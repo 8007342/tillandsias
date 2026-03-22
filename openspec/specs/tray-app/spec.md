@@ -15,27 +15,19 @@ The application SHALL run exclusively as a system tray icon with no main window.
 - **THEN** the tray icon displays the minimal Tillandsia idle state
 
 ### Requirement: Dynamic tray menu
-The tray menu SHALL be rebuilt on every state change and display a hierarchical view of discovered projects and running environments with tillandsia iconography linking related elements.
+The tray menu SHALL rebuild and display updated content whenever the application state changes.
 
-#### Scenario: Menu with discovered projects
-- **WHEN** the user clicks the tray icon and projects exist in the watch directory
-- **THEN** a menu displays showing each project as a submenu under the watch path, with available actions per project
+#### Scenario: Menu shows discovered projects
+- **WHEN** the scanner discovers projects in ~/src
+- **THEN** the tray menu rebuilds to show each project with its available actions
 
-#### Scenario: Menu with running environments
-- **WHEN** one or more environments are running
-- **THEN** each running environment appears as a top-level item below the project tree, showing its assigned tillandsia genus icon, project name, and Stop/Destroy actions
+#### Scenario: Quit exits the application
+- **WHEN** the user clicks Quit in the tray menu
+- **THEN** the application exits immediately
 
-#### Scenario: Visual linking between tree and running environments
-- **WHEN** an environment is running for a project
-- **THEN** the same tillandsia genus icon appears both next to the project in the filesystem tree and in the running environment chip, creating an intuitive visual link
-
-#### Scenario: Multiple concurrent environments for same project
-- **WHEN** two environments are running for the same project
-- **THEN** each has a different tillandsia genus icon, and both icons appear in the project's tree entry
-
-#### Scenario: Empty state
-- **WHEN** no projects exist in the watch directory
-- **THEN** the menu displays the watch path with a disabled "No projects found" item
+#### Scenario: Menu events reach handlers
+- **WHEN** the user clicks any menu item
+- **THEN** the corresponding handler is invoked
 
 ### Requirement: Tray icon state management
 The main tray icon SHALL visually reflect the overall system state.

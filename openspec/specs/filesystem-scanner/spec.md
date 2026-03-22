@@ -52,23 +52,15 @@ The scanner SHALL debounce rapid filesystem events into batched project state up
 - **THEN** the scanner waits 5 seconds of filesystem quiet before emitting a batched update
 
 ### Requirement: Project detection heuristics
-The scanner SHALL detect projects using a priority-ordered heuristic examining standard project markers.
+The scanner SHALL detect all non-empty, non-hidden directories under the watch path as projects, regardless of whether they contain recognized manifest files.
 
-#### Scenario: Explicit tillandsias config
-- **WHEN** a directory contains `.tillandsias/config.toml`
-- **THEN** it is detected as a project with explicit configuration
+#### Scenario: Directory with no manifest
+- **WHEN** a non-empty directory exists in ~/src with no Cargo.toml, package.json, etc
+- **THEN** it is detected as an Unknown-type project eligible for "Attach Here"
 
-#### Scenario: Container definition present
-- **WHEN** a directory contains a `Containerfile` or `Dockerfile`
-- **THEN** it is detected as a project with buildable artifacts
-
-#### Scenario: Known project type
-- **WHEN** a directory contains `package.json`, `Cargo.toml`, `pyproject.toml`, or `go.mod`
-- **THEN** it is detected as a known project type
-
-#### Scenario: Generic directory
-- **WHEN** a non-empty directory exists under the watch path with no recognized markers
-- **THEN** it is detected as a generic project eligible for "Attach Here"
+#### Scenario: Empty directory
+- **WHEN** an empty directory exists in ~/src
+- **THEN** it is still detected as a project (the user created it for a reason)
 
 ### Requirement: Low-priority background execution
 The scanner SHALL run as a low-priority tokio task that MUST NOT block the main event loop or interfere with tray responsiveness.

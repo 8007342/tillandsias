@@ -8,7 +8,6 @@ mod updater;
 use std::sync::{Arc, Mutex};
 
 use tauri::tray::TrayIconBuilder;
-use tauri::RunEvent;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
@@ -19,6 +18,10 @@ use tillandsias_podman::{detect_gpu_devices, PodmanClient, PodmanEventStream};
 use tillandsias_scanner::{Scanner, ScannerConfig};
 
 use updater::UpdateState;
+
+/// Global tray icon handle — needed for dynamic menu rebuilds.
+/// Set once during setup, never replaced.
+static TRAY_ICON: std::sync::OnceLock<Mutex<tauri::tray::TrayIcon>> = std::sync::OnceLock::new();
 
 fn main() {
     // Initialize tracing for debug builds
@@ -38,7 +41,7 @@ fn main() {
     // Detect platform
     let platform = PlatformInfo {
         os: Os::detect(),
-        has_podman: false, // Will be checked async
+        has_podman: false,
         has_podman_machine: false,
         gpu_devices: detect_gpu_devices()
             .iter()
@@ -49,11 +52,10 @@ fn main() {
     let initial_state = TrayState::new(platform);
     let state = Arc::new(Mutex::new(initial_state));
 
-    // Channels for the event loop
+    // Channel for menu commands → event loop
     let (menu_tx, menu_rx) = mpsc::channel::<MenuCommand>(64);
-    let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>(1);
+    let (shutdown_tx, _shutdown_rx) = mpsc::channel::<()>(1);
 
-    let menu_tx_for_tray = menu_tx.clone();
     let state_for_setup = state.clone();
 
     let update_state = UpdateState::default();
@@ -68,27 +70,40 @@ fn main() {
             // Spawn updater background tasks
             updater::spawn_update_tasks(&app_handle, update_state);
 
-            // Build initial tray icon with tooltip
+            // Build initial tray menu
             let tray_menu = {
                 let s = state_for_setup.lock().unwrap();
                 menu::build_tray_menu(&app_handle, &s)?
             };
 
-            let _tray = TrayIconBuilder::new()
+            // Build tray icon — store handle so it persists and callbacks remain active
+            let tray = TrayIconBuilder::new()
                 .tooltip("Tillandsias")
                 .menu(&tray_menu)
                 .on_menu_event({
-                    let menu_tx = menu_tx_for_tray.clone();
+                    let menu_tx = menu_tx.clone();
+                    let app_handle = app_handle.clone();
                     move |_app, event| {
                         let id = event.id().as_ref();
-                        debug!(menu_id = %id, "Menu event");
-                        handle_menu_click(id, &menu_tx);
+                        debug!(menu_id = %id, "Menu event received");
+
+                        // Quit fast-path — exit immediately, no channel round-trip
+                        if id == menu::ids::QUIT {
+                            info!("Quit requested");
+                            std::process::exit(0);
+                        }
+
+                        handle_menu_click(id, &menu_tx, &app_handle);
                     }
                 })
                 .build(app)?;
 
-            // Spawn the async runtime tasks
+            // Store tray handle globally so it persists and can be used for menu rebuilds
+            let _ = TRAY_ICON.set(Mutex::new(tray));
+
+            // Spawn async runtime tasks
             let state_for_loop = state_for_setup.clone();
+            let app_handle_for_loop = app_handle.clone();
 
             tauri::async_runtime::spawn(async move {
                 // Check podman availability
@@ -108,7 +123,6 @@ fn main() {
 
                 if !has_podman {
                     warn!("Podman not found. Install podman to use Tillandsias.");
-                    return;
                 }
 
                 if Os::detect().needs_podman_machine() && !has_machine {
@@ -116,35 +130,37 @@ fn main() {
                 }
 
                 // Discover existing containers on startup
-                match client.list_containers("tillandsias-").await {
-                    Ok(containers) => {
-                        let mut s = state_for_loop.lock().unwrap();
-                        for entry in containers {
-                            if let Some((project_name, genus)) =
-                                ContainerInfo::parse_container_name(&entry.name)
-                            {
-                                let container_state = match entry.state.as_str() {
-                                    "running" => {
-                                        tillandsias_core::event::ContainerState::Running
-                                    }
-                                    "created" | "configured" => {
-                                        tillandsias_core::event::ContainerState::Creating
-                                    }
-                                    _ => tillandsias_core::event::ContainerState::Stopped,
-                                };
-                                s.running.push(ContainerInfo {
-                                    name: entry.name,
-                                    project_name,
-                                    genus,
-                                    state: container_state,
-                                    port_range: (0, 0),
-                                });
+                if has_podman {
+                    match client.list_containers("tillandsias-").await {
+                        Ok(containers) => {
+                            let mut s = state_for_loop.lock().unwrap();
+                            for entry in containers {
+                                if let Some((project_name, genus)) =
+                                    ContainerInfo::parse_container_name(&entry.name)
+                                {
+                                    let container_state = match entry.state.as_str() {
+                                        "running" => {
+                                            tillandsias_core::event::ContainerState::Running
+                                        }
+                                        "created" | "configured" => {
+                                            tillandsias_core::event::ContainerState::Creating
+                                        }
+                                        _ => tillandsias_core::event::ContainerState::Stopped,
+                                    };
+                                    s.running.push(ContainerInfo {
+                                        name: entry.name,
+                                        project_name,
+                                        genus,
+                                        state: container_state,
+                                        port_range: (0, 0),
+                                    });
+                                }
                             }
+                            info!(count = s.running.len(), "Discovered existing containers");
                         }
-                        info!(count = s.running.len(), "Discovered existing containers");
-                    }
-                    Err(e) => {
-                        warn!(error = %e, "Failed to discover existing containers");
+                        Err(e) => {
+                            warn!(error = %e, "Failed to discover existing containers");
+                        }
                     }
                 }
 
@@ -171,6 +187,9 @@ fn main() {
                     info!(count = s.projects.len(), "Initial project scan complete");
                 }
 
+                // Rebuild menu after initial scan
+                rebuild_menu(&app_handle_for_loop, &state_for_loop);
+
                 // Start scanner watcher
                 let (scanner_tx, scanner_rx) = mpsc::channel(256);
                 let _scanner_task = tauri::async_runtime::spawn(async move {
@@ -186,20 +205,23 @@ fn main() {
                     podman_event_stream.stream(podman_tx).await;
                 });
 
-                // Clone state for the rebuild callback
-                let state_for_rebuild = state_for_loop.clone();
-
                 // Run main event loop
                 let loop_state = { state_for_loop.lock().unwrap().clone() };
+
+                let state_for_rebuild = state_for_loop.clone();
+                let app_for_rebuild = app_handle_for_loop.clone();
 
                 let on_state_change: event_loop::MenuRebuildFn =
                     Box::new(move |new_state: &TrayState| {
                         // Update shared state
-                        let mut s = state_for_rebuild.lock().unwrap();
-                        s.projects.clone_from(&new_state.projects);
-                        s.running.clone_from(&new_state.running);
+                        {
+                            let mut s = state_for_rebuild.lock().unwrap();
+                            s.projects.clone_from(&new_state.projects);
+                            s.running.clone_from(&new_state.running);
+                        }
 
-                        debug!("State changed, menu rebuild needed");
+                        // Rebuild tray menu
+                        rebuild_menu(&app_for_rebuild, &state_for_rebuild);
                     });
 
                 event_loop::run(
@@ -207,7 +229,6 @@ fn main() {
                     scanner_rx,
                     podman_rx,
                     menu_rx,
-                    shutdown_rx,
                     on_state_change,
                 )
                 .await;
@@ -218,17 +239,39 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building tillandsias")
         .run(move |_app, event| {
-            if let RunEvent::ExitRequested { .. } = event {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
                 info!("Exit requested");
                 let _ = shutdown_tx.blocking_send(());
             }
         });
 }
 
+/// Rebuild the tray menu from current state and apply it to the tray icon.
+fn rebuild_menu(app_handle: &tauri::AppHandle, state: &Arc<Mutex<TrayState>>) {
+    let s = state.lock().unwrap();
+    match menu::build_tray_menu(app_handle, &s) {
+        Ok(new_menu) => {
+            if let Some(tray_lock) = TRAY_ICON.get() {
+                if let Ok(tray) = tray_lock.lock() {
+                    let _ = tray.set_menu(Some(new_menu));
+                    debug!(
+                        projects = s.projects.len(),
+                        running = s.running.len(),
+                        "Tray menu rebuilt"
+                    );
+                }
+            }
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to rebuild tray menu");
+        }
+    }
+}
+
 /// Dispatch a menu click ID to the appropriate `MenuCommand`.
-fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>) {
+fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::AppHandle) {
     let command = match id {
-        menu::ids::QUIT => Some(MenuCommand::Quit),
+        menu::ids::QUIT => None, // Handled via fast-path above
         menu::ids::SETTINGS => Some(MenuCommand::Settings),
         _ => {
             if let Some((action, payload)) = menu::ids::parse(id) {
@@ -261,10 +304,7 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>) {
                                 genus,
                             })
                         } else {
-                            warn!(
-                                id,
-                                "Cannot parse container name from destroy action"
-                            );
+                            warn!(id, "Cannot parse container name from destroy action");
                             None
                         }
                     }

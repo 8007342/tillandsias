@@ -28,7 +28,6 @@ pub async fn run(
     mut scanner_rx: mpsc::Receiver<ProjectChange>,
     mut podman_rx: mpsc::Receiver<tillandsias_podman::events::PodmanEvent>,
     mut menu_rx: mpsc::Receiver<MenuCommand>,
-    mut shutdown_rx: mpsc::Receiver<()>,
     on_state_change: MenuRebuildFn,
 ) {
     let mut allocator = GenusAllocator::new();
@@ -104,10 +103,9 @@ pub async fn run(
                 }
             }
 
-            // Shutdown signal (SIGTERM/SIGINT)
-            Some(()) = shutdown_rx.recv() => {
-                info!("Shutdown signal received");
-                handlers::shutdown_all(&state).await;
+            // All channels closed — nothing left to do
+            else => {
+                info!("All event channels closed");
                 break;
             }
         }
