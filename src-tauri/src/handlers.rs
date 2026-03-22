@@ -17,57 +17,6 @@ use tillandsias_podman::PodmanClient;
 
 const FORGE_IMAGE_TAG: &str = "tillandsias-forge:latest";
 
-/// Detect a terminal emulator available on the host.
-///
-/// Tries, in order:
-/// 1. `$TERMINAL` environment variable
-/// 2. `x-terminal-emulator` (Debian/Ubuntu alternatives system)
-/// 3. Common terminal emulators: gnome-terminal, konsole, alacritty, kitty,
-///    foot, xfce4-terminal, xterm
-///
-/// Returns `None` if nothing is found.
-fn detect_terminal() -> Option<String> {
-    // 1. $TERMINAL env var
-    if let Ok(term) = std::env::var("TERMINAL") {
-        if !term.is_empty() {
-            return Some(term);
-        }
-    }
-
-    // 2. x-terminal-emulator (Debian/Ubuntu)
-    // 3. Fallback list
-    let candidates = [
-        "x-terminal-emulator",
-        "ptyxis",           // GNOME Terminal on Silverblue/Fedora 43+
-        "gnome-terminal",
-        "gnome-console",    // GNOME Console (kgx)
-        "konsole",
-        "alacritty",
-        "kitty",
-        "foot",
-        "xfce4-terminal",
-        "xterm",
-    ];
-
-    for candidate in &candidates {
-        if which_sync(candidate) {
-            return Some((*candidate).to_string());
-        }
-    }
-
-    None
-}
-
-/// Synchronous check if a binary exists in PATH.
-fn which_sync(name: &str) -> bool {
-    std::process::Command::new("which")
-        .arg(name)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
-}
-
 /// Resolve the default image source directory.
 ///
 /// Checks (in order):
@@ -247,22 +196,11 @@ pub async fn handle_attach_here(
         }
     }
 
-    // Detect terminal emulator
-    let terminal = detect_terminal().ok_or_else(|| {
-        state.running.retain(|c| c.name != container_name);
-        allocator.release(&project_name, genus);
-        "No terminal emulator found. Set $TERMINAL or install one of: \
-         gnome-terminal, konsole, alacritty, kitty, foot, xfce4-terminal, xterm"
-            .to_string()
-    })?;
-
-    debug!(terminal = %terminal, "Detected terminal emulator");
-
     // Ensure cache directories exist
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
 
-    // Build the podman run command for interactive mode
+    // Build the podman run args for interactive mode
     let run_args = build_interactive_run_args(
         &container_name,
         FORGE_IMAGE_TAG,
@@ -271,29 +209,27 @@ pub async fn handle_attach_here(
         port_range,
     );
 
-    // Build the full podman command string
-    let mut podman_cmd_parts = vec!["podman".to_string(), "run".to_string()];
-    podman_cmd_parts.extend(run_args);
-    let podman_cmd = podman_cmd_parts.join(" ");
-
-    // Spawn the terminal with the podman run command.
-    // When the user exits OpenCode, the container dies (--rm).
-    let spawn_result = spawn_terminal(&terminal, &podman_cmd);
+    // Spawn podman directly — no terminal emulator dependency.
+    // `podman run -it --rm` handles TTY allocation. The container's
+    // bash/entrypoint/opencode provides the interactive interface.
+    let spawn_result = std::process::Command::new("podman")
+        .arg("run")
+        .args(&run_args)
+        .spawn();
 
     match spawn_result {
-        Ok(()) => {
+        Ok(_child) => {
             info!(
                 container = %container_name,
-                terminal = %terminal,
                 genus = %genus.display_name(),
                 port_range = ?port_range,
-                "Terminal launched with interactive container"
+                "Container launched"
             );
         }
         Err(e) => {
             state.running.retain(|c| c.name != container_name);
             allocator.release(&project_name, genus);
-            return Err(format!("Failed to spawn terminal: {e}"));
+            return Err(format!("Failed to spawn podman: {e}"));
         }
     }
 
@@ -306,35 +242,6 @@ pub async fn handle_attach_here(
         container_name: container_name.clone(),
         new_state: ContainerState::Creating,
     })
-}
-
-/// Spawn a terminal emulator running a command.
-///
-/// Different terminals have different argument conventions for running
-/// a command. Most accept `-e <command>`, but gnome-terminal uses `--`.
-fn spawn_terminal(terminal: &str, command: &str) -> Result<(), String> {
-    let mut cmd = std::process::Command::new(terminal);
-
-    // Different terminals have different argument conventions
-    if terminal.contains("gnome-terminal") {
-        cmd.arg("--").arg("bash").arg("-c").arg(command);
-    } else if terminal.contains("ptyxis") {
-        // ptyxis (GNOME Terminal on Silverblue) uses -- for command separation
-        cmd.arg("--").arg("bash").arg("-c").arg(command);
-    } else if terminal.contains("konsole") {
-        cmd.arg("-e").arg("bash").arg("-c").arg(command);
-    } else {
-        // Most terminals: -e command
-        cmd.arg("-e").arg("bash").arg("-c").arg(command);
-    }
-
-    cmd.stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null());
-
-    cmd.spawn()
-        .map(|_| ())
-        .map_err(|e| format!("{terminal}: {e}"))
 }
 
 /// Handle the "Stop" action: graceful stop with SIGTERM -> 10s -> SIGKILL,
