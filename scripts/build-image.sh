@@ -132,32 +132,30 @@ fi
 BUILD_START="$(date +%s)"
 _step "Running nix build .#${NIX_ATTR} inside ${BUILDER_TOOLBOX}..."
 
-NIX_CMD="cd $ROOT && nix build .#${NIX_ATTR} --print-out-paths --no-link"
-TARBALL_PATH="$(toolbox run -c "$BUILDER_TOOLBOX" bash -lc "$NIX_CMD" 2>&1)"
+NIX_CMD="cd $ROOT && nix build .#${NIX_ATTR} --print-out-paths --no-link 2>/dev/null"
+TARBALL_PATH="$(toolbox run -c "$BUILDER_TOOLBOX" bash -lc "$NIX_CMD" | tail -1 | tr -d '[:space:]')"
 
-# The last line of output should be the store path
-TARBALL_PATH="$(echo "$TARBALL_PATH" | tail -1)"
-
-if [[ -z "$TARBALL_PATH" ]] || [[ ! -f "$TARBALL_PATH" ]]; then
-    _error "Nix build did not produce a valid tarball path: $TARBALL_PATH"
+if [[ -z "$TARBALL_PATH" ]]; then
+    _error "Nix build failed — no output path returned"
     exit 1
 fi
 
-_info "Tarball: $TARBALL_PATH"
+_info "Tarball: $TARBALL_PATH (inside builder toolbox)"
 
 # ---------------------------------------------------------------------------
-# Step 4: Load tarball into podman
+# Step 4: Stream tarball from builder toolbox → podman load on host
 # ---------------------------------------------------------------------------
+# The tarball lives inside the builder toolbox's /nix/store/ which is NOT
+# accessible from the host. We stream it via cat through the toolbox.
 _step "Loading image into podman..."
-LOAD_OUTPUT="$(podman load < "$TARBALL_PATH" 2>&1)"
+LOAD_OUTPUT="$(toolbox run -c "$BUILDER_TOOLBOX" cat "$TARBALL_PATH" | podman load 2>&1)"
 echo "$LOAD_OUTPUT" | while IFS= read -r line; do
     _info "  $line"
 done
 
-# Extract the loaded image name from podman load output.
-# podman load prints lines like: "Loaded image: docker.io/library/name:tag"
-# or "Loaded image(s): name:tag"
-LOADED_IMAGE="$(echo "$LOAD_OUTPUT" | grep -oP '(?<=Loaded image[^:]*: ).*' | tail -1 | tr -d '[:space:]')"
+# Extract the loaded image name from podman load output
+# "Loaded image: localhost/tillandsias-forge:latest" or "Loaded image(s): ..."
+LOADED_IMAGE="$(echo "$LOAD_OUTPUT" | grep 'Loaded image' | sed 's/.*: //' | tail -1 | tr -d '[:space:]')"
 
 # ---------------------------------------------------------------------------
 # Step 5: Tag the image

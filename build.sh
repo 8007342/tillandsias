@@ -225,20 +225,24 @@ if [[ "$FLAG_RELEASE" == true ]]; then
     fi
 
     _step "Building release (bundles: ${BUNDLES})..."
-    # The updater plugin expects an AppImage on Linux for signed update bundles,
-    # but AppImage needs FUSE (not available in toolbox). For local dev builds,
-    # we use --no-bundle to get the raw binary, then bundle deb/rpm separately.
-    # CI produces AppImage on ubuntu with FUSE available.
-    _run bash -c "cd '$SCRIPT_DIR' && cargo tauri build --no-bundle" 2>&1 || true
 
-    # Bundle deb/rpm (these work in toolbox, ignore updater error)
+    # Clean old bundles to avoid listing stale versions
+    rm -rf "$SCRIPT_DIR/target/release/bundle"
+
+    # Single build: --bundles skips AppImage (needs FUSE, CI handles it).
+    # The updater error is expected in toolbox — ignore it.
     _run bash -c "cd '$SCRIPT_DIR' && cargo tauri build --bundles ${BUNDLES}" 2>&1 || {
-        _warn "Some bundles failed (updater needs AppImage — CI handles that)"
-        _warn "Binary was built successfully"
+        # Check if the binary was built despite the bundle error
+        if [[ -f "$SCRIPT_DIR/target/release/tillandsias-tray" ]]; then
+            _warn "Some bundles failed (updater needs AppImage — CI handles that)"
+        else
+            _error "Build failed"
+            exit 1
+        fi
     }
     _info "Release build complete"
 
-    # Show built artifacts — workspace target dir is at project root
+    # Show built artifacts
     RELEASE_BIN="$SCRIPT_DIR/target/release/tillandsias-tray"
     BUNDLE_DIR="$SCRIPT_DIR/target/release/bundle"
     if [[ -f "$RELEASE_BIN" ]]; then
