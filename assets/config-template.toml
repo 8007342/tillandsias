@@ -1,0 +1,36 @@
+# Tillandsias Configuration
+# =========================
+# This file controls how Tillandsias discovers projects and launches environments.
+# Location: ~/.config/tillandsias/config.toml (Linux)
+#           ~/Library/Application Support/tillandsias/config.toml (macOS)
+#           %APPDATA%/tillandsias/config.toml (Windows)
+
+[scanner]
+# Directories to watch for projects. Default: ~/src
+# Each directory is scanned for project folders at depth 1.
+watch_paths = ["~/src"]
+
+# How long to wait (milliseconds) after a filesystem change before processing.
+# Higher values batch more changes together and reduce resource usage.
+# Lower values detect changes faster but may cause unnecessary rescans.
+# Default: 2000 (2 seconds)
+debounce_ms = 2000
+
+[defaults]
+# Default container image for new environments.
+# Power users can override this per-project in .tillandsias/config.toml
+# Default: the Macuahuitl forge image
+image = "ghcr.io/8007342/macuahuitl:latest"
+
+# Default port range mapped from environment to your machine.
+# Each concurrent environment gets a non-overlapping range automatically.
+# Default: 3000-3099
+port_range = "3000-3099"
+
+[security]
+# Security flags applied to every environment. These are non-negotiable
+# and cannot be weakened — they protect your system from untrusted code.
+# You can add additional restrictions per-project but never remove these.
+cap_drop_all = true
+no_new_privileges = true
+userns_keep_id = true

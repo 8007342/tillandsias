@@ -1,0 +1,236 @@
+use tokio::process::Command;
+use tracing::{debug, warn};
+
+/// Async podman CLI client. All operations are non-blocking.
+#[derive(Debug, Clone)]
+pub struct PodmanClient;
+
+impl PodmanClient {
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Check if podman is available in PATH.
+    pub async fn is_available(&self) -> bool {
+        Command::new("podman")
+            .arg("--version")
+            .output()
+            .await
+            .is_ok_and(|o| o.status.success())
+    }
+
+    /// Check if Podman Machine is running (macOS/Windows).
+    pub async fn is_machine_running(&self) -> bool {
+        let output = Command::new("podman")
+            .args(["machine", "list", "--format", "json"])
+            .output()
+            .await;
+
+        match output {
+            Ok(o) if o.status.success() => {
+                let stdout = String::from_utf8_lossy(&o.stdout);
+                // Check if any machine is running
+                stdout.contains("\"Running\"") || stdout.contains("\"running\"")
+            }
+            _ => false,
+        }
+    }
+
+    /// Check if a container image exists locally.
+    pub async fn image_exists(&self, image: &str) -> bool {
+        Command::new("podman")
+            .args(["image", "exists", image])
+            .output()
+            .await
+            .is_ok_and(|o| o.status.success())
+    }
+
+    /// Pull a container image.
+    pub async fn pull_image(&self, image: &str) -> Result<(), PodmanError> {
+        debug!(image, "Pulling image");
+        let output = Command::new("podman")
+            .args(["pull", image])
+            .output()
+            .await
+            .map_err(|e| PodmanError::CommandFailed(format!("pull: {e}")))?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(PodmanError::CommandFailed(format!(
+                "pull failed: {stderr}"
+            )))
+        }
+    }
+
+    /// Inspect a container and return its state.
+    pub async fn inspect_container(
+        &self,
+        name: &str,
+    ) -> Result<ContainerInspect, PodmanError> {
+        let output = Command::new("podman")
+            .args(["inspect", name, "--format", "json"])
+            .output()
+            .await
+            .map_err(|e| PodmanError::CommandFailed(format!("inspect: {e}")))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let inspects: Vec<serde_json::Value> =
+                serde_json::from_str(&stdout).map_err(|e| {
+                    PodmanError::ParseError(format!("inspect parse: {e}"))
+                })?;
+
+            if let Some(inspect) = inspects.first() {
+                let state = inspect["State"]["Status"]
+                    .as_str()
+                    .unwrap_or("unknown")
+                    .to_string();
+                Ok(ContainerInspect {
+                    name: name.to_string(),
+                    state,
+                })
+            } else {
+                Err(PodmanError::NotFound(name.to_string()))
+            }
+        } else {
+            Err(PodmanError::NotFound(name.to_string()))
+        }
+    }
+
+    /// List containers matching a name prefix.
+    pub async fn list_containers(
+        &self,
+        prefix: &str,
+    ) -> Result<Vec<ContainerListEntry>, PodmanError> {
+        let output = Command::new("podman")
+            .args([
+                "ps",
+                "-a",
+                "--filter",
+                &format!("name=^{prefix}"),
+                "--format",
+                "json",
+            ])
+            .output()
+            .await
+            .map_err(|e| PodmanError::CommandFailed(format!("ps: {e}")))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if stdout.trim().is_empty() || stdout.trim() == "[]" {
+                return Ok(Vec::new());
+            }
+            let entries: Vec<PodmanPsEntry> =
+                serde_json::from_str(&stdout).map_err(|e| {
+                    PodmanError::ParseError(format!("ps parse: {e}"))
+                })?;
+
+            Ok(entries
+                .into_iter()
+                .map(|e| ContainerListEntry {
+                    name: e.names.first().cloned().unwrap_or_default(),
+                    state: e.state,
+                })
+                .collect())
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    /// Stop a container gracefully.
+    pub async fn stop_container(&self, name: &str, timeout_secs: u32) -> Result<(), PodmanError> {
+        debug!(name, timeout_secs, "Stopping container");
+        let output = Command::new("podman")
+            .args(["stop", "-t", &timeout_secs.to_string(), name])
+            .output()
+            .await
+            .map_err(|e| PodmanError::CommandFailed(format!("stop: {e}")))?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            warn!(name, %stderr, "Container stop returned error");
+            // Not necessarily fatal — container may already be stopped
+            Ok(())
+        }
+    }
+
+    /// Force kill a container.
+    pub async fn kill_container(&self, name: &str) -> Result<(), PodmanError> {
+        debug!(name, "Killing container");
+        let _ = Command::new("podman")
+            .args(["kill", name])
+            .output()
+            .await;
+        Ok(())
+    }
+
+    /// Remove a container.
+    pub async fn remove_container(&self, name: &str) -> Result<(), PodmanError> {
+        let _ = Command::new("podman")
+            .args(["rm", "-f", name])
+            .output()
+            .await;
+        Ok(())
+    }
+
+    /// Start a container with the given arguments.
+    pub async fn run_container(&self, args: &[String]) -> Result<String, PodmanError> {
+        debug!(?args, "Running container");
+        let output = Command::new("podman")
+            .arg("run")
+            .args(args)
+            .output()
+            .await
+            .map_err(|e| PodmanError::CommandFailed(format!("run: {e}")))?;
+
+        if output.status.success() {
+            let container_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            Ok(container_id)
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(PodmanError::CommandFailed(format!(
+                "run failed: {stderr}"
+            )))
+        }
+    }
+}
+
+impl Default for PodmanClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ContainerInspect {
+    pub name: String,
+    pub state: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ContainerListEntry {
+    pub name: String,
+    pub state: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct PodmanPsEntry {
+    #[serde(rename = "Names")]
+    names: Vec<String>,
+    #[serde(rename = "State")]
+    state: String,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum PodmanError {
+    #[error("Command failed: {0}")]
+    CommandFailed(String),
+    #[error("Container not found: {0}")]
+    NotFound(String),
+    #[error("Parse error: {0}")]
+    ParseError(String),
+}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Ionantha pup: small light green compact form -->
+  <g transform="translate(32,56)">
+    <polygon points="0,-16 -3,-2 3,-2" fill="#a0dda0" stroke="#80bb80" stroke-width="1"/>
+    <polygon points="-7,-12 -4,-1 -1,-5" fill="#b0eeb0" stroke="#80bb80" stroke-width="1"/>
+    <polygon points="7,-12 4,-1 1,-5" fill="#b0eeb0" stroke="#80bb80" stroke-width="1"/>
+  </g>
+</svg>

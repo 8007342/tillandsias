@@ -1,0 +1,289 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write  # Required for Sigstore Cosign keyless signing (OIDC)
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build platform-specific Tauri bundles
+  # ---------------------------------------------------------------------------
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            label: linux-x86_64
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            label: macos-aarch64
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            label: macos-x86_64
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            label: windows-x86_64
+
+    runs-on: ${{ matrix.platform }}
+
+    env:
+      # Tauri Ed25519 signing key -- required for update bundles.
+      # If these secrets are missing, `tauri build` will fail, preventing
+      # unsigned releases from being published.
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fail if signing key is missing
+        shell: bash
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY secret is not configured. Cannot produce signed update bundles."
+            exit 1
+          fi
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2"
+
+      - name: Build Tauri (signed)
+        run: cargo tauri build --target ${{ matrix.target }}
+
+      - name: Collect build artifacts
+        shell: bash
+        run: |
+          mkdir -p collected-artifacts
+          BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle"
+
+          # Copy all release-worthy files from Tauri bundle output
+          find "${BUNDLE_DIR}" -type f \( \
+            -name "*.AppImage" -o -name "*.AppImage.sig" \
+            -o -name "*.dmg" \
+            -o -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" \
+            -o -name "*.exe" \
+            -o -name "*.msi" -o -name "*.msi.sig" \
+            -o -name "*.nsis.zip" -o -name "*.nsis.zip.sig" \
+          \) -exec cp {} collected-artifacts/ \;
+
+          echo "Collected artifacts:"
+          ls -la collected-artifacts/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.label }}
+          path: collected-artifacts/*
+          if-no-files-found: error
+          retention-days: 3
+
+  # ---------------------------------------------------------------------------
+  # Collect all artifacts, sign with Cosign, generate checksums, create release
+  # ---------------------------------------------------------------------------
+  sign-and-release:
+    name: Sign and release
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          pattern: build-*
+          merge-multiple: true
+
+      - name: List artifacts before signing
+        run: ls -la release-artifacts/
+
+      - name: Generate SHA256 checksums
+        run: |
+          cd release-artifacts
+          sha256sum -- * > SHA256SUMS
+          echo "--- SHA256SUMS ---"
+          cat SHA256SUMS
+
+      # -- Cosign signing (keyless via GitHub OIDC) ---------------------------
+      #
+      # Tauri already produces Ed25519 .sig files for auto-update bundles
+      # (e.g., *.AppImage.sig). Cosign signatures use the .cosign.sig and
+      # .cosign.cert extensions to avoid collision with Tauri signatures.
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da  # v3.7.0
+
+      - name: Verify Cosign installation
+        run: cosign version
+
+      - name: Sign artifacts with Cosign (keyless)
+        run: |
+          cd release-artifacts
+          for artifact in *; do
+            # Skip non-binary files: checksums, Tauri Ed25519 sigs, Cosign outputs
+            case "${artifact}" in
+              SHA256SUMS|*.sig|*.cosign.sig|*.cosign.cert) continue ;;
+            esac
+
+            echo "::group::Signing ${artifact}"
+            cosign sign-blob \
+              --yes \
+              --oidc-issuer "https://token.actions.githubusercontent.com" \
+              --output-signature "${artifact}.cosign.sig" \
+              --output-certificate "${artifact}.cosign.cert" \
+              "${artifact}"
+
+            # Verify the signature and certificate files were created
+            if [ ! -f "${artifact}.cosign.sig" ] || [ ! -f "${artifact}.cosign.cert" ]; then
+              echo "::error::Signing failed for ${artifact} -- missing .cosign.sig or .cosign.cert file"
+              exit 1
+            fi
+
+            echo "Signed: ${artifact}"
+            echo "  -> ${artifact}.cosign.sig"
+            echo "  -> ${artifact}.cosign.cert"
+            echo "::endgroup::"
+          done
+
+      - name: Verify all signable artifacts are signed
+        run: |
+          cd release-artifacts
+          EXPECTED=0
+          SIGNED=0
+          for artifact in *; do
+            case "${artifact}" in
+              SHA256SUMS|*.sig|*.cosign.sig|*.cosign.cert) continue ;;
+            esac
+            EXPECTED=$((EXPECTED + 1))
+            if [ -f "${artifact}.cosign.sig" ] && [ -f "${artifact}.cosign.cert" ]; then
+              SIGNED=$((SIGNED + 1))
+              echo "OK: ${artifact} (.cosign.sig + .cosign.cert present)"
+            else
+              echo "::error::MISSING Cosign signature files for ${artifact}"
+              exit 1
+            fi
+          done
+
+          echo ""
+          echo "Cosign-signed ${SIGNED}/${EXPECTED} artifacts"
+
+          if [ "${SIGNED}" -ne "${EXPECTED}" ]; then
+            echo "::error::Not all artifacts were signed (${SIGNED}/${EXPECTED})"
+            exit 1
+          fi
+
+          if [ "${EXPECTED}" -eq 0 ]; then
+            echo "::error::No artifacts found to sign"
+            exit 1
+          fi
+
+      - name: List all release files
+        run: ls -la release-artifacts/
+
+      # -- Create GitHub Release with verification instructions ---------------
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
+          generate_release_notes: true
+          body: |
+            ## Verify artifact signatures (Cosign)
+
+            All release artifacts are signed with [Sigstore Cosign](https://docs.sigstore.dev/) using keyless mode via GitHub Actions OIDC identity. Every signature is recorded in the [Rekor transparency log](https://rekor.sigstore.dev/).
+
+            ### Install Cosign
+
+            ```bash
+            # macOS (Homebrew)
+            brew install cosign
+
+            # Debian / Ubuntu
+            sudo apt-get install cosign
+
+            # Or download from: https://github.com/sigstore/cosign/releases
+            ```
+
+            ### Verify a downloaded binary
+
+            Download the binary along with its `.cosign.sig` and `.cosign.cert` files, then run:
+
+            ```bash
+            cosign verify-blob \
+              --certificate <ARTIFACT>.cosign.cert \
+              --signature <ARTIFACT>.cosign.sig \
+              --certificate-identity-regexp "https://github.com/.*/tillandsias/" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              <ARTIFACT>
+            ```
+
+            Replace `<ARTIFACT>` with the filename you downloaded.
+
+            ### Verify SHA256 checksums
+
+            ```bash
+            sha256sum -c SHA256SUMS
+            ```
+
+            For detailed instructions, see [docs/VERIFICATION.md](https://github.com/${{ github.repository }}/blob/main/docs/VERIFICATION.md).
+          files: |
+            release-artifacts/*
+
+  # ---------------------------------------------------------------------------
+  # Publish Tauri update manifest (latest.json)
+  # ---------------------------------------------------------------------------
+  publish-update-manifest:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all release artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Upload latest.json to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            **/latest.json

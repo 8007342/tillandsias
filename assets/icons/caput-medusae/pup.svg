@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Caput-Medusae pup: small light green bulb with tiny tentacles -->
+  <g transform="translate(32,56)">
+    <ellipse cx="0" cy="-4" rx="7" ry="6" fill="#a0dda0" stroke="#80bb80" stroke-width="1.5"/>
+    <path d="M-3,-8 C-5,-14 -9,-16 -10,-12" fill="none" stroke="#b0eeb0" stroke-width="2" stroke-linecap="round"/>
+    <path d="M3,-8 C5,-14 9,-16 10,-12" fill="none" stroke="#b0eeb0" stroke-width="2" stroke-linecap="round"/>
+    <path d="M0,-10 C0,-16 2,-18 3,-14" fill="none" stroke="#c0ffc0" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
+</svg>

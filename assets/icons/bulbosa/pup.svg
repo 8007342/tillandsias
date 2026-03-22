@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Bulbosa pup: small light green round form -->
+  <g transform="translate(32,58)">
+    <ellipse cx="0" cy="-6" rx="8" ry="7" fill="#a0dda0" stroke="#80bb80" stroke-width="1.5"/>
+    <path d="M0,-12 C-2,-18 0,-20 1,-16" fill="none" stroke="#b0eeb0" stroke-width="2" stroke-linecap="round"/>
+    <path d="M-4,-10 C-6,-16 -5,-18 -4,-14" fill="none" stroke="#b0eeb0" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
+</svg>

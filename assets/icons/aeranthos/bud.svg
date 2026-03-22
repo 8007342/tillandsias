@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Aeranthos bud: upright rosette, compact leaves -->
+  <g transform="translate(32,58)">
+    <ellipse cx="0" cy="-12" rx="8" ry="18" fill="#6aad6a" stroke="#4a8a4a" stroke-width="1.5"/>
+    <ellipse cx="-7" cy="-10" rx="5" ry="14" fill="#7cbc7c" stroke="#4a8a4a" stroke-width="1" transform="rotate(20)"/>
+    <ellipse cx="7" cy="-10" rx="5" ry="14" fill="#7cbc7c" stroke="#4a8a4a" stroke-width="1" transform="rotate(-20)"/>
+    <ellipse cx="0" cy="-6" rx="4" ry="8" fill="#8ecc8e"/>
+  </g>
+</svg>

@@ -1,0 +1,335 @@
+/// Curated pool of tillandsia genera used as visual namespaces for environments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum TillandsiaGenus {
+    Aeranthos,
+    Ionantha,
+    Xerographica,
+    CaputMedusae,
+    Bulbosa,
+    Tectorum,
+    Stricta,
+    Usneoides,
+}
+
+impl TillandsiaGenus {
+    /// All genera in pool order.
+    pub const ALL: &[TillandsiaGenus] = &[
+        Self::Aeranthos,
+        Self::Ionantha,
+        Self::Xerographica,
+        Self::CaputMedusae,
+        Self::Bulbosa,
+        Self::Tectorum,
+        Self::Stricta,
+        Self::Usneoides,
+    ];
+
+    /// Lowercase slug for container naming and filesystem paths.
+    pub fn slug(&self) -> &'static str {
+        match self {
+            Self::Aeranthos => "aeranthos",
+            Self::Ionantha => "ionantha",
+            Self::Xerographica => "xerographica",
+            Self::CaputMedusae => "caput-medusae",
+            Self::Bulbosa => "bulbosa",
+            Self::Tectorum => "tectorum",
+            Self::Stricta => "stricta",
+            Self::Usneoides => "usneoides",
+        }
+    }
+
+    /// Parse from a slug string.
+    pub fn from_slug(s: &str) -> Option<Self> {
+        match s {
+            "aeranthos" => Some(Self::Aeranthos),
+            "ionantha" => Some(Self::Ionantha),
+            "xerographica" => Some(Self::Xerographica),
+            "caput-medusae" => Some(Self::CaputMedusae),
+            "bulbosa" => Some(Self::Bulbosa),
+            "tectorum" => Some(Self::Tectorum),
+            "stricta" => Some(Self::Stricta),
+            "usneoides" => Some(Self::Usneoides),
+            _ => None,
+        }
+    }
+
+    /// Display name for tray menus.
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Aeranthos => "Aeranthos",
+            Self::Ionantha => "Ionantha",
+            Self::Xerographica => "Xerographica",
+            Self::CaputMedusae => "Caput-Medusae",
+            Self::Bulbosa => "Bulbosa",
+            Self::Tectorum => "Tectorum",
+            Self::Stricta => "Stricta",
+            Self::Usneoides => "Usneoides",
+        }
+    }
+}
+
+/// Plant lifecycle states mapped to container lifecycle for iconography.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum PlantLifecycle {
+    /// Container creating/booting — small green plant, no bloom
+    Bud,
+    /// Container running and healthy — colorful flower in bloom
+    Bloom,
+    /// Container stopping/stopped — faded/brown flower
+    Dried,
+    /// Container rebuilding/spawning — small plant growing from parent
+    Pup,
+}
+
+impl PlantLifecycle {
+    /// Map from container state to plant lifecycle.
+    pub fn from_container_state(state: &crate::event::ContainerState) -> Self {
+        match state {
+            crate::event::ContainerState::Creating => Self::Bud,
+            crate::event::ContainerState::Running => Self::Bloom,
+            crate::event::ContainerState::Stopping => Self::Dried,
+            crate::event::ContainerState::Stopped => Self::Dried,
+            crate::event::ContainerState::Rebuilding => Self::Pup,
+            crate::event::ContainerState::Absent => Self::Dried,
+        }
+    }
+}
+
+/// Allocates genera from the pool, avoiding duplicates per project.
+pub struct GenusAllocator {
+    /// Next index in the round-robin pool
+    next_index: usize,
+    /// Currently allocated genera per project name
+    allocated: std::collections::HashMap<String, Vec<TillandsiaGenus>>,
+}
+
+impl GenusAllocator {
+    pub fn new() -> Self {
+        Self {
+            next_index: 0,
+            allocated: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Allocate a genus for a project. Returns a different genus if the project
+    /// already has one or more environments running.
+    pub fn allocate(&mut self, project_name: &str) -> Option<TillandsiaGenus> {
+        let in_use = self.allocated.entry(project_name.to_string()).or_default();
+        let pool = TillandsiaGenus::ALL;
+
+        // Find next available genus not already used by this project
+        for _ in 0..pool.len() {
+            let candidate = pool[self.next_index % pool.len()];
+            self.next_index += 1;
+            if !in_use.contains(&candidate) {
+                in_use.push(candidate);
+                return Some(candidate);
+            }
+        }
+
+        // Pool exhausted for this project
+        None
+    }
+
+    /// Release a genus when an environment stops.
+    pub fn release(&mut self, project_name: &str, genus: TillandsiaGenus) {
+        if let Some(in_use) = self.allocated.get_mut(project_name) {
+            in_use.retain(|g| *g != genus);
+            if in_use.is_empty() {
+                self.allocated.remove(project_name);
+            }
+        }
+    }
+}
+
+impl Default for GenusAllocator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Compile-time embedded SVG icons for each genus + lifecycle combination.
+/// Uses `include_bytes!` to embed all 32 SVGs into the binary.
+pub mod icons {
+    use super::{PlantLifecycle, TillandsiaGenus};
+
+    // Aeranthos
+    const AERANTHOS_BUD: &[u8] = include_bytes!("../../../assets/icons/aeranthos/bud.svg");
+    const AERANTHOS_BLOOM: &[u8] = include_bytes!("../../../assets/icons/aeranthos/bloom.svg");
+    const AERANTHOS_DRIED: &[u8] = include_bytes!("../../../assets/icons/aeranthos/dried.svg");
+    const AERANTHOS_PUP: &[u8] = include_bytes!("../../../assets/icons/aeranthos/pup.svg");
+
+    // Ionantha
+    const IONANTHA_BUD: &[u8] = include_bytes!("../../../assets/icons/ionantha/bud.svg");
+    const IONANTHA_BLOOM: &[u8] = include_bytes!("../../../assets/icons/ionantha/bloom.svg");
+    const IONANTHA_DRIED: &[u8] = include_bytes!("../../../assets/icons/ionantha/dried.svg");
+    const IONANTHA_PUP: &[u8] = include_bytes!("../../../assets/icons/ionantha/pup.svg");
+
+    // Xerographica
+    const XEROGRAPHICA_BUD: &[u8] = include_bytes!("../../../assets/icons/xerographica/bud.svg");
+    const XEROGRAPHICA_BLOOM: &[u8] = include_bytes!("../../../assets/icons/xerographica/bloom.svg");
+    const XEROGRAPHICA_DRIED: &[u8] = include_bytes!("../../../assets/icons/xerographica/dried.svg");
+    const XEROGRAPHICA_PUP: &[u8] = include_bytes!("../../../assets/icons/xerographica/pup.svg");
+
+    // CaputMedusae
+    const CAPUT_MEDUSAE_BUD: &[u8] = include_bytes!("../../../assets/icons/caput-medusae/bud.svg");
+    const CAPUT_MEDUSAE_BLOOM: &[u8] = include_bytes!("../../../assets/icons/caput-medusae/bloom.svg");
+    const CAPUT_MEDUSAE_DRIED: &[u8] = include_bytes!("../../../assets/icons/caput-medusae/dried.svg");
+    const CAPUT_MEDUSAE_PUP: &[u8] = include_bytes!("../../../assets/icons/caput-medusae/pup.svg");
+
+    // Bulbosa
+    const BULBOSA_BUD: &[u8] = include_bytes!("../../../assets/icons/bulbosa/bud.svg");
+    const BULBOSA_BLOOM: &[u8] = include_bytes!("../../../assets/icons/bulbosa/bloom.svg");
+    const BULBOSA_DRIED: &[u8] = include_bytes!("../../../assets/icons/bulbosa/dried.svg");
+    const BULBOSA_PUP: &[u8] = include_bytes!("../../../assets/icons/bulbosa/pup.svg");
+
+    // Tectorum
+    const TECTORUM_BUD: &[u8] = include_bytes!("../../../assets/icons/tectorum/bud.svg");
+    const TECTORUM_BLOOM: &[u8] = include_bytes!("../../../assets/icons/tectorum/bloom.svg");
+    const TECTORUM_DRIED: &[u8] = include_bytes!("../../../assets/icons/tectorum/dried.svg");
+    const TECTORUM_PUP: &[u8] = include_bytes!("../../../assets/icons/tectorum/pup.svg");
+
+    // Stricta
+    const STRICTA_BUD: &[u8] = include_bytes!("../../../assets/icons/stricta/bud.svg");
+    const STRICTA_BLOOM: &[u8] = include_bytes!("../../../assets/icons/stricta/bloom.svg");
+    const STRICTA_DRIED: &[u8] = include_bytes!("../../../assets/icons/stricta/dried.svg");
+    const STRICTA_PUP: &[u8] = include_bytes!("../../../assets/icons/stricta/pup.svg");
+
+    // Usneoides
+    const USNEOIDES_BUD: &[u8] = include_bytes!("../../../assets/icons/usneoides/bud.svg");
+    const USNEOIDES_BLOOM: &[u8] = include_bytes!("../../../assets/icons/usneoides/bloom.svg");
+    const USNEOIDES_DRIED: &[u8] = include_bytes!("../../../assets/icons/usneoides/dried.svg");
+    const USNEOIDES_PUP: &[u8] = include_bytes!("../../../assets/icons/usneoides/pup.svg");
+
+    /// Look up the embedded SVG bytes for a given genus and lifecycle state.
+    pub fn icon_svg(genus: TillandsiaGenus, lifecycle: PlantLifecycle) -> &'static [u8] {
+        match (genus, lifecycle) {
+            (TillandsiaGenus::Aeranthos, PlantLifecycle::Bud) => AERANTHOS_BUD,
+            (TillandsiaGenus::Aeranthos, PlantLifecycle::Bloom) => AERANTHOS_BLOOM,
+            (TillandsiaGenus::Aeranthos, PlantLifecycle::Dried) => AERANTHOS_DRIED,
+            (TillandsiaGenus::Aeranthos, PlantLifecycle::Pup) => AERANTHOS_PUP,
+
+            (TillandsiaGenus::Ionantha, PlantLifecycle::Bud) => IONANTHA_BUD,
+            (TillandsiaGenus::Ionantha, PlantLifecycle::Bloom) => IONANTHA_BLOOM,
+            (TillandsiaGenus::Ionantha, PlantLifecycle::Dried) => IONANTHA_DRIED,
+            (TillandsiaGenus::Ionantha, PlantLifecycle::Pup) => IONANTHA_PUP,
+
+            (TillandsiaGenus::Xerographica, PlantLifecycle::Bud) => XEROGRAPHICA_BUD,
+            (TillandsiaGenus::Xerographica, PlantLifecycle::Bloom) => XEROGRAPHICA_BLOOM,
+            (TillandsiaGenus::Xerographica, PlantLifecycle::Dried) => XEROGRAPHICA_DRIED,
+            (TillandsiaGenus::Xerographica, PlantLifecycle::Pup) => XEROGRAPHICA_PUP,
+
+            (TillandsiaGenus::CaputMedusae, PlantLifecycle::Bud) => CAPUT_MEDUSAE_BUD,
+            (TillandsiaGenus::CaputMedusae, PlantLifecycle::Bloom) => CAPUT_MEDUSAE_BLOOM,
+            (TillandsiaGenus::CaputMedusae, PlantLifecycle::Dried) => CAPUT_MEDUSAE_DRIED,
+            (TillandsiaGenus::CaputMedusae, PlantLifecycle::Pup) => CAPUT_MEDUSAE_PUP,
+
+            (TillandsiaGenus::Bulbosa, PlantLifecycle::Bud) => BULBOSA_BUD,
+            (TillandsiaGenus::Bulbosa, PlantLifecycle::Bloom) => BULBOSA_BLOOM,
+            (TillandsiaGenus::Bulbosa, PlantLifecycle::Dried) => BULBOSA_DRIED,
+            (TillandsiaGenus::Bulbosa, PlantLifecycle::Pup) => BULBOSA_PUP,
+
+            (TillandsiaGenus::Tectorum, PlantLifecycle::Bud) => TECTORUM_BUD,
+            (TillandsiaGenus::Tectorum, PlantLifecycle::Bloom) => TECTORUM_BLOOM,
+            (TillandsiaGenus::Tectorum, PlantLifecycle::Dried) => TECTORUM_DRIED,
+            (TillandsiaGenus::Tectorum, PlantLifecycle::Pup) => TECTORUM_PUP,
+
+            (TillandsiaGenus::Stricta, PlantLifecycle::Bud) => STRICTA_BUD,
+            (TillandsiaGenus::Stricta, PlantLifecycle::Bloom) => STRICTA_BLOOM,
+            (TillandsiaGenus::Stricta, PlantLifecycle::Dried) => STRICTA_DRIED,
+            (TillandsiaGenus::Stricta, PlantLifecycle::Pup) => STRICTA_PUP,
+
+            (TillandsiaGenus::Usneoides, PlantLifecycle::Bud) => USNEOIDES_BUD,
+            (TillandsiaGenus::Usneoides, PlantLifecycle::Bloom) => USNEOIDES_BLOOM,
+            (TillandsiaGenus::Usneoides, PlantLifecycle::Dried) => USNEOIDES_DRIED,
+            (TillandsiaGenus::Usneoides, PlantLifecycle::Pup) => USNEOIDES_PUP,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slug_roundtrip() {
+        for genus in TillandsiaGenus::ALL {
+            assert_eq!(TillandsiaGenus::from_slug(genus.slug()), Some(*genus));
+        }
+    }
+
+    #[test]
+    fn allocator_round_robin() {
+        let mut alloc = GenusAllocator::new();
+        let g1 = alloc.allocate("project-a").unwrap();
+        let g2 = alloc.allocate("project-b").unwrap();
+        assert_ne!(g1, g2);
+    }
+
+    #[test]
+    fn allocator_no_duplicate_for_same_project() {
+        let mut alloc = GenusAllocator::new();
+        let g1 = alloc.allocate("project-a").unwrap();
+        let g2 = alloc.allocate("project-a").unwrap();
+        assert_ne!(g1, g2);
+    }
+
+    #[test]
+    fn allocator_pool_exhaustion() {
+        let mut alloc = GenusAllocator::new();
+        for _ in 0..8 {
+            assert!(alloc.allocate("project-a").is_some());
+        }
+        // 9th allocation should fail — pool exhausted
+        assert!(alloc.allocate("project-a").is_none());
+    }
+
+    #[test]
+    fn allocator_release_and_reuse() {
+        let mut alloc = GenusAllocator::new();
+        let g1 = alloc.allocate("project-a").unwrap();
+        alloc.release("project-a", g1);
+        let g2 = alloc.allocate("project-a").unwrap();
+        // After release, should be able to get a genus again
+        assert!(TillandsiaGenus::ALL.contains(&g2));
+    }
+
+    #[test]
+    fn icon_loader_all_combinations() {
+        // Verify all 32 icon combinations load and contain valid SVG data
+        for genus in TillandsiaGenus::ALL {
+            for lifecycle in &[
+                PlantLifecycle::Bud,
+                PlantLifecycle::Bloom,
+                PlantLifecycle::Dried,
+                PlantLifecycle::Pup,
+            ] {
+                let svg = icons::icon_svg(*genus, *lifecycle);
+                assert!(!svg.is_empty(), "Icon for {:?}/{:?} is empty", genus, lifecycle);
+                let svg_str = std::str::from_utf8(svg).expect("SVG should be valid UTF-8");
+                assert!(svg_str.contains("<svg"), "Icon for {:?}/{:?} missing <svg tag", genus, lifecycle);
+            }
+        }
+    }
+
+    #[test]
+    fn lifecycle_mapping() {
+        use crate::event::ContainerState;
+        assert_eq!(
+            PlantLifecycle::from_container_state(&ContainerState::Creating),
+            PlantLifecycle::Bud
+        );
+        assert_eq!(
+            PlantLifecycle::from_container_state(&ContainerState::Running),
+            PlantLifecycle::Bloom
+        );
+        assert_eq!(
+            PlantLifecycle::from_container_state(&ContainerState::Stopping),
+            PlantLifecycle::Dried
+        );
+        assert_eq!(
+            PlantLifecycle::from_container_state(&ContainerState::Rebuilding),
+            PlantLifecycle::Pup
+        );
+    }
+}

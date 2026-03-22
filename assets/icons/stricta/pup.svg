@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Stricta pup: small light green stiff leaves -->
+  <g transform="translate(32,58)">
+    <polygon points="0,-20 -2,-4 2,-4" fill="#a0dda0" stroke="#80bb80" stroke-width="1"/>
+    <polygon points="-6,-16 -5,-2 -2,-5" fill="#b0eeb0" stroke="#80bb80" stroke-width="1"/>
+    <polygon points="6,-16 5,-2 2,-5" fill="#b0eeb0" stroke="#80bb80" stroke-width="1"/>
+  </g>
+</svg>

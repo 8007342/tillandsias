@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Xerographica bloom: wide curling leaves with tall red-green inflorescence -->
+  <g transform="translate(32,54)">
+    <path d="M0,-8 C-8,-20 -18,-14 -20,-6 C-22,2 -14,4 -6,0" fill="none" stroke="#5a9a5a" stroke-width="3" stroke-linecap="round"/>
+    <path d="M0,-8 C8,-20 18,-14 20,-6 C22,2 14,4 6,0" fill="none" stroke="#5a9a5a" stroke-width="3" stroke-linecap="round"/>
+    <path d="M0,-8 C-4,-24 -10,-22 -8,-16" fill="none" stroke="#6aad6a" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M0,-8 C4,-24 10,-22 8,-16" fill="none" stroke="#6aad6a" stroke-width="2.5" stroke-linecap="round"/>
+    <!-- Flower spike -->
+    <line x1="0" y1="-10" x2="0" y2="-36" stroke="#cc5544" stroke-width="2"/>
+    <circle cx="-3" cy="-32" r="3" fill="#ee6655"/>
+    <circle cx="3" cy="-34" r="3" fill="#ff7766"/>
+    <circle cx="0" cy="-38" r="2.5" fill="#ff8877"/>
+  </g>
+</svg>

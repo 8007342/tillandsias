@@ -1,0 +1,221 @@
+//! Dynamic tray menu builder.
+//!
+//! Builds a hierarchical system tray menu from `TrayState`, reflecting
+//! discovered projects, running environments, and their lifecycle states.
+
+use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::{AppHandle, Runtime};
+use tracing::debug;
+
+use tillandsias_core::state::TrayState;
+
+/// Menu item ID constants for event dispatching.
+pub mod ids {
+    pub const QUIT: &str = "quit";
+    pub const SETTINGS: &str = "settings";
+
+    /// Build an "attach here" menu item ID for a project path.
+    pub fn attach_here(project_path: &std::path::Path) -> String {
+        format!("attach:{}", project_path.display())
+    }
+
+    /// Build a "start" menu item ID for a project path.
+    pub fn start(project_path: &std::path::Path) -> String {
+        format!("start:{}", project_path.display())
+    }
+
+    /// Build a "stop" menu item ID for a container.
+    pub fn stop(container_name: &str) -> String {
+        format!("stop:{container_name}")
+    }
+
+    /// Build a "destroy" menu item ID for a container.
+    pub fn destroy(container_name: &str) -> String {
+        format!("destroy:{container_name}")
+    }
+
+    /// Parse a menu item ID into its action and payload.
+    pub fn parse(id: &str) -> Option<(&str, &str)> {
+        id.split_once(':')
+    }
+}
+
+/// Build the complete tray menu from current application state.
+pub fn build_tray_menu<R: Runtime>(
+    app: &AppHandle<R>,
+    state: &TrayState,
+) -> tauri::Result<tauri::menu::Menu<R>> {
+    let mut menu = MenuBuilder::new(app);
+
+    // Section: Discovered projects
+    if state.projects.is_empty() {
+        menu = menu.item(
+            &MenuItemBuilder::with_id("no-projects", "No projects detected")
+                .enabled(false)
+                .build(app)?,
+        );
+    } else {
+        for project in &state.projects {
+            let project_submenu = build_project_submenu(app, project, state)?;
+            menu = menu.item(&project_submenu);
+        }
+    }
+
+    // Separator
+    menu = menu.separator();
+
+    // Section: Running environments
+    if state.running.is_empty() {
+        menu = menu.item(
+            &MenuItemBuilder::with_id("no-running", "No running environments")
+                .enabled(false)
+                .build(app)?,
+        );
+    } else {
+        let running_submenu = SubmenuBuilder::new(app, "Running Environments");
+        let mut running_sub = running_submenu;
+
+        for container in &state.running {
+            let lifecycle = container.lifecycle();
+            let label = format!(
+                "{} {} [{}]",
+                lifecycle_emoji(lifecycle),
+                container.project_name,
+                container.genus.display_name()
+            );
+
+            let container_sub = SubmenuBuilder::new(app, &label)
+                .item(
+                    &MenuItemBuilder::with_id(
+                        ids::stop(&container.name),
+                        "Stop",
+                    )
+                    .build(app)?,
+                )
+                .item(
+                    &MenuItemBuilder::with_id(
+                        ids::destroy(&container.name),
+                        "Destroy (hold 5s)",
+                    )
+                    .build(app)?,
+                )
+                .build()?;
+
+            running_sub = running_sub.item(&container_sub);
+        }
+
+        menu = menu.item(&running_sub.build()?);
+    }
+
+    // Separator
+    menu = menu.separator();
+
+    // Settings and Quit
+    menu = menu.item(
+        &MenuItemBuilder::with_id(ids::SETTINGS, "Settings")
+            .build(app)?,
+    );
+
+    menu = menu.item(
+        &MenuItemBuilder::with_id(ids::QUIT, "Quit Tillandsias")
+            .build(app)?,
+    );
+
+    debug!(
+        projects = state.projects.len(),
+        running = state.running.len(),
+        "Menu rebuilt"
+    );
+
+    menu.build()
+}
+
+/// Build a submenu for a single project.
+fn build_project_submenu<R: Runtime>(
+    app: &AppHandle<R>,
+    project: &tillandsias_core::project::Project,
+    state: &TrayState,
+) -> tauri::Result<tauri::menu::Submenu<R>> {
+    let running_count = state
+        .running
+        .iter()
+        .filter(|c| c.project_name == project.name)
+        .count();
+
+    let label = if running_count > 0 {
+        format!("{} ({})", project.name, running_count)
+    } else {
+        project.name.clone()
+    };
+
+    let mut submenu = SubmenuBuilder::new(app, &label);
+
+    // "Attach Here" — primary action
+    submenu = submenu.item(
+        &MenuItemBuilder::with_id(
+            ids::attach_here(&project.path),
+            "Attach Here",
+        )
+        .build(app)?,
+    );
+
+    // "Start" action
+    submenu = submenu.item(
+        &MenuItemBuilder::with_id(
+            ids::start(&project.path),
+            "Start",
+        )
+        .build(app)?,
+    );
+
+    // Per-project running environments
+    let project_containers: Vec<_> = state
+        .running
+        .iter()
+        .filter(|c| c.project_name == project.name)
+        .collect();
+
+    if !project_containers.is_empty() {
+        submenu = submenu.separator();
+        for container in project_containers {
+            let lifecycle = container.lifecycle();
+            let item_label = format!(
+                "{} {} — {}",
+                lifecycle_emoji(lifecycle),
+                container.genus.display_name(),
+                lifecycle_label(lifecycle),
+            );
+            submenu = submenu.item(
+                &MenuItemBuilder::with_id(
+                    ids::stop(&container.name),
+                    &item_label,
+                )
+                .build(app)?,
+            );
+        }
+    }
+
+    submenu.build()
+}
+
+/// Map plant lifecycle to a status emoji for the menu.
+fn lifecycle_emoji(lifecycle: tillandsias_core::genus::PlantLifecycle) -> &'static str {
+    use tillandsias_core::genus::PlantLifecycle;
+    match lifecycle {
+        PlantLifecycle::Bud => "\u{1F331}",    // seedling
+        PlantLifecycle::Bloom => "\u{1F33A}",  // hibiscus
+        PlantLifecycle::Dried => "\u{1F342}",  // fallen leaf
+        PlantLifecycle::Pup => "\u{1F33F}",    // herb
+    }
+}
+
+/// Human-readable lifecycle label.
+fn lifecycle_label(lifecycle: tillandsias_core::genus::PlantLifecycle) -> &'static str {
+    use tillandsias_core::genus::PlantLifecycle;
+    match lifecycle {
+        PlantLifecycle::Bud => "Starting",
+        PlantLifecycle::Bloom => "Running",
+        PlantLifecycle::Dried => "Stopping",
+        PlantLifecycle::Pup => "Rebuilding",
+    }
+}

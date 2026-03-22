@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Ionantha bud: compact, short stiff leaves radiating out -->
+  <g transform="translate(32,56)">
+    <polygon points="0,-22 -4,-4 4,-4" fill="#6aad6a" stroke="#4a8a4a" stroke-width="1"/>
+    <polygon points="-10,-18 -6,-2 -2,-8" fill="#7cbc7c" stroke="#4a8a4a" stroke-width="1"/>
+    <polygon points="10,-18 6,-2 2,-8" fill="#7cbc7c" stroke="#4a8a4a" stroke-width="1"/>
+    <polygon points="-14,-12 -8,0 -4,-6" fill="#8ecc8e" stroke="#4a8a4a" stroke-width="1"/>
+    <polygon points="14,-12 8,0 4,-6" fill="#8ecc8e" stroke="#4a8a4a" stroke-width="1"/>
+  </g>
+</svg>

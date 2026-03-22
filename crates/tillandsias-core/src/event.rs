@@ -1,0 +1,68 @@
+use std::path::PathBuf;
+
+use crate::genus::TillandsiaGenus;
+use crate::project::ProjectChange;
+
+/// All events flow through this enum into the main `tokio::select!` loop.
+#[derive(Debug, Clone)]
+pub enum AppEvent {
+    /// A project directory was created, modified, or removed.
+    FilesystemChange(ProjectChange),
+
+    /// A container changed state.
+    ContainerStateChange {
+        container_name: String,
+        new_state: ContainerState,
+    },
+
+    /// User clicked a menu item.
+    MenuAction(MenuCommand),
+
+    /// Graceful shutdown requested.
+    Shutdown,
+}
+
+/// Container lifecycle states mapped to plant lifecycle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ContainerState {
+    /// Container is being created/starting (icon: bud)
+    Creating,
+    /// Container is running and healthy (icon: bloom)
+    Running,
+    /// Container is shutting down (icon: dried)
+    Stopping,
+    /// Container has stopped
+    Stopped,
+    /// Container is being rebuilt (icon: pup)
+    Rebuilding,
+    /// Container is absent / not found
+    Absent,
+}
+
+/// Commands dispatched from tray menu interactions.
+#[derive(Debug, Clone)]
+pub enum MenuCommand {
+    /// "Attach Here" on a project
+    AttachHere { project_path: PathBuf },
+
+    /// Start a project's runtime
+    Start { project_path: PathBuf },
+
+    /// Stop a running environment
+    Stop {
+        container_name: String,
+        genus: TillandsiaGenus,
+    },
+
+    /// Destroy an environment (requires 5s hold confirmation)
+    Destroy {
+        container_name: String,
+        genus: TillandsiaGenus,
+    },
+
+    /// Open settings
+    Settings,
+
+    /// Quit the application
+    Quit,
+}

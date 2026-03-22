@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Tectorum pup: small light green fuzzy ball -->
+  <g transform="translate(32,54)">
+    <circle cx="0" cy="-8" r="8" fill="#a0dda0" stroke="#80bb80" stroke-width="1"/>
+    <line x1="-5" y1="-13" x2="-8" y2="-16" stroke="#b0eeb0" stroke-width="1" stroke-linecap="round"/>
+    <line x1="5" y1="-13" x2="8" y2="-16" stroke="#b0eeb0" stroke-width="1" stroke-linecap="round"/>
+    <line x1="0" y1="-16" x2="0" y2="-19" stroke="#b0eeb0" stroke-width="1" stroke-linecap="round"/>
+    <line x1="-7" y1="-6" x2="-9" y2="-6" stroke="#b0eeb0" stroke-width="1" stroke-linecap="round"/>
+    <line x1="7" y1="-6" x2="9" y2="-6" stroke="#b0eeb0" stroke-width="1" stroke-linecap="round"/>
+  </g>
+</svg>

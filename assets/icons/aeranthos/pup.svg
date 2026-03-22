@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Aeranthos pup: small light green rosette sprouting -->
+  <g transform="translate(32,58)">
+    <ellipse cx="0" cy="-8" rx="6" ry="12" fill="#a0dda0" stroke="#80bb80" stroke-width="1.5"/>
+    <ellipse cx="-5" cy="-6" rx="4" ry="9" fill="#b0eeb0" stroke="#80bb80" stroke-width="1" transform="rotate(18)"/>
+    <ellipse cx="5" cy="-6" rx="4" ry="9" fill="#b0eeb0" stroke="#80bb80" stroke-width="1" transform="rotate(-18)"/>
+  </g>
+</svg>

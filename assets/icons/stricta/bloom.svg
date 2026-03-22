@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Stricta bloom: stiff leaves with bright pink/magenta spike -->
+  <g transform="translate(32,58)">
+    <polygon points="0,-28 -3,-6 3,-6" fill="#5a9a5a" stroke="#3a7a3a" stroke-width="1"/>
+    <polygon points="-8,-24 -7,-4 -3,-8" fill="#6aad6a" stroke="#3a7a3a" stroke-width="1"/>
+    <polygon points="8,-24 7,-4 3,-8" fill="#6aad6a" stroke="#3a7a3a" stroke-width="1"/>
+    <polygon points="-14,-16 -10,-2 -6,-6" fill="#7cbc7c" stroke="#3a7a3a" stroke-width="1"/>
+    <polygon points="14,-16 10,-2 6,-6" fill="#7cbc7c" stroke="#3a7a3a" stroke-width="1"/>
+    <!-- Pink flower spike -->
+    <line x1="0" y1="-28" x2="0" y2="-40" stroke="#dd4488" stroke-width="2.5"/>
+    <ellipse cx="-3" cy="-38" rx="4" ry="3" fill="#ee5599"/>
+    <ellipse cx="3" cy="-40" rx="4" ry="3" fill="#ff66aa"/>
+    <ellipse cx="0" cy="-43" rx="3" ry="2.5" fill="#ff77bb"/>
+  </g>
+</svg>
