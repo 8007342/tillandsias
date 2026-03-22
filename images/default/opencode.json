@@ -1,18 +1,4 @@
 {
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "opencode": {
-      "name": "OpenCode",
-      "models": {
-        "big-pickle": {
-          "name": "big-pickle",
-          "contextWindow": 100000,
-          "maxOutput": 65536
-        }
-      }
-    }
-  },
-  "model": "opencode/big-pickle",
   "tools": {
     "read": true,
     "edit": true,

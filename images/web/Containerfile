@@ -1,0 +1,12 @@
+FROM docker.io/library/alpine:latest
+
+RUN apk add --no-cache busybox-extras
+
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+WORKDIR /var/www
+
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

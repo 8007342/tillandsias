@@ -26,10 +26,23 @@ echo "  project: ${PROJECT_NAME}"
 echo "========================================"
 echo ""
 
-# Launch opencode as the foreground process, fall back to bash
+# Launch opencode as the foreground process, fall back to bash on failure
 if command -v opencode &>/dev/null; then
-    exec opencode "$@"
+    set +e
+    opencode "$@"
+    OPENCODE_EXIT=$?
+    set -e
+
+    if [ "$OPENCODE_EXIT" -ne 0 ]; then
+        echo ""
+        echo "opencode exited with status ${OPENCODE_EXIT}."
+        echo "Falling back to interactive bash."
+        echo ""
+        exec bash
+    fi
 else
-    echo "opencode not found, falling back to bash"
-    exec bash "$@"
+    echo "opencode not found in PATH."
+    echo "Falling back to interactive bash."
+    echo ""
+    exec bash
 fi

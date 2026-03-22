@@ -1,9 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod cli;
 mod event_loop;
 mod handlers;
 mod logging;
 mod menu;
+mod runner;
 mod updater;
 
 use std::sync::{Arc, Mutex};
@@ -25,6 +27,25 @@ use updater::UpdateState;
 static TRAY_ICON: std::sync::OnceLock<Mutex<tauri::tray::TrayIcon>> = std::sync::OnceLock::new();
 
 fn main() {
+    // Parse CLI arguments first — before any heavy initialization.
+    let cli_mode = match cli::parse() {
+        Some(mode) => mode,
+        None => {
+            // --help was printed, exit cleanly
+            std::process::exit(0);
+        }
+    };
+
+    // If CLI attach mode, run the container runner and exit — no tray app.
+    if let cli::CliMode::Attach { path, image, debug } = cli_mode {
+        // Initialize tracing for file logging (CLI output uses println!)
+        let _log_guard = logging::init();
+        let success = runner::run(path, &image, debug);
+        std::process::exit(if success { 0 } else { 1 });
+    }
+
+    // --- Tray mode below ---
+
     // Initialize tracing — dual output (stderr if TTY + file appender) in all builds.
     // Hold the guard so the non-blocking file writer flushes on shutdown.
     let _log_guard = logging::init();
