@@ -80,18 +80,25 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Build the `podman run -it --rm` argument list for interactive terminal mode.
-fn build_interactive_run_args(
+/// Build `podman run` argument list.
+/// From tray: detached (`-d`). From CLI: interactive (`-it`).
+fn build_run_args(
     container_name: &str,
     image: &str,
     project_path: &Path,
     cache_dir: &Path,
     port_range: (u16, u16),
+    detached: bool,
 ) -> Vec<String> {
     let mut args = Vec::new();
 
-    // Interactive + ephemeral (NOT detached — user gets terminal directly)
-    args.push("-it".to_string());
+    if detached {
+        // Tray mode: run in background, user manages via tray menu
+        args.push("-d".to_string());
+    } else {
+        // CLI mode: interactive, user gets terminal directly
+        args.push("-it".to_string());
+    }
     args.push("--rm".to_string());
 
     // Container name
@@ -227,36 +234,42 @@ pub async fn handle_attach_here(
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
 
-    // Build the podman run args for interactive mode
-    let run_args = build_interactive_run_args(
+    // Tray mode: run container DETACHED. The tray manages lifecycle
+    // (stop/destroy). For interactive use, the CLI mode uses -it.
+    let run_args = build_run_args(
         &container_name,
         FORGE_IMAGE_TAG,
         &project_path,
         &cache,
         port_range,
+        true, // detached — tray has no terminal
     );
 
-    // Spawn podman directly — no terminal emulator dependency.
-    // `podman run -it --rm` handles TTY allocation. The container's
-    // bash/entrypoint/opencode provides the interactive interface.
+    // Spawn podman detached — container runs in background
     let spawn_result = std::process::Command::new("podman")
         .arg("run")
         .args(&run_args)
-        .spawn();
+        .output(); // use output() not spawn() for detached mode
 
     match spawn_result {
-        Ok(_child) => {
+        Ok(output) if output.status.success() => {
             info!(
                 container = %container_name,
                 genus = %genus.display_name(),
                 port_range = ?port_range,
-                "Container launched"
+                "Container launched (detached)"
             );
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            state.running.retain(|c| c.name != container_name);
+            allocator.release(&project_name, genus);
+            return Err(format!("Container failed to start: {stderr}"));
         }
         Err(e) => {
             state.running.retain(|c| c.name != container_name);
             allocator.release(&project_name, genus);
-            return Err(format!("Failed to spawn podman: {e}"));
+            return Err(format!("Failed to run podman: {e}"));
         }
     }
 

@@ -26,23 +26,37 @@ echo "  project: ${PROJECT_NAME}"
 echo "========================================"
 echo ""
 
-# Launch opencode as the foreground process, fall back to bash on failure
-if command -v opencode &>/dev/null; then
-    set +e
-    opencode "$@"
-    OPENCODE_EXIT=$?
-    set -e
+# Detect if we have a terminal (TTY)
+if [ -t 0 ] && [ -t 1 ]; then
+    # Interactive mode (CLI: tillandsias <path>)
+    # Launch opencode TUI or fall back to bash
+    if command -v opencode &>/dev/null; then
+        set +e
+        opencode "$@"
+        OPENCODE_EXIT=$?
+        set -e
 
-    if [ "$OPENCODE_EXIT" -ne 0 ]; then
-        echo ""
-        echo "opencode exited with status ${OPENCODE_EXIT}."
+        if [ "$OPENCODE_EXIT" -ne 0 ]; then
+            echo ""
+            echo "opencode exited with status ${OPENCODE_EXIT}."
+            echo "Falling back to interactive bash."
+            echo ""
+            exec bash
+        fi
+    else
+        echo "opencode not found in PATH."
         echo "Falling back to interactive bash."
         echo ""
         exec bash
     fi
 else
-    echo "opencode not found in PATH."
-    echo "Falling back to interactive bash."
+    # Detached mode (Tray: Attach Here)
+    # Keep container alive. User connects via: podman exec -it <name> bash
+    echo "Running in background mode."
+    echo "Connect with: podman exec -it ${HOSTNAME:-container} bash"
+    echo "Or use: tillandsias ${PROJECT_NAME}"
     echo ""
-    exec bash
+
+    # Sleep forever, waiting for SIGTERM
+    exec sleep infinity
 fi
