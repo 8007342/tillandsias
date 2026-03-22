@@ -1,0 +1,1 @@
+/nix/store/p1q2142fsxi1n2lxrvs5xgk86ppl4rnx-macuahuitl-shared-config/usr/local/share/macuahuitl/opencode/command/forge-install-launcher.md

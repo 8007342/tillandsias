@@ -38,7 +38,9 @@ fn detect_terminal() -> Option<String> {
     // 3. Fallback list
     let candidates = [
         "x-terminal-emulator",
+        "ptyxis",           // GNOME Terminal on Silverblue/Fedora 43+
         "gnome-terminal",
+        "gnome-console",    // GNOME Console (kgx)
         "konsole",
         "alacritty",
         "kitty",
@@ -313,8 +315,11 @@ pub async fn handle_attach_here(
 fn spawn_terminal(terminal: &str, command: &str) -> Result<(), String> {
     let mut cmd = std::process::Command::new(terminal);
 
-    // gnome-terminal uses -- for command separation
+    // Different terminals have different argument conventions
     if terminal.contains("gnome-terminal") {
+        cmd.arg("--").arg("bash").arg("-c").arg(command);
+    } else if terminal.contains("ptyxis") {
+        // ptyxis (GNOME Terminal on Silverblue) uses -- for command separation
         cmd.arg("--").arg("bash").arg("-c").arg(command);
     } else if terminal.contains("konsole") {
         cmd.arg("-e").arg("bash").arg("-c").arg(command);
