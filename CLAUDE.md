@@ -7,24 +7,25 @@
 ## Build Commands
 
 ```bash
-# Library crates only (no system deps needed)
-cargo check -p tillandsias-core -p tillandsias-scanner -p tillandsias-podman
-cargo test -p tillandsias-core -p tillandsias-scanner -p tillandsias-podman
-
-# Full workspace (requires GTK/WebKit dev libs — use toolbox on Silverblue)
-toolbox run -c tillandsias cargo build --workspace
-toolbox run -c tillandsias cargo test --workspace
-
-# If system libs are installed directly
-cargo build --workspace
-cargo test --workspace
+./build.sh                          # Debug build (auto-creates toolbox if needed)
+./build.sh --release                # Release build (Tauri bundle)
+./build.sh --test                   # Run test suite
+./build.sh --check                  # Type-check only
+./build.sh --clean                  # Clean + rebuild
+./build.sh --clean --release        # Clean release build
+./build.sh --install                # Release build + install to ~/.local/bin/
+./build.sh --remove                 # Remove installed binary
+./build.sh --wipe                   # Remove target/, caches
+./build.sh --toolbox-reset          # Destroy and recreate toolbox
 ```
 
-### Toolbox Setup (Fedora Silverblue)
+The build script auto-creates the `tillandsias` toolbox with all system deps on first run.
+
+### Manual Commands (without build.sh)
 
 ```bash
-toolbox create tillandsias
-toolbox run -c tillandsias sudo dnf install -y gcc gtk3-devel webkit2gtk4.1-devel libappindicator-gtk3-devel librsvg2-devel openssl-devel pkg-config
+toolbox run -c tillandsias cargo build --workspace
+toolbox run -c tillandsias cargo test --workspace
 ```
 
 ## Workspace Structure

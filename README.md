@@ -58,31 +58,18 @@ tillandsias/
 
 ## Build
 
-### Using Toolbox (Fedora Silverblue)
-
 ```bash
-# Create the dev toolbox (first time only)
-toolbox create tillandsias
-
-# Build inside the toolbox
-toolbox run -c tillandsias cargo build --workspace
-
-# Run tests
-toolbox run -c tillandsias cargo test --workspace
+./build.sh                  # Debug build (auto-creates toolbox on first run)
+./build.sh --test           # Run tests
+./build.sh --release        # Release build (Tauri bundle)
+./build.sh --install        # Release + install to ~/.local/bin/
+./build.sh --clean          # Clean + rebuild
+./build.sh --wipe           # Remove target/, caches
+./build.sh --toolbox-reset  # Destroy and recreate toolbox
+./build.sh --remove         # Uninstall from ~/.local/bin/
 ```
 
-### Direct (requires system GTK/WebKit dev libraries)
-
-```bash
-# Check library crates (no system deps needed)
-cargo check -p tillandsias-core -p tillandsias-scanner -p tillandsias-podman
-
-# Run tests (library crates)
-cargo test -p tillandsias-core -p tillandsias-scanner -p tillandsias-podman
-
-# Full build (requires gtk3-devel, webkit2gtk4.1-devel, libappindicator-gtk3-devel)
-cargo build --workspace
-```
+The build script handles everything — toolbox creation, system dependencies, Tauri CLI installation. Zero manual setup on Fedora Silverblue.
 
 ## Configuration
 
