@@ -1,0 +1,56 @@
+FROM registry.fedoraproject.org/fedora-minimal:latest
+
+# Install system packages via microdnf
+RUN microdnf install -y \
+        bash \
+        git \
+        gh \
+        curl \
+        jq \
+        ripgrep \
+        nodejs \
+        npm \
+        tar \
+        findutils \
+        procps-ng \
+        shadow-utils \
+        xz \
+        gzip \
+    && microdnf clean all
+
+# Install Nix in single-user mode with flakes enabled
+RUN mkdir -m 0755 /nix \
+    && mkdir -p /etc/nix \
+    && echo 'build-users-group =' > /etc/nix/nix.conf \
+    && curl -L https://nixos.org/nix/install | bash -s -- --no-daemon \
+    && mkdir -p /root/.config/nix \
+    && printf 'experimental-features = nix-command flakes\nbuild-users-group =\n' > /root/.config/nix/nix.conf
+
+# Install OpenCode binary (glibc linux-x64)
+RUN OPENCODE_URL=$(curl -fsSL https://api.github.com/repos/opencode-ai/opencode/releases/latest \
+        | jq -r '.assets[] | select(.name == "opencode-linux-x86_64.tar.gz") | .browser_download_url') \
+    && curl -fsSL -L "$OPENCODE_URL" -o /tmp/opencode.tar.gz \
+    && tar xzf /tmp/opencode.tar.gz -C /usr/local/bin/ opencode \
+    && chmod +x /usr/local/bin/opencode \
+    && rm -f /tmp/opencode.tar.gz
+
+# Install OpenSpec via npm globally
+RUN npm install -g @fission-ai/openspec
+
+# Create forge user
+RUN useradd -u 1000 -m -s /bin/bash forge
+
+# Copy entrypoint and config
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+COPY opencode.json /home/forge/.opencode.json
+RUN chown forge:forge /home/forge/.opencode.json
+
+WORKDIR /home/forge/src
+
+USER forge
+
+EXPOSE 3000-3099
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

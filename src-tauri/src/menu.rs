@@ -7,6 +7,7 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Runtime};
 use tracing::debug;
 
+use tillandsias_core::config::load_global_config;
 use tillandsias_core::state::TrayState;
 
 /// Menu item ID constants for event dispatching.
@@ -46,6 +47,35 @@ pub fn build_tray_menu<R: Runtime>(
     state: &TrayState,
 ) -> tauri::Result<tauri::menu::Menu<R>> {
     let mut menu = MenuBuilder::new(app);
+
+    // Permanent "~/src/ — Attach Here" entry at the top.
+    // Uses the first watch path from config (default ~/src).
+    let global_config = load_global_config();
+    let watch_path = global_config
+        .scanner
+        .watch_paths
+        .first()
+        .cloned()
+        .unwrap_or_else(|| {
+            std::path::PathBuf::from(
+                std::env::var("HOME").unwrap_or_else(|_| "/root".to_string()),
+            )
+            .join("src")
+        });
+
+    let src_label = format!(
+        "{}/ \u{2014} Attach Here",
+        watch_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| watch_path.display().to_string())
+    );
+    menu = menu.item(
+        &MenuItemBuilder::with_id(ids::attach_here(&watch_path), &src_label)
+            .build(app)?,
+    );
+
+    menu = menu.separator();
 
     // Section: Discovered projects
     if state.projects.is_empty() {

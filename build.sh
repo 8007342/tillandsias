@@ -101,6 +101,7 @@ done
 if [[ "$FLAG_REMOVE" == true ]]; then
     rm -f "$INSTALL_BIN" "$INSTALL_DIR/.tillandsias-bin"
     rm -rf "$HOME/.local/lib/tillandsias"
+    rm -rf "$HOME/.local/share/tillandsias"
     if [[ -f "$INSTALL_BIN" || -f "$INSTALL_DIR/.tillandsias-bin" ]]; then
         _warn "Some files could not be removed"
     else
@@ -289,6 +290,18 @@ WRAPPER
         # Install the actual binary
         cp "$RELEASE_BIN" "$INSTALL_DIR/.tillandsias-bin"
         chmod +x "$INSTALL_DIR/.tillandsias-bin"
+
+        # Copy container image files for "Attach Here" to build from
+        DATA_DIR="$HOME/.local/share/tillandsias"
+        IMAGE_DIR="$DATA_DIR/images/default"
+        mkdir -p "$IMAGE_DIR"
+        if [[ -d "$SCRIPT_DIR/images/default" ]]; then
+            cp "$SCRIPT_DIR/images/default/Containerfile" "$IMAGE_DIR/"
+            cp "$SCRIPT_DIR/images/default/entrypoint.sh" "$IMAGE_DIR/"
+            cp "$SCRIPT_DIR/images/default/opencode.json" "$IMAGE_DIR/"
+            chmod +x "$IMAGE_DIR/entrypoint.sh"
+            _info "Installed image files to $IMAGE_DIR"
+        fi
 
         _info "Installed to $INSTALL_BIN (libs in $LIB_DIR)"
     fi

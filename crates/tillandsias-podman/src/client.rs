@@ -177,6 +177,44 @@ impl PodmanClient {
         Ok(())
     }
 
+    /// Build a container image from a Containerfile.
+    pub async fn build_image(
+        &self,
+        containerfile: &str,
+        tag: &str,
+        context_dir: &str,
+    ) -> Result<(), PodmanError> {
+        debug!(tag, containerfile, context_dir, "Building image");
+        let output = Command::new("podman")
+            .args(["build", "-t", tag, "-f", containerfile, context_dir])
+            .output()
+            .await
+            .map_err(|e| PodmanError::CommandFailed(format!("build: {e}")))?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(PodmanError::CommandFailed(format!(
+                "build failed: {stderr}"
+            )))
+        }
+    }
+
+    /// Build image only if it doesn't already exist.
+    pub async fn ensure_image_built(
+        &self,
+        tag: &str,
+        containerfile: &str,
+        context_dir: &str,
+    ) -> Result<(), PodmanError> {
+        if self.image_exists(tag).await {
+            debug!(tag, "Image already exists, skipping build");
+            return Ok(());
+        }
+        self.build_image(containerfile, tag, context_dir).await
+    }
+
     /// Start a container with the given arguments.
     pub async fn run_container(&self, args: &[String]) -> Result<String, PodmanError> {
         debug!(?args, "Running container");

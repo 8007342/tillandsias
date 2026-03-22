@@ -205,6 +205,21 @@ pub fn config_dir() -> PathBuf {
     }
 }
 
+/// Platform-aware data directory (~/.local/share/tillandsias on Linux).
+pub fn data_dir() -> PathBuf {
+    match Os::detect() {
+        Os::Linux => dirs::data_local_dir()
+            .unwrap_or_else(|| PathBuf::from("~/.local/share"))
+            .join("tillandsias"),
+        Os::MacOS => dirs::data_local_dir()
+            .unwrap_or_else(|| PathBuf::from("~/Library/Application Support"))
+            .join("tillandsias"),
+        Os::Windows => dirs::data_local_dir()
+            .unwrap_or_else(|| PathBuf::from("AppData/Local"))
+            .join("tillandsias"),
+    }
+}
+
 /// Platform-aware cache directory.
 pub fn cache_dir() -> PathBuf {
     match Os::detect() {
