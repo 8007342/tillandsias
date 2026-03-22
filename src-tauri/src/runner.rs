@@ -211,33 +211,33 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool) -> bool {
         return false;
     }
 
-    // Use build-image.sh to ensure the image is built and fresh.
-    // The script handles staleness detection (skips if sources unchanged),
-    // nix build inside the builder toolbox, and podman load + tagging.
+    // Try to build image via build-image.sh if available (dev mode).
+    // Falls back to checking if image already exists (installed mode).
     let source_name = if image_name.contains(':') || image_name.contains('/') {
         "forge"
     } else {
         image_name
     };
 
-    println!("  Ensuring image is up to date...");
-
-    match run_build_image_script(source_name, debug) {
-        Ok(()) => {
-            // Verify the image exists after script ran
-            let image_exists = rt.block_on(client.image_exists(&tag));
-            if image_exists {
-                let size = image_size_display(&tag);
-                println!("  \u{2713} Image ready ({size})");
-            } else {
-                eprintln!("  \u{2717} build-image.sh succeeded but image {tag} not found");
-                return false;
+    // Try build script first (works when running from project dir)
+    if let Some(_root) = resolve_project_root() {
+        println!("  Ensuring image is up to date...");
+        if let Err(e) = run_build_image_script(source_name, debug) {
+            if debug {
+                eprintln!("  Build script failed: {e}");
             }
+            // Fall through to image check
         }
-        Err(e) => {
-            eprintln!("  \u{2717} Image build failed: {e}");
-            return false;
-        }
+    }
+
+    // Verify image exists
+    let image_exists = rt.block_on(client.image_exists(&tag));
+    if image_exists {
+        let size = image_size_display(&tag);
+        println!("  \u{2713} Image ready ({size})");
+    } else {
+        eprintln!("  \u{2717} Image {} not found. Run: ./build.sh --install", tag);
+        return false;
     }
 
     // Load config for port range

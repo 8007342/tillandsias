@@ -180,42 +180,19 @@ pub async fn handle_attach_here(
     state.running.push(placeholder);
     info!(container = %container_name, "Preparing environment... (bud state)");
 
-    // Ensure image is built via build-image.sh (handles staleness, nix build, podman load)
+    // Image must exist — built during `build.sh --install` or `scripts/build-image.sh`
+    // The tray app does NOT build images at runtime (needs flake.nix + builder toolbox).
     let client = PodmanClient::new();
 
-    info!(tag = FORGE_IMAGE_TAG, "Ensuring image is built via build-image.sh");
-
-    // Run build-image.sh in a blocking task to avoid blocking the async runtime.
-    // The script handles staleness detection internally — it's a no-op if sources
-    // haven't changed and the image already exists.
-    let build_result = tokio::task::spawn_blocking(|| {
-        run_build_image_script("forge")
-    }).await;
-
-    match build_result {
-        Ok(Ok(())) => {
-            // Script succeeded — verify image exists
-            if !client.image_exists(FORGE_IMAGE_TAG).await {
-                state.running.retain(|c| c.name != container_name);
-                allocator.release(&project_name, genus);
-                return Err(format!(
-                    "build-image.sh succeeded but image {} not found in podman",
-                    FORGE_IMAGE_TAG
-                ));
-            }
-            info!(tag = FORGE_IMAGE_TAG, "Image ready");
-        }
-        Ok(Err(e)) => {
-            state.running.retain(|c| c.name != container_name);
-            allocator.release(&project_name, genus);
-            return Err(format!("Image build failed: {e}"));
-        }
-        Err(e) => {
-            state.running.retain(|c| c.name != container_name);
-            allocator.release(&project_name, genus);
-            return Err(format!("Image build task panicked: {e}"));
-        }
+    if !client.image_exists(FORGE_IMAGE_TAG).await {
+        state.running.retain(|c| c.name != container_name);
+        allocator.release(&project_name, genus);
+        return Err(format!(
+            "Image {} not found. Run: ./build.sh --install (from project directory)",
+            FORGE_IMAGE_TAG
+        ));
     }
+    info!(tag = FORGE_IMAGE_TAG, "Image ready");
 
     // Ensure cache directories exist
     let cache = cache_dir();
