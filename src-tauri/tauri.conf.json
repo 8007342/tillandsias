@@ -29,7 +29,7 @@
       "endpoints": [
         "https://github.com/8007342/tillandsias/releases/latest/download/latest.json"
       ],
-      "pubkey": "REPLACE_WITH_GENERATED_PUBLIC_KEY"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM5MzAxMDI2RTYxM0VEMzEKUldReDdSUG1KaEF3T1J6aTN0TUs1NUxDcWl6cVFIME11Mjk4YzVtakwvU3ZRT3NjYi9tVElETUMK"
     }
   }
 }
