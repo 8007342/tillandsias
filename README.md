@@ -148,6 +148,30 @@ Eight curated genera serve as visual namespaces:
 | Stopping | Dried | Faded flower |
 | Rebuilding | Pup | New growth |
 
+## Versioning
+
+Format: `v<Major>.<Minor>.<ChangeCount>.<Build>`
+
+| Component | Meaning | Bumped when |
+|-----------|---------|-------------|
+| Major | Breaking changes | Manual — API/UX breaks |
+| Minor | New features | Manual — feature additions |
+| ChangeCount | OpenSpec archived changes | Incremented by `/opsx:archive` |
+| Build | Build number | Auto-incremented by CI |
+
+```bash
+# Bump build number
+./scripts/bump-version.sh --bump-build
+
+# Bump change count (after archiving OpenSpec changes)
+./scripts/bump-version.sh --bump-changes
+
+# Sync all version locations from VERSION file
+./scripts/bump-version.sh
+```
+
+Rolling tags: `stable` (latest release), `latest` (latest build).
+
 ## License
 
 GPL-3.0-or-later

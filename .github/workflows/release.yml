@@ -126,6 +126,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate tag matches VERSION file
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"  # Strip 'v' prefix
+          FILE_VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [ "$TAG" != "$FILE_VERSION" ]; then
+            echo "::error::Tag version ($TAG) does not match VERSION file ($FILE_VERSION)"
+            exit 1
+          fi
+          echo "VERSION=$FILE_VERSION" >> "$GITHUB_ENV"
+          echo "Version validated: v$FILE_VERSION"
+
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -268,6 +279,29 @@ jobs:
             For detailed instructions, see [docs/VERIFICATION.md](https://github.com/${{ github.repository }}/blob/main/docs/VERIFICATION.md).
           files: |
             release-artifacts/*
+
+  # ---------------------------------------------------------------------------
+  # Update rolling tags (stable + latest)
+  # ---------------------------------------------------------------------------
+  rolling-tags:
+    name: Update rolling tags
+    needs: sign-and-release
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Force-push stable and latest tags
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f stable -m "Rolling tag: stable release (${{ github.ref_name }})"
+          git tag -f latest -m "Rolling tag: latest build (${{ github.ref_name }})"
+          git push origin refs/tags/stable --force
+          git push origin refs/tags/latest --force
+          echo "Updated rolling tags: stable, latest → ${{ github.sha }}"
 
   # ---------------------------------------------------------------------------
   # Publish Tauri update manifest (latest.json)

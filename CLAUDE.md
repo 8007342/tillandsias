@@ -47,6 +47,18 @@ openspec/                     # Spec-driven development artifacts
 - **Config-driven** — global at `~/.config/tillandsias/config.toml`, per-project at `.tillandsias/config.toml`
 - **Forge image is external** — Tillandsias orchestrates containers but doesn't build them. Default image: `ghcr.io/8007342/macuahuitl:latest`
 
+## Versioning
+
+Format: `v<Major>.<Minor>.<ChangeCount>.<Build>` — source of truth is the `VERSION` file at project root.
+
+```bash
+./scripts/bump-version.sh              # Sync all files to VERSION
+./scripts/bump-version.sh --bump-build # Increment build number
+./scripts/bump-version.sh --bump-changes # Increment change count (after /opsx:archive)
+```
+
+Cargo.toml and tauri.conf.json use 3-part semver (Major.Minor.ChangeCount). Git tags use full 4-part.
+
 ## Test Commands
 
 ```bash
