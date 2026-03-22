@@ -16,6 +16,26 @@
         forgeOpencode = ./images/default/opencode.json;
         webEntrypoint = ./images/web/entrypoint.sh;
 
+        # OpenCode — pre-built binary (not in nixpkgs)
+        opencode = pkgs.stdenv.mkDerivation {
+          pname = "opencode";
+          version = "1.2.27";
+          src = pkgs.fetchurl {
+            url = "https://github.com/anomalyco/opencode/releases/download/v1.2.27/opencode-linux-x64.tar.gz";
+            hash = "sha256-b+OCCxRYV/f/UH0oJgWLes8fzoJY3vFJhGjdQ4Ceaeg=";
+          };
+          sourceRoot = ".";
+          dontConfigure = true;
+          dontBuild = true;
+          nativeBuildInputs = [ pkgs.autoPatchelfHook ];
+          buildInputs = [ pkgs.stdenv.cc.cc.lib ];
+          installPhase = ''
+            mkdir -p $out/bin
+            cp opencode $out/bin/opencode
+            chmod +x $out/bin/opencode
+          '';
+        };
+
       in {
         packages = {
           forge-image = pkgs.dockerTools.buildLayeredImage {
@@ -38,8 +58,11 @@
               wget
               jq
               ripgrep
-              # Node.js (for OpenSpec)
+              # Node.js + npm (for OpenSpec deferred install)
               nodejs_22
+              nodePackages.npm
+              # OpenCode (pre-built binary)
+              opencode
               # Nix itself (for nix develop inside container)
               nix
               # TLS certificates

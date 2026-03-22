@@ -180,19 +180,48 @@ pub async fn handle_attach_here(
     state.running.push(placeholder);
     info!(container = %container_name, "Preparing environment... (bud state)");
 
-    // Image must exist — built during `build.sh --install` or `scripts/build-image.sh`
-    // The tray app does NOT build images at runtime (needs flake.nix + builder toolbox).
+    // If image doesn't exist, try building it via bundled build-image.sh
     let client = PodmanClient::new();
 
     if !client.image_exists(FORGE_IMAGE_TAG).await {
-        state.running.retain(|c| c.name != container_name);
-        allocator.release(&project_name, genus);
-        return Err(format!(
-            "Image {} not found. Run: ./build.sh --install (from project directory)",
-            FORGE_IMAGE_TAG
-        ));
+        info!(tag = FORGE_IMAGE_TAG, "Image not found, building...");
+        let build_result = tokio::task::spawn_blocking(|| {
+            run_build_image_script("forge")
+        }).await;
+
+        match build_result {
+            Ok(Ok(())) => {
+                // Verify the image actually exists now
+                if !client.image_exists(FORGE_IMAGE_TAG).await {
+                    state.running.retain(|c| c.name != container_name);
+                    allocator.release(&project_name, genus);
+                    return Err(format!(
+                        "Image {} still not found after build-image.sh completed",
+                        FORGE_IMAGE_TAG
+                    ));
+                }
+                info!(tag = FORGE_IMAGE_TAG, "Image built successfully");
+            }
+            Ok(Err(e)) => {
+                state.running.retain(|c| c.name != container_name);
+                allocator.release(&project_name, genus);
+                return Err(format!(
+                    "Failed to build image {}: {}",
+                    FORGE_IMAGE_TAG, e
+                ));
+            }
+            Err(e) => {
+                state.running.retain(|c| c.name != container_name);
+                allocator.release(&project_name, genus);
+                return Err(format!(
+                    "Image build task panicked: {}",
+                    e
+                ));
+            }
+        }
+    } else {
+        info!(tag = FORGE_IMAGE_TAG, "Image ready");
     }
-    info!(tag = FORGE_IMAGE_TAG, "Image ready");
 
     // Ensure cache directories exist
     let cache = cache_dir();

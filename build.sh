@@ -304,15 +304,20 @@ WRAPPER
             _warn "scripts/build-image.sh not found, skipping image build"
         fi
 
-        # Install scripts and image sources for runtime use
+        # Install scripts, image sources, and flake for runtime use
         DATA_DIR="$HOME/.local/share/tillandsias"
-        mkdir -p "$DATA_DIR/scripts" "$DATA_DIR/images/default"
-        if [[ -d "$SCRIPT_DIR/images/default" ]]; then
-            cp "$SCRIPT_DIR/images/default/Containerfile" "$DATA_DIR/images/default/"
-            cp "$SCRIPT_DIR/images/default/entrypoint.sh" "$DATA_DIR/images/default/"
-            cp "$SCRIPT_DIR/images/default/opencode.json" "$DATA_DIR/images/default/"
-            chmod +x "$DATA_DIR/images/default/entrypoint.sh"
-        fi
+        mkdir -p "$DATA_DIR/scripts"
+
+        # Copy flake.nix and flake.lock for runtime image builds
+        cp "$SCRIPT_DIR/flake.nix" "$DATA_DIR/"
+        cp "$SCRIPT_DIR/flake.lock" "$DATA_DIR/"
+        _info "Installed flake.nix and flake.lock to $DATA_DIR/"
+
+        # Copy all image source directories (default/ and web/)
+        cp -r "$SCRIPT_DIR/images" "$DATA_DIR/"
+        chmod +x "$DATA_DIR/images/default/entrypoint.sh" 2>/dev/null || true
+        _info "Installed image sources to $DATA_DIR/images/"
+
         if [[ -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
             cp "$SCRIPT_DIR/scripts/build-image.sh" "$DATA_DIR/scripts/"
             cp "$SCRIPT_DIR/scripts/ensure-builder.sh" "$DATA_DIR/scripts/"

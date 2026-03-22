@@ -68,6 +68,14 @@ IMAGE_TAG="tillandsias-${IMAGE_NAME}:latest"
 NIX_ATTR="${IMAGE_NAME}-image"
 HASH_FILE="$CACHE_DIR/.last-build-${IMAGE_NAME}.sha256"
 
+# Verify flake.nix exists at ROOT (required for nix build)
+if [[ ! -f "$ROOT/flake.nix" ]]; then
+    _error "flake.nix not found at $ROOT/"
+    _error "When installed, flake.nix should be at ~/.local/share/tillandsias/flake.nix"
+    _error "Run './build.sh --install' from the project directory to fix this."
+    exit 1
+fi
+
 _step "Building image: ${BOLD}${IMAGE_TAG}${NC}"
 
 # ---------------------------------------------------------------------------
