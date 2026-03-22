@@ -17,39 +17,67 @@ use tillandsias_podman::PodmanClient;
 
 const FORGE_IMAGE_TAG: &str = "tillandsias-forge:latest";
 
-/// Resolve the default image source directory.
+/// Resolve the project root directory (where scripts/build-image.sh lives).
 ///
 /// Checks (in order):
-/// 1. `images/default/` relative to the executable
-/// 2. `~/.local/share/tillandsias/images/default/`
-///
-/// Returns `None` if neither location has a Containerfile.
-fn resolve_image_source() -> Option<PathBuf> {
-    // 1. Relative to executable (dev builds, bundled installs)
+/// 1. Two levels up from the executable (target/debug/ layout)
+/// 2. Alongside the executable
+/// 3. `~/.local/share/tillandsias/` (installed layout)
+fn resolve_project_root() -> Option<PathBuf> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
-            // Try alongside the binary
-            let candidate = exe_dir.join("images").join("default");
-            if candidate.join("Containerfile").exists() {
-                return Some(candidate);
-            }
-            // Try two levels up (target/debug/tillandsias-tray → project root)
+            // target/debug/tillandsias-tray -> project root (two levels up)
             if let Some(root) = exe_dir.parent().and_then(|p| p.parent()) {
-                let candidate = root.join("images").join("default");
-                if candidate.join("Containerfile").exists() {
-                    return Some(candidate);
+                if root.join("scripts").join("build-image.sh").exists() {
+                    return Some(root.to_path_buf());
                 }
+            }
+            // Alongside the binary
+            if exe_dir.join("scripts").join("build-image.sh").exists() {
+                return Some(exe_dir.to_path_buf());
             }
         }
     }
 
-    // 2. Installed data directory
-    let data = data_dir().join("images").join("default");
-    if data.join("Containerfile").exists() {
+    // Installed data directory
+    let data = data_dir();
+    if data.join("scripts").join("build-image.sh").exists() {
         return Some(data);
     }
 
     None
+}
+
+/// Run `scripts/build-image.sh` to ensure the forge image is built and loaded.
+///
+/// The script handles staleness detection, nix build inside the builder
+/// toolbox, podman load, and tagging. Returns Ok(()) if the image is
+/// available afterward.
+fn run_build_image_script(image_name: &str) -> Result<(), String> {
+    let root = resolve_project_root()
+        .ok_or("Cannot find project root (scripts/build-image.sh not found)")?;
+
+    let script = root.join("scripts").join("build-image.sh");
+    info!(script = %script.display(), image = image_name, "Running build-image.sh");
+
+    let output = std::process::Command::new(&script)
+        .arg(image_name)
+        .current_dir(&root)
+        .output()
+        .map_err(|e| format!("Failed to run build-image.sh: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        return Err(format!(
+            "build-image.sh failed (exit {}):\n{stdout}\n{stderr}",
+            output.status.code().unwrap_or(-1)
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    debug!(output = %stdout, "build-image.sh completed");
+    Ok(())
 }
 
 /// Build the `podman run -it --rm` argument list for interactive terminal mode.
@@ -152,49 +180,40 @@ pub async fn handle_attach_here(
     state.running.push(placeholder);
     info!(container = %container_name, "Preparing environment... (bud state)");
 
-    // Resolve image source and ensure image is built
+    // Ensure image is built via build-image.sh (handles staleness, nix build, podman load)
     let client = PodmanClient::new();
 
-    let image_source = resolve_image_source();
-    if let Some(ref source_dir) = image_source {
-        let containerfile = source_dir.join("Containerfile");
-        let containerfile_str = containerfile.to_string_lossy().to_string();
-        let context_dir_str = source_dir.to_string_lossy().to_string();
+    info!(tag = FORGE_IMAGE_TAG, "Ensuring image is built via build-image.sh");
 
-        info!(tag = FORGE_IMAGE_TAG, source = %context_dir_str, "Ensuring image is built");
+    // Run build-image.sh in a blocking task to avoid blocking the async runtime.
+    // The script handles staleness detection internally — it's a no-op if sources
+    // haven't changed and the image already exists.
+    let build_result = tokio::task::spawn_blocking(|| {
+        run_build_image_script("forge")
+    }).await;
 
-        let build_result = tokio::time::timeout(
-            Duration::from_secs(300), // Image builds can take a while
-            client.ensure_image_built(FORGE_IMAGE_TAG, &containerfile_str, &context_dir_str),
-        )
-        .await;
-
-        match build_result {
-            Ok(Ok(())) => {
-                info!(tag = FORGE_IMAGE_TAG, "Image ready");
-            }
-            Ok(Err(e)) => {
+    match build_result {
+        Ok(Ok(())) => {
+            // Script succeeded — verify image exists
+            if !client.image_exists(FORGE_IMAGE_TAG).await {
                 state.running.retain(|c| c.name != container_name);
                 allocator.release(&project_name, genus);
-                return Err(format!("Image build failed: {e}"));
+                return Err(format!(
+                    "build-image.sh succeeded but image {} not found in podman",
+                    FORGE_IMAGE_TAG
+                ));
             }
-            Err(_) => {
-                state.running.retain(|c| c.name != container_name);
-                allocator.release(&project_name, genus);
-                return Err("Image build timed out (300s).".to_string());
-            }
+            info!(tag = FORGE_IMAGE_TAG, "Image ready");
         }
-    } else {
-        // No local image source found — check if image already exists
-        if !client.image_exists(FORGE_IMAGE_TAG).await {
+        Ok(Err(e)) => {
             state.running.retain(|c| c.name != container_name);
             allocator.release(&project_name, genus);
-            return Err(format!(
-                "Image {} not found and no Containerfile source available. \
-                 Expected images/default/Containerfile relative to executable \
-                 or in ~/.local/share/tillandsias/images/default/",
-                FORGE_IMAGE_TAG
-            ));
+            return Err(format!("Image build failed: {e}"));
+        }
+        Err(e) => {
+            state.running.retain(|c| c.name != container_name);
+            allocator.release(&project_name, genus);
+            return Err(format!("Image build task panicked: {e}"));
         }
     }
 

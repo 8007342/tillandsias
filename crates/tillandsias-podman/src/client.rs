@@ -220,6 +220,29 @@ impl PodmanClient {
         self.build_image(containerfile, tag, context_dir).await
     }
 
+    /// Load a container image from a tarball (produced by nix build).
+    #[instrument(skip(self), fields(tarball = %tarball_path))]
+    pub async fn load_image(&self, tarball_path: &str) -> Result<(), PodmanError> {
+        debug!(tarball_path, "Loading image from tarball");
+        let start = std::time::Instant::now();
+        let output = Command::new("podman")
+            .args(["load", "-i", tarball_path])
+            .output()
+            .await
+            .map_err(|e| PodmanError::CommandFailed(format!("load: {e}")))?;
+
+        if output.status.success() {
+            let elapsed = start.elapsed().as_secs_f64();
+            info!(duration_secs = elapsed, "Image loaded from tarball");
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(PodmanError::CommandFailed(format!(
+                "load failed: {stderr}"
+            )))
+        }
+    }
+
     /// Start a container with the given arguments.
     pub async fn run_container(&self, args: &[String]) -> Result<String, PodmanError> {
         debug!(?args, "Running container");

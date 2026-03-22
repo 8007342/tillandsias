@@ -291,16 +291,29 @@ WRAPPER
         cp "$RELEASE_BIN" "$INSTALL_DIR/.tillandsias-bin"
         chmod +x "$INSTALL_DIR/.tillandsias-bin"
 
-        # Copy container image files for "Attach Here" to build from
+        # Build the forge container image via Nix (handles staleness detection)
+        if [[ -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
+            _step "Building forge container image..."
+            "$SCRIPT_DIR/scripts/build-image.sh" forge
+            _info "Forge image built and loaded"
+        else
+            _warn "scripts/build-image.sh not found, skipping image build"
+        fi
+
+        # Install scripts and image sources for runtime use
         DATA_DIR="$HOME/.local/share/tillandsias"
-        IMAGE_DIR="$DATA_DIR/images/default"
-        mkdir -p "$IMAGE_DIR"
+        mkdir -p "$DATA_DIR/scripts" "$DATA_DIR/images/default"
         if [[ -d "$SCRIPT_DIR/images/default" ]]; then
-            cp "$SCRIPT_DIR/images/default/Containerfile" "$IMAGE_DIR/"
-            cp "$SCRIPT_DIR/images/default/entrypoint.sh" "$IMAGE_DIR/"
-            cp "$SCRIPT_DIR/images/default/opencode.json" "$IMAGE_DIR/"
-            chmod +x "$IMAGE_DIR/entrypoint.sh"
-            _info "Installed image files to $IMAGE_DIR"
+            cp "$SCRIPT_DIR/images/default/Containerfile" "$DATA_DIR/images/default/"
+            cp "$SCRIPT_DIR/images/default/entrypoint.sh" "$DATA_DIR/images/default/"
+            cp "$SCRIPT_DIR/images/default/opencode.json" "$DATA_DIR/images/default/"
+            chmod +x "$DATA_DIR/images/default/entrypoint.sh"
+        fi
+        if [[ -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
+            cp "$SCRIPT_DIR/scripts/build-image.sh" "$DATA_DIR/scripts/"
+            cp "$SCRIPT_DIR/scripts/ensure-builder.sh" "$DATA_DIR/scripts/"
+            chmod +x "$DATA_DIR/scripts/build-image.sh" "$DATA_DIR/scripts/ensure-builder.sh"
+            _info "Installed build scripts to $DATA_DIR/scripts/"
         fi
 
         _info "Installed to $INSTALL_BIN (libs in $LIB_DIR)"

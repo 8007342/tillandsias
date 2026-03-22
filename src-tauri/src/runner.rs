@@ -21,36 +21,62 @@ fn image_tag(name: &str) -> String {
     }
 }
 
-/// Resolve the image source directory for building.
-///
-/// Checks (in order):
-/// 1. `images/<name>/` relative to the executable
-/// 2. `~/.local/share/tillandsias/images/<name>/`
-fn resolve_image_source(name: &str) -> Option<PathBuf> {
-    // Relative to executable (dev builds, bundled installs)
+/// Resolve the project root directory (where scripts/build-image.sh lives).
+fn resolve_project_root() -> Option<PathBuf> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
-            let candidate = exe_dir.join("images").join(name);
-            if candidate.join("Containerfile").exists() {
-                return Some(candidate);
-            }
-            // Two levels up for target/debug/ layout
+            // target/debug/ layout -> two levels up
             if let Some(root) = exe_dir.parent().and_then(|p| p.parent()) {
-                let candidate = root.join("images").join(name);
-                if candidate.join("Containerfile").exists() {
-                    return Some(candidate);
+                if root.join("scripts").join("build-image.sh").exists() {
+                    return Some(root.to_path_buf());
                 }
+            }
+            // Alongside the binary
+            if exe_dir.join("scripts").join("build-image.sh").exists() {
+                return Some(exe_dir.to_path_buf());
             }
         }
     }
 
     // Installed data directory
-    let data = data_dir().join("images").join(name);
-    if data.join("Containerfile").exists() {
-        return Some(data);
+    let data = data_dir().join("scripts");
+    if data.join("build-image.sh").exists() {
+        return Some(data_dir());
     }
 
     None
+}
+
+/// Run `scripts/build-image.sh` to build/refresh the image.
+/// Returns Ok(()) on success, Err with details on failure.
+fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
+    let root = resolve_project_root()
+        .ok_or("Cannot find project root (scripts/build-image.sh not found)")?;
+
+    let script = root.join("scripts").join("build-image.sh");
+
+    if debug {
+        println!("  [debug] Running: {}", script.display());
+    }
+
+    // Run the script with inherited stdio so the user sees progress output
+    let status = std::process::Command::new(&script)
+        .arg(image_name)
+        .current_dir(&root)
+        .stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .map_err(|e| format!("Failed to run build-image.sh: {e}"))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "build-image.sh exited with code {}",
+            status.code().unwrap_or(-1)
+        ))
+    }
 }
 
 /// Get the image size in human-readable form via `podman image inspect`.
@@ -185,57 +211,32 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool) -> bool {
         return false;
     }
 
-    let image_exists = rt.block_on(client.image_exists(&tag));
-
-    if image_exists {
-        let size = image_size_display(&tag);
-        println!("  \u{2713} Image cached ({size})");
+    // Use build-image.sh to ensure the image is built and fresh.
+    // The script handles staleness detection (skips if sources unchanged),
+    // nix build inside the builder toolbox, and podman load + tagging.
+    let source_name = if image_name.contains(':') || image_name.contains('/') {
+        "forge"
     } else {
-        // Try to build the image from source
-        let source_name = if image_name.contains(':') || image_name.contains('/') {
-            "default"
-        } else {
-            image_name
-        };
+        image_name
+    };
 
-        let image_source = resolve_image_source(source_name)
-            .or_else(|| resolve_image_source("default"));
+    println!("  Ensuring image is up to date...");
 
-        match image_source {
-            Some(source_dir) => {
-                println!("  Building image... (this takes ~60s on first run)");
-
-                let containerfile = source_dir.join("Containerfile");
-                let containerfile_str = containerfile.to_string_lossy().to_string();
-                let context_str = source_dir.to_string_lossy().to_string();
-
-                if debug {
-                    println!("  [debug] Containerfile: {containerfile_str}");
-                    println!("  [debug] Context: {context_str}");
-                }
-
-                let build_result = rt.block_on(
-                    client.build_image(&containerfile_str, &tag, &context_str),
-                );
-
-                match build_result {
-                    Ok(()) => {
-                        let size = image_size_display(&tag);
-                        println!("  \u{2713} Image built ({size})");
-                    }
-                    Err(e) => {
-                        eprintln!("  \u{2717} Image build failed: {e}");
-                        return false;
-                    }
-                }
-            }
-            None => {
-                eprintln!("  \u{2717} Image not found and no Containerfile available to build it");
-                eprintln!();
-                eprintln!("  Expected: images/{source_name}/Containerfile");
-                eprintln!("       or:  ~/.local/share/tillandsias/images/{source_name}/Containerfile");
+    match run_build_image_script(source_name, debug) {
+        Ok(()) => {
+            // Verify the image exists after script ran
+            let image_exists = rt.block_on(client.image_exists(&tag));
+            if image_exists {
+                let size = image_size_display(&tag);
+                println!("  \u{2713} Image ready ({size})");
+            } else {
+                eprintln!("  \u{2717} build-image.sh succeeded but image {tag} not found");
                 return false;
             }
+        }
+        Err(e) => {
+            eprintln!("  \u{2717} Image build failed: {e}");
+            return false;
         }
     }
 

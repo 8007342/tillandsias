@@ -72,6 +72,35 @@ cargo test -p tillandsias-scanner
 cargo test -p tillandsias-podman
 ```
 
+## Container Image Builds (Nix)
+
+Images are built reproducibly using Nix inside a dedicated builder toolbox (`tillandsias-builder`), separate from the dev toolbox.
+
+### Builder Toolbox
+
+```bash
+scripts/ensure-builder.sh          # Create builder toolbox with Nix (auto-called by build-image.sh)
+scripts/build-image.sh forge       # Build the forge (dev environment) image
+scripts/build-image.sh web         # Build the web server image
+scripts/build-image.sh forge --force  # Rebuild even if sources unchanged
+```
+
+The build script:
+1. Ensures the `tillandsias-builder` toolbox exists with Nix + flakes
+2. Checks staleness (hashes `flake.nix`, `flake.lock`, `images/` sources)
+3. Runs `nix build` inside the builder toolbox to produce a tarball
+4. Loads the tarball into podman via `podman load`
+5. Tags as `tillandsias-forge:latest` or `tillandsias-web:latest`
+
+Build cache is stored in `.nix-output/` (gitignored).
+
+### Image Architecture
+
+- `flake.nix` defines image outputs using `dockerTools.buildLayeredImage`
+- `images/default/Containerfile` and `images/web/Containerfile` are kept as reference documentation
+- The primary build path is always through `flake.nix` via `build-image.sh`
+- Rust code (`handlers.rs`, `runner.rs`) calls `build-image.sh` as a subprocess
+
 ## Related Projects
 
 - `../forge` — Container images (Macuahuitl forge). Tillandsias uses these as default container images.

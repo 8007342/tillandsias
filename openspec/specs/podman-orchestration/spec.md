@@ -115,3 +115,10 @@ The podman client SHALL support building container images from a Containerfile a
 - **WHEN** `image_exists` returns true for the target image name
 - **THEN** the build step is skipped entirely
 
+### Requirement: Load nix-built image tarballs
+The podman client SHALL support loading OCI image tarballs produced by Nix builds.
+
+#### Scenario: Load tarball
+- **WHEN** a Nix build produces a tarball
+- **THEN** `podman load` imports it and the image is available locally
+
