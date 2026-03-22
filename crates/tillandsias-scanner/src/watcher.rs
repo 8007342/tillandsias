@@ -110,6 +110,7 @@ impl Scanner {
             }
         }
 
+        info!(count = changes.len(), "Initial scan complete");
         changes
     }
 

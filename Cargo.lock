@@ -4184,7 +4184,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-core"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "dirs",
  "postcard",
@@ -4196,7 +4196,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-podman"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "serde",
  "serde_json",
@@ -4208,7 +4208,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-scanner"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "dirs",
  "notify",
@@ -4220,7 +4220,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-tray"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "serde",
  "serde_json",
@@ -4233,6 +4233,7 @@ dependencies = [
  "tillandsias-scanner",
  "tokio",
  "tracing",
+ "tracing-appender",
  "tracing-subscriber",
 ]
 
@@ -4487,6 +4488,18 @@ dependencies = [
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",
+]
+
+[[package]]
+name = "tracing-appender"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "786d480bce6247ab75f005b14ae1624ad978d3029d9113f0a22fa1ac773faeaf"
+dependencies = [
+ "crossbeam-channel",
+ "thiserror 2.0.18",
+ "time",
+ "tracing-subscriber",
 ]
 
 [[package]]

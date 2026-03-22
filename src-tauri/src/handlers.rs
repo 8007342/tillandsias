@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use tracing::{debug, info, warn};
+use tracing::{debug, info, warn, instrument};
 
 use tillandsias_core::config::{cache_dir, data_dir, load_global_config, load_project_config, GlobalConfig};
 use tillandsias_core::event::{AppEvent, ContainerState};
@@ -106,11 +106,13 @@ fn build_interactive_run_args(
 
 /// Handle the "Attach Here" action: build image if needed, open terminal
 /// with an interactive container.
+#[instrument(skip(state, allocator), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "attach"))]
 pub async fn handle_attach_here(
     project_path: PathBuf,
     state: &mut TrayState,
     allocator: &mut GenusAllocator,
 ) -> Result<AppEvent, String> {
+    let start = std::time::Instant::now();
     let project_name = project_path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -238,6 +240,13 @@ pub async fn handle_attach_here(
         project.assigned_genus = Some(genus);
     }
 
+    let elapsed = start.elapsed();
+    info!(
+        duration_secs = elapsed.as_secs_f64(),
+        container = %container_name,
+        "Attach Here completed"
+    );
+
     Ok(AppEvent::ContainerStateChange {
         container_name: container_name.clone(),
         new_state: ContainerState::Creating,
@@ -246,6 +255,7 @@ pub async fn handle_attach_here(
 
 /// Handle the "Stop" action: graceful stop with SIGTERM -> 10s -> SIGKILL,
 /// update icon to dried bloom during shutdown.
+#[instrument(skip(state, allocator), fields(container = %container_name, operation = "stop"))]
 pub async fn handle_stop(
     container_name: String,
     state: &mut TrayState,
@@ -298,6 +308,7 @@ pub async fn handle_stop(
 
 /// Handle the "Destroy" action: 5-second safety delay, then stop + remove cache.
 /// Project source in ~/src is NEVER touched.
+#[instrument(skip(state, allocator), fields(container = %container_name, operation = "destroy"))]
 pub async fn handle_destroy(
     container_name: String,
     state: &mut TrayState,

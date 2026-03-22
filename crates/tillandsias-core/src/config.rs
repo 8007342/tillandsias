@@ -220,6 +220,30 @@ pub fn data_dir() -> PathBuf {
     }
 }
 
+/// Platform-aware log directory.
+///
+/// - Linux: `~/.local/state/tillandsias/`
+/// - macOS: `~/Library/Logs/tillandsias/`
+/// - Windows: `%LOCALAPPDATA%/tillandsias/logs/`
+pub fn log_dir() -> PathBuf {
+    match Os::detect() {
+        Os::Linux => dirs::state_dir()
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .unwrap_or_else(|| PathBuf::from("~"))
+                    .join(".local/state")
+            })
+            .join("tillandsias"),
+        Os::MacOS => dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("~"))
+            .join("Library/Logs/tillandsias"),
+        Os::Windows => dirs::data_local_dir()
+            .unwrap_or_else(|| PathBuf::from("AppData/Local"))
+            .join("tillandsias")
+            .join("logs"),
+    }
+}
+
 /// Platform-aware cache directory.
 pub fn cache_dir() -> PathBuf {
     match Os::detect() {

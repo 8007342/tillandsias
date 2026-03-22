@@ -1,5 +1,5 @@
 use tokio::process::Command;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn, instrument};
 
 /// Async podman CLI client. All operations are non-blocking.
 #[derive(Debug, Clone)]
@@ -178,6 +178,7 @@ impl PodmanClient {
     }
 
     /// Build a container image from a Containerfile.
+    #[instrument(skip(self), fields(image.tag = %tag))]
     pub async fn build_image(
         &self,
         containerfile: &str,
@@ -185,6 +186,7 @@ impl PodmanClient {
         context_dir: &str,
     ) -> Result<(), PodmanError> {
         debug!(tag, containerfile, context_dir, "Building image");
+        let start = std::time::Instant::now();
         let output = Command::new("podman")
             .args(["build", "-t", tag, "-f", containerfile, context_dir])
             .output()
@@ -192,6 +194,8 @@ impl PodmanClient {
             .map_err(|e| PodmanError::CommandFailed(format!("build: {e}")))?;
 
         if output.status.success() {
+            let elapsed = start.elapsed().as_secs_f64();
+            info!(duration_secs = elapsed, "Image build complete");
             Ok(())
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -202,6 +206,7 @@ impl PodmanClient {
     }
 
     /// Build image only if it doesn't already exist.
+    #[instrument(skip(self), fields(image.tag = %tag))]
     pub async fn ensure_image_built(
         &self,
         tag: &str,

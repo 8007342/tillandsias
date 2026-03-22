@@ -2,6 +2,7 @@
 
 mod event_loop;
 mod handlers;
+mod logging;
 mod menu;
 mod updater;
 
@@ -24,17 +25,9 @@ use updater::UpdateState;
 static TRAY_ICON: std::sync::OnceLock<Mutex<tauri::tray::TrayIcon>> = std::sync::OnceLock::new();
 
 fn main() {
-    // Initialize tracing for debug builds
-    #[cfg(debug_assertions)]
-    {
-        use tracing_subscriber::EnvFilter;
-        tracing_subscriber::fmt()
-            .with_env_filter(
-                EnvFilter::try_from_default_env()
-                    .unwrap_or_else(|_| EnvFilter::new("tillandsias=debug")),
-            )
-            .init();
-    }
+    // Initialize tracing — dual output (stderr if TTY + file appender) in all builds.
+    // Hold the guard so the non-blocking file writer flushes on shutdown.
+    let _log_guard = logging::init();
 
     info!("Tillandsias starting");
 
