@@ -99,11 +99,12 @@ done
 # ---------------------------------------------------------------------------
 
 if [[ "$FLAG_REMOVE" == true ]]; then
-    if [[ -f "$INSTALL_BIN" ]]; then
-        rm -f "$INSTALL_BIN"
-        _info "Removed $INSTALL_BIN"
+    rm -f "$INSTALL_BIN" "$INSTALL_DIR/.tillandsias-bin"
+    rm -rf "$HOME/.local/lib/tillandsias"
+    if [[ -f "$INSTALL_BIN" || -f "$INSTALL_DIR/.tillandsias-bin" ]]; then
+        _warn "Some files could not be removed"
     else
-        _warn "Nothing to remove — $INSTALL_BIN not found"
+        _info "Removed tillandsias from $INSTALL_DIR"
     fi
     # If --remove is the only flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_WIPE$FLAG_TOOLBOX_RESET" == "falsefalsefalsefalsefalsefalsefalse" ]]; then
@@ -148,6 +149,7 @@ _toolbox_ensure() {
         librsvg2-devel \
         openssl-devel \
         pkg-config \
+        patchelf \
         2>&1 | tail -3
 
     _info "Toolbox '${TOOLBOX_NAME}' ready"
@@ -247,17 +249,48 @@ if [[ "$FLAG_RELEASE" == true ]]; then
         done
     fi
 
-    # Install if requested
+    # Install if requested — standalone, zero host dependencies
     if [[ "$FLAG_INSTALL" == true ]]; then
-        if [[ -f "$RELEASE_BIN" ]]; then
-            mkdir -p "$INSTALL_DIR"
-            cp "$RELEASE_BIN" "$INSTALL_BIN"
-            chmod +x "$INSTALL_BIN"
-            _info "Installed to $INSTALL_BIN"
-        else
+        if [[ ! -f "$RELEASE_BIN" ]]; then
             _error "Could not find built binary at $RELEASE_BIN"
             exit 1
         fi
+
+        LIB_DIR="$HOME/.local/lib/tillandsias"
+        mkdir -p "$INSTALL_DIR" "$LIB_DIR"
+
+        # Bundle shared libraries that aren't on a standard desktop.
+        # libappindicator3 is dlopen'd at runtime for tray icon support.
+        # These exist inside the toolbox but not on the Silverblue host.
+        _step "Bundling runtime libraries from toolbox..."
+        for lib in libappindicator3.so.1 libdbusmenu-glib.so.4 libdbusmenu-gtk3.so.4; do
+            if _run test -e "/usr/lib64/$lib"; then
+                _run cp -L "/usr/lib64/$lib" "$LIB_DIR/$lib"
+                _info "  Bundled $lib"
+            else
+                _warn "  $lib not found in toolbox"
+            fi
+        done
+
+        # Patch RPATH so the binary finds bundled libs
+        if _run command -v patchelf &>/dev/null; then
+            _run patchelf --set-rpath "$LIB_DIR" "$RELEASE_BIN"
+            _info "Set RPATH to $LIB_DIR"
+        fi
+
+        # Create wrapper script that sets LD_LIBRARY_PATH as fallback
+        cat > "$INSTALL_BIN" <<WRAPPER
+#!/usr/bin/env bash
+export LD_LIBRARY_PATH="${LIB_DIR}\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+exec "${INSTALL_DIR}/.tillandsias-bin" "\$@"
+WRAPPER
+        chmod +x "$INSTALL_BIN"
+
+        # Install the actual binary
+        cp "$RELEASE_BIN" "$INSTALL_DIR/.tillandsias-bin"
+        chmod +x "$INSTALL_DIR/.tillandsias-bin"
+
+        _info "Installed to $INSTALL_BIN (libs in $LIB_DIR)"
     fi
 
 # Default: debug build (only if no other build flag was set)

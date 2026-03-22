@@ -49,7 +49,7 @@ pub fn spawn_update_tasks(app: &AppHandle, update_state: UpdateState) {
     if updates_config.check_on_launch {
         let app_handle = app.clone();
         let state = update_state.clone();
-        tokio::spawn(async move {
+        tauri::async_runtime::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             check_for_update(&app_handle, &state).await;
         });
@@ -59,7 +59,7 @@ pub fn spawn_update_tasks(app: &AppHandle, update_state: UpdateState) {
     let app_handle = app.clone();
     let state = update_state;
     let interval_hours = updates_config.check_interval_hours.max(1);
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         let interval = std::time::Duration::from_secs(interval_hours * 3600);
         loop {
             tokio::time::sleep(interval).await;
