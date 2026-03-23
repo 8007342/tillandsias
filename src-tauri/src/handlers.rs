@@ -17,6 +17,70 @@ use tillandsias_podman::PodmanClient;
 
 const FORGE_IMAGE_TAG: &str = "tillandsias-forge:latest";
 
+/// Open a terminal window running a command.
+/// Uses the platform's default terminal — not a zoo of emulators.
+fn open_terminal(command: &str) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        // Try common Linux terminals in order of likelihood
+        let terminals: &[(&str, &[&str])] = &[
+            ("ptyxis", &["--", "bash", "-c"]),     // GNOME (Silverblue)
+            ("gnome-terminal", &["--", "bash", "-c"]), // GNOME
+            ("konsole", &["-e", "bash", "-c"]),     // KDE
+            ("xterm", &["-e", "bash", "-c"]),       // Fallback
+        ];
+
+        for (term, args) in terminals {
+            if std::process::Command::new("which")
+                .arg(term)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .is_ok_and(|s| s.success())
+            {
+                let mut cmd = std::process::Command::new(term);
+                for arg in *args {
+                    cmd.arg(arg);
+                }
+                cmd.arg(command);
+                return cmd
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn()
+                    .map(|_| ())
+                    .map_err(|e| format!("{term}: {e}"));
+            }
+        }
+
+        Err("No terminal emulator found (tried ptyxis, gnome-terminal, konsole, xterm)".into())
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // macOS: osascript to open Terminal.app with a command
+        std::process::Command::new("osascript")
+            .args(["-e", &format!("tell app \"Terminal\" to do script \"{}\"", command)])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| format!("osascript: {e}"))
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/c", "start", "cmd", "/k", command])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| format!("cmd: {e}"))
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        Err("Unsupported platform for terminal launch".into())
+    }
+}
+
 /// Resolve the project root directory (where scripts/build-image.sh lives).
 ///
 /// Checks (in order):
@@ -234,44 +298,36 @@ pub async fn handle_attach_here(
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
 
-    // Tray mode: run container DETACHED. The tray manages lifecycle
-    // (stop/destroy). For interactive use, the CLI mode uses -it.
+    // Build the full `podman run -it --rm ...` command string.
+    // We open a terminal window running this command — the terminal provides
+    // the TTY, podman passes it to the container, opencode gets a real terminal.
     let run_args = build_run_args(
         &container_name,
         FORGE_IMAGE_TAG,
         &project_path,
         &cache,
         port_range,
-        true, // detached — tray has no terminal
+        false, // interactive (-it), NOT detached
     );
 
-    // Spawn podman detached — container runs in background
-    let spawn_result = std::process::Command::new("podman")
-        .arg("run")
-        .args(&run_args)
-        .output(); // use output() not spawn() for detached mode
+    let mut podman_parts = vec!["podman".to_string(), "run".to_string()];
+    podman_parts.extend(run_args);
+    let podman_cmd = podman_parts.join(" ");
 
-    match spawn_result {
-        Ok(output) if output.status.success() => {
-            info!(
-                container = %container_name,
-                genus = %genus.display_name(),
-                port_range = ?port_range,
-                "Container launched (detached)"
-            );
-        }
-        Ok(output) => {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            state.running.retain(|c| c.name != container_name);
-            allocator.release(&project_name, genus);
-            return Err(format!("Container failed to start: {stderr}"));
-        }
-        Err(e) => {
-            state.running.retain(|c| c.name != container_name);
-            allocator.release(&project_name, genus);
-            return Err(format!("Failed to run podman: {e}"));
-        }
+    // Open a terminal window running the podman command.
+    // When the user exits OpenCode, the container dies (--rm), terminal closes.
+    if let Err(e) = open_terminal(&podman_cmd) {
+        state.running.retain(|c| c.name != container_name);
+        allocator.release(&project_name, genus);
+        return Err(format!("Failed to open terminal: {e}"));
     }
+
+    info!(
+        container = %container_name,
+        genus = %genus.display_name(),
+        port_range = ?port_range,
+        "Terminal opened with OpenCode"
+    );
 
     // Mark project as having an assigned genus
     if let Some(project) = state.projects.iter_mut().find(|p| p.path == project_path) {
