@@ -184,8 +184,17 @@ fn build_run_args(
     args.push(port_mapping);
 
     // Volume mounts
-    // Project directory -> container workspace (rw)
-    let project_mount = format!("{}:/home/forge/src", project_path.display());
+    // Project directory -> container workspace at src/<project-name>/
+    // Preserves hierarchy so OpenCode shows src/<project>:main
+    let project_name = project_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "project".to_string());
+    let project_mount = format!(
+        "{}:/home/forge/src/{}",
+        project_path.display(),
+        project_name
+    );
     args.push("-v".to_string());
     args.push(project_mount);
 

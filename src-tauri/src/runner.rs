@@ -138,8 +138,12 @@ fn build_run_args(
     args.push("-p".to_string());
     args.push(port_mapping);
 
-    // Volume mounts
-    let project_mount = format!("{}:/home/forge/src", project_path.display());
+    // Volume mounts — mount at src/<project-name>/ to preserve hierarchy
+    let proj_name = project_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "project".to_string());
+    let project_mount = format!("{}:/home/forge/src/{}", project_path.display(), proj_name);
     args.push("-v".to_string());
     args.push(project_mount);
 
@@ -270,7 +274,11 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool) -> bool {
         "  Ports:  {}-{}",
         base_port.0, base_port.1
     );
-    println!("  Mount:  {display_path} \u{2192} /home/forge/src");
+    let proj_display = project_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "project".to_string());
+    println!("  Mount:  {display_path} \u{2192} /home/forge/src/{proj_display}");
     println!(
         "  Cache:  {}",
         tilde_path(&cache)
