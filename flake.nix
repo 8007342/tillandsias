@@ -56,6 +56,11 @@
             ];
 
             fakeRootCommands = ''
+              # FHS compatibility: pre-built binaries (OpenCode, etc.) expect
+              # the dynamic linker at /lib64/ld-linux-x86-64.so.2
+              mkdir -p ./lib64
+              ln -sf ${pkgs.glibc}/lib/ld-linux-x86-64.so.2 ./lib64/ld-linux-x86-64.so.2
+
               # Create user home and standard dirs
               mkdir -p ./home/forge/src
               mkdir -p ./home/forge/.cache/tillandsias/{nix,opencode}

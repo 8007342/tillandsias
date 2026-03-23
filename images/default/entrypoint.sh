@@ -3,32 +3,43 @@ set -euo pipefail
 
 trap 'exit 0' SIGTERM SIGINT
 
-# Cache dirs
-mkdir -p ~/.cache/tillandsias/{nix,opencode} 2>/dev/null || true
+CACHE="$HOME/.cache/tillandsias"
+OC_BIN="$CACHE/opencode/opencode"
 
-# OpenCode lives at ~/.opencode/bin/ (persisted via cache mount)
-export PATH="$HOME/.opencode/bin:$PATH"
+mkdir -p "$CACHE/opencode" "$CACHE/nix" 2>/dev/null || true
+export PATH="$CACHE/opencode:$PATH"
 
-# Install OpenCode on first run (official installer, cached across runs)
-if ! command -v opencode &>/dev/null; then
-    echo "Installing OpenCode (first run, ~10s)..."
-    curl -fsSL https://opencode.ai/install | bash 2>&1
+# Install OpenCode binary directly into the cache (persisted via mount)
+if [ ! -x "$OC_BIN" ]; then
+    echo "Installing OpenCode (first run)..."
+    ARCH="$(uname -m)"
+    case "$ARCH" in
+        x86_64)  VARIANT="linux-x64" ;;
+        aarch64) VARIANT="linux-arm64" ;;
+        *)       VARIANT="linux-x64" ;;
+    esac
+    curl -fsSL -o /tmp/opencode.tar.gz \
+        "https://github.com/anomalyco/opencode/releases/latest/download/opencode-${VARIANT}.tar.gz"
+    tar xzf /tmp/opencode.tar.gz -C "$CACHE/opencode/"
+    chmod +x "$OC_BIN"
+    rm -f /tmp/opencode.tar.gz
+    echo "OpenCode installed: $("$OC_BIN" --version 2>/dev/null || echo 'ok')"
 fi
 
 # Deferred OpenSpec install
 command -v openspec &>/dev/null || npm install -g @fission-ai/openspec 2>/dev/null || true
 
 # Banner
-PROJECT_NAME="$(basename "$(pwd)")"
+echo ""
 echo "========================================"
 echo "  tillandsias forge"
-echo "  project: ${PROJECT_NAME}"
+echo "  project: $(basename "$(pwd)")"
 echo "========================================"
 echo ""
 
-# Launch OpenCode or fall back to bash
-if command -v opencode &>/dev/null; then
-    exec opencode "$@"
+# Launch OpenCode
+if [ -x "$OC_BIN" ]; then
+    exec "$OC_BIN" "$@"
 else
     echo "OpenCode not available. Starting bash."
     exec bash
