@@ -206,10 +206,10 @@ fn parse_port_output(output: &str) -> Vec<(u16, u16)> {
             if let Some(host_part) = part.split("->").next() {
                 // Strip IP prefix: "0.0.0.0:3000-3019" -> "3000-3019"
                 let port_part = host_part.rsplit(':').next().unwrap_or(host_part);
-                if let Some((start, end)) = port_part.split_once('-') {
-                    if let (Ok(s), Ok(e)) = (start.parse::<u16>(), end.parse::<u16>()) {
-                        ranges.push((s, e));
-                    }
+                if let Some((start, end)) = port_part.split_once('-')
+                    && let (Ok(s), Ok(e)) = (start.parse::<u16>(), end.parse::<u16>())
+                {
+                    ranges.push((s, e));
                 }
             }
         }

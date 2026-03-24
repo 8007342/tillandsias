@@ -223,7 +223,7 @@ fn build_remote_projects_submenu<R: Runtime>(
         submenu = submenu.item(
             &MenuItemBuilder::with_id(
                 ids::static_id("cloning-status"),
-                &format!("Cloning {cloning_name}..."),
+                format!("Cloning {cloning_name}..."),
             )
             .enabled(false)
             .build(app)?,

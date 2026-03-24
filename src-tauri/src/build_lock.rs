@@ -30,14 +30,13 @@ pub fn acquire(image: &str) -> Result<(), String> {
     let path = lock_path(image);
 
     // Check for existing lock
-    if let Ok(content) = fs::read_to_string(&path) {
-        if let Ok(pid) = content.trim().parse::<u32>() {
-            if is_alive(pid) {
-                return Err(format!("Build already running (PID {pid})"));
-            }
-            // Stale lock — take over
-        }
+    if let Ok(content) = fs::read_to_string(&path)
+        && let Ok(pid) = content.trim().parse::<u32>()
+        && is_alive(pid)
+    {
+        return Err(format!("Build already running (PID {pid})"));
     }
+    // Stale lock — take over
 
     // Write our PID
     if let Some(parent) = path.parent() {
@@ -51,22 +50,21 @@ pub fn acquire(image: &str) -> Result<(), String> {
 pub fn release(image: &str) {
     let path = lock_path(image);
     // Only remove if it's our PID
-    if let Ok(content) = fs::read_to_string(&path) {
-        if let Ok(pid) = content.trim().parse::<u32>() {
-            if pid == std::process::id() {
-                let _ = fs::remove_file(&path);
-            }
-        }
+    if let Ok(content) = fs::read_to_string(&path)
+        && let Ok(pid) = content.trim().parse::<u32>()
+        && pid == std::process::id()
+    {
+        let _ = fs::remove_file(&path);
     }
 }
 
 /// Check if a build is currently running for an image.
 pub fn is_running(image: &str) -> bool {
     let path = lock_path(image);
-    if let Ok(content) = fs::read_to_string(&path) {
-        if let Ok(pid) = content.trim().parse::<u32>() {
-            return is_alive(pid);
-        }
+    if let Ok(content) = fs::read_to_string(&path)
+        && let Ok(pid) = content.trim().parse::<u32>()
+    {
+        return is_alive(pid);
     }
     false
 }
