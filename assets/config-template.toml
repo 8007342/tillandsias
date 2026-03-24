@@ -27,6 +27,10 @@ image = "ghcr.io/8007342/macuahuitl:latest"
 # Default: 3000-3099
 port_range = "3000-3099"
 
+[autostart]
+# Start Tillandsias automatically on login. Default: false.
+enabled = false
+
 [security]
 # Security flags applied to every environment. These are non-negotiable
 # and cannot be weakened — they protect your system from untrusted code.

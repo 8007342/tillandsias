@@ -318,6 +318,14 @@ WRAPPER
         chmod +x "$DATA_DIR/images/default/entrypoint.sh" 2>/dev/null || true
         _info "Installed image sources to $DATA_DIR/images/"
 
+        # Copy icons for desktop launcher
+        if [[ -d "$SCRIPT_DIR/src-tauri/icons" ]]; then
+            mkdir -p "$DATA_DIR/icons"
+            cp "$SCRIPT_DIR/src-tauri/icons/32x32.png" "$DATA_DIR/icons/" 2>/dev/null || true
+            cp "$SCRIPT_DIR/src-tauri/icons/128x128.png" "$DATA_DIR/icons/" 2>/dev/null || true
+            cp "$SCRIPT_DIR/src-tauri/icons/icon.png" "$DATA_DIR/icons/256x256.png" 2>/dev/null || true
+        fi
+
         if [[ -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
             cp "$SCRIPT_DIR/scripts/build-image.sh" "$DATA_DIR/scripts/"
             cp "$SCRIPT_DIR/scripts/ensure-builder.sh" "$DATA_DIR/scripts/"

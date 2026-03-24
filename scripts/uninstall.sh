@@ -27,6 +27,19 @@ echo "  ✓ Removed libraries"
 rm -rf "$DATA_DIR"
 echo "  ✓ Removed data"
 
+# Linux desktop cleanup
+rm -f "$HOME/.local/share/applications/tillandsias.desktop"
+rm -f "$HOME/.local/share/icons/hicolor/32x32/apps/tillandsias.png"
+rm -f "$HOME/.local/share/icons/hicolor/128x128/apps/tillandsias.png"
+rm -f "$HOME/.local/share/icons/hicolor/256x256/apps/tillandsias.png"
+rm -f "$HOME/.config/autostart/tillandsias.desktop"
+update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+echo "  ✓ Removed desktop launcher"
+
+# macOS desktop cleanup
+rm -rf "$HOME/Applications/Tillandsias.app"
+rm -f "$HOME/Library/LaunchAgents/com.tillandsias.tray.plist"
+
 if [[ "$WIPE" == true ]]; then
     # Remove cache (container images, opencode, openspec, secrets)
     rm -rf "$CACHE_DIR"

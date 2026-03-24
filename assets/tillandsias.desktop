@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Tillandsias
+Comment=Local development environments that just work
+Exec=TILLANDSIAS_BIN
+Icon=tillandsias
+Terminal=false
+Type=Application
+Categories=Development;
+StartupWMClass=tillandsias
