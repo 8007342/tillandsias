@@ -183,12 +183,11 @@ impl Scanner {
 
                     for path in ready {
                         pending.remove(&path);
-                        if let Some(change) = self.process_change(&path) {
-                            if tx.send(change).await.is_err() {
+                        if let Some(change) = self.process_change(&path)
+                            && tx.send(change).await.is_err() {
                                 debug!("Scanner channel closed, stopping");
                                 return Ok(());
                             }
-                        }
                     }
                 }
             }

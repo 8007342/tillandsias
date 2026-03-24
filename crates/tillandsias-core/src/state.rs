@@ -31,10 +31,10 @@ impl ContainerInfo {
         // matching from longest suffix first.
         for genus in TillandsiaGenus::ALL {
             let slug = genus.slug();
-            if let Some(project) = stripped.strip_suffix(&format!("-{slug}")) {
-                if !project.is_empty() {
-                    return Some((project.to_string(), *genus));
-                }
+            if let Some(project) = stripped.strip_suffix(&format!("-{slug}"))
+                && !project.is_empty()
+            {
+                return Some((project.to_string(), *genus));
             }
         }
         None

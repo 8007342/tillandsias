@@ -116,18 +116,18 @@ fn open_terminal(command: &str) -> Result<(), String> {
 /// 2. Alongside the executable
 /// 3. `~/.local/share/tillandsias/` (installed layout)
 fn resolve_project_root() -> Option<PathBuf> {
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            // target/debug/tillandsias-tray -> project root (two levels up)
-            if let Some(root) = exe_dir.parent().and_then(|p| p.parent()) {
-                if root.join("scripts").join("build-image.sh").exists() {
-                    return Some(root.to_path_buf());
-                }
-            }
-            // Alongside the binary
-            if exe_dir.join("scripts").join("build-image.sh").exists() {
-                return Some(exe_dir.to_path_buf());
-            }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(exe_dir) = exe.parent()
+    {
+        // target/debug/tillandsias-tray -> project root (two levels up)
+        if let Some(root) = exe_dir.parent().and_then(|p| p.parent())
+            && root.join("scripts").join("build-image.sh").exists()
+        {
+            return Some(root.to_path_buf());
+        }
+        // Alongside the binary
+        if exe_dir.join("scripts").join("build-image.sh").exists() {
+            return Some(exe_dir.to_path_buf());
         }
     }
 
@@ -429,14 +429,13 @@ pub async fn handle_stop(
             .running
             .iter()
             .any(|c| c.project_name == container.project_name);
-        if !still_running {
-            if let Some(project) = state
+        if !still_running
+            && let Some(project) = state
                 .projects
                 .iter_mut()
                 .find(|p| p.name == container.project_name)
-            {
-                project.assigned_genus = None;
-            }
+        {
+            project.assigned_genus = None;
         }
 
         info!(container = %container_name, "Container stopped and removed from state");
@@ -484,14 +483,13 @@ pub async fn handle_destroy(
             .running
             .iter()
             .any(|c| c.project_name == container.project_name);
-        if !still_running {
-            if let Some(project) = state
+        if !still_running
+            && let Some(project) = state
                 .projects
                 .iter_mut()
                 .find(|p| p.name == container.project_name)
-            {
-                project.assigned_genus = None;
-            }
+        {
+            project.assigned_genus = None;
         }
     }
 
@@ -640,7 +638,7 @@ read -p "Press Enter to close..."
         secrets_dir.join("gh").display(),
         gitconfig_path.display(),
         FORGE_IMAGE_TAG,
-        shell_escape(&auth_script),
+        shell_escape(auth_script),
     );
 
     open_terminal(&podman_cmd).map_err(|e| format!("Failed to open terminal: {e}"))

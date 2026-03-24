@@ -25,18 +25,18 @@ fn image_tag(name: &str) -> String {
 
 /// Resolve the project root directory (where scripts/build-image.sh lives).
 fn resolve_project_root() -> Option<PathBuf> {
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            // target/debug/ layout -> two levels up
-            if let Some(root) = exe_dir.parent().and_then(|p| p.parent()) {
-                if root.join("scripts").join("build-image.sh").exists() {
-                    return Some(root.to_path_buf());
-                }
-            }
-            // Alongside the binary
-            if exe_dir.join("scripts").join("build-image.sh").exists() {
-                return Some(exe_dir.to_path_buf());
-            }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(exe_dir) = exe.parent()
+    {
+        // target/debug/ layout -> two levels up
+        if let Some(root) = exe_dir.parent().and_then(|p| p.parent())
+            && root.join("scripts").join("build-image.sh").exists()
+        {
+            return Some(root.to_path_buf());
+        }
+        // Alongside the binary
+        if exe_dir.join("scripts").join("build-image.sh").exists() {
+            return Some(exe_dir.to_path_buf());
         }
     }
 
@@ -109,21 +109,16 @@ fn build_run_args(
     cache: &Path,
     port_range: (u16, u16),
 ) -> Vec<String> {
-    let mut args = Vec::new();
-
-    // Interactive + ephemeral
-    args.push("-it".to_string());
-    args.push("--rm".to_string());
-
-    // Container name
-    args.push("--name".to_string());
-    args.push(container_name.to_string());
-
-    // Non-negotiable security flags
-    args.push("--cap-drop=ALL".to_string());
-    args.push("--security-opt=no-new-privileges".to_string());
-    args.push("--userns=keep-id".to_string());
-    args.push("--security-opt=label=disable".to_string());
+    let mut args = vec![
+        "-it".to_string(),
+        "--rm".to_string(),
+        "--name".to_string(),
+        container_name.to_string(),
+        "--cap-drop=ALL".to_string(),
+        "--security-opt=no-new-privileges".to_string(),
+        "--userns=keep-id".to_string(),
+        "--security-opt=label=disable".to_string(),
+    ];
 
     // GPU passthrough (Linux only)
     if cfg!(target_os = "linux") {
@@ -250,12 +245,12 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool) -> bool {
     // Try build script first (works when running from project dir)
     if let Some(_root) = resolve_project_root() {
         println!("  Ensuring image is up to date...");
-        if let Err(e) = run_build_image_script(source_name, debug) {
-            if debug {
-                eprintln!("  Build script failed: {e}");
-            }
-            // Fall through to image check
+        if let Err(e) = run_build_image_script(source_name, debug)
+            && debug
+        {
+            eprintln!("  Build script failed: {e}");
         }
+        // Fall through to image check
     }
 
     // Verify image exists
@@ -330,10 +325,10 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool) -> bool {
 
 /// Collapse a path's home directory prefix to `~` for display.
 fn tilde_path(path: &Path) -> String {
-    if let Some(home) = dirs::home_dir() {
-        if let Ok(suffix) = path.strip_prefix(&home) {
-            return format!("~/{}", suffix.display());
-        }
+    if let Some(home) = dirs::home_dir()
+        && let Ok(suffix) = path.strip_prefix(&home)
+    {
+        return format!("~/{}", suffix.display());
     }
     path.display().to_string()
 }

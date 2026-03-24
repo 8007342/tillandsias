@@ -190,10 +190,9 @@ fn main() {
                     for change in initial_changes {
                         if let tillandsias_core::project::ProjectChange::Discovered(project) =
                             change
+                            && !s.projects.iter().any(|p| p.path == project.path)
                         {
-                            if !s.projects.iter().any(|p| p.path == project.path) {
-                                s.projects.push(project);
-                            }
+                            s.projects.push(project);
                         }
                     }
                     info!(count = s.projects.len(), "Initial project scan complete");
@@ -256,15 +255,15 @@ fn rebuild_menu(app_handle: &tauri::AppHandle, state: &Arc<Mutex<TrayState>>) {
     let s = state.lock().unwrap();
     match menu::build_tray_menu(app_handle, &s) {
         Ok(new_menu) => {
-            if let Some(tray_lock) = TRAY_ICON.get() {
-                if let Ok(tray) = tray_lock.lock() {
-                    let _ = tray.set_menu(Some(new_menu));
-                    debug!(
-                        projects = s.projects.len(),
-                        running = s.running.len(),
-                        "Tray menu rebuilt"
-                    );
-                }
+            if let Some(tray_lock) = TRAY_ICON.get()
+                && let Ok(tray) = tray_lock.lock()
+            {
+                let _ = tray.set_menu(Some(new_menu));
+                debug!(
+                    projects = s.projects.len(),
+                    running = s.running.len(),
+                    "Tray menu rebuilt"
+                );
             }
         }
         Err(e) => {

@@ -184,14 +184,13 @@ fn handle_podman_event(
                     .running
                     .iter()
                     .any(|c| c.project_name == removed.project_name);
-                if !still_running {
-                    if let Some(project) = state
+                if !still_running
+                    && let Some(project) = state
                         .projects
                         .iter_mut()
                         .find(|p| p.name == removed.project_name)
-                    {
-                        project.assigned_genus = None;
-                    }
+                {
+                    project.assigned_genus = None;
                 }
             }
         }

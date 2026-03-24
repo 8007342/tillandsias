@@ -28,21 +28,16 @@ impl ContainerLauncher {
         cache_dir: &std::path::Path,
         port_range: (u16, u16),
     ) -> Vec<String> {
-        let mut args = Vec::new();
-
-        // Detached + ephemeral
-        args.push("-d".to_string());
-        args.push("--rm".to_string());
-
-        // Container name
-        args.push("--name".to_string());
-        args.push(container_name.to_string());
-
-        // Non-negotiable security flags
-        args.push("--userns=keep-id".to_string());
-        args.push("--cap-drop=ALL".to_string());
-        args.push("--security-opt=no-new-privileges".to_string());
-        args.push("--security-opt=label=disable".to_string());
+        let mut args = vec![
+            "-d".to_string(),
+            "--rm".to_string(),
+            "--name".to_string(),
+            container_name.to_string(),
+            "--userns=keep-id".to_string(),
+            "--cap-drop=ALL".to_string(),
+            "--security-opt=no-new-privileges".to_string(),
+            "--security-opt=label=disable".to_string(),
+        ];
 
         // GPU passthrough (Linux only, silent when absent)
         if cfg!(target_os = "linux") {

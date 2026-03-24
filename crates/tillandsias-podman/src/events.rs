@@ -79,10 +79,10 @@ impl PodmanEventStream {
                     return Err(PodmanEventError::StreamEnded);
                 }
                 Ok(_) => {
-                    if let Some(event) = parse_podman_event(&line, &self.prefix) {
-                        if tx.send(event).await.is_err() {
-                            return Ok(()); // Channel closed, clean shutdown
-                        }
+                    if let Some(event) = parse_podman_event(&line, &self.prefix)
+                        && tx.send(event).await.is_err()
+                    {
+                        return Ok(()); // Channel closed, clean shutdown
                     }
                 }
                 Err(e) => {
@@ -125,33 +125,33 @@ impl PodmanEventStream {
                 .output()
                 .await;
 
-            if let Ok(o) = output {
-                if o.status.success() {
-                    let stdout = String::from_utf8_lossy(&o.stdout);
-                    if let Ok(entries) = serde_json::from_str::<Vec<serde_json::Value>>(&stdout) {
-                        for entry in entries {
-                            if let (Some(name), Some(state)) = (
-                                entry["Names"]
-                                    .as_array()
-                                    .and_then(|n| n.first())
-                                    .and_then(|n| n.as_str()),
-                                entry["State"].as_str(),
-                            ) {
-                                let new_state = match state {
-                                    "running" => ContainerState::Running,
-                                    "created" | "configured" => ContainerState::Creating,
-                                    "exited" | "stopped" => ContainerState::Stopped,
-                                    _ => ContainerState::Absent,
-                                };
+            if let Ok(o) = output
+                && o.status.success()
+            {
+                let stdout = String::from_utf8_lossy(&o.stdout);
+                if let Ok(entries) = serde_json::from_str::<Vec<serde_json::Value>>(&stdout) {
+                    for entry in entries {
+                        if let (Some(name), Some(state)) = (
+                            entry["Names"]
+                                .as_array()
+                                .and_then(|n| n.first())
+                                .and_then(|n| n.as_str()),
+                            entry["State"].as_str(),
+                        ) {
+                            let new_state = match state {
+                                "running" => ContainerState::Running,
+                                "created" | "configured" => ContainerState::Creating,
+                                "exited" | "stopped" => ContainerState::Stopped,
+                                _ => ContainerState::Absent,
+                            };
 
-                                let event = PodmanEvent {
-                                    container_name: name.to_string(),
-                                    new_state,
-                                };
+                            let event = PodmanEvent {
+                                container_name: name.to_string(),
+                                new_state,
+                            };
 
-                                if tx.send(event).await.is_err() {
-                                    return Err(()); // Channel closed
-                                }
+                            if tx.send(event).await.is_err() {
+                                return Err(()); // Channel closed
                             }
                         }
                     }
