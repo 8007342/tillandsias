@@ -155,6 +155,10 @@ fn build_run_args(
     let secrets_dir = cache.join("secrets");
     std::fs::create_dir_all(secrets_dir.join("gh")).ok();
     std::fs::create_dir_all(secrets_dir.join("git")).ok();
+    let gitconfig_path = secrets_dir.join("git").join(".gitconfig");
+    if !gitconfig_path.exists() {
+        std::fs::File::create(&gitconfig_path).ok();
+    }
 
     // GitHub CLI credentials
     let gh_mount = format!("{}:/home/forge/.config/gh", secrets_dir.join("gh").display());
@@ -162,7 +166,7 @@ fn build_run_args(
     args.push(gh_mount);
 
     // Git config
-    let git_mount = format!("{}:/home/forge/.gitconfig", secrets_dir.join("git").join(".gitconfig").display());
+    let git_mount = format!("{}:/home/forge/.gitconfig", gitconfig_path.display());
     args.push("-v".to_string());
     args.push(git_mount);
 
