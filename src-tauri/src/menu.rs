@@ -14,10 +14,16 @@ use tillandsias_core::state::TrayState;
 pub mod ids {
     pub const QUIT: &str = "quit";
     pub const SETTINGS: &str = "settings";
+    pub const GITHUB_LOGIN: &str = "github-login";
 
     /// Build an "attach here" menu item ID for a project path.
     pub fn attach_here(project_path: &std::path::Path) -> String {
         format!("attach:{}", project_path.display())
+    }
+
+    /// Build a "terminal" menu item ID for a project path.
+    pub fn terminal(project_path: &std::path::Path) -> String {
+        format!("terminal:{}", project_path.display())
     }
 
     /// Build a "start" menu item ID for a project path.
@@ -140,6 +146,15 @@ pub fn build_tray_menu<R: Runtime>(
     // Separator
     menu = menu.separator();
 
+    // GitHub Login — show when no credentials exist
+    if needs_github_login() {
+        menu = menu.item(
+            &MenuItemBuilder::with_id(ids::GITHUB_LOGIN, "GitHub Login")
+                .build(app)?,
+        );
+        menu = menu.separator();
+    }
+
     // Settings and Quit
     menu = menu.item(
         &MenuItemBuilder::with_id(ids::SETTINGS, "Settings")
@@ -180,11 +195,20 @@ fn build_project_submenu<R: Runtime>(
 
     let mut submenu = SubmenuBuilder::new(app, &label);
 
-    // "Attach Here" — primary action
+    // "Attach Here" — primary action (opens OpenCode)
     submenu = submenu.item(
         &MenuItemBuilder::with_id(
             ids::attach_here(&project.path),
             "Attach Here",
+        )
+        .build(app)?,
+    );
+
+    // "Terminal" — opens bash in a forge container
+    submenu = submenu.item(
+        &MenuItemBuilder::with_id(
+            ids::terminal(&project.path),
+            "Terminal",
         )
         .build(app)?,
     );
@@ -248,4 +272,12 @@ fn lifecycle_label(lifecycle: tillandsias_core::genus::PlantLifecycle) -> &'stat
         PlantLifecycle::Dried => "Stopping",
         PlantLifecycle::Pup => "Rebuilding",
     }
+}
+
+/// Check if GitHub authentication is needed.
+/// Returns true if no gh credentials exist in the secrets cache.
+fn needs_github_login() -> bool {
+    let cache = tillandsias_core::config::cache_dir();
+    let gh_hosts = cache.join("secrets").join("gh").join("hosts.yml");
+    !gh_hosts.exists()
 }

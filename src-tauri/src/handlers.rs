@@ -503,3 +503,129 @@ pub async fn shutdown_all(state: &TrayState) {
 
     info!("All containers stopped, shutdown complete");
 }
+
+/// Handle "Terminal" — open bash in a forge container for the project.
+pub async fn handle_terminal(project_path: PathBuf, state: &TrayState) -> Result<(), String> {
+    let project_name = project_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "project".to_string());
+
+    info!(project = %project_name, "Opening terminal");
+
+    let client = PodmanClient::new();
+    if !client.image_exists(FORGE_IMAGE_TAG).await {
+        return Err("Forge image not found. Run ./build.sh --install first.".into());
+    }
+
+    let cache = cache_dir();
+    std::fs::create_dir_all(&cache).ok();
+    let secrets_dir = cache.join("secrets");
+    std::fs::create_dir_all(secrets_dir.join("gh")).ok();
+    std::fs::create_dir_all(secrets_dir.join("git")).ok();
+    let gitconfig_path = secrets_dir.join("git").join(".gitconfig");
+    if !gitconfig_path.exists() {
+        std::fs::File::create(&gitconfig_path).ok();
+    }
+
+    let container_name = format!("tillandsias-{}-terminal", project_name);
+
+    let podman_cmd = format!(
+        "podman run -it --rm \
+        --name {} \
+        --security-opt=label=disable \
+        --userns=keep-id \
+        --cap-drop=ALL \
+        --security-opt=no-new-privileges \
+        -p 3100-3199:3100-3199 \
+        -v {}:/home/forge/src/{} \
+        -v {}:/home/forge/.cache/tillandsias \
+        -v {}:/home/forge/.config/gh \
+        -v {}:/home/forge/.gitconfig \
+        {} bash",
+        container_name,
+        project_path.display(),
+        project_name,
+        cache.display(),
+        secrets_dir.join("gh").display(),
+        gitconfig_path.display(),
+        FORGE_IMAGE_TAG,
+    );
+
+    open_terminal(&podman_cmd).map_err(|e| format!("Failed to open terminal: {e}"))
+}
+
+/// Handle "GitHub Login" — open terminal running gh auth login in a container.
+/// Uses the same forge image with secrets mounted, so credentials persist.
+pub async fn handle_github_login(state: &TrayState) -> Result<(), String> {
+    info!("GitHub Login: opening terminal for authentication");
+
+    let client = PodmanClient::new();
+    let cache = cache_dir();
+
+    // Ensure image exists
+    if !client.image_exists(FORGE_IMAGE_TAG).await {
+        return Err("Forge image not found. Run ./build.sh --install first.".into());
+    }
+
+    // Ensure secrets dirs exist
+    let secrets_dir = cache.join("secrets");
+    std::fs::create_dir_all(secrets_dir.join("gh")).ok();
+    std::fs::create_dir_all(secrets_dir.join("git")).ok();
+    let gitconfig_path = secrets_dir.join("git").join(".gitconfig");
+    if !gitconfig_path.exists() {
+        std::fs::File::create(&gitconfig_path).ok();
+    }
+
+    // Build the podman command for gh auth login
+    let auth_script = r#"
+echo ""
+echo "=== GitHub Login ==="
+echo ""
+
+# Git identity
+read -p "Your name (for git commits): " GIT_NAME
+read -p "Your email (for git commits): " GIT_EMAIL
+git config --global user.name "$GIT_NAME"
+git config --global user.email "$GIT_EMAIL"
+echo ""
+echo "Git identity configured."
+echo ""
+
+# GitHub authentication
+echo "Starting GitHub authentication..."
+echo "(A browser will open for you to authorize)"
+echo ""
+gh auth login
+gh auth setup-git
+
+echo ""
+echo "=== Done! ==="
+echo "Your credentials are saved. Close this window."
+echo ""
+read -p "Press Enter to close..."
+"#;
+
+    let podman_cmd = format!(
+        "podman run -it --rm \
+        --name tillandsias-gh-login \
+        --security-opt=label=disable \
+        --userns=keep-id \
+        --cap-drop=ALL \
+        --security-opt=no-new-privileges \
+        -v {}:/home/forge/.config/gh \
+        -v {}:/home/forge/.gitconfig \
+        {} bash -c {}",
+        secrets_dir.join("gh").display(),
+        gitconfig_path.display(),
+        FORGE_IMAGE_TAG,
+        shell_escape(&auth_script),
+    );
+
+    open_terminal(&podman_cmd).map_err(|e| format!("Failed to open terminal: {e}"))
+}
+
+/// Escape a string for use as a bash argument.
+fn shell_escape(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}

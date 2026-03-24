@@ -60,6 +60,12 @@ pub enum MenuCommand {
         genus: TillandsiaGenus,
     },
 
+    /// Open a bash terminal in the project's forge container
+    Terminal { project_path: PathBuf },
+
+    /// GitHub Login — run gh auth login in a container
+    GitHubLogin,
+
     /// Open settings
     Settings,
 

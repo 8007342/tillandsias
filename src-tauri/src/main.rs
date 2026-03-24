@@ -286,11 +286,15 @@ fn rebuild_menu(app_handle: &tauri::AppHandle, state: &Arc<Mutex<TrayState>>) {
 fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::AppHandle) {
     let command = match id {
         menu::ids::QUIT => None, // Handled via fast-path above
+        menu::ids::GITHUB_LOGIN => Some(MenuCommand::GitHubLogin),
         menu::ids::SETTINGS => Some(MenuCommand::Settings),
         _ => {
             if let Some((action, payload)) = menu::ids::parse(id) {
                 match action {
                     "attach" => Some(MenuCommand::AttachHere {
+                        project_path: payload.into(),
+                    }),
+                    "terminal" => Some(MenuCommand::Terminal {
                         project_path: payload.into(),
                     }),
                     "start" => Some(MenuCommand::Start {

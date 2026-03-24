@@ -97,6 +97,20 @@ pub async fn run(
                             }
                         }
                     }
+                    MenuCommand::Terminal { project_path } => {
+                        info!(project = ?project_path, "Terminal requested");
+                        if let Err(e) = handlers::handle_terminal(project_path, &state).await {
+                            error!(error = %e, "Terminal failed");
+                        }
+                    }
+                    MenuCommand::GitHubLogin => {
+                        info!("GitHub Login requested");
+                        if let Err(e) = handlers::handle_github_login(&state).await {
+                            error!(error = %e, "GitHub Login failed");
+                        } else {
+                            on_state_change(&state);
+                        }
+                    }
                     MenuCommand::Settings => {
                         debug!("Settings requested (not yet implemented)");
                     }
