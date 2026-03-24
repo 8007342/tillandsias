@@ -14,6 +14,7 @@
         # Local files — changing these triggers rebuild
         forgeEntrypoint = ./images/default/entrypoint.sh;
         forgeOpencode = ./images/default/opencode.json;
+        forgeSkills = ./images/default/skills;
         webEntrypoint = ./images/web/entrypoint.sh;
 
       in {
@@ -75,6 +76,10 @@
 
               # Copy opencode config
               cp ${forgeOpencode} ./home/forge/.config/opencode/config.json
+
+              # Copy skills — entrypoint deploys these to ~/src/.opencode/ at runtime
+              mkdir -p ./usr/local/share/tillandsias/opencode
+              cp -r ${forgeSkills}/* ./usr/local/share/tillandsias/opencode/
 
               # Enable flakes inside container
               echo "experimental-features = nix-command flakes" > ./home/forge/.config/nix/nix.conf

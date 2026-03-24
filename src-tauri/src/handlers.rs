@@ -206,6 +206,21 @@ fn build_run_args(
     args.push("-v".to_string());
     args.push(cache_mount);
 
+    // Secrets directory — git config, gh auth, ssh keys
+    let secrets_dir = cache_dir.join("secrets");
+    std::fs::create_dir_all(secrets_dir.join("gh")).ok();
+    std::fs::create_dir_all(secrets_dir.join("git")).ok();
+
+    // GitHub CLI credentials
+    let gh_mount = format!("{}:/home/forge/.config/gh", secrets_dir.join("gh").display());
+    args.push("-v".to_string());
+    args.push(gh_mount);
+
+    // Git config
+    let git_mount = format!("{}:/home/forge/.gitconfig", secrets_dir.join("git").join(".gitconfig").display());
+    args.push("-v".to_string());
+    args.push(git_mount);
+
     // Container image (always last)
     args.push(image.to_string());
 
