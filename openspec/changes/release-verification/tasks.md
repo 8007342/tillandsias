@@ -1,9 +1,9 @@
 ## 1. Prerequisites
 
-- [ ] 1.1 Generate Tauri Ed25519 signing keypair: `cargo tauri signer generate -w ~/.tauri/tillandsias.key`
-- [ ] 1.2 Update `src-tauri/tauri.conf.json` replacing `REPLACE_WITH_GENERATED_PUBLIC_KEY` with the actual public key
-- [ ] 1.3 Configure GitHub repo secret `TAURI_SIGNING_PRIVATE_KEY` with the private key content
-- [ ] 1.4 Configure GitHub repo secret `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` with the key password
+- [x] 1.1 Generate Tauri Ed25519 signing keypair: `cargo tauri signer generate -w ~/.tauri/tillandsias.key`
+- [x] 1.2 Update `src-tauri/tauri.conf.json` with the actual public key
+- [x] 1.3 Configure GitHub repo secret `TAURI_SIGNING_PRIVATE_KEY` with the private key content
+- [x] 1.4 Configure GitHub repo secret `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` with the key password
 - [ ] 1.5 Install Cosign locally for verification testing
 
 ## 2. Release Pipeline Verification (from release-pipeline archive)

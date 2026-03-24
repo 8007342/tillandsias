@@ -38,7 +38,10 @@ impl PodmanEventStream {
             match self.stream_events(&tx).await {
                 Ok(()) => break, // Clean shutdown
                 Err(e) => {
-                    warn!(?e, "Podman events stream failed, falling back to backoff inspection");
+                    warn!(
+                        ?e,
+                        "Podman events stream failed, falling back to backoff inspection"
+                    );
                     // Fall back to exponential backoff
                     if self.backoff_inspect(&tx).await.is_err() {
                         break; // Channel closed
@@ -49,10 +52,7 @@ impl PodmanEventStream {
     }
 
     /// Primary: stream `podman events --format json`.
-    async fn stream_events(
-        &self,
-        tx: &mpsc::Sender<PodmanEvent>,
-    ) -> Result<(), PodmanEventError> {
+    async fn stream_events(&self, tx: &mpsc::Sender<PodmanEvent>) -> Result<(), PodmanEventError> {
         let mut child = Command::new("podman")
             .args([
                 "events",
@@ -94,10 +94,7 @@ impl PodmanEventStream {
 
     /// Fallback: exponential backoff inspection.
     /// Starts at 1s, doubles to 30s max. NEVER fixed-interval polling.
-    async fn backoff_inspect(
-        &self,
-        tx: &mpsc::Sender<PodmanEvent>,
-    ) -> Result<(), ()> {
+    async fn backoff_inspect(&self, tx: &mpsc::Sender<PodmanEvent>) -> Result<(), ()> {
         let mut interval = Duration::from_secs(1);
         let max_interval = Duration::from_secs(30);
 
@@ -131,9 +128,7 @@ impl PodmanEventStream {
             if let Ok(o) = output {
                 if o.status.success() {
                     let stdout = String::from_utf8_lossy(&o.stdout);
-                    if let Ok(entries) =
-                        serde_json::from_str::<Vec<serde_json::Value>>(&stdout)
-                    {
+                    if let Ok(entries) = serde_json::from_str::<Vec<serde_json::Value>>(&stdout) {
                         for entry in entries {
                             if let (Some(name), Some(state)) = (
                                 entry["Names"]

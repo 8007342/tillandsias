@@ -17,7 +17,7 @@ use tracing::{debug, error, info, warn};
 use tillandsias_core::config::load_global_config;
 use tillandsias_core::event::MenuCommand;
 use tillandsias_core::state::{ContainerInfo, Os, PlatformInfo, TrayState};
-use tillandsias_podman::{detect_gpu_devices, PodmanClient, PodmanEventStream};
+use tillandsias_podman::{PodmanClient, PodmanEventStream, detect_gpu_devices};
 use tillandsias_scanner::{Scanner, ScannerConfig};
 
 use updater::UpdateState;
@@ -180,8 +180,7 @@ fn main() {
 
                 // Set up scanner
                 let global_config = load_global_config();
-                let scanner_config =
-                    ScannerConfig::from_core_config(&global_config.scanner);
+                let scanner_config = ScannerConfig::from_core_config(&global_config.scanner);
                 let mut scanner = Scanner::new(scanner_config);
 
                 // Initial scan
@@ -189,9 +188,8 @@ fn main() {
                 {
                     let mut s = state_for_loop.lock().unwrap();
                     for change in initial_changes {
-                        if let tillandsias_core::project::ProjectChange::Discovered(
-                            project,
-                        ) = change
+                        if let tillandsias_core::project::ProjectChange::Discovered(project) =
+                            change
                         {
                             if !s.projects.iter().any(|p| p.path == project.path) {
                                 s.projects.push(project);
@@ -238,14 +236,7 @@ fn main() {
                         rebuild_menu(&app_for_rebuild, &state_for_rebuild);
                     });
 
-                event_loop::run(
-                    loop_state,
-                    scanner_rx,
-                    podman_rx,
-                    menu_rx,
-                    on_state_change,
-                )
-                .await;
+                event_loop::run(loop_state, scanner_rx, podman_rx, menu_rx, on_state_change).await;
             });
 
             Ok(())
@@ -303,9 +294,7 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
                         project_path: payload.into(),
                     }),
                     "stop" => {
-                        if let Some((_, genus)) =
-                            ContainerInfo::parse_container_name(payload)
-                        {
+                        if let Some((_, genus)) = ContainerInfo::parse_container_name(payload) {
                             Some(MenuCommand::Stop {
                                 container_name: payload.to_string(),
                                 genus,
@@ -316,9 +305,7 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
                         }
                     }
                     "destroy" => {
-                        if let Some((_, genus)) =
-                            ContainerInfo::parse_container_name(payload)
-                        {
+                        if let Some((_, genus)) = ContainerInfo::parse_container_name(payload) {
                             Some(MenuCommand::Destroy {
                                 container_name: payload.to_string(),
                                 genus,

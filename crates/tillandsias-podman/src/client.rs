@@ -1,5 +1,5 @@
 use tokio::process::Command;
-use tracing::{debug, info, warn, instrument};
+use tracing::{debug, info, instrument, warn};
 
 /// Async podman CLI client. All operations are non-blocking.
 #[derive(Debug, Clone)]
@@ -58,17 +58,12 @@ impl PodmanClient {
             Ok(())
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            Err(PodmanError::CommandFailed(format!(
-                "pull failed: {stderr}"
-            )))
+            Err(PodmanError::CommandFailed(format!("pull failed: {stderr}")))
         }
     }
 
     /// Inspect a container and return its state.
-    pub async fn inspect_container(
-        &self,
-        name: &str,
-    ) -> Result<ContainerInspect, PodmanError> {
+    pub async fn inspect_container(&self, name: &str) -> Result<ContainerInspect, PodmanError> {
         let output = Command::new("podman")
             .args(["inspect", name, "--format", "json"])
             .output()
@@ -77,10 +72,8 @@ impl PodmanClient {
 
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
-            let inspects: Vec<serde_json::Value> =
-                serde_json::from_str(&stdout).map_err(|e| {
-                    PodmanError::ParseError(format!("inspect parse: {e}"))
-                })?;
+            let inspects: Vec<serde_json::Value> = serde_json::from_str(&stdout)
+                .map_err(|e| PodmanError::ParseError(format!("inspect parse: {e}")))?;
 
             if let Some(inspect) = inspects.first() {
                 let state = inspect["State"]["Status"]
@@ -122,10 +115,8 @@ impl PodmanClient {
             if stdout.trim().is_empty() || stdout.trim() == "[]" {
                 return Ok(Vec::new());
             }
-            let entries: Vec<PodmanPsEntry> =
-                serde_json::from_str(&stdout).map_err(|e| {
-                    PodmanError::ParseError(format!("ps parse: {e}"))
-                })?;
+            let entries: Vec<PodmanPsEntry> = serde_json::from_str(&stdout)
+                .map_err(|e| PodmanError::ParseError(format!("ps parse: {e}")))?;
 
             Ok(entries
                 .into_iter()
@@ -161,10 +152,7 @@ impl PodmanClient {
     /// Force kill a container.
     pub async fn kill_container(&self, name: &str) -> Result<(), PodmanError> {
         debug!(name, "Killing container");
-        let _ = Command::new("podman")
-            .args(["kill", name])
-            .output()
-            .await;
+        let _ = Command::new("podman").args(["kill", name]).output().await;
         Ok(())
     }
 
@@ -237,9 +225,7 @@ impl PodmanClient {
             Ok(())
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            Err(PodmanError::CommandFailed(format!(
-                "load failed: {stderr}"
-            )))
+            Err(PodmanError::CommandFailed(format!("load failed: {stderr}")))
         }
     }
 
@@ -258,9 +244,7 @@ impl PodmanClient {
             Ok(container_id)
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            Err(PodmanError::CommandFailed(format!(
-                "run failed: {stderr}"
-            )))
+            Err(PodmanError::CommandFailed(format!("run failed: {stderr}")))
         }
     }
 }

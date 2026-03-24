@@ -23,11 +23,7 @@ pub fn detect_gpu_devices() -> Vec<String> {
     }
 
     // AMD ROCm devices
-    for dev in &[
-        "/dev/kfd",
-        "/dev/dri/renderD128",
-        "/dev/dri/renderD129",
-    ] {
+    for dev in &["/dev/kfd", "/dev/dri/renderD128", "/dev/dri/renderD129"] {
         if Path::new(dev).exists() {
             devices.push(format!("--device={dev}"));
         }

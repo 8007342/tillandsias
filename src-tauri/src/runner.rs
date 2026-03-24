@@ -6,7 +6,9 @@
 
 use std::path::{Path, PathBuf};
 
-use tillandsias_core::config::{cache_dir, data_dir, load_global_config, load_project_config, GlobalConfig};
+use tillandsias_core::config::{
+    GlobalConfig, cache_dir, data_dir, load_global_config, load_project_config,
+};
 use tillandsias_core::genus::TillandsiaGenus;
 use tillandsias_core::state::ContainerInfo;
 use tillandsias_podman::PodmanClient;
@@ -161,7 +163,10 @@ fn build_run_args(
     }
 
     // GitHub CLI credentials
-    let gh_mount = format!("{}:/home/forge/.config/gh", secrets_dir.join("gh").display());
+    let gh_mount = format!(
+        "{}:/home/forge/.config/gh",
+        secrets_dir.join("gh").display()
+    );
     args.push("-v".to_string());
     args.push(gh_mount);
 
@@ -259,7 +264,10 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool) -> bool {
         let size = image_size_display(&tag);
         println!("  \u{2713} Image ready ({size})");
     } else {
-        eprintln!("  \u{2717} Image {} not found. Run: ./build.sh --install", tag);
+        eprintln!(
+            "  \u{2717} Image {} not found. Run: ./build.sh --install",
+            tag
+        );
         return false;
     }
 
@@ -267,8 +275,7 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool) -> bool {
     let global_config = load_global_config();
     let project_config = load_project_config(&project_path);
     let resolved = global_config.merge_with_project(&project_config);
-    let base_port = GlobalConfig::parse_port_range(&resolved.port_range)
-        .unwrap_or((3000, 3099));
+    let base_port = GlobalConfig::parse_port_range(&resolved.port_range).unwrap_or((3000, 3099));
 
     // Use Aeranthos genus for CLI mode (no allocator needed)
     let genus = TillandsiaGenus::Aeranthos;
@@ -278,30 +285,18 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool) -> bool {
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
 
-    let run_args = build_run_args(
-        &container_name,
-        &tag,
-        &project_path,
-        &cache,
-        base_port,
-    );
+    let run_args = build_run_args(&container_name, &tag, &project_path, &cache, base_port);
 
     println!();
     println!("Starting environment...");
     println!("  Name:   {container_name}");
-    println!(
-        "  Ports:  {}-{}",
-        base_port.0, base_port.1
-    );
+    println!("  Ports:  {}-{}", base_port.0, base_port.1);
     let proj_display = project_path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "project".to_string());
     println!("  Mount:  {display_path} \u{2192} /home/forge/src/{proj_display}");
-    println!(
-        "  Cache:  {}",
-        tilde_path(&cache)
-    );
+    println!("  Cache:  {}", tilde_path(&cache));
 
     if debug {
         println!();

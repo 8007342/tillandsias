@@ -52,24 +52,21 @@ impl ContainerLauncher {
         }
 
         // Port range mapping
-        let port_mapping = format!("{}-{}:{}-{}", port_range.0, port_range.1, port_range.0, port_range.1);
+        let port_mapping = format!(
+            "{}-{}:{}-{}",
+            port_range.0, port_range.1, port_range.0, port_range.1
+        );
         args.push("-p".to_string());
         args.push(port_mapping);
 
         // Volume mounts
         // Project directory → container workspace (rw)
-        let project_mount = format!(
-            "{}:/var/home/forge/src",
-            project_path.display()
-        );
+        let project_mount = format!("{}:/var/home/forge/src", project_path.display());
         args.push("-v".to_string());
         args.push(project_mount);
 
         // Cache directory → container cache
-        let cache_mount = format!(
-            "{}:/var/home/forge/.cache/tillandsias",
-            cache_dir.display()
-        );
+        let cache_mount = format!("{}:/var/home/forge/.cache/tillandsias", cache_dir.display());
         args.push("-v".to_string());
         args.push(cache_mount);
 
@@ -86,10 +83,7 @@ impl ContainerLauncher {
 
         // Custom mounts from project config
         for mount in &config.mounts {
-            let mount_str = format!(
-                "{}:{}:{}",
-                mount.host, mount.container, mount.mode
-            );
+            let mount_str = format!("{}:{}:{}", mount.host, mount.container, mount.mode);
             args.push("-v".to_string());
             args.push(mount_str);
         }
@@ -129,13 +123,8 @@ impl ContainerLauncher {
         std::fs::create_dir_all(cache_dir).ok();
         std::fs::create_dir_all(cache_dir.join("nix")).ok();
 
-        let args = self.build_run_args(
-            &container_name,
-            config,
-            project_path,
-            cache_dir,
-            port_range,
-        );
+        let args =
+            self.build_run_args(&container_name, config, project_path, cache_dir, port_range);
 
         self.client.run_container(&args).await?;
 
@@ -186,17 +175,14 @@ impl ContainerLauncher {
 }
 
 /// Allocate a non-overlapping port range for a new environment.
-pub fn allocate_port_range(
-    base: (u16, u16),
-    existing_ranges: &[(u16, u16)],
-) -> (u16, u16) {
+pub fn allocate_port_range(base: (u16, u16), existing_ranges: &[(u16, u16)]) -> (u16, u16) {
     let range_size = base.1 - base.0;
     let mut candidate = base;
 
     loop {
-        let overlaps = existing_ranges.iter().any(|existing| {
-            candidate.0 <= existing.1 && candidate.1 >= existing.0
-        });
+        let overlaps = existing_ranges
+            .iter()
+            .any(|existing| candidate.0 <= existing.1 && candidate.1 >= existing.0);
 
         if !overlaps {
             return candidate;
@@ -306,10 +292,7 @@ mod tests {
 
     #[test]
     fn allocate_port_range_multiple_conflicts() {
-        let range = allocate_port_range(
-            (3000, 3099),
-            &[(3000, 3099), (3100, 3199)],
-        );
+        let range = allocate_port_range((3000, 3099), &[(3000, 3099), (3100, 3199)]);
         assert_eq!(range, (3200, 3299));
     }
 

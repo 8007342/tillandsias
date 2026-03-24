@@ -6,7 +6,11 @@ use tillandsias_core::project::{ArtifactStatus, Project, ProjectType};
 
 /// Detect project type from standard file markers (priority order).
 pub fn detect_project_type(project_path: &Path) -> ProjectType {
-    if project_path.join(".tillandsias").join("config.toml").exists() {
+    if project_path
+        .join(".tillandsias")
+        .join("config.toml")
+        .exists()
+    {
         // Explicit config — still try to detect type from project files
         return detect_from_project_files(project_path);
     }

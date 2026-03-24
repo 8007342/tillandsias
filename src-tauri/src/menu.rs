@@ -58,10 +58,8 @@ pub fn build_tray_menu<R: Runtime>(
         .first()
         .cloned()
         .unwrap_or_else(|| {
-            std::path::PathBuf::from(
-                std::env::var("HOME").unwrap_or_else(|_| "/root".to_string()),
-            )
-            .join("src")
+            std::path::PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/root".to_string()))
+                .join("src")
         });
 
     let src_label = format!(
@@ -71,10 +69,8 @@ pub fn build_tray_menu<R: Runtime>(
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| watch_path.display().to_string())
     );
-    menu = menu.item(
-        &MenuItemBuilder::with_id(ids::attach_here(&watch_path), &src_label)
-            .build(app)?,
-    );
+    menu =
+        menu.item(&MenuItemBuilder::with_id(ids::attach_here(&watch_path), &src_label).build(app)?);
 
     menu = menu.separator();
 
@@ -116,19 +112,10 @@ pub fn build_tray_menu<R: Runtime>(
             );
 
             let container_sub = SubmenuBuilder::new(app, &label)
+                .item(&MenuItemBuilder::with_id(ids::stop(&container.name), "Stop").build(app)?)
                 .item(
-                    &MenuItemBuilder::with_id(
-                        ids::stop(&container.name),
-                        "Stop",
-                    )
-                    .build(app)?,
-                )
-                .item(
-                    &MenuItemBuilder::with_id(
-                        ids::destroy(&container.name),
-                        "Destroy (hold 5s)",
-                    )
-                    .build(app)?,
+                    &MenuItemBuilder::with_id(ids::destroy(&container.name), "Destroy (hold 5s)")
+                        .build(app)?,
                 )
                 .build()?;
 
@@ -143,23 +130,14 @@ pub fn build_tray_menu<R: Runtime>(
 
     // GitHub Login — show when no credentials exist
     if needs_github_login() {
-        menu = menu.item(
-            &MenuItemBuilder::with_id(ids::GITHUB_LOGIN, "GitHub Login")
-                .build(app)?,
-        );
+        menu = menu.item(&MenuItemBuilder::with_id(ids::GITHUB_LOGIN, "GitHub Login").build(app)?);
         menu = menu.separator();
     }
 
     // Settings and Quit
-    menu = menu.item(
-        &MenuItemBuilder::with_id(ids::SETTINGS, "Settings")
-            .build(app)?,
-    );
+    menu = menu.item(&MenuItemBuilder::with_id(ids::SETTINGS, "Settings").build(app)?);
 
-    menu = menu.item(
-        &MenuItemBuilder::with_id(ids::QUIT, "Quit Tillandsias")
-            .build(app)?,
-    );
+    menu = menu.item(&MenuItemBuilder::with_id(ids::QUIT, "Quit Tillandsias").build(app)?);
 
     debug!(
         projects = state.projects.len(),
@@ -192,20 +170,12 @@ fn build_project_submenu<R: Runtime>(
 
     // "Attach Here" — primary action (opens OpenCode)
     submenu = submenu.item(
-        &MenuItemBuilder::with_id(
-            ids::attach_here(&project.path),
-            "Attach Here",
-        )
-        .build(app)?,
+        &MenuItemBuilder::with_id(ids::attach_here(&project.path), "Attach Here").build(app)?,
     );
 
     // "🌱 Ground" — opens bash in a forge container
     submenu = submenu.item(
-        &MenuItemBuilder::with_id(
-            ids::terminal(&project.path),
-            "\u{1F331} Ground",
-        )
-        .build(app)?,
+        &MenuItemBuilder::with_id(ids::terminal(&project.path), "\u{1F331} Ground").build(app)?,
     );
 
     // Per-project running environments
@@ -226,11 +196,7 @@ fn build_project_submenu<R: Runtime>(
                 lifecycle_label(lifecycle),
             );
             submenu = submenu.item(
-                &MenuItemBuilder::with_id(
-                    ids::stop(&container.name),
-                    &item_label,
-                )
-                .build(app)?,
+                &MenuItemBuilder::with_id(ids::stop(&container.name), &item_label).build(app)?,
             );
         }
     }
@@ -242,10 +208,10 @@ fn build_project_submenu<R: Runtime>(
 fn lifecycle_emoji(lifecycle: tillandsias_core::genus::PlantLifecycle) -> &'static str {
     use tillandsias_core::genus::PlantLifecycle;
     match lifecycle {
-        PlantLifecycle::Bud => "\u{1F331}",    // seedling
-        PlantLifecycle::Bloom => "\u{1F33A}",  // hibiscus
-        PlantLifecycle::Dried => "\u{1F342}",  // fallen leaf
-        PlantLifecycle::Pup => "\u{1F33F}",    // herb
+        PlantLifecycle::Bud => "\u{1F331}",   // seedling
+        PlantLifecycle::Bloom => "\u{1F33A}", // hibiscus
+        PlantLifecycle::Dried => "\u{1F342}", // fallen leaf
+        PlantLifecycle::Pup => "\u{1F33F}",   // herb
     }
 }
 

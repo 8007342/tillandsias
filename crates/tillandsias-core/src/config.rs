@@ -307,9 +307,11 @@ fn default_defaults_config() -> DefaultsConfig {
 }
 
 fn default_watch_paths() -> Vec<PathBuf> {
-    vec![dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("~"))
-        .join("src")]
+    vec![
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("~"))
+            .join("src"),
+    ]
 }
 
 fn default_debounce_ms() -> u64 {
@@ -380,8 +382,14 @@ mod tests {
 
     #[test]
     fn parse_port_range_valid() {
-        assert_eq!(GlobalConfig::parse_port_range("3000-3099"), Some((3000, 3099)));
-        assert_eq!(GlobalConfig::parse_port_range("8080-8089"), Some((8080, 8089)));
+        assert_eq!(
+            GlobalConfig::parse_port_range("3000-3099"),
+            Some((3000, 3099))
+        );
+        assert_eq!(
+            GlobalConfig::parse_port_range("8080-8089"),
+            Some((8080, 8089))
+        );
     }
 
     #[test]

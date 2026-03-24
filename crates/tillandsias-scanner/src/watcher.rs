@@ -116,10 +116,7 @@ impl Scanner {
 
     /// Start the async watcher loop. Sends `ProjectChange` events to the
     /// provided channel. Blocks on OS-native events — zero CPU when idle.
-    pub async fn watch(
-        mut self,
-        tx: mpsc::Sender<ProjectChange>,
-    ) -> notify::Result<()> {
+    pub async fn watch(mut self, tx: mpsc::Sender<ProjectChange>) -> notify::Result<()> {
         // Create a channel for notify events → tokio bridge
         let (notify_tx, mut notify_rx) = mpsc::channel::<notify::Result<Event>>(256);
 

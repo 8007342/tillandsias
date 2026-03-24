@@ -29,14 +29,16 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use tracing::{debug, info, warn, instrument};
+use tracing::{debug, info, instrument, warn};
 
-use tillandsias_core::config::{cache_dir, data_dir, load_global_config, load_project_config, GlobalConfig};
+use tillandsias_core::config::{
+    GlobalConfig, cache_dir, data_dir, load_global_config, load_project_config,
+};
 use tillandsias_core::event::{AppEvent, ContainerState};
 use tillandsias_core::genus::GenusAllocator;
 use tillandsias_core::state::{ContainerInfo, TrayState};
-use tillandsias_podman::launch::{allocate_port_range, ContainerLauncher};
 use tillandsias_podman::PodmanClient;
+use tillandsias_podman::launch::{ContainerLauncher, allocate_port_range};
 
 const FORGE_IMAGE_TAG: &str = "tillandsias-forge:latest";
 
@@ -47,10 +49,10 @@ fn open_terminal(command: &str) -> Result<(), String> {
     {
         // Try common Linux terminals in order of likelihood
         let terminals: &[(&str, &[&str])] = &[
-            ("ptyxis", &["--", "bash", "-c"]),     // GNOME (Silverblue)
+            ("ptyxis", &["--", "bash", "-c"]),         // GNOME (Silverblue)
             ("gnome-terminal", &["--", "bash", "-c"]), // GNOME
-            ("konsole", &["-e", "bash", "-c"]),     // KDE
-            ("xterm", &["-e", "bash", "-c"]),       // Fallback
+            ("konsole", &["-e", "bash", "-c"]),        // KDE
+            ("xterm", &["-e", "bash", "-c"]),          // Fallback
         ];
 
         for (term, args) in terminals {
@@ -83,7 +85,10 @@ fn open_terminal(command: &str) -> Result<(), String> {
     {
         // macOS: osascript to open Terminal.app with a command
         std::process::Command::new("osascript")
-            .args(["-e", &format!("tell app \"Terminal\" to do script \"{}\"", command)])
+            .args([
+                "-e",
+                &format!("tell app \"Terminal\" to do script \"{}\"", command),
+            ])
             .spawn()
             .map(|_| ())
             .map_err(|e| format!("osascript: {e}"))
@@ -222,10 +227,7 @@ fn build_run_args(
     args.push(project_mount);
 
     // Cache directory -> container cache
-    let cache_mount = format!(
-        "{}:/home/forge/.cache/tillandsias",
-        cache_dir.display()
-    );
+    let cache_mount = format!("{}:/home/forge/.cache/tillandsias", cache_dir.display());
     args.push("-v".to_string());
     args.push(cache_mount);
 
@@ -240,7 +242,10 @@ fn build_run_args(
     }
 
     // GitHub CLI credentials
-    let gh_mount = format!("{}:/home/forge/.config/gh", secrets_dir.join("gh").display());
+    let gh_mount = format!(
+        "{}:/home/forge/.config/gh",
+        secrets_dir.join("gh").display()
+    );
     args.push("-v".to_string());
     args.push(gh_mount);
 
@@ -285,8 +290,7 @@ pub async fn handle_attach_here(
 
     // Allocate port range
     let existing_ports: Vec<(u16, u16)> = state.running.iter().map(|c| c.port_range).collect();
-    let base_port = GlobalConfig::parse_port_range(&_resolved.port_range)
-        .unwrap_or((3000, 3099));
+    let base_port = GlobalConfig::parse_port_range(&_resolved.port_range).unwrap_or((3000, 3099));
     let port_range = allocate_port_range(base_port, &existing_ports);
 
     // Pre-register container in bud state immediately so the tray shows
@@ -308,9 +312,7 @@ pub async fn handle_attach_here(
 
     if !client.image_exists(FORGE_IMAGE_TAG).await {
         info!(tag = FORGE_IMAGE_TAG, "Image not found, building...");
-        let build_result = tokio::task::spawn_blocking(|| {
-            run_build_image_script("forge")
-        }).await;
+        let build_result = tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
 
         match build_result {
             Ok(Ok(())) => {
@@ -328,18 +330,12 @@ pub async fn handle_attach_here(
             Ok(Err(e)) => {
                 state.running.retain(|c| c.name != container_name);
                 allocator.release(&project_name, genus);
-                return Err(format!(
-                    "Failed to build image {}: {}",
-                    FORGE_IMAGE_TAG, e
-                ));
+                return Err(format!("Failed to build image {}: {}", FORGE_IMAGE_TAG, e));
             }
             Err(e) => {
                 state.running.retain(|c| c.name != container_name);
                 allocator.release(&project_name, genus);
-                return Err(format!(
-                    "Image build task panicked: {}",
-                    e
-                ));
+                return Err(format!("Image build task panicked: {}", e));
             }
         }
     } else {
@@ -520,7 +516,9 @@ pub async fn shutdown_all(state: &TrayState) {
     for container in &state.running {
         match launcher.stop(&container.name).await {
             Ok(()) => info!(container = %container.name, "Container stopped"),
-            Err(e) => warn!(container = %container.name, error = %e, "Failed to stop container on shutdown"),
+            Err(e) => {
+                warn!(container = %container.name, error = %e, "Failed to stop container on shutdown")
+            }
         }
     }
 

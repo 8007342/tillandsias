@@ -1,9 +1,9 @@
 use std::io::IsTerminal;
 
 use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
 
 use tillandsias_core::config::log_dir;
 
@@ -13,8 +13,7 @@ fn build_env_filter() -> EnvFilter {
     if let Ok(val) = std::env::var("TILLANDSIAS_LOG") {
         EnvFilter::try_new(&val).unwrap_or_else(|_| EnvFilter::new("tillandsias=info"))
     } else {
-        EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("tillandsias=info"))
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("tillandsias=info"))
     }
 }
 

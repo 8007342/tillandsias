@@ -167,14 +167,18 @@ pub mod icons {
 
     // Xerographica
     const XEROGRAPHICA_BUD: &[u8] = include_bytes!("../../../assets/icons/xerographica/bud.svg");
-    const XEROGRAPHICA_BLOOM: &[u8] = include_bytes!("../../../assets/icons/xerographica/bloom.svg");
-    const XEROGRAPHICA_DRIED: &[u8] = include_bytes!("../../../assets/icons/xerographica/dried.svg");
+    const XEROGRAPHICA_BLOOM: &[u8] =
+        include_bytes!("../../../assets/icons/xerographica/bloom.svg");
+    const XEROGRAPHICA_DRIED: &[u8] =
+        include_bytes!("../../../assets/icons/xerographica/dried.svg");
     const XEROGRAPHICA_PUP: &[u8] = include_bytes!("../../../assets/icons/xerographica/pup.svg");
 
     // CaputMedusae
     const CAPUT_MEDUSAE_BUD: &[u8] = include_bytes!("../../../assets/icons/caput-medusae/bud.svg");
-    const CAPUT_MEDUSAE_BLOOM: &[u8] = include_bytes!("../../../assets/icons/caput-medusae/bloom.svg");
-    const CAPUT_MEDUSAE_DRIED: &[u8] = include_bytes!("../../../assets/icons/caput-medusae/dried.svg");
+    const CAPUT_MEDUSAE_BLOOM: &[u8] =
+        include_bytes!("../../../assets/icons/caput-medusae/bloom.svg");
+    const CAPUT_MEDUSAE_DRIED: &[u8] =
+        include_bytes!("../../../assets/icons/caput-medusae/dried.svg");
     const CAPUT_MEDUSAE_PUP: &[u8] = include_bytes!("../../../assets/icons/caput-medusae/pup.svg");
 
     // Bulbosa
@@ -305,9 +309,19 @@ mod tests {
                 PlantLifecycle::Pup,
             ] {
                 let svg = icons::icon_svg(*genus, *lifecycle);
-                assert!(!svg.is_empty(), "Icon for {:?}/{:?} is empty", genus, lifecycle);
+                assert!(
+                    !svg.is_empty(),
+                    "Icon for {:?}/{:?} is empty",
+                    genus,
+                    lifecycle
+                );
                 let svg_str = std::str::from_utf8(svg).expect("SVG should be valid UTF-8");
-                assert!(svg_str.contains("<svg"), "Icon for {:?}/{:?} missing <svg tag", genus, lifecycle);
+                assert!(
+                    svg_str.contains("<svg"),
+                    "Icon for {:?}/{:?} missing <svg tag",
+                    genus,
+                    lifecycle
+                );
             }
         }
     }
