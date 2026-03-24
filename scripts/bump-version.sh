@@ -8,7 +8,7 @@
 # Usage:
 #   ./scripts/bump-version.sh              # Sync all files to VERSION
 #   ./scripts/bump-version.sh --bump-build # Increment build number
-#   ./scripts/bump-version.sh --bump-changes # Increment change count, reset build
+#   ./scripts/bump-version.sh --bump-changes # Increment change count + build (monotonic)
 # =============================================================================
 
 set -euo pipefail
@@ -36,7 +36,7 @@ case "${1:-}" in
         ;;
     --bump-changes)
         CHANGES=$((CHANGES + 1))
-        BUILD=0
+        BUILD=$((BUILD + 1))
         FULL_VERSION="${MAJOR}.${MINOR}.${CHANGES}.${BUILD}"
         echo "$FULL_VERSION" > "$VERSION_FILE"
         echo "Bumped changes: $FULL_VERSION"

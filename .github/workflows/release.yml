@@ -1,9 +1,12 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:  # Manual trigger only until signing secrets are configured
+  # Future: uncomment to trigger on stable/latest tag pushes
+  # push:
+  #   tags:
+  #     - "stable"
+  #     - "latest"
 
 permissions:
   contents: write
