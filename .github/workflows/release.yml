@@ -83,7 +83,7 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: "./src-tauri -> target"
+          workspaces: ". -> target"
 
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2"
@@ -95,7 +95,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p collected-artifacts
-          BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle"
+          BUNDLE_DIR="target/${{ matrix.target }}/release/bundle"
 
           # Copy all release-worthy files from Tauri bundle output
           find "${BUNDLE_DIR}" -type f \( \
