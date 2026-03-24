@@ -6,9 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
-use tillandsias_core::config::{
-    GlobalConfig, cache_dir, load_global_config, load_project_config,
-};
+use tillandsias_core::config::{GlobalConfig, cache_dir, load_global_config, load_project_config};
 use tillandsias_core::genus::TillandsiaGenus;
 use tillandsias_core::state::ContainerInfo;
 use tillandsias_podman::PodmanClient;

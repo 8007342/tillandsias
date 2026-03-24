@@ -31,9 +31,7 @@ use std::time::Duration;
 
 use tracing::{debug, info, instrument, warn};
 
-use tillandsias_core::config::{
-    GlobalConfig, cache_dir, load_global_config, load_project_config,
-};
+use tillandsias_core::config::{GlobalConfig, cache_dir, load_global_config, load_project_config};
 use tillandsias_core::event::{AppEvent, ContainerState};
 use tillandsias_core::genus::GenusAllocator;
 use tillandsias_core::state::{ContainerInfo, TrayState};
@@ -83,10 +81,10 @@ fn open_terminal(command: &str) -> Result<(), String> {
         // ptyxis -s: standalone instance (doesn't reuse existing window).
         // ptyxis -x: execute command directly (not via bash -c wrapper).
         let terminals: &[(&str, &[&str])] = &[
-            ("ptyxis", &["--new-window", "-x"]),       // GNOME (Silverblue) — new window + execute
+            ("ptyxis", &["--new-window", "-x"]), // GNOME (Silverblue) — new window + execute
             ("gnome-terminal", &["--", "bash", "-c"]), // GNOME
-            ("konsole", &["-e", "bash", "-c"]),        // KDE
-            ("xterm", &["-e", "bash", "-c"]),          // Fallback
+            ("konsole", &["-e", "bash", "-c"]),  // KDE
+            ("xterm", &["-e", "bash", "-c"]),    // Fallback
         ];
 
         for (term, args) in terminals {
@@ -102,10 +100,7 @@ fn open_terminal(command: &str) -> Result<(), String> {
                     cmd.arg(arg);
                 }
                 cmd.arg(command);
-                return cmd
-                    .spawn()
-                    .map(|_| ())
-                    .map_err(|e| format!("{term}: {e}"));
+                return cmd.spawn().map(|_| ()).map_err(|e| format!("{term}: {e}"));
             }
         }
 
@@ -293,7 +288,14 @@ fn build_run_args(
 /// toolboxes (builder, windows, etc.).
 async fn cleanup_stale_containers(state: &TrayState) {
     let output = std::process::Command::new("podman")
-        .args(["ps", "-a", "--filter", "name=tillandsias-", "--format", "{{.Names}}"])
+        .args([
+            "ps",
+            "-a",
+            "--filter",
+            "name=tillandsias-",
+            "--format",
+            "{{.Names}}",
+        ])
         .output();
 
     if let Ok(out) = output {
@@ -302,12 +304,20 @@ async fn cleanup_stale_containers(state: &TrayState) {
 
         for name in stdout.lines() {
             let name = name.trim();
-            if name.is_empty() { continue; }
-            if name.ends_with("-builder") || name.ends_with("-windows") { continue; }
-            if known_names.contains(&name) { continue; }
+            if name.is_empty() {
+                continue;
+            }
+            if name.ends_with("-builder") || name.ends_with("-windows") {
+                continue;
+            }
+            if known_names.contains(&name) {
+                continue;
+            }
 
             warn!(container = %name, "Removing stale container");
-            let _ = std::process::Command::new("podman").args(["rm", "-f", name]).output();
+            let _ = std::process::Command::new("podman")
+                .args(["rm", "-f", name])
+                .output();
         }
     }
 }
@@ -634,7 +644,10 @@ pub async fn handle_terminal(project_path: PathBuf, _state: &TrayState) -> Resul
         project_name,
         project_name,
         host_os,
-        port_range.0, port_range.1, port_range.0, port_range.1,
+        port_range.0,
+        port_range.1,
+        port_range.0,
+        port_range.1,
         project_path.display(),
         project_name,
         cache.display(),
@@ -651,11 +664,9 @@ pub async fn handle_terminal(project_path: PathBuf, _state: &TrayState) -> Resul
 pub async fn handle_github_login(_state: &TrayState) -> Result<(), String> {
     info!("GitHub Login: extracting embedded script to temp");
 
-    let script_path = crate::embedded::write_temp_script(
-        "gh-auth-login.sh",
-        crate::embedded::GH_AUTH_LOGIN,
-    )
-    .map_err(|e| format!("Failed to extract gh-auth-login.sh: {e}"))?;
+    let script_path =
+        crate::embedded::write_temp_script("gh-auth-login.sh", crate::embedded::GH_AUTH_LOGIN)
+            .map_err(|e| format!("Failed to extract gh-auth-login.sh: {e}"))?;
 
     open_terminal(&script_path.display().to_string())
         .map_err(|e| format!("Failed to open terminal: {e}"))

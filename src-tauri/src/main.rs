@@ -258,7 +258,8 @@ fn main() {
                             s.remote_repos_fetched_at = new_state.remote_repos_fetched_at;
                             s.remote_repos_loading = new_state.remote_repos_loading;
                             s.cloning_project.clone_from(&new_state.cloning_project);
-                            s.remote_repos_error.clone_from(&new_state.remote_repos_error);
+                            s.remote_repos_error
+                                .clone_from(&new_state.remote_repos_error);
                         }
 
                         // Rebuild tray menu

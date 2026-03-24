@@ -176,7 +176,13 @@ impl ContainerLauncher {
 /// podman is unavailable or returns an error.
 pub fn query_occupied_ports() -> Vec<(u16, u16)> {
     let output = std::process::Command::new("podman")
-        .args(["ps", "--filter", "name=tillandsias-", "--format", "{{.Ports}}"])
+        .args([
+            "ps",
+            "--filter",
+            "name=tillandsias-",
+            "--format",
+            "{{.Ports}}",
+        ])
         .output();
 
     match output {

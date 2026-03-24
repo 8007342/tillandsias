@@ -221,9 +221,12 @@ fn build_remote_projects_submenu<R: Runtime>(
     // Show cloning state if active
     if let Some(ref cloning_name) = state.cloning_project {
         submenu = submenu.item(
-            &MenuItemBuilder::with_id(ids::static_id("cloning-status"), &format!("Cloning {cloning_name}..."))
-                .enabled(false)
-                .build(app)?,
+            &MenuItemBuilder::with_id(
+                ids::static_id("cloning-status"),
+                &format!("Cloning {cloning_name}..."),
+            )
+            .enabled(false)
+            .build(app)?,
         );
         submenu = submenu.separator();
     }
@@ -275,9 +278,12 @@ fn build_remote_projects_submenu<R: Runtime>(
             );
         } else {
             submenu = submenu.item(
-                &MenuItemBuilder::with_id(ids::static_id("remote-all-local"), "All repos cloned locally")
-                    .enabled(false)
-                    .build(app)?,
+                &MenuItemBuilder::with_id(
+                    ids::static_id("remote-all-local"),
+                    "All repos cloned locally",
+                )
+                .enabled(false)
+                .build(app)?,
             );
         }
     } else {
@@ -322,9 +328,8 @@ fn build_project_submenu<R: Runtime>(
     } else {
         "\u{1F331} Attach Here" // 🌱 seedling — idle
     };
-    submenu = submenu.item(
-        &MenuItemBuilder::with_id(ids::attach_here(&project.path), attach_label).build(app)?,
-    );
+    submenu = submenu
+        .item(&MenuItemBuilder::with_id(ids::attach_here(&project.path), attach_label).build(app)?);
 
     // "🌱 Ground" — opens bash in a forge container
     submenu = submenu.item(

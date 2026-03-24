@@ -196,7 +196,10 @@ async fn fetch_remote_repos(state: &mut TrayState, on_state_change: &MenuRebuild
                 .collect();
             state.remote_repos_fetched_at = Some(Instant::now());
             state.remote_repos_error = None;
-            info!(count = state.remote_repos.len(), "Remote repos cache updated");
+            info!(
+                count = state.remote_repos.len(),
+                "Remote repos cache updated"
+            );
         }
         Err(e) => {
             error!(error = %e, "Failed to fetch remote repos");

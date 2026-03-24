@@ -79,7 +79,10 @@ pub fn wait_for_build(image: &str) -> Result<(), String> {
 
     while is_running(image) {
         if waited >= max_wait {
-            return Err(format!("Timed out waiting for {image} build ({}s)", max_wait));
+            return Err(format!(
+                "Timed out waiting for {image} build ({}s)",
+                max_wait
+            ));
         }
         std::thread::sleep(std::time::Duration::from_secs(2));
         waited += 2;

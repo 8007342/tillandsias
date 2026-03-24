@@ -98,7 +98,10 @@ fn build_forge_image() -> Result<(), String> {
     if status.success() {
         Ok(())
     } else {
-        Err(format!("build-image.sh exited with code {}", status.code().unwrap_or(-1)))
+        Err(format!(
+            "build-image.sh exited with code {}",
+            status.code().unwrap_or(-1)
+        ))
     }
 }
 

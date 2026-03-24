@@ -64,7 +64,10 @@ pub fn try_acquire() -> Result<(), ()> {
                     // PID is stale (dead or different process) — take over.
                     info!(pid, "Stale lock detected, taking over");
                 } else {
-                    warn!(?path, contents, "Lock file contains invalid PID, taking over");
+                    warn!(
+                        ?path,
+                        contents, "Lock file contains invalid PID, taking over"
+                    );
                 }
             }
             Err(e) => {

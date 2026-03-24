@@ -67,10 +67,7 @@ pub enum MenuCommand {
     GitHubLogin,
 
     /// Clone a remote GitHub repository into ~/src/<name>
-    CloneProject {
-        full_name: String,
-        name: String,
-    },
+    CloneProject { full_name: String, name: String },
 
     /// Trigger a background refresh of the remote repos list
     RefreshRemoteProjects,
