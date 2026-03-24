@@ -2,6 +2,29 @@
 //!
 //! Implements the "Attach Here", "Stop", and "Destroy" workflows that
 //! bridge tray menu clicks to podman operations and state updates.
+//!
+//! # Container Security Model (audited 2026-03-23)
+//!
+//! Every container launched by this module (Attach Here, Ground/Terminal,
+//! GitHub Login) enforces the following non-negotiable security flags:
+//!
+//!   --cap-drop=ALL              Drop all Linux capabilities
+//!   --security-opt=no-new-privileges  No privilege escalation (suid, etc.)
+//!   --userns=keep-id            Map host UID into container (no root)
+//!   --security-opt=label=disable  Disable SELinux relabeling (needed for
+//!                                 bind mounts on Silverblue)
+//!   --rm                        Ephemeral: container removed on exit
+//!
+//! Volume mounts are limited to:
+//!   1. Project directory (rw) -- user's own files, mounted at /home/forge/src/<name>
+//!   2. Cache directory (rw)   -- ~/.cache/tillandsias for tool persistence
+//!   3. Secrets directory (rw) -- gh credentials + .gitconfig only
+//!
+//! NOT mounted (by design):
+//!   - Host root filesystem or /
+//!   - Other user projects (only the selected project)
+//!   - System directories (/etc, /var, /usr)
+//!   - Docker/Podman socket (no container-in-container)
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -505,7 +528,7 @@ pub async fn shutdown_all(state: &TrayState) {
 }
 
 /// Handle "Terminal" — open bash in a forge container for the project.
-pub async fn handle_terminal(project_path: PathBuf, state: &TrayState) -> Result<(), String> {
+pub async fn handle_terminal(project_path: PathBuf, _state: &TrayState) -> Result<(), String> {
     let project_name = project_path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -557,7 +580,7 @@ pub async fn handle_terminal(project_path: PathBuf, state: &TrayState) -> Result
 
 /// Handle "GitHub Login" — open terminal running gh auth login in a container.
 /// Uses the same forge image with secrets mounted, so credentials persist.
-pub async fn handle_github_login(state: &TrayState) -> Result<(), String> {
+pub async fn handle_github_login(_state: &TrayState) -> Result<(), String> {
     info!("GitHub Login: opening terminal for authentication");
 
     let client = PodmanClient::new();

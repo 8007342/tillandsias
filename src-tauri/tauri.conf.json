@@ -1,6 +1,6 @@
 {
   "productName": "Tillandsias",
-  "version": "0.0.24",
+  "version": "0.0.25",
   "identifier": "com.tillandsias.tray",
   "build": {
     "frontendDist": "../assets/frontend"

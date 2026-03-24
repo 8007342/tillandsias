@@ -26,11 +26,6 @@ pub mod ids {
         format!("terminal:{}", project_path.display())
     }
 
-    /// Build a "start" menu item ID for a project path.
-    pub fn start(project_path: &std::path::Path) -> String {
-        format!("start:{}", project_path.display())
-    }
-
     /// Build a "stop" menu item ID for a container.
     pub fn stop(container_name: &str) -> String {
         format!("stop:{container_name}")
@@ -204,20 +199,11 @@ fn build_project_submenu<R: Runtime>(
         .build(app)?,
     );
 
-    // "Terminal" — opens bash in a forge container
+    // "🌱 Ground" — opens bash in a forge container
     submenu = submenu.item(
         &MenuItemBuilder::with_id(
             ids::terminal(&project.path),
-            "Terminal",
-        )
-        .build(app)?,
-    );
-
-    // "Start" action
-    submenu = submenu.item(
-        &MenuItemBuilder::with_id(
-            ids::start(&project.path),
-            "Start",
+            "\u{1F331} Ground",
         )
         .build(app)?,
     );

@@ -297,6 +297,8 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
                     "terminal" => Some(MenuCommand::Terminal {
                         project_path: payload.into(),
                     }),
+                    // "start" ID no longer emitted from menu but kept
+                    // for safety in case external callers use it.
                     "start" => Some(MenuCommand::Start {
                         project_path: payload.into(),
                     }),

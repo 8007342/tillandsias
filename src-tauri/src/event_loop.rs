@@ -66,16 +66,10 @@ pub async fn run(
                             }
                         }
                     }
-                    MenuCommand::Start { project_path } => {
-                        // Start is equivalent to Attach Here for now
-                        match handlers::handle_attach_here(project_path, &mut state, &mut allocator).await {
-                            Ok(_event) => {
-                                on_state_change(&state);
-                            }
-                            Err(e) => {
-                                error!(error = %e, "Start failed");
-                            }
-                        }
+                    MenuCommand::Start { .. } => {
+                        // Start variant kept for backwards compatibility but
+                        // removed from the menu (was a duplicate of Attach Here).
+                        debug!("Start command received but no longer shown in menu");
                     }
                     MenuCommand::Stop { container_name, genus: _ } => {
                         match handlers::handle_stop(container_name, &mut state, &mut allocator).await {
