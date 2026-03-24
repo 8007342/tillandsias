@@ -47,11 +47,13 @@ The `--clean` flag SHALL remove all build artifacts before building.
 - **THEN** `cargo clean` runs first, then a release build proceeds
 
 ### Requirement: Install to local path
-The `--install` flag SHALL build a release binary and copy it to `~/.local/bin/`.
+The `--install` flag SHALL build a release binary and copy it to `~/.local/bin/` with only non-executable supporting files.
 
 #### Scenario: Install binary
 - **WHEN** `./build.sh --install` is run
-- **THEN** a release build is produced and the binary is copied to `~/.local/bin/tillandsias`
+- **THEN** the binary and runtime libraries are installed to `~/.local/bin/` and `~/.local/lib/tillandsias/`
+- **AND** icons are installed for the desktop launcher
+- **AND** no shell scripts, flake files, or image sources are copied to `~/.local/share/tillandsias/`
 
 ### Requirement: Remove installed binary
 The `--remove` flag SHALL remove the installed binary from `~/.local/bin/`.
@@ -73,4 +75,27 @@ The `--toolbox-reset` flag SHALL destroy and recreate the toolbox from scratch.
 #### Scenario: Reset toolbox
 - **WHEN** `./build.sh --toolbox-reset` is run
 - **THEN** the `tillandsias` toolbox is removed and recreated with fresh dependencies
+
+### Requirement: Installer triggers init
+The installer script SHALL run `tillandsias init` as a background task after installation.
+
+#### Scenario: Fresh install
+- **WHEN** `install.sh` completes the binary installation
+- **THEN** `tillandsias init` is spawned as a background process
+- **AND** the installer prints a message indicating images are building in the background
+
+### Requirement: Cross-platform build documentation
+The project SHALL include documentation at `docs/cross-platform-builds.md` explaining the cross-platform build strategy and legal constraints.
+
+#### Scenario: macOS infeasibility documented
+- **WHEN** a developer reads `docs/cross-platform-builds.md`
+- **THEN** they find a clear explanation that macOS cross-compilation from Linux is not feasible due to Apple EULA restrictions and Tauri's native framework requirements
+
+#### Scenario: Windows cross-compilation documented
+- **WHEN** a developer reads `docs/cross-platform-builds.md`
+- **THEN** they find instructions for using `build-windows.sh` with its limitations (unsigned, experimental)
+
+#### Scenario: CI-first strategy documented
+- **WHEN** a developer reads `docs/cross-platform-builds.md`
+- **THEN** they understand that CI (GitHub Actions) remains the authoritative build pipeline for all platforms, and local cross-compilation is supplementary for troubleshooting
 

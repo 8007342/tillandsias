@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::event::ContainerState;
 use crate::genus::{PlantLifecycle, TillandsiaGenus};
 use crate::project::Project;
@@ -78,12 +80,36 @@ impl Os {
     }
 }
 
+/// Lightweight remote repo info for menu display.
+/// Kept in core so TrayState can hold it; actual fetching lives in the tray crate.
+#[derive(Debug, Clone)]
+pub struct RemoteRepoInfo {
+    /// Simple repository name (e.g., "tillandsias").
+    pub name: String,
+    /// Full owner/name (e.g., "8007342/tillandsias").
+    pub full_name: String,
+}
+
+/// Cache TTL for remote repository list (5 minutes).
+const REMOTE_REPOS_TTL_SECS: u64 = 300;
+
 /// Full tray state rebuilt on every event.
 #[derive(Debug, Clone)]
 pub struct TrayState {
     pub projects: Vec<Project>,
     pub running: Vec<ContainerInfo>,
     pub platform: PlatformInfo,
+
+    /// Cached list of remote GitHub repos (fetched via `gh repo list`).
+    pub remote_repos: Vec<RemoteRepoInfo>,
+    /// When the remote repo list was last fetched.
+    pub remote_repos_fetched_at: Option<Instant>,
+    /// True while a background fetch is in progress.
+    pub remote_repos_loading: bool,
+    /// If a clone is in progress, holds the repo name being cloned.
+    pub cloning_project: Option<String>,
+    /// Error message from the last fetch attempt, if any.
+    pub remote_repos_error: Option<String>,
 }
 
 impl TrayState {
@@ -92,7 +118,27 @@ impl TrayState {
             projects: Vec::new(),
             running: Vec::new(),
             platform,
+            remote_repos: Vec::new(),
+            remote_repos_fetched_at: None,
+            remote_repos_loading: false,
+            cloning_project: None,
+            remote_repos_error: None,
         }
+    }
+
+    /// Returns true if the remote repos cache is stale (older than 5 minutes) or empty.
+    pub fn remote_repos_cache_stale(&self) -> bool {
+        match self.remote_repos_fetched_at {
+            Some(fetched_at) => fetched_at.elapsed().as_secs() >= REMOTE_REPOS_TTL_SECS,
+            None => true,
+        }
+    }
+
+    /// Invalidate the remote repos cache (e.g., after GitHub login).
+    pub fn invalidate_remote_repos_cache(&mut self) {
+        self.remote_repos_fetched_at = None;
+        self.remote_repos.clear();
+        self.remote_repos_error = None;
     }
 }
 
@@ -136,7 +182,7 @@ mod tests {
             project_name: "my-app".to_string(),
             genus: TillandsiaGenus::Aeranthos,
             state: crate::event::ContainerState::Running,
-            port_range: (3000, 3099),
+            port_range: (3000, 3019),
         };
         let bytes = postcard::to_allocvec(&info).unwrap();
         let decoded: ContainerInfo = postcard::from_bytes(&bytes).unwrap();

@@ -66,6 +66,15 @@ pub enum MenuCommand {
     /// GitHub Login — run gh auth login in a container
     GitHubLogin,
 
+    /// Clone a remote GitHub repository into ~/src/<name>
+    CloneProject {
+        full_name: String,
+        name: String,
+    },
+
+    /// Trigger a background refresh of the remote repos list
+    RefreshRemoteProjects,
+
     /// Open settings
     Settings,
 

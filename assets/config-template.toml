@@ -24,8 +24,8 @@ image = "ghcr.io/8007342/macuahuitl:latest"
 
 # Default port range mapped from environment to your machine.
 # Each concurrent environment gets a non-overlapping range automatically.
-# Default: 3000-3099
-port_range = "3000-3099"
+# Default: 3000-3019
+port_range = "3000-3019"
 
 [autostart]
 # Start Tillandsias automatically on login. Default: false.

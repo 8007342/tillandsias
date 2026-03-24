@@ -32,24 +32,58 @@ use std::time::Duration;
 use tracing::{debug, info, instrument, warn};
 
 use tillandsias_core::config::{
-    GlobalConfig, cache_dir, data_dir, load_global_config, load_project_config,
+    GlobalConfig, cache_dir, load_global_config, load_project_config,
 };
 use tillandsias_core::event::{AppEvent, ContainerState};
 use tillandsias_core::genus::GenusAllocator;
 use tillandsias_core::state::{ContainerInfo, TrayState};
 use tillandsias_podman::PodmanClient;
 use tillandsias_podman::launch::{ContainerLauncher, allocate_port_range};
+use tillandsias_podman::query_occupied_ports;
 
-const FORGE_IMAGE_TAG: &str = "tillandsias-forge:latest";
+pub(crate) const FORGE_IMAGE_TAG: &str = "tillandsias-forge:latest";
+
+/// Detect the host operating system by reading `/etc/os-release`.
+/// Returns a human-readable string like "Fedora Silverblue 43".
+fn detect_host_os() -> String {
+    if let Ok(content) = std::fs::read_to_string("/etc/os-release") {
+        let mut name = String::new();
+        let mut version = String::new();
+        let mut variant = String::new();
+        for line in content.lines() {
+            if let Some(val) = line.strip_prefix("NAME=") {
+                name = val.trim_matches('"').to_string();
+            } else if let Some(val) = line.strip_prefix("VERSION_ID=") {
+                version = val.trim_matches('"').to_string();
+            } else if let Some(val) = line.strip_prefix("VARIANT=") {
+                variant = val.trim_matches('"').to_string();
+            }
+        }
+        if !variant.is_empty() {
+            format!("{name} {variant} {version}")
+        } else {
+            format!("{name} {version}")
+        }
+    } else {
+        "Unknown OS".to_string()
+    }
+}
 
 /// Open a terminal window running a command.
 /// Uses the platform's default terminal — not a zoo of emulators.
+///
+/// On GNOME (ptyxis), launches a standalone instance so the tray app
+/// doesn't depend on an existing terminal window. The command runs
+/// directly (not wrapped in `bash -c`) so interactive TTY works.
 fn open_terminal(command: &str) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        // Try common Linux terminals in order of likelihood
+        // Try common Linux terminals in order of likelihood.
+        // Each entry: (binary, args-before-command, uses-exec-flag).
+        // ptyxis -s: standalone instance (doesn't reuse existing window).
+        // ptyxis -x: execute command directly (not via bash -c wrapper).
         let terminals: &[(&str, &[&str])] = &[
-            ("ptyxis", &["--", "bash", "-c"]),         // GNOME (Silverblue)
+            ("ptyxis", &["--new-window", "-x"]),       // GNOME (Silverblue) — new window + execute
             ("gnome-terminal", &["--", "bash", "-c"]), // GNOME
             ("konsole", &["-e", "bash", "-c"]),        // KDE
             ("xterm", &["-e", "bash", "-c"]),          // Fallback
@@ -69,9 +103,6 @@ fn open_terminal(command: &str) -> Result<(), String> {
                 }
                 cmd.arg(command);
                 return cmd
-                    .stdin(std::process::Stdio::null())
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
                     .spawn()
                     .map(|_| ())
                     .map_err(|e| format!("{term}: {e}"));
@@ -109,54 +140,37 @@ fn open_terminal(command: &str) -> Result<(), String> {
     }
 }
 
-/// Resolve the project root directory (where scripts/build-image.sh lives).
+/// Run `build-image.sh` from the embedded binary scripts.
 ///
-/// Checks (in order):
-/// 1. Two levels up from the executable (target/debug/ layout)
-/// 2. Alongside the executable
-/// 3. `~/.local/share/tillandsias/` (installed layout)
-fn resolve_project_root() -> Option<PathBuf> {
-    if let Ok(exe) = std::env::current_exe()
-        && let Some(exe_dir) = exe.parent()
-    {
-        // target/debug/tillandsias-tray -> project root (two levels up)
-        if let Some(root) = exe_dir.parent().and_then(|p| p.parent())
-            && root.join("scripts").join("build-image.sh").exists()
-        {
-            return Some(root.to_path_buf());
-        }
-        // Alongside the binary
-        if exe_dir.join("scripts").join("build-image.sh").exists() {
-            return Some(exe_dir.to_path_buf());
-        }
-    }
-
-    // Installed data directory
-    let data = data_dir();
-    if data.join("scripts").join("build-image.sh").exists() {
-        return Some(data);
-    }
-
-    None
-}
-
-/// Run `scripts/build-image.sh` to ensure the forge image is built and loaded.
-///
-/// The script handles staleness detection, nix build inside the builder
-/// toolbox, podman load, and tagging. Returns Ok(()) if the image is
-/// available afterward.
+/// Extracts image sources + build scripts to temp, executes, cleans up.
+/// No filesystem scripts are trusted — everything comes from the signed binary.
 fn run_build_image_script(image_name: &str) -> Result<(), String> {
-    let root = resolve_project_root()
-        .ok_or("Cannot find project root (scripts/build-image.sh not found)")?;
+    // Check if another process is already building this image
+    if crate::build_lock::is_running(image_name) {
+        info!(image = image_name, "Build already in progress, waiting...");
+        crate::build_lock::wait_for_build(image_name)?;
+        return Ok(());
+    }
 
-    let script = root.join("scripts").join("build-image.sh");
-    info!(script = %script.display(), image = image_name, "Running build-image.sh");
+    // Acquire build lock
+    crate::build_lock::acquire(image_name)
+        .map_err(|e| format!("Cannot acquire build lock: {e}"))?;
+
+    let source_dir = crate::embedded::write_image_sources()
+        .map_err(|e| format!("Failed to extract image sources: {e}"))?;
+
+    let script = source_dir.join("scripts").join("build-image.sh");
+    info!(script = %script.display(), image = image_name, "Running embedded build-image.sh");
 
     let output = std::process::Command::new(&script)
         .arg(image_name)
-        .current_dir(&root)
+        .current_dir(&source_dir)
         .output()
         .map_err(|e| format!("Failed to run build-image.sh: {e}"))?;
+
+    // Clean up temp files and release lock regardless of result
+    crate::embedded::cleanup_image_sources();
+    crate::build_lock::release(image_name);
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -203,6 +217,12 @@ fn build_run_args(
     args.push("--userns=keep-id".to_string());
     args.push("--security-opt=label=disable".to_string());
 
+    // Signal handling: --init provides a proper init process (tini) that
+    // forwards signals and reaps zombies. When a terminal is closed,
+    // SIGHUP → init → SIGTERM to all children → clean shutdown.
+    args.push("--init".to_string());
+    args.push("--stop-timeout=10".to_string());
+
     // Port range mapping
     let port_mapping = format!(
         "{}-{}:{}-{}",
@@ -234,30 +254,62 @@ fn build_run_args(
     // Secrets directory — git config, gh auth, ssh keys
     let secrets_dir = cache_dir.join("secrets");
     std::fs::create_dir_all(secrets_dir.join("gh")).ok();
-    std::fs::create_dir_all(secrets_dir.join("git")).ok();
-    // Ensure .gitconfig FILE exists (podman needs source to exist for file mounts)
-    let gitconfig_path = secrets_dir.join("git").join(".gitconfig");
+    let git_dir = secrets_dir.join("git");
+    std::fs::create_dir_all(&git_dir).ok();
+    // Ensure .gitconfig FILE exists inside the git dir
+    let gitconfig_path = git_dir.join(".gitconfig");
     if !gitconfig_path.exists() {
         std::fs::File::create(&gitconfig_path).ok();
     }
 
-    // GitHub CLI credentials
+    // GitHub CLI credentials (read-only — containers shouldn't modify auth state)
     let gh_mount = format!(
-        "{}:/home/forge/.config/gh",
+        "{}:/home/forge/.config/gh:ro",
         secrets_dir.join("gh").display()
     );
     args.push("-v".to_string());
     args.push(gh_mount);
 
-    // Git config
-    let git_mount = format!("{}:/home/forge/.gitconfig", gitconfig_path.display());
+    // Git config — mount directory read-only. Tell git via GIT_CONFIG_GLOBAL.
+    let git_mount = format!(
+        "{}:/home/forge/.config/tillandsias-git:ro",
+        git_dir.display()
+    );
     args.push("-v".to_string());
     args.push(git_mount);
+    args.push("-e".to_string());
+    args.push("GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig".to_string());
 
     // Container image (always last)
     args.push(image.to_string());
 
     args
+}
+
+/// Remove orphaned tillandsias containers not tracked in state.
+///
+/// Queries podman for all containers matching `tillandsias-*`, then removes
+/// any that are not present in our in-memory state. Skips infrastructure
+/// toolboxes (builder, windows, etc.).
+async fn cleanup_stale_containers(state: &TrayState) {
+    let output = std::process::Command::new("podman")
+        .args(["ps", "-a", "--filter", "name=tillandsias-", "--format", "{{.Names}}"])
+        .output();
+
+    if let Ok(out) = output {
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let known_names: Vec<&str> = state.running.iter().map(|c| c.name.as_str()).collect();
+
+        for name in stdout.lines() {
+            let name = name.trim();
+            if name.is_empty() { continue; }
+            if name.ends_with("-builder") || name.ends_with("-windows") { continue; }
+            if known_names.contains(&name) { continue; }
+
+            warn!(container = %name, "Removing stale container");
+            let _ = std::process::Command::new("podman").args(["rm", "-f", name]).output();
+        }
+    }
 }
 
 /// Handle the "Attach Here" action: build image if needed, open terminal
@@ -276,6 +328,9 @@ pub async fn handle_attach_here(
 
     info!(project = %project_name, "Attach Here requested");
 
+    // Clean up orphaned containers before allocating resources
+    cleanup_stale_containers(state).await;
+
     // Allocate a genus
     let genus = allocator
         .allocate(&project_name)
@@ -288,9 +343,10 @@ pub async fn handle_attach_here(
     let project_config = load_project_config(&project_path);
     let _resolved = global_config.merge_with_project(&project_config);
 
-    // Allocate port range
-    let existing_ports: Vec<(u16, u16)> = state.running.iter().map(|c| c.port_range).collect();
-    let base_port = GlobalConfig::parse_port_range(&_resolved.port_range).unwrap_or((3000, 3099));
+    // Allocate port range — merge in-memory state with actual podman containers
+    let mut existing_ports: Vec<(u16, u16)> = state.running.iter().map(|c| c.port_range).collect();
+    existing_ports.extend(query_occupied_ports());
+    let base_port = GlobalConfig::parse_port_range(&_resolved.port_range).unwrap_or((3000, 3019));
     let port_range = allocate_port_range(base_port, &existing_ports);
 
     // Pre-register container in bud state immediately so the tray shows
@@ -547,104 +603,60 @@ pub async fn handle_terminal(project_path: PathBuf, _state: &TrayState) -> Resul
         std::fs::File::create(&gitconfig_path).ok();
     }
 
+    // Allocate port range — check actual podman containers for conflicts
+    let mut existing_ports: Vec<(u16, u16)> = _state.running.iter().map(|c| c.port_range).collect();
+    existing_ports.extend(query_occupied_ports());
+    let port_range = allocate_port_range((3000, 3019), &existing_ports);
+
     let container_name = format!("tillandsias-{}-terminal", project_name);
 
+    let git_dir = secrets_dir.join("git");
+    let host_os = detect_host_os();
     let podman_cmd = format!(
-        "podman run -it --rm \
+        "podman run -it --rm --init --stop-timeout=10 \
         --name {} \
         --security-opt=label=disable \
         --userns=keep-id \
         --cap-drop=ALL \
         --security-opt=no-new-privileges \
-        -p 3100-3199:3100-3199 \
+        --entrypoint fish \
+        -w /home/forge/src/{} \
+        -e TILLANDSIAS_PROJECT={} \
+        -e TILLANDSIAS_HOST_OS='{}' \
+        -e GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig \
+        -p {}-{}:{}-{} \
         -v {}:/home/forge/src/{} \
         -v {}:/home/forge/.cache/tillandsias \
-        -v {}:/home/forge/.config/gh \
-        -v {}:/home/forge/.gitconfig \
-        {} bash",
+        -v {}:/home/forge/.config/gh:ro \
+        -v {}:/home/forge/.config/tillandsias-git:ro \
+        {}",
         container_name,
+        project_name,
+        project_name,
+        host_os,
+        port_range.0, port_range.1, port_range.0, port_range.1,
         project_path.display(),
         project_name,
         cache.display(),
         secrets_dir.join("gh").display(),
-        gitconfig_path.display(),
+        git_dir.display(),
         FORGE_IMAGE_TAG,
     );
 
     open_terminal(&podman_cmd).map_err(|e| format!("Failed to open terminal: {e}"))
 }
 
-/// Handle "GitHub Login" — open terminal running gh auth login in a container.
-/// Uses the same forge image with secrets mounted, so credentials persist.
+/// Handle "GitHub Login" — extract embedded gh-auth-login.sh to temp and run it.
+/// No filesystem scripts are trusted — everything comes from the signed binary.
 pub async fn handle_github_login(_state: &TrayState) -> Result<(), String> {
-    info!("GitHub Login: opening terminal for authentication");
+    info!("GitHub Login: extracting embedded script to temp");
 
-    let client = PodmanClient::new();
-    let cache = cache_dir();
+    let script_path = crate::embedded::write_temp_script(
+        "gh-auth-login.sh",
+        crate::embedded::GH_AUTH_LOGIN,
+    )
+    .map_err(|e| format!("Failed to extract gh-auth-login.sh: {e}"))?;
 
-    // Ensure image exists
-    if !client.image_exists(FORGE_IMAGE_TAG).await {
-        return Err("Forge image not found. Run ./build.sh --install first.".into());
-    }
-
-    // Ensure secrets dirs exist
-    let secrets_dir = cache.join("secrets");
-    std::fs::create_dir_all(secrets_dir.join("gh")).ok();
-    std::fs::create_dir_all(secrets_dir.join("git")).ok();
-    let gitconfig_path = secrets_dir.join("git").join(".gitconfig");
-    if !gitconfig_path.exists() {
-        std::fs::File::create(&gitconfig_path).ok();
-    }
-
-    // Build the podman command for gh auth login
-    let auth_script = r#"
-echo ""
-echo "=== GitHub Login ==="
-echo ""
-
-# Git identity
-read -p "Your name (for git commits): " GIT_NAME
-read -p "Your email (for git commits): " GIT_EMAIL
-git config --global user.name "$GIT_NAME"
-git config --global user.email "$GIT_EMAIL"
-echo ""
-echo "Git identity configured."
-echo ""
-
-# GitHub authentication
-echo "Starting GitHub authentication..."
-echo "(A browser will open for you to authorize)"
-echo ""
-gh auth login
-gh auth setup-git
-
-echo ""
-echo "=== Done! ==="
-echo "Your credentials are saved. Close this window."
-echo ""
-read -p "Press Enter to close..."
-"#;
-
-    let podman_cmd = format!(
-        "podman run -it --rm \
-        --name tillandsias-gh-login \
-        --security-opt=label=disable \
-        --userns=keep-id \
-        --cap-drop=ALL \
-        --security-opt=no-new-privileges \
-        -v {}:/home/forge/.config/gh \
-        -v {}:/home/forge/.gitconfig \
-        {} bash -c {}",
-        secrets_dir.join("gh").display(),
-        gitconfig_path.display(),
-        FORGE_IMAGE_TAG,
-        shell_escape(auth_script),
-    );
-
-    open_terminal(&podman_cmd).map_err(|e| format!("Failed to open terminal: {e}"))
-}
-
-/// Escape a string for use as a bash argument.
-fn shell_escape(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\\''"))
+    open_terminal(&script_path.display().to_string())
+        .map_err(|e| format!("Failed to open terminal: {e}"))
 }

@@ -1,12 +1,15 @@
 name: Release
 
 on:
-  workflow_dispatch:  # Manual trigger only until signing secrets are configured
-  # Future: uncomment to trigger on stable/latest tag pushes
-  # push:
-  #   tags:
-  #     - "stable"
-  #     - "latest"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 0.0.25.21). Required when not triggered from a tag."
+        required: false
+        type: string
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
   contents: write
@@ -78,7 +81,7 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -129,12 +132,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate tag matches VERSION file
+      - name: Validate version matches VERSION file
         run: |
-          TAG="${GITHUB_REF_NAME#v}"  # Strip 'v' prefix
           FILE_VERSION="$(tr -d '[:space:]' < VERSION)"
-          if [ "$TAG" != "$FILE_VERSION" ]; then
-            echo "::error::Tag version ($TAG) does not match VERSION file ($FILE_VERSION)"
+
+          # Resolve version: prefer workflow_dispatch input, fall back to tag
+          if [ -n "${{ inputs.version }}" ]; then
+            RESOLVED_VERSION="${{ inputs.version }}"
+            echo "Version source: workflow_dispatch input"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            RESOLVED_VERSION="${GITHUB_REF_NAME#v}"
+            echo "Version source: git tag"
+          else
+            echo "::error::No version provided. Either push a v* tag or provide a version input via workflow_dispatch."
+            exit 1
+          fi
+
+          if [ "$RESOLVED_VERSION" != "$FILE_VERSION" ]; then
+            echo "::error::Resolved version ($RESOLVED_VERSION) does not match VERSION file ($FILE_VERSION)"
             exit 1
           fi
           echo "VERSION=$FILE_VERSION" >> "$GITHUB_ENV"

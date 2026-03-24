@@ -169,6 +169,48 @@ impl ContainerLauncher {
     }
 }
 
+/// Query port mappings from running tillandsias containers via podman.
+///
+/// Returns a list of `(start, end)` port ranges currently occupied by
+/// tillandsias containers on the host. Falls back to an empty list if
+/// podman is unavailable or returns an error.
+pub fn query_occupied_ports() -> Vec<(u16, u16)> {
+    let output = std::process::Command::new("podman")
+        .args(["ps", "--filter", "name=tillandsias-", "--format", "{{.Ports}}"])
+        .output();
+
+    match output {
+        Ok(out) if out.status.success() => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            parse_port_output(&stdout)
+        }
+        _ => vec![],
+    }
+}
+
+/// Parse podman port output like "0.0.0.0:3000-3019->3000-3019/tcp, 3000-3019/tcp"
+///
+/// Only extracts host-side port mappings (the part before `->`) so we know
+/// which host ports are actually bound.
+fn parse_port_output(output: &str) -> Vec<(u16, u16)> {
+    let mut ranges = vec![];
+    for line in output.lines() {
+        for part in line.split(", ") {
+            // Look for host port mappings: "0.0.0.0:3000-3019->3000-3019/tcp"
+            if let Some(host_part) = part.split("->").next() {
+                // Strip IP prefix: "0.0.0.0:3000-3019" -> "3000-3019"
+                let port_part = host_part.rsplit(':').next().unwrap_or(host_part);
+                if let Some((start, end)) = port_part.split_once('-') {
+                    if let (Ok(s), Ok(e)) = (start.parse::<u16>(), end.parse::<u16>()) {
+                        ranges.push((s, e));
+                    }
+                }
+            }
+        }
+    }
+    ranges
+}
+
 /// Allocate a non-overlapping port range for a new environment.
 pub fn allocate_port_range(base: (u16, u16), existing_ranges: &[(u16, u16)]) -> (u16, u16) {
     let range_size = base.1 - base.0;
@@ -202,7 +244,7 @@ mod tests {
         let launcher = ContainerLauncher::new(PodmanClient::new());
         let config = ResolvedConfig {
             image: "test:latest".to_string(),
-            port_range: "3000-3099".to_string(),
+            port_range: "3000-3019".to_string(),
             security: SecurityConfig {
                 cap_drop_all: true,
                 no_new_privileges: true,
@@ -217,7 +259,7 @@ mod tests {
             &config,
             std::path::Path::new("/tmp/test-project"),
             std::path::Path::new("/tmp/cache"),
-            (3000, 3099),
+            (3000, 3019),
         );
 
         assert!(args.contains(&"--cap-drop=ALL".to_string()));
@@ -233,7 +275,7 @@ mod tests {
         let launcher = ContainerLauncher::new(PodmanClient::new());
         let config = ResolvedConfig {
             image: "test:latest".to_string(),
-            port_range: "3000-3099".to_string(),
+            port_range: "3000-3019".to_string(),
             security: SecurityConfig::default(),
             mounts: vec![],
             runtime: None,
@@ -244,7 +286,7 @@ mod tests {
             &config,
             std::path::Path::new("/tmp/test"),
             std::path::Path::new("/tmp/cache"),
-            (3000, 3099),
+            (3000, 3019),
         );
 
         let name_idx = args.iter().position(|a| a == "--name").unwrap();
@@ -256,7 +298,7 @@ mod tests {
         let launcher = ContainerLauncher::new(PodmanClient::new());
         let config = ResolvedConfig {
             image: "test:latest".to_string(),
-            port_range: "3000-3099".to_string(),
+            port_range: "3000-3019".to_string(),
             security: SecurityConfig::default(),
             mounts: vec![],
             runtime: None,
@@ -267,28 +309,63 @@ mod tests {
             &config,
             std::path::Path::new("/tmp/test"),
             std::path::Path::new("/tmp/cache"),
-            (3000, 3099),
+            (3000, 3019),
         );
 
-        assert!(args.contains(&"3000-3099:3000-3099".to_string()));
+        assert!(args.contains(&"3000-3019:3000-3019".to_string()));
     }
 
     #[test]
     fn allocate_port_range_no_conflicts() {
-        let range = allocate_port_range((3000, 3099), &[]);
-        assert_eq!(range, (3000, 3099));
+        let range = allocate_port_range((3000, 3019), &[]);
+        assert_eq!(range, (3000, 3019));
     }
 
     #[test]
     fn allocate_port_range_with_conflict() {
-        let range = allocate_port_range((3000, 3099), &[(3000, 3099)]);
-        assert_eq!(range, (3100, 3199));
+        let range = allocate_port_range((3000, 3019), &[(3000, 3019)]);
+        assert_eq!(range, (3020, 3039));
     }
 
     #[test]
     fn allocate_port_range_multiple_conflicts() {
-        let range = allocate_port_range((3000, 3099), &[(3000, 3099), (3100, 3199)]);
-        assert_eq!(range, (3200, 3299));
+        let range = allocate_port_range((3000, 3019), &[(3000, 3019), (3020, 3039)]);
+        assert_eq!(range, (3040, 3059));
+    }
+
+    #[test]
+    fn parse_port_output_standard() {
+        let output = "0.0.0.0:3000-3019->3000-3019/tcp\n";
+        let ranges = parse_port_output(output);
+        assert_eq!(ranges, vec![(3000, 3019)]);
+    }
+
+    #[test]
+    fn parse_port_output_multiple_mappings() {
+        let output = "0.0.0.0:3000-3019->3000-3019/tcp, 0.0.0.0:3020-3039->3020-3039/tcp\n";
+        let ranges = parse_port_output(output);
+        assert_eq!(ranges, vec![(3000, 3019), (3020, 3039)]);
+    }
+
+    #[test]
+    fn parse_port_output_multiline() {
+        let output = "0.0.0.0:3000-3019->3000-3019/tcp\n0.0.0.0:3020-3039->3020-3039/tcp\n";
+        let ranges = parse_port_output(output);
+        assert_eq!(ranges, vec![(3000, 3019), (3020, 3039)]);
+    }
+
+    #[test]
+    fn parse_port_output_empty() {
+        let ranges = parse_port_output("");
+        assert!(ranges.is_empty());
+    }
+
+    #[test]
+    fn parse_port_output_no_arrow() {
+        // Container-only ports without host mapping should be ignored
+        let output = "3000-3019/tcp\n";
+        let ranges = parse_port_output(output);
+        assert!(ranges.is_empty());
     }
 
     #[test]

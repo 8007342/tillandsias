@@ -1,0 +1,36 @@
+# ~/.zshrc — tillandsias forge
+
+# ── PATH ─────────────────────────────────────────────────────
+export PATH="$HOME/.cache/tillandsias/opencode:$HOME/.cache/tillandsias/openspec/bin:$HOME/.local/bin:$PATH"
+
+# ── Completion ───────────────────────────────────────────────
+autoload -Uz compinit && compinit
+
+# ── History ──────────────────────────────────────────────────
+HISTSIZE=10000
+SAVEHIST=10000
+HISTFILE=~/.zsh_history
+
+# ── Prompt ───────────────────────────────────────────────────
+PROMPT='%F{green}%~%f $ '
+
+# ── Aliases ──────────────────────────────────────────────────
+alias ll='eza -la'
+alias la='eza -a'
+alias ..='cd ..'
+alias grep='grep --color=auto'
+
+# ── bat as pager ─────────────────────────────────────────────
+if (( $+commands[bat] )); then
+    export MANPAGER="sh -c 'col -bx | bat -l man -p'"
+fi
+
+# ── fzf key bindings ────────────────────────────────────────
+if (( $+commands[fzf] )); then
+    eval "$(fzf --zsh 2>/dev/null)" || true
+fi
+
+# ── zoxide (smart cd) ───────────────────────────────────────
+if (( $+commands[zoxide] )); then
+    eval "$(zoxide init zsh)"
+fi

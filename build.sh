@@ -102,6 +102,15 @@ if [[ "$FLAG_REMOVE" == true ]]; then
     rm -f "$INSTALL_BIN" "$INSTALL_DIR/.tillandsias-bin"
     rm -rf "$HOME/.local/lib/tillandsias"
     rm -rf "$HOME/.local/share/tillandsias"
+
+    # Remove desktop launcher and XDG icons
+    rm -f "$HOME/.local/share/applications/tillandsias.desktop"
+    for size in 32x32 128x128 256x256; do
+        rm -f "$HOME/.local/share/icons/hicolor/$size/apps/tillandsias.png"
+    done
+    update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+    gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+
     if [[ -f "$INSTALL_BIN" || -f "$INSTALL_DIR/.tillandsias-bin" ]]; then
         _warn "Some files could not be removed"
     else
@@ -308,15 +317,9 @@ WRAPPER
         DATA_DIR="$HOME/.local/share/tillandsias"
         mkdir -p "$DATA_DIR/scripts"
 
-        # Copy flake.nix and flake.lock for runtime image builds
-        cp "$SCRIPT_DIR/flake.nix" "$DATA_DIR/"
-        cp "$SCRIPT_DIR/flake.lock" "$DATA_DIR/"
-        _info "Installed flake.nix and flake.lock to $DATA_DIR/"
-
-        # Copy all image source directories (default/ and web/)
-        cp -r "$SCRIPT_DIR/images" "$DATA_DIR/"
-        chmod +x "$DATA_DIR/images/default/entrypoint.sh" 2>/dev/null || true
-        _info "Installed image sources to $DATA_DIR/images/"
+        # Scripts, flake files, and image sources are embedded in the signed
+        # binary at compile time (src-tauri/src/embedded.rs). Nothing executable
+        # is installed to disk — only icons for the desktop launcher.
 
         # Copy icons for desktop launcher
         if [[ -d "$SCRIPT_DIR/src-tauri/icons" ]]; then
@@ -326,11 +329,38 @@ WRAPPER
             cp "$SCRIPT_DIR/src-tauri/icons/icon.png" "$DATA_DIR/icons/256x256.png" 2>/dev/null || true
         fi
 
-        if [[ -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
-            cp "$SCRIPT_DIR/scripts/build-image.sh" "$DATA_DIR/scripts/"
-            cp "$SCRIPT_DIR/scripts/ensure-builder.sh" "$DATA_DIR/scripts/"
-            chmod +x "$DATA_DIR/scripts/build-image.sh" "$DATA_DIR/scripts/ensure-builder.sh"
-            _info "Installed build scripts to $DATA_DIR/scripts/"
+        # Install .desktop launcher and XDG icons
+        if [[ "$(uname -s)" == "Linux" ]]; then
+            DESKTOP_DIR="$HOME/.local/share/applications"
+            ICON_DIR="$HOME/.local/share/icons/hicolor"
+            mkdir -p "$DESKTOP_DIR"
+
+            # Install icons into XDG hicolor theme
+            for size in 32x32 128x128; do
+                if [[ -f "$DATA_DIR/icons/$size.png" ]]; then
+                    mkdir -p "$ICON_DIR/$size/apps"
+                    cp "$DATA_DIR/icons/$size.png" "$ICON_DIR/$size/apps/tillandsias.png"
+                fi
+            done
+            if [[ -f "$DATA_DIR/icons/256x256.png" ]]; then
+                mkdir -p "$ICON_DIR/256x256/apps"
+                cp "$DATA_DIR/icons/256x256.png" "$ICON_DIR/256x256/apps/tillandsias.png"
+            fi
+
+            # Install .desktop file with correct Exec and absolute Icon path.
+            # We use an absolute Icon path because the user-local hicolor dir
+            # may lack index.theme on immutable systems (Silverblue), making
+            # theme-based lookup unreliable. Packaged installs (deb/rpm) use
+            # the theme name since they install into /usr/share.
+            ICON_PATH="$ICON_DIR/256x256/apps/tillandsias.png"
+            sed -e "s|TILLANDSIAS_BIN|$INSTALL_BIN|g" \
+                -e "s|Icon=tillandsias|Icon=$ICON_PATH|g" \
+                "$SCRIPT_DIR/assets/tillandsias.desktop" > "$DESKTOP_DIR/tillandsias.desktop"
+
+            # Refresh caches
+            gtk-update-icon-cache "$ICON_DIR" 2>/dev/null || true
+            update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
+            _info "Desktop launcher + icons installed"
         fi
 
         _info "Installed to $INSTALL_BIN (libs in $LIB_DIR)"

@@ -9,7 +9,7 @@ const DEFAULT_IMAGE: &str = "ghcr.io/8007342/macuahuitl:latest";
 
 /// Default port range start.
 const DEFAULT_PORT_START: u16 = 3000;
-const DEFAULT_PORT_END: u16 = 3099;
+const DEFAULT_PORT_END: u16 = 3019;
 
 /// Default debounce for filesystem scanner.
 const DEFAULT_DEBOUNCE_MS: u64 = 2000;
@@ -167,7 +167,7 @@ impl GlobalConfig {
         }
     }
 
-    /// Parse a port range string like "3000-3099" into (start, end).
+    /// Parse a port range string like "3000-3019" into (start, end).
     pub fn parse_port_range(s: &str) -> Option<(u16, u16)> {
         let parts: Vec<&str> = s.split('-').collect();
         if parts.len() == 2 {
@@ -342,7 +342,7 @@ mod tests {
     fn default_config_values() {
         let config = GlobalConfig::default();
         assert_eq!(config.defaults.image, DEFAULT_IMAGE);
-        assert_eq!(config.defaults.port_range, "3000-3099");
+        assert_eq!(config.defaults.port_range, "3000-3019");
         assert!(config.security.cap_drop_all);
         assert!(config.security.no_new_privileges);
         assert!(config.security.userns_keep_id);
@@ -377,14 +377,14 @@ mod tests {
         let project = ProjectConfig::default();
         let resolved = global.merge_with_project(&project);
         assert_eq!(resolved.image, DEFAULT_IMAGE);
-        assert_eq!(resolved.port_range, "3000-3099");
+        assert_eq!(resolved.port_range, "3000-3019");
     }
 
     #[test]
     fn parse_port_range_valid() {
         assert_eq!(
-            GlobalConfig::parse_port_range("3000-3099"),
-            Some((3000, 3099))
+            GlobalConfig::parse_port_range("3000-3019"),
+            Some((3000, 3019))
         );
         assert_eq!(
             GlobalConfig::parse_port_range("8080-8089"),

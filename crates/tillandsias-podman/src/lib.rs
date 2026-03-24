@@ -7,3 +7,4 @@ pub use client::PodmanClient;
 pub use events::PodmanEventStream;
 pub use gpu::detect_gpu_devices;
 pub use launch::ContainerLauncher;
+pub use launch::query_occupied_ports;

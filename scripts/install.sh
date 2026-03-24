@@ -185,5 +185,14 @@ if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
     echo ""
 fi
 
+# Pre-build container images in the background so they're ready
+# when the user runs tillandsias for the first time.
+if command -v tillandsias &>/dev/null || [ -x "$INSTALL_DIR/tillandsias" ]; then
+    echo "  Building container images in the background..."
+    nohup "$INSTALL_DIR/tillandsias" init >/tmp/tillandsias-init.log 2>&1 &
+    echo "  (Progress: tail -f /tmp/tillandsias-init.log)"
+    echo ""
+fi
+
 echo "  Run: tillandsias"
 echo ""

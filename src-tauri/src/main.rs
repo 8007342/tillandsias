@@ -1,11 +1,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod build_lock;
 mod cli;
+mod embedded;
 mod event_loop;
+mod github;
 mod handlers;
+mod init;
 mod logging;
 mod menu;
 mod runner;
+mod singleton;
 mod updater;
 
 use std::sync::{Arc, Mutex};
@@ -36,11 +41,23 @@ fn main() {
         }
     };
 
+    // Init mode — pre-build images and exit.
+    if matches!(cli_mode, cli::CliMode::Init) {
+        let success = init::run();
+        std::process::exit(if success { 0 } else { 1 });
+    }
+
     // If CLI attach mode, run the container runner and exit — no tray app.
-    if let cli::CliMode::Attach { path, image, debug } = cli_mode {
+    if let cli::CliMode::Attach {
+        path,
+        image,
+        debug,
+        bash,
+    } = cli_mode
+    {
         // Initialize tracing for file logging (CLI output uses println!)
         let _log_guard = logging::init();
-        let success = runner::run(path, &image, debug);
+        let success = runner::run(path, &image, debug, bash);
         std::process::exit(if success { 0 } else { 1 });
     }
 
@@ -49,6 +66,12 @@ fn main() {
     // Initialize tracing — dual output (stderr if TTY + file appender) in all builds.
     // Hold the guard so the non-blocking file writer flushes on shutdown.
     let _log_guard = logging::init();
+
+    // Singleton guard — only one tray instance at a time.
+    // If another instance is already running, exit silently.
+    if singleton::try_acquire().is_err() {
+        std::process::exit(0);
+    }
 
     info!("Tillandsias starting");
 
@@ -98,12 +121,14 @@ fn main() {
                     let menu_tx = menu_tx.clone();
                     let app_handle = app_handle.clone();
                     move |_app, event| {
-                        let id = event.id().as_ref();
+                        let raw_id = event.id().as_ref();
+                        let id = menu::ids::strip_gen(raw_id);
                         debug!(menu_id = %id, "Menu event received");
 
                         // Quit fast-path — exit immediately, no channel round-trip
                         if id == menu::ids::QUIT {
                             info!("Quit requested");
+                            singleton::release();
                             std::process::exit(0);
                         }
 
@@ -229,6 +254,11 @@ fn main() {
                             let mut s = state_for_rebuild.lock().unwrap();
                             s.projects.clone_from(&new_state.projects);
                             s.running.clone_from(&new_state.running);
+                            s.remote_repos.clone_from(&new_state.remote_repos);
+                            s.remote_repos_fetched_at = new_state.remote_repos_fetched_at;
+                            s.remote_repos_loading = new_state.remote_repos_loading;
+                            s.cloning_project.clone_from(&new_state.cloning_project);
+                            s.remote_repos_error.clone_from(&new_state.remote_repos_error);
                         }
 
                         // Rebuild tray menu
@@ -245,6 +275,7 @@ fn main() {
         .run(move |_app, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 info!("Exit requested");
+                singleton::release();
                 let _ = shutdown_tx.blocking_send(());
             }
         });
@@ -274,10 +305,15 @@ fn rebuild_menu(app_handle: &tauri::AppHandle, state: &Arc<Mutex<TrayState>>) {
 
 /// Dispatch a menu click ID to the appropriate `MenuCommand`.
 fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::AppHandle) {
+    // Strip the generation suffix (e.g., "quit#5" -> "quit") added to avoid
+    // libappindicator's menu ID caching bug that causes blank labels.
+    let id = menu::ids::strip_gen(id);
+
     let command = match id {
         menu::ids::QUIT => None, // Handled via fast-path above
         menu::ids::GITHUB_LOGIN => Some(MenuCommand::GitHubLogin),
         menu::ids::SETTINGS => Some(MenuCommand::Settings),
+        menu::ids::REFRESH_REMOTE_PROJECTS => Some(MenuCommand::RefreshRemoteProjects),
         _ => {
             if let Some((action, payload)) = menu::ids::parse(id) {
                 match action {
@@ -311,6 +347,18 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
                             })
                         } else {
                             warn!(id, "Cannot parse container name from destroy action");
+                            None
+                        }
+                    }
+                    "clone" => {
+                        // Payload format: "<full_name>\t<name>"
+                        if let Some((full_name, name)) = payload.split_once('\t') {
+                            Some(MenuCommand::CloneProject {
+                                full_name: full_name.to_string(),
+                                name: name.to_string(),
+                            })
+                        } else {
+                            warn!(id, "Cannot parse clone project from menu ID");
                             None
                         }
                     }

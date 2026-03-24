@@ -7,6 +7,13 @@ trap 'exit 0' SIGTERM SIGINT
 mkdir -p ~/.config/gh 2>/dev/null || true
 touch ~/.gitconfig 2>/dev/null || true
 
+# Deploy shell configs if not present
+for f in .bashrc .zshrc; do
+    [ -f "$HOME/$f" ] || cp "/etc/skel/$f" "$HOME/$f" 2>/dev/null || true
+done
+mkdir -p "$HOME/.config/fish"
+[ -f "$HOME/.config/fish/config.fish" ] || cp "/etc/skel/.config/fish/config.fish" "$HOME/.config/fish/config.fish" 2>/dev/null || true
+
 CACHE="$HOME/.cache/tillandsias"
 OC_BIN="$CACHE/opencode/opencode"
 OS_PREFIX="$CACHE/openspec"

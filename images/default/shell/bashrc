@@ -1,0 +1,32 @@
+# ~/.bashrc — tillandsias forge
+
+# If not running interactively, don't do anything
+[[ $- != *i* ]] && return
+
+# ── PATH ─────────────────────────────────────────────────────
+# OpenCode and OpenSpec are cached in ~/.cache/tillandsias/
+export PATH="$HOME/.cache/tillandsias/opencode:$HOME/.cache/tillandsias/openspec/bin:$HOME/.local/bin:$PATH"
+
+# ── Prompt ───────────────────────────────────────────────────
+PS1='\[\033[0;32m\]\w\[\033[0m\] $ '
+
+# ── Aliases ──────────────────────────────────────────────────
+alias ll='eza -la'
+alias la='eza -a'
+alias ..='cd ..'
+alias grep='grep --color=auto'
+
+# ── bat as pager ─────────────────────────────────────────────
+if command -v bat &>/dev/null; then
+    export MANPAGER="sh -c 'col -bx | bat -l man -p'"
+fi
+
+# ── fzf key bindings ────────────────────────────────────────
+if command -v fzf &>/dev/null; then
+    eval "$(fzf --bash 2>/dev/null)" || true
+fi
+
+# ── zoxide (smart cd) ───────────────────────────────────────
+if command -v zoxide &>/dev/null; then
+    eval "$(zoxide init bash)"
+fi

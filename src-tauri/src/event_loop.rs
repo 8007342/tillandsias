@@ -6,12 +6,15 @@
 use tokio::sync::mpsc;
 use tracing::{debug, error, info};
 
+use std::time::Instant;
+
+use tillandsias_core::config::load_global_config;
 use tillandsias_core::event::{ContainerState, MenuCommand};
 use tillandsias_core::genus::GenusAllocator;
 use tillandsias_core::project::ProjectChange;
-use tillandsias_core::state::{ContainerInfo, TrayState};
+use tillandsias_core::state::{ContainerInfo, RemoteRepoInfo, TrayState};
 
-use crate::handlers;
+use crate::{github, handlers};
 
 /// Callback for menu rebuilds after state changes.
 pub type MenuRebuildFn = Box<dyn Fn(&TrayState) + Send + Sync>;
@@ -33,6 +36,11 @@ pub async fn run(
     let mut allocator = GenusAllocator::new();
 
     info!("Event loop started");
+
+    // Timer drives remote repos fetch — checks every 3s if cache is stale.
+    // First fetch happens ~3s after startup (after initial tick is consumed).
+    let mut remote_fetch_interval = tokio::time::interval(std::time::Duration::from_secs(3));
+    remote_fetch_interval.tick().await; // consume first immediate tick
 
     loop {
         tokio::select! {
@@ -102,12 +110,35 @@ pub async fn run(
                         if let Err(e) = handlers::handle_github_login(&state).await {
                             error!(error = %e, "GitHub Login failed");
                         } else {
+                            // Invalidate remote repos cache so it refreshes
+                            // on next menu open after auth completes.
+                            state.invalidate_remote_repos_cache();
                             on_state_change(&state);
                         }
                     }
-                    MenuCommand::Settings => {
-                        debug!("Settings requested (not yet implemented)");
+                    MenuCommand::RefreshRemoteProjects => {
+                        info!("Remote projects refresh requested");
+                        fetch_remote_repos(&mut state, &on_state_change).await;
                     }
+                    MenuCommand::CloneProject { full_name, name } => {
+                        info!(repo = %full_name, "Clone project requested");
+                        handle_clone_project(&full_name, &name, &mut state, &on_state_change).await;
+                    }
+                    MenuCommand::Settings => {
+                        // Settings is a Submenu now — this event won't fire from menu clicks.
+                        // Kept for forward compatibility if Settings ever becomes actionable.
+                        debug!("Settings command received");
+                    }
+                }
+            }
+
+            // Timer: check if remote repos cache needs refresh
+            _ = remote_fetch_interval.tick() => {
+                if !crate::menu::needs_github_login()
+                    && state.remote_repos_cache_stale()
+                    && !state.remote_repos_loading
+                {
+                    fetch_remote_repos(&mut state, &on_state_change).await;
                 }
             }
 
@@ -146,6 +177,76 @@ fn handle_scanner_event(change: ProjectChange, state: &mut TrayState) {
             state.projects.retain(|p| p.path != path);
         }
     }
+}
+
+/// Fetch remote GitHub repos into state cache.
+async fn fetch_remote_repos(state: &mut TrayState, on_state_change: &MenuRebuildFn) {
+    state.remote_repos_loading = true;
+    state.remote_repos_error = None;
+    on_state_change(state);
+
+    match github::fetch_repos().await {
+        Ok(repos) => {
+            state.remote_repos = repos
+                .into_iter()
+                .map(|r| RemoteRepoInfo {
+                    name: r.name,
+                    full_name: r.full_name,
+                })
+                .collect();
+            state.remote_repos_fetched_at = Some(Instant::now());
+            state.remote_repos_error = None;
+            info!(count = state.remote_repos.len(), "Remote repos cache updated");
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to fetch remote repos");
+            state.remote_repos_error = Some(e);
+        }
+    }
+
+    state.remote_repos_loading = false;
+    on_state_change(state);
+}
+
+/// Handle cloning a remote project into the watched directory.
+async fn handle_clone_project(
+    full_name: &str,
+    name: &str,
+    state: &mut TrayState,
+    on_state_change: &MenuRebuildFn,
+) {
+    // Set cloning state
+    state.cloning_project = Some(name.to_string());
+    on_state_change(state);
+
+    // Determine target directory from config
+    let global_config = load_global_config();
+    let watch_path = global_config
+        .scanner
+        .watch_paths
+        .first()
+        .cloned()
+        .unwrap_or_else(|| {
+            std::path::PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/root".to_string()))
+                .join("src")
+        });
+    let target_dir = watch_path.join(name);
+
+    match github::clone_repo(full_name, &target_dir).await {
+        Ok(()) => {
+            info!(repo = %full_name, target = %target_dir.display(), "Clone completed");
+            // Scanner will detect the new directory automatically via filesystem events.
+            // Invalidate remote repos cache so the cloned repo is filtered out.
+            state.invalidate_remote_repos_cache();
+        }
+        Err(e) => {
+            error!(repo = %full_name, error = %e, "Clone failed");
+        }
+    }
+
+    // Clear cloning state
+    state.cloning_project = None;
+    on_state_change(state);
 }
 
 /// Process a podman container state change event.

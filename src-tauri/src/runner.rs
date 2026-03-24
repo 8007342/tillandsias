@@ -7,11 +7,37 @@
 use std::path::{Path, PathBuf};
 
 use tillandsias_core::config::{
-    GlobalConfig, cache_dir, data_dir, load_global_config, load_project_config,
+    GlobalConfig, cache_dir, load_global_config, load_project_config,
 };
 use tillandsias_core::genus::TillandsiaGenus;
 use tillandsias_core::state::ContainerInfo;
 use tillandsias_podman::PodmanClient;
+
+/// Detect the host operating system by reading `/etc/os-release`.
+/// Returns a human-readable string like "Fedora Silverblue 43".
+fn detect_host_os() -> String {
+    if let Ok(content) = std::fs::read_to_string("/etc/os-release") {
+        let mut name = String::new();
+        let mut version = String::new();
+        let mut variant = String::new();
+        for line in content.lines() {
+            if let Some(val) = line.strip_prefix("NAME=") {
+                name = val.trim_matches('"').to_string();
+            } else if let Some(val) = line.strip_prefix("VERSION_ID=") {
+                version = val.trim_matches('"').to_string();
+            } else if let Some(val) = line.strip_prefix("VARIANT=") {
+                variant = val.trim_matches('"').to_string();
+            }
+        }
+        if !variant.is_empty() {
+            format!("{name} {variant} {version}")
+        } else {
+            format!("{name} {version}")
+        }
+    } else {
+        "Unknown OS".to_string()
+    }
+}
 
 /// Map a short image name to a full image tag.
 fn image_tag(name: &str) -> String {
@@ -23,53 +49,41 @@ fn image_tag(name: &str) -> String {
     }
 }
 
-/// Resolve the project root directory (where scripts/build-image.sh lives).
-fn resolve_project_root() -> Option<PathBuf> {
-    if let Ok(exe) = std::env::current_exe()
-        && let Some(exe_dir) = exe.parent()
-    {
-        // target/debug/ layout -> two levels up
-        if let Some(root) = exe_dir.parent().and_then(|p| p.parent())
-            && root.join("scripts").join("build-image.sh").exists()
-        {
-            return Some(root.to_path_buf());
-        }
-        // Alongside the binary
-        if exe_dir.join("scripts").join("build-image.sh").exists() {
-            return Some(exe_dir.to_path_buf());
-        }
-    }
-
-    // Installed data directory
-    let data = data_dir().join("scripts");
-    if data.join("build-image.sh").exists() {
-        return Some(data_dir());
-    }
-
-    None
-}
-
-/// Run `scripts/build-image.sh` to build/refresh the image.
-/// Returns Ok(()) on success, Err with details on failure.
+/// Run `build-image.sh` from the embedded binary scripts.
+///
+/// Extracts image sources + build scripts to temp, executes with inherited
+/// stdio so the user sees progress, then cleans up.
 fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
-    let root = resolve_project_root()
-        .ok_or("Cannot find project root (scripts/build-image.sh not found)")?;
+    // Check if another process (e.g., tillandsias init) is already building
+    if crate::build_lock::is_running(image_name) {
+        println!("  Waiting for image build in progress...");
+        crate::build_lock::wait_for_build(image_name)?;
+        return Ok(());
+    }
 
-    let script = root.join("scripts").join("build-image.sh");
+    crate::build_lock::acquire(image_name)
+        .map_err(|e| format!("Cannot acquire build lock: {e}"))?;
+
+    let source_dir = crate::embedded::write_image_sources()
+        .map_err(|e| format!("Failed to extract image sources: {e}"))?;
+
+    let script = source_dir.join("scripts").join("build-image.sh");
 
     if debug {
-        println!("  [debug] Running: {}", script.display());
+        println!("  [debug] Running embedded: {}", script.display());
     }
 
-    // Run the script with inherited stdio so the user sees progress output
     let status = std::process::Command::new(&script)
         .arg(image_name)
-        .current_dir(&root)
+        .current_dir(&source_dir)
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .status()
         .map_err(|e| format!("Failed to run build-image.sh: {e}"))?;
+
+    crate::embedded::cleanup_image_sources();
+    crate::build_lock::release(image_name);
 
     if status.success() {
         Ok(())
@@ -109,15 +123,30 @@ fn build_run_args(
     cache: &Path,
     port_range: (u16, u16),
 ) -> Vec<String> {
+    // Derive project name for env vars
+    let proj_name = project_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "project".to_string());
+
+    let host_os = detect_host_os();
+
     let mut args = vec![
         "-it".to_string(),
         "--rm".to_string(),
+        "--init".to_string(),
+        "--stop-timeout=10".to_string(),
         "--name".to_string(),
         container_name.to_string(),
         "--cap-drop=ALL".to_string(),
         "--security-opt=no-new-privileges".to_string(),
         "--userns=keep-id".to_string(),
         "--security-opt=label=disable".to_string(),
+        // Environment variables for the welcome script
+        "-e".to_string(),
+        format!("TILLANDSIAS_PROJECT={proj_name}"),
+        "-e".to_string(),
+        format!("TILLANDSIAS_HOST_OS={host_os}"),
     ];
 
     // GPU passthrough (Linux only)
@@ -136,10 +165,6 @@ fn build_run_args(
     args.push(port_mapping);
 
     // Volume mounts — mount at src/<project-name>/ to preserve hierarchy
-    let proj_name = project_path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "project".to_string());
     let project_mount = format!("{}:/home/forge/src/{}", project_path.display(), proj_name);
     args.push("-v".to_string());
     args.push(project_mount);
@@ -186,8 +211,11 @@ fn build_run_args(
 
 /// Run the CLI attach workflow.
 ///
+/// When `bash` is true, the container entrypoint is overridden with `/bin/bash`
+/// for troubleshooting (no default tools/IDE launched).
+///
 /// Returns `true` on success, `false` on failure.
-pub fn run(path: PathBuf, image_name: &str, debug: bool) -> bool {
+pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
     // Resolve and validate the project path
     let project_path = match path.canonicalize() {
         Ok(p) => p,
@@ -242,15 +270,12 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool) -> bool {
         image_name
     };
 
-    // Try build script first (works when running from project dir)
-    if let Some(_root) = resolve_project_root() {
-        println!("  Ensuring image is up to date...");
-        if let Err(e) = run_build_image_script(source_name, debug)
-            && debug
-        {
-            eprintln!("  Build script failed: {e}");
-        }
-        // Fall through to image check
+    // Try embedded build script (always available in the signed binary)
+    println!("  Ensuring image is up to date...");
+    if let Err(e) = run_build_image_script(source_name, debug)
+        && debug
+    {
+        eprintln!("  Build script failed: {e}");
     }
 
     // Verify image exists
@@ -270,7 +295,7 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool) -> bool {
     let global_config = load_global_config();
     let project_config = load_project_config(&project_path);
     let resolved = global_config.merge_with_project(&project_config);
-    let base_port = GlobalConfig::parse_port_range(&resolved.port_range).unwrap_or((3000, 3099));
+    let base_port = GlobalConfig::parse_port_range(&resolved.port_range).unwrap_or((3000, 3019));
 
     // Use Aeranthos genus for CLI mode (no allocator needed)
     let genus = TillandsiaGenus::Aeranthos;
@@ -280,10 +305,29 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool) -> bool {
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
 
-    let run_args = build_run_args(&container_name, &tag, &project_path, &cache, base_port);
+    let mut run_args = build_run_args(&container_name, &tag, &project_path, &cache, base_port);
+
+    // --bash mode: launch fish shell (skipping the OpenCode entrypoint).
+    // Start in the project directory so the user lands in the right place.
+    if bash {
+        let project_name = project_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "src".to_string());
+        let image_arg = run_args.pop().expect("run_args always ends with image");
+        run_args.push("--entrypoint".to_string());
+        run_args.push("fish".to_string());
+        run_args.push("-w".to_string());
+        run_args.push(format!("/home/forge/src/{project_name}"));
+        run_args.push(image_arg);
+    }
 
     println!();
-    println!("Starting environment...");
+    if bash {
+        println!("Starting terminal (fish shell)...");
+    } else {
+        println!("Starting environment...");
+    }
     println!("  Name:   {container_name}");
     println!("  Ports:  {}-{}", base_port.0, base_port.1);
     let proj_display = project_path

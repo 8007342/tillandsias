@@ -10,6 +10,9 @@ pub enum CliMode {
     /// No arguments — start the system tray application.
     Tray,
 
+    /// `tillandsias init` — pre-build container images.
+    Init,
+
     /// A project path was given — launch an interactive container.
     Attach {
         /// Absolute path to the project directory.
@@ -18,6 +21,8 @@ pub enum CliMode {
         image: String,
         /// Show verbose debug output.
         debug: bool,
+        /// Drop into bash shell instead of default entrypoint (troubleshooting).
+        bash: bool,
     },
 }
 
@@ -27,12 +32,15 @@ Tillandsias — development environment manager
 USAGE:
     tillandsias                     Start the system tray app
     tillandsias <path>              Attach a container to a project
+    tillandsias <path> --bash       Drop into fish shell for troubleshooting
+    tillandsias init                Pre-build container images
     tillandsias --help              Show this help
 
 OPTIONS:
     --image <name>    Container image to use (default: forge)
                       Maps to tillandsias-<name>:latest
     --debug           Show verbose output including podman commands
+    --bash            Drop into bash shell instead of default entrypoint
 ";
 
 /// Parse CLI arguments and return the appropriate mode.
@@ -47,9 +55,15 @@ pub fn parse() -> Option<CliMode> {
         return Some(CliMode::Tray);
     }
 
+    // `tillandsias init` — pre-build images.
+    if args.first().map(|s| s.as_str()) == Some("init") {
+        return Some(CliMode::Init);
+    }
+
     let mut path: Option<PathBuf> = None;
     let mut image = "forge".to_string();
     let mut debug = false;
+    let mut bash = false;
     let mut i = 0;
 
     while i < args.len() {
@@ -70,6 +84,9 @@ pub fn parse() -> Option<CliMode> {
             "--debug" => {
                 debug = true;
             }
+            "--bash" => {
+                bash = true;
+            }
             arg => {
                 // Skip Tauri-injected flags (they start with --)
                 if arg.starts_with('-') {
@@ -89,6 +106,7 @@ pub fn parse() -> Option<CliMode> {
             path: p,
             image,
             debug,
+            bash,
         }),
         None => {
             // Had flags but no path — tray mode (could be Tauri flags)

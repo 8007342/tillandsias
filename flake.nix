@@ -15,6 +15,8 @@
         forgeEntrypoint = ./images/default/entrypoint.sh;
         forgeOpencode = ./images/default/opencode.json;
         forgeSkills = ./images/default/skills;
+        forgeShellConfigs = ./images/default/shell;
+        forgeWelcome = ./images/default/forge-welcome.sh;
         webEntrypoint = ./images/web/entrypoint.sh;
 
       in {
@@ -35,6 +37,9 @@
               gnutar
               gzip
               xz
+              # Alternative shells
+              fish
+              zsh
               # Dev tools
               git
               gh
@@ -42,6 +47,17 @@
               wget
               jq
               ripgrep
+              # Terminal tools
+              mc            # midnight commander
+              vim
+              nano
+              eza           # modern ls
+              bat           # modern cat
+              fd            # modern find
+              fzf           # fuzzy finder
+              zoxide        # smart cd
+              htop          # process viewer
+              tree          # directory tree
               # Node.js + npm (for OpenSpec deferred install)
               nodejs_22
               nodePackages.npm
@@ -80,6 +96,22 @@
               # Copy skills — entrypoint deploys these to ~/src/.opencode/ at runtime
               mkdir -p ./usr/local/share/tillandsias/opencode
               cp -r ${forgeSkills}/* ./usr/local/share/tillandsias/opencode/
+
+              # Shell configs — entrypoint deploys these from /etc/skel/ to $HOME
+              mkdir -p ./etc/skel/.config/fish
+              cp ${forgeShellConfigs}/bashrc ./etc/skel/.bashrc
+              cp ${forgeShellConfigs}/zshrc ./etc/skel/.zshrc
+              cp ${forgeShellConfigs}/config.fish ./etc/skel/.config/fish/config.fish
+
+              # Welcome script
+              cp ${forgeWelcome} ./usr/local/share/tillandsias/forge-welcome.sh
+              chmod +x ./usr/local/share/tillandsias/forge-welcome.sh
+
+              # Fish config in the user's config dir — fish reads from
+              # $__fish_config_dir/conf.d/ which is ~/.config/fish/conf.d/
+              # NOT /etc/fish/conf.d/ (which points to the Nix store).
+              mkdir -p ./home/forge/.config/fish/conf.d
+              cp ${forgeShellConfigs}/config.fish ./home/forge/.config/fish/conf.d/tillandsias.fish
 
               # Enable flakes inside container
               echo "experimental-features = nix-command flakes" > ./home/forge/.config/nix/nix.conf

@@ -16,7 +16,13 @@
 - [x] 2.3 Write specs/secrets-management/spec.md: requirements and scenarios
 - [x] 2.4 Write tasks.md with document-writing tasks (not implementation tasks)
 
-## 3. Review readiness
+## 3. Nix Store & Build Chain (addendum)
 
-- [ ] 3.1 User reviews SECRETS.md and provides feedback
-- [ ] 3.2 Incorporate review feedback into SECRETS.md and spec
+- [x] 3.1 Document Nix store encryption strategy in SECRETS.md — builder toolbox isolation, content-addressed verification, encrypted-at-rest for Phase 2
+- [x] 3.2 Document build artifact chain of trust — embedded sources (Phase 1) → image hash verification → signed images (Phase 3)
+- [x] 3.3 Document secrets cache encryption lifecycle — gocryptfs/LUKS, keyring integration, auto-unlock/lock tied to container lifecycle
+
+## 4. Review readiness
+
+- [ ] 4.1 User reviews SECRETS.md and provides feedback
+- [ ] 4.2 Incorporate review feedback into SECRETS.md and spec

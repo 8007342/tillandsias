@@ -115,3 +115,84 @@ The tray menu SHALL always display the watch path root (~/src/) as a top-level "
 - **WHEN** ~/src/ contains projects
 - **THEN** the menu shows "~/src/ — Attach Here" at the top, followed by individual project submenus
 
+### Requirement: Settings submenu
+The tray menu SHALL include a Settings submenu that contains configuration, setup actions, and remote project management.
+
+#### Scenario: GitHub Login label when not authenticated
+- **WHEN** the Settings submenu is built and GitHub credentials are missing
+- **THEN** the submenu contains an item labeled "GitHub Login"
+
+#### Scenario: GitHub Login label when authenticated
+- **WHEN** the Settings submenu is built and GitHub credentials are present
+- **THEN** the submenu contains an item labeled "GitHub Login Refresh"
+
+#### Scenario: Remote Projects submenu present
+- **WHEN** the Settings submenu is built and GitHub credentials are present
+- **THEN** a "Remote Projects" submenu appears below the GitHub Login Refresh item
+
+#### Scenario: Remote Projects hidden when not authenticated
+- **WHEN** the Settings submenu is built and GitHub credentials are missing
+- **THEN** no "Remote Projects" submenu appears
+
+### Requirement: GitHub Login delegates to embedded script
+The tray GitHub Login handler SHALL use the binary-embedded `gh-auth-login.sh` content, not a filesystem script.
+
+#### Scenario: Script not found on disk
+- **WHEN** no `gh-auth-login.sh` exists at any filesystem location
+- **THEN** the handler still works by extracting the embedded script to temp
+
+#### Scenario: Tampered script on disk ignored
+- **WHEN** a modified `gh-auth-login.sh` exists at `~/.local/share/tillandsias/`
+- **THEN** the handler ignores it and uses the embedded version
+
+### Requirement: Attach Here lifecycle emoji
+Each "Attach Here" menu item SHALL display a lifecycle emoji prefix reflecting whether a container is running for that project.
+
+#### Scenario: No container running for project
+- **WHEN** the tray menu is built and no tillandsias container is running for a scanned project
+- **THEN** the "Attach Here" item for that project is prefixed with 🌱
+
+#### Scenario: Container running for project
+- **WHEN** the tray menu is built and a tillandsias container is in the Running state for a scanned project
+- **THEN** the "Attach Here" item for that project is prefixed with 🌺
+
+#### Scenario: Container stops
+- **WHEN** a running container for a project stops or is destroyed
+- **THEN** the menu is rebuilt and the "Attach Here" item reverts to the 🌱 prefix
+
+### Requirement: GitHub Login delegates to script
+The tray GitHub Login handler SHALL open a terminal running `gh-auth-login.sh` instead of an inline bash script.
+
+#### Scenario: User clicks GitHub Login in tray
+- **WHEN** the user clicks GitHub Login in the Settings submenu
+- **THEN** a terminal opens running `gh-auth-login.sh` from the installed data directory
+
+### Requirement: Single tray icon guarantee
+The system SHALL guarantee that at most one tray icon exists per user session, regardless of how many times the application is launched.
+
+#### Scenario: User double-clicks launcher
+- **WHEN** the user launches Tillandsias from the desktop launcher while it is already running
+- **THEN** no second tray icon appears and the existing instance continues unaffected
+
+#### Scenario: Autostart plus manual launch
+- **WHEN** tillandsias starts via autostart on login and the user later launches it manually
+- **THEN** only one tray icon exists and the manual launch exits silently
+
+### Requirement: Terminal launches fish with welcome
+The Terminal (Ground) tray menu action SHALL launch the fish shell with the welcome message displayed.
+
+#### Scenario: Terminal opens with fish
+- **WHEN** the user clicks "Ground" for a project
+- **THEN** a ptyxis terminal opens with fish running inside the forge container, showing the welcome message and landing in the project directory
+
+### Requirement: Tray waits for background init
+The tray app SHALL detect an in-progress background init and wait for it instead of starting a duplicate build.
+
+#### Scenario: Init running on tray startup
+- **WHEN** the tray starts and the forge image is missing but a build lock is active
+- **THEN** the tray shows "Preparing environment..." in the menu and waits for the build to complete
+
+#### Scenario: Init completes while tray is waiting
+- **WHEN** the background init finishes and the forge image becomes available
+- **THEN** the tray menu updates normally with project actions enabled
+

@@ -21,6 +21,19 @@
 
 The build script auto-creates the `tillandsias` toolbox with all system deps on first run.
 
+### Windows Cross-Compilation
+
+```bash
+./build-windows.sh                  # Debug cross-build (auto-creates toolbox)
+./build-windows.sh --release        # Release cross-build (unsigned NSIS/MSI)
+./build-windows.sh --check          # Type-check for Windows target
+./build-windows.sh --test           # Compile tests (not executed on Linux)
+./build-windows.sh --clean          # Clean Windows artifacts
+./build-windows.sh --toolbox-reset  # Destroy and recreate Windows toolbox
+```
+
+Uses `cargo-xwin` in a dedicated `tillandsias-windows` toolbox. Artifacts are unsigned — for local testing only. See `docs/cross-platform-builds.md` for details and macOS build strategy.
+
 ### Manual Commands (without build.sh)
 
 ```bash
