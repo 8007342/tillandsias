@@ -169,6 +169,20 @@ pub fn build_tray_menu<R: Runtime>(
     let settings_submenu = build_settings_submenu(app, state, &watch_path)?;
     menu = menu.item(&settings_submenu);
 
+    // Version and credit — non-clickable, just before Quit
+    menu = menu.separator();
+    let version = env!("CARGO_PKG_VERSION");
+    menu = menu.item(
+        &MenuItemBuilder::with_id(ids::static_id("version"), format!("Tillandsias v{version}"))
+            .enabled(false)
+            .build(app)?,
+    );
+    menu = menu.item(
+        &MenuItemBuilder::with_id(ids::static_id("credit"), "by Tlatoāni")
+            .enabled(false)
+            .build(app)?,
+    );
+
     menu = menu.item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), "Quit Tillandsias").build(app)?);
 
     debug!(
