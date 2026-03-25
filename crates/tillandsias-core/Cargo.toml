@@ -13,3 +13,7 @@ toml = { workspace = true }
 dirs = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+
+[build-dependencies]
+resvg = "0.45"
+tiny-skia = "0.11"

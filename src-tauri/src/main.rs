@@ -21,6 +21,8 @@ use tracing::{debug, error, info, warn};
 
 use tillandsias_core::config::load_global_config;
 use tillandsias_core::event::MenuCommand;
+use tillandsias_core::genus::TrayIconState;
+use tillandsias_core::icons;
 use tillandsias_core::state::{ContainerInfo, Os, PlatformInfo, TrayState};
 use tillandsias_podman::{PodmanClient, PodmanEventStream, detect_gpu_devices};
 use tillandsias_scanner::{Scanner, ScannerConfig};
@@ -114,9 +116,8 @@ fn main() {
             };
 
             // Build tray icon — store handle so it persists and callbacks remain active
-            // Embed the tray icon at compile time so it works in AppImage
-            // (where relative paths resolve to the FUSE mount, not the install dir)
-            let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png"))
+            // Icon bytes come from the SVG→PNG build pipeline (Ionantha bud = idle state)
+            let icon = tauri::image::Image::from_bytes(icons::tray_icon_png(TrayIconState::Base))
                 .expect("embedded tray icon is valid PNG");
 
             let tray = TrayIconBuilder::new()

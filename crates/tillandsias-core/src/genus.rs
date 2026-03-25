@@ -95,6 +95,23 @@ impl PlantLifecycle {
     }
 }
 
+/// Tray icon state — maps overall system state to a specific tray icon variant.
+/// Independent of the per-environment `TillandsiaGenus` and `PlantLifecycle` types.
+///
+/// All tray icon variants are derived from the Ionantha genus:
+/// - `Base` → Ionantha bud (idle, no environments running)
+/// - `Building` → Ionantha bloom (at least one environment active)
+/// - `Decay` → Ionantha dried (all environments stopped)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum TrayIconState {
+    /// Idle or projects detected, none running — Ionantha bud
+    Base,
+    /// At least one environment starting or running — Ionantha bloom
+    Building,
+    /// Environments present but all stopped or stopping — Ionantha dried
+    Decay,
+}
+
 /// Allocates genera from the pool, avoiding duplicates per project.
 pub struct GenusAllocator {
     /// Next index in the round-robin pool
