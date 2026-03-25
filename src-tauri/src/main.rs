@@ -114,7 +114,13 @@ fn main() {
             };
 
             // Build tray icon — store handle so it persists and callbacks remain active
+            // Embed the tray icon at compile time so it works in AppImage
+            // (where relative paths resolve to the FUSE mount, not the install dir)
+            let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png"))
+                .expect("embedded tray icon is valid PNG");
+
             let tray = TrayIconBuilder::new()
+                .icon(icon)
                 .tooltip("Tillandsias")
                 .menu(&tray_menu)
                 .on_menu_event({
