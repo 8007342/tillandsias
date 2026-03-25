@@ -337,18 +337,38 @@ fn build_project_submenu<R: Runtime>(
     let mut submenu = SubmenuBuilder::new(app, &label);
 
     // "Attach Here" — primary action (opens OpenCode)
-    // Prefix with lifecycle emoji: 🌺 if a container is running for this project, 🌱 otherwise
-    let attach_label = if running_count > 0 {
-        "\u{1F33A} Attach Here" // 🌺 bloom — environment running
+    // When a container is running for this project, prefix with the genus flower
+    // so the tray label matches the terminal window title exactly.
+    let attach_label = if let Some(genus) = project.assigned_genus {
+        format!("{} Attach Here", genus.flower())
     } else {
-        "\u{1F331} Attach Here" // 🌱 seedling — idle
+        "Attach Here".to_string()
     };
     submenu = submenu
-        .item(&MenuItemBuilder::with_id(ids::attach_here(&project.path), attach_label).build(app)?);
+        .item(&MenuItemBuilder::with_id(ids::attach_here(&project.path), &attach_label).build(app)?);
 
-    // "🌱 Ground" — opens bash in a forge container
+    // Derive flower for the Ground/Maintenance terminal item.
+    // Use the assigned genus if available, otherwise plain label.
+    let terminal_container_name = format!("tillandsias-{}-terminal", project.name);
+    let maintenance_running = state
+        .running
+        .iter()
+        .any(|c| c.name == terminal_container_name);
+    let ground_label = if maintenance_running {
+        // Use the flower from an existing running container for this project
+        let flower = state
+            .running
+            .iter()
+            .find(|c| c.project_name == project.name)
+            .map(|c| c.genus.flower())
+            .unwrap_or_else(|| tillandsias_core::genus::TillandsiaGenus::Aeranthos.flower());
+        format!("{flower} Ground")
+    } else {
+        "\u{1F331} Ground".to_string() // 🌱 seedling — idle
+    };
+    // "Ground" — opens bash in a forge container
     submenu = submenu.item(
-        &MenuItemBuilder::with_id(ids::terminal(&project.path), "\u{1F331} Ground").build(app)?,
+        &MenuItemBuilder::with_id(ids::terminal(&project.path), &ground_label).build(app)?,
     );
 
     // Per-project running environments

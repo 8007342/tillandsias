@@ -66,6 +66,20 @@ impl TillandsiaGenus {
             Self::Usneoides => "Usneoides",
         }
     }
+
+    /// Unique flower emoji for this genus — used in terminal window titles and menu labels.
+    pub fn flower(&self) -> &'static str {
+        match self {
+            Self::Aeranthos => "\u{1F338}",      // 🌸
+            Self::Ionantha => "\u{1F33A}",        // 🌺
+            Self::Xerographica => "\u{1F33B}",    // 🌻
+            Self::CaputMedusae => "\u{1F33C}",    // 🌼
+            Self::Bulbosa => "\u{1F337}",         // 🌷
+            Self::Tectorum => "\u{1F339}",        // 🌹
+            Self::Stricta => "\u{1F3F5}\u{FE0F}", // 🏵️
+            Self::Usneoides => "\u{1F4AE}",       // 💮
+        }
+    }
 }
 
 /// Plant lifecycle states mapped to container lifecycle for iconography.
@@ -271,6 +285,28 @@ pub mod icons {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn flower_unique_per_genus() {
+        let mut seen = std::collections::HashSet::new();
+        for genus in TillandsiaGenus::ALL {
+            let flower = genus.flower();
+            assert!(
+                seen.insert(flower),
+                "Duplicate flower '{flower}' for genus {:?}",
+                genus
+            );
+        }
+        assert_eq!(seen.len(), TillandsiaGenus::ALL.len(), "All genera must have distinct flowers");
+    }
+
+    #[test]
+    fn flower_no_gaps() {
+        // Every genus must return a non-empty flower string
+        for genus in TillandsiaGenus::ALL {
+            assert!(!genus.flower().is_empty(), "flower() is empty for {:?}", genus);
+        }
+    }
 
     #[test]
     fn slug_roundtrip() {
