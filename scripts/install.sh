@@ -44,8 +44,9 @@ if [ -z "$RELEASE_JSON" ]; then
 fi
 
 # Helper: find a release asset URL by suffix pattern
+# Uses sed instead of grep -P for portability (BSD grep lacks -P)
 find_asset() {
-    echo "$RELEASE_JSON" | grep -oP '"browser_download_url":\s*"\K[^"]*'"$1" | head -1
+    echo "$RELEASE_JSON" | sed -n 's/.*"browser_download_url": *"//p' | sed 's/".*//' | grep "$1" | head -1
 }
 
 # ---------------------------------------------------------------------------
@@ -63,8 +64,15 @@ if [ "$PLATFORM" = "linux" ]; then
         PKG_TYPE="none"
     fi
 
-    # Try native package install
-    if [ "$PKG_TYPE" = "deb" ]; then
+    # When piped from curl, sudo won't work (stdin is the script).
+    # Skip package manager installs that need sudo; go to AppImage.
+    HAS_SUDO=false
+    if [ -t 0 ] && command -v sudo &>/dev/null; then
+        HAS_SUDO=true
+    fi
+
+    # Try native package install (only if we can use sudo)
+    if [ "$PKG_TYPE" = "deb" ] && [ "$HAS_SUDO" = true ]; then
         # Configure APT repository for auto-updates
         echo "  Configuring APT repository..."
         if curl -fsSL https://8007342.github.io/tillandsias/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/tillandsias.gpg 2>/dev/null; then
@@ -90,7 +98,7 @@ if [ "$PLATFORM" = "linux" ]; then
                 fi
             fi
         fi
-    elif [ "$PKG_TYPE" = "rpm" ]; then
+    elif [ "$PKG_TYPE" = "rpm" ] && [ "$HAS_SUDO" = true ]; then
         # Try COPR first (enables automatic updates via dnf)
         if command -v dnf &>/dev/null && ! command -v rpm-ostree &>/dev/null; then
             echo "  Configuring COPR repository..."
@@ -205,9 +213,7 @@ if [[ "$PLATFORM" == "linux" ]]; then
 
     mkdir -p "$DESKTOP_DIR"
 
-    # Install .desktop file
-    sed "s|TILLANDSIAS_BIN|$INSTALL_DIR/tillandsias|g" \
-        "$(dirname "$0")/../assets/tillandsias.desktop" > "$DESKTOP_DIR/tillandsias.desktop" 2>/dev/null || \
+    # Install .desktop file (inline — no external template needed)
     cat > "$DESKTOP_DIR/tillandsias.desktop" << DESK
 [Desktop Entry]
 Name=Tillandsias
@@ -314,9 +320,9 @@ if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
     echo ""
 fi
 
-# Pre-build container images in the background so they're ready
-# when the user runs tillandsias for the first time.
-if command -v tillandsias &>/dev/null || [ -x "$INSTALL_DIR/tillandsias" ]; then
+# Pre-build container images in the background (only for non-AppImage installs,
+# and only if we have a working terminal — not when piped from curl).
+if [ -t 0 ] && [ -x "$INSTALL_DIR/tillandsias" ] && command -v podman &>/dev/null; then
     echo "  Building container images in the background..."
     nohup "$INSTALL_DIR/tillandsias" init >/tmp/tillandsias-init.log 2>&1 &
     echo "  (Progress: tail -f /tmp/tillandsias-init.log)"
