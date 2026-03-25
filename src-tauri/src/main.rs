@@ -168,10 +168,26 @@ fn main() {
                     let mut s = state_for_loop.lock().unwrap();
                     s.platform.has_podman = has_podman;
                     s.platform.has_podman_machine = has_machine;
+                    s.has_podman = has_podman;
+                    if !has_podman {
+                        s.tray_icon_state = TrayIconState::Decay;
+                    }
                 }
 
                 if !has_podman {
                     warn!("Podman not found. Install podman to use Tillandsias.");
+                    // Set Decay icon immediately
+                    if let Some(tray_lock) = TRAY_ICON.get()
+                        && let Ok(tray) = tray_lock.lock()
+                    {
+                        if let Ok(icon) = tauri::image::Image::from_bytes(
+                            icons::tray_icon_png(TrayIconState::Decay),
+                        ) {
+                            let _ = tray.set_icon(Some(icon));
+                        }
+                    }
+                    // Rebuild menu to show Decay state
+                    rebuild_menu(&app_handle_for_loop, &state_for_loop);
                 }
 
                 if Os::detect().needs_podman_machine() && !has_machine {
@@ -210,6 +226,68 @@ fn main() {
                         Err(e) => {
                             warn!(error = %e, "Failed to discover existing containers");
                         }
+                    }
+                }
+
+                // Launch-time forge image check — build automatically if absent
+                if has_podman {
+                    let forge_client = tillandsias_podman::PodmanClient::new();
+                    if !forge_client.image_exists(handlers::FORGE_IMAGE_TAG).await {
+                        info!(tag = handlers::FORGE_IMAGE_TAG, "Forge image absent at launch — triggering auto-build");
+
+                        // Notify the event loop and update the icon to Building
+                        let _ = build_tx.try_send(BuildProgressEvent::Started {
+                            image_name: "forge".to_string(),
+                        });
+                        {
+                            let mut s = state_for_loop.lock().unwrap();
+                            s.active_builds.push(tillandsias_core::state::BuildProgress {
+                                image_name: "forge".to_string(),
+                                status: tillandsias_core::state::BuildStatus::InProgress,
+                                started_at: std::time::Instant::now(),
+                                completed_at: None,
+                            });
+                            s.tray_icon_state = TrayIconState::Building;
+                        }
+                        if let Some(tray_lock) = TRAY_ICON.get()
+                            && let Ok(tray) = tray_lock.lock()
+                        {
+                            if let Ok(icon) = tauri::image::Image::from_bytes(
+                                icons::tray_icon_png(TrayIconState::Building),
+                            ) {
+                                let _ = tray.set_icon(Some(icon));
+                            }
+                        }
+                        rebuild_menu(&app_handle_for_loop, &state_for_loop);
+
+                        // Run the build (blocking in a worker thread)
+                        let build_result =
+                            tokio::task::spawn_blocking(|| handlers::run_build_image_script_pub("forge")).await;
+
+                        match build_result {
+                            Ok(Ok(())) => {
+                                info!(tag = handlers::FORGE_IMAGE_TAG, "Forge image built at launch");
+                                let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                                    image_name: "forge".to_string(),
+                                });
+                            }
+                            Ok(Err(ref e)) => {
+                                warn!(error = %e, "Auto forge build failed at launch");
+                                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                                    image_name: "forge".to_string(),
+                                    reason: e.clone(),
+                                });
+                            }
+                            Err(ref e) => {
+                                warn!(error = %e, "Auto forge build task panicked at launch");
+                                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                                    image_name: "forge".to_string(),
+                                    reason: format!("Build task panicked: {e}"),
+                                });
+                            }
+                        }
+                    } else {
+                        info!(tag = handlers::FORGE_IMAGE_TAG, "Forge image present at launch");
                     }
                 }
 
@@ -259,11 +337,17 @@ fn main() {
 
                 let on_state_change: event_loop::MenuRebuildFn =
                     Box::new(move |new_state: &TrayState| {
-                        // Update shared state
-                        {
+                        // Compute new icon state before acquiring the lock
+                        let new_icon_state = new_state.compute_icon_state();
+
+                        // Update shared state and detect icon transition
+                        let old_icon_state = {
                             let mut s = state_for_rebuild.lock().unwrap();
+                            let old = s.tray_icon_state;
                             s.projects.clone_from(&new_state.projects);
                             s.running.clone_from(&new_state.running);
+                            s.has_podman = new_state.has_podman;
+                            s.tray_icon_state = new_icon_state;
                             s.remote_repos.clone_from(&new_state.remote_repos);
                             s.remote_repos_fetched_at = new_state.remote_repos_fetched_at;
                             s.remote_repos_loading = new_state.remote_repos_loading;
@@ -271,6 +355,30 @@ fn main() {
                             s.remote_repos_error
                                 .clone_from(&new_state.remote_repos_error);
                             s.active_builds.clone_from(&new_state.active_builds);
+                            old
+                        };
+
+                        // Update tray icon if state changed
+                        if new_icon_state != old_icon_state {
+                            if let Some(tray_lock) = TRAY_ICON.get()
+                                && let Ok(tray) = tray_lock.lock()
+                            {
+                                match tauri::image::Image::from_bytes(
+                                    icons::tray_icon_png(new_icon_state),
+                                ) {
+                                    Ok(icon) => {
+                                        let _ = tray.set_icon(Some(icon));
+                                        debug!(
+                                            old = ?old_icon_state,
+                                            new = ?new_icon_state,
+                                            "Tray icon updated"
+                                        );
+                                    }
+                                    Err(e) => {
+                                        error!(error = %e, "Failed to build tray icon image");
+                                    }
+                                }
+                            }
                         }
 
                         // Rebuild tray menu

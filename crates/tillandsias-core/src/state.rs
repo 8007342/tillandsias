@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use crate::event::ContainerState;
-use crate::genus::{PlantLifecycle, TillandsiaGenus};
+use crate::genus::{PlantLifecycle, TillandsiaGenus, TrayIconState};
 use crate::project::Project;
 
 /// Status of an image or maintenance build tracked in the tray menu.
@@ -128,6 +128,13 @@ pub struct TrayState {
     pub running: Vec<ContainerInfo>,
     pub platform: PlatformInfo,
 
+    /// Whether podman was reachable at launch.
+    /// Set once during startup; never recovered at runtime (Decay is terminal).
+    pub has_podman: bool,
+
+    /// Current tray icon state — updated by `compute_icon_state()`.
+    pub tray_icon_state: TrayIconState,
+
     /// Cached list of remote GitHub repos (fetched via `gh repo list`).
     pub remote_repos: Vec<RemoteRepoInfo>,
     /// When the remote repo list was last fetched.
@@ -151,12 +158,34 @@ impl TrayState {
             projects: Vec::new(),
             running: Vec::new(),
             platform,
+            has_podman: true,
+            tray_icon_state: TrayIconState::Base,
             remote_repos: Vec::new(),
             remote_repos_fetched_at: None,
             remote_repos_loading: false,
             cloning_project: None,
             remote_repos_error: None,
             active_builds: Vec::new(),
+        }
+    }
+
+    /// Compute the tray icon state from current application state.
+    ///
+    /// - `Decay`    — podman is not available (terminal, non-recoverable)
+    /// - `Building` — one or more builds are `InProgress`
+    /// - `Base`     — idle, no in-progress builds
+    pub fn compute_icon_state(&self) -> TrayIconState {
+        if !self.has_podman {
+            return TrayIconState::Decay;
+        }
+        let any_in_progress = self
+            .active_builds
+            .iter()
+            .any(|b| b.status == BuildStatus::InProgress);
+        if any_in_progress {
+            TrayIconState::Building
+        } else {
+            TrayIconState::Base
         }
     }
 

@@ -233,6 +233,12 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Public wrapper around `run_build_image_script` for use from `main.rs`
+/// launch-time forge auto-build.
+pub fn run_build_image_script_pub(image_name: &str) -> Result<(), String> {
+    run_build_image_script(image_name)
+}
+
 /// Build `podman run` argument list.
 /// From tray: detached (`-d`). From CLI: interactive (`-it`).
 fn build_run_args(

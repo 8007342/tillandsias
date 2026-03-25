@@ -10,6 +10,7 @@ use tauri::{AppHandle, Runtime};
 use tracing::debug;
 
 use tillandsias_core::config::load_global_config;
+use tillandsias_core::genus::TrayIconState;
 use tillandsias_core::state::{BuildStatus, TrayState};
 
 /// Generation counter for menu rebuilds.
@@ -83,6 +84,11 @@ pub fn build_tray_menu<R: Runtime>(
 ) -> tauri::Result<tauri::menu::Menu<R>> {
     // Bump generation so all IDs are unique (avoids libappindicator blank label bug)
     MENU_GENERATION.fetch_add(1, Ordering::Relaxed);
+
+    // Decay state: podman unavailable — show minimal error menu
+    if state.tray_icon_state == TrayIconState::Decay {
+        return build_decay_menu(app);
+    }
 
     let mut menu = MenuBuilder::new(app);
 
@@ -213,6 +219,48 @@ pub fn build_tray_menu<R: Runtime>(
         active_builds = state.active_builds.len(),
         "Menu rebuilt"
     );
+
+    menu.build()
+}
+
+/// Build the minimal Decay menu shown when podman is not available.
+///
+/// Contains only:
+/// - Error item (disabled) explaining podman is unavailable
+/// - Separator
+/// - Version / credit (disabled)
+/// - Quit (enabled)
+fn build_decay_menu<R: Runtime>(
+    app: &AppHandle<R>,
+) -> tauri::Result<tauri::menu::Menu<R>> {
+    let mut menu = MenuBuilder::new(app);
+
+    menu = menu.item(
+        &MenuItemBuilder::with_id(
+            ids::static_id("podman-unavailable"),
+            "Podman is not available",
+        )
+        .enabled(false)
+        .build(app)?,
+    );
+
+    menu = menu.separator();
+
+    let version = include_str!("../../VERSION").trim();
+    menu = menu.item(
+        &MenuItemBuilder::with_id(ids::static_id("version"), format!("Tillandsias v{version}"))
+            .enabled(false)
+            .build(app)?,
+    );
+    menu = menu.item(
+        &MenuItemBuilder::with_id(ids::static_id("credit"), "by Tlatoāni")
+            .enabled(false)
+            .build(app)?,
+    );
+
+    menu = menu.item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), "Quit Tillandsias").build(app)?);
+
+    debug!("Decay menu built (podman unavailable)");
 
     menu.build()
 }
