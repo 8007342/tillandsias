@@ -11,6 +11,14 @@
 
 - [ ] 2.1 SHA-pin all GitHub Actions in release.yml (checkout, setup-node, rust-toolchain, rust-cache, upload-artifact, download-artifact, gh-release)
 
+## 2b. Security Findings (from security audit)
+
+- [x] 2b.1 Remove tracked `result` file (stale Nix build artifact) + add to .gitignore
+- [ ] 2b.2 Escape macOS osascript command string in open_terminal() (injection via crafted dir names)
+- [ ] 2b.3 Add --init to short-lived gh containers in github.rs and gh-auth-login.sh (consistency)
+- [ ] 2b.4 Build lock is_alive() — check process name, not just PID existence (match singleton pattern)
+- [ ] 2b.5 Consider flock() for atomic lock acquisition (singleton + build lock TOCTOU)
+
 ## 3. Spec Cleanup (remove aspirational/unimplemented)
 
 - [ ] 3.1 Remove WASM isolation requirement from app-lifecycle spec (F4 — no WASM in codebase, aspirational)
