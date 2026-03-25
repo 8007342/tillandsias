@@ -157,6 +157,8 @@ build_appimage() {
     _warn "Subsequent builds reuse the cargo registry cache (~2-5 minutes)"
 
     podman run --rm \
+        --device /dev/fuse \
+        --cap-add SYS_ADMIN \
         -v "$SCRIPT_DIR:/src:ro,Z" \
         -v "$cargo_cache_dir:/root/.cargo/registry:rw,Z" \
         -v "$output_dir:/output:rw,Z" \
@@ -198,7 +200,11 @@ echo "[appimage] Running cargo tauri build (AppImage target)..."
 # APPIMAGE_EXTRACT_AND_RUN lets linuxdeploy (itself an AppImage) extract
 # to a temp dir instead of requiring FUSE mount — critical for containers.
 export APPIMAGE_EXTRACT_AND_RUN=1
-cargo tauri build --bundles appimage 2>&1
+# Prefer IPv4 — IPv6 connections to raw.githubusercontent.com hang in containers
+echo "precedence ::ffff:0:0/96  100" >> /etc/gai.conf
+# Allow non-zero exit — signing key is only available in CI, the AppImage
+# itself is produced before the signing step fails.
+cargo tauri build --bundles appimage 2>&1 || true
 
 echo "[appimage] Locating AppImage artifact..."
 appimage_file="$(find /build/target/release/bundle/appimage -name "*.AppImage" -type f 2>/dev/null | head -1)"
