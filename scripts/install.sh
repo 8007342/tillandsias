@@ -33,25 +33,56 @@ echo "  Arch: $ARCH"
 echo ""
 
 # Determine download URL
-# For now: download AppImage on Linux, .app bundle on macOS
-ASSET_NAME="tillandsias-${PLATFORM}-${ARCH}"
+# Determine the correct asset name based on Tauri's naming convention
 RELEASE_URL="https://github.com/${REPO}/releases/latest"
+
+case "$PLATFORM" in
+    linux)
+        case "$ARCH" in
+            x86_64)  ASSET_NAME="Tillandsias_amd64.AppImage" ;;
+            aarch64) ASSET_NAME="Tillandsias_aarch64.AppImage" ;;
+        esac
+        ;;
+    macos)
+        case "$ARCH" in
+            aarch64) ASSET_NAME="Tillandsias_aarch64.dmg" ;;
+            x86_64)  ASSET_NAME="Tillandsias_x64.dmg" ;;
+        esac
+        ;;
+esac
+
+# The release uses versioned filenames (e.g., Tillandsias_0.1.35_amd64.AppImage).
+# Query the GitHub API for the actual latest release asset URL.
+echo "  Finding latest release..."
+DOWNLOAD_URL=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+    | grep -o "https://[^\"]*${ASSET_NAME%%_*}_[0-9.]*_${ASSET_NAME#*_}" \
+    | head -1)
+
+# Fallback: try a simpler pattern match
+if [ -z "$DOWNLOAD_URL" ]; then
+    # Try matching any asset that ends with the arch-specific suffix
+    SUFFIX="${ASSET_NAME#Tillandsias_}"
+    DOWNLOAD_URL=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+        | grep -oP '"browser_download_url":\s*"\K[^"]*'"${SUFFIX}" \
+        | head -1)
+fi
 
 echo "  Downloading from GitHub releases..."
 
 # Create directories
 mkdir -p "$INSTALL_DIR" "$LIB_DIR" "$DATA_DIR"
 
-# Download the binary (placeholder — actual asset names depend on CI release)
-# For now, download and extract the appropriate artifact
-DOWNLOAD_URL="${RELEASE_URL}/download/${ASSET_NAME}"
-if curl -fsSL -o "/tmp/tillandsias-download" "$DOWNLOAD_URL" 2>/dev/null; then
-    cp "/tmp/tillandsias-download" "$INSTALL_DIR/tillandsias"
-    chmod +x "$INSTALL_DIR/tillandsias"
+if [ -n "$DOWNLOAD_URL" ] && curl -fsSL -o "/tmp/tillandsias-download" "$DOWNLOAD_URL" 2>/dev/null; then
+    if [[ "$PLATFORM" == "linux" ]]; then
+        # AppImage — install directly as the binary
+        cp "/tmp/tillandsias-download" "$INSTALL_DIR/tillandsias"
+        chmod +x "$INSTALL_DIR/tillandsias"
+    fi
     rm -f "/tmp/tillandsias-download"
 else
-    echo "  Download failed. Release may not be available yet."
-    echo "  Build from source: git clone https://github.com/${REPO} && cd tillandsias && ./build.sh --install"
+    echo "  Download failed."
+    echo "  Try downloading manually from: https://github.com/${REPO}/releases/latest"
+    echo "  Or build from source: git clone https://github.com/${REPO} && cd tillandsias && ./build.sh --install"
     exit 1
 fi
 
