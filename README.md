@@ -21,7 +21,9 @@ curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/insta
 
 | Format | Download |
 |--------|----------|
-| AppImage (portable) | [Tillandsias_amd64.AppImage](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias_0.1.35_amd64.AppImage) |
+| RPM package (Fedora/RHEL) | [Tillandsias.rpm](https://github.com/8007342/tillandsias/releases/latest) |
+| DEB package (Ubuntu/Debian) | [Tillandsias.deb](https://github.com/8007342/tillandsias/releases/latest) |
+| AppImage (portable) | [Tillandsias.AppImage](https://github.com/8007342/tillandsias/releases/latest) |
 
 </details>
 </details>

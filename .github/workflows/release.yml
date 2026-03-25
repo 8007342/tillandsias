@@ -103,6 +103,8 @@ jobs:
           # Copy all release-worthy files from Tauri bundle output
           find "${BUNDLE_DIR}" -type f \( \
             -name "*.AppImage" -o -name "*.AppImage.sig" \
+            -o -name "*.deb" \
+            -o -name "*.rpm" \
             -o -name "*.dmg" \
             -o -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" \
             -o -name "*.exe" \

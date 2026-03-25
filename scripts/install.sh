@@ -32,58 +32,126 @@ echo "  OS:   $PLATFORM"
 echo "  Arch: $ARCH"
 echo ""
 
-# Determine download URL
-# Determine the correct asset name based on Tauri's naming convention
 RELEASE_URL="https://github.com/${REPO}/releases/latest"
+API_URL="https://api.github.com/repos/${REPO}/releases/latest"
 
-case "$PLATFORM" in
-    linux)
-        case "$ARCH" in
-            x86_64)  ASSET_NAME="Tillandsias_amd64.AppImage" ;;
-            aarch64) ASSET_NAME="Tillandsias_aarch64.AppImage" ;;
-        esac
-        ;;
-    macos)
-        case "$ARCH" in
-            aarch64) ASSET_NAME="Tillandsias_aarch64.dmg" ;;
-            x86_64)  ASSET_NAME="Tillandsias_x64.dmg" ;;
-        esac
-        ;;
-esac
-
-# The release uses versioned filenames (e.g., Tillandsias_0.1.35_amd64.AppImage).
-# Query the GitHub API for the actual latest release asset URL.
 echo "  Finding latest release..."
-DOWNLOAD_URL=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-    | grep -o "https://[^\"]*${ASSET_NAME%%_*}_[0-9.]*_${ASSET_NAME#*_}" \
-    | head -1)
-
-# Fallback: try a simpler pattern match
-if [ -z "$DOWNLOAD_URL" ]; then
-    # Try matching any asset that ends with the arch-specific suffix
-    SUFFIX="${ASSET_NAME#Tillandsias_}"
-    DOWNLOAD_URL=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-        | grep -oP '"browser_download_url":\s*"\K[^"]*'"${SUFFIX}" \
-        | head -1)
+RELEASE_JSON=$(curl -fsSL "$API_URL" 2>/dev/null || echo "")
+if [ -z "$RELEASE_JSON" ]; then
+    echo "  Cannot reach GitHub API."
+    echo "  Try downloading manually from: ${RELEASE_URL}"
+    exit 1
 fi
 
-echo "  Downloading from GitHub releases..."
+# Helper: find a release asset URL by suffix pattern
+find_asset() {
+    echo "$RELEASE_JSON" | grep -oP '"browser_download_url":\s*"\K[^"]*'"$1" | head -1
+}
 
-# Create directories
-mkdir -p "$INSTALL_DIR" "$LIB_DIR" "$DATA_DIR"
+# ---------------------------------------------------------------------------
+# Linux: prefer native packages (.deb/.rpm), fall back to AppImage
+# ---------------------------------------------------------------------------
+if [ "$PLATFORM" = "linux" ]; then
+    INSTALLED=false
 
-if [ -n "$DOWNLOAD_URL" ] && curl -fsSL -o "/tmp/tillandsias-download" "$DOWNLOAD_URL" 2>/dev/null; then
-    if [[ "$PLATFORM" == "linux" ]]; then
-        # AppImage — install directly as the binary
-        cp "/tmp/tillandsias-download" "$INSTALL_DIR/tillandsias"
-        chmod +x "$INSTALL_DIR/tillandsias"
+    # Detect package manager
+    if command -v dpkg &>/dev/null; then
+        PKG_TYPE="deb"
+    elif command -v rpm &>/dev/null; then
+        PKG_TYPE="rpm"
+    else
+        PKG_TYPE="none"
     fi
-    rm -f "/tmp/tillandsias-download"
-else
-    echo "  Download failed."
-    echo "  Try downloading manually from: https://github.com/${REPO}/releases/latest"
-    echo "  Or build from source: git clone https://github.com/${REPO} && cd tillandsias && ./build.sh --install"
-    exit 1
+
+    # Try native package install
+    if [ "$PKG_TYPE" = "deb" ]; then
+        DEB_URL=$(find_asset "_amd64\\.deb")
+        if [ -n "$DEB_URL" ]; then
+            echo "  Downloading .deb package..."
+            if curl -fsSL -o /tmp/tillandsias.deb "$DEB_URL"; then
+                echo "  Installing .deb package..."
+                sudo dpkg -i /tmp/tillandsias.deb 2>/dev/null && INSTALLED=true
+                rm -f /tmp/tillandsias.deb
+                if [ "$INSTALLED" = true ]; then
+                    echo "  ✓ Installed via dpkg"
+                fi
+            fi
+        fi
+    elif [ "$PKG_TYPE" = "rpm" ]; then
+        RPM_URL=$(find_asset "_x86_64\\.rpm")
+        if [ -n "$RPM_URL" ]; then
+            echo "  Downloading .rpm package..."
+            if curl -fsSL -o /tmp/tillandsias.rpm "$RPM_URL"; then
+                # Try rpm-ostree first (immutable OS like Silverblue)
+                if command -v rpm-ostree &>/dev/null; then
+                    echo "  Installing via rpm-ostree (immutable OS)..."
+                    rpm-ostree install /tmp/tillandsias.rpm 2>/dev/null && INSTALLED=true
+                    if [ "$INSTALLED" = true ]; then
+                        echo "  ✓ Installed via rpm-ostree (reboot to apply)"
+                    fi
+                fi
+                # Fallback to regular rpm/dnf
+                if [ "$INSTALLED" = false ]; then
+                    echo "  Installing .rpm package..."
+                    if command -v dnf &>/dev/null; then
+                        sudo dnf install -y /tmp/tillandsias.rpm 2>/dev/null && INSTALLED=true
+                    else
+                        sudo rpm -i /tmp/tillandsias.rpm 2>/dev/null && INSTALLED=true
+                    fi
+                    if [ "$INSTALLED" = true ]; then
+                        echo "  ✓ Installed via rpm"
+                    fi
+                fi
+                rm -f /tmp/tillandsias.rpm
+            fi
+        fi
+    fi
+
+    # Fallback: AppImage (works everywhere, no root needed)
+    if [ "$INSTALLED" = false ]; then
+        echo "  Falling back to AppImage (no root required)..."
+        APPIMAGE_URL=$(find_asset "_amd64\\.AppImage")
+        if [ -z "$APPIMAGE_URL" ]; then
+            APPIMAGE_URL=$(find_asset "_aarch64\\.AppImage")
+        fi
+        if [ -n "$APPIMAGE_URL" ]; then
+            mkdir -p "$INSTALL_DIR"
+            echo "  Downloading AppImage..."
+            if curl -fsSL -o "$INSTALL_DIR/tillandsias" "$APPIMAGE_URL"; then
+                chmod +x "$INSTALL_DIR/tillandsias"
+                INSTALLED=true
+                echo "  ✓ Installed AppImage to $INSTALL_DIR/tillandsias"
+            fi
+        fi
+    fi
+
+    if [ "$INSTALLED" = false ]; then
+        echo "  Download failed."
+        echo "  Try downloading manually from: ${RELEASE_URL}"
+        exit 1
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# macOS: download .dmg
+# ---------------------------------------------------------------------------
+if [ "$PLATFORM" = "macos" ]; then
+    if [ "$ARCH" = "aarch64" ]; then
+        DMG_URL=$(find_asset "_aarch64\\.dmg")
+    else
+        DMG_URL=$(find_asset "_x64\\.dmg")
+    fi
+    if [ -n "$DMG_URL" ]; then
+        mkdir -p "$INSTALL_DIR"
+        echo "  Downloading .dmg..."
+        curl -fsSL -o /tmp/Tillandsias.dmg "$DMG_URL"
+        echo "  Open /tmp/Tillandsias.dmg and drag to Applications."
+        echo "  ✓ Downloaded to /tmp/Tillandsias.dmg"
+    else
+        echo "  Download failed."
+        echo "  Try downloading manually from: ${RELEASE_URL}"
+        exit 1
+    fi
 fi
 
 # Install uninstall script
