@@ -55,10 +55,14 @@ fn open_terminal(command: &str) -> Result<(), String> {
         // ptyxis -s: standalone instance (doesn't reuse existing window).
         // ptyxis -x: execute command directly (not via bash -c wrapper).
         let terminals: &[(&str, &[&str])] = &[
-            ("ptyxis", &["--new-window", "-x"]), // GNOME (Silverblue) — new window + execute
+            // ptyxis: -s = standalone process (no D-Bus handoff to existing instance)
+            //         --new-window = own window (not a tab in someone else's window)
+            //         -x = execute command directly
+            // All three flags together ensure each terminal launch is fully independent.
+            ("ptyxis", &["-s", "--new-window", "-x"]),
             ("gnome-terminal", &["--", "bash", "-c"]), // GNOME
-            ("konsole", &["-e", "bash", "-c"]),  // KDE
-            ("xterm", &["-e", "bash", "-c"]),    // Fallback
+            ("konsole", &["-e", "bash", "-c"]),        // KDE
+            ("xterm", &["-e", "bash", "-c"]),          // Fallback
         ];
 
         for (term, args) in terminals {
