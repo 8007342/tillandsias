@@ -112,6 +112,39 @@ jobs:
             -o -name "*.nsis.zip" -o -name "*.nsis.zip.sig" \
           \) -exec cp {} collected-artifacts/ \;
 
+          # Rename portable formats to versionless names.
+          # These self-update via Tauri — version in filename becomes stale.
+          # Package formats (deb/rpm/msi) keep versions for OS package managers.
+          cd collected-artifacts
+          for f in *.AppImage; do
+            [ -f "$f" ] && mv "$f" "Tillandsias-linux-x86_64.AppImage" 2>/dev/null || true
+          done
+          for f in *.AppImage.sig; do
+            [ -f "$f" ] && mv "$f" "Tillandsias-linux-x86_64.AppImage.sig" 2>/dev/null || true
+          done
+          for f in *_aarch64.dmg; do
+            [ -f "$f" ] && mv "$f" "Tillandsias-macos-aarch64.dmg" 2>/dev/null || true
+          done
+          for f in *_x64.dmg; do
+            [ -f "$f" ] && mv "$f" "Tillandsias-macos-x86_64.dmg" 2>/dev/null || true
+          done
+          for f in *.app.tar.gz; do
+            [ -f "$f" ] && mv "$f" "Tillandsias-macos-aarch64.app.tar.gz" 2>/dev/null || true
+          done
+          for f in *.app.tar.gz.sig; do
+            [ -f "$f" ] && mv "$f" "Tillandsias-macos-aarch64.app.tar.gz.sig" 2>/dev/null || true
+          done
+          for f in *-setup.exe; do
+            [ -f "$f" ] && mv "$f" "Tillandsias-windows-x86_64-setup.exe" 2>/dev/null || true
+          done
+          for f in *-setup.nsis.zip; do
+            [ -f "$f" ] && mv "$f" "Tillandsias-windows-x86_64-setup.nsis.zip" 2>/dev/null || true
+          done
+          for f in *-setup.nsis.zip.sig; do
+            [ -f "$f" ] && mv "$f" "Tillandsias-windows-x86_64-setup.nsis.zip.sig" 2>/dev/null || true
+          done
+          cd ..
+
           echo "Collected artifacts:"
           ls -la collected-artifacts/
 

@@ -21,9 +21,9 @@ curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/insta
 
 | Format | Download |
 |--------|----------|
-| RPM package (Fedora/RHEL) | [Tillandsias.rpm](https://github.com/8007342/tillandsias/releases/latest) |
-| DEB package (Ubuntu/Debian) | [Tillandsias.deb](https://github.com/8007342/tillandsias/releases/latest) |
-| AppImage (portable) | [Tillandsias.AppImage](https://github.com/8007342/tillandsias/releases/latest) |
+| AppImage (portable) | [Tillandsias-linux-x86_64.AppImage](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-linux-x86_64.AppImage) |
+| RPM (Fedora/RHEL) | [latest release](https://github.com/8007342/tillandsias/releases/latest) |
+| DEB (Ubuntu/Debian) | [latest release](https://github.com/8007342/tillandsias/releases/latest) |
 
 </details>
 </details>
@@ -40,9 +40,9 @@ curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/insta
 
 | Format | Download |
 |--------|----------|
-| Disk Image — Apple Silicon | [Tillandsias_aarch64.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias_0.1.35_aarch64.dmg) |
-| Disk Image — Intel | [Tillandsias_x64.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias_0.1.35_x64.dmg) |
-| App Bundle (.app) | [Tillandsias.app.tar.gz](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias.app.tar.gz) |
+| Disk Image — Apple Silicon | [Tillandsias-macos-aarch64.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-macos-aarch64.dmg) |
+| Disk Image — Intel | [Tillandsias-macos-x86_64.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-macos-x86_64.dmg) |
+| App Bundle (.app) | [Tillandsias-macos-aarch64.app.tar.gz](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-macos-aarch64.app.tar.gz) |
 
 </details>
 </details>
@@ -59,8 +59,8 @@ irm https://github.com/8007342/tillandsias/releases/latest/download/install.ps1 
 
 | Format | Download |
 |--------|----------|
-| Installer (.exe) | [Tillandsias_x64-setup.exe](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias_0.1.35_x64-setup.exe) |
-| MSI Installer | [Tillandsias_x64.msi](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias_0.1.35_x64_en-US.msi) |
+| Installer (.exe) | [Tillandsias-windows-x86_64-setup.exe](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-windows-x86_64-setup.exe) |
+| MSI | [latest release](https://github.com/8007342/tillandsias/releases/latest) |
 
 </details>
 </details>

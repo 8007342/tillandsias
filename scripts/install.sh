@@ -110,9 +110,10 @@ if [ "$PLATFORM" = "linux" ]; then
     # Fallback: AppImage (works everywhere, no root needed)
     if [ "$INSTALLED" = false ]; then
         echo "  Falling back to AppImage (no root required)..."
-        APPIMAGE_URL=$(find_asset "_amd64\\.AppImage")
+        APPIMAGE_URL=$(find_asset "linux-x86_64\\.AppImage")
         if [ -z "$APPIMAGE_URL" ]; then
-            APPIMAGE_URL=$(find_asset "_aarch64\\.AppImage")
+            # Try old versioned name as fallback
+            APPIMAGE_URL=$(find_asset "_amd64\\.AppImage")
         fi
         if [ -n "$APPIMAGE_URL" ]; then
             mkdir -p "$INSTALL_DIR"
@@ -137,9 +138,11 @@ fi
 # ---------------------------------------------------------------------------
 if [ "$PLATFORM" = "macos" ]; then
     if [ "$ARCH" = "aarch64" ]; then
-        DMG_URL=$(find_asset "_aarch64\\.dmg")
+        DMG_URL=$(find_asset "macos-aarch64\\.dmg")
+        [ -z "$DMG_URL" ] && DMG_URL=$(find_asset "_aarch64\\.dmg")
     else
-        DMG_URL=$(find_asset "_x64\\.dmg")
+        DMG_URL=$(find_asset "macos-x86_64\\.dmg")
+        [ -z "$DMG_URL" ] && DMG_URL=$(find_asset "_x64\\.dmg")
     fi
     if [ -n "$DMG_URL" ]; then
         mkdir -p "$INSTALL_DIR"
