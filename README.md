@@ -90,10 +90,14 @@ Removes the binary, caches, container images, and all Tillandsias data.
 
 ## Requirements
 
-- [Podman](https://podman.io) (rootless) — the only dependency
+- [Podman](https://podman.io) (rootless)
   - Linux: `sudo dnf install podman` / `sudo apt install podman`
   - macOS: `brew install podman && podman machine init && podman machine start`
   - Windows: [Podman Desktop](https://podman-desktop.io)
+- **GNOME desktop** (Linux): the [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/) must be enabled for the tray icon to appear. Install via Extension Manager or:
+  ```bash
+  gnome-extensions install appindicatorsupport@rgcjonas.gmail.com
+  ```
 
 ## All Downloads
 
