@@ -61,6 +61,20 @@ openspec/                     # Spec-driven development artifacts
 - **Config-driven** — global at `~/.config/tillandsias/config.toml`, per-project at `.tillandsias/config.toml`
 - **Forge image is external** — Tillandsias orchestrates containers but doesn't build them. Default image: `ghcr.io/8007342/macuahuitl:latest`
 
+## CI/CD — Conservative Cloud Usage
+
+Both CI and Release workflows are **manual trigger only** (`workflow_dispatch`). They NEVER run automatically on push or PR. This is intentional — cloud minutes are expensive.
+
+**Rules:**
+- Push code freely — zero cloud minutes consumed
+- **Do NOT** trigger `gh workflow run` after every commit
+- Batch changes, test locally, trigger a release only when shipping
+- Use `./build.sh --test` and `cargo clippy` locally before pushing
+- A release is a deliberate act: bump VERSION, tag, then `gh workflow run release.yml -f version=X.Y.Z`
+
+**Release workflow**: `gh workflow run release.yml -f version="0.1.37.25"`
+**CI workflow**: `gh workflow run ci.yml` (lint + test only, no artifacts)
+
 ## Versioning
 
 Format: `v<Major>.<Minor>.<ChangeCount>.<Build>` — source of truth is the `VERSION` file at project root.
