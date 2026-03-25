@@ -171,7 +171,8 @@ pub fn build_tray_menu<R: Runtime>(
 
     // Version and credit — non-clickable, just before Quit
     menu = menu.separator();
-    let version = env!("CARGO_PKG_VERSION");
+    // Full 4-part version from VERSION file, embedded at compile time
+    let version = include_str!("../../VERSION").trim();
     menu = menu.item(
         &MenuItemBuilder::with_id(ids::static_id("version"), format!("Tillandsias v{version}"))
             .enabled(false)
