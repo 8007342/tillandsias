@@ -41,32 +41,27 @@ use tillandsias_podman::query_occupied_ports;
 
 pub(crate) const FORGE_IMAGE_TAG: &str = "tillandsias-forge:latest";
 
-/// Open a terminal window running a command.
+/// Open a terminal window running a command with a custom title.
 /// Uses the platform's default terminal — not a zoo of emulators.
 ///
 /// On GNOME (ptyxis), launches a standalone instance so the tray app
 /// doesn't depend on an existing terminal window. The command runs
 /// directly (not wrapped in `bash -c`) so interactive TTY works.
-fn open_terminal(command: &str) -> Result<(), String> {
+fn open_terminal(command: &str, title: &str) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         // Try common Linux terminals in order of likelihood.
-        // Each entry: (binary, args-before-command, uses-exec-flag).
+        // Each entry: (binary, title-args, command-args).
         // ptyxis -s: standalone instance (doesn't reuse existing window).
         // ptyxis -x: execute command directly (not via bash -c wrapper).
-        let terminals: &[(&str, &[&str])] = &[
-            // ptyxis: -s = standalone process (no D-Bus handoff to existing instance)
-            //         --new-window = own window (not a tab in someone else's window)
-            //         -x = execute command directly
-            // All three flags together ensure each terminal launch is fully independent.
-            ("ptyxis", &["-s", "--new-window", "-x"]),
-            ("gnome-terminal", &["--", "bash", "-c"]), // GNOME
-            ("konsole", &["-e", "bash", "-c"]),        // KDE
-            ("xterm", &["-e", "bash", "-c"]),          // Fallback
-        ];
+        //
+        // Title is passed before the command execution flags so each
+        // terminal window carries a meaningful name matching the tray label.
 
-        for (term, args) in terminals {
-            if std::process::Command::new("which")
+        // Check which terminal is available
+        let terminal_names = ["ptyxis", "gnome-terminal", "konsole", "xterm"];
+        let found_term = terminal_names.iter().find(|&&term| {
+            std::process::Command::new("which")
                 .arg(term)
                 .env_remove("LD_LIBRARY_PATH")
                 .env_remove("LD_PRELOAD")
@@ -74,21 +69,46 @@ fn open_terminal(command: &str) -> Result<(), String> {
                 .stderr(std::process::Stdio::null())
                 .status()
                 .is_ok_and(|s| s.success())
-            {
-                let mut cmd = std::process::Command::new(term);
-                // Clear AppImage library paths so host binaries (ptyxis, etc.)
-                // use the host's libraries, not the AppImage's bundled ones.
+        });
+
+        match found_term {
+            Some(&"ptyxis") => {
+                // ptyxis: -T <title> -s --new-window -x <command>
+                // -s = standalone process (no D-Bus handoff to existing instance)
+                // --new-window = own window (not a tab in someone else's window)
+                // -x = execute command directly
+                // All three flags together ensure each terminal launch is fully independent.
+                let mut cmd = std::process::Command::new("ptyxis");
                 cmd.env_remove("LD_LIBRARY_PATH");
                 cmd.env_remove("LD_PRELOAD");
-                for arg in *args {
-                    cmd.arg(arg);
-                }
-                cmd.arg(command);
-                return cmd.spawn().map(|_| ()).map_err(|e| format!("{term}: {e}"));
+                cmd.args(["-T", title, "-s", "--new-window", "-x", command]);
+                cmd.spawn().map(|_| ()).map_err(|e| format!("ptyxis: {e}"))
+            }
+            Some(&"gnome-terminal") => {
+                let mut cmd = std::process::Command::new("gnome-terminal");
+                cmd.env_remove("LD_LIBRARY_PATH");
+                cmd.env_remove("LD_PRELOAD");
+                cmd.args(["--title", title, "--", "bash", "-c", command]);
+                cmd.spawn().map(|_| ()).map_err(|e| format!("gnome-terminal: {e}"))
+            }
+            Some(&"konsole") => {
+                let mut cmd = std::process::Command::new("konsole");
+                cmd.env_remove("LD_LIBRARY_PATH");
+                cmd.env_remove("LD_PRELOAD");
+                cmd.args(["-p", &format!("tabtitle={title}"), "-e", "bash", "-c", command]);
+                cmd.spawn().map(|_| ()).map_err(|e| format!("konsole: {e}"))
+            }
+            Some(&"xterm") => {
+                let mut cmd = std::process::Command::new("xterm");
+                cmd.env_remove("LD_LIBRARY_PATH");
+                cmd.env_remove("LD_PRELOAD");
+                cmd.args(["-T", title, "-e", "bash", "-c", command]);
+                cmd.spawn().map(|_| ()).map_err(|e| format!("xterm: {e}"))
+            }
+            _ => {
+                Err("No terminal emulator found (tried ptyxis, gnome-terminal, konsole, xterm)".into())
             }
         }
-
-        Err("No terminal emulator found (tried ptyxis, gnome-terminal, konsole, xterm)".into())
     }
 
     #[cfg(target_os = "macos")]
@@ -96,11 +116,16 @@ fn open_terminal(command: &str) -> Result<(), String> {
         // macOS: osascript to open Terminal.app with a command.
         // Escape backslashes and quotes to prevent AppleScript injection
         // via crafted directory names.
-        let escaped = command.replace('\\', "\\\\").replace('"', "\\\"");
+        // Title is embedded via a `set custom title` call — best-effort.
+        let escaped_cmd = command.replace('\\', "\\\\").replace('"', "\\\"");
+        let escaped_title = title.replace('\\', "\\\\").replace('"', "\\\"");
         std::process::Command::new("osascript")
             .args([
                 "-e",
-                &format!("tell app \"Terminal\" to do script \"{escaped}\""),
+                &format!(
+                    "tell app \"Terminal\" to do script \"{escaped_cmd}\"\n\
+                     tell app \"Terminal\" to set custom title of front window to \"{escaped_title}\""
+                ),
             ])
             .spawn()
             .map(|_| ())
@@ -109,8 +134,10 @@ fn open_terminal(command: &str) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
+        // Windows: `start "<title>" cmd /k <command>`
+        // The first positional argument to `start` is the window title.
         std::process::Command::new("cmd")
-            .args(["/c", "start", "cmd", "/k", command])
+            .args(["/c", "start", title, "cmd", "/k", command])
             .spawn()
             .map(|_| ())
             .map_err(|e| format!("cmd: {e}"))
@@ -119,6 +146,39 @@ fn open_terminal(command: &str) -> Result<(), String> {
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
         Err("Unsupported platform for terminal launch".into())
+    }
+}
+
+/// Send a desktop notification (best-effort, non-blocking).
+///
+/// Uses `notify-send` on Linux, `osascript` on macOS.
+/// Silently ignored on failure — notifications are advisory only.
+fn send_notification(summary: &str, body: &str) {
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("notify-send")
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            .args([summary, body])
+            .spawn();
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let escaped_summary = summary.replace('"', "\\\"");
+        let escaped_body = body.replace('"', "\\\"");
+        let script = format!(
+            "display notification \"{escaped_body}\" with title \"{escaped_summary}\""
+        );
+        let _ = std::process::Command::new("osascript")
+            .args(["-e", &script])
+            .spawn();
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        // Windows and other platforms: no-op
+        let _ = (summary, body);
     }
 }
 
@@ -336,6 +396,23 @@ pub async fn handle_attach_here(
 
     info!(project = %project_name, "Attach Here requested");
 
+    // Don't-relaunch guard: if a container for this project is already running,
+    // notify the user and return early instead of spawning a second environment.
+    if let Some(existing) = state
+        .running
+        .iter()
+        .find(|c| c.project_name == project_name)
+    {
+        let flower = existing.genus.flower();
+        let title = format!("{flower} {project_name}");
+        let msg = format!("Already running — look for '{title}' in your windows");
+        info!(project = %project_name, "Don't-relaunch guard fired — environment already running");
+        send_notification("Tillandsias", &msg);
+        return Err(format!(
+            "Environment for '{project_name}' is already running as '{title}'"
+        ));
+    }
+
     // Clean up orphaned containers before allocating resources
     cleanup_stale_containers(state).await;
 
@@ -429,9 +506,12 @@ pub async fn handle_attach_here(
     podman_parts.extend(run_args);
     let podman_cmd = podman_parts.join(" ");
 
+    // Build window title: "<flower> <project_name>" — matches the tray menu label.
+    let title = format!("{} {}", genus.flower(), project_name);
+
     // Open a terminal window running the podman command.
     // When the user exits OpenCode, the container dies (--rm), terminal closes.
-    if let Err(e) = open_terminal(&podman_cmd) {
+    if let Err(e) = open_terminal(&podman_cmd, &title) {
         state.running.retain(|c| c.name != container_name);
         allocator.release(&project_name, genus);
         return Err(format!("Failed to open terminal: {e}"));
@@ -591,13 +671,31 @@ pub async fn shutdown_all(state: &TrayState) {
 }
 
 /// Handle "Terminal" — open bash in a forge container for the project.
-pub async fn handle_terminal(project_path: PathBuf, _state: &TrayState) -> Result<(), String> {
+pub async fn handle_terminal(project_path: PathBuf, state: &TrayState) -> Result<(), String> {
     let project_name = project_path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "project".to_string());
 
     info!(project = %project_name, "Opening terminal");
+
+    // Don't-relaunch guard: if a maintenance terminal container is already running
+    // for this project, notify the user and return early.
+    let terminal_container_name = format!("tillandsias-{project_name}-terminal");
+    if let Some(existing) = state
+        .running
+        .iter()
+        .find(|c| c.name == terminal_container_name)
+    {
+        let flower = existing.genus.flower();
+        let title = format!("{flower} {project_name}");
+        let msg = format!("Already running — look for '{title}' in your windows");
+        info!(project = %project_name, "Don't-relaunch guard fired — maintenance terminal already running");
+        send_notification("Tillandsias", &msg);
+        return Err(format!(
+            "Maintenance terminal for '{project_name}' is already running as '{title}'"
+        ));
+    }
 
     let client = PodmanClient::new();
     if !client.image_exists(FORGE_IMAGE_TAG).await {
@@ -615,7 +713,7 @@ pub async fn handle_terminal(project_path: PathBuf, _state: &TrayState) -> Resul
     }
 
     // Allocate port range — check actual podman containers for conflicts
-    let mut existing_ports: Vec<(u16, u16)> = _state.running.iter().map(|c| c.port_range).collect();
+    let mut existing_ports: Vec<(u16, u16)> = state.running.iter().map(|c| c.port_range).collect();
     existing_ports.extend(query_occupied_ports());
     let port_range = allocate_port_range((3000, 3019), &existing_ports);
 
@@ -658,7 +756,17 @@ pub async fn handle_terminal(project_path: PathBuf, _state: &TrayState) -> Resul
         FORGE_IMAGE_TAG,
     );
 
-    open_terminal(&podman_cmd).map_err(|e| format!("Failed to open terminal: {e}"))
+    // Derive flower from an existing running container for this project,
+    // or fall back to the first genus in the pool.
+    let flower = state
+        .running
+        .iter()
+        .find(|c| c.project_name == project_name)
+        .map(|c| c.genus.flower())
+        .unwrap_or_else(|| tillandsias_core::genus::TillandsiaGenus::Aeranthos.flower());
+    let title = format!("{flower} {project_name}");
+
+    open_terminal(&podman_cmd, &title).map_err(|e| format!("Failed to open terminal: {e}"))
 }
 
 /// Handle "GitHub Login" — extract embedded gh-auth-login.sh to temp and run it.
@@ -670,6 +778,6 @@ pub async fn handle_github_login(_state: &TrayState) -> Result<(), String> {
         crate::embedded::write_temp_script("gh-auth-login.sh", crate::embedded::GH_AUTH_LOGIN)
             .map_err(|e| format!("Failed to extract gh-auth-login.sh: {e}"))?;
 
-    open_terminal(&script_path.display().to_string())
+    open_terminal(&script_path.display().to_string(), "GitHub Login")
         .map_err(|e| format!("Failed to open terminal: {e}"))
 }
