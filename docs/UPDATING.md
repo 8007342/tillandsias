@@ -62,6 +62,27 @@ You can always download the latest release directly from
 [GitHub Releases](https://github.com/8007342/tillandsias/releases) and replace
 your existing installation.
 
+## Package Manager Updates (Linux)
+
+If you installed via a package repository, updates arrive through your system
+package manager — not the built-in updater.
+
+### Fedora (COPR)
+
+```bash
+sudo dnf update tillandsias
+```
+
+Or enable `dnf-automatic` for fully unattended updates. The COPR repository is
+updated automatically when a new release is published on GitHub.
+
+### Manual RPM / DEB
+
+If you installed a standalone `.rpm` or `.deb` from GitHub Releases, you must
+download the new package manually from the
+[releases page](https://github.com/8007342/tillandsias/releases) and reinstall.
+Consider switching to the COPR repo for automatic updates.
+
 ## AppImage Users (Linux)
 
 The auto-updater replaces the AppImage file in-place. Make sure the AppImage is

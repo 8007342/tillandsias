@@ -30,8 +30,7 @@ The tray menu SHALL rebuild and display updated content whenever the application
 - **THEN** the corresponding handler is invoked
 
 ### Requirement: Tray icon state management
-> **Status: Future** — Not yet implemented. Menu emojis reflect lifecycle state; tray icon is static.
-The main tray icon SHALL visually reflect the overall system state.
+The main tray icon SHALL visually reflect the overall system state. *(Status: Future — not yet implemented. Menu emojis reflect lifecycle state; tray icon is static.)*
 
 #### Scenario: Idle state icon
 - **WHEN** no projects are detected and no apps are running
@@ -138,13 +137,9 @@ The tray menu SHALL include a Settings submenu that contains configuration, setu
 ### Requirement: GitHub Login delegates to embedded script
 The tray GitHub Login handler SHALL use the binary-embedded `gh-auth-login.sh` content, not a filesystem script.
 
-#### Scenario: Script not found on disk
-- **WHEN** no `gh-auth-login.sh` exists at any filesystem location
-- **THEN** the handler still works by extracting the embedded script to temp
-
-#### Scenario: Tampered script on disk ignored
-- **WHEN** a modified `gh-auth-login.sh` exists at `~/.local/share/tillandsias/`
-- **THEN** the handler ignores it and uses the embedded version
+#### Scenario: User clicks GitHub Login in tray
+- **WHEN** the user clicks GitHub Login in the Settings submenu
+- **THEN** the embedded script is extracted to temp and executed in a new terminal window
 
 ### Requirement: Attach Here lifecycle emoji
 Each "Attach Here" menu item SHALL display a lifecycle emoji prefix reflecting whether a container is running for that project.
@@ -196,4 +191,15 @@ The tray app SHALL detect an in-progress background init and wait for it instead
 #### Scenario: Init completes while tray is waiting
 - **WHEN** the background init finishes and the forge image becomes available
 - **THEN** the tray menu updates normally with project actions enabled
+
+### Requirement: Version and credit display
+The tray menu SHALL display the current version number and author credit as non-clickable items near the bottom of the menu.
+
+#### Scenario: Version shown
+- **WHEN** the tray menu is displayed
+- **THEN** a disabled item reading "Tillandsias v{version}" appears before the Quit item, where {version} is the Cargo package version
+
+#### Scenario: Credit shown
+- **WHEN** the tray menu is displayed
+- **THEN** a disabled item reading "by Tlatoāni" appears between the version line and the Quit item
 

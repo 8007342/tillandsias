@@ -339,6 +339,69 @@ jobs:
             scripts/uninstall.ps1
 
   # ---------------------------------------------------------------------------
+  # Publish APT repository to GitHub Pages
+  # ---------------------------------------------------------------------------
+  publish-apt-repo:
+    name: Publish APT repository
+    needs: sign-and-release
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+
+      - name: Download DEB artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: build-linux-*
+          merge-multiple: true
+          path: incoming
+
+      - name: Setup GPG
+        run: |
+          echo "${{ secrets.REPO_GPG_PRIVATE_KEY }}" | gpg --import --batch
+
+      - name: Update APT repository
+        run: |
+          # Copy new .deb to pool
+          mkdir -p deb/pool
+          cp incoming/*.deb deb/pool/ 2>/dev/null || true
+
+          # Generate Packages file
+          mkdir -p deb/dists/stable/main/binary-amd64
+          cd deb
+          dpkg-scanpackages pool /dev/null > dists/stable/main/binary-amd64/Packages
+          gzip -k -f dists/stable/main/binary-amd64/Packages
+
+          # Generate Release file
+          cd dists/stable
+          apt-ftparchive release . > Release
+
+          # Sign
+          gpg --default-key "Tillandsias Release" -abs -o Release.gpg Release
+          gpg --default-key "Tillandsias Release" --clearsign -o InRelease Release
+
+          cd ../../..
+
+      - name: Read VERSION
+        run: |
+          # VERSION is not on gh-pages, extract from .deb filename
+          VERSION=$(ls incoming/*.deb 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+' || echo "unknown")
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "Update APT repository for v${{ env.VERSION }}"
+          git push
+
+  # ---------------------------------------------------------------------------
   # Update rolling tags (stable + latest)
   # ---------------------------------------------------------------------------
   rolling-tags:

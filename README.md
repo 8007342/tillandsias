@@ -19,6 +19,19 @@ curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/insta
 <details>
 <summary>Other ways to install</summary>
 
+**Debian/Ubuntu (APT repository — auto-updates):**
+```bash
+curl -fsSL https://8007342.github.io/tillandsias/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/tillandsias.gpg
+echo "deb [signed-by=/usr/share/keyrings/tillandsias.gpg] https://8007342.github.io/tillandsias/deb stable main" | sudo tee /etc/apt/sources.list.d/tillandsias.list
+sudo apt update && sudo apt install tillandsias
+```
+
+**Fedora (COPR — auto-updates):**
+```bash
+sudo dnf copr enable 8007342/tillandsias
+sudo dnf install tillandsias
+```
+
 | Format | Download |
 |--------|----------|
 | AppImage (portable) | [Tillandsias-linux-x86_64.AppImage](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-linux-x86_64.AppImage) |

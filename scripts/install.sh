@@ -65,44 +65,71 @@ if [ "$PLATFORM" = "linux" ]; then
 
     # Try native package install
     if [ "$PKG_TYPE" = "deb" ]; then
-        DEB_URL=$(find_asset "_amd64\\.deb")
-        if [ -n "$DEB_URL" ]; then
-            echo "  Downloading .deb package..."
-            if curl -fsSL -o /tmp/tillandsias.deb "$DEB_URL"; then
-                echo "  Installing .deb package..."
-                sudo dpkg -i /tmp/tillandsias.deb 2>/dev/null && INSTALLED=true
-                rm -f /tmp/tillandsias.deb
-                if [ "$INSTALLED" = true ]; then
-                    echo "  ✓ Installed via dpkg"
+        # Configure APT repository for auto-updates
+        echo "  Configuring APT repository..."
+        if curl -fsSL https://8007342.github.io/tillandsias/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/tillandsias.gpg 2>/dev/null; then
+            echo "deb [signed-by=/usr/share/keyrings/tillandsias.gpg] https://8007342.github.io/tillandsias/deb stable main" | sudo tee /etc/apt/sources.list.d/tillandsias.list > /dev/null
+            sudo apt update -qq 2>/dev/null
+            sudo apt install -y tillandsias 2>/dev/null && INSTALLED=true
+            if [ "$INSTALLED" = true ]; then
+                echo "  ✓ Installed via APT (auto-updates enabled)"
+            fi
+        fi
+        # Fallback: download .deb directly
+        if [ "$INSTALLED" = false ]; then
+            DEB_URL=$(find_asset "_amd64\\.deb")
+            if [ -n "$DEB_URL" ]; then
+                echo "  Downloading .deb package..."
+                if curl -fsSL -o /tmp/tillandsias.deb "$DEB_URL"; then
+                    echo "  Installing .deb package..."
+                    sudo dpkg -i /tmp/tillandsias.deb 2>/dev/null && INSTALLED=true
+                    rm -f /tmp/tillandsias.deb
+                    if [ "$INSTALLED" = true ]; then
+                        echo "  ✓ Installed via dpkg"
+                    fi
                 fi
             fi
         fi
     elif [ "$PKG_TYPE" = "rpm" ]; then
-        RPM_URL=$(find_asset "_x86_64\\.rpm")
-        if [ -n "$RPM_URL" ]; then
-            echo "  Downloading .rpm package..."
-            if curl -fsSL -o /tmp/tillandsias.rpm "$RPM_URL"; then
-                # Try rpm-ostree first (immutable OS like Silverblue)
-                if command -v rpm-ostree &>/dev/null; then
-                    echo "  Installing via rpm-ostree (immutable OS)..."
-                    rpm-ostree install /tmp/tillandsias.rpm 2>/dev/null && INSTALLED=true
-                    if [ "$INSTALLED" = true ]; then
-                        echo "  ✓ Installed via rpm-ostree (reboot to apply)"
-                    fi
+        # Try COPR first (enables automatic updates via dnf)
+        if command -v dnf &>/dev/null && ! command -v rpm-ostree &>/dev/null; then
+            echo "  Configuring COPR repository..."
+            if sudo dnf copr enable -y 8007342/tillandsias 2>/dev/null; then
+                if sudo dnf install -y tillandsias 2>/dev/null; then
+                    INSTALLED=true
+                    echo "  ✓ Installed via COPR (auto-updates enabled)"
                 fi
-                # Fallback to regular rpm/dnf
-                if [ "$INSTALLED" = false ]; then
-                    echo "  Installing .rpm package..."
-                    if command -v dnf &>/dev/null; then
-                        sudo dnf install -y /tmp/tillandsias.rpm 2>/dev/null && INSTALLED=true
-                    else
-                        sudo rpm -i /tmp/tillandsias.rpm 2>/dev/null && INSTALLED=true
+            fi
+        fi
+
+        # Fallback: download RPM directly from GitHub Releases
+        if [ "$INSTALLED" = false ]; then
+            RPM_URL=$(find_asset "_x86_64\\.rpm")
+            if [ -n "$RPM_URL" ]; then
+                echo "  Downloading .rpm package..."
+                if curl -fsSL -o /tmp/tillandsias.rpm "$RPM_URL"; then
+                    # Try rpm-ostree first (immutable OS like Silverblue)
+                    if command -v rpm-ostree &>/dev/null; then
+                        echo "  Installing via rpm-ostree (immutable OS)..."
+                        rpm-ostree install /tmp/tillandsias.rpm 2>/dev/null && INSTALLED=true
+                        if [ "$INSTALLED" = true ]; then
+                            echo "  ✓ Installed via rpm-ostree (reboot to apply)"
+                        fi
                     fi
-                    if [ "$INSTALLED" = true ]; then
-                        echo "  ✓ Installed via rpm"
+                    # Fallback to regular rpm/dnf
+                    if [ "$INSTALLED" = false ]; then
+                        echo "  Installing .rpm package..."
+                        if command -v dnf &>/dev/null; then
+                            sudo dnf install -y /tmp/tillandsias.rpm 2>/dev/null && INSTALLED=true
+                        else
+                            sudo rpm -i /tmp/tillandsias.rpm 2>/dev/null && INSTALLED=true
+                        fi
+                        if [ "$INSTALLED" = true ]; then
+                            echo "  ✓ Installed via rpm"
+                        fi
                     fi
+                    rm -f /tmp/tillandsias.rpm
                 fi
-                rm -f /tmp/tillandsias.rpm
             fi
         fi
     fi
