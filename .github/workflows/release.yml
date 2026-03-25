@@ -298,6 +298,10 @@ jobs:
             For detailed instructions, see [docs/VERIFICATION.md](https://github.com/${{ github.repository }}/blob/main/docs/VERIFICATION.md).
           files: |
             release-artifacts/*
+            scripts/install.sh
+            scripts/uninstall.sh
+            scripts/install.ps1
+            scripts/uninstall.ps1
 
   # ---------------------------------------------------------------------------
   # Update rolling tags (stable + latest)
