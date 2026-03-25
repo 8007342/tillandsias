@@ -53,15 +53,6 @@ for dir in "$HOME/src"/*/; do
 done
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
 
-# ── Deploy OpenCode skills ───────────────────────────────────
-# Skills are bundled into the image at /usr/local/share/tillandsias/opencode/.
-# ~/src/ is a volume mount so build-time files are hidden — copy at runtime.
-SKILLS_SRC="/usr/local/share/tillandsias/opencode"
-if [ -d "$SKILLS_SRC" ] && [ -n "$PROJECT_DIR" ]; then
-    mkdir -p "$PROJECT_DIR/.opencode"
-    cp -r "$SKILLS_SRC"/* "$PROJECT_DIR/.opencode/" 2>/dev/null || true
-fi
-
 # ── Banner ────────────────────────────────────────────────────
 echo ""
 echo "========================================"

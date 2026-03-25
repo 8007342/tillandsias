@@ -37,11 +37,6 @@ pub const FORGE_WELCOME: &str = include_str!("../../images/default/forge-welcome
 pub const FORGE_CONTAINERFILE: &str = include_str!("../../images/default/Containerfile");
 pub const FORGE_OPENCODE_JSON: &str = include_str!("../../images/default/opencode.json");
 
-// Skills
-pub const SKILL_BASH: &str = include_str!("../../images/default/skills/command/bash.md");
-pub const SKILL_BASH_PRIVATE: &str =
-    include_str!("../../images/default/skills/command/bash-private.md");
-
 // Shell configs
 pub const SHELL_BASHRC: &str = include_str!("../../images/default/shell/bashrc");
 pub const SHELL_FISH_CONFIG: &str = include_str!("../../images/default/shell/config.fish");
@@ -164,13 +159,6 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         fs::Permissions::from_mode(0o755),
     )
     .ok();
-
-    // Skills
-    let skills_dir = default_dir.join("skills").join("command");
-    fs::create_dir_all(&skills_dir).map_err(|e| format!("skills dir: {e}"))?;
-    fs::write(skills_dir.join("bash.md"), SKILL_BASH).map_err(|e| format!("bash.md: {e}"))?;
-    fs::write(skills_dir.join("bash-private.md"), SKILL_BASH_PRIVATE)
-        .map_err(|e| format!("bash-private.md: {e}"))?;
 
     // Shell configs
     let shell_dir = default_dir.join("shell");

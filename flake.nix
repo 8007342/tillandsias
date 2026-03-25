@@ -14,7 +14,6 @@
         # Local files — changing these triggers rebuild
         forgeEntrypoint = ./images/default/entrypoint.sh;
         forgeOpencode = ./images/default/opencode.json;
-        forgeSkills = ./images/default/skills;
         forgeShellConfigs = ./images/default/shell;
         forgeWelcome = ./images/default/forge-welcome.sh;
         webEntrypoint = ./images/web/entrypoint.sh;
@@ -92,10 +91,6 @@
 
               # Copy opencode config
               cp ${forgeOpencode} ./home/forge/.config/opencode/config.json
-
-              # Copy skills — entrypoint deploys these to ~/src/.opencode/ at runtime
-              mkdir -p ./usr/local/share/tillandsias/opencode
-              cp -r ${forgeSkills}/* ./usr/local/share/tillandsias/opencode/
 
               # Shell configs — entrypoint deploys these from /etc/skel/ to $HOME
               mkdir -p ./etc/skel/.config/fish
