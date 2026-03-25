@@ -335,8 +335,12 @@ jobs:
       - name: Download all release artifacts
         uses: actions/download-artifact@v4
 
+      - name: Read VERSION
+        run: echo "VERSION=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_ENV"
+
       - name: Upload latest.json to Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ env.VERSION }}
           files: |
             **/latest.json
