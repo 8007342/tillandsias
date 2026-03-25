@@ -48,6 +48,8 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
     let status = std::process::Command::new(&script)
         .arg(image_name)
         .current_dir(&source_dir)
+        .env_remove("LD_LIBRARY_PATH")
+        .env_remove("LD_PRELOAD")
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())

@@ -87,6 +87,8 @@ fn build_forge_image() -> Result<(), String> {
     let status = std::process::Command::new(&script)
         .arg("forge")
         .current_dir(&source_dir)
+        .env_remove("LD_LIBRARY_PATH")
+        .env_remove("LD_PRELOAD")
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())

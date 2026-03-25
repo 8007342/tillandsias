@@ -68,6 +68,8 @@ fn open_terminal(command: &str) -> Result<(), String> {
         for (term, args) in terminals {
             if std::process::Command::new("which")
                 .arg(term)
+                .env_remove("LD_LIBRARY_PATH")
+                .env_remove("LD_PRELOAD")
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .status()
@@ -145,6 +147,10 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
     let output = std::process::Command::new(&script)
         .arg(image_name)
         .current_dir(&source_dir)
+        // Clear AppImage library paths so toolbox, nix, and other host
+        // binaries called by build-image.sh use host libraries.
+        .env_remove("LD_LIBRARY_PATH")
+        .env_remove("LD_PRELOAD")
         .output()
         .map_err(|e| format!("Failed to run build-image.sh: {e}"))?;
 
