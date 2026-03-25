@@ -171,27 +171,33 @@ fn build_run_args(
     args.push("-v".to_string());
     args.push(cache_mount);
 
-    // Secrets directory — git config, gh auth, ssh keys
+    // Secrets directory — git config, gh auth
     let secrets_dir = cache.join("secrets");
     std::fs::create_dir_all(secrets_dir.join("gh")).ok();
-    std::fs::create_dir_all(secrets_dir.join("git")).ok();
-    let gitconfig_path = secrets_dir.join("git").join(".gitconfig");
+    let git_dir = secrets_dir.join("git");
+    std::fs::create_dir_all(&git_dir).ok();
+    let gitconfig_path = git_dir.join(".gitconfig");
     if !gitconfig_path.exists() {
         std::fs::File::create(&gitconfig_path).ok();
     }
 
-    // GitHub CLI credentials
+    // GitHub CLI credentials (read-only — containers shouldn't modify auth state)
     let gh_mount = format!(
-        "{}:/home/forge/.config/gh",
+        "{}:/home/forge/.config/gh:ro",
         secrets_dir.join("gh").display()
     );
     args.push("-v".to_string());
     args.push(gh_mount);
 
-    // Git config
-    let git_mount = format!("{}:/home/forge/.gitconfig", gitconfig_path.display());
+    // Git config — mount directory read-only, point git via GIT_CONFIG_GLOBAL
+    let git_mount = format!(
+        "{}:/home/forge/.config/tillandsias-git:ro",
+        git_dir.display()
+    );
     args.push("-v".to_string());
     args.push(git_mount);
+    args.push("-e".to_string());
+    args.push("GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig".to_string());
 
     // Custom mounts from project config
     let project_config = load_project_config(project_path);

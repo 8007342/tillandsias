@@ -56,11 +56,11 @@ Each environment SHALL be allocated a configurable port range mapped from the co
 
 #### Scenario: Default port range
 - **WHEN** an environment is launched with default configuration
-- **THEN** ports 3000-3099 are mapped from the container to the host
+- **THEN** ports 3000-3019 are mapped from the container to the host
 
 #### Scenario: Multiple concurrent environments
 - **WHEN** two environments are running with default port ranges
-- **THEN** the second environment receives a non-overlapping port range (e.g., 3100-3199) to avoid conflicts
+- **THEN** the second environment receives a non-overlapping port range (e.g., 3020-3039) to avoid conflicts
 
 #### Scenario: Custom port range
 - **WHEN** a per-project config specifies `port_range = "8080-8089"`

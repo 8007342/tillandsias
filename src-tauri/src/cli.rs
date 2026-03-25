@@ -21,7 +21,7 @@ pub enum CliMode {
         image: String,
         /// Show verbose debug output.
         debug: bool,
-        /// Drop into bash shell instead of default entrypoint (troubleshooting).
+        /// Drop into fish shell instead of default entrypoint (troubleshooting).
         bash: bool,
     },
 }
@@ -40,7 +40,7 @@ OPTIONS:
     --image <name>    Container image to use (default: forge)
                       Maps to tillandsias-<name>:latest
     --debug           Show verbose output including podman commands
-    --bash            Drop into bash shell instead of default entrypoint
+    --bash            Drop into fish shell instead of default entrypoint
 ";
 
 /// Parse CLI arguments and return the appropriate mode.

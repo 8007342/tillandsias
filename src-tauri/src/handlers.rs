@@ -222,6 +222,13 @@ fn build_run_args(
     args.push("--init".to_string());
     args.push("--stop-timeout=10".to_string());
 
+    // GPU passthrough (Linux only)
+    if cfg!(target_os = "linux") {
+        for flag in tillandsias_podman::detect_gpu_devices() {
+            args.push(flag);
+        }
+    }
+
     // Port range mapping
     let port_mapping = format!(
         "{}-{}:{}-{}",

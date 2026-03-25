@@ -160,12 +160,12 @@ Each "Attach Here" menu item SHALL display a lifecycle emoji prefix reflecting w
 - **WHEN** a running container for a project stops or is destroyed
 - **THEN** the menu is rebuilt and the "Attach Here" item reverts to the 🌱 prefix
 
-### Requirement: GitHub Login delegates to script
-The tray GitHub Login handler SHALL open a terminal running `gh-auth-login.sh` instead of an inline bash script.
+### Requirement: GitHub Login delegates to embedded script
+The tray GitHub Login handler SHALL use the binary-embedded `gh-auth-login.sh` content, not a filesystem script.
 
 #### Scenario: User clicks GitHub Login in tray
 - **WHEN** the user clicks GitHub Login in the Settings submenu
-- **THEN** a terminal opens running `gh-auth-login.sh` from the installed data directory
+- **THEN** the embedded script is extracted to temp and executed in a new terminal window
 
 ### Requirement: Single tray icon guarantee
 The system SHALL guarantee that at most one tray icon exists per user session, regardless of how many times the application is launched.
