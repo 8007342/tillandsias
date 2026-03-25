@@ -96,6 +96,10 @@ fn open_terminal(command: &str) -> Result<(), String> {
                 .is_ok_and(|s| s.success())
             {
                 let mut cmd = std::process::Command::new(term);
+                // Clear AppImage library paths so host binaries (ptyxis, etc.)
+                // use the host's libraries, not the AppImage's bundled ones.
+                cmd.env_remove("LD_LIBRARY_PATH");
+                cmd.env_remove("LD_PRELOAD");
                 for arg in *args {
                     cmd.arg(arg);
                 }
