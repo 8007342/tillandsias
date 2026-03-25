@@ -424,7 +424,10 @@ pub async fn handle_attach_here(
         false, // interactive (-it), NOT detached
     );
 
-    let mut podman_parts = vec!["podman".to_string(), "run".to_string()];
+    let mut podman_parts = vec![
+        tillandsias_podman::find_podman_path().to_string(),
+        "run".to_string(),
+    ];
     podman_parts.extend(run_args);
     let podman_cmd = podman_parts.join(" ");
 
@@ -622,8 +625,9 @@ pub async fn handle_terminal(project_path: PathBuf, _state: &TrayState) -> Resul
 
     let git_dir = secrets_dir.join("git");
     let host_os = detect_host_os();
+    let podman_bin = tillandsias_podman::find_podman_path();
     let podman_cmd = format!(
-        "podman run -it --rm --init --stop-timeout=10 \
+        "{podman_bin} run -it --rm --init --stop-timeout=10 \
         --name {} \
         --security-opt=label=disable \
         --userns=keep-id \

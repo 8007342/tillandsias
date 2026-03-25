@@ -17,6 +17,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FORGE_IMAGE="tillandsias-forge:latest"
+
+# Find podman — AppImages may not have /usr/bin in PATH
+PODMAN="podman"
+for p in /usr/bin/podman /usr/local/bin/podman /bin/podman; do
+    [ -x "$p" ] && PODMAN="$p" && break
+done
 CACHE_DIR="${HOME}/.cache/tillandsias"
 SECRETS_DIR="${CACHE_DIR}/secrets"
 GH_DIR="${SECRETS_DIR}/gh"
@@ -118,7 +124,7 @@ esac
 # ---------------------------------------------------------------------------
 # Check forge image
 # ---------------------------------------------------------------------------
-if ! podman image exists "$FORGE_IMAGE" 2>/dev/null; then
+if ! $PODMAN image exists "$FORGE_IMAGE" 2>/dev/null; then
     _warn "Forge image not found: $FORGE_IMAGE"
     echo ""
     if [[ -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
@@ -157,7 +163,7 @@ if ! podman image exists "$FORGE_IMAGE" 2>/dev/null; then
     fi
 
     # Verify image now exists
-    if ! podman image exists "$FORGE_IMAGE" 2>/dev/null; then
+    if ! $PODMAN image exists "$FORGE_IMAGE" 2>/dev/null; then
         _error "Image still not available after build."
         exit 1
     fi
@@ -217,7 +223,7 @@ echo ""
 # Run gh auth login as the direct entrypoint — NOT via bash -c "..."
 # Using bash -c breaks TTY passthrough and gh auth login hangs.
 # --entrypoint "" clears the image default, then the command IS the entrypoint.
-podman run -it --rm \
+$PODMAN run -it --rm \
     --name tillandsias-gh-login \
     --cap-drop=ALL \
     --security-opt=no-new-privileges \
@@ -231,7 +237,7 @@ podman run -it --rm \
     gh auth login --git-protocol https
 
 # Run setup-git in a separate non-interactive container
-podman run --rm \
+$PODMAN run --rm \
     --cap-drop=ALL \
     --security-opt=no-new-privileges \
     --userns=keep-id \

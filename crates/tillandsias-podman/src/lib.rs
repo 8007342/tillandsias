@@ -9,16 +9,31 @@ pub use gpu::detect_gpu_devices;
 pub use launch::ContainerLauncher;
 pub use launch::query_occupied_ports;
 
+/// Find the podman binary path.
+///
+/// AppImages and some sandboxed environments may not have `/usr/bin` in PATH.
+/// We check common locations before falling back to bare `podman` (PATH lookup).
+pub fn find_podman_path() -> &'static str {
+    // Check standard locations first — avoids PATH issues in AppImage/Flatpak
+    static PATHS: &[&str] = &["/usr/bin/podman", "/usr/local/bin/podman", "/bin/podman"];
+
+    for path in PATHS {
+        if std::path::Path::new(path).exists() {
+            return path;
+        }
+    }
+
+    // Fallback to PATH lookup
+    "podman"
+}
+
 /// Create a `tokio::process::Command` for podman with a clean library environment.
 ///
-/// AppImages bundle their own libraries and set `LD_LIBRARY_PATH` which leaks
-/// into child processes. Podman (a host binary) then loads the AppImage's
-/// older `libseccomp` instead of the host's, causing symbol errors like
-/// `undefined symbol: seccomp_export_bpf_mem`.
-///
-/// This helper removes `LD_LIBRARY_PATH` so podman uses the host's libraries.
+/// - Resolves podman by absolute path (AppImages may not have /usr/bin in PATH)
+/// - Removes `LD_LIBRARY_PATH` and `LD_PRELOAD` (AppImage bundled libs conflict
+///   with host libraries, causing `undefined symbol: seccomp_export_bpf_mem`)
 pub fn podman_cmd() -> tokio::process::Command {
-    let mut cmd = tokio::process::Command::new("podman");
+    let mut cmd = tokio::process::Command::new(find_podman_path());
     cmd.env_remove("LD_LIBRARY_PATH");
     cmd.env_remove("LD_PRELOAD");
     cmd
@@ -26,7 +41,7 @@ pub fn podman_cmd() -> tokio::process::Command {
 
 /// Same as [`podman_cmd`] but returns a `std::process::Command` for synchronous use.
 pub fn podman_cmd_sync() -> std::process::Command {
-    let mut cmd = std::process::Command::new("podman");
+    let mut cmd = std::process::Command::new(find_podman_path());
     cmd.env_remove("LD_LIBRARY_PATH");
     cmd.env_remove("LD_PRELOAD");
     cmd
