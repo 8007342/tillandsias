@@ -53,6 +53,11 @@ for dir in "$HOME/src"/*/; do
 done
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
 
+# ── OpenSpec init (first launch only) ────────────────────────
+if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ] && [ ! -d "$PROJECT_DIR/openspec" ]; then
+    "$OS_BIN" init --tools opencode && echo "  ✓ OpenSpec initialized" || echo "  ⚠ OpenSpec init skipped"
+fi
+
 # ── Banner ────────────────────────────────────────────────────
 echo ""
 echo "========================================"
