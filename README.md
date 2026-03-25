@@ -6,52 +6,61 @@ A tray app that makes software appear — safely, locally, reproducibly.
 
 ## Install
 
-### Linux
+<!-- GitHub doesn't support JS-based tab switching in markdown.
+     We use <details> to show the user's likely OS expanded, others collapsed. -->
+
+<details open>
+<summary><strong>Linux</strong></summary>
+
 ```bash
 curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
 ```
 
-### macOS
+<details>
+<summary>Other ways to install</summary>
+
+| Format | Download |
+|--------|----------|
+| AppImage (portable) | [Tillandsias_amd64.AppImage](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias_0.1.35_amd64.AppImage) |
+
+</details>
+</details>
+
+<details>
+<summary><strong>macOS</strong></summary>
+
 ```bash
 curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
 ```
 
-### Windows
+<details>
+<summary>Other ways to install</summary>
+
+| Format | Download |
+|--------|----------|
+| Disk Image — Apple Silicon | [Tillandsias_aarch64.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias_0.1.35_aarch64.dmg) |
+| Disk Image — Intel | [Tillandsias_x64.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias_0.1.35_x64.dmg) |
+| App Bundle (.app) | [Tillandsias.app.tar.gz](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias.app.tar.gz) |
+
+</details>
+</details>
+
+<details>
+<summary><strong>Windows</strong></summary>
+
 ```powershell
 irm https://github.com/8007342/tillandsias/releases/latest/download/install.ps1 | iex
 ```
 
 <details>
-<summary><strong>Other Binaries</strong> (direct download)</summary>
+<summary>Other ways to install</summary>
 
-All binaries are signed with [Sigstore Cosign](https://docs.sigstore.dev/) and include SHA256 checksums.
-
-#### Linux
 | Format | Download |
 |--------|----------|
-| AppImage (portable) | [Tillandsias.AppImage](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias.AppImage) |
-| Debian (.deb) | [Tillandsias_amd64.deb](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias_amd64.deb) |
+| Installer (.exe) | [Tillandsias_x64-setup.exe](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias_0.1.35_x64-setup.exe) |
+| MSI Installer | [Tillandsias_x64.msi](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias_0.1.35_x64_en-US.msi) |
 
-#### macOS
-| Format | Download |
-|--------|----------|
-| Disk Image (.dmg) — Apple Silicon | [Tillandsias_aarch64.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias_aarch64.dmg) |
-| Disk Image (.dmg) — Intel | [Tillandsias_x64.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias_x64.dmg) |
-| App Bundle (.app.tar.gz) — Apple Silicon | [Tillandsias.app.tar.gz](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias_aarch64.app.tar.gz) |
-
-#### Windows
-| Format | Download |
-|--------|----------|
-| Installer (.exe) | [Tillandsias.exe](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias.exe) |
-| MSI Installer | [Tillandsias.msi](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias.msi) |
-
-#### Checksums & Signatures
-| File | Download |
-|------|----------|
-| SHA256 checksums | [SHA256SUMS](https://github.com/8007342/tillandsias/releases/latest/download/SHA256SUMS) |
-
-See [docs/VERIFICATION.md](docs/VERIFICATION.md) for signature verification instructions.
-
+</details>
 </details>
 
 ## Run
@@ -68,7 +77,8 @@ That's it. A tray icon appears. Right-click → pick a project → Attach Here.
 tillandsias-uninstall
 ```
 
-### Uninstall + Wipe Everything
+<details>
+<summary>Uninstall + wipe everything</summary>
 
 ```bash
 tillandsias-uninstall --wipe
@@ -76,12 +86,23 @@ tillandsias-uninstall --wipe
 
 Removes the binary, caches, container images, and all Tillandsias data.
 
+</details>
+
 ## Requirements
 
 - [Podman](https://podman.io) (rootless) — the only dependency
   - Linux: `sudo dnf install podman` / `sudo apt install podman`
   - macOS: `brew install podman && podman machine init && podman machine start`
   - Windows: [Podman Desktop](https://podman-desktop.io)
+
+## All Downloads
+
+See the [latest release](https://github.com/8007342/tillandsias/releases/latest) for all platform binaries, checksums, and Cosign signatures.
+
+| File | Description |
+|------|-------------|
+| [SHA256SUMS](https://github.com/8007342/tillandsias/releases/latest/download/SHA256SUMS) | Checksums for all artifacts |
+| [VERIFICATION.md](docs/VERIFICATION.md) | Signature verification instructions |
 
 ## Learn More
 
