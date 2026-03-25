@@ -157,9 +157,6 @@ build_appimage() {
     _warn "Subsequent builds reuse the cargo registry cache (~2-5 minutes)"
 
     podman run --rm \
-        --device /dev/fuse \
-        --cap-add SYS_ADMIN \
-        --security-opt apparmor:unconfined \
         -v "$SCRIPT_DIR:/src:ro,Z" \
         -v "$cargo_cache_dir:/root/.cargo/registry:rw,Z" \
         -v "$output_dir:/output:rw,Z" \
@@ -198,6 +195,9 @@ cp -r /src /build
 cd /build
 
 echo "[appimage] Running cargo tauri build (AppImage target)..."
+# APPIMAGE_EXTRACT_AND_RUN lets linuxdeploy (itself an AppImage) extract
+# to a temp dir instead of requiring FUSE mount — critical for containers.
+export APPIMAGE_EXTRACT_AND_RUN=1
 cargo tauri build --bundles appimage 2>&1
 
 echo "[appimage] Locating AppImage artifact..."
