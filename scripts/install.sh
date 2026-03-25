@@ -55,6 +55,15 @@ find_asset() {
 if [ "$PLATFORM" = "linux" ]; then
     INSTALLED=false
 
+    # Detect immutable/ostree OS (Silverblue, Kinoite, uBlue, etc.)
+    # Must happen BEFORE HAS_SUDO check — immutable routing is unconditional.
+    IS_IMMUTABLE=false
+    if [ -e /run/ostree-booted ] || command -v rpm-ostree &>/dev/null; then
+        IS_IMMUTABLE=true
+        echo "  Immutable OS detected (Silverblue/Kinoite/uBlue) — installing to userspace"
+        echo ""
+    fi
+
     # Detect package manager
     if command -v dpkg &>/dev/null; then
         PKG_TYPE="deb"
@@ -71,8 +80,8 @@ if [ "$PLATFORM" = "linux" ]; then
         HAS_SUDO=true
     fi
 
-    # Try native package install (only if we can use sudo)
-    if [ "$PKG_TYPE" = "deb" ] && [ "$HAS_SUDO" = true ]; then
+    # Try native package install (only if we can use sudo AND not on immutable OS)
+    if [ "$PKG_TYPE" = "deb" ] && [ "$HAS_SUDO" = true ] && [ "$IS_IMMUTABLE" = false ]; then
         # Configure APT repository for auto-updates
         echo "  Configuring APT repository..."
         if curl -fsSL https://8007342.github.io/tillandsias/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/tillandsias.gpg 2>/dev/null; then
@@ -98,7 +107,7 @@ if [ "$PLATFORM" = "linux" ]; then
                 fi
             fi
         fi
-    elif [ "$PKG_TYPE" = "rpm" ] && [ "$HAS_SUDO" = true ]; then
+    elif [ "$PKG_TYPE" = "rpm" ] && [ "$HAS_SUDO" = true ] && [ "$IS_IMMUTABLE" = false ]; then
         # Try COPR first (enables automatic updates via dnf)
         if command -v dnf &>/dev/null && ! command -v rpm-ostree &>/dev/null; then
             echo "  Configuring COPR repository..."
@@ -142,9 +151,13 @@ if [ "$PLATFORM" = "linux" ]; then
         fi
     fi
 
-    # Fallback: AppImage (works everywhere, no root needed)
+    # AppImage: primary path on immutable OS, fallback elsewhere
     if [ "$INSTALLED" = false ]; then
-        echo "  Falling back to AppImage (no root required)..."
+        if [ "$IS_IMMUTABLE" = true ]; then
+            echo "  Installing AppImage to ~/.local/bin/ (no reboot needed)..."
+        else
+            echo "  Falling back to AppImage (no root required)..."
+        fi
         APPIMAGE_URL=$(find_asset "linux-x86_64\\.AppImage")
         if [ -z "$APPIMAGE_URL" ]; then
             # Try old versioned name as fallback
