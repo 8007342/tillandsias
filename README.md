@@ -32,6 +32,17 @@ sudo dnf copr enable 8007342/tillandsias
 sudo dnf install tillandsias
 ```
 
+**Fedora Silverblue (COPR — auto-updates):**
+```bash
+# Add the COPR repo (dnf copr plugin is not available on the immutable host)
+sudo curl -fsSL "https://copr.fedorainfracloud.org/coprs/8007342/tillandsias/repo/fedora-$(rpm -E %fedora)/8007342-tillandsias-fedora-$(rpm -E %fedora).repo" \
+  -o /etc/yum.repos.d/8007342-tillandsias.repo
+# Layer the RPM
+rpm-ostree install tillandsias
+# Reboot to apply
+systemctl reboot
+```
+
 | Format | Download |
 |--------|----------|
 | AppImage (portable) | [Tillandsias-linux-x86_64.AppImage](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-linux-x86_64.AppImage) |

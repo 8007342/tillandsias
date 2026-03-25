@@ -76,6 +76,19 @@ sudo dnf update tillandsias
 Or enable `dnf-automatic` for fully unattended updates. The COPR repository is
 updated automatically when a new release is published on GitHub.
 
+### Fedora Silverblue (COPR)
+
+On Silverblue, the layered RPM updates automatically with system updates:
+
+```bash
+rpm-ostree upgrade
+systemctl reboot
+```
+
+If you have automatic system updates enabled (via `rpm-ostreed-automatic.timer`
+or GNOME Software), Tillandsias updates are applied alongside OS updates with
+no manual steps. The COPR repo is checked on every `rpm-ostree upgrade`.
+
 ### Manual RPM / DEB
 
 If you installed a standalone `.rpm` or `.deb` from GitHub Releases, you must
