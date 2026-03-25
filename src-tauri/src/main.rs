@@ -20,7 +20,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
 use tillandsias_core::config::load_global_config;
-use tillandsias_core::event::MenuCommand;
+use tillandsias_core::event::{BuildProgressEvent, MenuCommand};
 use tillandsias_core::genus::TrayIconState;
 use tillandsias_core::icons;
 use tillandsias_core::state::{ContainerInfo, Os, PlatformInfo, TrayState};
@@ -94,6 +94,9 @@ fn main() {
     // Channel for menu commands → event loop
     let (menu_tx, menu_rx) = mpsc::channel::<MenuCommand>(64);
     let (shutdown_tx, _shutdown_rx) = mpsc::channel::<()>(1);
+
+    // Channel for build progress events (handlers → event loop)
+    let (build_tx, build_rx) = mpsc::channel::<BuildProgressEvent>(64);
 
     let state_for_setup = state.clone();
 
@@ -267,13 +270,14 @@ fn main() {
                             s.cloning_project.clone_from(&new_state.cloning_project);
                             s.remote_repos_error
                                 .clone_from(&new_state.remote_repos_error);
+                            s.active_builds.clone_from(&new_state.active_builds);
                         }
 
                         // Rebuild tray menu
                         rebuild_menu(&app_for_rebuild, &state_for_rebuild);
                     });
 
-                event_loop::run(loop_state, scanner_rx, podman_rx, menu_rx, on_state_change).await;
+                event_loop::run(loop_state, scanner_rx, podman_rx, menu_rx, build_rx, build_tx, on_state_change).await;
             });
 
             Ok(())

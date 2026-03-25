@@ -10,7 +10,7 @@ use tauri::{AppHandle, Runtime};
 use tracing::debug;
 
 use tillandsias_core::config::load_global_config;
-use tillandsias_core::state::TrayState;
+use tillandsias_core::state::{BuildStatus, TrayState};
 
 /// Generation counter for menu rebuilds.
 ///
@@ -162,6 +162,26 @@ pub fn build_tray_menu<R: Runtime>(
         menu = menu.item(&running_sub.build()?);
     }
 
+    // Section: Active / recently completed build chips
+    //
+    // Disabled informational items — only shown when there are active builds.
+    // Placement: between running environments and Settings so they're visible
+    // without scrolling but don't interfere with project actions.
+    if !state.active_builds.is_empty() {
+        menu = menu.separator();
+        for build in &state.active_builds {
+            let label = build_chip_label(build);
+            menu = menu.item(
+                &MenuItemBuilder::with_id(
+                    ids::static_id(&format!("build-chip-{}", build.image_name)),
+                    &label,
+                )
+                .enabled(false)
+                .build(app)?,
+            );
+        }
+    }
+
     // Separator
     menu = menu.separator();
 
@@ -190,6 +210,7 @@ pub fn build_tray_menu<R: Runtime>(
         projects = state.projects.len(),
         running = state.running.len(),
         remote_repos = state.remote_repos.len(),
+        active_builds = state.active_builds.len(),
         "Menu rebuilt"
     );
 
@@ -347,28 +368,28 @@ fn build_project_submenu<R: Runtime>(
     submenu = submenu
         .item(&MenuItemBuilder::with_id(ids::attach_here(&project.path), &attach_label).build(app)?);
 
-    // Derive flower for the Ground/Maintenance terminal item.
-    // Use the assigned genus if available, otherwise plain label.
+    // Derive flower for the Maintenance terminal item.
+    // When running: show flower matching the terminal window title.
+    // When idle: show wrench icon.
     let terminal_container_name = format!("tillandsias-{}-terminal", project.name);
     let maintenance_running = state
         .running
         .iter()
         .any(|c| c.name == terminal_container_name);
-    let ground_label = if maintenance_running {
-        // Use the flower from an existing running container for this project
+    let maintenance_label = if maintenance_running {
         let flower = state
             .running
             .iter()
             .find(|c| c.project_name == project.name)
             .map(|c| c.genus.flower())
             .unwrap_or_else(|| tillandsias_core::genus::TillandsiaGenus::Aeranthos.flower());
-        format!("{flower} Ground")
+        format!("{flower} Maintenance")
     } else {
-        "\u{1F331} Ground".to_string() // 🌱 seedling — idle
+        "\u{1F527} Maintenance".to_string() // 🔧 wrench — idle
     };
-    // "Ground" — opens bash in a forge container
+    // "Maintenance" — opens bash in a forge container
     submenu = submenu.item(
-        &MenuItemBuilder::with_id(ids::terminal(&project.path), &ground_label).build(app)?,
+        &MenuItemBuilder::with_id(ids::terminal(&project.path), &maintenance_label).build(app)?
     );
 
     // Per-project running environments
@@ -416,6 +437,26 @@ fn lifecycle_label(lifecycle: tillandsias_core::genus::PlantLifecycle) -> &'stat
         PlantLifecycle::Bloom => "Running",
         PlantLifecycle::Dried => "Stopping",
         PlantLifecycle::Pup => "Rebuilding",
+    }
+}
+
+/// Build the display label for a build progress chip.
+///
+/// - `InProgress` with `image_name == "Maintenance"`: special label "🔧 Setting up Maintenance..."
+/// - `InProgress` otherwise: `"⏳ Building {image_name}..."`
+/// - `Completed`: `"✅ {image_name} ready"`
+/// - `Failed`: `"❌ {image_name} build failed"`
+fn build_chip_label(build: &tillandsias_core::state::BuildProgress) -> String {
+    match &build.status {
+        BuildStatus::InProgress => {
+            if build.image_name == "Maintenance" {
+                "\u{1F527} Setting up Maintenance...".to_string()
+            } else {
+                format!("\u{23F3} Building {}...", build.image_name)
+            }
+        }
+        BuildStatus::Completed => format!("\u{2705} {} ready", build.image_name),
+        BuildStatus::Failed(_) => format!("\u{274C} {} build failed", build.image_name),
     }
 }
 

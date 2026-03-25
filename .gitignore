@@ -19,3 +19,4 @@ Thumbs.db
 *.pem
 *.key
 result
+.claude/worktrees/

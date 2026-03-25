@@ -133,6 +133,19 @@ Build cache is stored in `.nix-output/` (gitignored).
 - `../forge` — Container images (Macuahuitl forge). Tillandsias uses these as default container images.
 - `../thinking-service` — Autonomous daemon. Architecture patterns (tokio::select!, event loop) informed Tillandsias design.
 
+## OpenSpec — Monotonic Convergence
+
+All changes go through OpenSpec (`/opsx:ff` or `/opsx:new`). No exceptions for "quick fixes".
+
+**Purpose**: OpenSpec ensures **monotonic convergence** — specs and implementation move toward each other with every change, never apart. The spec trail is the project's institutional memory and proof of work.
+
+**Rules**:
+- Spec must reflect what was built. Implementation must reflect what was spec'd.
+- If implementation diverges from spec during development, update the spec.
+- If a spec decision is revised, update the spec before (or with) the code change.
+- Use `/opsx:verify` before archiving to confirm convergence.
+- Break large features into multiple changes — each independently convergent.
+
 ## Conventions
 
 - User-facing text MUST NOT contain: "container", "pod", "image", "runtime"
