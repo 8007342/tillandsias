@@ -15,6 +15,7 @@
 #   ./build.sh --remove             # Remove installed binary
 #   ./build.sh --wipe               # Remove target/, caches, temp files
 #   ./build.sh --toolbox-reset      # Destroy and recreate toolbox
+#   ./build.sh --appimage           # Build AppImage in Ubuntu podman container
 #   ./build.sh --clean --release    # Flags combine
 # =============================================================================
 
@@ -49,6 +50,7 @@ FLAG_INSTALL=false
 FLAG_REMOVE=false
 FLAG_WIPE=false
 FLAG_TOOLBOX_RESET=false
+FLAG_APPIMAGE=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -60,6 +62,7 @@ while [[ $# -gt 0 ]]; do
         --remove)         FLAG_REMOVE=true ;;
         --wipe)           FLAG_WIPE=true ;;
         --toolbox-reset)  FLAG_TOOLBOX_RESET=true ;;
+        --appimage)       FLAG_APPIMAGE=true ;;
         --help|-h)
             cat <<'EOF'
 Tillandsias Development Build Script
@@ -72,6 +75,7 @@ Build flags:
   --test            Run test suite (cargo test --workspace)
   --check           Type-check only (cargo check --workspace)
   --clean           Clean build artifacts before building
+  --appimage        Build AppImage in Ubuntu podman container (FUSE-capable)
 
 Install flags:
   --install         Release build + copy binary to ~/.local/bin/
@@ -117,7 +121,7 @@ if [[ "$FLAG_REMOVE" == true ]]; then
         _info "Removed tillandsias from $INSTALL_DIR"
     fi
     # If --remove is the only flag, exit
-    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_WIPE$FLAG_TOOLBOX_RESET" == "falsefalsefalsefalsefalsefalsefalse" ]]; then
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_WIPE$FLAG_TOOLBOX_RESET$FLAG_APPIMAGE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
     fi
 fi
@@ -129,10 +133,96 @@ if [[ "$FLAG_WIPE" == true ]]; then
     # Cargo registry cache inside toolbox is in the host home (shared)
     _info "Removed target/ and $CACHE_DIR"
     # If --wipe is the only remaining flag, exit
-    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_TOOLBOX_RESET" == "falsefalsefalsefalsefalsefalse" ]]; then
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_TOOLBOX_RESET$FLAG_APPIMAGE" == "falsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
     fi
 fi
+
+# ---------------------------------------------------------------------------
+# AppImage build (standalone — uses podman Ubuntu container, not toolbox)
+# ---------------------------------------------------------------------------
+
+build_appimage() {
+    local output_dir="$SCRIPT_DIR/target/release/bundle/appimage"
+    local cargo_cache_dir="$HOME/.cache/tillandsias/cargo-registry"
+
+    _step "Preparing AppImage build directories..."
+    mkdir -p "$output_dir"
+    mkdir -p "$cargo_cache_dir"
+
+    _info "Output dir:      $output_dir"
+    _info "Cargo cache dir: $cargo_cache_dir"
+    _step "Starting Ubuntu 22.04 podman container for AppImage build..."
+    _warn "First build installs Rust + tauri-cli — expect 10-20 minutes"
+    _warn "Subsequent builds reuse the cargo registry cache (~2-5 minutes)"
+
+    podman run --rm \
+        --device /dev/fuse \
+        --cap-add SYS_ADMIN \
+        --security-opt apparmor:unconfined \
+        -v "$SCRIPT_DIR:/src:ro,Z" \
+        -v "$cargo_cache_dir:/root/.cargo/registry:rw,Z" \
+        -v "$output_dir:/output:rw,Z" \
+        ubuntu:22.04 \
+        bash -euo pipefail -c '
+set -euo pipefail
+
+echo "[appimage] Updating package lists..."
+apt-get update -qq
+
+echo "[appimage] Installing system dependencies..."
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    libgtk-3-dev \
+    libwebkit2gtk-4.1-dev \
+    libappindicator3-dev \
+    librsvg2-dev \
+    libssl-dev \
+    fuse \
+    libfuse2 \
+    curl \
+    file \
+    ca-certificates \
+    2>&1 | tail -5
+
+echo "[appimage] Installing Rust toolchain..."
+curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+source /root/.cargo/env
+
+echo "[appimage] Installing tauri-cli..."
+cargo install tauri-cli --version "^2" --locked 2>&1 | tail -3
+
+echo "[appimage] Copying source to writable build directory..."
+cp -r /src /build
+cd /build
+
+echo "[appimage] Running cargo tauri build (AppImage target)..."
+cargo tauri build --bundles appimage 2>&1
+
+echo "[appimage] Locating AppImage artifact..."
+appimage_file="$(find /build/target/release/bundle/appimage -name "*.AppImage" -type f 2>/dev/null | head -1)"
+if [[ -z "$appimage_file" ]]; then
+    echo "[appimage] ERROR: No AppImage found in target/release/bundle/appimage/" >&2
+    exit 1
+fi
+
+echo "[appimage] Copying $(basename "$appimage_file") to output mount..."
+cp "$appimage_file" /output/
+echo "[appimage] Done: /output/$(basename "$appimage_file")"
+'
+
+    # Find the produced AppImage and report it
+    local appimage_path
+    appimage_path="$(find "$output_dir" -name "*.AppImage" -type f 2>/dev/null | head -1)"
+    if [[ -z "$appimage_path" ]]; then
+        _error "AppImage build failed — no .AppImage found in $output_dir"
+        exit 1
+    fi
+
+    chmod +x "$appimage_path"
+    _info "AppImage ready: $appimage_path ($(du -h "$appimage_path" | cut -f1))"
+}
 
 # ---------------------------------------------------------------------------
 # Toolbox management
@@ -188,6 +278,15 @@ if [[ "$FLAG_TOOLBOX_RESET" == true ]]; then
     fi
     _toolbox_ensure
     # If --toolbox-reset is the only flag, exit
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_APPIMAGE" == "falsefalsefalsefalsefalsefalse" ]]; then
+        exit 0
+    fi
+fi
+
+# AppImage build (standalone — bypasses toolbox entirely)
+if [[ "$FLAG_APPIMAGE" == true ]]; then
+    build_appimage
+    # If --appimage is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL" == "falsefalsefalsefalsefalse" ]]; then
         exit 0
     fi
