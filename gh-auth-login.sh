@@ -223,7 +223,7 @@ echo ""
 # Run gh auth login as the direct entrypoint — NOT via bash -c "..."
 # Using bash -c breaks TTY passthrough and gh auth login hangs.
 # --entrypoint "" clears the image default, then the command IS the entrypoint.
-$PODMAN run -it --rm \
+$PODMAN run -it --rm --init \
     --name tillandsias-gh-login \
     --cap-drop=ALL \
     --security-opt=no-new-privileges \
@@ -237,7 +237,7 @@ $PODMAN run -it --rm \
     gh auth login --git-protocol https
 
 # Run setup-git in a separate non-interactive container
-$PODMAN run --rm \
+$PODMAN run --rm --init \
     --cap-drop=ALL \
     --security-opt=no-new-privileges \
     --userns=keep-id \

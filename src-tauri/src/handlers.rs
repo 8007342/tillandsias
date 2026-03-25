@@ -41,32 +41,6 @@ use tillandsias_podman::query_occupied_ports;
 
 pub(crate) const FORGE_IMAGE_TAG: &str = "tillandsias-forge:latest";
 
-/// Detect the host operating system by reading `/etc/os-release`.
-/// Returns a human-readable string like "Fedora Silverblue 43".
-fn detect_host_os() -> String {
-    if let Ok(content) = std::fs::read_to_string("/etc/os-release") {
-        let mut name = String::new();
-        let mut version = String::new();
-        let mut variant = String::new();
-        for line in content.lines() {
-            if let Some(val) = line.strip_prefix("NAME=") {
-                name = val.trim_matches('"').to_string();
-            } else if let Some(val) = line.strip_prefix("VERSION_ID=") {
-                version = val.trim_matches('"').to_string();
-            } else if let Some(val) = line.strip_prefix("VARIANT=") {
-                variant = val.trim_matches('"').to_string();
-            }
-        }
-        if !variant.is_empty() {
-            format!("{name} {variant} {version}")
-        } else {
-            format!("{name} {version}")
-        }
-    } else {
-        "Unknown OS".to_string()
-    }
-}
-
 /// Open a terminal window running a command.
 /// Uses the platform's default terminal — not a zoo of emulators.
 ///
@@ -113,11 +87,14 @@ fn open_terminal(command: &str) -> Result<(), String> {
 
     #[cfg(target_os = "macos")]
     {
-        // macOS: osascript to open Terminal.app with a command
+        // macOS: osascript to open Terminal.app with a command.
+        // Escape backslashes and quotes to prevent AppleScript injection
+        // via crafted directory names.
+        let escaped = command.replace('\\', "\\\\").replace('"', "\\\"");
         std::process::Command::new("osascript")
             .args([
                 "-e",
-                &format!("tell app \"Terminal\" to do script \"{}\"", command),
+                &format!("tell app \"Terminal\" to do script \"{escaped}\""),
             ])
             .spawn()
             .map(|_| ())
@@ -635,7 +612,7 @@ pub async fn handle_terminal(project_path: PathBuf, _state: &TrayState) -> Resul
     let container_name = format!("tillandsias-{}-terminal", project_name);
 
     let git_dir = secrets_dir.join("git");
-    let host_os = detect_host_os();
+    let host_os = tillandsias_core::config::detect_host_os();
     let podman_bin = tillandsias_podman::find_podman_path();
     let podman_cmd = format!(
         "{podman_bin} run -it --rm --init --stop-timeout=10 \

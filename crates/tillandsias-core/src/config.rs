@@ -432,3 +432,29 @@ debounce_ms = 5000
         std::fs::remove_dir_all(&dir).ok();
     }
 }
+
+/// Detect the host operating system by reading `/etc/os-release`.
+/// Returns a human-readable string like "Fedora Silverblue 43".
+pub fn detect_host_os() -> String {
+    if let Ok(content) = std::fs::read_to_string("/etc/os-release") {
+        let mut name = String::new();
+        let mut version = String::new();
+        let mut variant = String::new();
+        for line in content.lines() {
+            if let Some(val) = line.strip_prefix("NAME=") {
+                name = val.trim_matches('"').to_string();
+            } else if let Some(val) = line.strip_prefix("VERSION_ID=") {
+                version = val.trim_matches('"').to_string();
+            } else if let Some(val) = line.strip_prefix("VARIANT=") {
+                variant = val.trim_matches('"').to_string();
+            }
+        }
+        if !variant.is_empty() {
+            format!("{name} {variant} {version}")
+        } else {
+            format!("{name} {version}")
+        }
+    } else {
+        "Unknown OS".to_string()
+    }
+}

@@ -61,7 +61,7 @@ Destroying an app (removing its cache and persistent data) SHALL require a delib
 
 #### Scenario: Destroy action
 - **WHEN** the user initiates a Destroy action on a stopped app
-- **THEN** the action requires holding the button/confirmation for 5 seconds before executing
+- **THEN** the action triggers a 5-second server-side delay before executing (safety hold)
 
 #### Scenario: Destroy while running
 - **WHEN** the user initiates a Destroy action on a running app
@@ -81,9 +81,6 @@ Running apps SHALL be displayed in the tray with visual indicators and available
 #### Scenario: Multiple running apps
 - **WHEN** multiple apps are running
 - **THEN** each app is listed separately in the Running section, each with independent Stop/Destroy actions
-
-### Requirement: WASM-isolated resource monitoring
-Long-running container operations SHALL be wrapped with timeout and resource monitoring capabilities, using WASM isolation where appropriate to enforce gas limits and prevent resource-consuming operations from impacting the host.
 
 #### Scenario: Container operation timeout
 - **WHEN** a container start operation exceeds 60 seconds

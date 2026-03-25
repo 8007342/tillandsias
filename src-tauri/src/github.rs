@@ -120,6 +120,7 @@ pub async fn clone_repo(full_name: &str, target_dir: &Path) -> Result<(), String
 
     let mut args = vec![
         "--rm".to_string(),
+        "--init".to_string(),
         "--cap-drop=ALL".to_string(),
         "--security-opt=no-new-privileges".to_string(),
         "--userns=keep-id".to_string(),
@@ -186,6 +187,7 @@ pub async fn clone_repo(full_name: &str, target_dir: &Path) -> Result<(), String
 fn build_gh_run_args(secrets_dir: &Path, command: &[&str]) -> Vec<String> {
     let mut args = vec![
         "--rm".to_string(),
+        "--init".to_string(),
         "--cap-drop=ALL".to_string(),
         "--security-opt=no-new-privileges".to_string(),
         "--userns=keep-id".to_string(),

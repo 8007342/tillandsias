@@ -16,12 +16,21 @@ fn lock_path(image: &str) -> PathBuf {
     dir.join(format!("build-{image}.lock"))
 }
 
-/// Check if a PID is alive and belongs to a tillandsias-related process.
+/// Check if a PID is alive and could be a tillandsias build process.
+///
+/// Checks both that the process exists AND that its name is plausibly
+/// related to a tillandsias build (tillandsias, nix, bash, sh).
+/// This prevents false positives from PID reuse.
 fn is_alive(pid: u32) -> bool {
     let comm_path = format!("/proc/{pid}/comm");
-    // Just check if the process exists. The PID could be tillandsias-tray,
-    // nix, bash (running build-image.sh), etc.
-    fs::read_to_string(comm_path).is_ok()
+    if let Ok(comm) = fs::read_to_string(comm_path) {
+        let name = comm.trim();
+        // Build processes could be: tillandsias-tray, nix, bash, sh
+        // (build-image.sh runs via bash, nix build runs via nix)
+        name.starts_with("tillandsias") || name == "nix" || name == "bash" || name == "sh"
+    } else {
+        false
+    }
 }
 
 /// Try to acquire the build lock for an image.

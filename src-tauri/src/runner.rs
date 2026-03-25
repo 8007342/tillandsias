@@ -11,32 +11,6 @@ use tillandsias_core::genus::TillandsiaGenus;
 use tillandsias_core::state::ContainerInfo;
 use tillandsias_podman::PodmanClient;
 
-/// Detect the host operating system by reading `/etc/os-release`.
-/// Returns a human-readable string like "Fedora Silverblue 43".
-fn detect_host_os() -> String {
-    if let Ok(content) = std::fs::read_to_string("/etc/os-release") {
-        let mut name = String::new();
-        let mut version = String::new();
-        let mut variant = String::new();
-        for line in content.lines() {
-            if let Some(val) = line.strip_prefix("NAME=") {
-                name = val.trim_matches('"').to_string();
-            } else if let Some(val) = line.strip_prefix("VERSION_ID=") {
-                version = val.trim_matches('"').to_string();
-            } else if let Some(val) = line.strip_prefix("VARIANT=") {
-                variant = val.trim_matches('"').to_string();
-            }
-        }
-        if !variant.is_empty() {
-            format!("{name} {variant} {version}")
-        } else {
-            format!("{name} {version}")
-        }
-    } else {
-        "Unknown OS".to_string()
-    }
-}
-
 /// Map a short image name to a full image tag.
 fn image_tag(name: &str) -> String {
     // If the name already contains a colon or slash, treat it as a full tag.
@@ -127,7 +101,7 @@ fn build_run_args(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "project".to_string());
 
-    let host_os = detect_host_os();
+    let host_os = tillandsias_core::config::detect_host_os();
 
     let mut args = vec![
         "-it".to_string(),

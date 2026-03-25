@@ -52,6 +52,7 @@ The artifact detection system SHALL detect runtime configuration from per-projec
 - **THEN** the artifact detection falls back to heuristic file-based detection
 
 ### Requirement: Built image detection
+> **Status: Future** — Not yet implemented. All projects show "Attach Here" regardless of image state.
 The artifact system SHALL check for previously built container images to enable instant start without rebuilding.
 
 #### Scenario: Image already built

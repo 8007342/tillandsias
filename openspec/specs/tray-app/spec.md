@@ -30,6 +30,7 @@ The tray menu SHALL rebuild and display updated content whenever the application
 - **THEN** the corresponding handler is invoked
 
 ### Requirement: Tray icon state management
+> **Status: Future** — Not yet implemented. Menu emojis reflect lifecycle state; tray icon is static.
 The main tray icon SHALL visually reflect the overall system state.
 
 #### Scenario: Idle state icon
