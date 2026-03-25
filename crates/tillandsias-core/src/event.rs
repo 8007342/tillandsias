@@ -3,6 +3,25 @@ use std::path::PathBuf;
 use crate::genus::TillandsiaGenus;
 use crate::project::ProjectChange;
 
+/// Build progress events sent from async build tasks back to the event loop.
+#[derive(Debug, Clone)]
+pub enum BuildProgressEvent {
+    /// A build (image or maintenance) has started.
+    Started {
+        /// Short name shown in the menu chip.
+        image_name: String,
+    },
+    /// A build completed successfully.
+    Completed {
+        image_name: String,
+    },
+    /// A build failed.
+    Failed {
+        image_name: String,
+        reason: String,
+    },
+}
+
 /// All events flow through this enum into the main `tokio::select!` loop.
 #[derive(Debug, Clone)]
 pub enum AppEvent {

@@ -29,10 +29,11 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use tokio::sync::mpsc;
 use tracing::{debug, info, instrument, warn};
 
 use tillandsias_core::config::{GlobalConfig, cache_dir, load_global_config, load_project_config};
-use tillandsias_core::event::{AppEvent, ContainerState};
+use tillandsias_core::event::{AppEvent, BuildProgressEvent, ContainerState};
 use tillandsias_core::genus::GenusAllocator;
 use tillandsias_core::state::{ContainerInfo, TrayState};
 use tillandsias_podman::PodmanClient;
@@ -322,11 +323,12 @@ async fn cleanup_stale_containers(state: &TrayState) {
 
 /// Handle the "Attach Here" action: build image if needed, open terminal
 /// with an interactive container.
-#[instrument(skip(state, allocator), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "attach"))]
+#[instrument(skip(state, allocator, build_tx), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "attach"))]
 pub async fn handle_attach_here(
     project_path: PathBuf,
     state: &mut TrayState,
     allocator: &mut GenusAllocator,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<AppEvent, String> {
     let start = std::time::Instant::now();
     let project_name = project_path
@@ -376,12 +378,22 @@ pub async fn handle_attach_here(
 
     if !client.image_exists(FORGE_IMAGE_TAG).await {
         info!(tag = FORGE_IMAGE_TAG, "Image not found, building...");
+
+        // Notify event loop: build started (menu chip: ⏳ Building forge...)
+        let _ = build_tx.try_send(BuildProgressEvent::Started {
+            image_name: "forge".to_string(),
+        });
+
         let build_result = tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
 
         match build_result {
             Ok(Ok(())) => {
                 // Verify the image actually exists now
                 if !client.image_exists(FORGE_IMAGE_TAG).await {
+                    let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                        image_name: "forge".to_string(),
+                        reason: format!("Image {} still not found after build", FORGE_IMAGE_TAG),
+                    });
                     state.running.retain(|c| c.name != container_name);
                     allocator.release(&project_name, genus);
                     return Err(format!(
@@ -390,13 +402,27 @@ pub async fn handle_attach_here(
                     ));
                 }
                 info!(tag = FORGE_IMAGE_TAG, "Image built successfully");
+                // Notify event loop: build completed (menu chip: ✅ forge ready)
+                let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                    image_name: "forge".to_string(),
+                });
             }
-            Ok(Err(e)) => {
+            Ok(Err(ref e)) => {
+                let reason = e.clone();
+                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: "forge".to_string(),
+                    reason,
+                });
                 state.running.retain(|c| c.name != container_name);
                 allocator.release(&project_name, genus);
                 return Err(format!("Failed to build image {}: {}", FORGE_IMAGE_TAG, e));
             }
-            Err(e) => {
+            Err(ref e) => {
+                let reason = format!("Build task panicked: {e}");
+                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: "forge".to_string(),
+                    reason,
+                });
                 state.running.retain(|c| c.name != container_name);
                 allocator.release(&project_name, genus);
                 return Err(format!("Image build task panicked: {}", e));
@@ -590,8 +616,12 @@ pub async fn shutdown_all(state: &TrayState) {
     info!("All containers stopped, shutdown complete");
 }
 
-/// Handle "Terminal" — open bash in a forge container for the project.
-pub async fn handle_terminal(project_path: PathBuf, _state: &TrayState) -> Result<(), String> {
+/// Handle "Terminal" (Maintenance) — open bash in a forge container for the project.
+pub async fn handle_terminal(
+    project_path: PathBuf,
+    _state: &TrayState,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<(), String> {
     let project_name = project_path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -658,7 +688,27 @@ pub async fn handle_terminal(project_path: PathBuf, _state: &TrayState) -> Resul
         FORGE_IMAGE_TAG,
     );
 
-    open_terminal(&podman_cmd).map_err(|e| format!("Failed to open terminal: {e}"))
+    // Notify event loop: maintenance setup in progress (menu chip: 🔧 Setting up Maintenance...)
+    let _ = build_tx.try_send(BuildProgressEvent::Started {
+        image_name: "Maintenance".to_string(),
+    });
+
+    match open_terminal(&podman_cmd) {
+        Ok(()) => {
+            // Terminal launched — notify completed so chip shows ✅ briefly
+            let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                image_name: "Maintenance".to_string(),
+            });
+            Ok(())
+        }
+        Err(e) => {
+            let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                image_name: "Maintenance".to_string(),
+                reason: e.clone(),
+            });
+            Err(format!("Failed to open terminal: {e}"))
+        }
+    }
 }
 
 /// Handle "GitHub Login" — extract embedded gh-auth-login.sh to temp and run it.

@@ -4,6 +4,34 @@ use crate::event::ContainerState;
 use crate::genus::{PlantLifecycle, TillandsiaGenus};
 use crate::project::Project;
 
+/// Status of an image or maintenance build tracked in the tray menu.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BuildStatus {
+    /// Build is currently in progress.
+    InProgress,
+    /// Build completed successfully.
+    Completed,
+    /// Build failed with the given reason.
+    Failed(String),
+}
+
+/// Tracks an active or recently completed image/maintenance build for menu display.
+///
+/// Entries are pruned from `TrayState::active_builds` when they have been
+/// `Completed` for more than 10 seconds. Failed entries persist until a new
+/// build attempt begins for the same image.
+#[derive(Debug, Clone)]
+pub struct BuildProgress {
+    /// Short name displayed in the menu chip (e.g. `"forge"` or `"Maintenance"`).
+    pub image_name: String,
+    /// Current status.
+    pub status: BuildStatus,
+    /// When the build was started.
+    pub started_at: Instant,
+    /// When the build completed (success or failure). `None` while in progress.
+    pub completed_at: Option<Instant>,
+}
+
 /// Info about a running container environment.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ContainerInfo {
@@ -110,6 +138,11 @@ pub struct TrayState {
     pub cloning_project: Option<String>,
     /// Error message from the last fetch attempt, if any.
     pub remote_repos_error: Option<String>,
+
+    /// Active or recently completed image/maintenance builds shown as menu chips.
+    /// Completed entries are pruned after 10 seconds; failed entries persist until
+    /// a new build for the same image begins.
+    pub active_builds: Vec<BuildProgress>,
 }
 
 impl TrayState {
@@ -123,6 +156,7 @@ impl TrayState {
             remote_repos_loading: false,
             cloning_project: None,
             remote_repos_error: None,
+            active_builds: Vec::new(),
         }
     }
 

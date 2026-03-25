@@ -3,34 +3,43 @@
 //! Multiplexes scanner events, podman events, menu actions, and shutdown
 //! signals into a single async loop that drives all tray state updates.
 
+use std::time::{Duration, Instant};
+
 use tokio::sync::mpsc;
 use tracing::{debug, error, info};
 
-use std::time::Instant;
-
 use tillandsias_core::config::load_global_config;
-use tillandsias_core::event::{ContainerState, MenuCommand};
+use tillandsias_core::event::{BuildProgressEvent, ContainerState, MenuCommand};
 use tillandsias_core::genus::GenusAllocator;
 use tillandsias_core::project::ProjectChange;
-use tillandsias_core::state::{ContainerInfo, RemoteRepoInfo, TrayState};
+use tillandsias_core::state::{BuildProgress, BuildStatus, ContainerInfo, RemoteRepoInfo, TrayState};
 
 use crate::{github, handlers};
+
+/// Duration a completed build chip remains visible in the menu before being pruned.
+const BUILD_CHIP_FADEOUT: Duration = Duration::from_secs(10);
 
 /// Callback for menu rebuilds after state changes.
 pub type MenuRebuildFn = Box<dyn Fn(&TrayState) + Send + Sync>;
 
 /// Run the main event loop. This drives the entire application.
 ///
-/// Listens on four event sources via `tokio::select!`:
+/// Listens on five event sources via `tokio::select!`:
 /// - Scanner: filesystem changes (project discovered/updated/removed)
 /// - Podman events: container state changes
 /// - Menu actions: user clicks in the tray menu
+/// - Build progress: image/maintenance build state transitions
 /// - Shutdown signal: SIGTERM/SIGINT
+///
+/// `build_tx` is cloned and forwarded to handlers so they can report build
+/// progress back into this loop via `build_rx`.
 pub async fn run(
     mut state: TrayState,
     mut scanner_rx: mpsc::Receiver<ProjectChange>,
     mut podman_rx: mpsc::Receiver<tillandsias_podman::events::PodmanEvent>,
     mut menu_rx: mpsc::Receiver<MenuCommand>,
+    mut build_rx: mpsc::Receiver<BuildProgressEvent>,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
     on_state_change: MenuRebuildFn,
 ) {
     let mut allocator = GenusAllocator::new();
@@ -39,21 +48,41 @@ pub async fn run(
 
     // Timer drives remote repos fetch — checks periodically if cache is stale.
     // Backs off on errors to avoid spamming (3s → 30s → 300s).
-    let mut remote_fetch_interval = tokio::time::interval(std::time::Duration::from_secs(5));
+    let mut remote_fetch_interval = tokio::time::interval(Duration::from_secs(5));
     remote_fetch_interval.tick().await; // consume first immediate tick
     let mut remote_fetch_errors: u32 = 0;
+
+    // Channel used by the 10s fadeout tasks to trigger a prune rebuild.
+    // We store the sender here so we can clone it for spawned tasks.
+    // The receiver is a separate local that we select on.
+    let (prune_tx, mut prune_rx) = mpsc::channel::<()>(32);
 
     loop {
         tokio::select! {
             // Scanner: filesystem changes
             Some(change) = scanner_rx.recv() => {
                 handle_scanner_event(change, &mut state);
+                prune_completed_builds(&mut state);
                 on_state_change(&state);
             }
 
             // Podman: container state changes
             Some(event) = podman_rx.recv() => {
                 handle_podman_event(event, &mut state, &mut allocator);
+                prune_completed_builds(&mut state);
+                on_state_change(&state);
+            }
+
+            // Build progress: image/maintenance build state transitions
+            Some(event) = build_rx.recv() => {
+                handle_build_progress_event(event, &mut state, prune_tx.clone());
+                prune_completed_builds(&mut state);
+                on_state_change(&state);
+            }
+
+            // Prune trigger: 10s fadeout timer fired for a completed build chip
+            Some(()) = prune_rx.recv() => {
+                prune_completed_builds(&mut state);
                 on_state_change(&state);
             }
 
@@ -66,8 +95,9 @@ pub async fn run(
                         break;
                     }
                     MenuCommand::AttachHere { project_path } => {
-                        match handlers::handle_attach_here(project_path, &mut state, &mut allocator).await {
+                        match handlers::handle_attach_here(project_path, &mut state, &mut allocator, build_tx.clone()).await {
                             Ok(_event) => {
+                                prune_completed_builds(&mut state);
                                 on_state_change(&state);
                             }
                             Err(e) => {
@@ -83,6 +113,7 @@ pub async fn run(
                     MenuCommand::Stop { container_name, genus: _ } => {
                         match handlers::handle_stop(container_name, &mut state, &mut allocator).await {
                             Ok(_event) => {
+                                prune_completed_builds(&mut state);
                                 on_state_change(&state);
                             }
                             Err(e) => {
@@ -93,6 +124,7 @@ pub async fn run(
                     MenuCommand::Destroy { container_name, genus: _ } => {
                         match handlers::handle_destroy(container_name, &mut state, &mut allocator).await {
                             Ok(_event) => {
+                                prune_completed_builds(&mut state);
                                 on_state_change(&state);
                             }
                             Err(e) => {
@@ -102,7 +134,7 @@ pub async fn run(
                     }
                     MenuCommand::Terminal { project_path } => {
                         info!(project = ?project_path, "Terminal requested");
-                        if let Err(e) = handlers::handle_terminal(project_path, &state).await {
+                        if let Err(e) = handlers::handle_terminal(project_path, &state, build_tx.clone()).await {
                             error!(error = %e, "Terminal failed");
                         }
                     }
@@ -114,6 +146,7 @@ pub async fn run(
                             // Invalidate remote repos cache so it refreshes
                             // on next menu open after auth completes.
                             state.invalidate_remote_repos_cache();
+                            prune_completed_builds(&mut state);
                             on_state_change(&state);
                         }
                     }
@@ -145,7 +178,7 @@ pub async fn run(
                         remote_fetch_errors += 1;
                         // Exponential backoff: 30s, 60s, 120s, max 300s
                         let backoff = std::cmp::min(30 * (1 << remote_fetch_errors.min(4)), 300);
-                        remote_fetch_interval = tokio::time::interval(std::time::Duration::from_secs(backoff));
+                        remote_fetch_interval = tokio::time::interval(Duration::from_secs(backoff));
                         remote_fetch_interval.tick().await;
                         debug!(backoff_secs = backoff, errors = remote_fetch_errors, "Remote fetch backing off");
                     } else {
@@ -163,6 +196,70 @@ pub async fn run(
     }
 
     info!("Event loop exited");
+}
+
+/// Handle a `BuildProgressEvent` sent by a spawned build task.
+///
+/// - `Started`: push a new `BuildProgress` with `InProgress` status (replacing
+///   any previous failed entry for the same image so stale chips don't pile up).
+/// - `Completed`: mark the entry as `Completed`, record `completed_at`, and
+///   spawn a one-shot 10-second timer that sends a prune trigger.
+/// - `Failed`: mark the entry as `Failed`; the chip persists until the next
+///   build attempt clears it via `Started`.
+fn handle_build_progress_event(
+    event: BuildProgressEvent,
+    state: &mut TrayState,
+    prune_tx: mpsc::Sender<()>,
+) {
+    match event {
+        BuildProgressEvent::Started { image_name } => {
+            // Remove any existing entry for this image (clears stale failed chips)
+            state.active_builds.retain(|b| b.image_name != image_name);
+            state.active_builds.push(BuildProgress {
+                image_name,
+                status: BuildStatus::InProgress,
+                started_at: Instant::now(),
+                completed_at: None,
+            });
+        }
+        BuildProgressEvent::Completed { image_name } => {
+            if let Some(entry) = state.active_builds.iter_mut().find(|b| b.image_name == image_name) {
+                entry.status = BuildStatus::Completed;
+                entry.completed_at = Some(Instant::now());
+            }
+            // Schedule single-fire 10s fadeout so the chip is removed after the
+            // grace period without any polling or periodic menu rebuilds.
+            tokio::task::spawn(async move {
+                tokio::time::sleep(BUILD_CHIP_FADEOUT).await;
+                // Best-effort send — if the receiver is gone the app is shutting down.
+                let _ = prune_tx.send(()).await;
+            });
+        }
+        BuildProgressEvent::Failed { image_name, reason } => {
+            if let Some(entry) = state.active_builds.iter_mut().find(|b| b.image_name == image_name) {
+                entry.status = BuildStatus::Failed(reason);
+                entry.completed_at = Some(Instant::now());
+            }
+        }
+    }
+}
+
+/// Remove build chips that have been `Completed` for longer than `BUILD_CHIP_FADEOUT`.
+///
+/// Called before every `on_state_change` so that any stale chips are cleaned up
+/// at natural state transitions without needing a separate periodic timer.
+fn prune_completed_builds(state: &mut TrayState) {
+    state.active_builds.retain(|b| {
+        if let BuildStatus::Completed = &b.status {
+            // Keep if completed within the fadeout window
+            b.completed_at
+                .map(|t| t.elapsed() < BUILD_CHIP_FADEOUT)
+                .unwrap_or(true)
+        } else {
+            // InProgress and Failed entries are kept
+            true
+        }
+    });
 }
 
 /// Process a scanner filesystem change event.
