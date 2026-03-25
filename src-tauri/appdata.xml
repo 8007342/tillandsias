@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.tillandsias.tray</id>
+  <name>Tillandsias</name>
+  <summary>Local development environments that just work</summary>
+  <metadata_license>GPL-3.0-or-later</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <description>
+    <p>
+      Tillandsias is a system tray application that orchestrates containerized
+      development environments. Right-click the tray icon, pick a project, and
+      a fully configured environment appears — safely, locally, reproducibly.
+    </p>
+  </description>
+  <url type="homepage">https://github.com/8007342/tillandsias</url>
+  <url type="bugtracker">https://github.com/8007342/tillandsias/issues</url>
+  <launchable type="desktop-id">Tillandsias.desktop</launchable>
+  <provides>
+    <binary>tillandsias-tray</binary>
+  </provides>
+  <categories>
+    <category>Development</category>
+  </categories>
+</component>
