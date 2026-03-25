@@ -107,7 +107,7 @@ fn build_forge_image() -> Result<(), String> {
 
 /// Check if a podman image exists.
 fn image_exists(tag: &str) -> bool {
-    std::process::Command::new("podman")
+    tillandsias_podman::podman_cmd_sync()
         .args(["image", "exists", tag])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())

@@ -37,10 +37,11 @@ pub async fn run(
 
     info!("Event loop started");
 
-    // Timer drives remote repos fetch — checks every 3s if cache is stale.
-    // First fetch happens ~3s after startup (after initial tick is consumed).
-    let mut remote_fetch_interval = tokio::time::interval(std::time::Duration::from_secs(3));
+    // Timer drives remote repos fetch — checks periodically if cache is stale.
+    // Backs off on errors to avoid spamming (3s → 30s → 300s).
+    let mut remote_fetch_interval = tokio::time::interval(std::time::Duration::from_secs(5));
     remote_fetch_interval.tick().await; // consume first immediate tick
+    let mut remote_fetch_errors: u32 = 0;
 
     loop {
         tokio::select! {
@@ -137,8 +138,19 @@ pub async fn run(
                 if !crate::menu::needs_github_login()
                     && state.remote_repos_cache_stale()
                     && !state.remote_repos_loading
+                    && state.remote_repos_error.is_none() // don't retry on error (wait for cache invalidation)
                 {
                     fetch_remote_repos(&mut state, &on_state_change).await;
+                    if state.remote_repos_error.is_some() {
+                        remote_fetch_errors += 1;
+                        // Exponential backoff: 30s, 60s, 120s, max 300s
+                        let backoff = std::cmp::min(30 * (1 << remote_fetch_errors.min(4)), 300);
+                        remote_fetch_interval = tokio::time::interval(std::time::Duration::from_secs(backoff));
+                        remote_fetch_interval.tick().await;
+                        debug!(backoff_secs = backoff, errors = remote_fetch_errors, "Remote fetch backing off");
+                    } else {
+                        remote_fetch_errors = 0;
+                    }
                 }
             }
 

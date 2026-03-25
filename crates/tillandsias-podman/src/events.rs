@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use tokio::process::Command;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
@@ -53,7 +52,7 @@ impl PodmanEventStream {
 
     /// Primary: stream `podman events --format json`.
     async fn stream_events(&self, tx: &mpsc::Sender<PodmanEvent>) -> Result<(), PodmanEventError> {
-        let mut child = Command::new("podman")
+        let mut child = crate::podman_cmd()
             .args([
                 "events",
                 "--format",
@@ -102,7 +101,7 @@ impl PodmanEventStream {
             tokio::time::sleep(interval).await;
 
             // Try to reconnect to events first
-            if Command::new("podman")
+            if crate::podman_cmd()
                 .args(["events", "--help"])
                 .output()
                 .await
@@ -113,7 +112,7 @@ impl PodmanEventStream {
             }
 
             // Inspect containers as fallback
-            let output = Command::new("podman")
+            let output = crate::podman_cmd()
                 .args([
                     "ps",
                     "-a",

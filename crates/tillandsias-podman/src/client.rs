@@ -1,4 +1,3 @@
-use tokio::process::Command;
 use tracing::{debug, info, instrument, warn};
 
 /// Async podman CLI client. All operations are non-blocking.
@@ -12,7 +11,7 @@ impl PodmanClient {
 
     /// Check if podman is available in PATH.
     pub async fn is_available(&self) -> bool {
-        Command::new("podman")
+        crate::podman_cmd()
             .arg("--version")
             .output()
             .await
@@ -21,7 +20,7 @@ impl PodmanClient {
 
     /// Check if Podman Machine is running (macOS/Windows).
     pub async fn is_machine_running(&self) -> bool {
-        let output = Command::new("podman")
+        let output = crate::podman_cmd()
             .args(["machine", "list", "--format", "json"])
             .output()
             .await;
@@ -38,7 +37,7 @@ impl PodmanClient {
 
     /// Check if a container image exists locally.
     pub async fn image_exists(&self, image: &str) -> bool {
-        Command::new("podman")
+        crate::podman_cmd()
             .args(["image", "exists", image])
             .output()
             .await
@@ -48,7 +47,7 @@ impl PodmanClient {
     /// Pull a container image.
     pub async fn pull_image(&self, image: &str) -> Result<(), PodmanError> {
         debug!(image, "Pulling image");
-        let output = Command::new("podman")
+        let output = crate::podman_cmd()
             .args(["pull", image])
             .output()
             .await
@@ -64,7 +63,7 @@ impl PodmanClient {
 
     /// Inspect a container and return its state.
     pub async fn inspect_container(&self, name: &str) -> Result<ContainerInspect, PodmanError> {
-        let output = Command::new("podman")
+        let output = crate::podman_cmd()
             .args(["inspect", name, "--format", "json"])
             .output()
             .await
@@ -97,7 +96,7 @@ impl PodmanClient {
         &self,
         prefix: &str,
     ) -> Result<Vec<ContainerListEntry>, PodmanError> {
-        let output = Command::new("podman")
+        let output = crate::podman_cmd()
             .args([
                 "ps",
                 "-a",
@@ -133,7 +132,7 @@ impl PodmanClient {
     /// Stop a container gracefully.
     pub async fn stop_container(&self, name: &str, timeout_secs: u32) -> Result<(), PodmanError> {
         debug!(name, timeout_secs, "Stopping container");
-        let output = Command::new("podman")
+        let output = crate::podman_cmd()
             .args(["stop", "-t", &timeout_secs.to_string(), name])
             .output()
             .await
@@ -152,16 +151,13 @@ impl PodmanClient {
     /// Force kill a container.
     pub async fn kill_container(&self, name: &str) -> Result<(), PodmanError> {
         debug!(name, "Killing container");
-        let _ = Command::new("podman").args(["kill", name]).output().await;
+        let _ = crate::podman_cmd().args(["kill", name]).output().await;
         Ok(())
     }
 
     /// Remove a container.
     pub async fn remove_container(&self, name: &str) -> Result<(), PodmanError> {
-        let _ = Command::new("podman")
-            .args(["rm", "-f", name])
-            .output()
-            .await;
+        let _ = crate::podman_cmd().args(["rm", "-f", name]).output().await;
         Ok(())
     }
 
@@ -175,7 +171,7 @@ impl PodmanClient {
     ) -> Result<(), PodmanError> {
         debug!(tag, containerfile, context_dir, "Building image");
         let start = std::time::Instant::now();
-        let output = Command::new("podman")
+        let output = crate::podman_cmd()
             .args(["build", "-t", tag, "-f", containerfile, context_dir])
             .output()
             .await
@@ -213,7 +209,7 @@ impl PodmanClient {
     pub async fn load_image(&self, tarball_path: &str) -> Result<(), PodmanError> {
         debug!(tarball_path, "Loading image from tarball");
         let start = std::time::Instant::now();
-        let output = Command::new("podman")
+        let output = crate::podman_cmd()
             .args(["load", "-i", tarball_path])
             .output()
             .await
@@ -232,7 +228,7 @@ impl PodmanClient {
     /// Start a container with the given arguments.
     pub async fn run_container(&self, args: &[String]) -> Result<String, PodmanError> {
         debug!(?args, "Running container");
-        let output = Command::new("podman")
+        let output = crate::podman_cmd()
             .arg("run")
             .args(args)
             .output()

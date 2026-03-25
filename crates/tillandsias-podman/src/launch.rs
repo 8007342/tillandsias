@@ -175,7 +175,7 @@ impl ContainerLauncher {
 /// tillandsias containers on the host. Falls back to an empty list if
 /// podman is unavailable or returns an error.
 pub fn query_occupied_ports() -> Vec<(u16, u16)> {
-    let output = std::process::Command::new("podman")
+    let output = crate::podman_cmd_sync()
         .args([
             "ps",
             "--filter",

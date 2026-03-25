@@ -4,27 +4,23 @@
 TBD - created by archiving change release-pipeline. Update Purpose after archive.
 ## Requirements
 ### Requirement: Tag-triggered release workflow
-The release pipeline SHALL be triggered by git tag pushes matching the `v*` pattern OR by manual `workflow_dispatch` with a version input. No other event SHALL trigger release builds.
+The release workflow SHALL be verified to produce correct artifacts for all platforms when triggered by a tag push.
 
-#### Scenario: Version tag pushed
-- **WHEN** a tag matching `v*` (e.g., `v0.1.0`, `v1.0.0-rc.1`) is pushed to the repository
-- **THEN** the release workflow starts and builds artifacts for all configured platform targets
+#### Scenario: Full pipeline run
+- **WHEN** a `v*` tag is pushed to the repository with signing secrets configured
+- **THEN** the workflow completes successfully with build, checksum, sign, and release jobs all passing
 
-#### Scenario: Manual dispatch with version
-- **WHEN** a `workflow_dispatch` is triggered with a `version` input (e.g., `0.0.25.21`)
-- **THEN** the release workflow starts using the provided version for tag validation
+#### Scenario: Artifact naming verification
+- **WHEN** the release workflow completes
+- **THEN** all artifacts follow the `tillandsias-{version}-{os}-{arch}.{ext}` naming convention
 
-#### Scenario: Manual dispatch without version
-- **WHEN** a `workflow_dispatch` is triggered without a `version` input
-- **THEN** the workflow fails early with a clear error message asking for the version input
+#### Scenario: Checksum verification
+- **WHEN** the `SHA256SUMS` file is downloaded alongside artifacts
+- **THEN** running `sha256sum -c SHA256SUMS` passes for every artifact
 
-#### Scenario: Non-version tag pushed
-- **WHEN** a tag not matching `v*` (e.g., `test-123`, `release-candidate`) is pushed
-- **THEN** the release workflow does not trigger
-
-#### Scenario: Regular commit pushed
-- **WHEN** a commit is pushed to any branch (including `main`)
-- **THEN** the release workflow does not trigger
+#### Scenario: GitHub Release assets
+- **WHEN** the release is created on GitHub
+- **THEN** all platform binaries, signatures, certificates, and SHA256SUMS are attached
 
 ### Requirement: Multi-platform matrix builds
 The pipeline SHALL build Tauri desktop bundles for Linux, macOS, and Windows in parallel using a GitHub Actions matrix strategy.

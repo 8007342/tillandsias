@@ -287,7 +287,7 @@ fn build_run_args(
 /// any that are not present in our in-memory state. Skips infrastructure
 /// toolboxes (builder, windows, etc.).
 async fn cleanup_stale_containers(state: &TrayState) {
-    let output = std::process::Command::new("podman")
+    let output = tillandsias_podman::podman_cmd_sync()
         .args([
             "ps",
             "-a",
@@ -315,7 +315,7 @@ async fn cleanup_stale_containers(state: &TrayState) {
             }
 
             warn!(container = %name, "Removing stale container");
-            let _ = std::process::Command::new("podman")
+            let _ = tillandsias_podman::podman_cmd_sync()
                 .args(["rm", "-f", name])
                 .output();
         }

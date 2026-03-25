@@ -64,7 +64,7 @@ pub async fn fetch_repos() -> Result<Vec<RemoteRepo>, String> {
 
     info!("Fetching remote repos via gh CLI");
 
-    let output = tokio::process::Command::new("podman")
+    let output = tillandsias_podman::podman_cmd()
         .arg("run")
         .args(&args)
         .output()
@@ -161,7 +161,7 @@ pub async fn clone_repo(full_name: &str, target_dir: &Path) -> Result<(), String
 
     info!(repo = %full_name, "Cloning repository");
 
-    let output = tokio::process::Command::new("podman")
+    let output = tillandsias_podman::podman_cmd()
         .arg("run")
         .args(&args)
         .output()

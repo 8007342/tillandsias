@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Cosign signing produces verifiable signatures
 All release artifacts SHALL be signed with Cosign keyless mode and verifiable locally.

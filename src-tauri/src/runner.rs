@@ -95,7 +95,7 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
 
 /// Get the image size in human-readable form via `podman image inspect`.
 fn image_size_display(tag: &str) -> String {
-    let output = std::process::Command::new("podman")
+    let output = tillandsias_podman::podman_cmd_sync()
         .args(["image", "inspect", tag, "--format", "{{.Size}}"])
         .output();
 
@@ -346,7 +346,7 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
 
     // Execute podman with inherited stdio — terminal passes through.
     // Using .status() blocks until the container exits.
-    let status = std::process::Command::new("podman")
+    let status = tillandsias_podman::podman_cmd_sync()
         .arg("run")
         .args(&run_args)
         .status();
