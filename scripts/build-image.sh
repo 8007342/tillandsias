@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Build container images using Nix inside the builder toolbox.
+# Build container images using Nix inside an ephemeral podman container.
 # Usage: scripts/build-image.sh [forge|web] [--force]
 #
 # This script:
-#   1. Ensures the builder toolbox exists (via ensure-builder.sh)
-#   2. Checks if sources have changed since last build (staleness detection)
-#   3. Runs `nix build` inside the builder toolbox to produce a tarball
-#   4. Loads the tarball into podman and tags the image
+#   1. Checks if sources have changed since last build (staleness detection)
+#   2. Runs `nix build` inside an ephemeral `nixos/nix:latest` container
+#   3. Loads the resulting tarball into podman and tags the image
+#
+# No toolbox dependency — works on any system with podman.
 #
 # Environment:
 #   TILLANDSIAS_BUILD_VERBOSE=1   Show nix build output
@@ -15,7 +16,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-BUILDER_TOOLBOX="tillandsias-builder"
+NIX_IMAGE="nixos/nix:latest"
 CACHE_DIR="$ROOT/.nix-output"
 
 # Colors
@@ -48,7 +49,7 @@ while [[ $# -gt 0 ]]; do
         --help|-h)
             echo "Usage: scripts/build-image.sh [forge|web] [--force]"
             echo ""
-            echo "Build a container image using Nix inside the builder toolbox."
+            echo "Build a container image using Nix inside an ephemeral podman container."
             echo ""
             echo "Arguments:"
             echo "  forge       Build the forge (dev environment) image (default)"
@@ -79,13 +80,7 @@ fi
 _step "Building image: ${BOLD}${IMAGE_TAG}${NC}"
 
 # ---------------------------------------------------------------------------
-# Step 1: Ensure builder toolbox exists
-# ---------------------------------------------------------------------------
-_step "Ensuring builder toolbox..."
-"$SCRIPT_DIR/ensure-builder.sh"
-
-# ---------------------------------------------------------------------------
-# Step 2: Staleness detection
+# Step 1: Staleness detection
 # ---------------------------------------------------------------------------
 mkdir -p "$CACHE_DIR"
 
@@ -135,28 +130,45 @@ if [[ "$FLAG_FORCE" == true ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step 3: Build image via Nix inside the builder toolbox
+# Step 2: Build image via Nix inside an ephemeral podman container
 # ---------------------------------------------------------------------------
 BUILD_START="$(date +%s)"
-_step "Running nix build .#${NIX_ATTR} inside ${BUILDER_TOOLBOX}..."
 
-NIX_CMD="cd $ROOT && nix build .#${NIX_ATTR} --print-out-paths --no-link 2>/dev/null"
-TARBALL_PATH="$(toolbox run -c "$BUILDER_TOOLBOX" bash -lc "$NIX_CMD" | tail -1 | tr -d '[:space:]')"
+# Output directory for the tarball (host-side)
+OUTPUT_DIR="$CACHE_DIR/build-output"
+mkdir -p "$OUTPUT_DIR"
+rm -f "$OUTPUT_DIR/result.tar.gz"
 
-if [[ -z "$TARBALL_PATH" ]]; then
-    _error "Nix build failed — no output path returned"
+_step "Running nix build .#${NIX_ATTR} inside ephemeral ${NIX_IMAGE} container..."
+
+# Mount the source tree read-only at /src and an output volume at /output.
+# The nix build produces a tarball in /nix/store/; we copy it to /output
+# so it's accessible on the host after the container exits.
+#
+# --extra-experimental-features ensures flakes work regardless of the
+# image's default nix.conf.
+NIX_BUILD_CMD="nix --extra-experimental-features 'nix-command flakes' build /src#${NIX_ATTR} --print-out-paths --no-link 2>/dev/null | tail -1 | xargs -I{} cp {} /output/result.tar.gz"
+
+podman run --rm \
+    -v "$ROOT:/src:ro" \
+    -v "$OUTPUT_DIR:/output" \
+    "$NIX_IMAGE" \
+    bash -c "$NIX_BUILD_CMD"
+
+TARBALL_PATH="$OUTPUT_DIR/result.tar.gz"
+
+if [[ ! -f "$TARBALL_PATH" ]]; then
+    _error "Nix build failed — no tarball produced at $TARBALL_PATH"
     exit 1
 fi
 
-_info "Tarball: $TARBALL_PATH (inside builder toolbox)"
+_info "Tarball: $TARBALL_PATH"
 
 # ---------------------------------------------------------------------------
-# Step 4: Stream tarball from builder toolbox → podman load on host
+# Step 3: Load tarball into podman
 # ---------------------------------------------------------------------------
-# The tarball lives inside the builder toolbox's /nix/store/ which is NOT
-# accessible from the host. We stream it via cat through the toolbox.
 _step "Loading image into podman..."
-LOAD_OUTPUT="$(toolbox run -c "$BUILDER_TOOLBOX" cat "$TARBALL_PATH" | podman load 2>&1)"
+LOAD_OUTPUT="$(podman load < "$TARBALL_PATH" 2>&1)"
 echo "$LOAD_OUTPUT" | while IFS= read -r line; do
     _info "  $line"
 done
@@ -166,7 +178,7 @@ done
 LOADED_IMAGE="$(echo "$LOAD_OUTPUT" | grep 'Loaded image' | sed 's/.*: //' | tail -1 | tr -d '[:space:]')"
 
 # ---------------------------------------------------------------------------
-# Step 5: Tag the image
+# Step 4: Tag the image
 # ---------------------------------------------------------------------------
 if [[ -n "$LOADED_IMAGE" ]] && [[ "$LOADED_IMAGE" != "$IMAGE_TAG" ]]; then
     _step "Tagging as ${IMAGE_TAG}..."
@@ -185,9 +197,12 @@ if ! podman image exists "$IMAGE_TAG" 2>/dev/null; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step 6: Save hash for staleness detection
+# Step 5: Save hash for staleness detection
 # ---------------------------------------------------------------------------
 echo "$CURRENT_HASH" > "$HASH_FILE"
+
+# Clean up the build output tarball
+rm -f "$TARBALL_PATH"
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -209,5 +224,4 @@ _info "----------------------------------------------"
 _info "Image:    ${BOLD}${IMAGE_TAG}${NC}"
 _info "Size:     ${SIZE_DISPLAY}"
 _info "Time:     ${BUILD_DURATION}s"
-_info "Tarball:  ${TARBALL_PATH}"
 _info "----------------------------------------------"

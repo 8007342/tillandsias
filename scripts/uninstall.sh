@@ -50,9 +50,9 @@ if [[ "$WIPE" == true ]]; then
     podman rmi tillandsias-web:latest 2>/dev/null || true
     echo "  ✓ Removed container images"
 
-    # Remove builder toolbox
-    toolbox rm -f tillandsias-builder 2>/dev/null || true
-    echo "  ✓ Removed builder toolbox"
+    # Remove cached nix build output
+    rm -rf "$CACHE_DIR/build-output" 2>/dev/null || true
+    echo "  ✓ Removed build cache"
 fi
 
 echo ""

@@ -20,7 +20,6 @@ use tracing::debug;
 // Executable scripts
 // ---------------------------------------------------------------------------
 pub const BUILD_IMAGE: &str = include_str!("../../scripts/build-image.sh");
-pub const ENSURE_BUILDER: &str = include_str!("../../scripts/ensure-builder.sh");
 pub const GH_AUTH_LOGIN: &str = include_str!("../../gh-auth-login.sh");
 
 // ---------------------------------------------------------------------------
@@ -94,7 +93,6 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 ///   flake.lock
 ///   scripts/
 ///     build-image.sh
-///     ensure-builder.sh
 ///   images/
 ///     default/
 ///       entrypoint.sh
@@ -126,21 +124,12 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     fs::create_dir_all(&scripts_dir).map_err(|e| format!("scripts dir: {e}"))?;
     fs::write(scripts_dir.join("build-image.sh"), BUILD_IMAGE)
         .map_err(|e| format!("build-image.sh: {e}"))?;
-    fs::write(scripts_dir.join("ensure-builder.sh"), ENSURE_BUILDER)
-        .map_err(|e| format!("ensure-builder.sh: {e}"))?;
     #[cfg(unix)]
-    {
-        fs::set_permissions(
-            scripts_dir.join("build-image.sh"),
-            fs::Permissions::from_mode(0o700),
-        )
-        .ok();
-        fs::set_permissions(
-            scripts_dir.join("ensure-builder.sh"),
-            fs::Permissions::from_mode(0o700),
-        )
-        .ok();
-    }
+    fs::set_permissions(
+        scripts_dir.join("build-image.sh"),
+        fs::Permissions::from_mode(0o700),
+    )
+    .ok();
 
     // -- images/default/ --
     let default_dir = dir.join("images").join("default");
