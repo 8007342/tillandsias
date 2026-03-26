@@ -3,6 +3,7 @@
 mod build_lock;
 mod cleanup;
 mod cli;
+mod desktop;
 mod embedded;
 mod event_loop;
 mod github;
@@ -82,6 +83,11 @@ fn main() {
     // Initialize tracing — dual output (stderr if TTY + file appender) in all builds.
     // Hold the guard so the non-blocking file writer flushes on shutdown.
     let _log_guard = logging::init();
+
+    // AppImage desktop integration — install .desktop file and icons on first run.
+    // Must happen after logging init (so we can trace) and before tray setup
+    // (so the icon is available when GNOME processes the tray window).
+    desktop::ensure_desktop_integration();
 
     // Singleton guard — only one tray instance at a time.
     // If another instance is already running, exit silently.

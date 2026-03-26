@@ -241,7 +241,7 @@ DESK
     echo "  ✓ Desktop launcher installed"
 
     # Install icons (use the placeholder green PNGs from src-tauri/icons/)
-    for size in 32x32 128x128; do
+    for size in 32x32 128x128 256x256; do
         mkdir -p "$ICON_DIR/$size/apps"
         # Copy from data dir if available, otherwise skip
         if [[ -f "$DATA_DIR/icons/$size.png" ]]; then
