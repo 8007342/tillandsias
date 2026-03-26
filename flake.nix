@@ -99,6 +99,7 @@
               cp ${forgeShellConfigs}/config.fish ./etc/skel/.config/fish/config.fish
 
               # Welcome script
+              mkdir -p ./usr/local/share/tillandsias
               cp ${forgeWelcome} ./usr/local/share/tillandsias/forge-welcome.sh
               chmod +x ./usr/local/share/tillandsias/forge-welcome.sh
 
