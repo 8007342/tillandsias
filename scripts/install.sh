@@ -50,127 +50,30 @@ find_asset() {
 }
 
 # ---------------------------------------------------------------------------
-# Linux: prefer native packages (.deb/.rpm), fall back to AppImage
+# Linux: download AppImage to ~/.local/bin/
 # ---------------------------------------------------------------------------
 if [ "$PLATFORM" = "linux" ]; then
     INSTALLED=false
 
     # Detect immutable/ostree OS (Silverblue, Kinoite, uBlue, etc.)
-    # Must happen BEFORE HAS_SUDO check — immutable routing is unconditional.
-    IS_IMMUTABLE=false
     if [ -e /run/ostree-booted ] || command -v rpm-ostree &>/dev/null; then
-        IS_IMMUTABLE=true
         echo "  Immutable OS detected (Silverblue/Kinoite/uBlue) — installing to userspace"
         echo ""
     fi
 
-    # Detect package manager
-    if command -v dpkg &>/dev/null; then
-        PKG_TYPE="deb"
-    elif command -v rpm &>/dev/null; then
-        PKG_TYPE="rpm"
-    else
-        PKG_TYPE="none"
+    echo "  Installing AppImage to ~/.local/bin/ (no root required)..."
+    APPIMAGE_URL=$(find_asset "linux-x86_64\\.AppImage")
+    if [ -z "$APPIMAGE_URL" ]; then
+        # Try old versioned name as fallback
+        APPIMAGE_URL=$(find_asset "_amd64\\.AppImage")
     fi
-
-    # When piped from curl, sudo won't work (stdin is the script).
-    # Skip package manager installs that need sudo; go to AppImage.
-    HAS_SUDO=false
-    if [ -t 0 ] && command -v sudo &>/dev/null; then
-        HAS_SUDO=true
-    fi
-
-    # Try native package install (only if we can use sudo AND not on immutable OS)
-    if [ "$PKG_TYPE" = "deb" ] && [ "$HAS_SUDO" = true ] && [ "$IS_IMMUTABLE" = false ]; then
-        # Configure APT repository for auto-updates
-        echo "  Configuring APT repository..."
-        if curl -fsSL https://8007342.github.io/tillandsias/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/tillandsias.gpg 2>/dev/null; then
-            echo "deb [signed-by=/usr/share/keyrings/tillandsias.gpg] https://8007342.github.io/tillandsias/deb stable main" | sudo tee /etc/apt/sources.list.d/tillandsias.list > /dev/null
-            sudo apt update -qq 2>/dev/null
-            sudo apt install -y tillandsias 2>/dev/null && INSTALLED=true
-            if [ "$INSTALLED" = true ]; then
-                echo "  ✓ Installed via APT (auto-updates enabled)"
-            fi
-        fi
-        # Fallback: download .deb directly
-        if [ "$INSTALLED" = false ]; then
-            DEB_URL=$(find_asset "_amd64\\.deb")
-            if [ -n "$DEB_URL" ]; then
-                echo "  Downloading .deb package..."
-                if curl -fsSL -o /tmp/tillandsias.deb "$DEB_URL"; then
-                    echo "  Installing .deb package..."
-                    sudo dpkg -i /tmp/tillandsias.deb 2>/dev/null && INSTALLED=true
-                    rm -f /tmp/tillandsias.deb
-                    if [ "$INSTALLED" = true ]; then
-                        echo "  ✓ Installed via dpkg"
-                    fi
-                fi
-            fi
-        fi
-    elif [ "$PKG_TYPE" = "rpm" ] && [ "$HAS_SUDO" = true ] && [ "$IS_IMMUTABLE" = false ]; then
-        # Try COPR first (enables automatic updates via dnf)
-        if command -v dnf &>/dev/null && ! command -v rpm-ostree &>/dev/null; then
-            echo "  Configuring COPR repository..."
-            if sudo dnf copr enable -y 8007342/tillandsias 2>/dev/null; then
-                if sudo dnf install -y tillandsias 2>/dev/null; then
-                    INSTALLED=true
-                    echo "  ✓ Installed via COPR (auto-updates enabled)"
-                fi
-            fi
-        fi
-
-        # Fallback: download RPM directly from GitHub Releases
-        if [ "$INSTALLED" = false ]; then
-            RPM_URL=$(find_asset "_x86_64\\.rpm")
-            if [ -n "$RPM_URL" ]; then
-                echo "  Downloading .rpm package..."
-                if curl -fsSL -o /tmp/tillandsias.rpm "$RPM_URL"; then
-                    # Try rpm-ostree first (immutable OS like Silverblue)
-                    if command -v rpm-ostree &>/dev/null; then
-                        echo "  Installing via rpm-ostree (immutable OS)..."
-                        rpm-ostree install /tmp/tillandsias.rpm 2>/dev/null && INSTALLED=true
-                        if [ "$INSTALLED" = true ]; then
-                            echo "  ✓ Installed via rpm-ostree (reboot to apply)"
-                        fi
-                    fi
-                    # Fallback to regular rpm/dnf
-                    if [ "$INSTALLED" = false ]; then
-                        echo "  Installing .rpm package..."
-                        if command -v dnf &>/dev/null; then
-                            sudo dnf install -y /tmp/tillandsias.rpm 2>/dev/null && INSTALLED=true
-                        else
-                            sudo rpm -i /tmp/tillandsias.rpm 2>/dev/null && INSTALLED=true
-                        fi
-                        if [ "$INSTALLED" = true ]; then
-                            echo "  ✓ Installed via rpm"
-                        fi
-                    fi
-                    rm -f /tmp/tillandsias.rpm
-                fi
-            fi
-        fi
-    fi
-
-    # AppImage: primary path on immutable OS, fallback elsewhere
-    if [ "$INSTALLED" = false ]; then
-        if [ "$IS_IMMUTABLE" = true ]; then
-            echo "  Installing AppImage to ~/.local/bin/ (no reboot needed)..."
-        else
-            echo "  Falling back to AppImage (no root required)..."
-        fi
-        APPIMAGE_URL=$(find_asset "linux-x86_64\\.AppImage")
-        if [ -z "$APPIMAGE_URL" ]; then
-            # Try old versioned name as fallback
-            APPIMAGE_URL=$(find_asset "_amd64\\.AppImage")
-        fi
-        if [ -n "$APPIMAGE_URL" ]; then
-            mkdir -p "$INSTALL_DIR"
-            echo "  Downloading AppImage..."
-            if curl -fsSL -o "$INSTALL_DIR/tillandsias" "$APPIMAGE_URL"; then
-                chmod +x "$INSTALL_DIR/tillandsias"
-                INSTALLED=true
-                echo "  ✓ Installed AppImage to $INSTALL_DIR/tillandsias"
-            fi
+    if [ -n "$APPIMAGE_URL" ]; then
+        mkdir -p "$INSTALL_DIR"
+        echo "  Downloading AppImage..."
+        if curl -fsSL -o "$INSTALL_DIR/tillandsias" "$APPIMAGE_URL"; then
+            chmod +x "$INSTALL_DIR/tillandsias"
+            INSTALLED=true
+            echo "  ✓ Installed AppImage to $INSTALL_DIR/tillandsias"
         fi
     fi
 

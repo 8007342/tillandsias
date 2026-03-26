@@ -25,15 +25,7 @@
       "icons/icon.png",
       "icons/icon.ico"
     ],
-    "createUpdaterArtifacts": "v1Compatible",
-    "linux": {
-      "deb": {
-        "desktopTemplate": "desktop-template.desktop"
-      },
-      "rpm": {
-        "desktopTemplate": "desktop-template.desktop"
-      }
-    }
+    "createUpdaterArtifacts": "v1Compatible"
   },
   "plugins": {
     "updater": {

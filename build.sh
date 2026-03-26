@@ -331,9 +331,9 @@ if [[ "$FLAG_RELEASE" == true ]]; then
     _toolbox_ensure_tauri_cli
 
     # Skip AppImage in toolbox — linuxdeploy needs FUSE which isn't available.
-    # AppImage bundling works in CI (ubuntu with FUSE). For local dev, we
-    # produce deb + rpm bundles and the raw binary.
-    BUNDLES="deb,rpm"
+    # AppImage bundling works in CI (ubuntu with FUSE) and via --appimage.
+    # Linux only distributes via AppImage; no deb/rpm bundles.
+    BUNDLES="none"
     if [[ "$(uname -s)" == "Darwin" ]]; then
         BUNDLES="dmg"
     fi
@@ -367,7 +367,7 @@ if [[ "$FLAG_RELEASE" == true ]]; then
         _info "Binary: tillandsias-tray ($(du -h "$RELEASE_BIN" | cut -f1))"
     fi
     if [[ -d "$BUNDLE_DIR" ]]; then
-        find "$BUNDLE_DIR" -type f \( -name "*.deb" -o -name "*.rpm" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) 2>/dev/null | while read -r f; do
+        find "$BUNDLE_DIR" -type f \( -name "*.AppImage" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) 2>/dev/null | while read -r f; do
             _info "Bundle: $(basename "$f") ($(du -h "$f" | cut -f1))"
         done
     fi
