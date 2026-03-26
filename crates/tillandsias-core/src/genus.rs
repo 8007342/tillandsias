@@ -171,6 +171,24 @@ impl GenusAllocator {
             }
         }
     }
+
+    /// Seed the allocator from a list of already-running containers.
+    ///
+    /// Called once at event loop startup when `state.running` has been
+    /// pre-populated from `podman ps` (graceful restart).  Marks every
+    /// `(project_name, genus)` pair as in-use so that subsequent
+    /// `allocate()` calls do not collide with restored environments.
+    pub fn seed_from_running(&mut self, running: &[crate::state::ContainerInfo]) {
+        for container in running {
+            let in_use = self
+                .allocated
+                .entry(container.project_name.clone())
+                .or_default();
+            if !in_use.contains(&container.genus) {
+                in_use.push(container.genus);
+            }
+        }
+    }
 }
 
 impl Default for GenusAllocator {

@@ -44,6 +44,11 @@ pub async fn run(
 ) {
     let mut allocator = GenusAllocator::new();
 
+    // Seed allocator from containers discovered during startup (graceful restart).
+    // Without this, allocate() would not know pre-existing genera are taken and
+    // could assign a duplicate genus when the user clicks "Attach Here".
+    allocator.seed_from_running(&state.running);
+
     info!("Event loop started");
 
     // Timer drives remote repos fetch — checks periodically if cache is stale.
