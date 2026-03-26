@@ -28,16 +28,32 @@ fn image_tag(name: &str) -> String {
 fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
     // Check if another process (e.g., tillandsias init) is already building
     if crate::build_lock::is_running(image_name) {
-        println!("  Waiting for image build in progress...");
-        crate::build_lock::wait_for_build(image_name)?;
+        println!("  Waiting for environment setup to complete...");
+        crate::build_lock::wait_for_build(image_name)
+            .map_err(|e| {
+                if debug {
+                    eprintln!("  [debug] Build wait timed out: {e}");
+                }
+                "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+            })?;
         return Ok(());
     }
 
     crate::build_lock::acquire(image_name)
-        .map_err(|e| format!("Cannot acquire build lock: {e}"))?;
+        .map_err(|e| {
+            if debug {
+                eprintln!("  [debug] Cannot acquire build lock: {e}");
+            }
+            "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+        })?;
 
     let source_dir = crate::embedded::write_image_sources()
-        .map_err(|e| format!("Failed to extract image sources: {e}"))?;
+        .map_err(|e| {
+            if debug {
+                eprintln!("  [debug] Failed to extract embedded image sources: {e}");
+            }
+            "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+        })?;
 
     let script = source_dir.join("scripts").join("build-image.sh");
 
@@ -54,7 +70,10 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .status()
-        .map_err(|e| format!("Failed to run build-image.sh: {e}"))?;
+        .map_err(|e| {
+            eprintln!("  [debug] Failed to launch build script: {e}");
+            "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+        })?;
 
     crate::embedded::cleanup_image_sources();
     crate::build_lock::release(image_name);
@@ -62,10 +81,10 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
     if status.success() {
         Ok(())
     } else {
-        Err(format!(
-            "build-image.sh exited with code {}",
-            status.code().unwrap_or(-1)
-        ))
+        if debug {
+            eprintln!("  [debug] Build script exited with code {}", status.code().unwrap_or(-1));
+        }
+        Err("Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias".into())
     }
 }
 
@@ -267,10 +286,7 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
         let size = image_size_display(&tag);
         println!("  \u{2713} Image ready ({size})");
     } else {
-        eprintln!(
-            "  \u{2717} Image {} not found. Run: ./build.sh --install",
-            tag
-        );
+        eprintln!("  \u{2717} Development environment not ready yet. Tillandsias will set it up automatically — please try again in a few minutes.");
         return false;
     }
 

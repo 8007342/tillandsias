@@ -30,7 +30,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use tokio::sync::mpsc;
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 use tillandsias_core::config::{GlobalConfig, cache_dir, load_global_config, load_project_config};
 use tillandsias_core::event::{AppEvent, BuildProgressEvent, ContainerState};
@@ -197,10 +197,16 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
 
     // Acquire build lock
     crate::build_lock::acquire(image_name)
-        .map_err(|e| format!("Cannot acquire build lock: {e}"))?;
+        .map_err(|e| {
+            error!(image = image_name, error = %e, "Cannot acquire build lock");
+            "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+        })?;
 
     let source_dir = crate::embedded::write_image_sources()
-        .map_err(|e| format!("Failed to extract image sources: {e}"))?;
+        .map_err(|e| {
+            error!(image = image_name, error = %e, "Failed to extract embedded image sources to temp");
+            "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+        })?;
 
     let script = source_dir.join("scripts").join("build-image.sh");
     info!(script = %script.display(), image = image_name, "Running embedded build-image.sh");
@@ -213,7 +219,10 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
         .env_remove("LD_LIBRARY_PATH")
         .env_remove("LD_PRELOAD")
         .output()
-        .map_err(|e| format!("Failed to run build-image.sh: {e}"))?;
+        .map_err(|e| {
+            error!(script = %script.display(), image = image_name, error = %e, "Failed to launch image build script");
+            "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+        })?;
 
     // Clean up temp files and release lock regardless of result
     crate::embedded::cleanup_image_sources();
@@ -222,10 +231,14 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        return Err(format!(
-            "build-image.sh failed (exit {}):\n{stdout}\n{stderr}",
-            output.status.code().unwrap_or(-1)
-        ));
+        error!(
+            image = image_name,
+            exit_code = output.status.code().unwrap_or(-1),
+            stdout = %stdout,
+            stderr = %stderr,
+            "Image build script failed"
+        );
+        return Err("Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias".into());
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -473,16 +486,16 @@ pub async fn handle_attach_here(
             Ok(Ok(())) => {
                 // Verify the image actually exists now
                 if !client.image_exists(FORGE_IMAGE_TAG).await {
+                    error!(tag = FORGE_IMAGE_TAG, "Image still not found after build completed");
                     let _ = build_tx.try_send(BuildProgressEvent::Failed {
                         image_name: "forge".to_string(),
-                        reason: format!("Image {} still not found after build", FORGE_IMAGE_TAG),
+                        reason: "Development environment not ready yet".to_string(),
                     });
                     state.running.retain(|c| c.name != container_name);
                     allocator.release(&project_name, genus);
-                    return Err(format!(
-                        "Image {} still not found after build-image.sh completed",
-                        FORGE_IMAGE_TAG
-                    ));
+                    return Err(
+                        "Development environment not ready yet. Tillandsias will set it up automatically — please try again in a few minutes.".into()
+                    );
                 }
                 info!(tag = FORGE_IMAGE_TAG, "Image built successfully");
                 // Notify event loop: build completed (menu chip: ✅ forge ready)
@@ -491,24 +504,24 @@ pub async fn handle_attach_here(
                 });
             }
             Ok(Err(ref e)) => {
-                let reason = e.clone();
+                error!(tag = FORGE_IMAGE_TAG, error = %e, "Image build failed");
                 let _ = build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "forge".to_string(),
-                    reason,
+                    reason: "Tillandsias is setting up".to_string(),
                 });
                 state.running.retain(|c| c.name != container_name);
                 allocator.release(&project_name, genus);
-                return Err(format!("Failed to build image {}: {}", FORGE_IMAGE_TAG, e));
+                return Err("Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias".into());
             }
             Err(ref e) => {
-                let reason = format!("Build task panicked: {e}");
+                error!(tag = FORGE_IMAGE_TAG, error = %e, "Image build task panicked");
                 let _ = build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "forge".to_string(),
-                    reason,
+                    reason: "Tillandsias is setting up".to_string(),
                 });
                 state.running.retain(|c| c.name != container_name);
                 allocator.release(&project_name, genus);
-                return Err(format!("Image build task panicked: {}", e));
+                return Err("Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias".into());
             }
         }
     } else {
@@ -739,7 +752,8 @@ pub async fn handle_terminal(
 
     let client = PodmanClient::new();
     if !client.image_exists(FORGE_IMAGE_TAG).await {
-        return Err("Forge image not found. Run ./build.sh --install first.".into());
+        error!(tag = FORGE_IMAGE_TAG, "Image not found when opening maintenance terminal");
+        return Err("Development environment not ready yet. Tillandsias will set it up automatically — please try again in a few minutes.".into());
     }
 
     let cache = cache_dir();
@@ -832,14 +846,83 @@ pub async fn handle_terminal(
     }
 }
 
-/// Handle "GitHub Login" — extract embedded gh-auth-login.sh to temp and run it.
+/// Handle "GitHub Login" — build forge image if missing, then run gh-auth-login.sh.
+///
+/// On first launch the forge image does not exist yet. Rather than failing with
+/// "Cannot find build-image.sh", this handler builds the image first (same
+/// pipeline as Attach Here) and shows a progress chip in the tray while it
+/// waits. Only after the image is confirmed present does it open the terminal.
+///
 /// No filesystem scripts are trusted — everything comes from the signed binary.
-pub async fn handle_github_login(_state: &TrayState) -> Result<(), String> {
+pub async fn handle_github_login(
+    _state: &TrayState,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<(), String> {
+    info!("GitHub Login: checking forge image");
+
+    let client = PodmanClient::new();
+
+    if !client.image_exists(FORGE_IMAGE_TAG).await {
+        info!(tag = FORGE_IMAGE_TAG, "Forge image missing — building before GitHub Login");
+
+        // Show "Building environment..." chip in tray menu
+        let _ = build_tx.try_send(BuildProgressEvent::Started {
+            image_name: "forge".to_string(),
+        });
+
+        let build_result = tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
+
+        match build_result {
+            Ok(Ok(())) => {
+                // Verify the image actually exists now
+                if !client.image_exists(FORGE_IMAGE_TAG).await {
+                    error!(tag = FORGE_IMAGE_TAG, "Image still not found after build completed (GitHub Login)");
+                    let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                        image_name: "forge".to_string(),
+                        reason: "Development environment not ready yet".to_string(),
+                    });
+                    return Err("Development environment not ready yet. Tillandsias will set it up automatically — please try again in a few minutes.".into());
+                }
+                info!(
+                    tag = FORGE_IMAGE_TAG,
+                    "Image built successfully — proceeding with GitHub Login"
+                );
+                let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                    image_name: "forge".to_string(),
+                });
+            }
+            Ok(Err(ref e)) => {
+                error!(tag = FORGE_IMAGE_TAG, error = %e, "Image build failed (GitHub Login)");
+                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: "forge".to_string(),
+                    reason: "Tillandsias is setting up".to_string(),
+                });
+                return Err("Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias".into());
+            }
+            Err(ref e) => {
+                error!(tag = FORGE_IMAGE_TAG, error = %e, "Image build task panicked (GitHub Login)");
+                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: "forge".to_string(),
+                    reason: "Tillandsias is setting up".to_string(),
+                });
+                return Err("Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias".into());
+            }
+        }
+    } else {
+        info!(
+            tag = FORGE_IMAGE_TAG,
+            "Forge image present — proceeding with GitHub Login"
+        );
+    }
+
     info!("GitHub Login: extracting embedded script to temp");
 
     let script_path =
         crate::embedded::write_temp_script("gh-auth-login.sh", crate::embedded::GH_AUTH_LOGIN)
-            .map_err(|e| format!("Failed to extract gh-auth-login.sh: {e}"))?;
+            .map_err(|e| {
+                error!(error = %e, "Failed to extract embedded gh-auth-login.sh to temp");
+                "Tillandsias installation may be incomplete. Please reinstall from https://github.com/8007342/tillandsias"
+            })?;
 
     open_terminal(&script_path.display().to_string(), "GitHub Login")
         .map_err(|e| format!("Failed to open terminal: {e}"))

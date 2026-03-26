@@ -11,28 +11,29 @@ const FORGE_IMAGE: &str = "tillandsias-forge:latest";
 
 /// Run the init command. Returns true on success.
 pub fn run() -> bool {
-    println!("Tillandsias init — pre-building container images");
+    println!("Tillandsias init — preparing development environment");
     println!();
 
     // Check if forge image already exists
     if image_exists(FORGE_IMAGE) {
-        println!("  ✓ Forge image already built");
+        println!("  ✓ Development environment already ready");
         println!();
-        println!("Images up to date.");
+        println!("Ready.");
         return true;
     }
 
     // Check if another build is running
     if build_lock::is_running("forge") {
-        println!("  ⏳ Forge image build already in progress, waiting...");
+        println!("  ⏳ Setup already in progress, waiting...");
         if let Err(e) = build_lock::wait_for_build("forge") {
-            eprintln!("  ✗ {e}");
+            eprintln!("  [internal] Wait timed out: {e}");
+            eprintln!("  ✗ Setup timed out. If this persists, please reinstall from https://github.com/8007342/tillandsias");
             return false;
         }
         if image_exists(FORGE_IMAGE) {
-            println!("  ✓ Forge image ready");
+            println!("  ✓ Environment ready");
             println!();
-            println!("Images up to date.");
+            println!("Ready.");
             return true;
         }
         // Build finished but image still missing — fall through to build
@@ -41,18 +42,20 @@ pub fn run() -> bool {
     // Acquire lock and build
     if let Err(e) = build_lock::acquire("forge") {
         // Another process grabbed the lock between our check and acquire — wait
-        println!("  ⏳ {e} — waiting...");
+        eprintln!("  [internal] Acquire failed: {e}");
+        println!("  ⏳ Waiting for setup to complete...");
         if let Err(e) = build_lock::wait_for_build("forge") {
-            eprintln!("  ✗ {e}");
+            eprintln!("  [internal] Wait timed out: {e}");
+            eprintln!("  ✗ Setup timed out. If this persists, please reinstall from https://github.com/8007342/tillandsias");
             return false;
         }
         if image_exists(FORGE_IMAGE) {
-            println!("  ✓ Forge image ready");
+            println!("  ✓ Environment ready");
             return true;
         }
     }
 
-    println!("  Building forge image...");
+    println!("  Setting up development environment...");
     println!("  (This may take a few minutes on first run)");
     println!();
 
@@ -64,14 +67,14 @@ pub fn run() -> bool {
     match result {
         Ok(()) => {
             println!();
-            println!("  ✓ Forge image built");
+            println!("  ✓ Development environment ready");
             println!();
-            println!("Images ready. Run: tillandsias");
+            println!("Ready. Run: tillandsias");
             true
         }
         Err(e) => {
             eprintln!();
-            eprintln!("  ✗ Build failed: {e}");
+            eprintln!("  ✗ Setup failed: {e}");
             false
         }
     }
@@ -80,7 +83,10 @@ pub fn run() -> bool {
 /// Build the forge image using the embedded build-image.sh script.
 fn build_forge_image() -> Result<(), String> {
     let source_dir = embedded::write_image_sources()
-        .map_err(|e| format!("Failed to extract image sources: {e}"))?;
+        .map_err(|e| {
+            eprintln!("  [internal] Failed to extract embedded image sources: {e}");
+            "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+        })?;
 
     let script = source_dir.join("scripts").join("build-image.sh");
 
@@ -93,17 +99,18 @@ fn build_forge_image() -> Result<(), String> {
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .status()
-        .map_err(|e| format!("Failed to run build-image.sh: {e}"))?;
+        .map_err(|e| {
+            eprintln!("  [internal] Failed to launch build script: {e}");
+            "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+        })?;
 
     embedded::cleanup_image_sources();
 
     if status.success() {
         Ok(())
     } else {
-        Err(format!(
-            "build-image.sh exited with code {}",
-            status.code().unwrap_or(-1)
-        ))
+        eprintln!("  [internal] Build script exited with code {}", status.code().unwrap_or(-1));
+        Err("Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias".into())
     }
 }
 
