@@ -6,87 +6,31 @@ A tray app that makes software appear — safely, locally, reproducibly.
 
 ## Install
 
-<!-- GitHub doesn't support JS-based tab switching in markdown.
-     We use <details> to show the user's likely OS expanded, others collapsed. -->
-
-<details open>
-<summary><strong>Linux</strong></summary>
-
+**Linux**
 ```bash
 curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
 ```
 
-<details>
-<summary>Other ways to install</summary>
-
-**Debian/Ubuntu (APT repository — auto-updates):**
-```bash
-curl -fsSL https://8007342.github.io/tillandsias/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/tillandsias.gpg
-echo "deb [signed-by=/usr/share/keyrings/tillandsias.gpg] https://8007342.github.io/tillandsias/deb stable main" | sudo tee /etc/apt/sources.list.d/tillandsias.list
-sudo apt update && sudo apt install tillandsias
-```
-
-**Fedora (COPR — auto-updates):**
-```bash
-sudo dnf copr enable 8007342/tillandsias
-sudo dnf install tillandsias
-```
-
-**Fedora Silverblue (COPR — auto-updates):**
-```bash
-# Add the COPR repo (dnf copr plugin is not available on the immutable host)
-sudo curl -fsSL "https://copr.fedorainfracloud.org/coprs/8007342/tillandsias/repo/fedora-$(rpm -E %fedora)/8007342-tillandsias-fedora-$(rpm -E %fedora).repo" \
-  -o /etc/yum.repos.d/8007342-tillandsias.repo
-# Layer the RPM
-rpm-ostree install tillandsias
-# Reboot to apply
-systemctl reboot
-```
-
-| Format | Download |
-|--------|----------|
-| AppImage (portable) | [Tillandsias-linux-x86_64.AppImage](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-linux-x86_64.AppImage) |
-| RPM (Fedora/RHEL) | [latest release](https://github.com/8007342/tillandsias/releases/latest) |
-| DEB (Ubuntu/Debian) | [latest release](https://github.com/8007342/tillandsias/releases/latest) |
-
-</details>
-</details>
-
-<details>
-<summary><strong>macOS</strong></summary>
-
+**macOS**
 ```bash
 curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
 ```
 
-<details>
-<summary>Other ways to install</summary>
-
-| Format | Download |
-|--------|----------|
-| Disk Image — Apple Silicon | [Tillandsias-macos-aarch64.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-macos-aarch64.dmg) |
-| Disk Image — Intel | [Tillandsias-macos-x86_64.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-macos-x86_64.dmg) |
-| App Bundle (.app) | [Tillandsias-macos-aarch64.app.tar.gz](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-macos-aarch64.app.tar.gz) |
-
-</details>
-</details>
-
-<details>
-<summary><strong>Windows</strong></summary>
-
+**Windows**
 ```powershell
 irm https://github.com/8007342/tillandsias/releases/latest/download/install.ps1 | iex
 ```
 
 <details>
-<summary>Other ways to install</summary>
+<summary>Direct downloads</summary>
 
-| Format | Download |
-|--------|----------|
-| Installer (.exe) | [Tillandsias-windows-x86_64-setup.exe](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-windows-x86_64-setup.exe) |
-| MSI | [latest release](https://github.com/8007342/tillandsias/releases/latest) |
+| Platform | Download |
+|----------|----------|
+| Linux | [Tillandsias-linux-x86_64.AppImage](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-linux-x86_64.AppImage) |
+| macOS (Apple Silicon) | [Tillandsias-macos-aarch64.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-macos-aarch64.dmg) |
+| macOS (Intel) | [Tillandsias-macos-x86_64.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-macos-x86_64.dmg) |
+| Windows | [Tillandsias-windows-x86_64-setup.exe](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-windows-x86_64-setup.exe) |
 
-</details>
 </details>
 
 ## Run
