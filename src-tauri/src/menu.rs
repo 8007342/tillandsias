@@ -277,9 +277,9 @@ fn build_settings_submenu<R: Runtime>(
 
     // GitHub Login / GitHub Login Refresh
     let github_label = if authenticated {
-        "GitHub Login Refresh"
+        "\u{1F512} GitHub Login Refresh"
     } else {
-        "GitHub Login"
+        "\u{1F511} GitHub Login"
     };
     settings = settings
         .item(&MenuItemBuilder::with_id(gen_id(ids::GITHUB_LOGIN), github_label).build(app)?);
@@ -481,8 +481,13 @@ fn build_chip_label(build: &tillandsias_core::state::BuildProgress) -> String {
 }
 
 /// Check if GitHub authentication is needed.
-/// Returns true if no gh credentials exist in the secrets cache.
+/// Returns true if no gh credentials exist in the native keyring or secrets cache.
 pub(crate) fn needs_github_login() -> bool {
+    // Check keyring first — token may exist there without a hosts.yml on disk.
+    if let Ok(Some(_)) = crate::secrets::retrieve_github_token() {
+        return false;
+    }
+    // Fallback: check the plain text file.
     let cache = tillandsias_core::config::cache_dir();
     let gh_hosts = cache.join("secrets").join("gh").join("hosts.yml");
     !gh_hosts.exists()
