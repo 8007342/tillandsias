@@ -157,13 +157,12 @@ pub fn build_tray_menu<R: Runtime>(
 
     menu = menu.separator();
 
-    // Settings submenu — contains GitHub Login/Refresh and Remote Projects.
+    // Settings submenu — contains GitHub Login/Refresh, Remote Projects, version, credit.
     let settings_submenu = build_settings_submenu(app, state, &watch_path)?;
     menu = menu.item(&settings_submenu);
 
-    // About submenu — version, credit, and Quit grouped at the bottom.
-    let about_submenu = build_about_submenu(app)?;
-    menu = menu.item(&about_submenu);
+    // Quit — always visible at top level
+    menu = menu.item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), "Quit Tillandsias").build(app)?);
 
     debug!(
         projects = state.projects.len(),
@@ -197,9 +196,7 @@ fn build_decay_menu<R: Runtime>(
     );
 
     menu = menu.separator();
-
-    let about_submenu = build_about_submenu(app)?;
-    menu = menu.item(&about_submenu);
+    menu = menu.item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), "Quit Tillandsias").build(app)?);
 
     debug!("Decay menu built (podman unavailable)");
 
@@ -302,37 +299,6 @@ fn build_activity_submenu<R: Runtime>(
     activity.build()
 }
 
-/// Build the About submenu containing version, credit, and Quit.
-///
-/// Label uses the full 4-part version so the user can see the version
-/// without expanding the submenu.
-fn build_about_submenu<R: Runtime>(
-    app: &AppHandle<R>,
-) -> tauri::Result<tauri::menu::Submenu<R>> {
-    let version = include_str!("../../VERSION").trim();
-    let submenu_label = format!("Tillandsias v{version}");
-
-    let about = SubmenuBuilder::new(app, &submenu_label)
-        .item(
-            &MenuItemBuilder::with_id(
-                ids::static_id("version"),
-                format!("Tillandsias v{version}"),
-            )
-            .enabled(false)
-            .build(app)?,
-        )
-        .item(
-            &MenuItemBuilder::with_id(ids::static_id("credit"), "by Tlatoāni")
-                .enabled(false)
-                .build(app)?,
-        )
-        .separator()
-        .item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), "Quit Tillandsias").build(app)?)
-        .build()?;
-
-    Ok(about)
-}
-
 /// Build the Settings submenu containing GitHub Login/Refresh and Remote Projects.
 fn build_settings_submenu<R: Runtime>(
     app: &AppHandle<R>,
@@ -358,6 +324,20 @@ fn build_settings_submenu<R: Runtime>(
         let remote_submenu = build_remote_projects_submenu(app, state, watch_path)?;
         settings = settings.item(&remote_submenu);
     }
+
+    // Version and credit at the bottom of Settings
+    settings = settings.separator();
+    let version = include_str!("../../VERSION").trim();
+    settings = settings.item(
+        &MenuItemBuilder::with_id(ids::static_id("version"), format!("Tillandsias v{version}"))
+            .enabled(false)
+            .build(app)?,
+    );
+    settings = settings.item(
+        &MenuItemBuilder::with_id(ids::static_id("credit"), "by Tlatoāni")
+            .enabled(false)
+            .build(app)?,
+    );
 
     settings.build()
 }
