@@ -11,6 +11,7 @@ mod init;
 mod logging;
 mod menu;
 mod runner;
+mod secrets;
 mod singleton;
 mod updater;
 
@@ -168,6 +169,10 @@ fn main() {
             let app_handle_for_loop = app_handle.clone();
 
             tauri::async_runtime::spawn(async move {
+                // Migrate existing plain text GitHub token to native keyring.
+                // Idempotent — no-op if already migrated or keyring unavailable.
+                secrets::migrate_token_to_keyring();
+
                 // Check podman availability
                 let client = PodmanClient::new();
                 let has_podman = client.is_available().await;

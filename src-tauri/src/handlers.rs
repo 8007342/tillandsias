@@ -18,7 +18,7 @@
 //! Volume mounts are limited to:
 //!   1. Project directory (rw) -- user's own files, mounted at /home/forge/src/<name>
 //!   2. Cache directory (rw)   -- ~/.cache/tillandsias for tool persistence
-//!   3. Secrets directory (rw) -- gh credentials + .gitconfig only
+//!   3. Secrets directory (rw) -- gh credentials (refreshed from OS keyring) + .gitconfig only
 //!
 //! NOT mounted (by design):
 //!   - Host root filesystem or /
@@ -519,6 +519,10 @@ pub async fn handle_attach_here(
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
 
+    // Refresh hosts.yml from native keyring so the container gets
+    // a current GitHub token without plain text lingering on disk.
+    crate::secrets::write_hosts_yml_from_keyring();
+
     // Build the full `podman run -it --rm ...` command string.
     // We open a terminal window running this command — the terminal provides
     // the TTY, podman passes it to the container, opencode gets a real terminal.
@@ -747,6 +751,9 @@ pub async fn handle_terminal(
     if !gitconfig_path.exists() {
         std::fs::File::create(&gitconfig_path).ok();
     }
+
+    // Refresh hosts.yml from native keyring before terminal launch.
+    crate::secrets::write_hosts_yml_from_keyring();
 
     // Allocate port range — check actual podman containers for conflicts
     let mut existing_ports: Vec<(u16, u16)> = state.running.iter().map(|c| c.port_range).collect();

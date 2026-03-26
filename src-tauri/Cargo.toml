@@ -20,6 +20,7 @@ tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 dirs = { workspace = true }
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

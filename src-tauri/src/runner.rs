@@ -150,6 +150,9 @@ fn build_run_args(
     // Secrets directory — git config, gh auth
     let secrets_dir = cache.join("secrets");
     std::fs::create_dir_all(secrets_dir.join("gh")).ok();
+
+    // Refresh hosts.yml from native keyring before container launch.
+    crate::secrets::write_hosts_yml_from_keyring();
     let git_dir = secrets_dir.join("git");
     std::fs::create_dir_all(&git_dir).ok();
     let gitconfig_path = git_dir.join(".gitconfig");

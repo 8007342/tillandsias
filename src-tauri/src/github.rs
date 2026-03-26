@@ -44,6 +44,9 @@ pub async fn fetch_repos() -> Result<Vec<RemoteRepo>, String> {
     let secrets_dir = cache.join("secrets");
     let gh_dir = secrets_dir.join("gh");
 
+    // Refresh hosts.yml from native keyring before checking.
+    crate::secrets::write_hosts_yml_from_keyring();
+
     // Verify credentials exist before spawning a container
     if !gh_dir.join("hosts.yml").exists() {
         return Err("No GitHub credentials found".to_string());
@@ -103,6 +106,9 @@ pub async fn fetch_repos() -> Result<Vec<RemoteRepo>, String> {
 pub async fn clone_repo(full_name: &str, target_dir: &Path) -> Result<(), String> {
     let cache = cache_dir();
     let secrets_dir = cache.join("secrets");
+
+    // Refresh hosts.yml from native keyring before clone.
+    crate::secrets::write_hosts_yml_from_keyring();
 
     // Ensure the parent directory exists so we can mount it
     let parent = target_dir
