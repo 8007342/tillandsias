@@ -14,6 +14,7 @@ mod menu;
 mod runner;
 mod secrets;
 mod singleton;
+mod update_cli;
 mod updater;
 
 use std::sync::{Arc, Mutex};
@@ -61,6 +62,12 @@ fn main() {
     // Clean mode — remove stale artifacts and exit.
     if matches!(cli_mode, cli::CliMode::Clean) {
         let success = cleanup::run_clean();
+        std::process::exit(if success { 0 } else { 1 });
+    }
+
+    // Update mode — check for updates and apply if available, then exit.
+    if matches!(cli_mode, cli::CliMode::Update) {
+        let success = update_cli::run();
         std::process::exit(if success { 0 } else { 1 });
     }
 

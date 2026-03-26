@@ -19,6 +19,9 @@ pub enum CliMode {
     /// `tillandsias --clean` — remove stale artifacts and exit.
     Clean,
 
+    /// `tillandsias --update` — check for updates and apply if available, then exit.
+    Update,
+
     /// A project path was given — launch an interactive container.
     Attach {
         /// Absolute path to the project directory.
@@ -42,6 +45,7 @@ USAGE:
     tillandsias init                Pre-build container images
     tillandsias --stats             Show disk usage from Tillandsias artifacts
     tillandsias --clean             Remove stale artifacts and reclaim disk space
+    tillandsias --update            Check for updates and apply if available
     tillandsias --help              Show this help
 
 OPTIONS:
@@ -76,6 +80,11 @@ pub fn parse() -> Option<CliMode> {
     // `tillandsias --clean` — artifact cleanup.
     if args.iter().any(|a| a == "--clean") {
         return Some(CliMode::Clean);
+    }
+
+    // `tillandsias --update` — check for updates and apply.
+    if args.iter().any(|a| a == "--update") {
+        return Some(CliMode::Update);
     }
 
     let mut path: Option<PathBuf> = None;
