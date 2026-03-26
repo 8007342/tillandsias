@@ -145,7 +145,7 @@ pub async fn run(
                     }
                     MenuCommand::GitHubLogin => {
                         info!("GitHub Login requested");
-                        if let Err(e) = handlers::handle_github_login(&state).await {
+                        if let Err(e) = handlers::handle_github_login(&state, build_tx.clone()).await {
                             error!(error = %e, "GitHub Login failed");
                         } else {
                             // Invalidate remote repos cache so it refreshes
