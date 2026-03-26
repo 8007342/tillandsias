@@ -1,24 +1,47 @@
-//! Build-time SVG→PNG rendering pipeline.
+//! Build-time SVG->PNG rendering pipeline.
 //!
 //! Uses `resvg` + `tiny-skia` (pure Rust, no system deps) to render all
-//! 32 genus/lifecycle SVG icons into PNGs at compile time. Generated PNGs
+//! genus/lifecycle SVG icons into PNGs at compile time. Generated PNGs
 //! are placed in `OUT_DIR` and embedded via `include_bytes!` in the
 //! generated `icons_generated.rs` source file.
+//!
+//! Genera without dedicated SVG assets fall back to Ionantha icons.
 
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+/// All 24 genera slugs. Order matches `TillandsiaGenus::ALL`.
 const GENERA: &[&str] = &[
     "aeranthos",
-    "bulbosa",
-    "caput-medusae",
     "ionantha",
-    "stricta",
-    "tectorum",
-    "usneoides",
     "xerographica",
+    "caput-medusae",
+    "bulbosa",
+    "tectorum",
+    "stricta",
+    "usneoides",
+    // 16 new genera — no dedicated SVGs, fall back to ionantha
+    "cyanea",
+    "funckiana",
+    "magnusiana",
+    "bergeri",
+    "brachycaulos",
+    "harrisii",
+    "duratii",
+    "gardneri",
+    "seleriana",
+    "fasciculata",
+    "leiboldiana",
+    "flabellata",
+    "paleacea",
+    "recurvata",
+    "kolbii",
+    "pruinosa",
 ];
+
+/// Fallback genus for genera without dedicated SVG assets.
+const FALLBACK_GENUS: &str = "ionantha";
 
 const LIFECYCLES: &[&str] = &["bud", "bloom", "dried", "pup"];
 
@@ -37,9 +60,12 @@ fn main() {
     // Tell cargo to re-run if any SVG changes
     println!("cargo:rerun-if-changed=../../assets/icons");
     for genus in GENERA {
-        for lifecycle in LIFECYCLES {
-            let svg_path = assets_dir.join(genus).join(format!("{lifecycle}.svg"));
-            println!("cargo:rerun-if-changed={}", svg_path.display());
+        let genus_dir = assets_dir.join(genus);
+        if genus_dir.is_dir() {
+            for lifecycle in LIFECYCLES {
+                let svg_path = genus_dir.join(format!("{lifecycle}.svg"));
+                println!("cargo:rerun-if-changed={}", svg_path.display());
+            }
         }
     }
 
@@ -50,14 +76,21 @@ fn main() {
     fs::create_dir_all(&tray_dir).unwrap();
     fs::create_dir_all(&window_dir).unwrap();
 
-    // Render all 32 genus/lifecycle combinations at 32x32
+    // Render all genus/lifecycle combinations at 32x32
+    // For genera without SVG assets, use the fallback genus (ionantha)
     for genus in GENERA {
-        let genus_dir = icons_dir.join(genus);
-        fs::create_dir_all(&genus_dir).unwrap();
+        let genus_out_dir = icons_dir.join(genus);
+        fs::create_dir_all(&genus_out_dir).unwrap();
+
+        let source_genus = if assets_dir.join(genus).is_dir() {
+            genus
+        } else {
+            FALLBACK_GENUS
+        };
 
         for lifecycle in LIFECYCLES {
-            let svg_path = assets_dir.join(genus).join(format!("{lifecycle}.svg"));
-            let png_path = genus_dir.join(format!("{lifecycle}.png"));
+            let svg_path = assets_dir.join(source_genus).join(format!("{lifecycle}.svg"));
+            let png_path = genus_out_dir.join(format!("{lifecycle}.png"));
             render_svg_to_png(&svg_path, &png_path, 32, 32);
         }
     }
@@ -74,8 +107,14 @@ fn main() {
         let genus_window_dir = window_dir.join(genus);
         fs::create_dir_all(&genus_window_dir).unwrap();
 
+        let source_genus = if assets_dir.join(genus).is_dir() {
+            genus
+        } else {
+            FALLBACK_GENUS
+        };
+
         for lifecycle in LIFECYCLES {
-            let svg_path = assets_dir.join(genus).join(format!("{lifecycle}.svg"));
+            let svg_path = assets_dir.join(source_genus).join(format!("{lifecycle}.svg"));
             let png_path = genus_window_dir.join(format!("{lifecycle}@48.png"));
             render_svg_to_png(&svg_path, &png_path, 48, 48);
         }
@@ -263,13 +302,29 @@ fn generate_icons_rs(out_dir: &Path) {
 fn genus_to_variant(slug: &str) -> &'static str {
     match slug {
         "aeranthos" => "Aeranthos",
-        "bulbosa" => "Bulbosa",
-        "caput-medusae" => "CaputMedusae",
         "ionantha" => "Ionantha",
-        "stricta" => "Stricta",
-        "tectorum" => "Tectorum",
-        "usneoides" => "Usneoides",
         "xerographica" => "Xerographica",
+        "caput-medusae" => "CaputMedusae",
+        "bulbosa" => "Bulbosa",
+        "tectorum" => "Tectorum",
+        "stricta" => "Stricta",
+        "usneoides" => "Usneoides",
+        "cyanea" => "Cyanea",
+        "funckiana" => "Funckiana",
+        "magnusiana" => "Magnusiana",
+        "bergeri" => "Bergeri",
+        "brachycaulos" => "Brachycaulos",
+        "harrisii" => "Harrisii",
+        "duratii" => "Duratii",
+        "gardneri" => "Gardneri",
+        "seleriana" => "Seleriana",
+        "fasciculata" => "Fasciculata",
+        "leiboldiana" => "Leiboldiana",
+        "flabellata" => "Flabellata",
+        "paleacea" => "Paleacea",
+        "recurvata" => "Recurvata",
+        "kolbii" => "Kolbii",
+        "pruinosa" => "Pruinosa",
         _ => panic!("Unknown genus slug: {slug}"),
     }
 }

@@ -9,6 +9,23 @@ pub enum TillandsiaGenus {
     Tectorum,
     Stricta,
     Usneoides,
+    // --- 16 new genera (v0.1.39) ---
+    Cyanea,
+    Funckiana,
+    Magnusiana,
+    Bergeri,
+    Brachycaulos,
+    Harrisii,
+    Duratii,
+    Gardneri,
+    Seleriana,
+    Fasciculata,
+    Leiboldiana,
+    Flabellata,
+    Paleacea,
+    Recurvata,
+    Kolbii,
+    Pruinosa,
 }
 
 impl TillandsiaGenus {
@@ -22,7 +39,40 @@ impl TillandsiaGenus {
         Self::Tectorum,
         Self::Stricta,
         Self::Usneoides,
+        Self::Cyanea,
+        Self::Funckiana,
+        Self::Magnusiana,
+        Self::Bergeri,
+        Self::Brachycaulos,
+        Self::Harrisii,
+        Self::Duratii,
+        Self::Gardneri,
+        Self::Seleriana,
+        Self::Fasciculata,
+        Self::Leiboldiana,
+        Self::Flabellata,
+        Self::Paleacea,
+        Self::Recurvata,
+        Self::Kolbii,
+        Self::Pruinosa,
     ];
+
+    /// The original 8 genera that have dedicated SVG icon assets.
+    const GENERA_WITH_ICONS: &[TillandsiaGenus] = &[
+        Self::Aeranthos,
+        Self::Ionantha,
+        Self::Xerographica,
+        Self::CaputMedusae,
+        Self::Bulbosa,
+        Self::Tectorum,
+        Self::Stricta,
+        Self::Usneoides,
+    ];
+
+    /// Whether this genus has dedicated SVG/PNG icon assets.
+    pub fn has_dedicated_icons(&self) -> bool {
+        Self::GENERA_WITH_ICONS.contains(self)
+    }
 
     /// Lowercase slug for container naming and filesystem paths.
     pub fn slug(&self) -> &'static str {
@@ -35,6 +85,22 @@ impl TillandsiaGenus {
             Self::Tectorum => "tectorum",
             Self::Stricta => "stricta",
             Self::Usneoides => "usneoides",
+            Self::Cyanea => "cyanea",
+            Self::Funckiana => "funckiana",
+            Self::Magnusiana => "magnusiana",
+            Self::Bergeri => "bergeri",
+            Self::Brachycaulos => "brachycaulos",
+            Self::Harrisii => "harrisii",
+            Self::Duratii => "duratii",
+            Self::Gardneri => "gardneri",
+            Self::Seleriana => "seleriana",
+            Self::Fasciculata => "fasciculata",
+            Self::Leiboldiana => "leiboldiana",
+            Self::Flabellata => "flabellata",
+            Self::Paleacea => "paleacea",
+            Self::Recurvata => "recurvata",
+            Self::Kolbii => "kolbii",
+            Self::Pruinosa => "pruinosa",
         }
     }
 
@@ -49,6 +115,22 @@ impl TillandsiaGenus {
             "tectorum" => Some(Self::Tectorum),
             "stricta" => Some(Self::Stricta),
             "usneoides" => Some(Self::Usneoides),
+            "cyanea" => Some(Self::Cyanea),
+            "funckiana" => Some(Self::Funckiana),
+            "magnusiana" => Some(Self::Magnusiana),
+            "bergeri" => Some(Self::Bergeri),
+            "brachycaulos" => Some(Self::Brachycaulos),
+            "harrisii" => Some(Self::Harrisii),
+            "duratii" => Some(Self::Duratii),
+            "gardneri" => Some(Self::Gardneri),
+            "seleriana" => Some(Self::Seleriana),
+            "fasciculata" => Some(Self::Fasciculata),
+            "leiboldiana" => Some(Self::Leiboldiana),
+            "flabellata" => Some(Self::Flabellata),
+            "paleacea" => Some(Self::Paleacea),
+            "recurvata" => Some(Self::Recurvata),
+            "kolbii" => Some(Self::Kolbii),
+            "pruinosa" => Some(Self::Pruinosa),
             _ => None,
         }
     }
@@ -64,6 +146,22 @@ impl TillandsiaGenus {
             Self::Tectorum => "Tectorum",
             Self::Stricta => "Stricta",
             Self::Usneoides => "Usneoides",
+            Self::Cyanea => "Cyanea",
+            Self::Funckiana => "Funckiana",
+            Self::Magnusiana => "Magnusiana",
+            Self::Bergeri => "Bergeri",
+            Self::Brachycaulos => "Brachycaulos",
+            Self::Harrisii => "Harrisii",
+            Self::Duratii => "Duratii",
+            Self::Gardneri => "Gardneri",
+            Self::Seleriana => "Seleriana",
+            Self::Fasciculata => "Fasciculata",
+            Self::Leiboldiana => "Leiboldiana",
+            Self::Flabellata => "Flabellata",
+            Self::Paleacea => "Paleacea",
+            Self::Recurvata => "Recurvata",
+            Self::Kolbii => "Kolbii",
+            Self::Pruinosa => "Pruinosa",
         }
     }
 
@@ -78,6 +176,22 @@ impl TillandsiaGenus {
             Self::Tectorum => "\u{1F339}",        // 🌹
             Self::Stricta => "\u{1F3F5}\u{FE0F}", // 🏵️
             Self::Usneoides => "\u{1F4AE}",       // 💮
+            Self::Cyanea => "\u{1FABB}",          // 🪻
+            Self::Funckiana => "\u{1F33E}",       // 🌾
+            Self::Magnusiana => "\u{1FAB7}",      // 🪷
+            Self::Bergeri => "\u{1F490}",         // 💐
+            Self::Brachycaulos => "\u{1F38B}",    // 🎋
+            Self::Harrisii => "\u{1F340}",        // 🍀
+            Self::Duratii => "\u{1F334}",         // 🌴
+            Self::Gardneri => "\u{1F38D}",        // 🎍
+            Self::Seleriana => "\u{1F335}",       // 🌵
+            Self::Fasciculata => "\u{1F384}",     // 🎄
+            Self::Leiboldiana => "\u{1F343}",     // 🍃
+            Self::Flabellata => "\u{1F341}",      // 🍁
+            Self::Paleacea => "\u{1F332}",        // 🌲
+            Self::Recurvata => "\u{1F333}",       // 🌳
+            Self::Kolbii => "\u{2618}\u{FE0F}",  // ☘️
+            Self::Pruinosa => "\u{1F391}",        // 🎑
         }
     }
 }
@@ -198,7 +312,10 @@ impl Default for GenusAllocator {
 }
 
 /// Compile-time embedded SVG icons for each genus + lifecycle combination.
-/// Uses `include_bytes!` to embed all 32 SVGs into the binary.
+/// Uses `include_bytes!` to embed all SVGs into the binary.
+///
+/// The original 8 genera have dedicated SVG assets. The 16 new genera
+/// fall back to Ionantha icons (same visual, distinct flower emoji in menus).
 pub mod icons {
     use super::{PlantLifecycle, TillandsiaGenus};
 
@@ -254,7 +371,11 @@ pub mod icons {
     const USNEOIDES_DRIED: &[u8] = include_bytes!("../../../assets/icons/usneoides/dried.svg");
     const USNEOIDES_PUP: &[u8] = include_bytes!("../../../assets/icons/usneoides/pup.svg");
 
+    // New genera (16) — no dedicated SVGs, fall back to Ionantha at runtime.
+
     /// Look up the embedded SVG bytes for a given genus and lifecycle state.
+    ///
+    /// Genera without dedicated SVG assets fall back to Ionantha icons.
     pub fn icon_svg(genus: TillandsiaGenus, lifecycle: PlantLifecycle) -> &'static [u8] {
         match (genus, lifecycle) {
             (TillandsiaGenus::Aeranthos, PlantLifecycle::Bud) => AERANTHOS_BUD,
@@ -296,6 +417,12 @@ pub mod icons {
             (TillandsiaGenus::Usneoides, PlantLifecycle::Bloom) => USNEOIDES_BLOOM,
             (TillandsiaGenus::Usneoides, PlantLifecycle::Dried) => USNEOIDES_DRIED,
             (TillandsiaGenus::Usneoides, PlantLifecycle::Pup) => USNEOIDES_PUP,
+
+            // All new genera without dedicated SVGs fall back to Ionantha
+            (_, PlantLifecycle::Bud) => IONANTHA_BUD,
+            (_, PlantLifecycle::Bloom) => IONANTHA_BLOOM,
+            (_, PlantLifecycle::Dried) => IONANTHA_DRIED,
+            (_, PlantLifecycle::Pup) => IONANTHA_PUP,
         }
     }
 }
@@ -303,6 +430,11 @@ pub mod icons {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pool_size_is_24() {
+        assert_eq!(TillandsiaGenus::ALL.len(), 24);
+    }
 
     #[test]
     fn flower_unique_per_genus() {
@@ -334,6 +466,19 @@ mod tests {
     }
 
     #[test]
+    fn slug_unique_per_genus() {
+        let mut seen = std::collections::HashSet::new();
+        for genus in TillandsiaGenus::ALL {
+            let slug = genus.slug();
+            assert!(
+                seen.insert(slug),
+                "Duplicate slug '{slug}' for genus {:?}",
+                genus
+            );
+        }
+    }
+
+    #[test]
     fn allocator_round_robin() {
         let mut alloc = GenusAllocator::new();
         let g1 = alloc.allocate("project-a").unwrap();
@@ -352,10 +497,10 @@ mod tests {
     #[test]
     fn allocator_pool_exhaustion() {
         let mut alloc = GenusAllocator::new();
-        for _ in 0..8 {
+        for _ in 0..24 {
             assert!(alloc.allocate("project-a").is_some());
         }
-        // 9th allocation should fail — pool exhausted
+        // 25th allocation should fail — pool exhausted
         assert!(alloc.allocate("project-a").is_none());
     }
 
@@ -371,7 +516,7 @@ mod tests {
 
     #[test]
     fn icon_loader_all_combinations() {
-        // Verify all 32 icon combinations load and contain valid SVG data
+        // Verify all icon combinations load and contain valid SVG data
         for genus in TillandsiaGenus::ALL {
             for lifecycle in &[
                 PlantLifecycle::Bud,
@@ -395,6 +540,30 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn new_genera_fall_back_to_ionantha_svg() {
+        // New genera without dedicated SVGs should return Ionantha icons
+        let ionantha_bud = icons::icon_svg(TillandsiaGenus::Ionantha, PlantLifecycle::Bud);
+        let cyanea_bud = icons::icon_svg(TillandsiaGenus::Cyanea, PlantLifecycle::Bud);
+        assert!(std::ptr::eq(ionantha_bud, cyanea_bud), "Cyanea bud should be same bytes as Ionantha bud");
+    }
+
+    #[test]
+    fn original_genera_have_dedicated_icons() {
+        // Original 8 genera should NOT fall back to Ionantha (except Ionantha itself)
+        let aeranthos_bud = icons::icon_svg(TillandsiaGenus::Aeranthos, PlantLifecycle::Bud);
+        let ionantha_bud = icons::icon_svg(TillandsiaGenus::Ionantha, PlantLifecycle::Bud);
+        assert!(!std::ptr::eq(aeranthos_bud, ionantha_bud), "Aeranthos should have its own icon");
+    }
+
+    #[test]
+    fn has_dedicated_icons_correct() {
+        assert!(TillandsiaGenus::Aeranthos.has_dedicated_icons());
+        assert!(TillandsiaGenus::Ionantha.has_dedicated_icons());
+        assert!(!TillandsiaGenus::Cyanea.has_dedicated_icons());
+        assert!(!TillandsiaGenus::Pruinosa.has_dedicated_icons());
     }
 
     #[test]
