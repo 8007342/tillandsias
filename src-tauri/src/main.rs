@@ -3,6 +3,7 @@
 mod build_lock;
 mod cleanup;
 mod cli;
+#[cfg(target_os = "linux")]
 mod desktop;
 mod embedded;
 mod event_loop;
@@ -94,6 +95,7 @@ fn main() {
     // AppImage desktop integration — install .desktop file and icons on first run.
     // Must happen after logging init (so we can trace) and before tray setup
     // (so the icon is available when GNOME processes the tray window).
+    #[cfg(target_os = "linux")]
     desktop::ensure_desktop_integration();
 
     // Singleton guard — only one tray instance at a time.

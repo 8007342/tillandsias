@@ -244,14 +244,17 @@ fn apply_appimage_update(
     // Find the extracted .AppImage file
     let new_appimage = find_appimage_in_dir(&tmp_dir)?;
 
-    // Make it executable
-    use std::os::unix::fs::PermissionsExt;
-    let mut perms = std::fs::metadata(&new_appimage)
-        .map_err(|e| format!("cannot stat extracted AppImage: {e}"))?
-        .permissions();
-    perms.set_mode(0o755);
-    std::fs::set_permissions(&new_appimage, perms)
-        .map_err(|e| format!("cannot chmod extracted AppImage: {e}"))?;
+    // Make it executable (Unix only — Windows doesn't need this)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&new_appimage)
+            .map_err(|e| format!("cannot stat extracted AppImage: {e}"))?
+            .permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&new_appimage, perms)
+            .map_err(|e| format!("cannot chmod extracted AppImage: {e}"))?;
+    }
 
     // Atomic replace: rename new AppImage over the current one.
     // On Linux this is atomic at the filesystem level when src and dst are
