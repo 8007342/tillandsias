@@ -146,10 +146,9 @@ pub fn build_tray_menu<R: Runtime>(
         let mut running_sub = running_submenu;
 
         for container in &state.running {
-            let lifecycle = container.lifecycle();
             let label = format!(
                 "{} {} [{}]",
-                lifecycle_emoji(lifecycle),
+                container.display_emoji,
                 container.project_name,
                 container.genus.display_name()
             );
@@ -447,17 +446,6 @@ fn build_project_submenu<R: Runtime>(
     );
 
     submenu.build()
-}
-
-/// Map plant lifecycle to a status emoji for the menu.
-fn lifecycle_emoji(lifecycle: tillandsias_core::genus::PlantLifecycle) -> &'static str {
-    use tillandsias_core::genus::PlantLifecycle;
-    match lifecycle {
-        PlantLifecycle::Bud => "\u{1F331}",   // seedling
-        PlantLifecycle::Bloom => "\u{1F33A}", // hibiscus
-        PlantLifecycle::Dried => "\u{1F342}", // fallen leaf
-        PlantLifecycle::Pup => "\u{1F33F}",   // herb
-    }
 }
 
 /// Build the display label for a build progress chip.
