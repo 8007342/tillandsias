@@ -2,6 +2,20 @@
 //!
 //! Builds a hierarchical system tray menu from `TrayState`, reflecting
 //! discovered projects, running environments, and their lifecycle states.
+//!
+//! ## Top-level structure
+//!
+//! ```text
+//! ~/src/ — Attach Here
+//! 🛠️ Root
+//! ─────────
+//! Projects ▸          (always present; contains all per-project submenus)
+//! Running ▸           (only when containers are active)
+//! Activity ▸          (only when builds are active but nothing is running)
+//! ─────────
+//! Settings ▸
+//! Tillandsias v{ver} ▸  (About: version · credit · quit)
+//! ```
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -127,99 +141,29 @@ pub fn build_tray_menu<R: Runtime>(
 
     menu = menu.separator();
 
-    // Section: Discovered projects
-    if state.projects.is_empty() {
-        menu = menu.item(
-            &MenuItemBuilder::with_id(ids::static_id("no-projects"), "No projects detected")
-                .enabled(false)
-                .build(app)?,
-        );
-    } else {
-        for project in &state.projects {
-            let project_submenu = build_project_submenu(app, project, state)?;
-            menu = menu.item(&project_submenu);
-        }
+    // Projects submenu — all per-project submenus collected under one entry.
+    let projects_submenu = build_projects_submenu(app, state)?;
+    menu = menu.item(&projects_submenu);
+
+    // Running Environments submenu — only shown when containers are active.
+    if !state.running.is_empty() {
+        let running_submenu = build_running_submenu(app, state)?;
+        menu = menu.item(&running_submenu);
+    } else if !state.active_builds.is_empty() {
+        // Activity submenu — build chips only, no running containers.
+        let activity_submenu = build_activity_submenu(app, state)?;
+        menu = menu.item(&activity_submenu);
     }
 
-    // Separator
     menu = menu.separator();
 
-    // Section: Running environments
-    if state.running.is_empty() {
-        menu = menu.item(
-            &MenuItemBuilder::with_id(ids::static_id("no-running"), "No running environments")
-                .enabled(false)
-                .build(app)?,
-        );
-    } else {
-        let running_submenu = SubmenuBuilder::new(app, "Running Environments");
-        let mut running_sub = running_submenu;
-
-        for container in &state.running {
-            let label = format!(
-                "{} {} [{}]",
-                container.display_emoji,
-                container.project_name,
-                container.genus.display_name()
-            );
-
-            let container_sub = SubmenuBuilder::new(app, &label)
-                .item(&MenuItemBuilder::with_id(ids::stop(&container.name), "Stop").build(app)?)
-                .item(
-                    &MenuItemBuilder::with_id(ids::destroy(&container.name), "Destroy (hold 5s)")
-                        .build(app)?,
-                )
-                .build()?;
-
-            running_sub = running_sub.item(&container_sub);
-        }
-
-        menu = menu.item(&running_sub.build()?);
-    }
-
-    // Section: Active / recently completed build chips
-    //
-    // Disabled informational items — only shown when there are active builds.
-    // Placement: between running environments and Settings so they're visible
-    // without scrolling but don't interfere with project actions.
-    if !state.active_builds.is_empty() {
-        menu = menu.separator();
-        for build in &state.active_builds {
-            let label = build_chip_label(build);
-            menu = menu.item(
-                &MenuItemBuilder::with_id(
-                    ids::static_id(&format!("build-chip-{}", build.image_name)),
-                    &label,
-                )
-                .enabled(false)
-                .build(app)?,
-            );
-        }
-    }
-
-    // Separator
-    menu = menu.separator();
-
-    // Settings submenu — contains GitHub Login/Refresh and Remote Projects
+    // Settings submenu — contains GitHub Login/Refresh and Remote Projects.
     let settings_submenu = build_settings_submenu(app, state, &watch_path)?;
     menu = menu.item(&settings_submenu);
 
-    // Version and credit — non-clickable, just before Quit
-    menu = menu.separator();
-    // Full 4-part version from VERSION file, embedded at compile time
-    let version = include_str!("../../VERSION").trim();
-    menu = menu.item(
-        &MenuItemBuilder::with_id(ids::static_id("version"), format!("Tillandsias v{version}"))
-            .enabled(false)
-            .build(app)?,
-    );
-    menu = menu.item(
-        &MenuItemBuilder::with_id(ids::static_id("credit"), "by Tlatoāni")
-            .enabled(false)
-            .build(app)?,
-    );
-
-    menu = menu.item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), "Quit Tillandsias").build(app)?);
+    // About submenu — version, credit, and Quit grouped at the bottom.
+    let about_submenu = build_about_submenu(app)?;
+    menu = menu.item(&about_submenu);
 
     debug!(
         projects = state.projects.len(),
@@ -237,8 +181,7 @@ pub fn build_tray_menu<R: Runtime>(
 /// Contains only:
 /// - Error item (disabled) explaining podman is unavailable
 /// - Separator
-/// - Version / credit (disabled)
-/// - Quit (enabled)
+/// - About submenu (version · credit · quit)
 fn build_decay_menu<R: Runtime>(
     app: &AppHandle<R>,
 ) -> tauri::Result<tauri::menu::Menu<R>> {
@@ -255,23 +198,139 @@ fn build_decay_menu<R: Runtime>(
 
     menu = menu.separator();
 
-    let version = include_str!("../../VERSION").trim();
-    menu = menu.item(
-        &MenuItemBuilder::with_id(ids::static_id("version"), format!("Tillandsias v{version}"))
-            .enabled(false)
-            .build(app)?,
-    );
-    menu = menu.item(
-        &MenuItemBuilder::with_id(ids::static_id("credit"), "by Tlatoāni")
-            .enabled(false)
-            .build(app)?,
-    );
-
-    menu = menu.item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), "Quit Tillandsias").build(app)?);
+    let about_submenu = build_about_submenu(app)?;
+    menu = menu.item(&about_submenu);
 
     debug!("Decay menu built (podman unavailable)");
 
     menu.build()
+}
+
+/// Build the Projects submenu containing all per-project submenus.
+///
+/// Always present. When no projects are discovered, contains a single
+/// disabled "No projects detected" item.
+fn build_projects_submenu<R: Runtime>(
+    app: &AppHandle<R>,
+    state: &TrayState,
+) -> tauri::Result<tauri::menu::Submenu<R>> {
+    let mut projects = SubmenuBuilder::new(app, "Projects");
+
+    if state.projects.is_empty() {
+        projects = projects.item(
+            &MenuItemBuilder::with_id(ids::static_id("no-projects"), "No projects detected")
+                .enabled(false)
+                .build(app)?,
+        );
+    } else {
+        for project in &state.projects {
+            let project_submenu = build_project_submenu(app, project, state)?;
+            projects = projects.item(&project_submenu);
+        }
+    }
+
+    projects.build()
+}
+
+/// Build the Running Environments submenu.
+///
+/// Each running container gets its own submenu with Stop and Destroy actions.
+/// Active build chips are appended after the container items when present.
+fn build_running_submenu<R: Runtime>(
+    app: &AppHandle<R>,
+    state: &TrayState,
+) -> tauri::Result<tauri::menu::Submenu<R>> {
+    let mut running_sub = SubmenuBuilder::new(app, "Running Environments");
+
+    for container in &state.running {
+        let label = format!(
+            "{} {} [{}]",
+            container.display_emoji,
+            container.project_name,
+            container.genus.display_name()
+        );
+
+        let container_sub = SubmenuBuilder::new(app, &label)
+            .item(&MenuItemBuilder::with_id(ids::stop(&container.name), "Stop").build(app)?)
+            .item(
+                &MenuItemBuilder::with_id(ids::destroy(&container.name), "Destroy (hold 5s)")
+                    .build(app)?,
+            )
+            .build()?;
+
+        running_sub = running_sub.item(&container_sub);
+    }
+
+    // Build chips appended inside Running when present.
+    if !state.active_builds.is_empty() {
+        running_sub = running_sub.separator();
+        for build in &state.active_builds {
+            let label = build_chip_label(build);
+            running_sub = running_sub.item(
+                &MenuItemBuilder::with_id(
+                    ids::static_id(&format!("build-chip-{}", build.image_name)),
+                    &label,
+                )
+                .enabled(false)
+                .build(app)?,
+            );
+        }
+    }
+
+    running_sub.build()
+}
+
+/// Build the Activity submenu shown when builds are active but nothing is running.
+fn build_activity_submenu<R: Runtime>(
+    app: &AppHandle<R>,
+    state: &TrayState,
+) -> tauri::Result<tauri::menu::Submenu<R>> {
+    let mut activity = SubmenuBuilder::new(app, "Activity");
+
+    for build in &state.active_builds {
+        let label = build_chip_label(build);
+        activity = activity.item(
+            &MenuItemBuilder::with_id(
+                ids::static_id(&format!("build-chip-{}", build.image_name)),
+                &label,
+            )
+            .enabled(false)
+            .build(app)?,
+        );
+    }
+
+    activity.build()
+}
+
+/// Build the About submenu containing version, credit, and Quit.
+///
+/// Label uses the full 4-part version so the user can see the version
+/// without expanding the submenu.
+fn build_about_submenu<R: Runtime>(
+    app: &AppHandle<R>,
+) -> tauri::Result<tauri::menu::Submenu<R>> {
+    let version = include_str!("../../VERSION").trim();
+    let submenu_label = format!("Tillandsias v{version}");
+
+    let about = SubmenuBuilder::new(app, &submenu_label)
+        .item(
+            &MenuItemBuilder::with_id(
+                ids::static_id("version"),
+                format!("Tillandsias v{version}"),
+            )
+            .enabled(false)
+            .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id(ids::static_id("credit"), "by Tlatoāni")
+                .enabled(false)
+                .build(app)?,
+        )
+        .separator()
+        .item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), "Quit Tillandsias").build(app)?)
+        .build()?;
+
+    Ok(about)
 }
 
 /// Build the Settings submenu containing GitHub Login/Refresh and Remote Projects.
