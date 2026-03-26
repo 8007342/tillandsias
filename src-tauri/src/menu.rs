@@ -9,12 +9,13 @@
 //! ~/src/ — Attach Here
 //! 🛠️ Root
 //! ─────────
-//! Projects ▸          (always present; contains all per-project submenus)
-//! Running ▸           (only when containers are active)
-//! Activity ▸          (only when builds are active but nothing is running)
+//! tetris        🔧🌸  ▸  (active project — promoted inline)
+//! cool-app      🌸    ▸  (active project — promoted inline)
+//! Projects ▸           (only inactive projects; omitted when all are active)
+//! ⏳ Building forge... (inline build chips, disabled)
 //! ─────────
 //! Settings ▸
-//! Tillandsias v{ver} ▸  (About: version · credit · quit)
+//! Quit Tillandsias
 //! ```
 
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -57,16 +58,6 @@ pub mod ids {
     /// Build a "terminal" menu item ID for a project path.
     pub fn terminal(project_path: &std::path::Path) -> String {
         gen_id(&format!("terminal:{}", project_path.display()))
-    }
-
-    /// Build a "stop" menu item ID for a container.
-    pub fn stop(container_name: &str) -> String {
-        gen_id(&format!("stop:{container_name}"))
-    }
-
-    /// Build a "destroy" menu item ID for a container.
-    pub fn destroy(container_name: &str) -> String {
-        gen_id(&format!("destroy:{container_name}"))
     }
 
     /// Build a "clone" menu item ID encoding both full_name and name.
@@ -141,18 +132,42 @@ pub fn build_tray_menu<R: Runtime>(
 
     menu = menu.separator();
 
-    // Projects submenu — all per-project submenus collected under one entry.
-    let projects_submenu = build_projects_submenu(app, state)?;
-    menu = menu.item(&projects_submenu);
+    // Split projects into active (has running containers) and inactive.
+    let active_projects: Vec<&tillandsias_core::project::Project> = state
+        .projects
+        .iter()
+        .filter(|p| state.running.iter().any(|c| c.project_name == p.name))
+        .collect();
+    let inactive_projects: Vec<&tillandsias_core::project::Project> = state
+        .projects
+        .iter()
+        .filter(|p| !state.running.iter().any(|c| c.project_name == p.name))
+        .collect();
 
-    // Running Environments submenu — only shown when containers are active.
-    if !state.running.is_empty() {
-        let running_submenu = build_running_submenu(app, state)?;
-        menu = menu.item(&running_submenu);
-    } else if !state.active_builds.is_empty() {
-        // Activity submenu — build chips only, no running containers.
-        let activity_submenu = build_activity_submenu(app, state)?;
-        menu = menu.item(&activity_submenu);
+    // Active projects — promoted inline at the top level.
+    for project in &active_projects {
+        let project_submenu = build_project_submenu(app, project, state)?;
+        menu = menu.item(&project_submenu);
+    }
+
+    // Projects submenu — only inactive projects.
+    // Omitted entirely when every discovered project is active.
+    if !inactive_projects.is_empty() || state.projects.is_empty() {
+        let projects_submenu = build_inactive_projects_submenu(app, &inactive_projects)?;
+        menu = menu.item(&projects_submenu);
+    }
+
+    // Build chips — inline disabled items, always at the top level.
+    for build in &state.active_builds {
+        let label = build_chip_label(build);
+        menu = menu.item(
+            &MenuItemBuilder::with_id(
+                ids::static_id(&format!("build-chip-{}", build.image_name)),
+                &label,
+            )
+            .enabled(false)
+            .build(app)?,
+        );
     }
 
     menu = menu.separator();
@@ -166,6 +181,8 @@ pub fn build_tray_menu<R: Runtime>(
 
     debug!(
         projects = state.projects.len(),
+        active_inline = active_projects.len(),
+        inactive_in_submenu = inactive_projects.len(),
         running = state.running.len(),
         remote_repos = state.remote_repos.len(),
         active_builds = state.active_builds.len(),
@@ -203,100 +220,49 @@ fn build_decay_menu<R: Runtime>(
     menu.build()
 }
 
-/// Build the Projects submenu containing all per-project submenus.
+/// Build the Projects submenu containing only inactive per-project submenus.
 ///
-/// Always present. When no projects are discovered, contains a single
-/// disabled "No projects detected" item.
-fn build_projects_submenu<R: Runtime>(
+/// "Inactive" means no running containers belong to the project.
+/// Active projects are promoted inline to the top-level menu instead.
+///
+/// When the inactive list is empty and projects exist (all are active),
+/// this function is not called. When no projects are discovered at all,
+/// this is called with an empty slice and shows "No projects detected".
+fn build_inactive_projects_submenu<R: Runtime>(
     app: &AppHandle<R>,
-    state: &TrayState,
+    inactive: &[&tillandsias_core::project::Project],
 ) -> tauri::Result<tauri::menu::Submenu<R>> {
     let mut projects = SubmenuBuilder::new(app, "Projects");
 
-    if state.projects.is_empty() {
+    if inactive.is_empty() {
         projects = projects.item(
             &MenuItemBuilder::with_id(ids::static_id("no-projects"), "No projects detected")
                 .enabled(false)
                 .build(app)?,
         );
     } else {
-        for project in &state.projects {
-            let project_submenu = build_project_submenu(app, project, state)?;
-            projects = projects.item(&project_submenu);
+        // Inactive projects have no running containers so we pass a TrayState-like
+        // view with an empty running list. Rather than threading a full TrayState
+        // reference just for the emoji logic, we use a zero-running sentinel directly.
+        // build_project_submenu uses state.running to find emojis — passing state
+        // with the real running list is still correct here: inactive projects won't
+        // match any running container by name, so they'll render with plain labels.
+        for project in inactive {
+            let submenu = SubmenuBuilder::new(app, &project.name)
+                .item(
+                    &MenuItemBuilder::with_id(ids::attach_here(&project.path), "\u{1F331} Attach Here")
+                        .build(app)?,
+                )
+                .item(
+                    &MenuItemBuilder::with_id(ids::terminal(&project.path), "\u{26CF}\u{FE0F} Maintenance")
+                        .build(app)?,
+                )
+                .build()?;
+            projects = projects.item(&submenu);
         }
     }
 
     projects.build()
-}
-
-/// Build the Running Environments submenu.
-///
-/// Each running container gets its own submenu with Stop and Destroy actions.
-/// Active build chips are appended after the container items when present.
-fn build_running_submenu<R: Runtime>(
-    app: &AppHandle<R>,
-    state: &TrayState,
-) -> tauri::Result<tauri::menu::Submenu<R>> {
-    let mut running_sub = SubmenuBuilder::new(app, "Running Environments");
-
-    for container in &state.running {
-        let label = format!(
-            "{} {} [{}]",
-            container.display_emoji,
-            container.project_name,
-            container.genus.display_name()
-        );
-
-        let container_sub = SubmenuBuilder::new(app, &label)
-            .item(&MenuItemBuilder::with_id(ids::stop(&container.name), "Stop").build(app)?)
-            .item(
-                &MenuItemBuilder::with_id(ids::destroy(&container.name), "Destroy (hold 5s)")
-                    .build(app)?,
-            )
-            .build()?;
-
-        running_sub = running_sub.item(&container_sub);
-    }
-
-    // Build chips appended inside Running when present.
-    if !state.active_builds.is_empty() {
-        running_sub = running_sub.separator();
-        for build in &state.active_builds {
-            let label = build_chip_label(build);
-            running_sub = running_sub.item(
-                &MenuItemBuilder::with_id(
-                    ids::static_id(&format!("build-chip-{}", build.image_name)),
-                    &label,
-                )
-                .enabled(false)
-                .build(app)?,
-            );
-        }
-    }
-
-    running_sub.build()
-}
-
-/// Build the Activity submenu shown when builds are active but nothing is running.
-fn build_activity_submenu<R: Runtime>(
-    app: &AppHandle<R>,
-    state: &TrayState,
-) -> tauri::Result<tauri::menu::Submenu<R>> {
-    let mut activity = SubmenuBuilder::new(app, "Activity");
-
-    for build in &state.active_builds {
-        let label = build_chip_label(build);
-        activity = activity.item(
-            &MenuItemBuilder::with_id(
-                ids::static_id(&format!("build-chip-{}", build.image_name)),
-                &label,
-            )
-            .enabled(false)
-            .build(app)?,
-        );
-    }
-
-    activity.build()
 }
 
 /// Build the Settings submenu containing GitHub Login/Refresh and Remote Projects.
