@@ -30,13 +30,14 @@
 //!
 //! For AppImage installs the update is applied by:
 //! 1. Detecting the running AppImage path via `$APPIMAGE` env var.
-//! 2. Downloading the `.AppImage.tar.gz` with `curl`.
+//! 2. Downloading the `.AppImage.tar.gz` via in-process HTTP (`reqwest`).
 //! 3. Extracting the new AppImage alongside the current one.
 //! 4. Atomically replacing the current AppImage with the new one.
 //!
 //! If `$APPIMAGE` is not set the binary is not an AppImage and the download
 //! step is skipped after a clear message to the user.
 
+use std::io::Write as _;
 use std::path::PathBuf;
 
 use serde::Deserialize;
@@ -163,52 +164,80 @@ pub fn run() -> bool {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Fetch a URL with curl and return the body as a String.
+/// Fetch a URL and return the body as a String.
+///
+/// Uses `reqwest` with rustls so no system `libcurl` or `libnghttp2` is
+/// touched — safe to call from inside an AppImage where `LD_LIBRARY_PATH`
+/// points at bundled (possibly mismatched) `.so` files.
 fn fetch_url(url: &str) -> Result<String, String> {
-    let output = std::process::Command::new("curl")
-        .args([
-            "--silent",
-            "--show-error",
-            "--fail",
-            "--location", // follow redirects
-            "--max-time",
-            "30",
-            url,
-        ])
-        .output()
-        .map_err(|e| format!("curl not found or failed to spawn: {e}"))?;
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| format!("failed to build tokio runtime: {e}"))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("curl error: {stderr}"));
-    }
+    rt.block_on(async {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .map_err(|e| format!("failed to build HTTP client: {e}"))?;
 
-    String::from_utf8(output.stdout).map_err(|e| format!("response is not valid UTF-8: {e}"))
+        let response = client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| format!("HTTP request failed: {e}"))?;
+
+        if !response.status().is_success() {
+            return Err(format!("HTTP error: {}", response.status()));
+        }
+
+        response
+            .text()
+            .await
+            .map_err(|e| format!("failed to read response body: {e}"))
+    })
 }
 
 /// Download a URL to a temporary file and return its path.
+///
+/// Uses `reqwest` with rustls — no system `libcurl` involved, safe inside
+/// an AppImage regardless of `LD_LIBRARY_PATH`.
 fn download_update(url: &str) -> Result<PathBuf, String> {
     let tmp = std::env::temp_dir().join("tillandsias-update.tar.gz");
 
-    let status = std::process::Command::new("curl")
-        .args([
-            "--silent",
-            "--show-error",
-            "--fail",
-            "--location",
-            "--progress-bar",
-            "--output",
-            tmp.to_str().unwrap_or("/tmp/tillandsias-update.tar.gz"),
-            url,
-        ])
-        .status()
-        .map_err(|e| format!("curl not found or failed to spawn: {e}"))?;
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| format!("failed to build tokio runtime: {e}"))?;
 
-    if !status.success() {
-        return Err("curl exited with non-zero status".to_string());
-    }
+    rt.block_on(async {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(300)) // large file, generous timeout
+            .build()
+            .map_err(|e| format!("failed to build HTTP client: {e}"))?;
 
-    Ok(tmp)
+        let response = client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| format!("HTTP request failed: {e}"))?;
+
+        if !response.status().is_success() {
+            return Err(format!("HTTP error: {}", response.status()));
+        }
+
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| format!("failed to read response body: {e}"))?;
+
+        let mut file = std::fs::File::create(&tmp)
+            .map_err(|e| format!("failed to create temp file: {e}"))?;
+        file.write_all(&bytes)
+            .map_err(|e| format!("failed to write download to disk: {e}"))?;
+
+        Ok(tmp.clone())
+    })
 }
 
 /// Extract a `.AppImage.tar.gz` archive and atomically replace the running
