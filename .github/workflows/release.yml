@@ -101,8 +101,11 @@ jobs:
           BUNDLE_DIR="target/${{ matrix.target }}/release/bundle"
 
           # Copy all release-worthy files from Tauri bundle output
+          # Note: *.AppImage.tar.gz and *.AppImage.tar.gz.sig are the updater
+          # artifacts needed by Tauri's auto-updater (contains compressed AppImage).
           find "${BUNDLE_DIR}" -type f \( \
             -name "*.AppImage" -o -name "*.AppImage.sig" \
+            -o -name "*.AppImage.tar.gz" -o -name "*.AppImage.tar.gz.sig" \
             -o -name "*.dmg" \
             -o -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" \
             -o -name "*.exe" \
@@ -118,6 +121,12 @@ jobs:
           done
           for f in *.AppImage.sig; do
             [ -f "$f" ] && mv "$f" "Tillandsias-linux-x86_64.AppImage.sig" 2>/dev/null || true
+          done
+          for f in *.AppImage.tar.gz; do
+            [ -f "$f" ] && mv "$f" "Tillandsias-linux-x86_64.AppImage.tar.gz" 2>/dev/null || true
+          done
+          for f in *.AppImage.tar.gz.sig; do
+            [ -f "$f" ] && mv "$f" "Tillandsias-linux-x86_64.AppImage.tar.gz.sig" 2>/dev/null || true
           done
           for f in *_aarch64.dmg; do
             [ -f "$f" ] && mv "$f" "Tillandsias-macos-aarch64.dmg" 2>/dev/null || true
@@ -280,6 +289,73 @@ jobs:
       - name: List all release files
         run: ls -la release-artifacts/
 
+      # -- Generate Tauri update manifest (latest.json) ----------------------
+      #
+      # Tauri's updater plugin fetches this manifest to discover available
+      # updates. The version MUST be the 3-part semver from tauri.conf.json
+      # (not the 4-part VERSION file) because CARGO_PKG_VERSION is 3-part.
+      # URLs point to the release assets on this same GitHub release.
+
+      - name: Generate latest.json
+        run: |
+          # Extract 3-part semver (Major.Minor.ChangeCount) from 4-part VERSION
+          SEMVER="$(echo "$VERSION" | cut -d. -f1-3)"
+          REPO="${{ github.repository }}"
+          TAG="v${VERSION}"
+          BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
+
+          # Read Ed25519 signatures from the .sig files produced by Tauri
+          read_sig() {
+            local sigfile="release-artifacts/$1"
+            if [ -f "$sigfile" ]; then
+              cat "$sigfile"
+            else
+              echo ""
+            fi
+          }
+
+          LINUX_SIG="$(read_sig 'Tillandsias-linux-x86_64.AppImage.tar.gz.sig')"
+          MACOS_AARCH64_SIG="$(read_sig 'Tillandsias-macos-aarch64.app.tar.gz.sig')"
+          WINDOWS_NSIS_SIG="$(read_sig 'Tillandsias-windows-x86_64-setup.nsis.zip.sig')"
+          WINDOWS_MSI_SIG="$(read_sig 'Tillandsias_${SEMVER}_x64_en-US.msi.sig')"
+
+          # Build the manifest. Platform keys follow Tauri v2 convention:
+          #   "{os}-{arch}" where os is linux/darwin/windows and arch is x86_64/aarch64
+          cat > release-artifacts/latest.json << MANIFEST
+          {
+            "version": "${SEMVER}",
+            "notes": "See release notes at ${BASE_URL}",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "linux-x86_64": {
+                "url": "${BASE_URL}/Tillandsias-linux-x86_64.AppImage.tar.gz",
+                "signature": "${LINUX_SIG}"
+              },
+              "darwin-aarch64": {
+                "url": "${BASE_URL}/Tillandsias-macos-aarch64.app.tar.gz",
+                "signature": "${MACOS_AARCH64_SIG}"
+              },
+              "windows-x86_64": {
+                "url": "${BASE_URL}/Tillandsias-windows-x86_64-setup.nsis.zip",
+                "signature": "${WINDOWS_NSIS_SIG}"
+              }
+            }
+          }
+          MANIFEST
+
+          # Remove leading whitespace from heredoc indentation
+          python3 -c "
+          import json, sys
+          with open('release-artifacts/latest.json') as f:
+              data = json.load(f)
+          with open('release-artifacts/latest.json', 'w') as f:
+              json.dump(data, f, indent=2)
+              f.write('\n')
+          "
+
+          echo "--- latest.json ---"
+          cat release-artifacts/latest.json
+
       # -- Create GitHub Release with verification instructions ---------------
 
       - name: Create GitHub Release
@@ -358,25 +434,3 @@ jobs:
           git push origin refs/tags/latest --force
           echo "Updated rolling tags: stable, latest → ${{ github.sha }}"
 
-  # ---------------------------------------------------------------------------
-  # Publish Tauri update manifest (latest.json)
-  # ---------------------------------------------------------------------------
-  publish-update-manifest:
-    needs: build
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Download all release artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-
-      - name: Read VERSION
-        run: echo "VERSION=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_ENV"
-
-      - name: Upload latest.json to Release
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
-        with:
-          tag_name: v${{ env.VERSION }}
-          files: |
-            **/latest.json

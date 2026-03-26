@@ -13,18 +13,22 @@
 //!
 //! # latest.json shape
 //!
-//! Tauri's GitHub release provider produces a `latest.json` with at least:
+//! The release workflow generates a `latest.json` with at least:
 //! ```json
 //! {
-//!   "version": "0.1.46.28",
+//!   "version": "0.1.46",
 //!   "platforms": {
 //!     "linux-x86_64": {
-//!       "url": "https://github.com/…/Tillandsias_0.1.46.28_amd64.AppImage.tar.gz",
+//!       "url": "https://github.com/…/Tillandsias-linux-x86_64.AppImage.tar.gz",
 //!       "signature": "…"
 //!     }
 //!   }
 //! }
 //! ```
+//!
+//! The version field uses 3-part semver (matching `CARGO_PKG_VERSION`) so that
+//! version comparison works correctly without false-positive "update available"
+//! results.
 //!
 //! # Update mechanism
 //!
@@ -358,13 +362,22 @@ fn detect_platform_key() -> String {
 /// Compare two semver-like version strings. Returns `true` if `a` is strictly
 /// newer than `b`. Handles the 4-part `Major.Minor.Change.Build` scheme used
 /// by Tillandsias as well as standard 3-part semver.
+///
+/// When the two versions have different part counts (e.g., `0.1.65.38` vs
+/// `0.1.65`), comparison is limited to the shorter length so that a 4-part
+/// remote version with the same semver prefix is NOT considered newer than
+/// the 3-part local version. This avoids perpetual "update available" when
+/// `CARGO_PKG_VERSION` (3-part) matches the semver base of `latest.json`
+/// (4-part).
 fn is_newer(a: &str, b: &str) -> bool {
     let parse = |s: &str| -> Vec<u64> {
         s.split('.').filter_map(|p| p.parse().ok()).collect()
     };
     let va = parse(a);
     let vb = parse(b);
-    va > vb
+    let len = va.len().min(vb.len());
+    // Compare only the shared prefix (typically Major.Minor.Change)
+    va[..len] > vb[..len]
 }
 
 /// Human-readable byte count.
@@ -412,6 +425,22 @@ mod tests {
     fn is_newer_three_part_semver() {
         assert!(is_newer("0.2.0", "0.1.99"));
         assert!(!is_newer("0.1.0", "0.1.0"));
+    }
+
+    #[test]
+    fn is_newer_four_part_vs_three_part_same_base_is_not_newer() {
+        // 4-part remote with same semver prefix as 3-part local → NOT newer.
+        // This is the critical fix: CARGO_PKG_VERSION is 3-part, latest.json
+        // version is 4-part. Without prefix comparison, the updater would
+        // always report an update available.
+        assert!(!is_newer("0.1.65.38", "0.1.65"));
+        assert!(!is_newer("0.1.65.0", "0.1.65"));
+    }
+
+    #[test]
+    fn is_newer_four_part_vs_three_part_higher_base_is_newer() {
+        assert!(is_newer("0.2.0.1", "0.1.65"));
+        assert!(is_newer("0.1.66.1", "0.1.65"));
     }
 
     #[test]
