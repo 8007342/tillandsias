@@ -11,7 +11,7 @@ use tracing::{debug, error, info};
 use tillandsias_core::config::load_global_config;
 use tillandsias_core::event::{BuildProgressEvent, ContainerState, MenuCommand};
 use tillandsias_core::genus::GenusAllocator;
-use tillandsias_core::project::ProjectChange;
+use tillandsias_core::project::{ArtifactStatus, Project, ProjectChange, ProjectType};
 use tillandsias_core::state::{BuildProgress, BuildStatus, ContainerInfo, ContainerType, RemoteRepoInfo, TrayState};
 use tillandsias_core::tools::ToolAllocator;
 
@@ -196,7 +196,7 @@ pub async fn run(
                     }
                     MenuCommand::CloneProject { full_name, name } => {
                         info!(repo = %full_name, "Clone project requested");
-                        handle_clone_project(&full_name, &name, &mut state, &on_state_change).await;
+                        handle_clone_project(&full_name, &name, &mut state, &mut allocator, build_tx.clone(), &on_state_change).await;
                     }
                     MenuCommand::Settings => {
                         // Settings is a Submenu now — this event won't fire from menu clicks.
@@ -361,10 +361,16 @@ async fn fetch_remote_repos(state: &mut TrayState, on_state_change: &MenuRebuild
 }
 
 /// Handle cloning a remote project into the watched directory.
+///
+/// After a successful clone, automatically launches the forge for the new
+/// project so the user gets immediate visual feedback (blooming flower) that
+/// the checkout worked and the environment is ready.
 async fn handle_clone_project(
     full_name: &str,
     name: &str,
     state: &mut TrayState,
+    allocator: &mut GenusAllocator,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
     on_state_change: &MenuRebuildFn,
 ) {
     // Set cloning state
@@ -387,9 +393,33 @@ async fn handle_clone_project(
     match github::clone_repo(full_name, &target_dir).await {
         Ok(()) => {
             info!(repo = %full_name, target = %target_dir.display(), "Clone completed");
-            // Scanner will detect the new directory automatically via filesystem events.
             // Invalidate remote repos cache so the cloned repo is filtered out.
             state.invalidate_remote_repos_cache();
+
+            // Pre-insert the cloned project into state so handle_attach_here can
+            // find it immediately, before the scanner emits a Discovered event.
+            // The scanner's dedup guard will skip it when it catches up.
+            if !state.projects.iter().any(|p| p.path == target_dir) {
+                state.projects.push(Project {
+                    name: name.to_string(),
+                    path: target_dir.clone(),
+                    project_type: ProjectType::Unknown,
+                    artifacts: ArtifactStatus::default(),
+                    assigned_genus: None,
+                });
+                debug!(project = %name, "Pre-inserted cloned project into state");
+            }
+
+            // Auto-launch the forge for the newly cloned project.
+            // Errors are logged but do not affect clone success.
+            match handlers::handle_attach_here(target_dir, state, allocator, build_tx).await {
+                Ok(_) => {
+                    info!(project = %name, "Forge auto-launched after clone");
+                }
+                Err(e) => {
+                    error!(project = %name, error = %e, "Auto-launch after clone failed — user can attach manually");
+                }
+            }
         }
         Err(e) => {
             error!(repo = %full_name, error = %e, "Clone failed");
