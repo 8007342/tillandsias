@@ -260,6 +260,7 @@ fn main() {
                                         state: container_state,
                                         port_range: (0, 0),
                                         container_type: tillandsias_core::state::ContainerType::Forge, // Default for discovered containers
+                                        display_emoji: genus.flower().to_string(), // Default to flower for discovered containers
                                     });
                                 }
                             }

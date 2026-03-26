@@ -391,24 +391,29 @@ fn build_project_submenu<R: Runtime>(
     project: &tillandsias_core::project::Project,
     state: &TrayState,
 ) -> tauri::Result<tauri::menu::Submenu<R>> {
-    let attach_running = project.assigned_genus.is_some();
-    let maintenance_running = state
+    // Collect display emojis for running containers of this project, separated by type
+    let tool_emojis: Vec<&str> = state
         .running
         .iter()
-        .any(|c| c.project_name == project.name && c.container_type == ContainerType::Maintenance);
+        .filter(|c| c.project_name == project.name && c.container_type == ContainerType::Maintenance)
+        .map(|c| c.display_emoji.as_str())
+        .collect();
+    let flower_emojis: Vec<&str> = state
+        .running
+        .iter()
+        .filter(|c| c.project_name == project.name && c.container_type == ContainerType::Forge)
+        .map(|c| c.display_emoji.as_str())
+        .collect();
 
-    // Project label: plain name when idle, flower/pick prefix only when containers running
-    let label = match (attach_running, maintenance_running) {
-        (true, true) => {
-            let flower = project.assigned_genus.unwrap().flower();
-            format!("{flower}\u{26CF}\u{FE0F} {}", project.name) // 🌺⛏️ project
-        }
-        (true, false) => {
-            let flower = project.assigned_genus.unwrap().flower();
-            format!("{flower} {}", project.name) // 🌺 project
-        }
-        (false, true) => format!("\u{26CF}\u{FE0F} {}", project.name), // ⛏️ project
-        (false, false) => project.name.clone(),                         // plain name
+    let maintenance_running = !tool_emojis.is_empty();
+
+    // Project label: name first, emojis as suffix. Tools then flowers.
+    // Idle: plain name. Running: "project-name  🔧🪛🌸"
+    let label = if tool_emojis.is_empty() && flower_emojis.is_empty() {
+        project.name.clone()
+    } else {
+        let suffix: String = [tool_emojis.join(""), flower_emojis.join("")].concat();
+        format!("{}  {}", project.name, suffix)
     };
 
     let mut submenu = SubmenuBuilder::new(app, &label);
@@ -427,17 +432,12 @@ fn build_project_submenu<R: Runtime>(
             .build(app)?,
     );
 
-    // Derive flower for the Maintenance terminal item.
-    // When running: show flower matching the first maintenance container's genus.
-    // When idle: show pick icon (garden tool).
+    // Maintenance menu item.
+    // When running: show the first maintenance container's tool emoji.
+    // When idle: show pick icon (⛏️).
     let maintenance_label = if maintenance_running {
-        let flower = state
-            .running
-            .iter()
-            .find(|c| c.project_name == project.name && c.container_type == ContainerType::Maintenance)
-            .map(|c| c.genus.flower())
-            .unwrap_or_else(|| tillandsias_core::genus::TillandsiaGenus::Aeranthos.flower());
-        format!("{flower} Maintenance")
+        let tool = tool_emojis.first().copied().unwrap_or("\u{26CF}\u{FE0F}");
+        format!("{tool} Maintenance")
     } else {
         "\u{26CF}\u{FE0F} Maintenance".to_string() // ⛏️ pick — idle
     };

@@ -36,6 +36,7 @@ use tillandsias_core::config::{GlobalConfig, cache_dir, load_global_config, load
 use tillandsias_core::event::{AppEvent, BuildProgressEvent, ContainerState};
 use tillandsias_core::genus::GenusAllocator;
 use tillandsias_core::state::{ContainerInfo, TrayState};
+use tillandsias_core::tools::ToolAllocator;
 use tillandsias_podman::PodmanClient;
 use tillandsias_podman::launch::{ContainerLauncher, allocate_port_range};
 use tillandsias_podman::query_occupied_ports;
@@ -459,6 +460,7 @@ pub async fn handle_attach_here(
     // "Preparing environment..." with the bud icon while the image build
     // and terminal launch happen.
     let container_name = ContainerInfo::container_name(&project_name, genus);
+    let display_emoji = genus.flower().to_string();
     let placeholder = ContainerInfo {
         name: container_name.clone(),
         project_name: project_name.clone(),
@@ -466,6 +468,7 @@ pub async fn handle_attach_here(
         state: ContainerState::Creating,
         port_range,
         container_type: tillandsias_core::state::ContainerType::Forge,
+        display_emoji: display_emoji.clone(),
     };
     state.running.push(placeholder);
     info!(container = %container_name, "Preparing environment... (bud state)");
@@ -557,7 +560,7 @@ pub async fn handle_attach_here(
     let podman_cmd = podman_parts.join(" ");
 
     // Build window title: "<flower> <project_name>" — matches the tray menu label.
-    let title = format!("{} {}", genus.flower(), project_name);
+    let title = format!("{} {}", display_emoji, project_name);
 
     // Open a terminal window running the podman command.
     // When the user exits OpenCode, the container dies (--rm), terminal closes.
@@ -730,6 +733,7 @@ pub async fn handle_terminal(
     project_path: PathBuf,
     state: &mut TrayState,
     allocator: &mut GenusAllocator,
+    tool_allocator: &mut ToolAllocator,
     build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<(), String> {
     let project_name = project_path
@@ -744,12 +748,19 @@ pub async fn handle_terminal(
         .allocate(&project_name)
         .ok_or_else(|| format!("All genera exhausted for project {project_name}"))?;
 
-    debug!(project = %project_name, genus = %genus.display_name(), "Genus allocated for maintenance terminal");
+    // Allocate a tool emoji for this maintenance terminal
+    let display_emoji = tool_allocator
+        .allocate(&project_name)
+        .unwrap_or(tillandsias_core::tools::TOOL_EMOJIS[0])
+        .to_string();
+
+    debug!(project = %project_name, genus = %genus.display_name(), tool = %display_emoji, "Genus and tool allocated for maintenance terminal");
 
     let client = PodmanClient::new();
     if !client.image_exists(FORGE_IMAGE_TAG).await {
         error!(tag = FORGE_IMAGE_TAG, "Image not found when opening maintenance terminal");
         allocator.release(&project_name, genus);
+        tool_allocator.release(&project_name, &display_emoji);
         return Err("Development environment not ready yet. Tillandsias will set it up automatically — please try again in a few minutes.".into());
     }
 
@@ -782,9 +793,10 @@ pub async fn handle_terminal(
         state: ContainerState::Creating,
         port_range,
         container_type: tillandsias_core::state::ContainerType::Maintenance,
+        display_emoji: display_emoji.clone(),
     };
     state.running.push(placeholder);
-    info!(container = %container_name, "Maintenance terminal registered (bud state)");
+    info!(container = %container_name, tool = %display_emoji, "Maintenance terminal registered (bud state)");
 
     let git_dir = secrets_dir.join("git");
     let host_os = tillandsias_core::config::detect_host_os();
@@ -823,8 +835,8 @@ pub async fn handle_terminal(
         FORGE_IMAGE_TAG,
     );
 
-    // Window title uses the allocated genus flower — unique per terminal
-    let title = format!("{} {}", genus.flower(), project_name);
+    // Window title uses the allocated tool emoji — unique per terminal
+    let title = format!("{} {}", display_emoji, project_name);
 
     // Notify event loop: maintenance setup in progress (menu chip: ⛏️ Setting up Maintenance...)
     let _ = build_tx.try_send(BuildProgressEvent::Started {
@@ -846,9 +858,10 @@ pub async fn handle_terminal(
             Ok(())
         }
         Err(e) => {
-            // Clean up: remove from state and release genus
+            // Clean up: remove from state and release genus + tool
             state.running.retain(|c| c.name != container_name);
             allocator.release(&project_name, genus);
+            tool_allocator.release(&project_name, &display_emoji);
             let _ = build_tx.try_send(BuildProgressEvent::Failed {
                 image_name: "Maintenance".to_string(),
                 reason: e.clone(),

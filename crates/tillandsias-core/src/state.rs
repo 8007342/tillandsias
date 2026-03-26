@@ -56,6 +56,10 @@ pub struct ContainerInfo {
     pub port_range: (u16, u16),
     /// Whether this is a forge or maintenance container.
     pub container_type: ContainerType,
+    /// Display emoji for menu labels and window titles.
+    /// Flower emoji for Forge containers, tool emoji for Maintenance containers.
+    /// Single source of truth — set at container creation time.
+    pub display_emoji: String,
 }
 
 impl ContainerInfo {
@@ -258,6 +262,7 @@ mod tests {
             state: crate::event::ContainerState::Running,
             port_range: (3000, 3019),
             container_type: ContainerType::Forge,
+            display_emoji: TillandsiaGenus::Aeranthos.flower().to_string(),
         };
         let bytes = postcard::to_allocvec(&info).unwrap();
         let decoded: ContainerInfo = postcard::from_bytes(&bytes).unwrap();
@@ -267,5 +272,6 @@ mod tests {
         assert_eq!(decoded.state, info.state);
         assert_eq!(decoded.port_range, info.port_range);
         assert_eq!(decoded.container_type, info.container_type);
+        assert_eq!(decoded.display_emoji, info.display_emoji);
     }
 }

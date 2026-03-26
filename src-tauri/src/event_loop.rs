@@ -12,7 +12,8 @@ use tillandsias_core::config::load_global_config;
 use tillandsias_core::event::{BuildProgressEvent, ContainerState, MenuCommand};
 use tillandsias_core::genus::GenusAllocator;
 use tillandsias_core::project::ProjectChange;
-use tillandsias_core::state::{BuildProgress, BuildStatus, ContainerInfo, RemoteRepoInfo, TrayState};
+use tillandsias_core::state::{BuildProgress, BuildStatus, ContainerInfo, ContainerType, RemoteRepoInfo, TrayState};
+use tillandsias_core::tools::ToolAllocator;
 
 use crate::{github, handlers};
 
@@ -43,11 +44,13 @@ pub async fn run(
     on_state_change: MenuRebuildFn,
 ) {
     let mut allocator = GenusAllocator::new();
+    let mut tool_allocator = ToolAllocator::new();
 
-    // Seed allocator from containers discovered during startup (graceful restart).
-    // Without this, allocate() would not know pre-existing genera are taken and
-    // could assign a duplicate genus when the user clicks "Attach Here".
+    // Seed allocators from containers discovered during startup (graceful restart).
+    // Without this, allocate() would not know pre-existing genera/tools are taken and
+    // could assign a duplicate genus or tool when the user clicks menu items.
     allocator.seed_from_running(&state.running);
+    tool_allocator.seed_from_running(&state.running);
 
     info!("Event loop started");
 
@@ -73,7 +76,7 @@ pub async fn run(
 
             // Podman: container state changes
             Some(event) = podman_rx.recv() => {
-                handle_podman_event(event, &mut state, &mut allocator);
+                handle_podman_event(event, &mut state, &mut allocator, &mut tool_allocator);
                 prune_completed_builds(&mut state);
                 on_state_change(&state);
             }
@@ -139,7 +142,7 @@ pub async fn run(
                     }
                     MenuCommand::Terminal { project_path } => {
                         info!(project = ?project_path, "Terminal requested");
-                        match handlers::handle_terminal(project_path, &mut state, &mut allocator, build_tx.clone()).await {
+                        match handlers::handle_terminal(project_path, &mut state, &mut allocator, &mut tool_allocator, build_tx.clone()).await {
                             Ok(()) => {
                                 prune_completed_builds(&mut state);
                                 on_state_change(&state);
@@ -377,6 +380,7 @@ fn handle_podman_event(
     event: tillandsias_podman::events::PodmanEvent,
     state: &mut TrayState,
     allocator: &mut GenusAllocator,
+    tool_allocator: &mut ToolAllocator,
 ) {
     debug!(
         container = %event.container_name,
@@ -402,6 +406,10 @@ fn handle_podman_event(
             if let Some(pos) = state.running.iter().position(|c| c.name == name) {
                 let removed = state.running.remove(pos);
                 allocator.release(&removed.project_name, removed.genus);
+                // Release tool emoji if this was a Maintenance container
+                if removed.container_type == ContainerType::Maintenance && !removed.display_emoji.is_empty() {
+                    tool_allocator.release(&removed.project_name, &removed.display_emoji);
+                }
 
                 // Clear project genus if no more environments
                 let still_running = state
@@ -436,7 +444,8 @@ fn handle_podman_event(
                 genus,
                 state: event.new_state,
                 port_range: (0, 0), // Unknown — will be updated on next inspect
-                container_type: tillandsias_core::state::ContainerType::Forge, // Default for discovered containers
+                container_type: ContainerType::Forge, // Default for discovered containers
+                display_emoji: genus.flower().to_string(), // Default to flower for discovered containers
             });
         }
     }
