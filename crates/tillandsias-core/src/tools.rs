@@ -2,6 +2,11 @@
 ///
 /// Each Maintenance terminal gets a unique tool emoji from this pool.
 /// Tools are strictly separated from flower emojis (used by Forge/AI containers).
+///
+/// # Reserved emojis (NOT in this pool)
+///
+/// - `🛠️` (U+1F6E0+FE0F) — reserved exclusively for the global Root terminal
+///   menu item. It MUST NOT be added here.
 pub const TOOL_EMOJIS: &[&str] = &[
     "\u{1F527}",     // 🔧
     "\u{1FA9B}",     // 🪛

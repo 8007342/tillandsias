@@ -152,6 +152,32 @@ pub async fn run(
                             }
                         }
                     }
+                    MenuCommand::RootTerminal => {
+                        info!("Root terminal requested");
+                        let watch_path = {
+                            let global_config = load_global_config();
+                            global_config
+                                .scanner
+                                .watch_paths
+                                .first()
+                                .cloned()
+                                .unwrap_or_else(|| {
+                                    std::path::PathBuf::from(
+                                        std::env::var("HOME").unwrap_or_else(|_| "/root".to_string()),
+                                    )
+                                    .join("src")
+                                })
+                        };
+                        match handlers::handle_root_terminal(watch_path, &mut state, &mut allocator, &mut tool_allocator, build_tx.clone()).await {
+                            Ok(()) => {
+                                prune_completed_builds(&mut state);
+                                on_state_change(&state);
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Root terminal failed");
+                            }
+                        }
+                    }
                     MenuCommand::GitHubLogin => {
                         info!("GitHub Login requested");
                         if let Err(e) = handlers::handle_github_login(&state, build_tx.clone()).await {

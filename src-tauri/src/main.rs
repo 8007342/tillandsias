@@ -477,6 +477,7 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
         menu::ids::GITHUB_LOGIN => Some(MenuCommand::GitHubLogin),
         menu::ids::SETTINGS => Some(MenuCommand::Settings),
         menu::ids::REFRESH_REMOTE_PROJECTS => Some(MenuCommand::RefreshRemoteProjects),
+        "root-terminal" => Some(MenuCommand::RootTerminal),
         _ => {
             if let Some((action, payload)) = menu::ids::parse(id) {
                 match action {

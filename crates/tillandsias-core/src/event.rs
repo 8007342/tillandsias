@@ -82,6 +82,9 @@ pub enum MenuCommand {
     /// Open a bash terminal in the project's forge container
     Terminal { project_path: PathBuf },
 
+    /// Open a bash terminal in the forge container at the root src/ directory
+    RootTerminal,
+
     /// GitHub Login — run gh auth login in a container
     GitHubLogin,
 

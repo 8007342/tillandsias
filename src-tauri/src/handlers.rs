@@ -871,6 +871,144 @@ pub async fn handle_terminal(
     }
 }
 
+/// Handle the global "🛠️ Root" terminal — open bash at the src/ root directory.
+///
+/// Identical lifecycle to `handle_terminal` but scoped to the entire `~/src/`
+/// watch path rather than a single project sub-directory.
+///
+/// - Container name: `tillandsias-src-<genus>` (project_name = "src")
+/// - Working directory inside container: `/home/forge/src`
+/// - Volume mount: `<watch_path>:/home/forge/src` (entire src tree, rw)
+/// - Window title: `🛠️ Root`
+/// - The `🛠️` emoji is reserved for this item and is absent from `TOOL_EMOJIS`.
+pub async fn handle_root_terminal(
+    watch_path: PathBuf,
+    state: &mut TrayState,
+    allocator: &mut GenusAllocator,
+    _tool_allocator: &mut ToolAllocator,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<(), String> {
+    // Use a fixed project name for the root terminal so the container name is
+    // stable and recognisable: tillandsias-src-<genus>
+    let project_name = "src".to_string();
+
+    info!("Opening root terminal at src/");
+
+    let genus = allocator
+        .allocate(&project_name)
+        .ok_or_else(|| "All genera exhausted for root terminal".to_string())?;
+
+    // Reserve the 🛠️ emoji as the display emoji — it is NOT drawn from the pool.
+    let display_emoji = "\u{1F6E0}\u{FE0F}".to_string();
+
+    debug!(genus = %genus.display_name(), "Genus allocated for root terminal");
+
+    let client = PodmanClient::new();
+    if !client.image_exists(FORGE_IMAGE_TAG).await {
+        error!(tag = FORGE_IMAGE_TAG, "Image not found when opening root terminal");
+        allocator.release(&project_name, genus);
+        return Err("Development environment not ready yet. Tillandsias will set it up automatically — please try again in a few minutes.".into());
+    }
+
+    let cache = cache_dir();
+    std::fs::create_dir_all(&cache).ok();
+    let secrets_dir = cache.join("secrets");
+    std::fs::create_dir_all(secrets_dir.join("gh")).ok();
+    std::fs::create_dir_all(secrets_dir.join("git")).ok();
+    let gitconfig_path = secrets_dir.join("git").join(".gitconfig");
+    if !gitconfig_path.exists() {
+        std::fs::File::create(&gitconfig_path).ok();
+    }
+
+    // Refresh hosts.yml from native keyring before terminal launch.
+    crate::secrets::write_hosts_yml_from_keyring();
+
+    // Allocate port range — check actual podman containers for conflicts
+    let mut existing_ports: Vec<(u16, u16)> = state.running.iter().map(|c| c.port_range).collect();
+    existing_ports.extend(query_occupied_ports());
+    let port_range = allocate_port_range((3000, 3019), &existing_ports);
+
+    let container_name = tillandsias_core::state::ContainerInfo::container_name(&project_name, genus);
+
+    // Pre-register container in state so the tray shows it immediately
+    let placeholder = tillandsias_core::state::ContainerInfo {
+        name: container_name.clone(),
+        project_name: project_name.clone(),
+        genus,
+        state: tillandsias_core::event::ContainerState::Creating,
+        port_range,
+        container_type: tillandsias_core::state::ContainerType::Maintenance,
+        display_emoji: display_emoji.clone(),
+    };
+    state.running.push(placeholder);
+    info!(container = %container_name, "Root terminal registered (bud state)");
+
+    let git_dir = secrets_dir.join("git");
+    let host_os = tillandsias_core::config::detect_host_os();
+    let podman_bin = tillandsias_podman::find_podman_path();
+
+    let podman_cmd = format!(
+        "{podman_bin} run -it --rm --init --stop-timeout=10 \
+        --name {} \
+        --security-opt=label=disable \
+        --userns=keep-id \
+        --cap-drop=ALL \
+        --security-opt=no-new-privileges \
+        --entrypoint bash \
+        -w /home/forge/src \
+        -e TILLANDSIAS_HOST_OS='{}' \
+        -e GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig \
+        -p {}-{}:{}-{} \
+        -v {}:/home/forge/src \
+        -v {}:/home/forge/.cache/tillandsias \
+        -v {}:/home/forge/.config/gh:ro \
+        -v {}:/home/forge/.config/tillandsias-git:ro \
+        {}",
+        container_name,
+        host_os,
+        port_range.0,
+        port_range.1,
+        port_range.0,
+        port_range.1,
+        watch_path.display(),
+        cache.display(),
+        secrets_dir.join("gh").display(),
+        git_dir.display(),
+        FORGE_IMAGE_TAG,
+    );
+
+    let title = "\u{1F6E0}\u{FE0F} Root".to_string();
+
+    // Notify event loop: maintenance setup in progress
+    let _ = build_tx.try_send(BuildProgressEvent::Started {
+        image_name: "Maintenance".to_string(),
+    });
+
+    match open_terminal(&podman_cmd, &title) {
+        Ok(()) => {
+            let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                image_name: "Maintenance".to_string(),
+            });
+            info!(
+                container = %container_name,
+                genus = %genus.display_name(),
+                port_range = ?port_range,
+                "Root terminal opened"
+            );
+            Ok(())
+        }
+        Err(e) => {
+            state.running.retain(|c| c.name != container_name);
+            allocator.release(&project_name, genus);
+            let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                image_name: "Maintenance".to_string(),
+                reason: e.clone(),
+            });
+            Err(format!("Failed to open root terminal: {e}"))
+        }
+    }
+}
+
 /// Handle "GitHub Login" — build forge image if missing, then run gh-auth-login.sh.
 ///
 /// On first launch the forge image does not exist yet. Rather than failing with

@@ -60,6 +60,11 @@ pub mod ids {
         gen_id(&format!("clone:{full_name}\t{name}"))
     }
 
+    /// Build the root terminal menu item ID.
+    pub fn root_terminal() -> String {
+        gen_id("root-terminal")
+    }
+
     /// Build a menu item ID with generation suffix for non-actionable items.
     pub fn static_id(name: &str) -> String {
         gen_id(name)
@@ -114,6 +119,11 @@ pub fn build_tray_menu<R: Runtime>(
     );
     menu =
         menu.item(&MenuItemBuilder::with_id(ids::attach_here(&watch_path), &src_label).build(app)?);
+
+    // Global root terminal — 🛠️ is reserved for this item and MUST NOT appear in TOOL_EMOJIS.
+    menu = menu.item(
+        &MenuItemBuilder::with_id(ids::root_terminal(), "\u{1F6E0}\u{FE0F} Root").build(app)?,
+    );
 
     menu = menu.separator();
 
