@@ -398,6 +398,7 @@ fn build_project_submenu<R: Runtime>(
         .iter()
         .any(|c| c.name == terminal_container_name);
 
+    // Project label: plain name when idle, flower/pick prefix only when containers running
     let label = match (attach_running, maintenance_running) {
         (true, true) => {
             let flower = project.assigned_genus.unwrap().flower();
@@ -408,7 +409,7 @@ fn build_project_submenu<R: Runtime>(
             format!("{flower} {}", project.name) // 🌺 project
         }
         (false, true) => format!("\u{26CF}\u{FE0F} {}", project.name), // ⛏️ project
-        (false, false) => format!("\u{1F331} {}", project.name),       // 🌱 project
+        (false, false) => project.name.clone(),                         // plain name
     };
 
     let mut submenu = SubmenuBuilder::new(app, &label);
