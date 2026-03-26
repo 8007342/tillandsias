@@ -391,77 +391,60 @@ fn build_project_submenu<R: Runtime>(
     project: &tillandsias_core::project::Project,
     state: &TrayState,
 ) -> tauri::Result<tauri::menu::Submenu<R>> {
-    let running_count = state
-        .running
-        .iter()
-        .filter(|c| c.project_name == project.name)
-        .count();
-
-    let label = if running_count > 0 {
-        format!("{} ({})", project.name, running_count)
-    } else {
-        project.name.clone()
-    };
-
-    let mut submenu = SubmenuBuilder::new(app, &label);
-
-    // "Attach Here" — primary action (opens OpenCode)
-    // When a container is running for this project, prefix with the genus flower
-    // so the tray label matches the terminal window title exactly.
-    let attach_label = if let Some(genus) = project.assigned_genus {
-        format!("{} Attach Here", genus.flower())
-    } else {
-        "Attach Here".to_string()
-    };
-    submenu = submenu
-        .item(&MenuItemBuilder::with_id(ids::attach_here(&project.path), &attach_label).build(app)?);
-
-    // Derive flower for the Maintenance terminal item.
-    // When running: show flower matching the terminal window title.
-    // When idle: show wrench icon.
+    let attach_running = project.assigned_genus.is_some();
     let terminal_container_name = format!("tillandsias-{}-terminal", project.name);
     let maintenance_running = state
         .running
         .iter()
         .any(|c| c.name == terminal_container_name);
+
+    let label = match (attach_running, maintenance_running) {
+        (true, true) => {
+            let flower = project.assigned_genus.unwrap().flower();
+            format!("{flower}\u{26CF}\u{FE0F} {}", project.name) // 🌺⛏️ project
+        }
+        (true, false) => {
+            let flower = project.assigned_genus.unwrap().flower();
+            format!("{flower} {}", project.name) // 🌺 project
+        }
+        (false, true) => format!("\u{26CF}\u{FE0F} {}", project.name), // ⛏️ project
+        (false, false) => format!("\u{1F331} {}", project.name),       // 🌱 project
+    };
+
+    let mut submenu = SubmenuBuilder::new(app, &label);
+
+    // "Attach Here" — primary action (opens OpenCode)
+    // Idle: 🌱 Attach Here (clickable)
+    // Running: 🌺 Blooming (genus flower, disabled — prevents re-launch)
+    let (attach_label, attach_enabled) = if let Some(genus) = project.assigned_genus {
+        (format!("{} Blooming", genus.flower()), false)
+    } else {
+        ("\u{1F331} Attach Here".to_string(), true) // 🌱
+    };
+    submenu = submenu.item(
+        &MenuItemBuilder::with_id(ids::attach_here(&project.path), &attach_label)
+            .enabled(attach_enabled)
+            .build(app)?,
+    );
+
+    // Derive flower for the Maintenance terminal item.
+    // When running: show flower matching the terminal window title.
+    // When idle: show pick icon (garden tool).
     let maintenance_label = if maintenance_running {
         let flower = state
             .running
             .iter()
-            .find(|c| c.project_name == project.name)
+            .find(|c| c.name == terminal_container_name)
             .map(|c| c.genus.flower())
             .unwrap_or_else(|| tillandsias_core::genus::TillandsiaGenus::Aeranthos.flower());
         format!("{flower} Maintenance")
     } else {
-        "\u{1F527} Maintenance".to_string() // 🔧 wrench — idle
+        "\u{26CF}\u{FE0F} Maintenance".to_string() // ⛏️ pick — idle
     };
     // "Maintenance" — opens bash in a forge container
     submenu = submenu.item(
         &MenuItemBuilder::with_id(ids::terminal(&project.path), &maintenance_label).build(app)?
     );
-
-    // Per-project running environments
-    let project_containers: Vec<_> = state
-        .running
-        .iter()
-        .filter(|c| c.project_name == project.name)
-        .collect();
-
-    if !project_containers.is_empty() {
-        submenu = submenu.separator();
-        for container in project_containers {
-            let lifecycle = container.lifecycle();
-            let item_label = format!(
-                "{} {} — {}",
-                lifecycle_emoji(lifecycle),
-                container.genus.display_name(),
-                lifecycle_label(lifecycle),
-            );
-            submenu = submenu.item(
-                &MenuItemBuilder::with_id(ids::stop(&container.name), &item_label).build(app)?,
-            );
-        }
-    }
 
     submenu.build()
 }
@@ -477,20 +460,9 @@ fn lifecycle_emoji(lifecycle: tillandsias_core::genus::PlantLifecycle) -> &'stat
     }
 }
 
-/// Human-readable lifecycle label.
-fn lifecycle_label(lifecycle: tillandsias_core::genus::PlantLifecycle) -> &'static str {
-    use tillandsias_core::genus::PlantLifecycle;
-    match lifecycle {
-        PlantLifecycle::Bud => "Starting",
-        PlantLifecycle::Bloom => "Running",
-        PlantLifecycle::Dried => "Stopping",
-        PlantLifecycle::Pup => "Rebuilding",
-    }
-}
-
 /// Build the display label for a build progress chip.
 ///
-/// - `InProgress` with `image_name == "Maintenance"`: special label "🔧 Setting up Maintenance..."
+/// - `InProgress` with `image_name == "Maintenance"`: special label "⛏️ Setting up Maintenance..."
 /// - `InProgress` otherwise: `"⏳ Building {image_name}..."`
 /// - `Completed`: `"✅ {image_name} ready"`
 /// - `Failed`: `"❌ {image_name} build failed"`
@@ -498,7 +470,7 @@ fn build_chip_label(build: &tillandsias_core::state::BuildProgress) -> String {
     match &build.status {
         BuildStatus::InProgress => {
             if build.image_name == "Maintenance" {
-                "\u{1F527} Setting up Maintenance...".to_string()
+                "\u{26CF}\u{FE0F} Setting up Maintenance...".to_string()
             } else {
                 format!("\u{23F3} Building {}...", build.image_name)
             }
