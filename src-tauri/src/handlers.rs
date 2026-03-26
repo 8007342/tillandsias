@@ -978,6 +978,7 @@ pub async fn handle_root_terminal(
         --security-opt=no-new-privileges \
         --entrypoint fish \
         -w /home/forge/src \
+        -e TILLANDSIAS_PROJECT='(all projects)' \
         -e TILLANDSIAS_HOST_OS='{}' \
         -e GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig \
         -p {}-{}:{}-{} \
