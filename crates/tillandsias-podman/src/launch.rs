@@ -129,6 +129,7 @@ impl ContainerLauncher {
             genus,
             state: tillandsias_core::event::ContainerState::Creating,
             port_range,
+            container_type: tillandsias_core::state::ContainerType::Forge,
         })
     }
 

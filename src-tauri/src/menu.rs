@@ -11,7 +11,7 @@ use tracing::debug;
 
 use tillandsias_core::config::load_global_config;
 use tillandsias_core::genus::TrayIconState;
-use tillandsias_core::state::{BuildStatus, TrayState};
+use tillandsias_core::state::{BuildStatus, ContainerType, TrayState};
 
 /// Generation counter for menu rebuilds.
 ///
@@ -392,11 +392,10 @@ fn build_project_submenu<R: Runtime>(
     state: &TrayState,
 ) -> tauri::Result<tauri::menu::Submenu<R>> {
     let attach_running = project.assigned_genus.is_some();
-    let terminal_container_name = format!("tillandsias-{}-terminal", project.name);
     let maintenance_running = state
         .running
         .iter()
-        .any(|c| c.name == terminal_container_name);
+        .any(|c| c.project_name == project.name && c.container_type == ContainerType::Maintenance);
 
     // Project label: plain name when idle, flower/pick prefix only when containers running
     let label = match (attach_running, maintenance_running) {
@@ -429,13 +428,13 @@ fn build_project_submenu<R: Runtime>(
     );
 
     // Derive flower for the Maintenance terminal item.
-    // When running: show flower matching the terminal window title.
+    // When running: show flower matching the first maintenance container's genus.
     // When idle: show pick icon (garden tool).
     let maintenance_label = if maintenance_running {
         let flower = state
             .running
             .iter()
-            .find(|c| c.name == terminal_container_name)
+            .find(|c| c.project_name == project.name && c.container_type == ContainerType::Maintenance)
             .map(|c| c.genus.flower())
             .unwrap_or_else(|| tillandsias_core::genus::TillandsiaGenus::Aeranthos.flower());
         format!("{flower} Maintenance")

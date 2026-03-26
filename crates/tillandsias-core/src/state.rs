@@ -32,6 +32,15 @@ pub struct BuildProgress {
     pub completed_at: Option<Instant>,
 }
 
+/// Whether a container is a forge (Attach Here / OpenCode) or maintenance (terminal / bash).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ContainerType {
+    /// Forge environment launched via "Attach Here" (runs OpenCode).
+    Forge,
+    /// Maintenance terminal launched via "Maintenance" (runs fish/bash).
+    Maintenance,
+}
+
 /// Info about a running container environment.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ContainerInfo {
@@ -45,6 +54,8 @@ pub struct ContainerInfo {
     pub state: ContainerState,
     /// Allocated port range (start, end inclusive)
     pub port_range: (u16, u16),
+    /// Whether this is a forge or maintenance container.
+    pub container_type: ContainerType,
 }
 
 impl ContainerInfo {
@@ -246,6 +257,7 @@ mod tests {
             genus: TillandsiaGenus::Aeranthos,
             state: crate::event::ContainerState::Running,
             port_range: (3000, 3019),
+            container_type: ContainerType::Forge,
         };
         let bytes = postcard::to_allocvec(&info).unwrap();
         let decoded: ContainerInfo = postcard::from_bytes(&bytes).unwrap();
@@ -254,5 +266,6 @@ mod tests {
         assert_eq!(decoded.genus, info.genus);
         assert_eq!(decoded.state, info.state);
         assert_eq!(decoded.port_range, info.port_range);
+        assert_eq!(decoded.container_type, info.container_type);
     }
 }

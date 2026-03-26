@@ -139,8 +139,14 @@ pub async fn run(
                     }
                     MenuCommand::Terminal { project_path } => {
                         info!(project = ?project_path, "Terminal requested");
-                        if let Err(e) = handlers::handle_terminal(project_path, &state, build_tx.clone()).await {
-                            error!(error = %e, "Terminal failed");
+                        match handlers::handle_terminal(project_path, &mut state, &mut allocator, build_tx.clone()).await {
+                            Ok(()) => {
+                                prune_completed_builds(&mut state);
+                                on_state_change(&state);
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Terminal failed");
+                            }
                         }
                     }
                     MenuCommand::GitHubLogin => {
@@ -430,6 +436,7 @@ fn handle_podman_event(
                 genus,
                 state: event.new_state,
                 port_range: (0, 0), // Unknown — will be updated on next inspect
+                container_type: tillandsias_core::state::ContainerType::Forge, // Default for discovered containers
             });
         }
     }

@@ -249,8 +249,7 @@ fn main() {
                                     _ => continue,
                                 };
 
-                                // Container name encodes project + genus; skip if unparseable
-                                // (e.g. tillandsias-<project>-terminal maintenance containers).
+                                // Container name encodes project + genus; skip if unparseable.
                                 if let Some((project_name, genus)) =
                                     ContainerInfo::parse_container_name(&entry.name)
                                 {
@@ -260,6 +259,7 @@ fn main() {
                                         genus,
                                         state: container_state,
                                         port_range: (0, 0),
+                                        container_type: tillandsias_core::state::ContainerType::Forge, // Default for discovered containers
                                     });
                                 }
                             }

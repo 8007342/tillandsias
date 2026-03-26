@@ -465,6 +465,7 @@ pub async fn handle_attach_here(
         genus,
         state: ContainerState::Creating,
         port_range,
+        container_type: tillandsias_core::state::ContainerType::Forge,
     };
     state.running.push(placeholder);
     info!(container = %container_name, "Preparing environment... (bud state)");
@@ -719,10 +720,16 @@ pub async fn shutdown_all(state: &TrayState) {
     info!("All containers stopped, shutdown complete");
 }
 
-/// Handle "Maintenance" — open bash in a forge container for the project.
+/// Handle "Maintenance" — open fish/bash in a forge container for the project.
+///
+/// Each maintenance terminal gets its own genus-named container, following the
+/// same naming convention as forge containers (`tillandsias-{project}-{genus}`).
+/// Multiple maintenance terminals per project are allowed — each allocates a
+/// unique genus from the pool.
 pub async fn handle_terminal(
     project_path: PathBuf,
-    state: &TrayState,
+    state: &mut TrayState,
+    allocator: &mut GenusAllocator,
     build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<(), String> {
     let project_name = project_path
@@ -730,29 +737,19 @@ pub async fn handle_terminal(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "project".to_string());
 
-    info!(project = %project_name, "Opening terminal");
+    info!(project = %project_name, "Opening maintenance terminal");
 
-    // Don't-relaunch guard: if a maintenance terminal container is already running
-    // for this project, notify the user and return early.
-    let terminal_container_name = format!("tillandsias-{project_name}-terminal");
-    if let Some(existing) = state
-        .running
-        .iter()
-        .find(|c| c.name == terminal_container_name)
-    {
-        let flower = existing.genus.flower();
-        let title = format!("{flower} {project_name}");
-        let msg = format!("Already running — look for '{title}' in your windows");
-        info!(project = %project_name, "Don't-relaunch guard fired — maintenance terminal already running");
-        send_notification("Tillandsias", &msg);
-        return Err(format!(
-            "Maintenance terminal for '{project_name}' is already running as '{title}'"
-        ));
-    }
+    // Allocate a genus — each maintenance terminal gets its own unique name
+    let genus = allocator
+        .allocate(&project_name)
+        .ok_or_else(|| format!("All genera exhausted for project {project_name}"))?;
+
+    debug!(project = %project_name, genus = %genus.display_name(), "Genus allocated for maintenance terminal");
 
     let client = PodmanClient::new();
     if !client.image_exists(FORGE_IMAGE_TAG).await {
         error!(tag = FORGE_IMAGE_TAG, "Image not found when opening maintenance terminal");
+        allocator.release(&project_name, genus);
         return Err("Development environment not ready yet. Tillandsias will set it up automatically — please try again in a few minutes.".into());
     }
 
@@ -774,7 +771,20 @@ pub async fn handle_terminal(
     existing_ports.extend(query_occupied_ports());
     let port_range = allocate_port_range((3000, 3019), &existing_ports);
 
-    let container_name = format!("tillandsias-{}-terminal", project_name);
+    // Use genus-based container name (same convention as forge containers)
+    let container_name = ContainerInfo::container_name(&project_name, genus);
+
+    // Pre-register container in state so the tray shows it immediately
+    let placeholder = ContainerInfo {
+        name: container_name.clone(),
+        project_name: project_name.clone(),
+        genus,
+        state: ContainerState::Creating,
+        port_range,
+        container_type: tillandsias_core::state::ContainerType::Maintenance,
+    };
+    state.running.push(placeholder);
+    info!(container = %container_name, "Maintenance terminal registered (bud state)");
 
     let git_dir = secrets_dir.join("git");
     let host_os = tillandsias_core::config::detect_host_os();
@@ -813,30 +823,32 @@ pub async fn handle_terminal(
         FORGE_IMAGE_TAG,
     );
 
-    // Derive flower from an existing running container for this project,
-    // or fall back to the first genus in the pool.
-    let flower = state
-        .running
-        .iter()
-        .find(|c| c.project_name == project_name)
-        .map(|c| c.genus.flower())
-        .unwrap_or_else(|| tillandsias_core::genus::TillandsiaGenus::Aeranthos.flower());
-    let title = format!("{flower} {project_name}");
+    // Window title uses the allocated genus flower — unique per terminal
+    let title = format!("{} {}", genus.flower(), project_name);
 
-    // Notify event loop: maintenance setup in progress (menu chip: 🔧 Setting up Maintenance...)
+    // Notify event loop: maintenance setup in progress (menu chip: ⛏️ Setting up Maintenance...)
     let _ = build_tx.try_send(BuildProgressEvent::Started {
         image_name: "Maintenance".to_string(),
     });
 
     match open_terminal(&podman_cmd, &title) {
         Ok(()) => {
-            // Terminal launched — notify completed so chip shows ✅ briefly
+            // Terminal launched — notify completed so chip shows briefly
             let _ = build_tx.try_send(BuildProgressEvent::Completed {
                 image_name: "Maintenance".to_string(),
             });
+            info!(
+                container = %container_name,
+                genus = %genus.display_name(),
+                port_range = ?port_range,
+                "Maintenance terminal opened"
+            );
             Ok(())
         }
         Err(e) => {
+            // Clean up: remove from state and release genus
+            state.running.retain(|c| c.name != container_name);
+            allocator.release(&project_name, genus);
             let _ = build_tx.try_send(BuildProgressEvent::Failed {
                 image_name: "Maintenance".to_string(),
                 reason: e.clone(),
