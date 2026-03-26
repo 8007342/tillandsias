@@ -144,36 +144,42 @@ fi
 
 build_appimage() {
     local output_dir="$SCRIPT_DIR/target/release/bundle/appimage"
-    local cargo_cache_dir="$HOME/.cache/tillandsias/cargo-registry"
+    local cache_base="$HOME/.cache/tillandsias/appimage-builder"
 
     _step "Preparing AppImage build directories..."
     mkdir -p "$output_dir"
-    mkdir -p "$cargo_cache_dir"
+    mkdir -p "$cache_base"/{cargo-registry,cargo-bin,rustup,apt}
 
     # Remove old AppImages — avoids "Text file busy" if one is still running.
     # On Linux, rm unlinks the file but running processes keep their fd.
     rm -f "$output_dir"/*.AppImage 2>/dev/null || true
 
-    _info "Output dir:      $output_dir"
-    _info "Cargo cache dir: $cargo_cache_dir"
+    _info "Output dir:  $output_dir"
+    _info "Cache dir:   $cache_base"
     _step "Starting Ubuntu 22.04 podman container for AppImage build..."
-    _warn "First build installs Rust + tauri-cli — expect 10-20 minutes"
-    _warn "Subsequent builds reuse the cargo registry cache (~2-5 minutes)"
+    if [[ -f "$cache_base/rustup/settings.toml" ]]; then
+        _info "Cached toolchain found — skipping install (~1-2 min build)"
+    else
+        _warn "First build installs Rust + tauri-cli — expect 10-20 minutes"
+    fi
 
     podman run --rm \
         --device /dev/fuse \
         --cap-add SYS_ADMIN \
         -v "$SCRIPT_DIR:/src:ro,Z" \
-        -v "$cargo_cache_dir:/root/.cargo/registry:rw,Z" \
+        -v "$cache_base/cargo-registry:/root/.cargo/registry:rw,Z" \
+        -v "$cache_base/cargo-bin:/root/.cargo/bin:rw,Z" \
+        -v "$cache_base/rustup:/root/.rustup:rw,Z" \
+        -v "$cache_base/apt:/var/cache/apt:rw,Z" \
         -v "$output_dir:/output:rw,Z" \
         ubuntu:22.04 \
         bash -euo pipefail -c '
 set -euo pipefail
 
-echo "[appimage] Updating package lists..."
-apt-get update -qq
-
+# System deps — skip if already installed (cached apt + dpkg state not preserved,
+# so we always run apt-get but it will be fast with cached packages)
 echo "[appimage] Installing system dependencies..."
+apt-get update -qq
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
@@ -187,14 +193,25 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     curl \
     file \
     ca-certificates \
-    2>&1 | tail -5
+    2>&1 | tail -3
 
-echo "[appimage] Installing Rust toolchain..."
-curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-source /root/.cargo/env
+# Rust — skip install if rustup already cached
+if [[ -f /root/.cargo/bin/rustup ]]; then
+    echo "[appimage] Rust toolchain cached — skipping install"
+    source /root/.cargo/env
+else
+    echo "[appimage] Installing Rust toolchain..."
+    curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+    source /root/.cargo/env
+fi
 
-echo "[appimage] Installing tauri-cli..."
-cargo install tauri-cli --version "^2" --locked 2>&1 | tail -3
+# tauri-cli — skip if already installed
+if command -v cargo-tauri &>/dev/null; then
+    echo "[appimage] tauri-cli cached — skipping install"
+else
+    echo "[appimage] Installing tauri-cli..."
+    cargo install tauri-cli --version "^2" --locked 2>&1 | tail -3
+fi
 
 echo "[appimage] Copying source to writable build directory..."
 cp -r /src /build
