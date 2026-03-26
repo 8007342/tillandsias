@@ -149,9 +149,14 @@ _step "Running nix build .#${NIX_ATTR} inside ephemeral ${NIX_IMAGE} container..
 # image's default nix.conf.
 NIX_BUILD_CMD="nix --extra-experimental-features 'nix-command flakes' build /src#${NIX_ATTR} --print-out-paths --no-link 2>&1 | tee /dev/stderr | tail -1 | xargs -I{} cp {} /output/result.tar.gz"
 
+# --security-opt label=disable bypasses SELinux label checks entirely.
+# Required on Silverblue where source files may be on tmpfs ($XDG_RUNTIME_DIR)
+# or have unexpected SELinux contexts. This is the same approach used for
+# forge containers in handlers.rs.
 podman run --rm \
-    -v "$ROOT:/src:ro,z" \
-    -v "$OUTPUT_DIR:/output:rw,z" \
+    --security-opt label=disable \
+    -v "$ROOT:/src:ro" \
+    -v "$OUTPUT_DIR:/output:rw" \
     "$NIX_IMAGE" \
     bash -c "$NIX_BUILD_CMD"
 
