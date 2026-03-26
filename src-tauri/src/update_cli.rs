@@ -73,6 +73,10 @@ struct PlatformEntry {
 /// Run the `--update` CLI command. Returns `true` on success (up-to-date or
 /// update applied), `false` on error.
 pub fn run() -> bool {
+    // Install rustls crypto provider before any reqwest calls.
+    // Tauri normally does this during its setup, but --update runs before Tauri.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     println!("  Tillandsias v{CURRENT_VERSION}");
     println!("  Checking for updates...");
     println!("  Endpoint: {UPDATE_ENDPOINT}");
