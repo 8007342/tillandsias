@@ -1,6 +1,11 @@
 # Tillandsias Forge — Fish shell configuration
 # Auto-sourced from /etc/fish/conf.d/ inside the container image.
 
+# ── Permissions ───────────────────────────────────────────────
+# Ensure files created in interactive sessions (and by tools we invoke)
+# are user-writable on the host bind mount.
+umask 022
+
 # ── PATH — OpenCode and OpenSpec cached in ~/.cache/tillandsias/
 fish_add_path -gP $HOME/.cache/tillandsias/opencode
 fish_add_path -gP $HOME/.cache/tillandsias/openspec/bin

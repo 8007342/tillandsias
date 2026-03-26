@@ -121,6 +121,13 @@
 
               # Own everything to forge user
               chown -R 1000:1000 ./home/forge
+              # Ensure all home dir files are at least user-readable and user-writable.
+              # Nix store files are copied as 0444 (read-only); without this chmod,
+              # shell configs and other copied files cannot be modified inside the
+              # container, and tools like zoxide or npm that update dotfiles will fail.
+              chmod -R u+rw ./home/forge
+              # Skel files must be readable so entrypoint.sh can cp them to $HOME.
+              chmod -R a+r ./etc/skel
             '';
 
             config = {

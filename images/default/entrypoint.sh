@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Ensure all files created by this script and any process it execs (OpenCode,
+# npm, openspec, bash) are user-writable. Without this, tools that run inside
+# the container may create files on the bind-mounted project directory with
+# mode 0444 or 0555, which the host user cannot modify or delete without sudo.
+umask 0022
+
 trap 'exit 0' SIGTERM SIGINT
 
 # Ensure secrets directories exist

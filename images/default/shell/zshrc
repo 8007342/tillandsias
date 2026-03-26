@@ -1,5 +1,10 @@
 # ~/.zshrc — tillandsias forge
 
+# ── Permissions ───────────────────────────────────────────────
+# Ensure files created in interactive sessions (and by tools we invoke)
+# are user-writable on the host bind mount.
+umask 0022
+
 # ── PATH ─────────────────────────────────────────────────────
 export PATH="$HOME/.cache/tillandsias/opencode:$HOME/.cache/tillandsias/openspec/bin:$HOME/.local/bin:$PATH"
 

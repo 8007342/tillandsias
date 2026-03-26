@@ -3,6 +3,11 @@
 # If not running interactively, don't do anything
 [[ $- != *i* ]] && return
 
+# ── Permissions ───────────────────────────────────────────────
+# Ensure files created in interactive sessions (and by tools we invoke)
+# are user-writable on the host bind mount.
+umask 0022
+
 # ── PATH ─────────────────────────────────────────────────────
 # OpenCode and OpenSpec are cached in ~/.cache/tillandsias/
 export PATH="$HOME/.cache/tillandsias/opencode:$HOME/.cache/tillandsias/openspec/bin:$HOME/.local/bin:$PATH"
