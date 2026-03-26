@@ -102,7 +102,7 @@ _toolbox_ensure() {
     fi
 
     _step "Creating toolbox '${TOOLBOX_NAME}'..."
-    toolbox create "$TOOLBOX_NAME" 2>&1
+    toolbox create --assumeyes "$TOOLBOX_NAME" 2>&1
 
     _step "Installing cross-compilation dependencies..."
     toolbox run -c "$TOOLBOX_NAME" sudo dnf install -y \

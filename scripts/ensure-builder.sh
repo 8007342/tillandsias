@@ -15,7 +15,7 @@ if toolbox list --containers 2>/dev/null | grep -q "${TOOLBOX_NAME}"; then
     echo "Toolbox '${TOOLBOX_NAME}' already exists."
 else
     echo "Creating toolbox '${TOOLBOX_NAME}'..."
-    toolbox create "${TOOLBOX_NAME}"
+    toolbox create --assumeyes "${TOOLBOX_NAME}"
     echo "Toolbox '${TOOLBOX_NAME}' created."
 fi
 
