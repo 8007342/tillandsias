@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod build_lock;
+mod cleanup;
 mod cli;
 mod embedded;
 mod event_loop;
@@ -46,6 +47,18 @@ fn main() {
     // Init mode — pre-build images and exit.
     if matches!(cli_mode, cli::CliMode::Init) {
         let success = init::run();
+        std::process::exit(if success { 0 } else { 1 });
+    }
+
+    // Stats mode — print disk usage report and exit.
+    if matches!(cli_mode, cli::CliMode::Stats) {
+        let success = cleanup::run_stats();
+        std::process::exit(if success { 0 } else { 1 });
+    }
+
+    // Clean mode — remove stale artifacts and exit.
+    if matches!(cli_mode, cli::CliMode::Clean) {
+        let success = cleanup::run_clean();
         std::process::exit(if success { 0 } else { 1 });
     }
 
@@ -194,24 +207,33 @@ fn main() {
                     warn!("Podman Machine not running. Start it with: podman machine start");
                 }
 
-                // Discover existing containers on startup
+                // Discover existing containers on startup (graceful restart)
+                //
+                // Containers surviving a previous session are discovered here and
+                // restored into state.running so the menu shows the correct flower
+                // icons and lifecycle states immediately. Only running/creating
+                // containers are restored — stopped/exited ones are ignored.
                 if has_podman {
                     match client.list_containers("tillandsias-").await {
                         Ok(containers) => {
                             let mut s = state_for_loop.lock().unwrap();
                             for entry in containers {
+                                // Map podman state strings to ContainerState.
+                                // Skip anything that is not actively running or starting.
+                                let container_state = match entry.state.as_str() {
+                                    "running" => tillandsias_core::event::ContainerState::Running,
+                                    "created" | "configured" => {
+                                        tillandsias_core::event::ContainerState::Creating
+                                    }
+                                    // exited, stopped, dead, removing, paused, unknown — skip.
+                                    _ => continue,
+                                };
+
+                                // Container name encodes project + genus; skip if unparseable
+                                // (e.g. tillandsias-<project>-terminal maintenance containers).
                                 if let Some((project_name, genus)) =
                                     ContainerInfo::parse_container_name(&entry.name)
                                 {
-                                    let container_state = match entry.state.as_str() {
-                                        "running" => {
-                                            tillandsias_core::event::ContainerState::Running
-                                        }
-                                        "created" | "configured" => {
-                                            tillandsias_core::event::ContainerState::Creating
-                                        }
-                                        _ => tillandsias_core::event::ContainerState::Stopped,
-                                    };
                                     s.running.push(ContainerInfo {
                                         name: entry.name,
                                         project_name,
@@ -221,10 +243,10 @@ fn main() {
                                     });
                                 }
                             }
-                            info!(count = s.running.len(), "Discovered existing containers");
+                            info!(count = s.running.len(), "Restored running containers from prior session");
                         }
                         Err(e) => {
-                            warn!(error = %e, "Failed to discover existing containers");
+                            warn!(error = %e, "Failed to discover existing containers on startup");
                         }
                     }
                 }

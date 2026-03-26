@@ -356,6 +356,10 @@ if [[ "$FLAG_RELEASE" == true ]]; then
     }
     _info "Release build complete"
 
+    # Prune dangling images accumulated during the build
+    _step "Pruning dangling podman images..."
+    podman image prune -f 2>/dev/null && _info "Dangling images pruned" || true
+
     # Show built artifacts
     RELEASE_BIN="$SCRIPT_DIR/target/release/tillandsias-tray"
     BUNDLE_DIR="$SCRIPT_DIR/target/release/bundle"
@@ -476,4 +480,8 @@ elif [[ "$FLAG_TEST$FLAG_CHECK" == "falsefalse" ]]; then
     _step "Building workspace (debug)..."
     _run cargo build --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
     _info "Debug build complete"
+
+    # Prune dangling images accumulated during the build
+    _step "Pruning dangling podman images..."
+    podman image prune -f 2>/dev/null && _info "Dangling images pruned" || true
 fi

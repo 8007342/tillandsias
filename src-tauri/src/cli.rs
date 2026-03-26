@@ -13,6 +13,12 @@ pub enum CliMode {
     /// `tillandsias init` — pre-build container images.
     Init,
 
+    /// `tillandsias --stats` — print disk usage report and exit.
+    Stats,
+
+    /// `tillandsias --clean` — remove stale artifacts and exit.
+    Clean,
+
     /// A project path was given — launch an interactive container.
     Attach {
         /// Absolute path to the project directory.
@@ -34,6 +40,8 @@ USAGE:
     tillandsias <path>              Attach a container to a project
     tillandsias <path> --bash       Drop into fish shell for troubleshooting
     tillandsias init                Pre-build container images
+    tillandsias --stats             Show disk usage from Tillandsias artifacts
+    tillandsias --clean             Remove stale artifacts and reclaim disk space
     tillandsias --help              Show this help
 
 OPTIONS:
@@ -58,6 +66,16 @@ pub fn parse() -> Option<CliMode> {
     // `tillandsias init` — pre-build images.
     if args.first().map(|s| s.as_str()) == Some("init") {
         return Some(CliMode::Init);
+    }
+
+    // `tillandsias --stats` — disk usage report.
+    if args.iter().any(|a| a == "--stats") {
+        return Some(CliMode::Stats);
+    }
+
+    // `tillandsias --clean` — artifact cleanup.
+    if args.iter().any(|a| a == "--clean") {
+        return Some(CliMode::Clean);
     }
 
     let mut path: Option<PathBuf> = None;
