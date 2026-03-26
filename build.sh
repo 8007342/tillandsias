@@ -150,6 +150,10 @@ build_appimage() {
     mkdir -p "$output_dir"
     mkdir -p "$cargo_cache_dir"
 
+    # Remove old AppImages — avoids "Text file busy" if one is still running.
+    # On Linux, rm unlinks the file but running processes keep their fd.
+    rm -f "$output_dir"/*.AppImage 2>/dev/null || true
+
     _info "Output dir:      $output_dir"
     _info "Cargo cache dir: $cargo_cache_dir"
     _step "Starting Ubuntu 22.04 podman container for AppImage build..."
@@ -214,6 +218,7 @@ if [[ -z "$appimage_file" ]]; then
 fi
 
 echo "[appimage] Copying $(basename "$appimage_file") to output mount..."
+rm -f /output/*.AppImage 2>/dev/null || true
 cp "$appimage_file" /output/
 echo "[appimage] Done: /output/$(basename "$appimage_file")"
 '
@@ -291,6 +296,7 @@ fi
 
 # AppImage build (standalone — bypasses toolbox entirely)
 if [[ "$FLAG_APPIMAGE" == true ]]; then
+    "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
     build_appimage
     # If --appimage is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL" == "falsefalsefalsefalsefalse" ]]; then
@@ -300,6 +306,13 @@ fi
 
 # Ensure toolbox exists for any build operation
 _toolbox_ensure
+
+# ---------------------------------------------------------------------------
+# Auto-increment build number on every build (not test/check/clean-only)
+# ---------------------------------------------------------------------------
+if [[ "$FLAG_TEST$FLAG_CHECK" == "falsefalse" ]]; then
+    "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
+fi
 
 # ---------------------------------------------------------------------------
 # Build operations
