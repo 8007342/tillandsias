@@ -16,7 +16,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-NIX_IMAGE="docker.io/nixos/nix:latest"
+# Pinned for reproducibility. Update: podman pull docker.io/nixos/nix:<new-version>
+NIX_IMAGE="docker.io/nixos/nix:2.34.4"
 CACHE_DIR="$ROOT/.nix-output"
 
 # Colors
