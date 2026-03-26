@@ -16,7 +16,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-NIX_IMAGE="nixos/nix:latest"
+NIX_IMAGE="docker.io/nixos/nix:latest"
 CACHE_DIR="$ROOT/.nix-output"
 
 # Colors
