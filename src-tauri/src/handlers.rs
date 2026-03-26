@@ -255,6 +255,10 @@ pub fn run_build_image_script_pub(image_name: &str) -> Result<(), String> {
 
 /// Build `podman run` argument list.
 /// From tray: detached (`-d`). From CLI: interactive (`-it`).
+///
+/// When `is_watch_root` is true, the project path is the watch root itself
+/// (e.g., `~/src/`) and is mounted directly at `/home/forge/src/` instead of
+/// being nested as `/home/forge/src/<name>/`.
 fn build_run_args(
     container_name: &str,
     image: &str,
@@ -262,6 +266,7 @@ fn build_run_args(
     cache_dir: &Path,
     port_range: (u16, u16),
     detached: bool,
+    is_watch_root: bool,
 ) -> Vec<String> {
     let mut args = Vec::new();
 
@@ -308,15 +313,22 @@ fn build_run_args(
     // Volume mounts
     // Project directory -> container workspace at src/<project-name>/
     // Preserves hierarchy so OpenCode shows src/<project>:main
-    let project_name = project_path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "project".to_string());
-    let project_mount = format!(
-        "{}:/home/forge/src/{}",
-        project_path.display(),
-        project_name
-    );
+    //
+    // Watch-root case: mount the entire watch path at /home/forge/src/ directly
+    // so all project subdirectories appear as /home/forge/src/<project>/.
+    let project_mount = if is_watch_root {
+        format!("{}:/home/forge/src", project_path.display())
+    } else {
+        let project_name = project_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "project".to_string());
+        format!(
+            "{}:/home/forge/src/{}",
+            project_path.display(),
+            project_name
+        )
+    };
     args.push("-v".to_string());
     args.push(project_mount);
 
@@ -540,6 +552,15 @@ pub async fn handle_attach_here(
     // a current GitHub token without plain text lingering on disk.
     crate::secrets::write_hosts_yml_from_keyring();
 
+    // Detect whether the project path IS the watch root (e.g., ~/src/) rather
+    // than a project inside it. When true, mount at /home/forge/src/ directly
+    // instead of nesting as /home/forge/src/src/.
+    let is_watch_root = global_config
+        .scanner
+        .watch_paths
+        .iter()
+        .any(|wp| wp == &project_path);
+
     // Build the full `podman run -it --rm ...` command string.
     // We open a terminal window running this command — the terminal provides
     // the TTY, podman passes it to the container, opencode gets a real terminal.
@@ -550,6 +571,7 @@ pub async fn handle_attach_here(
         &cache,
         port_range,
         false, // interactive (-it), NOT detached
+        is_watch_root,
     );
 
     let mut podman_parts = vec![
@@ -871,7 +893,7 @@ pub async fn handle_terminal(
     }
 }
 
-/// Handle the global "🛠️ Root" terminal — open bash at the src/ root directory.
+/// Handle the global "🛠️ Root" terminal — open fish at the src/ root directory.
 ///
 /// Identical lifecycle to `handle_terminal` but scoped to the entire `~/src/`
 /// watch path rather than a single project sub-directory.
@@ -954,7 +976,7 @@ pub async fn handle_root_terminal(
         --userns=keep-id \
         --cap-drop=ALL \
         --security-opt=no-new-privileges \
-        --entrypoint bash \
+        --entrypoint fish \
         -w /home/forge/src \
         -e TILLANDSIAS_HOST_OS='{}' \
         -e GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig \
