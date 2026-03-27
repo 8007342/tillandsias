@@ -86,8 +86,9 @@
               chmod 1777 ./tmp
 
               # Copy entrypoint
-              cp ${forgeEntrypoint} ./home/forge/entrypoint.sh
-              chmod +x ./home/forge/entrypoint.sh
+              mkdir -p ./usr/local/bin
+              cp ${forgeEntrypoint} ./usr/local/bin/tillandsias-entrypoint.sh
+              chmod +x ./usr/local/bin/tillandsias-entrypoint.sh
 
               # Copy opencode config
               cp ${forgeOpencode} ./home/forge/.config/opencode/config.json
@@ -133,7 +134,7 @@
             config = {
               User = "1000:1000";
               WorkingDir = "/home/forge/src";
-              Entrypoint = [ "/home/forge/entrypoint.sh" ];
+              Entrypoint = [ "/usr/local/bin/tillandsias-entrypoint.sh" ];
               ExposedPorts = {
                 "3000-3099/tcp" = {};
               };
