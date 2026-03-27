@@ -13,6 +13,11 @@ trap 'exit 0' SIGTERM SIGINT
 mkdir -p ~/.config/gh 2>/dev/null || true
 touch ~/.gitconfig 2>/dev/null || true
 
+# Bridge gh auth → git push: register gh as git credential helper.
+# Without this, git doesn't know about gh's OAuth token and prompts for
+# username/password. Non-interactive, fails silently if gh not installed yet.
+command -v gh &>/dev/null && gh auth setup-git 2>/dev/null || true
+
 # Deploy shell configs if not present
 for f in .bashrc .zshrc; do
     [ -f "$HOME/$f" ] || cp "/etc/skel/$f" "$HOME/$f" 2>/dev/null || true

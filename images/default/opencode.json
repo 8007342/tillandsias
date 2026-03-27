@@ -1,2 +1,14 @@
 {
+  "permissions": {
+    "deny": [
+      "~/.config/gh",
+      "~/.config/gh/**",
+      "~/.config/tillandsias-git",
+      "~/.config/tillandsias-git/**",
+      "/home/forge/.config/gh",
+      "/home/forge/.config/gh/**",
+      "/home/forge/.config/tillandsias-git",
+      "/home/forge/.config/tillandsias-git/**"
+    ]
+  }
 }
