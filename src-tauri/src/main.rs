@@ -21,6 +21,7 @@ mod updater;
 use std::sync::{Arc, Mutex};
 
 use tauri::tray::TrayIconBuilder;
+use tauri::Manager;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
@@ -466,6 +467,38 @@ fn rebuild_menu(app_handle: &tauri::AppHandle, state: &Arc<Mutex<TrayState>>) {
     }
 }
 
+/// Open the Settings webview window, or focus it if already open.
+fn open_settings_window(app: &tauri::AppHandle) {
+    use tauri::WebviewWindowBuilder;
+
+    // If the window already exists, just focus it.
+    if let Some(window) = app.get_webview_window("settings") {
+        let _ = window.set_focus();
+        debug!("Settings window already open — focused");
+        return;
+    }
+
+    // Create a new settings window.
+    match WebviewWindowBuilder::new(
+        app,
+        "settings",
+        tauri::WebviewUrl::App("settings.html".into()),
+    )
+    .title("Tillandsias Settings")
+    .inner_size(480.0, 600.0)
+    .min_inner_size(400.0, 500.0)
+    .resizable(true)
+    .build()
+    {
+        Ok(_) => {
+            info!("Settings window opened");
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to open settings window");
+        }
+    }
+}
+
 /// Dispatch a menu click ID to the appropriate `MenuCommand`.
 fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::AppHandle) {
     // Strip the generation suffix (e.g., "quit#5" -> "quit") added to avoid
@@ -474,6 +507,11 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
 
     let command = match id {
         menu::ids::QUIT => None, // Handled via fast-path above
+        menu::ids::OPEN_SETTINGS => {
+            // Handle directly — window creation needs AppHandle, not the event loop.
+            open_settings_window(_app);
+            None
+        }
         menu::ids::GITHUB_LOGIN => Some(MenuCommand::GitHubLogin),
         menu::ids::SETTINGS => Some(MenuCommand::Settings),
         menu::ids::REFRESH_REMOTE_PROJECTS => Some(MenuCommand::RefreshRemoteProjects),

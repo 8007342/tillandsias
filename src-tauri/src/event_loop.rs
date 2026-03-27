@@ -213,6 +213,11 @@ pub async fn run(
                         // Kept for forward compatibility if Settings ever becomes actionable.
                         debug!("Settings command received");
                     }
+                    MenuCommand::OpenSettings => {
+                        // Window creation is handled directly in main.rs handle_menu_click
+                        // because it needs the AppHandle. This arm exists for completeness.
+                        debug!("OpenSettings command received in event loop (no-op)");
+                    }
                 }
             }
 

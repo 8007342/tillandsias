@@ -6,7 +6,7 @@
     "frontendDist": "../assets/frontend"
   },
   "app": {
-    "withGlobalTauri": false,
+    "withGlobalTauri": true,
     "trayIcon": {
       "iconPath": "icons/tray-icon.png",
       "iconAsTemplate": true,
