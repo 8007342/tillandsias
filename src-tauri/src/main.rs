@@ -489,8 +489,8 @@ fn open_settings_window(app: &tauri::AppHandle) {
         tauri::WebviewUrl::App("settings.html".into()),
     )
     .title("Tillandsias Settings")
-    .inner_size(480.0, 600.0)
-    .min_inner_size(400.0, 500.0)
+    .inner_size(280.0, 340.0)
+    .min_inner_size(220.0, 200.0)
     .resizable(false)
     .decorations(false)
     .always_on_top(true)

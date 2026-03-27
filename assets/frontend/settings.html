@@ -3,34 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tillandsias Settings</title>
+  <title>Settings</title>
   <style>
-    :root {
-      --bg: #1a1a2e;
-      --bg-card: #16213e;
-      --bg-hover: #1f2e50;
-      --text: #e0e0e0;
-      --text-muted: #8a8a9a;
-      --accent: #5a9a5a;
-      --accent-light: #7cbc7c;
-      --border: #2a2a4a;
-      --tab-active: #5a9a5a;
-      --tab-inactive: transparent;
-      --selected-bg: #2a4a2a;
-    }
-
-    @media (prefers-color-scheme: light) {
-      :root {
-        --bg: #f5f5f0;
-        --bg-card: #ffffff;
-        --bg-hover: #eef5ee;
-        --text: #1a1a2e;
-        --text-muted: #666680;
-        --border: #d0d0d8;
-        --selected-bg: #e0f0e0;
-      }
-    }
-
     * {
       margin: 0;
       padding: 0;
@@ -38,579 +12,155 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.5;
-      overflow-x: hidden;
+      font-family: "Cantarell", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #2d2d2d;
+      color: #eeeeec;
+      font-size: 13px;
+      line-height: 1;
+      -webkit-user-select: none;
+      user-select: none;
+      overflow: hidden;
     }
 
-    /* Header */
-    .header {
+    .menu {
+      padding: 4px 0;
+    }
+
+    .menu-item {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 20px 24px 12px;
-      border-bottom: 1px solid var(--border);
+      padding: 6px 12px;
+      cursor: default;
+      white-space: nowrap;
     }
 
-    .header-icon {
-      width: 40px;
-      height: 40px;
-      flex-shrink: 0;
+    .menu-item:hover {
+      background: #4a90d9;
+      color: #ffffff;
     }
 
-    .header h1 {
-      font-size: 18px;
-      font-weight: 600;
-      letter-spacing: 0.02em;
+    .menu-item.disabled {
+      color: #888a85;
+      cursor: default;
     }
 
-    .header .subtitle {
-      font-size: 12px;
-      color: var(--text-muted);
+    .menu-item.disabled:hover {
+      background: transparent;
+      color: #888a85;
     }
 
-    /* Tabs */
-    .tabs {
-      display: flex;
-      border-bottom: 1px solid var(--border);
-      padding: 0 24px;
+    .menu-item .arrow {
+      margin-left: auto;
+      padding-left: 16px;
+      font-size: 10px;
+      color: #babdb6;
     }
 
-    .tab {
-      padding: 10px 16px;
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-muted);
-      cursor: pointer;
-      border-bottom: 2px solid var(--tab-inactive);
-      transition: color 0.15s, border-color 0.15s;
-      user-select: none;
+    .menu-item:hover .arrow {
+      color: #ffffff;
     }
 
-    .tab:hover {
-      color: var(--text);
+    .menu-item.disabled .arrow {
+      color: #888a85;
     }
 
-    .tab.active {
-      color: var(--accent-light);
-      border-bottom-color: var(--tab-active);
+    .separator {
+      height: 1px;
+      background: #464646;
+      margin: 4px 0;
     }
 
-    /* Tab content */
-    .tab-content {
+    .submenu {
       display: none;
-      padding: 20px 24px;
-      animation: fadeIn 0.15s ease-in;
+      padding-left: 0;
+      background: #353535;
     }
 
-    .tab-content.active {
+    .submenu.open {
       display: block;
     }
 
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(4px); }
-      to { opacity: 1; transform: translateY(0); }
+    .submenu .menu-item {
+      padding-left: 24px;
     }
 
-    /* Cards */
-    .card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 12px;
-    }
-
-    .card-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-
-    .card-header h3 {
-      font-size: 14px;
-      font-weight: 600;
-    }
-
-    .card-header .status {
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-weight: 500;
-    }
-
-    .status.connected {
-      background: var(--selected-bg);
-      color: var(--accent-light);
-    }
-
-    .status.disconnected {
-      background: #4a2a2a;
-      color: #cc6666;
-    }
-
-    .card p {
-      font-size: 13px;
-      color: var(--text-muted);
-      margin-bottom: 8px;
-    }
-
-    /* Agent picker */
-    .agent-list {
-      list-style: none;
-    }
-
-    .agent-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.1s;
-      margin-bottom: 4px;
-    }
-
-    .agent-item:hover {
-      background: var(--bg-hover);
-    }
-
-    .agent-item.selected {
-      background: var(--selected-bg);
-    }
-
-    .agent-icon {
-      width: 36px;
-      height: 36px;
-      flex-shrink: 0;
-    }
-
-    .agent-name {
-      font-size: 14px;
-      font-weight: 500;
-    }
-
-    .agent-desc {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    .selected-badge {
-      margin-left: auto;
-      font-size: 11px;
-      color: var(--accent-light);
-      font-weight: 500;
-    }
-
-    /* Genus gallery */
-    .genus-gallery {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 12px;
-      margin-top: 12px;
-    }
-
-    .genus-card {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-      padding: 12px 8px;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      transition: border-color 0.15s;
-    }
-
-    .genus-card:hover {
-      border-color: var(--accent);
-    }
-
-    .genus-card svg {
-      width: 40px;
-      height: 40px;
-    }
-
-    .genus-name {
-      font-size: 11px;
-      color: var(--text-muted);
-      text-align: center;
-    }
-
-    /* About section */
-    .about-info {
-      font-size: 13px;
-      color: var(--text-muted);
-    }
-
-    .about-info dt {
-      font-weight: 500;
-      color: var(--text);
-      margin-top: 8px;
-    }
-
-    .about-info dd {
-      margin-left: 0;
-      margin-bottom: 4px;
-    }
-
-    /* Button (placeholder) */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 14px;
-      font-size: 13px;
-      font-weight: 500;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--bg-card);
-      color: var(--text);
-      cursor: pointer;
-      transition: background 0.1s, border-color 0.1s;
-    }
-
-    .btn:hover {
-      background: var(--bg-hover);
-      border-color: var(--accent);
-    }
-
-    .btn.primary {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
-    }
-
-    .btn.primary:hover {
-      background: var(--accent-light);
-    }
-
-    /* Repo list placeholder */
-    .repo-list {
-      list-style: none;
-      margin-top: 12px;
-    }
-
-    .repo-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 8px 12px;
-      border-bottom: 1px solid var(--border);
-      font-size: 13px;
-    }
-
-    .repo-item:last-child {
-      border-bottom: none;
-    }
-
-    .repo-item .clone-btn {
-      font-size: 12px;
-      padding: 4px 10px;
-    }
-
-    .section-label {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--text-muted);
-      margin-bottom: 8px;
-      margin-top: 16px;
-    }
-
-    .section-label:first-child {
-      margin-top: 0;
+    .submenu .submenu .menu-item {
+      padding-left: 36px;
     }
   </style>
 </head>
 <body>
 
-  <!-- Header with inline ionantha bloom SVG -->
-  <div class="header">
-    <svg class="header-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="40" height="40">
-      <!-- Ionantha bloom -->
-      <g transform="translate(32,56)">
-        <polygon points="0,-24 -4,-4 4,-4" fill="#5a9a5a" stroke="#3a7a3a" stroke-width="1"/>
-        <polygon points="-10,-20 -6,-2 -2,-8" fill="#6a9a5a" stroke="#3a7a3a" stroke-width="1"/>
-        <polygon points="10,-20 6,-2 2,-8" fill="#6a9a5a" stroke="#3a7a3a" stroke-width="1"/>
-        <polygon points="-14,-14 -8,0 -4,-6" fill="#7aaa6a" stroke="#3a7a3a" stroke-width="1"/>
-        <polygon points="14,-14 8,0 4,-6" fill="#7aaa6a" stroke="#3a7a3a" stroke-width="1"/>
-        <circle cx="0" cy="-24" r="3" fill="#dd4455" opacity="0.7"/>
-        <circle cx="-10" cy="-20" r="2.5" fill="#dd4455" opacity="0.6"/>
-        <circle cx="10" cy="-20" r="2.5" fill="#dd4455" opacity="0.6"/>
-        <ellipse cx="0" cy="-30" rx="3" ry="4" fill="#9966cc"/>
-        <ellipse cx="-2" cy="-28" rx="2" ry="3" fill="#aa77dd"/>
-      </g>
-    </svg>
-    <div>
-      <h1>Tillandsias</h1>
-      <div class="subtitle">Development environments that just work</div>
+  <div class="menu">
+    <!-- GitHub -->
+    <div class="menu-item" data-submenu="github">
+      <span>GitHub</span>
+      <span class="arrow">&#9656;</span>
     </div>
-  </div>
-
-  <!-- Tabs -->
-  <div class="tabs">
-    <div class="tab active" data-tab="github">GitHub</div>
-    <div class="tab" data-tab="seedlings">Seedlings</div>
-    <div class="tab" data-tab="about">About</div>
-  </div>
-
-  <!-- GitHub tab -->
-  <div class="tab-content active" id="tab-github">
-    <div class="card">
-      <div class="card-header">
-        <h3>GitHub Authentication</h3>
-        <span class="status disconnected">Not connected</span>
+    <div class="submenu" id="github">
+      <div class="menu-item" data-action="github-login">
+        <span id="github-login-label">&#128273; GitHub Login</span>
       </div>
-      <p>Connect your GitHub account to clone private repos and manage projects from the tray.</p>
-      <button class="btn primary">Login with GitHub</button>
+      <div class="separator"></div>
+      <div class="menu-item" data-submenu="remote-projects">
+        <span>Remote Projects</span>
+        <span class="arrow">&#9656;</span>
+      </div>
+      <div class="submenu" id="remote-projects">
+        <div class="menu-item disabled">
+          <span>Loading...</span>
+        </div>
+      </div>
     </div>
 
-    <div class="section-label">Remote Repositories</div>
-    <div class="card">
-      <p>Login to GitHub to see your repositories here.</p>
-      <ul class="repo-list">
-        <li class="repo-item">
-          <span style="color: var(--text-muted); font-style: italic;">No repositories loaded</span>
-        </li>
-      </ul>
+    <!-- Seedlings -->
+    <div class="menu-item" data-submenu="seedlings">
+      <span>&#127793; Seedlings</span>
+      <span class="arrow">&#9656;</span>
     </div>
-  </div>
-
-  <!-- Seedlings tab -->
-  <div class="tab-content" id="tab-seedlings">
-    <div class="section-label">AI Coding Agent</div>
-    <div class="card">
-      <p>Choose which AI agent launches when you "Attach Here" to a project.</p>
-      <ul class="agent-list">
-        <li class="agent-item selected">
-          <!-- Aeranthos bloom as OpenCode icon -->
-          <svg class="agent-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-            <g transform="translate(32,58)">
-              <ellipse cx="0" cy="-12" rx="8" ry="18" fill="#5a9a5a" stroke="#3a7a3a" stroke-width="1.5"/>
-              <ellipse cx="-7" cy="-10" rx="5" ry="14" fill="#6aad6a" stroke="#3a7a3a" stroke-width="1" transform="rotate(20)"/>
-              <ellipse cx="7" cy="-10" rx="5" ry="14" fill="#6aad6a" stroke="#3a7a3a" stroke-width="1" transform="rotate(-20)"/>
-              <line x1="0" y1="-28" x2="0" y2="-42" stroke="#8866aa" stroke-width="2"/>
-              <ellipse cx="-3" cy="-40" rx="4" ry="3" fill="#9977cc"/>
-              <ellipse cx="3" cy="-38" rx="4" ry="3" fill="#aa88dd"/>
-              <ellipse cx="0" cy="-44" rx="3" ry="3" fill="#bb99ee"/>
-            </g>
-          </svg>
-          <div>
-            <div class="agent-name">OpenCode</div>
-            <div class="agent-desc">Open-source terminal AI coding assistant</div>
-          </div>
-          <span class="selected-badge">Selected</span>
-        </li>
-        <li class="agent-item">
-          <!-- Stricta bloom as Claude icon -->
-          <svg class="agent-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-            <g transform="translate(32,58)">
-              <polygon points="0,-28 -3,-6 3,-6" fill="#5a9a5a" stroke="#3a7a3a" stroke-width="1"/>
-              <polygon points="-8,-24 -7,-4 -3,-8" fill="#6aad6a" stroke="#3a7a3a" stroke-width="1"/>
-              <polygon points="8,-24 7,-4 3,-8" fill="#6aad6a" stroke="#3a7a3a" stroke-width="1"/>
-              <polygon points="-14,-16 -10,-2 -6,-6" fill="#7cbc7c" stroke="#3a7a3a" stroke-width="1"/>
-              <polygon points="14,-16 10,-2 6,-6" fill="#7cbc7c" stroke="#3a7a3a" stroke-width="1"/>
-              <line x1="0" y1="-28" x2="0" y2="-40" stroke="#dd4488" stroke-width="2.5"/>
-              <ellipse cx="-3" cy="-38" rx="4" ry="3" fill="#ee5599"/>
-              <ellipse cx="3" cy="-40" rx="4" ry="3" fill="#ff66aa"/>
-              <ellipse cx="0" cy="-43" rx="3" ry="2.5" fill="#ff77bb"/>
-            </g>
-          </svg>
-          <div>
-            <div class="agent-name">Claude</div>
-            <div class="agent-desc">Anthropic's Claude Code terminal agent</div>
-          </div>
-        </li>
-      </ul>
-    </div>
-  </div>
-
-  <!-- About tab -->
-  <div class="tab-content" id="tab-about">
-    <div class="card">
-      <dl class="about-info">
-        <dt>Version</dt>
-        <dd>0.1.72.39</dd>
-        <dt>Author</dt>
-        <dd>Tlatoani</dd>
-        <dt>License</dt>
-        <dd>MIT</dd>
-      </dl>
+    <div class="submenu" id="seedlings">
+      <div class="menu-item" data-action="select-agent:opencode" id="agent-opencode">
+        <span>&#128204; OpenCode</span>
+      </div>
+      <div class="menu-item" data-action="select-agent:claude" id="agent-claude">
+        <span>Claude</span>
+      </div>
     </div>
 
-    <div class="section-label">Tillandsia Genera</div>
-    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
-      Each development environment is assigned a unique tillandsia genus.
-      The plant lifecycle maps to the environment state.
-    </p>
-    <div class="genus-gallery">
-      <!-- Ionantha -->
-      <div class="genus-card">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-          <g transform="translate(32,56)">
-            <polygon points="0,-24 -4,-4 4,-4" fill="#5a9a5a" stroke="#3a7a3a" stroke-width="1"/>
-            <polygon points="-10,-20 -6,-2 -2,-8" fill="#6a9a5a" stroke="#3a7a3a" stroke-width="1"/>
-            <polygon points="10,-20 6,-2 2,-8" fill="#6a9a5a" stroke="#3a7a3a" stroke-width="1"/>
-            <polygon points="-14,-14 -8,0 -4,-6" fill="#7aaa6a" stroke="#3a7a3a" stroke-width="1"/>
-            <polygon points="14,-14 8,0 4,-6" fill="#7aaa6a" stroke="#3a7a3a" stroke-width="1"/>
-            <circle cx="0" cy="-24" r="3" fill="#dd4455" opacity="0.7"/>
-            <circle cx="-10" cy="-20" r="2.5" fill="#dd4455" opacity="0.6"/>
-            <circle cx="10" cy="-20" r="2.5" fill="#dd4455" opacity="0.6"/>
-            <ellipse cx="0" cy="-30" rx="3" ry="4" fill="#9966cc"/>
-            <ellipse cx="-2" cy="-28" rx="2" ry="3" fill="#aa77dd"/>
-          </g>
-        </svg>
-        <span class="genus-name">Ionantha</span>
-      </div>
-      <!-- Aeranthos -->
-      <div class="genus-card">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-          <g transform="translate(32,58)">
-            <ellipse cx="0" cy="-12" rx="8" ry="18" fill="#5a9a5a" stroke="#3a7a3a" stroke-width="1.5"/>
-            <ellipse cx="-7" cy="-10" rx="5" ry="14" fill="#6aad6a" stroke="#3a7a3a" stroke-width="1" transform="rotate(20)"/>
-            <ellipse cx="7" cy="-10" rx="5" ry="14" fill="#6aad6a" stroke="#3a7a3a" stroke-width="1" transform="rotate(-20)"/>
-            <line x1="0" y1="-28" x2="0" y2="-42" stroke="#8866aa" stroke-width="2"/>
-            <ellipse cx="-3" cy="-40" rx="4" ry="3" fill="#9977cc"/>
-            <ellipse cx="3" cy="-38" rx="4" ry="3" fill="#aa88dd"/>
-            <ellipse cx="0" cy="-44" rx="3" ry="3" fill="#bb99ee"/>
-          </g>
-        </svg>
-        <span class="genus-name">Aeranthos</span>
-      </div>
-      <!-- Xerographica -->
-      <div class="genus-card">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-          <g transform="translate(32,54)">
-            <path d="M0,-8 C-8,-20 -18,-14 -20,-6 C-22,2 -14,4 -6,0" fill="none" stroke="#5a9a5a" stroke-width="3" stroke-linecap="round"/>
-            <path d="M0,-8 C8,-20 18,-14 20,-6 C22,2 14,4 6,0" fill="none" stroke="#5a9a5a" stroke-width="3" stroke-linecap="round"/>
-            <path d="M0,-8 C-4,-24 -10,-22 -8,-16" fill="none" stroke="#6aad6a" stroke-width="2.5" stroke-linecap="round"/>
-            <path d="M0,-8 C4,-24 10,-22 8,-16" fill="none" stroke="#6aad6a" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="0" y1="-10" x2="0" y2="-36" stroke="#cc5544" stroke-width="2"/>
-            <circle cx="-3" cy="-32" r="3" fill="#ee6655"/>
-            <circle cx="3" cy="-34" r="3" fill="#ff7766"/>
-            <circle cx="0" cy="-38" r="2.5" fill="#ff8877"/>
-          </g>
-        </svg>
-        <span class="genus-name">Xerographica</span>
-      </div>
-      <!-- Bulbosa -->
-      <div class="genus-card">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-          <g transform="translate(32,58)">
-            <ellipse cx="0" cy="-8" rx="12" ry="10" fill="#5a9a5a" stroke="#3a7a3a" stroke-width="1.5"/>
-            <path d="M-2,-16 C-4,-28 -1,-32 0,-28" fill="none" stroke="#6aad6a" stroke-width="2.5" stroke-linecap="round"/>
-            <path d="M2,-16 C6,-26 3,-30 2,-26" fill="none" stroke="#7cbc7c" stroke-width="2" stroke-linecap="round"/>
-            <path d="M-6,-14 C-10,-22 -8,-26 -6,-22" fill="none" stroke="#6aad6a" stroke-width="2" stroke-linecap="round"/>
-            <line x1="0" y1="-18" x2="2" y2="-34" stroke="#cc4466" stroke-width="2"/>
-            <ellipse cx="2" cy="-36" rx="3" ry="4" fill="#ee5577"/>
-            <ellipse cx="4" cy="-38" rx="2.5" ry="3" fill="#ff6688"/>
-          </g>
-        </svg>
-        <span class="genus-name">Bulbosa</span>
-      </div>
-      <!-- Stricta -->
-      <div class="genus-card">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-          <g transform="translate(32,58)">
-            <polygon points="0,-28 -3,-6 3,-6" fill="#5a9a5a" stroke="#3a7a3a" stroke-width="1"/>
-            <polygon points="-8,-24 -7,-4 -3,-8" fill="#6aad6a" stroke="#3a7a3a" stroke-width="1"/>
-            <polygon points="8,-24 7,-4 3,-8" fill="#6aad6a" stroke="#3a7a3a" stroke-width="1"/>
-            <polygon points="-14,-16 -10,-2 -6,-6" fill="#7cbc7c" stroke="#3a7a3a" stroke-width="1"/>
-            <polygon points="14,-16 10,-2 6,-6" fill="#7cbc7c" stroke="#3a7a3a" stroke-width="1"/>
-            <line x1="0" y1="-28" x2="0" y2="-40" stroke="#dd4488" stroke-width="2.5"/>
-            <ellipse cx="-3" cy="-38" rx="4" ry="3" fill="#ee5599"/>
-            <ellipse cx="3" cy="-40" rx="4" ry="3" fill="#ff66aa"/>
-            <ellipse cx="0" cy="-43" rx="3" ry="2.5" fill="#ff77bb"/>
-          </g>
-        </svg>
-        <span class="genus-name">Stricta</span>
-      </div>
-      <!-- Usneoides -->
-      <div class="genus-card">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-          <g transform="translate(32,6)">
-            <line x1="-8" y1="0" x2="8" y2="0" stroke="#3a7a3a" stroke-width="2"/>
-            <path d="M-6,0 C-8,12 -5,26 -7,38" fill="none" stroke="#5a9a5a" stroke-width="2" stroke-linecap="round"/>
-            <path d="M-2,0 C-3,14 -1,28 -3,42" fill="none" stroke="#6aad6a" stroke-width="2" stroke-linecap="round"/>
-            <path d="M2,0 C1,12 3,30 1,44" fill="none" stroke="#5a9a5a" stroke-width="2" stroke-linecap="round"/>
-            <path d="M6,0 C8,10 5,22 7,36" fill="none" stroke="#6aad6a" stroke-width="2" stroke-linecap="round"/>
-            <circle cx="-6" cy="20" r="2" fill="#ccdd44"/>
-            <circle cx="1" cy="26" r="2" fill="#ddee55"/>
-            <circle cx="6" cy="18" r="2" fill="#ccdd44"/>
-            <circle cx="-3" cy="32" r="1.5" fill="#ddee55"/>
-          </g>
-        </svg>
-        <span class="genus-name">Usneoides</span>
-      </div>
-      <!-- Tectorum -->
-      <div class="genus-card">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-          <g transform="translate(32,54)">
-            <circle cx="0" cy="-10" r="12" fill="#5a9a5a" stroke="#3a7a3a" stroke-width="1"/>
-            <line x1="-8" y1="-16" x2="-12" y2="-20" stroke="#7cbc7c" stroke-width="1" stroke-linecap="round"/>
-            <line x1="8" y1="-16" x2="12" y2="-20" stroke="#7cbc7c" stroke-width="1" stroke-linecap="round"/>
-            <line x1="-10" y1="-8" x2="-14" y2="-8" stroke="#7cbc7c" stroke-width="1" stroke-linecap="round"/>
-            <line x1="10" y1="-8" x2="14" y2="-8" stroke="#7cbc7c" stroke-width="1" stroke-linecap="round"/>
-            <line x1="-6" y1="-2" x2="-8" y2="2" stroke="#7cbc7c" stroke-width="1" stroke-linecap="round"/>
-            <line x1="6" y1="-2" x2="8" y2="2" stroke="#7cbc7c" stroke-width="1" stroke-linecap="round"/>
-            <line x1="0" y1="-22" x2="0" y2="-34" stroke="#8855aa" stroke-width="2"/>
-            <ellipse cx="-2" cy="-36" rx="3" ry="4" fill="#9966bb"/>
-            <ellipse cx="2" cy="-38" rx="3" ry="3" fill="#aa77cc"/>
-          </g>
-        </svg>
-        <span class="genus-name">Tectorum</span>
-      </div>
-      <!-- Caput-Medusae -->
-      <div class="genus-card">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-          <g transform="translate(32,56)">
-            <ellipse cx="0" cy="-6" rx="10" ry="8" fill="#5a9a5a" stroke="#3a7a3a" stroke-width="1.5"/>
-            <path d="M-4,-12 C-8,-22 -14,-26 -16,-20" fill="none" stroke="#6aad6a" stroke-width="2.5" stroke-linecap="round"/>
-            <path d="M4,-12 C8,-22 14,-26 16,-20" fill="none" stroke="#6aad6a" stroke-width="2.5" stroke-linecap="round"/>
-            <path d="M0,-14 C-2,-24 2,-28 4,-22" fill="none" stroke="#7cbc7c" stroke-width="2" stroke-linecap="round"/>
-            <path d="M-6,-10 C-12,-16 -18,-14 -16,-10" fill="none" stroke="#6aad6a" stroke-width="2" stroke-linecap="round"/>
-            <path d="M6,-10 C12,-16 18,-14 16,-10" fill="none" stroke="#6aad6a" stroke-width="2" stroke-linecap="round"/>
-            <line x1="0" y1="-14" x2="0" y2="-30" stroke="#dd5577" stroke-width="2"/>
-            <ellipse cx="-2" cy="-32" rx="4" ry="3" fill="#ee6688"/>
-            <ellipse cx="2" cy="-34" rx="4" ry="3" fill="#ff7799"/>
-          </g>
-        </svg>
-        <span class="genus-name">Caput-Medusae</span>
-      </div>
+    <div class="separator"></div>
+
+    <!-- Version -->
+    <div class="menu-item disabled">
+      <span>Tillandsias v0.1.72.42</span>
+    </div>
+
+    <!-- Credit -->
+    <div class="menu-item disabled">
+      <span>by Tlatoani</span>
     </div>
   </div>
 
   <script>
-    // Tab switching
-    document.querySelectorAll('.tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        // Deactivate all tabs and content
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        // Activate clicked tab and its content
-        tab.classList.add('active');
-        document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    // Toggle submenus on click
+    document.querySelectorAll('[data-submenu]').forEach(function(item) {
+      item.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var id = item.getAttribute('data-submenu');
+        var submenu = document.getElementById(id);
+        if (submenu) {
+          submenu.classList.toggle('open');
+        }
       });
     });
 
-    // Agent selection (visual only — no IPC in this spike)
-    document.querySelectorAll('.agent-item').forEach(item => {
-      item.addEventListener('click', () => {
-        document.querySelectorAll('.agent-item').forEach(i => {
-          i.classList.remove('selected');
-          const badge = i.querySelector('.selected-badge');
-          if (badge) badge.remove();
-        });
-        item.classList.add('selected');
-        const badge = document.createElement('span');
-        badge.className = 'selected-badge';
-        badge.textContent = 'Selected';
-        item.appendChild(badge);
+    // Clickable actions (placeholder — will call Tauri IPC later)
+    document.querySelectorAll('[data-action]').forEach(function(item) {
+      item.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var action = item.getAttribute('data-action');
+        console.log('action:', action);
+        // TODO: invoke Tauri IPC command
+        // window.__TAURI__.invoke(action);
       });
     });
   </script>
