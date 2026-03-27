@@ -38,6 +38,7 @@ _step()  { echo -e "${CYAN}[build-image]${NC} $*"; }
 # ---------------------------------------------------------------------------
 IMAGE_NAME="forge"
 FLAG_FORCE=false
+FLAG_TAG=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -47,15 +48,20 @@ while [[ $# -gt 0 ]]; do
         --force)
             FLAG_FORCE=true
             ;;
+        --tag)
+            shift
+            FLAG_TAG="$1"
+            ;;
         --help|-h)
-            echo "Usage: scripts/build-image.sh [forge|web] [--force]"
+            echo "Usage: scripts/build-image.sh [forge|web] [--force] [--tag <tag>]"
             echo ""
             echo "Build a container image using Nix inside an ephemeral podman container."
             echo ""
             echo "Arguments:"
-            echo "  forge       Build the forge (dev environment) image (default)"
-            echo "  web         Build the web server image"
-            echo "  --force     Rebuild even if sources haven't changed"
+            echo "  forge            Build the forge (dev environment) image (default)"
+            echo "  web              Build the web server image"
+            echo "  --force          Rebuild even if sources haven't changed"
+            echo "  --tag <tag>      Override the image tag (default: tillandsias-<name>:latest)"
             exit 0
             ;;
         *)
@@ -66,7 +72,11 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-IMAGE_TAG="tillandsias-${IMAGE_NAME}:latest"
+if [[ -n "$FLAG_TAG" ]]; then
+    IMAGE_TAG="$FLAG_TAG"
+else
+    IMAGE_TAG="tillandsias-${IMAGE_NAME}:latest"
+fi
 NIX_ATTR="${IMAGE_NAME}-image"
 HASH_FILE="$CACHE_DIR/.last-build-${IMAGE_NAME}.sha256"
 

@@ -277,13 +277,20 @@ fn main() {
                 // is confirmed present (no build needed) or after a successful build.
                 if has_podman {
                     let forge_client = tillandsias_podman::PodmanClient::new();
-                    let image_present = forge_client.image_exists(handlers::FORGE_IMAGE_TAG).await;
+                    let tag = handlers::forge_image_tag();
+                    let image_present = forge_client.image_exists(&tag).await;
 
                     if !image_present {
-                        info!(tag = handlers::FORGE_IMAGE_TAG, "Forge image absent at launch — triggering auto-build");
+                        info!(tag = %tag, "Forge image absent at launch — triggering auto-build");
 
-                        // First-time build: image did not exist.
-                        let chip_name = "Building Forge".to_string();
+                        // Detect whether this is a first-time build or an update:
+                        // if any tillandsias-forge:v* image exists, it's an update.
+                        let is_update = handlers::any_versioned_forge_exists();
+                        let chip_name = if is_update {
+                            "Building Updated Forge".to_string()
+                        } else {
+                            "Building Forge".to_string()
+                        };
 
                         // Notify the event loop and update the icon to Building.
                         // forge_available remains false (already the default).
@@ -318,7 +325,7 @@ fn main() {
 
                         match build_result {
                             Ok(Ok(())) => {
-                                info!(tag = handlers::FORGE_IMAGE_TAG, "Forge image built at launch");
+                                info!(tag = %tag, "Forge image built at launch");
                                 // Mark forge as available before sending Completed so the
                                 // menu rebuild triggered by the event sees forge_available=true.
                                 {
@@ -345,7 +352,7 @@ fn main() {
                             }
                         }
                     } else {
-                        info!(tag = handlers::FORGE_IMAGE_TAG, "Forge image present at launch");
+                        info!(tag = %tag, "Forge image present at launch");
                         // Image is ready — enable forge-dependent actions immediately.
                         {
                             let mut s = state_for_loop.lock().unwrap();

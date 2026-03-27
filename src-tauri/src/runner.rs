@@ -12,10 +12,15 @@ use tillandsias_core::state::ContainerInfo;
 use tillandsias_podman::PodmanClient;
 
 /// Map a short image name to a full image tag.
+///
+/// For "forge", returns the versioned tag (e.g., `tillandsias-forge:v0.1.72`).
+/// For other names or full tags (containing `:` or `/`), passes through as-is.
 fn image_tag(name: &str) -> String {
     // If the name already contains a colon or slash, treat it as a full tag.
     if name.contains(':') || name.contains('/') {
         name.to_string()
+    } else if name == "forge" {
+        crate::handlers::forge_image_tag()
     } else {
         format!("tillandsias-{name}:latest")
     }
@@ -56,13 +61,15 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         })?;
 
     let script = source_dir.join("scripts").join("build-image.sh");
+    let tag = crate::handlers::forge_image_tag();
 
     if debug {
-        println!("  [debug] Running embedded: {}", script.display());
+        println!("  [debug] Running embedded: {} --tag {}", script.display(), tag);
     }
 
     let status = std::process::Command::new(&script)
         .arg(image_name)
+        .args(["--tag", &tag])
         .current_dir(&source_dir)
         .env_remove("LD_LIBRARY_PATH")
         .env_remove("LD_PRELOAD")
@@ -79,6 +86,8 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
     crate::build_lock::release(image_name);
 
     if status.success() {
+        // Prune older versioned forge images to reclaim disk space
+        crate::handlers::prune_old_forge_images(&tag);
         Ok(())
     } else {
         if debug {

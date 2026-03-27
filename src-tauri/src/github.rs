@@ -12,7 +12,7 @@ use tracing::{debug, error, info, instrument};
 
 use tillandsias_core::config::cache_dir;
 
-use crate::handlers::FORGE_IMAGE_TAG;
+use crate::handlers::forge_image_tag;
 
 /// A remote GitHub repository discovered via `gh repo list`.
 #[derive(Debug, Clone)]
@@ -160,7 +160,7 @@ pub async fn clone_repo(full_name: &str, target_dir: &Path) -> Result<(), String
     args.push("--entrypoint".to_string());
     args.push("gh".to_string());
 
-    args.push(FORGE_IMAGE_TAG.to_string());
+    args.push(forge_image_tag());
     args.push("repo".to_string());
     args.push("clone".to_string());
     args.push(full_name.to_string());
@@ -224,7 +224,7 @@ fn build_gh_run_args(secrets_dir: &Path, command: &[&str]) -> Vec<String> {
     args.push(command[0].to_string());
 
     // Image
-    args.push(FORGE_IMAGE_TAG.to_string());
+    args.push(forge_image_tag());
 
     // Command arguments (skip first element, already used as entrypoint)
     for part in &command[1..] {

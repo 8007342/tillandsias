@@ -26,7 +26,7 @@ pub enum CliMode {
     Attach {
         /// Absolute path to the project directory.
         path: PathBuf,
-        /// Image short name (e.g., "forge" -> "tillandsias-forge:latest").
+        /// Image short name (e.g., "forge" -> "tillandsias-forge:v0.1.72").
         image: String,
         /// Show verbose debug output.
         debug: bool,

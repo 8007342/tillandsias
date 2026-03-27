@@ -41,7 +41,89 @@ use tillandsias_podman::PodmanClient;
 use tillandsias_podman::launch::{ContainerLauncher, allocate_port_range};
 use tillandsias_podman::query_occupied_ports;
 
-pub(crate) const FORGE_IMAGE_TAG: &str = "tillandsias-forge:latest";
+/// Derive the forge image tag from the app's semver version.
+///
+/// At compile time `CARGO_PKG_VERSION` is the 3-part semver from Cargo.toml
+/// (e.g., "0.1.72"). The returned tag is `tillandsias-forge:v0.1.72`.
+///
+/// This ensures each app version uses its own image — when the app updates
+/// to a new version the old image is not silently reused.
+pub(crate) fn forge_image_tag() -> String {
+    format!("tillandsias-forge:v{}", env!("CARGO_PKG_VERSION"))
+}
+
+/// Check whether ANY versioned forge image (`tillandsias-forge:v*`) exists.
+///
+/// Used to distinguish "first time" builds (no previous image) from "update"
+/// builds (upgrading from an older version).
+pub(crate) fn any_versioned_forge_exists() -> bool {
+    let output = tillandsias_podman::podman_cmd_sync()
+        .args([
+            "images",
+            "--format",
+            "{{.Repository}}:{{.Tag}}",
+            "--filter",
+            "reference=tillandsias-forge:v*",
+        ])
+        .output();
+
+    match output {
+        Ok(o) => {
+            let stdout = String::from_utf8_lossy(&o.stdout);
+            stdout.lines().any(|line| {
+                let trimmed = line.trim();
+                !trimmed.is_empty() && trimmed.starts_with("tillandsias-forge:v")
+            })
+        }
+        Err(_) => false,
+    }
+}
+
+/// Remove older `tillandsias-forge:v*` images, keeping only `current_tag`.
+///
+/// Best-effort — failures are logged but do not block operation.
+pub(crate) fn prune_old_forge_images(current_tag: &str) {
+    let output = tillandsias_podman::podman_cmd_sync()
+        .args(["images", "--format", "{{.Repository}}:{{.Tag}}"])
+        .output();
+
+    let images_to_remove: Vec<String> = match output {
+        Ok(o) => {
+            let stdout = String::from_utf8_lossy(&o.stdout);
+            stdout
+                .lines()
+                .filter(|line| {
+                    let trimmed = line.trim();
+                    trimmed.starts_with("tillandsias-forge:v") && trimmed != current_tag
+                })
+                .map(|s| s.trim().to_string())
+                .collect()
+        }
+        Err(e) => {
+            warn!(error = %e, "Failed to list images for pruning");
+            return;
+        }
+    };
+
+    for image in &images_to_remove {
+        info!(image = %image, "Pruning old forge image");
+        let result = tillandsias_podman::podman_cmd_sync()
+            .args(["rmi", image])
+            .output();
+        match result {
+            Ok(o) if o.status.success() => {
+                info!(image = %image, "Pruned old forge image");
+            }
+            Ok(o) => {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                warn!(image = %image, stderr = %stderr, "Failed to prune old forge image");
+            }
+            Err(e) => {
+                warn!(image = %image, error = %e, "Failed to prune old forge image");
+            }
+        }
+    }
+}
 
 /// Open a terminal window running a command with a custom title.
 /// Uses the platform's default terminal — not a zoo of emulators.
@@ -210,10 +292,12 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
         })?;
 
     let script = source_dir.join("scripts").join("build-image.sh");
-    info!(script = %script.display(), image = image_name, "Running embedded build-image.sh");
+    let tag = forge_image_tag();
+    info!(script = %script.display(), image = image_name, tag = %tag, "Running embedded build-image.sh");
 
     let output = std::process::Command::new(&script)
         .arg(image_name)
+        .args(["--tag", &tag])
         .current_dir(&source_dir)
         // Clear AppImage library paths so toolbox, nix, and other host
         // binaries called by build-image.sh use host libraries.
@@ -244,6 +328,10 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     debug!(output = %stdout, "build-image.sh completed");
+
+    // Prune older versioned forge images to reclaim disk space
+    prune_old_forge_images(&tag);
+
     Ok(())
 }
 
@@ -499,9 +587,10 @@ pub async fn handle_attach_here(
 
     // If image doesn't exist, try building it via bundled build-image.sh
     let client = PodmanClient::new();
+    let tag = forge_image_tag();
 
-    if !client.image_exists(FORGE_IMAGE_TAG).await {
-        info!(tag = FORGE_IMAGE_TAG, "Image not found, building...");
+    if !client.image_exists(&tag).await {
+        info!(tag = %tag, "Image not found, building...");
 
         // Notify event loop: build started (menu chip: ⏳ Building forge...)
         let _ = build_tx.try_send(BuildProgressEvent::Started {
@@ -513,8 +602,8 @@ pub async fn handle_attach_here(
         match build_result {
             Ok(Ok(())) => {
                 // Verify the image actually exists now
-                if !client.image_exists(FORGE_IMAGE_TAG).await {
-                    error!(tag = FORGE_IMAGE_TAG, "Image still not found after build completed");
+                if !client.image_exists(&tag).await {
+                    error!(tag = %tag, "Image still not found after build completed");
                     let _ = build_tx.try_send(BuildProgressEvent::Failed {
                         image_name: "forge".to_string(),
                         reason: "Development environment not ready yet".to_string(),
@@ -525,14 +614,14 @@ pub async fn handle_attach_here(
                         "Development environment not ready yet. Tillandsias will set it up automatically — please try again in a few minutes.".into()
                     );
                 }
-                info!(tag = FORGE_IMAGE_TAG, "Image built successfully");
+                info!(tag = %tag, "Image built successfully");
                 // Notify event loop: build completed (menu chip: ✅ forge ready)
                 let _ = build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: "forge".to_string(),
                 });
             }
             Ok(Err(ref e)) => {
-                error!(tag = FORGE_IMAGE_TAG, error = %e, "Image build failed");
+                error!(tag = %tag, error = %e, "Image build failed");
                 let _ = build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "forge".to_string(),
                     reason: "Tillandsias is setting up".to_string(),
@@ -542,7 +631,7 @@ pub async fn handle_attach_here(
                 return Err("Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias".into());
             }
             Err(ref e) => {
-                error!(tag = FORGE_IMAGE_TAG, error = %e, "Image build task panicked");
+                error!(tag = %tag, error = %e, "Image build task panicked");
                 let _ = build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "forge".to_string(),
                     reason: "Tillandsias is setting up".to_string(),
@@ -553,7 +642,7 @@ pub async fn handle_attach_here(
             }
         }
     } else {
-        info!(tag = FORGE_IMAGE_TAG, "Image ready");
+        info!(tag = %tag, "Image ready");
     }
 
     // Ensure cache directories exist
@@ -579,7 +668,7 @@ pub async fn handle_attach_here(
     let selected_agent = global_config.agent.selected;
     let run_args = build_run_args(
         &container_name,
-        FORGE_IMAGE_TAG,
+        &tag,
         &project_path,
         &cache,
         port_range,
@@ -793,8 +882,9 @@ pub async fn handle_terminal(
     debug!(project = %project_name, genus = %genus.display_name(), tool = %display_emoji, "Genus and tool allocated for maintenance terminal");
 
     let client = PodmanClient::new();
-    if !client.image_exists(FORGE_IMAGE_TAG).await {
-        error!(tag = FORGE_IMAGE_TAG, "Image not found when opening maintenance terminal");
+    let tag = forge_image_tag();
+    if !client.image_exists(&tag).await {
+        error!(tag = %tag, "Image not found when opening maintenance terminal");
         allocator.release(&project_name, genus);
         tool_allocator.release(&project_name, &display_emoji);
         return Err("Development environment not ready yet. Tillandsias will set it up automatically — please try again in a few minutes.".into());
@@ -875,7 +965,7 @@ pub async fn handle_terminal(
         secrets_dir.join("gh").display(),
         git_dir.display(),
         claude_dir.display(),
-        FORGE_IMAGE_TAG,
+        tag,
     );
 
     // Window title uses the allocated tool emoji — unique per terminal
@@ -947,8 +1037,9 @@ pub async fn handle_root_terminal(
     debug!(genus = %genus.display_name(), "Genus allocated for root terminal");
 
     let client = PodmanClient::new();
-    if !client.image_exists(FORGE_IMAGE_TAG).await {
-        error!(tag = FORGE_IMAGE_TAG, "Image not found when opening root terminal");
+    let tag = forge_image_tag();
+    if !client.image_exists(&tag).await {
+        error!(tag = %tag, "Image not found when opening root terminal");
         allocator.release(&project_name, genus);
         return Err("Development environment not ready yet. Tillandsias will set it up automatically — please try again in a few minutes.".into());
     }
@@ -1025,7 +1116,7 @@ pub async fn handle_root_terminal(
         secrets_dir.join("gh").display(),
         git_dir.display(),
         claude_dir.display(),
-        FORGE_IMAGE_TAG,
+        tag,
     );
 
     let title = "\u{1F6E0}\u{FE0F} Root".to_string();
@@ -1075,9 +1166,10 @@ pub async fn handle_github_login(
     info!("GitHub Login: checking forge image");
 
     let client = PodmanClient::new();
+    let tag = forge_image_tag();
 
-    if !client.image_exists(FORGE_IMAGE_TAG).await {
-        info!(tag = FORGE_IMAGE_TAG, "Forge image missing — building before GitHub Login");
+    if !client.image_exists(&tag).await {
+        info!(tag = %tag, "Forge image missing — building before GitHub Login");
 
         // Show "Building environment..." chip in tray menu
         let _ = build_tx.try_send(BuildProgressEvent::Started {
@@ -1089,8 +1181,8 @@ pub async fn handle_github_login(
         match build_result {
             Ok(Ok(())) => {
                 // Verify the image actually exists now
-                if !client.image_exists(FORGE_IMAGE_TAG).await {
-                    error!(tag = FORGE_IMAGE_TAG, "Image still not found after build completed (GitHub Login)");
+                if !client.image_exists(&tag).await {
+                    error!(tag = %tag, "Image still not found after build completed (GitHub Login)");
                     let _ = build_tx.try_send(BuildProgressEvent::Failed {
                         image_name: "forge".to_string(),
                         reason: "Development environment not ready yet".to_string(),
@@ -1098,7 +1190,7 @@ pub async fn handle_github_login(
                     return Err("Development environment not ready yet. Tillandsias will set it up automatically — please try again in a few minutes.".into());
                 }
                 info!(
-                    tag = FORGE_IMAGE_TAG,
+                    tag = %tag,
                     "Image built successfully — proceeding with GitHub Login"
                 );
                 let _ = build_tx.try_send(BuildProgressEvent::Completed {
@@ -1106,7 +1198,7 @@ pub async fn handle_github_login(
                 });
             }
             Ok(Err(ref e)) => {
-                error!(tag = FORGE_IMAGE_TAG, error = %e, "Image build failed (GitHub Login)");
+                error!(tag = %tag, error = %e, "Image build failed (GitHub Login)");
                 let _ = build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "forge".to_string(),
                     reason: "Tillandsias is setting up".to_string(),
@@ -1114,7 +1206,7 @@ pub async fn handle_github_login(
                 return Err("Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias".into());
             }
             Err(ref e) => {
-                error!(tag = FORGE_IMAGE_TAG, error = %e, "Image build task panicked (GitHub Login)");
+                error!(tag = %tag, error = %e, "Image build task panicked (GitHub Login)");
                 let _ = build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "forge".to_string(),
                     reason: "Tillandsias is setting up".to_string(),
@@ -1124,7 +1216,7 @@ pub async fn handle_github_login(
         }
     } else {
         info!(
-            tag = FORGE_IMAGE_TAG,
+            tag = %tag,
             "Forge image present — proceeding with GitHub Login"
         );
     }

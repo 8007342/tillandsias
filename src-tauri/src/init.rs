@@ -6,17 +6,18 @@
 
 use crate::build_lock;
 use crate::embedded;
-
-const FORGE_IMAGE: &str = "tillandsias-forge:latest";
+use crate::handlers::{forge_image_tag, prune_old_forge_images};
 
 /// Run the init command. Returns true on success.
 pub fn run() -> bool {
     println!("Tillandsias init — preparing development environment");
     println!();
 
+    let tag = forge_image_tag();
+
     // Check if forge image already exists
-    if image_exists(FORGE_IMAGE) {
-        println!("  ✓ Development environment already ready");
+    if image_exists(&tag) {
+        println!("  \u{2713} Development environment already ready");
         println!();
         println!("Ready.");
         return true;
@@ -24,14 +25,14 @@ pub fn run() -> bool {
 
     // Check if another build is running
     if build_lock::is_running("forge") {
-        println!("  ⏳ Setup already in progress, waiting...");
+        println!("  \u{231B} Setup already in progress, waiting...");
         if let Err(e) = build_lock::wait_for_build("forge") {
             eprintln!("  [internal] Wait timed out: {e}");
-            eprintln!("  ✗ Setup timed out. If this persists, please reinstall from https://github.com/8007342/tillandsias");
+            eprintln!("  \u{2717} Setup timed out. If this persists, please reinstall from https://github.com/8007342/tillandsias");
             return false;
         }
-        if image_exists(FORGE_IMAGE) {
-            println!("  ✓ Environment ready");
+        if image_exists(&tag) {
+            println!("  \u{2713} Environment ready");
             println!();
             println!("Ready.");
             return true;
@@ -43,14 +44,14 @@ pub fn run() -> bool {
     if let Err(e) = build_lock::acquire("forge") {
         // Another process grabbed the lock between our check and acquire — wait
         eprintln!("  [internal] Acquire failed: {e}");
-        println!("  ⏳ Waiting for setup to complete...");
+        println!("  \u{231B} Waiting for setup to complete...");
         if let Err(e) = build_lock::wait_for_build("forge") {
             eprintln!("  [internal] Wait timed out: {e}");
-            eprintln!("  ✗ Setup timed out. If this persists, please reinstall from https://github.com/8007342/tillandsias");
+            eprintln!("  \u{2717} Setup timed out. If this persists, please reinstall from https://github.com/8007342/tillandsias");
             return false;
         }
-        if image_exists(FORGE_IMAGE) {
-            println!("  ✓ Environment ready");
+        if image_exists(&tag) {
+            println!("  \u{2713} Environment ready");
             return true;
         }
     }
@@ -89,9 +90,11 @@ fn build_forge_image() -> Result<(), String> {
         })?;
 
     let script = source_dir.join("scripts").join("build-image.sh");
+    let tag = forge_image_tag();
 
     let status = std::process::Command::new(&script)
         .arg("forge")
+        .args(["--tag", &tag])
         .current_dir(&source_dir)
         .env_remove("LD_LIBRARY_PATH")
         .env_remove("LD_PRELOAD")
@@ -107,6 +110,8 @@ fn build_forge_image() -> Result<(), String> {
     embedded::cleanup_image_sources();
 
     if status.success() {
+        // Prune older versioned forge images to reclaim disk space
+        prune_old_forge_images(&tag);
         Ok(())
     } else {
         eprintln!("  [internal] Build script exited with code {}", status.code().unwrap_or(-1));
