@@ -266,16 +266,24 @@ fn handle_build_progress_event(
             // Remove any existing entry for this image (clears stale failed chips)
             state.active_builds.retain(|b| b.image_name != image_name);
             state.active_builds.push(BuildProgress {
-                image_name,
+                image_name: image_name.clone(),
                 status: BuildStatus::InProgress,
                 started_at: Instant::now(),
                 completed_at: None,
             });
+            // Forge builds (either variant) make the image temporarily unavailable.
+            if is_forge_build(&image_name) {
+                state.forge_available = false;
+            }
         }
         BuildProgressEvent::Completed { image_name } => {
             if let Some(entry) = state.active_builds.iter_mut().find(|b| b.image_name == image_name) {
                 entry.status = BuildStatus::Completed;
                 entry.completed_at = Some(Instant::now());
+            }
+            // Forge build completed — image is now ready.
+            if is_forge_build(&image_name) {
+                state.forge_available = true;
             }
             // Schedule single-fire 10s fadeout so the chip is removed after the
             // grace period without any polling or periodic menu rebuilds.
@@ -290,8 +298,18 @@ fn handle_build_progress_event(
                 entry.status = BuildStatus::Failed(reason);
                 entry.completed_at = Some(Instant::now());
             }
+            // Forge build failed — image remains unavailable; keep forge_available false.
         }
     }
+}
+
+/// Returns true if the build image name corresponds to a forge image build.
+///
+/// Both "Building Forge" (first-time) and "Building Updated Forge" (update)
+/// are forge builds. The check is intentionally broad so future variants
+/// (e.g., with version suffixes) are still recognised.
+fn is_forge_build(image_name: &str) -> bool {
+    image_name == "Building Forge" || image_name == "Building Updated Forge"
 }
 
 /// Remove build chips that have been `Completed` for longer than `BUILD_CHIP_FADEOUT`.

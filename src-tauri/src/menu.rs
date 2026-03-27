@@ -127,12 +127,17 @@ pub fn build_tray_menu<R: Runtime>(
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| watch_path.display().to_string())
     );
-    menu =
-        menu.item(&MenuItemBuilder::with_id(ids::attach_here(&watch_path), &src_label).build(app)?);
+    menu = menu.item(
+        &MenuItemBuilder::with_id(ids::attach_here(&watch_path), &src_label)
+            .enabled(state.forge_available)
+            .build(app)?,
+    );
 
     // Global root terminal — 🛠️ is reserved for this item and MUST NOT appear in TOOL_EMOJIS.
     menu = menu.item(
-        &MenuItemBuilder::with_id(ids::root_terminal(), "\u{1F6E0}\u{FE0F} Root").build(app)?,
+        &MenuItemBuilder::with_id(ids::root_terminal(), "\u{1F6E0}\u{FE0F} Root")
+            .enabled(state.forge_available)
+            .build(app)?,
     );
 
     menu = menu.separator();
@@ -158,7 +163,7 @@ pub fn build_tray_menu<R: Runtime>(
     // Projects submenu — only inactive projects.
     // Omitted entirely when every discovered project is active.
     if !inactive_projects.is_empty() || state.projects.is_empty() {
-        let projects_submenu = build_inactive_projects_submenu(app, &inactive_projects)?;
+        let projects_submenu = build_inactive_projects_submenu(app, &inactive_projects, state.forge_available)?;
         menu = menu.item(&projects_submenu);
     }
 
@@ -233,9 +238,13 @@ fn build_decay_menu<R: Runtime>(
 /// When the inactive list is empty and projects exist (all are active),
 /// this function is not called. When no projects are discovered at all,
 /// this is called with an empty slice and shows "No projects detected".
+///
+/// `forge_available` gates "Attach Here" and "Maintenance" — both require the
+/// forge image to be present. When `false`, those items are disabled.
 fn build_inactive_projects_submenu<R: Runtime>(
     app: &AppHandle<R>,
     inactive: &[&tillandsias_core::project::Project],
+    forge_available: bool,
 ) -> tauri::Result<tauri::menu::Submenu<R>> {
     let mut projects = SubmenuBuilder::new(app, "Projects");
 
@@ -256,10 +265,12 @@ fn build_inactive_projects_submenu<R: Runtime>(
             let submenu = SubmenuBuilder::new(app, &project.name)
                 .item(
                     &MenuItemBuilder::with_id(ids::attach_here(&project.path), "\u{1F331} Attach Here")
+                        .enabled(forge_available)
                         .build(app)?,
                 )
                 .item(
                     &MenuItemBuilder::with_id(ids::terminal(&project.path), "\u{26CF}\u{FE0F} Maintenance")
+                        .enabled(forge_available)
                         .build(app)?,
                 )
                 .build()?;
@@ -287,8 +298,11 @@ fn build_settings_submenu<R: Runtime>(
         "\u{1F511} GitHub Login"
     };
     let mut github = SubmenuBuilder::new(app, "GitHub");
-    github = github
-        .item(&MenuItemBuilder::with_id(gen_id(ids::GITHUB_LOGIN), github_label).build(app)?);
+    github = github.item(
+        &MenuItemBuilder::with_id(gen_id(ids::GITHUB_LOGIN), github_label)
+            .enabled(state.forge_available)
+            .build(app)?,
+    );
     if authenticated {
         github = github.separator();
         let remote_submenu = build_remote_projects_submenu(app, state, watch_path)?;
@@ -475,12 +489,12 @@ fn build_project_submenu<R: Runtime>(
     let mut submenu = SubmenuBuilder::new(app, &label);
 
     // "Attach Here" — primary action (opens OpenCode)
-    // Idle: 🌱 Attach Here (clickable)
+    // Idle: 🌱 Attach Here (clickable, gated on forge_available)
     // Running: 🌺 Blooming (genus flower, disabled — prevents re-launch)
     let (attach_label, attach_enabled) = if let Some(genus) = project.assigned_genus {
         (format!("{} Blooming", genus.flower()), false)
     } else {
-        ("\u{1F331} Attach Here".to_string(), true) // 🌱
+        ("\u{1F331} Attach Here".to_string(), state.forge_available) // 🌱
     };
     submenu = submenu.item(
         &MenuItemBuilder::with_id(ids::attach_here(&project.path), &attach_label)
@@ -491,6 +505,7 @@ fn build_project_submenu<R: Runtime>(
     // Maintenance menu item.
     // When running: show the first maintenance container's tool emoji.
     // When idle: show pick icon (⛏️).
+    // Gated on forge_available — requires the image to launch.
     let maintenance_label = if maintenance_running {
         let tool = tool_emojis.first().copied().unwrap_or("\u{26CF}\u{FE0F}");
         format!("{tool} Maintenance")
@@ -499,7 +514,9 @@ fn build_project_submenu<R: Runtime>(
     };
     // "Maintenance" — opens bash in a forge container
     submenu = submenu.item(
-        &MenuItemBuilder::with_id(ids::terminal(&project.path), &maintenance_label).build(app)?
+        &MenuItemBuilder::with_id(ids::terminal(&project.path), &maintenance_label)
+            .enabled(state.forge_available)
+            .build(app)?,
     );
 
     submenu.build()

@@ -272,25 +272,34 @@ fn main() {
                     }
                 }
 
-                // Launch-time forge image check — build automatically if absent
+                // Launch-time forge image check — build automatically if absent or stale.
+                // forge_available starts as false; we set it to true only when the image
+                // is confirmed present (no build needed) or after a successful build.
                 if has_podman {
                     let forge_client = tillandsias_podman::PodmanClient::new();
-                    if !forge_client.image_exists(handlers::FORGE_IMAGE_TAG).await {
+                    let image_present = forge_client.image_exists(handlers::FORGE_IMAGE_TAG).await;
+
+                    if !image_present {
                         info!(tag = handlers::FORGE_IMAGE_TAG, "Forge image absent at launch — triggering auto-build");
 
-                        // Notify the event loop and update the icon to Building
+                        // First-time build: image did not exist.
+                        let chip_name = "Building Forge".to_string();
+
+                        // Notify the event loop and update the icon to Building.
+                        // forge_available remains false (already the default).
                         let _ = build_tx.try_send(BuildProgressEvent::Started {
-                            image_name: "forge".to_string(),
+                            image_name: chip_name.clone(),
                         });
                         {
                             let mut s = state_for_loop.lock().unwrap();
                             s.active_builds.push(tillandsias_core::state::BuildProgress {
-                                image_name: "forge".to_string(),
+                                image_name: chip_name.clone(),
                                 status: tillandsias_core::state::BuildStatus::InProgress,
                                 started_at: std::time::Instant::now(),
                                 completed_at: None,
                             });
                             s.tray_icon_state = TrayIconState::Building;
+                            // forge_available is already false — keep it false during build
                         }
                         if let Some(tray_lock) = TRAY_ICON.get()
                             && let Ok(tray) = tray_lock.lock()
@@ -310,27 +319,39 @@ fn main() {
                         match build_result {
                             Ok(Ok(())) => {
                                 info!(tag = handlers::FORGE_IMAGE_TAG, "Forge image built at launch");
+                                // Mark forge as available before sending Completed so the
+                                // menu rebuild triggered by the event sees forge_available=true.
+                                {
+                                    let mut s = state_for_loop.lock().unwrap();
+                                    s.forge_available = true;
+                                }
                                 let _ = build_tx.try_send(BuildProgressEvent::Completed {
-                                    image_name: "forge".to_string(),
+                                    image_name: chip_name,
                                 });
                             }
                             Ok(Err(ref e)) => {
                                 warn!(error = %e, "Auto forge build failed at launch");
                                 let _ = build_tx.try_send(BuildProgressEvent::Failed {
-                                    image_name: "forge".to_string(),
+                                    image_name: chip_name,
                                     reason: e.clone(),
                                 });
                             }
                             Err(ref e) => {
                                 warn!(error = %e, "Auto forge build task panicked at launch");
                                 let _ = build_tx.try_send(BuildProgressEvent::Failed {
-                                    image_name: "forge".to_string(),
+                                    image_name: chip_name,
                                     reason: format!("Build task panicked: {e}"),
                                 });
                             }
                         }
                     } else {
                         info!(tag = handlers::FORGE_IMAGE_TAG, "Forge image present at launch");
+                        // Image is ready — enable forge-dependent actions immediately.
+                        {
+                            let mut s = state_for_loop.lock().unwrap();
+                            s.forge_available = true;
+                        }
+                        rebuild_menu(&app_handle_for_loop, &state_for_loop);
                     }
                 }
 
@@ -398,6 +419,7 @@ fn main() {
                             s.remote_repos_error
                                 .clone_from(&new_state.remote_repos_error);
                             s.active_builds.clone_from(&new_state.active_builds);
+                            s.forge_available = new_state.forge_available;
                             old
                         };
 

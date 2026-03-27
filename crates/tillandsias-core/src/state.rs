@@ -165,6 +165,18 @@ pub struct TrayState {
     /// Completed entries are pruned after 10 seconds; failed entries persist until
     /// a new build for the same image begins.
     pub active_builds: Vec<BuildProgress>,
+
+    /// Whether the forge image is available and ready for use.
+    ///
+    /// Starts as `false` on every launch. Set to `true` when:
+    /// - The forge image is confirmed present at startup (no build needed), or
+    /// - A forge image build completes successfully.
+    /// Set to `false` when a forge rebuild begins (image stale or absent).
+    ///
+    /// While `false`, all forge-dependent menu actions (Attach Here, Maintenance,
+    /// Root terminal, GitHub Login) are disabled so the user cannot trigger them
+    /// before the image is ready.
+    pub forge_available: bool,
 }
 
 impl TrayState {
@@ -181,6 +193,7 @@ impl TrayState {
             cloning_project: None,
             remote_repos_error: None,
             active_builds: Vec::new(),
+            forge_available: false,
         }
     }
 
