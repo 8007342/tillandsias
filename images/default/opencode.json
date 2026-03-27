@@ -8,7 +8,11 @@
       "/home/forge/.config/gh",
       "/home/forge/.config/gh/**",
       "/home/forge/.config/tillandsias-git",
-      "/home/forge/.config/tillandsias-git/**"
+      "/home/forge/.config/tillandsias-git/**",
+      "~/.claude",
+      "~/.claude/**",
+      "/home/forge/.claude",
+      "/home/forge/.claude/**"
     ]
   }
 }

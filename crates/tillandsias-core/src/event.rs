@@ -94,6 +94,9 @@ pub enum MenuCommand {
     /// Trigger a background refresh of the remote repos list
     RefreshRemoteProjects,
 
+    /// Select an AI coding agent (OpenCode or Claude)
+    SelectAgent { agent: String },
+
     /// Open settings
     Settings,
 

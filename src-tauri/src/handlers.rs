@@ -267,6 +267,7 @@ fn build_run_args(
     port_range: (u16, u16),
     detached: bool,
     is_watch_root: bool,
+    agent: tillandsias_core::config::SelectedAgent,
 ) -> Vec<String> {
     let mut args = Vec::new();
 
@@ -365,6 +366,17 @@ fn build_run_args(
     args.push(git_mount);
     args.push("-e".to_string());
     args.push("GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig".to_string());
+
+    // Agent selection — tells the entrypoint which coding agent to launch
+    args.push("-e".to_string());
+    args.push(format!("TILLANDSIAS_AGENT={}", agent.as_env_str()));
+
+    // Claude Code credentials — persists auth across container restarts
+    let claude_dir = secrets_dir.join("claude");
+    std::fs::create_dir_all(&claude_dir).ok();
+    let claude_mount = format!("{}:/home/forge/.claude:rw", claude_dir.display());
+    args.push("-v".to_string());
+    args.push(claude_mount);
 
     // Container image (always last)
     args.push(image.to_string());
@@ -564,6 +576,7 @@ pub async fn handle_attach_here(
     // Build the full `podman run -it --rm ...` command string.
     // We open a terminal window running this command — the terminal provides
     // the TTY, podman passes it to the container, opencode gets a real terminal.
+    let selected_agent = global_config.agent.selected;
     let run_args = build_run_args(
         &container_name,
         FORGE_IMAGE_TAG,
@@ -572,6 +585,7 @@ pub async fn handle_attach_here(
         port_range,
         false, // interactive (-it), NOT detached
         is_watch_root,
+        selected_agent,
     );
 
     let mut podman_parts = vec![
@@ -821,7 +835,10 @@ pub async fn handle_terminal(
     info!(container = %container_name, tool = %display_emoji, "Maintenance terminal registered (bud state)");
 
     let git_dir = secrets_dir.join("git");
+    let claude_dir = secrets_dir.join("claude");
+    std::fs::create_dir_all(&claude_dir).ok();
     let host_os = tillandsias_core::config::detect_host_os();
+    let selected_agent = load_global_config().agent.selected;
     let podman_bin = tillandsias_podman::find_podman_path();
     let podman_cmd = format!(
         "{podman_bin} run -it --rm --init --stop-timeout=10 \
@@ -834,17 +851,20 @@ pub async fn handle_terminal(
         -w /home/forge/src/{} \
         -e TILLANDSIAS_PROJECT={} \
         -e TILLANDSIAS_HOST_OS='{}' \
+        -e TILLANDSIAS_AGENT={} \
         -e GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig \
         -p {}-{}:{}-{} \
         -v {}:/home/forge/src/{} \
         -v {}:/home/forge/.cache/tillandsias \
         -v {}:/home/forge/.config/gh:ro \
         -v {}:/home/forge/.config/tillandsias-git:ro \
+        -v {}:/home/forge/.claude:rw \
         {}",
         container_name,
         project_name,
         project_name,
         host_os,
+        selected_agent.as_env_str(),
         port_range.0,
         port_range.1,
         port_range.0,
@@ -854,6 +874,7 @@ pub async fn handle_terminal(
         cache.display(),
         secrets_dir.join("gh").display(),
         git_dir.display(),
+        claude_dir.display(),
         FORGE_IMAGE_TAG,
     );
 
@@ -966,7 +987,10 @@ pub async fn handle_root_terminal(
     info!(container = %container_name, "Root terminal registered (bud state)");
 
     let git_dir = secrets_dir.join("git");
+    let claude_dir = secrets_dir.join("claude");
+    std::fs::create_dir_all(&claude_dir).ok();
     let host_os = tillandsias_core::config::detect_host_os();
+    let selected_agent = load_global_config().agent.selected;
     let podman_bin = tillandsias_podman::find_podman_path();
 
     let podman_cmd = format!(
@@ -980,15 +1004,18 @@ pub async fn handle_root_terminal(
         -w /home/forge/src \
         -e TILLANDSIAS_PROJECT='(all projects)' \
         -e TILLANDSIAS_HOST_OS='{}' \
+        -e TILLANDSIAS_AGENT={} \
         -e GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig \
         -p {}-{}:{}-{} \
         -v {}:/home/forge/src \
         -v {}:/home/forge/.cache/tillandsias \
         -v {}:/home/forge/.config/gh:ro \
         -v {}:/home/forge/.config/tillandsias-git:ro \
+        -v {}:/home/forge/.claude:rw \
         {}",
         container_name,
         host_os,
+        selected_agent.as_env_str(),
         port_range.0,
         port_range.1,
         port_range.0,
@@ -997,6 +1024,7 @@ pub async fn handle_root_terminal(
         cache.display(),
         secrets_dir.join("gh").display(),
         git_dir.display(),
+        claude_dir.display(),
         FORGE_IMAGE_TAG,
     );
 

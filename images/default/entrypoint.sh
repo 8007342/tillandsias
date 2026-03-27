@@ -13,7 +13,7 @@ trap 'exit 0' SIGTERM SIGINT
 mkdir -p ~/.config/gh 2>/dev/null || true
 touch ~/.gitconfig 2>/dev/null || true
 
-# Bridge gh auth → git push: register gh as git credential helper.
+# Bridge gh auth -> git push: register gh as git credential helper.
 # Without this, git doesn't know about gh's OAuth token and prompts for
 # username/password. Non-interactive, fails silently if gh not installed yet.
 command -v gh &>/dev/null && gh auth setup-git 2>/dev/null || true
@@ -33,31 +33,62 @@ OS_BIN="$OS_PREFIX/bin/openspec"
 mkdir -p "$CACHE/opencode" "$OS_PREFIX" "$CACHE/nix" 2>/dev/null || true
 export PATH="$CACHE/opencode:$OS_PREFIX/bin:$PATH"
 
-# ── OpenCode (direct binary, cached) ──────────────────────────
-if [ ! -x "$OC_BIN" ]; then
-    echo "Installing OpenCode..."
-    ARCH="$(uname -m)"
-    case "$ARCH" in
-        x86_64)  VARIANT="linux-x64" ;;
-        aarch64) VARIANT="linux-arm64" ;;
-        *)       VARIANT="linux-x64" ;;
-    esac
-    curl -fsSL -o /tmp/opencode.tar.gz \
-        "https://github.com/anomalyco/opencode/releases/latest/download/opencode-${VARIANT}.tar.gz"
-    tar xzf /tmp/opencode.tar.gz -C "$CACHE/opencode/"
-    chmod +x "$OC_BIN"
-    rm -f /tmp/opencode.tar.gz
-    echo "  ✓ OpenCode $("$OC_BIN" --version 2>/dev/null || echo 'installed')"
-fi
+# ── Agent selection ──────────────────────────────────────────
+AGENT="${TILLANDSIAS_AGENT:-opencode}"
 
-# ── OpenSpec (npm to user prefix, cached) ─────────────────────
+# ── OpenCode (direct binary, cached) ────────────────────────
+install_opencode() {
+    if [ ! -x "$OC_BIN" ]; then
+        echo "Installing OpenCode..."
+        ARCH="$(uname -m)"
+        case "$ARCH" in
+            x86_64)  VARIANT="linux-x64" ;;
+            aarch64) VARIANT="linux-arm64" ;;
+            *)       VARIANT="linux-x64" ;;
+        esac
+        curl -fsSL -o /tmp/opencode.tar.gz \
+            "https://github.com/anomalyco/opencode/releases/latest/download/opencode-${VARIANT}.tar.gz"
+        tar xzf /tmp/opencode.tar.gz -C "$CACHE/opencode/"
+        chmod +x "$OC_BIN"
+        rm -f /tmp/opencode.tar.gz
+        echo "  done OpenCode $("$OC_BIN" --version 2>/dev/null || echo 'installed')"
+    fi
+}
+
+# ── Claude Code (npm installer, cached) ─────────────────────
+CC_PREFIX="$CACHE/claude"
+CC_BIN="$CC_PREFIX/bin/claude"
+
+install_claude() {
+    mkdir -p "$CC_PREFIX" 2>/dev/null || true
+    if [ ! -x "$CC_BIN" ]; then
+        echo "Installing Claude Code..."
+        # Claude Code installs via npm — use a local prefix so it persists
+        # across container restarts via the cache bind mount.
+        npm install -g --prefix "$CC_PREFIX" @anthropic-ai/claude-code 2>/dev/null || true
+        if [ -x "$CC_BIN" ]; then
+            echo "  done Claude Code installed"
+        else
+            echo "  Claude Code install failed"
+        fi
+    fi
+    export PATH="$CC_PREFIX/bin:$PATH"
+}
+
+# ── OpenSpec (npm to user prefix, cached) ────────────────────
 if [ ! -x "$OS_BIN" ]; then
     echo "Installing OpenSpec..."
     npm install -g --prefix "$OS_PREFIX" @fission-ai/openspec 2>/dev/null || true
-    [ -x "$OS_BIN" ] && echo "  ✓ OpenSpec installed" || echo "  OpenSpec deferred"
+    [ -x "$OS_BIN" ] && echo "  done OpenSpec installed" || echo "  OpenSpec deferred"
 fi
 
-# ── Find project directory ────────────────────────────────────
+# Install the selected agent (and always install OpenCode for OpenSpec tooling)
+install_opencode
+if [ "$AGENT" = "claude" ]; then
+    install_claude
+fi
+
+# ── Find project directory ───────────────────────────────────
 PROJECT_DIR=""
 for dir in "$HOME/src"/*/; do
     [ -d "$dir" ] && PROJECT_DIR="$dir" && break
@@ -66,21 +97,35 @@ done
 
 # ── OpenSpec init (first launch only) ────────────────────────
 if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ] && [ ! -d "$PROJECT_DIR/openspec" ]; then
-    "$OS_BIN" init --tools opencode && echo "  ✓ OpenSpec initialized" || echo "  ⚠ OpenSpec init skipped"
+    "$OS_BIN" init --tools opencode && echo "  done OpenSpec initialized" || echo "  OpenSpec init skipped"
 fi
 
-# ── Banner ────────────────────────────────────────────────────
+# ── Banner ───────────────────────────────────────────────────
 echo ""
 echo "========================================"
 echo "  tillandsias forge"
 echo "  project: $(basename "$(pwd)")"
+echo "  agent:   $AGENT"
 echo "========================================"
 echo ""
 
-# ── Launch OpenCode ───────────────────────────────────────────
-if [ -x "$OC_BIN" ]; then
-    exec "$OC_BIN" "$@"
-else
-    echo "OpenCode not available. Starting bash."
-    exec bash
-fi
+# ── Launch selected agent ────────────────────────────────────
+case "$AGENT" in
+    claude)
+        if [ -x "$CC_BIN" ]; then
+            exec "$CC_BIN" "$@"
+        else
+            echo "Claude Code not available. Starting bash."
+            exec bash
+        fi
+        ;;
+    *)
+        # OpenCode (default)
+        if [ -x "$OC_BIN" ]; then
+            exec "$OC_BIN" "$@"
+        else
+            echo "OpenCode not available. Starting bash."
+            exec bash
+        fi
+        ;;
+esac

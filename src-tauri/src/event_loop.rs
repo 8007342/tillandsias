@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info};
 
-use tillandsias_core::config::load_global_config;
+use tillandsias_core::config::{SelectedAgent, load_global_config, save_selected_agent};
 use tillandsias_core::event::{BuildProgressEvent, ContainerState, MenuCommand};
 use tillandsias_core::genus::GenusAllocator;
 use tillandsias_core::project::{ArtifactStatus, Project, ProjectChange, ProjectType};
@@ -197,6 +197,16 @@ pub async fn run(
                     MenuCommand::CloneProject { full_name, name } => {
                         info!(repo = %full_name, "Clone project requested");
                         handle_clone_project(&full_name, &name, &mut state, &mut allocator, build_tx.clone(), &on_state_change).await;
+                    }
+                    MenuCommand::SelectAgent { agent } => {
+                        if let Some(selected) = SelectedAgent::from_str_opt(&agent) {
+                            info!(agent = %agent, "Agent selection changed");
+                            save_selected_agent(selected);
+                            // Rebuild menu to update pin emoji
+                            on_state_change(&state);
+                        } else {
+                            debug!(agent = %agent, "Unknown agent in SelectAgent command");
+                        }
                     }
                     MenuCommand::Settings => {
                         // Settings is a Submenu now — this event won't fire from menu clicks.

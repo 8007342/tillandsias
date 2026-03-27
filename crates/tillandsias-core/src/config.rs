@@ -14,6 +14,62 @@ const DEFAULT_PORT_END: u16 = 3019;
 /// Default debounce for filesystem scanner.
 const DEFAULT_DEBOUNCE_MS: u64 = 2000;
 
+/// Which AI coding agent to launch in forge containers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SelectedAgent {
+    OpenCode,
+    Claude,
+}
+
+impl Default for SelectedAgent {
+    fn default() -> Self {
+        Self::OpenCode
+    }
+}
+
+impl SelectedAgent {
+    /// The string value passed as `TILLANDSIAS_AGENT` env var.
+    pub fn as_env_str(&self) -> &'static str {
+        match self {
+            Self::OpenCode => "opencode",
+            Self::Claude => "claude",
+        }
+    }
+
+    /// Parse from a string (case-insensitive). Returns `None` for unknown values.
+    pub fn from_str_opt(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "opencode" => Some(Self::OpenCode),
+            "claude" => Some(Self::Claude),
+            _ => None,
+        }
+    }
+
+    /// Display name for menu labels.
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::OpenCode => "OpenCode",
+            Self::Claude => "Claude",
+        }
+    }
+}
+
+/// Agent selection configuration.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AgentConfig {
+    #[serde(default)]
+    pub selected: SelectedAgent,
+}
+
+impl Default for AgentConfig {
+    fn default() -> Self {
+        Self {
+            selected: SelectedAgent::default(),
+        }
+    }
+}
+
 /// Global configuration loaded from `~/.config/tillandsias/config.toml`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GlobalConfig {
@@ -28,6 +84,9 @@ pub struct GlobalConfig {
 
     #[serde(default)]
     pub updates: UpdatesConfig,
+
+    #[serde(default)]
+    pub agent: AgentConfig,
 }
 
 /// Scanner settings.
@@ -123,6 +182,7 @@ impl Default for GlobalConfig {
             defaults: default_defaults_config(),
             security: SecurityConfig::default(),
             updates: UpdatesConfig::default(),
+            agent: AgentConfig::default(),
         }
     }
 }
@@ -263,6 +323,35 @@ pub fn cache_dir() -> PathBuf {
 pub fn load_global_config() -> GlobalConfig {
     let path = config_dir().join("config.toml");
     load_global_config_from(&path)
+}
+
+/// Save the selected agent to the global config file.
+///
+/// Reads the existing config, updates the agent section, and writes it back.
+/// Creates the config directory and file if they don't exist.
+pub fn save_selected_agent(agent: SelectedAgent) {
+    let dir = config_dir();
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        warn!(error = %e, "Failed to create config directory");
+        return;
+    }
+
+    let path = dir.join("config.toml");
+    let mut config = load_global_config_from(&path);
+    config.agent.selected = agent;
+
+    match toml::to_string_pretty(&config) {
+        Ok(contents) => {
+            if let Err(e) = std::fs::write(&path, contents) {
+                warn!(error = %e, "Failed to write config file");
+            } else {
+                debug!(?path, agent = agent.as_env_str(), "Agent selection saved");
+            }
+        }
+        Err(e) => {
+            warn!(error = %e, "Failed to serialize config");
+        }
+    }
 }
 
 /// Load global config from a specific path (for testing).

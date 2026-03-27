@@ -526,6 +526,9 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
                             None
                         }
                     }
+                    "select-agent" => Some(MenuCommand::SelectAgent {
+                        agent: payload.to_string(),
+                    }),
                     _ => {
                         debug!(action, "Unknown menu action");
                         None

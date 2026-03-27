@@ -197,6 +197,18 @@ fn build_run_args(
     args.push("-e".to_string());
     args.push("GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig".to_string());
 
+    // Agent selection — tells the entrypoint which coding agent to launch
+    let selected_agent = tillandsias_core::config::load_global_config().agent.selected;
+    args.push("-e".to_string());
+    args.push(format!("TILLANDSIAS_AGENT={}", selected_agent.as_env_str()));
+
+    // Claude Code credentials — persists auth across container restarts
+    let claude_dir = secrets_dir.join("claude");
+    std::fs::create_dir_all(&claude_dir).ok();
+    let claude_mount = format!("{}:/home/forge/.claude:rw", claude_dir.display());
+    args.push("-v".to_string());
+    args.push(claude_mount);
+
     // Custom mounts from project config
     let project_config = load_project_config(project_path);
     for mount in &project_config.mounts {
