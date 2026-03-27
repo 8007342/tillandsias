@@ -4,9 +4,6 @@
   "windows": ["*"],
   "permissions": [
     "core:default",
-    "core:window:allow-create",
-    "core:window:allow-set-focus",
-    "core:window:allow-close",
     "shell:allow-open",
     "updater:default"
   ]

@@ -47,7 +47,6 @@ pub mod ids {
 
     pub const QUIT: &str = "quit";
     pub const SETTINGS: &str = "settings";
-    pub const OPEN_SETTINGS: &str = "open-settings";
     pub const GITHUB_LOGIN: &str = "github-login";
     pub const REFRESH_REMOTE_PROJECTS: &str = "refresh-remote-projects";
 
@@ -178,11 +177,9 @@ pub fn build_tray_menu<R: Runtime>(
 
     menu = menu.separator();
 
-    // Settings — flat menu item that opens a webview window.
-    menu = menu.item(
-        &MenuItemBuilder::with_id(gen_id(ids::OPEN_SETTINGS), "\u{2699}\u{FE0F} Settings")
-            .build(app)?,
-    );
+    // Settings submenu — contains GitHub Login/Refresh, Remote Projects, version, credit.
+    let settings_submenu = build_settings_submenu(app, state, &watch_path)?;
+    menu = menu.item(&settings_submenu);
 
     // Quit — always visible at top level
     menu = menu.item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), "Quit Tillandsias").build(app)?);

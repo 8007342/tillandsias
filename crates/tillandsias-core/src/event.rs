@@ -97,11 +97,8 @@ pub enum MenuCommand {
     /// Select an AI coding agent (OpenCode or Claude)
     SelectAgent { agent: String },
 
-    /// Open settings (legacy — was a submenu, event never fires)
+    /// Open settings
     Settings,
-
-    /// Open the Settings webview window
-    OpenSettings,
 
     /// Quit the application
     Quit,

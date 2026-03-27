@@ -21,7 +21,6 @@ mod updater;
 use std::sync::{Arc, Mutex};
 
 use tauri::tray::TrayIconBuilder;
-use tauri::Manager;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
@@ -437,13 +436,10 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building tillandsias")
         .run(move |_app, event| {
-            match event {
-                tauri::RunEvent::ExitRequested { api, .. } => {
-                    // Prevent exit when the settings window closes.
-                    // Only quit via the explicit Quit menu item (which calls std::process::exit).
-                    api.prevent_exit();
-                }
-                _ => {}
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                info!("Exit requested");
+                singleton::release();
+                let _ = shutdown_tx.blocking_send(());
             }
         });
 }
@@ -470,49 +466,6 @@ fn rebuild_menu(app_handle: &tauri::AppHandle, state: &Arc<Mutex<TrayState>>) {
     }
 }
 
-/// Open the Settings webview window, or focus it if already open.
-fn open_settings_window(app: &tauri::AppHandle) {
-    use tauri::WebviewWindowBuilder;
-
-    // If the window already exists, just focus it.
-    if let Some(window) = app.get_webview_window("settings") {
-        let _ = window.set_focus();
-        debug!("Settings window already open — focused");
-        return;
-    }
-
-    // Create a frameless, always-on-top settings popup.
-    // Behaves like a modal menu: no frame, stays on top, closes on focus loss.
-    match WebviewWindowBuilder::new(
-        app,
-        "settings",
-        tauri::WebviewUrl::App("settings.html".into()),
-    )
-    .title("Tillandsias Settings")
-    .inner_size(280.0, 340.0)
-    .min_inner_size(220.0, 200.0)
-    .resizable(false)
-    .decorations(false)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .build()
-    {
-        Ok(window) => {
-            info!("Settings window opened");
-            // Close on focus loss — acts like a popup menu
-            let w = window.clone();
-            window.on_window_event(move |event| {
-                if let tauri::WindowEvent::Focused(false) = event {
-                    let _ = w.close();
-                }
-            });
-        }
-        Err(e) => {
-            error!(error = %e, "Failed to open settings window");
-        }
-    }
-}
-
 /// Dispatch a menu click ID to the appropriate `MenuCommand`.
 fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::AppHandle) {
     // Strip the generation suffix (e.g., "quit#5" -> "quit") added to avoid
@@ -521,11 +474,6 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
 
     let command = match id {
         menu::ids::QUIT => None, // Handled via fast-path above
-        menu::ids::OPEN_SETTINGS => {
-            // Handle directly — window creation needs AppHandle, not the event loop.
-            open_settings_window(_app);
-            None
-        }
         menu::ids::GITHUB_LOGIN => Some(MenuCommand::GitHubLogin),
         menu::ids::SETTINGS => Some(MenuCommand::Settings),
         menu::ids::REFRESH_REMOTE_PROJECTS => Some(MenuCommand::RefreshRemoteProjects),
