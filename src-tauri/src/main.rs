@@ -437,10 +437,13 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building tillandsias")
         .run(move |_app, event| {
-            if let tauri::RunEvent::ExitRequested { .. } = event {
-                info!("Exit requested");
-                singleton::release();
-                let _ = shutdown_tx.blocking_send(());
+            match event {
+                tauri::RunEvent::ExitRequested { api, .. } => {
+                    // Prevent exit when the settings window closes.
+                    // Only quit via the explicit Quit menu item (which calls std::process::exit).
+                    api.prevent_exit();
+                }
+                _ => {}
             }
         });
 }
@@ -478,7 +481,8 @@ fn open_settings_window(app: &tauri::AppHandle) {
         return;
     }
 
-    // Create a new settings window.
+    // Create a frameless, always-on-top settings popup.
+    // Behaves like a modal menu: no frame, stays on top, closes on focus loss.
     match WebviewWindowBuilder::new(
         app,
         "settings",
@@ -487,11 +491,21 @@ fn open_settings_window(app: &tauri::AppHandle) {
     .title("Tillandsias Settings")
     .inner_size(480.0, 600.0)
     .min_inner_size(400.0, 500.0)
-    .resizable(true)
+    .resizable(false)
+    .decorations(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
     .build()
     {
-        Ok(_) => {
+        Ok(window) => {
             info!("Settings window opened");
+            // Close on focus loss — acts like a popup menu
+            let w = window.clone();
+            window.on_window_event(move |event| {
+                if let tauri::WindowEvent::Focused(false) = event {
+                    let _ = w.close();
+                }
+            });
         }
         Err(e) => {
             error!(error = %e, "Failed to open settings window");
