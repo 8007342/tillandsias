@@ -101,8 +101,9 @@ jobs:
           BUNDLE_DIR="target/${{ matrix.target }}/release/bundle"
 
           # Copy all release-worthy files from Tauri bundle output
-          # Note: *.AppImage.tar.gz and *.AppImage.tar.gz.sig are the updater
-          # artifacts needed by Tauri's auto-updater (contains compressed AppImage).
+          # Note: *.AppImage and *.AppImage.sig are the updater artifacts needed
+          # by Tauri's auto-updater on Linux. Tauri v2 does NOT produce a .tar.gz
+          # for Linux — only the raw AppImage and its detached Ed25519 signature.
           find "${BUNDLE_DIR}" -type f \( \
             -name "*.AppImage" -o -name "*.AppImage.sig" \
             -o -name "*.AppImage.tar.gz" -o -name "*.AppImage.tar.gz.sig" \
@@ -314,7 +315,7 @@ jobs:
             fi
           }
 
-          LINUX_SIG="$(read_sig 'Tillandsias-linux-x86_64.AppImage.tar.gz.sig')"
+          LINUX_SIG="$(read_sig 'Tillandsias-linux-x86_64.AppImage.sig')"
           MACOS_AARCH64_SIG="$(read_sig 'Tillandsias-macos-aarch64.app.tar.gz.sig')"
           WINDOWS_NSIS_SIG="$(read_sig 'Tillandsias-windows-x86_64-setup.nsis.zip.sig')"
           WINDOWS_MSI_SIG="$(read_sig 'Tillandsias_${SEMVER}_x64_en-US.msi.sig')"
@@ -328,7 +329,7 @@ jobs:
             "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "platforms": {
               "linux-x86_64": {
-                "url": "${BASE_URL}/Tillandsias-linux-x86_64.AppImage.tar.gz",
+                "url": "${BASE_URL}/Tillandsias-linux-x86_64.AppImage",
                 "signature": "${LINUX_SIG}"
               },
               "darwin-aarch64": {

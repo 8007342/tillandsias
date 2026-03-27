@@ -19,7 +19,7 @@
 //!   "version": "0.1.46",
 //!   "platforms": {
 //!     "linux-x86_64": {
-//!       "url": "https://github.com/…/Tillandsias-linux-x86_64.AppImage.tar.gz",
+//!       "url": "https://github.com/…/Tillandsias-linux-x86_64.AppImage",
 //!       "signature": "…"
 //!     }
 //!   }
@@ -34,9 +34,12 @@
 //!
 //! For AppImage installs the update is applied by:
 //! 1. Detecting the running AppImage path via `$APPIMAGE` env var.
-//! 2. Downloading the `.AppImage.tar.gz` via in-process HTTP (`reqwest`).
-//! 3. Extracting the new AppImage alongside the current one.
-//! 4. Atomically replacing the current AppImage with the new one.
+//! 2. Downloading the artifact URL via in-process HTTP (`reqwest`).
+//! 3. If the URL ends in `.tar.gz`: extract the archive to find the `.AppImage`
+//!    inside.  If the URL ends in `.AppImage`: the download IS the new binary —
+//!    no extraction step is needed.
+//! 4. Making the new AppImage executable and atomically replacing the running
+//!    one.
 //!
 //! If `$APPIMAGE` is not set the binary is not an AppImage and the download
 //! step is skipped after a clear message to the user.
@@ -151,9 +154,9 @@ pub fn run() -> bool {
         .unwrap_or(0);
     println!("  Downloaded ({})", human_bytes(archive_size));
 
-    // Extract and replace
+    // Extract (if tar.gz) or use directly (if raw AppImage), then replace
     println!("  Applying update...");
-    if let Err(e) = apply_appimage_update(&archive_path, &appimage_path) {
+    if let Err(e) = apply_appimage_update(&archive_path, &appimage_path, &entry.url) {
         eprintln!("  Error: failed to apply update: {e}");
         // Clean up temp archive
         let _ = std::fs::remove_file(&archive_path);
@@ -208,10 +211,20 @@ fn fetch_url(url: &str) -> Result<String, String> {
 
 /// Download a URL to a temporary file and return its path.
 ///
+/// The temp file is named to match the URL extension (`.AppImage` or
+/// `.tar.gz`) so that [`apply_appimage_update`] can detect the format.
+///
 /// Uses `reqwest` with rustls — no system `libcurl` involved, safe inside
 /// an AppImage regardless of `LD_LIBRARY_PATH`.
 fn download_update(url: &str) -> Result<PathBuf, String> {
-    let tmp = std::env::temp_dir().join("tillandsias-update.tar.gz");
+    // Choose a temp filename that preserves the extension so the apply step
+    // can determine whether extraction is needed.
+    let filename = if url.ends_with(".AppImage") {
+        "tillandsias-update.AppImage"
+    } else {
+        "tillandsias-update.tar.gz"
+    };
+    let tmp = std::env::temp_dir().join(filename);
 
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -248,49 +261,58 @@ fn download_update(url: &str) -> Result<PathBuf, String> {
     })
 }
 
-/// Extract a `.AppImage.tar.gz` archive and atomically replace the running
-/// AppImage binary.
+/// Apply a downloaded AppImage update, replacing the running AppImage binary.
 ///
-/// The archive is expected to contain a single `.AppImage` file at its root.
+/// Two artifact formats are supported, detected by `download_url`:
+///
+/// - **Raw `.AppImage`** — Tauri v2 Linux: the downloaded file IS the new
+///   binary. No extraction needed; just make it executable and replace.
+/// - **`.tar.gz` archive** — legacy / macOS-derived path: extract the archive
+///   to find the `.AppImage` inside, then replace.
 fn apply_appimage_update(
-    archive_path: &std::path::Path,
+    download_path: &std::path::Path,
     appimage_path: &std::path::Path,
+    download_url: &str,
 ) -> Result<(), String> {
-    let tmp_dir = std::env::temp_dir().join("tillandsias-update-extract");
-    let _ = std::fs::remove_dir_all(&tmp_dir);
-    std::fs::create_dir_all(&tmp_dir)
-        .map_err(|e| format!("failed to create temp extract dir: {e}"))?;
+    let new_appimage: PathBuf = if download_url.ends_with(".AppImage") {
+        // Raw AppImage — the downloaded file is the replacement binary.
+        download_path.to_path_buf()
+    } else {
+        // tar.gz archive — extract and find the .AppImage inside.
+        let tmp_dir = std::env::temp_dir().join("tillandsias-update-extract");
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        std::fs::create_dir_all(&tmp_dir)
+            .map_err(|e| format!("failed to create temp extract dir: {e}"))?;
 
-    // Extract
-    let status = std::process::Command::new("tar")
-        .args([
-            "--extract",
-            "--gzip",
-            "--file",
-            archive_path.to_str().unwrap_or(""),
-            "--directory",
-            tmp_dir.to_str().unwrap_or(""),
-        ])
-        .status()
-        .map_err(|e| format!("tar not found or failed to spawn: {e}"))?;
+        let status = std::process::Command::new("tar")
+            .args([
+                "--extract",
+                "--gzip",
+                "--file",
+                download_path.to_str().unwrap_or(""),
+                "--directory",
+                tmp_dir.to_str().unwrap_or(""),
+            ])
+            .status()
+            .map_err(|e| format!("tar not found or failed to spawn: {e}"))?;
 
-    if !status.success() {
-        return Err("tar extraction failed".to_string());
-    }
+        if !status.success() {
+            return Err("tar extraction failed".to_string());
+        }
 
-    // Find the extracted .AppImage file
-    let new_appimage = find_appimage_in_dir(&tmp_dir)?;
+        find_appimage_in_dir(&tmp_dir)?
+    };
 
     // Make it executable (Unix only — Windows doesn't need this)
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let mut perms = std::fs::metadata(&new_appimage)
-            .map_err(|e| format!("cannot stat extracted AppImage: {e}"))?
+            .map_err(|e| format!("cannot stat new AppImage: {e}"))?
             .permissions();
         perms.set_mode(0o755);
         std::fs::set_permissions(&new_appimage, perms)
-            .map_err(|e| format!("cannot chmod extracted AppImage: {e}"))?;
+            .map_err(|e| format!("cannot chmod new AppImage: {e}"))?;
     }
 
     // Atomic replace: rename new AppImage over the current one.
@@ -306,8 +328,8 @@ fn apply_appimage_update(
             .map_err(|e| format!("failed to replace AppImage: {e}"))?;
     }
 
-    // Clean up extract dir
-    let _ = std::fs::remove_dir_all(&tmp_dir);
+    // Clean up extract dir (only exists for tar.gz path; harmless if absent)
+    let _ = std::fs::remove_dir_all(std::env::temp_dir().join("tillandsias-update-extract"));
 
     Ok(())
 }
