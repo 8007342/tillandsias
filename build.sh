@@ -198,11 +198,11 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
 # Rust — skip install if rustup already cached
 if [[ -f /root/.cargo/bin/rustup ]]; then
     echo "[appimage] Rust toolchain cached — skipping install"
-    source /root/.cargo/env
+    export PATH="/root/.cargo/bin:$PATH"
 else
     echo "[appimage] Installing Rust toolchain..."
     curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-    source /root/.cargo/env
+    export PATH="/root/.cargo/bin:$PATH"
 fi
 
 # tauri-cli — skip if already installed
