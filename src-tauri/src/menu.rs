@@ -24,7 +24,7 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Runtime};
 use tracing::debug;
 
-use tillandsias_core::config::load_global_config;
+use tillandsias_core::config::{SelectedAgent, load_global_config};
 use tillandsias_core::genus::TrayIconState;
 use tillandsias_core::state::{BuildStatus, ContainerType, TrayState};
 
@@ -73,6 +73,11 @@ pub mod ids {
     /// Build a menu item ID with generation suffix for non-actionable items.
     pub fn static_id(name: &str) -> String {
         gen_id(name)
+    }
+
+    /// Build an agent selection menu item ID.
+    pub fn select_agent(agent_name: &str) -> String {
+        gen_id(&format!("select-agent:{agent_name}"))
     }
 
     /// Strip the generation suffix from a menu ID for dispatch matching.
@@ -275,21 +280,26 @@ fn build_settings_submenu<R: Runtime>(
 
     let authenticated = !needs_github_login();
 
-    // GitHub Login / GitHub Login Refresh
+    // GitHub submenu — contains Login/Refresh and (when authenticated) Remote Projects
     let github_label = if authenticated {
         "\u{1F512} GitHub Login Refresh"
     } else {
         "\u{1F511} GitHub Login"
     };
-    settings = settings
+    let mut github = SubmenuBuilder::new(app, "GitHub");
+    github = github
         .item(&MenuItemBuilder::with_id(gen_id(ids::GITHUB_LOGIN), github_label).build(app)?);
-
-    // Remote Projects submenu — only when authenticated
     if authenticated {
-        settings = settings.separator();
+        github = github.separator();
         let remote_submenu = build_remote_projects_submenu(app, state, watch_path)?;
-        settings = settings.item(&remote_submenu);
+        github = github.item(&remote_submenu);
     }
+    settings = settings.item(&github.build()?);
+
+    // Seedlings submenu — agent selection (OpenCode / Claude)
+    settings = settings.separator();
+    let seedlings_submenu = build_seedlings_submenu(app)?;
+    settings = settings.item(&seedlings_submenu);
 
     // Version and credit at the bottom of Settings
     settings = settings.separator();
@@ -394,6 +404,38 @@ fn build_remote_projects_submenu<R: Runtime>(
                 .build(app)?,
             );
         }
+    }
+
+    submenu.build()
+}
+
+/// Build the "Seedlings" submenu for AI agent selection.
+///
+/// Lists available agents with a pin emoji on the currently selected one.
+/// Clicking an agent triggers `MenuCommand::SelectAgent`.
+fn build_seedlings_submenu<R: Runtime>(
+    app: &AppHandle<R>,
+) -> tauri::Result<tauri::menu::Submenu<R>> {
+    let global_config = load_global_config();
+    let selected = global_config.agent.selected;
+
+    let mut submenu = SubmenuBuilder::new(app, "\u{1F331} Seedlings"); // 🌱
+
+    // Available agents: OpenCode, Claude
+    let agents: &[(SelectedAgent, &str)] = &[
+        (SelectedAgent::OpenCode, "OpenCode"),
+        (SelectedAgent::Claude, "Claude"),
+    ];
+
+    for &(agent, name) in agents {
+        let label = if agent == selected {
+            format!("\u{1F4CC} {name}") // 📌 pin for selected
+        } else {
+            name.to_string()
+        };
+        submenu = submenu.item(
+            &MenuItemBuilder::with_id(ids::select_agent(agent.as_env_str()), &label).build(app)?,
+        );
     }
 
     submenu.build()
