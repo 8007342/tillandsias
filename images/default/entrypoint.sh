@@ -36,6 +36,11 @@ export PATH="$CACHE/opencode:$OS_PREFIX/bin:$PATH"
 # ── Agent selection ──────────────────────────────────────────
 AGENT="${TILLANDSIAS_AGENT:-opencode}"
 
+# Capture API key then scrub from environment to limit exposure.
+# Only the agent process that needs it will receive it via exec env.
+_CLAUDE_KEY="${ANTHROPIC_API_KEY:-}"
+unset ANTHROPIC_API_KEY
+
 # ── OpenCode (direct binary, cached) ────────────────────────
 install_opencode() {
     if [ ! -x "$OC_BIN" ]; then
@@ -113,7 +118,11 @@ echo ""
 case "$AGENT" in
     claude)
         if [ -x "$CC_BIN" ]; then
-            exec "$CC_BIN" "$@"
+            if [ -n "$_CLAUDE_KEY" ]; then
+                exec env ANTHROPIC_API_KEY="$_CLAUDE_KEY" "$CC_BIN" "$@"
+            else
+                exec "$CC_BIN" "$@"
+            fi
         else
             echo "Claude Code not available. Starting bash."
             exec bash

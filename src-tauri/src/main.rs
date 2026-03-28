@@ -504,6 +504,7 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
     let command = match id {
         menu::ids::QUIT => None, // Handled via fast-path above
         menu::ids::GITHUB_LOGIN => Some(MenuCommand::GitHubLogin),
+        menu::ids::CLAUDE_LOGIN => Some(MenuCommand::ClaudeLogin),
         menu::ids::SETTINGS => Some(MenuCommand::Settings),
         menu::ids::REFRESH_REMOTE_PROJECTS => Some(MenuCommand::RefreshRemoteProjects),
         "root-terminal" => Some(MenuCommand::RootTerminal),

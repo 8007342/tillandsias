@@ -459,6 +459,12 @@ fn build_run_args(
     args.push("-e".to_string());
     args.push(format!("TILLANDSIAS_AGENT={}", agent.as_env_str()));
 
+    // Claude API key — injected from OS keyring when present
+    if let Ok(Some(api_key)) = crate::secrets::retrieve_claude_api_key() {
+        args.push("-e".to_string());
+        args.push(format!("ANTHROPIC_API_KEY={api_key}"));
+    }
+
     // Claude Code credentials — persists auth across container restarts
     let claude_dir = secrets_dir.join("claude");
     std::fs::create_dir_all(&claude_dir).ok();
@@ -930,6 +936,13 @@ pub async fn handle_terminal(
     let host_os = tillandsias_core::config::detect_host_os();
     let selected_agent = load_global_config().agent.selected;
     let podman_bin = tillandsias_podman::find_podman_path();
+
+    // Claude API key — injected from OS keyring when present
+    let claude_api_key_arg = match crate::secrets::retrieve_claude_api_key() {
+        Ok(Some(key)) => format!("-e ANTHROPIC_API_KEY={key} "),
+        _ => String::new(),
+    };
+
     let podman_cmd = format!(
         "{podman_bin} run -it --rm --init --stop-timeout=10 \
         --name {} \
@@ -942,6 +955,7 @@ pub async fn handle_terminal(
         -e TILLANDSIAS_PROJECT={} \
         -e TILLANDSIAS_HOST_OS='{}' \
         -e TILLANDSIAS_AGENT={} \
+        {}\
         -e GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig \
         -p {}-{}:{}-{} \
         -v {}:/home/forge/src/{} \
@@ -955,6 +969,7 @@ pub async fn handle_terminal(
         project_name,
         host_os,
         selected_agent.as_env_str(),
+        claude_api_key_arg,
         port_range.0,
         port_range.1,
         port_range.0,
@@ -1084,6 +1099,12 @@ pub async fn handle_root_terminal(
     let selected_agent = load_global_config().agent.selected;
     let podman_bin = tillandsias_podman::find_podman_path();
 
+    // Claude API key — injected from OS keyring when present
+    let claude_api_key_arg = match crate::secrets::retrieve_claude_api_key() {
+        Ok(Some(key)) => format!("-e ANTHROPIC_API_KEY={key} "),
+        _ => String::new(),
+    };
+
     let podman_cmd = format!(
         "{podman_bin} run -it --rm --init --stop-timeout=10 \
         --name {} \
@@ -1096,6 +1117,7 @@ pub async fn handle_root_terminal(
         -e TILLANDSIAS_PROJECT='(all projects)' \
         -e TILLANDSIAS_HOST_OS='{}' \
         -e TILLANDSIAS_AGENT={} \
+        {}\
         -e GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig \
         -p {}-{}:{}-{} \
         -v {}:/home/forge/src \
@@ -1107,6 +1129,7 @@ pub async fn handle_root_terminal(
         container_name,
         host_os,
         selected_agent.as_env_str(),
+        claude_api_key_arg,
         port_range.0,
         port_range.1,
         port_range.0,
@@ -1232,4 +1255,78 @@ pub async fn handle_github_login(
 
     open_terminal(&script_path.display().to_string(), "GitHub Login")
         .map_err(|e| format!("Failed to open terminal: {e}"))
+}
+
+/// Handle "Claude Login" — prompt user for Anthropic API key and store in keyring.
+///
+/// Opens a terminal running a small embedded script that reads the key
+/// interactively (hidden input) and writes it to a temp file. We then
+/// poll for the temp file, read the key, store it in the native keyring,
+/// and delete the temp file.
+pub async fn handle_claude_login() -> Result<(), String> {
+    info!("Claude Login: extracting embedded script to temp");
+
+    let script_path = crate::embedded::write_temp_script(
+        "claude-api-key-prompt.sh",
+        crate::embedded::CLAUDE_API_KEY_PROMPT,
+    )
+    .map_err(|e| {
+        error!(error = %e, "Failed to extract embedded claude-api-key-prompt.sh to temp");
+        "Tillandsias installation may be incomplete. Please reinstall from https://github.com/8007342/tillandsias"
+    })?;
+
+    open_terminal(&script_path.display().to_string(), "Claude Login")?;
+
+    // Poll for the temp file containing the API key.
+    // The script writes to $XDG_RUNTIME_DIR/tillandsias-claude-key (or /tmp/).
+    let temp_key_path = std::env::var("XDG_RUNTIME_DIR")
+        .map(|d| std::path::PathBuf::from(d).join("tillandsias-claude-key"))
+        .unwrap_or_else(|_| std::path::PathBuf::from("/tmp/tillandsias-claude-key"));
+
+    // Wait up to 5 minutes for the user to enter the key.
+    // Check every 2 seconds. The file only appears after they press Enter.
+    let max_attempts = 150; // 150 * 2s = 300s = 5 min
+    for _ in 0..max_attempts {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        if temp_key_path.exists() {
+            match std::fs::read_to_string(&temp_key_path) {
+                Ok(key) => {
+                    let key = key.trim().to_string();
+
+                    // Clean up temp file immediately
+                    let _ = std::fs::remove_file(&temp_key_path);
+
+                    if key.is_empty() {
+                        info!("Claude Login: user entered empty key, skipping");
+                        return Ok(());
+                    }
+
+                    // Store in keyring
+                    match crate::secrets::store_claude_api_key(&key) {
+                        Ok(()) => {
+                            info!("Claude API key stored in native keyring");
+                            send_notification(
+                                "Tillandsias",
+                                "Claude API key saved successfully",
+                            );
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            error!(error = %e, "Failed to store Claude API key in keyring");
+                            return Err(format!("Failed to save API key: {e}"));
+                        }
+                    }
+                }
+                Err(e) => {
+                    let _ = std::fs::remove_file(&temp_key_path);
+                    return Err(format!("Failed to read temp key file: {e}"));
+                }
+            }
+        }
+    }
+
+    // Timeout — user didn't enter a key within 5 minutes
+    info!("Claude Login: timed out waiting for API key");
+    Ok(())
 }

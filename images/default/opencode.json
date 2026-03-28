@@ -12,7 +12,8 @@
       "~/.claude",
       "~/.claude/**",
       "/home/forge/.claude",
-      "/home/forge/.claude/**"
+      "/home/forge/.claude/**",
+      "/proc/*/environ"
     ]
   }
 }

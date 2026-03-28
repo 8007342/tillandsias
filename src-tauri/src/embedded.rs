@@ -21,6 +21,7 @@ use tracing::debug;
 // ---------------------------------------------------------------------------
 pub const BUILD_IMAGE: &str = include_str!("../../scripts/build-image.sh");
 pub const GH_AUTH_LOGIN: &str = include_str!("../../gh-auth-login.sh");
+pub const CLAUDE_API_KEY_PROMPT: &str = include_str!("../../claude-api-key-prompt.sh");
 
 // ---------------------------------------------------------------------------
 // Image sources — flake

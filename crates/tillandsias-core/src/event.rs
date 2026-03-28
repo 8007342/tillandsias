@@ -97,6 +97,9 @@ pub enum MenuCommand {
     /// Select an AI coding agent (OpenCode or Claude)
     SelectAgent { agent: String },
 
+    /// Claude Login — prompt user for Anthropic API key and store in keyring
+    ClaudeLogin,
+
     /// Open settings
     Settings,
 

@@ -211,6 +211,12 @@ fn build_run_args(
     args.push("-e".to_string());
     args.push(format!("TILLANDSIAS_AGENT={}", selected_agent.as_env_str()));
 
+    // Claude API key — injected from OS keyring when present
+    if let Ok(Some(api_key)) = crate::secrets::retrieve_claude_api_key() {
+        args.push("-e".to_string());
+        args.push(format!("ANTHROPIC_API_KEY={api_key}"));
+    }
+
     // Claude Code credentials — persists auth across container restarts
     let claude_dir = secrets_dir.join("claude");
     std::fs::create_dir_all(&claude_dir).ok();

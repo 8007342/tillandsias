@@ -48,6 +48,7 @@ pub mod ids {
     pub const QUIT: &str = "quit";
     pub const SETTINGS: &str = "settings";
     pub const GITHUB_LOGIN: &str = "github-login";
+    pub const CLAUDE_LOGIN: &str = "claude-login";
     pub const REFRESH_REMOTE_PROJECTS: &str = "refresh-remote-projects";
 
     /// Build an "attach here" menu item ID for a project path.
@@ -451,6 +452,20 @@ fn build_seedlings_submenu<R: Runtime>(
             &MenuItemBuilder::with_id(ids::select_agent(agent.as_env_str()), &label).build(app)?,
         );
     }
+
+    // Claude Login — shows authentication state
+    submenu = submenu.separator();
+    let has_claude_key = matches!(crate::secrets::retrieve_claude_api_key(), Ok(Some(_)));
+    let (claude_login_label, claude_login_enabled) = if has_claude_key {
+        ("\u{1F512} Claude (authenticated)", false) // 🔒 locked — already authenticated
+    } else {
+        ("\u{1F511} Claude Login", true) // 🔑 key — needs authentication
+    };
+    submenu = submenu.item(
+        &MenuItemBuilder::with_id(gen_id(ids::CLAUDE_LOGIN), claude_login_label)
+            .enabled(claude_login_enabled)
+            .build(app)?,
+    );
 
     submenu.build()
 }

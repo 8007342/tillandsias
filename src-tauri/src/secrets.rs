@@ -32,6 +32,9 @@ const SERVICE: &str = "tillandsias";
 /// Keyring entry key for the GitHub OAuth token.
 const GITHUB_TOKEN_KEY: &str = "github-oauth-token";
 
+/// Keyring entry key for the Claude (Anthropic) API key.
+const CLAUDE_API_KEY_KEY: &str = "claude-api-key";
+
 /// Path to the `hosts.yml` file in the secrets cache.
 fn hosts_yml_path() -> PathBuf {
     cache_dir().join("secrets").join("gh").join("hosts.yml")
@@ -65,6 +68,40 @@ pub fn retrieve_github_token() -> Result<Option<String>, String> {
         }
         Err(keyring::Error::NoEntry) => {
             debug!("No GitHub token in native keyring");
+            Ok(None)
+        }
+        Err(e) => Err(format!("Failed to read keyring: {e}")),
+    }
+}
+
+/// Store the Claude (Anthropic) API key in the native keyring.
+///
+/// Returns `Ok(())` on success. Returns `Err` if the keyring is
+/// unavailable — the caller should log and fall back.
+pub fn store_claude_api_key(key: &str) -> Result<(), String> {
+    let entry = keyring::Entry::new(SERVICE, CLAUDE_API_KEY_KEY)
+        .map_err(|e| format!("Failed to create keyring entry: {e}"))?;
+    entry
+        .set_password(key)
+        .map_err(|e| format!("Failed to store Claude API key in keyring: {e}"))?;
+    debug!("Claude API key stored in native keyring");
+    Ok(())
+}
+
+/// Retrieve the Claude (Anthropic) API key from the native keyring.
+///
+/// Returns `Ok(Some(key))` if found, `Ok(None)` if no entry exists,
+/// and `Err` if the keyring is unavailable.
+pub fn retrieve_claude_api_key() -> Result<Option<String>, String> {
+    let entry = keyring::Entry::new(SERVICE, CLAUDE_API_KEY_KEY)
+        .map_err(|e| format!("Failed to create keyring entry: {e}"))?;
+    match entry.get_password() {
+        Ok(key) => {
+            debug!("Claude API key retrieved from native keyring");
+            Ok(Some(key))
+        }
+        Err(keyring::Error::NoEntry) => {
+            debug!("No Claude API key in native keyring");
             Ok(None)
         }
         Err(e) => Err(format!("Failed to read keyring: {e}")),
