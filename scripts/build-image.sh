@@ -18,7 +18,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Pinned for reproducibility. Update: podman pull docker.io/nixos/nix:<new-version>
 NIX_IMAGE="docker.io/nixos/nix:2.34.4"
-CACHE_DIR="$ROOT/.nix-output"
+# Use a stable cache dir that survives temp directory cleanup.
+# When invoked from the app, $ROOT is a temp dir that gets deleted after build.
+if [[ -d "$HOME/.cache/tillandsias" ]]; then
+    CACHE_DIR="$HOME/.cache/tillandsias/nix-output"
+elif [[ -d "$HOME/Library/Caches/tillandsias" ]]; then
+    CACHE_DIR="$HOME/Library/Caches/tillandsias/nix-output"
+else
+    CACHE_DIR="$ROOT/.nix-output"
+fi
 
 # Colors
 RED='\033[0;31m'
@@ -126,13 +134,22 @@ CURRENT_HASH="$(_compute_hash)"
 if [[ "$FLAG_FORCE" == false ]] && [[ -f "$HASH_FILE" ]]; then
     LAST_HASH="$(cat "$HASH_FILE")"
     if [[ "$CURRENT_HASH" == "$LAST_HASH" ]]; then
-        # Verify the image actually exists in podman
+        # Verify the image actually exists in podman (exact tag)
         if podman image exists "$IMAGE_TAG" 2>/dev/null; then
             _info "Image ${BOLD}${IMAGE_TAG}${NC} is up to date (sources unchanged)"
             exit 0
-        else
-            _warn "Hash matches but image not found in podman, rebuilding..."
         fi
+
+        # Sources unchanged but this exact tag doesn't exist — check if an older
+        # version tag exists and just re-tag it instead of rebuilding.
+        EXISTING_IMAGE="$(podman images --format '{{.Repository}}:{{.Tag}}' --filter "reference=tillandsias-${IMAGE_NAME}:v*" 2>/dev/null | head -1)"
+        if [[ -n "$EXISTING_IMAGE" ]]; then
+            _info "Sources unchanged — re-tagging ${BOLD}${EXISTING_IMAGE}${NC} → ${BOLD}${IMAGE_TAG}${NC}"
+            podman tag "$EXISTING_IMAGE" "$IMAGE_TAG" 2>/dev/null
+            exit 0
+        fi
+
+        _warn "Hash matches but no image found in podman, rebuilding..."
     fi
 fi
 
