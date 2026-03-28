@@ -303,6 +303,9 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
         // binaries called by build-image.sh use host libraries.
         .env_remove("LD_LIBRARY_PATH")
         .env_remove("LD_PRELOAD")
+        // Pass the resolved podman path so build-image.sh can find podman
+        // even when launched from Finder (which has a minimal PATH).
+        .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
         .output()
         .map_err(|e| {
             error!(script = %script.display(), image = image_name, error = %e, "Failed to launch image build script");

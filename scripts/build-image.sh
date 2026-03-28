@@ -14,6 +14,34 @@
 
 set -euo pipefail
 
+# ---------------------------------------------------------------------------
+# macOS PATH fix: Finder-launched apps don't inherit shell PATH.
+# Ensure common tool directories are reachable (Homebrew, MacPorts, etc.)
+# Linux is unaffected — this block is a no-op there.
+# ---------------------------------------------------------------------------
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    for _dir in /opt/homebrew/bin /opt/local/bin /usr/local/bin; do
+        [[ -d "$_dir" ]] && [[ ":$PATH:" != *":$_dir:"* ]] && export PATH="$_dir:$PATH"
+    done
+    unset _dir
+fi
+
+# Resolve the podman binary: prefer PODMAN_PATH from Rust caller, then
+# check known absolute paths, then fall back to bare "podman" (PATH lookup).
+if [[ -n "${PODMAN_PATH:-}" ]] && [[ -x "$PODMAN_PATH" ]]; then
+    PODMAN="$PODMAN_PATH"
+elif [[ -x /opt/homebrew/bin/podman ]]; then
+    PODMAN=/opt/homebrew/bin/podman
+elif [[ -x /opt/local/bin/podman ]]; then
+    PODMAN=/opt/local/bin/podman
+elif [[ -x /usr/local/bin/podman ]]; then
+    PODMAN=/usr/local/bin/podman
+elif [[ -x /usr/bin/podman ]]; then
+    PODMAN=/usr/bin/podman
+else
+    PODMAN=podman
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Pinned for reproducibility. Update: podman pull docker.io/nixos/nix:<new-version>
@@ -136,7 +164,7 @@ if [[ "$FLAG_FORCE" == false ]] && [[ -f "$HASH_FILE" ]]; then
     LAST_HASH="$(cat "$HASH_FILE")"
     if [[ "$CURRENT_HASH" == "$LAST_HASH" ]]; then
         # Verify the image actually exists in podman
-        if podman image exists "$IMAGE_TAG" 2>/dev/null; then
+        if "$PODMAN" image exists "$IMAGE_TAG" 2>/dev/null; then
             _info "Image ${BOLD}${IMAGE_TAG}${NC} is up to date (sources unchanged)"
             exit 0
         else
@@ -173,7 +201,7 @@ NIX_BUILD_CMD="nix --extra-experimental-features 'nix-command flakes' build /src
 # Required on Silverblue where source files may be on tmpfs ($XDG_RUNTIME_DIR)
 # or have unexpected SELinux contexts. This is the same approach used for
 # forge containers in handlers.rs.
-podman run --rm \
+"$PODMAN" run --rm \
     --security-opt label=disable \
     -v "$ROOT:/src:ro" \
     -v "$OUTPUT_DIR:/output:rw" \
@@ -193,7 +221,7 @@ _info "Tarball: $TARBALL_PATH"
 # Step 3: Load tarball into podman
 # ---------------------------------------------------------------------------
 _step "Loading image into podman..."
-LOAD_OUTPUT="$(podman load < "$TARBALL_PATH" 2>&1)"
+LOAD_OUTPUT="$("$PODMAN" load < "$TARBALL_PATH" 2>&1)"
 echo "$LOAD_OUTPUT" | while IFS= read -r line; do
     _info "  $line"
 done
@@ -207,7 +235,7 @@ LOADED_IMAGE="$(echo "$LOAD_OUTPUT" | grep 'Loaded image' | sed 's/.*: //' | tai
 # ---------------------------------------------------------------------------
 if [[ -n "$LOADED_IMAGE" ]] && [[ "$LOADED_IMAGE" != "$IMAGE_TAG" ]]; then
     _step "Tagging as ${IMAGE_TAG}..."
-    podman tag "$LOADED_IMAGE" "$IMAGE_TAG"
+    "$PODMAN" tag "$LOADED_IMAGE" "$IMAGE_TAG"
 elif [[ -z "$LOADED_IMAGE" ]]; then
     _warn "Could not detect loaded image name from podman output"
     _warn "Attempting to tag by inspecting recent images..."
@@ -216,7 +244,7 @@ elif [[ -z "$LOADED_IMAGE" ]]; then
 fi
 
 # Verify the image exists
-if ! podman image exists "$IMAGE_TAG" 2>/dev/null; then
+if ! "$PODMAN" image exists "$IMAGE_TAG" 2>/dev/null; then
     _error "Image ${IMAGE_TAG} not found after load. Something went wrong."
     exit 1
 fi
@@ -236,7 +264,7 @@ BUILD_END="$(date +%s)"
 BUILD_DURATION=$(( BUILD_END - BUILD_START ))
 
 # Get image size
-IMAGE_SIZE="$(podman image inspect "$IMAGE_TAG" --format '{{.Size}}' 2>/dev/null || echo "")"
+IMAGE_SIZE="$("$PODMAN" image inspect "$IMAGE_TAG" --format '{{.Size}}' 2>/dev/null || echo "")"
 if [[ -n "$IMAGE_SIZE" ]]; then
     SIZE_MB=$(( IMAGE_SIZE / 1024 / 1024 ))
     SIZE_DISPLAY="${SIZE_MB} MB"

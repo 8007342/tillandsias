@@ -73,6 +73,9 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         .current_dir(&source_dir)
         .env_remove("LD_LIBRARY_PATH")
         .env_remove("LD_PRELOAD")
+        // Pass the resolved podman path so build-image.sh can find podman
+        // even when launched from Finder (which has a minimal PATH).
+        .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
