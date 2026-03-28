@@ -10,7 +10,7 @@ description = "System tray application for Tillandsias"
 tillandsias-core = { workspace = true }
 tillandsias-scanner = { workspace = true }
 tillandsias-podman = { workspace = true }
-tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri = { version = "2", features = ["tray-icon", "image-png", "process-relaunch-dangerous-allow-symlink-macos"] }
 tauri-plugin-shell = "2"
 tauri-plugin-updater = "2"
 tokio = { workspace = true }
