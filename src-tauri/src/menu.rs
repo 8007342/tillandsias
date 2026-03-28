@@ -457,7 +457,7 @@ fn build_seedlings_submenu<R: Runtime>(
     submenu = submenu.separator();
     let has_claude_key = matches!(crate::secrets::retrieve_claude_api_key(), Ok(Some(_)));
     let (claude_login_label, claude_login_enabled) = if has_claude_key {
-        ("\u{1F512} Claude (authenticated)", false) // 🔒 locked — already authenticated
+        ("\u{1F512} Claude Login Refresh", true) // 🔒 locked — can re-authenticate
     } else {
         ("\u{1F511} Claude Login", true) // 🔑 key — needs authentication
     };
