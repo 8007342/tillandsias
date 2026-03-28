@@ -5,7 +5,11 @@ set -euo pipefail
 INSTALL_DIR="$HOME/.local/bin"
 LIB_DIR="$HOME/.local/lib/tillandsias"
 DATA_DIR="$HOME/.local/share/tillandsias"
-CACHE_DIR="$HOME/.cache/tillandsias"
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    CACHE_DIR="$HOME/Library/Caches/tillandsias"
+else
+    CACHE_DIR="$HOME/.cache/tillandsias"
+fi
 
 WIPE=false
 [[ "${1:-}" == "--wipe" ]] && WIPE=true

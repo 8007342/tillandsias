@@ -27,7 +27,7 @@ INSTALL_DIR="$HOME/.local/bin"
 INSTALL_BIN="$INSTALL_DIR/tillandsias"
 APP_DEST="$HOME/Applications"
 APP_BUNDLE="$APP_DEST/Tillandsias.app"
-CACHE_DIR="$HOME/.cache/tillandsias"
+CACHE_DIR="$HOME/Library/Caches/tillandsias"
 
 # Colors
 RED='\033[0;31m'
@@ -81,7 +81,7 @@ Install flags:
   --remove          Remove installed app + CLI symlink
 
 Maintenance flags:
-  --wipe            Remove target/, ~/.cache/tillandsias/
+  --wipe            Remove target/, ~/Library/Caches/tillandsias/
   --help            Show this message
 
 Flags combine: ./build-osx.sh --clean --release --install

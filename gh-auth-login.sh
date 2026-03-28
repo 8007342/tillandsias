@@ -4,8 +4,10 @@
 #
 # Runs `gh auth login` and git identity setup inside a forge container
 # with full interactive TTY. Credentials persist at:
-#   ~/.cache/tillandsias/secrets/gh/hosts.yml   (GitHub CLI)
-#   ~/.cache/tillandsias/secrets/git/.gitconfig  (Git identity)
+#   Linux: ~/.cache/tillandsias/secrets/gh/hosts.yml   (GitHub CLI)
+#   macOS: ~/Library/Caches/tillandsias/secrets/gh/hosts.yml
+#   Linux: ~/.cache/tillandsias/secrets/git/.gitconfig  (Git identity)
+#   macOS: ~/Library/Caches/tillandsias/secrets/git/.gitconfig
 #
 # Usage:
 #   ./gh-auth-login.sh            # Run interactive authentication
@@ -23,7 +25,11 @@ PODMAN="podman"
 for p in /usr/bin/podman /usr/local/bin/podman /bin/podman; do
     [ -x "$p" ] && PODMAN="$p" && break
 done
-CACHE_DIR="${HOME}/.cache/tillandsias"
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    CACHE_DIR="$HOME/Library/Caches/tillandsias"
+else
+    CACHE_DIR="$HOME/.cache/tillandsias"
+fi
 SECRETS_DIR="${CACHE_DIR}/secrets"
 GH_DIR="${SECRETS_DIR}/gh"
 GIT_DIR="${SECRETS_DIR}/git"
@@ -62,8 +68,8 @@ WHAT IT DOES:
     3. Runs `gh auth setup-git` (configures git to use GitHub credentials)
 
 CREDENTIALS ARE STORED AT:
-    ~/.cache/tillandsias/secrets/gh/       GitHub CLI credentials
-    ~/.cache/tillandsias/secrets/git/      Git identity (.gitconfig)
+    Linux: ~/.cache/tillandsias/secrets/          GitHub CLI + Git identity
+    macOS: ~/Library/Caches/tillandsias/secrets/  GitHub CLI + Git identity
 EOF
 }
 
