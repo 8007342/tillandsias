@@ -18,7 +18,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Pinned for reproducibility. Update: podman pull docker.io/nixos/nix:<new-version>
 NIX_IMAGE="docker.io/nixos/nix:2.34.4"
-CACHE_DIR="$ROOT/.nix-output"
+# Hash file must survive temp dir cleanup. When the app invokes this script,
+# $ROOT is a temp dir that gets deleted after the build completes. Store the
+# staleness hash in the user's cache dir so it persists across launches.
+if [[ -d "$HOME/Library/Caches/tillandsias" ]]; then
+    CACHE_DIR="$HOME/Library/Caches/tillandsias/build-hashes"
+elif [[ -d "$HOME/.cache/tillandsias" ]]; then
+    CACHE_DIR="$HOME/.cache/tillandsias/build-hashes"
+else
+    CACHE_DIR="$ROOT/.nix-output"
+fi
 
 # Colors
 RED='\033[0;31m'
