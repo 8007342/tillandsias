@@ -21,6 +21,22 @@
 
 The build script auto-creates the `tillandsias` toolbox with all system deps on first run.
 
+### macOS Native Build
+
+```bash
+./build-osx.sh                      # Debug build (native, no toolbox)
+./build-osx.sh --release            # Release build (Tauri .dmg bundle)
+./build-osx.sh --test               # Run test suite
+./build-osx.sh --check              # Type-check only
+./build-osx.sh --clean              # Clean + rebuild
+./build-osx.sh --clean --release    # Clean release build
+./build-osx.sh --install            # Release build + install to ~/Applications/
+./build-osx.sh --remove             # Remove installed app + CLI symlink
+./build-osx.sh --wipe               # Remove target/, caches
+```
+
+Builds directly on macOS using Xcode CLT + Rust — no toolbox needed. Supports Apple Silicon (aarch64) and Intel (x86_64). Local builds are unsigned; use `xattr -cr ~/Applications/Tillandsias.app` to bypass Gatekeeper.
+
 ### Windows Cross-Compilation
 
 ```bash

@@ -95,16 +95,50 @@ if [ "$PLATFORM" = "macos" ]; then
         DMG_URL=$(find_asset "macos-x86_64\\.dmg")
         [ -z "$DMG_URL" ] && DMG_URL=$(find_asset "_x64\\.dmg")
     fi
-    if [ -n "$DMG_URL" ]; then
-        mkdir -p "$INSTALL_DIR"
-        echo "  Downloading .dmg..."
-        curl -fsSL -o /tmp/Tillandsias.dmg "$DMG_URL"
-        echo "  Open /tmp/Tillandsias.dmg and drag to Applications."
-        echo "  ✓ Downloaded to /tmp/Tillandsias.dmg"
-    else
-        echo "  Download failed."
+    if [ -z "$DMG_URL" ]; then
+        echo "  No macOS .dmg found in release."
         echo "  Try downloading manually from: ${RELEASE_URL}"
         exit 1
+    fi
+
+    mkdir -p "$INSTALL_DIR"
+    echo "  Downloading .dmg..."
+    curl -fsSL -o /tmp/Tillandsias.dmg "$DMG_URL"
+    echo "  ✓ Downloaded to /tmp/Tillandsias.dmg"
+
+    # Mount the .dmg and copy the .app bundle to ~/Applications/
+    echo "  Installing to ~/Applications/..."
+    DMG_MOUNT=$(hdiutil attach -nobrowse -readonly /tmp/Tillandsias.dmg 2>/dev/null | tail -1 | awk '{print $NF}')
+    if [ -z "$DMG_MOUNT" ]; then
+        echo "  Could not mount .dmg. Open /tmp/Tillandsias.dmg manually and drag to Applications."
+        exit 1
+    fi
+
+    APP_SRC=$(find "$DMG_MOUNT" -maxdepth 1 -name "*.app" -print -quit)
+    if [ -z "$APP_SRC" ]; then
+        hdiutil detach "$DMG_MOUNT" -quiet 2>/dev/null || true
+        echo "  No .app found in .dmg. Open /tmp/Tillandsias.dmg manually and drag to Applications."
+        exit 1
+    fi
+
+    APP_DEST="$HOME/Applications"
+    mkdir -p "$APP_DEST"
+    # Remove previous install if present
+    rm -rf "$APP_DEST/Tillandsias.app"
+    cp -R "$APP_SRC" "$APP_DEST/"
+    hdiutil detach "$DMG_MOUNT" -quiet 2>/dev/null || true
+    rm -f /tmp/Tillandsias.dmg
+    echo "  ✓ Installed Tillandsias.app to ~/Applications/"
+
+    # Create CLI symlink in ~/.local/bin/
+    MACOS_BIN="$APP_DEST/Tillandsias.app/Contents/MacOS/tillandsias-tray"
+    # Fallback: find the executable if the name differs
+    if [ ! -f "$MACOS_BIN" ]; then
+        MACOS_BIN="$(find "$APP_DEST/Tillandsias.app/Contents/MacOS" -type f -perm +111 2>/dev/null | head -1)"
+    fi
+    if [ -n "$MACOS_BIN" ] && [ -f "$MACOS_BIN" ]; then
+        ln -sf "$MACOS_BIN" "$INSTALL_DIR/tillandsias"
+        echo "  ✓ CLI symlink at $INSTALL_DIR/tillandsias"
     fi
 fi
 
@@ -119,7 +153,9 @@ else
     echo "    $DATA_DIR"
 fi
 
-echo "  ✓ Installed to $INSTALL_DIR/tillandsias"
+if [ "$PLATFORM" = "linux" ]; then
+    echo "  ✓ Installed to $INSTALL_DIR/tillandsias"
+fi
 echo ""
 
 # Linux desktop integration
@@ -162,72 +198,15 @@ DESK
     # cp "$DESKTOP_DIR/tillandsias.desktop" "$HOME/.config/autostart/"
 fi
 
-# macOS desktop integration: .app bundle + optional autostart
-if [[ "$PLATFORM" == "macos" ]]; then
-    APP_DIR="$HOME/Applications/Tillandsias.app"
-    mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
-
-    cp "$INSTALL_DIR/tillandsias" "$APP_DIR/Contents/MacOS/"
-
-    # Info.plist
-    cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleName</key>
-    <string>Tillandsias</string>
-    <key>CFBundleDisplayName</key>
-    <string>Tillandsias</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.tillandsias.tray</string>
-    <key>CFBundleVersion</key>
-    <string>1.0</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleExecutable</key>
-    <string>tillandsias</string>
-    <key>CFBundleIconFile</key>
-    <string>tillandsias.icns</string>
-    <key>LSUIElement</key>
-    <true/>
-    <key>LSMinimumSystemVersion</key>
-    <string>12.0</string>
-</dict>
-</plist>
-PLIST
-
-    # Convert icon (if sips available)
-    if command -v sips &>/dev/null && [[ -f "$DATA_DIR/icons/256x256.png" ]]; then
-        sips -s format icns "$DATA_DIR/icons/256x256.png" --out "$APP_DIR/Contents/Resources/tillandsias.icns" 2>/dev/null || true
-    fi
-
-    echo "  ✓ App bundle installed at ~/Applications/"
-
-    # Autostart via LaunchAgent (disabled by default — controlled by config)
-    # To enable, uncomment the block below or set autostart = true in config.toml
-    # LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
-    # mkdir -p "$LAUNCH_AGENTS_DIR"
-    # cat > "$LAUNCH_AGENTS_DIR/com.tillandsias.tray.plist" << LAUNCHAGENT
-    # <?xml version="1.0" encoding="UTF-8"?>
-    # <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-    # <plist version="1.0">
-    # <dict>
-    #     <key>Label</key>
-    #     <string>com.tillandsias.tray</string>
-    #     <key>ProgramArguments</key>
-    #     <array>
-    #         <string>$APP_DIR/Contents/MacOS/tillandsias</string>
-    #         <string>--background</string>
-    #     </array>
-    #     <key>RunAtLoad</key>
-    #     <true/>
-    #     <key>KeepAlive</key>
-    #     <false/>
-    # </dict>
-    # </plist>
-    # LAUNCHAGENT
-fi
+# macOS autostart (disabled by default — controlled by config)
+# To enable, uncomment the block below or set autostart = true in config.toml
+# if [[ "$PLATFORM" == "macos" ]]; then
+#     LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
+#     mkdir -p "$LAUNCH_AGENTS_DIR"
+#     cat > "$LAUNCH_AGENTS_DIR/com.tillandsias.tray.plist" << LAUNCHAGENT
+#     ...
+#     LAUNCHAGENT
+# fi
 
 # Check if PATH includes install dir
 if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then

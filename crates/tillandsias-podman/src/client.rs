@@ -28,10 +28,35 @@ impl PodmanClient {
         match output {
             Ok(o) if o.status.success() => {
                 let stdout = String::from_utf8_lossy(&o.stdout);
-                // Check if any machine is running
-                stdout.contains("\"Running\"") || stdout.contains("\"running\"")
+                // Check if any machine has "Running": true (not just the key name)
+                stdout.contains("\"Running\": true") || stdout.contains("\"Running\":true")
             }
             _ => false,
+        }
+    }
+
+    /// Start the podman machine (macOS/Windows). Returns true on success.
+    pub async fn start_machine(&self) -> bool {
+        info!("Starting podman machine...");
+        let output = crate::podman_cmd()
+            .args(["machine", "start"])
+            .output()
+            .await;
+
+        match output {
+            Ok(o) if o.status.success() => {
+                info!("Podman machine started successfully");
+                true
+            }
+            Ok(o) => {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                warn!(%stderr, "Podman machine start failed");
+                false
+            }
+            Err(e) => {
+                warn!(%e, "Podman machine start command error");
+                false
+            }
         }
     }
 

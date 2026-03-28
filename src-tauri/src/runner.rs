@@ -196,9 +196,9 @@ fn build_run_args(
     args.push("-v".to_string());
     args.push(gh_mount);
 
-    // Git config — mount directory read-only, point git via GIT_CONFIG_GLOBAL
+    // Git config — mount directory read-write (gh auth needs to write), point git via GIT_CONFIG_GLOBAL
     let git_mount = format!(
-        "{}:/home/forge/.config/tillandsias-git:ro",
+        "{}:/home/forge/.config/tillandsias-git:rw",
         git_dir.display()
     );
     args.push("-v".to_string());

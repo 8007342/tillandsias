@@ -445,9 +445,9 @@ fn build_run_args(
     args.push("-v".to_string());
     args.push(gh_mount);
 
-    // Git config — mount directory read-only. Tell git via GIT_CONFIG_GLOBAL.
+    // Git config — mount directory read-write (gh auth needs to write). Tell git via GIT_CONFIG_GLOBAL.
     let git_mount = format!(
-        "{}:/home/forge/.config/tillandsias-git:ro",
+        "{}:/home/forge/.config/tillandsias-git:rw",
         git_dir.display()
     );
     args.push("-v".to_string());
@@ -961,7 +961,7 @@ pub async fn handle_terminal(
         -v {}:/home/forge/src/{} \
         -v {}:/home/forge/.cache/tillandsias \
         -v {}:/home/forge/.config/gh:ro \
-        -v {}:/home/forge/.config/tillandsias-git:ro \
+        -v {}:/home/forge/.config/tillandsias-git:rw \
         -v {}:/home/forge/.claude:rw \
         {}",
         container_name,
@@ -1123,7 +1123,7 @@ pub async fn handle_root_terminal(
         -v {}:/home/forge/src \
         -v {}:/home/forge/.cache/tillandsias \
         -v {}:/home/forge/.config/gh:ro \
-        -v {}:/home/forge/.config/tillandsias-git:ro \
+        -v {}:/home/forge/.config/tillandsias-git:rw \
         -v {}:/home/forge/.claude:rw \
         {}",
         container_name,

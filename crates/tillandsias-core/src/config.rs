@@ -522,9 +522,23 @@ debounce_ms = 5000
     }
 }
 
-/// Detect the host operating system by reading `/etc/os-release`.
-/// Returns a human-readable string like "Fedora Silverblue 43".
+/// Detect the host operating system.
+/// Returns a human-readable string like "Fedora Silverblue 43" or "macOS 15.4".
 pub fn detect_host_os() -> String {
+    if cfg!(target_os = "macos") {
+        // macOS has no /etc/os-release — use sw_vers instead
+        if let Ok(output) = std::process::Command::new("sw_vers")
+            .arg("-productVersion")
+            .output()
+        {
+            let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !version.is_empty() {
+                return format!("macOS {version}");
+            }
+        }
+        return "macOS".to_string();
+    }
+
     if let Ok(content) = std::fs::read_to_string("/etc/os-release") {
         let mut name = String::new();
         let mut version = String::new();

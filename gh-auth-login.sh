@@ -232,7 +232,7 @@ $PODMAN run -it --rm --init \
     --entrypoint "" \
     -e GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig \
     -v "${GH_DIR}:/home/forge/.config/gh" \
-    -v "${GIT_DIR}:/home/forge/.config/tillandsias-git:ro" \
+    -v "${GIT_DIR}:/home/forge/.config/tillandsias-git:rw" \
     "$FORGE_IMAGE" \
     gh auth login --git-protocol https
 

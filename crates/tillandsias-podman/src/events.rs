@@ -30,23 +30,43 @@ impl PodmanEventStream {
     /// Start streaming events. Sends to the provided channel.
     /// Uses `podman events --format json` as primary source.
     /// Falls back to exponential backoff inspection when events fail.
+    ///
+    /// The outer loop has its own exponential backoff (2s → 5min) to prevent
+    /// tight retry loops when podman is persistently unavailable (e.g. machine
+    /// not running on macOS/Windows).
     pub async fn stream(self, tx: mpsc::Sender<PodmanEvent>) {
+        let mut attempt: u32 = 0;
+
         loop {
-            info!("Starting podman events listener");
+            attempt += 1;
+
+            // Log every attempt initially, then only every 5th to reduce spam
+            if attempt <= 3 || attempt % 5 == 0 {
+                info!(attempt, "Starting podman events listener");
+            }
 
             // Try event-driven approach first
             match self.stream_events(&tx).await {
-                Ok(()) => break, // Clean shutdown
+                Ok(()) => return, // Clean shutdown (channel closed)
                 Err(e) => {
-                    warn!(
-                        ?e,
-                        "Podman events stream failed, falling back to backoff inspection"
-                    );
-                    // Fall back to exponential backoff
-                    if self.backoff_inspect(&tx).await.is_err() {
-                        break; // Channel closed
+                    if attempt <= 3 || attempt % 5 == 0 {
+                        warn!(
+                            ?e,
+                            attempt,
+                            "Podman events stream failed, falling back to backoff inspection"
+                        );
                     }
                 }
+            }
+
+            // Fall back to exponential backoff inspection (1s → 30s internal backoff).
+            // Blocks until podman service becomes available (Ok) or channel closes (Err).
+            match self.backoff_inspect(&tx).await {
+                Ok(()) => {
+                    // Podman came back — reset attempt counter and retry stream_events
+                    attempt = 0;
+                }
+                Err(()) => return, // Channel closed
             }
         }
     }
@@ -119,14 +139,17 @@ impl PodmanEventStream {
         loop {
             tokio::time::sleep(interval).await;
 
-            // Try to reconnect to events first
+            // Try to reconnect — `podman info` actually connects to the podman
+            // service, unlike `--help` which succeeds even when the machine is down.
             if crate::podman_cmd()
-                .args(["events", "--help"])
+                .args(["info", "--format", "json"])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
                 .output()
                 .await
                 .is_ok_and(|o| o.status.success())
             {
-                debug!("Podman events available again, switching back");
+                info!("Podman service available again, switching to event stream");
                 return Ok(()); // Will restart stream_events in outer loop
             }
 

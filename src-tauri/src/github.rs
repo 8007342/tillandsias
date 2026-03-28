@@ -144,12 +144,12 @@ pub async fn clone_repo(full_name: &str, target_dir: &Path) -> Result<(), String
         secrets_dir.join("gh").display()
     ));
 
-    // Mount git config directory (read-only) + env var
+    // Mount git config directory (read-write, gh auth needs to write) + env var
     let git_dir = secrets_dir.join("git");
     if git_dir.exists() {
         args.push("-v".to_string());
         args.push(format!(
-            "{}:/home/forge/.config/tillandsias-git:ro",
+            "{}:/home/forge/.config/tillandsias-git:rw",
             git_dir.display()
         ));
         args.push("-e".to_string());
@@ -207,12 +207,12 @@ fn build_gh_run_args(secrets_dir: &Path, command: &[&str]) -> Vec<String> {
         secrets_dir.join("gh").display()
     ));
 
-    // Mount git config directory (read-only) + env var to find it
+    // Mount git config directory (read-write, gh auth needs to write) + env var to find it
     let git_dir = secrets_dir.join("git");
     if git_dir.exists() {
         args.push("-v".to_string());
         args.push(format!(
-            "{}:/home/forge/.config/tillandsias-git:ro",
+            "{}:/home/forge/.config/tillandsias-git:rw",
             git_dir.display()
         ));
         args.push("-e".to_string());

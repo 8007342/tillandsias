@@ -191,24 +191,44 @@ fn main() {
                 // Check podman availability
                 let client = PodmanClient::new();
                 let has_podman = client.is_available().await;
-                let has_machine = if Os::detect().needs_podman_machine() {
+                let mut has_machine = if Os::detect().needs_podman_machine() {
                     client.is_machine_running().await
                 } else {
                     false
                 };
 
+                // On macOS/Windows, auto-start podman machine if not running
+                if has_podman && Os::detect().needs_podman_machine() && !has_machine {
+                    info!("Podman machine not running, starting automatically...");
+                    if client.start_machine().await {
+                        has_machine = true;
+                    } else {
+                        warn!("Podman machine auto-start failed — falling back to decay state");
+                    }
+                }
+
+                // Podman is usable only if the binary exists AND, on macOS/Windows,
+                // the podman machine is running. All podman operations gate on this.
+                let podman_usable = has_podman
+                    && (!Os::detect().needs_podman_machine() || has_machine);
+
                 {
                     let mut s = state_for_loop.lock().unwrap();
                     s.platform.has_podman = has_podman;
                     s.platform.has_podman_machine = has_machine;
-                    s.has_podman = has_podman;
-                    if !has_podman {
+                    s.has_podman = podman_usable;
+                    if !podman_usable {
                         s.tray_icon_state = TrayIconState::Decay;
                     }
                 }
 
                 if !has_podman {
                     warn!("Podman not found. Install podman to use Tillandsias.");
+                } else if Os::detect().needs_podman_machine() && !has_machine {
+                    warn!("Podman Machine not running. Start it with: podman machine start");
+                }
+
+                if !podman_usable {
                     // Set Decay icon immediately
                     if let Some(tray_lock) = TRAY_ICON.get()
                         && let Ok(tray) = tray_lock.lock()
@@ -223,17 +243,13 @@ fn main() {
                     rebuild_menu(&app_handle_for_loop, &state_for_loop);
                 }
 
-                if Os::detect().needs_podman_machine() && !has_machine {
-                    warn!("Podman Machine not running. Start it with: podman machine start");
-                }
-
                 // Discover existing containers on startup (graceful restart)
                 //
                 // Containers surviving a previous session are discovered here and
                 // restored into state.running so the menu shows the correct flower
                 // icons and lifecycle states immediately. Only running/creating
                 // containers are restored — stopped/exited ones are ignored.
-                if has_podman {
+                if podman_usable {
                     match client.list_containers("tillandsias-").await {
                         Ok(containers) => {
                             let mut s = state_for_loop.lock().unwrap();
@@ -275,7 +291,7 @@ fn main() {
                 // Launch-time forge image check — build automatically if absent or stale.
                 // forge_available starts as false; we set it to true only when the image
                 // is confirmed present (no build needed) or after a successful build.
-                if has_podman {
+                if podman_usable {
                     let forge_client = tillandsias_podman::PodmanClient::new();
                     let tag = handlers::forge_image_tag();
                     let image_present = forge_client.image_exists(&tag).await;
@@ -395,10 +411,14 @@ fn main() {
 
                 // Start podman event stream
                 let (podman_tx, podman_rx) = mpsc::channel(256);
-                let podman_event_stream = PodmanEventStream::new("tillandsias-");
-                let _podman_task = tauri::async_runtime::spawn(async move {
-                    podman_event_stream.stream(podman_tx).await;
-                });
+                if podman_usable {
+                    let podman_event_stream = PodmanEventStream::new("tillandsias-");
+                    let _podman_task = tauri::async_runtime::spawn(async move {
+                        podman_event_stream.stream(podman_tx).await;
+                    });
+                } else {
+                    info!("Podman events stream skipped (podman unavailable or machine not running)");
+                }
 
                 // Run main event loop
                 let loop_state = { state_for_loop.lock().unwrap().clone() };

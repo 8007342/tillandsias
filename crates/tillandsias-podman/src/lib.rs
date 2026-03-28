@@ -15,7 +15,13 @@ pub use launch::query_occupied_ports;
 /// We check common locations before falling back to bare `podman` (PATH lookup).
 pub fn find_podman_path() -> &'static str {
     // Check standard locations first — avoids PATH issues in AppImage/Flatpak
-    static PATHS: &[&str] = &["/usr/bin/podman", "/usr/local/bin/podman", "/bin/podman"];
+    static PATHS: &[&str] = &[
+        "/usr/bin/podman",
+        "/usr/local/bin/podman",
+        "/bin/podman",
+        "/opt/homebrew/bin/podman", // Homebrew on Apple Silicon
+        "/opt/local/bin/podman",    // MacPorts
+    ];
 
     for path in PATHS {
         if std::path::Path::new(path).exists() {

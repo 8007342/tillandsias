@@ -1,17 +1,12 @@
 {
   "productName": "Tillandsias",
-  "version": "0.1.75",
+  "version": "0.1.81",
   "identifier": "com.tillandsias.tray",
   "build": {
     "frontendDist": "../assets/frontend"
   },
   "app": {
     "withGlobalTauri": false,
-    "trayIcon": {
-      "iconPath": "icons/tray-icon.png",
-      "iconAsTemplate": true,
-      "tooltip": "Tillandsias"
-    },
     "windows": []
   },
   "bundle": {
