@@ -201,7 +201,14 @@ fn main() {
                 if has_podman && Os::detect().needs_podman_machine() && !has_machine {
                     info!("Podman machine not running, starting automatically...");
                     if client.start_machine().await {
-                        has_machine = true;
+                        // Wait for the API socket to be ready before proceeding.
+                        // On macOS, `podman machine start` returns before the socket
+                        // is fully ready, causing subsequent commands to fail.
+                        if client.wait_for_ready(5).await {
+                            has_machine = true;
+                        } else {
+                            warn!("Podman machine started but API not ready after retries");
+                        }
                     } else {
                         warn!("Podman machine auto-start failed — falling back to decay state");
                     }
@@ -294,7 +301,20 @@ fn main() {
                 if podman_usable {
                     let forge_client = tillandsias_podman::PodmanClient::new();
                     let tag = handlers::forge_image_tag();
-                    let image_present = forge_client.image_exists(&tag).await;
+
+                    // Retry image_exists check — defense-in-depth against transient
+                    // socket failures after machine start on macOS.
+                    let mut image_present = false;
+                    for attempt in 0..3u32 {
+                        if forge_client.image_exists(&tag).await {
+                            image_present = true;
+                            break;
+                        }
+                        if attempt < 2 {
+                            debug!(attempt, tag = %tag, "image_exists returned false, retrying...");
+                            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                        }
+                    }
 
                     if !image_present {
                         info!(tag = %tag, "Forge image absent at launch — triggering auto-build");

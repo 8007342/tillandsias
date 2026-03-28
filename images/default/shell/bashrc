@@ -9,8 +9,8 @@
 umask 0022
 
 # ── PATH ─────────────────────────────────────────────────────
-# OpenCode and OpenSpec are cached in ~/.cache/tillandsias/
-export PATH="$HOME/.cache/tillandsias/opencode:$HOME/.cache/tillandsias/openspec/bin:$HOME/.local/bin:$PATH"
+# Claude Code and OpenSpec are cached in ~/.cache/tillandsias/
+export PATH="$HOME/.cache/tillandsias/claude/bin:$HOME/.cache/tillandsias/openspec/bin:$HOME/.local/bin:$PATH"
 
 # ── Prompt ───────────────────────────────────────────────────
 PS1='\[\033[0;32m\]\w\[\033[0m\] $ '

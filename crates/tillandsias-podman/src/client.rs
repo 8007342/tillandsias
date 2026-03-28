@@ -60,6 +60,23 @@ impl PodmanClient {
         }
     }
 
+    /// Wait for podman to be ready to accept commands after machine start.
+    /// Polls `podman --version` with exponential backoff up to `max_attempts`.
+    /// Returns true if podman became ready, false if all attempts exhausted.
+    pub async fn wait_for_ready(&self, max_attempts: u32) -> bool {
+        let mut delay = std::time::Duration::from_millis(500);
+        for attempt in 1..=max_attempts {
+            if self.is_available().await {
+                info!(attempt, "Podman API ready after machine start");
+                return true;
+            }
+            debug!(attempt, delay_ms = delay.as_millis() as u64, "Waiting for podman API...");
+            tokio::time::sleep(delay).await;
+            delay = (delay * 2).min(std::time::Duration::from_secs(4));
+        }
+        false
+    }
+
     /// Check if a container image exists locally.
     pub async fn image_exists(&self, image: &str) -> bool {
         crate::podman_cmd()

@@ -6,8 +6,8 @@
 # are user-writable on the host bind mount.
 umask 022
 
-# ── PATH — OpenCode and OpenSpec cached in ~/.cache/tillandsias/
-fish_add_path -gP $HOME/.cache/tillandsias/opencode
+# ── PATH — Claude Code and OpenSpec cached in ~/.cache/tillandsias/
+fish_add_path -gP $HOME/.cache/tillandsias/claude/bin
 fish_add_path -gP $HOME/.cache/tillandsias/openspec/bin
 fish_add_path -gP $HOME/.local/bin
 

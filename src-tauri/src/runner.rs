@@ -217,9 +217,10 @@ fn build_run_args(
         args.push(format!("ANTHROPIC_API_KEY={api_key}"));
     }
 
-    // Claude Code credentials — persists auth across container restarts
-    let claude_dir = secrets_dir.join("claude");
-    std::fs::create_dir_all(&claude_dir).ok();
+    // Claude Code credentials — mount host's ~/.claude/ for OAuth auth
+    let claude_dir = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("~"))
+        .join(".claude");
     let claude_mount = format!("{}:/home/forge/.claude:rw", claude_dir.display());
     args.push("-v".to_string());
     args.push(claude_mount);

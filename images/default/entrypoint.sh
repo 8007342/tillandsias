@@ -30,11 +30,11 @@ OC_BIN="$CACHE/opencode/opencode"
 OS_PREFIX="$CACHE/openspec"
 OS_BIN="$OS_PREFIX/bin/openspec"
 
-mkdir -p "$CACHE/opencode" "$OS_PREFIX" "$CACHE/nix" 2>/dev/null || true
-export PATH="$CACHE/opencode:$OS_PREFIX/bin:$PATH"
+mkdir -p "$OS_PREFIX" "$CACHE/nix" 2>/dev/null || true
+export PATH="$OS_PREFIX/bin:$PATH"
 
 # ── Agent selection ──────────────────────────────────────────
-AGENT="${TILLANDSIAS_AGENT:-opencode}"
+AGENT="${TILLANDSIAS_AGENT:-claude}"
 
 # Capture API key then scrub from environment to limit exposure.
 # Only the agent process that needs it will receive it via exec env.
@@ -87,8 +87,10 @@ if [ ! -x "$OS_BIN" ]; then
     [ -x "$OS_BIN" ] && echo "  done OpenSpec installed" || echo "  OpenSpec deferred"
 fi
 
-# Install the selected agent (and always install OpenCode for OpenSpec tooling)
-install_opencode
+# Install the selected agent
+if [ "$AGENT" = "opencode" ]; then
+    install_opencode
+fi
 if [ "$AGENT" = "claude" ]; then
     install_claude
 fi
@@ -102,7 +104,7 @@ done
 
 # ── OpenSpec init (first launch only) ────────────────────────
 if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ] && [ ! -d "$PROJECT_DIR/openspec" ]; then
-    "$OS_BIN" init --tools opencode && echo "  done OpenSpec initialized" || echo "  OpenSpec init skipped"
+    "$OS_BIN" init --tools claude && echo "  done OpenSpec initialized" || echo "  OpenSpec init skipped"
 fi
 
 # ── Banner ───────────────────────────────────────────────────
@@ -118,11 +120,7 @@ echo ""
 case "$AGENT" in
     claude)
         if [ -x "$CC_BIN" ]; then
-            if [ -n "$_CLAUDE_KEY" ]; then
-                exec env ANTHROPIC_API_KEY="$_CLAUDE_KEY" "$CC_BIN" "$@"
-            else
-                exec "$CC_BIN" "$@"
-            fi
+            exec "$CC_BIN" "$@"
         else
             echo "Claude Code not available. Starting bash."
             exec bash

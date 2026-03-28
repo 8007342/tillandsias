@@ -6,7 +6,7 @@
 umask 0022
 
 # ── PATH ─────────────────────────────────────────────────────
-export PATH="$HOME/.cache/tillandsias/opencode:$HOME/.cache/tillandsias/openspec/bin:$HOME/.local/bin:$PATH"
+export PATH="$HOME/.cache/tillandsias/claude/bin:$HOME/.cache/tillandsias/openspec/bin:$HOME/.local/bin:$PATH"
 
 # ── Completion ───────────────────────────────────────────────
 autoload -Uz compinit && compinit

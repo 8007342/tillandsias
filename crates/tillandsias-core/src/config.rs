@@ -24,7 +24,7 @@ pub enum SelectedAgent {
 
 impl Default for SelectedAgent {
     fn default() -> Self {
-        Self::OpenCode
+        Self::Claude
     }
 }
 
