@@ -147,8 +147,12 @@ if ! $PODMAN image exists "$FORGE_IMAGE" 2>/dev/null; then
                 ;;
         esac
     else
-        # Check installed location
-        DATA_DIR="${HOME}/.local/share/tillandsias"
+        # Check installed location — platform-aware
+        if [[ "$(uname -s)" == "Darwin" ]]; then
+            DATA_DIR="${HOME}/Library/Application Support/tillandsias"
+        else
+            DATA_DIR="${HOME}/.local/share/tillandsias"
+        fi
         if [[ -x "$DATA_DIR/scripts/build-image.sh" ]]; then
             read -rp "Build it now? [Y/n] " answer
             case "${answer:-y}" in

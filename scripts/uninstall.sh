@@ -2,12 +2,15 @@
 # Tillandsias Uninstaller
 set -euo pipefail
 
-INSTALL_DIR="$HOME/.local/bin"
-LIB_DIR="$HOME/.local/lib/tillandsias"
-DATA_DIR="$HOME/.local/share/tillandsias"
 if [[ "$(uname -s)" == "Darwin" ]]; then
+    INSTALL_DIR="/usr/local/bin"
+    LIB_DIR="$HOME/Library/Application Support/tillandsias/lib"
+    DATA_DIR="$HOME/Library/Application Support/tillandsias"
     CACHE_DIR="$HOME/Library/Caches/tillandsias"
 else
+    INSTALL_DIR="$HOME/.local/bin"
+    LIB_DIR="$HOME/.local/lib/tillandsias"
+    DATA_DIR="$HOME/.local/share/tillandsias"
     CACHE_DIR="$HOME/.cache/tillandsias"
 fi
 

@@ -17,7 +17,12 @@ YELLOW='\033[0;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-TEMP_FILE="${XDG_RUNTIME_DIR:-/tmp}/tillandsias-claude-key"
+# Platform-aware temp directory: $XDG_RUNTIME_DIR on Linux, $TMPDIR on macOS
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    TEMP_FILE="${TMPDIR:-/tmp}/tillandsias-claude-key"
+else
+    TEMP_FILE="${XDG_RUNTIME_DIR:-/tmp}/tillandsias-claude-key"
+fi
 
 echo ""
 echo "=== Claude Login ==="

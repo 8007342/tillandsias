@@ -1281,10 +1281,20 @@ pub async fn handle_claude_login() -> Result<(), String> {
     open_terminal(&script_path.display().to_string(), "Claude Login")?;
 
     // Poll for the temp file containing the API key.
-    // The script writes to $XDG_RUNTIME_DIR/tillandsias-claude-key (or /tmp/).
-    let temp_key_path = std::env::var("XDG_RUNTIME_DIR")
-        .map(|d| std::path::PathBuf::from(d).join("tillandsias-claude-key"))
-        .unwrap_or_else(|_| std::path::PathBuf::from("/tmp/tillandsias-claude-key"));
+    // The script writes to $XDG_RUNTIME_DIR/tillandsias-claude-key on Linux,
+    // $TMPDIR/tillandsias-claude-key on macOS (both resolved via std::env::temp_dir).
+    let temp_key_path = {
+        #[cfg(target_os = "linux")]
+        {
+            std::env::var("XDG_RUNTIME_DIR")
+                .map(|d| std::path::PathBuf::from(d).join("tillandsias-claude-key"))
+                .unwrap_or_else(|_| std::env::temp_dir().join("tillandsias-claude-key"))
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            std::env::temp_dir().join("tillandsias-claude-key")
+        }
+    };
 
     // Wait up to 5 minutes for the user to enter the key.
     // Check every 2 seconds. The file only appears after they press Enter.

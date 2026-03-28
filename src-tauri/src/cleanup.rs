@@ -4,30 +4,39 @@
 
 use std::path::{Path, PathBuf};
 
+use tillandsias_core::config;
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 /// Return the size of a directory tree (in bytes), or 0 if it doesn't exist.
+///
+/// Uses a pure-Rust recursive walk via `std::fs` — no platform-specific CLI flags.
 fn dir_size_bytes(path: &Path) -> u64 {
     if !path.exists() {
         return 0;
     }
-    // Use `du -sb` for a reliable recursive byte count.
-    let path_str = path.to_string_lossy().into_owned();
-    let output = std::process::Command::new("du")
-        .args(["-sb", &path_str])
-        .output();
-    match output {
-        Ok(o) if o.status.success() => {
-            let s = String::from_utf8_lossy(&o.stdout);
-            s.split_whitespace()
-                .next()
-                .and_then(|n| n.parse::<u64>().ok())
-                .unwrap_or(0)
+    fn walk(dir: &Path) -> u64 {
+        let mut total: u64 = 0;
+        let entries = match std::fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(_) => return 0,
+        };
+        for entry in entries.flatten() {
+            let ft = match entry.file_type() {
+                Ok(ft) => ft,
+                Err(_) => continue,
+            };
+            if ft.is_file() || ft.is_symlink() {
+                total += entry.metadata().map(|m| m.len()).unwrap_or(0);
+            } else if ft.is_dir() {
+                total += walk(&entry.path());
+            }
         }
-        _ => 0,
+        total
     }
+    walk(path)
 }
 
 /// Return the size of a single file in bytes, or 0 if it doesn't exist.
@@ -54,6 +63,26 @@ fn human_bytes(bytes: u64) -> String {
 /// Home directory path.
 fn home() -> PathBuf {
     PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/root".to_string()))
+}
+
+/// Platform-aware installed binary path.
+///
+/// - Linux: `~/.local/bin/.tillandsias-bin`
+/// - macOS: `/usr/local/bin/tillandsias` (or `~/Applications/Tillandsias.app` bundle)
+fn installed_binary_path() -> PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        // Check app bundle first, fall back to /usr/local/bin
+        let app_bundle = home().join("Applications/Tillandsias.app");
+        if app_bundle.exists() {
+            return app_bundle;
+        }
+        PathBuf::from("/usr/local/bin/tillandsias")
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        home().join(".local/bin/.tillandsias-bin")
+    }
 }
 
 /// Run a podman command synchronously, returning (stdout, success).
@@ -132,7 +161,8 @@ pub fn run_stats() -> bool {
     println!();
 
     // --- Nix cache ---
-    let nix_path = home().join(".cache/tillandsias/nix");
+    let cache = config::cache_dir();
+    let nix_path = cache.join("nix");
     let nix_bytes = dir_size_bytes(&nix_path);
     total_bytes += nix_bytes;
     if nix_bytes > 0 {
@@ -142,7 +172,7 @@ pub fn run_stats() -> bool {
     }
 
     // --- Cargo registry cache ---
-    let cargo_path = home().join(".cache/tillandsias/cargo-registry");
+    let cargo_path = cache.join("cargo-registry");
     let cargo_bytes = dir_size_bytes(&cargo_path);
     total_bytes += cargo_bytes;
     if cargo_bytes > 0 {
@@ -152,7 +182,7 @@ pub fn run_stats() -> bool {
     }
 
     // --- Installed binary ---
-    let bin_path = home().join(".local/bin/.tillandsias-bin");
+    let bin_path = installed_binary_path();
     let bin_bytes = file_size_bytes(&bin_path);
     total_bytes += bin_bytes;
     if bin_bytes > 0 {
@@ -232,7 +262,7 @@ pub fn run_clean() -> bool {
     }
 
     // --- Nix cache ---
-    let nix_path = home().join(".cache/tillandsias/nix");
+    let nix_path = config::cache_dir().join("nix");
     if nix_path.exists() {
         let size_before = dir_size_bytes(&nix_path);
         match std::fs::remove_dir_all(&nix_path) {
