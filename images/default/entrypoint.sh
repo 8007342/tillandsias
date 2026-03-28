@@ -26,7 +26,6 @@ mkdir -p "$HOME/.config/fish"
 [ -f "$HOME/.config/fish/config.fish" ] || cp "/etc/skel/.config/fish/config.fish" "$HOME/.config/fish/config.fish" 2>/dev/null || true
 
 CACHE="$HOME/.cache/tillandsias"
-OC_BIN="$CACHE/opencode/opencode"
 OS_PREFIX="$CACHE/openspec"
 OS_BIN="$OS_PREFIX/bin/openspec"
 
@@ -42,7 +41,11 @@ _CLAUDE_KEY="${ANTHROPIC_API_KEY:-}"
 unset ANTHROPIC_API_KEY
 
 # ── OpenCode (direct binary, cached) ────────────────────────
+OC_DIR="$CACHE/opencode"
+OC_BIN="$OC_DIR/bin/opencode"
+
 install_opencode() {
+    mkdir -p "$OC_DIR/bin" 2>/dev/null || true
     if [ ! -x "$OC_BIN" ]; then
         echo "Installing OpenCode..."
         ARCH="$(uname -m)"
@@ -53,7 +56,7 @@ install_opencode() {
         esac
         curl -fsSL -o /tmp/opencode.tar.gz \
             "https://github.com/anomalyco/opencode/releases/latest/download/opencode-${VARIANT}.tar.gz"
-        tar xzf /tmp/opencode.tar.gz -C "$CACHE/opencode/"
+        tar xzf /tmp/opencode.tar.gz -C "$OC_DIR/bin/" --strip-components=1
         chmod +x "$OC_BIN"
         rm -f /tmp/opencode.tar.gz
         echo "  done OpenCode $("$OC_BIN" --version 2>/dev/null || echo 'installed')"
@@ -126,13 +129,16 @@ case "$AGENT" in
             exec bash
         fi
         ;;
-    *)
-        # OpenCode (default)
+    opencode)
         if [ -x "$OC_BIN" ]; then
             exec "$OC_BIN" "$@"
         else
             echo "OpenCode not available. Starting bash."
             exec bash
         fi
+        ;;
+    *)
+        echo "Unknown agent '$AGENT'. Starting bash."
+        exec bash
         ;;
 esac
