@@ -70,10 +70,19 @@ if [ "$PLATFORM" = "linux" ]; then
     if [ -n "$APPIMAGE_URL" ]; then
         mkdir -p "$INSTALL_DIR"
         echo "  Downloading AppImage..."
-        if curl -fsSL -o "$INSTALL_DIR/tillandsias" "$APPIMAGE_URL"; then
-            chmod +x "$INSTALL_DIR/tillandsias"
+        # Download to a temp file first, then atomic rename.
+        # Direct write to the target fails with "Text file busy" if the
+        # AppImage is currently running (common during reinstall/update).
+        TMPFILE="$INSTALL_DIR/.tillandsias-download-$$"
+        if curl -fsSL -o "$TMPFILE" "$APPIMAGE_URL"; then
+            chmod +x "$TMPFILE"
+            # Atomic rename — works even if target is running (Linux unlinks
+            # the old inode but running processes keep their file descriptor).
+            mv -f "$TMPFILE" "$INSTALL_DIR/tillandsias"
             INSTALLED=true
             echo "  ✓ Installed AppImage to $INSTALL_DIR/tillandsias"
+        else
+            rm -f "$TMPFILE" 2>/dev/null
         fi
     fi
 
