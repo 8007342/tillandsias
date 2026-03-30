@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<knowledge version="1" generated="2026-03-30">
+  <categories>
+    <category id="infra/containers" label="Container Infrastructure">
+      <cheatsheet ref="podman-rootless" file="cheatsheets/infra/podman-rootless.md"/>
+      <cheatsheet ref="podman-security" file="cheatsheets/infra/podman-security.md"/>
+      <cheatsheet ref="oci-runtime-spec" file="cheatsheets/infra/oci-runtime-spec.md"/>
+      <cheatsheet ref="linux-namespaces" file="cheatsheets/infra/linux-namespaces.md"/>
+    </category>
+    <category id="lang/rust" label="Rust Language">
+      <cheatsheet ref="rust-async" file="cheatsheets/lang/rust-async.md"/>
+    </category>
+    <category id="packaging/nix" label="Nix Packaging">
+      <cheatsheet ref="nix-flakes" file="cheatsheets/packaging/nix-flakes.md"/>
+    </category>
+  </categories>
+  <tags>
+    <tag name="podman" refs="podman-rootless,podman-security"/>
+    <tag name="security" refs="podman-rootless,podman-security,oci-runtime-spec,linux-namespaces"/>
+    <tag name="namespaces" refs="podman-rootless,linux-namespaces,oci-runtime-spec"/>
+    <tag name="crun" refs="podman-rootless,oci-runtime-spec"/>
+    <tag name="selinux" refs="podman-security,linux-namespaces"/>
+    <tag name="async" refs="rust-async"/>
+    <tag name="tokio" refs="rust-async"/>
+    <tag name="nix" refs="nix-flakes"/>
+    <tag name="containers" refs="podman-rootless,podman-security,oci-runtime-spec,nix-flakes"/>
+    <tag name="fd" refs="oci-runtime-spec,linux-namespaces"/>
+    <tag name="proc" refs="oci-runtime-spec,linux-namespaces"/>
+  </tags>
+</knowledge>

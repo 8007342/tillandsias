@@ -1,0 +1,39 @@
+[meta]
+schema_version = 1
+last_full_audit = "2026-03-30"
+
+[cheatsheets.podman-rootless]
+upstream = "https://docs.podman.io/en/latest/markdown/podman.1.md"
+version_pinned = "5.4"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.podman-security]
+upstream = "https://docs.podman.io/en/latest/markdown/podman-run.1.md"
+version_pinned = "5.4"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.oci-runtime-spec]
+upstream = "https://github.com/opencontainers/runtime-spec"
+version_pinned = "1.2.0"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.linux-namespaces]
+upstream = "https://man7.org/linux/man-pages/man7/namespaces.7.html"
+version_pinned = "kernel 6.x"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.nix-flakes]
+upstream = "https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake.html"
+version_pinned = "2.28"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.rust-async]
+upstream = "https://doc.rust-lang.org/std/future/trait.Future.html"
+version_pinned = "1.85"
+last_verified = "2026-03-30"
+authority = "official"

@@ -1,0 +1,19 @@
+[crun]
+repo = "https://github.com/containers/crun"
+default_tag = "1.19"
+
+[podman]
+repo = "https://github.com/containers/podman"
+default_tag = "v5.4.2"
+
+[squashfuse]
+repo = "https://github.com/vasi/squashfuse"
+default_tag = "0.5.2"
+
+[nix]
+repo = "https://github.com/NixOS/nix"
+default_tag = "2.28.3"
+
+[containers-common]
+repo = "https://github.com/containers/common"
+default_tag = "v0.62.2"

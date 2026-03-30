@@ -20,3 +20,6 @@ Thumbs.db
 *.key
 result
 .claude/worktrees/
+
+# Vendored debug sources
+vendor/debug/
