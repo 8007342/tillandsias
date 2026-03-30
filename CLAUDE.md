@@ -177,7 +177,10 @@ OpenSpec change: fix-entrypoint-regression
 
 The URL links to every source file implementing that spec. GitHub renders it as a clickable link in the commit view. The search is always live — no generated files to maintain.
 
-Format: `https://github.com/8007342/tillandsias/search?q=%40trace+spec%3A<spec-name>&type=code`
+Format — replace `SPECNAME` with the actual spec name (e.g., `forge-launch`):
+```
+https://github.com/8007342/tillandsias/search?q=%40trace+spec%3ASPECNAME&type=code
+```
 
 ## Conventions
 
