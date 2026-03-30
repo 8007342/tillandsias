@@ -162,9 +162,26 @@ All changes go through OpenSpec (`/opsx:ff` or `/opsx:new`). No exceptions for "
 - Use `/opsx:verify` before archiving to confirm convergence.
 - Break large features into multiple changes — each independently convergent.
 
+## Commit Conventions
+
+When a commit implements or fixes a spec-traced feature, include a clickable GitHub code search URL in the commit body:
+
+```
+fix: entrypoint crashes under set -e
+
+@trace spec:forge-launch
+https://github.com/8007342/tillandsias/search?q=%40trace+spec%3Aforge-launch&type=code
+
+OpenSpec change: fix-entrypoint-regression
+```
+
+The URL links to every source file implementing that spec. GitHub renders it as a clickable link in the commit view. The search is always live — no generated files to maintain.
+
+Format: `https://github.com/8007342/tillandsias/search?q=%40trace+spec%3A<spec-name>&type=code`
+
 ## Conventions
 
 - User-facing text MUST NOT contain: "container", "pod", "image", "runtime"
 - "Attach Here" = launch development environment for a project
 - Each environment gets a tillandsia genus name for visual linking
-- Plant lifecycle maps to container lifecycle: Bud→Creating, Bloom→Running, Dried→Stopping, Pup→Rebuilding
+- Plant lifecycle maps to container lifecycle: Pup→Initializing, Mature→Ready, Blushing→Building, Blooming→Complete, Dried→Error
