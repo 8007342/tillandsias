@@ -115,3 +115,27 @@ upstream = "https://doc.rust-lang.org/nomicon/"
 version_pinned = "1.85"
 last_verified = "2026-03-30"
 authority = "official"
+
+[cheatsheets.os-keyring]
+upstream = "https://specifications.freedesktop.org/secret-service/latest/"
+version_pinned = "0.2"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.tauri-v2-updater]
+upstream = "https://v2.tauri.app/plugin/updater/"
+version_pinned = "2.x"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.sigstore-cosign]
+upstream = "https://docs.sigstore.dev/"
+version_pinned = "2.x"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.singleton-lock]
+upstream = "https://man7.org/linux/man-pages/man2/flock.2.html"
+version_pinned = "POSIX"
+last_verified = "2026-03-30"
+authority = "official"

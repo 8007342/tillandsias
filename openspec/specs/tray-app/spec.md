@@ -83,7 +83,7 @@ The tray application SHALL function correctly on Linux, macOS, and Windows using
 
 #### Scenario: Linux tray
 - **WHEN** the application runs on Linux
-- **THEN** the tray icon integrates with the desktop environment via StatusNotifier/libappindicator
+- **THEN** the tray icon integrates with the desktop environment via DBus StatusNotifierItem (libayatana-appindicator)
 
 #### Scenario: macOS tray
 - **WHEN** the application runs on macOS

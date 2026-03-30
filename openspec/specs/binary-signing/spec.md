@@ -30,7 +30,7 @@ Every signing operation SHALL be recorded in the Rekor transparency log, creatin
 - **THEN** anyone can query the Rekor log to find the entry by artifact hash without authentication
 
 ### Requirement: Signature and certificate artifacts
-Each signed binary SHALL have its signature and certificate published as separate files alongside the binary in the GitHub Release.
+Each signed binary SHALL have its signature and certificate published as separate files alongside the binary in the GitHub Release. Signature files use the `.sig` extension and certificate files use the `.cert` extension.
 
 #### Scenario: Artifact naming for signatures
 - **WHEN** a binary named `tillandsias-v0.1.0-linux-x86_64.AppImage` is signed
@@ -104,10 +104,10 @@ The Cosign CLI used in CI SHALL be installed via a SHA-pinned action to prevent 
 - **THEN** the `sigstore/cosign-installer` action is referenced by full commit SHA with a version comment
 
 ### Requirement: Cosign signing produces verifiable signatures
-All release artifacts SHALL be signed with Cosign keyless mode and verifiable locally.
+All release artifacts SHALL be signed with Cosign keyless mode and verifiable locally. Signature and certificate files use `.sig` and `.cert` extensions (not `.cosign.sig`/`.cosign.cert`).
 
 #### Scenario: Successful local verification
-- **WHEN** a signed artifact and its `.cosign.sig` and `.cosign.cert` files are downloaded
+- **WHEN** a signed artifact and its `.sig` and `.cert` files are downloaded
 - **THEN** `cosign verify-blob` succeeds with the correct identity and OIDC issuer
 
 #### Scenario: Tampered artifact fails verification

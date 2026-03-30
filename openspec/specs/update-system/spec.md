@@ -121,6 +121,10 @@ The application SHALL use GitHub Releases as the sole update endpoint, configure
 - **WHEN** an update is available and the updater downloads the update bundle
 - **THEN** it selects the artifact matching the current platform (AppImage for Linux, .dmg/.app for macOS, .exe for Windows)
 
+#### Scenario: AppImage on immutable OS without FUSE
+- **WHEN** the application runs as an AppImage on an immutable operating system (e.g., Fedora Silverblue, SteamOS) where FUSE is unavailable or restricted
+- **THEN** the application sets the `APPIMAGE_EXTRACT_AND_RUN=1` environment variable to enable AppImage execution via extraction fallback instead of FUSE mounting
+
 ### Requirement: CI signing of update bundles
 The release CI workflow SHALL sign all Tauri update bundles with the Ed25519 private key stored in GitHub Actions secrets.
 

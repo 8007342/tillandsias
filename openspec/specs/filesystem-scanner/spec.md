@@ -4,7 +4,7 @@
 TBD - created by archiving change tillandsias-bootstrap. Update Purpose after archive.
 ## Requirements
 ### Requirement: OS-native event-driven watching
-The filesystem scanner SHALL use OS-native file event mechanisms (inotify on Linux, kqueue on macOS, ReadDirectoryChangesW on Windows) and MUST NOT use polling loops of any kind.
+The filesystem scanner SHALL use OS-native file event mechanisms (inotify on Linux, FSEvents on macOS, ReadDirectoryChangesW on Windows) via the `notify` crate's `RecommendedWatcher` and MUST NOT use polling loops of any kind.
 
 #### Scenario: Project directory created on Linux
 - **WHEN** a user creates a new directory under the watch path on Linux
@@ -12,11 +12,15 @@ The filesystem scanner SHALL use OS-native file event mechanisms (inotify on Lin
 
 #### Scenario: Project directory created on macOS
 - **WHEN** a user creates a new directory under the watch path on macOS
-- **THEN** the scanner detects the change via kqueue and emits a project discovery event within the debounce window
+- **THEN** the scanner detects the change via FSEvents (the default backend for `RecommendedWatcher` on macOS) and emits a project discovery event within the debounce window
 
 #### Scenario: No changes occurring
 - **WHEN** no filesystem changes have occurred
 - **THEN** the scanner consumes zero CPU cycles (blocked on OS event wait)
+
+#### Scenario: inotify watch limit exhausted on Linux
+- **WHEN** the system's `fs.inotify.max_user_watches` limit is reached and the scanner cannot register new watches
+- **THEN** the scanner logs a warning indicating the watch limit is exhausted and continues operating with existing watches. Depth-2 scanning minimizes the number of watches required, but systems with very low limits or many concurrent inotify consumers may still hit the cap.
 
 ### Requirement: Configurable watch path
 The scanner SHALL watch `~/src` by default, with the watch path configurable via the global config file. Multiple watch paths SHALL be supported.
@@ -41,7 +45,7 @@ The scanner SHALL watch at depth 2 from the watch path (project directory level)
 - **THEN** the scanner emits a project discovery event
 
 ### Requirement: Debounced event batching
-The scanner SHALL debounce rapid filesystem events into batched project state updates with a configurable delay (default: 2000ms).
+The scanner SHALL debounce rapid filesystem events into batched project state updates with a configurable delay (project default: 2000ms). This default is a project choice, not a crate default.
 
 #### Scenario: Rapid file creation
 - **WHEN** multiple files are created in quick succession within a project directory (e.g., git clone)

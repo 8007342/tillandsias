@@ -67,7 +67,7 @@ Each environment SHALL be allocated a configurable port range mapped from the co
 - **THEN** the specified range is used for that project's environment
 
 ### Requirement: Global and per-project configuration
-The configuration system SHALL support a two-level hierarchy: global defaults at `~/.config/tillandsias/config.toml` and per-project overrides at `<project>/.tillandsias/config.toml`.
+The configuration system SHALL support a two-level hierarchy: global defaults at a platform-specific path and per-project overrides at `<project>/.tillandsias/config.toml`.
 
 #### Scenario: Global config only
 - **WHEN** a global config exists but no per-project config exists
@@ -84,6 +84,14 @@ The configuration system SHALL support a two-level hierarchy: global defaults at
 #### Scenario: Platform-specific config paths
 - **WHEN** the application runs on macOS
 - **THEN** the global config is located at `~/Library/Application Support/tillandsias/config.toml`
+
+#### Scenario: Platform-specific config paths (Windows)
+- **WHEN** the application runs on Windows
+- **THEN** the global config is located at `%APPDATA%\tillandsias\config.toml`
+
+#### Scenario: Platform-specific config paths (Linux)
+- **WHEN** the application runs on Linux
+- **THEN** the global config is located at `~/.config/tillandsias/config.toml`
 
 ### Requirement: Attach Here launches container and opens terminal
 The "Attach Here" action SHALL build the default image if needed, start a container, and open a terminal window with OpenCode running inside.

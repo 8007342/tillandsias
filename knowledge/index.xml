@@ -10,6 +10,8 @@
     </category>
     <category id="infra/security" label="Security Infrastructure">
       <cheatsheet ref="selinux-silverblue" file="cheatsheets/infra/selinux-silverblue.md"/>
+      <cheatsheet ref="os-keyring" file="cheatsheets/infra/os-keyring.md"/>
+      <cheatsheet ref="singleton-lock" file="cheatsheets/infra/singleton-lock.md"/>
     </category>
     <category id="infra/filesystem" label="Filesystem Infrastructure">
       <cheatsheet ref="fuse-userspace-fs" file="cheatsheets/infra/fuse-userspace-fs.md"/>
@@ -20,6 +22,9 @@
     </category>
     <category id="frameworks/tauri" label="Tauri Framework">
       <cheatsheet ref="tauri-v2-tray" file="cheatsheets/frameworks/tauri-v2-tray.md"/>
+    </category>
+    <category id="frameworks/tauri-updater" label="Tauri Updater">
+      <cheatsheet ref="tauri-v2-updater" file="cheatsheets/frameworks/tauri-v2-updater.md"/>
     </category>
     <category id="frameworks/notify" label="Filesystem Watching">
       <cheatsheet ref="notify-fs-events" file="cheatsheets/frameworks/notify-fs-events.md"/>
@@ -41,6 +46,7 @@
     </category>
     <category id="ci/github" label="CI/CD">
       <cheatsheet ref="github-actions" file="cheatsheets/ci/github-actions.md"/>
+      <cheatsheet ref="sigstore-cosign" file="cheatsheets/ci/sigstore-cosign.md"/>
     </category>
   </categories>
   <tags>
@@ -66,5 +72,12 @@
     <tag name="serialization" refs="postcard-serde,toml-config"/>
     <tag name="filesystem" refs="notify-fs-events,fuse-userspace-fs"/>
     <tag name="cross-platform" refs="cross-compilation-rust,macos-codesigning,tauri-v2-tray,notify-fs-events"/>
+    <tag name="keyring" refs="os-keyring"/>
+    <tag name="secrets" refs="os-keyring"/>
+    <tag name="sigstore" refs="sigstore-cosign"/>
+    <tag name="signing" refs="sigstore-cosign,macos-codesigning"/>
+    <tag name="updater" refs="tauri-v2-updater"/>
+    <tag name="singleton" refs="singleton-lock"/>
+    <tag name="lock-file" refs="singleton-lock"/>
   </tags>
 </knowledge>
