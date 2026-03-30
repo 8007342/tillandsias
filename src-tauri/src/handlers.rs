@@ -32,6 +32,8 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, instrument, warn};
 
+use crate::strings;
+
 use tillandsias_core::config::{GlobalConfig, cache_dir, load_global_config, load_project_config};
 use tillandsias_core::event::{AppEvent, BuildProgressEvent, ContainerState};
 use tillandsias_core::genus::GenusAllocator;
@@ -282,13 +284,13 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
     crate::build_lock::acquire(image_name)
         .map_err(|e| {
             error!(image = image_name, error = %e, "Cannot acquire build lock");
-            "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+            strings::SETUP_ERROR
         })?;
 
     let source_dir = crate::embedded::write_image_sources()
         .map_err(|e| {
             error!(image = image_name, error = %e, "Failed to extract embedded image sources to temp");
-            "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+            strings::SETUP_ERROR
         })?;
 
     let script = source_dir.join("scripts").join("build-image.sh");
@@ -309,7 +311,7 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
         .output()
         .map_err(|e| {
             error!(script = %script.display(), image = image_name, error = %e, "Failed to launch image build script");
-            "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+            strings::SETUP_ERROR
         })?;
 
     // Clean up temp files and release lock regardless of result
@@ -326,7 +328,7 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
             stderr = %stderr,
             "Image build script failed"
         );
-        return Err("Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias".into());
+        return Err(strings::SETUP_ERROR.into());
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -621,7 +623,7 @@ pub async fn handle_attach_here(
                     state.running.retain(|c| c.name != container_name);
                     allocator.release(&project_name, genus);
                     return Err(
-                        "Development environment not ready yet. Tillandsias will set it up automatically — please try again in a few minutes.".into()
+                        strings::ENV_NOT_READY.into()
                     );
                 }
                 info!(tag = %tag, "Image built successfully");
@@ -638,7 +640,7 @@ pub async fn handle_attach_here(
                 });
                 state.running.retain(|c| c.name != container_name);
                 allocator.release(&project_name, genus);
-                return Err("Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias".into());
+                return Err(strings::SETUP_ERROR.into());
             }
             Err(ref e) => {
                 error!(tag = %tag, error = %e, "Image build task panicked");
@@ -648,7 +650,7 @@ pub async fn handle_attach_here(
                 });
                 state.running.retain(|c| c.name != container_name);
                 allocator.release(&project_name, genus);
-                return Err("Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias".into());
+                return Err(strings::SETUP_ERROR.into());
             }
         }
     } else {
@@ -897,7 +899,7 @@ pub async fn handle_terminal(
         error!(tag = %tag, "Image not found when opening maintenance terminal");
         allocator.release(&project_name, genus);
         tool_allocator.release(&project_name, &display_emoji);
-        return Err("Development environment not ready yet. Tillandsias will set it up automatically — please try again in a few minutes.".into());
+        return Err(strings::ENV_NOT_READY.into());
     }
 
     let cache = cache_dir();
@@ -955,11 +957,11 @@ pub async fn handle_terminal(
         --userns=keep-id \
         --cap-drop=ALL \
         --security-opt=no-new-privileges \
-        --entrypoint fish \
         -w /home/forge/src/{} \
         -e TILLANDSIAS_PROJECT={} \
         -e TILLANDSIAS_HOST_OS='{}' \
         -e TILLANDSIAS_AGENT={} \
+        -e TILLANDSIAS_MAINTENANCE=1 \
         {}\
         -e GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig \
         -p {}-{}:{}-{} \
@@ -1061,7 +1063,7 @@ pub async fn handle_root_terminal(
     if !client.image_exists(&tag).await {
         error!(tag = %tag, "Image not found when opening root terminal");
         allocator.release(&project_name, genus);
-        return Err("Development environment not ready yet. Tillandsias will set it up automatically — please try again in a few minutes.".into());
+        return Err(strings::ENV_NOT_READY.into());
     }
 
     let cache = cache_dir();
@@ -1118,11 +1120,11 @@ pub async fn handle_root_terminal(
         --userns=keep-id \
         --cap-drop=ALL \
         --security-opt=no-new-privileges \
-        --entrypoint fish \
         -w /home/forge/src \
         -e TILLANDSIAS_PROJECT='(all projects)' \
         -e TILLANDSIAS_HOST_OS='{}' \
         -e TILLANDSIAS_AGENT={} \
+        -e TILLANDSIAS_MAINTENANCE=1 \
         {}\
         -e GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig \
         -p {}-{}:{}-{} \
@@ -1216,7 +1218,7 @@ pub async fn handle_github_login(
                         image_name: "forge".to_string(),
                         reason: "Development environment not ready yet".to_string(),
                     });
-                    return Err("Development environment not ready yet. Tillandsias will set it up automatically — please try again in a few minutes.".into());
+                    return Err(strings::ENV_NOT_READY.into());
                 }
                 info!(
                     tag = %tag,
@@ -1232,7 +1234,7 @@ pub async fn handle_github_login(
                     image_name: "forge".to_string(),
                     reason: "Tillandsias is setting up".to_string(),
                 });
-                return Err("Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias".into());
+                return Err(strings::SETUP_ERROR.into());
             }
             Err(ref e) => {
                 error!(tag = %tag, error = %e, "Image build task panicked (GitHub Login)");
@@ -1240,7 +1242,7 @@ pub async fn handle_github_login(
                     image_name: "forge".to_string(),
                     reason: "Tillandsias is setting up".to_string(),
                 });
-                return Err("Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias".into());
+                return Err(strings::SETUP_ERROR.into());
             }
         }
     } else {
@@ -1256,7 +1258,7 @@ pub async fn handle_github_login(
         crate::embedded::write_temp_script("gh-auth-login.sh", crate::embedded::GH_AUTH_LOGIN)
             .map_err(|e| {
                 error!(error = %e, "Failed to extract embedded gh-auth-login.sh to temp");
-                "Tillandsias installation may be incomplete. Please reinstall from https://github.com/8007342/tillandsias"
+                strings::INSTALL_INCOMPLETE
             })?;
 
     open_terminal(&script_path.display().to_string(), "GitHub Login")
@@ -1278,7 +1280,7 @@ pub async fn handle_claude_login() -> Result<(), String> {
     )
     .map_err(|e| {
         error!(error = %e, "Failed to extract embedded claude-api-key-prompt.sh to temp");
-        "Tillandsias installation may be incomplete. Please reinstall from https://github.com/8007342/tillandsias"
+        strings::INSTALL_INCOMPLETE
     })?;
 
     open_terminal(&script_path.display().to_string(), "Claude Login")?;

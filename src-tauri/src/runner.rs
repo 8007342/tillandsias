@@ -11,6 +11,8 @@ use tillandsias_core::genus::TillandsiaGenus;
 use tillandsias_core::state::ContainerInfo;
 use tillandsias_podman::PodmanClient;
 
+use crate::strings;
+
 /// Map a short image name to a full image tag.
 ///
 /// For "forge", returns the versioned tag (e.g., `tillandsias-forge:v0.1.72`).
@@ -39,7 +41,7 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
                 if debug {
                     eprintln!("  [debug] Build wait timed out: {e}");
                 }
-                "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+                strings::SETUP_ERROR
             })?;
         return Ok(());
     }
@@ -49,7 +51,7 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
             if debug {
                 eprintln!("  [debug] Cannot acquire build lock: {e}");
             }
-            "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+            strings::SETUP_ERROR
         })?;
 
     let source_dir = crate::embedded::write_image_sources()
@@ -57,7 +59,7 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
             if debug {
                 eprintln!("  [debug] Failed to extract embedded image sources: {e}");
             }
-            "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+            strings::SETUP_ERROR
         })?;
 
     let script = source_dir.join("scripts").join("build-image.sh");
@@ -82,7 +84,7 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         .status()
         .map_err(|e| {
             eprintln!("  [debug] Failed to launch build script: {e}");
-            "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+            strings::SETUP_ERROR
         })?;
 
     crate::embedded::cleanup_image_sources();
@@ -96,7 +98,7 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         if debug {
             eprintln!("  [debug] Build script exited with code {}", status.code().unwrap_or(-1));
         }
-        Err("Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias".into())
+        Err(strings::SETUP_ERROR.into())
     }
 }
 
@@ -317,7 +319,7 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
         let size = image_size_display(&tag);
         println!("  \u{2713} Image ready ({size})");
     } else {
-        eprintln!("  \u{2717} Development environment not ready yet. Tillandsias will set it up automatically — please try again in a few minutes.");
+        eprintln!("  \u{2717} {}", strings::ENV_NOT_READY);
         return false;
     }
 
@@ -337,7 +339,8 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
 
     let mut run_args = build_run_args(&container_name, &tag, &project_path, &cache, base_port);
 
-    // --bash mode: launch fish shell (skipping the OpenCode entrypoint).
+    // --bash mode: maintenance shell via entrypoint (not bypassing it).
+    // The entrypoint handles PATH, gh auth, shell configs, then drops to fish.
     // Start in the project directory so the user lands in the right place.
     if bash {
         let project_name = project_path
@@ -345,8 +348,8 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "src".to_string());
         let image_arg = run_args.pop().expect("run_args always ends with image");
-        run_args.push("--entrypoint".to_string());
-        run_args.push("fish".to_string());
+        run_args.push("-e".to_string());
+        run_args.push("TILLANDSIAS_MAINTENANCE=1".to_string());
         run_args.push("-w".to_string());
         run_args.push(format!("/home/forge/src/{project_name}"));
         run_args.push(image_arg);
