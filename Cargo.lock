@@ -4939,7 +4939,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-core"
-version = "0.1.90"
+version = "0.1.96"
 dependencies = [
  "dirs",
  "postcard",
@@ -4953,7 +4953,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-podman"
-version = "0.1.90"
+version = "0.1.96"
 dependencies = [
  "serde",
  "serde_json",
@@ -4965,7 +4965,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-scanner"
-version = "0.1.90"
+version = "0.1.96"
 dependencies = [
  "dirs",
  "notify",
@@ -4977,7 +4977,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-tray"
-version = "0.1.90"
+version = "0.1.96"
 dependencies = [
  "dirs",
  "keyring",

@@ -46,6 +46,10 @@ pub const SHELL_BASHRC: &str = include_str!("../../images/default/shell/bashrc")
 pub const SHELL_FISH_CONFIG: &str = include_str!("../../images/default/shell/config.fish");
 pub const SHELL_ZSHRC: &str = include_str!("../../images/default/shell/zshrc");
 
+// Locale files
+pub const LOCALE_EN: &str = include_str!("../../images/default/locales/en.sh");
+pub const LOCALE_ES: &str = include_str!("../../images/default/locales/es.sh");
+
 // ---------------------------------------------------------------------------
 // Image sources — web image
 // ---------------------------------------------------------------------------
@@ -105,6 +109,7 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 ///       opencode.json
 ///       skills/command/{bash,bash-private}.md
 ///       shell/{bashrc,config.fish,zshrc}
+///       locales/{en.sh,es.sh}
 ///     web/
 ///       entrypoint.sh
 ///       Containerfile
@@ -186,6 +191,12 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     fs::write(shell_dir.join("config.fish"), SHELL_FISH_CONFIG)
         .map_err(|e| format!("config.fish: {e}"))?;
     fs::write(shell_dir.join("zshrc"), SHELL_ZSHRC).map_err(|e| format!("zshrc: {e}"))?;
+
+    // Locale files
+    let locales_dir = default_dir.join("locales");
+    fs::create_dir_all(&locales_dir).map_err(|e| format!("locales dir: {e}"))?;
+    fs::write(locales_dir.join("en.sh"), LOCALE_EN).map_err(|e| format!("en.sh: {e}"))?;
+    fs::write(locales_dir.join("es.sh"), LOCALE_ES).map_err(|e| format!("es.sh: {e}"))?;
 
     // -- images/web/ --
     let web_dir = dir.join("images").join("web");
