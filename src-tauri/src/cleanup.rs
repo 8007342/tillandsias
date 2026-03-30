@@ -8,6 +8,7 @@ use tillandsias_core::config;
 use tillandsias_core::format::human_bytes;
 
 use crate::i18n;
+use crate::update_log;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -190,6 +191,11 @@ pub fn run_stats() -> bool {
             bin_path.display()
         );
     }
+
+    // --- Last update ---
+    let last_update = update_log::read_last_entry()
+        .unwrap_or_else(|| "(no update log)".to_string());
+    println!("  Last update:      {last_update}");
 
     println!();
     println!(

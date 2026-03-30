@@ -19,6 +19,7 @@ mod secrets;
 mod singleton;
 mod strings;
 mod update_cli;
+mod update_log;
 mod updater;
 
 use std::sync::{Arc, Mutex};

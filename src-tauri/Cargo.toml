@@ -24,6 +24,8 @@ dirs = { workspace = true }
 keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
+sha2 = "0.10"
+hex = "0.4"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

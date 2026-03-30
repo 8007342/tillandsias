@@ -51,6 +51,7 @@ use serde::Deserialize;
 use tillandsias_core::format::human_bytes;
 
 use crate::i18n;
+use crate::update_log;
 
 /// The update manifest endpoint. Mirrors `tauri.conf.json` plugins.updater.endpoints[0].
 const UPDATE_ENDPOINT: &str =
@@ -87,6 +88,11 @@ pub fn run() -> bool {
     // Tauri normally does this during its setup, but --update runs before Tauri.
     let _ = rustls::crypto::ring::default_provider().install_default();
 
+    // Rotate the audit log if it has grown too large — do this once at the
+    // start of each run so the file never exceeds the threshold by more than
+    // one entry.
+    update_log::append_entry("---"); // separator between update sessions
+
     println!(
         "  {}",
         i18n::tf("update.version", &[("version", CURRENT_VERSION)])
@@ -98,6 +104,9 @@ pub fn run() -> bool {
         Ok(t) => t,
         Err(e) => {
             eprintln!("  Error: failed to fetch update manifest: {e}");
+            update_log::append_entry(&format!(
+                "ERROR: failed to fetch update manifest: {e}"
+            ));
             return false;
         }
     };
@@ -107,6 +116,9 @@ pub fn run() -> bool {
         Ok(m) => m,
         Err(e) => {
             eprintln!("  Error: failed to parse update manifest: {e}");
+            update_log::append_entry(&format!(
+                "ERROR: failed to parse update manifest: {e}"
+            ));
             return false;
         }
     };
@@ -116,10 +128,16 @@ pub fn run() -> bool {
 
     if !is_newer(latest, current) {
         println!("  {}", i18n::t("update.up_to_date"));
+        update_log::append_entry(&format!(
+            "UPDATE CHECK: v{current} — already up to date"
+        ));
         return true;
     }
 
     println!("  {}", i18n::tf("update.available", &[("version", latest)]));
+    update_log::append_entry(&format!(
+        "UPDATE CHECK: v{current} \u{2192} v{latest} available"
+    ));
 
     // Detect platform key (Tauri uses "linux-x86_64", "darwin-x86_64", etc.)
     let platform_key = detect_platform_key();
@@ -133,6 +151,9 @@ pub fn run() -> bool {
                 "  Available platforms: {:?}",
                 manifest.platforms.keys().collect::<Vec<_>>()
             );
+            update_log::append_entry(&format!(
+                "ERROR: no artifact for platform '{platform_key}'"
+            ));
             return false;
         }
     };
@@ -143,6 +164,9 @@ pub fn run() -> bool {
         println!("  Note: $APPIMAGE is not set — not running as an AppImage.");
         println!("  Download the new version manually from:");
         println!("    {}", entry.url);
+        update_log::append_entry(&format!(
+            "UPDATE CHECK: v{current} \u{2192} v{latest} available (manual download required — not an AppImage)"
+        ));
         // Still report success: the check itself succeeded.
         return true;
     }
@@ -154,6 +178,7 @@ pub fn run() -> bool {
         Ok(p) => p,
         Err(e) => {
             eprintln!("  Error: download failed: {e}");
+            update_log::append_entry(&format!("ERROR: download failed: {e}"));
             return false;
         }
     };
@@ -164,11 +189,17 @@ pub fn run() -> bool {
         "  {}",
         i18n::tf("update.downloaded", &[("size", &human_bytes(archive_size))])
     );
+    update_log::append_entry(&format!(
+        "DOWNLOAD: {} from {}",
+        human_bytes(archive_size),
+        entry.url
+    ));
 
     // Extract (if tar.gz) or use directly (if raw AppImage), then replace
     println!("  {}", i18n::t("update.applying"));
     if let Err(e) = apply_appimage_update(&archive_path, &appimage_path, &entry.url) {
         eprintln!("  Error: failed to apply update: {e}");
+        update_log::append_entry(&format!("ERROR: failed to apply update: {e}"));
         // Clean up temp archive
         let _ = std::fs::remove_file(&archive_path);
         return false;
@@ -176,6 +207,14 @@ pub fn run() -> bool {
 
     // Clean up temp archive
     let _ = std::fs::remove_file(&archive_path);
+
+    // Compute SHA256 of the newly installed binary and log the apply event.
+    let sha = update_log::sha256_file(&appimage_path)
+        .unwrap_or_else(|_| "(sha256 unavailable)".to_string());
+    update_log::append_entry(&format!(
+        "APPLIED: v{current} \u{2192} v{latest} (replaced {}) SHA256: {sha}",
+        appimage_path.display()
+    ));
 
     println!("  {}", i18n::tf("update.updated", &[("version", latest)]));
     println!("  {}", i18n::t("update.restart_note"));

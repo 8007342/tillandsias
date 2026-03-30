@@ -4981,11 +4981,13 @@ name = "tillandsias-tray"
 version = "0.1.97"
 dependencies = [
  "dirs",
+ "hex",
  "keyring",
  "reqwest",
  "rustls",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-shell",

@@ -14,6 +14,8 @@ use tillandsias_podman::PodmanClient;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
+use crate::update_log;
+
 /// Shared state for tracking whether an update is available across tray
 /// menu rebuilds and user interactions.
 #[derive(Debug, Clone)]
@@ -107,6 +109,12 @@ async fn check_for_update(app: &AppHandle, state: &UpdateState) {
         *version = Some(new_version.clone());
     }
 
+    // Audit log: background updater detected a new version.
+    let current = env!("CARGO_PKG_VERSION");
+    update_log::append_entry(&format!(
+        "UPDATE CHECK: v{current} \u{2192} v{new_version} available (background)"
+    ));
+
     // Fire a system notification on first detection
     send_update_notification(app, &new_version);
 }
@@ -181,12 +189,19 @@ pub async fn install_update(app: &AppHandle, state: &UpdateState) {
     // by the Tauri updater plugin. If the signature does not match the
     // compiled-in public key, this call will fail and no binary replacement
     // occurs.
+    let new_version = update.version.clone();
     if let Err(e) = update.download_and_install(|_, _| {}, || {}).await {
         error!(error = %e, "Update download/install failed");
+        update_log::append_entry(&format!(
+            "ERROR: background update install failed: {e}"
+        ));
         reset_progress(app, state).await;
         return;
     }
 
+    update_log::append_entry(&format!(
+        "APPLIED: background updater installed v{new_version}"
+    ));
     info!("Update installed successfully, restarting...");
 
     // Step 3: Restart the application
