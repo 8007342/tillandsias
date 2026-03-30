@@ -76,7 +76,10 @@ fn installed_binary_path() -> PathBuf {
 fn podman_run(args: &[&str]) -> (String, bool) {
     let output = tillandsias_podman::podman_cmd_sync().args(args).output();
     match output {
-        Ok(o) => (String::from_utf8_lossy(&o.stdout).to_string(), o.status.success()),
+        Ok(o) => (
+            String::from_utf8_lossy(&o.stdout).to_string(),
+            o.status.success(),
+        ),
         Err(_) => (String::new(), false),
     }
 }
@@ -92,11 +95,8 @@ pub fn run_stats() -> bool {
     let mut total_bytes: u64 = 0;
 
     // --- Podman images ---
-    let (images_out, podman_ok) = podman_run(&[
-        "images",
-        "--format",
-        "{{.Repository}}:{{.Tag}}\t{{.Size}}",
-    ]);
+    let (images_out, podman_ok) =
+        podman_run(&["images", "--format", "{{.Repository}}:{{.Tag}}\t{{.Size}}"]);
 
     if podman_ok {
         let relevant: Vec<&str> = images_out
@@ -192,7 +192,10 @@ pub fn run_stats() -> bool {
     }
 
     println!();
-    println!("  {}", i18n::tf("stats.total", &[("size", &human_bytes(total_bytes))]));
+    println!(
+        "  {}",
+        i18n::tf("stats.total", &[("size", &human_bytes(total_bytes))])
+    );
     println!("  {}", i18n::t("stats.podman_note"));
 
     true
@@ -247,7 +250,10 @@ pub fn run_clean() -> bool {
             println!("  Containers: no stopped tillandsias containers");
         } else {
             anything_cleaned = true;
-            println!("  Containers: removing {} stopped container(s)...", names.len());
+            println!(
+                "  Containers: removing {} stopped container(s)...",
+                names.len()
+            );
             for name in &names {
                 let (_, ok) = podman_run(&["rm", name]);
                 if ok {
@@ -275,10 +281,7 @@ pub fn run_clean() -> bool {
                 );
             }
             Err(e) => {
-                println!(
-                    "  Nix cache:  failed to remove {}: {e}",
-                    nix_path.display()
-                );
+                println!("  Nix cache:  failed to remove {}: {e}", nix_path.display());
             }
         }
     } else {

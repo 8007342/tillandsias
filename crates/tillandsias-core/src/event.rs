@@ -12,14 +12,9 @@ pub enum BuildProgressEvent {
         image_name: String,
     },
     /// A build completed successfully.
-    Completed {
-        image_name: String,
-    },
+    Completed { image_name: String },
     /// A build failed.
-    Failed {
-        image_name: String,
-        reason: String,
-    },
+    Failed { image_name: String, reason: String },
 }
 
 /// All events flow through this enum into the main `tokio::select!` loop.

@@ -87,7 +87,10 @@ pub fn run() -> bool {
     // Tauri normally does this during its setup, but --update runs before Tauri.
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    println!("  {}", i18n::tf("update.version", &[("version", CURRENT_VERSION)]));
+    println!(
+        "  {}",
+        i18n::tf("update.version", &[("version", CURRENT_VERSION)])
+    );
     println!("  {}", i18n::t("update.checking"));
 
     // Fetch latest.json
@@ -126,7 +129,10 @@ pub fn run() -> bool {
             eprintln!(
                 "  Error: no update artifact found for platform '{platform_key}' in manifest"
             );
-            eprintln!("  Available platforms: {:?}", manifest.platforms.keys().collect::<Vec<_>>());
+            eprintln!(
+                "  Available platforms: {:?}",
+                manifest.platforms.keys().collect::<Vec<_>>()
+            );
             return false;
         }
     };
@@ -154,7 +160,10 @@ pub fn run() -> bool {
     let archive_size = std::fs::metadata(&archive_path)
         .map(|m| m.len())
         .unwrap_or(0);
-    println!("  {}", i18n::tf("update.downloaded", &[("size", &human_bytes(archive_size))]));
+    println!(
+        "  {}",
+        i18n::tf("update.downloaded", &[("size", &human_bytes(archive_size))])
+    );
 
     // Extract (if tar.gz) or use directly (if raw AppImage), then replace
     println!("  {}", i18n::t("update.applying"));
@@ -254,8 +263,8 @@ fn download_update(url: &str) -> Result<PathBuf, String> {
             .await
             .map_err(|e| format!("failed to read response body: {e}"))?;
 
-        let mut file = std::fs::File::create(&tmp)
-            .map_err(|e| format!("failed to create temp file: {e}"))?;
+        let mut file =
+            std::fs::File::create(&tmp).map_err(|e| format!("failed to create temp file: {e}"))?;
         file.write_all(&bytes)
             .map_err(|e| format!("failed to write download to disk: {e}"))?;
 
@@ -338,9 +347,7 @@ fn apply_appimage_update(
 
 /// Walk a directory and return the path of the first `.AppImage` file found.
 fn find_appimage_in_dir(dir: &std::path::Path) -> Result<PathBuf, String> {
-    for entry in std::fs::read_dir(dir)
-        .map_err(|e| format!("cannot read extract dir: {e}"))?
-    {
+    for entry in std::fs::read_dir(dir).map_err(|e| format!("cannot read extract dir: {e}"))? {
         let entry = entry.map_err(|e| format!("directory read error: {e}"))?;
         let path = entry.path();
         if path
@@ -394,16 +401,13 @@ fn detect_platform_key() -> String {
 /// `CARGO_PKG_VERSION` (3-part) matches the semver base of `latest.json`
 /// (4-part).
 fn is_newer(a: &str, b: &str) -> bool {
-    let parse = |s: &str| -> Vec<u64> {
-        s.split('.').filter_map(|p| p.parse().ok()).collect()
-    };
+    let parse = |s: &str| -> Vec<u64> { s.split('.').filter_map(|p| p.parse().ok()).collect() };
     let va = parse(a);
     let vb = parse(b);
     let len = va.len().min(vb.len());
     // Compare only the shared prefix (typically Major.Minor.Change)
     va[..len] > vb[..len]
 }
-
 
 // ---------------------------------------------------------------------------
 // Tests

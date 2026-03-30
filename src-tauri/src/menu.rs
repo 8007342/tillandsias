@@ -197,8 +197,8 @@ pub fn build_tray_menu<R: Runtime>(
     menu = menu.item(&settings_submenu);
 
     // Quit — always visible at top level
-    menu = menu
-        .item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), i18n::t("menu.quit")).build(app)?);
+    menu =
+        menu.item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), i18n::t("menu.quit")).build(app)?);
 
     debug!(
         projects = state.projects.len(),
@@ -232,8 +232,8 @@ fn build_decay_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu
     );
 
     menu = menu.separator();
-    menu = menu
-        .item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), i18n::t("menu.quit")).build(app)?);
+    menu =
+        menu.item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), i18n::t("menu.quit")).build(app)?);
 
     debug!("Decay menu built (podman unavailable)");
 
@@ -260,12 +260,9 @@ fn build_inactive_projects_submenu<R: Runtime>(
 
     if inactive.is_empty() {
         projects = projects.item(
-            &MenuItemBuilder::with_id(
-                ids::static_id("no-projects"),
-                i18n::t("menu.no_projects"),
-            )
-            .enabled(false)
-            .build(app)?,
+            &MenuItemBuilder::with_id(ids::static_id("no-projects"), i18n::t("menu.no_projects"))
+                .enabled(false)
+                .build(app)?,
         );
     } else {
         // Inactive projects have no running containers so we pass a TrayState-like

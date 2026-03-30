@@ -89,7 +89,9 @@ fn main() {
         };
 
         for lifecycle in LIFECYCLES {
-            let svg_path = assets_dir.join(source_genus).join(format!("{lifecycle}.svg"));
+            let svg_path = assets_dir
+                .join(source_genus)
+                .join(format!("{lifecycle}.svg"));
             let png_path = genus_out_dir.join(format!("{lifecycle}.png"));
             render_svg_to_png(&svg_path, &png_path, 32, 32);
         }
@@ -114,7 +116,9 @@ fn main() {
         };
 
         for lifecycle in LIFECYCLES {
-            let svg_path = assets_dir.join(source_genus).join(format!("{lifecycle}.svg"));
+            let svg_path = assets_dir
+                .join(source_genus)
+                .join(format!("{lifecycle}.svg"));
             let png_path = genus_window_dir.join(format!("{lifecycle}@48.png"));
             render_svg_to_png(&svg_path, &png_path, 48, 48);
         }
@@ -143,21 +147,12 @@ fn render_svg_to_png(svg_path: &Path, png_path: &Path, width: u32, height: u32) 
 
     resvg::render(&tree, transform, &mut pixmap.as_mut());
 
-    let png_data = pixmap.encode_png().unwrap_or_else(|e| {
-        panic!(
-            "Failed to encode PNG for {}: {}",
-            svg_path.display(),
-            e
-        )
-    });
+    let png_data = pixmap
+        .encode_png()
+        .unwrap_or_else(|e| panic!("Failed to encode PNG for {}: {}", svg_path.display(), e));
 
-    fs::write(png_path, &png_data).unwrap_or_else(|e| {
-        panic!(
-            "Failed to write PNG {}: {}",
-            png_path.display(),
-            e
-        )
-    });
+    fs::write(png_path, &png_data)
+        .unwrap_or_else(|e| panic!("Failed to write PNG {}: {}", png_path.display(), e));
 }
 
 /// Generate `icons_generated.rs` with `include_bytes!` references to all rendered PNGs.
@@ -220,16 +215,32 @@ fn generate_icons_rs(out_dir: &Path) {
     }
 
     // Generate tray_icon_png function
-    writeln!(f, r#"/// Return the PNG bytes for a tray icon state (32x32)."#).unwrap();
+    writeln!(
+        f,
+        r#"/// Return the PNG bytes for a tray icon state (32x32)."#
+    )
+    .unwrap();
     writeln!(
         f,
         "pub fn tray_icon_png(state: crate::genus::TrayIconState) -> &'static [u8] {{"
     )
     .unwrap();
     writeln!(f, "    match state {{").unwrap();
-    writeln!(f, "        crate::genus::TrayIconState::Base => PNG_TRAY_BASE,").unwrap();
-    writeln!(f, "        crate::genus::TrayIconState::Building => PNG_TRAY_BUILDING,").unwrap();
-    writeln!(f, "        crate::genus::TrayIconState::Decay => PNG_TRAY_DECAY,").unwrap();
+    writeln!(
+        f,
+        "        crate::genus::TrayIconState::Base => PNG_TRAY_BASE,"
+    )
+    .unwrap();
+    writeln!(
+        f,
+        "        crate::genus::TrayIconState::Building => PNG_TRAY_BUILDING,"
+    )
+    .unwrap();
+    writeln!(
+        f,
+        "        crate::genus::TrayIconState::Decay => PNG_TRAY_DECAY,"
+    )
+    .unwrap();
     writeln!(f, "    }}").unwrap();
     writeln!(f, "}}").unwrap();
     writeln!(f).unwrap();

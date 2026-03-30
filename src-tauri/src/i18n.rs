@@ -87,8 +87,16 @@ pub fn detect_locale() -> &'static str {
             let text = String::from_utf8_lossy(&output.stdout);
             // Output looks like:  (\n    "es-MX",\n    "en-US",\n)
             for line in text.lines() {
-                let trimmed = line.trim().trim_matches(|c| c == '"' || c == ',' || c == '(' || c == ')');
-                let lang = trimmed.split('-').next().unwrap_or("").split('_').next().unwrap_or("");
+                let trimmed = line
+                    .trim()
+                    .trim_matches(|c| c == '"' || c == ',' || c == '(' || c == ')');
+                let lang = trimmed
+                    .split('-')
+                    .next()
+                    .unwrap_or("")
+                    .split('_')
+                    .next()
+                    .unwrap_or("");
                 if is_supported(lang) {
                     return Box::leak(lang.to_ascii_lowercase().into_boxed_str());
                 }
@@ -229,7 +237,10 @@ attach_here = "Attach Here"
 "#;
         let map = parse_flat_toml(toml);
         assert_eq!(map.get("menu.quit").map(String::as_str), Some("Quit"));
-        assert_eq!(map.get("menu.attach_here").map(String::as_str), Some("Attach Here"));
+        assert_eq!(
+            map.get("menu.attach_here").map(String::as_str),
+            Some("Attach Here")
+        );
     }
 
     #[test]

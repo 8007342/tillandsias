@@ -70,7 +70,11 @@ impl PodmanClient {
                 info!(attempt, "Podman API ready after machine start");
                 return true;
             }
-            debug!(attempt, delay_ms = delay.as_millis() as u64, "Waiting for podman API...");
+            debug!(
+                attempt,
+                delay_ms = delay.as_millis() as u64,
+                "Waiting for podman API..."
+            );
             tokio::time::sleep(delay).await;
             delay = (delay * 2).min(std::time::Duration::from_secs(4));
         }

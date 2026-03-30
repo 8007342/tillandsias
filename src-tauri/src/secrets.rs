@@ -143,9 +143,7 @@ fn extract_token_from_hosts_yml(contents: &str) -> Option<String> {
 ///     git_protocol: https
 /// ```
 fn build_hosts_yml(token: &str) -> String {
-    format!(
-        "github.com:\n    oauth_token: {token}\n    git_protocol: https\n"
-    )
+    format!("github.com:\n    oauth_token: {token}\n    git_protocol: https\n")
 }
 
 /// Migrate an existing plain text token from `hosts.yml` into the native

@@ -175,13 +175,22 @@ fn open_terminal(command: &str, title: &str) -> Result<(), String> {
                 cmd.env_remove("LD_LIBRARY_PATH");
                 cmd.env_remove("LD_PRELOAD");
                 cmd.args(["--title", title, "--", "bash", "-c", command]);
-                cmd.spawn().map(|_| ()).map_err(|e| format!("gnome-terminal: {e}"))
+                cmd.spawn()
+                    .map(|_| ())
+                    .map_err(|e| format!("gnome-terminal: {e}"))
             }
             Some(&"konsole") => {
                 let mut cmd = std::process::Command::new("konsole");
                 cmd.env_remove("LD_LIBRARY_PATH");
                 cmd.env_remove("LD_PRELOAD");
-                cmd.args(["-p", &format!("tabtitle={title}"), "-e", "bash", "-c", command]);
+                cmd.args([
+                    "-p",
+                    &format!("tabtitle={title}"),
+                    "-e",
+                    "bash",
+                    "-c",
+                    command,
+                ]);
                 cmd.spawn().map(|_| ()).map_err(|e| format!("konsole: {e}"))
             }
             Some(&"xterm") => {
@@ -191,9 +200,9 @@ fn open_terminal(command: &str, title: &str) -> Result<(), String> {
                 cmd.args(["-T", title, "-e", "bash", "-c", command]);
                 cmd.spawn().map(|_| ()).map_err(|e| format!("xterm: {e}"))
             }
-            _ => {
-                Err("No terminal emulator found (tried ptyxis, gnome-terminal, konsole, xterm)".into())
-            }
+            _ => Err(
+                "No terminal emulator found (tried ptyxis, gnome-terminal, konsole, xterm)".into(),
+            ),
         }
     }
 
@@ -253,9 +262,8 @@ fn send_notification(summary: &str, body: &str) {
     {
         let escaped_summary = summary.replace('"', "\\\"");
         let escaped_body = body.replace('"', "\\\"");
-        let script = format!(
-            "display notification \"{escaped_body}\" with title \"{escaped_summary}\""
-        );
+        let script =
+            format!("display notification \"{escaped_body}\" with title \"{escaped_summary}\"");
         let _ = std::process::Command::new("osascript")
             .args(["-e", &script])
             .spawn();
@@ -281,17 +289,15 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
     }
 
     // Acquire build lock
-    crate::build_lock::acquire(image_name)
-        .map_err(|e| {
-            error!(image = image_name, error = %e, "Cannot acquire build lock");
-            strings::SETUP_ERROR
-        })?;
+    crate::build_lock::acquire(image_name).map_err(|e| {
+        error!(image = image_name, error = %e, "Cannot acquire build lock");
+        strings::SETUP_ERROR
+    })?;
 
-    let source_dir = crate::embedded::write_image_sources()
-        .map_err(|e| {
-            error!(image = image_name, error = %e, "Failed to extract embedded image sources to temp");
-            strings::SETUP_ERROR
-        })?;
+    let source_dir = crate::embedded::write_image_sources().map_err(|e| {
+        error!(image = image_name, error = %e, "Failed to extract embedded image sources to temp");
+        strings::SETUP_ERROR
+    })?;
 
     let script = source_dir.join("scripts").join("build-image.sh");
     let tag = forge_image_tag();
@@ -377,9 +383,7 @@ fn build_launch_context(
     let host_os = tillandsias_core::config::detect_host_os();
 
     // Claude API key from OS keyring
-    let claude_api_key = crate::secrets::retrieve_claude_api_key()
-        .ok()
-        .flatten();
+    let claude_api_key = crate::secrets::retrieve_claude_api_key().ok().flatten();
 
     // Claude credentials directory
     let claude_dir = dirs::home_dir()
@@ -545,9 +549,7 @@ pub async fn handle_attach_here(
                     });
                     state.running.retain(|c| c.name != container_name);
                     allocator.release(&project_name, genus);
-                    return Err(
-                        strings::ENV_NOT_READY.into()
-                    );
+                    return Err(strings::ENV_NOT_READY.into());
                 }
                 info!(tag = %tag, "Image built successfully");
                 // Notify event loop: build completed (menu chip: ✅ forge ready)
@@ -961,7 +963,8 @@ pub async fn handle_root_terminal(
     existing_ports.extend(query_occupied_ports());
     let port_range = allocate_port_range((3000, 3019), &existing_ports);
 
-    let container_name = tillandsias_core::state::ContainerInfo::container_name(&project_name, genus);
+    let container_name =
+        tillandsias_core::state::ContainerInfo::container_name(&project_name, genus);
 
     // Pre-register container in state so the tray shows it immediately
     let placeholder = tillandsias_core::state::ContainerInfo {
@@ -1175,10 +1178,7 @@ pub async fn handle_claude_login() -> Result<(), String> {
                     match crate::secrets::store_claude_api_key(&key) {
                         Ok(()) => {
                             info!("Claude API key stored in native keyring");
-                            send_notification(
-                                "Tillandsias",
-                                "Claude API key saved successfully",
-                            );
+                            send_notification("Tillandsias", "Claude API key saved successfully");
                             return Ok(());
                         }
                         Err(e) => {

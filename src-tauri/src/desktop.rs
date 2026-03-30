@@ -34,8 +34,7 @@ pub fn ensure_desktop_integration() {
     info!(appimage = %appimage_path, "AppImage detected — checking desktop integration");
 
     let data_home = dirs::data_dir().unwrap_or_else(|| {
-        PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/tmp".into()))
-            .join(".local/share")
+        PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/tmp".into())).join(".local/share")
     });
 
     let desktop_dir = data_home.join("applications");

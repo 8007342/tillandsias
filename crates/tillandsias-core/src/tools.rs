@@ -8,22 +8,22 @@
 /// - `🛠️` (U+1F6E0+FE0F) — reserved exclusively for the global Root terminal
 ///   menu item. It MUST NOT be added here.
 pub const TOOL_EMOJIS: &[&str] = &[
-    "\u{1F527}",     // 🔧
-    "\u{1FA9B}",     // 🪛
-    "\u{1F529}",     // 🔩
+    "\u{1F527}",        // 🔧
+    "\u{1FA9B}",        // 🪛
+    "\u{1F529}",        // 🔩
     "\u{2699}\u{FE0F}", // ⚙️
-    "\u{1FA9A}",     // 🪚
-    "\u{1F528}",     // 🔨
-    "\u{1FA9C}",     // 🪜
-    "\u{1F9F2}",     // 🧲
-    "\u{1FA63}",     // 🪣
-    "\u{1F9F0}",     // 🧰
-    "\u{1FA9D}",     // 🪝
-    "\u{1F517}",     // 🔗
-    "\u{1F4D0}",     // 📐
-    "\u{1FAA4}",     // 🪤
-    "\u{1F9F1}",     // 🧱
-    "\u{1FAB5}",     // 🪵
+    "\u{1FA9A}",        // 🪚
+    "\u{1F528}",        // 🔨
+    "\u{1FA9C}",        // 🪜
+    "\u{1F9F2}",        // 🧲
+    "\u{1FA63}",        // 🪣
+    "\u{1F9F0}",        // 🧰
+    "\u{1FA9D}",        // 🪝
+    "\u{1F517}",        // 🔗
+    "\u{1F4D0}",        // 📐
+    "\u{1FAA4}",        // 🪤
+    "\u{1F9F1}",        // 🧱
+    "\u{1FAB5}",        // 🪵
 ];
 
 /// Look up a tool emoji by index (wrapping).
@@ -96,7 +96,10 @@ impl ToolAllocator {
             if container.display_emoji.is_empty() {
                 continue;
             }
-            if let Some(idx) = TOOL_EMOJIS.iter().position(|&e| e == container.display_emoji) {
+            if let Some(idx) = TOOL_EMOJIS
+                .iter()
+                .position(|&e| e == container.display_emoji)
+            {
                 let in_use = self
                     .allocated
                     .entry(container.project_name.clone())
@@ -128,10 +131,7 @@ mod tests {
     fn tool_emojis_are_unique() {
         let mut seen = std::collections::HashSet::new();
         for emoji in TOOL_EMOJIS {
-            assert!(
-                seen.insert(*emoji),
-                "Duplicate tool emoji: {emoji}"
-            );
+            assert!(seen.insert(*emoji), "Duplicate tool emoji: {emoji}");
         }
     }
 

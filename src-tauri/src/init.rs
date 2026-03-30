@@ -85,11 +85,10 @@ pub fn run() -> bool {
 
 /// Build the forge image using the embedded build-image.sh script.
 fn build_forge_image() -> Result<(), String> {
-    let source_dir = embedded::write_image_sources()
-        .map_err(|e| {
-            eprintln!("  [internal] Failed to extract embedded image sources: {e}");
-            strings::SETUP_ERROR
-        })?;
+    let source_dir = embedded::write_image_sources().map_err(|e| {
+        eprintln!("  [internal] Failed to extract embedded image sources: {e}");
+        strings::SETUP_ERROR
+    })?;
 
     let script = source_dir.join("scripts").join("build-image.sh");
     let tag = forge_image_tag();

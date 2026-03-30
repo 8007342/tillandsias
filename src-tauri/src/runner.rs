@@ -143,9 +143,7 @@ fn build_cli_launch_context(
     crate::secrets::write_hosts_yml_from_keyring();
 
     // Claude API key from OS keyring
-    let claude_api_key = crate::secrets::retrieve_claude_api_key()
-        .ok()
-        .flatten();
+    let claude_api_key = crate::secrets::retrieve_claude_api_key().ok().flatten();
 
     // Claude credentials directory
     let claude_dir = dirs::home_dir()

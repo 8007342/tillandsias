@@ -115,7 +115,8 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     // -----------------------------------------------------------------------
     for mount in &profile.mounts {
         let host_path = resolve_mount_source(&mount.host_key, ctx);
-        let container_path = resolve_container_path(mount.container_path, mount.host_key.clone(), ctx);
+        let container_path =
+            resolve_container_path(mount.container_path, mount.host_key.clone(), ctx);
         args.push("-v".into());
         args.push(format!(
             "{}:{}:{}",
@@ -269,7 +270,10 @@ mod tests {
 
         for profile in &profiles {
             let args = build_podman_args(profile, &test_context());
-            assert!(args.contains(&"--cap-drop=ALL".to_string()), "Missing --cap-drop=ALL");
+            assert!(
+                args.contains(&"--cap-drop=ALL".to_string()),
+                "Missing --cap-drop=ALL"
+            );
             assert!(args.contains(&"--security-opt=no-new-privileges".to_string()));
             assert!(args.contains(&"--userns=keep-id".to_string()));
             assert!(args.contains(&"--security-opt=label=disable".to_string()));
@@ -365,7 +369,10 @@ mod tests {
         let profile = container_profile::terminal_profile();
         let ctx = test_context();
         let args = build_podman_args(&profile, &ctx);
-        let w_idx = args.iter().position(|a| a == "-w").expect("-w flag present");
+        let w_idx = args
+            .iter()
+            .position(|a| a == "-w")
+            .expect("-w flag present");
         assert_eq!(args[w_idx + 1], "/home/forge/src/myproject");
     }
 
@@ -373,11 +380,12 @@ mod tests {
     fn custom_mounts_appended() {
         let profile = container_profile::forge_opencode_profile();
         let mut ctx = test_context();
-        ctx.custom_mounts.push(tillandsias_core::config::MountConfig {
-            host: "/data/models".into(),
-            container: "/models".into(),
-            mode: "ro".into(),
-        });
+        ctx.custom_mounts
+            .push(tillandsias_core::config::MountConfig {
+                host: "/data/models".into(),
+                container: "/models".into(),
+                mode: "ro".into(),
+            });
         let args = build_podman_args(&profile, &ctx);
         let joined = args.join(" ");
         assert!(joined.contains("/data/models:/models:ro"));

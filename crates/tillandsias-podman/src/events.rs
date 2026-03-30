@@ -79,13 +79,7 @@ impl PodmanEventStream {
         debug!(prefix = %self.prefix, "Starting podman events stream (no name filter, prefix matched in-process)");
 
         let mut child = crate::podman_cmd()
-            .args([
-                "events",
-                "--format",
-                "json",
-                "--filter",
-                "type=container",
-            ])
+            .args(["events", "--format", "json", "--filter", "type=container"])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
             .spawn()
@@ -278,9 +272,7 @@ mod tests {
 
     /// Helper: build a podman-format JSON event line.
     fn podman_event_json(name: &str, status: &str) -> String {
-        format!(
-            r#"{{"Name":"{name}","Status":"{status}","Type":"container","Time":1711400000}}"#
-        )
+        format!(r#"{{"Name":"{name}","Status":"{status}","Type":"container","Time":1711400000}}"#)
     }
 
     #[test]

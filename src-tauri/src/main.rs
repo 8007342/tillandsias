@@ -219,8 +219,8 @@ fn main() {
 
                 // Podman is usable only if the binary exists AND, on macOS/Windows,
                 // the podman machine is running. All podman operations gate on this.
-                let podman_usable = has_podman
-                    && (!Os::detect().needs_podman_machine() || has_machine);
+                let podman_usable =
+                    has_podman && (!Os::detect().needs_podman_machine() || has_machine);
 
                 {
                     let mut s = state_for_loop.lock().unwrap();
@@ -243,9 +243,9 @@ fn main() {
                     if let Some(tray_lock) = TRAY_ICON.get()
                         && let Ok(tray) = tray_lock.lock()
                     {
-                        if let Ok(icon) = tauri::image::Image::from_bytes(
-                            icons::tray_icon_png(TrayIconState::Decay),
-                        ) {
+                        if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                            TrayIconState::Decay,
+                        )) {
                             let _ = tray.set_icon(Some(icon));
                         }
                     }
@@ -285,12 +285,16 @@ fn main() {
                                         genus,
                                         state: container_state,
                                         port_range: (0, 0),
-                                        container_type: tillandsias_core::state::ContainerType::Forge, // Default for discovered containers
+                                        container_type:
+                                            tillandsias_core::state::ContainerType::Forge, // Default for discovered containers
                                         display_emoji: genus.flower().to_string(), // Default to flower for discovered containers
                                     });
                                 }
                             }
-                            info!(count = s.running.len(), "Restored running containers from prior session");
+                            info!(
+                                count = s.running.len(),
+                                "Restored running containers from prior session"
+                            );
                         }
                         Err(e) => {
                             warn!(error = %e, "Failed to discover existing containers on startup");
@@ -338,29 +342,32 @@ fn main() {
                         });
                         {
                             let mut s = state_for_loop.lock().unwrap();
-                            s.active_builds.push(tillandsias_core::state::BuildProgress {
-                                image_name: chip_name.clone(),
-                                status: tillandsias_core::state::BuildStatus::InProgress,
-                                started_at: std::time::Instant::now(),
-                                completed_at: None,
-                            });
+                            s.active_builds
+                                .push(tillandsias_core::state::BuildProgress {
+                                    image_name: chip_name.clone(),
+                                    status: tillandsias_core::state::BuildStatus::InProgress,
+                                    started_at: std::time::Instant::now(),
+                                    completed_at: None,
+                                });
                             s.tray_icon_state = TrayIconState::Building;
                             // forge_available is already false — keep it false during build
                         }
                         if let Some(tray_lock) = TRAY_ICON.get()
                             && let Ok(tray) = tray_lock.lock()
                         {
-                            if let Ok(icon) = tauri::image::Image::from_bytes(
-                                icons::tray_icon_png(TrayIconState::Building),
-                            ) {
+                            if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                                TrayIconState::Building,
+                            )) {
                                 let _ = tray.set_icon(Some(icon));
                             }
                         }
                         rebuild_menu(&app_handle_for_loop, &state_for_loop);
 
                         // Run the build (blocking in a worker thread)
-                        let build_result =
-                            tokio::task::spawn_blocking(|| handlers::run_build_image_script_pub("forge")).await;
+                        let build_result = tokio::task::spawn_blocking(|| {
+                            handlers::run_build_image_script_pub("forge")
+                        })
+                        .await;
 
                         match build_result {
                             Ok(Ok(())) => {
@@ -440,7 +447,9 @@ fn main() {
                         podman_event_stream.stream(podman_tx).await;
                     });
                 } else {
-                    info!("Podman events stream skipped (podman unavailable or machine not running)");
+                    info!(
+                        "Podman events stream skipped (podman unavailable or machine not running)"
+                    );
                 }
 
                 // Run main event loop
@@ -478,9 +487,9 @@ fn main() {
                             if let Some(tray_lock) = TRAY_ICON.get()
                                 && let Ok(tray) = tray_lock.lock()
                             {
-                                match tauri::image::Image::from_bytes(
-                                    icons::tray_icon_png(new_icon_state),
-                                ) {
+                                match tauri::image::Image::from_bytes(icons::tray_icon_png(
+                                    new_icon_state,
+                                )) {
                                     Ok(icon) => {
                                         let _ = tray.set_icon(Some(icon));
                                         debug!(
@@ -500,7 +509,16 @@ fn main() {
                         rebuild_menu(&app_for_rebuild, &state_for_rebuild);
                     });
 
-                event_loop::run(loop_state, scanner_rx, podman_rx, menu_rx, build_rx, build_tx, on_state_change).await;
+                event_loop::run(
+                    loop_state,
+                    scanner_rx,
+                    podman_rx,
+                    menu_rx,
+                    build_rx,
+                    build_tx,
+                    on_state_change,
+                )
+                .await;
             });
 
             Ok(())

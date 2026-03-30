@@ -202,9 +202,7 @@ pub fn terminal_profile() -> ContainerProfile {
             },
             ProfileEnvVar {
                 name: "GIT_CONFIG_GLOBAL",
-                value: EnvValue::Literal(
-                    "/home/forge/.config/tillandsias-git/.gitconfig",
-                ),
+                value: EnvValue::Literal("/home/forge/.config/tillandsias-git/.gitconfig"),
             },
         ],
         secrets: vec![],
@@ -301,24 +299,25 @@ mod tests {
     fn forge_claude_has_claude_secrets() {
         let profile = forge_claude_profile();
         assert_eq!(profile.secrets.len(), 2);
-        assert!(profile
-            .secrets
-            .iter()
-            .any(|s| matches!(s.kind, SecretKind::ClaudeDir)));
-        assert!(profile
-            .secrets
-            .iter()
-            .any(|s| matches!(s.kind, SecretKind::ClaudeApiKey)));
+        assert!(
+            profile
+                .secrets
+                .iter()
+                .any(|s| matches!(s.kind, SecretKind::ClaudeDir))
+        );
+        assert!(
+            profile
+                .secrets
+                .iter()
+                .any(|s| matches!(s.kind, SecretKind::ClaudeApiKey))
+        );
     }
 
     #[test]
     fn terminal_has_no_secrets() {
         let profile = terminal_profile();
         assert!(profile.secrets.is_empty());
-        assert_eq!(
-            profile.entrypoint,
-            "/usr/local/bin/entrypoint-terminal.sh"
-        );
+        assert_eq!(profile.entrypoint, "/usr/local/bin/entrypoint-terminal.sh");
         assert!(matches!(
             profile.working_dir,
             Some(WorkingDir::ProjectSubdir)

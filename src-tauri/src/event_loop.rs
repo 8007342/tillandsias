@@ -12,7 +12,9 @@ use tillandsias_core::config::{SelectedAgent, load_global_config, save_selected_
 use tillandsias_core::event::{BuildProgressEvent, ContainerState, MenuCommand};
 use tillandsias_core::genus::GenusAllocator;
 use tillandsias_core::project::{ArtifactStatus, Project, ProjectChange, ProjectType};
-use tillandsias_core::state::{BuildProgress, BuildStatus, ContainerInfo, ContainerType, RemoteRepoInfo, TrayState};
+use tillandsias_core::state::{
+    BuildProgress, BuildStatus, ContainerInfo, ContainerType, RemoteRepoInfo, TrayState,
+};
 use tillandsias_core::tools::ToolAllocator;
 
 use crate::{github, handlers};
@@ -298,7 +300,11 @@ fn handle_build_progress_event(
             }
         }
         BuildProgressEvent::Completed { image_name } => {
-            if let Some(entry) = state.active_builds.iter_mut().find(|b| b.image_name == image_name) {
+            if let Some(entry) = state
+                .active_builds
+                .iter_mut()
+                .find(|b| b.image_name == image_name)
+            {
                 entry.status = BuildStatus::Completed;
                 entry.completed_at = Some(Instant::now());
             }
@@ -315,7 +321,11 @@ fn handle_build_progress_event(
             });
         }
         BuildProgressEvent::Failed { image_name, reason } => {
-            if let Some(entry) = state.active_builds.iter_mut().find(|b| b.image_name == image_name) {
+            if let Some(entry) = state
+                .active_builds
+                .iter_mut()
+                .find(|b| b.image_name == image_name)
+            {
                 entry.status = BuildStatus::Failed(reason);
                 entry.completed_at = Some(Instant::now());
             }
@@ -512,7 +522,9 @@ fn handle_podman_event(
                 let removed = state.running.remove(pos);
                 allocator.release(&removed.project_name, removed.genus);
                 // Release tool emoji if this was a Maintenance container
-                if removed.container_type == ContainerType::Maintenance && !removed.display_emoji.is_empty() {
+                if removed.container_type == ContainerType::Maintenance
+                    && !removed.display_emoji.is_empty()
+                {
                     tool_allocator.release(&removed.project_name, &removed.display_emoji);
                 }
 
@@ -537,9 +549,7 @@ fn handle_podman_event(
         // Unknown container with our prefix — discovered on startup or external.
         // Try web container naming first (`tillandsias-<project>-web`), then
         // fall back to genus-based naming (`tillandsias-<project>-<genus>`).
-        if let Some(project_name) =
-            ContainerInfo::parse_web_container_name(&event.container_name)
-        {
+        if let Some(project_name) = ContainerInfo::parse_web_container_name(&event.container_name) {
             debug!(
                 project = %project_name,
                 "Discovered running web container"

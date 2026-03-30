@@ -168,7 +168,7 @@ impl TillandsiaGenus {
     /// Unique flower emoji for this genus — used in terminal window titles and menu labels.
     pub fn flower(&self) -> &'static str {
         match self {
-            Self::Aeranthos => "\u{1F338}",      // 🌸
+            Self::Aeranthos => "\u{1F338}",       // 🌸
             Self::Ionantha => "\u{1F33A}",        // 🌺
             Self::Xerographica => "\u{1F33B}",    // 🌻
             Self::CaputMedusae => "\u{1F33C}",    // 🌼
@@ -190,7 +190,7 @@ impl TillandsiaGenus {
             Self::Flabellata => "\u{1F341}",      // 🍁
             Self::Paleacea => "\u{1F332}",        // 🌲
             Self::Recurvata => "\u{1F333}",       // 🌳
-            Self::Kolbii => "\u{2618}\u{FE0F}",  // ☘️
+            Self::Kolbii => "\u{2618}\u{FE0F}",   // ☘️
             Self::Pruinosa => "\u{1F391}",        // 🎑
         }
     }
@@ -447,14 +447,22 @@ mod tests {
                 genus
             );
         }
-        assert_eq!(seen.len(), TillandsiaGenus::ALL.len(), "All genera must have distinct flowers");
+        assert_eq!(
+            seen.len(),
+            TillandsiaGenus::ALL.len(),
+            "All genera must have distinct flowers"
+        );
     }
 
     #[test]
     fn flower_no_gaps() {
         // Every genus must return a non-empty flower string
         for genus in TillandsiaGenus::ALL {
-            assert!(!genus.flower().is_empty(), "flower() is empty for {:?}", genus);
+            assert!(
+                !genus.flower().is_empty(),
+                "flower() is empty for {:?}",
+                genus
+            );
         }
     }
 
@@ -547,7 +555,10 @@ mod tests {
         // New genera without dedicated SVGs should return Ionantha icons
         let ionantha_bud = icons::icon_svg(TillandsiaGenus::Ionantha, PlantLifecycle::Bud);
         let cyanea_bud = icons::icon_svg(TillandsiaGenus::Cyanea, PlantLifecycle::Bud);
-        assert!(std::ptr::eq(ionantha_bud, cyanea_bud), "Cyanea bud should be same bytes as Ionantha bud");
+        assert!(
+            std::ptr::eq(ionantha_bud, cyanea_bud),
+            "Cyanea bud should be same bytes as Ionantha bud"
+        );
     }
 
     #[test]
@@ -555,7 +566,10 @@ mod tests {
         // Original 8 genera should NOT fall back to Ionantha (except Ionantha itself)
         let aeranthos_bud = icons::icon_svg(TillandsiaGenus::Aeranthos, PlantLifecycle::Bud);
         let ionantha_bud = icons::icon_svg(TillandsiaGenus::Ionantha, PlantLifecycle::Bud);
-        assert!(!std::ptr::eq(aeranthos_bud, ionantha_bud), "Aeranthos should have its own icon");
+        assert!(
+            !std::ptr::eq(aeranthos_bud, ionantha_bud),
+            "Aeranthos should have its own icon"
+        );
     }
 
     #[test]

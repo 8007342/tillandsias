@@ -66,9 +66,7 @@ fn is_alive(pid: u32) -> bool {
     {
         Ok(output) if output.status.success() => {
             let stdout = String::from_utf8_lossy(&output.stdout);
-            stdout.contains("tillandsias")
-                || stdout.contains("nix")
-                || stdout.contains("bash")
+            stdout.contains("tillandsias") || stdout.contains("nix") || stdout.contains("bash")
         }
         _ => false,
     }
