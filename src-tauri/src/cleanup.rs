@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use tillandsias_core::config;
 use tillandsias_core::format::human_bytes;
 
+use crate::i18n;
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -72,9 +74,7 @@ fn installed_binary_path() -> PathBuf {
 
 /// Run a podman command synchronously, returning (stdout, success).
 fn podman_run(args: &[&str]) -> (String, bool) {
-    let output = tillandsias_podman::podman_cmd_sync()
-        .args(args)
-        .output();
+    let output = tillandsias_podman::podman_cmd_sync().args(args).output();
     match output {
         Ok(o) => (String::from_utf8_lossy(&o.stdout).to_string(), o.status.success()),
         Err(_) => (String::new(), false),
@@ -86,7 +86,7 @@ fn podman_run(args: &[&str]) -> (String, bool) {
 // ---------------------------------------------------------------------------
 
 pub fn run_stats() -> bool {
-    println!("Tillandsias — disk usage report");
+    println!("{}", i18n::t("stats.title"));
     println!();
 
     let mut total_bytes: u64 = 0;
@@ -108,7 +108,7 @@ pub fn run_stats() -> bool {
             .collect();
 
         if relevant.is_empty() {
-            println!("  Images:     (none)");
+            println!("  {}", i18n::t("stats.images_none"));
         } else {
             println!("  Images:");
             for line in &relevant {
@@ -116,7 +116,7 @@ pub fn run_stats() -> bool {
             }
         }
     } else {
-        println!("  Images:     (podman not available)");
+        println!("  {}", i18n::t("stats.images_no_podman"));
     }
     println!();
 
@@ -133,7 +133,7 @@ pub fn run_stats() -> bool {
     if ps_ok {
         let containers: Vec<&str> = ps_out.lines().filter(|l| !l.trim().is_empty()).collect();
         if containers.is_empty() {
-            println!("  Containers: (none)");
+            println!("  {}", i18n::t("stats.containers_none"));
         } else {
             println!("  Containers:");
             for line in &containers {
@@ -141,7 +141,7 @@ pub fn run_stats() -> bool {
             }
         }
     } else {
-        println!("  Containers: (podman not available)");
+        println!("  {}", i18n::t("stats.containers_no_podman"));
     }
     println!();
 
@@ -151,7 +151,11 @@ pub fn run_stats() -> bool {
     let nix_bytes = dir_size_bytes(&nix_path);
     total_bytes += nix_bytes;
     if nix_bytes > 0 {
-        println!("  Nix cache:       {} ({})", nix_path.display(), human_bytes(nix_bytes));
+        println!(
+            "  Nix cache:       {} ({})",
+            nix_path.display(),
+            human_bytes(nix_bytes)
+        );
     } else {
         println!("  Nix cache:       (not present)");
     }
@@ -161,7 +165,11 @@ pub fn run_stats() -> bool {
     let cargo_bytes = dir_size_bytes(&cargo_path);
     total_bytes += cargo_bytes;
     if cargo_bytes > 0 {
-        println!("  Cargo cache:     {} ({})", cargo_path.display(), human_bytes(cargo_bytes));
+        println!(
+            "  Cargo cache:     {} ({})",
+            cargo_path.display(),
+            human_bytes(cargo_bytes)
+        );
     } else {
         println!("  Cargo cache:     (not present)");
     }
@@ -171,14 +179,21 @@ pub fn run_stats() -> bool {
     let bin_bytes = file_size_bytes(&bin_path);
     total_bytes += bin_bytes;
     if bin_bytes > 0 {
-        println!("  Installed binary: {} ({})", bin_path.display(), human_bytes(bin_bytes));
+        println!(
+            "  Installed binary: {} ({})",
+            bin_path.display(),
+            human_bytes(bin_bytes)
+        );
     } else {
-        println!("  Installed binary: (not installed at {})", bin_path.display());
+        println!(
+            "  Installed binary: (not installed at {})",
+            bin_path.display()
+        );
     }
 
     println!();
-    println!("  Total (caches + binary): {}", human_bytes(total_bytes));
-    println!("  (Podman image storage is managed by podman — see 'podman system df')");
+    println!("  {}", i18n::tf("stats.total", &[("size", &human_bytes(total_bytes))]));
+    println!("  {}", i18n::t("stats.podman_note"));
 
     true
 }
@@ -188,7 +203,7 @@ pub fn run_stats() -> bool {
 // ---------------------------------------------------------------------------
 
 pub fn run_clean() -> bool {
-    println!("Tillandsias — artifact cleanup");
+    println!("{}", i18n::t("clean.title"));
     println!();
 
     let mut anything_cleaned = false;
@@ -253,10 +268,17 @@ pub fn run_clean() -> bool {
         match std::fs::remove_dir_all(&nix_path) {
             Ok(()) => {
                 anything_cleaned = true;
-                println!("  Nix cache:  removed {} ({})", nix_path.display(), human_bytes(size_before));
+                println!(
+                    "  Nix cache:  removed {} ({})",
+                    nix_path.display(),
+                    human_bytes(size_before)
+                );
             }
             Err(e) => {
-                println!("  Nix cache:  failed to remove {}: {e}", nix_path.display());
+                println!(
+                    "  Nix cache:  failed to remove {}: {e}",
+                    nix_path.display()
+                );
             }
         }
     } else {
@@ -265,9 +287,9 @@ pub fn run_clean() -> bool {
 
     println!();
     if anything_cleaned {
-        println!("Cleanup complete.");
+        println!("{}", i18n::t("clean.complete"));
     } else {
-        println!("Nothing to clean.");
+        println!("{}", i18n::t("clean.nothing"));
     }
 
     true

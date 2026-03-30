@@ -28,6 +28,8 @@ use tillandsias_core::config::{SelectedAgent, load_global_config};
 use tillandsias_core::genus::TrayIconState;
 use tillandsias_core::state::{BuildStatus, ContainerType, TrayState};
 
+use crate::i18n;
+
 /// Generation counter for menu rebuilds.
 ///
 /// libappindicator (Linux tray) caches menu item IDs across rebuilds.
@@ -122,11 +124,12 @@ pub fn build_tray_menu<R: Runtime>(
         });
 
     let src_label = format!(
-        "{}/ \u{2014} Attach Here",
+        "{}/ \u{2014} {}",
         watch_path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| watch_path.display().to_string())
+            .unwrap_or_else(|| watch_path.display().to_string()),
+        i18n::t("menu.attach_here")
     );
     menu = menu.item(
         &MenuItemBuilder::with_id(ids::attach_here(&watch_path), &src_label)
@@ -136,7 +139,7 @@ pub fn build_tray_menu<R: Runtime>(
 
     // Global root terminal — 🛠️ is reserved for this item and MUST NOT appear in TOOL_EMOJIS.
     menu = menu.item(
-        &MenuItemBuilder::with_id(ids::root_terminal(), "\u{1F6E0}\u{FE0F} Root")
+        &MenuItemBuilder::with_id(ids::root_terminal(), i18n::t("menu.root_terminal"))
             .enabled(state.forge_available)
             .build(app)?,
     );
@@ -164,7 +167,8 @@ pub fn build_tray_menu<R: Runtime>(
     // Projects submenu — only inactive projects.
     // Omitted entirely when every discovered project is active.
     if !inactive_projects.is_empty() || state.projects.is_empty() {
-        let projects_submenu = build_inactive_projects_submenu(app, &inactive_projects, state.forge_available)?;
+        let projects_submenu =
+            build_inactive_projects_submenu(app, &inactive_projects, state.forge_available)?;
         menu = menu.item(&projects_submenu);
     }
 
@@ -188,7 +192,8 @@ pub fn build_tray_menu<R: Runtime>(
     menu = menu.item(&settings_submenu);
 
     // Quit — always visible at top level
-    menu = menu.item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), "Quit Tillandsias").build(app)?);
+    menu = menu
+        .item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), i18n::t("menu.quit")).build(app)?);
 
     debug!(
         projects = state.projects.len(),
@@ -209,22 +214,21 @@ pub fn build_tray_menu<R: Runtime>(
 /// - Error item (disabled) explaining podman is unavailable
 /// - Separator
 /// - About submenu (version · credit · quit)
-fn build_decay_menu<R: Runtime>(
-    app: &AppHandle<R>,
-) -> tauri::Result<tauri::menu::Menu<R>> {
+fn build_decay_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu::Menu<R>> {
     let mut menu = MenuBuilder::new(app);
 
     menu = menu.item(
         &MenuItemBuilder::with_id(
             ids::static_id("podman-unavailable"),
-            "Podman is not available",
+            i18n::t("errors.podman_unavailable"),
         )
         .enabled(false)
         .build(app)?,
     );
 
     menu = menu.separator();
-    menu = menu.item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), "Quit Tillandsias").build(app)?);
+    menu = menu
+        .item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), i18n::t("menu.quit")).build(app)?);
 
     debug!("Decay menu built (podman unavailable)");
 
@@ -247,13 +251,16 @@ fn build_inactive_projects_submenu<R: Runtime>(
     inactive: &[&tillandsias_core::project::Project],
     forge_available: bool,
 ) -> tauri::Result<tauri::menu::Submenu<R>> {
-    let mut projects = SubmenuBuilder::new(app, "Projects");
+    let mut projects = SubmenuBuilder::new(app, i18n::t("menu.projects"));
 
     if inactive.is_empty() {
         projects = projects.item(
-            &MenuItemBuilder::with_id(ids::static_id("no-projects"), "No projects detected")
-                .enabled(false)
-                .build(app)?,
+            &MenuItemBuilder::with_id(
+                ids::static_id("no-projects"),
+                i18n::t("menu.no_projects"),
+            )
+            .enabled(false)
+            .build(app)?,
         );
     } else {
         // Inactive projects have no running containers so we pass a TrayState-like
@@ -263,16 +270,20 @@ fn build_inactive_projects_submenu<R: Runtime>(
         // with the real running list is still correct here: inactive projects won't
         // match any running container by name, so they'll render with plain labels.
         for project in inactive {
+            let attach_label = format!("\u{1F331} {}", i18n::t("menu.attach_here"));
             let submenu = SubmenuBuilder::new(app, &project.name)
                 .item(
-                    &MenuItemBuilder::with_id(ids::attach_here(&project.path), "\u{1F331} Attach Here")
+                    &MenuItemBuilder::with_id(ids::attach_here(&project.path), &attach_label)
                         .enabled(forge_available)
                         .build(app)?,
                 )
                 .item(
-                    &MenuItemBuilder::with_id(ids::terminal(&project.path), "\u{26CF}\u{FE0F} Maintenance")
-                        .enabled(forge_available)
-                        .build(app)?,
+                    &MenuItemBuilder::with_id(
+                        ids::terminal(&project.path),
+                        i18n::t("menu.maintenance"),
+                    )
+                    .enabled(forge_available)
+                    .build(app)?,
                 )
                 .build()?;
             projects = projects.item(&submenu);
@@ -288,17 +299,17 @@ fn build_settings_submenu<R: Runtime>(
     state: &TrayState,
     watch_path: &std::path::Path,
 ) -> tauri::Result<tauri::menu::Submenu<R>> {
-    let mut settings = SubmenuBuilder::new(app, "Settings");
+    let mut settings = SubmenuBuilder::new(app, i18n::t("menu.settings"));
 
     let authenticated = !needs_github_login();
 
     // GitHub submenu — contains Login/Refresh and (when authenticated) Remote Projects
     let github_label = if authenticated {
-        "\u{1F512} GitHub Login Refresh"
+        i18n::t("menu.github.login_refresh")
     } else {
-        "\u{1F511} GitHub Login"
+        i18n::t("menu.github.login")
     };
-    let mut github = SubmenuBuilder::new(app, "GitHub");
+    let mut github = SubmenuBuilder::new(app, i18n::t("menu.github.label"));
     github = github.item(
         &MenuItemBuilder::with_id(gen_id(ids::GITHUB_LOGIN), github_label)
             .enabled(state.forge_available)
@@ -320,12 +331,15 @@ fn build_settings_submenu<R: Runtime>(
     settings = settings.separator();
     let version = include_str!("../../VERSION").trim();
     settings = settings.item(
-        &MenuItemBuilder::with_id(ids::static_id("version"), format!("Tillandsias v{version}"))
-            .enabled(false)
-            .build(app)?,
+        &MenuItemBuilder::with_id(
+            ids::static_id("version"),
+            i18n::tf("menu.version", &[("version", version)]),
+        )
+        .enabled(false)
+        .build(app)?,
     );
     settings = settings.item(
-        &MenuItemBuilder::with_id(ids::static_id("credit"), "by Tlatoāni")
+        &MenuItemBuilder::with_id(ids::static_id("credit"), i18n::t("menu.credit"))
             .enabled(false)
             .build(app)?,
     );
@@ -346,7 +360,7 @@ fn build_remote_projects_submenu<R: Runtime>(
         submenu = submenu.item(
             &MenuItemBuilder::with_id(
                 ids::static_id("cloning-status"),
-                format!("Cloning {cloning_name}..."),
+                i18n::tf("menu.github.cloning", &[("name", cloning_name)]),
             )
             .enabled(false)
             .build(app)?,
@@ -357,9 +371,12 @@ fn build_remote_projects_submenu<R: Runtime>(
     // Show loading state
     if state.remote_repos_loading {
         submenu = submenu.item(
-            &MenuItemBuilder::with_id(ids::static_id("remote-loading"), "Loading...")
-                .enabled(false)
-                .build(app)?,
+            &MenuItemBuilder::with_id(
+                ids::static_id("remote-loading"),
+                i18n::t("menu.github.loading"),
+            )
+            .enabled(false)
+            .build(app)?,
         );
         return submenu.build();
     }
@@ -367,9 +384,9 @@ fn build_remote_projects_submenu<R: Runtime>(
     // Show error state
     if let Some(ref error) = state.remote_repos_error {
         let label = if error.contains("No GitHub credentials") {
-            "Login to GitHub first".to_string()
+            i18n::t("menu.github.login_first").to_string()
         } else {
-            "Could not fetch repos".to_string()
+            i18n::t("menu.github.could_not_fetch").to_string()
         };
         submenu = submenu.item(
             &MenuItemBuilder::with_id(ids::static_id("remote-error"), &label)
@@ -395,15 +412,18 @@ fn build_remote_projects_submenu<R: Runtime>(
     if remote_only.is_empty() {
         if state.remote_repos.is_empty() && state.remote_repos_fetched_at.is_none() {
             submenu = submenu.item(
-                &MenuItemBuilder::with_id(ids::static_id("remote-loading"), "Loading...")
-                    .enabled(false)
-                    .build(app)?,
+                &MenuItemBuilder::with_id(
+                    ids::static_id("remote-loading"),
+                    i18n::t("menu.github.loading"),
+                )
+                .enabled(false)
+                .build(app)?,
             );
         } else {
             submenu = submenu.item(
                 &MenuItemBuilder::with_id(
                     ids::static_id("remote-all-local"),
-                    "All repos cloned locally",
+                    i18n::t("menu.github.all_cloned"),
                 )
                 .enabled(false)
                 .build(app)?,
@@ -434,7 +454,7 @@ fn build_seedlings_submenu<R: Runtime>(
     let global_config = load_global_config();
     let selected = global_config.agent.selected;
 
-    let mut submenu = SubmenuBuilder::new(app, "\u{1F331} Seedlings"); // 🌱
+    let mut submenu = SubmenuBuilder::new(app, i18n::t("menu.seedlings"));
 
     // Available agents: OpenCode, Claude
     let agents: &[(SelectedAgent, &str)] = &[
@@ -457,9 +477,9 @@ fn build_seedlings_submenu<R: Runtime>(
     submenu = submenu.separator();
     let has_claude_key = matches!(crate::secrets::retrieve_claude_api_key(), Ok(Some(_)));
     let (claude_login_label, claude_login_enabled) = if has_claude_key {
-        ("\u{1F512} Claude Login Refresh", true) // 🔒 locked — can re-authenticate
+        (i18n::t("menu.claude.login_refresh"), true)
     } else {
-        ("\u{1F511} Claude Login", true) // 🔑 key — needs authentication
+        (i18n::t("menu.claude.login"), true)
     };
     submenu = submenu.item(
         &MenuItemBuilder::with_id(gen_id(ids::CLAUDE_LOGIN), claude_login_label)
@@ -480,7 +500,9 @@ fn build_project_submenu<R: Runtime>(
     let tool_emojis: Vec<&str> = state
         .running
         .iter()
-        .filter(|c| c.project_name == project.name && c.container_type == ContainerType::Maintenance)
+        .filter(|c| {
+            c.project_name == project.name && c.container_type == ContainerType::Maintenance
+        })
         .map(|c| c.display_emoji.as_str())
         .collect();
     let flower_emojis: Vec<&str> = state
@@ -507,9 +529,15 @@ fn build_project_submenu<R: Runtime>(
     // Idle: 🌱 Attach Here (clickable, gated on forge_available)
     // Running: 🌺 Blooming (genus flower, disabled — prevents re-launch)
     let (attach_label, attach_enabled) = if let Some(genus) = project.assigned_genus {
-        (format!("{} Blooming", genus.flower()), false)
+        (
+            format!("{} {}", genus.flower(), i18n::t("menu.blooming")),
+            false,
+        )
     } else {
-        ("\u{1F331} Attach Here".to_string(), state.forge_available) // 🌱
+        (
+            format!("\u{1F331} {}", i18n::t("menu.attach_here")),
+            state.forge_available,
+        ) // 🌱
     };
     submenu = submenu.item(
         &MenuItemBuilder::with_id(ids::attach_here(&project.path), &attach_label)
@@ -521,11 +549,13 @@ fn build_project_submenu<R: Runtime>(
     // When running: show the first maintenance container's tool emoji.
     // When idle: show pick icon (⛏️).
     // Gated on forge_available — requires the image to launch.
+    let maintenance_word = i18n::t("menu.maintenance"); // already includes ⛏️ emoji
     let maintenance_label = if maintenance_running {
         let tool = tool_emojis.first().copied().unwrap_or("\u{26CF}\u{FE0F}");
+        // Replace the default ⛏️ prefix with the running tool emoji
         format!("{tool} Maintenance")
     } else {
-        "\u{26CF}\u{FE0F} Maintenance".to_string() // ⛏️ pick — idle
+        maintenance_word.to_string()
     };
     // "Maintenance" — opens bash in a forge container
     submenu = submenu.item(
@@ -547,13 +577,13 @@ fn build_chip_label(build: &tillandsias_core::state::BuildProgress) -> String {
     match &build.status {
         BuildStatus::InProgress => {
             if build.image_name == "Maintenance" {
-                "\u{26CF}\u{FE0F} Setting up Maintenance...".to_string()
+                i18n::t("menu.build.maintenance_setup").to_string()
             } else {
-                format!("\u{23F3} Building {}...", build.image_name)
+                i18n::tf("menu.build.in_progress", &[("name", &build.image_name)])
             }
         }
-        BuildStatus::Completed => format!("\u{2705} {} ready", build.image_name),
-        BuildStatus::Failed(_) => format!("\u{274C} {} build failed", build.image_name),
+        BuildStatus::Completed => i18n::tf("menu.build.completed", &[("name", &build.image_name)]),
+        BuildStatus::Failed(_) => i18n::tf("menu.build.failed", &[("name", &build.image_name)]),
     }
 }
 

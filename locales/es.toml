@@ -1,0 +1,113 @@
+# Tillandsias — tabla de cadenas en español
+# Traducción de prueba de concepto. Las claves que faltan usarán inglés como respaldo.
+#
+# Traducción por: Tlatoāni (hablante nativo)
+
+# ── App ─────────────────────────────────────────────────────
+[app]
+name = "Tillandsias"
+
+# ── Tray menu ───────────────────────────────────────────────
+[menu]
+attach_here = "Abrir aquí"
+root_terminal = "🛠️ Raíz"
+projects = "Proyectos"
+no_projects = "No se detectaron proyectos"
+settings = "Configuración"
+quit = "Salir de Tillandsias"
+blooming = "Floreciendo"
+maintenance = "⛏️ Mantenimiento"
+seedlings = "🌱 Semillas"
+credit = "por Tlatoāni"
+version = "Tillandsias v{version}"
+
+[menu.github]
+label = "GitHub"
+login = "🔑 Iniciar sesión en GitHub"
+login_refresh = "🔒 Actualizar sesión de GitHub"
+loading = "Cargando..."
+all_cloned = "Todos los repositorios están clonados"
+login_first = "Inicia sesión en GitHub primero"
+could_not_fetch = "No se pudieron obtener los repositorios"
+cloning = "Clonando {name}..."
+
+[menu.claude]
+login = "🔑 Iniciar sesión en Claude"
+login_refresh = "🔒 Actualizar sesión de Claude"
+
+[menu.build]
+in_progress = "⏳ Construyendo {name}..."
+maintenance_setup = "⛏️ Configurando Mantenimiento..."
+completed = "✅ {name} listo"
+failed = "❌ Error al construir {name}"
+
+# ── CLI output ───────────────────────────────────────────────
+[cli]
+attaching = "Tillandsias — Conectando a {name}"
+checking_image = "Verificando imagen... {tag}"
+ensuring_image = "Asegurando que la imagen esté actualizada..."
+image_ready = "✓ Imagen lista ({size})"
+starting_env = "Iniciando entorno..."
+starting_terminal = "Iniciando terminal (shell fish)..."
+launching = "Iniciando... (Ctrl+C para detener)"
+env_stopped = "Entorno detenido."
+waiting_setup = "Esperando que termine la configuración del entorno..."
+
+# ── Init command ─────────────────────────────────────────────
+[init]
+preparing = "Tillandsias init — preparando el entorno de desarrollo"
+already_ready = "✓ El entorno de desarrollo ya está listo"
+ready = "Listo."
+setup_in_progress = "⌛ Configuración en curso, esperando..."
+setup_timed_out = "✗ Tiempo de espera agotado. Si persiste, reinstala desde https://github.com/8007342/tillandsias"
+env_ready = "✓ Entorno listo"
+waiting = "⌛ Esperando que se complete la configuración..."
+setting_up = "Configurando el entorno de desarrollo..."
+first_run_note = "(Esto puede tardar unos minutos en el primer arranque)"
+dev_env_ready = "✓ Entorno de desarrollo listo"
+ready_run = "Listo. Ejecuta: tillandsias"
+setup_failed = "✗ Error de configuración: {error}"
+
+# ── Error messages ───────────────────────────────────────────
+[errors]
+setup = "Tillandsias se está configurando. Si esto persiste, reinstala desde https://github.com/8007342/tillandsias"
+env_not_ready = "El entorno de desarrollo aún no está listo. Tillandsias lo configurará automáticamente — inténtalo de nuevo en unos minutos."
+install_incomplete = "La instalación de Tillandsias puede estar incompleta. Reinstala desde https://github.com/8007342/tillandsias"
+podman_unavailable = "Podman no está disponible"
+no_podman = "Error: podman no está instalado o no está en PATH"
+genera_exhausted = "Se agotaron todos los géneros para el proyecto {name}"
+terminal_failed = "Error al abrir la terminal: {error}"
+no_terminal = "No se encontró un emulador de terminal (se probó ptyxis, gnome-terminal, konsole, xterm)"
+
+# ── Desktop notifications ────────────────────────────────────
+[notifications]
+already_running = "Ya está en ejecución — busca '{title}' en tus ventanas"
+claude_key_saved = "Clave API de Claude guardada correctamente"
+
+# ── Stats command ────────────────────────────────────────────
+[stats]
+title = "Tillandsias — informe de uso de disco"
+images_none = "Imágenes:     (ninguna)"
+images_no_podman = "Imágenes:     (podman no disponible)"
+containers_none = "Contenedores: (ninguno)"
+containers_no_podman = "Contenedores: (podman no disponible)"
+total = "Total (cachés + binario): {size}"
+podman_note = "(El almacenamiento de imágenes de Podman es gestionado por podman — ver 'podman system df')"
+
+# ── Clean command ────────────────────────────────────────────
+[clean]
+title = "Tillandsias — limpieza de artefactos"
+complete = "Limpieza completada."
+nothing = "Nada que limpiar."
+
+# ── Update command ───────────────────────────────────────────
+[update]
+version = "Tillandsias v{version}"
+checking = "Buscando actualizaciones..."
+up_to_date = "Ya está actualizado."
+available = "Actualización disponible: v{version}"
+downloading = "Descargando..."
+downloaded = "Descargado ({size})"
+applying = "Aplicando actualización..."
+updated = "Actualizado a v{version}"
+restart_note = "Reinicia la aplicación para usar la nueva versión."

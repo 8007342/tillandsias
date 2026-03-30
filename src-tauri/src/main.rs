@@ -9,6 +9,7 @@ mod embedded;
 mod event_loop;
 mod github;
 mod handlers;
+mod i18n;
 mod init;
 mod logging;
 mod menu;

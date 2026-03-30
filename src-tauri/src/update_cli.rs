@@ -50,6 +50,8 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use tillandsias_core::format::human_bytes;
 
+use crate::i18n;
+
 /// The update manifest endpoint. Mirrors `tauri.conf.json` plugins.updater.endpoints[0].
 const UPDATE_ENDPOINT: &str =
     "https://github.com/8007342/tillandsias/releases/latest/download/latest.json";
@@ -85,8 +87,8 @@ pub fn run() -> bool {
     // Tauri normally does this during its setup, but --update runs before Tauri.
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    println!("  Tillandsias v{CURRENT_VERSION}");
-    println!("  Checking for updates...");
+    println!("  {}", i18n::tf("update.version", &[("version", CURRENT_VERSION)]));
+    println!("  {}", i18n::t("update.checking"));
 
     // Fetch latest.json
     let json_text = match fetch_url(UPDATE_ENDPOINT) {
@@ -110,11 +112,11 @@ pub fn run() -> bool {
     let current = CURRENT_VERSION.trim_start_matches('v');
 
     if !is_newer(latest, current) {
-        println!("  Already up to date.");
+        println!("  {}", i18n::t("update.up_to_date"));
         return true;
     }
 
-    println!("  Update available: v{latest}");
+    println!("  {}", i18n::tf("update.available", &[("version", latest)]));
 
     // Detect platform key (Tauri uses "linux-x86_64", "darwin-x86_64", etc.)
     let platform_key = detect_platform_key();
@@ -141,7 +143,7 @@ pub fn run() -> bool {
     let appimage_path = appimage_path.unwrap();
 
     // Download the update archive
-    println!("  Downloading...");
+    println!("  {}", i18n::t("update.downloading"));
     let archive_path = match download_update(&entry.url) {
         Ok(p) => p,
         Err(e) => {
@@ -152,10 +154,10 @@ pub fn run() -> bool {
     let archive_size = std::fs::metadata(&archive_path)
         .map(|m| m.len())
         .unwrap_or(0);
-    println!("  Downloaded ({})", human_bytes(archive_size));
+    println!("  {}", i18n::tf("update.downloaded", &[("size", &human_bytes(archive_size))]));
 
     // Extract (if tar.gz) or use directly (if raw AppImage), then replace
-    println!("  Applying update...");
+    println!("  {}", i18n::t("update.applying"));
     if let Err(e) = apply_appimage_update(&archive_path, &appimage_path, &entry.url) {
         eprintln!("  Error: failed to apply update: {e}");
         // Clean up temp archive
@@ -166,8 +168,8 @@ pub fn run() -> bool {
     // Clean up temp archive
     let _ = std::fs::remove_file(&archive_path);
 
-    println!("  Updated to v{latest}");
-    println!("  Restart the application to use the new version.");
+    println!("  {}", i18n::tf("update.updated", &[("version", latest)]));
+    println!("  {}", i18n::t("update.restart_note"));
     true
 }
 

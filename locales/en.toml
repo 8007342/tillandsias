@@ -1,0 +1,121 @@
+# Tillandsias — English string table
+# All user-facing strings for the Rust tray app and CLI.
+#
+# Keys use dot-notation matching code organisation:
+#   menu.*       Tray menu labels
+#   cli.*        CLI attach/runner output
+#   init.*       `tillandsias init` output
+#   errors.*     Error messages
+#   notifications.*  Desktop notifications
+#   stats.*      `tillandsias --stats` output
+#   clean.*      `tillandsias --clean` output
+#   update.*     `tillandsias --update` output
+
+# ── App ─────────────────────────────────────────────────────
+[app]
+name = "Tillandsias"
+
+# ── Tray menu ───────────────────────────────────────────────
+[menu]
+attach_here = "Attach Here"
+root_terminal = "🛠️ Root"
+projects = "Projects"
+no_projects = "No projects detected"
+settings = "Settings"
+quit = "Quit Tillandsias"
+blooming = "Blooming"
+maintenance = "⛏️ Maintenance"
+seedlings = "🌱 Seedlings"
+credit = "by Tlatoāni"
+version = "Tillandsias v{version}"
+
+[menu.github]
+label = "GitHub"
+login = "🔑 GitHub Login"
+login_refresh = "🔒 GitHub Login Refresh"
+loading = "Loading..."
+all_cloned = "All repos cloned locally"
+login_first = "Login to GitHub first"
+could_not_fetch = "Could not fetch repos"
+cloning = "Cloning {name}..."
+
+[menu.claude]
+login = "🔑 Claude Login"
+login_refresh = "🔒 Claude Login Refresh"
+
+[menu.build]
+in_progress = "⏳ Building {name}..."
+maintenance_setup = "⛏️ Setting up Maintenance..."
+completed = "✅ {name} ready"
+failed = "❌ {name} build failed"
+
+# ── CLI output ───────────────────────────────────────────────
+[cli]
+attaching = "Tillandsias — Attaching to {name}"
+checking_image = "Checking image... {tag}"
+ensuring_image = "Ensuring image is up to date..."
+image_ready = "✓ Image ready ({size})"
+starting_env = "Starting environment..."
+starting_terminal = "Starting terminal (fish shell)..."
+launching = "Launching... (Ctrl+C to stop)"
+env_stopped = "Environment stopped."
+waiting_setup = "Waiting for environment setup to complete..."
+
+# ── Init command ─────────────────────────────────────────────
+[init]
+preparing = "Tillandsias init — preparing development environment"
+already_ready = "✓ Development environment already ready"
+ready = "Ready."
+setup_in_progress = "⌛ Setup already in progress, waiting..."
+setup_timed_out = "✗ Setup timed out. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+env_ready = "✓ Environment ready"
+waiting = "⌛ Waiting for setup to complete..."
+setting_up = "Setting up development environment..."
+first_run_note = "(This may take a few minutes on first run)"
+dev_env_ready = "✓ Development environment ready"
+ready_run = "Ready. Run: tillandsias"
+setup_failed = "✗ Setup failed: {error}"
+
+# ── Error messages ───────────────────────────────────────────
+[errors]
+setup = "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+env_not_ready = "Development environment not ready yet. Tillandsias will set it up automatically — please try again in a few minutes."
+install_incomplete = "Tillandsias installation may be incomplete. Please reinstall from https://github.com/8007342/tillandsias"
+podman_unavailable = "Podman is not available"
+no_podman = "Error: podman is not installed or not in PATH"
+genera_exhausted = "All genera exhausted for project {name}"
+terminal_failed = "Failed to open terminal: {error}"
+no_terminal = "No terminal emulator found (tried ptyxis, gnome-terminal, konsole, xterm)"
+
+# ── Desktop notifications ────────────────────────────────────
+[notifications]
+already_running = "Already running — look for '{title}' in your windows"
+claude_key_saved = "Claude API key saved successfully"
+
+# ── Stats command ────────────────────────────────────────────
+[stats]
+title = "Tillandsias — disk usage report"
+images_none = "Images:     (none)"
+images_no_podman = "Images:     (podman not available)"
+containers_none = "Containers: (none)"
+containers_no_podman = "Containers: (podman not available)"
+total = "Total (caches + binary): {size}"
+podman_note = "(Podman image storage is managed by podman — see 'podman system df')"
+
+# ── Clean command ────────────────────────────────────────────
+[clean]
+title = "Tillandsias — artifact cleanup"
+complete = "Cleanup complete."
+nothing = "Nothing to clean."
+
+# ── Update command ───────────────────────────────────────────
+[update]
+version = "Tillandsias v{version}"
+checking = "Checking for updates..."
+up_to_date = "Already up to date."
+available = "Update available: v{version}"
+downloading = "Downloading..."
+downloaded = "Downloaded ({size})"
+applying = "Applying update..."
+updated = "Updated to v{version}"
+restart_note = "Restart the application to use the new version."

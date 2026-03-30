@@ -21,6 +21,26 @@ D_GREEN=$'\033[32m'        # dim green
 D_RED=$'\033[31m'          # dim red
 D_BLUE=$'\033[34m'         # dim blue
 
+# ── Locale detection ─────────────────────────────────────────
+# Load locale bundle if not already loaded (forge-welcome.sh may be called
+# directly by fish's config.fish, outside of the entrypoint context).
+if [ -z "${L_WELCOME_TITLE:-}" ]; then
+    _LOCALE_RAW="${LC_ALL:-${LC_MESSAGES:-${LANG:-en}}}"
+    _LOCALE="${_LOCALE_RAW%%_*}"
+    _LOCALE="${_LOCALE%%.*}"
+    _LOCALE_FILE="/etc/tillandsias/locales/${_LOCALE}.sh"
+    [ -f "$_LOCALE_FILE" ] || _LOCALE_FILE="/etc/tillandsias/locales/en.sh"
+    # shellcheck source=/dev/null
+    [ -f "$_LOCALE_FILE" ] && source "$_LOCALE_FILE"
+    unset _LOCALE_RAW _LOCALE _LOCALE_FILE
+fi
+
+# ── Locale string defaults (English fallback) ────────────────
+L_WELCOME_TITLE="${L_WELCOME_TITLE:-🌱 Tillandsias Forge}"
+L_WELCOME_PROJECT="${L_WELCOME_PROJECT:-Project}"
+L_WELCOME_FORGE="${L_WELCOME_FORGE:-Forge}"
+L_WELCOME_MOUNTS="${L_WELCOME_MOUNTS:-Mounts}"
+
 # ── Environment ──────────────────────────────────────────────
 PROJECT="${TILLANDSIAS_PROJECT:-unknown}"
 HOST_OS="${TILLANDSIAS_HOST_OS:-Unknown OS}"
@@ -42,27 +62,49 @@ if [ -f /etc/os-release ]; then
 fi
 
 # ── Rotating tips ─────────────────────────────────────────────
+# Load locale tips if available, fall back to English literals.
+_tip1="${L_TIP_1:-Type help to learn about the Fish shell}"
+_tip2="${L_TIP_2:-Try Midnight Commander with mc}"
+_tip3="${L_TIP_3:-Browse files with eza --tree}"
+_tip4="${L_TIP_4:-Use Tab for autocomplete suggestions}"
+_tip5="${L_TIP_5:-Search history with Ctrl+R}"
+_tip6="${L_TIP_6:-Smart directory jump with z <partial-name>}"
+_tip7="${L_TIP_7:-Preview files with bat <filename>}"
+_tip8="${L_TIP_8:-Find files fast with fd <pattern>}"
+_tip9="${L_TIP_9:-Fuzzy-find anything with fzf}"
+_tip10="${L_TIP_10:-View processes with htop}"
+_tip11="${L_TIP_11:-Show directory tree with tree}"
+_tip12="${L_TIP_12:-Edit files with vim or nano}"
+_tip13="${L_TIP_13:-Fish highlights valid commands in green as you type}"
+_tip14="${L_TIP_14:-Fish suggests from history — press → to accept}"
+_tip15="${L_TIP_15:-Use .. to go up a directory}"
+_tip16="${L_TIP_16:-List files in detail with ll}"
+_tip17="${L_TIP_17:-Switch to bash anytime: type bash}"
+_tip18="${L_TIP_18:-Switch to zsh anytime: type zsh}"
+_tip19="${L_TIP_19:-Check git status with git status}"
+_tip20="${L_TIP_20:-GitHub CLI: gh repo view, gh pr list}"
+
 tips=(
-    "Type ${B_WHITE}help${RST} to learn about the Fish shell"
-    "Try Midnight Commander with ${B_WHITE}mc${RST}"
-    "Browse files with ${B_WHITE}eza --tree${RST}"
-    "Use ${B_WHITE}Tab${RST} for autocomplete suggestions"
-    "Search history with ${B_WHITE}Ctrl+R${RST}"
-    "Smart directory jump with ${B_WHITE}z <partial-name>${RST}"
-    "Preview files with ${B_WHITE}bat <filename>${RST}"
-    "Find files fast with ${B_WHITE}fd <pattern>${RST}"
-    "Fuzzy-find anything with ${B_WHITE}fzf${RST}"
-    "View processes with ${B_WHITE}htop${RST}"
-    "Show directory tree with ${B_WHITE}tree${RST}"
-    "Edit files with ${B_WHITE}vim${RST} or ${B_WHITE}nano${RST}"
-    "Fish highlights ${B_WHITE}valid commands${RST} in green as you type"
-    "Fish suggests from ${B_WHITE}history${RST} — press ${B_WHITE}→${RST} to accept"
-    "Use ${B_WHITE}..${RST} to go up a directory"
-    "List files in detail with ${B_WHITE}ll${RST}"
-    "Switch to bash anytime: type ${B_WHITE}bash${RST}"
-    "Switch to zsh anytime: type ${B_WHITE}zsh${RST}"
-    "Check git status with ${B_WHITE}git status${RST}"
-    "GitHub CLI: ${B_WHITE}gh repo view${RST}, ${B_WHITE}gh pr list${RST}"
+    "$_tip1"
+    "$_tip2"
+    "$_tip3"
+    "$_tip4"
+    "$_tip5"
+    "$_tip6"
+    "$_tip7"
+    "$_tip8"
+    "$_tip9"
+    "$_tip10"
+    "$_tip11"
+    "$_tip12"
+    "$_tip13"
+    "$_tip14"
+    "$_tip15"
+    "$_tip16"
+    "$_tip17"
+    "$_tip18"
+    "$_tip19"
+    "$_tip20"
 )
 tip="${tips[$((RANDOM % ${#tips[@]}))]}"
 
@@ -71,12 +113,12 @@ A="${DIM}←${RST}"
 
 # ── Print ─────────────────────────────────────────────────────
 echo ""
-printf "  ${B_GREEN}🌱 Tillandsias Forge${RST}\n"
+printf "  ${B_GREEN}%s${RST}\n" "$L_WELCOME_TITLE"
 echo ""
-printf "  ${B_WHITE}Project${RST}   ${B_CYAN}%s${RST}\n" "$PROJECT"
-printf "  ${B_WHITE}Forge${RST}     ${ITAL}%s${RST}  ${DIM}+${RST}  ${ITAL}%s${RST}\n" "$GUEST_OS" "$HOST_OS"
+printf "  ${B_WHITE}%s${RST}   ${B_CYAN}%s${RST}\n" "$L_WELCOME_PROJECT" "$PROJECT"
+printf "  ${B_WHITE}%s${RST}     ${ITAL}%s${RST}  ${DIM}+${RST}  ${ITAL}%s${RST}\n" "$L_WELCOME_FORGE" "$GUEST_OS" "$HOST_OS"
 echo ""
-printf "  ${B_WHITE}Mounts${RST}\n"
+printf "  ${B_WHITE}%s${RST}\n" "$L_WELCOME_MOUNTS"
 printf "    ${B_GREEN}%-38s${RST} ${A} ${DIM}%-26s${RST} ${B_GREEN}rw${RST}\n" \
     "/home/forge/src/$PROJECT"  "~/src/$PROJECT"
 printf "    ${B_GREEN}%-38s${RST} ${A} ${DIM}%-26s${RST} ${B_GREEN}rw${RST}\n" \
