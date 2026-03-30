@@ -97,6 +97,7 @@ After completing all artifacts, summarize:
 - Follow the `instruction` field from `openspec instructions` for each artifact type
 - The schema defines what each artifact should contain - follow it
 - Read dependency artifacts for context before creating new ones
+- **Consult knowledge source of truth**: If `knowledge/` exists at the repo root, read `knowledge/index.xml` to identify cheatsheets relevant to the change. When writing specs or design decisions, cite verified facts from cheatsheets rather than inferring (e.g., "Per `knowledge/cheatsheets/infra/podman-security.md`: ..."). If the change involves technology not covered by existing cheatsheets, note the gap.
 - Use `template` as the structure for your output file - fill in its sections
 - **IMPORTANT**: `context` and `rules` are constraints for YOU, not content for the file
   - Do NOT copy `<context>`, `<rules>`, `<project_context>` blocks into the artifact

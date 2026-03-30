@@ -37,3 +37,81 @@ upstream = "https://doc.rust-lang.org/std/future/trait.Future.html"
 version_pinned = "1.85"
 last_verified = "2026-03-30"
 authority = "official"
+
+[cheatsheets.selinux-silverblue]
+upstream = "https://docs.fedoraproject.org/en-US/fedora-silverblue/"
+version_pinned = "Fedora 43"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.fuse-userspace-fs]
+upstream = "https://www.kernel.org/doc/html/latest/filesystems/fuse.html"
+version_pinned = "kernel 6.x"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.podman-machine]
+upstream = "https://docs.podman.io/en/latest/markdown/podman-machine.1.md"
+version_pinned = "5.4"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.tauri-v2-tray]
+upstream = "https://v2.tauri.app/learn/system-tray/"
+version_pinned = "2.x"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.notify-fs-events]
+upstream = "https://docs.rs/notify/latest/notify/"
+version_pinned = "8.x"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.appimage-packaging]
+upstream = "https://docs.appimage.org"
+version_pinned = "type2"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.cross-compilation-rust]
+upstream = "https://doc.rust-lang.org/cargo/reference/config.html"
+version_pinned = "1.85"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.macos-codesigning]
+upstream = "https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution"
+version_pinned = "macOS 15"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.toml-config]
+upstream = "https://toml.io/en/v1.0.0"
+version_pinned = "1.0.0"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.postcard-serde]
+upstream = "https://docs.rs/postcard/latest/postcard/"
+version_pinned = "1.x"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.github-actions]
+upstream = "https://docs.github.com/en/actions"
+version_pinned = "2024"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.nix-reproducibility]
+upstream = "https://nixos.org/guides/how-nix-works"
+version_pinned = "2.28"
+last_verified = "2026-03-30"
+authority = "official"
+
+[cheatsheets.rust-ffi-unsafe]
+upstream = "https://doc.rust-lang.org/nomicon/"
+version_pinned = "1.85"
+last_verified = "2026-03-30"
+authority = "official"
