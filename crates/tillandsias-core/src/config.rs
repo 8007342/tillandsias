@@ -157,6 +157,20 @@ pub struct ProjectConfig {
     pub mounts: Vec<MountConfig>,
 
     pub runtime: Option<RuntimeConfig>,
+
+    /// Web server configuration for "Serve Here".
+    pub web: Option<WebConfig>,
+}
+
+/// Web server configuration for the `[web]` section of per-project config.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct WebConfig {
+    /// Explicit document root override (relative to project root).
+    /// When absent, auto-detection is used: public/ → dist/ → build/ → _site/ → out/ → project root.
+    pub document_root: Option<String>,
+
+    /// Port for the web container. Defaults to 8080, increments on conflict.
+    pub port: Option<u16>,
 }
 
 /// A custom volume mount.

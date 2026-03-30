@@ -63,6 +63,11 @@ pub mod ids {
         gen_id(&format!("terminal:{}", project_path.display()))
     }
 
+    /// Build a "serve here" menu item ID for a project path.
+    pub fn serve_here(project_path: &std::path::Path) -> String {
+        gen_id(&format!("serve:{}", project_path.display()))
+    }
+
     /// Build a "clone" menu item ID encoding both full_name and name.
     pub fn clone_project(full_name: &str, name: &str) -> String {
         gen_id(&format!("clone:{full_name}\t{name}"))
@@ -511,15 +516,25 @@ fn build_project_submenu<R: Runtime>(
         .filter(|c| c.project_name == project.name && c.container_type == ContainerType::Forge)
         .map(|c| c.display_emoji.as_str())
         .collect();
+    let web_running = state
+        .running
+        .iter()
+        .any(|c| c.project_name == project.name && c.container_type == ContainerType::Web);
 
     let maintenance_running = !tool_emojis.is_empty();
 
-    // Project label: name first, emojis as suffix. Tools then flowers.
-    // Idle: plain name. Running: "project-name  🔧🪛🌸"
-    let label = if tool_emojis.is_empty() && flower_emojis.is_empty() {
+    // Project label: name first, emojis as suffix. Tools then flowers, then web globe.
+    // Idle: plain name. Running: "project-name  🔧🪛🌸🔗"
+    let label = if tool_emojis.is_empty() && flower_emojis.is_empty() && !web_running {
         project.name.clone()
     } else {
-        let suffix: String = [tool_emojis.join(""), flower_emojis.join("")].concat();
+        let web_suffix = if web_running { "\u{1F517}" } else { "" }; // 🔗
+        let suffix: String = [
+            tool_emojis.join(""),
+            flower_emojis.join(""),
+            web_suffix.to_string(),
+        ]
+        .concat();
         format!("{}  {}", project.name, suffix)
     };
 
@@ -561,6 +576,20 @@ fn build_project_submenu<R: Runtime>(
     submenu = submenu.item(
         &MenuItemBuilder::with_id(ids::terminal(&project.path), &maintenance_label)
             .enabled(state.forge_available)
+            .build(app)?,
+    );
+
+    // "Serve Here" — launch a web server container for static files.
+    // Running: 🔗 Serving (disabled — prevents duplicate)
+    // Idle: 🔗 Serve Here (clickable — always enabled; web image is separate from forge)
+    let serve_label = if web_running {
+        format!("\u{1F517} {}", i18n::t("menu.serving")) // 🔗 Serving
+    } else {
+        i18n::t("menu.serve_here").to_string() // 🔗 Serve Here
+    };
+    submenu = submenu.item(
+        &MenuItemBuilder::with_id(ids::serve_here(&project.path), &serve_label)
+            .enabled(!web_running)
             .build(app)?,
     );
 

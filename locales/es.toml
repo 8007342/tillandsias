@@ -17,6 +17,8 @@ settings = "Configuración"
 quit = "Salir de Tillandsias"
 blooming = "Floreciendo"
 maintenance = "⛏️ Mantenimiento"
+serve_here = "🔗 Servir aquí"
+serving = "🔗 Sirviendo"
 seedlings = "🌱 Semillas"
 credit = "por Tlatoāni"
 version = "Tillandsias v{version}"
@@ -34,6 +36,9 @@ cloning = "Clonando {name}..."
 [menu.claude]
 login = "🔑 Iniciar sesión en Claude"
 login_refresh = "🔒 Actualizar sesión de Claude"
+
+[menu.web]
+already_serving = "Ya está sirviendo — abre http://localhost:{port}"
 
 [menu.build]
 in_progress = "⏳ Construyendo {name}..."

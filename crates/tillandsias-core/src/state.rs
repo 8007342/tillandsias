@@ -32,13 +32,17 @@ pub struct BuildProgress {
     pub completed_at: Option<Instant>,
 }
 
-/// Whether a container is a forge (Attach Here / OpenCode) or maintenance (terminal / bash).
+/// Whether a container is a forge (Attach Here / OpenCode), maintenance (terminal / bash),
+/// or a web server (Serve Here / static httpd).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ContainerType {
     /// Forge environment launched via "Attach Here" (runs OpenCode).
     Forge,
     /// Maintenance terminal launched via "Maintenance" (runs fish/bash).
     Maintenance,
+    /// Web server launched via "Serve Here" (runs tillandsias-web / httpd).
+    /// Named `tillandsias-<project>-web` — no genus allocation.
+    Web,
 }
 
 /// Info about a running container environment.
@@ -83,6 +87,22 @@ impl ContainerInfo {
             }
         }
         None
+    }
+
+    /// Parse project name from a web container name (`tillandsias-<project>-web`).
+    /// Returns `Some(project_name)` or `None` if the name does not match.
+    pub fn parse_web_container_name(name: &str) -> Option<String> {
+        let stripped = name.strip_prefix("tillandsias-")?;
+        let project = stripped.strip_suffix("-web")?;
+        if project.is_empty() {
+            return None;
+        }
+        Some(project.to_string())
+    }
+
+    /// Build a web container name for a project: `tillandsias-<project>-web`.
+    pub fn web_container_name(project_name: &str) -> String {
+        format!("tillandsias-{}-web", project_name)
     }
 
     /// Current plant lifecycle state for icon rendering.
@@ -286,5 +306,41 @@ mod tests {
         assert_eq!(decoded.port_range, info.port_range);
         assert_eq!(decoded.container_type, info.container_type);
         assert_eq!(decoded.display_emoji, info.display_emoji);
+    }
+
+    #[test]
+    fn web_container_name_format() {
+        let name = ContainerInfo::web_container_name("my-project");
+        assert_eq!(name, "tillandsias-my-project-web");
+    }
+
+    #[test]
+    fn parse_web_container_name_valid() {
+        let project = ContainerInfo::parse_web_container_name("tillandsias-my-project-web");
+        assert_eq!(project, Some("my-project".to_string()));
+    }
+
+    #[test]
+    fn parse_web_container_name_hyphenated_project() {
+        let project = ContainerInfo::parse_web_container_name("tillandsias-cool-project-web");
+        assert_eq!(project, Some("cool-project".to_string()));
+    }
+
+    #[test]
+    fn parse_web_container_name_invalid() {
+        // Does not match a genus-based name
+        assert!(ContainerInfo::parse_web_container_name("tillandsias-my-app-aeranthos").is_none());
+        // No project name
+        assert!(ContainerInfo::parse_web_container_name("tillandsias-web").is_none());
+        // Missing prefix
+        assert!(ContainerInfo::parse_web_container_name("my-project-web").is_none());
+    }
+
+    #[test]
+    fn parse_web_container_name_not_confused_with_genus_web() {
+        // "web" is not a genus slug, so genus-parsing won't match this
+        // and web-parsing should correctly extract the project name.
+        let project = ContainerInfo::parse_web_container_name("tillandsias-frontend-web");
+        assert_eq!(project, Some("frontend".to_string()));
     }
 }
