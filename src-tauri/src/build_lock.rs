@@ -2,6 +2,8 @@
 //!
 //! Uses a PID lock file at `$XDG_RUNTIME_DIR/tillandsias/build-<image>.lock`.
 //! Same pattern as the singleton guard but scoped per image name.
+//!
+//! @trace spec:build-lock
 
 use std::fs;
 use std::path::PathBuf;
@@ -74,6 +76,7 @@ fn is_alive(pid: u32) -> bool {
 
 /// Try to acquire the build lock for an image.
 /// Returns `Ok(())` if acquired, `Err("already running")` if another build is active.
+// @trace spec:build-lock, knowledge:infra/singleton-lock
 pub fn acquire(image: &str) -> Result<(), String> {
     let path = lock_path(image);
 

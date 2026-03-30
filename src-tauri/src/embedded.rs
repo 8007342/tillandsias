@@ -7,6 +7,8 @@
 //!
 //! This closes the supply-chain gap where unsigned scripts in
 //! `~/.local/share/tillandsias/` could be tampered with.
+//!
+//! @trace spec:embedded-scripts, spec:default-image
 
 use std::fs;
 use std::path::PathBuf;
@@ -121,6 +123,7 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 /// Returns the root temp directory path. The caller should clean up via
 /// [`cleanup_image_sources`] after the build completes (or rely on
 /// session cleanup of `$XDG_RUNTIME_DIR`).
+// @trace spec:embedded-scripts/image-source-extraction
 pub fn write_image_sources() -> Result<PathBuf, String> {
     let dir = runtime_dir().join("image-sources");
 

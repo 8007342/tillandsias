@@ -1,3 +1,5 @@
+//! @trace spec:filesystem-scanner
+
 mod detect;
 mod watcher;
 

@@ -6,6 +6,8 @@
 //!
 //! Idempotent: only writes when the `.desktop` file is missing or stale
 //! (i.e. `Exec=` path no longer matches the current `$APPIMAGE` location).
+//!
+//! @trace spec:app-lifecycle
 
 use std::fs;
 use std::path::{Path, PathBuf};

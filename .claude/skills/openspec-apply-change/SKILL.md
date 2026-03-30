@@ -80,6 +80,7 @@ Implement tasks from an OpenSpec change.
    - Make the code changes required
    - Keep changes minimal and focused
    - Mark task complete in the tasks file: `- [ ]` → `- [x]`
+   - When implementing code that enacts a spec requirement, add a `// @trace spec:<capability>/<requirement>` comment before the block. For module-level changes, add `//! @trace spec:<capability>` to the module header if not already present. Only annotate non-obvious architectural decisions, not plumbing code.
    - Continue to next task
 
    **Pause if:**

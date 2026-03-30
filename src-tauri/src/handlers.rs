@@ -25,6 +25,8 @@
 //!   - Other user projects (only the selected project)
 //!   - System directories (/etc, /var, /usr)
 //!   - Docker/Podman socket (no container-in-container)
+//!
+//! @trace spec:podman-orchestration, spec:default-image, spec:tray-app
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -50,6 +52,7 @@ use tillandsias_podman::query_occupied_ports;
 ///
 /// This ensures each app version uses its own image — when the app updates
 /// to a new version the old image is not silently reused.
+// @trace spec:default-image, spec:versioning
 pub(crate) fn forge_image_tag() -> String {
     format!("tillandsias-forge:v{}", env!("CARGO_PKG_VERSION"))
 }
@@ -301,7 +304,7 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
 
     let script = source_dir.join("scripts").join("build-image.sh");
     let tag = forge_image_tag();
-    info!(script = %script.display(), image = image_name, tag = %tag, "Running embedded build-image.sh");
+    info!(script = %script.display(), image = image_name, tag = %tag, spec = "default-image, nix-builder", "Running embedded build-image.sh");
 
     let output = std::process::Command::new(&script)
         .arg(image_name)
@@ -332,6 +335,7 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
             exit_code = output.status.code().unwrap_or(-1),
             stdout = %stdout,
             stderr = %stderr,
+            spec = "default-image, nix-builder",
             "Image build script failed"
         );
         return Err(strings::SETUP_ERROR.into());
@@ -454,7 +458,7 @@ async fn cleanup_stale_containers(state: &TrayState) {
 
 /// Handle the "Attach Here" action: build image if needed, open terminal
 /// with an interactive container.
-#[instrument(skip(state, allocator, build_tx), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "attach"))]
+#[instrument(skip(state, allocator, build_tx), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "attach", spec = "podman-orchestration, default-image"))]
 pub async fn handle_attach_here(
     project_path: PathBuf,
     state: &mut TrayState,
@@ -529,7 +533,7 @@ pub async fn handle_attach_here(
     let tag = forge_image_tag();
 
     if !client.image_exists(&tag).await {
-        info!(tag = %tag, "Image not found, building...");
+        info!(tag = %tag, spec = "default-image, nix-builder", "Image not found, building...");
 
         // Notify event loop: build started (menu chip: ⏳ Building forge...)
         let _ = build_tx.try_send(BuildProgressEvent::Started {
@@ -551,7 +555,7 @@ pub async fn handle_attach_here(
                     allocator.release(&project_name, genus);
                     return Err(strings::ENV_NOT_READY.into());
                 }
-                info!(tag = %tag, "Image built successfully");
+                info!(tag = %tag, spec = "default-image", "Image built successfully");
                 // Notify event loop: build completed (menu chip: ✅ forge ready)
                 let _ = build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: "forge".to_string(),
@@ -661,7 +665,7 @@ pub async fn handle_attach_here(
 
 /// Handle the "Stop" action: graceful stop with SIGTERM -> 10s -> SIGKILL,
 /// update icon to dried bloom during shutdown.
-#[instrument(skip(state, allocator), fields(container = %container_name, operation = "stop"))]
+#[instrument(skip(state, allocator), fields(container = %container_name, operation = "stop", spec = "podman-orchestration"))]
 pub async fn handle_stop(
     container_name: String,
     state: &mut TrayState,
@@ -713,7 +717,7 @@ pub async fn handle_stop(
 
 /// Handle the "Destroy" action: 5-second safety delay, then stop + remove cache.
 /// Project source in ~/src is NEVER touched.
-#[instrument(skip(state, allocator), fields(container = %container_name, operation = "destroy"))]
+#[instrument(skip(state, allocator), fields(container = %container_name, operation = "destroy", spec = "podman-orchestration"))]
 pub async fn handle_destroy(
     container_name: String,
     state: &mut TrayState,
@@ -769,6 +773,7 @@ pub async fn handle_destroy(
 pub async fn shutdown_all(state: &TrayState) {
     info!(
         count = state.running.len(),
+        spec = "podman-orchestration",
         "Shutting down: stopping all managed containers"
     );
 
@@ -1245,7 +1250,7 @@ pub fn detect_document_root(project_path: &Path) -> PathBuf {
 ///
 /// # Port allocation
 /// Base port 8080, increments if occupied. Separate range from forge containers (3000-3019).
-#[instrument(skip(state, build_tx), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "serve"))]
+#[instrument(skip(state, build_tx), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "serve", spec = "podman-orchestration"))]
 pub async fn handle_serve_here(
     project_path: PathBuf,
     state: &mut TrayState,

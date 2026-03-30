@@ -1,3 +1,5 @@
+//! @trace spec:podman-orchestration
+
 use tracing::{debug, info};
 
 use tillandsias_core::config::ResolvedConfig;

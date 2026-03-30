@@ -3,6 +3,8 @@
 //! Builds the forge image (and any other standard images) so they're ready
 //! before the user opens the tray. Uses the build lock to coordinate with
 //! other processes (tray app, other init invocations).
+//!
+//! @trace spec:init-command
 
 use crate::build_lock;
 use crate::embedded;

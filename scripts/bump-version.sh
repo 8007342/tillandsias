@@ -13,6 +13,8 @@
 
 set -euo pipefail
 
+# @trace spec:versioning
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 VERSION_FILE="$ROOT/VERSION"

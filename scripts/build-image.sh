@@ -14,6 +14,8 @@
 
 set -euo pipefail
 
+# @trace spec:nix-builder, spec:default-image
+
 # ---------------------------------------------------------------------------
 # macOS PATH fix: Finder-launched apps don't inherit shell PATH.
 # Ensure common tool directories are reachable (Homebrew, MacPorts, etc.)
@@ -179,6 +181,7 @@ fi
 
 # ---------------------------------------------------------------------------
 # Step 2: Build image via Nix inside an ephemeral podman container
+# @trace spec:nix-builder/ephemeral-nix-build, knowledge:packaging/nix-flakes
 # ---------------------------------------------------------------------------
 BUILD_START="$(date +%s)"
 
@@ -219,6 +222,7 @@ _info "Tarball: $TARBALL_PATH"
 
 # ---------------------------------------------------------------------------
 # Step 3: Load tarball into podman
+# @trace spec:default-image
 # ---------------------------------------------------------------------------
 _step "Loading image into podman..."
 LOAD_OUTPUT="$("$PODMAN" load < "$TARBALL_PATH" 2>&1)"

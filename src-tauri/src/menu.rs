@@ -17,6 +17,8 @@
 //! Settings ▸
 //! Quit Tillandsias
 //! ```
+//!
+//! @trace spec:tray-app
 
 use std::sync::atomic::{AtomicU64, Ordering};
 

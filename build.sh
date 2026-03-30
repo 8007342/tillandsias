@@ -21,6 +21,8 @@
 
 set -euo pipefail
 
+# @trace spec:dev-build
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLBOX_NAME="$(basename "$SCRIPT_DIR")"
 INSTALL_DIR="$HOME/.local/bin"

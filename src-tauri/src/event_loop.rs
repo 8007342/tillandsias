@@ -2,6 +2,8 @@
 //!
 //! Multiplexes scanner events, podman events, menu actions, and shutdown
 //! signals into a single async loop that drives all tray state updates.
+//!
+//! @trace spec:tray-app, spec:podman-orchestration
 
 use std::time::{Duration, Instant};
 
@@ -54,7 +56,7 @@ pub async fn run(
     allocator.seed_from_running(&state.running);
     tool_allocator.seed_from_running(&state.running);
 
-    info!("Event loop started");
+    info!(spec = "tray-app", "Event loop started");
 
     // Timer drives remote repos fetch — checks periodically if cache is stale.
     // Backs off on errors to avoid spamming (3s → 30s → 300s).
@@ -67,6 +69,7 @@ pub async fn run(
     // The receiver is a separate local that we select on.
     let (prune_tx, mut prune_rx) = mpsc::channel::<()>(32);
 
+    // @trace spec:tray-app, spec:podman-orchestration, knowledge:lang/rust-async
     loop {
         tokio::select! {
             // Scanner: filesystem changes
@@ -100,7 +103,7 @@ pub async fn run(
             Some(command) = menu_rx.recv() => {
                 match command {
                     MenuCommand::Quit => {
-                        info!("Quit requested from menu");
+                        info!(spec = "tray-app", "Quit requested from menu");
                         handlers::shutdown_all(&state).await;
                         break;
                     }
@@ -262,13 +265,13 @@ pub async fn run(
 
             // All channels closed — nothing left to do
             else => {
-                info!("All event channels closed");
+                info!(spec = "tray-app", "All event channels closed");
                 break;
             }
         }
     }
 
-    info!("Event loop exited");
+    info!(spec = "tray-app", "Event loop exited");
 }
 
 /// Handle a `BuildProgressEvent` sent by a spawned build task.
@@ -500,6 +503,7 @@ fn handle_podman_event(
     debug!(
         container = %event.container_name,
         new_state = ?event.new_state,
+        spec = "podman-orchestration",
         "Podman event"
     );
 

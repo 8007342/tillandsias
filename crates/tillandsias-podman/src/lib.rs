@@ -1,3 +1,5 @@
+//! @trace spec:podman-orchestration
+
 mod client;
 pub mod events;
 mod gpu;
@@ -46,6 +48,7 @@ pub fn podman_cmd() -> tokio::process::Command {
     // Close inherited file descriptors >= 3 before exec'ing podman.
     // AppImage's squashfuse FUSE mount creates FDs that crun cannot
     // stat through /proc/self/fd/, causing OCI permission denied errors.
+    // @trace spec:podman-orchestration/fuse-fd-sanitization, knowledge:infra/fuse-userspace-fs
     #[cfg(target_os = "linux")]
     unsafe {
         cmd.pre_exec(|| {
@@ -68,6 +71,7 @@ pub fn podman_cmd_sync() -> std::process::Command {
     // Close inherited file descriptors >= 3 before exec'ing podman.
     // AppImage's squashfuse FUSE mount creates FDs that crun cannot
     // stat through /proc/self/fd/, causing OCI permission denied errors.
+    // @trace spec:podman-orchestration/fuse-fd-sanitization, knowledge:infra/fuse-userspace-fs
     #[cfg(target_os = "linux")]
     {
         use std::os::unix::process::CommandExt;

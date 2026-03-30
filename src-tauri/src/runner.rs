@@ -3,6 +3,8 @@
 //! Launched when the user runs `tillandsias <path>`. Checks/builds the
 //! image, prints formatted progress, then execs `podman run -it --rm`
 //! with inherited stdio so the container terminal passes through.
+//!
+//! @trace spec:cli-mode, spec:podman-orchestration, spec:default-image
 
 use std::path::{Path, PathBuf};
 

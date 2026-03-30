@@ -9,6 +9,8 @@
 //! Non-negotiable security flags are hardcoded in `build_podman_args()` and
 //! are never read from profiles, config, or any external source. The only
 //! way to change them is to modify this source file.
+//!
+//! @trace spec:podman-orchestration, spec:environment-runtime
 
 use std::path::Path;
 
@@ -36,6 +38,7 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
 
     // -----------------------------------------------------------------------
     // Non-negotiable security flags (hardcoded, NEVER from profile)
+    // @trace spec:podman-orchestration/security-hardened-defaults, knowledge:infra/podman-security
     // -----------------------------------------------------------------------
     args.push("--rm".into());
     args.push("--init".into());
@@ -49,6 +52,7 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
 
     // -----------------------------------------------------------------------
     // GPU passthrough (Linux only)
+    // @trace spec:podman-orchestration/gpu-passthrough
     // -----------------------------------------------------------------------
     if cfg!(target_os = "linux") {
         for flag in tillandsias_podman::detect_gpu_devices() {
@@ -112,6 +116,7 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
 
     // -----------------------------------------------------------------------
     // Volume mounts (resolved from context)
+    // @trace spec:podman-orchestration/volume-mount-strategy
     // -----------------------------------------------------------------------
     for mount in &profile.mounts {
         let host_path = resolve_mount_source(&mount.host_key, ctx);

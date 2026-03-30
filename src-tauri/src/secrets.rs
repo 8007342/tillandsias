@@ -18,6 +18,8 @@
 //!
 //!   Service: `tillandsias`
 //!   Key:     `github-oauth-token`
+//!
+//! @trace spec:native-secrets-store
 
 use std::fs;
 use std::path::PathBuf;
@@ -40,6 +42,7 @@ fn hosts_yml_path() -> PathBuf {
     cache_dir().join("secrets").join("gh").join("hosts.yml")
 }
 
+// @trace spec:native-secrets-store, knowledge:infra/os-keyring
 /// Store the GitHub OAuth token in the native keyring.
 ///
 /// Returns `Ok(())` on success. Returns `Err` if the keyring is

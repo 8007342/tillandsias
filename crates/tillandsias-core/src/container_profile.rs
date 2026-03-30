@@ -7,6 +7,8 @@
 //!
 //! Security flags are NOT part of profiles — they are hardcoded in the
 //! arg builder and cannot be overridden.
+//!
+//! @trace spec:environment-runtime, spec:podman-orchestration
 
 use std::path::PathBuf;
 
@@ -154,6 +156,7 @@ pub struct LaunchContext {
 // Built-in profiles
 // ---------------------------------------------------------------------------
 
+// @trace spec:environment-runtime, knowledge:infra/podman-rootless
 /// Forge container for OpenCode (no Claude secrets).
 pub fn forge_opencode_profile() -> ContainerProfile {
     ContainerProfile {
