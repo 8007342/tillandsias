@@ -7,6 +7,7 @@
 use crate::build_lock;
 use crate::embedded;
 use crate::handlers::{forge_image_tag, prune_old_forge_images};
+use crate::strings;
 
 /// Run the init command. Returns true on success.
 pub fn run() -> bool {
@@ -68,14 +69,14 @@ pub fn run() -> bool {
     match result {
         Ok(()) => {
             println!();
-            println!("  ✓ Development environment ready");
+            println!("  \u{2713} Development environment ready");
             println!();
             println!("Ready. Run: tillandsias");
             true
         }
         Err(e) => {
             eprintln!();
-            eprintln!("  ✗ Setup failed: {e}");
+            eprintln!("  \u{2717} Setup failed: {e}");
             false
         }
     }
@@ -86,7 +87,7 @@ fn build_forge_image() -> Result<(), String> {
     let source_dir = embedded::write_image_sources()
         .map_err(|e| {
             eprintln!("  [internal] Failed to extract embedded image sources: {e}");
-            "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+            strings::SETUP_ERROR
         })?;
 
     let script = source_dir.join("scripts").join("build-image.sh");
@@ -104,7 +105,7 @@ fn build_forge_image() -> Result<(), String> {
         .status()
         .map_err(|e| {
             eprintln!("  [internal] Failed to launch build script: {e}");
-            "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias"
+            strings::SETUP_ERROR
         })?;
 
     embedded::cleanup_image_sources();
@@ -115,7 +116,7 @@ fn build_forge_image() -> Result<(), String> {
         Ok(())
     } else {
         eprintln!("  [internal] Build script exited with code {}", status.code().unwrap_or(-1));
-        Err("Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias".into())
+        Err(strings::SETUP_ERROR.into())
     }
 }
 

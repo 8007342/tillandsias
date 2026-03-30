@@ -5,6 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use tillandsias_core::config;
+use tillandsias_core::format::human_bytes;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -42,22 +43,6 @@ fn dir_size_bytes(path: &Path) -> u64 {
 /// Return the size of a single file in bytes, or 0 if it doesn't exist.
 fn file_size_bytes(path: &Path) -> u64 {
     std::fs::metadata(path).map(|m| m.len()).unwrap_or(0)
-}
-
-/// Human-readable byte count: "1.2 GB", "345 MB", "12 KB".
-fn human_bytes(bytes: u64) -> String {
-    const GB: u64 = 1_073_741_824;
-    const MB: u64 = 1_048_576;
-    const KB: u64 = 1_024;
-    if bytes >= GB {
-        format!("{:.1} GB", bytes as f64 / GB as f64)
-    } else if bytes >= MB {
-        format!("{:.1} MB", bytes as f64 / MB as f64)
-    } else if bytes >= KB {
-        format!("{:.1} KB", bytes as f64 / KB as f64)
-    } else {
-        format!("{bytes} B")
-    }
 }
 
 /// Home directory path.
@@ -186,7 +171,7 @@ pub fn run_stats() -> bool {
     let bin_bytes = file_size_bytes(&bin_path);
     total_bytes += bin_bytes;
     if bin_bytes > 0 {
-        println!("  Installed binary:{} ({})", bin_path.display(), human_bytes(bin_bytes));
+        println!("  Installed binary: {} ({})", bin_path.display(), human_bytes(bin_bytes));
     } else {
         println!("  Installed binary: (not installed at {})", bin_path.display());
     }

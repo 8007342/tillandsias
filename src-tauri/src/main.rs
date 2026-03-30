@@ -15,6 +15,7 @@ mod menu;
 mod runner;
 mod secrets;
 mod singleton;
+mod strings;
 mod update_cli;
 mod updater;
 
@@ -323,9 +324,9 @@ fn main() {
                         // if any tillandsias-forge:v* image exists, it's an update.
                         let is_update = handlers::any_versioned_forge_exists();
                         let chip_name = if is_update {
-                            "Building Updated Forge".to_string()
+                            "Updated Forge".to_string()
                         } else {
-                            "Building Forge".to_string()
+                            "Forge".to_string()
                         };
 
                         // Notify the event loop and update the icon to Building.

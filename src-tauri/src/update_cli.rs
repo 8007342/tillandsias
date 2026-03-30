@@ -48,6 +48,7 @@ use std::io::Write as _;
 use std::path::PathBuf;
 
 use serde::Deserialize;
+use tillandsias_core::format::human_bytes;
 
 /// The update manifest endpoint. Mirrors `tauri.conf.json` plugins.updater.endpoints[0].
 const UPDATE_ENDPOINT: &str =
@@ -86,7 +87,6 @@ pub fn run() -> bool {
 
     println!("  Tillandsias v{CURRENT_VERSION}");
     println!("  Checking for updates...");
-    println!("  Endpoint: {UPDATE_ENDPOINT}");
 
     // Fetch latest.json
     let json_text = match fetch_url(UPDATE_ENDPOINT) {
@@ -402,21 +402,6 @@ fn is_newer(a: &str, b: &str) -> bool {
     va[..len] > vb[..len]
 }
 
-/// Human-readable byte count.
-fn human_bytes(bytes: u64) -> String {
-    const GB: u64 = 1_073_741_824;
-    const MB: u64 = 1_048_576;
-    const KB: u64 = 1_024;
-    if bytes >= GB {
-        format!("{:.1} GB", bytes as f64 / GB as f64)
-    } else if bytes >= MB {
-        format!("{:.1} MB", bytes as f64 / MB as f64)
-    } else if bytes >= KB {
-        format!("{:.1} KB", bytes as f64 / KB as f64)
-    } else {
-        format!("{bytes} B")
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Tests

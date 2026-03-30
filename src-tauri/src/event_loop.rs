@@ -314,11 +314,11 @@ fn handle_build_progress_event(
 
 /// Returns true if the build image name corresponds to a forge image build.
 ///
-/// Both "Building Forge" (first-time) and "Building Updated Forge" (update)
-/// are forge builds. The check is intentionally broad so future variants
-/// (e.g., with version suffixes) are still recognised.
+/// Both "Forge" (first-time) and "Updated Forge" (update) are forge builds.
+/// The check is intentionally broad so future variants (e.g., with version
+/// suffixes) are still recognised.
 fn is_forge_build(image_name: &str) -> bool {
-    image_name == "Building Forge" || image_name == "Building Updated Forge"
+    image_name == "Forge" || image_name == "Updated Forge"
 }
 
 /// Remove build chips that have been `Completed` for longer than `BUILD_CHIP_FADEOUT`.
