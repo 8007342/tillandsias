@@ -25,10 +25,14 @@ install_opencode() {
         if ! curl -fsSL -o /tmp/opencode.tar.gz \
             "https://github.com/anomalyco/opencode/releases/latest/download/opencode-${VARIANT}.tar.gz"; then
             echo "  ERROR: Failed to download OpenCode. Check network connection."
-            return 1
+            return 0
         fi
-        tar xzf /tmp/opencode.tar.gz -C "$OC_DIR/bin/" --strip-components=1
-        chmod +x "$OC_BIN"
+        if ! tar xzf /tmp/opencode.tar.gz -C "$OC_DIR/bin/" --strip-components=1; then
+            echo "  ERROR: Failed to extract OpenCode archive."
+            rm -f /tmp/opencode.tar.gz
+            return 0
+        fi
+        chmod +x "$OC_BIN" 2>/dev/null || true
         rm -f /tmp/opencode.tar.gz
     fi
     # Verify binary actually works
@@ -72,12 +76,13 @@ update_opencode() {
     if [ -n "$latest_tag" ] && ! echo "$current_ver" | grep -q "$latest_tag"; then
         echo "  Updating OpenCode ($current_ver -> $latest_tag)..."
         if curl -fsSL -o /tmp/opencode.tar.gz \
-            "https://github.com/anomalyco/opencode/releases/latest/download/opencode-${VARIANT}.tar.gz"; then
-            tar xzf /tmp/opencode.tar.gz -C "$OC_DIR/bin/" --strip-components=1
-            chmod +x "$OC_BIN"
+            "https://github.com/anomalyco/opencode/releases/latest/download/opencode-${VARIANT}.tar.gz" \
+            && tar xzf /tmp/opencode.tar.gz -C "$OC_DIR/bin/" --strip-components=1; then
+            chmod +x "$OC_BIN" 2>/dev/null || true
             rm -f /tmp/opencode.tar.gz
             echo "  Updated to $("$OC_BIN" --version 2>/dev/null || echo "$latest_tag")"
         else
+            rm -f /tmp/opencode.tar.gz
             echo "  Update failed, continuing with current version."
         fi
     else

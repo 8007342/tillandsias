@@ -78,6 +78,10 @@ find_project_dir() {
     for dir in "$HOME/src"/*/; do
         [ -d "$dir" ] && PROJECT_DIR="$dir" && break
     done
+    # The for-loop's exit code is the last body command's exit code.
+    # When the glob matches nothing, [ -d "$dir" ] fails (exit 1) and
+    # the function would propagate that to the caller — fatal under set -e.
+    return 0
 }
 
 # ── Banner ──────────────────────────────────────────────────
