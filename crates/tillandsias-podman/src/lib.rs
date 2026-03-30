@@ -42,6 +42,20 @@ pub fn podman_cmd() -> tokio::process::Command {
     let mut cmd = tokio::process::Command::new(find_podman_path());
     cmd.env_remove("LD_LIBRARY_PATH");
     cmd.env_remove("LD_PRELOAD");
+
+    // Close inherited file descriptors >= 3 before exec'ing podman.
+    // AppImage's squashfuse FUSE mount creates FDs that crun cannot
+    // stat through /proc/self/fd/, causing OCI permission denied errors.
+    #[cfg(target_os = "linux")]
+    unsafe {
+        cmd.pre_exec(|| {
+            for fd in 3..1024 {
+                libc::close(fd);
+            }
+            Ok(())
+        });
+    }
+
     cmd
 }
 
@@ -50,5 +64,22 @@ pub fn podman_cmd_sync() -> std::process::Command {
     let mut cmd = std::process::Command::new(find_podman_path());
     cmd.env_remove("LD_LIBRARY_PATH");
     cmd.env_remove("LD_PRELOAD");
+
+    // Close inherited file descriptors >= 3 before exec'ing podman.
+    // AppImage's squashfuse FUSE mount creates FDs that crun cannot
+    // stat through /proc/self/fd/, causing OCI permission denied errors.
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            cmd.pre_exec(|| {
+                for fd in 3..1024 {
+                    libc::close(fd);
+                }
+                Ok(())
+            });
+        }
+    }
+
     cmd
 }
