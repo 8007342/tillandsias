@@ -11,6 +11,7 @@ use tillandsias_core::genus::TillandsiaGenus;
 use tillandsias_core::state::ContainerInfo;
 use tillandsias_podman::PodmanClient;
 
+use crate::i18n;
 use crate::strings;
 
 /// Map a short image name to a full image tag.
@@ -35,38 +36,39 @@ fn image_tag(name: &str) -> String {
 fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
     // Check if another process (e.g., tillandsias init) is already building
     if crate::build_lock::is_running(image_name) {
-        println!("  Waiting for environment setup to complete...");
-        crate::build_lock::wait_for_build(image_name)
-            .map_err(|e| {
-                if debug {
-                    eprintln!("  [debug] Build wait timed out: {e}");
-                }
-                strings::SETUP_ERROR
-            })?;
+        println!("  {}", i18n::t("cli.waiting_setup"));
+        crate::build_lock::wait_for_build(image_name).map_err(|e| {
+            if debug {
+                eprintln!("  [debug] Build wait timed out: {e}");
+            }
+            strings::SETUP_ERROR
+        })?;
         return Ok(());
     }
 
-    crate::build_lock::acquire(image_name)
-        .map_err(|e| {
-            if debug {
-                eprintln!("  [debug] Cannot acquire build lock: {e}");
-            }
-            strings::SETUP_ERROR
-        })?;
+    crate::build_lock::acquire(image_name).map_err(|e| {
+        if debug {
+            eprintln!("  [debug] Cannot acquire build lock: {e}");
+        }
+        strings::SETUP_ERROR
+    })?;
 
-    let source_dir = crate::embedded::write_image_sources()
-        .map_err(|e| {
-            if debug {
-                eprintln!("  [debug] Failed to extract embedded image sources: {e}");
-            }
-            strings::SETUP_ERROR
-        })?;
+    let source_dir = crate::embedded::write_image_sources().map_err(|e| {
+        if debug {
+            eprintln!("  [debug] Failed to extract embedded image sources: {e}");
+        }
+        strings::SETUP_ERROR
+    })?;
 
     let script = source_dir.join("scripts").join("build-image.sh");
     let tag = crate::handlers::forge_image_tag();
 
     if debug {
-        println!("  [debug] Running embedded: {} --tag {}", script.display(), tag);
+        println!(
+            "  [debug] Running embedded: {} --tag {}",
+            script.display(),
+            tag
+        );
     }
 
     let status = std::process::Command::new(&script)
@@ -96,7 +98,10 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         Ok(())
     } else {
         if debug {
-            eprintln!("  [debug] Build script exited with code {}", status.code().unwrap_or(-1));
+            eprintln!(
+                "  [debug] Build script exited with code {}",
+                status.code().unwrap_or(-1)
+            );
         }
         Err(strings::SETUP_ERROR.into())
     }
@@ -274,13 +279,13 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
     let display_path = tilde_path(&project_path);
 
     println!();
-    println!("Tillandsias \u{2014} Attaching to {project_name}");
+    println!("{}", i18n::tf("cli.attaching", &[("name", &project_name)]));
 
     // Resolve image
     let tag = image_tag(image_name);
 
     println!();
-    println!("Checking image... {tag}");
+    println!("{}", i18n::tf("cli.checking_image", &[("tag", &tag)]));
 
     // Check if image exists
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -293,7 +298,7 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
     // Verify podman is available
     let has_podman = rt.block_on(client.is_available());
     if !has_podman {
-        eprintln!("Error: podman is not installed or not in PATH");
+        eprintln!("{}", i18n::t("errors.no_podman"));
         return false;
     }
 
@@ -306,7 +311,7 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
     };
 
     // Try embedded build script (always available in the signed binary)
-    println!("  Ensuring image is up to date...");
+    println!("  {}", i18n::t("cli.ensuring_image"));
     if let Err(e) = run_build_image_script(source_name, debug)
         && debug
     {
@@ -317,9 +322,9 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
     let image_exists = rt.block_on(client.image_exists(&tag));
     if image_exists {
         let size = image_size_display(&tag);
-        println!("  \u{2713} Image ready ({size})");
+        println!("{}", i18n::tf("cli.image_ready", &[("size", &size)]));
     } else {
-        eprintln!("  \u{2717} {}", strings::ENV_NOT_READY);
+        eprintln!("  \u{2717} {}", i18n::t("errors.env_not_ready"));
         return false;
     }
 
@@ -357,9 +362,9 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
 
     println!();
     if bash {
-        println!("Starting terminal (fish shell)...");
+        println!("{}", i18n::t("cli.starting_terminal"));
     } else {
-        println!("Starting environment...");
+        println!("{}", i18n::t("cli.starting_env"));
     }
     println!("  Name:   {container_name}");
     println!("  Ports:  {}-{}", base_port.0, base_port.1);
@@ -376,7 +381,7 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
     }
 
     println!();
-    println!("Launching... (Ctrl+C to stop)");
+    println!("{}", i18n::t("cli.launching"));
     println!();
 
     // Execute podman with inherited stdio — terminal passes through.
@@ -390,7 +395,7 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
 
     match status {
         Ok(s) => {
-            println!("Environment stopped.");
+            println!("{}", i18n::t("cli.env_stopped"));
             s.success()
         }
         Err(e) => {

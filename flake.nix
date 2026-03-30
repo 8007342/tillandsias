@@ -13,9 +13,14 @@
 
         # Local files — changing these triggers rebuild
         forgeEntrypoint = ./images/default/entrypoint.sh;
+        forgeLibCommon = ./images/default/lib-common.sh;
+        forgeEntrypointOpencode = ./images/default/entrypoint-forge-opencode.sh;
+        forgeEntrypointClaude = ./images/default/entrypoint-forge-claude.sh;
+        forgeEntrypointTerminal = ./images/default/entrypoint-terminal.sh;
         forgeOpencode = ./images/default/opencode.json;
         forgeShellConfigs = ./images/default/shell;
         forgeWelcome = ./images/default/forge-welcome.sh;
+        forgeLocales = ./images/default/locales;
         webEntrypoint = ./images/web/entrypoint.sh;
 
       in {
@@ -85,8 +90,21 @@
               mkdir -p ./tmp
               chmod 1777 ./tmp
 
-              # Copy entrypoint
+              # Copy shared library
+              mkdir -p ./usr/local/lib/tillandsias
+              cp ${forgeLibCommon} ./usr/local/lib/tillandsias/lib-common.sh
+              chmod +r ./usr/local/lib/tillandsias/lib-common.sh
+
+              # Copy per-type entrypoints
               mkdir -p ./usr/local/bin
+              cp ${forgeEntrypointOpencode} ./usr/local/bin/entrypoint-forge-opencode.sh
+              cp ${forgeEntrypointClaude} ./usr/local/bin/entrypoint-forge-claude.sh
+              cp ${forgeEntrypointTerminal} ./usr/local/bin/entrypoint-terminal.sh
+              chmod +x ./usr/local/bin/entrypoint-forge-opencode.sh
+              chmod +x ./usr/local/bin/entrypoint-forge-claude.sh
+              chmod +x ./usr/local/bin/entrypoint-terminal.sh
+
+              # Copy legacy entrypoint (backward compat redirect)
               cp ${forgeEntrypoint} ./usr/local/bin/tillandsias-entrypoint.sh
               chmod +x ./usr/local/bin/tillandsias-entrypoint.sh
 
@@ -103,6 +121,12 @@
               mkdir -p ./usr/local/share/tillandsias
               cp ${forgeWelcome} ./usr/local/share/tillandsias/forge-welcome.sh
               chmod +x ./usr/local/share/tillandsias/forge-welcome.sh
+
+              # Locale files — sourced by lib-common.sh for i18n
+              mkdir -p ./etc/tillandsias/locales
+              cp ${forgeLocales}/en.sh ./etc/tillandsias/locales/en.sh
+              cp ${forgeLocales}/es.sh ./etc/tillandsias/locales/es.sh
+              chmod +r ./etc/tillandsias/locales/en.sh ./etc/tillandsias/locales/es.sh
 
               # Fish config in the user's config dir — fish reads from
               # $__fish_config_dir/conf.d/ which is ~/.config/fish/conf.d/
@@ -134,7 +158,7 @@
             config = {
               User = "1000:1000";
               WorkingDir = "/home/forge/src";
-              Entrypoint = [ "/usr/local/bin/tillandsias-entrypoint.sh" ];
+              Entrypoint = [ "/usr/local/bin/entrypoint-forge-claude.sh" ];
               ExposedPorts = {
                 "3000-3099/tcp" = {};
               };

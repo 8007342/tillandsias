@@ -33,6 +33,10 @@ pub const FLAKE_LOCK: &str = include_str!("../../flake.lock");
 // Image sources — forge (default) image
 // ---------------------------------------------------------------------------
 pub const FORGE_ENTRYPOINT: &str = include_str!("../../images/default/entrypoint.sh");
+pub const FORGE_LIB_COMMON: &str = include_str!("../../images/default/lib-common.sh");
+pub const FORGE_ENTRYPOINT_OPENCODE: &str = include_str!("../../images/default/entrypoint-forge-opencode.sh");
+pub const FORGE_ENTRYPOINT_CLAUDE: &str = include_str!("../../images/default/entrypoint-forge-claude.sh");
+pub const FORGE_ENTRYPOINT_TERMINAL: &str = include_str!("../../images/default/entrypoint-terminal.sh");
 pub const FORGE_WELCOME: &str = include_str!("../../images/default/forge-welcome.sh");
 pub const FORGE_CONTAINERFILE: &str = include_str!("../../images/default/Containerfile");
 pub const FORGE_OPENCODE_JSON: &str = include_str!("../../images/default/opencode.json");
@@ -137,6 +141,14 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     fs::create_dir_all(&default_dir).map_err(|e| format!("images/default dir: {e}"))?;
     fs::write(default_dir.join("entrypoint.sh"), FORGE_ENTRYPOINT)
         .map_err(|e| format!("entrypoint.sh: {e}"))?;
+    fs::write(default_dir.join("lib-common.sh"), FORGE_LIB_COMMON)
+        .map_err(|e| format!("lib-common.sh: {e}"))?;
+    fs::write(default_dir.join("entrypoint-forge-opencode.sh"), FORGE_ENTRYPOINT_OPENCODE)
+        .map_err(|e| format!("entrypoint-forge-opencode.sh: {e}"))?;
+    fs::write(default_dir.join("entrypoint-forge-claude.sh"), FORGE_ENTRYPOINT_CLAUDE)
+        .map_err(|e| format!("entrypoint-forge-claude.sh: {e}"))?;
+    fs::write(default_dir.join("entrypoint-terminal.sh"), FORGE_ENTRYPOINT_TERMINAL)
+        .map_err(|e| format!("entrypoint-terminal.sh: {e}"))?;
     fs::write(default_dir.join("forge-welcome.sh"), FORGE_WELCOME)
         .map_err(|e| format!("forge-welcome.sh: {e}"))?;
     fs::write(default_dir.join("Containerfile"), FORGE_CONTAINERFILE)
@@ -144,11 +156,28 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     fs::write(default_dir.join("opencode.json"), FORGE_OPENCODE_JSON)
         .map_err(|e| format!("opencode.json: {e}"))?;
     #[cfg(unix)]
-    fs::set_permissions(
-        default_dir.join("entrypoint.sh"),
-        fs::Permissions::from_mode(0o755),
-    )
-    .ok();
+    {
+        fs::set_permissions(
+            default_dir.join("entrypoint.sh"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .ok();
+        fs::set_permissions(
+            default_dir.join("entrypoint-forge-opencode.sh"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .ok();
+        fs::set_permissions(
+            default_dir.join("entrypoint-forge-claude.sh"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .ok();
+        fs::set_permissions(
+            default_dir.join("entrypoint-terminal.sh"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .ok();
+    }
 
     // Shell configs
     let shell_dir = default_dir.join("shell");

@@ -460,23 +460,35 @@ fn build_run_args(
     args.push("-e".to_string());
     args.push("GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig".to_string());
 
-    // Agent selection — tells the entrypoint which coding agent to launch
+    // Per-type entrypoint — select based on agent
+    let entrypoint = match agent {
+        tillandsias_core::config::SelectedAgent::OpenCode => "/usr/local/bin/entrypoint-forge-opencode.sh",
+        tillandsias_core::config::SelectedAgent::Claude => "/usr/local/bin/entrypoint-forge-claude.sh",
+    };
+    args.push("--entrypoint".to_string());
+    args.push(entrypoint.to_string());
+
+    // Agent selection — tells the legacy entrypoint which coding agent to launch
+    // (kept for backward compat with cached images that still use the redirect)
     args.push("-e".to_string());
     args.push(format!("TILLANDSIAS_AGENT={}", agent.as_env_str()));
 
-    // Claude API key — injected from OS keyring when present
-    if let Ok(Some(api_key)) = crate::secrets::retrieve_claude_api_key() {
-        args.push("-e".to_string());
-        args.push(format!("ANTHROPIC_API_KEY={api_key}"));
-    }
+    // Claude-specific secrets — only mounted for Claude agent
+    if matches!(agent, tillandsias_core::config::SelectedAgent::Claude) {
+        // Claude API key — injected from OS keyring when present
+        if let Ok(Some(api_key)) = crate::secrets::retrieve_claude_api_key() {
+            args.push("-e".to_string());
+            args.push(format!("ANTHROPIC_API_KEY={api_key}"));
+        }
 
-    // Claude Code credentials — mount host's ~/.claude/ for OAuth auth
-    let claude_dir = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("~"))
-        .join(".claude");
-    let claude_mount = format!("{}:/home/forge/.claude:rw", claude_dir.display());
-    args.push("-v".to_string());
-    args.push(claude_mount);
+        // Claude Code credentials — mount host's ~/.claude/ for OAuth auth
+        let claude_dir = dirs::home_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("~"))
+            .join(".claude");
+        let claude_mount = format!("{}:/home/forge/.claude:rw", claude_dir.display());
+        args.push("-v".to_string());
+        args.push(claude_mount);
+    }
 
     // Container image (always last)
     args.push(image.to_string());
@@ -937,22 +949,13 @@ pub async fn handle_terminal(
     info!(container = %container_name, tool = %display_emoji, "Maintenance terminal registered (bud state)");
 
     let git_dir = secrets_dir.join("git");
-    let claude_dir = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("~"))
-        .join(".claude");
     let host_os = tillandsias_core::config::detect_host_os();
-    let selected_agent = load_global_config().agent.selected;
     let podman_bin = tillandsias_podman::find_podman_path();
-
-    // Claude API key — injected from OS keyring when present
-    let claude_api_key_arg = match crate::secrets::retrieve_claude_api_key() {
-        Ok(Some(key)) => format!("-e ANTHROPIC_API_KEY={key} "),
-        _ => String::new(),
-    };
 
     let podman_cmd = format!(
         "{podman_bin} run -it --rm --init --stop-timeout=10 \
         --name {} \
+        --entrypoint /usr/local/bin/entrypoint-terminal.sh \
         --security-opt=label=disable \
         --userns=keep-id \
         --cap-drop=ALL \
@@ -960,23 +963,17 @@ pub async fn handle_terminal(
         -w /home/forge/src/{} \
         -e TILLANDSIAS_PROJECT={} \
         -e TILLANDSIAS_HOST_OS='{}' \
-        -e TILLANDSIAS_AGENT={} \
-        -e TILLANDSIAS_MAINTENANCE=1 \
-        {}\
         -e GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig \
         -p {}-{}:{}-{} \
         -v {}:/home/forge/src/{} \
         -v {}:/home/forge/.cache/tillandsias \
         -v {}:/home/forge/.config/gh:ro \
         -v {}:/home/forge/.config/tillandsias-git:rw \
-        -v {}:/home/forge/.claude:rw \
         {}",
         container_name,
         project_name,
         project_name,
         host_os,
-        selected_agent.as_env_str(),
-        claude_api_key_arg,
         port_range.0,
         port_range.1,
         port_range.0,
@@ -986,7 +983,6 @@ pub async fn handle_terminal(
         cache.display(),
         secrets_dir.join("gh").display(),
         git_dir.display(),
-        claude_dir.display(),
         tag,
     );
 
@@ -1100,22 +1096,13 @@ pub async fn handle_root_terminal(
     info!(container = %container_name, "Root terminal registered (bud state)");
 
     let git_dir = secrets_dir.join("git");
-    let claude_dir = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("~"))
-        .join(".claude");
     let host_os = tillandsias_core::config::detect_host_os();
-    let selected_agent = load_global_config().agent.selected;
     let podman_bin = tillandsias_podman::find_podman_path();
-
-    // Claude API key — injected from OS keyring when present
-    let claude_api_key_arg = match crate::secrets::retrieve_claude_api_key() {
-        Ok(Some(key)) => format!("-e ANTHROPIC_API_KEY={key} "),
-        _ => String::new(),
-    };
 
     let podman_cmd = format!(
         "{podman_bin} run -it --rm --init --stop-timeout=10 \
         --name {} \
+        --entrypoint /usr/local/bin/entrypoint-terminal.sh \
         --security-opt=label=disable \
         --userns=keep-id \
         --cap-drop=ALL \
@@ -1123,21 +1110,15 @@ pub async fn handle_root_terminal(
         -w /home/forge/src \
         -e TILLANDSIAS_PROJECT='(all projects)' \
         -e TILLANDSIAS_HOST_OS='{}' \
-        -e TILLANDSIAS_AGENT={} \
-        -e TILLANDSIAS_MAINTENANCE=1 \
-        {}\
         -e GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig \
         -p {}-{}:{}-{} \
         -v {}:/home/forge/src \
         -v {}:/home/forge/.cache/tillandsias \
         -v {}:/home/forge/.config/gh:ro \
         -v {}:/home/forge/.config/tillandsias-git:rw \
-        -v {}:/home/forge/.claude:rw \
         {}",
         container_name,
         host_os,
-        selected_agent.as_env_str(),
-        claude_api_key_arg,
         port_range.0,
         port_range.1,
         port_range.0,
@@ -1146,7 +1127,6 @@ pub async fn handle_root_terminal(
         cache.display(),
         secrets_dir.join("gh").display(),
         git_dir.display(),
-        claude_dir.display(),
         tag,
     );
 
