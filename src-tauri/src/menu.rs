@@ -110,9 +110,9 @@ pub fn build_tray_menu<R: Runtime>(
     // Bump generation so all IDs are unique (avoids libappindicator blank label bug)
     MENU_GENERATION.fetch_add(1, Ordering::Relaxed);
 
-    // Decay state: podman unavailable — show minimal error menu
-    if state.tray_icon_state == TrayIconState::Decay {
-        return build_decay_menu(app);
+    // Dried state: podman unavailable — show minimal error menu
+    if state.tray_icon_state == TrayIconState::Dried {
+        return build_dried_menu(app);
     }
 
     let mut menu = MenuBuilder::new(app);
@@ -215,13 +215,13 @@ pub fn build_tray_menu<R: Runtime>(
     menu.build()
 }
 
-/// Build the minimal Decay menu shown when podman is not available.
+/// Build the minimal Dried menu shown when podman is not available.
 ///
 /// Contains only:
 /// - Error item (disabled) explaining podman is unavailable
 /// - Separator
-/// - About submenu (version · credit · quit)
-fn build_decay_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu::Menu<R>> {
+/// - Quit
+fn build_dried_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu::Menu<R>> {
     let mut menu = MenuBuilder::new(app);
 
     menu = menu.item(
@@ -237,7 +237,7 @@ fn build_decay_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu
     menu =
         menu.item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), i18n::t("menu.quit")).build(app)?);
 
-    debug!("Decay menu built (podman unavailable)");
+    debug!("Dried menu built (podman unavailable)");
 
     menu.build()
 }

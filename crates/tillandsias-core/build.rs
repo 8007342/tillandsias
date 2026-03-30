@@ -46,10 +46,13 @@ const FALLBACK_GENUS: &str = "ionantha";
 const LIFECYCLES: &[&str] = &["bud", "bloom", "dried", "pup"];
 
 /// Tray icon mappings: (tray_state_name, genus, lifecycle)
+/// @trace spec:tray-icon-lifecycle
 const TRAY_ICONS: &[(&str, &str, &str)] = &[
-    ("base", "ionantha", "bud"),
+    ("pup", "ionantha", "pup"),
+    ("mature", "ionantha", "bud"),
     ("building", "ionantha", "bloom"),
-    ("decay", "ionantha", "dried"),
+    ("blooming", "ionantha", "bloom"),
+    ("dried", "ionantha", "dried"),
 ];
 
 fn main() {
@@ -97,7 +100,7 @@ fn main() {
         }
     }
 
-    // Render 3 tray icon variants at 32x32
+    // Render 5 tray icon variants at 32x32
     for (tray_name, genus, lifecycle) in TRAY_ICONS {
         let svg_path = assets_dir.join(genus).join(format!("{lifecycle}.svg"));
         let png_path = tray_dir.join(format!("{tray_name}.png"));
@@ -215,6 +218,7 @@ fn generate_icons_rs(out_dir: &Path) {
     }
 
     // Generate tray_icon_png function
+    // @trace spec:tray-icon-lifecycle
     writeln!(
         f,
         r#"/// Return the PNG bytes for a tray icon state (32x32)."#
@@ -228,7 +232,12 @@ fn generate_icons_rs(out_dir: &Path) {
     writeln!(f, "    match state {{").unwrap();
     writeln!(
         f,
-        "        crate::genus::TrayIconState::Base => PNG_TRAY_BASE,"
+        "        crate::genus::TrayIconState::Pup => PNG_TRAY_PUP,"
+    )
+    .unwrap();
+    writeln!(
+        f,
+        "        crate::genus::TrayIconState::Mature => PNG_TRAY_MATURE,"
     )
     .unwrap();
     writeln!(
@@ -238,7 +247,12 @@ fn generate_icons_rs(out_dir: &Path) {
     .unwrap();
     writeln!(
         f,
-        "        crate::genus::TrayIconState::Decay => PNG_TRAY_DECAY,"
+        "        crate::genus::TrayIconState::Blooming => PNG_TRAY_BLOOMING,"
+    )
+    .unwrap();
+    writeln!(
+        f,
+        "        crate::genus::TrayIconState::Dried => PNG_TRAY_DRIED,"
     )
     .unwrap();
     writeln!(f, "    }}").unwrap();

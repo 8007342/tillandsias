@@ -152,8 +152,9 @@ fn main() {
             };
 
             // Build tray icon — store handle so it persists and callbacks remain active
-            // Icon bytes come from the SVG→PNG build pipeline (Ionantha bud = idle state)
-            let icon = tauri::image::Image::from_bytes(icons::tray_icon_png(TrayIconState::Base))
+            // Icon bytes come from the SVG→PNG build pipeline (Ionantha pup = startup state)
+            // @trace spec:tray-icon-lifecycle
+            let icon = tauri::image::Image::from_bytes(icons::tray_icon_png(TrayIconState::Pup))
                 .expect("embedded tray icon is valid PNG");
 
             let tray = TrayIconBuilder::new()
@@ -163,10 +164,30 @@ fn main() {
                 .on_menu_event({
                     let menu_tx = menu_tx.clone();
                     let app_handle = app_handle.clone();
+                    let state_for_menu = state_for_setup.clone();
                     move |_app, event| {
                         let raw_id = event.id().as_ref();
                         let id = menu::ids::strip_gen(raw_id);
                         debug!(menu_id = %id, "Menu event received");
+
+                        // Blooming → Mature: any menu interaction acknowledges
+                        // the "something new" state and transitions to idle.
+                        // @trace spec:tray-icon-lifecycle
+                        {
+                            let mut s = state_for_menu.lock().unwrap();
+                            if s.tray_icon_state == TrayIconState::Blooming {
+                                s.tray_icon_state = TrayIconState::Mature;
+                                if let Some(tray_lock) = TRAY_ICON.get()
+                                    && let Ok(tray) = tray_lock.lock()
+                                {
+                                    if let Ok(icon) = tauri::image::Image::from_bytes(
+                                        icons::tray_icon_png(TrayIconState::Mature),
+                                    ) {
+                                        let _ = tray.set_icon(Some(icon));
+                                    }
+                                }
+                            }
+                        }
 
                         // Quit fast-path — exit immediately, no channel round-trip
                         if id == menu::ids::QUIT {
@@ -214,7 +235,7 @@ fn main() {
                             warn!("Podman machine started but API not ready after retries");
                         }
                     } else {
-                        warn!("Podman machine auto-start failed — falling back to decay state");
+                        warn!("Podman machine auto-start failed — falling back to dried state");
                     }
                 }
 
@@ -229,7 +250,7 @@ fn main() {
                     s.platform.has_podman_machine = has_machine;
                     s.has_podman = podman_usable;
                     if !podman_usable {
-                        s.tray_icon_state = TrayIconState::Decay;
+                        s.tray_icon_state = TrayIconState::Dried;
                     }
                 }
 
@@ -240,17 +261,17 @@ fn main() {
                 }
 
                 if !podman_usable {
-                    // Set Decay icon immediately
+                    // Set Dried icon immediately
                     if let Some(tray_lock) = TRAY_ICON.get()
                         && let Ok(tray) = tray_lock.lock()
                     {
                         if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
-                            TrayIconState::Decay,
+                            TrayIconState::Dried,
                         )) {
                             let _ = tray.set_icon(Some(icon));
                         }
                     }
-                    // Rebuild menu to show Decay state
+                    // Rebuild menu to show Dried state
                     rebuild_menu(&app_handle_for_loop, &state_for_loop);
                 }
 
@@ -400,10 +421,21 @@ fn main() {
                         }
                     } else {
                         info!(tag = %tag, "Forge image present at launch");
-                        // Image is ready — enable forge-dependent actions immediately.
+                        // Image is ready — transition from Pup to Mature.
+                        // @trace spec:tray-icon-lifecycle
                         {
                             let mut s = state_for_loop.lock().unwrap();
                             s.forge_available = true;
+                            s.tray_icon_state = TrayIconState::Mature;
+                        }
+                        if let Some(tray_lock) = TRAY_ICON.get()
+                            && let Ok(tray) = tray_lock.lock()
+                        {
+                            if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                                TrayIconState::Mature,
+                            )) {
+                                let _ = tray.set_icon(Some(icon));
+                            }
                         }
                         rebuild_menu(&app_handle_for_loop, &state_for_loop);
                     }

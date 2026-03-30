@@ -223,21 +223,30 @@ impl PlantLifecycle {
     }
 }
 
-/// Tray icon state — maps overall system state to a specific tray icon variant.
-/// Independent of the per-environment `TillandsiaGenus` and `PlantLifecycle` types.
+/// Tray icon state — maps the full tillandsia plant lifecycle to the system
+/// tray icon. Independent of the per-environment `TillandsiaGenus` and
+/// `PlantLifecycle` types.
 ///
 /// All tray icon variants are derived from the Ionantha genus:
-/// - `Base` → Ionantha bud (idle, no environments running)
-/// - `Building` → Ionantha bloom (at least one environment active)
-/// - `Decay` → Ionantha dried (all environments stopped)
+/// - `Pup`      → Ionantha pup  (app launching, initializing)
+/// - `Mature`   → Ionantha bud  (at rest, everything healthy)
+/// - `Building` → Ionantha bloom (image/container build in progress)
+/// - `Blooming` → Ionantha bloom (build complete, awaiting user ack)
+/// - `Dried`    → Ionantha dried (unrecoverable error, e.g. podman missing)
+///
+/// @trace spec:tray-icon-lifecycle
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum TrayIconState {
-    /// Idle or projects detected, none running — Ionantha bud
-    Base,
-    /// At least one environment starting or running — Ionantha bloom
+    /// App just launched, initializing — Ionantha pup (tiny sprout)
+    Pup,
+    /// At rest, everything working — Ionantha bud (healthy mature rosette)
+    Mature,
+    /// Image or container build in progress — Ionantha bloom (flowering)
     Building,
-    /// Environments present but all stopped or stopping — Ionantha dried
-    Decay,
+    /// Build complete, waiting for user acknowledgment — Ionantha bloom
+    Blooming,
+    /// Unrecoverable error (podman missing) — Ionantha dried (withered)
+    Dried,
 }
 
 /// Allocates genera from the pool, avoiding duplicates per project.

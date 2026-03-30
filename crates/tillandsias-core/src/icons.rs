@@ -23,12 +23,22 @@ mod tests {
     const PNG_MAGIC: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
     #[test]
-    fn tray_icon_base_is_valid_png() {
-        let bytes = tray_icon_png(TrayIconState::Base);
-        assert!(!bytes.is_empty(), "Base tray icon is empty");
+    fn tray_icon_pup_is_valid_png() {
+        let bytes = tray_icon_png(TrayIconState::Pup);
+        assert!(!bytes.is_empty(), "Pup tray icon is empty");
         assert!(
             bytes.starts_with(PNG_MAGIC),
-            "Base tray icon missing PNG magic bytes"
+            "Pup tray icon missing PNG magic bytes"
+        );
+    }
+
+    #[test]
+    fn tray_icon_mature_is_valid_png() {
+        let bytes = tray_icon_png(TrayIconState::Mature);
+        assert!(!bytes.is_empty(), "Mature tray icon is empty");
+        assert!(
+            bytes.starts_with(PNG_MAGIC),
+            "Mature tray icon missing PNG magic bytes"
         );
     }
 
@@ -43,13 +53,47 @@ mod tests {
     }
 
     #[test]
-    fn tray_icon_decay_is_valid_png() {
-        let bytes = tray_icon_png(TrayIconState::Decay);
-        assert!(!bytes.is_empty(), "Decay tray icon is empty");
+    fn tray_icon_blooming_is_valid_png() {
+        let bytes = tray_icon_png(TrayIconState::Blooming);
+        assert!(!bytes.is_empty(), "Blooming tray icon is empty");
         assert!(
             bytes.starts_with(PNG_MAGIC),
-            "Decay tray icon missing PNG magic bytes"
+            "Blooming tray icon missing PNG magic bytes"
         );
+    }
+
+    #[test]
+    fn tray_icon_dried_is_valid_png() {
+        let bytes = tray_icon_png(TrayIconState::Dried);
+        assert!(!bytes.is_empty(), "Dried tray icon is empty");
+        assert!(
+            bytes.starts_with(PNG_MAGIC),
+            "Dried tray icon missing PNG magic bytes"
+        );
+    }
+
+    #[test]
+    fn all_five_tray_icon_states_valid() {
+        let states = [
+            TrayIconState::Pup,
+            TrayIconState::Mature,
+            TrayIconState::Building,
+            TrayIconState::Blooming,
+            TrayIconState::Dried,
+        ];
+        for state in &states {
+            let bytes = tray_icon_png(*state);
+            assert!(
+                !bytes.is_empty(),
+                "Tray icon for {:?} is empty",
+                state
+            );
+            assert!(
+                bytes.starts_with(PNG_MAGIC),
+                "Tray icon for {:?} missing PNG magic bytes",
+                state
+            );
+        }
     }
 
     #[test]

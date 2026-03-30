@@ -164,7 +164,7 @@ pub struct TrayState {
     pub platform: PlatformInfo,
 
     /// Whether podman was reachable at launch.
-    /// Set once during startup; never recovered at runtime (Decay is terminal).
+    /// Set once during startup; never recovered at runtime (Dried is terminal).
     pub has_podman: bool,
 
     /// Current tray icon state — updated by `compute_icon_state()`.
@@ -206,7 +206,7 @@ impl TrayState {
             running: Vec::new(),
             platform,
             has_podman: true,
-            tray_icon_state: TrayIconState::Base,
+            tray_icon_state: TrayIconState::Pup,
             remote_repos: Vec::new(),
             remote_repos_fetched_at: None,
             remote_repos_loading: false,
@@ -219,21 +219,37 @@ impl TrayState {
 
     /// Compute the tray icon state from current application state.
     ///
-    /// - `Decay`    — podman is not available (terminal, non-recoverable)
+    /// - `Dried`    — podman is not available (terminal, non-recoverable)
     /// - `Building` — one or more builds are `InProgress`
-    /// - `Base`     — idle, no in-progress builds
+    /// - `Blooming` — no builds in progress, but at least one recently completed
+    /// - `Mature`   — idle, no in-progress or recently completed builds
+    ///
+    /// Note: `Pup` is never returned here — it is only set at startup before
+    /// the first `compute_icon_state()` call.
+    ///
+    /// @trace spec:tray-icon-lifecycle
     pub fn compute_icon_state(&self) -> TrayIconState {
         if !self.has_podman {
-            return TrayIconState::Decay;
+            return TrayIconState::Dried;
         }
         let any_in_progress = self
             .active_builds
             .iter()
             .any(|b| b.status == BuildStatus::InProgress);
         if any_in_progress {
-            TrayIconState::Building
+            return TrayIconState::Building;
+        }
+        // Check for recently completed builds (within the fadeout window).
+        // These are builds that completed successfully and whose completed_at
+        // timestamp is still present (not yet pruned).
+        let any_recently_completed = self
+            .active_builds
+            .iter()
+            .any(|b| matches!(b.status, BuildStatus::Completed) && b.completed_at.is_some());
+        if any_recently_completed {
+            TrayIconState::Blooming
         } else {
-            TrayIconState::Base
+            TrayIconState::Mature
         }
     }
 
