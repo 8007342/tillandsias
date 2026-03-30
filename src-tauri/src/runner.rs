@@ -127,126 +127,50 @@ fn image_size_display(tag: &str) -> String {
     }
 }
 
-/// Build podman run args for interactive CLI mode.
-fn build_run_args(
+/// Build a [`LaunchContext`] for CLI mode.
+fn build_cli_launch_context(
     container_name: &str,
-    image: &str,
     project_path: &Path,
+    project_name: &str,
     cache: &Path,
     port_range: (u16, u16),
-) -> Vec<String> {
-    // Derive project name for env vars
-    let proj_name = project_path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "project".to_string());
-
+    image_tag: &str,
+) -> tillandsias_core::container_profile::LaunchContext {
+    let (gh_dir, git_dir) = crate::launch::ensure_secrets_dirs(cache);
     let host_os = tillandsias_core::config::detect_host_os();
-
-    let mut args = vec![
-        "-it".to_string(),
-        "--rm".to_string(),
-        "--init".to_string(),
-        "--stop-timeout=10".to_string(),
-        "--name".to_string(),
-        container_name.to_string(),
-        "--cap-drop=ALL".to_string(),
-        "--security-opt=no-new-privileges".to_string(),
-        "--userns=keep-id".to_string(),
-        "--security-opt=label=disable".to_string(),
-        // Environment variables for the welcome script
-        "-e".to_string(),
-        format!("TILLANDSIAS_PROJECT={proj_name}"),
-        "-e".to_string(),
-        format!("TILLANDSIAS_HOST_OS={host_os}"),
-    ];
-
-    // GPU passthrough (Linux only)
-    if cfg!(target_os = "linux") {
-        for flag in tillandsias_podman::detect_gpu_devices() {
-            args.push(flag);
-        }
-    }
-
-    // Port range
-    let port_mapping = format!(
-        "{}-{}:{}-{}",
-        port_range.0, port_range.1, port_range.0, port_range.1
-    );
-    args.push("-p".to_string());
-    args.push(port_mapping);
-
-    // Volume mounts — mount at src/<project-name>/ to preserve hierarchy
-    let project_mount = format!("{}:/home/forge/src/{}", project_path.display(), proj_name);
-    args.push("-v".to_string());
-    args.push(project_mount);
-
-    let cache_mount = format!("{}:/home/forge/.cache/tillandsias", cache.display());
-    args.push("-v".to_string());
-    args.push(cache_mount);
-
-    // Secrets directory — git config, gh auth
-    let secrets_dir = cache.join("secrets");
-    std::fs::create_dir_all(secrets_dir.join("gh")).ok();
 
     // Refresh hosts.yml from native keyring before container launch.
     crate::secrets::write_hosts_yml_from_keyring();
-    let git_dir = secrets_dir.join("git");
-    std::fs::create_dir_all(&git_dir).ok();
-    let gitconfig_path = git_dir.join(".gitconfig");
-    if !gitconfig_path.exists() {
-        std::fs::File::create(&gitconfig_path).ok();
-    }
 
-    // GitHub CLI credentials (read-only — containers shouldn't modify auth state)
-    let gh_mount = format!(
-        "{}:/home/forge/.config/gh:ro",
-        secrets_dir.join("gh").display()
-    );
-    args.push("-v".to_string());
-    args.push(gh_mount);
+    // Claude API key from OS keyring
+    let claude_api_key = crate::secrets::retrieve_claude_api_key()
+        .ok()
+        .flatten();
 
-    // Git config — mount directory read-write (gh auth needs to write), point git via GIT_CONFIG_GLOBAL
-    let git_mount = format!(
-        "{}:/home/forge/.config/tillandsias-git:rw",
-        git_dir.display()
-    );
-    args.push("-v".to_string());
-    args.push(git_mount);
-    args.push("-e".to_string());
-    args.push("GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig".to_string());
-
-    // Agent selection — tells the entrypoint which coding agent to launch
-    let selected_agent = tillandsias_core::config::load_global_config().agent.selected;
-    args.push("-e".to_string());
-    args.push(format!("TILLANDSIAS_AGENT={}", selected_agent.as_env_str()));
-
-    // Claude API key — injected from OS keyring when present
-    if let Ok(Some(api_key)) = crate::secrets::retrieve_claude_api_key() {
-        args.push("-e".to_string());
-        args.push(format!("ANTHROPIC_API_KEY={api_key}"));
-    }
-
-    // Claude Code credentials — mount host's ~/.claude/ for OAuth auth
+    // Claude credentials directory
     let claude_dir = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("~"))
-        .join(".claude");
-    let claude_mount = format!("{}:/home/forge/.claude:rw", claude_dir.display());
-    args.push("-v".to_string());
-    args.push(claude_mount);
+        .map(|h| h.join(".claude"))
+        .filter(|p| p.exists());
 
     // Custom mounts from project config
     let project_config = load_project_config(project_path);
-    for mount in &project_config.mounts {
-        let mount_str = format!("{}:{}:{}", mount.host, mount.container, mount.mode);
-        args.push("-v".to_string());
-        args.push(mount_str);
+
+    tillandsias_core::container_profile::LaunchContext {
+        container_name: container_name.to_string(),
+        project_path: project_path.to_path_buf(),
+        project_name: project_name.to_string(),
+        cache_dir: cache.to_path_buf(),
+        port_range,
+        host_os,
+        detached: false,
+        is_watch_root: false,
+        claude_api_key,
+        claude_dir,
+        gh_dir,
+        git_dir,
+        custom_mounts: project_config.mounts,
+        image_tag: image_tag.to_string(),
     }
-
-    // Image (always last)
-    args.push(image.to_string());
-
-    args
 }
 
 /// Run the CLI attach workflow.
@@ -342,23 +266,30 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
 
-    let mut run_args = build_run_args(&container_name, &tag, &project_path, &cache, base_port);
+    // Select profile based on mode: --bash uses terminal profile, otherwise forge
+    let selected_agent = global_config.agent.selected;
+    let profile = if bash {
+        tillandsias_core::container_profile::terminal_profile()
+    } else {
+        match selected_agent {
+            tillandsias_core::config::SelectedAgent::OpenCode => {
+                tillandsias_core::container_profile::forge_opencode_profile()
+            }
+            tillandsias_core::config::SelectedAgent::Claude => {
+                tillandsias_core::container_profile::forge_claude_profile()
+            }
+        }
+    };
 
-    // --bash mode: maintenance shell via entrypoint (not bypassing it).
-    // The entrypoint handles PATH, gh auth, shell configs, then drops to fish.
-    // Start in the project directory so the user lands in the right place.
-    if bash {
-        let project_name = project_path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "src".to_string());
-        let image_arg = run_args.pop().expect("run_args always ends with image");
-        run_args.push("-e".to_string());
-        run_args.push("TILLANDSIAS_MAINTENANCE=1".to_string());
-        run_args.push("-w".to_string());
-        run_args.push(format!("/home/forge/src/{project_name}"));
-        run_args.push(image_arg);
-    }
+    let ctx = build_cli_launch_context(
+        &container_name,
+        &project_path,
+        &project_name,
+        &cache,
+        base_port,
+        &tag,
+    );
+    let run_args = crate::launch::build_podman_args(&profile, &ctx);
 
     println!();
     if bash {

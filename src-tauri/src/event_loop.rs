@@ -152,6 +152,18 @@ pub async fn run(
                             }
                         }
                     }
+                    MenuCommand::ServeHere { project_path } => {
+                        info!(project = ?project_path, "Serve Here requested");
+                        match handlers::handle_serve_here(project_path, &mut state, build_tx.clone()).await {
+                            Ok(()) => {
+                                prune_completed_builds(&mut state);
+                                on_state_change(&state);
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Serve Here failed");
+                            }
+                        }
+                    }
                     MenuCommand::RootTerminal => {
                         info!("Root terminal requested");
                         let watch_path = {
@@ -522,8 +534,29 @@ fn handle_podman_event(
     } else if event.new_state == ContainerState::Running
         || event.new_state == ContainerState::Creating
     {
-        // Unknown container with our prefix — discovered on startup or external
-        if let Some((project_name, genus)) =
+        // Unknown container with our prefix — discovered on startup or external.
+        // Try web container naming first (`tillandsias-<project>-web`), then
+        // fall back to genus-based naming (`tillandsias-<project>-<genus>`).
+        if let Some(project_name) =
+            ContainerInfo::parse_web_container_name(&event.container_name)
+        {
+            debug!(
+                project = %project_name,
+                "Discovered running web container"
+            );
+            // Web containers use a sentinel genus (first in the list); the real
+            // display emoji is the chain link. Genus is never shown for Web type.
+            let sentinel_genus = tillandsias_core::genus::TillandsiaGenus::ALL[0];
+            state.running.push(ContainerInfo {
+                name: event.container_name,
+                project_name,
+                genus: sentinel_genus,
+                state: event.new_state,
+                port_range: (0, 0), // Unknown — will be updated on next inspect
+                container_type: ContainerType::Web,
+                display_emoji: "\u{1F517}".to_string(), // 🔗
+            });
+        } else if let Some((project_name, genus)) =
             ContainerInfo::parse_container_name(&event.container_name)
         {
             debug!(

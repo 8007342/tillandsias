@@ -11,6 +11,7 @@ mod github;
 mod handlers;
 mod i18n;
 mod init;
+mod launch;
 mod logging;
 mod menu;
 mod runner;
@@ -557,6 +558,9 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
                         project_path: payload.into(),
                     }),
                     "terminal" => Some(MenuCommand::Terminal {
+                        project_path: payload.into(),
+                    }),
+                    "serve" => Some(MenuCommand::ServeHere {
                         project_path: payload.into(),
                     }),
                     // "start" ID no longer emitted from menu but kept

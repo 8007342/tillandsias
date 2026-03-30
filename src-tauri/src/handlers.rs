@@ -346,154 +346,65 @@ pub fn run_build_image_script_pub(image_name: &str) -> Result<(), String> {
     run_build_image_script(image_name)
 }
 
-/// Build `podman run` argument list.
-/// From tray: detached (`-d`). From CLI: interactive (`-it`).
+/// Select the appropriate container profile for a forge launch based on the agent.
+fn forge_profile(
+    agent: tillandsias_core::config::SelectedAgent,
+) -> tillandsias_core::container_profile::ContainerProfile {
+    match agent {
+        tillandsias_core::config::SelectedAgent::OpenCode => {
+            tillandsias_core::container_profile::forge_opencode_profile()
+        }
+        tillandsias_core::config::SelectedAgent::Claude => {
+            tillandsias_core::container_profile::forge_claude_profile()
+        }
+    }
+}
+
+/// Build a [`LaunchContext`] for forge and terminal launches.
 ///
-/// When `is_watch_root` is true, the project path is the watch root itself
-/// (e.g., `~/src/`) and is mounted directly at `/home/forge/src/` instead of
-/// being nested as `/home/forge/src/<name>/`.
-fn build_run_args(
+/// Resolves all paths, secrets, and custom mounts needed by `build_podman_args()`.
+fn build_launch_context(
     container_name: &str,
-    image: &str,
     project_path: &Path,
-    cache_dir: &Path,
+    project_name: &str,
+    cache: &Path,
     port_range: (u16, u16),
     detached: bool,
     is_watch_root: bool,
-    agent: tillandsias_core::config::SelectedAgent,
-) -> Vec<String> {
-    let mut args = Vec::new();
+    image_tag: &str,
+) -> tillandsias_core::container_profile::LaunchContext {
+    let (gh_dir, git_dir) = crate::launch::ensure_secrets_dirs(cache);
+    let host_os = tillandsias_core::config::detect_host_os();
 
-    if detached {
-        // Tray mode: run in background, user manages via tray menu
-        args.push("-d".to_string());
-    } else {
-        // CLI mode: interactive, user gets terminal directly
-        args.push("-it".to_string());
+    // Claude API key from OS keyring
+    let claude_api_key = crate::secrets::retrieve_claude_api_key()
+        .ok()
+        .flatten();
+
+    // Claude credentials directory
+    let claude_dir = dirs::home_dir()
+        .map(|h| h.join(".claude"))
+        .filter(|p| p.exists());
+
+    // Custom mounts from project config
+    let project_config = tillandsias_core::config::load_project_config(project_path);
+
+    tillandsias_core::container_profile::LaunchContext {
+        container_name: container_name.to_string(),
+        project_path: project_path.to_path_buf(),
+        project_name: project_name.to_string(),
+        cache_dir: cache.to_path_buf(),
+        port_range,
+        host_os,
+        detached,
+        is_watch_root,
+        claude_api_key,
+        claude_dir,
+        gh_dir,
+        git_dir,
+        custom_mounts: project_config.mounts,
+        image_tag: image_tag.to_string(),
     }
-    args.push("--rm".to_string());
-
-    // Container name
-    args.push("--name".to_string());
-    args.push(container_name.to_string());
-
-    // Non-negotiable security flags
-    args.push("--cap-drop=ALL".to_string());
-    args.push("--security-opt=no-new-privileges".to_string());
-    args.push("--userns=keep-id".to_string());
-    args.push("--security-opt=label=disable".to_string());
-
-    // Signal handling: --init provides a proper init process (tini) that
-    // forwards signals and reaps zombies. When a terminal is closed,
-    // SIGHUP → init → SIGTERM to all children → clean shutdown.
-    args.push("--init".to_string());
-    args.push("--stop-timeout=10".to_string());
-
-    // GPU passthrough (Linux only)
-    if cfg!(target_os = "linux") {
-        for flag in tillandsias_podman::detect_gpu_devices() {
-            args.push(flag);
-        }
-    }
-
-    // Port range mapping
-    let port_mapping = format!(
-        "{}-{}:{}-{}",
-        port_range.0, port_range.1, port_range.0, port_range.1
-    );
-    args.push("-p".to_string());
-    args.push(port_mapping);
-
-    // Volume mounts
-    // Project directory -> container workspace at src/<project-name>/
-    // Preserves hierarchy so OpenCode shows src/<project>:main
-    //
-    // Watch-root case: mount the entire watch path at /home/forge/src/ directly
-    // so all project subdirectories appear as /home/forge/src/<project>/.
-    let project_mount = if is_watch_root {
-        format!("{}:/home/forge/src", project_path.display())
-    } else {
-        let project_name = project_path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "project".to_string());
-        format!(
-            "{}:/home/forge/src/{}",
-            project_path.display(),
-            project_name
-        )
-    };
-    args.push("-v".to_string());
-    args.push(project_mount);
-
-    // Cache directory -> container cache
-    let cache_mount = format!("{}:/home/forge/.cache/tillandsias", cache_dir.display());
-    args.push("-v".to_string());
-    args.push(cache_mount);
-
-    // Secrets directory — git config, gh auth, ssh keys
-    let secrets_dir = cache_dir.join("secrets");
-    std::fs::create_dir_all(secrets_dir.join("gh")).ok();
-    let git_dir = secrets_dir.join("git");
-    std::fs::create_dir_all(&git_dir).ok();
-    // Ensure .gitconfig FILE exists inside the git dir
-    let gitconfig_path = git_dir.join(".gitconfig");
-    if !gitconfig_path.exists() {
-        std::fs::File::create(&gitconfig_path).ok();
-    }
-
-    // GitHub CLI credentials (read-only — containers shouldn't modify auth state)
-    let gh_mount = format!(
-        "{}:/home/forge/.config/gh:ro",
-        secrets_dir.join("gh").display()
-    );
-    args.push("-v".to_string());
-    args.push(gh_mount);
-
-    // Git config — mount directory read-write (gh auth needs to write). Tell git via GIT_CONFIG_GLOBAL.
-    let git_mount = format!(
-        "{}:/home/forge/.config/tillandsias-git:rw",
-        git_dir.display()
-    );
-    args.push("-v".to_string());
-    args.push(git_mount);
-    args.push("-e".to_string());
-    args.push("GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig".to_string());
-
-    // Per-type entrypoint — select based on agent
-    let entrypoint = match agent {
-        tillandsias_core::config::SelectedAgent::OpenCode => "/usr/local/bin/entrypoint-forge-opencode.sh",
-        tillandsias_core::config::SelectedAgent::Claude => "/usr/local/bin/entrypoint-forge-claude.sh",
-    };
-    args.push("--entrypoint".to_string());
-    args.push(entrypoint.to_string());
-
-    // Agent selection — tells the legacy entrypoint which coding agent to launch
-    // (kept for backward compat with cached images that still use the redirect)
-    args.push("-e".to_string());
-    args.push(format!("TILLANDSIAS_AGENT={}", agent.as_env_str()));
-
-    // Claude-specific secrets — only mounted for Claude agent
-    if matches!(agent, tillandsias_core::config::SelectedAgent::Claude) {
-        // Claude API key — injected from OS keyring when present
-        if let Ok(Some(api_key)) = crate::secrets::retrieve_claude_api_key() {
-            args.push("-e".to_string());
-            args.push(format!("ANTHROPIC_API_KEY={api_key}"));
-        }
-
-        // Claude Code credentials — mount host's ~/.claude/ for OAuth auth
-        let claude_dir = dirs::home_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("~"))
-            .join(".claude");
-        let claude_mount = format!("{}:/home/forge/.claude:rw", claude_dir.display());
-        args.push("-v".to_string());
-        args.push(claude_mount);
-    }
-
-    // Container image (always last)
-    args.push(image.to_string());
-
-    args
 }
 
 /// Remove orphaned tillandsias containers not tracked in state.
@@ -690,16 +601,18 @@ pub async fn handle_attach_here(
     // We open a terminal window running this command — the terminal provides
     // the TTY, podman passes it to the container, opencode gets a real terminal.
     let selected_agent = global_config.agent.selected;
-    let run_args = build_run_args(
+    let profile = forge_profile(selected_agent);
+    let ctx = build_launch_context(
         &container_name,
-        &tag,
         &project_path,
+        &project_name,
         &cache,
         port_range,
         false, // interactive (-it), NOT detached
         is_watch_root,
-        selected_agent,
+        &tag,
     );
+    let run_args = crate::launch::build_podman_args(&profile, &ctx);
 
     let mut podman_parts = vec![
         tillandsias_podman::find_podman_path().to_string(),
@@ -916,13 +829,6 @@ pub async fn handle_terminal(
 
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
-    let secrets_dir = cache.join("secrets");
-    std::fs::create_dir_all(secrets_dir.join("gh")).ok();
-    std::fs::create_dir_all(secrets_dir.join("git")).ok();
-    let gitconfig_path = secrets_dir.join("git").join(".gitconfig");
-    if !gitconfig_path.exists() {
-        std::fs::File::create(&gitconfig_path).ok();
-    }
 
     // Refresh hosts.yml from native keyring before terminal launch.
     crate::secrets::write_hosts_yml_from_keyring();
@@ -948,43 +854,25 @@ pub async fn handle_terminal(
     state.running.push(placeholder);
     info!(container = %container_name, tool = %display_emoji, "Maintenance terminal registered (bud state)");
 
-    let git_dir = secrets_dir.join("git");
-    let host_os = tillandsias_core::config::detect_host_os();
-    let podman_bin = tillandsias_podman::find_podman_path();
-
-    let podman_cmd = format!(
-        "{podman_bin} run -it --rm --init --stop-timeout=10 \
-        --name {} \
-        --entrypoint /usr/local/bin/entrypoint-terminal.sh \
-        --security-opt=label=disable \
-        --userns=keep-id \
-        --cap-drop=ALL \
-        --security-opt=no-new-privileges \
-        -w /home/forge/src/{} \
-        -e TILLANDSIAS_PROJECT={} \
-        -e TILLANDSIAS_HOST_OS='{}' \
-        -e GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig \
-        -p {}-{}:{}-{} \
-        -v {}:/home/forge/src/{} \
-        -v {}:/home/forge/.cache/tillandsias \
-        -v {}:/home/forge/.config/gh:ro \
-        -v {}:/home/forge/.config/tillandsias-git:rw \
-        {}",
-        container_name,
-        project_name,
-        project_name,
-        host_os,
-        port_range.0,
-        port_range.1,
-        port_range.0,
-        port_range.1,
-        project_path.display(),
-        project_name,
-        cache.display(),
-        secrets_dir.join("gh").display(),
-        git_dir.display(),
-        tag,
+    let profile = tillandsias_core::container_profile::terminal_profile();
+    let ctx = build_launch_context(
+        &container_name,
+        &project_path,
+        &project_name,
+        &cache,
+        port_range,
+        false, // interactive
+        false, // not watch root
+        &tag,
     );
+    let run_args = crate::launch::build_podman_args(&profile, &ctx);
+
+    let mut podman_parts = vec![
+        tillandsias_podman::find_podman_path().to_string(),
+        "run".to_string(),
+    ];
+    podman_parts.extend(run_args);
+    let podman_cmd = podman_parts.join(" ");
 
     // Window title uses the allocated tool emoji — unique per terminal
     let title = format!("{} {}", display_emoji, project_name);
@@ -1064,13 +952,6 @@ pub async fn handle_root_terminal(
 
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
-    let secrets_dir = cache.join("secrets");
-    std::fs::create_dir_all(secrets_dir.join("gh")).ok();
-    std::fs::create_dir_all(secrets_dir.join("git")).ok();
-    let gitconfig_path = secrets_dir.join("git").join(".gitconfig");
-    if !gitconfig_path.exists() {
-        std::fs::File::create(&gitconfig_path).ok();
-    }
 
     // Refresh hosts.yml from native keyring before terminal launch.
     crate::secrets::write_hosts_yml_from_keyring();
@@ -1095,40 +976,30 @@ pub async fn handle_root_terminal(
     state.running.push(placeholder);
     info!(container = %container_name, "Root terminal registered (bud state)");
 
-    let git_dir = secrets_dir.join("git");
-    let host_os = tillandsias_core::config::detect_host_os();
-    let podman_bin = tillandsias_podman::find_podman_path();
+    // Use terminal profile with SrcRoot working dir for the root terminal
+    let mut profile = tillandsias_core::container_profile::terminal_profile();
+    profile.working_dir = Some(tillandsias_core::container_profile::WorkingDir::SrcRoot);
 
-    let podman_cmd = format!(
-        "{podman_bin} run -it --rm --init --stop-timeout=10 \
-        --name {} \
-        --entrypoint /usr/local/bin/entrypoint-terminal.sh \
-        --security-opt=label=disable \
-        --userns=keep-id \
-        --cap-drop=ALL \
-        --security-opt=no-new-privileges \
-        -w /home/forge/src \
-        -e TILLANDSIAS_PROJECT='(all projects)' \
-        -e TILLANDSIAS_HOST_OS='{}' \
-        -e GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig \
-        -p {}-{}:{}-{} \
-        -v {}:/home/forge/src \
-        -v {}:/home/forge/.cache/tillandsias \
-        -v {}:/home/forge/.config/gh:ro \
-        -v {}:/home/forge/.config/tillandsias-git:rw \
-        {}",
-        container_name,
-        host_os,
-        port_range.0,
-        port_range.1,
-        port_range.0,
-        port_range.1,
-        watch_path.display(),
-        cache.display(),
-        secrets_dir.join("gh").display(),
-        git_dir.display(),
-        tag,
+    // Build context: project_name="(all projects)" for the env var display,
+    // is_watch_root=true so the watch path mounts at /home/forge/src directly.
+    let ctx = build_launch_context(
+        &container_name,
+        &watch_path,
+        "(all projects)",
+        &cache,
+        port_range,
+        false, // interactive
+        true,  // watch root — mount at /home/forge/src directly
+        &tag,
     );
+    let run_args = crate::launch::build_podman_args(&profile, &ctx);
+
+    let mut podman_parts = vec![
+        tillandsias_podman::find_podman_path().to_string(),
+        "run".to_string(),
+    ];
+    podman_parts.extend(run_args);
+    let podman_cmd = podman_parts.join(" ");
 
     let title = "\u{1F6E0}\u{FE0F} Root".to_string();
 
@@ -1327,4 +1198,217 @@ pub async fn handle_claude_login() -> Result<(), String> {
     // Timeout — user didn't enter a key within 5 minutes
     info!("Claude Login: timed out waiting for API key");
     Ok(())
+}
+
+/// Detect the document root for a web container.
+///
+/// Checks subdirectories in priority order:
+///   1. `public/`   — Hugo, Rails, Vite default
+///   2. `dist/`     — Webpack, Parcel, Rollup default
+///   3. `build/`    — Create React App default
+///   4. `_site/`    — Jekyll, Eleventy default
+///   5. `out/`      — Next.js static export
+///   6. Project root — fallback
+///
+/// Returns the absolute path to the detected document root.
+pub fn detect_document_root(project_path: &Path) -> PathBuf {
+    let candidates = ["public", "dist", "build", "_site", "out"];
+    for name in &candidates {
+        let candidate = project_path.join(name);
+        if candidate.is_dir() {
+            debug!(
+                project = %project_path.display(),
+                document_root = %candidate.display(),
+                "Auto-detected document root"
+            );
+            return candidate;
+        }
+    }
+    debug!(
+        project = %project_path.display(),
+        "No standard output directory found, using project root as document root"
+    );
+    project_path.to_path_buf()
+}
+
+/// Handle "Serve Here" — launch a minimal web server container for static files.
+///
+/// # Security model
+/// - Image: `tillandsias-web:latest` (httpd on port 8080, no dev tools)
+/// - Only the detected document root is mounted, read-only (`/var/www:ro`)
+/// - NO secrets mounted: no gh credentials, no git config, no Claude directory, no API keys
+/// - Port binds to `127.0.0.1` only (localhost)
+/// - Full security flags: `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`
+///
+/// # Container naming
+/// `tillandsias-<project>-web` — no genus allocation. Only one web container per project.
+///
+/// # Port allocation
+/// Base port 8080, increments if occupied. Separate range from forge containers (3000-3019).
+#[instrument(skip(state, build_tx), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "serve"))]
+pub async fn handle_serve_here(
+    project_path: PathBuf,
+    state: &mut TrayState,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<(), String> {
+    let project_name = project_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "project".to_string());
+
+    info!(project = %project_name, "Serve Here requested");
+
+    let container_name = tillandsias_core::state::ContainerInfo::web_container_name(&project_name);
+
+    // Don't-relaunch guard: if a web container for this project is already running,
+    // notify the user and return early instead of spawning a second server.
+    if let Some(existing) = state.running.iter().find(|c| c.name == container_name) {
+        let port = existing.port_range.0;
+        let msg = format!("Already serving — open http://localhost:{port}");
+        info!(project = %project_name, port, "Don't-relaunch guard fired — web container already running");
+        send_notification("Tillandsias", &msg);
+        return Err(format!(
+            "Web server for '{project_name}' is already running on port {port}"
+        ));
+    }
+
+    // Load project config for document_root and port overrides
+    let project_config = tillandsias_core::config::load_project_config(&project_path);
+
+    // Detect document root — check per-project config override first, then auto-detect
+    let document_root = if let Some(ref web_cfg) = project_config.web {
+        if let Some(ref explicit_root) = web_cfg.document_root {
+            let override_path = project_path.join(explicit_root);
+            if override_path.is_dir() {
+                debug!(project = %project_name, document_root = %override_path.display(), "Using explicit document root from config");
+                override_path
+            } else {
+                warn!(project = %project_name, path = %override_path.display(), "Configured web.document_root does not exist, falling back to auto-detection");
+                detect_document_root(&project_path)
+            }
+        } else {
+            detect_document_root(&project_path)
+        }
+    } else {
+        detect_document_root(&project_path)
+    };
+
+    // Allocate port — base 8080, increment on conflict.
+    // Web containers use a separate port space from forge containers (3000-3019).
+    let configured_base_port = project_config
+        .web
+        .as_ref()
+        .and_then(|w| w.port)
+        .unwrap_or(8080);
+    let base_port = (configured_base_port, configured_base_port); // single-port "range"
+
+    let mut existing_ports: Vec<(u16, u16)> = state.running.iter().map(|c| c.port_range).collect();
+    existing_ports.extend(query_occupied_ports());
+    let port_range = allocate_port_range(base_port, &existing_ports);
+    let port = port_range.0;
+
+    // Check that the web image exists; build it if missing (same pattern as forge in handle_attach_here)
+    let web_image = "tillandsias-web:latest";
+    let client = PodmanClient::new();
+    if !client.image_exists(web_image).await {
+        info!(image = web_image, "Web image not found, building...");
+        let _ = build_tx.try_send(BuildProgressEvent::Started {
+            image_name: "Web server".to_string(),
+        });
+        let build_result = tokio::task::spawn_blocking(|| run_build_image_script("web")).await;
+        match build_result {
+            Ok(Ok(())) => {
+                if !client.image_exists(web_image).await {
+                    error!(image = web_image, "Web image still not found after build");
+                    let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                        image_name: "Web server".to_string(),
+                        reason: "Web server image not ready".to_string(),
+                    });
+                    return Err("Web server image is not ready yet".into());
+                }
+                let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                    image_name: "Web server".to_string(),
+                });
+            }
+            Ok(Err(ref e)) => {
+                error!(image = web_image, error = %e, "Web image build failed");
+                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: "Web server".to_string(),
+                    reason: "Web server image build failed".to_string(),
+                });
+                return Err(strings::SETUP_ERROR.into());
+            }
+            Err(ref e) => {
+                error!(image = web_image, error = %e, "Web image build task panicked");
+                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: "Web server".to_string(),
+                    reason: "Web server image build failed".to_string(),
+                });
+                return Err(strings::SETUP_ERROR.into());
+            }
+        }
+    }
+
+    // Pre-register in state so the tray shows 🔗 Serving immediately
+    let sentinel_genus = tillandsias_core::genus::TillandsiaGenus::ALL[0];
+    let placeholder = tillandsias_core::state::ContainerInfo {
+        name: container_name.clone(),
+        project_name: project_name.clone(),
+        genus: sentinel_genus,
+        state: tillandsias_core::event::ContainerState::Creating,
+        port_range,
+        container_type: tillandsias_core::state::ContainerType::Web,
+        display_emoji: "\u{1F517}".to_string(), // 🔗
+    };
+    state.running.push(placeholder);
+
+    // Build `podman run` command for the web container.
+    //
+    // Security guarantees (audited 2026-03-29):
+    //   - --cap-drop=ALL             No Linux capabilities
+    //   - --security-opt=no-new-privileges  No suid escalation
+    //   - --userns=keep-id           Rootless, host UID mapped
+    //   - --security-opt=label=disable  Bind mount on Silverblue
+    //   - --rm                       Ephemeral, removed on exit
+    //   - Only mount: document_root → /var/www:ro (read-only)
+    //   - Port: 127.0.0.1:<port>:8080 — localhost only, no external exposure
+    //   - NO secrets mounted (no gh, no git, no claude, no API keys)
+    let podman_bin = tillandsias_podman::find_podman_path();
+    let podman_cmd = format!(
+        "{podman_bin} run -it --rm --init --stop-timeout=10 \
+        --name {container_name} \
+        --cap-drop=ALL \
+        --security-opt=no-new-privileges \
+        --userns=keep-id \
+        --security-opt=label=disable \
+        -p 127.0.0.1:{port}:8080 \
+        -v {}:/var/www:ro \
+        {web_image}",
+        document_root.display(),
+    );
+
+    // Window title uses the chain link emoji to distinguish from forge windows
+    let title = format!("\u{1F517} {project_name}"); // 🔗 <project>
+
+    info!(
+        container = %container_name,
+        port,
+        document_root = %document_root.display(),
+        "Launching web server"
+    );
+
+    match open_terminal(&podman_cmd, &title) {
+        Ok(()) => {
+            info!(
+                container = %container_name,
+                port,
+                "Web server terminal opened — serving at http://localhost:{port}"
+            );
+            Ok(())
+        }
+        Err(e) => {
+            state.running.retain(|c| c.name != container_name);
+            Err(format!("Failed to open web server terminal: {e}"))
+        }
+    }
 }
