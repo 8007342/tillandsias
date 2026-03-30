@@ -331,6 +331,7 @@ _toolbox_ensure
 # ---------------------------------------------------------------------------
 if [[ "$FLAG_TEST$FLAG_CHECK" == "falsefalse" ]]; then
     "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
+    "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
 fi
 
 # ---------------------------------------------------------------------------
