@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod accountability;
 mod build_lock;
 mod cleanup;
 mod cli;
@@ -44,10 +45,10 @@ static TRAY_ICON: std::sync::OnceLock<Mutex<tauri::tray::TrayIcon>> = std::sync:
 
 fn main() {
     // Parse CLI arguments first — before any heavy initialization.
-    let cli_mode = match cli::parse() {
-        Some(mode) => mode,
+    let (cli_mode, log_config) = match cli::parse() {
+        Some(parsed) => parsed,
         None => {
-            // --help was printed, exit cleanly
+            // --help or --version was printed, exit cleanly
             std::process::exit(0);
         }
     };
@@ -85,7 +86,7 @@ fn main() {
     } = cli_mode
     {
         // Initialize tracing for file logging (CLI output uses println!)
-        let _log_guard = logging::init();
+        let _log_guard = logging::init(&log_config);
         let success = runner::run(path, &image, debug, bash);
         std::process::exit(if success { 0 } else { 1 });
     }
@@ -94,7 +95,7 @@ fn main() {
 
     // Initialize tracing — dual output (stderr if TTY + file appender) in all builds.
     // Hold the guard so the non-blocking file writer flushes on shutdown.
-    let _log_guard = logging::init();
+    let _log_guard = logging::init(&log_config);
 
     // AppImage desktop integration — install .desktop file and icons on first run.
     // Must happen after logging init (so we can trace) and before tray setup

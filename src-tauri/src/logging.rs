@@ -1,3 +1,17 @@
+//! Logging initialization with per-module log levels and accountability windows.
+//!
+//! The logging system supports three configuration sources, in priority order:
+//!
+//!   1. `--log=module:level;...` CLI flag (highest priority)
+//!   2. `TILLANDSIAS_LOG` environment variable
+//!   3. `RUST_LOG` environment variable
+//!   4. Default: `tillandsias=info` (lowest priority)
+//!
+//! Accountability windows (`--log-secret-management`, etc.) are composable
+//! with `--log` and add a curated stderr layer for sensitive operations.
+//!
+//! @trace spec:logging-accountability
+
 use std::io::IsTerminal;
 
 use tracing_appender::non_blocking::WorkerGuard;
@@ -7,21 +21,118 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 use tillandsias_core::config::log_dir;
 
-/// Build an [`EnvFilter`] by checking `TILLANDSIAS_LOG` first, then `RUST_LOG`,
-/// falling back to `"tillandsias=info"`.
-fn build_env_filter() -> EnvFilter {
-    if let Ok(val) = std::env::var("TILLANDSIAS_LOG") {
-        EnvFilter::try_new(&val).unwrap_or_else(|_| EnvFilter::new("tillandsias=info"))
-    } else {
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("tillandsias=info"))
+use crate::cli::{AccountabilityWindow, LogConfig};
+
+// ---------------------------------------------------------------------------
+// Module-to-target mapping
+// ---------------------------------------------------------------------------
+
+/// Map a user-facing module name to one or more Rust tracing targets.
+///
+/// These targets match the crate/module paths used in `tracing` macros.
+/// The `tillandsias_tray` crate is referenced as `tillandsias` in tracing
+/// targets because of how the binary crate's module path works.
+///
+/// Used by `build_filter_from_config` and tested from `cli::tests`.
+pub fn module_to_targets(module: &str) -> Vec<&'static str> {
+    match module {
+        "secrets" => vec!["tillandsias_tray::secrets", "tillandsias_tray::launch"],
+        "containers" => vec![
+            "tillandsias_tray::handlers",
+            "tillandsias_tray::launch",
+            "tillandsias_podman",
+        ],
+        "updates" => vec![
+            "tillandsias_tray::updater",
+            "tillandsias_tray::update_cli",
+            "tillandsias_tray::update_log",
+        ],
+        "scanner" => vec!["tillandsias_scanner"],
+        "menu" => vec!["tillandsias_tray::menu", "tillandsias_tray::event_loop"],
+        "events" => vec![
+            "tillandsias_tray::event_loop",
+            "tillandsias_podman::events",
+        ],
+        _ => vec![],
     }
 }
 
-/// Initialize the tracing subscriber with file logging and optional stderr output.
+// ---------------------------------------------------------------------------
+// Filter construction
+// ---------------------------------------------------------------------------
+
+/// Build an [`EnvFilter`] from `LogConfig`.
+///
+/// If the config has module overrides, those take precedence over environment
+/// variables. Each user-facing module name is expanded to its Rust targets.
+/// Modules not mentioned in the config keep the default level (`info`).
+///
+/// If the config is empty (no `--log` flag), falls back to the env var chain:
+/// `TILLANDSIAS_LOG` -> `RUST_LOG` -> `tillandsias=info`.
+fn build_filter(config: &LogConfig) -> EnvFilter {
+    if config.modules.is_empty() && config.accountability.is_empty() {
+        return build_env_filter();
+    }
+
+    // Start with a base that allows info-level for the tillandsias crates.
+    let mut directives = vec!["tillandsias_tray=info".to_string()];
+
+    // Apply per-module overrides from --log flag.
+    for ml in &config.modules {
+        for target in module_to_targets(&ml.module) {
+            directives.push(format!("{target}={}", ml.level));
+        }
+    }
+
+    // Accountability windows implicitly enable their modules at info level
+    // (or trace if --log already set a higher detail level for that module).
+    for window in &config.accountability {
+        let module_name = match window {
+            AccountabilityWindow::SecretManagement => "secrets",
+            AccountabilityWindow::ImageManagement => "containers",
+            AccountabilityWindow::UpdateCycle => "updates",
+        };
+
+        // Only add if not already overridden by --log.
+        let already_set = config.modules.iter().any(|ml| ml.module == module_name);
+        if !already_set {
+            for target in module_to_targets(module_name) {
+                directives.push(format!("{target}=info"));
+            }
+        }
+    }
+
+    let filter_str = directives.join(",");
+    EnvFilter::try_new(&filter_str).unwrap_or_else(|_| {
+        eprintln!("Warning: Failed to parse log filter: {filter_str}");
+        EnvFilter::new("tillandsias_tray=info")
+    })
+}
+
+/// Build an [`EnvFilter`] by checking `TILLANDSIAS_LOG` first, then `RUST_LOG`,
+/// falling back to `"tillandsias_tray=info"`.
+fn build_env_filter() -> EnvFilter {
+    if let Ok(val) = std::env::var("TILLANDSIAS_LOG") {
+        EnvFilter::try_new(&val).unwrap_or_else(|_| EnvFilter::new("tillandsias_tray=info"))
+    } else {
+        EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| EnvFilter::new("tillandsias_tray=info"))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Initialization
+// ---------------------------------------------------------------------------
+
+/// Initialize the tracing subscriber with file logging, optional stderr output,
+/// and optional accountability layer.
+///
+/// Accepts a `LogConfig` parsed from CLI arguments. If the config is default
+/// (no flags), behavior is identical to the previous `init()`.
 ///
 /// Returns a [`WorkerGuard`] that **must** be held for the lifetime of the
 /// application so the non-blocking file writer flushes on shutdown.
-pub fn init() -> WorkerGuard {
+pub fn init(config: &LogConfig) -> WorkerGuard {
     let log_path = log_dir();
 
     // Ensure the log directory exists.
@@ -36,7 +147,7 @@ pub fn init() -> WorkerGuard {
         .with_writer(non_blocking)
         .with_ansi(false);
 
-    let filter = build_env_filter();
+    let filter = build_filter(config);
 
     // Pretty-print to stderr only when running in a terminal.
     let stderr_layer = if std::io::stderr().is_terminal() {
@@ -49,10 +160,21 @@ pub fn init() -> WorkerGuard {
         None
     };
 
+    // Accountability layer — adds curated output for --log-*-management flags.
+    let accountability_layer = if !config.accountability.is_empty() && std::io::stderr().is_terminal()
+    {
+        Some(crate::accountability::AccountabilityLayer::new(
+            &config.accountability,
+        ))
+    } else {
+        None
+    };
+
     tracing_subscriber::registry()
         .with(filter)
         .with(file_layer)
         .with(stderr_layer)
+        .with(accountability_layer)
         .init();
 
     guard

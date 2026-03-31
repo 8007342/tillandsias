@@ -24,7 +24,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use tracing::{debug, info, warn};
+use tracing::{debug, info, info_span, trace, warn};
 
 use tillandsias_core::config::cache_dir;
 
@@ -48,12 +48,23 @@ fn hosts_yml_path() -> PathBuf {
 /// Returns `Ok(())` on success. Returns `Err` if the keyring is
 /// unavailable — the caller should log and fall back.
 pub fn store_github_token(token: &str) -> Result<(), String> {
+    let _span = info_span!("store_github_token", accountability = true, category = "secrets").entered();
     let entry = keyring::Entry::new(SERVICE, GITHUB_TOKEN_KEY)
         .map_err(|e| format!("Failed to create keyring entry: {e}"))?;
     entry
         .set_password(token)
         .map_err(|e| format!("Failed to store token in keyring: {e}"))?;
-    debug!("GitHub token stored in native keyring");
+    info!(
+        accountability = true,
+        category = "secrets",
+        safety = "Token stored in OS keyring, not written to disk",
+        spec = "native-secrets-store",
+        "GitHub token stored in native keyring"
+    );
+    trace!(
+        spec = "native-secrets-store",
+        "Token stored via keyring crate -> secret-service D-Bus API"
+    );
     Ok(())
 }
 
@@ -62,11 +73,22 @@ pub fn store_github_token(token: &str) -> Result<(), String> {
 /// Returns `Ok(Some(token))` if found, `Ok(None)` if no entry exists,
 /// and `Err` if the keyring is unavailable.
 pub fn retrieve_github_token() -> Result<Option<String>, String> {
+    let _span = info_span!("retrieve_github_token", accountability = true, category = "secrets").entered();
     let entry = keyring::Entry::new(SERVICE, GITHUB_TOKEN_KEY)
         .map_err(|e| format!("Failed to create keyring entry: {e}"))?;
     match entry.get_password() {
         Ok(token) => {
-            debug!("GitHub token retrieved from native keyring");
+            info!(
+                accountability = true,
+                category = "secrets",
+                safety = "Never written to disk, injected via bind mount",
+                spec = "native-secrets-store",
+                "GitHub token retrieved from OS keyring"
+            );
+            trace!(
+                spec = "native-secrets-store",
+                "Token read via keyring crate -> secret-service D-Bus API"
+            );
             Ok(Some(token))
         }
         Err(keyring::Error::NoEntry) => {
@@ -82,12 +104,19 @@ pub fn retrieve_github_token() -> Result<Option<String>, String> {
 /// Returns `Ok(())` on success. Returns `Err` if the keyring is
 /// unavailable — the caller should log and fall back.
 pub fn store_claude_api_key(key: &str) -> Result<(), String> {
+    let _span = info_span!("store_claude_api_key", accountability = true, category = "secrets").entered();
     let entry = keyring::Entry::new(SERVICE, CLAUDE_API_KEY_KEY)
         .map_err(|e| format!("Failed to create keyring entry: {e}"))?;
     entry
         .set_password(key)
         .map_err(|e| format!("Failed to store Claude API key in keyring: {e}"))?;
-    debug!("Claude API key stored in native keyring");
+    info!(
+        accountability = true,
+        category = "secrets",
+        safety = "API key stored in OS keyring, not written to disk",
+        spec = "native-secrets-store",
+        "Claude API key stored in native keyring"
+    );
     Ok(())
 }
 
@@ -96,11 +125,18 @@ pub fn store_claude_api_key(key: &str) -> Result<(), String> {
 /// Returns `Ok(Some(key))` if found, `Ok(None)` if no entry exists,
 /// and `Err` if the keyring is unavailable.
 pub fn retrieve_claude_api_key() -> Result<Option<String>, String> {
+    let _span = info_span!("retrieve_claude_api_key", accountability = true, category = "secrets").entered();
     let entry = keyring::Entry::new(SERVICE, CLAUDE_API_KEY_KEY)
         .map_err(|e| format!("Failed to create keyring entry: {e}"))?;
     match entry.get_password() {
         Ok(key) => {
-            debug!("Claude API key retrieved from native keyring");
+            info!(
+                accountability = true,
+                category = "secrets",
+                safety = "Injected as env var, unset after capture in entrypoint",
+                spec = "native-secrets-store",
+                "Claude API key retrieved from OS keyring"
+            );
             Ok(Some(key))
         }
         Err(keyring::Error::NoEntry) => {
@@ -157,6 +193,7 @@ fn build_hosts_yml(token: &str) -> String {
 ///
 /// This is idempotent and safe to call on every startup.
 pub fn migrate_token_to_keyring() {
+    let _span = info_span!("migrate_token_to_keyring", accountability = true, category = "secrets").entered();
     let path = hosts_yml_path();
 
     // Read the hosts.yml file
@@ -195,7 +232,13 @@ pub fn migrate_token_to_keyring() {
     // Store in keyring
     match store_github_token(&token) {
         Ok(()) => {
-            info!("Migrated GitHub token from hosts.yml to native keyring");
+            info!(
+                accountability = true,
+                category = "secrets",
+                safety = "Token moved from plain text file to OS keyring",
+                spec = "native-secrets-store",
+                "Migrated GitHub token from hosts.yml to native keyring"
+            );
         }
         Err(e) => {
             warn!("Failed to migrate token to keyring: {e}");
@@ -212,6 +255,7 @@ pub fn migrate_token_to_keyring() {
 ///
 /// Call this before every `podman run` that needs GitHub credentials.
 pub fn write_hosts_yml_from_keyring() {
+    let _span = info_span!("write_hosts_yml_from_keyring", accountability = true, category = "secrets").entered();
     let token = match retrieve_github_token() {
         Ok(Some(t)) => t,
         Ok(None) => {
@@ -234,7 +278,18 @@ pub fn write_hosts_yml_from_keyring() {
     let contents = build_hosts_yml(&token);
     match fs::write(&path, &contents) {
         Ok(()) => {
-            debug!("Wrote hosts.yml from keyring token");
+            info!(
+                accountability = true,
+                category = "secrets",
+                safety = "Refreshed from keyring for container mount, overwritten on next launch",
+                spec = "native-secrets-store",
+                "hosts.yml refreshed from keyring for container launch"
+            );
+            trace!(
+                spec = "native-secrets-store",
+                "hosts.yml written to {} (bind-mounted into container as ro)",
+                path.display()
+            );
         }
         Err(e) => {
             warn!("Failed to write hosts.yml: {e}");

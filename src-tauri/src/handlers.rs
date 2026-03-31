@@ -645,6 +645,25 @@ pub async fn handle_attach_here(
         "Terminal opened with OpenCode"
     );
 
+    // Accountability: log the secret mount summary for this container launch.
+    {
+        let has_gh = ctx.gh_dir.join("hosts.yml").exists();
+        let has_claude = ctx.claude_api_key.is_some();
+        let secret_summary = match (has_gh, has_claude) {
+            (true, true) => "gh(ro), git(rw), claude(env)",
+            (true, false) => "gh(ro), git(rw) | No Claude secrets",
+            (false, true) => "claude(env) | No GitHub token",
+            (false, false) => "No secrets injected",
+        };
+        info!(
+            accountability = true,
+            category = "secrets",
+            safety = %secret_summary,
+            spec = "environment-runtime",
+            "Environment {container_name} launched with secrets: {secret_summary}",
+        );
+    }
+
     // Mark project as having an assigned genus
     if let Some(project) = state.projects.iter_mut().find(|p| p.path == project_path) {
         project.assigned_genus = Some(genus);
@@ -901,6 +920,17 @@ pub async fn handle_terminal(
                 port_range = ?port_range,
                 "Maintenance terminal opened"
             );
+            // Accountability: log the secret mount summary.
+            {
+                let has_gh = ctx.gh_dir.join("hosts.yml").exists();
+                info!(
+                    accountability = true,
+                    category = "secrets",
+                    safety = "gh(ro), git(rw) | Terminal profile, no Claude secrets",
+                    spec = "environment-runtime",
+                    "Maintenance terminal {container_name} launched | gh: {has_gh}",
+                );
+            }
             Ok(())
         }
         Err(e) => {
@@ -1027,6 +1057,17 @@ pub async fn handle_root_terminal(
                 port_range = ?port_range,
                 "Root terminal opened"
             );
+            // Accountability: log the secret mount summary.
+            {
+                let has_gh = ctx.gh_dir.join("hosts.yml").exists();
+                info!(
+                    accountability = true,
+                    category = "secrets",
+                    safety = "gh(ro), git(rw) | Root terminal, no Claude secrets",
+                    spec = "environment-runtime",
+                    "Root terminal {container_name} launched | gh: {has_gh}",
+                );
+            }
             Ok(())
         }
         Err(e) => {
