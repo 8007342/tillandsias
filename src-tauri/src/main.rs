@@ -54,6 +54,12 @@ fn main() {
         }
     };
 
+    // Version mode — print version and exit.
+    if matches!(cli_mode, cli::CliMode::Version) {
+        println!("Tillandsias v{}", env!("TILLANDSIAS_FULL_VERSION"));
+        std::process::exit(0);
+    }
+
     // Init mode — pre-build images and exit.
     if matches!(cli_mode, cli::CliMode::Init) {
         let success = init::run();
@@ -610,7 +616,7 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
     let command = match id {
         menu::ids::QUIT => None, // Handled via fast-path above
         menu::ids::GITHUB_LOGIN => Some(MenuCommand::GitHubLogin),
-        menu::ids::CLAUDE_LOGIN => Some(MenuCommand::ClaudeLogin),
+        menu::ids::CLAUDE_RESET_CREDENTIALS => Some(MenuCommand::ClaudeResetCredentials),
         menu::ids::SETTINGS => Some(MenuCommand::Settings),
         menu::ids::REFRESH_REMOTE_PROJECTS => Some(MenuCommand::RefreshRemoteProjects),
         "root-terminal" => Some(MenuCommand::RootTerminal),

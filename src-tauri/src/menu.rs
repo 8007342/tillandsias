@@ -52,7 +52,7 @@ pub mod ids {
     pub const QUIT: &str = "quit";
     pub const SETTINGS: &str = "settings";
     pub const GITHUB_LOGIN: &str = "github-login";
-    pub const CLAUDE_LOGIN: &str = "claude-login";
+    pub const CLAUDE_RESET_CREDENTIALS: &str = "claude-reset-credentials";
     pub const REFRESH_REMOTE_PROJECTS: &str = "refresh-remote-projects";
 
     /// Build an "attach here" menu item ID for a project path.
@@ -477,19 +477,21 @@ fn build_seedlings_submenu<R: Runtime>(
         );
     }
 
-    // Claude Login — shows authentication state
-    submenu = submenu.separator();
-    let has_claude_key = matches!(crate::secrets::retrieve_claude_api_key(), Ok(Some(_)));
-    let (claude_login_label, claude_login_enabled) = if has_claude_key {
-        (i18n::t("menu.claude.login_refresh"), true)
-    } else {
-        (i18n::t("menu.claude.login"), true)
-    };
-    submenu = submenu.item(
-        &MenuItemBuilder::with_id(gen_id(ids::CLAUDE_LOGIN), claude_login_label)
-            .enabled(claude_login_enabled)
+    // Claude Reset Credentials — only shown when ~/.claude/ has content
+    let claude_dir = dirs::home_dir().map(|h| h.join(".claude"));
+    let has_claude_credentials = claude_dir
+        .as_ref()
+        .is_some_and(|d| d.exists() && d.read_dir().is_ok_and(|mut r| r.next().is_some()));
+    if has_claude_credentials {
+        submenu = submenu.separator();
+        submenu = submenu.item(
+            &MenuItemBuilder::with_id(
+                gen_id(ids::CLAUDE_RESET_CREDENTIALS),
+                i18n::t("menu.claude.reset_credentials"),
+            )
             .build(app)?,
-    );
+        );
+    }
 
     submenu.build()
 }

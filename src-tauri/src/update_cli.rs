@@ -93,9 +93,11 @@ pub fn run() -> bool {
     // one entry.
     update_log::append_entry("---"); // separator between update sessions
 
+    // Show full 4-part version for display, but compare using 3-part below
+    const FULL_VERSION: &str = env!("TILLANDSIAS_FULL_VERSION");
     println!(
         "  {}",
-        i18n::tf("update.version", &[("version", CURRENT_VERSION)])
+        i18n::tf("update.version", &[("version", FULL_VERSION)])
     );
     println!("  {}", i18n::t("update.checking"));
 

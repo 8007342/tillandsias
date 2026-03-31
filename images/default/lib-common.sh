@@ -49,6 +49,15 @@ mkdir -p "$HOME/.config/fish"
 CACHE="$HOME/.cache/tillandsias"
 export PATH="$CACHE/openspec/bin:$HOME/.local/bin:$PATH"
 
+# ── Lifecycle tracing ───────────────────────────────────────
+# Structured trace output for --log-environment-lifecycle troubleshooting.
+# Format: [lifecycle] <phase> | <detail>
+trace_lifecycle() {
+    local phase="$1"
+    shift
+    echo "[lifecycle] $phase | $*"
+}
+
 # ── Update-check rate-limiting ──────────────────────────────
 # Returns 0 (true) if the last check was more than 24 hours ago or never ran.
 needs_update_check() {

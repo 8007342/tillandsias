@@ -34,8 +34,7 @@ could_not_fetch = "No se pudieron obtener los repositorios"
 cloning = "Clonando {name}..."
 
 [menu.claude]
-login = "🔑 Iniciar sesión en Claude"
-login_refresh = "🔒 Actualizar sesión de Claude"
+reset_credentials = "🔒 Restablecer credenciales de Claude"
 
 [menu.web]
 already_serving = "Ya está sirviendo — abre http://localhost:{port}"
@@ -87,7 +86,7 @@ no_terminal = "No se encontró un emulador de terminal (se probó ptyxis, gnome-
 # ── Desktop notifications ────────────────────────────────────
 [notifications]
 already_running = "Ya está en ejecución — busca '{title}' en tus ventanas"
-claude_key_saved = "Clave API de Claude guardada correctamente"
+claude_credentials_cleared = "Credenciales de Claude eliminadas. El próximo inicio solicitará autenticación."
 
 # ── Stats command ────────────────────────────────────────────
 [stats]

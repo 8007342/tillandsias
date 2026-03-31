@@ -150,17 +150,9 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
                     );
                 }
             }
-            SecretKind::ClaudeApiKey => {
-                if let Some(ref api_key) = ctx.claude_api_key {
-                    args.push("-e".into());
-                    args.push(format!("ANTHROPIC_API_KEY={api_key}"));
-                }
-            }
             SecretKind::ClaudeDir => {
-                if let Some(ref claude_dir) = ctx.claude_dir {
-                    args.push("-v".into());
-                    args.push(format!("{}:/home/forge/.claude:rw", claude_dir.display()));
-                }
+                args.push("-v".into());
+                args.push(format!("{}:/home/forge/.claude:rw", ctx.claude_dir.display()));
             }
         }
     }
@@ -269,8 +261,7 @@ mod tests {
             host_os: "Fedora Silverblue 43".into(),
             detached: false,
             is_watch_root: false,
-            claude_api_key: Some("sk-test-key".into()),
-            claude_dir: Some(PathBuf::from("/home/user/.claude")),
+            claude_dir: PathBuf::from("/home/user/.claude"),
             gh_dir: PathBuf::from("/home/user/.cache/tillandsias/secrets/gh"),
             git_dir: PathBuf::from("/home/user/.cache/tillandsias/secrets/git"),
             token_file_path: Some(PathBuf::from(
@@ -326,8 +317,9 @@ mod tests {
         // Has GitHub token mount
         assert!(joined.contains("/run/secrets/github_token:ro"));
         assert!(joined.contains("GIT_ASKPASS=/usr/local/bin/git-askpass-tillandsias.sh"));
-        // Has Claude secrets
-        assert!(joined.contains("ANTHROPIC_API_KEY=sk-test-key"));
+        // No API key injection (removed)
+        assert!(!joined.contains("ANTHROPIC_API_KEY"), "API key should never be injected");
+        // Has Claude dir mount
         assert!(joined.contains("/home/user/.claude:/home/forge/.claude:rw"));
     }
 
@@ -468,20 +460,6 @@ mod tests {
             args[ep_idx + 1],
             "/usr/local/bin/entrypoint-forge-claude.sh"
         );
-    }
-
-    #[test]
-    fn claude_secrets_absent_when_context_has_none() {
-        let profile = container_profile::forge_claude_profile();
-        let mut ctx = test_context();
-        ctx.claude_api_key = None;
-        ctx.claude_dir = None;
-        let args = build_podman_args(&profile, &ctx);
-        let joined = args.join(" ");
-        assert!(!joined.contains("ANTHROPIC_API_KEY"));
-        assert!(!joined.contains(".claude:rw"));
-        // GitHub token should still be present (it's independent of Claude secrets)
-        assert!(joined.contains("/run/secrets/github_token:ro"));
     }
 
     #[test]

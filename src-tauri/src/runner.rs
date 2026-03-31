@@ -36,7 +36,7 @@ fn image_tag(name: &str) -> String {
 /// Extracts image sources + build scripts to temp, executes with inherited
 /// stdio so the user sees progress, then cleans up.
 fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
-    // Check if another process (e.g., tillandsias init) is already building
+    // Check if another process (e.g., tillandsias --init) is already building
     if crate::build_lock::is_running(image_name) {
         println!("  {}", i18n::t("cli.waiting_setup"));
         crate::build_lock::wait_for_build(image_name).map_err(|e| {
@@ -146,13 +146,13 @@ fn build_cli_launch_context(
     // Refresh hosts.yml from native keyring before container launch.
     crate::secrets::write_hosts_yml_from_keyring();
 
-    // Claude API key from OS keyring
-    let claude_api_key = crate::secrets::retrieve_claude_api_key().ok().flatten();
-
-    // Claude credentials directory
+    // Claude credentials directory — always create so the mount works on first auth
     let claude_dir = dirs::home_dir()
         .map(|h| h.join(".claude"))
-        .filter(|p| p.exists());
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp/.claude"));
+    if !claude_dir.exists() {
+        std::fs::create_dir_all(&claude_dir).ok();
+    }
 
     // Write GitHub token to tmpfs-backed file for secure container injection.
     // @trace spec:secret-rotation
@@ -179,7 +179,6 @@ fn build_cli_launch_context(
         host_os,
         detached: false,
         is_watch_root: false,
-        claude_api_key,
         claude_dir,
         gh_dir,
         git_dir,
@@ -327,7 +326,10 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
 
     if debug {
         println!();
-        println!("  [debug] podman run {}", run_args.join(" "));
+        let debug_cmd: Vec<_> = run_args.iter().map(|a| {
+            if a.contains(' ') { format!("'{a}'") } else { a.clone() }
+        }).collect();
+        println!("  [debug] podman run {}", debug_cmd.join(" "));
     }
 
     println!();

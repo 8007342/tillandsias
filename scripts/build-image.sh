@@ -117,7 +117,10 @@ else
     IMAGE_TAG="tillandsias-${IMAGE_NAME}:latest"
 fi
 NIX_ATTR="${IMAGE_NAME}-image"
-HASH_FILE="$CACHE_DIR/.last-build-${IMAGE_NAME}.sha256"
+# Version the hash file with the image tag so each version has independent
+# staleness state. Sanitize tag for filename (replace : and / with -).
+HASH_SUFFIX="$(echo "$IMAGE_TAG" | tr ':/' '--')"
+HASH_FILE="$CACHE_DIR/.last-build-${HASH_SUFFIX}.sha256"
 
 # Verify flake.nix exists at ROOT (required for nix build)
 if [[ ! -f "$ROOT/flake.nix" ]]; then

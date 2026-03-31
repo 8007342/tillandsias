@@ -4,7 +4,7 @@
 # Keys use dot-notation matching code organisation:
 #   menu.*       Tray menu labels
 #   cli.*        CLI attach/runner output
-#   init.*       `tillandsias init` output
+#   init.*       `tillandsias --init` output
 #   errors.*     Error messages
 #   notifications.*  Desktop notifications
 #   stats.*      `tillandsias --stats` output
@@ -42,8 +42,7 @@ could_not_fetch = "Could not fetch repos"
 cloning = "Cloning {name}..."
 
 [menu.claude]
-login = "🔑 Claude Login"
-login_refresh = "🔒 Claude Login Refresh"
+reset_credentials = "🔒 Claude Reset Credentials"
 
 [menu.web]
 already_serving = "Already serving — open http://localhost:{port}"
@@ -95,7 +94,7 @@ no_terminal = "No terminal emulator found (tried ptyxis, gnome-terminal, konsole
 # ── Desktop notifications ────────────────────────────────────
 [notifications]
 already_running = "Already running — look for '{title}' in your windows"
-claude_key_saved = "Claude API key saved successfully"
+claude_credentials_cleared = "Claude credentials cleared. Next launch will prompt for authentication."
 
 # ── Stats command ────────────────────────────────────────────
 [stats]

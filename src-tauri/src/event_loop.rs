@@ -241,12 +241,12 @@ pub async fn run(
                         info!(repo = %full_name, "Clone project requested");
                         handle_clone_project(&full_name, &name, &mut state, &mut allocator, build_tx.clone(), &on_state_change).await;
                     }
-                    MenuCommand::ClaudeLogin => {
-                        info!("Claude Login requested");
-                        if let Err(e) = handlers::handle_claude_login().await {
-                            error!(error = %e, "Claude Login failed");
+                    MenuCommand::ClaudeResetCredentials => {
+                        info!("Claude Reset Credentials requested");
+                        if let Err(e) = handlers::handle_claude_reset_credentials() {
+                            error!(error = %e, "Claude Reset Credentials failed");
                         } else {
-                            // Rebuild menu to reflect new auth state
+                            // Rebuild menu to reflect cleared auth state
                             on_state_change(&state);
                         }
                     }

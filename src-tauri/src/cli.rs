@@ -112,7 +112,10 @@ pub enum CliMode {
     /// No arguments — start the system tray application.
     Tray,
 
-    /// `tillandsias init` — pre-build development environments.
+    /// `tillandsias --version` — print version and exit.
+    Version,
+
+    /// `tillandsias --init` — pre-build development environments.
     Init,
 
     /// `tillandsias --stats` — print disk usage report and exit.
@@ -141,8 +144,15 @@ const USAGE: &str = "\
 Tillandsias — development environments that just work
 
 USAGE:
-  tillandsias [PROJECT_PATH]              Launch tray app (or attach to project)
-  tillandsias PROJECT_PATH --bash         Open maintenance terminal
+    tillandsias                     Start the system tray app
+    tillandsias <path>              Attach to a project
+    tillandsias <path> --bash       Open maintenance terminal
+    tillandsias --init              Pre-build development environments
+    tillandsias --stats             Show disk usage from Tillandsias artifacts
+    tillandsias --clean             Remove stale artifacts and reclaim disk space
+    tillandsias --update            Check for updates and apply if available
+    tillandsias --version           Show version information
+    tillandsias --help              Show this help
 
 ACCOUNTABILITY:
   --log-secret-management    Show how secrets are safely handled
@@ -187,8 +197,13 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
         return Some((CliMode::Tray, log_config));
     }
 
-    // `tillandsias init` — pre-build images.
-    if args.first().map(|s| s.as_str()) == Some("init") {
+    // `tillandsias --version` — print version and exit.
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        return Some((CliMode::Version, log_config));
+    }
+
+    // `tillandsias --init` or `tillandsias init` — pre-build images.
+    if args.iter().any(|a| a == "--init") || args.first().map(|s| s.as_str()) == Some("init") {
         return Some((CliMode::Init, log_config));
     }
 

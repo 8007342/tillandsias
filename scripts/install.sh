@@ -228,7 +228,7 @@ fi
 # and only if we have a working terminal — not when piped from curl).
 if [ -t 0 ] && [ -x "$INSTALL_DIR/tillandsias" ] && command -v podman &>/dev/null; then
     echo "  Building container images in the background..."
-    nohup "$INSTALL_DIR/tillandsias" init >/tmp/tillandsias-init.log 2>&1 &
+    nohup "$INSTALL_DIR/tillandsias" --init >/tmp/tillandsias-init.log 2>&1 &
     echo "  (Progress: tail -f /tmp/tillandsias-init.log)"
     echo ""
 fi

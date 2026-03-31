@@ -1,4 +1,4 @@
-//! `tillandsias init` — pre-build container images.
+//! `tillandsias --init` — pre-build container images.
 //!
 //! Builds the forge image (and any other standard images) so they're ready
 //! before the user opens the tray. Uses the build lock to coordinate with

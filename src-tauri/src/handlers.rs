@@ -45,16 +45,34 @@ use tillandsias_podman::PodmanClient;
 use tillandsias_podman::launch::{ContainerLauncher, allocate_port_range};
 use tillandsias_podman::query_occupied_ports;
 
-/// Derive the forge image tag from the app's semver version.
+/// Shell-quote an argument if it contains whitespace.
 ///
-/// At compile time `CARGO_PKG_VERSION` is the 3-part semver from Cargo.toml
-/// (e.g., "0.1.72"). The returned tag is `tillandsias-forge:v0.1.72`.
+/// When building a command string for `open_terminal()`, each argument is joined
+/// with spaces. Arguments that themselves contain spaces (e.g., env var values
+/// like `TILLANDSIAS_HOST_OS=macOS 26.4`) must be quoted so the shell doesn't
+/// split them.
+fn shell_quote(arg: &str) -> String {
+    if arg.contains(' ') || arg.contains('\t') {
+        // Single-quote the argument; escape any internal single quotes
+        format!("'{}'", arg.replace('\'', "'\\''"))
+    } else {
+        arg.to_string()
+    }
+}
+
+/// Join podman args into a shell command string, quoting args with spaces.
+fn join_shell_args(parts: &[String]) -> String {
+    parts.iter().map(|a| shell_quote(a)).collect::<Vec<_>>().join(" ")
+}
+
+/// Derive the forge image tag from the full 4-part version.
 ///
-/// This ensures each app version uses its own image — when the app updates
-/// to a new version the old image is not silently reused.
+/// Uses `TILLANDSIAS_FULL_VERSION` (set by build.rs from the VERSION file)
+/// which includes the build number (e.g., "0.1.97.83"). This ensures every
+/// local build increment triggers a forge image rebuild.
 // @trace spec:default-image, spec:versioning
 pub(crate) fn forge_image_tag() -> String {
-    format!("tillandsias-forge:v{}", env!("CARGO_PKG_VERSION"))
+    format!("tillandsias-forge:v{}", env!("TILLANDSIAS_FULL_VERSION"))
 }
 
 /// Check whether ANY versioned forge image (`tillandsias-forge:v*`) exists.
@@ -95,11 +113,22 @@ pub(crate) fn prune_old_forge_images(current_tag: &str) {
     let images_to_remove: Vec<String> = match output {
         Ok(o) => {
             let stdout = String::from_utf8_lossy(&o.stdout);
+            // Extract just the tag portion of current_tag for comparison
+            // (handles both "tillandsias-forge:v0.1.97" and "localhost/tillandsias-forge:v0.1.97")
+            let current_suffix = current_tag
+                .rsplit_once(':')
+                .map(|(_, tag)| tag)
+                .unwrap_or(current_tag);
             stdout
                 .lines()
                 .filter(|line| {
                     let trimmed = line.trim();
-                    trimmed.starts_with("tillandsias-forge:v") && trimmed != current_tag
+                    // Match any tillandsias-forge image (with or without localhost/ prefix).
+                    // Remove ALL old versioned tags AND the "latest" tag (build-image.sh
+                    // re-creates it). Keep only the current version tag.
+                    let is_forge = trimmed.contains("tillandsias-forge:");
+                    let is_current = trimmed.ends_with(&format!(":{current_suffix}"));
+                    is_forge && !is_current
                 })
                 .map(|s| s.trim().to_string())
                 .collect()
@@ -128,6 +157,63 @@ pub(crate) fn prune_old_forge_images(current_tag: &str) {
             }
         }
     }
+
+    // Also clean up dangling (untagged) images left from builds
+    let _ = tillandsias_podman::podman_cmd_sync()
+        .args(["image", "prune", "-f"])
+        .output();
+}
+
+/// Find the newest `tillandsias-forge:v*` image by parsing version numbers.
+///
+/// Returns `Some(tag)` if a forge image exists with a higher version than
+/// `expected_tag`. Returns `None` if no newer image exists.
+pub(crate) fn find_newer_forge_image(expected_tag: &str) -> Option<String> {
+    let expected_version = expected_tag.strip_prefix("tillandsias-forge:v")?;
+    let expected_parts: Vec<u64> = expected_version
+        .split('.')
+        .filter_map(|s| s.parse().ok())
+        .collect();
+
+    let output = tillandsias_podman::podman_cmd_sync()
+        .args([
+            "images",
+            "--format",
+            "{{.Repository}}:{{.Tag}}",
+            "--filter",
+            "reference=tillandsias-forge:v*",
+        ])
+        .output()
+        .ok()?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut newest_tag: Option<String> = None;
+    let mut newest_parts: Vec<u64> = expected_parts.clone();
+
+    for line in stdout.lines() {
+        let tag = line.trim();
+        if let Some(version_str) = tag.strip_prefix("tillandsias-forge:v") {
+            let parts: Vec<u64> = version_str
+                .split('.')
+                .filter_map(|s| s.parse().ok())
+                .collect();
+
+            // Compare version parts lexicographically
+            let is_newer = parts
+                .iter()
+                .zip(newest_parts.iter())
+                .find(|(a, b)| a != b)
+                .map(|(a, b)| a > b)
+                .unwrap_or(parts.len() > newest_parts.len());
+
+            if is_newer {
+                newest_parts = parts;
+                newest_tag = Some(tag.to_string());
+            }
+        }
+    }
+
+    newest_tag
 }
 
 /// Open a terminal window running a command with a custom title.
@@ -212,17 +298,24 @@ fn open_terminal(command: &str, title: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         // macOS: osascript to open Terminal.app with a command.
-        // Escape backslashes and quotes to prevent AppleScript injection
-        // via crafted directory names.
-        // Title is embedded via a `set custom title` call — best-effort.
+        // - `clear &&` suppresses the echoed command (Terminal.app always echoes)
+        // - Tab reference from `do script` avoids race with `front window`
+        // - `has custom title` must be set before `custom title` takes effect
+        // - `activate` brings Terminal.app to the front
         let escaped_cmd = command.replace('\\', "\\\\").replace('"', "\\\"");
         let escaped_title = title.replace('\\', "\\\\").replace('"', "\\\"");
         std::process::Command::new("osascript")
             .args([
                 "-e",
                 &format!(
-                    "tell app \"Terminal\" to do script \"{escaped_cmd}\"\n\
-                     tell app \"Terminal\" to set custom title of front window to \"{escaped_title}\""
+                    "tell app \"Terminal\"\n\
+                         set t to do script \"clear && {escaped_cmd}\"\n\
+                         tell t\n\
+                             set has custom title to true\n\
+                             set custom title to \"{escaped_title}\"\n\
+                         end tell\n\
+                         activate\n\
+                     end tell"
                 ),
             ])
             .spawn()
@@ -389,13 +482,13 @@ fn build_launch_context(
     let (gh_dir, git_dir) = crate::launch::ensure_secrets_dirs(cache);
     let host_os = tillandsias_core::config::detect_host_os();
 
-    // Claude API key from OS keyring
-    let claude_api_key = crate::secrets::retrieve_claude_api_key().ok().flatten();
-
-    // Claude credentials directory
+    // Claude credentials directory — always create so the mount works on first auth
     let claude_dir = dirs::home_dir()
         .map(|h| h.join(".claude"))
-        .filter(|p| p.exists());
+        .unwrap_or_else(|| PathBuf::from("/tmp/.claude"));
+    if !claude_dir.exists() {
+        std::fs::create_dir_all(&claude_dir).ok();
+    }
 
     // Write GitHub token to tmpfs-backed file for secure container injection.
     // @trace spec:secret-rotation
@@ -443,7 +536,6 @@ fn build_launch_context(
         host_os,
         detached,
         is_watch_root,
-        claude_api_key,
         claude_dir,
         gh_dir,
         git_dir,
@@ -566,19 +658,31 @@ pub async fn handle_attach_here(
     state.running.push(placeholder);
     info!(container = %container_name, "Preparing environment... (bud state)");
 
-    // If image doesn't exist, try building it via bundled build-image.sh
+    // Ensure forge image is up to date — always invoke the build script
+    // (it handles staleness internally via hash check and exits fast when current).
     let client = PodmanClient::new();
-    let tag = forge_image_tag();
+    let mut tag = forge_image_tag();
 
-    if !client.image_exists(&tag).await {
-        info!(tag = %tag, spec = "default-image, nix-builder", "Image not found, building...");
+    // Check for a newer forge image (forward compatibility: a newer binary may
+    // have built a newer image before the user downgraded).
+    if let Some(newer_tag) = find_newer_forge_image(&tag) {
+        warn!(
+            expected = %tag,
+            found = %newer_tag,
+            "Found a newer forge image than expected — using it"
+        );
+        tag = newer_tag;
+    } else {
+        // No newer image — ensure current version is built and up to date
+        info!(tag = %tag, "Ensuring forge image is up to date...");
 
         // Notify event loop: build started (menu chip: ⏳ Building forge...)
         let _ = build_tx.try_send(BuildProgressEvent::Started {
             image_name: "forge".to_string(),
         });
 
-        let build_result = tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
+        let build_result =
+            tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
 
         match build_result {
             Ok(Ok(())) => {
@@ -593,7 +697,9 @@ pub async fn handle_attach_here(
                     allocator.release(&project_name, genus);
                     return Err(strings::ENV_NOT_READY.into());
                 }
-                info!(tag = %tag, spec = "default-image", "Image built successfully");
+                info!(tag = %tag, spec = "default-image", "Image ready");
+                // Prune older forge images after successful build
+                prune_old_forge_images(&tag);
                 // Notify event loop: build completed (menu chip: ✅ forge ready)
                 let _ = build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: "forge".to_string(),
@@ -620,8 +726,6 @@ pub async fn handle_attach_here(
                 return Err(strings::SETUP_ERROR.into());
             }
         }
-    } else {
-        info!(tag = %tag, "Image ready");
     }
 
     // Ensure cache directories exist
@@ -663,7 +767,7 @@ pub async fn handle_attach_here(
         "run".to_string(),
     ];
     podman_parts.extend(run_args);
-    let podman_cmd = podman_parts.join(" ");
+    let podman_cmd = join_shell_args(&podman_parts);
 
     // Build window title: "<flower> <project_name>" — matches the tray menu label.
     let title = format!("{} {}", display_emoji, project_name);
@@ -688,16 +792,16 @@ pub async fn handle_attach_here(
     {
         let has_token_file = ctx.token_file_path.is_some();
         let has_gh = ctx.gh_dir.join("hosts.yml").exists();
-        let has_claude = ctx.claude_api_key.is_some();
+        let has_claude_dir = ctx.claude_dir.exists();
         let token_detail = if has_token_file {
             "token-file(tmpfs,ro)"
         } else {
             "no-token-file"
         };
-        let secret_summary = match (has_gh, has_claude) {
-            (true, true) => format!("{token_detail}, gh(ro), git(rw), claude(env)"),
-            (true, false) => format!("{token_detail}, gh(ro), git(rw) | No Claude secrets"),
-            (false, true) => format!("{token_detail}, claude(env) | No GitHub token in hosts.yml"),
+        let secret_summary = match (has_gh, has_claude_dir) {
+            (true, true) => format!("{token_detail}, gh(ro), git(rw), claude-dir(rw)"),
+            (true, false) => format!("{token_detail}, gh(ro), git(rw) | No Claude dir"),
+            (false, true) => format!("{token_detail}, claude-dir(rw) | No GitHub token in hosts.yml"),
             (false, false) => format!("{token_detail} | No other secrets"),
         };
         info!(
@@ -890,7 +994,12 @@ pub async fn handle_terminal(
     debug!(project = %project_name, genus = %genus.display_name(), tool = %display_emoji, "Genus and tool allocated for maintenance terminal");
 
     let client = PodmanClient::new();
-    let tag = forge_image_tag();
+    let mut tag = forge_image_tag();
+    // Use newer image if available (forward compatibility)
+    if let Some(newer_tag) = find_newer_forge_image(&tag) {
+        warn!(expected = %tag, found = %newer_tag, "Using newer forge image for terminal");
+        tag = newer_tag;
+    }
     if !client.image_exists(&tag).await {
         error!(tag = %tag, "Image not found when opening maintenance terminal");
         allocator.release(&project_name, genus);
@@ -943,7 +1052,7 @@ pub async fn handle_terminal(
         "run".to_string(),
     ];
     podman_parts.extend(run_args);
-    let podman_cmd = podman_parts.join(" ");
+    let podman_cmd = join_shell_args(&podman_parts);
 
     // Window title uses the allocated tool emoji — unique per terminal
     let title = format!("{} {}", display_emoji, project_name);
@@ -1082,7 +1191,7 @@ pub async fn handle_root_terminal(
         "run".to_string(),
     ];
     podman_parts.extend(run_args);
-    let podman_cmd = podman_parts.join(" ");
+    let podman_cmd = join_shell_args(&podman_parts);
 
     let title = "\u{1F6E0}\u{FE0F} Root".to_string();
 
@@ -1210,85 +1319,35 @@ pub async fn handle_github_login(
         .map_err(|e| format!("Failed to open terminal: {e}"))
 }
 
-/// Handle "Claude Login" — prompt user for Anthropic API key and store in keyring.
-///
-/// Opens a terminal running a small embedded script that reads the key
-/// interactively (hidden input) and writes it to a temp file. We then
-/// poll for the temp file, read the key, store it in the native keyring,
-/// and delete the temp file.
-pub async fn handle_claude_login() -> Result<(), String> {
-    info!("Claude Login: extracting embedded script to temp");
+/// Handle "Claude Reset Credentials" — remove `~/.claude/` contents so next
+/// container launch triggers re-authentication via Claude Code's own flow.
+pub fn handle_claude_reset_credentials() -> Result<(), String> {
+    let claude_dir = dirs::home_dir()
+        .map(|h| h.join(".claude"))
+        .ok_or("Cannot determine home directory")?;
 
-    let script_path = crate::embedded::write_temp_script(
-        "claude-api-key-prompt.sh",
-        crate::embedded::CLAUDE_API_KEY_PROMPT,
-    )
-    .map_err(|e| {
-        error!(error = %e, "Failed to extract embedded claude-api-key-prompt.sh to temp");
-        strings::INSTALL_INCOMPLETE
-    })?;
-
-    open_terminal(&script_path.display().to_string(), "Claude Login")?;
-
-    // Poll for the temp file containing the API key.
-    // The script writes to $XDG_RUNTIME_DIR/tillandsias-claude-key on Linux,
-    // $TMPDIR/tillandsias-claude-key on macOS (both resolved via std::env::temp_dir).
-    let temp_key_path = {
-        #[cfg(target_os = "linux")]
-        {
-            std::env::var("XDG_RUNTIME_DIR")
-                .map(|d| std::path::PathBuf::from(d).join("tillandsias-claude-key"))
-                .unwrap_or_else(|_| std::env::temp_dir().join("tillandsias-claude-key"))
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            std::env::temp_dir().join("tillandsias-claude-key")
-        }
-    };
-
-    // Wait up to 5 minutes for the user to enter the key.
-    // Check every 2 seconds. The file only appears after they press Enter.
-    let max_attempts = 150; // 150 * 2s = 300s = 5 min
-    for _ in 0..max_attempts {
-        tokio::time::sleep(Duration::from_secs(2)).await;
-
-        if temp_key_path.exists() {
-            match std::fs::read_to_string(&temp_key_path) {
-                Ok(key) => {
-                    let key = key.trim().to_string();
-
-                    // Clean up temp file immediately
-                    let _ = std::fs::remove_file(&temp_key_path);
-
-                    if key.is_empty() {
-                        info!("Claude Login: user entered empty key, skipping");
-                        return Ok(());
-                    }
-
-                    // Store in keyring
-                    match crate::secrets::store_claude_api_key(&key) {
-                        Ok(()) => {
-                            info!("Claude API key stored in native keyring");
-                            send_notification("Tillandsias", "Claude API key saved successfully");
-                            return Ok(());
-                        }
-                        Err(e) => {
-                            error!(error = %e, "Failed to store Claude API key in keyring");
-                            return Err(format!("Failed to save API key: {e}"));
-                        }
-                    }
-                }
-                Err(e) => {
-                    let _ = std::fs::remove_file(&temp_key_path);
-                    return Err(format!("Failed to read temp key file: {e}"));
-                }
-            }
-        }
+    if !claude_dir.exists() {
+        info!("Claude credentials directory does not exist, nothing to reset");
+        return Ok(());
     }
 
-    // Timeout — user didn't enter a key within 5 minutes
-    info!("Claude Login: timed out waiting for API key");
-    Ok(())
+    // Remove contents but keep the directory (it's always mounted)
+    match std::fs::read_dir(&claude_dir) {
+        Ok(entries) => {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    std::fs::remove_dir_all(&path).ok();
+                } else {
+                    std::fs::remove_file(&path).ok();
+                }
+            }
+            info!("Claude credentials cleared — next launch will re-authenticate");
+            send_notification("Tillandsias", "Claude credentials cleared. Next launch will prompt for authentication.");
+            Ok(())
+        }
+        Err(e) => Err(format!("Failed to read Claude credentials directory: {e}")),
+    }
 }
 
 /// Detect the document root for a web container.

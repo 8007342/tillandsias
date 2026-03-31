@@ -114,8 +114,6 @@ pub struct SecretMount {
 pub enum SecretKind {
     /// Mount ~/.claude/ into the container (rw).
     ClaudeDir,
-    /// Inject ANTHROPIC_API_KEY from the OS keyring.
-    ClaudeApiKey,
     /// Mount GitHub token file at /run/secrets/github_token (ro).
     /// @trace spec:secret-rotation
     GitHubToken,
@@ -142,9 +140,8 @@ pub struct LaunchContext {
     pub detached: bool,
     pub is_watch_root: bool,
 
-    // Resolved secret paths (from keyring, filesystem)
-    pub claude_api_key: Option<String>,
-    pub claude_dir: Option<PathBuf>,
+    // Resolved secret paths (filesystem)
+    pub claude_dir: PathBuf,
     pub gh_dir: PathBuf,
     pub git_dir: PathBuf,
 
@@ -195,9 +192,6 @@ pub fn forge_claude_profile() -> ContainerProfile {
             },
             SecretMount {
                 kind: SecretKind::ClaudeDir,
-            },
-            SecretMount {
-                kind: SecretKind::ClaudeApiKey,
             },
         ],
         image_override: None,
@@ -327,7 +321,7 @@ mod tests {
     #[test]
     fn forge_claude_has_claude_and_github_secrets() {
         let profile = forge_claude_profile();
-        assert_eq!(profile.secrets.len(), 3);
+        assert_eq!(profile.secrets.len(), 2, "Claude profile should have GitHubToken + ClaudeDir");
         assert!(
             profile
                 .secrets
@@ -339,12 +333,6 @@ mod tests {
                 .secrets
                 .iter()
                 .any(|s| s.kind == SecretKind::ClaudeDir)
-        );
-        assert!(
-            profile
-                .secrets
-                .iter()
-                .any(|s| s.kind == SecretKind::ClaudeApiKey)
         );
     }
 
