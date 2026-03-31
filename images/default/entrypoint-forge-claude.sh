@@ -75,15 +75,14 @@ mkdir -p "$OS_PREFIX" 2>/dev/null || true
 
 if [ ! -x "$OS_BIN" ]; then
     trace_lifecycle "install" "openspec: fresh install starting"
-    if npm install -g --prefix "$OS_PREFIX" @anthropic-ai/openspec 2>/dev/null || \
-       npm install -g --prefix "$OS_PREFIX" openspec 2>/dev/null; then
-        if [ -x "$OS_BIN" ]; then
-            trace_lifecycle "install" "openspec: installed"
-        else
-            trace_lifecycle "install" "openspec: npm succeeded but binary NOT FOUND at $OS_BIN"
-        fi
+    set +e
+    npm install -g --prefix "$OS_PREFIX" @anthropic-ai/openspec 2>&1 || \
+        npm install -g --prefix "$OS_PREFIX" openspec 2>&1 || true
+    set -e
+    if [ -x "$OS_BIN" ]; then
+        trace_lifecycle "install" "openspec: installed"
     else
-        trace_lifecycle "install" "openspec: install FAILED (non-fatal)"
+        trace_lifecycle "install" "openspec: not available (non-fatal)"
     fi
 else
     trace_lifecycle "install" "openspec: cached"
