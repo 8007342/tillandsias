@@ -195,8 +195,21 @@ fn build_cli_launch_context(
 ///
 /// Returns `true` on success, `false` on failure.
 pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
-    // Resolve and validate the project path
-    let project_path = match path.canonicalize() {
+    // Resolve and validate the project path.
+    // AppImage changes CWD to its FUSE mount — resolve relative paths against
+    // $OWD (Original Working Directory) so `tillandsias .` works correctly.
+    // @trace spec:cli-mode
+    let resolved = if path.is_relative() {
+        if let Ok(owd) = std::env::var("OWD") {
+            PathBuf::from(owd).join(&path)
+        } else {
+            path.clone()
+        }
+    } else {
+        path.clone()
+    };
+
+    let project_path = match resolved.canonicalize() {
         Ok(p) => p,
         Err(e) => {
             eprintln!("Error: cannot resolve path '{}': {e}", path.display());

@@ -1,19 +1,4 @@
 {
-  "permissions": {
-    "deny": [
-      "~/.config/gh",
-      "~/.config/gh/**",
-      "~/.config/tillandsias-git",
-      "~/.config/tillandsias-git/**",
-      "/home/forge/.config/gh",
-      "/home/forge/.config/gh/**",
-      "/home/forge/.config/tillandsias-git",
-      "/home/forge/.config/tillandsias-git/**",
-      "~/.claude",
-      "~/.claude/**",
-      "/home/forge/.claude",
-      "/home/forge/.claude/**",
-      "/proc/*/environ"
-    ]
-  }
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false
 }
