@@ -97,7 +97,7 @@ fn build_forge_image() -> Result<(), String> {
 
     let status = std::process::Command::new(&script)
         .arg("forge")
-        .args(["--tag", &tag])
+        .args(["--tag", &tag, "--backend", "fedora"])
         .current_dir(&source_dir)
         .env_remove("LD_LIBRARY_PATH")
         .env_remove("LD_PRELOAD")

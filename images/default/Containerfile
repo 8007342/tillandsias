@@ -1,57 +1,76 @@
-# Reference only — images are built via flake.nix
-FROM registry.fedoraproject.org/fedora-minimal:latest
+# Tillandsias Forge — Fedora Minimal
+# Standard glibc, SELinux-ready, FHS-compliant.
+# Pre-built binaries (OpenCode, Claude Code) execute directly — no linker hacks.
+FROM registry.fedoraproject.org/fedora-minimal:41
 
-# Install system packages via microdnf
+# ── System packages ────────────────────────────────────────────
 RUN microdnf install -y \
-        bash \
-        git \
-        gh \
-        curl \
-        jq \
-        ripgrep \
-        nodejs \
-        npm \
-        tar \
-        findutils \
-        procps-ng \
-        shadow-utils \
-        xz \
-        gzip \
+        bash coreutils findutils grep sed gawk tar gzip xz \
+        procps-ng shadow-utils ca-certificates \
+        fish zsh \
+        git gh curl wget jq ripgrep \
+        mc vim-minimal nano \
+        eza bat fd-find fzf htop tree \
+        nodejs npm \
     && microdnf clean all
 
-# Install Nix in single-user mode with flakes enabled
-RUN mkdir -m 0755 /nix \
-    && mkdir -p /etc/nix \
-    && echo 'build-users-group =' > /etc/nix/nix.conf \
-    && curl -L https://nixos.org/nix/install | bash -s -- --no-daemon \
-    && mkdir -p /root/.config/nix \
-    && printf 'experimental-features = nix-command flakes\nbuild-users-group =\n' > /root/.config/nix/nix.conf
+# ── zoxide (not in Fedora repos) ──────────────────────────────
+RUN curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash \
+    && mv /root/.local/bin/zoxide /usr/local/bin/zoxide || true
 
-# Install OpenCode binary (glibc linux-x64)
-RUN OPENCODE_URL=$(curl -fsSL https://api.github.com/repos/opencode-ai/opencode/releases/latest \
-        | jq -r '.assets[] | select(.name == "opencode-linux-x86_64.tar.gz") | .browser_download_url') \
-    && curl -fsSL -L "$OPENCODE_URL" -o /tmp/opencode.tar.gz \
-    && tar xzf /tmp/opencode.tar.gz -C /usr/local/bin/ opencode \
-    && chmod +x /usr/local/bin/opencode \
-    && rm -f /tmp/opencode.tar.gz
-
-# Install OpenSpec via npm globally
-RUN npm install -g @fission-ai/openspec
-
-# Create forge user
+# ── Create forge user ──────────────────────────────────────────
 RUN useradd -u 1000 -m -s /bin/bash forge
 
-# Copy entrypoint and config
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+# ── Directory structure ────────────────────────────────────────
+RUN mkdir -p /home/forge/src \
+    && mkdir -p /home/forge/.cache/tillandsias \
+    && mkdir -p /home/forge/.config/opencode \
+    && mkdir -p /tmp && chmod 1777 /tmp
 
-COPY opencode.json /home/forge/.opencode.json
-RUN chown forge:forge /home/forge/.opencode.json
+# ── Shared library ─────────────────────────────────────────────
+RUN mkdir -p /usr/local/lib/tillandsias
+COPY lib-common.sh /usr/local/lib/tillandsias/lib-common.sh
 
+# ── Entrypoints ────────────────────────────────────────────────
+COPY entrypoint.sh /usr/local/bin/tillandsias-entrypoint.sh
+COPY entrypoint-forge-opencode.sh /usr/local/bin/entrypoint-forge-opencode.sh
+COPY entrypoint-forge-claude.sh /usr/local/bin/entrypoint-forge-claude.sh
+COPY entrypoint-terminal.sh /usr/local/bin/entrypoint-terminal.sh
+RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
+             /usr/local/bin/entrypoint-forge-opencode.sh \
+             /usr/local/bin/entrypoint-forge-claude.sh \
+             /usr/local/bin/entrypoint-terminal.sh
+
+# ── GIT_ASKPASS helper ─────────────────────────────────────────
+COPY git-askpass-tillandsias.sh /usr/local/bin/git-askpass-tillandsias.sh
+RUN chmod 0755 /usr/local/bin/git-askpass-tillandsias.sh
+
+# ── OpenCode config ────────────────────────────────────────────
+COPY opencode.json /home/forge/.config/opencode/config.json
+
+# ── Shell configs ──────────────────────────────────────────────
+RUN mkdir -p /etc/skel/.config/fish
+COPY shell/bashrc /etc/skel/.bashrc
+COPY shell/zshrc /etc/skel/.zshrc
+COPY shell/config.fish /etc/skel/.config/fish/config.fish
+RUN mkdir -p /home/forge/.config/fish/conf.d
+COPY shell/config.fish /home/forge/.config/fish/conf.d/tillandsias.fish
+
+# ── Welcome script ─────────────────────────────────────────────
+RUN mkdir -p /usr/local/share/tillandsias
+COPY forge-welcome.sh /usr/local/share/tillandsias/forge-welcome.sh
+RUN chmod +x /usr/local/share/tillandsias/forge-welcome.sh || true
+
+# ── Locale files ───────────────────────────────────────────────
+RUN mkdir -p /etc/tillandsias/locales
+COPY locales/en.sh /etc/tillandsias/locales/en.sh
+COPY locales/es.sh /etc/tillandsias/locales/es.sh
+
+# ── Fix ownership ──────────────────────────────────────────────
+RUN chown -R 1000:1000 /home/forge
+
+USER 1000:1000
 WORKDIR /home/forge/src
-
-USER forge
-
+ENTRYPOINT ["/usr/local/bin/entrypoint-forge-claude.sh"]
 EXPOSE 3000-3099
-
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+ENV HOME=/home/forge USER=forge

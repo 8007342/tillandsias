@@ -10,64 +10,60 @@ source /usr/local/lib/tillandsias/lib-common.sh
 
 trace_lifecycle "entrypoint" "opencode starting"
 
-# ── Nix dynamic linker ─────────────────────────────────────
-# The Nix-built container lacks standard glibc paths (/lib/ld-linux-*.so).
-# Pre-built binaries (curl installer, npm-bundled natives) fail with
-# "required file not found" or ENOENT. We find the Nix dynamic linker
-# and use it to invoke unpatched binaries.
-NIX_LD="$(find /nix/store -name 'ld-linux-*.so.*' -path '*/lib/ld-linux-*' 2>/dev/null | head -1)"
-NIX_LIB_DIR="$(dirname "$NIX_LD" 2>/dev/null || true)"
-if [ -n "$NIX_LD" ]; then
-    trace_lifecycle "nix" "dynamic linker: $NIX_LD"
-else
-    trace_lifecycle "nix" "WARNING: dynamic linker not found in /nix/store"
-fi
-
-# ── OpenCode (curl installer + Nix linker wrapper) ─────────
+# ── OpenCode (official curl installer) ─────────────────────
+# On Fedora (default): pre-built binary executes directly (standard glibc).
+# On Nix: binary needs the Nix dynamic linker — a wrapper is created.
 OC_DIR="$CACHE/opencode"
-OC_NATIVE="$HOME/.opencode/bin/opencode"
 OC_BIN="$OC_DIR/bin/opencode"
+OC_NATIVE="$HOME/.opencode/bin/opencode"
+
+_make_opencode_wrapper() {
+    # The curl installer puts the binary at ~/.opencode/bin/opencode.
+    # We need it at $OC_BIN (persistent cache). On Nix images, the binary
+    # can't execute directly, so we create a wrapper with the Nix linker.
+    local native="$OC_NATIVE"
+    [ -f "$native" ] || return 1
+
+    local nix_ld
+    nix_ld="$(find /nix/store -name 'ld-linux-*.so.*' -path '*/lib/ld-linux-*' 2>/dev/null | head -1)"
+
+    if [ -n "$nix_ld" ]; then
+        trace_lifecycle "install" "opencode: Nix image detected, creating linker wrapper"
+        local nix_lib_dir
+        nix_lib_dir="$(dirname "$nix_ld")"
+        cat > "$OC_BIN" <<WRAPPER
+#!/usr/bin/env bash
+exec "$nix_ld" --library-path "$nix_lib_dir" "$native" "\$@"
+WRAPPER
+        chmod +x "$OC_BIN"
+    else
+        # Standard FHS (Fedora) — binary executes directly
+        cp "$native" "$OC_BIN"
+        chmod +x "$OC_BIN"
+    fi
+}
 
 ensure_opencode() {
     local stamp_file="$OC_DIR/.last-update-check"
     mkdir -p "$OC_DIR/bin" 2>/dev/null || true
 
-    # First install: download via official curl installer
     if [ ! -x "$OC_BIN" ]; then
         trace_lifecycle "install" "opencode: fresh install via curl"
         set +e
+        export OPENCODE_INSTALL_DIR="$OC_DIR"
         curl -fsSL https://opencode.ai/install | bash 2>&1
         set -e
 
-        # The installer puts the native binary at ~/.opencode/bin/opencode.
-        # It can't execute directly in Nix (wrong ELF interpreter), so we
-        # create a wrapper script that invokes it through the Nix linker.
-        local native_bin="$OC_NATIVE"
-        if [ ! -f "$native_bin" ]; then
-            trace_lifecycle "install" "opencode: FAILED (binary not at $native_bin)"
-            return 0
-        fi
-
-        if [ -n "$NIX_LD" ]; then
-            trace_lifecycle "install" "opencode: creating Nix linker wrapper"
-            cat > "$OC_BIN" <<WRAPPER
-#!/usr/bin/env bash
-exec "$NIX_LD" --library-path "$NIX_LIB_DIR" "$native_bin" "\$@"
-WRAPPER
-            chmod +x "$OC_BIN"
-        else
-            # No Nix linker found — try direct execution (non-Nix image)
-            cp "$native_bin" "$OC_BIN"
-            chmod +x "$OC_BIN"
+        # If installer ignored OPENCODE_INSTALL_DIR (common), relocate binary
+        if [ ! -x "$OC_BIN" ] && [ -f "$OC_NATIVE" ]; then
+            _make_opencode_wrapper
         fi
 
         if [ -x "$OC_BIN" ]; then
-            local oc_ver
-            oc_ver="$("$OC_BIN" --version 2>/dev/null || echo "unknown")"
-            trace_lifecycle "install" "opencode: ready ($oc_ver)"
+            trace_lifecycle "install" "opencode: ready ($("$OC_BIN" --version 2>/dev/null || echo "unknown"))"
             record_update_check "$stamp_file"
         else
-            trace_lifecycle "install" "opencode: wrapper created but execution failed"
+            trace_lifecycle "install" "opencode: FAILED (binary not found)"
         fi
         return 0
     fi
@@ -81,21 +77,15 @@ WRAPPER
     set +e
     curl -fsSL https://opencode.ai/install | bash 2>&1
     set -e
-    # Recreate wrapper if native binary was updated
-    if [ -f "$OC_NATIVE" ] && [ -n "$NIX_LD" ]; then
-        cat > "$OC_BIN" <<WRAPPER
-#!/usr/bin/env bash
-exec "$NIX_LD" --library-path "$NIX_LIB_DIR" "$OC_NATIVE" "\$@"
-WRAPPER
-        chmod +x "$OC_BIN"
+    # Refresh wrapper/copy if updated
+    if [ -f "$OC_NATIVE" ]; then
+        _make_opencode_wrapper
     fi
     trace_lifecycle "update" "opencode: $("$OC_BIN" --version 2>/dev/null || echo "ready")"
     record_update_check "$stamp_file"
 }
 
-# ── OpenSpec ────────────────────────────────────────────────
-# OpenSpec is a Node.js CLI — npm install works in Nix (uses patched Node).
-# Package name: @fission-ai/openspec (primary), fallback: openspec
+# ── OpenSpec (npm, cached) ──────────────────────────────────
 OS_PREFIX="$CACHE/openspec"
 OS_BIN="$OS_PREFIX/bin/openspec"
 mkdir -p "$OS_PREFIX" 2>/dev/null || true

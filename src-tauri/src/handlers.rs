@@ -401,7 +401,7 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
 
     let output = std::process::Command::new(&script)
         .arg(image_name)
-        .args(["--tag", &tag])
+        .args(["--tag", &tag, "--backend", "fedora"])
         .current_dir(&source_dir)
         // Clear AppImage library paths so toolbox, nix, and other host
         // binaries called by build-image.sh use host libraries.

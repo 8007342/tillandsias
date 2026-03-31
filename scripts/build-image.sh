@@ -78,6 +78,7 @@ _step()  { echo -e "${CYAN}[build-image]${NC} $*"; }
 IMAGE_NAME="forge"
 FLAG_FORCE=false
 FLAG_TAG=""
+FLAG_BACKEND="fedora"  # Default: Fedora minimal. Use --backend nix for Nix image.
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -91,16 +92,21 @@ while [[ $# -gt 0 ]]; do
             shift
             FLAG_TAG="$1"
             ;;
+        --backend)
+            shift
+            FLAG_BACKEND="$1"
+            ;;
         --help|-h)
-            echo "Usage: scripts/build-image.sh [forge|web] [--force] [--tag <tag>]"
+            echo "Usage: scripts/build-image.sh [forge|web] [--force] [--tag <tag>] [--backend fedora|nix]"
             echo ""
-            echo "Build a container image using Nix inside an ephemeral podman container."
+            echo "Build a container image."
             echo ""
             echo "Arguments:"
-            echo "  forge            Build the forge (dev environment) image (default)"
-            echo "  web              Build the web server image"
-            echo "  --force          Rebuild even if sources haven't changed"
-            echo "  --tag <tag>      Override the image tag (default: tillandsias-<name>:latest)"
+            echo "  forge              Build the forge (dev environment) image (default)"
+            echo "  web                Build the web server image"
+            echo "  --force            Rebuild even if sources haven't changed"
+            echo "  --tag <tag>        Override the image tag (default: tillandsias-<name>:latest)"
+            echo "  --backend <type>   Build backend: fedora (default) or nix"
             exit 0
             ;;
         *)
@@ -122,8 +128,8 @@ NIX_ATTR="${IMAGE_NAME}-image"
 HASH_SUFFIX="$(echo "$IMAGE_TAG" | tr ':/' '--')"
 HASH_FILE="$CACHE_DIR/.last-build-${HASH_SUFFIX}.sha256"
 
-# Verify flake.nix exists at ROOT (required for nix build)
-if [[ ! -f "$ROOT/flake.nix" ]]; then
+# Verify required files exist based on backend
+if [[ "$FLAG_BACKEND" == "nix" ]] && [[ ! -f "$ROOT/flake.nix" ]]; then
     _error "flake.nix not found at $ROOT/"
     _error "When installed, flake.nix should be at ~/.local/share/tillandsias/flake.nix"
     _error "Run './build.sh --install' from the project directory to fix this."
@@ -183,71 +189,64 @@ if [[ "$FLAG_FORCE" == true ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step 2: Build image via Nix inside an ephemeral podman container
-# @trace spec:nix-builder/ephemeral-nix-build, knowledge:packaging/nix-flakes
+# Step 2: Build image
 # ---------------------------------------------------------------------------
 BUILD_START="$(date +%s)"
 
-# Output directory for the tarball (host-side)
-OUTPUT_DIR="$CACHE_DIR/build-output"
-mkdir -p "$OUTPUT_DIR"
-rm -f "$OUTPUT_DIR/result.tar.gz"
+if [[ "$FLAG_BACKEND" == "fedora" ]]; then
+    # ── Fedora backend: podman build with Containerfile ────────
+    _step "Building ${BOLD}${IMAGE_TAG}${NC} via podman build (Fedora minimal)..."
+    CONTAINERFILE="$ROOT/images/default/Containerfile"
+    if [[ ! -f "$CONTAINERFILE" ]]; then
+        _error "Containerfile not found at $CONTAINERFILE"
+        exit 1
+    fi
+    "$PODMAN" build \
+        --tag "$IMAGE_TAG" \
+        -f "$CONTAINERFILE" \
+        "$ROOT/images/default/"
 
-_step "Running nix build .#${NIX_ATTR} inside ephemeral ${NIX_IMAGE} container..."
+else
+    # ── Nix backend: nix build inside ephemeral container ─────
+    # @trace spec:nix-builder/ephemeral-nix-build, knowledge:packaging/nix-flakes
+    OUTPUT_DIR="$CACHE_DIR/build-output"
+    mkdir -p "$OUTPUT_DIR"
+    rm -f "$OUTPUT_DIR/result.tar.gz"
 
-# Mount the source tree read-only at /src and an output volume at /output.
-# The nix build produces a tarball in /nix/store/; we copy it to /output
-# so it's accessible on the host after the container exits.
-#
-# --extra-experimental-features ensures flakes work regardless of the
-# image's default nix.conf.
-NIX_BUILD_CMD="nix --extra-experimental-features 'nix-command flakes' build /src#${NIX_ATTR} --print-out-paths --no-link 2>&1 | tee /dev/stderr | tail -1 | xargs -I{} cp {} /output/result.tar.gz"
+    _step "Running nix build .#${NIX_ATTR} inside ephemeral ${NIX_IMAGE} container..."
 
-# --security-opt label=disable bypasses SELinux label checks entirely.
-# Required on Silverblue where source files may be on tmpfs ($XDG_RUNTIME_DIR)
-# or have unexpected SELinux contexts. This is the same approach used for
-# forge containers in handlers.rs.
-"$PODMAN" run --rm \
-    --security-opt label=disable \
-    -v "$ROOT:/src:ro" \
-    -v "$OUTPUT_DIR:/output:rw" \
-    "$NIX_IMAGE" \
-    bash -c "$NIX_BUILD_CMD"
+    NIX_BUILD_CMD="nix --extra-experimental-features 'nix-command flakes' build /src#${NIX_ATTR} --print-out-paths --no-link 2>&1 | tee /dev/stderr | tail -1 | xargs -I{} cp {} /output/result.tar.gz"
 
-TARBALL_PATH="$OUTPUT_DIR/result.tar.gz"
+    # --security-opt label=disable bypasses SELinux label checks.
+    "$PODMAN" run --rm \
+        --security-opt label=disable \
+        -v "$ROOT:/src:ro" \
+        -v "$OUTPUT_DIR:/output:rw" \
+        "$NIX_IMAGE" \
+        bash -c "$NIX_BUILD_CMD"
 
-if [[ ! -f "$TARBALL_PATH" ]]; then
-    _error "Nix build failed — no tarball produced at $TARBALL_PATH"
-    exit 1
-fi
+    TARBALL_PATH="$OUTPUT_DIR/result.tar.gz"
 
-_info "Tarball: $TARBALL_PATH"
+    if [[ ! -f "$TARBALL_PATH" ]]; then
+        _error "Nix build failed — no tarball produced at $TARBALL_PATH"
+        exit 1
+    fi
 
-# ---------------------------------------------------------------------------
-# Step 3: Load tarball into podman
-# @trace spec:default-image
-# ---------------------------------------------------------------------------
-_step "Loading image into podman..."
-LOAD_OUTPUT="$("$PODMAN" load < "$TARBALL_PATH" 2>&1)"
-echo "$LOAD_OUTPUT" | while IFS= read -r line; do
-    _info "  $line"
-done
+    _info "Tarball: $TARBALL_PATH"
 
-# Extract the loaded image name from podman load output
-# "Loaded image: localhost/tillandsias-forge:latest" or "Loaded image(s): ..."
-LOADED_IMAGE="$(echo "$LOAD_OUTPUT" | grep 'Loaded image' | sed 's/.*: //' | tail -1 | tr -d '[:space:]')"
+    # Load tarball into podman
+    _step "Loading image into podman..."
+    LOAD_OUTPUT="$("$PODMAN" load < "$TARBALL_PATH" 2>&1)"
+    echo "$LOAD_OUTPUT" | while IFS= read -r line; do
+        _info "  $line"
+    done
 
-# ---------------------------------------------------------------------------
-# Step 4: Tag the image
-# ---------------------------------------------------------------------------
-if [[ -n "$LOADED_IMAGE" ]] && [[ "$LOADED_IMAGE" != "$IMAGE_TAG" ]]; then
-    _step "Tagging as ${IMAGE_TAG}..."
-    "$PODMAN" tag "$LOADED_IMAGE" "$IMAGE_TAG"
-elif [[ -z "$LOADED_IMAGE" ]]; then
-    _warn "Could not detect loaded image name from podman output"
-    _warn "Attempting to tag by inspecting recent images..."
-    # Fallback: the nix-built image often uses a specific name
-    # Try tagging whatever was just loaded
+    LOADED_IMAGE="$(echo "$LOAD_OUTPUT" | grep 'Loaded image' | sed 's/.*: //' | tail -1 | tr -d '[:space:]')"
+
+    if [[ -n "$LOADED_IMAGE" ]] && [[ "$LOADED_IMAGE" != "$IMAGE_TAG" ]]; then
+        _step "Tagging as ${IMAGE_TAG}..."
+        "$PODMAN" tag "$LOADED_IMAGE" "$IMAGE_TAG"
+    fi
 fi
 
 # Verify the image exists
