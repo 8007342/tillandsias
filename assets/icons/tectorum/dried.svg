@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <!-- Tectorum dried: brown fuzzy ball -->
-  <g transform="translate(32,54)">
-    <circle cx="0" cy="-10" r="12" fill="#a08860" stroke="#887044" stroke-width="1"/>
-    <line x1="-8" y1="-16" x2="-12" y2="-20" stroke="#c0aa80" stroke-width="1" stroke-linecap="round"/>
-    <line x1="0" y1="-22" x2="0" y2="-26" stroke="#c0aa80" stroke-width="1" stroke-linecap="round"/>
-    <line x1="8" y1="-16" x2="12" y2="-20" stroke="#c0aa80" stroke-width="1" stroke-linecap="round"/>
-    <line x1="-10" y1="-8" x2="-14" y2="-8" stroke="#c0aa80" stroke-width="1" stroke-linecap="round"/>
-    <line x1="10" y1="-8" x2="14" y2="-8" stroke="#c0aa80" stroke-width="1" stroke-linecap="round"/>
-    <line x1="-6" y1="-2" x2="-8" y2="2" stroke="#c0aa80" stroke-width="1" stroke-linecap="round"/>
-    <line x1="6" y1="-2" x2="8" y2="2" stroke="#c0aa80" stroke-width="1" stroke-linecap="round"/>
+  <g transform="translate(32,38) scale(1.4)">
+    <circle cx="0" cy="-10" r="12" fill="#b09968" stroke="#98804c" stroke-width="1.5"/>
+    <line x1="-8" y1="-16" x2="-12" y2="-20" stroke="#d0bb88" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="0" y1="-22" x2="0" y2="-26" stroke="#d0bb88" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="8" y1="-16" x2="12" y2="-20" stroke="#d0bb88" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="-10" y1="-8" x2="-14" y2="-8" stroke="#d0bb88" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="10" y1="-8" x2="14" y2="-8" stroke="#d0bb88" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="-6" y1="-2" x2="-8" y2="2" stroke="#d0bb88" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="6" y1="-2" x2="8" y2="2" stroke="#d0bb88" stroke-width="1.5" stroke-linecap="round"/>
   </g>
 </svg>

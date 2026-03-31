@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <!-- Ionantha bloom: leaves blush red at tips, violet flower -->
-  <g transform="translate(32,56)">
-    <polygon points="0,-24 -4,-4 4,-4" fill="#5a9a5a" stroke="#3a7a3a" stroke-width="1"/>
-    <polygon points="-10,-20 -6,-2 -2,-8" fill="#6a9a5a" stroke="#3a7a3a" stroke-width="1"/>
-    <polygon points="10,-20 6,-2 2,-8" fill="#6a9a5a" stroke="#3a7a3a" stroke-width="1"/>
-    <polygon points="-14,-14 -8,0 -4,-6" fill="#7aaa6a" stroke="#3a7a3a" stroke-width="1"/>
-    <polygon points="14,-14 8,0 4,-6" fill="#7aaa6a" stroke="#3a7a3a" stroke-width="1"/>
+  <g transform="translate(32,38) scale(1.4)">
+    <polygon points="0,-24 -4,-4 4,-4" fill="#6ab86a" stroke="#4a8a4a" stroke-width="1.5"/>
+    <polygon points="-10,-20 -6,-2 -2,-8" fill="#7ec87e" stroke="#4a8a4a" stroke-width="1.5"/>
+    <polygon points="10,-20 6,-2 2,-8" fill="#7ec87e" stroke="#4a8a4a" stroke-width="1.5"/>
+    <polygon points="-14,-14 -8,0 -4,-6" fill="#95d895" stroke="#4a8a4a" stroke-width="1.5"/>
+    <polygon points="14,-14 8,0 4,-6" fill="#95d895" stroke="#4a8a4a" stroke-width="1.5"/>
     <!-- Red blush at leaf tips -->
     <circle cx="0" cy="-24" r="3" fill="#dd4455" opacity="0.7"/>
     <circle cx="-10" cy="-20" r="2.5" fill="#dd4455" opacity="0.6"/>

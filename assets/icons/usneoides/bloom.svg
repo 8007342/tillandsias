@@ -1,15 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <!-- Usneoides bloom: long hanging strands with tiny yellow-green flowers -->
-  <g transform="translate(32,6)">
-    <line x1="-8" y1="0" x2="8" y2="0" stroke="#3a7a3a" stroke-width="2"/>
-    <path d="M-6,0 C-8,12 -5,26 -7,38" fill="none" stroke="#5a9a5a" stroke-width="2" stroke-linecap="round"/>
-    <path d="M-2,0 C-3,14 -1,28 -3,42" fill="none" stroke="#6aad6a" stroke-width="2" stroke-linecap="round"/>
-    <path d="M2,0 C1,12 3,30 1,44" fill="none" stroke="#5a9a5a" stroke-width="2" stroke-linecap="round"/>
-    <path d="M6,0 C8,10 5,22 7,36" fill="none" stroke="#6aad6a" stroke-width="2" stroke-linecap="round"/>
+  <g transform="translate(32,4) scale(1.3)">
+    <line x1="-8" y1="0" x2="8" y2="0" stroke="#4a8a4a" stroke-width="2.5"/>
+    <path d="M-6,0 C-8,12 -5,26 -7,38" fill="none" stroke="#6ab86a" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M-2,0 C-3,14 -1,28 -3,42" fill="none" stroke="#7ec87e" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M2,0 C1,12 3,30 1,44" fill="none" stroke="#6ab86a" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M6,0 C8,10 5,22 7,36" fill="none" stroke="#7ec87e" stroke-width="2.5" stroke-linecap="round"/>
     <!-- Tiny yellow-green flowers -->
-    <circle cx="-6" cy="20" r="2" fill="#ccdd44"/>
-    <circle cx="1" cy="26" r="2" fill="#ddee55"/>
-    <circle cx="6" cy="18" r="2" fill="#ccdd44"/>
-    <circle cx="-3" cy="32" r="1.5" fill="#ddee55"/>
+    <circle cx="-6" cy="20" r="2.5" fill="#ccdd44"/>
+    <circle cx="1" cy="26" r="2.5" fill="#ddee55"/>
+    <circle cx="6" cy="18" r="2.5" fill="#ccdd44"/>
+    <circle cx="-3" cy="32" r="2" fill="#ddee55"/>
   </g>
 </svg>

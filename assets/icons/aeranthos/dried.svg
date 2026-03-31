@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <!-- Aeranthos dried: brown/faded rosette -->
-  <g transform="translate(32,58)">
-    <ellipse cx="0" cy="-12" rx="8" ry="18" fill="#a08860" stroke="#887044" stroke-width="1.5"/>
-    <ellipse cx="-7" cy="-10" rx="5" ry="14" fill="#b09970" stroke="#887044" stroke-width="1" transform="rotate(20)"/>
-    <ellipse cx="7" cy="-10" rx="5" ry="14" fill="#b09970" stroke="#887044" stroke-width="1" transform="rotate(-20)"/>
-    <ellipse cx="0" cy="-6" rx="4" ry="8" fill="#c0aa80"/>
+  <g transform="translate(32,44) scale(1.4)">
+    <ellipse cx="0" cy="-12" rx="8" ry="18" fill="#b09968" stroke="#98804c" stroke-width="1.5"/>
+    <ellipse cx="-7" cy="-10" rx="5" ry="14" fill="#c0aa78" stroke="#98804c" stroke-width="1.5" transform="rotate(20)"/>
+    <ellipse cx="7" cy="-10" rx="5" ry="14" fill="#c0aa78" stroke="#98804c" stroke-width="1.5" transform="rotate(-20)"/>
+    <ellipse cx="0" cy="-6" rx="4" ry="8" fill="#d0bb88"/>
   </g>
 </svg>
