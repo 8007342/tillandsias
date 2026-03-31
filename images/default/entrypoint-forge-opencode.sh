@@ -10,41 +10,31 @@ source /usr/local/lib/tillandsias/lib-common.sh
 
 trace_lifecycle "entrypoint" "opencode starting"
 
-# ── OpenCode (official installer, cached) ───────────────────
-# Install to persistent cache so the binary survives container restarts.
-# The env var must be exported so the piped bash subprocess inherits it.
-export OPENCODE_INSTALL_DIR="$CACHE/opencode"
-OC_BIN="$OPENCODE_INSTALL_DIR/bin/opencode"
+# ── OpenCode (npm installer, cached) ────────────────────────
+# The Nix-built container lacks standard glibc paths (/lib/ld-linux-*.so),
+# so pre-built binaries from the curl installer can't execute ("required
+# file not found"). npm install uses Node.js which is Nix-patched, so it
+# works correctly — same pattern as Claude Code.
+OC_PREFIX="$CACHE/opencode"
+OC_BIN="$OC_PREFIX/bin/opencode"
 
 ensure_opencode() {
-    local stamp_file="$OPENCODE_INSTALL_DIR/.last-update-check"
-    mkdir -p "$OPENCODE_INSTALL_DIR/bin" 2>/dev/null || true
+    local stamp_file="$OC_PREFIX/.last-update-check"
+    mkdir -p "$OC_PREFIX" 2>/dev/null || true
 
-    # First install: run the official installer
+    # First install
     if [ ! -x "$OC_BIN" ]; then
-        trace_lifecycle "install" "opencode: fresh install to $OPENCODE_INSTALL_DIR"
-        # Disable set -e for the installer — it may return non-zero or trigger
-        # pipefail even on success (installer writes to stderr for progress).
+        trace_lifecycle "install" "opencode: fresh install via npm"
         set +e
-        curl -fsSL https://opencode.ai/install | bash 2>&1
-        local install_exit=$?
+        npm install -g --prefix "$OC_PREFIX" opencode-ai@latest 2>&1
         set -e
-
-        # The installer might ignore OPENCODE_INSTALL_DIR and install to ~/.opencode.
-        # If so, move the binary to our cache dir so it persists.
-        if [ ! -x "$OC_BIN" ] && [ -x "$HOME/.opencode/bin/opencode" ]; then
-            trace_lifecycle "install" "opencode: installer used ~/.opencode, relocating to cache"
-            cp "$HOME/.opencode/bin/opencode" "$OC_BIN"
-            chmod +x "$OC_BIN"
-        fi
-
         if [ -x "$OC_BIN" ]; then
             trace_lifecycle "install" "opencode: ready ($("$OC_BIN" --version 2>/dev/null || echo "unknown"))"
             record_update_check "$stamp_file"
         else
-            trace_lifecycle "install" "opencode: FAILED (exit=$install_exit, binary not at $OC_BIN)"
+            trace_lifecycle "install" "opencode: FAILED (binary not at $OC_BIN)"
         fi
-        return 0  # Always non-fatal — script continues to error handler at bottom
+        return 0
     fi
 
     # Subsequent launches: only update if stamp is stale (daily throttle)
@@ -53,16 +43,22 @@ ensure_opencode() {
         return 0
     fi
     trace_lifecycle "update" "opencode: checking for updates..."
-    set +e
-    curl -fsSL https://opencode.ai/install | bash 2>&1
-    set -e
-    # Relocate if installer ignored OPENCODE_INSTALL_DIR
-    if [ ! -x "$OC_BIN" ] && [ -x "$HOME/.opencode/bin/opencode" ]; then
-        cp "$HOME/.opencode/bin/opencode" "$OC_BIN"
-        chmod +x "$OC_BIN"
+    local current_ver latest_ver
+    current_ver="$("$OC_BIN" --version 2>/dev/null || echo "unknown")"
+    latest_ver="$(timeout 10 npm view opencode-ai version 2>/dev/null || true)"
+    if [ -z "$latest_ver" ]; then
+        trace_lifecycle "update" "opencode: skipped (offline)"
+        record_update_check "$stamp_file"
+        return 0
     fi
-    if [ -x "$OC_BIN" ]; then
+    if [ "$current_ver" != "$latest_ver" ]; then
+        trace_lifecycle "update" "opencode: updating $current_ver -> $latest_ver"
+        set +e
+        npm install -g --prefix "$OC_PREFIX" opencode-ai@latest 2>&1
+        set -e
         trace_lifecycle "update" "opencode: $("$OC_BIN" --version 2>/dev/null || echo "ready")"
+    else
+        trace_lifecycle "update" "opencode: up to date ($current_ver)"
     fi
     record_update_check "$stamp_file"
 }
@@ -108,7 +104,7 @@ fi
 show_banner "opencode"
 
 # ── Launch OpenCode ─────────────────────────────────────────
-export PATH="$OPENCODE_INSTALL_DIR/bin:$PATH"
+export PATH="$OC_PREFIX/bin:$PATH"
 if [ -x "$OC_BIN" ]; then
     trace_lifecycle "exec" "launching opencode ($OC_BIN)"
     exec "$OC_BIN" "$@"
