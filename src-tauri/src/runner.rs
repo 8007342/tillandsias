@@ -130,6 +130,8 @@ fn image_size_display(tag: &str) -> String {
 }
 
 /// Build a [`LaunchContext`] for CLI mode.
+///
+/// @trace spec:secret-rotation
 fn build_cli_launch_context(
     container_name: &str,
     project_path: &Path,
@@ -152,6 +154,19 @@ fn build_cli_launch_context(
         .map(|h| h.join(".claude"))
         .filter(|p| p.exists());
 
+    // Write GitHub token to tmpfs-backed file for secure container injection.
+    // @trace spec:secret-rotation
+    let token_file_path = match crate::secrets::retrieve_github_token() {
+        Ok(Some(token)) => match crate::token_files::write_token(container_name, &token) {
+            Ok(path) => Some(path),
+            Err(e) => {
+                eprintln!("  Warning: token file write failed ({e}), using hosts.yml only");
+                None
+            }
+        },
+        _ => None,
+    };
+
     // Custom mounts from project config
     let project_config = load_project_config(project_path);
 
@@ -168,6 +183,7 @@ fn build_cli_launch_context(
         claude_dir,
         gh_dir,
         git_dir,
+        token_file_path,
         custom_mounts: project_config.mounts,
         image_tag: image_tag.to_string(),
     }
@@ -326,6 +342,10 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
         .status();
 
     println!();
+
+    // Clean up token file after container exits (CLI mode runs synchronously).
+    // @trace spec:secret-rotation
+    crate::token_files::delete_token(&container_name);
 
     match status {
         Ok(s) => {

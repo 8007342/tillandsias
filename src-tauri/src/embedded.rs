@@ -46,6 +46,10 @@ pub const FORGE_WELCOME: &str = include_str!("../../images/default/forge-welcome
 pub const FORGE_CONTAINERFILE: &str = include_str!("../../images/default/Containerfile");
 pub const FORGE_OPENCODE_JSON: &str = include_str!("../../images/default/opencode.json");
 
+// GIT_ASKPASS helper for secure token delivery
+pub const FORGE_GIT_ASKPASS: &str =
+    include_str!("../../images/default/git-askpass-tillandsias.sh");
+
 // Shell configs
 pub const SHELL_BASHRC: &str = include_str!("../../images/default/shell/bashrc");
 pub const SHELL_FISH_CONFIG: &str = include_str!("../../images/default/shell/config.fish");
@@ -175,6 +179,11 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("Containerfile: {e}"))?;
     fs::write(default_dir.join("opencode.json"), FORGE_OPENCODE_JSON)
         .map_err(|e| format!("opencode.json: {e}"))?;
+    fs::write(
+        default_dir.join("git-askpass-tillandsias.sh"),
+        FORGE_GIT_ASKPASS,
+    )
+    .map_err(|e| format!("git-askpass-tillandsias.sh: {e}"))?;
     #[cfg(unix)]
     {
         fs::set_permissions(
@@ -194,6 +203,11 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .ok();
         fs::set_permissions(
             default_dir.join("entrypoint-terminal.sh"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .ok();
+        fs::set_permissions(
+            default_dir.join("git-askpass-tillandsias.sh"),
             fs::Permissions::from_mode(0o755),
         )
         .ok();

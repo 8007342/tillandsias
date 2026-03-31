@@ -373,6 +373,9 @@ fn forge_profile(
 /// Build a [`LaunchContext`] for forge and terminal launches.
 ///
 /// Resolves all paths, secrets, and custom mounts needed by `build_podman_args()`.
+/// Writes the GitHub token to a tmpfs-backed file for secure injection.
+///
+/// @trace spec:secret-rotation
 fn build_launch_context(
     container_name: &str,
     project_path: &Path,
@@ -394,6 +397,40 @@ fn build_launch_context(
         .map(|h| h.join(".claude"))
         .filter(|p| p.exists());
 
+    // Write GitHub token to tmpfs-backed file for secure container injection.
+    // @trace spec:secret-rotation
+    let token_file_path = match crate::secrets::retrieve_github_token() {
+        Ok(Some(token)) => {
+            match crate::token_files::write_token(container_name, &token) {
+                Ok(path) => Some(path),
+                Err(e) => {
+                    warn!(
+                        target: "secrets",
+                        accountability = true,
+                        category = "secrets",
+                        spec = "secret-rotation",
+                        "Failed to write token file for {container_name}: {e} — falling back to hosts.yml only"
+                    );
+                    None
+                }
+            }
+        }
+        Ok(None) => {
+            debug!("No GitHub token in keyring — skipping token file");
+            None
+        }
+        Err(e) => {
+            warn!(
+                target: "secrets",
+                accountability = true,
+                category = "secrets",
+                spec = "secret-rotation",
+                "Keyring unavailable for token file: {e} — falling back to hosts.yml only"
+            );
+            None
+        }
+    };
+
     // Custom mounts from project config
     let project_config = tillandsias_core::config::load_project_config(project_path);
 
@@ -410,6 +447,7 @@ fn build_launch_context(
         claude_dir,
         gh_dir,
         git_dir,
+        token_file_path,
         custom_mounts: project_config.mounts,
         image_tag: image_tag.to_string(),
     }
@@ -646,20 +684,27 @@ pub async fn handle_attach_here(
     );
 
     // Accountability: log the secret mount summary for this container launch.
+    // @trace spec:secret-rotation
     {
+        let has_token_file = ctx.token_file_path.is_some();
         let has_gh = ctx.gh_dir.join("hosts.yml").exists();
         let has_claude = ctx.claude_api_key.is_some();
+        let token_detail = if has_token_file {
+            "token-file(tmpfs,ro)"
+        } else {
+            "no-token-file"
+        };
         let secret_summary = match (has_gh, has_claude) {
-            (true, true) => "gh(ro), git(rw), claude(env)",
-            (true, false) => "gh(ro), git(rw) | No Claude secrets",
-            (false, true) => "claude(env) | No GitHub token",
-            (false, false) => "No secrets injected",
+            (true, true) => format!("{token_detail}, gh(ro), git(rw), claude(env)"),
+            (true, false) => format!("{token_detail}, gh(ro), git(rw) | No Claude secrets"),
+            (false, true) => format!("{token_detail}, claude(env) | No GitHub token in hosts.yml"),
+            (false, false) => format!("{token_detail} | No other secrets"),
         };
         info!(
             accountability = true,
             category = "secrets",
             safety = %secret_summary,
-            spec = "environment-runtime",
+            spec = "environment-runtime, secret-rotation",
             "Environment {container_name} launched with secrets: {secret_summary}",
         );
     }

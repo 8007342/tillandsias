@@ -133,9 +133,23 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
 
     // -----------------------------------------------------------------------
     // Secret mounts (only present for profiles that declare them)
+    // @trace spec:secret-rotation
     // -----------------------------------------------------------------------
     for secret in &profile.secrets {
         match &secret.kind {
+            SecretKind::GitHubToken => {
+                if let Some(ref token_path) = ctx.token_file_path {
+                    args.push("-v".into());
+                    args.push(format!(
+                        "{}:/run/secrets/github_token:ro",
+                        token_path.display()
+                    ));
+                    args.push("-e".into());
+                    args.push(
+                        "GIT_ASKPASS=/usr/local/bin/git-askpass-tillandsias.sh".into(),
+                    );
+                }
+            }
             SecretKind::ClaudeApiKey => {
                 if let Some(ref api_key) = ctx.claude_api_key {
                     args.push("-e".into());
@@ -259,6 +273,9 @@ mod tests {
             claude_dir: Some(PathBuf::from("/home/user/.claude")),
             gh_dir: PathBuf::from("/home/user/.cache/tillandsias/secrets/gh"),
             git_dir: PathBuf::from("/home/user/.cache/tillandsias/secrets/git"),
+            token_file_path: Some(PathBuf::from(
+                "/run/user/1000/tillandsias/tokens/tillandsias-myproject-aeranthos/github_token",
+            )),
             custom_mounts: vec![],
             image_tag: "tillandsias-forge:v0.1.90".into(),
         }
@@ -289,28 +306,40 @@ mod tests {
     }
 
     #[test]
-    fn forge_opencode_no_claude_secrets() {
+    fn forge_opencode_has_github_token_no_claude_secrets() {
         let profile = container_profile::forge_opencode_profile();
         let args = build_podman_args(&profile, &test_context());
         let joined = args.join(" ");
+        // Has GitHub token mount
+        assert!(joined.contains("/run/secrets/github_token:ro"));
+        assert!(joined.contains("GIT_ASKPASS=/usr/local/bin/git-askpass-tillandsias.sh"));
+        // No Claude secrets
         assert!(!joined.contains("ANTHROPIC_API_KEY"));
         assert!(!joined.contains(".claude:rw"));
     }
 
     #[test]
-    fn forge_claude_has_claude_secrets() {
+    fn forge_claude_has_claude_and_github_secrets() {
         let profile = container_profile::forge_claude_profile();
         let args = build_podman_args(&profile, &test_context());
         let joined = args.join(" ");
+        // Has GitHub token mount
+        assert!(joined.contains("/run/secrets/github_token:ro"));
+        assert!(joined.contains("GIT_ASKPASS=/usr/local/bin/git-askpass-tillandsias.sh"));
+        // Has Claude secrets
         assert!(joined.contains("ANTHROPIC_API_KEY=sk-test-key"));
         assert!(joined.contains("/home/user/.claude:/home/forge/.claude:rw"));
     }
 
     #[test]
-    fn terminal_no_claude_secrets() {
+    fn terminal_has_github_token_no_claude_secrets() {
         let profile = container_profile::terminal_profile();
         let args = build_podman_args(&profile, &test_context());
         let joined = args.join(" ");
+        // Has GitHub token mount
+        assert!(joined.contains("/run/secrets/github_token:ro"));
+        assert!(joined.contains("GIT_ASKPASS=/usr/local/bin/git-askpass-tillandsias.sh"));
+        // No Claude secrets
         assert!(!joined.contains("ANTHROPIC_API_KEY"));
         assert!(!joined.contains(".claude:rw"));
     }
@@ -326,6 +355,9 @@ mod tests {
         assert!(!joined.contains(".cache/tillandsias"));
         assert!(!joined.contains(".config/gh"));
         assert!(!joined.contains("tillandsias-git"));
+        // No GitHub token mount
+        assert!(!joined.contains("/run/secrets/github_token"));
+        assert!(!joined.contains("GIT_ASKPASS"));
         // Uses override image
         assert!(joined.contains("tillandsias-web:latest"));
     }
@@ -448,5 +480,18 @@ mod tests {
         let joined = args.join(" ");
         assert!(!joined.contains("ANTHROPIC_API_KEY"));
         assert!(!joined.contains(".claude:rw"));
+        // GitHub token should still be present (it's independent of Claude secrets)
+        assert!(joined.contains("/run/secrets/github_token:ro"));
+    }
+
+    #[test]
+    fn github_token_absent_when_token_file_path_is_none() {
+        let profile = container_profile::forge_opencode_profile();
+        let mut ctx = test_context();
+        ctx.token_file_path = None;
+        let args = build_podman_args(&profile, &ctx);
+        let joined = args.join(" ");
+        assert!(!joined.contains("/run/secrets/github_token"));
+        assert!(!joined.contains("GIT_ASKPASS"));
     }
 }

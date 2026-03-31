@@ -110,12 +110,15 @@ pub struct SecretMount {
 }
 
 /// The types of secrets a profile can request.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecretKind {
     /// Mount ~/.claude/ into the container (rw).
     ClaudeDir,
     /// Inject ANTHROPIC_API_KEY from the OS keyring.
     ClaudeApiKey,
+    /// Mount GitHub token file at /run/secrets/github_token (ro).
+    /// @trace spec:secret-rotation
+    GitHubToken,
 }
 
 /// Working directory specification inside the container.
@@ -145,6 +148,12 @@ pub struct LaunchContext {
     pub gh_dir: PathBuf,
     pub git_dir: PathBuf,
 
+    /// Path to the tmpfs-backed GitHub token file for this container.
+    /// When `Some`, the file is bind-mounted at `/run/secrets/github_token:ro`
+    /// and `GIT_ASKPASS` is set to the forge image's askpass script.
+    /// @trace spec:secret-rotation
+    pub token_file_path: Option<PathBuf>,
+
     // Custom mounts from project config
     pub custom_mounts: Vec<crate::config::MountConfig>,
 
@@ -164,7 +173,11 @@ pub fn forge_opencode_profile() -> ContainerProfile {
         working_dir: None,
         mounts: common_forge_mounts(),
         env_vars: common_forge_env(),
-        secrets: vec![],
+        secrets: vec![
+            SecretMount {
+                kind: SecretKind::GitHubToken,
+            },
+        ],
         image_override: None,
     }
 }
@@ -177,6 +190,9 @@ pub fn forge_claude_profile() -> ContainerProfile {
         mounts: common_forge_mounts(),
         env_vars: common_forge_env(),
         secrets: vec![
+            SecretMount {
+                kind: SecretKind::GitHubToken,
+            },
             SecretMount {
                 kind: SecretKind::ClaudeDir,
             },
@@ -208,7 +224,11 @@ pub fn terminal_profile() -> ContainerProfile {
                 value: EnvValue::Literal("/home/forge/.config/tillandsias-git/.gitconfig"),
             },
         ],
-        secrets: vec![],
+        secrets: vec![
+            SecretMount {
+                kind: SecretKind::GitHubToken,
+            },
+        ],
         image_override: None,
     }
 }
@@ -289,9 +309,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn forge_opencode_has_no_secrets() {
+    fn forge_opencode_has_github_token_secret() {
         let profile = forge_opencode_profile();
-        assert!(profile.secrets.is_empty());
+        assert_eq!(profile.secrets.len(), 1);
+        assert!(
+            profile
+                .secrets
+                .iter()
+                .any(|s| s.kind == SecretKind::GitHubToken)
+        );
         assert_eq!(
             profile.entrypoint,
             "/usr/local/bin/entrypoint-forge-opencode.sh"
@@ -299,27 +325,39 @@ mod tests {
     }
 
     #[test]
-    fn forge_claude_has_claude_secrets() {
+    fn forge_claude_has_claude_and_github_secrets() {
         let profile = forge_claude_profile();
-        assert_eq!(profile.secrets.len(), 2);
+        assert_eq!(profile.secrets.len(), 3);
         assert!(
             profile
                 .secrets
                 .iter()
-                .any(|s| matches!(s.kind, SecretKind::ClaudeDir))
+                .any(|s| s.kind == SecretKind::GitHubToken)
         );
         assert!(
             profile
                 .secrets
                 .iter()
-                .any(|s| matches!(s.kind, SecretKind::ClaudeApiKey))
+                .any(|s| s.kind == SecretKind::ClaudeDir)
+        );
+        assert!(
+            profile
+                .secrets
+                .iter()
+                .any(|s| s.kind == SecretKind::ClaudeApiKey)
         );
     }
 
     #[test]
-    fn terminal_has_no_secrets() {
+    fn terminal_has_github_token_secret() {
         let profile = terminal_profile();
-        assert!(profile.secrets.is_empty());
+        assert_eq!(profile.secrets.len(), 1);
+        assert!(
+            profile
+                .secrets
+                .iter()
+                .any(|s| s.kind == SecretKind::GitHubToken)
+        );
         assert_eq!(profile.entrypoint, "/usr/local/bin/entrypoint-terminal.sh");
         assert!(matches!(
             profile.working_dir,
@@ -330,7 +368,14 @@ mod tests {
     #[test]
     fn web_has_readonly_mount_only() {
         let profile = web_profile();
-        assert!(profile.secrets.is_empty());
+        assert!(profile.secrets.is_empty(), "Web profile should have no secrets");
+        assert!(
+            !profile
+                .secrets
+                .iter()
+                .any(|s| s.kind == SecretKind::GitHubToken),
+            "Web profile must NOT have GitHubToken"
+        );
         assert!(profile.env_vars.is_empty());
         assert_eq!(profile.mounts.len(), 1);
         assert_eq!(profile.mounts[0].mode, MountMode::Ro);

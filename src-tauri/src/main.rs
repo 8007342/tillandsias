@@ -19,6 +19,7 @@ mod runner;
 mod secrets;
 mod singleton;
 mod strings;
+mod token_files;
 mod update_cli;
 mod update_log;
 mod updater;
@@ -96,6 +97,11 @@ fn main() {
     // Initialize tracing — dual output (stderr if TTY + file appender) in all builds.
     // Hold the guard so the non-blocking file writer flushes on shutdown.
     let _log_guard = logging::init(&log_config);
+
+    // Token cleanup guard — ensures all tmpfs token files are deleted on exit,
+    // including panic. Held for the lifetime of the tray application.
+    // @trace spec:secret-rotation
+    let _token_guard = token_files::TokenCleanupGuard;
 
     // AppImage desktop integration — install .desktop file and icons on first run.
     // Must happen after logging init (so we can trace) and before tray setup
@@ -562,6 +568,11 @@ fn main() {
         .run(move |_app, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 info!("Exit requested");
+                // Belt-and-suspenders: explicitly delete all token files on exit.
+                // The TokenCleanupGuard's Drop will also run, but this ensures
+                // cleanup happens as early as possible.
+                // @trace spec:secret-rotation
+                token_files::delete_all_tokens();
                 singleton::release();
                 let _ = shutdown_tx.blocking_send(());
             }
