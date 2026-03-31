@@ -202,6 +202,9 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
     // Display the tilde-collapsed path for readability
     let display_path = tilde_path(&project_path);
 
+    // Print the welcome banner before any other output — only in interactive mode.
+    crate::cli::print_welcome_banner(debug);
+
     println!();
     println!("{}", i18n::tf("cli.attaching", &[("name", &project_name)]));
 
