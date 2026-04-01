@@ -11,6 +11,15 @@ fish_add_path -gP $HOME/.cache/tillandsias/claude/bin
 fish_add_path -gP $HOME/.cache/tillandsias/openspec/bin
 fish_add_path -gP $HOME/.local/bin
 
+# ── Package manager cache (persists via bind mount) ─────────
+# @trace spec:forge-shell-tools
+set -gx NPM_CONFIG_PREFIX "$HOME/.cache/tillandsias/npm-global"
+set -gx CARGO_HOME "$HOME/.cache/tillandsias/cargo"
+set -gx GOPATH "$HOME/.cache/tillandsias/go"
+set -gx PIP_USER 1
+set -gx PYTHONUSERBASE "$HOME/.cache/tillandsias/pip"
+fish_add_path -g "$NPM_CONFIG_PREFIX/bin" "$CARGO_HOME/bin" "$GOPATH/bin" "$PYTHONUSERBASE/bin"
+
 # Suppress fish's default "Welcome to fish" greeting
 set -g fish_greeting ""
 

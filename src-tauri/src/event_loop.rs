@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-use tillandsias_core::config::{SelectedAgent, load_global_config, save_selected_agent};
+use tillandsias_core::config::{SelectedAgent, load_global_config, save_selected_agent, save_selected_language};
 use tillandsias_core::event::{BuildProgressEvent, ContainerState, MenuCommand};
 use tillandsias_core::genus::GenusAllocator;
 use tillandsias_core::project::{ArtifactStatus, Project, ProjectChange, ProjectType};
@@ -259,6 +259,15 @@ pub async fn run(
                         } else {
                             debug!(agent = %agent, "Unknown agent in SelectAgent command");
                         }
+                    }
+                    MenuCommand::SelectLanguage { language } => {
+                        info!(language = %language, "Language selection changed");
+                        save_selected_language(&language);
+                        // Rebuild menu to update pin emoji.
+                        // Note: full tray UI translation requires app restart
+                        // since STRINGS is LazyLock-initialized. Container
+                        // launches will pick up the new LANG immediately.
+                        on_state_change(&state);
                     }
                     MenuCommand::Settings => {
                         // Settings is a Submenu now — this event won't fire from menu clicks.

@@ -107,6 +107,10 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
                         "claude".to_string()
                     }
                 }
+                // @trace spec:environment-runtime
+                ContextKey::Language => {
+                    tillandsias_core::config::language_to_lang_value(&ctx.selected_language).to_string()
+                }
             },
             EnvValue::Literal(s) => s.to_string(),
         };
@@ -175,6 +179,33 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     args.push(image);
 
     args
+}
+
+/// Shell-quote a podman argument list into a single command string.
+///
+/// Arguments containing spaces, quotes, or special characters are wrapped in
+/// single quotes with interior single quotes escaped. Arguments without special
+/// characters pass through unquoted for readability.
+///
+/// Used when constructing command strings for `open_terminal()` which passes
+/// the command to a shell (e.g., `bash -c` or `ptyxis -x`).
+pub fn shell_quote_join(args: &[String]) -> String {
+    args.iter()
+        .map(|arg| {
+            if arg.is_empty() {
+                "''".to_string()
+            } else if arg
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "-_=:/.@+,".contains(c))
+            {
+                arg.clone()
+            } else {
+                // Wrap in single quotes, escaping interior single quotes
+                format!("'{}'", arg.replace('\'', "'\\''"))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Resolve a logical mount source to an absolute host path.
@@ -269,6 +300,7 @@ mod tests {
             )),
             custom_mounts: vec![],
             image_tag: "tillandsias-forge:v0.1.90".into(),
+            selected_language: "en".into(),
         }
     }
 

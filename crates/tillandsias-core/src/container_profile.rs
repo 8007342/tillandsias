@@ -100,6 +100,9 @@ pub enum ContextKey {
     ProjectName,
     HostOs,
     AgentName,
+    /// The user's selected language as a full POSIX LANG value (e.g., "ja_JP.UTF-8").
+    /// @trace spec:environment-runtime
+    Language,
 }
 
 /// A secret that may be mounted as a volume or injected as an env var.
@@ -156,6 +159,11 @@ pub struct LaunchContext {
 
     // Image tag (resolved before launch)
     pub image_tag: String,
+
+    /// The user's selected language code (e.g., "ja", "es", "zh-Hant").
+    /// Resolved to a full POSIX LANG value via `language_to_lang_value()`.
+    /// @trace spec:environment-runtime
+    pub selected_language: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -216,6 +224,15 @@ pub fn terminal_profile() -> ContainerProfile {
             ProfileEnvVar {
                 name: "GIT_CONFIG_GLOBAL",
                 value: EnvValue::Literal("/home/forge/.config/tillandsias-git/.gitconfig"),
+            },
+            // @trace spec:environment-runtime
+            ProfileEnvVar {
+                name: "LANG",
+                value: EnvValue::FromContext(ContextKey::Language),
+            },
+            ProfileEnvVar {
+                name: "LANGUAGE",
+                value: EnvValue::FromContext(ContextKey::Language),
             },
         ],
         secrets: vec![
@@ -290,6 +307,15 @@ fn common_forge_env() -> Vec<ProfileEnvVar> {
         ProfileEnvVar {
             name: "TILLANDSIAS_AGENT",
             value: EnvValue::FromContext(ContextKey::AgentName),
+        },
+        // @trace spec:environment-runtime
+        ProfileEnvVar {
+            name: "LANG",
+            value: EnvValue::FromContext(ContextKey::Language),
+        },
+        ProfileEnvVar {
+            name: "LANGUAGE",
+            value: EnvValue::FromContext(ContextKey::Language),
         },
     ]
 }
@@ -380,18 +406,18 @@ mod tests {
     }
 
     #[test]
-    fn forge_profiles_have_four_env_vars() {
+    fn forge_profiles_have_six_env_vars() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
-        // PROJECT, HOST_OS, GIT_CONFIG_GLOBAL, AGENT
-        assert_eq!(opencode.env_vars.len(), 4);
-        assert_eq!(claude.env_vars.len(), 4);
+        // PROJECT, HOST_OS, GIT_CONFIG_GLOBAL, AGENT, LANG, LANGUAGE
+        assert_eq!(opencode.env_vars.len(), 6);
+        assert_eq!(claude.env_vars.len(), 6);
     }
 
     #[test]
-    fn terminal_has_three_env_vars() {
+    fn terminal_has_five_env_vars() {
         let profile = terminal_profile();
-        // PROJECT, HOST_OS, GIT_CONFIG_GLOBAL (no AGENT)
-        assert_eq!(profile.env_vars.len(), 3);
+        // PROJECT, HOST_OS, GIT_CONFIG_GLOBAL, LANG, LANGUAGE (no AGENT)
+        assert_eq!(profile.env_vars.len(), 5);
     }
 }

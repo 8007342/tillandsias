@@ -144,6 +144,7 @@ pub fn init(config: &LogConfig) -> WorkerGuard {
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
     let file_layer = tracing_subscriber::fmt::layer()
+        .event_format(crate::log_format::TillandsiasFormat)
         .with_writer(non_blocking)
         .with_ansi(false);
 
@@ -153,19 +154,9 @@ pub fn init(config: &LogConfig) -> WorkerGuard {
     let stderr_layer = if std::io::stderr().is_terminal() {
         Some(
             tracing_subscriber::fmt::layer()
-                .with_writer(std::io::stderr)
-                .pretty(),
+                .event_format(crate::log_format::TillandsiasFormat)
+                .with_writer(std::io::stderr),
         )
-    } else {
-        None
-    };
-
-    // Accountability layer — adds curated output for --log-*-management flags.
-    let accountability_layer = if !config.accountability.is_empty() && std::io::stderr().is_terminal()
-    {
-        Some(crate::accountability::AccountabilityLayer::new(
-            &config.accountability,
-        ))
     } else {
         None
     };
@@ -174,7 +165,6 @@ pub fn init(config: &LogConfig) -> WorkerGuard {
         .with(filter)
         .with(file_layer)
         .with(stderr_layer)
-        .with(accountability_layer)
         .init();
 
     guard

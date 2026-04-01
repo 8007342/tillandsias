@@ -13,6 +13,7 @@ mod handlers;
 mod i18n;
 mod init;
 mod launch;
+mod log_format;
 mod logging;
 mod menu;
 mod runner;
@@ -673,6 +674,9 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
                     }
                     "select-agent" => Some(MenuCommand::SelectAgent {
                         agent: payload.to_string(),
+                    }),
+                    "select-lang" => Some(MenuCommand::SelectLanguage {
+                        language: payload.to_string(),
                     }),
                     _ => {
                         debug!(action, "Unknown menu action");

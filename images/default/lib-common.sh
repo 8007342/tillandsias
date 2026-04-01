@@ -58,6 +58,18 @@ trace_lifecycle() {
     echo "[lifecycle] $phase | $*"
 }
 
+# ── Package manager cache strategy ──────────────────────────
+# Global installs go to the persistent cache mount, surviving container
+# restarts. Project-local installs (npm install, cargo build) use the
+# project directory which is also bind-mounted.
+# @trace spec:forge-shell-tools
+export NPM_CONFIG_PREFIX="$CACHE/npm-global"
+export CARGO_HOME="$CACHE/cargo"
+export GOPATH="$CACHE/go"
+export PIP_USER=1
+export PYTHONUSERBASE="$CACHE/pip"
+export PATH="$NPM_CONFIG_PREFIX/bin:$CARGO_HOME/bin:$GOPATH/bin:$PYTHONUSERBASE/bin:$PATH"
+
 # ── Update-check rate-limiting ──────────────────────────────
 # Returns 0 (true) if the last check was more than 24 hours ago or never ran.
 needs_update_check() {
@@ -91,6 +103,22 @@ find_project_dir() {
     # When the glob matches nothing, [ -d "$dir" ] fails (exit 1) and
     # the function would propagate that to the caller — fatal under set -e.
     return 0
+}
+
+# ── OpenSpec install (npm to user prefix, cached) ──────────
+# @trace spec:forge-shell-tools
+install_openspec() {
+    local os_prefix="$CACHE/openspec"
+    local os_bin="$os_prefix/bin/openspec"
+    mkdir -p "$os_prefix" 2>/dev/null || true
+    if [ ! -x "$os_bin" ]; then
+        echo "Installing OpenSpec..."
+        if npm install -g --prefix "$os_prefix" @fission-ai/openspec 2>/dev/null; then
+            [ -x "$os_bin" ] && echo "  ✓ OpenSpec installed" || echo "  ✗ OpenSpec binary not found after install"
+        else
+            echo "  OpenSpec install failed (non-fatal, continuing)"
+        fi
+    fi
 }
 
 # ── Banner ──────────────────────────────────────────────────

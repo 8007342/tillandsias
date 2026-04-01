@@ -45,26 +45,6 @@ use tillandsias_podman::PodmanClient;
 use tillandsias_podman::launch::{ContainerLauncher, allocate_port_range};
 use tillandsias_podman::query_occupied_ports;
 
-/// Shell-quote an argument if it contains whitespace.
-///
-/// When building a command string for `open_terminal()`, each argument is joined
-/// with spaces. Arguments that themselves contain spaces (e.g., env var values
-/// like `TILLANDSIAS_HOST_OS=macOS 26.4`) must be quoted so the shell doesn't
-/// split them.
-fn shell_quote(arg: &str) -> String {
-    if arg.contains(' ') || arg.contains('\t') {
-        // Single-quote the argument; escape any internal single quotes
-        format!("'{}'", arg.replace('\'', "'\\''"))
-    } else {
-        arg.to_string()
-    }
-}
-
-/// Join podman args into a shell command string, quoting args with spaces.
-fn join_shell_args(parts: &[String]) -> String {
-    parts.iter().map(|a| shell_quote(a)).collect::<Vec<_>>().join(" ")
-}
-
 /// Derive the forge image tag from the full 4-part version.
 ///
 /// Uses `TILLANDSIAS_FULL_VERSION` (set by build.rs from the VERSION file)
@@ -542,6 +522,7 @@ fn build_launch_context(
         token_file_path,
         custom_mounts: project_config.mounts,
         image_tag: image_tag.to_string(),
+        selected_language: tillandsias_core::config::load_global_config().i18n.language.clone(),
     }
 }
 
@@ -767,7 +748,7 @@ pub async fn handle_attach_here(
         "run".to_string(),
     ];
     podman_parts.extend(run_args);
-    let podman_cmd = join_shell_args(&podman_parts);
+    let podman_cmd = crate::launch::shell_quote_join(&podman_parts);
 
     // Build window title: "<flower> <project_name>" — matches the tray menu label.
     let title = format!("{} {}", display_emoji, project_name);
@@ -1052,7 +1033,7 @@ pub async fn handle_terminal(
         "run".to_string(),
     ];
     podman_parts.extend(run_args);
-    let podman_cmd = join_shell_args(&podman_parts);
+    let podman_cmd = crate::launch::shell_quote_join(&podman_parts);
 
     // Window title uses the allocated tool emoji — unique per terminal
     let title = format!("{} {}", display_emoji, project_name);
@@ -1191,7 +1172,7 @@ pub async fn handle_root_terminal(
         "run".to_string(),
     ];
     podman_parts.extend(run_args);
-    let podman_cmd = join_shell_args(&podman_parts);
+    let podman_cmd = crate::launch::shell_quote_join(&podman_parts);
 
     let title = "\u{1F6E0}\u{FE0F} Root".to_string();
 

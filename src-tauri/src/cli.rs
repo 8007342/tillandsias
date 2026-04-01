@@ -175,6 +175,7 @@ MAINTENANCE:
 ";
 
 /// The 4-part version string, trimmed of any trailing whitespace/newline.
+#[allow(dead_code)]
 pub fn version_full() -> &'static str {
     VERSION_FULL.trim()
 }

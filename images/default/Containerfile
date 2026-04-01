@@ -1,6 +1,7 @@
 # Tillandsias Forge — Fedora Minimal
 # Standard glibc, SELinux-ready, FHS-compliant.
 # Pre-built binaries (OpenCode, Claude Code) execute directly — no linker hacks.
+# @trace spec:default-image
 FROM registry.fedoraproject.org/fedora-minimal:41
 
 # ── System packages ────────────────────────────────────────────

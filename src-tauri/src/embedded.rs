@@ -57,6 +57,20 @@ pub const SHELL_ZSHRC: &str = include_str!("../../images/default/shell/zshrc");
 // Locale files
 pub const LOCALE_EN: &str = include_str!("../../images/default/locales/en.sh");
 pub const LOCALE_ES: &str = include_str!("../../images/default/locales/es.sh");
+pub const LOCALE_JA: &str = include_str!("../../images/default/locales/ja.sh");
+pub const LOCALE_ZH_HANT: &str = include_str!("../../images/default/locales/zh-Hant.sh");
+pub const LOCALE_ZH_HANS: &str = include_str!("../../images/default/locales/zh-Hans.sh");
+pub const LOCALE_AR: &str = include_str!("../../images/default/locales/ar.sh");
+pub const LOCALE_KO: &str = include_str!("../../images/default/locales/ko.sh");
+pub const LOCALE_HI: &str = include_str!("../../images/default/locales/hi.sh");
+pub const LOCALE_TA: &str = include_str!("../../images/default/locales/ta.sh");
+pub const LOCALE_TE: &str = include_str!("../../images/default/locales/te.sh");
+pub const LOCALE_FR: &str = include_str!("../../images/default/locales/fr.sh");
+pub const LOCALE_PT: &str = include_str!("../../images/default/locales/pt.sh");
+pub const LOCALE_IT: &str = include_str!("../../images/default/locales/it.sh");
+pub const LOCALE_RO: &str = include_str!("../../images/default/locales/ro.sh");
+pub const LOCALE_RU: &str = include_str!("../../images/default/locales/ru.sh");
+pub const LOCALE_NAH: &str = include_str!("../../images/default/locales/nah.sh");
 
 // ---------------------------------------------------------------------------
 // Image sources — web image
@@ -117,7 +131,7 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 ///       opencode.json
 ///       skills/command/{bash,bash-private}.md
 ///       shell/{bashrc,config.fish,zshrc}
-///       locales/{en.sh,es.sh}
+///       locales/{en,es,ja,zh-Hant,zh-Hans,ar,ko,hi,ta,te,fr,pt,it,ro,ru,nah}.sh
 ///     web/
 ///       entrypoint.sh
 ///       Containerfile
@@ -225,6 +239,22 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     fs::create_dir_all(&locales_dir).map_err(|e| format!("locales dir: {e}"))?;
     fs::write(locales_dir.join("en.sh"), LOCALE_EN).map_err(|e| format!("en.sh: {e}"))?;
     fs::write(locales_dir.join("es.sh"), LOCALE_ES).map_err(|e| format!("es.sh: {e}"))?;
+    fs::write(locales_dir.join("ja.sh"), LOCALE_JA).map_err(|e| format!("ja.sh: {e}"))?;
+    fs::write(locales_dir.join("zh-Hant.sh"), LOCALE_ZH_HANT)
+        .map_err(|e| format!("zh-Hant.sh: {e}"))?;
+    fs::write(locales_dir.join("zh-Hans.sh"), LOCALE_ZH_HANS)
+        .map_err(|e| format!("zh-Hans.sh: {e}"))?;
+    fs::write(locales_dir.join("ar.sh"), LOCALE_AR).map_err(|e| format!("ar.sh: {e}"))?;
+    fs::write(locales_dir.join("ko.sh"), LOCALE_KO).map_err(|e| format!("ko.sh: {e}"))?;
+    fs::write(locales_dir.join("hi.sh"), LOCALE_HI).map_err(|e| format!("hi.sh: {e}"))?;
+    fs::write(locales_dir.join("ta.sh"), LOCALE_TA).map_err(|e| format!("ta.sh: {e}"))?;
+    fs::write(locales_dir.join("te.sh"), LOCALE_TE).map_err(|e| format!("te.sh: {e}"))?;
+    fs::write(locales_dir.join("fr.sh"), LOCALE_FR).map_err(|e| format!("fr.sh: {e}"))?;
+    fs::write(locales_dir.join("pt.sh"), LOCALE_PT).map_err(|e| format!("pt.sh: {e}"))?;
+    fs::write(locales_dir.join("it.sh"), LOCALE_IT).map_err(|e| format!("it.sh: {e}"))?;
+    fs::write(locales_dir.join("ro.sh"), LOCALE_RO).map_err(|e| format!("ro.sh: {e}"))?;
+    fs::write(locales_dir.join("ru.sh"), LOCALE_RU).map_err(|e| format!("ru.sh: {e}"))?;
+    fs::write(locales_dir.join("nah.sh"), LOCALE_NAH).map_err(|e| format!("nah.sh: {e}"))?;
 
     // -- images/web/ --
     let web_dir = dir.join("images").join("web");

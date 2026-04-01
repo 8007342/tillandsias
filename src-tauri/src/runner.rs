@@ -185,6 +185,7 @@ fn build_cli_launch_context(
         token_file_path,
         custom_mounts: project_config.mounts,
         image_tag: image_tag.to_string(),
+        selected_language: tillandsias_core::config::load_global_config().i18n.language.clone(),
     }
 }
 

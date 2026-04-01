@@ -31,27 +31,37 @@
             tag = "latest";
             maxLayers = 100;
 
+            # @trace spec:forge-shell-tools
             contents = with pkgs; [
               # Shell and core utils
               bash
               coreutils
+              diffutils       # diff, cmp
               findutils
               gnugrep
+              gnumake         # make
               gnused
               gawk
               gnutar
               gzip
+              less            # pager
+              patch           # apply patches
+              unzip           # extract archives
+              which           # find executables
               xz
               # Alternative shells
               fish
               zsh
               # Dev tools
+              file            # identify file types
               git
               gh
               curl
               wget
               jq
+              openssh         # ssh client
               ripgrep
+              strace          # syscall tracing
               # Terminal tools
               mc            # midnight commander
               vim
@@ -63,6 +73,9 @@
               zoxide        # smart cd
               htop          # process viewer
               tree          # directory tree
+              # System tools
+              iproute2        # ip, ss (network)
+              procps          # ps, free, vmstat
               # Node.js + npm (for OpenSpec deferred install)
               nodejs_22
               nodePackages.npm

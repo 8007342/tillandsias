@@ -5,6 +5,7 @@
 
 set -euo pipefail
 
+# @trace spec:forge-welcome — bright colors for dark terminals, ramdisk distinction
 # ── Colors (bright variants for dark backgrounds) ────────────
 RST=$'\033[0m'
 BOLD=$'\033[1m'
@@ -19,7 +20,6 @@ B_CYAN=$'\033[1;96m'       # bright cyan
 B_WHITE=$'\033[1;97m'      # bright white
 D_GREEN=$'\033[32m'        # dim green
 D_RED=$'\033[31m'          # dim red
-D_BLUE=$'\033[34m'         # dim blue
 
 # ── Locale detection ─────────────────────────────────────────
 # Load locale bundle if not already loaded (forge-welcome.sh may be called
@@ -123,10 +123,17 @@ printf "    ${B_GREEN}%-38s${RST} ${A} ${DIM}%-26s${RST} ${B_GREEN}rw${RST}\n" \
     "/home/forge/src/$PROJECT"  "~/src/$PROJECT"
 printf "    ${B_GREEN}%-38s${RST} ${A} ${DIM}%-26s${RST} ${B_GREEN}rw${RST}\n" \
     "/home/forge/.cache/tillandsias"      "~/.cache/tillandsias"
-printf "    ${D_RED}%-38s${RST} ${A} ${D_BLUE}%-26s${RST} ${B_RED}ro${RST}\n" \
+# @trace spec:forge-welcome — mount table with ramdisk awareness
+printf "    ${D_RED}%-38s${RST} ${A} ${B_BLUE}%-26s${RST} ${B_RED}ro${RST}\n" \
     "/home/forge/.config/gh"              "secrets/gh"
-printf "    ${D_RED}%-38s${RST} ${A} ${D_BLUE}%-26s${RST} ${B_RED}ro${RST}\n" \
+printf "    ${D_RED}%-38s${RST} ${A} ${B_BLUE}%-26s${RST} ${B_RED}ro${RST}\n" \
     "/home/forge/.config/tillandsias-git" "secrets/git"
+if [ -f /run/secrets/github_token ]; then
+    printf "    ${D_RED}%-38s${RST} ${A} ${B_MAGENTA}%-26s${RST} ${B_MAGENTA}ro*${RST}\n" \
+        "/run/secrets/github_token"           "ramdisk"
+fi
+echo ""
+printf "    ${B_MAGENTA}* ramdisk — never touches disk, RAM-only${RST}\n"
 echo ""
 printf "  ${B_YELLOW}→${RST} Project at ${B_WHITE}/home/forge/src/%s${RST}\n" "$PROJECT"
 echo ""

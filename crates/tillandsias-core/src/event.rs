@@ -95,6 +95,10 @@ pub enum MenuCommand {
     /// Select an AI coding agent (OpenCode or Claude)
     SelectAgent { agent: String },
 
+    /// Select a language for the UI and container LANG propagation.
+    /// @trace spec:tray-app
+    SelectLanguage { language: String },
+
     /// Claude Reset Credentials — clear ~/.claude/ so next launch re-authenticates
     ClaudeResetCredentials,
 

@@ -1,0 +1,8 @@
+# Tillandsias — Japanese string table
+# Stub file — missing keys fall back to English.
+
+[app]
+name = "Tillandsias"
+
+[menu]
+language = "言語"

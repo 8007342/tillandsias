@@ -24,7 +24,7 @@ pub enum SelectedAgent {
 
 impl Default for SelectedAgent {
     fn default() -> Self {
-        Self::Claude
+        Self::OpenCode
     }
 }
 
@@ -70,6 +70,25 @@ impl Default for AgentConfig {
     }
 }
 
+/// Internationalization configuration.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct I18nConfig {
+    #[serde(default = "default_language")]
+    pub language: String,
+}
+
+impl Default for I18nConfig {
+    fn default() -> Self {
+        Self {
+            language: default_language(),
+        }
+    }
+}
+
+fn default_language() -> String {
+    "en".to_string()
+}
+
 /// Global configuration loaded from `~/.config/tillandsias/config.toml`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GlobalConfig {
@@ -87,6 +106,9 @@ pub struct GlobalConfig {
 
     #[serde(default)]
     pub agent: AgentConfig,
+
+    #[serde(default)]
+    pub i18n: I18nConfig,
 }
 
 /// Scanner settings.
@@ -197,6 +219,7 @@ impl Default for GlobalConfig {
             security: SecurityConfig::default(),
             updates: UpdatesConfig::default(),
             agent: AgentConfig::default(),
+            i18n: I18nConfig::default(),
         }
     }
 }
@@ -337,6 +360,63 @@ pub fn cache_dir() -> PathBuf {
 pub fn load_global_config() -> GlobalConfig {
     let path = config_dir().join("config.toml");
     load_global_config_from(&path)
+}
+
+/// Save the selected language to the global config file.
+///
+/// Reads the existing config, updates the i18n section, and writes it back.
+/// Creates the config directory and file if they don't exist.
+pub fn save_selected_language(language: &str) {
+    let dir = config_dir();
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        warn!(error = %e, "Failed to create config directory");
+        return;
+    }
+
+    let path = dir.join("config.toml");
+    let mut config = load_global_config_from(&path);
+    config.i18n.language = language.to_string();
+
+    match toml::to_string_pretty(&config) {
+        Ok(contents) => {
+            if let Err(e) = std::fs::write(&path, contents) {
+                warn!(error = %e, "Failed to write config file");
+            } else {
+                debug!(?path, language, "Language selection saved");
+            }
+        }
+        Err(e) => {
+            warn!(error = %e, "Failed to serialize config");
+        }
+    }
+}
+
+/// Map a language code to a full POSIX LANG value for containers.
+///
+/// Used when propagating the user's language selection into containers
+/// via the `LANG` and `LANGUAGE` environment variables.
+///
+/// @trace spec:environment-runtime
+pub fn language_to_lang_value(code: &str) -> &'static str {
+    match code {
+        "en" => "en_US.UTF-8",
+        "es" => "es_MX.UTF-8",
+        "ja" => "ja_JP.UTF-8",
+        "zh-Hant" => "zh_TW.UTF-8",
+        "zh-Hans" => "zh_CN.UTF-8",
+        "ar" => "ar_SA.UTF-8",
+        "ko" => "ko_KR.UTF-8",
+        "hi" => "hi_IN.UTF-8",
+        "ta" => "ta_IN.UTF-8",
+        "te" => "te_IN.UTF-8",
+        "fr" => "fr_FR.UTF-8",
+        "pt" => "pt_BR.UTF-8",
+        "it" => "it_IT.UTF-8",
+        "ro" => "ro_RO.UTF-8",
+        "ru" => "ru_RU.UTF-8",
+        "nah" => "nah_MX.UTF-8",
+        _ => "en_US.UTF-8",
+    }
 }
 
 /// Save the selected agent to the global config file.

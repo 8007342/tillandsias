@@ -8,6 +8,7 @@
 
 source /usr/local/lib/tillandsias/lib-common.sh
 
+# @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "opencode starting"
 
 # ── OpenCode (official curl installer) ─────────────────────
@@ -85,28 +86,15 @@ ensure_opencode() {
     record_update_check "$stamp_file"
 }
 
-# ── OpenSpec (npm, cached) ──────────────────────────────────
-OS_PREFIX="$CACHE/openspec"
-OS_BIN="$OS_PREFIX/bin/openspec"
-mkdir -p "$OS_PREFIX" 2>/dev/null || true
-
-if [ ! -x "$OS_BIN" ]; then
-    trace_lifecycle "install" "openspec: fresh install starting"
-    set +e
-    npm install -g --prefix "$OS_PREFIX" @fission-ai/openspec 2>&1 || \
-        npm install -g --prefix "$OS_PREFIX" openspec-cli 2>&1 || true
-    set -e
-    if [ -x "$OS_BIN" ]; then
-        trace_lifecycle "install" "openspec: installed"
-    else
-        trace_lifecycle "install" "openspec: not available (non-fatal)"
-    fi
-else
-    trace_lifecycle "install" "openspec: cached"
-fi
+# ── OpenSpec (shared function from lib-common.sh) ────────────
+# @trace spec:forge-shell-tools
+install_openspec
+OS_BIN="$CACHE/openspec/bin/openspec"
 
 # ── Install and update OpenCode ─────────────────────────────
 ensure_opencode || true
+
+echo "[lifecycle] entrypoint | opencode installed" >&2
 
 # ── Find project directory ──────────────────────────────────
 find_project_dir
@@ -125,6 +113,7 @@ fi
 show_banner "opencode"
 
 # ── Launch OpenCode ─────────────────────────────────────────
+echo "[lifecycle] entrypoint | opencode launching" >&2
 export PATH="$OC_DIR/bin:$PATH"
 if [ -x "$OC_BIN" ]; then
     trace_lifecycle "exec" "launching opencode ($OC_BIN)"

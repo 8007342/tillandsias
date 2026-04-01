@@ -12,6 +12,15 @@ umask 0022
 # Claude Code and OpenSpec are cached in ~/.cache/tillandsias/
 export PATH="$HOME/.cache/tillandsias/claude/bin:$HOME/.cache/tillandsias/openspec/bin:$HOME/.local/bin:$PATH"
 
+# ── Package manager cache (persists via bind mount) ─────────
+# @trace spec:forge-shell-tools
+export NPM_CONFIG_PREFIX="$HOME/.cache/tillandsias/npm-global"
+export CARGO_HOME="$HOME/.cache/tillandsias/cargo"
+export GOPATH="$HOME/.cache/tillandsias/go"
+export PIP_USER=1
+export PYTHONUSERBASE="$HOME/.cache/tillandsias/pip"
+export PATH="$NPM_CONFIG_PREFIX/bin:$CARGO_HOME/bin:$GOPATH/bin:$PYTHONUSERBASE/bin:$PATH"
+
 # ── Prompt ───────────────────────────────────────────────────
 PS1='\[\033[0;32m\]\w\[\033[0m\] $ '
 

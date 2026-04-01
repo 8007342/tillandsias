@@ -34,10 +34,27 @@ use std::sync::LazyLock;
 
 const EN_TOML: &str = include_str!("../../locales/en.toml");
 const ES_TOML: &str = include_str!("../../locales/es.toml");
+const JA_TOML: &str = include_str!("../../locales/ja.toml");
+const ZH_HANT_TOML: &str = include_str!("../../locales/zh-Hant.toml");
+const ZH_HANS_TOML: &str = include_str!("../../locales/zh-Hans.toml");
+const AR_TOML: &str = include_str!("../../locales/ar.toml");
+const KO_TOML: &str = include_str!("../../locales/ko.toml");
+const HI_TOML: &str = include_str!("../../locales/hi.toml");
+const TA_TOML: &str = include_str!("../../locales/ta.toml");
+const TE_TOML: &str = include_str!("../../locales/te.toml");
+const FR_TOML: &str = include_str!("../../locales/fr.toml");
+const PT_TOML: &str = include_str!("../../locales/pt.toml");
+const IT_TOML: &str = include_str!("../../locales/it.toml");
+const RO_TOML: &str = include_str!("../../locales/ro.toml");
+const RU_TOML: &str = include_str!("../../locales/ru.toml");
+const NAH_TOML: &str = include_str!("../../locales/nah.toml");
 
 // ── Supported locales ────────────────────────────────────────────────────────
 
-const SUPPORTED_LOCALES: &[&str] = &["en", "es"];
+const SUPPORTED_LOCALES: &[&str] = &[
+    "en", "es", "ja", "zh-Hant", "zh-Hans", "ar", "ko",
+    "hi", "ta", "te", "fr", "pt", "it", "ro", "ru", "nah",
+];
 
 fn is_supported(lang: &str) -> bool {
     SUPPORTED_LOCALES.contains(&lang)
@@ -66,10 +83,19 @@ pub fn detect_locale() -> &'static str {
             }
             // LANGUAGE can be a colon-separated fallback chain — use the first entry.
             let first = val.split(':').next().unwrap_or(&val);
-            // Strip region: "es_MX.UTF-8" → "es"
-            let lang = first.split('_').next().unwrap_or(first);
-            // Strip encoding: "en.UTF-8" → "en"
-            let lang = lang.split('.').next().unwrap_or(lang);
+            // Strip encoding: "es_MX.UTF-8" → "es_MX"
+            let without_encoding = first.split('.').next().unwrap_or(first);
+            // Chinese needs special handling: zh_TW → zh-Hant, zh_CN → zh-Hans.
+            if without_encoding.starts_with("zh") {
+                let resolved = match without_encoding {
+                    "zh_TW" | "zh-Hant" => "zh-Hant",
+                    "zh_CN" | "zh-Hans" | "zh" => "zh-Hans",
+                    _ => "zh-Hans", // default Chinese to Simplified
+                };
+                return Box::leak(resolved.to_string().into_boxed_str());
+            }
+            // Strip region: "es_MX" → "es"
+            let lang = without_encoding.split('_').next().unwrap_or(without_encoding);
             if is_supported(lang) {
                 // Leak to get &'static str — called once at startup.
                 return Box::leak(lang.to_ascii_lowercase().into_boxed_str());
@@ -173,10 +199,34 @@ impl StringTable {
     }
 }
 
+// NOTE: STRINGS is initialized once at startup via LazyLock. If the user
+// changes language via the menu, the app must be restarted for the tray UI
+// strings to update. Container launches will pick up the new LANG immediately
+// because they read the config at launch time, not from STRINGS.
 static STRINGS: LazyLock<StringTable> = LazyLock::new(|| {
-    let locale = detect_locale();
+    // Prefer user's persisted preference, fall back to OS detection.
+    let config = tillandsias_core::config::load_global_config();
+    let locale: &str = if is_supported(config.i18n.language.as_str()) {
+        Box::leak(config.i18n.language.clone().into_boxed_str())
+    } else {
+        detect_locale()
+    };
     let locale_toml = match locale {
         "es" => ES_TOML,
+        "ja" => JA_TOML,
+        "zh-Hant" => ZH_HANT_TOML,
+        "zh-Hans" => ZH_HANS_TOML,
+        "ar" => AR_TOML,
+        "ko" => KO_TOML,
+        "hi" => HI_TOML,
+        "ta" => TA_TOML,
+        "te" => TE_TOML,
+        "fr" => FR_TOML,
+        "pt" => PT_TOML,
+        "it" => IT_TOML,
+        "ro" => RO_TOML,
+        "ru" => RU_TOML,
+        "nah" => NAH_TOML,
         _ => EN_TOML,
     };
 

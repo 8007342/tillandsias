@@ -11,8 +11,8 @@
 #   ./build.sh --test               # Run tests
 #   ./build.sh --check              # Type-check only
 #   ./build.sh --clean              # Clean before building
-#   ./build.sh --install            # Release build + install to ~/.local/bin/
-#   ./build.sh --remove             # Remove installed binary
+#   ./build.sh --install            # Build AppImage + install to ~/Applications/
+#   ./build.sh --remove             # Remove installed AppImage + symlink
 #   ./build.sh --wipe               # Remove target/, caches, temp files
 #   ./build.sh --toolbox-reset      # Destroy and recreate toolbox
 #   ./build.sh --appimage           # Build AppImage in Ubuntu podman container
@@ -60,7 +60,7 @@ while [[ $# -gt 0 ]]; do
         --test)           FLAG_TEST=true ;;
         --check)          FLAG_CHECK=true ;;
         --clean)          FLAG_CLEAN=true ;;
-        --install)        FLAG_INSTALL=true; FLAG_RELEASE=true ;;
+        --install)        FLAG_INSTALL=true ;;
         --remove)         FLAG_REMOVE=true ;;
         --wipe)           FLAG_WIPE=true ;;
         --toolbox-reset)  FLAG_TOOLBOX_RESET=true ;;
@@ -80,8 +80,8 @@ Build flags:
   --appimage        Build AppImage in Ubuntu podman container (FUSE-capable)
 
 Install flags:
-  --install         Release build + copy binary to ~/.local/bin/
-  --remove          Remove installed binary from ~/.local/bin/
+  --install         Build AppImage + install to ~/Applications/ + symlink to ~/.local/bin/
+  --remove          Remove installed AppImage, symlink, and desktop integration
 
 Maintenance flags:
   --wipe            Remove target/, ~/.cache/tillandsias/, temp files
@@ -105,7 +105,12 @@ done
 # ---------------------------------------------------------------------------
 
 if [[ "$FLAG_REMOVE" == true ]]; then
-    rm -f "$INSTALL_BIN" "$INSTALL_DIR/.tillandsias-bin"
+    # Remove AppImage (new install layout)
+    rm -f "$HOME/Applications/Tillandsias.AppImage"
+    # Remove CLI symlink
+    rm -f "$INSTALL_BIN"
+    # Remove legacy layout artifacts (old install format)
+    rm -f "$INSTALL_DIR/.tillandsias-bin"
     rm -rf "$HOME/.local/lib/tillandsias"
     rm -rf "$HOME/.local/share/tillandsias"
 
@@ -117,11 +122,7 @@ if [[ "$FLAG_REMOVE" == true ]]; then
     update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
     gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 
-    if [[ -f "$INSTALL_BIN" || -f "$INSTALL_DIR/.tillandsias-bin" ]]; then
-        _warn "Some files could not be removed"
-    else
-        _info "Removed tillandsias from $INSTALL_DIR"
-    fi
+    _info "Removed tillandsias (AppImage, symlink, desktop integration)"
     # If --remove is the only flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_WIPE$FLAG_TOOLBOX_RESET$FLAG_APPIMAGE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
@@ -255,6 +256,50 @@ echo "[appimage] Done: /output/$(basename "$appimage_file")"
 }
 
 # ---------------------------------------------------------------------------
+# Install AppImage — same layout as the curl installer
+# ---------------------------------------------------------------------------
+
+# @trace spec:dev-build
+install_appimage() {
+    _step "Building AppImage for install..."
+    build_appimage
+
+    # Locate the built AppImage
+    local appimage_output_dir="$SCRIPT_DIR/target/release/bundle/appimage"
+    local appimage_src
+    appimage_src="$(find "$appimage_output_dir" -name "*.AppImage" -type f 2>/dev/null | head -1)"
+    if [[ -z "$appimage_src" ]]; then
+        _error "AppImage build failed — no .AppImage found"
+        exit 1
+    fi
+
+    # Install to ~/Applications/ (same location as curl installer and self-updater)
+    local app_dir="$HOME/Applications"
+    local app_path="$app_dir/Tillandsias.AppImage"
+    mkdir -p "$app_dir"
+    cp "$appimage_src" "$app_path"
+    chmod +x "$app_path"
+    _info "AppImage installed: $app_path ($(du -h "$app_path" | cut -f1))"
+
+    # Create symlink in ~/.local/bin/ for CLI access
+    mkdir -p "$INSTALL_DIR"
+    ln -sf "$app_path" "$INSTALL_BIN"
+    _info "Symlink: $INSTALL_BIN -> $app_path"
+
+    # Build the forge container image via Nix (handles staleness detection)
+    if [[ -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
+        _step "Building forge container image..."
+        "$SCRIPT_DIR/scripts/build-image.sh" forge
+        _info "Forge image built and loaded"
+    else
+        _warn "scripts/build-image.sh not found, skipping image build"
+    fi
+
+    _info "Installed. Run 'tillandsias' or launch from your desktop."
+    _info "Desktop integration (icons, launcher) is set up on first run."
+}
+
+# ---------------------------------------------------------------------------
 # Toolbox management
 # ---------------------------------------------------------------------------
 
@@ -321,6 +366,14 @@ if [[ "$FLAG_APPIMAGE" == true ]]; then
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL" == "falsefalsefalsefalsefalse" ]]; then
         exit 0
     fi
+fi
+
+# Install (builds AppImage via podman, then installs to ~/Applications/)
+if [[ "$FLAG_INSTALL" == true ]]; then
+    "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
+    "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
+    install_appimage
+    exit 0
 fi
 
 # Ensure toolbox exists for any build operation
@@ -405,108 +458,8 @@ if [[ "$FLAG_RELEASE" == true ]]; then
         done
     fi
 
-    # Install if requested — standalone, zero host dependencies
-    if [[ "$FLAG_INSTALL" == true ]]; then
-        if [[ ! -f "$RELEASE_BIN" ]]; then
-            _error "Could not find built binary at $RELEASE_BIN"
-            exit 1
-        fi
-
-        LIB_DIR="$HOME/.local/lib/tillandsias"
-        mkdir -p "$INSTALL_DIR" "$LIB_DIR"
-
-        # Bundle shared libraries that aren't on a standard desktop.
-        # libappindicator3 is dlopen'd at runtime for tray icon support.
-        # These exist inside the toolbox but not on the Silverblue host.
-        _step "Bundling runtime libraries from toolbox..."
-        for lib in libappindicator3.so.1 libdbusmenu-glib.so.4 libdbusmenu-gtk3.so.4; do
-            if _run test -e "/usr/lib64/$lib"; then
-                _run cp -L "/usr/lib64/$lib" "$LIB_DIR/$lib"
-                _info "  Bundled $lib"
-            else
-                _warn "  $lib not found in toolbox"
-            fi
-        done
-
-        # Patch RPATH so the binary finds bundled libs
-        if _run command -v patchelf &>/dev/null; then
-            _run patchelf --set-rpath "$LIB_DIR" "$RELEASE_BIN"
-            _info "Set RPATH to $LIB_DIR"
-        fi
-
-        # Create wrapper script that sets LD_LIBRARY_PATH as fallback
-        cat > "$INSTALL_BIN" <<WRAPPER
-#!/usr/bin/env bash
-export LD_LIBRARY_PATH="${LIB_DIR}\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
-exec "${INSTALL_DIR}/.tillandsias-bin" "\$@"
-WRAPPER
-        chmod +x "$INSTALL_BIN"
-
-        # Install the actual binary
-        cp "$RELEASE_BIN" "$INSTALL_DIR/.tillandsias-bin"
-        chmod +x "$INSTALL_DIR/.tillandsias-bin"
-
-        # Build the forge container image via Nix (handles staleness detection)
-        if [[ -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
-            _step "Building forge container image..."
-            "$SCRIPT_DIR/scripts/build-image.sh" forge
-            _info "Forge image built and loaded"
-        else
-            _warn "scripts/build-image.sh not found, skipping image build"
-        fi
-
-        # Install scripts, image sources, and flake for runtime use
-        DATA_DIR="$HOME/.local/share/tillandsias"
-        mkdir -p "$DATA_DIR/scripts"
-
-        # Scripts, flake files, and image sources are embedded in the signed
-        # binary at compile time (src-tauri/src/embedded.rs). Nothing executable
-        # is installed to disk — only icons for the desktop launcher.
-
-        # Copy icons for desktop launcher
-        if [[ -d "$SCRIPT_DIR/src-tauri/icons" ]]; then
-            mkdir -p "$DATA_DIR/icons"
-            cp "$SCRIPT_DIR/src-tauri/icons/32x32.png" "$DATA_DIR/icons/" 2>/dev/null || true
-            cp "$SCRIPT_DIR/src-tauri/icons/128x128.png" "$DATA_DIR/icons/" 2>/dev/null || true
-            cp "$SCRIPT_DIR/src-tauri/icons/icon.png" "$DATA_DIR/icons/256x256.png" 2>/dev/null || true
-        fi
-
-        # Install .desktop launcher and XDG icons
-        if [[ "$(uname -s)" == "Linux" ]]; then
-            DESKTOP_DIR="$HOME/.local/share/applications"
-            ICON_DIR="$HOME/.local/share/icons/hicolor"
-            mkdir -p "$DESKTOP_DIR"
-
-            # Install icons into XDG hicolor theme
-            for size in 32x32 128x128; do
-                if [[ -f "$DATA_DIR/icons/$size.png" ]]; then
-                    mkdir -p "$ICON_DIR/$size/apps"
-                    cp "$DATA_DIR/icons/$size.png" "$ICON_DIR/$size/apps/tillandsias.png"
-                fi
-            done
-            if [[ -f "$DATA_DIR/icons/256x256.png" ]]; then
-                mkdir -p "$ICON_DIR/256x256/apps"
-                cp "$DATA_DIR/icons/256x256.png" "$ICON_DIR/256x256/apps/tillandsias.png"
-            fi
-
-            # Install .desktop file with correct Exec and absolute Icon path.
-            # We use an absolute Icon path because the user-local hicolor dir
-            # may lack index.theme on immutable systems (Silverblue), making
-            # theme-based lookup unreliable. Packaged installs (deb/rpm) use
-            # the theme name since they install into /usr/share.
-            ICON_PATH="$ICON_DIR/256x256/apps/tillandsias.png"
-            sed -e "s|TILLANDSIAS_BIN|$INSTALL_BIN|g" \
-                -e "s|Icon=tillandsias|Icon=$ICON_PATH|g" \
-                "$SCRIPT_DIR/assets/tillandsias.desktop" > "$DESKTOP_DIR/tillandsias.desktop"
-
-            # Refresh caches
-            gtk-update-icon-cache "$ICON_DIR" 2>/dev/null || true
-            update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
-            _info "Desktop launcher + icons installed"
-        fi
-
-        _info "Installed to $INSTALL_BIN (libs in $LIB_DIR)"
-    fi
+    # Note: --install is handled as a standalone operation above (before
+    # toolbox setup), using build_appimage() + install_appimage().
 
 # Default: debug build (only if no other build flag was set)
 elif [[ "$FLAG_TEST$FLAG_CHECK" == "falsefalse" ]]; then

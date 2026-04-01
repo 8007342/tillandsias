@@ -8,7 +8,13 @@
 
 source /usr/local/lib/tillandsias/lib-common.sh
 
+# @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "claude-code starting"
+
+# ── Capture and scrub API key ────────────────────────────────
+# Only the agent process that needs it will receive it via exec env.
+_CLAUDE_KEY="${ANTHROPIC_API_KEY:-}"
+unset ANTHROPIC_API_KEY
 
 # ── Claude Code (npm installer, cached) ─────────────────────
 CC_PREFIX="$CACHE/claude"
@@ -68,25 +74,10 @@ update_claude() {
     record_update_check "$stamp_file"
 }
 
-# ── OpenSpec (npm to user prefix, cached) ────────────────────
-OS_PREFIX="$CACHE/openspec"
-OS_BIN="$OS_PREFIX/bin/openspec"
-mkdir -p "$OS_PREFIX" 2>/dev/null || true
-
-if [ ! -x "$OS_BIN" ]; then
-    trace_lifecycle "install" "openspec: fresh install starting"
-    set +e
-    npm install -g --prefix "$OS_PREFIX" @anthropic-ai/openspec 2>&1 || \
-        npm install -g --prefix "$OS_PREFIX" openspec 2>&1 || true
-    set -e
-    if [ -x "$OS_BIN" ]; then
-        trace_lifecycle "install" "openspec: installed"
-    else
-        trace_lifecycle "install" "openspec: not available (non-fatal)"
-    fi
-else
-    trace_lifecycle "install" "openspec: cached"
-fi
+# ── OpenSpec (shared function from lib-common.sh) ────────────
+# @trace spec:forge-shell-tools
+install_openspec
+OS_BIN="$CACHE/openspec/bin/openspec"
 
 # ── Install and update Claude Code ──────────────────────────
 install_claude
@@ -117,6 +108,7 @@ fi
 show_banner "claude"
 
 # ── Launch Claude Code ──────────────────────────────────────
+echo "[lifecycle] entrypoint | claude launching" >&2
 if [ -x "$CC_BIN" ]; then
     trace_lifecycle "exec" "launching claude-code ($CC_BIN)"
     exec "$CC_BIN" "$@"

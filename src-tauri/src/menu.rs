@@ -90,6 +90,11 @@ pub mod ids {
         gen_id(&format!("select-agent:{agent_name}"))
     }
 
+    /// Build a language selection menu item ID.
+    pub fn select_lang(code: &str) -> String {
+        gen_id(&format!("select-lang:{code}"))
+    }
+
     /// Strip the generation suffix from a menu ID for dispatch matching.
     /// "attach:/path#42" -> "attach:/path"
     pub fn strip_gen(id: &str) -> &str {
@@ -331,6 +336,11 @@ fn build_settings_submenu<R: Runtime>(
     let seedlings_submenu = build_seedlings_submenu(app)?;
     settings = settings.item(&seedlings_submenu);
 
+    // Language submenu — locale selection
+    // @trace spec:tray-app
+    let language_submenu = build_language_submenu(app)?;
+    settings = settings.item(&language_submenu);
+
     // Version and credit at the bottom of Settings
     settings = settings.separator();
     let version = include_str!("../../VERSION").trim();
@@ -490,6 +500,55 @@ fn build_seedlings_submenu<R: Runtime>(
                 i18n::t("menu.claude.reset_credentials"),
             )
             .build(app)?,
+        );
+    }
+
+    submenu.build()
+}
+
+/// Build the "Language" submenu for locale selection.
+///
+/// Lists all supported languages in their native script with a pin emoji
+/// on the currently selected one. Clicking a language triggers
+/// `MenuCommand::SelectLanguage`.
+///
+/// @trace spec:tray-app
+fn build_language_submenu<R: Runtime>(
+    app: &AppHandle<R>,
+) -> tauri::Result<tauri::menu::Submenu<R>> {
+    let global_config = load_global_config();
+    let selected = &global_config.i18n.language;
+
+    let mut submenu = SubmenuBuilder::new(app, i18n::t("menu.language"));
+
+    // All supported languages with native names.
+    let languages: &[(&str, &str)] = &[
+        ("en", "English"),
+        ("es", "Espa\u{00F1}ol"),
+        ("ja", "\u{65E5}\u{672C}\u{8A9E}"),
+        ("zh-Hant", "\u{7E41}\u{9AD4}\u{4E2D}\u{6587}"),
+        ("zh-Hans", "\u{7B80}\u{4F53}\u{4E2D}\u{6587}"),
+        ("ar", "\u{0627}\u{0644}\u{0639}\u{0631}\u{0628}\u{064A}\u{0629}"),
+        ("ko", "\u{D55C}\u{AD6D}\u{C5B4}"),
+        ("hi", "\u{0939}\u{093F}\u{0928}\u{094D}\u{0926}\u{0940}"),
+        ("ta", "\u{0BA4}\u{0BAE}\u{0BBF}\u{0BB4}\u{0BCD}"),
+        ("te", "\u{0C24}\u{0C46}\u{0C32}\u{0C41}\u{0C17}\u{0C41}"),
+        ("fr", "Fran\u{00E7}ais"),
+        ("pt", "Portugu\u{00EA}s"),
+        ("it", "Italiano"),
+        ("ro", "Rom\u{00E2}n\u{0103}"),
+        ("ru", "\u{0420}\u{0443}\u{0441}\u{0441}\u{043A}\u{0438}\u{0439}"),
+        ("nah", "N\u{0101}huatl"),
+    ];
+
+    for &(code, name) in languages {
+        let label = if code == selected {
+            format!("\u{1F4CC} {name}") // 📌
+        } else {
+            name.to_string()
+        };
+        submenu = submenu.item(
+            &MenuItemBuilder::with_id(ids::select_lang(code), &label).build(app)?,
         );
     }
 
