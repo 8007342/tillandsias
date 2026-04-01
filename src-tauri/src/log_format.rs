@@ -1,7 +1,11 @@
-//! Compact event formatter with structured accountability rendering.
+//! Compact event formatter with structured accountability rendering and deduplication.
 //!
 //! Replaces the default `tracing-subscriber` full/pretty formatters with a
-//! condensed format that separates accountability metadata from regular fields:
+//! condensed format that separates accountability metadata from regular fields.
+//!
+//! **Deduplication**: Identical messages within a 30-second window are suppressed.
+//! When a new message arrives, any pending duplicates are flushed as
+//! `  ... repeated N times (Xs)`.
 //!
 //! **Accountability events** (tagged with `accountability = true`):
 //! ```text
@@ -17,7 +21,11 @@
 //!
 //! @trace spec:logging-accountability
 
+use std::collections::hash_map::DefaultHasher;
 use std::fmt;
+use std::hash::{Hash, Hasher};
+use std::sync::Mutex;
+use std::time::Instant;
 
 use tracing::field::{Field, Visit};
 use tracing::{Event, Subscriber};
@@ -106,18 +114,73 @@ impl Visit for EventFields {
 }
 
 // ---------------------------------------------------------------------------
+// Deduplication state
+// ---------------------------------------------------------------------------
+
+/// Tracks the last logged message to suppress consecutive duplicates.
+///
+/// When the same message (by hash of message text + target) appears within
+/// `DEDUP_WINDOW`, it's suppressed. When a different message arrives, any
+/// accumulated duplicates are flushed as "... repeated N times (Xs)".
+///
+/// @trace spec:logging-accountability
+struct DeduplicationState {
+    /// Hash of the last emitted message (message text + target).
+    last_hash: u64,
+    /// How many times the current message has been suppressed.
+    suppressed_count: u64,
+    /// When the first instance of the current message was logged.
+    first_seen: Instant,
+}
+
+impl DeduplicationState {
+    fn new() -> Self {
+        Self {
+            last_hash: 0,
+            suppressed_count: 0,
+            first_seen: Instant::now(),
+        }
+    }
+}
+
+/// Window within which identical messages are suppressed.
+const DEDUP_WINDOW_SECS: u64 = 30;
+
+/// Compute a fingerprint for deduplication.
+///
+/// Uses message text + target so that the same message from different modules
+/// is NOT deduplicated (they're different events).
+fn message_fingerprint(message: &str, target: &str) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    message.hash(&mut hasher);
+    target.hash(&mut hasher);
+    hasher.finish()
+}
+
+// ---------------------------------------------------------------------------
 // Custom event formatter
 // ---------------------------------------------------------------------------
 
-/// Compact event formatter for Tillandsias logs.
+/// Compact event formatter for Tillandsias logs with deduplication.
 ///
 /// Renders accountability-tagged events with structured safety notes and
 /// spec trace links. Regular events use a compact single-line format.
+/// Consecutive identical messages within 30s are suppressed and counted.
 ///
 /// ANSI coloring is determined at render time via `writer.has_ansi_escapes()`,
 /// so a single `TillandsiasFormat` instance works for both file (no ANSI) and
 /// stderr (ANSI) layers.
-pub struct TillandsiasFormat;
+pub struct TillandsiasFormat {
+    dedup: Mutex<DeduplicationState>,
+}
+
+impl TillandsiasFormat {
+    pub fn new() -> Self {
+        Self {
+            dedup: Mutex::new(DeduplicationState::new()),
+        }
+    }
+}
 
 impl<S, N> FormatEvent<S, N> for TillandsiasFormat
 where
@@ -135,6 +198,48 @@ where
         // Extract and classify fields.
         let mut fields = EventFields::new();
         event.record(&mut fields);
+
+        let target = event.metadata().target();
+        let fingerprint = message_fingerprint(&fields.message, target);
+
+        // --- Deduplication check ---
+        if let Ok(mut dedup) = self.dedup.lock() {
+            let now = Instant::now();
+            let within_window =
+                now.duration_since(dedup.first_seen).as_secs() < DEDUP_WINDOW_SECS;
+
+            if fingerprint == dedup.last_hash && within_window {
+                // Same message within window — suppress it.
+                dedup.suppressed_count += 1;
+                return Ok(());
+            }
+
+            // Different message (or window expired) — flush any pending count.
+            if dedup.suppressed_count > 0 {
+                let elapsed = now.duration_since(dedup.first_seen).as_secs();
+                if ansi {
+                    writeln!(
+                        writer,
+                        "  \x1b[2m  ... repeated {} times ({}s)\x1b[0m",
+                        dedup.suppressed_count, elapsed
+                    )?;
+                } else {
+                    writeln!(
+                        writer,
+                        "    ... repeated {} times ({}s)",
+                        dedup.suppressed_count, elapsed
+                    )?;
+                }
+            }
+
+            // Record this message as the new "last".
+            dedup.last_hash = fingerprint;
+            dedup.suppressed_count = 0;
+            dedup.first_seen = now;
+        }
+        // If lock is poisoned, just render without dedup.
+
+        // --- Render the event ---
 
         // Timestamp (delegates to tracing-subscriber's SystemTime).
         SystemTime.format_time(&mut writer)?;
@@ -189,8 +294,8 @@ where
         } else {
             // Compact format:
             //   TIMESTAMP LEVEL target: message {extra fields}
-            let target = shorten_target(event.metadata().target());
-            write!(writer, " {target}: {}", fields.message)?;
+            let short_target = shorten_target(target);
+            write!(writer, " {short_target}: {}", fields.message)?;
 
             // Append structured fields.
             write_other_fields(&mut writer, &fields.other)?;
@@ -292,5 +397,33 @@ mod tests {
         assert!(fields.safety.is_none());
         assert!(fields.spec.is_none());
         assert!(fields.other.is_empty());
+    }
+
+    #[test]
+    fn fingerprint_same_message_same_target() {
+        let a = message_fingerprint("token retrieved", "secrets");
+        let b = message_fingerprint("token retrieved", "secrets");
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn fingerprint_different_message() {
+        let a = message_fingerprint("token retrieved", "secrets");
+        let b = message_fingerprint("token stored", "secrets");
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn fingerprint_same_message_different_target() {
+        let a = message_fingerprint("starting", "secrets");
+        let b = message_fingerprint("starting", "handlers");
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn dedup_state_defaults() {
+        let state = DeduplicationState::new();
+        assert_eq!(state.last_hash, 0);
+        assert_eq!(state.suppressed_count, 0);
     }
 }

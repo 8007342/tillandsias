@@ -144,7 +144,7 @@ pub fn init(config: &LogConfig) -> WorkerGuard {
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
     let file_layer = tracing_subscriber::fmt::layer()
-        .event_format(crate::log_format::TillandsiasFormat)
+        .event_format(crate::log_format::TillandsiasFormat::new())
         .with_writer(non_blocking)
         .with_ansi(false);
 
@@ -154,7 +154,7 @@ pub fn init(config: &LogConfig) -> WorkerGuard {
     let stderr_layer = if std::io::stderr().is_terminal() {
         Some(
             tracing_subscriber::fmt::layer()
-                .event_format(crate::log_format::TillandsiasFormat)
+                .event_format(crate::log_format::TillandsiasFormat::new())
                 .with_writer(std::io::stderr),
         )
     } else {
