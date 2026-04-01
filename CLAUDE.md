@@ -13,8 +13,8 @@
 ./build.sh --check                  # Type-check only
 ./build.sh --clean                  # Clean + rebuild
 ./build.sh --clean --release        # Clean release build
-./build.sh --install                # Release build + install to ~/.local/bin/
-./build.sh --remove                 # Remove installed binary
+./build.sh --install                # Build AppImage + install to ~/Applications/
+./build.sh --remove                 # Remove installed AppImage + symlink
 ./build.sh --wipe                   # Remove target/, caches
 ./build.sh --toolbox-reset          # Destroy and recreate toolbox
 ```
@@ -161,6 +161,29 @@ All changes go through OpenSpec (`/opsx:ff` or `/opsx:new`). No exceptions for "
 - If a spec decision is revised, update the spec before (or with) the code change.
 - Use `/opsx:verify` before archiving to confirm convergence.
 - Break large features into multiple changes — each independently convergent.
+
+## Trace Annotations — @trace spec:<name>
+
+Add `@trace spec:<name>` annotations in ALL code changes. Traces are the connective tissue between specs, code, and runtime accountability.
+
+**Where to add:**
+- Rust: `// @trace spec:<name>` near functions implementing a spec
+- Shell: `# @trace spec:<name>` near relevant code blocks
+- Docs/cheatsheets: `@trace spec:<name>` as plain text
+- Commits: include GitHub search URL for the trace
+- Log events: `spec = "<name>"` field on accountability-tagged tracing events
+
+**Coverage:** ~145 trace annotations across 73 files. Every new feature should add traces.
+
+## Cheatsheets
+
+Document operational knowledge in `docs/cheatsheets/` with `@trace` annotations.
+
+Current: `logging-levels.md`, `secret-management.md`, `token-rotation.md`, `terminal-tools.md`.
+
+## Agent Waves
+
+For batch tasks, organize parallel agents into waves by size (small first). Track each group with a separate OpenSpec change. Report traces added/updated after each wave.
 
 ## Commit Conventions
 
