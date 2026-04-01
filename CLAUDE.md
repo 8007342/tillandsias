@@ -155,12 +155,17 @@ All changes go through OpenSpec (`/opsx:ff` or `/opsx:new`). No exceptions for "
 
 **Purpose**: OpenSpec ensures **monotonic convergence** — specs and implementation move toward each other with every change, never apart. The spec trail is the project's institutional memory and proof of work.
 
+**Workflow**: `/opsx:ff` (create artifacts) -> `/opsx:apply` (implement) -> `/opsx:archive` (archive + sync specs) -> `./scripts/bump-version.sh --bump-changes`
+
 **Rules**:
 - Spec must reflect what was built. Implementation must reflect what was spec'd.
-- If implementation diverges from spec during development, update the spec.
+- Specs are source of truth — never modify specs without user approval.
+- Specs converge toward **intent**, not toward code. If code diverges from spec, the code is wrong.
 - If a spec decision is revised, update the spec before (or with) the code change.
 - Use `/opsx:verify` before archiving to confirm convergence.
 - Break large features into multiple changes — each independently convergent.
+- Each change produces: proposal.md, design.md, specs/<capability>/spec.md, tasks.md
+- Delta specs sync to main specs at archive time.
 
 ## Trace Annotations — @trace spec:<name>
 
@@ -172,18 +177,67 @@ Add `@trace spec:<name>` annotations in ALL code changes. Traces are the connect
 - Docs/cheatsheets: `@trace spec:<name>` as plain text
 - Commits: include GitHub search URL for the trace
 - Log events: `spec = "<name>"` field on accountability-tagged tracing events
+- Multiple specs: `@trace spec:foo, spec:bar`
 
-**Coverage:** ~145 trace annotations across 73 files. Every new feature should add traces.
+**Why:** Traces create bidirectional links between specs and implementation. Power users reading logs or source should follow a trace to the spec governing that behavior. The accountability log format renders `@trace spec:name URL` lines with clickable GitHub search links.
 
 ## Cheatsheets
 
-Document operational knowledge in `docs/cheatsheets/` with `@trace` annotations.
+Document operational knowledge in `docs/cheatsheets/` with `@trace` annotations and scannable tables.
 
 Current: `logging-levels.md`, `secret-management.md`, `token-rotation.md`, `terminal-tools.md`.
 
 ## Agent Waves
 
-For batch tasks, organize parallel agents into waves by size (small first). Track each group with a separate OpenSpec change. Report traces added/updated after each wave.
+For batch tasks, organize parallel agents into waves by size (small first, large last). Track each group with a separate OpenSpec change. Report traces added/updated after each wave.
+
+- Wave 1: tiny/small tasks (complete in <2 min, all parallel)
+- Wave 2: medium tasks (2-5 min, parallel)
+- Wave 3: large tasks (dedicated opus agents)
+- Between waves: build + test to catch integration issues early
+- Each agent gets: full context, OpenSpec creation instructions, @trace requirements
+
+## Cross-Platform Development — Branch-per-Machine
+
+The project is developed across Linux (Fedora Silverblue), macOS, and Windows. To prevent cross-platform merge conflicts:
+
+**Branch strategy:**
+- `main` — stable, release-ready. Only merge completed work here.
+- `linux-next` — active Linux development branch
+- `osx-next` — active macOS development branch
+- `windows-next` — active Windows development branch
+
+**Workflow:**
+1. Work on the platform branch for your current machine (`git checkout linux-next`)
+2. Push to the platform branch freely — no conflicts with other machines
+3. When a batch of work is complete and tested: merge to main
+4. Bump version ONLY at merge-to-main time, not during feature work
+5. Push main. Trigger release from main.
+
+**Why:** Pushing from multiple machines to main simultaneously causes rebase conflicts (version numbers, Cargo.lock, platform-specific scripts). Platform branches eliminate this entirely.
+
+**Version bumps:**
+- During development: NO version bumps. Let `--bump-build` happen locally but don't commit it.
+- At merge time: `./scripts/bump-version.sh --bump-changes` once, commit, push main.
+- Release: `gh workflow run release.yml -f version="X.Y.Z.B"` from main only.
+
+**Cross-platform checks before merging to main:**
+```bash
+# On Linux:
+./build.sh --test && cargo clippy --workspace
+
+# On macOS:
+./build-osx.sh --test && cargo clippy --workspace
+
+# On Windows:
+./build-windows.sh --check
+```
+
+**Cargo.lock:** Committed to git (correct for binary projects). Platform-specific deps resolve the same on all platforms. If Cargo.lock conflicts at merge time, regenerate: `cargo generate-lockfile`.
+
+## Cloud Workflows — Conservative Usage
+
+See CI/CD section above. Both CI and Release workflows are `workflow_dispatch` only. NEVER auto-trigger. Batch changes, release deliberately.
 
 ## Commit Conventions
 
