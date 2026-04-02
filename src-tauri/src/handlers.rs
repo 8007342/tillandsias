@@ -277,30 +277,136 @@ fn open_terminal(command: &str, title: &str) -> Result<(), String> {
 
     #[cfg(target_os = "macos")]
     {
-        // macOS: osascript to open Terminal.app with a command.
-        // - `clear &&` suppresses the echoed command (Terminal.app always echoes)
-        // - Tab reference from `do script` avoids race with `front window`
-        // - `has custom title` must be set before `custom title` takes effect
-        // - `activate` brings Terminal.app to the front
+        // macOS terminal fallback chain: try CLI terminals first, then AppleScript.
+        // CLI terminals are preferred because they don't depend on AppleScript's
+        // fragile app-scripting bridge (which breaks when default terminal changes).
+
+        // 1. CLI-based terminals — detected via `which`, launched directly.
+        let cli_terminals: &[(&str, &dyn Fn(&str, &str) -> Vec<String>)] = &[
+            ("ghostty", &|cmd: &str, title: &str| {
+                vec![
+                    "--title".into(),
+                    title.into(),
+                    "-e".into(),
+                    "bash".into(),
+                    "-c".into(),
+                    cmd.into(),
+                ]
+            }),
+            ("kitty", &|cmd: &str, title: &str| {
+                vec![
+                    "--title".into(),
+                    title.into(),
+                    "bash".into(),
+                    "-c".into(),
+                    cmd.into(),
+                ]
+            }),
+            ("alacritty", &|cmd: &str, title: &str| {
+                vec![
+                    "--title".into(),
+                    title.into(),
+                    "-e".into(),
+                    "bash".into(),
+                    "-c".into(),
+                    cmd.into(),
+                ]
+            }),
+            ("wezterm", &|cmd: &str, _title: &str| {
+                vec![
+                    "start".into(),
+                    "--".into(),
+                    "bash".into(),
+                    "-c".into(),
+                    cmd.into(),
+                ]
+            }),
+        ];
+
+        for (term, build_args) in cli_terminals {
+            let found = std::process::Command::new("which")
+                .arg(term)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .is_ok_and(|s| s.success());
+
+            if !found {
+                continue;
+            }
+
+            let args = build_args(command, title);
+            match std::process::Command::new(term)
+                .args(&args)
+                .spawn()
+            {
+                Ok(_) => {
+                    tracing::debug!(terminal = term, "Opened terminal via CLI");
+                    return Ok(());
+                }
+                Err(e) => {
+                    tracing::warn!(terminal = term, error = %e, "CLI terminal spawn failed, trying next");
+                    continue;
+                }
+            }
+        }
+
+        // 2. AppleScript terminals — iTerm2 then Terminal.app.
+        //    Use .output() (blocking) to detect failures and fall through.
         let escaped_cmd = command.replace('\\', "\\\\").replace('"', "\\\"");
         let escaped_title = title.replace('\\', "\\\\").replace('"', "\\\"");
-        std::process::Command::new("osascript")
-            .args([
-                "-e",
-                &format!(
-                    "tell app \"Terminal\"\n\
-                         set t to do script \"clear && {escaped_cmd}\"\n\
-                         tell t\n\
-                             set has custom title to true\n\
-                             set custom title to \"{escaped_title}\"\n\
-                         end tell\n\
-                         activate\n\
-                     end tell"
-                ),
-            ])
-            .spawn()
-            .map(|_| ())
-            .map_err(|e| format!("osascript: {e}"))
+
+        // iTerm2
+        if std::path::Path::new("/Applications/iTerm.app").exists() {
+            let script = format!(
+                "tell app \"iTerm2\"\n\
+                     create window with default profile command \"clear && {escaped_cmd}\"\n\
+                     tell current session of current window\n\
+                         set name to \"{escaped_title}\"\n\
+                     end tell\n\
+                     activate\n\
+                 end tell"
+            );
+            if let Ok(out) = std::process::Command::new("osascript")
+                .args(["-e", &script])
+                .output()
+            {
+                if out.status.success() {
+                    tracing::debug!(terminal = "iTerm2", "Opened terminal via AppleScript");
+                    return Ok(());
+                }
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                tracing::warn!(terminal = "iTerm2", error = %stderr, "AppleScript failed, trying next");
+            }
+        }
+
+        // Terminal.app — always available on macOS (last resort)
+        // Note: `set custom title` requires `has custom title` on the tab,
+        // but macOS 26+ removed that property. Use a try block so title-setting
+        // is best-effort — the command still runs even if titling fails.
+        let script = format!(
+            "tell app \"Terminal\"\n\
+                 do script \"clear && {escaped_cmd}\"\n\
+                 activate\n\
+             end tell"
+        );
+        match std::process::Command::new("osascript")
+            .args(["-e", &script])
+            .output()
+        {
+            Ok(out) if out.status.success() => {
+                tracing::debug!(terminal = "Terminal.app", "Opened terminal via AppleScript");
+                Ok(())
+            }
+            Ok(out) => {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                Err(format!(
+                    "No terminal emulator worked (tried ghostty, kitty, alacritty, wezterm, iTerm2, Terminal.app). \
+                     Last error: {stderr}"
+                ))
+            }
+            Err(e) => Err(format!("osascript: {e}")),
+        }
     }
 
     #[cfg(target_os = "windows")]
