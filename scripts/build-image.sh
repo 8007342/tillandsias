@@ -260,8 +260,10 @@ fi
 # ---------------------------------------------------------------------------
 echo "$CURRENT_HASH" > "$HASH_FILE"
 
-# Clean up the build output tarball
-rm -f "$TARBALL_PATH"
+# Clean up the build output tarball (Nix backend only)
+if [[ -n "${TARBALL_PATH:-}" ]]; then
+    rm -f "$TARBALL_PATH"
+fi
 
 # ---------------------------------------------------------------------------
 # Summary

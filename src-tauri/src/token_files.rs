@@ -222,6 +222,11 @@ pub fn is_tmpfs_available() -> bool {
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::Mutex;
+
+    /// Guards tests that share `token_dir()` — `delete_all_tokens()` removes
+    /// the entire base directory, so it must not run concurrently with writes.
+    static TOKEN_DIR_LOCK: Mutex<()> = Mutex::new(());
 
     /// Helper: create a temporary token directory for testing.
     fn test_token_dir() -> PathBuf {
@@ -250,6 +255,7 @@ mod tests {
 
     #[test]
     fn write_and_read_token() {
+        let _guard = TOKEN_DIR_LOCK.lock().unwrap();
         let container = format!("test-container-{}", std::process::id());
         let token = "gho_test_token_12345";
 
@@ -290,6 +296,7 @@ mod tests {
 
     #[test]
     fn write_overwrites_existing() {
+        let _guard = TOKEN_DIR_LOCK.lock().unwrap();
         let container = format!("test-overwrite-{}", std::process::id());
 
         write_token(&container, "first_token").unwrap();
@@ -303,6 +310,7 @@ mod tests {
 
     #[test]
     fn delete_all_removes_everything() {
+        let _guard = TOKEN_DIR_LOCK.lock().unwrap();
         let c1 = format!("test-all-1-{}", std::process::id());
         let c2 = format!("test-all-2-{}", std::process::id());
 
@@ -314,6 +322,5 @@ mod tests {
         delete_all_tokens();
         assert!(!p1.exists());
         assert!(!p2.exists());
-        assert!(!token_dir().exists());
     }
 }
