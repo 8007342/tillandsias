@@ -26,6 +26,7 @@ mod update_log;
 mod updater;
 
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use tauri::tray::TrayIconBuilder;
 use tokio::sync::mpsc;
@@ -601,9 +602,55 @@ fn main() {
         });
 }
 
+/// Fingerprint of the last menu rebuild — avoids redundant `set_menu` calls
+/// that can steal window focus on Windows and AppImage.
+static LAST_MENU_FINGERPRINT: AtomicU64 = AtomicU64::new(0);
+
+/// Compute a cheap fingerprint of menu-relevant state.
+/// Only structural changes (project count, running count, build chips, forge status)
+/// warrant a full menu rebuild.
+fn menu_fingerprint(s: &TrayState) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    // Include i18n generation so language changes force a rebuild
+    i18n::generation().hash(&mut h);
+    s.projects.len().hash(&mut h);
+    s.running.len().hash(&mut h);
+    s.active_builds.len().hash(&mut h);
+    s.forge_available.hash(&mut h);
+    s.has_podman.hash(&mut h);
+    s.tray_icon_state.hash(&mut h);
+    s.remote_repos_loading.hash(&mut h);
+    s.cloning_project.hash(&mut h);
+    // Hash project names to detect additions/removals
+    for p in &s.projects {
+        p.name.hash(&mut h);
+    }
+    // Hash running container names
+    for r in &s.running {
+        r.name.hash(&mut h);
+    }
+    // Hash build chip names + status
+    for b in &s.active_builds {
+        b.image_name.hash(&mut h);
+        std::mem::discriminant(&b.status).hash(&mut h);
+    }
+    h.finish()
+}
+
 /// Rebuild the tray menu from current state and apply it to the tray icon.
+/// Skips the rebuild if the menu-relevant state hasn't changed, avoiding
+/// focus-stealing on Windows and AppImage.
 fn rebuild_menu(app_handle: &tauri::AppHandle, state: &Arc<Mutex<TrayState>>) {
     let s = state.lock().unwrap();
+
+    // Skip rebuild if menu content hasn't changed
+    let fp = menu_fingerprint(&s);
+    let prev = LAST_MENU_FINGERPRINT.swap(fp, Ordering::Relaxed);
+    if fp == prev {
+        return;
+    }
+
     match menu::build_tray_menu(app_handle, &s) {
         Ok(new_menu) => {
             if let Some(tray_lock) = TRAY_ICON.get()

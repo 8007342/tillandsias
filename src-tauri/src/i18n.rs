@@ -28,7 +28,8 @@
 //! is ever an empty string for a known key.
 
 use std::collections::HashMap;
-use std::sync::LazyLock;
+use std::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 // ── Embedded locale files ────────────────────────────────────────────────────
 
@@ -199,19 +200,9 @@ impl StringTable {
     }
 }
 
-// NOTE: STRINGS is initialized once at startup via LazyLock. If the user
-// changes language via the menu, the app must be restarted for the tray UI
-// strings to update. Container launches will pick up the new LANG immediately
-// because they read the config at launch time, not from STRINGS.
-static STRINGS: LazyLock<StringTable> = LazyLock::new(|| {
-    // Prefer user's persisted preference, fall back to OS detection.
-    let config = tillandsias_core::config::load_global_config();
-    let locale: &str = if is_supported(config.i18n.language.as_str()) {
-        Box::leak(config.i18n.language.clone().into_boxed_str())
-    } else {
-        detect_locale()
-    };
-    let locale_toml = match locale {
+/// Map locale code to embedded TOML source.
+fn locale_toml(locale: &str) -> &'static str {
+    match locale {
         "es" => ES_TOML,
         "ja" => JA_TOML,
         "zh-Hant" => ZH_HANT_TOML,
@@ -228,18 +219,62 @@ static STRINGS: LazyLock<StringTable> = LazyLock::new(|| {
         "ru" => RU_TOML,
         "nah" => NAH_TOML,
         _ => EN_TOML,
-    };
+    }
+}
 
-    let primary = parse_flat_toml(locale_toml);
-    // Always keep the English table as fallback for missing keys.
+/// Build a StringTable for the given locale code.
+fn build_string_table(locale: &str) -> StringTable {
+    let primary = parse_flat_toml(locale_toml(locale));
     let fallback = if locale == "en" {
-        HashMap::new() // primary IS english; no separate fallback needed
+        HashMap::new()
     } else {
         parse_flat_toml(EN_TOML)
     };
-
     StringTable { primary, fallback }
-});
+}
+
+/// Global string table — protected by RwLock so language can be changed at runtime.
+static STRINGS: RwLock<Option<StringTable>> = RwLock::new(None);
+
+/// Ensure STRINGS is initialized (called lazily on first access).
+fn ensure_initialized() {
+    {
+        let r = STRINGS.read().unwrap();
+        if r.is_some() {
+            return;
+        }
+    }
+    let config = tillandsias_core::config::load_global_config();
+    let locale = if is_supported(config.i18n.language.as_str()) {
+        config.i18n.language.as_str().to_string()
+    } else {
+        detect_locale().to_string()
+    };
+    let table = build_string_table(&locale);
+    let mut w = STRINGS.write().unwrap();
+    if w.is_none() {
+        *w = Some(table);
+    }
+}
+
+/// Generation counter — incremented on reload so the menu fingerprint
+/// detects language changes even when no structural state changed.
+static I18N_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+/// Current i18n generation. Include in menu fingerprints to detect language changes.
+pub fn generation() -> u64 {
+    I18N_GENERATION.load(Ordering::Relaxed)
+}
+
+/// Reload the string table for a new locale. Called when the user changes
+/// language via the tray menu — the next menu rebuild picks up the new strings.
+pub fn reload(locale: &str) {
+    let resolved = if is_supported(locale) { locale } else { "en" };
+    let table = build_string_table(resolved);
+    let mut w = STRINGS.write().unwrap();
+    *w = Some(table);
+    I18N_GENERATION.fetch_add(1, Ordering::Relaxed);
+}
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -251,9 +286,13 @@ static STRINGS: LazyLock<StringTable> = LazyLock::new(|| {
 /// let label = i18n::t("menu.quit"); // "Quit Tillandsias" (en) or "Salir de Tillandsias" (es)
 /// ```
 pub fn t(key: &str) -> &'static str {
+    ensure_initialized();
     // get() returns an owned String; leak it to obtain a 'static &str.
     // Called only for a bounded set of UI strings — memory cost is negligible.
-    Box::leak(STRINGS.get(key).into_boxed_str())
+    // After a reload, new strings are leaked separately (bounded count × locales).
+    let r = STRINGS.read().unwrap();
+    let s = r.as_ref().unwrap().get(key);
+    Box::leak(s.into_boxed_str())
 }
 
 /// Look up a string by dot-notation key and substitute `{name}` placeholders.
@@ -265,7 +304,9 @@ pub fn t(key: &str) -> &'static str {
 /// // → "⏳ Building Forge..." (en)  or  "⏳ Construyendo Forge..." (es)
 /// ```
 pub fn tf(key: &str, vars: &[(&str, &str)]) -> String {
-    let mut result = STRINGS.get(key);
+    ensure_initialized();
+    let r = STRINGS.read().unwrap();
+    let mut result = r.as_ref().unwrap().get(key);
     for (name, value) in vars {
         result = result.replace(&format!("{{{name}}}"), value);
     }

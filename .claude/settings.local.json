@@ -27,7 +27,10 @@
       "Bash(git push:*)",
       "Bash(git pull:*)",
       "Bash(git merge:*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(gh run:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)"
     ]
   }
 }

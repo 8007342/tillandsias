@@ -263,10 +263,8 @@ pub async fn run(
                     MenuCommand::SelectLanguage { language } => {
                         info!(language = %language, "Language selection changed");
                         save_selected_language(&language);
-                        // Rebuild menu to update pin emoji.
-                        // Note: full tray UI translation requires app restart
-                        // since STRINGS is LazyLock-initialized. Container
-                        // launches will pick up the new LANG immediately.
+                        // Reload i18n strings for the new locale and rebuild menu.
+                        crate::i18n::reload(&language);
                         on_state_change(&state);
                     }
                     MenuCommand::Settings => {
