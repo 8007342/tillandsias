@@ -15,8 +15,13 @@ All executable scripts SHALL be embedded in the compiled binary via `include_str
 - **THEN** the binary writes embedded `build-image.sh` and `ensure-builder.sh` to a temp directory and executes from there
 
 #### Scenario: Image source extraction for nix build
-- **WHEN** `build-image.sh` needs image sources (flake.nix, entrypoint, configs)
-- **THEN** the binary writes the full embedded image source tree to a temp directory, passes the path to the build script, and cleans up after
+- **WHEN** `build-image.sh` needs image sources (flake.nix, entrypoint, configs, locales)
+- **THEN** the binary writes the full embedded image source tree to a temp directory — including `images/default/locales/` with all locale shell scripts — passes the path to the build script, and cleans up after
+
+#### Scenario: Locale files included in image source extraction
+- **WHEN** `write_image_sources()` extracts the image source tree
+- **THEN** the directory `images/default/locales/` SHALL exist in the extracted tree
+- **AND** it SHALL contain `en.sh` and `es.sh` with content matching the compile-time `include_str!` values
 
 #### Scenario: Temp file permissions
 - **WHEN** an embedded script is written to temp

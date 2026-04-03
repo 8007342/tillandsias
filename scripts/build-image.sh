@@ -143,23 +143,56 @@ _step "Building image: ${BOLD}${IMAGE_TAG}${NC}"
 # ---------------------------------------------------------------------------
 mkdir -p "$CACHE_DIR"
 
+_is_git_repo() {
+    git -C "$ROOT" rev-parse --is-inside-work-tree &>/dev/null
+}
+
+# @trace spec:nix-builder/git-tracked-files
+_check_untracked_image_sources() {
+    # Fail early if untracked files exist in image source dirs — they would
+    # be silently excluded from the Nix flake build, producing wrong images.
+    if ! _is_git_repo; then
+        return 0
+    fi
+    local untracked
+    untracked="$(git -C "$ROOT" ls-files --others --exclude-standard -- images/default images/web 2>/dev/null)"
+    if [[ -n "$untracked" ]]; then
+        _error "Untracked files in image sources (Nix will silently exclude them):"
+        while IFS= read -r f; do
+            _error "  $f"
+        done <<< "$untracked"
+        _error "Stage them with: git add <files>"
+        exit 1
+    fi
+}
+
 _compute_hash() {
     # Hash the flake definition, lock file, and image source files.
-    # Any change to these means the image needs rebuilding.
+    # Uses git ls-files to match what Nix flake builds actually see.
+    # @trace spec:nix-builder/git-tracked-files
     local files=()
 
     # Flake files (always relevant)
     [[ -f "$ROOT/flake.nix" ]]  && files+=("$ROOT/flake.nix")
     [[ -f "$ROOT/flake.lock" ]] && files+=("$ROOT/flake.lock")
 
-    # Image source directories — hash all files in default/ and web/
-    for dir in "$ROOT/images/default" "$ROOT/images/web"; do
-        if [[ -d "$dir" ]]; then
-            while IFS= read -r -d '' f; do
-                files+=("$f")
-            done < <(find "$dir" -type f -print0 2>/dev/null)
-        fi
-    done
+    # Image source directories — use git ls-files to match Nix's view
+    if _is_git_repo; then
+        for dir in images/default images/web; do
+            while IFS= read -r f; do
+                [[ -n "$f" ]] && files+=("$ROOT/$f")
+            done < <(git -C "$ROOT" ls-files -- "$dir" 2>/dev/null)
+        done
+    else
+        _warn "Not a git repo — falling back to find (untracked file detection unavailable)"
+        for dir in "$ROOT/images/default" "$ROOT/images/web"; do
+            if [[ -d "$dir" ]]; then
+                while IFS= read -r -d '' f; do
+                    files+=("$f")
+                done < <(find "$dir" -type f -print0 2>/dev/null)
+            fi
+        done
+    fi
 
     if [[ ${#files[@]} -eq 0 ]]; then
         echo "no-sources"
@@ -169,6 +202,7 @@ _compute_hash() {
     sha256sum "${files[@]}" 2>/dev/null | sha256sum | cut -d' ' -f1
 }
 
+_check_untracked_image_sources
 CURRENT_HASH="$(_compute_hash)"
 
 if [[ "$FLAG_FORCE" == false ]] && [[ -f "$HASH_FILE" ]]; then

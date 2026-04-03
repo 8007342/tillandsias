@@ -10,8 +10,11 @@
 - [x] 2.1 Create `macos-app-launch-env.md` — DMG launch env, PATH isolation, TCC permissions
 - [x] 2.2 Create `terminal-fallback-chain.md` — per-platform chain architecture, error detection
 
-## 3. Verify
+## 3. Simplify to Terminal.app only
 
-- [x] 3.1 `cargo check --package tillandsias-tray` — no new warnings
-- [ ] 3.2 Build and test tray launch with Ghostty installed
-- [ ] 3.3 Verify fallback to Terminal.app when no CLI terminal found (optional — remove ghostty from PATH temporarily)
+- [x] 3.1 Remove Ghostty detection and `open -na` launch path from `open_terminal()`
+- [x] 3.2 Remove CLI terminal detection loop (kitty, alacritty, wezterm) from `open_terminal()`
+- [x] 3.3 Remove iTerm2 AppleScript path from `open_terminal()`
+- [x] 3.4 Update error message to reference Terminal.app only
+- [x] 3.5 `cargo check --workspace` compiles clean
+- [x] 3.6 Build and test tray launch confirms Terminal.app opens
