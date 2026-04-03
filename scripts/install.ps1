@@ -44,6 +44,22 @@ if ((Test-Path $trayExe) -and (-not (Test-Path $aliasExe))) {
     Copy-Item $trayExe $aliasExe
 }
 
+# --- Ensure WSL2 is available (required by Podman) ---
+$wslPath = Get-Command wsl -ErrorAction SilentlyContinue
+if (-not $wslPath) {
+    Write-Host ""
+    Write-Host "  WSL not found. Installing (requires admin + reboot)..." -ForegroundColor Cyan
+    wsl --install --no-distribution 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "  WSL installed. A reboot may be required before Podman works." -ForegroundColor Yellow
+    } else {
+        Write-Host "  WSL install failed. Run as admin: wsl --install" -ForegroundColor Yellow
+    }
+} else {
+    # Ensure WSL2 is the default version
+    wsl --set-default-version 2 2>$null | Out-Null
+}
+
 # --- Ensure Podman CLI is available ---
 $podmanPath = Get-Command podman -ErrorAction SilentlyContinue
 if (-not $podmanPath) {
