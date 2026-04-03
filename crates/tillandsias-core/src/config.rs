@@ -633,6 +633,20 @@ pub fn detect_host_os() -> String {
         return "macOS".to_string();
     }
 
+    if cfg!(target_os = "windows") {
+        // Windows: use `ver` or environment variables
+        if let Ok(output) = std::process::Command::new("cmd")
+            .args(["/c", "ver"])
+            .output()
+        {
+            let ver = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !ver.is_empty() {
+                return ver;
+            }
+        }
+        return "Windows".to_string();
+    }
+
     if let Ok(content) = std::fs::read_to_string("/etc/os-release") {
         let mut name = String::new();
         let mut version = String::new();
