@@ -484,19 +484,7 @@ pub fn run(
 pub fn run_github_login() -> bool {
     crate::cli::print_welcome_banner(false);
 
-    let script_path = match crate::embedded::write_temp_script(
-        "gh-auth-login.sh",
-        crate::embedded::GH_AUTH_LOGIN,
-    ) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("Error: failed to extract login script: {e}");
-            return false;
-        }
-    };
-
-    // Ensure forge image exists before running login (it needs the container).
-    // On Windows, call podman build directly; on Unix, use build-image.sh.
+    // Ensure forge image exists (build inline if missing).
     let tag = crate::handlers::forge_image_tag();
     {
         let rt = tokio::runtime::Builder::new_current_thread()
@@ -514,12 +502,162 @@ pub fn run_github_login() -> bool {
         }
     }
 
-    // Convert path for bash on Windows (MSYS2 format: /c/Users/...)
-    let script_arg = crate::embedded::bash_path(&script_path);
+    // On Windows, run gh auth login directly via podman (no bash).
+    // On Unix, use the gh-auth-login.sh script which handles D-Bus forwarding.
+    #[cfg(target_os = "windows")]
+    return run_github_login_direct(&tag);
 
-    // Clean AppImage environment so podman works correctly.
-    let status = std::process::Command::new("bash")
-        .arg(&script_arg)
+    #[cfg(not(target_os = "windows"))]
+    return run_github_login_bash(&tag);
+}
+
+/// Windows: run `gh auth login` directly in a forge container via podman.
+/// No bash, no scripts — just podman run.
+// @trace spec:secret-management, spec:cross-platform
+#[cfg(target_os = "windows")]
+fn run_github_login_direct(tag: &str) -> bool {
+
+    let cache = tillandsias_core::config::cache_dir();
+    let secrets_dir = cache.join("secrets");
+    let gh_dir = secrets_dir.join("gh");
+    let git_dir = secrets_dir.join("git");
+    let gitconfig = git_dir.join(".gitconfig");
+
+    std::fs::create_dir_all(&gh_dir).ok();
+    std::fs::create_dir_all(&git_dir).ok();
+    if !gitconfig.exists() {
+        std::fs::write(&gitconfig, "").ok();
+    }
+
+    // Prompt for git identity
+    println!();
+    println!("=== GitHub Login ===");
+    println!();
+
+    let stdin = std::io::stdin();
+    let mut stdout = std::io::stdout();
+
+    // Read existing name/email from gitconfig
+    let existing_name = read_gitconfig_value(&gitconfig, "name");
+    let existing_email = read_gitconfig_value(&gitconfig, "email");
+
+    let git_name = prompt_with_default(&stdin, &mut stdout, "Your name (for git commits)", &existing_name);
+    let git_email = prompt_with_default(&stdin, &mut stdout, "Your email (for git commits)", &existing_email);
+
+    if git_name.is_empty() || git_email.is_empty() {
+        eprintln!("  Name and email are required.");
+        return false;
+    }
+
+    // Write gitconfig
+    let gitconfig_content = format!("[user]\n\tname = {git_name}\n\temail = {git_email}\n");
+    std::fs::write(&gitconfig, gitconfig_content).ok();
+    println!("  Git identity saved: {git_name} <{git_email}>");
+
+    // Security flags (same as gh-auth-login.sh)
+    let security_flags = [
+        "--cap-drop=ALL",
+        "--security-opt=no-new-privileges",
+        "--userns=keep-id",
+        "--security-opt=label=disable",
+    ];
+
+    println!();
+    println!("  Starting GitHub authentication...");
+    println!("  (You'll be prompted to paste a GitHub token)");
+    println!();
+
+    // Run gh auth login interactively in forge container
+    let status = tillandsias_podman::podman_cmd_sync()
+        .args(["run", "-it", "--rm", "--init", "--name", "tillandsias-gh-login"])
+        .args(security_flags)
+        .args(["--entrypoint", ""])
+        .args(["-e", "GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig"])
+        .arg("-v").arg(format!("{}:/home/forge/.config/gh", gh_dir.display()))
+        .arg("-v").arg(format!("{}:/home/forge/.config/tillandsias-git:rw", git_dir.display()))
+        .arg(tag)
+        .args(["gh", "auth", "login", "--git-protocol", "https"])
+        .stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status();
+
+    if let Ok(s) = &status {
+        if !s.success() {
+            eprintln!("  GitHub authentication failed.");
+            return false;
+        }
+    }
+
+    // Run setup-git in a separate non-interactive container
+    let _ = tillandsias_podman::podman_cmd_sync()
+        .args(["run", "--rm", "--init"])
+        .args(security_flags)
+        .args(["--entrypoint", ""])
+        .arg("-v").arg(format!("{}:/home/forge/.config/gh", gh_dir.display()))
+        .arg("-v").arg(format!("{}:/home/forge/.config/tillandsias-git:rw", git_dir.display()))
+        .arg(tag)
+        .args(["gh", "auth", "setup-git"])
+        .output();
+
+    println!();
+    println!("  GitHub authentication complete.");
+    println!();
+    true
+}
+
+#[cfg(target_os = "windows")]
+fn read_gitconfig_value(path: &std::path::Path, key: &str) -> String {
+    std::fs::read_to_string(path)
+        .unwrap_or_default()
+        .lines()
+        .find_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.starts_with(key) {
+                trimmed.split('=').nth(1).map(|v| v.trim().to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default()
+}
+
+#[cfg(target_os = "windows")]
+fn prompt_with_default(
+    stdin: &std::io::Stdin,
+    stdout: &mut std::io::Stdout,
+    prompt: &str,
+    default: &str,
+) -> String {
+    use std::io::Write;
+    use std::io::BufRead;
+    if default.is_empty() {
+        print!("  {prompt}: ");
+    } else {
+        print!("  {prompt} [{default}]: ");
+    }
+    stdout.flush().ok();
+    let mut input = String::new();
+    stdin.lock().read_line(&mut input).ok();
+    let trimmed = input.trim().to_string();
+    if trimmed.is_empty() { default.to_string() } else { trimmed }
+}
+
+/// Unix: use the gh-auth-login.sh script (handles D-Bus, host gh, etc.)
+#[cfg(not(target_os = "windows"))]
+fn run_github_login_bash(tag: &str) -> bool {
+    let script_path = match crate::embedded::write_temp_script(
+        "gh-auth-login.sh",
+        crate::embedded::GH_AUTH_LOGIN,
+    ) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Error: failed to extract login script: {e}");
+            return false;
+        }
+    };
+
+    let status = std::process::Command::new(&script_path)
         .env_remove("LD_LIBRARY_PATH")
         .env_remove("LD_PRELOAD")
         .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
@@ -529,7 +667,6 @@ pub fn run_github_login() -> bool {
         .stderr(std::process::Stdio::inherit())
         .status();
 
-    // Clean up temp script
     std::fs::remove_file(&script_path).ok();
 
     match status {
