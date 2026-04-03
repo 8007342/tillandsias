@@ -55,7 +55,7 @@ export PATH="$CACHE/openspec/bin:$HOME/.local/bin:$PATH"
 trace_lifecycle() {
     local phase="$1"
     shift
-    echo "[lifecycle] $phase | $*"
+    echo "[lifecycle] $phase | $*" >&2
 }
 
 # ── Package manager cache strategy ──────────────────────────

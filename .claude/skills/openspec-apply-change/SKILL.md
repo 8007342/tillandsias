@@ -56,15 +56,6 @@ Implement tasks from an OpenSpec change.
    - **spec-driven**: proposal, specs, design, tasks
    - Other schemas: follow the contextFiles from CLI output
 
-4b. **Consult knowledge source of truth**
-
-   Before implementing, check if `knowledge/` exists at the repo root. If it does:
-   - Read `knowledge/index.xml` to identify cheatsheets relevant to the current tasks
-   - Match task topics against cheatsheet tags (e.g., tasks involving podman → read `podman-rootless.md`, `podman-security.md`)
-   - Read the relevant cheatsheets for verified best practices
-   - When making implementation decisions, **cite the cheatsheet** that informed the decision (e.g., "Per `knowledge/cheatsheets/infra/podman-security.md`: --cap-drop=ALL drops all Linux capabilities")
-   - If a task involves technology not covered by existing cheatsheets, note this as a gap
-
 5. **Show current progress**
 
    Display:
@@ -80,7 +71,6 @@ Implement tasks from an OpenSpec change.
    - Make the code changes required
    - Keep changes minimal and focused
    - Mark task complete in the tasks file: `- [ ]` → `- [x]`
-   - When implementing code that enacts a spec requirement, add a `// @trace spec:<capability>/<requirement>` comment before the block. For module-level changes, add `//! @trace spec:<capability>` to the module header if not already present. Only annotate non-obvious architectural decisions, not plumbing code.
    - Continue to next task
 
    **Pause if:**

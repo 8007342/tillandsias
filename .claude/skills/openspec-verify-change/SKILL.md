@@ -6,7 +6,7 @@ compatibility: Requires openspec CLI.
 metadata:
   author: openspec
   version: "1.0"
-  generatedBy: "1.1.1"
+  generatedBy: "1.2.0"
 ---
 
 Verify that an implementation matches the change artifacts (specs, tasks, design).
@@ -99,15 +99,6 @@ Verify that an implementation matches the change artifacts (specs, tasks, design
        - Add WARNING: "Design decision not followed: <decision>"
        - Recommendation: "Update implementation or revise design.md to match reality"
    - If no design.md: Skip design adherence check, note "No design.md to verify against"
-
-   **Knowledge Source of Truth Cross-Check**:
-   - If `knowledge/` exists at the repo root, read `knowledge/index.xml` to identify cheatsheets relevant to this change
-   - Cross-check spec claims against knowledge cheatsheets (e.g., spec says "--cap-drop=ALL" → verify against `podman-security.md`)
-   - If a spec claim contradicts knowledge:
-     - Add WARNING: "Spec diverges from knowledge source of truth: <details>"
-     - Recommendation: "Update spec or knowledge cheatsheet to resolve divergence"
-   - If change involves technology not covered by knowledge cheatsheets:
-     - Add SUGGESTION: "Knowledge gap: no cheatsheet for <technology>. Consider creating one."
 
    **Code Pattern Consistency**:
    - Review new code for consistency with project patterns

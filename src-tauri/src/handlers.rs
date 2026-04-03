@@ -1484,7 +1484,7 @@ pub async fn handle_github_login(
         std::env::set_var("PODMAN_PATH", tillandsias_podman::find_podman_path());
     }
 
-    open_terminal(&script_path.display().to_string(), "GitHub Login")
+    open_terminal(&crate::embedded::bash_path(&script_path), "GitHub Login")
         .map_err(|e| format!("Failed to open terminal: {e}"))
 }
 
