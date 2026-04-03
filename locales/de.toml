@@ -1,0 +1,126 @@
+# Tillandsias — Deutsche Zeichenkettentabelle
+# Alle benutzersichtbaren Zeichenketten für die Rust-Tray-App und CLI.
+#
+# Schlüssel verwenden Punkt-Notation entsprechend der Code-Organisation:
+#   menu.*       Tray-Menü-Beschriftungen
+#   cli.*        CLI attach/runner Ausgaben
+#   init.*       `tillandsias --init` Ausgaben
+#   errors.*     Fehlermeldungen
+#   notifications.*  Desktop-Benachrichtigungen
+#   stats.*      `tillandsias --stats` Ausgaben
+#   clean.*      `tillandsias --clean` Ausgaben
+#   update.*     `tillandsias --update` Ausgaben
+
+# ── App ─────────────────────────────────────────────────────
+[app]
+name = "Tillandsias"
+
+# ── Tray menu ───────────────────────────────────────────────
+[menu]
+attach_here = "Hier öffnen"
+root_terminal = "🛠️ Stammverzeichnis"
+projects = "Projekte"
+no_projects = "Keine Projekte erkannt"
+settings = "Einstellungen"
+quit = "Tillandsias beenden"
+blooming = "Blühend"
+maintenance = "⛏️ Wartung"
+serve_here = "🔗 Hier bereitstellen"
+serving = "🔗 Wird bereitgestellt"
+seedlings = "🌱 Setzlinge"
+language = "Sprache"
+credit = "von Tlatoāni"
+version = "Tillandsias v{version}"
+
+[menu.github]
+label = "GitHub"
+login = "🔑 GitHub-Anmeldung"
+login_refresh = "🔒 GitHub-Anmeldung aktualisieren"
+loading = "Laden..."
+all_cloned = "Alle Repos lokal geklont"
+login_first = "Zuerst bei GitHub anmelden"
+could_not_fetch = "Repos konnten nicht abgerufen werden"
+cloning = "{name} wird geklont..."
+
+[menu.claude]
+reset_credentials = "🔒 Claude-Zugangsdaten zurücksetzen"
+
+[menu.web]
+already_serving = "Wird bereits bereitgestellt — öffne http://localhost:{port}"
+
+[menu.build]
+in_progress = "⏳ {name} wird erstellt..."
+maintenance_setup = "⛏️ Wartung wird eingerichtet..."
+completed = "✅ {name} bereit"
+failed = "❌ {name} Erstellung fehlgeschlagen"
+
+# ── CLI output ───────────────────────────────────────────────
+[cli]
+attaching = "Tillandsias — Verbinde mit {name}"
+checking_image = "Überprüfe Image... {tag}"
+ensuring_image = "Stelle sicher, dass das Image aktuell ist..."
+image_ready = "✓ Image bereit ({size})"
+starting_env = "Umgebung wird gestartet..."
+starting_terminal = "Terminal wird gestartet (Fish-Shell)..."
+launching = "Starte... (Strg+C zum Beenden)"
+env_stopped = "Umgebung gestoppt."
+waiting_setup = "Warte auf Abschluss der Umgebungseinrichtung..."
+
+# ── Init command ─────────────────────────────────────────────
+[init]
+preparing = "Tillandsias init — Entwicklungsumgebung wird vorbereitet"
+already_ready = "✓ Entwicklungsumgebung bereits bereit"
+ready = "Bereit."
+setup_in_progress = "⌛ Einrichtung läuft bereits, warte..."
+setup_timed_out = "✗ Zeitüberschreitung bei der Einrichtung. Falls das Problem bestehen bleibt, bitte neu installieren von https://github.com/8007342/tillandsias"
+env_ready = "✓ Umgebung bereit"
+waiting = "⌛ Warte auf Abschluss der Einrichtung..."
+setting_up = "Entwicklungsumgebung wird eingerichtet..."
+first_run_note = "(Dies kann beim ersten Start einige Minuten dauern)"
+dev_env_ready = "✓ Entwicklungsumgebung bereit"
+ready_run = "Bereit. Starte: tillandsias"
+setup_failed = "✗ Einrichtung fehlgeschlagen: {error}"
+
+# ── Error messages ───────────────────────────────────────────
+[errors]
+setup = "Tillandsias wird eingerichtet. Falls das Problem bestehen bleibt, bitte neu installieren von https://github.com/8007342/tillandsias"
+env_not_ready = "Entwicklungsumgebung noch nicht bereit. Tillandsias richtet sie automatisch ein — bitte versuche es in ein paar Minuten erneut."
+install_incomplete = "Die Tillandsias-Installation ist möglicherweise unvollständig. Bitte neu installieren von https://github.com/8007342/tillandsias"
+podman_unavailable = "Podman ist nicht verfügbar"
+no_podman = "Fehler: podman ist nicht installiert oder nicht im PATH"
+genera_exhausted = "Alle Gattungen für das Projekt {name} sind aufgebraucht"
+terminal_failed = "Terminal konnte nicht geöffnet werden: {error}"
+no_terminal = "Kein Terminalemulator gefunden (versucht: ptyxis, gnome-terminal, konsole, xterm)"
+
+# ── Desktop notifications ────────────────────────────────────
+[notifications]
+already_running = "Läuft bereits — suche nach '{title}' in deinen Fenstern"
+claude_credentials_cleared = "Claude-Zugangsdaten gelöscht. Beim nächsten Start wird eine Authentifizierung angefordert."
+
+# ── Stats command ────────────────────────────────────────────
+[stats]
+title = "Tillandsias — Speicherplatzbericht"
+images_none = "Images:      (keine)"
+images_no_podman = "Images:      (podman nicht verfügbar)"
+containers_none = "Container:   (keine)"
+containers_no_podman = "Container:   (podman nicht verfügbar)"
+total = "Gesamt (Caches + Binärdatei): {size}"
+podman_note = "(Podman-Image-Speicher wird von podman verwaltet — siehe 'podman system df')"
+
+# ── Clean command ────────────────────────────────────────────
+[clean]
+title = "Tillandsias — Artefaktbereinigung"
+complete = "Bereinigung abgeschlossen."
+nothing = "Nichts zu bereinigen."
+
+# ── Update command ───────────────────────────────────────────
+[update]
+version = "Tillandsias v{version}"
+checking = "Suche nach Updates..."
+up_to_date = "Bereits auf dem neuesten Stand."
+available = "Update verfügbar: v{version}"
+downloading = "Wird heruntergeladen..."
+downloaded = "Heruntergeladen ({size})"
+applying = "Update wird angewendet..."
+updated = "Aktualisiert auf v{version}"
+restart_note = "Starte die Anwendung neu, um die neue Version zu verwenden."

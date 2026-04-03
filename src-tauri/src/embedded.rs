@@ -104,6 +104,7 @@ pub const LOCALE_IT: &str = include_str!("../../images/default/locales/it.sh");
 pub const LOCALE_RO: &str = include_str!("../../images/default/locales/ro.sh");
 pub const LOCALE_RU: &str = include_str!("../../images/default/locales/ru.sh");
 pub const LOCALE_NAH: &str = include_str!("../../images/default/locales/nah.sh");
+pub const LOCALE_DE: &str = include_str!("../../images/default/locales/de.sh");
 
 // ---------------------------------------------------------------------------
 // Image sources — web image
@@ -164,7 +165,7 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 ///       opencode.json
 ///       skills/command/{bash,bash-private}.md
 ///       shell/{bashrc,config.fish,zshrc}
-///       locales/{en,es,ja,zh-Hant,zh-Hans,ar,ko,hi,ta,te,fr,pt,it,ro,ru,nah}.sh
+///       locales/{en,es,ja,zh-Hant,zh-Hans,ar,ko,hi,ta,te,fr,pt,it,ro,ru,nah,de}.sh
 ///     web/
 ///       entrypoint.sh
 ///       Containerfile
@@ -291,6 +292,7 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     write_lf(&locales_dir.join("ro.sh"), LOCALE_RO).map_err(|e| format!("ro.sh: {e}"))?;
     write_lf(&locales_dir.join("ru.sh"), LOCALE_RU).map_err(|e| format!("ru.sh: {e}"))?;
     write_lf(&locales_dir.join("nah.sh"), LOCALE_NAH).map_err(|e| format!("nah.sh: {e}"))?;
+    write_lf(&locales_dir.join("de.sh"), LOCALE_DE).map_err(|e| format!("de.sh: {e}"))?;
 
     // -- images/web/ --
     let web_dir = dir.join("images").join("web");

@@ -49,12 +49,13 @@ const IT_TOML: &str = include_str!("../../locales/it.toml");
 const RO_TOML: &str = include_str!("../../locales/ro.toml");
 const RU_TOML: &str = include_str!("../../locales/ru.toml");
 const NAH_TOML: &str = include_str!("../../locales/nah.toml");
+const DE_TOML: &str = include_str!("../../locales/de.toml");
 
 // ── Supported locales ────────────────────────────────────────────────────────
 
 const SUPPORTED_LOCALES: &[&str] = &[
     "en", "es", "ja", "zh-Hant", "zh-Hans", "ar", "ko",
-    "hi", "ta", "te", "fr", "pt", "it", "ro", "ru", "nah",
+    "hi", "ta", "te", "fr", "pt", "it", "ro", "ru", "nah", "de",
 ];
 
 fn is_supported(lang: &str) -> bool {
@@ -218,6 +219,7 @@ fn locale_toml(locale: &str) -> &'static str {
         "ro" => RO_TOML,
         "ru" => RU_TOML,
         "nah" => NAH_TOML,
+        "de" => DE_TOML,
         _ => EN_TOML,
     }
 }
@@ -405,6 +407,31 @@ completed = "{name} ready"
         result = result.replace("{name}", "{version}");
         // No second pass — {version} is NOT replaced.
         assert_eq!(result, "Hello {version}");
+    }
+
+    #[test]
+    fn de_toml_parses_without_errors() {
+        let map = parse_flat_toml(DE_TOML);
+        assert!(!map.is_empty(), "de.toml should produce a non-empty map");
+    }
+
+    #[test]
+    fn every_en_key_exists_in_de() {
+        let en = parse_flat_toml(EN_TOML);
+        let de = parse_flat_toml(DE_TOML);
+        let mut missing: Vec<&str> = Vec::new();
+        for key in en.keys() {
+            if !de.contains_key(key) {
+                missing.push(key.as_str());
+            }
+        }
+        if !missing.is_empty() {
+            missing.sort();
+            panic!(
+                "The following keys are in en.toml but missing from de.toml:\n  {}",
+                missing.join("\n  ")
+            );
+        }
     }
 
     #[test]

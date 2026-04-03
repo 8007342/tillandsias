@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Tillandsias Forge — Deutsches Sprachpaket
+# Wird von entrypoint.sh und forge-welcome.sh nach der Spracherkennung eingebunden.
+# Variablen mit L_ als Präfix zur Vermeidung von Kollisionen.
+
+# ── entrypoint.sh ────────────────────────────────────────────
+L_INSTALLING_OPENCODE="OpenCode wird installiert..."
+L_INSTALLED_OPENCODE="  OpenCode bereit: %s"
+L_WARN_OPENCODE="  WARNUNG: OpenCode-Binary vorhanden, aber --version lieferte nichts."
+L_INSTALLING_CLAUDE="Claude Code wird installiert..."
+L_INSTALLED_CLAUDE="  Claude Code bereit: %s"
+L_WARN_CLAUDE="  WARNUNG: Claude Code-Binary vorhanden, aber --version lieferte nichts."
+L_CLAUDE_NOT_FOUND="  Claude Code-Binary nach der Installation nicht gefunden."
+L_INSTALL_FAILED_CLAUDE="  FEHLER: npm install fehlgeschlagen. Siehe Ausgabe oben für Details."
+L_INSTALLING_OPENSPEC="OpenSpec wird installiert..."
+L_INSTALLED_OPENSPEC="  ✓ OpenSpec installiert"
+L_OPENSPEC_NOT_FOUND="  ✗ OpenSpec-Binary nach der Installation nicht gefunden"
+L_OPENSPEC_FAILED="  OpenSpec-Installation fehlgeschlagen (nicht kritisch, wird fortgesetzt)"
+L_BANNER_FORGE="tillandsias forge"
+L_BANNER_PROJECT="Projekt:"
+L_BANNER_AGENT="Agent:"
+L_BANNER_MODE_MAINTENANCE="Modus:   Wartung"
+L_AGENT_NOT_AVAILABLE="Claude Code nicht verfügbar. Bash wird gestartet."
+L_OPENCODE_NOT_AVAILABLE="OpenCode nicht verfügbar. Bash wird gestartet."
+L_UNKNOWN_AGENT="Unbekannter Agent '%s'. Bash wird gestartet."
+
+# ── forge-welcome.sh ──────────────────────────────────────────
+L_WELCOME_TITLE="🌱 Tillandsias Forge"
+L_WELCOME_PROJECT="Projekt"
+L_WELCOME_FORGE="Forge"
+L_WELCOME_MOUNTS="Einbindungen"
+L_WELCOME_PROJECT_AT="→ Projekt unter /home/forge/src/%s"
+
+# ── Tipps (wechselnd, beim Anmelden angezeigt) ──────────────
+L_TIP_1="Tippe help, um mehr über die Fish-Shell zu erfahren"
+L_TIP_2="Probiere Midnight Commander mit mc"
+L_TIP_3="Durchsuche Dateien mit eza --tree"
+L_TIP_4="Verwende Tab für Autovervollständigung"
+L_TIP_5="Durchsuche den Verlauf mit Strg+R"
+L_TIP_6="Intelligenter Verzeichnissprung mit z <Teilname>"
+L_TIP_7="Dateivorschau mit bat <Dateiname>"
+L_TIP_8="Dateien schnell finden mit fd <Muster>"
+L_TIP_9="Unscharfe Suche mit fzf"
+L_TIP_10="Prozesse anzeigen mit htop"
+L_TIP_11="Verzeichnisbaum anzeigen mit tree"
+L_TIP_12="Dateien bearbeiten mit vim oder nano"
+L_TIP_13="Fish hebt gültige Befehle beim Tippen grün hervor"
+L_TIP_14="Fish schlägt aus dem Verlauf vor — drücke → zum Übernehmen"
+L_TIP_15="Verwende .. um ein Verzeichnis nach oben zu gehen"
+L_TIP_16="Dateien detailliert auflisten mit ll"
+L_TIP_17="Jederzeit zu bash wechseln: tippe bash"
+L_TIP_18="Jederzeit zu zsh wechseln: tippe zsh"
+L_TIP_19="Git-Status prüfen mit git status"
+L_TIP_20="GitHub CLI: gh repo view, gh pr list"

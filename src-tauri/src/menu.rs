@@ -539,6 +539,7 @@ fn build_language_submenu<R: Runtime>(
         ("ro", "Rom\u{00E2}n\u{0103}"),
         ("ru", "\u{0420}\u{0443}\u{0441}\u{0441}\u{043A}\u{0438}\u{0439}"),
         ("nah", "N\u{0101}huatl"),
+        ("de", "Deutsch"),
     ];
 
     for &(code, name) in languages {
