@@ -30,7 +30,13 @@
       "Bash(bash:*)",
       "Bash(gh run:*)",
       "Bash(cargo build:*)",
-      "Bash(cargo test:*)"
+      "Bash(cargo test:*)",
+      "Bash(git commit:*)",
+      "Bash(npm install:*)",
+      "Bash(npm search:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(openspec:*)"
     ]
   }
 }
