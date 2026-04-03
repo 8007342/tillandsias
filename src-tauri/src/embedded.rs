@@ -18,13 +18,27 @@ use std::os::unix::fs::PermissionsExt;
 
 use tracing::debug;
 
-/// Convert a path to a string suitable for Git Bash on Windows.
+/// Convert a path to MSYS2 format suitable for Git Bash.
 ///
-/// Windows paths use backslashes (`C:\Users\...`) which bash interprets
-/// as escape characters, mangling the path. This converts to forward slashes.
-/// Available on all platforms so `cfg!(target_os = "windows")` branches compile.
+/// On Windows, `C:\Users\foo` must become `/c/Users/foo` — not just `C:/Users/foo`.
+/// Git Bash's virtual filesystem doesn't understand drive letters as path prefixes.
+/// When bash.exe is launched from a native Windows process (no MSYS2 layer),
+/// there's no automatic path translation, so we must do it explicitly.
+///
+/// On non-Windows, returns the path as-is.
 pub fn bash_path(path: &std::path::Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
+    let s = path.to_string_lossy().replace('\\', "/");
+    if cfg!(target_os = "windows") {
+        // Convert "C:/foo" to "/c/foo" (MSYS2 mount format)
+        if s.len() >= 2 && s.as_bytes()[1] == b':' {
+            let drive = s.as_bytes()[0].to_ascii_lowercase() as char;
+            format!("/{drive}{}", &s[2..])
+        } else {
+            s
+        }
+    } else {
+        s
+    }
 }
 
 /// Write content to a file, stripping \r so scripts work inside Linux
