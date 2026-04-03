@@ -85,6 +85,12 @@ pub fn run() -> bool {
     }
 }
 
+/// Build the forge image without the init banner/flow.
+/// Used by --github-login to build inline before running the auth script.
+pub fn run_build_only() -> Result<(), String> {
+    build_forge_image()
+}
+
 /// Build the forge image using the embedded build-image.sh script.
 fn build_forge_image() -> Result<(), String> {
     let source_dir = embedded::write_image_sources().map_err(|e| {

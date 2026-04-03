@@ -495,14 +495,35 @@ pub fn run_github_login() -> bool {
         }
     };
 
+    // Ensure forge image exists before running login (it needs the container).
+    // On Windows, call podman build directly; on Unix, use build-image.sh.
+    let tag = crate::handlers::forge_image_tag();
+    {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        let client = tillandsias_podman::PodmanClient::new();
+        if !rt.block_on(client.image_exists(&tag)) {
+            println!();
+            println!("  Building development environment first...");
+            if let Err(e) = crate::init::run_build_only() {
+                eprintln!("  Failed to build environment: {e}");
+                return false;
+            }
+        }
+    }
+
+    // Convert path for bash on Windows (MSYS2 format: /c/Users/...)
+    let script_arg = crate::embedded::bash_path(&script_path);
+
     // Clean AppImage environment so podman works correctly.
-    // AppImage injects LD_LIBRARY_PATH/LD_PRELOAD that break subprocesses.
     let status = std::process::Command::new("bash")
-        .arg(&script_path)
+        .arg(&script_arg)
         .env_remove("LD_LIBRARY_PATH")
         .env_remove("LD_PRELOAD")
         .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
-        .env("FORGE_IMAGE_TAG", crate::handlers::forge_image_tag())
+        .env("FORGE_IMAGE_TAG", tag)
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
