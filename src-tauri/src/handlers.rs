@@ -512,9 +512,15 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
     info!(script = %script.display(), image = image_name, tag = %tag, spec = "default-image, nix-builder", "Running embedded build-image.sh");
 
     // On Windows, .sh scripts can't be executed directly — invoke via bash.
+    // CREATE_NO_WINDOW prevents flashing console windows from the tray app.
     let mut cmd = if cfg!(target_os = "windows") {
         let mut c = std::process::Command::new("bash");
         c.arg(&script);
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            c.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
         c
     } else {
         std::process::Command::new(&script)

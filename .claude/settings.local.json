@@ -36,7 +36,10 @@
       "Bash(npm search:*)",
       "WebSearch",
       "WebFetch(domain:github.com)",
-      "Bash(openspec:*)"
+      "Bash(openspec:*)",
+      "Bash(gh workflow:*)",
+      "Bash(./target/debug/tillandsias-tray.exe:*)",
+      "Bash(cargo doc:*)"
     ]
   }
 }

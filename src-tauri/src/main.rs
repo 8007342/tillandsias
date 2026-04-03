@@ -1,4 +1,7 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![cfg_attr(
+    all(not(debug_assertions), target_os = "windows"),
+    windows_subsystem = "windows"
+)]
 
 mod accountability;
 mod build_lock;
@@ -47,6 +50,20 @@ use updater::UpdateState;
 static TRAY_ICON: std::sync::OnceLock<Mutex<tauri::tray::TrayIcon>> = std::sync::OnceLock::new();
 
 fn main() {
+    // On Windows release builds, the binary is a GUI app (windows_subsystem = "windows")
+    // which means no console is attached. When launched from a terminal with CLI args,
+    // reattach to the parent console so println! output is visible.
+    #[cfg(all(not(debug_assertions), target_os = "windows"))]
+    {
+        // Any CLI arg means the user launched from a terminal and expects output.
+        if std::env::args().len() > 1 {
+            unsafe {
+                // ATTACH_PARENT_PROCESS = -1 (0xFFFFFFFF)
+                windows_sys::Win32::System::Console::AttachConsole(0xFFFFFFFF);
+            }
+        }
+    }
+
     // Parse CLI arguments first — before any heavy initialization.
     let (cli_mode, log_config) = match cli::parse() {
         Some(parsed) => parsed,

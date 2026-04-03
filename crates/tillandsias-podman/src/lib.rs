@@ -59,6 +59,10 @@ pub fn podman_cmd() -> tokio::process::Command {
         });
     }
 
+    // Prevent flashing console windows when podman is called from the tray app.
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
     cmd
 }
 
@@ -67,6 +71,13 @@ pub fn podman_cmd_sync() -> std::process::Command {
     let mut cmd = std::process::Command::new(find_podman_path());
     cmd.env_remove("LD_LIBRARY_PATH");
     cmd.env_remove("LD_PRELOAD");
+
+    // Prevent flashing console windows when podman is called from the tray app.
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
 
     // Close inherited file descriptors >= 3 before exec'ing podman.
     // AppImage's squashfuse FUSE mount creates FDs that crun cannot

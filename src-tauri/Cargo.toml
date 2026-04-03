@@ -27,5 +27,8 @@ rustls = { version = "0.23", default-features = false, features = ["ring"] }
 sha2 = "0.10"
 hex = "0.4"
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_System_Console"] }
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
