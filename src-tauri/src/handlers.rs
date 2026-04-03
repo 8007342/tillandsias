@@ -521,15 +521,11 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
 
     // On Windows, .sh scripts can't be executed directly — invoke via bash.
     // Paths must use forward slashes or bash interprets \ as escape chars.
-    // CREATE_NO_WINDOW prevents flashing console windows from the tray app.
+    // Note: DO NOT use CREATE_NO_WINDOW here — it breaks Git Bash's MSYS2
+    // environment. The .output() capture already prevents visible windows.
     let mut cmd = if cfg!(target_os = "windows") {
         let mut c = std::process::Command::new("bash");
         c.arg(crate::embedded::bash_path(&script));
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            c.creation_flags(0x08000000); // CREATE_NO_WINDOW
-        }
         c
     } else {
         std::process::Command::new(&script)
