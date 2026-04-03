@@ -75,7 +75,16 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         );
     }
 
-    let status = std::process::Command::new(&script)
+    // On Windows, .sh scripts can't be executed directly — invoke via bash.
+    let mut cmd = if cfg!(target_os = "windows") {
+        let mut c = std::process::Command::new("bash");
+        c.arg(&script);
+        c
+    } else {
+        std::process::Command::new(&script)
+    };
+
+    let status = cmd
         .arg(image_name)
         .args(["--tag", &tag, "--backend", "fedora"])
         .current_dir(&source_dir)

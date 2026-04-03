@@ -95,7 +95,16 @@ fn build_forge_image() -> Result<(), String> {
     let script = source_dir.join("scripts").join("build-image.sh");
     let tag = forge_image_tag();
 
-    let status = std::process::Command::new(&script)
+    // On Windows, .sh scripts can't be executed directly — invoke via bash.
+    let mut cmd = if cfg!(target_os = "windows") {
+        let mut c = std::process::Command::new("bash");
+        c.arg(&script);
+        c
+    } else {
+        std::process::Command::new(&script)
+    };
+
+    let status = cmd
         .arg("forge")
         .args(["--tag", &tag, "--backend", "fedora"])
         .current_dir(&source_dir)

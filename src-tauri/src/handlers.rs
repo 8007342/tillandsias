@@ -430,11 +430,20 @@ fn open_terminal(command: &str, title: &str) -> Result<(), String> {
     {
         // Windows: `start "<title>" cmd /k <command>`
         // The first positional argument to `start` is the window title.
-        std::process::Command::new("cmd")
-            .args(["/c", "start", title, "cmd", "/k", command])
-            .spawn()
-            .map(|_| ())
-            .map_err(|e| format!("cmd: {e}"))
+        // For .sh scripts, invoke through bash instead of cmd.
+        if command.ends_with(".sh") {
+            std::process::Command::new("cmd")
+                .args(["/c", "start", title, "bash", command])
+                .spawn()
+                .map(|_| ())
+                .map_err(|e| format!("cmd: {e}"))
+        } else {
+            std::process::Command::new("cmd")
+                .args(["/c", "start", title, "cmd", "/k", command])
+                .spawn()
+                .map(|_| ())
+                .map_err(|e| format!("cmd: {e}"))
+        }
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
@@ -502,7 +511,16 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
     let tag = forge_image_tag();
     info!(script = %script.display(), image = image_name, tag = %tag, spec = "default-image, nix-builder", "Running embedded build-image.sh");
 
-    let output = std::process::Command::new(&script)
+    // On Windows, .sh scripts can't be executed directly — invoke via bash.
+    let mut cmd = if cfg!(target_os = "windows") {
+        let mut c = std::process::Command::new("bash");
+        c.arg(&script);
+        c
+    } else {
+        std::process::Command::new(&script)
+    };
+
+    let output = cmd
         .arg(image_name)
         .args(["--tag", &tag, "--backend", "fedora"])
         .current_dir(&source_dir)
