@@ -244,8 +244,15 @@ fn main() {
                     false
                 };
 
-                // On macOS/Windows, auto-start podman machine if not running
+                // On macOS/Windows, auto-init and auto-start podman machine
                 if has_podman && Os::detect().needs_podman_machine() && !has_machine {
+                    // Initialize machine if none exists (first-time setup)
+                    if !client.has_machine().await {
+                        info!("No podman machine found, initializing...");
+                        if !client.init_machine().await {
+                            warn!("Podman machine init failed");
+                        }
+                    }
                     info!("Podman machine not running, starting automatically...");
                     if client.start_machine().await {
                         // Wait for the API socket to be ready before proceeding.

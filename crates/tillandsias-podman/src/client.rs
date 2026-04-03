@@ -18,6 +18,48 @@ impl PodmanClient {
             .is_ok_and(|o| o.status.success())
     }
 
+    /// Check if any Podman Machine exists (macOS/Windows).
+    pub async fn has_machine(&self) -> bool {
+        let output = crate::podman_cmd()
+            .args(["machine", "list", "--format", "json"])
+            .output()
+            .await;
+
+        match output {
+            Ok(o) if o.status.success() => {
+                let stdout = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                // Empty array or empty output means no machines
+                !stdout.is_empty() && stdout != "[]"
+            }
+            _ => false,
+        }
+    }
+
+    /// Initialize a new Podman Machine (macOS/Windows). Returns true on success.
+    pub async fn init_machine(&self) -> bool {
+        info!("Initializing podman machine...");
+        let output = crate::podman_cmd()
+            .args(["machine", "init"])
+            .output()
+            .await;
+
+        match output {
+            Ok(o) if o.status.success() => {
+                info!("Podman machine initialized successfully");
+                true
+            }
+            Ok(o) => {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                warn!(%stderr, "Podman machine init failed");
+                false
+            }
+            Err(e) => {
+                warn!(%e, "Podman machine init command error");
+                false
+            }
+        }
+    }
+
     /// Check if Podman Machine is running (macOS/Windows).
     pub async fn is_machine_running(&self) -> bool {
         let output = crate::podman_cmd()

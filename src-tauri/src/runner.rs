@@ -278,6 +278,27 @@ pub fn run(
         return false;
     }
 
+    // On macOS/Windows, ensure podman machine is initialized and running
+    if tillandsias_core::state::Os::detect().needs_podman_machine() {
+        if !rt.block_on(client.has_machine()) {
+            if debug {
+                eprintln!("  [debug] No podman machine found, initializing...");
+            }
+            rt.block_on(client.init_machine());
+        }
+        if !rt.block_on(client.is_machine_running()) {
+            if debug {
+                eprintln!("  [debug] Starting podman machine...");
+            }
+            if !rt.block_on(client.start_machine()) {
+                eprintln!("  Podman machine failed to start. Try: podman machine init && podman machine start");
+                return false;
+            }
+            // Wait for API to be ready
+            rt.block_on(client.wait_for_ready(5));
+        }
+    }
+
     // Try to build image via build-image.sh if available (dev mode).
     // Falls back to checking if image already exists (installed mode).
     let source_name = if image_name.contains(':') || image_name.contains('/') {
