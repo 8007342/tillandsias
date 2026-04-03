@@ -18,6 +18,15 @@ use std::os::unix::fs::PermissionsExt;
 
 use tracing::debug;
 
+/// Convert a path to a string suitable for Git Bash on Windows.
+///
+/// Windows paths use backslashes (`C:\Users\...`) which bash interprets
+/// as escape characters, mangling the path. This converts to forward slashes.
+#[cfg(target_os = "windows")]
+pub fn bash_path(path: &std::path::Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
 /// Write content to a file, stripping \r so scripts work inside Linux
 /// containers even when compiled on Windows with core.autocrlf=true.
 fn write_lf(path: &std::path::Path, content: &str) -> std::io::Result<()> {

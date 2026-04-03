@@ -431,9 +431,11 @@ fn open_terminal(command: &str, title: &str) -> Result<(), String> {
         // Windows: `start "<title>" cmd /k <command>`
         // The first positional argument to `start` is the window title.
         // For .sh scripts, invoke through bash instead of cmd.
+        // Convert backslashes to forward slashes for Git Bash.
         if command.ends_with(".sh") {
+            let bash_cmd = command.replace('\\', "/");
             std::process::Command::new("cmd")
-                .args(["/c", "start", title, "bash", command])
+                .args(["/c", "start", title, "bash", &bash_cmd])
                 .spawn()
                 .map(|_| ())
                 .map_err(|e| format!("cmd: {e}"))
@@ -512,10 +514,11 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
     info!(script = %script.display(), image = image_name, tag = %tag, spec = "default-image, nix-builder", "Running embedded build-image.sh");
 
     // On Windows, .sh scripts can't be executed directly — invoke via bash.
+    // Paths must use forward slashes or bash interprets \ as escape chars.
     // CREATE_NO_WINDOW prevents flashing console windows from the tray app.
     let mut cmd = if cfg!(target_os = "windows") {
         let mut c = std::process::Command::new("bash");
-        c.arg(&script);
+        c.arg(crate::embedded::bash_path(&script));
         #[cfg(target_os = "windows")]
         {
             use std::os::windows::process::CommandExt;

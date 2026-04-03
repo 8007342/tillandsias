@@ -96,9 +96,10 @@ fn build_forge_image() -> Result<(), String> {
     let tag = forge_image_tag();
 
     // On Windows, .sh scripts can't be executed directly — invoke via bash.
+    // Paths must use forward slashes or bash interprets \ as escape chars.
     let mut cmd = if cfg!(target_os = "windows") {
         let mut c = std::process::Command::new("bash");
-        c.arg(&script);
+        c.arg(crate::embedded::bash_path(&script));
         c
     } else {
         std::process::Command::new(&script)
