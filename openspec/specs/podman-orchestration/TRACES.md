@@ -10,6 +10,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-podman/src/lib.rs#L1](../../../crates/tillandsias-podman/src/lib.rs#L1)
 - [crates/tillandsias-podman/src/lib.rs#L51](../../../crates/tillandsias-podman/src/lib.rs#L51)
 - [crates/tillandsias-podman/src/lib.rs#L74](../../../crates/tillandsias-podman/src/lib.rs#L74)
+- [gh-auth-login.sh#L367](../../../gh-auth-login.sh#L367)
 - [src-tauri/src/event_loop.rs#L6](../../../src-tauri/src/event_loop.rs#L6)
 - [src-tauri/src/event_loop.rs#L93](../../../src-tauri/src/event_loop.rs#L93)
 - [src-tauri/src/handlers.rs#L29](../../../src-tauri/src/handlers.rs#L29)

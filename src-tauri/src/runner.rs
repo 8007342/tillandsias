@@ -8,7 +8,9 @@
 
 use std::path::{Path, PathBuf};
 
-use tillandsias_core::config::{GlobalConfig, cache_dir, load_global_config, load_project_config};
+use tillandsias_core::config::{
+    GlobalConfig, SelectedAgent, cache_dir, load_global_config, load_project_config,
+};
 use tillandsias_core::genus::TillandsiaGenus;
 use tillandsias_core::state::ContainerInfo;
 use tillandsias_podman::PodmanClient;
@@ -194,8 +196,17 @@ fn build_cli_launch_context(
 /// When `bash` is true, the container entrypoint is overridden with `/bin/bash`
 /// for troubleshooting (no default tools/IDE launched).
 ///
+/// `agent_override` lets `--opencode` / `--claude` flags override the
+/// configured agent for this session. Ignored when `bash` is true.
+///
 /// Returns `true` on success, `false` on failure.
-pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
+pub fn run(
+    path: PathBuf,
+    image_name: &str,
+    debug: bool,
+    bash: bool,
+    agent_override: Option<SelectedAgent>,
+) -> bool {
     // Resolve and validate the project path.
     // AppImage changes CWD to its FUSE mount — resolve relative paths against
     // $OWD (Original Working Directory) so `tillandsias .` works correctly.
@@ -298,16 +309,17 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
 
-    // Select profile based on mode: --bash uses terminal profile, otherwise forge
-    let selected_agent = global_config.agent.selected;
+    // Select profile based on mode: --bash uses terminal profile, otherwise forge.
+    // --opencode / --claude override the configured agent for this session.
+    let selected_agent = agent_override.unwrap_or(global_config.agent.selected);
     let profile = if bash {
         tillandsias_core::container_profile::terminal_profile()
     } else {
         match selected_agent {
-            tillandsias_core::config::SelectedAgent::OpenCode => {
+            SelectedAgent::OpenCode => {
                 tillandsias_core::container_profile::forge_opencode_profile()
             }
-            tillandsias_core::config::SelectedAgent::Claude => {
+            SelectedAgent::Claude => {
                 tillandsias_core::container_profile::forge_claude_profile()
             }
         }
@@ -337,6 +349,22 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
         .unwrap_or_else(|| "project".to_string());
     println!("  Mount:  {display_path} \u{2192} /home/forge/src/{proj_display}");
     println!("  Cache:  {}", tilde_path(&cache));
+
+    // @trace spec:secret-management
+    // Show credential mounts transparently so users know what is shared
+    println!();
+    println!("  Credentials shared with this environment:");
+    if ctx.token_file_path.is_some() {
+        println!("    Token:    tmpfs (RAM only, read-only, deleted on stop)");
+    } else {
+        println!("    Token:    not available (GitHub login may be needed)");
+    }
+    println!("    Git auth: protocol + username (no token in this file)");
+    println!("    Git ID:   {} <from .gitconfig>",
+        tilde_path(&ctx.git_dir.join(".gitconfig")));
+    if profile.secrets.iter().any(|s| s.kind == tillandsias_core::container_profile::SecretKind::ClaudeDir) {
+        println!("    Claude:   ~/.claude/ (session credentials, read-write)");
+    }
 
     if debug {
         println!();
@@ -370,6 +398,51 @@ pub fn run(path: PathBuf, image_name: &str, debug: bool, bash: bool) -> bool {
         }
         Err(e) => {
             eprintln!("Error: failed to run podman: {e}");
+            false
+        }
+    }
+}
+
+/// Run the GitHub login flow interactively in the current terminal.
+///
+/// Extracts the embedded `gh-auth-login.sh` script to a temp file and
+/// executes it with inherited stdio so the user can authenticate directly.
+///
+/// Returns `true` on success, `false` on failure.
+pub fn run_github_login() -> bool {
+    crate::cli::print_welcome_banner(false);
+
+    let script_path = match crate::embedded::write_temp_script(
+        "gh-auth-login.sh",
+        crate::embedded::GH_AUTH_LOGIN,
+    ) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Error: failed to extract login script: {e}");
+            return false;
+        }
+    };
+
+    // Clean AppImage environment so podman works correctly.
+    // AppImage injects LD_LIBRARY_PATH/LD_PRELOAD that break subprocesses.
+    let status = std::process::Command::new("bash")
+        .arg(&script_path)
+        .env_remove("LD_LIBRARY_PATH")
+        .env_remove("LD_PRELOAD")
+        .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
+        .env("FORGE_IMAGE_TAG", crate::handlers::forge_image_tag())
+        .stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status();
+
+    // Clean up temp script
+    std::fs::remove_file(&script_path).ok();
+
+    match status {
+        Ok(s) => s.success(),
+        Err(e) => {
+            eprintln!("Error: failed to run login script: {e}");
             false
         }
     }

@@ -286,10 +286,12 @@ install_appimage() {
     ln -sf "$app_path" "$INSTALL_BIN"
     _info "Symlink: $INSTALL_BIN -> $app_path"
 
-    # Build the forge container image via Nix (handles staleness detection)
+    # Build the forge container image with versioned tag (handles staleness detection)
     if [[ -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
+        local full_version
+        full_version="$(cat "$SCRIPT_DIR/VERSION" | tr -d '[:space:]')"
         _step "Building forge container image..."
-        "$SCRIPT_DIR/scripts/build-image.sh" forge
+        "$SCRIPT_DIR/scripts/build-image.sh" forge --tag "tillandsias-forge:v${full_version}"
         _info "Forge image built and loaded"
     else
         _warn "scripts/build-image.sh not found, skipping image build"

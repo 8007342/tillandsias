@@ -85,17 +85,25 @@ fn main() {
         std::process::exit(if success { 0 } else { 1 });
     }
 
+    // GitHub Login mode — run authentication flow interactively and exit.
+    if matches!(cli_mode, cli::CliMode::GitHubLogin) {
+        let _log_guard = logging::init(&log_config);
+        let success = runner::run_github_login();
+        std::process::exit(if success { 0 } else { 1 });
+    }
+
     // If CLI attach mode, run the container runner and exit — no tray app.
     if let cli::CliMode::Attach {
         path,
         image,
         debug,
         bash,
+        agent_override,
     } = cli_mode
     {
         // Initialize tracing for file logging (CLI output uses println!)
         let _log_guard = logging::init(&log_config);
-        let success = runner::run(path, &image, debug, bash);
+        let success = runner::run(path, &image, debug, bash, agent_override);
         std::process::exit(if success { 0 } else { 1 });
     }
 

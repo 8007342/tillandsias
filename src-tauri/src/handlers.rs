@@ -1419,12 +1419,18 @@ pub async fn handle_github_login(
                 strings::INSTALL_INCOMPLETE
             })?;
 
-    // Pass the versioned image tag so the script doesn't have to guess.
-    let cmd = format!(
-        "TILLANDSIAS_FORGE_IMAGE={} {}",
-        tag, script_path.display()
-    );
-    open_terminal(&cmd, "GitHub Login")
+    // Set env vars that gh-auth-login.sh requires. open_terminal spawns a
+    // child process that inherits these. They are set on the current process
+    // (not a Command builder) because open_terminal's various terminal
+    // backends all inherit the parent environment.
+    // SAFETY: Tillandsias is single-threaded at this point in the menu handler;
+    // the async runtime is on the same thread and no parallel env reads occur.
+    unsafe {
+        std::env::set_var("FORGE_IMAGE_TAG", forge_image_tag());
+        std::env::set_var("PODMAN_PATH", tillandsias_podman::find_podman_path());
+    }
+
+    open_terminal(&script_path.display().to_string(), "GitHub Login")
         .map_err(|e| format!("Failed to open terminal: {e}"))
 }
 

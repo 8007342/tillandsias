@@ -171,3 +171,5 @@ The primary threats are: (1) an AI agent attempting to read credentials directly
 **Cheatsheets:**
 - `docs/cheatsheets/token-rotation.md` — how the 55-minute refresh task works
 - `docs/cheatsheets/logging-levels.md` — how to use `--log-secret-management`
+- `docs/cheatsheets/os-vault-credentials.md` — OS keyring APIs (GNOME, KDE, macOS, Windows)
+- `docs/cheatsheets/github-credential-tools.md` — how gh, GCM, and git credential helpers store tokens

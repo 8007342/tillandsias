@@ -5,6 +5,8 @@
 
 use std::path::PathBuf;
 
+use tillandsias_core::config::SelectedAgent;
+
 /// The 4-part version string embedded from the VERSION file at build time.
 ///
 /// This is the canonical version: Major.Minor.ChangeCount.Build (e.g., "0.1.97.76").
@@ -127,6 +129,9 @@ pub enum CliMode {
     /// `tillandsias --update` — check for updates and apply if available, then exit.
     Update,
 
+    /// `tillandsias --github-login` — run GitHub authentication flow and exit.
+    GitHubLogin,
+
     /// A project path was given — launch an interactive development environment.
     Attach {
         /// Absolute path to the project directory.
@@ -137,6 +142,8 @@ pub enum CliMode {
         debug: bool,
         /// Drop into fish shell instead of default entrypoint (troubleshooting).
         bash: bool,
+        /// Override the configured agent for this session.
+        agent_override: Option<SelectedAgent>,
     },
 }
 
@@ -146,7 +153,10 @@ Tillandsias — development environments that just work
 USAGE:
     tillandsias                     Start the system tray app
     tillandsias <path>              Attach to a project
+    tillandsias <path> --opencode   Attach using OpenCode
+    tillandsias <path> --claude     Attach using Claude Code
     tillandsias <path> --bash       Open maintenance terminal
+    tillandsias --github-login      Authenticate with GitHub
     tillandsias --init              Pre-build development environments
     tillandsias --stats             Show disk usage from Tillandsias artifacts
     tillandsias --clean             Remove stale artifacts and reclaim disk space
@@ -163,7 +173,10 @@ OPTIONS:
   --log=MODULES              Per-module log levels (secrets:trace;events:debug)
   --env <name>               Environment to use (default: forge)
   --debug                    Show verbose output including commands
+  --opencode                 Use OpenCode for this session
+  --claude                   Use Claude Code for this session
   --bash                     Open maintenance terminal
+  --github-login             Run GitHub authentication flow
   --version                  Show version and exit
   --help                     Show this help
 
@@ -198,6 +211,12 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
         return Some((CliMode::Tray, log_config));
     }
 
+    // `tillandsias --help` — print usage and exit (checked before all modes).
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        print!("{USAGE}");
+        return None;
+    }
+
     // `tillandsias --version` — print version and exit.
     if args.iter().any(|a| a == "--version" || a == "-V") {
         return Some((CliMode::Version, log_config));
@@ -223,10 +242,16 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
         return Some((CliMode::Update, log_config));
     }
 
+    // `tillandsias --github-login` — run GitHub auth flow.
+    if args.iter().any(|a| a == "--github-login") {
+        return Some((CliMode::GitHubLogin, log_config));
+    }
+
     let mut path: Option<PathBuf> = None;
     let mut image = "forge".to_string();
     let mut debug = false;
     let mut bash = false;
+    let mut agent_override: Option<SelectedAgent> = None;
     let mut i = 0;
 
     while i < args.len() {
@@ -257,6 +282,12 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
             "--bash" => {
                 bash = true;
             }
+            "--opencode" => {
+                agent_override = Some(SelectedAgent::OpenCode);
+            }
+            "--claude" => {
+                agent_override = Some(SelectedAgent::Claude);
+            }
             // Log flags — already parsed by parse_log_flags(), skip here.
             "--log-secret-management" | "--log-image-management" | "--log-update-cycle" => {}
             arg if arg.starts_with("--log=") => {}
@@ -281,6 +312,7 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
                 image,
                 debug,
                 bash,
+                agent_override,
             },
             log_config,
         )),
@@ -383,10 +415,10 @@ pub fn detect_podman_version() -> Option<String> {
 
 /// Check the forge image status synchronously via `podman image exists`.
 ///
-/// Uses the 3-part semver from Cargo.toml (matching `handlers::forge_image_tag()`).
+/// Uses `TILLANDSIAS_FULL_VERSION` (4-part) to match `handlers::forge_image_tag()`.
 pub fn check_forge_image_status() -> ForgeStatus {
-    let version_3part = env!("CARGO_PKG_VERSION");
-    let expected_tag = format!("tillandsias-forge:v{version_3part}");
+    let version_full = env!("TILLANDSIAS_FULL_VERSION");
+    let expected_tag = format!("tillandsias-forge:v{version_full}");
 
     // First verify podman is callable at all.
     let probe = std::process::Command::new("podman")

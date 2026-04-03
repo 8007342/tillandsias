@@ -6,4 +6,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [src-tauri/src/embedded.rs#L11](../../../src-tauri/src/embedded.rs#L11)
-- [src-tauri/src/embedded.rs#L144](../../../src-tauri/src/embedded.rs#L144)
+- [src-tauri/src/embedded.rs#L143](../../../src-tauri/src/embedded.rs#L143)

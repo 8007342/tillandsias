@@ -133,7 +133,7 @@ The build script:
 2. Checks staleness (hashes `flake.nix`, `flake.lock`, `images/` sources)
 3. Runs `nix build` inside the builder toolbox to produce a tarball
 4. Loads the tarball into podman via `podman load`
-5. Tags as `tillandsias-forge:latest` or `tillandsias-web:latest`
+5. Tags as `tillandsias-forge:v<FULL_VERSION>` or `tillandsias-web:v<FULL_VERSION>`
 
 Build cache is stored in `.nix-output/` (gitignored).
 

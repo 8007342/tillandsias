@@ -52,9 +52,9 @@ if [[ "$WIPE" == true ]]; then
     rm -rf "$CACHE_DIR"
     echo "  ✓ Removed cache and secrets"
 
-    # Remove container images
-    podman rmi tillandsias-forge:latest 2>/dev/null || true
-    podman rmi tillandsias-web:latest 2>/dev/null || true
+    # Remove all versioned forge and web images
+    podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | xargs -r podman rmi 2>/dev/null || true
+    podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-web:' | xargs -r podman rmi 2>/dev/null || true
     echo "  ✓ Removed container images"
 
     # Remove cached nix build output
