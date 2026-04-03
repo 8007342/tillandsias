@@ -281,18 +281,35 @@ fn open_terminal(command: &str, title: &str) -> Result<(), String> {
         // CLI terminals are preferred because they don't depend on AppleScript's
         // fragile app-scripting bridge (which breaks when default terminal changes).
 
-        // 1. CLI-based terminals — detected via `which`, launched directly.
+        // 1. Ghostty — must use `open -na Ghostty.app` on macOS (direct CLI
+        //    invocation is unsupported). Config uses --key=value syntax.
+        if std::path::Path::new("/Applications/Ghostty.app").exists() {
+            let mut args = vec![
+                "-na".into(),
+                "Ghostty.app".into(),
+                "--args".into(),
+                format!("--title={title}"),
+                "-e".into(),
+                "bash".into(),
+                "-c".into(),
+                command.into(),
+            ];
+            // --wait-after-command keeps the window open when the command exits,
+            // so users can read output / errors before the window closes.
+            args.insert(3, "--wait-after-command".into());
+            match std::process::Command::new("open").args(&args).spawn() {
+                Ok(_) => {
+                    tracing::debug!(terminal = "Ghostty", "Opened terminal via open -na");
+                    return Ok(());
+                }
+                Err(e) => {
+                    tracing::warn!(terminal = "Ghostty", error = %e, "Ghostty launch failed, trying next");
+                }
+            }
+        }
+
+        // 2. Other CLI terminals — detected via `which`, launched directly.
         let cli_terminals: &[(&str, &dyn Fn(&str, &str) -> Vec<String>)] = &[
-            ("ghostty", &|cmd: &str, title: &str| {
-                vec![
-                    "--title".into(),
-                    title.into(),
-                    "-e".into(),
-                    "bash".into(),
-                    "-c".into(),
-                    cmd.into(),
-                ]
-            }),
             ("kitty", &|cmd: &str, title: &str| {
                 vec![
                     "--title".into(),
