@@ -22,7 +22,7 @@ use tracing::debug;
 ///
 /// Windows paths use backslashes (`C:\Users\...`) which bash interprets
 /// as escape characters, mangling the path. This converts to forward slashes.
-#[cfg(target_os = "windows")]
+/// Available on all platforms so `cfg!(target_os = "windows")` branches compile.
 pub fn bash_path(path: &std::path::Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
