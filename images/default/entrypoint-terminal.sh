@@ -21,9 +21,9 @@ find_project_dir
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
-# ── OpenSpec init (first launch only) ────────────────────────
-if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ] && [ ! -d "$PROJECT_DIR/openspec" ]; then
-    "$OS_BIN" init 2>/dev/null && echo "  ✓ OpenSpec initialized" || true
+# ── OpenSpec init (every launch, silent) ────────────────────
+if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
+    "$OS_BIN" init >/dev/null 2>&1 || true
 fi
 
 # ── Welcome banner ──────────────────────────────────────────

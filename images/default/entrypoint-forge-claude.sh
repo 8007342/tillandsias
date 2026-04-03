@@ -96,12 +96,11 @@ find_project_dir
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
-# ── OpenSpec init (first launch only) ────────────────────────
-if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ] && [ ! -d "$PROJECT_DIR/openspec" ]; then
-    trace_lifecycle "openspec-init" "initializing for claude..."
-    "$OS_BIN" init --tools claude && trace_lifecycle "openspec-init" "done" || trace_lifecycle "openspec-init" "skipped"
-else
-    trace_lifecycle "openspec-init" "skipped (binary=$([ -x "$OS_BIN" ] && echo "yes" || echo "no"), project=$([ -n "$PROJECT_DIR" ] && echo "yes" || echo "no"), existing=$([ -d "${PROJECT_DIR:-/nonexistent}/openspec" ] && echo "yes" || echo "no"))"
+# ── OpenSpec init (every launch, silent) ────────────────────
+# Always run to ensure /opsx commands are available, even if the project
+# was cloned without openspec config. Idempotent — no-ops if already set up.
+if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
+    "$OS_BIN" init --tools claude >/dev/null 2>&1 || true
 fi
 
 # ── Banner ──────────────────────────────────────────────────
