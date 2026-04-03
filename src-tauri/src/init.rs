@@ -95,43 +95,88 @@ fn build_forge_image() -> Result<(), String> {
     let script = source_dir.join("scripts").join("build-image.sh");
     let tag = forge_image_tag();
 
-    // On Windows, .sh scripts can't be executed directly — invoke via bash.
-    // Paths must use forward slashes or bash interprets \ as escape chars.
-    let mut cmd = if cfg!(target_os = "windows") {
-        let mut c = std::process::Command::new("bash");
-        c.arg(crate::embedded::bash_path(&script));
-        c
-    } else {
-        std::process::Command::new(&script)
-    };
+    // Debug: verify the script file was actually extracted
+    if !script.exists() {
+        eprintln!("  [internal] Script not found at: {}", script.display());
+        eprintln!("  [internal] Source dir contents:");
+        if let Ok(entries) = std::fs::read_dir(&source_dir) {
+            for entry in entries.flatten() {
+                eprintln!("    {}", entry.path().display());
+            }
+        }
+        return Err(strings::SETUP_ERROR.into());
+    }
 
-    let status = cmd
-        .arg("forge")
-        .args(["--tag", &tag, "--backend", "fedora"])
-        .current_dir(&source_dir)
-        .env_remove("LD_LIBRARY_PATH")
-        .env_remove("LD_PRELOAD")
-        .stdin(std::process::Stdio::inherit())
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .map_err(|e| {
-            eprintln!("  [internal] Failed to launch build script: {e}");
-            strings::SETUP_ERROR
-        })?;
+    // On Windows, invoke podman build directly instead of going through bash.
+    // Git Bash's MSYS2 environment doesn't initialize properly when bash.exe
+    // is launched from a native Windows process without a console.
+    #[cfg(target_os = "windows")]
+    {
+        let containerfile = source_dir.join("images").join("default").join("Containerfile");
+        let context_dir = source_dir.join("images").join("default");
 
-    embedded::cleanup_image_sources();
+        if !containerfile.exists() {
+            eprintln!("  [internal] Containerfile not found at: {}", containerfile.display());
+            return Err(strings::SETUP_ERROR.into());
+        }
 
-    if status.success() {
-        // Prune older versioned forge images to reclaim disk space
-        prune_old_forge_images(&tag);
-        Ok(())
-    } else {
-        eprintln!(
-            "  [internal] Build script exited with code {}",
-            status.code().unwrap_or(-1)
-        );
-        Err(strings::SETUP_ERROR.into())
+        let status = tillandsias_podman::podman_cmd_sync()
+            .args(["build", "--tag", &tag, "-f"])
+            .arg(&containerfile)
+            .arg(&context_dir)
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status()
+            .map_err(|e| {
+                eprintln!("  [internal] Failed to launch podman build: {e}");
+                strings::SETUP_ERROR
+            })?;
+
+        embedded::cleanup_image_sources();
+
+        if status.success() {
+            prune_old_forge_images(&tag);
+            return Ok(());
+        } else {
+            eprintln!(
+                "  [internal] podman build exited with code {}",
+                status.code().unwrap_or(-1)
+            );
+            return Err(strings::SETUP_ERROR.into());
+        }
+    }
+
+    // On Unix, use the build-image.sh script directly.
+    #[cfg(not(target_os = "windows"))]
+    {
+        let status = std::process::Command::new(&script)
+            .arg("forge")
+            .args(["--tag", &tag, "--backend", "fedora"])
+            .current_dir(&source_dir)
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status()
+            .map_err(|e| {
+                eprintln!("  [internal] Failed to launch build script: {e}");
+                strings::SETUP_ERROR
+            })?;
+
+        embedded::cleanup_image_sources();
+
+        if status.success() {
+            prune_old_forge_images(&tag);
+            Ok(())
+        } else {
+            eprintln!(
+                "  [internal] Build script exited with code {}",
+                status.code().unwrap_or(-1)
+            );
+            Err(strings::SETUP_ERROR.into())
+        }
     }
 }
 

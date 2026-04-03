@@ -519,60 +519,85 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
     let tag = forge_image_tag();
     info!(script = %script.display(), image = image_name, tag = %tag, spec = "default-image, nix-builder", "Running embedded build-image.sh");
 
-    // On Windows, .sh scripts can't be executed directly — invoke via bash.
-    // Paths must use forward slashes or bash interprets \ as escape chars.
-    // Note: DO NOT use CREATE_NO_WINDOW here — it breaks Git Bash's MSYS2
-    // environment. The .output() capture already prevents visible windows.
-    let mut cmd = if cfg!(target_os = "windows") {
-        let mut c = std::process::Command::new("bash");
-        c.arg(crate::embedded::bash_path(&script));
-        c
-    } else {
-        std::process::Command::new(&script)
-    };
+    // On Windows, call podman build directly instead of going through bash.
+    // Git Bash's MSYS2 doesn't initialize properly from native Windows processes.
+    #[cfg(target_os = "windows")]
+    {
+        let containerfile = source_dir.join("images").join("default").join("Containerfile");
+        let context_dir = source_dir.join("images").join("default");
+        info!(image = image_name, tag = %tag, "Running podman build directly (Windows)");
 
-    let output = cmd
-        .arg(image_name)
-        .args(["--tag", &tag, "--backend", "fedora"])
-        .current_dir(&source_dir)
-        // Clear AppImage library paths so toolbox, nix, and other host
-        // binaries called by build-image.sh use host libraries.
-        .env_remove("LD_LIBRARY_PATH")
-        .env_remove("LD_PRELOAD")
-        // Pass the resolved podman path so build-image.sh can find podman
-        // even when launched from Finder (which has a minimal PATH).
-        .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
-        .output()
-        .map_err(|e| {
-            error!(script = %script.display(), image = image_name, error = %e, "Failed to launch image build script");
-            strings::SETUP_ERROR
-        })?;
+        let output = tillandsias_podman::podman_cmd_sync()
+            .args(["build", "--tag", &tag, "-f"])
+            .arg(&containerfile)
+            .arg(&context_dir)
+            .output()
+            .map_err(|e| {
+                error!(image = image_name, error = %e, "Failed to launch podman build");
+                strings::SETUP_ERROR
+            })?;
 
-    // Clean up temp files and release lock regardless of result
-    crate::embedded::cleanup_image_sources();
-    crate::build_lock::release(image_name);
+        crate::embedded::cleanup_image_sources();
+        crate::build_lock::release(image_name);
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            error!(
+                image = image_name,
+                exit_code = output.status.code().unwrap_or(-1),
+                stdout = %stdout,
+                stderr = %stderr,
+                "podman build failed"
+            );
+            return Err(strings::SETUP_ERROR.into());
+        }
+
         let stdout = String::from_utf8_lossy(&output.stdout);
-        error!(
-            image = image_name,
-            exit_code = output.status.code().unwrap_or(-1),
-            stdout = %stdout,
-            stderr = %stderr,
-            spec = "default-image, nix-builder",
-            "Image build script failed"
-        );
-        return Err(strings::SETUP_ERROR.into());
+        debug!(output = %stdout, "podman build completed");
+        prune_old_forge_images(&tag);
+        return Ok(());
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    debug!(output = %stdout, "build-image.sh completed");
+    // On Unix, use the build-image.sh script (handles nix + fedora backends).
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = std::process::Command::new(&script)
+            .arg(image_name)
+            .args(["--tag", &tag, "--backend", "fedora"])
+            .current_dir(&source_dir)
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
+            .output()
+            .map_err(|e| {
+                error!(script = %script.display(), image = image_name, error = %e, "Failed to launch image build script");
+                strings::SETUP_ERROR
+            })?;
 
-    // Prune older versioned forge images to reclaim disk space
-    prune_old_forge_images(&tag);
+        crate::embedded::cleanup_image_sources();
+        crate::build_lock::release(image_name);
 
-    Ok(())
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            error!(
+                image = image_name,
+                exit_code = output.status.code().unwrap_or(-1),
+                stdout = %stdout,
+                stderr = %stderr,
+                spec = "default-image, nix-builder",
+                "Image build script failed"
+            );
+            return Err(strings::SETUP_ERROR.into());
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        debug!(output = %stdout, "build-image.sh completed");
+        prune_old_forge_images(&tag);
+
+        Ok(())
+    }
 }
 
 /// Public wrapper around `run_build_image_script` for use from `main.rs`

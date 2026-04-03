@@ -75,15 +75,55 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         );
     }
 
-    // On Windows, .sh scripts can't be executed directly — invoke via bash.
-    // Paths must use forward slashes or bash interprets \ as escape chars.
-    let mut cmd = if cfg!(target_os = "windows") {
-        let mut c = std::process::Command::new("bash");
-        c.arg(crate::embedded::bash_path(&script));
-        c
-    } else {
-        std::process::Command::new(&script)
-    };
+    // On Windows, call podman build directly instead of going through bash.
+    // Git Bash's MSYS2 doesn't initialize properly from native Windows processes.
+    #[cfg(target_os = "windows")]
+    {
+        let containerfile = source_dir.join("images").join("default").join("Containerfile");
+        let context_dir = source_dir.join("images").join("default");
+
+        if debug {
+            println!(
+                "  [debug] Running podman build --tag {} -f {}",
+                tag,
+                containerfile.display()
+            );
+        }
+
+        let status = tillandsias_podman::podman_cmd_sync()
+            .args(["build", "--tag", &tag, "-f"])
+            .arg(&containerfile)
+            .arg(&context_dir)
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status()
+            .map_err(|e| {
+                eprintln!("  [debug] Failed to launch podman build: {e}");
+                strings::SETUP_ERROR
+            })?;
+
+        crate::embedded::cleanup_image_sources();
+        crate::build_lock::release(image_name);
+
+        if status.success() {
+            crate::handlers::prune_old_forge_images(&tag);
+            return Ok(());
+        } else {
+            if debug {
+                eprintln!(
+                    "  [debug] podman build exited with code {}",
+                    status.code().unwrap_or(-1)
+                );
+            }
+            return Err(strings::SETUP_ERROR.into());
+        }
+    }
+
+    // On Unix, use the build-image.sh script (handles nix + fedora backends).
+    #[cfg(not(target_os = "windows"))]
+    {
+    let mut cmd = std::process::Command::new(&script);
 
     let status = cmd
         .arg(image_name)
@@ -119,6 +159,7 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         }
         Err(strings::SETUP_ERROR.into())
     }
+    } // #[cfg(not(target_os = "windows"))]
 }
 
 /// Get the image size in human-readable form via `podman image inspect`.
