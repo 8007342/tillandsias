@@ -1,0 +1,13 @@
+# Force LF line endings for all text files in the repo.
+# This overrides core.autocrlf on Windows machines, ensuring
+# include_str!() embeds LF (not CRLF) in the binary.
+* text=auto eol=lf
+
+# Explicitly mark binary formats
+*.png binary
+*.ico binary
+*.svg binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
