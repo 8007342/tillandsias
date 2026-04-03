@@ -39,7 +39,17 @@
       "Bash(openspec:*)",
       "Bash(gh workflow:*)",
       "Bash(./target/debug/tillandsias-tray.exe:*)",
-      "Bash(cargo doc:*)"
+      "Bash(cargo doc:*)",
+      "Bash(git rm:*)",
+      "Bash(git reset:*)",
+      "Bash(git rebase:*)",
+      "Read(//c/Users/bullo/AppData/Local/Temp/tillandsias-embedded//**)",
+      "Read(//c/Users/bullo/AppData/Local/Temp/tillandsias-embedded/image-sources/**)",
+      "Bash(\"/c/Users/bullo/AppData/Local/Tillandsias/tillandsias-tray.exe\" --version)",
+      "Bash(podman rmi:*)",
+      "Bash(podman images:*)",
+      "Bash(grep -r \"CreateFile\" /c/Users/bullo/.cargo/registry/src/*/windows-sys-0.59.0/src/Windows/Win32/Storage/FileSystem/mod.rs)",
+      "Bash(grep -r \"fn CreateFileW\" /c/Users/bullo/.cargo/registry/src/*/windows-sys-0.59.0/src/)"
     ]
   }
 }

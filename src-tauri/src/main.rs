@@ -1,7 +1,7 @@
-#![cfg_attr(
-    all(not(debug_assertions), target_os = "windows"),
-    windows_subsystem = "windows"
-)]
+// On Windows, we use "console" subsystem (the default) so CLI output works
+// from any terminal. For tray-only mode (no args), the console window is
+// hidden via FreeConsole() after startup.
+// On non-Windows, the attribute is irrelevant.
 
 mod accountability;
 mod build_lock;
@@ -50,16 +50,13 @@ use updater::UpdateState;
 static TRAY_ICON: std::sync::OnceLock<Mutex<tauri::tray::TrayIcon>> = std::sync::OnceLock::new();
 
 fn main() {
-    // On Windows release builds, the binary is a GUI app (windows_subsystem = "windows")
-    // which means no console is attached. When launched from a terminal with CLI args,
-    // reattach to the parent console so println! output is visible.
-    #[cfg(all(not(debug_assertions), target_os = "windows"))]
+    // On Windows, hide the console window for tray-only mode (no args).
+    // CLI mode keeps the console so output is visible in any terminal.
+    #[cfg(target_os = "windows")]
     {
-        // Any CLI arg means the user launched from a terminal and expects output.
-        if std::env::args().len() > 1 {
+        if std::env::args().len() <= 1 {
             unsafe {
-                // ATTACH_PARENT_PROCESS = -1 (0xFFFFFFFF)
-                windows_sys::Win32::System::Console::AttachConsole(0xFFFFFFFF);
+                windows_sys::Win32::System::Console::FreeConsole();
             }
         }
     }
