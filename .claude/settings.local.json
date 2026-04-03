@@ -49,7 +49,10 @@
       "Bash(podman rmi:*)",
       "Bash(podman images:*)",
       "Bash(grep -r \"CreateFile\" /c/Users/bullo/.cargo/registry/src/*/windows-sys-0.59.0/src/Windows/Win32/Storage/FileSystem/mod.rs)",
-      "Bash(grep -r \"fn CreateFileW\" /c/Users/bullo/.cargo/registry/src/*/windows-sys-0.59.0/src/)"
+      "Bash(grep -r \"fn CreateFileW\" /c/Users/bullo/.cargo/registry/src/*/windows-sys-0.59.0/src/)",
+      "Bash(grep:*)",
+      "Bash(cmd.exe /c ver)",
+      "Bash(where.exe wt.exe)"
     ]
   }
 }

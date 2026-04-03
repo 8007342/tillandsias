@@ -193,14 +193,22 @@ pub fn shell_quote_join(args: &[String]) -> String {
     args.iter()
         .map(|arg| {
             if arg.is_empty() {
-                "''".to_string()
+                if cfg!(target_os = "windows") {
+                    "\"\"".to_string()
+                } else {
+                    "''".to_string()
+                }
             } else if arg
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || "-_=:/.@+,".contains(c))
             {
                 arg.clone()
+            } else if cfg!(target_os = "windows") {
+                // Windows cmd.exe uses double quotes, not single quotes.
+                // Escape interior double quotes by doubling them.
+                format!("\"{}\"", arg.replace('"', "\"\""))
             } else {
-                // Wrap in single quotes, escaping interior single quotes
+                // Unix: single quotes, escape interior single quotes
                 format!("'{}'", arg.replace('\'', "'\\''"))
             }
         })

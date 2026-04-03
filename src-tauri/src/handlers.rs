@@ -428,23 +428,29 @@ fn open_terminal(command: &str, title: &str) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        // Windows: `start "<title>" cmd /k <command>`
-        // The first positional argument to `start` is the window title.
-        // For .sh scripts, invoke through bash instead of cmd.
-        // Convert backslashes to forward slashes for Git Bash.
-        if command.ends_with(".sh") {
-            let bash_cmd = command.replace('\\', "/");
-            std::process::Command::new("cmd")
-                .args(["/c", "start", title, "bash", &bash_cmd])
-                .spawn()
-                .map(|_| ())
-                .map_err(|e| format!("cmd: {e}"))
+        // Windows Terminal (wt.exe) preserves argument quoting correctly.
+        // Falls back to cmd /c start for systems without wt.
+        let shell_cmd = if command.ends_with(".sh") {
+            format!("bash {}", command.replace('\\', "/"))
         } else {
-            std::process::Command::new("cmd")
-                .args(["/c", "start", title, "cmd", "/k", command])
-                .spawn()
-                .map(|_| ())
-                .map_err(|e| format!("cmd: {e}"))
+            command.to_string()
+        };
+
+        // Try Windows Terminal first (handles quoting properly)
+        let wt_result = std::process::Command::new("wt")
+            .args(["--title", title, "cmd", "/k", &shell_cmd])
+            .spawn();
+
+        match wt_result {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                // Fallback: cmd /c start (legacy, quoting may be fragile)
+                std::process::Command::new("cmd")
+                    .args(["/c", "start", &format!("\"{}\"", title), "cmd", "/k", &shell_cmd])
+                    .spawn()
+                    .map(|_| ())
+                    .map_err(|e| format!("cmd: {e}"))
+            }
         }
     }
 
