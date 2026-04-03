@@ -161,7 +161,10 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 /// session cleanup of `$XDG_RUNTIME_DIR`).
 // @trace spec:embedded-scripts/image-source-extraction
 pub fn write_image_sources() -> Result<PathBuf, String> {
-    let dir = runtime_dir().join("image-sources");
+    // Use a per-process directory to avoid collisions between the tray app's
+    // background build and concurrent CLI invocations.
+    let pid = std::process::id();
+    let dir = runtime_dir().join(format!("image-sources-{pid}"));
 
     // Recreate fresh each time
     let _ = fs::remove_dir_all(&dir);
@@ -295,7 +298,8 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
 
 /// Remove the extracted image sources temp directory.
 pub fn cleanup_image_sources() {
-    let dir = runtime_dir().join("image-sources");
+    let pid = std::process::id();
+    let dir = runtime_dir().join(format!("image-sources-{pid}"));
     if dir.exists() {
         if let Err(e) = fs::remove_dir_all(&dir) {
             debug!(error = %e, "Failed to clean up image sources temp dir");
@@ -303,4 +307,7 @@ pub fn cleanup_image_sources() {
             debug!("Cleaned up image sources temp dir");
         }
     }
+    // Also clean up legacy shared dir if it exists
+    let legacy = runtime_dir().join("image-sources");
+    let _ = fs::remove_dir_all(&legacy);
 }
