@@ -32,17 +32,21 @@
 //!
 //! # Update mechanism
 //!
-//! For AppImage installs the update is applied by:
-//! 1. Detecting the running AppImage path via `$APPIMAGE` env var.
-//! 2. Downloading the artifact URL via in-process HTTP (`reqwest`).
-//! 3. If the URL ends in `.tar.gz`: extract the archive to find the `.AppImage`
-//!    inside.  If the URL ends in `.AppImage`: the download IS the new binary —
-//!    no extraction step is needed.
-//! 4. Making the new AppImage executable and atomically replacing the running
-//!    one.
+//! Platform-specific:
 //!
-//! If `$APPIMAGE` is not set the binary is not an AppImage and the download
-//! step is skipped after a clear message to the user.
+//! **Linux (AppImage):**
+//! 1. Detect install path via `$APPIMAGE` or `~/Applications/Tillandsias.AppImage`.
+//! 2. Download the artifact (`.AppImage` or `.tar.gz`).
+//! 3. Extract if needed, `chmod +x`, atomically replace the running binary.
+//!
+//! **macOS (.app bundle):**
+//! 1. Detect install path at `~/Applications/Tillandsias.app` or `/Applications/`.
+//! 2. Download the `.app.tar.gz` artifact.
+//! 3. Extract, clear quarantine (`xattr -cr`), atomically swap the bundle
+//!    (old → `.app.bak`, new → `.app`, delete bak).
+//!
+//! If the install location cannot be detected, the download URL is printed
+//! for manual installation.
 
 use std::io::Write as _;
 use std::path::PathBuf;
@@ -67,6 +71,10 @@ const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Debug, Deserialize)]
 struct LatestJson {
     version: String,
+    /// Full 4-part version (e.g. "0.1.110.96"). Added to the manifest alongside
+    /// the 3-part `version` (which Tauri's built-in updater requires as semver).
+    /// The CLI prefers this for display and comparison.
+    full_version: Option<String>,
     platforms: std::collections::HashMap<String, PlatformEntry>,
 }
 
@@ -125,10 +133,17 @@ pub fn run() -> bool {
         }
     };
 
-    let latest = manifest.version.trim_start_matches('v');
+    // Prefer full_version (4-part) for display; fall back to version (3-part)
+    // for comparison against CARGO_PKG_VERSION which is also 3-part.
+    let latest_display = manifest
+        .full_version
+        .as_deref()
+        .unwrap_or(&manifest.version)
+        .trim_start_matches('v');
+    let latest_compare = manifest.version.trim_start_matches('v');
     let current = CURRENT_VERSION.trim_start_matches('v');
 
-    if !is_newer(latest, current) {
+    if !is_newer(latest_compare, current) {
         println!("  {}", i18n::t("update.up_to_date"));
         update_log::append_entry(&format!(
             "UPDATE CHECK: v{current} — already up to date"
@@ -136,9 +151,12 @@ pub fn run() -> bool {
         return true;
     }
 
-    println!("  {}", i18n::tf("update.available", &[("version", latest)]));
+    println!(
+        "  {}",
+        i18n::tf("update.available", &[("version", latest_display)])
+    );
     update_log::append_entry(&format!(
-        "UPDATE CHECK: v{current} \u{2192} v{latest} available"
+        "UPDATE CHECK: v{current} \u{2192} v{latest_display} available"
     ));
 
     // Detect platform key (Tauri uses "linux-x86_64", "darwin-x86_64", etc.)
@@ -160,19 +178,17 @@ pub fn run() -> bool {
         }
     };
 
-    // Detect whether we are running as an AppImage
-    let appimage_path = std::env::var("APPIMAGE").ok().map(PathBuf::from);
-    if appimage_path.is_none() {
-        println!("  Note: $APPIMAGE is not set — not running as an AppImage.");
+    // Detect install location — platform-specific.
+    let install_target = detect_install_target();
+    if install_target.is_none() {
         println!("  Download the new version manually from:");
         println!("    {}", entry.url);
         update_log::append_entry(&format!(
-            "UPDATE CHECK: v{current} \u{2192} v{latest} available (manual download required — not an AppImage)"
+            "UPDATE CHECK: v{current} \u{2192} v{latest_display} available (manual download — install location not detected)"
         ));
-        // Still report success: the check itself succeeded.
         return true;
     }
-    let appimage_path = appimage_path.unwrap();
+    let install_target = install_target.unwrap();
 
     // Download the update archive
     println!("  {}", i18n::t("update.downloading"));
@@ -197,12 +213,11 @@ pub fn run() -> bool {
         entry.url
     ));
 
-    // Extract (if tar.gz) or use directly (if raw AppImage), then replace
+    // Apply the update — dispatches to platform-specific logic.
     println!("  {}", i18n::t("update.applying"));
-    if let Err(e) = apply_appimage_update(&archive_path, &appimage_path, &entry.url) {
+    if let Err(e) = apply_update(&archive_path, &install_target, &entry.url) {
         eprintln!("  Error: failed to apply update: {e}");
         update_log::append_entry(&format!("ERROR: failed to apply update: {e}"));
-        // Clean up temp archive
         let _ = std::fs::remove_file(&archive_path);
         return false;
     }
@@ -210,15 +225,18 @@ pub fn run() -> bool {
     // Clean up temp archive
     let _ = std::fs::remove_file(&archive_path);
 
-    // Compute SHA256 of the newly installed binary and log the apply event.
-    let sha = update_log::sha256_file(&appimage_path)
+    // Compute SHA256 of the installed artifact and log the apply event.
+    let sha = update_log::sha256_file(&install_target)
         .unwrap_or_else(|_| "(sha256 unavailable)".to_string());
     update_log::append_entry(&format!(
-        "APPLIED: v{current} \u{2192} v{latest} (replaced {}) SHA256: {sha}",
-        appimage_path.display()
+        "APPLIED: v{current} \u{2192} v{latest_display} (replaced {}) SHA256: {sha}",
+        install_target.display()
     ));
 
-    println!("  {}", i18n::tf("update.updated", &[("version", latest)]));
+    println!(
+        "  {}",
+        i18n::tf("update.updated", &[("version", latest_display)])
+    );
     println!("  {}", i18n::t("update.restart_note"));
     true
 }
@@ -313,24 +331,143 @@ fn download_update(url: &str) -> Result<PathBuf, String> {
     })
 }
 
-/// Apply a downloaded AppImage update, replacing the running AppImage binary.
+/// Detect where Tillandsias is installed on this platform.
+///
+/// Returns the path to the installed artifact (AppImage on Linux, .app on
+/// macOS) or `None` if the install location cannot be determined.
+fn detect_install_target() -> Option<PathBuf> {
+    if cfg!(target_os = "linux") {
+        // Linux: AppImage at $APPIMAGE, or ~/Applications/Tillandsias.AppImage
+        std::env::var("APPIMAGE")
+            .ok()
+            .map(PathBuf::from)
+            .or_else(|| {
+                let home = dirs::home_dir()?;
+                let path = home.join("Applications/Tillandsias.AppImage");
+                path.exists().then_some(path)
+            })
+    } else if cfg!(target_os = "macos") {
+        // macOS: ~/Applications/Tillandsias.app (user install from build-osx.sh)
+        let home = dirs::home_dir()?;
+        let path = home.join("Applications/Tillandsias.app");
+        if path.exists() {
+            Some(path)
+        } else {
+            // Also check /Applications (system-wide install)
+            let sys_path = PathBuf::from("/Applications/Tillandsias.app");
+            sys_path.exists().then_some(sys_path)
+        }
+    } else {
+        None
+    }
+}
+
+/// Apply a downloaded update, dispatching to the correct platform logic.
+///
+/// - **Linux AppImage**: raw `.AppImage` → chmod + rename; `.tar.gz` → extract + replace.
+/// - **macOS .app**: `.app.tar.gz` → extract + replace bundle.
+fn apply_update(
+    download_path: &std::path::Path,
+    install_target: &std::path::Path,
+    download_url: &str,
+) -> Result<(), String> {
+    if cfg!(target_os = "macos") {
+        apply_macos_update(download_path, install_target)
+    } else {
+        apply_appimage_update(download_path, install_target, download_url)
+    }
+}
+
+/// Apply a macOS `.app.tar.gz` update by extracting and replacing the bundle.
+///
+/// The `.app.tar.gz` produced by Tauri contains `Tillandsias.app/` at the
+/// top level. We extract to a temp dir, then atomically swap the old .app
+/// with the new one (rename old → .app.bak, rename new → .app, delete bak).
+fn apply_macos_update(
+    download_path: &std::path::Path,
+    app_bundle_path: &std::path::Path,
+) -> Result<(), String> {
+    let tmp_dir = std::env::temp_dir().join("tillandsias-update-extract");
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+    std::fs::create_dir_all(&tmp_dir)
+        .map_err(|e| format!("failed to create temp extract dir: {e}"))?;
+
+    // Extract the .app.tar.gz
+    let status = std::process::Command::new("tar")
+        .args([
+            "xzf",
+            download_path.to_str().unwrap_or(""),
+            "-C",
+            tmp_dir.to_str().unwrap_or(""),
+        ])
+        .status()
+        .map_err(|e| format!("tar not found or failed to spawn: {e}"))?;
+
+    if !status.success() {
+        return Err("tar extraction failed".to_string());
+    }
+
+    // Find the extracted .app bundle
+    let new_app = find_app_bundle_in_dir(&tmp_dir)?;
+
+    // Clear quarantine on the extracted .app
+    let _ = std::process::Command::new("xattr")
+        .args(["-cr", new_app.to_str().unwrap_or("")])
+        .status();
+
+    // Replace: move old .app to .bak, move new .app in, delete .bak
+    let backup_path = app_bundle_path.with_extension("app.bak");
+    let _ = std::fs::remove_dir_all(&backup_path); // clean any stale backup
+
+    // Move current → backup
+    if app_bundle_path.exists() {
+        std::fs::rename(app_bundle_path, &backup_path)
+            .map_err(|e| format!("failed to back up current app: {e}"))?;
+    }
+
+    // Move new → install location
+    if let Err(e) = std::fs::rename(&new_app, app_bundle_path) {
+        // Restore backup on failure
+        let _ = std::fs::rename(&backup_path, app_bundle_path);
+        return Err(format!("failed to install new app: {e}"));
+    }
+
+    // Success — remove backup and temp dir
+    let _ = std::fs::remove_dir_all(&backup_path);
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+
+    Ok(())
+}
+
+/// Walk a directory and return the path of the first `.app` bundle found.
+fn find_app_bundle_in_dir(dir: &std::path::Path) -> Result<PathBuf, String> {
+    for entry in std::fs::read_dir(dir).map_err(|e| format!("cannot read extract dir: {e}"))? {
+        let entry = entry.map_err(|e| format!("directory read error: {e}"))?;
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(ext) = path.extension() {
+                if ext.eq_ignore_ascii_case("app") {
+                    return Ok(path);
+                }
+            }
+        }
+    }
+    Err("no .app bundle found in update archive".to_string())
+}
+
+/// Apply a Linux AppImage update, replacing the running binary.
 ///
 /// Two artifact formats are supported, detected by `download_url`:
-///
-/// - **Raw `.AppImage`** — Tauri v2 Linux: the downloaded file IS the new
-///   binary. No extraction needed; just make it executable and replace.
-/// - **`.tar.gz` archive** — legacy / macOS-derived path: extract the archive
-///   to find the `.AppImage` inside, then replace.
+/// - **Raw `.AppImage`** — the downloaded file IS the new binary.
+/// - **`.tar.gz` archive** — extract to find the `.AppImage` inside.
 fn apply_appimage_update(
     download_path: &std::path::Path,
     appimage_path: &std::path::Path,
     download_url: &str,
 ) -> Result<(), String> {
     let new_appimage: PathBuf = if download_url.ends_with(".AppImage") {
-        // Raw AppImage — the downloaded file is the replacement binary.
         download_path.to_path_buf()
     } else {
-        // tar.gz archive — extract and find the .AppImage inside.
         let tmp_dir = std::env::temp_dir().join("tillandsias-update-extract");
         let _ = std::fs::remove_dir_all(&tmp_dir);
         std::fs::create_dir_all(&tmp_dir)
@@ -355,7 +492,6 @@ fn apply_appimage_update(
         find_appimage_in_dir(&tmp_dir)?
     };
 
-    // Make it executable (Unix only — Windows doesn't need this)
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -367,12 +503,7 @@ fn apply_appimage_update(
             .map_err(|e| format!("cannot chmod new AppImage: {e}"))?;
     }
 
-    // Atomic replace: rename new AppImage over the current one.
-    // On Linux this is atomic at the filesystem level when src and dst are
-    // on the same filesystem — which they are if $APPIMAGE is in $HOME and
-    // /tmp is also on the same mount. If not, we fall back to copy+replace.
     if std::fs::rename(&new_appimage, appimage_path).is_err() {
-        // Cross-device fallback: copy then rename via a sibling temp file.
         let sibling = appimage_path.with_extension("update-tmp");
         std::fs::copy(&new_appimage, &sibling)
             .map_err(|e| format!("failed to copy new AppImage: {e}"))?;
@@ -380,9 +511,7 @@ fn apply_appimage_update(
             .map_err(|e| format!("failed to replace AppImage: {e}"))?;
     }
 
-    // Clean up extract dir (only exists for tar.gz path; harmless if absent)
     let _ = std::fs::remove_dir_all(std::env::temp_dir().join("tillandsias-update-extract"));
-
     Ok(())
 }
 
@@ -398,7 +527,6 @@ fn find_appimage_in_dir(dir: &std::path::Path) -> Result<PathBuf, String> {
         {
             return Ok(path);
         }
-        // Recurse one level (some archives nest files in a subdirectory)
         if path.is_dir() {
             if let Ok(inner) = find_appimage_in_dir(&path) {
                 return Ok(inner);
