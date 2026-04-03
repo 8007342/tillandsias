@@ -18,7 +18,17 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FORGE_IMAGE="tillandsias-forge:latest"
+
+# Auto-detect the forge image tag — the tray app builds versioned tags
+# (e.g. tillandsias-forge:v0.1.111.99), not :latest. Find the newest one.
+FORGE_IMAGE="${TILLANDSIAS_FORGE_IMAGE:-}"
+if [[ -z "$FORGE_IMAGE" ]]; then
+    FORGE_IMAGE="$("${PODMAN:-podman}" images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
+        | grep '^localhost/tillandsias-forge:' \
+        | head -1 \
+        | sed 's|^localhost/||')"
+fi
+FORGE_IMAGE="${FORGE_IMAGE:-tillandsias-forge:latest}"
 
 # Find podman — AppImages may not have /usr/bin in PATH
 PODMAN="podman"
@@ -131,14 +141,35 @@ esac
 # Check forge image
 # ---------------------------------------------------------------------------
 if ! $PODMAN image exists "$FORGE_IMAGE" 2>/dev/null; then
+    # The tray app builds the image before launching this script, so if we
+    # get here something went wrong. Try common locations for build-image.sh.
     _warn "Forge image not found: $FORGE_IMAGE"
     echo ""
-    if [[ -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
+
+    BUILD_SCRIPT=""
+    # 1. Embedded temp dir (launched from tray app)
+    for candidate in \
+        "$SCRIPT_DIR/scripts/build-image.sh" \
+        "$SCRIPT_DIR/../image-sources/scripts/build-image.sh" \
+        ; do
+        [[ -x "$candidate" ]] && BUILD_SCRIPT="$candidate" && break
+    done
+    # 2. Installed data location
+    if [[ -z "$BUILD_SCRIPT" ]]; then
+        if [[ "$(uname -s)" == "Darwin" ]]; then
+            DATA_DIR="${HOME}/Library/Application Support/tillandsias"
+        else
+            DATA_DIR="${HOME}/.local/share/tillandsias"
+        fi
+        [[ -x "$DATA_DIR/scripts/build-image.sh" ]] && BUILD_SCRIPT="$DATA_DIR/scripts/build-image.sh"
+    fi
+
+    if [[ -n "$BUILD_SCRIPT" ]]; then
         read -rp "Build it now? [Y/n] " answer
         case "${answer:-y}" in
             [Yy]|"")
                 _info "Building forge image..."
-                "$SCRIPT_DIR/scripts/build-image.sh" forge
+                "$BUILD_SCRIPT" forge
                 echo ""
                 ;;
             *)
@@ -147,29 +178,8 @@ if ! $PODMAN image exists "$FORGE_IMAGE" 2>/dev/null; then
                 ;;
         esac
     else
-        # Check installed location — platform-aware
-        if [[ "$(uname -s)" == "Darwin" ]]; then
-            DATA_DIR="${HOME}/Library/Application Support/tillandsias"
-        else
-            DATA_DIR="${HOME}/.local/share/tillandsias"
-        fi
-        if [[ -x "$DATA_DIR/scripts/build-image.sh" ]]; then
-            read -rp "Build it now? [Y/n] " answer
-            case "${answer:-y}" in
-                [Yy]|"")
-                    _info "Building forge image..."
-                    "$DATA_DIR/scripts/build-image.sh" forge
-                    echo ""
-                    ;;
-                *)
-                    _error "Cannot proceed without forge image."
-                    exit 1
-                    ;;
-            esac
-        else
-            _error "Cannot find build-image.sh. Run: ./build.sh --install"
-            exit 1
-        fi
+        _error "Forge image missing. Restart the app — it builds the image automatically."
+        exit 1
     fi
 
     # Verify image now exists

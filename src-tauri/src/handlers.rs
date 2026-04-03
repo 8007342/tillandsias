@@ -1419,7 +1419,12 @@ pub async fn handle_github_login(
                 strings::INSTALL_INCOMPLETE
             })?;
 
-    open_terminal(&script_path.display().to_string(), "GitHub Login")
+    // Pass the versioned image tag so the script doesn't have to guess.
+    let cmd = format!(
+        "TILLANDSIAS_FORGE_IMAGE={} {}",
+        tag, script_path.display()
+    );
+    open_terminal(&cmd, "GitHub Login")
         .map_err(|e| format!("Failed to open terminal: {e}"))
 }
 
