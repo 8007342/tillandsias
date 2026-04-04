@@ -63,9 +63,9 @@ COPY forge-welcome.sh /usr/local/share/tillandsias/forge-welcome.sh
 RUN chmod +x /usr/local/share/tillandsias/forge-welcome.sh || true
 
 # ── Locale files ───────────────────────────────────────────────
+# @trace spec:environment-runtime
 RUN mkdir -p /etc/tillandsias/locales
-COPY locales/en.sh /etc/tillandsias/locales/en.sh
-COPY locales/es.sh /etc/tillandsias/locales/es.sh
+COPY locales/ /etc/tillandsias/locales/
 
 # ── Fix ownership ──────────────────────────────────────────────
 RUN chown -R 1000:1000 /home/forge

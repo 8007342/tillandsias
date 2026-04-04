@@ -41,6 +41,7 @@ all_cloned = "All repos cloned locally"
 login_first = "Login to GitHub first"
 could_not_fetch = "Could not fetch repos"
 cloning = "Cloning {name}..."
+remote_projects = "Remote Projects"
 
 [menu.claude]
 reset_credentials = "🔒 Claude Reset Credentials"

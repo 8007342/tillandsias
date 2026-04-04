@@ -41,6 +41,7 @@ all_cloned = "Alle Repos lokal geklont"
 login_first = "Zuerst bei GitHub anmelden"
 could_not_fetch = "Repos konnten nicht abgerufen werden"
 cloning = "{name} wird geklont..."
+remote_projects = "Entfernte Projekte"
 
 [menu.claude]
 reset_credentials = "🔒 Claude-Zugangsdaten zurücksetzen"

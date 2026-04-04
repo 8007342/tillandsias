@@ -13,7 +13,8 @@ set -euo pipefail
 # create files on bind-mounted directories with restrictive modes.
 umask 0022
 
-trap 'exit 0' SIGTERM SIGINT
+_cleanup() { jobs -p | xargs -r kill 2>/dev/null; exit 0; }
+trap '_cleanup' SIGTERM SIGINT EXIT
 
 # ── Locale detection ─────────────────────────────────────────
 # Extract the 2-letter language code from the OS locale environment.
@@ -105,6 +106,35 @@ find_project_dir() {
     return 0
 }
 
+# ── Progress spinner ────────────────────────────────────────
+# @trace spec:install-progress
+# Usage: spin "message" command [args...]
+# Shows animated spinner on stderr while command runs.
+# Falls back to a static message if stderr is not a TTY.
+spin() {
+    local msg="$1"; shift
+    if [ ! -t 2 ]; then
+        echo "  $msg" >&2
+        "$@" >/dev/null 2>&1
+        return $?
+    fi
+    local chars='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local spin_pid
+    ( trap 'exit 0' TERM
+      while true; do
+        for ((i=0; i<${#chars}; i++)); do
+            printf '\r  %s %s' "${chars:$i:1}" "$msg" >&2
+            sleep 0.1
+        done
+      done ) &
+    spin_pid=$!
+    local rc=0
+    "$@" >/dev/null 2>&1 || rc=$?
+    kill "$spin_pid" 2>/dev/null; wait "$spin_pid" 2>/dev/null
+    printf '\r\033[K' >&2
+    return $rc
+}
+
 # ── OpenSpec install (npm to user prefix, cached) ──────────
 # @trace spec:forge-shell-tools
 install_openspec() {
@@ -112,11 +142,14 @@ install_openspec() {
     local os_bin="$os_prefix/bin/openspec"
     mkdir -p "$os_prefix" 2>/dev/null || true
     if [ ! -x "$os_bin" ]; then
-        echo "Installing OpenSpec..."
-        if npm install -g --prefix "$os_prefix" @fission-ai/openspec 2>/dev/null; then
-            [ -x "$os_bin" ] && echo "  ✓ OpenSpec installed" || echo "  ✗ OpenSpec binary not found after install"
+        if spin "${L_INSTALLING_OPENSPEC:-Installing OpenSpec...}" npm install -g --prefix "$os_prefix" @fission-ai/openspec; then
+            if [ -x "$os_bin" ]; then
+                echo "  ${L_INSTALLED_OPENSPEC:-✓ OpenSpec installed}" >&2
+            else
+                echo "  ${L_OPENSPEC_NOT_FOUND:-✗ OpenSpec binary not found after install}" >&2
+            fi
         else
-            echo "  OpenSpec install failed (non-fatal, continuing)"
+            echo "  ${L_OPENSPEC_FAILED:-OpenSpec install failed (non-fatal, continuing)}" >&2
         fi
     fi
 }

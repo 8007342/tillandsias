@@ -367,7 +367,7 @@ fn build_remote_projects_submenu<R: Runtime>(
     state: &TrayState,
     watch_path: &std::path::Path,
 ) -> tauri::Result<tauri::menu::Submenu<R>> {
-    let mut submenu = SubmenuBuilder::new(app, "Remote Projects");
+    let mut submenu = SubmenuBuilder::new(app, &i18n::t("menu.github.remote_projects"));
 
     // Show cloning state if active
     if let Some(ref cloning_name) = state.cloning_project {

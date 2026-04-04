@@ -52,7 +52,7 @@ ensure_opencode() {
         trace_lifecycle "install" "opencode: fresh install via curl"
         set +e
         export OPENCODE_INSTALL_DIR="$OC_DIR"
-        curl -fsSL https://opencode.ai/install | bash 2>&1
+        spin "${L_INSTALLING_OPENCODE:-Installing OpenCode...}" bash -c 'curl -fsSL https://opencode.ai/install | bash' 2>&1
         set -e
 
         # If installer ignored OPENCODE_INSTALL_DIR (common), relocate binary
@@ -62,6 +62,7 @@ ensure_opencode() {
 
         if [ -x "$OC_BIN" ]; then
             trace_lifecycle "install" "opencode: ready ($("$OC_BIN" --version 2>/dev/null || echo "unknown"))"
+            printf "  ${L_INSTALLED_OPENCODE:-OpenCode ready: %s}\n" "$("$OC_BIN" --version 2>/dev/null || echo "")" >&2
             record_update_check "$stamp_file"
         else
             trace_lifecycle "install" "opencode: FAILED (binary not found)"
@@ -76,7 +77,7 @@ ensure_opencode() {
     fi
     trace_lifecycle "update" "opencode: checking for updates..."
     set +e
-    curl -fsSL https://opencode.ai/install | bash 2>&1
+    spin "${L_INSTALLING_OPENCODE:-Installing OpenCode...}" bash -c 'curl -fsSL https://opencode.ai/install | bash'
     set -e
     # Refresh wrapper/copy if updated
     if [ -f "$OC_NATIVE" ]; then
@@ -120,10 +121,10 @@ if [ -x "$OC_BIN" ]; then
 else
     trace_lifecycle "exec" "FAILED — opencode not found at $OC_BIN"
     echo ""
-    echo "ERROR: OpenCode failed to install."
+    echo "${L_OPENCODE_INSTALL_FAILED:-ERROR: OpenCode failed to install.}"
     echo ""
-    echo "To retry: restart the container"
-    echo "To clear cache: rm -rf ~/.cache/tillandsias/opencode/"
+    echo "${L_RETRY_HINT:-To retry: restart the container}"
+    echo "${L_CLEAR_CACHE_OPENCODE:-To clear cache: rm -rf ~/.cache/tillandsias/opencode/}"
     echo ""
     exec bash
 fi

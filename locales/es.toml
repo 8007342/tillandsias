@@ -33,6 +33,7 @@ all_cloned = "Todos los repositorios están clonados"
 login_first = "Inicia sesión en GitHub primero"
 could_not_fetch = "No se pudieron obtener los repositorios"
 cloning = "Clonando {name}..."
+remote_projects = "Proyectos Remotos"
 
 [menu.claude]
 reset_credentials = "🔒 Restablecer credenciales de Claude"

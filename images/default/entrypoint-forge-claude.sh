@@ -24,7 +24,7 @@ install_claude() {
     mkdir -p "$CC_PREFIX" 2>/dev/null || true
     if [ ! -x "$CC_BIN" ]; then
         trace_lifecycle "install" "claude-code: fresh install starting"
-        if npm install -g --prefix "$CC_PREFIX" @anthropic-ai/claude-code; then
+        if spin "${L_INSTALLING_CLAUDE:-Installing Claude Code...}" npm install -g --prefix "$CC_PREFIX" @anthropic-ai/claude-code; then
             trace_lifecycle "install" "claude-code: npm install succeeded"
         else
             trace_lifecycle "install" "claude-code: npm install FAILED"
@@ -33,8 +33,10 @@ install_claude() {
             local cc_ver
             cc_ver="$("$CC_BIN" --version 2>&1 || true)"
             trace_lifecycle "install" "claude-code: ready ($cc_ver)"
+            printf "  ${L_INSTALLED_CLAUDE:-Claude Code ready: %s}\n" "$cc_ver" >&2
         else
             trace_lifecycle "install" "claude-code: binary NOT FOUND after install at $CC_BIN"
+            echo "  ${L_CLAUDE_NOT_FOUND:-Claude Code binary not found after install.}" >&2
         fi
     else
         trace_lifecycle "install" "claude-code: cached ($("$CC_BIN" --version 2>/dev/null || echo "unknown"))"
@@ -63,7 +65,7 @@ update_claude() {
     fi
     if [ "$current_ver" != "$latest_ver" ]; then
         trace_lifecycle "update" "claude-code: updating $current_ver -> $latest_ver"
-        if npm install -g --prefix "$CC_PREFIX" @anthropic-ai/claude-code; then
+        if spin "${L_INSTALLING_CLAUDE:-Installing Claude Code...}" npm install -g --prefix "$CC_PREFIX" @anthropic-ai/claude-code; then
             trace_lifecycle "update" "claude-code: updated to $("$CC_BIN" --version 2>/dev/null || echo "$latest_ver")"
         else
             trace_lifecycle "update" "claude-code: update FAILED, keeping $current_ver"
@@ -114,10 +116,10 @@ if [ -x "$CC_BIN" ]; then
 else
     trace_lifecycle "exec" "FAILED — claude-code not found at $CC_BIN"
     echo ""
-    echo "ERROR: Claude Code failed to install."
+    echo "${L_INSTALL_FAILED_CLAUDE:-ERROR: Claude Code failed to install.}"
     echo ""
-    echo "To retry: restart the container"
-    echo "To clear cache: rm -rf ~/.cache/tillandsias/claude/"
+    echo "${L_RETRY_HINT:-To retry: restart the container}"
+    echo "${L_CLEAR_CACHE_CLAUDE:-To clear cache: rm -rf ~/.cache/tillandsias/claude/}"
     echo ""
     exec bash
 fi
