@@ -90,6 +90,11 @@ pub async fn run(
         }
     }
 
+    // Proxy health check timer — restarts the proxy if it crashed.
+    // @trace spec:proxy-container
+    let mut proxy_health_interval = tokio::time::interval(Duration::from_secs(60));
+    proxy_health_interval.tick().await; // consume first immediate tick
+
     // @trace spec:tray-app, spec:podman-orchestration, knowledge:lang/rust-async
     loop {
         tokio::select! {
@@ -304,6 +309,34 @@ pub async fn run(
                 };
                 if !containers.is_empty() {
                     refresh_token_files(&containers);
+                }
+            }
+
+            // Proxy health check: restart the proxy if it crashed (60-second interval).
+            // Only checks when forge/maintenance containers are running (no point
+            // keeping the proxy alive if nothing uses it).
+            // @trace spec:proxy-container
+            _ = proxy_health_interval.tick() => {
+                let has_forge_containers = state.running.iter().any(|c| {
+                    matches!(c.container_type,
+                        ContainerType::Forge | ContainerType::Maintenance
+                    )
+                });
+                if has_forge_containers {
+                    let client = tillandsias_podman::PodmanClient::new();
+                    let proxy_running = match client.inspect_container("tillandsias-proxy").await {
+                        Ok(inspect) => inspect.state == "running",
+                        Err(_) => false,
+                    };
+                    if !proxy_running {
+                        warn!(spec = "proxy-container", "Proxy container not running — restarting");
+                        if let Err(e) = handlers::ensure_enclave_network().await {
+                            error!(spec = "enclave-network", error = %e, "Failed to ensure enclave network for proxy restart");
+                        }
+                        if let Err(e) = handlers::ensure_proxy_running(&state, build_tx.clone()).await {
+                            error!(spec = "proxy-container", error = %e, "Proxy restart failed");
+                        }
+                    }
                 }
             }
 
@@ -586,17 +619,37 @@ fn handle_podman_event(
                 }
 
                 // Clear project genus if no more environments
-                let still_running = state
+                let still_has_forge = state
                     .running
                     .iter()
-                    .any(|c| c.project_name == removed.project_name);
-                if !still_running
-                    && let Some(project) = state
+                    .any(|c| {
+                        c.project_name == removed.project_name
+                            && matches!(
+                                c.container_type,
+                                ContainerType::Forge | ContainerType::Maintenance
+                            )
+                    });
+                if !still_has_forge {
+                    if let Some(project) = state
                         .projects
                         .iter_mut()
                         .find(|p| p.name == removed.project_name)
-                {
-                    project.assigned_genus = None;
+                    {
+                        project.assigned_genus = None;
+                    }
+
+                    // @trace spec:git-mirror-service
+                    // Stop the git service if this was the last forge/maintenance
+                    // container for this project.
+                    if matches!(
+                        removed.container_type,
+                        ContainerType::Forge | ContainerType::Maintenance
+                    ) {
+                        let project_name = removed.project_name.clone();
+                        tokio::task::spawn(async move {
+                            handlers::stop_git_service(&project_name).await;
+                        });
+                    }
                 }
             }
         }
@@ -604,9 +657,24 @@ fn handle_podman_event(
         || event.new_state == ContainerState::Creating
     {
         // Unknown container with our prefix — discovered on startup or external.
-        // Try web container naming first (`tillandsias-<project>-web`), then
-        // fall back to genus-based naming (`tillandsias-<project>-<genus>`).
-        if let Some(project_name) = ContainerInfo::parse_web_container_name(&event.container_name) {
+        // Try git service naming first, then web, then genus-based.
+        // @trace spec:git-mirror-service
+        if let Some(project_name) = ContainerInfo::parse_git_service_container_name(&event.container_name) {
+            debug!(
+                project = %project_name,
+                "Discovered running git service container"
+            );
+            let sentinel_genus = tillandsias_core::genus::TillandsiaGenus::ALL[0];
+            state.running.push(ContainerInfo {
+                name: event.container_name,
+                project_name,
+                genus: sentinel_genus,
+                state: event.new_state,
+                port_range: (0, 0),
+                container_type: ContainerType::GitService,
+                display_emoji: String::new(), // Git service is invisible in the menu
+            });
+        } else if let Some(project_name) = ContainerInfo::parse_web_container_name(&event.container_name) {
             debug!(
                 project = %project_name,
                 "Discovered running web container"

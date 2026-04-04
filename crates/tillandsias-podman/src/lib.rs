@@ -5,11 +5,16 @@ pub mod events;
 mod gpu;
 pub mod launch;
 
+pub use client::network_exists_sync;
 pub use client::PodmanClient;
 pub use events::PodmanEventStream;
 pub use gpu::detect_gpu_devices;
 pub use launch::ContainerLauncher;
 pub use launch::query_occupied_ports;
+
+/// The internal podman network name for the Tillandsias enclave.
+/// @trace spec:enclave-network
+pub const ENCLAVE_NETWORK: &str = "tillandsias-enclave";
 
 /// Find the podman binary path.
 ///

@@ -120,6 +120,9 @@ pub enum SecretKind {
     /// Mount GitHub token file at /run/secrets/github_token (ro).
     /// @trace spec:secret-rotation
     GitHubToken,
+    /// Forward the host D-Bus session bus socket for keyring access.
+    /// @trace spec:git-mirror-service, spec:secret-management
+    DbusSession,
 }
 
 /// Working directory specification inside the container.
@@ -164,6 +167,13 @@ pub struct LaunchContext {
     /// Resolved to a full POSIX LANG value via `language_to_lang_value()`.
     /// @trace spec:environment-runtime
     pub selected_language: String,
+
+    /// Optional podman network to attach the container to.
+    /// When `Some`, adds `--network=<value>` to the podman args.
+    /// Forge containers use `Some("tillandsias-enclave")`, proxy uses
+    /// `Some("tillandsias-enclave,bridge")` for dual-homing.
+    /// @trace spec:enclave-network, spec:proxy-container
+    pub network: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -234,6 +244,31 @@ pub fn terminal_profile() -> ContainerProfile {
                 name: "LANGUAGE",
                 value: EnvValue::FromContext(ContextKey::Language),
             },
+            // @trace spec:proxy-container, spec:enclave-network
+            ProfileEnvVar {
+                name: "HTTP_PROXY",
+                value: EnvValue::Literal("http://proxy:3128"),
+            },
+            ProfileEnvVar {
+                name: "HTTPS_PROXY",
+                value: EnvValue::Literal("http://proxy:3128"),
+            },
+            ProfileEnvVar {
+                name: "NO_PROXY",
+                value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
+            },
+            ProfileEnvVar {
+                name: "http_proxy",
+                value: EnvValue::Literal("http://proxy:3128"),
+            },
+            ProfileEnvVar {
+                name: "https_proxy",
+                value: EnvValue::Literal("http://proxy:3128"),
+            },
+            ProfileEnvVar {
+                name: "no_proxy",
+                value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
+            },
         ],
         secrets: vec![
             SecretMount {
@@ -257,6 +292,63 @@ pub fn web_profile() -> ContainerProfile {
         env_vars: vec![],
         secrets: vec![],
         image_override: Some("tillandsias-web:latest"),
+    }
+}
+
+/// Proxy container — caching HTTP/HTTPS proxy with domain allowlist.
+///
+/// Runs a Squid-based forward proxy inside the enclave network. Forge containers
+/// route all HTTP(S) traffic through this proxy, which enforces a domain allowlist
+/// and caches responses to reduce bandwidth and latency.
+///
+/// The proxy has NO secrets and NO env vars — it is a passive service container.
+/// Its image tag is resolved at launch time via `LaunchContext.image_tag`, not
+/// through `image_override` (which is static and cannot include the version).
+///
+/// @trace spec:proxy-container, spec:enclave-network
+pub fn proxy_profile() -> ContainerProfile {
+    ContainerProfile {
+        entrypoint: "/usr/local/bin/entrypoint.sh",
+        working_dir: None,
+        mounts: vec![
+            ProfileMount {
+                host_key: MountSource::CacheDir,
+                container_path: "/var/spool/squid",
+                mode: MountMode::Rw,
+            },
+        ],
+        env_vars: vec![],
+        secrets: vec![],
+        image_override: None,
+    }
+}
+
+/// Git service container — bare mirror + git daemon + D-Bus for credentials.
+///
+/// Runs a local git daemon inside the enclave network. Forge containers clone
+/// and fetch from this service instead of hitting the internet directly.
+///
+/// Mounts are intentionally empty — the mirror volume is added dynamically at
+/// launch time based on the project being served. Secrets include D-Bus socket
+/// forwarding (primary, for host keyring access) and a GitHub token fallback
+/// for environments where D-Bus is unavailable.
+///
+/// @trace spec:git-mirror-service
+pub fn git_service_profile() -> ContainerProfile {
+    ContainerProfile {
+        entrypoint: "/usr/local/bin/entrypoint.sh",
+        working_dir: None,
+        mounts: vec![], // Mirror volume added dynamically per-project
+        env_vars: vec![],
+        secrets: vec![
+            SecretMount {
+                kind: SecretKind::DbusSession,
+            },
+            SecretMount {
+                kind: SecretKind::GitHubToken, // Fallback for when D-Bus unavailable
+            },
+        ],
+        image_override: None,
     }
 }
 
@@ -316,6 +408,38 @@ fn common_forge_env() -> Vec<ProfileEnvVar> {
         ProfileEnvVar {
             name: "LANGUAGE",
             value: EnvValue::FromContext(ContextKey::Language),
+        },
+        // @trace spec:git-mirror-service
+        ProfileEnvVar {
+            name: "TILLANDSIAS_GIT_SERVICE",
+            value: EnvValue::Literal("git-service"),
+        },
+        // @trace spec:proxy-container, spec:enclave-network
+        // Uppercase — standard for curl, wget, apt, pip, npm, cargo, etc.
+        ProfileEnvVar {
+            name: "HTTP_PROXY",
+            value: EnvValue::Literal("http://proxy:3128"),
+        },
+        ProfileEnvVar {
+            name: "HTTPS_PROXY",
+            value: EnvValue::Literal("http://proxy:3128"),
+        },
+        ProfileEnvVar {
+            name: "NO_PROXY",
+            value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
+        },
+        // Lowercase — required by libcurl, Go net/http, some Python libs.
+        ProfileEnvVar {
+            name: "http_proxy",
+            value: EnvValue::Literal("http://proxy:3128"),
+        },
+        ProfileEnvVar {
+            name: "https_proxy",
+            value: EnvValue::Literal("http://proxy:3128"),
+        },
+        ProfileEnvVar {
+            name: "no_proxy",
+            value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
         },
     ]
 }
@@ -406,18 +530,72 @@ mod tests {
     }
 
     #[test]
-    fn forge_profiles_have_six_env_vars() {
+    fn forge_profiles_have_thirteen_env_vars() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
-        // PROJECT, HOST_OS, GIT_CONFIG_GLOBAL, AGENT, LANG, LANGUAGE
-        assert_eq!(opencode.env_vars.len(), 6);
-        assert_eq!(claude.env_vars.len(), 6);
+        // PROJECT, HOST_OS, GIT_CONFIG_GLOBAL, AGENT, LANG, LANGUAGE, GIT_SERVICE
+        // + HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy
+        // @trace spec:proxy-container, spec:enclave-network, spec:git-mirror-service
+        assert_eq!(opencode.env_vars.len(), 13);
+        assert_eq!(claude.env_vars.len(), 13);
     }
 
     #[test]
-    fn terminal_has_five_env_vars() {
+    fn terminal_has_eleven_env_vars() {
         let profile = terminal_profile();
         // PROJECT, HOST_OS, GIT_CONFIG_GLOBAL, LANG, LANGUAGE (no AGENT)
-        assert_eq!(profile.env_vars.len(), 5);
+        // + HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy
+        // @trace spec:proxy-container, spec:enclave-network
+        assert_eq!(profile.env_vars.len(), 11);
+    }
+
+    // @trace spec:git-mirror-service
+    #[test]
+    fn git_service_has_dbus_and_token_secrets_no_mounts() {
+        let profile = git_service_profile();
+        assert_eq!(
+            profile.secrets.len(),
+            2,
+            "Git service should have DbusSession + GitHubToken"
+        );
+        assert!(
+            profile
+                .secrets
+                .iter()
+                .any(|s| s.kind == SecretKind::DbusSession),
+            "Git service must have DbusSession for keyring access"
+        );
+        assert!(
+            profile
+                .secrets
+                .iter()
+                .any(|s| s.kind == SecretKind::GitHubToken),
+            "Git service must have GitHubToken as fallback"
+        );
+        assert!(
+            profile.mounts.is_empty(),
+            "Git service mounts are added dynamically per-project"
+        );
+        assert!(
+            profile.env_vars.is_empty(),
+            "Git service has no static env vars"
+        );
+        assert!(
+            profile.image_override.is_none(),
+            "Git service image tag comes from LaunchContext"
+        );
+        assert_eq!(profile.entrypoint, "/usr/local/bin/entrypoint.sh");
+    }
+
+    // @trace spec:proxy-container, spec:enclave-network
+    #[test]
+    fn proxy_has_no_secrets_no_env_vars() {
+        let profile = proxy_profile();
+        assert!(profile.secrets.is_empty(), "Proxy must have no secrets");
+        assert!(profile.env_vars.is_empty(), "Proxy is a passive service — no env vars");
+        assert_eq!(profile.mounts.len(), 1, "Proxy has only the cache mount");
+        assert_eq!(profile.mounts[0].container_path, "/var/spool/squid");
+        assert_eq!(profile.mounts[0].mode, MountMode::Rw);
+        assert!(profile.image_override.is_none(), "Proxy image tag comes from LaunchContext");
     }
 }

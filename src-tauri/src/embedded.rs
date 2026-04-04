@@ -113,6 +113,14 @@ pub const WEB_ENTRYPOINT: &str = include_str!("../../images/web/entrypoint.sh");
 pub const WEB_CONTAINERFILE: &str = include_str!("../../images/web/Containerfile");
 
 // ---------------------------------------------------------------------------
+// Image sources — git service image
+// @trace spec:git-mirror-service
+// ---------------------------------------------------------------------------
+pub const GIT_ENTRYPOINT: &str = include_str!("../../images/git/entrypoint.sh");
+pub const GIT_CONTAINERFILE: &str = include_str!("../../images/git/Containerfile");
+pub const POST_RECEIVE_HOOK: &str = include_str!("../../images/git/post-receive-hook.sh");
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -169,6 +177,10 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 ///     web/
 ///       entrypoint.sh
 ///       Containerfile
+///     git/
+///       entrypoint.sh
+///       Containerfile
+///       post-receive-hook.sh
 /// ```
 ///
 /// Returns the root temp directory path. The caller should clean up via
@@ -307,6 +319,30 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         fs::Permissions::from_mode(0o755),
     )
     .ok();
+
+    // -- images/git/ --
+    // @trace spec:git-mirror-service
+    let git_dir = dir.join("images").join("git");
+    fs::create_dir_all(&git_dir).map_err(|e| format!("images/git dir: {e}"))?;
+    write_lf(&git_dir.join("entrypoint.sh"), GIT_ENTRYPOINT)
+        .map_err(|e| format!("git entrypoint: {e}"))?;
+    write_lf(&git_dir.join("Containerfile"), GIT_CONTAINERFILE)
+        .map_err(|e| format!("git Containerfile: {e}"))?;
+    write_lf(&git_dir.join("post-receive-hook.sh"), POST_RECEIVE_HOOK)
+        .map_err(|e| format!("git post-receive-hook: {e}"))?;
+    #[cfg(unix)]
+    {
+        fs::set_permissions(
+            git_dir.join("entrypoint.sh"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .ok();
+        fs::set_permissions(
+            git_dir.join("post-receive-hook.sh"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .ok();
+    }
 
     debug!(dir = %dir.display(), "Wrote embedded image sources to temp");
     Ok(dir)

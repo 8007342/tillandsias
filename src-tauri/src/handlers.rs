@@ -55,6 +55,601 @@ pub(crate) fn forge_image_tag() -> String {
     format!("tillandsias-forge:v{}", env!("TILLANDSIAS_FULL_VERSION"))
 }
 
+/// The versioned proxy image tag, e.g., `tillandsias-proxy:v0.1.126.116`.
+/// @trace spec:proxy-container
+pub(crate) fn proxy_image_tag() -> String {
+    format!("tillandsias-proxy:v{}", env!("TILLANDSIAS_FULL_VERSION"))
+}
+
+/// The versioned git service image tag.
+/// @trace spec:git-mirror-service
+pub(crate) fn git_image_tag() -> String {
+    format!("tillandsias-git:v{}", env!("TILLANDSIAS_FULL_VERSION"))
+}
+
+/// Ensure the tillandsias-enclave internal network exists.
+/// Creates it if absent. Called before any container launch.
+/// @trace spec:enclave-network
+pub(crate) async fn ensure_enclave_network() -> Result<(), String> {
+    let client = PodmanClient::new();
+    let name = tillandsias_podman::ENCLAVE_NETWORK;
+    if !client.network_exists(name).await {
+        info!(
+            network = name,
+            accountability = true,
+            spec = "enclave-network",
+            "Creating enclave network"
+        );
+        client
+            .create_internal_network(name)
+            .await
+            .map_err(|e| format!("Failed to create enclave network: {e}"))?;
+    }
+    Ok(())
+}
+
+/// The fixed container name for the proxy (not project-specific).
+const PROXY_CONTAINER_NAME: &str = "tillandsias-proxy";
+
+/// Ensure the proxy container is running.
+///
+/// Checks if `tillandsias-proxy` container exists and is running. If not,
+/// builds the proxy image if needed and starts a detached proxy container
+/// on the enclave network (dual-homed with bridge for external access).
+///
+/// @trace spec:proxy-container, spec:enclave-network
+pub(crate) async fn ensure_proxy_running(
+    state: &TrayState,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<(), String> {
+    // Check if already running (in our state or via podman inspect)
+    if state.running.iter().any(|c| c.name == PROXY_CONTAINER_NAME) {
+        debug!(spec = "proxy-container", "Proxy container already tracked in state");
+        return Ok(());
+    }
+
+    let client = PodmanClient::new();
+
+    // Check if it's running outside our state (e.g., surviving a restart)
+    if let Ok(inspect) = client.inspect_container(PROXY_CONTAINER_NAME).await {
+        if inspect.state == "running" {
+            debug!(spec = "proxy-container", "Proxy container already running (discovered)");
+            return Ok(());
+        }
+    }
+
+    info!(
+        accountability = true,
+        spec = "proxy-container",
+        "Starting proxy container"
+    );
+
+    // Ensure proxy image exists — build if needed
+    let tag = proxy_image_tag();
+    if !client.image_exists(&tag).await {
+        info!(tag = %tag, spec = "proxy-container", "Proxy image absent — building");
+
+        let _ = build_tx.try_send(BuildProgressEvent::Started {
+            image_name: "Proxy".to_string(),
+        });
+
+        let build_result =
+            tokio::task::spawn_blocking(|| run_build_image_script("proxy")).await;
+
+        match build_result {
+            Ok(Ok(())) => {
+                if !client.image_exists(&tag).await {
+                    error!(tag = %tag, spec = "proxy-container", "Proxy image still not found after build");
+                    let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                        image_name: "Proxy".to_string(),
+                        reason: "Proxy image not ready".to_string(),
+                    });
+                    return Err("Proxy image not ready after build".into());
+                }
+                info!(tag = %tag, spec = "proxy-container", "Proxy image built");
+                let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                    image_name: "Proxy".to_string(),
+                });
+            }
+            Ok(Err(ref e)) => {
+                error!(tag = %tag, error = %e, spec = "proxy-container", "Proxy image build failed");
+                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: "Proxy".to_string(),
+                    reason: format!("Proxy build failed: {e}"),
+                });
+                return Err(format!("Proxy image build failed: {e}"));
+            }
+            Err(ref e) => {
+                error!(tag = %tag, error = %e, spec = "proxy-container", "Proxy image build task panicked");
+                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: "Proxy".to_string(),
+                    reason: format!("Proxy build panicked: {e}"),
+                });
+                return Err(format!("Proxy image build panicked: {e}"));
+            }
+        }
+    }
+
+    // Build proxy container args using the profile + LaunchContext
+    let profile = tillandsias_core::container_profile::proxy_profile();
+    let cache = cache_dir();
+
+    // Ensure cache dir for proxy exists
+    let proxy_cache = cache.join("proxy-cache");
+    std::fs::create_dir_all(&proxy_cache).ok();
+
+    let ctx = tillandsias_core::container_profile::LaunchContext {
+        container_name: PROXY_CONTAINER_NAME.to_string(),
+        project_path: proxy_cache.clone(),  // not meaningful for proxy
+        project_name: "proxy".to_string(),
+        cache_dir: proxy_cache.clone(),     // mount proxy-cache as /var/spool/squid
+        port_range: (0, 0),                 // no ports exposed to host
+        host_os: tillandsias_core::config::detect_host_os(),
+        detached: true,
+        is_watch_root: false,
+        claude_dir: PathBuf::from("/nonexistent"),
+        gh_dir: PathBuf::from("/nonexistent"),
+        git_dir: PathBuf::from("/nonexistent"),
+        token_file_path: None,
+        custom_mounts: vec![],
+        image_tag: tag.clone(),
+        selected_language: "en".to_string(),
+        // @trace spec:proxy-container, spec:enclave-network
+        // Proxy is dual-homed: enclave network (for forge containers) + bridge (for external access)
+        network: Some(format!("{},bridge", tillandsias_podman::ENCLAVE_NETWORK)),
+    };
+
+    let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
+
+    // The proxy also needs a network alias so forge containers can reach it as "proxy"
+    run_args.insert(
+        run_args.len() - 1, // before the image tag (always last)
+        "--network-alias=proxy".to_string(),
+    );
+
+    // Launch the proxy container via podman run (detached)
+    match client.run_container(&run_args).await {
+        Ok(container_id) => {
+            info!(
+                accountability = true,
+                spec = "proxy-container",
+                container_id = %container_id,
+                "Proxy container started (detached)"
+            );
+            Ok(())
+        }
+        Err(e) => {
+            error!(
+                spec = "proxy-container",
+                error = %e,
+                "Failed to start proxy container"
+            );
+            Err(format!("Failed to start proxy container: {e}"))
+        }
+    }
+}
+
+/// Stop the proxy container if running. Best-effort, errors are logged.
+/// @trace spec:proxy-container
+pub(crate) async fn stop_proxy() {
+    let client = PodmanClient::new();
+    let launcher = tillandsias_podman::launch::ContainerLauncher::new(client);
+    match launcher.stop(PROXY_CONTAINER_NAME).await {
+        Ok(()) => info!(spec = "proxy-container", "Proxy container stopped"),
+        Err(e) => {
+            // Not an error if it wasn't running
+            debug!(spec = "proxy-container", error = %e, "Proxy stop returned error (may not have been running)");
+        }
+    }
+}
+
+/// Remove the enclave network if no containers are attached.
+/// Best-effort — silently ignores errors (e.g., containers still attached).
+/// @trace spec:enclave-network
+pub(crate) async fn cleanup_enclave_network() {
+    let client = PodmanClient::new();
+    let name = tillandsias_podman::ENCLAVE_NETWORK;
+    if client.network_exists(name).await {
+        match client.remove_network(name).await {
+            Ok(()) => info!(spec = "enclave-network", "Enclave network removed"),
+            Err(e) => debug!(spec = "enclave-network", error = %e, "Enclave network removal failed (may still have attached containers)"),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Git mirror service
+// @trace spec:git-mirror-service
+// ---------------------------------------------------------------------------
+
+/// State of a project directory with respect to git.
+#[derive(Debug)]
+enum GitProjectState {
+    /// Has a `.git` directory with a configured `origin` remote.
+    RemoteRepo { remote_url: String },
+    /// Has a `.git` directory but no `origin` remote.
+    LocalRepo,
+    /// Not a git repository.
+    NotGitRepo,
+}
+
+/// Detect the git state of a project directory.
+/// @trace spec:git-mirror-service
+fn detect_project_git_state(project_path: &Path) -> GitProjectState {
+    let git_dir = project_path.join(".git");
+    if !git_dir.exists() {
+        return GitProjectState::NotGitRepo;
+    }
+
+    let output = std::process::Command::new("git")
+        .args(["-C", &project_path.display().to_string(), "remote", "get-url", "origin"])
+        .env_remove("LD_LIBRARY_PATH")
+        .env_remove("LD_PRELOAD")
+        .output();
+
+    match output {
+        Ok(o) if o.status.success() => {
+            let url = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if url.is_empty() {
+                GitProjectState::LocalRepo
+            } else {
+                GitProjectState::RemoteRepo { remote_url: url }
+            }
+        }
+        _ => GitProjectState::LocalRepo,
+    }
+}
+
+/// Create or update the bare git mirror for a project.
+///
+/// Mirror path: `~/.cache/tillandsias/mirrors/<project>/`
+///
+/// If the mirror exists, runs `git fetch --all` to sync from the remote.
+/// If it doesn't exist, detects the project's git state and clones accordingly:
+/// - `NotGitRepo` → initializes git in the project, then clones
+/// - `RemoteRepo` → clones from the remote URL
+/// - `LocalRepo` → clones from the local path
+///
+/// After cloning, installs the embedded post-receive hook.
+///
+/// @trace spec:git-mirror-service
+fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, String> {
+    let mirror_path = cache_dir().join("mirrors").join(project_name);
+
+    // If mirror already exists, just fetch updates
+    if mirror_path.join("HEAD").exists() {
+        info!(
+            spec = "git-mirror-service",
+            project = %project_name,
+            mirror = %mirror_path.display(),
+            "Mirror exists — fetching updates"
+        );
+        let output = std::process::Command::new("git")
+            .args(["-C", &mirror_path.display().to_string(), "fetch", "--all"])
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            .output();
+        match output {
+            Ok(o) if o.status.success() => {
+                debug!(spec = "git-mirror-service", project = %project_name, "Mirror fetch succeeded");
+            }
+            Ok(o) => {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                debug!(
+                    spec = "git-mirror-service",
+                    project = %project_name,
+                    stderr = %stderr,
+                    "Mirror fetch returned non-zero (may be expected for local-only repos)"
+                );
+            }
+            Err(e) => {
+                warn!(spec = "git-mirror-service", project = %project_name, error = %e, "Mirror fetch failed");
+            }
+        }
+        return Ok(mirror_path);
+    }
+
+    // Mirror doesn't exist — create it
+    info!(
+        spec = "git-mirror-service",
+        project = %project_name,
+        "Creating new mirror"
+    );
+
+    let state = detect_project_git_state(project_path);
+    debug!(spec = "git-mirror-service", project = %project_name, state = ?state, "Project git state detected");
+
+    // For NotGitRepo, initialize git in the project first
+    if matches!(state, GitProjectState::NotGitRepo) {
+        info!(spec = "git-mirror-service", project = %project_name, "Initializing git in project directory");
+        let pp = project_path.display().to_string();
+        let init = std::process::Command::new("git")
+            .args(["-C", &pp, "init"])
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            .output()
+            .map_err(|e| format!("git init failed: {e}"))?;
+        if !init.status.success() {
+            return Err(format!("git init failed: {}", String::from_utf8_lossy(&init.stderr)));
+        }
+        let add = std::process::Command::new("git")
+            .args(["-C", &pp, "add", "-A"])
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            .output()
+            .map_err(|e| format!("git add failed: {e}"))?;
+        if !add.status.success() {
+            return Err(format!("git add failed: {}", String::from_utf8_lossy(&add.stderr)));
+        }
+        let commit = std::process::Command::new("git")
+            .args(["-C", &pp, "commit", "-m", "Initial commit"])
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            .output()
+            .map_err(|e| format!("git commit failed: {e}"))?;
+        if !commit.status.success() {
+            let stderr = String::from_utf8_lossy(&commit.stderr);
+            // "nothing to commit" is not an error — the directory may be empty
+            if !stderr.contains("nothing to commit") {
+                return Err(format!("git commit failed: {stderr}"));
+            }
+        }
+    }
+
+    // Determine clone source
+    let clone_source = match &state {
+        GitProjectState::RemoteRepo { remote_url } => remote_url.clone(),
+        _ => project_path.display().to_string(),
+    };
+
+    // Ensure parent directory exists
+    if let Some(parent) = mirror_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Cannot create mirrors directory: {e}"))?;
+    }
+
+    // Clone as a bare mirror
+    info!(
+        spec = "git-mirror-service",
+        project = %project_name,
+        source = %clone_source,
+        mirror = %mirror_path.display(),
+        "Cloning mirror"
+    );
+    let clone_output = std::process::Command::new("git")
+        .args(["clone", "--mirror", &clone_source, &mirror_path.display().to_string()])
+        .env_remove("LD_LIBRARY_PATH")
+        .env_remove("LD_PRELOAD")
+        .output()
+        .map_err(|e| format!("git clone --mirror failed: {e}"))?;
+    if !clone_output.status.success() {
+        let stderr = String::from_utf8_lossy(&clone_output.stderr);
+        return Err(format!("git clone --mirror failed: {stderr}"));
+    }
+
+    // Install post-receive hook from embedded binary
+    let hooks_dir = mirror_path.join("hooks");
+    std::fs::create_dir_all(&hooks_dir)
+        .map_err(|e| format!("Cannot create hooks directory: {e}"))?;
+    let hook_path = hooks_dir.join("post-receive");
+    std::fs::write(&hook_path, crate::embedded::POST_RECEIVE_HOOK)
+        .map_err(|e| format!("Cannot write post-receive hook: {e}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&hook_path, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| format!("Cannot set hook permissions: {e}"))?;
+    }
+    info!(
+        spec = "git-mirror-service",
+        project = %project_name,
+        "Post-receive hook installed"
+    );
+
+    info!(
+        accountability = true,
+        spec = "git-mirror-service",
+        project = %project_name,
+        mirror = %mirror_path.display(),
+        "Mirror created successfully"
+    );
+
+    Ok(mirror_path)
+}
+
+/// Ensure the git service container is running for a project.
+///
+/// Checks if `tillandsias-git-<project>` is already running. If not,
+/// builds the git image if needed and starts a detached git service
+/// container on the enclave network with the mirror mounted.
+///
+/// @trace spec:git-mirror-service
+pub(crate) async fn ensure_git_service_running(
+    project_name: &str,
+    mirror_path: &Path,
+    state: &TrayState,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<(), String> {
+    let container_name = tillandsias_core::state::ContainerInfo::git_service_container_name(project_name);
+
+    // Check if already running (in our state or via podman inspect)
+    if state.running.iter().any(|c| c.name == container_name) {
+        debug!(spec = "git-mirror-service", project = %project_name, "Git service already tracked in state");
+        return Ok(());
+    }
+
+    let client = PodmanClient::new();
+
+    // Check if it's running outside our state
+    if let Ok(inspect) = client.inspect_container(&container_name).await {
+        if inspect.state == "running" {
+            debug!(spec = "git-mirror-service", project = %project_name, "Git service already running (discovered)");
+            return Ok(());
+        }
+    }
+
+    info!(
+        accountability = true,
+        spec = "git-mirror-service",
+        project = %project_name,
+        "Starting git service container"
+    );
+
+    // Ensure git image exists — build if needed
+    let tag = git_image_tag();
+    if !client.image_exists(&tag).await {
+        info!(tag = %tag, spec = "git-mirror-service", "Git service image absent — building");
+
+        let _ = build_tx.try_send(BuildProgressEvent::Started {
+            image_name: "Git service".to_string(),
+        });
+
+        let build_result =
+            tokio::task::spawn_blocking(|| run_build_image_script("git")).await;
+
+        match build_result {
+            Ok(Ok(())) => {
+                if !client.image_exists(&tag).await {
+                    error!(tag = %tag, spec = "git-mirror-service", "Git service image still not found after build");
+                    let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                        image_name: "Git service".to_string(),
+                        reason: "Git service image not ready".to_string(),
+                    });
+                    return Err("Git service image not ready after build".into());
+                }
+                info!(tag = %tag, spec = "git-mirror-service", "Git service image built");
+                let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                    image_name: "Git service".to_string(),
+                });
+            }
+            Ok(Err(ref e)) => {
+                error!(tag = %tag, error = %e, spec = "git-mirror-service", "Git service image build failed");
+                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: "Git service".to_string(),
+                    reason: format!("Git service build failed: {e}"),
+                });
+                return Err(format!("Git service image build failed: {e}"));
+            }
+            Err(ref e) => {
+                error!(tag = %tag, error = %e, spec = "git-mirror-service", "Git service image build task panicked");
+                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: "Git service".to_string(),
+                    reason: format!("Git service build panicked: {e}"),
+                });
+                return Err(format!("Git service image build panicked: {e}"));
+            }
+        }
+    }
+
+    // Build git service container args using the profile + LaunchContext
+    let profile = tillandsias_core::container_profile::git_service_profile();
+    let cache = cache_dir();
+
+    // The git service needs a token file for the fallback GitHubToken secret
+    let token_file_path = match crate::secrets::retrieve_github_token() {
+        Ok(Some(token)) => {
+            match crate::token_files::write_token(&container_name, &token) {
+                Ok(path) => Some(path),
+                Err(e) => {
+                    warn!(
+                        spec = "git-mirror-service",
+                        error = %e,
+                        "Failed to write token file for git service — D-Bus auth only"
+                    );
+                    None
+                }
+            }
+        }
+        _ => None,
+    };
+
+    let ctx = tillandsias_core::container_profile::LaunchContext {
+        container_name: container_name.clone(),
+        project_path: mirror_path.to_path_buf(),
+        project_name: project_name.to_string(),
+        cache_dir: cache.clone(),
+        port_range: (0, 0), // no ports exposed to host
+        host_os: tillandsias_core::config::detect_host_os(),
+        detached: true,
+        is_watch_root: false,
+        claude_dir: PathBuf::from("/nonexistent"),
+        gh_dir: PathBuf::from("/nonexistent"),
+        git_dir: PathBuf::from("/nonexistent"),
+        token_file_path,
+        custom_mounts: vec![],
+        image_tag: tag.clone(),
+        selected_language: "en".to_string(),
+        // @trace spec:git-mirror-service, spec:enclave-network
+        network: Some(tillandsias_podman::ENCLAVE_NETWORK.to_string()),
+    };
+
+    let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
+
+    // Add the mirror volume mount dynamically (not in the profile)
+    // Mirror is mounted at /srv/git/<project_name> (rw) matching the git daemon base-path
+    let mirror_mount = format!(
+        "{}:/srv/git/{}:rw",
+        mirror_path.display(),
+        project_name
+    );
+    // Insert before the image tag (always last element)
+    run_args.insert(run_args.len() - 1, "-v".to_string());
+    run_args.insert(run_args.len() - 1, mirror_mount);
+
+    // Add network alias so forge containers can reach it as "git-service"
+    run_args.insert(
+        run_args.len() - 1,
+        "--network-alias=git-service".to_string(),
+    );
+
+    // Launch the git service container via podman run (detached)
+    match client.run_container(&run_args).await {
+        Ok(container_id) => {
+            info!(
+                accountability = true,
+                spec = "git-mirror-service",
+                container_id = %container_id,
+                project = %project_name,
+                "Git service container started (detached)"
+            );
+
+            // Brief wait for git daemon to be ready
+            tokio::time::sleep(Duration::from_millis(500)).await;
+
+            Ok(())
+        }
+        Err(e) => {
+            error!(
+                spec = "git-mirror-service",
+                project = %project_name,
+                error = %e,
+                "Failed to start git service container"
+            );
+            Err(format!("Failed to start git service container: {e}"))
+        }
+    }
+}
+
+/// Public synchronous wrapper around `ensure_mirror` for CLI mode.
+/// @trace spec:git-mirror-service
+pub fn ensure_mirror_sync(project_path: &Path, project_name: &str) -> Result<PathBuf, String> {
+    ensure_mirror(project_path, project_name)
+}
+
+/// Stop the git service container for a project. Best-effort, errors are logged.
+/// @trace spec:git-mirror-service
+pub(crate) async fn stop_git_service(project_name: &str) {
+    let name = tillandsias_core::state::ContainerInfo::git_service_container_name(project_name);
+    let client = PodmanClient::new();
+    let launcher = tillandsias_podman::launch::ContainerLauncher::new(client);
+    match launcher.stop(&name).await {
+        Ok(()) => info!(spec = "git-mirror-service", project = %project_name, "Git service container stopped"),
+        Err(e) => {
+            debug!(spec = "git-mirror-service", project = %project_name, error = %e, "Git service stop returned error (may not have been running)");
+        }
+    }
+}
+
 /// Check whether ANY versioned forge image (`tillandsias-forge:v*`) exists.
 ///
 /// Used to distinguish "first time" builds (no previous image) from "update"
@@ -524,7 +1119,13 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
     })?;
 
     let script = source_dir.join("scripts").join("build-image.sh");
-    let tag = forge_image_tag();
+    // Use the correct versioned tag for each image type.
+    // @trace spec:default-image, spec:proxy-container, spec:git-mirror-service
+    let tag = match image_name {
+        "proxy" => proxy_image_tag(),
+        "git" => git_image_tag(),
+        _ => forge_image_tag(),
+    };
     info!(script = %script.display(), image = image_name, tag = %tag, spec = "default-image, nix-builder", "Running embedded build-image.sh");
 
     // On Windows, call podman build directly instead of going through bash.
@@ -708,6 +1309,10 @@ fn build_launch_context(
         custom_mounts: project_config.mounts,
         image_tag: image_tag.to_string(),
         selected_language: tillandsias_core::config::load_global_config().i18n.language.clone(),
+        // @trace spec:enclave-network
+        // Forge and terminal containers join the enclave network so they route
+        // through the proxy. The proxy itself gets dual-homed separately.
+        network: Some(tillandsias_podman::ENCLAVE_NETWORK.to_string()),
     }
 }
 
@@ -769,12 +1374,19 @@ pub async fn handle_attach_here(
 
     info!(project = %project_name, "Attach Here requested");
 
-    // Don't-relaunch guard: if a container for this project is already running,
+    // Don't-relaunch guard: if a forge container for this project is already running,
     // notify the user and return early instead of spawning a second environment.
+    // Git service containers are infrastructure — they don't count as "already running".
     if let Some(existing) = state
         .running
         .iter()
-        .find(|c| c.project_name == project_name)
+        .find(|c| {
+            c.project_name == project_name
+                && matches!(
+                    c.container_type,
+                    tillandsias_core::state::ContainerType::Forge
+                )
+        })
     {
         let flower = existing.genus.flower();
         let title = format!("{flower} {project_name}");
@@ -897,6 +1509,52 @@ pub async fn handle_attach_here(
     // Ensure cache directories exist
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
+
+    // @trace spec:enclave-network, spec:proxy-container
+    // Ensure the enclave network and proxy are running before launching the forge.
+    ensure_enclave_network().await?;
+    if let Err(e) = ensure_proxy_running(state, build_tx.clone()).await {
+        warn!(error = %e, spec = "proxy-container", "Proxy setup failed — forge will launch without proxy");
+    }
+
+    // @trace spec:git-mirror-service
+    // Ensure git mirror and service for this project.
+    // Runs synchronously (mirror setup involves git commands) then starts
+    // the detached git service container on the enclave network.
+    match tokio::task::spawn_blocking({
+        let pp = project_path.clone();
+        let pn = project_name.clone();
+        move || ensure_mirror(&pp, &pn)
+    })
+    .await
+    {
+        Ok(Ok(mirror_path)) => {
+            if let Err(e) =
+                ensure_git_service_running(&project_name, &mirror_path, state, build_tx.clone())
+                    .await
+            {
+                warn!(
+                    error = %e,
+                    spec = "git-mirror-service",
+                    "Git service setup failed — forge will launch without git mirror"
+                );
+            }
+        }
+        Ok(Err(e)) => {
+            warn!(
+                error = %e,
+                spec = "git-mirror-service",
+                "Mirror setup failed — forge will launch without git mirror"
+            );
+        }
+        Err(e) => {
+            warn!(
+                error = %e,
+                spec = "git-mirror-service",
+                "Mirror setup task panicked — forge will launch without git mirror"
+            );
+        }
+    }
 
     // Refresh hosts.yml from native keyring so the container gets
     // a current GitHub token without plain text lingering on disk.
@@ -1104,6 +1762,9 @@ pub async fn handle_destroy(
 }
 
 /// Graceful application shutdown: stop all managed containers.
+///
+/// Also stops infrastructure containers (git services, proxy) and cleans up
+/// the enclave network.
 pub async fn shutdown_all(state: &TrayState) {
     info!(
         count = state.running.len(),
@@ -1114,6 +1775,9 @@ pub async fn shutdown_all(state: &TrayState) {
     let client = PodmanClient::new();
     let launcher = ContainerLauncher::new(client);
 
+    // Collect unique project names that have git services to stop
+    let mut git_service_projects: Vec<String> = Vec::new();
+
     for container in &state.running {
         match launcher.stop(&container.name).await {
             Ok(()) => info!(container = %container.name, "Container stopped"),
@@ -1121,7 +1785,32 @@ pub async fn shutdown_all(state: &TrayState) {
                 warn!(container = %container.name, error = %e, "Failed to stop container on shutdown")
             }
         }
+
+        // Track projects that may have git services running
+        // @trace spec:git-mirror-service
+        if matches!(
+            container.container_type,
+            tillandsias_core::state::ContainerType::Forge
+                | tillandsias_core::state::ContainerType::Maintenance
+        ) && !git_service_projects.contains(&container.project_name)
+        {
+            git_service_projects.push(container.project_name.clone());
+        }
     }
+
+    // Stop git service containers for all projects
+    // @trace spec:git-mirror-service
+    for project_name in &git_service_projects {
+        stop_git_service(project_name).await;
+    }
+
+    // Stop the proxy
+    // @trace spec:proxy-container
+    stop_proxy().await;
+
+    // Clean up the enclave network
+    // @trace spec:enclave-network
+    cleanup_enclave_network().await;
 
     info!("All containers stopped, shutdown complete");
 }
@@ -1175,6 +1864,38 @@ pub async fn handle_terminal(
 
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
+
+    // @trace spec:enclave-network, spec:proxy-container
+    // Ensure the enclave network and proxy are running before launching the terminal.
+    ensure_enclave_network().await?;
+    if let Err(e) = ensure_proxy_running(state, build_tx.clone()).await {
+        warn!(error = %e, spec = "proxy-container", "Proxy setup failed — terminal will launch without proxy");
+    }
+
+    // @trace spec:git-mirror-service
+    // Ensure git mirror and service for this project (same as handle_attach_here).
+    match tokio::task::spawn_blocking({
+        let pp = project_path.clone();
+        let pn = project_name.clone();
+        move || ensure_mirror(&pp, &pn)
+    })
+    .await
+    {
+        Ok(Ok(mirror_path)) => {
+            if let Err(e) =
+                ensure_git_service_running(&project_name, &mirror_path, state, build_tx.clone())
+                    .await
+            {
+                warn!(error = %e, spec = "git-mirror-service", "Git service setup failed — terminal will launch without git mirror");
+            }
+        }
+        Ok(Err(e)) => {
+            warn!(error = %e, spec = "git-mirror-service", "Mirror setup failed — terminal will launch without git mirror");
+        }
+        Err(e) => {
+            warn!(error = %e, spec = "git-mirror-service", "Mirror setup task panicked — terminal will launch without git mirror");
+        }
+    }
 
     // Refresh hosts.yml from native keyring before terminal launch.
     crate::secrets::write_hosts_yml_from_keyring();
@@ -1310,6 +2031,13 @@ pub async fn handle_root_terminal(
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
 
+    // @trace spec:enclave-network, spec:proxy-container
+    // Ensure the enclave network and proxy are running before launching the root terminal.
+    ensure_enclave_network().await?;
+    if let Err(e) = ensure_proxy_running(state, build_tx.clone()).await {
+        warn!(error = %e, spec = "proxy-container", "Proxy setup failed — root terminal will launch without proxy");
+    }
+
     // Refresh hosts.yml from native keyring before terminal launch.
     crate::secrets::write_hosts_yml_from_keyring();
 
@@ -1410,6 +2138,12 @@ pub async fn handle_root_terminal(
 /// waits. Only after the image is confirmed present does it open the terminal.
 ///
 /// No filesystem scripts are trusted — everything comes from the signed binary.
+///
+/// TODO(Phase 3): If a git service container is already running for any project,
+/// exec `gh auth login` inside it (it already has D-Bus for keyring access).
+/// If no git service is running, start a temporary one for auth and stop it after.
+/// The current flow still works — just uses a standalone container.
+/// @trace spec:git-mirror-service
 pub async fn handle_github_login(
     _state: &TrayState,
     build_tx: mpsc::Sender<BuildProgressEvent>,
@@ -1619,6 +2353,13 @@ pub async fn handle_serve_here(
     } else {
         detect_document_root(&project_path)
     };
+
+    // @trace spec:enclave-network, spec:proxy-container
+    // Ensure the enclave network and proxy are running before launching the web container.
+    ensure_enclave_network().await?;
+    if let Err(e) = ensure_proxy_running(state, build_tx.clone()).await {
+        warn!(error = %e, spec = "proxy-container", "Proxy setup failed — web server will launch without proxy");
+    }
 
     // Allocate port — base 8080, increment on conflict.
     // Web containers use a separate port space from forge containers (3000-3019).

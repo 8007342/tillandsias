@@ -11,6 +11,33 @@ source /usr/local/lib/tillandsias/lib-common.sh
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "opencode starting"
 
+# @trace spec:git-mirror-service
+# Clone project from git mirror (Phase 2: additive, falls back to direct mount)
+if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]]; then
+    trace_lifecycle "git-mirror" "cloning from ${TILLANDSIAS_GIT_SERVICE}"
+    MAX_RETRIES=5
+    CLONE_SUCCESS=false
+    for i in $(seq 1 $MAX_RETRIES); do
+        if git clone "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" "/home/forge/src/${TILLANDSIAS_PROJECT}.mirror" 2>/dev/null; then
+            trace_lifecycle "git-mirror" "clone successful"
+            CLONE_SUCCESS=true
+            cd "/home/forge/src/${TILLANDSIAS_PROJECT}.mirror"
+            # Configure push back to mirror
+            git remote set-url --push origin "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" 2>/dev/null || true
+            break
+        fi
+        if [[ $i -lt $MAX_RETRIES ]]; then
+            trace_lifecycle "git-mirror" "git service not ready, retrying ($i/$MAX_RETRIES)..."
+            sleep 1
+        else
+            trace_lifecycle "git-mirror" "could not clone after $MAX_RETRIES attempts, using direct mount"
+        fi
+    done
+    if [[ "$CLONE_SUCCESS" != "true" ]]; then
+        trace_lifecycle "git-mirror" "falling back to direct mount"
+    fi
+fi
+
 # ── OpenCode (official curl installer) ─────────────────────
 # On Fedora (default): pre-built binary executes directly (standard glibc).
 # On Nix: binary needs the Nix dynamic linker — a wrapper is created.

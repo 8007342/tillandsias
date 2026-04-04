@@ -239,6 +239,9 @@ fn build_cli_launch_context(
         custom_mounts: project_config.mounts,
         image_tag: image_tag.to_string(),
         selected_language: tillandsias_core::config::load_global_config().i18n.language.clone(),
+        // @trace spec:enclave-network
+        // CLI-mode forge containers join the enclave network.
+        network: Some(tillandsias_podman::ENCLAVE_NETWORK.to_string()),
     }
 }
 
@@ -380,6 +383,57 @@ pub fn run(
     // Ensure cache directory exists
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
+
+    // @trace spec:enclave-network, spec:proxy-container
+    // Ensure the enclave network and proxy are running before launching the container.
+    if let Err(e) = rt.block_on(crate::handlers::ensure_enclave_network()) {
+        if debug {
+            eprintln!("  [debug] Enclave network setup failed: {e}");
+        }
+    }
+    // Proxy setup in CLI mode: use a dummy build_tx since there is no tray event loop.
+    {
+        let (proxy_tx, _proxy_rx) = tokio::sync::mpsc::channel::<tillandsias_core::event::BuildProgressEvent>(4);
+        let dummy_state = tillandsias_core::state::TrayState::new(tillandsias_core::state::PlatformInfo {
+            os: tillandsias_core::state::Os::detect(),
+            has_podman: true,
+            has_podman_machine: false,
+            gpu_devices: vec![],
+        });
+        if let Err(e) = rt.block_on(crate::handlers::ensure_proxy_running(&dummy_state, proxy_tx)) {
+            if debug {
+                eprintln!("  [debug] Proxy setup failed: {e}");
+            }
+        }
+    }
+
+    // @trace spec:git-mirror-service
+    // Ensure git mirror and service for this project (CLI mode).
+    {
+        let pp = project_path.clone();
+        let pn = project_name.clone();
+        match crate::handlers::ensure_mirror_sync(&pp, &pn) {
+            Ok(mirror_path) => {
+                let (git_tx, _git_rx) = tokio::sync::mpsc::channel::<tillandsias_core::event::BuildProgressEvent>(4);
+                let dummy_state = tillandsias_core::state::TrayState::new(tillandsias_core::state::PlatformInfo {
+                    os: tillandsias_core::state::Os::detect(),
+                    has_podman: true,
+                    has_podman_machine: false,
+                    gpu_devices: vec![],
+                });
+                if let Err(e) = rt.block_on(crate::handlers::ensure_git_service_running(&pn, &mirror_path, &dummy_state, git_tx)) {
+                    if debug {
+                        eprintln!("  [debug] Git service setup failed: {e}");
+                    }
+                }
+            }
+            Err(e) => {
+                if debug {
+                    eprintln!("  [debug] Mirror setup failed: {e}");
+                }
+            }
+        }
+    }
 
     // Select profile based on mode: --bash uses terminal profile, otherwise forge.
     // --opencode / --claude override the configured agent for this session.

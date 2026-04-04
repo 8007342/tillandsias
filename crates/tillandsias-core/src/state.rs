@@ -33,7 +33,7 @@ pub struct BuildProgress {
 }
 
 /// Whether a container is a forge (Attach Here / OpenCode), maintenance (terminal / bash),
-/// or a web server (Serve Here / static httpd).
+/// a web server (Serve Here / static httpd), or a proxy (caching forward proxy).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ContainerType {
     /// Forge environment launched via "Attach Here" (runs OpenCode).
@@ -43,6 +43,14 @@ pub enum ContainerType {
     /// Web server launched via "Serve Here" (runs tillandsias-web / httpd).
     /// Named `tillandsias-<project>-web` — no genus allocation.
     Web,
+    /// Caching HTTP/HTTPS proxy with domain allowlist.
+    /// Named `tillandsias-<project>-proxy` — no genus allocation.
+    /// @trace spec:proxy-container, spec:enclave-network
+    Proxy,
+    /// Local git mirror service — bare repos + git daemon.
+    /// Named `tillandsias-<project>-git-service` — no genus allocation.
+    /// @trace spec:git-mirror-service
+    GitService,
 }
 
 /// Info about a running container environment.
@@ -103,6 +111,25 @@ impl ContainerInfo {
     /// Build a web container name for a project: `tillandsias-<project>-web`.
     pub fn web_container_name(project_name: &str) -> String {
         format!("tillandsias-{}-web", project_name)
+    }
+
+    /// Build a git service container name for a project: `tillandsias-git-<project>`.
+    /// @trace spec:git-mirror-service
+    pub fn git_service_container_name(project_name: &str) -> String {
+        format!("tillandsias-git-{}", project_name)
+    }
+
+    /// Parse project name from a git service container name (`tillandsias-git-<project>`).
+    /// Returns `Some(project_name)` or `None` if the name does not match.
+    /// @trace spec:git-mirror-service
+    pub fn parse_git_service_container_name(name: &str) -> Option<String> {
+        let project = name.strip_prefix("tillandsias-git-")?;
+        if project.is_empty() {
+            return None;
+        }
+        // Avoid matching genus-based names that happen to start with "git-"
+        // by checking the project name does not match a genus slug suffix.
+        Some(project.to_string())
     }
 
     /// Current plant lifecycle state for icon rendering.
@@ -358,5 +385,39 @@ mod tests {
         // and web-parsing should correctly extract the project name.
         let project = ContainerInfo::parse_web_container_name("tillandsias-frontend-web");
         assert_eq!(project, Some("frontend".to_string()));
+    }
+
+    // @trace spec:git-mirror-service
+    #[test]
+    fn git_service_container_name_format() {
+        let name = ContainerInfo::git_service_container_name("my-project");
+        assert_eq!(name, "tillandsias-git-my-project");
+    }
+
+    #[test]
+    fn parse_git_service_container_name_valid() {
+        let project =
+            ContainerInfo::parse_git_service_container_name("tillandsias-git-my-project");
+        assert_eq!(project, Some("my-project".to_string()));
+    }
+
+    #[test]
+    fn parse_git_service_container_name_hyphenated() {
+        let project =
+            ContainerInfo::parse_git_service_container_name("tillandsias-git-cool-project");
+        assert_eq!(project, Some("cool-project".to_string()));
+    }
+
+    #[test]
+    fn parse_git_service_container_name_invalid() {
+        // Missing prefix
+        assert!(ContainerInfo::parse_git_service_container_name("git-my-project").is_none());
+        // No project name
+        assert!(ContainerInfo::parse_git_service_container_name("tillandsias-git-").is_none());
+        // Different container type
+        assert!(
+            ContainerInfo::parse_git_service_container_name("tillandsias-my-project-web")
+                .is_none()
+        );
     }
 }

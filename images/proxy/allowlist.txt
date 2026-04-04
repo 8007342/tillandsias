@@ -1,0 +1,116 @@
+# @trace spec:proxy-container
+# Domain allowlist for Tillandsias proxy.
+# Format: .domain.com matches domain and all subdomains.
+# One domain per line. Lines starting with # are comments.
+
+# --- Package registries ---
+.npmjs.org
+.npmjs.com
+.yarnpkg.com
+.crates.io
+.pypi.org
+.pythonhosted.org
+.rubygems.org
+.pub.dev
+.nuget.org
+.maven.org
+.mvnrepository.com
+.repo1.maven.org
+.jcenter.bintray.com
+.packagist.org
+.hex.pm
+.cocoapods.org
+.cpan.org
+.cran.r-project.org
+.hackage.haskell.org
+.clojars.org
+.opam.ocaml.org
+
+# --- CDNs and package hosting ---
+.jsdelivr.net
+.unpkg.com
+.cdnjs.cloudflare.com
+.esm.sh
+.skypack.dev
+.deno.land
+.esm.run
+
+# --- Language/framework tools ---
+.nodejs.org
+.node.js.org
+.rustup.rs
+.static.rust-lang.org
+.go.dev
+.golang.org
+.proxy.golang.org
+.dart.dev
+.flutter.dev
+.pub.dartlang.org
+.gradle.org
+.services.gradle.org
+.plugins.gradle.org
+.dl.google.com
+.storage.googleapis.com
+.packages.microsoft.com
+.dotnet.microsoft.com
+
+# --- VCS (git dependencies) ---
+.github.com
+.github.io
+.githubusercontent.com
+.gitlab.com
+.bitbucket.org
+.sr.ht
+.codeberg.org
+
+# --- Cloud SDKs ---
+.amazonaws.com
+.azure.com
+.azureedge.net
+.googleusercontent.com
+.googleapis.com
+.gstatic.com
+.firebase.com
+.firebaseio.com
+.cloudflare.com
+.vercel.com
+.netlify.com
+.netlify.app
+.heroku.com
+.digitalocean.com
+.fly.io
+
+# --- AI/ML ---
+.ollama.com
+.huggingface.co
+.openai.com
+.anthropic.com
+
+# --- Documentation ---
+.docs.rs
+.learn.microsoft.com
+.developer.android.com
+.developer.apple.com
+.developer.mozilla.org
+.w3.org
+.devdocs.io
+.stackoverflow.com
+.stackexchange.com
+.readthedocs.io
+.readthedocs.org
+
+# --- Security/certificates ---
+.letsencrypt.org
+.digicert.com
+.pki.goog
+
+# --- Container/OS ---
+.docker.io
+.docker.com
+.ghcr.io
+.quay.io
+.registry.fedoraproject.org
+.alpine-linux.org
+.ubuntu.com
+.debian.org
+.archlinux.org

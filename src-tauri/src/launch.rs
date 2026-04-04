@@ -61,13 +61,24 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     }
 
     // -----------------------------------------------------------------------
-    // Port range
+    // Network (enclave or dual-homed)
+    // @trace spec:enclave-network, spec:proxy-container
     // -----------------------------------------------------------------------
-    args.push("-p".into());
-    args.push(format!(
-        "{}-{}:{}-{}",
-        ctx.port_range.0, ctx.port_range.1, ctx.port_range.0, ctx.port_range.1
-    ));
+    if let Some(ref net) = ctx.network {
+        args.push(format!("--network={net}"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Port range (skipped when (0,0) — e.g., proxy containers expose no ports)
+    // @trace spec:proxy-container
+    // -----------------------------------------------------------------------
+    if ctx.port_range != (0, 0) {
+        args.push("-p".into());
+        args.push(format!(
+            "{}-{}:{}-{}",
+            ctx.port_range.0, ctx.port_range.1, ctx.port_range.0, ctx.port_range.1
+        ));
+    }
 
     // -----------------------------------------------------------------------
     // Entrypoint
@@ -157,6 +168,23 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
             SecretKind::ClaudeDir => {
                 args.push("-v".into());
                 args.push(format!("{}:/home/forge/.claude:rw", ctx.claude_dir.display()));
+            }
+            SecretKind::DbusSession => {
+                // Forward host D-Bus session bus for keyring access.
+                // The socket path is extracted from DBUS_SESSION_BUS_ADDRESS
+                // and bind-mounted read-only. With --userns=keep-id the UID
+                // matches, so D-Bus auth succeeds without mounting the entire
+                // runtime directory.
+                // @trace spec:git-mirror-service, spec:secret-management
+                if let Ok(addr) = std::env::var("DBUS_SESSION_BUS_ADDRESS")
+                    && let Some(socket_path) = addr.strip_prefix("unix:path=")
+                    && std::path::Path::new(socket_path).exists()
+                {
+                    args.push("-v".into());
+                    args.push(format!("{}:{}:ro", socket_path, socket_path));
+                    args.push("-e".into());
+                    args.push(format!("DBUS_SESSION_BUS_ADDRESS={}", addr));
+                }
             }
         }
     }
@@ -309,6 +337,7 @@ mod tests {
             custom_mounts: vec![],
             image_tag: "tillandsias-forge:v0.1.90".into(),
             selected_language: "en".into(),
+            network: None,
         }
     }
 
@@ -511,5 +540,99 @@ mod tests {
         let joined = args.join(" ");
         assert!(!joined.contains("/run/secrets/github_token"));
         assert!(!joined.contains("GIT_ASKPASS"));
+    }
+
+    // @trace spec:git-mirror-service, spec:secret-management
+    #[test]
+    fn dbus_session_mounts_socket_when_env_set() {
+        // Create a temp file to act as the D-Bus socket
+        let tmp_dir = std::env::temp_dir().join("tillandsias-test-dbus");
+        std::fs::create_dir_all(&tmp_dir).unwrap();
+        let socket_path = tmp_dir.join("bus");
+        std::fs::File::create(&socket_path).unwrap();
+
+        // Set the env var for this test (note: env vars are process-global,
+        // but cargo test runs each test in the same process sequentially
+        // for the same test binary unless parallelized — this is acceptable
+        // for testing the code path).
+        let addr = format!("unix:path={}", socket_path.display());
+        // SAFETY: Test-only env var manipulation. These tests are not run in
+        // parallel with other tests that read DBUS_SESSION_BUS_ADDRESS.
+        unsafe { std::env::set_var("DBUS_SESSION_BUS_ADDRESS", &addr) };
+
+        let profile = container_profile::git_service_profile();
+        let args = build_podman_args(&profile, &test_context());
+        let joined = args.join(" ");
+
+        // D-Bus socket should be bind-mounted read-only
+        let expected_mount = format!("{}:{}:ro", socket_path.display(), socket_path.display());
+        assert!(
+            joined.contains(&expected_mount),
+            "D-Bus socket mount missing. Expected: {expected_mount}\nGot: {joined}"
+        );
+
+        // D-Bus address env var should be forwarded
+        let expected_env = format!("DBUS_SESSION_BUS_ADDRESS={}", addr);
+        assert!(
+            joined.contains(&expected_env),
+            "DBUS_SESSION_BUS_ADDRESS env var missing"
+        );
+
+        // GitHub token fallback should also be present
+        assert!(
+            joined.contains("/run/secrets/github_token:ro"),
+            "GitHubToken fallback should still be mounted"
+        );
+
+        // Clean up
+        std::fs::remove_dir_all(&tmp_dir).ok();
+        unsafe { std::env::remove_var("DBUS_SESSION_BUS_ADDRESS") };
+    }
+
+    // @trace spec:git-mirror-service
+    #[test]
+    fn dbus_session_skipped_when_env_unset() {
+        // SAFETY: Test-only env var manipulation.
+        unsafe { std::env::remove_var("DBUS_SESSION_BUS_ADDRESS") };
+
+        let profile = container_profile::git_service_profile();
+        let args = build_podman_args(&profile, &test_context());
+        let joined = args.join(" ");
+
+        // No D-Bus mount or env var should appear
+        assert!(
+            !joined.contains("DBUS_SESSION_BUS_ADDRESS"),
+            "D-Bus env var should not appear when host env is unset"
+        );
+    }
+
+    // @trace spec:git-mirror-service
+    #[test]
+    fn git_service_has_no_mounts_no_env_vars() {
+        let profile = container_profile::git_service_profile();
+        // SAFETY: Test-only env var manipulation.
+        unsafe { std::env::remove_var("DBUS_SESSION_BUS_ADDRESS") };
+        let mut ctx = test_context();
+        ctx.token_file_path = None; // Also remove token to test bare profile
+
+        let args = build_podman_args(&profile, &ctx);
+        let joined = args.join(" ");
+
+        // No profile mounts (mounts vec is empty)
+        assert!(
+            !joined.contains("/home/forge/src"),
+            "Git service should have no project mount from profile"
+        );
+        // No profile env vars
+        assert!(
+            !joined.contains("TILLANDSIAS_PROJECT="),
+            "Git service should have no env vars from profile"
+        );
+        // Image should still be last
+        let last = args.last().unwrap();
+        assert!(
+            !last.starts_with('-'),
+            "Last arg should be image tag, got: {last}"
+        );
     }
 }

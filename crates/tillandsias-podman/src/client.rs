@@ -313,6 +313,59 @@ impl PodmanClient {
         }
     }
 
+    /// Check if a podman network exists.
+    /// @trace spec:enclave-network
+    pub async fn network_exists(&self, name: &str) -> bool {
+        crate::podman_cmd()
+            .args(["network", "exists", name])
+            .output()
+            .await
+            .is_ok_and(|o| o.status.success())
+    }
+
+    /// Create an internal podman network.
+    /// Runs: `podman network create <name> --internal`
+    /// @trace spec:enclave-network
+    pub async fn create_internal_network(&self, name: &str) -> Result<(), PodmanError> {
+        debug!(name, "Creating internal network");
+        let output = crate::podman_cmd()
+            .args(["network", "create", name, "--internal"])
+            .output()
+            .await
+            .map_err(|e| PodmanError::CommandFailed(format!("network create: {e}")))?;
+
+        if output.status.success() {
+            info!(name, "Internal network created");
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(PodmanError::CommandFailed(format!(
+                "network create failed: {stderr}"
+            )))
+        }
+    }
+
+    /// Remove a podman network. Fails silently if containers are still attached.
+    /// @trace spec:enclave-network
+    pub async fn remove_network(&self, name: &str) -> Result<(), PodmanError> {
+        debug!(name, "Removing network");
+        let output = crate::podman_cmd()
+            .args(["network", "rm", name])
+            .output()
+            .await
+            .map_err(|e| PodmanError::CommandFailed(format!("network rm: {e}")))?;
+
+        if output.status.success() {
+            info!(name, "Network removed");
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // Fail silently if containers are still attached
+            warn!(name, %stderr, "Network removal returned error (may still have attached containers)");
+            Ok(())
+        }
+    }
+
     /// Start a container with the given arguments.
     pub async fn run_container(&self, args: &[String]) -> Result<String, PodmanError> {
         debug!(?args, "Running container");
@@ -337,6 +390,15 @@ impl Default for PodmanClient {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Check if a podman network exists (sync, for CLI mode).
+/// @trace spec:enclave-network
+pub fn network_exists_sync(name: &str) -> bool {
+    crate::podman_cmd_sync()
+        .args(["network", "exists", name])
+        .output()
+        .is_ok_and(|o| o.status.success())
 }
 
 #[derive(Debug, Clone)]
@@ -367,4 +429,36 @@ pub enum PodmanError {
     NotFound(String),
     #[error("Parse error: {0}")]
     ParseError(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// @trace spec:enclave-network
+    #[test]
+    fn enclave_network_constant_value() {
+        assert_eq!(crate::ENCLAVE_NETWORK, "tillandsias-enclave");
+    }
+
+    /// Verify PodmanClient has network_exists method and it returns bool.
+    /// We cannot call podman in tests, but we can instantiate the client.
+    /// @trace spec:enclave-network
+    #[test]
+    fn client_has_network_methods() {
+        let _client = PodmanClient::new();
+        // Compile-time verification: these methods exist with correct signatures.
+        // The async methods are tested by type — calling them would require a runtime
+        // and a real podman socket.
+        let _ = PodmanClient::network_exists;
+        let _ = PodmanClient::create_internal_network;
+        let _ = PodmanClient::remove_network;
+    }
+
+    /// Verify the sync network_exists_sync function exists and compiles.
+    /// @trace spec:enclave-network
+    #[test]
+    fn network_exists_sync_compiles() {
+        let _ = network_exists_sync as fn(&str) -> bool;
+    }
 }

@@ -1,0 +1,20 @@
+# @trace spec:proxy-container
+# Caching HTTP/HTTPS forward proxy for Tillandsias enclave network.
+# Built on Alpine + squid — minimal footprint (~15-20MB).
+FROM docker.io/library/alpine:3.20
+
+RUN apk add --no-cache squid bash \
+    && adduser -D -u 1000 -s /sbin/nologin proxy \
+    && mkdir -p /var/spool/squid /var/log/squid /var/run/squid \
+    && chown -R proxy:proxy /var/spool/squid /var/log/squid /var/run/squid
+
+COPY squid.conf /etc/squid/squid.conf
+COPY allowlist.txt /etc/squid/allowlist.txt
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+USER proxy
+
+EXPOSE 3128
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

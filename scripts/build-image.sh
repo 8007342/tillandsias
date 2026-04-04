@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build container images using Nix inside an ephemeral podman container.
-# Usage: scripts/build-image.sh [forge|web] [--force]
+# Usage: scripts/build-image.sh [forge|web|proxy] [--force]
 #
 # This script:
 #   1. Checks if sources have changed since last build (staleness detection)
@@ -82,7 +82,7 @@ FLAG_BACKEND="fedora"  # Default: Fedora minimal. Use --backend nix for Nix imag
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        forge|web)
+        forge|web|proxy|git)
             IMAGE_NAME="$1"
             ;;
         --force)
@@ -97,13 +97,15 @@ while [[ $# -gt 0 ]]; do
             FLAG_BACKEND="$1"
             ;;
         --help|-h)
-            echo "Usage: scripts/build-image.sh [forge|web] [--force] [--tag <tag>] [--backend fedora|nix]"
+            echo "Usage: scripts/build-image.sh [forge|web|proxy|git] [--force] [--tag <tag>] [--backend fedora|nix]"
             echo ""
             echo "Build a container image."
             echo ""
             echo "Arguments:"
             echo "  forge              Build the forge (dev environment) image (default)"
             echo "  web                Build the web server image"
+            echo "  proxy              Build the enclave proxy image"
+            echo "  git                Build the git service image"
             echo "  --force            Rebuild even if sources haven't changed"
             echo "  --tag <tag>        Override the image tag (default: tillandsias-<name>:latest)"
             echo "  --backend <type>   Build backend: fedora (default) or nix"
@@ -152,8 +154,8 @@ _compute_hash() {
     [[ -f "$ROOT/flake.nix" ]]  && files+=("$ROOT/flake.nix")
     [[ -f "$ROOT/flake.lock" ]] && files+=("$ROOT/flake.lock")
 
-    # Image source directories — hash all files in default/ and web/
-    for dir in "$ROOT/images/default" "$ROOT/images/web"; do
+    # Image source directories — hash all files in default/, web/, proxy/, and git/
+    for dir in "$ROOT/images/default" "$ROOT/images/web" "$ROOT/images/proxy" "$ROOT/images/git"; do
         if [[ -d "$dir" ]]; then
             while IFS= read -r -d '' f; do
                 files+=("$f")
@@ -195,8 +197,16 @@ BUILD_START="$(date +%s)"
 
 if [[ "$FLAG_BACKEND" == "fedora" ]]; then
     # ── Fedora backend: podman build with Containerfile ────────
+    # Route to the correct image directory based on IMAGE_NAME.
+    # @trace spec:proxy-container
+    case "$IMAGE_NAME" in
+        web)   IMAGE_DIR="$ROOT/images/web" ;;
+        proxy) IMAGE_DIR="$ROOT/images/proxy" ;;
+        git)   IMAGE_DIR="$ROOT/images/git" ;;
+        *)     IMAGE_DIR="$ROOT/images/default" ;;
+    esac
     _step "Building ${BOLD}${IMAGE_TAG}${NC} via podman build (Fedora minimal)..."
-    CONTAINERFILE="$ROOT/images/default/Containerfile"
+    CONTAINERFILE="$IMAGE_DIR/Containerfile"
     if [[ ! -f "$CONTAINERFILE" ]]; then
         _error "Containerfile not found at $CONTAINERFILE"
         exit 1
@@ -204,7 +214,7 @@ if [[ "$FLAG_BACKEND" == "fedora" ]]; then
     "$PODMAN" build \
         --tag "$IMAGE_TAG" \
         -f "$CONTAINERFILE" \
-        "$ROOT/images/default/"
+        "$IMAGE_DIR/"
 
 else
     # ── Nix backend: nix build inside ephemeral container ─────

@@ -53,6 +53,21 @@ pub fn module_to_targets(module: &str) -> Vec<&'static str> {
             "tillandsias_tray::event_loop",
             "tillandsias_podman::events",
         ],
+        // @trace spec:proxy-container
+        "proxy" => vec![
+            "tillandsias_tray::handlers",
+            "tillandsias_tray::proxy",
+        ],
+        // @trace spec:enclave-network
+        "enclave" => vec![
+            "tillandsias_tray::handlers",
+            "tillandsias_tray::enclave",
+        ],
+        // @trace spec:git-mirror-service
+        "git" => vec![
+            "tillandsias_tray::handlers",
+            "tillandsias_tray::git",
+        ],
         _ => vec![],
     }
 }
@@ -91,6 +106,9 @@ fn build_filter(config: &LogConfig) -> EnvFilter {
             AccountabilityWindow::SecretManagement => "secrets",
             AccountabilityWindow::ImageManagement => "containers",
             AccountabilityWindow::UpdateCycle => "updates",
+            AccountabilityWindow::ProxyManagement => "proxy",       // @trace spec:proxy-container
+            AccountabilityWindow::EnclaveManagement => "enclave",   // @trace spec:enclave-network
+            AccountabilityWindow::GitManagement => "git",              // @trace spec:git-mirror-service
         };
 
         // Only add if not already overridden by --log.

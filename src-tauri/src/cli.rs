@@ -18,7 +18,17 @@ const VERSION_FULL: &str = include_str!("../../VERSION");
 // ---------------------------------------------------------------------------
 
 /// Valid user-facing log module names.
-const VALID_MODULES: &[&str] = &["secrets", "containers", "updates", "scanner", "menu", "events"];
+const VALID_MODULES: &[&str] = &[
+    "secrets",
+    "containers",
+    "updates",
+    "scanner",
+    "menu",
+    "events",
+    "proxy",
+    "enclave",
+    "git",
+];
 
 /// Valid log level names (case-insensitive).
 const VALID_LEVELS: &[&str] = &["off", "error", "warn", "info", "debug", "trace"];
@@ -35,6 +45,15 @@ pub enum AccountabilityWindow {
     ImageManagement,
     /// `--log-update-cycle` — trace self-update operations (future).
     UpdateCycle,
+    /// `--log-proxy` — trace proxy request/cache operations.
+    // @trace spec:proxy-container
+    ProxyManagement,
+    /// `--log-enclave` — trace enclave network lifecycle operations.
+    // @trace spec:enclave-network
+    EnclaveManagement,
+    /// `--log-git` — trace git mirror lifecycle and push operations.
+    // @trace spec:git-mirror-service
+    GitManagement,
 }
 
 /// Per-module log level override parsed from `--log=module:level;...`.
@@ -170,6 +189,9 @@ ACCOUNTABILITY:
   --log-secret-management    Show how secrets are safely handled
   --log-image-management     Show environment lifecycle
   --log-update-cycle         Show update check and apply flow
+  --log-proxy                Show proxy request and cache operations
+  --log-enclave              Show enclave network lifecycle
+  --log-git                  Show git mirror and push operations
 
 OPTIONS:
   --log=MODULES              Per-module log levels (secrets:trace;events:debug)
@@ -293,7 +315,8 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
                 agent_override = Some(SelectedAgent::Claude);
             }
             // Log flags — already parsed by parse_log_flags(), skip here.
-            "--log-secret-management" | "--log-image-management" | "--log-update-cycle" => {}
+            "--log-secret-management" | "--log-image-management" | "--log-update-cycle"
+            | "--log-proxy" | "--log-enclave" | "--log-git" => {}
             arg if arg.starts_with("--log=") => {}
             arg => {
                 // Skip Tauri-injected flags (they start with --)
@@ -330,7 +353,7 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
 /// Extract log configuration flags from the argument list.
 ///
 /// Scans for `--log=...`, `--log-secret-management`, `--log-image-management`,
-/// and `--log-update-cycle`. These flags are orthogonal to the mode — they
+/// `--log-update-cycle`, `--log-proxy`, `--log-enclave`, and `--log-git`. These flags are orthogonal to the mode — they
 /// configure the tracing subscriber regardless of whether the app runs as a
 /// tray, attach, or utility command.
 fn parse_log_flags(args: &[String]) -> LogConfig {
@@ -365,6 +388,36 @@ fn parse_log_flags(args: &[String]) -> LogConfig {
                 config
                     .accountability
                     .push(AccountabilityWindow::UpdateCycle);
+            }
+        // @trace spec:proxy-container
+        } else if arg == "--log-proxy" {
+            if !config
+                .accountability
+                .contains(&AccountabilityWindow::ProxyManagement)
+            {
+                config
+                    .accountability
+                    .push(AccountabilityWindow::ProxyManagement);
+            }
+        // @trace spec:enclave-network
+        } else if arg == "--log-enclave" {
+            if !config
+                .accountability
+                .contains(&AccountabilityWindow::EnclaveManagement)
+            {
+                config
+                    .accountability
+                    .push(AccountabilityWindow::EnclaveManagement);
+            }
+        // @trace spec:git-mirror-service
+        } else if arg == "--log-git" {
+            if !config
+                .accountability
+                .contains(&AccountabilityWindow::GitManagement)
+            {
+                config
+                    .accountability
+                    .push(AccountabilityWindow::GitManagement);
             }
         }
     }

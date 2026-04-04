@@ -610,6 +610,20 @@ fn main() {
                 // cleanup happens as early as possible.
                 // @trace spec:secret-rotation
                 token_files::delete_all_tokens();
+
+                // @trace spec:proxy-container, spec:enclave-network
+                // Stop the proxy container and remove the enclave network on exit.
+                // Uses a blocking runtime since we are in the sync RunEvent handler.
+                if let Ok(rt) = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    rt.block_on(async {
+                        handlers::stop_proxy().await;
+                        handlers::cleanup_enclave_network().await;
+                    });
+                }
+
                 singleton::release();
                 let _ = shutdown_tx.blocking_send(());
             }
