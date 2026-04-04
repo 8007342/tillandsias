@@ -567,8 +567,10 @@ fn run_github_login_direct(tag: &str) -> bool {
     println!("  (You'll be prompted to paste a GitHub token)");
     println!();
 
-    // Run gh auth login interactively in forge container
-    let status = tillandsias_podman::podman_cmd_sync()
+    // Run gh auth login interactively in forge container.
+    // Use raw Command (not podman_cmd_sync) to avoid CREATE_NO_WINDOW
+    // which kills the interactive TTY that gh auth login needs.
+    let status = std::process::Command::new(tillandsias_podman::find_podman_path())
         .args(["run", "-it", "--rm", "--init", "--name", "tillandsias-gh-login"])
         .args(security_flags)
         .args(["--entrypoint", ""])
