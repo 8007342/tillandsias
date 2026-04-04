@@ -65,8 +65,7 @@
       "Bash(tasklist)",
       "Bash([ -f \"/c/Users/bullo/AppData/Local/Tillandsias/uninstall.exe\" ])",
       "Bash(\"/c/Users/bullo/AppData/Local/Tillandsias/uninstall.exe\" /S)",
-      "Bash(git stash:*)",
-      "Bash(./scripts/bump-version.sh:*)"
+      "Bash(git stash:*)"
     ]
   }
 }

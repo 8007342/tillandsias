@@ -39,7 +39,7 @@ fi
 export TILLANDSIAS_WELCOME_SHOWN=1
 
 # ── Launch shell ────────────────────────────────────────────
-echo "[lifecycle] entrypoint | terminal launching" >&2
+trace_lifecycle "entrypoint" "terminal launching"
 if command -v fish &>/dev/null; then
     trace_lifecycle "exec" "launching fish"
     exec fish

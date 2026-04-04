@@ -109,7 +109,7 @@ fi
 show_banner "claude"
 
 # ── Launch Claude Code ──────────────────────────────────────
-echo "[lifecycle] entrypoint | claude launching" >&2
+trace_lifecycle "entrypoint" "claude launching"
 if [ -x "$CC_BIN" ]; then
     trace_lifecycle "exec" "launching claude-code ($CC_BIN)"
     exec "$CC_BIN" "$@"

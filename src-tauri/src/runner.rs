@@ -613,6 +613,11 @@ fn run_github_login_direct(tag: &str) -> bool {
     println!();
     println!("  GitHub authentication complete.");
     println!();
+
+    // Migrate the token from hosts.yml to the native keyring so
+    // subsequent launches can inject it via tmpfs.
+    crate::secrets::migrate_token_to_keyring();
+
     true
 }
 

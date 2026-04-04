@@ -90,10 +90,30 @@ pub fn retrieve_github_token() -> Result<Option<String>, String> {
             Ok(Some(token))
         }
         Err(keyring::Error::NoEntry) => {
-            debug!("No GitHub token in native keyring");
-            Ok(None)
+            debug!("No GitHub token in native keyring, checking hosts.yml fallback");
+            // Fall back to reading hosts.yml directly (e.g., after gh auth login
+            // before migration, or when keyring is unavailable on Windows).
+            let path = hosts_yml_path();
+            match fs::read_to_string(&path) {
+                Ok(contents) => {
+                    if let Some(token) = extract_token_from_hosts_yml(&contents) {
+                        debug!("Found token in hosts.yml fallback");
+                        Ok(Some(token))
+                    } else {
+                        Ok(None)
+                    }
+                }
+                Err(_) => Ok(None),
+            }
         }
-        Err(e) => Err(format!("Failed to read keyring: {e}")),
+        Err(e) => {
+            debug!("Keyring error: {e}, checking hosts.yml fallback");
+            let path = hosts_yml_path();
+            match fs::read_to_string(&path) {
+                Ok(contents) => Ok(extract_token_from_hosts_yml(&contents)),
+                Err(_) => Ok(None),
+            }
+        }
     }
 }
 

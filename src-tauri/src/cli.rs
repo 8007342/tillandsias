@@ -545,8 +545,6 @@ pub fn print_welcome_banner(debug: bool) {
     }
 
     println!();
-    println!("   {YELLOW}Try: tillandsias --help{RESET}");
-    println!();
 }
 
 // ---------------------------------------------------------------------------

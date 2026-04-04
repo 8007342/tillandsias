@@ -95,7 +95,7 @@ OS_BIN="$CACHE/openspec/bin/openspec"
 # ── Install and update OpenCode ─────────────────────────────
 ensure_opencode || true
 
-echo "[lifecycle] entrypoint | opencode installed" >&2
+trace_lifecycle "entrypoint" "opencode installed"
 
 # ── Find project directory ──────────────────────────────────
 find_project_dir
@@ -113,7 +113,7 @@ fi
 show_banner "opencode"
 
 # ── Launch OpenCode ─────────────────────────────────────────
-echo "[lifecycle] entrypoint | opencode launching" >&2
+trace_lifecycle "entrypoint" "opencode launching"
 export PATH="$OC_DIR/bin:$PATH"
 if [ -x "$OC_BIN" ]; then
     trace_lifecycle "exec" "launching opencode ($OC_BIN)"

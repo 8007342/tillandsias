@@ -14,25 +14,47 @@ pub use launch::query_occupied_ports;
 /// Find the podman binary path.
 ///
 /// AppImages and some sandboxed environments may not have `/usr/bin` in PATH.
+/// On Windows, Start Menu launches have a minimal PATH that excludes Podman.
 /// We check common locations before falling back to bare `podman` (PATH lookup).
 pub fn find_podman_path() -> &'static str {
-    // Check standard locations first — avoids PATH issues in AppImage/Flatpak
-    static PATHS: &[&str] = &[
-        "/usr/bin/podman",
-        "/usr/local/bin/podman",
-        "/bin/podman",
-        "/opt/homebrew/bin/podman", // Homebrew on Apple Silicon
-        "/opt/local/bin/podman",    // MacPorts
-    ];
+    #[cfg(target_os = "windows")]
+    {
+        // Windows: check common install locations before PATH fallback.
+        // Podman Desktop and winget both install to Program Files.
+        static WIN_PATHS: &[&str] = &[
+            r"C:\Program Files\RedHat\Podman\podman.exe",
+            r"C:\Program Files\Podman\podman.exe",
+            r"C:\ProgramData\chocolatey\bin\podman.exe",
+        ];
 
-    for path in PATHS {
-        if std::path::Path::new(path).exists() {
-            return path;
+        for path in WIN_PATHS {
+            if std::path::Path::new(path).exists() {
+                return path;
+            }
         }
+        // Fallback to PATH lookup
+        "podman"
     }
 
-    // Fallback to PATH lookup
-    "podman"
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Check standard locations first — avoids PATH issues in AppImage/Flatpak
+        static PATHS: &[&str] = &[
+            "/usr/bin/podman",
+            "/usr/local/bin/podman",
+            "/bin/podman",
+            "/opt/homebrew/bin/podman", // Homebrew on Apple Silicon
+            "/opt/local/bin/podman",    // MacPorts
+        ];
+
+        for path in PATHS {
+            if std::path::Path::new(path).exists() {
+                return path;
+            }
+        }
+        // Fallback to PATH lookup
+        "podman"
+    }
 }
 
 /// Create a `tokio::process::Command` for podman with a clean library environment.

@@ -13,8 +13,12 @@ set -euo pipefail
 # create files on bind-mounted directories with restrictive modes.
 umask 0022
 
-_cleanup() { jobs -p | xargs -r kill 2>/dev/null; exit 0; }
-trap '_cleanup' SIGTERM SIGINT EXIT
+# Kill background jobs (spinners) on signal, but do NOT call exit —
+# this file is sourced by entrypoints that end with `exec`, and an
+# `exit` in the EXIT trap would prevent the exec from replacing the shell.
+_cleanup() { jobs -p | xargs -r kill 2>/dev/null || true; }
+trap '_cleanup' SIGTERM SIGINT
+trap '_cleanup' EXIT
 
 # ── Locale detection ─────────────────────────────────────────
 # Extract the 2-letter language code from the OS locale environment.
@@ -54,6 +58,9 @@ export PATH="$CACHE/openspec/bin:$HOME/.local/bin:$PATH"
 # Structured trace output for --log-environment-lifecycle troubleshooting.
 # Format: [lifecycle] <phase> | <detail>
 trace_lifecycle() {
+    # Only emit lifecycle traces when TILLANDSIAS_DEBUG is set.
+    # In production, these clutter the terminal (stderr shares the display).
+    [ -n "${TILLANDSIAS_DEBUG:-}" ] || return 0
     local phase="$1"
     shift
     echo "[lifecycle] $phase | $*" >&2
