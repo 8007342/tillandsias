@@ -451,7 +451,15 @@ pub fn run(
     println!();
 
     // Execute podman with inherited stdio — terminal passes through.
-    // Using .status() blocks until the container exits.
+    // On Windows, use raw Command to avoid CREATE_NO_WINDOW from
+    // podman_cmd_sync() — it kills the interactive TTY that `-it` needs.
+    #[cfg(target_os = "windows")]
+    let status = std::process::Command::new(tillandsias_podman::find_podman_path())
+        .arg("run")
+        .args(&run_args)
+        .status();
+
+    #[cfg(not(target_os = "windows"))]
     let status = tillandsias_podman::podman_cmd_sync()
         .arg("run")
         .args(&run_args)
