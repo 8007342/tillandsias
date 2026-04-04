@@ -60,7 +60,13 @@
       "Bash(rustc /tmp/test-bash.rs -o /tmp/test-bash.exe)",
       "Bash(xargs -r -I{} podman rmi {} rm -rf \"/c/Users/bullo/AppData/Local/Temp/tillandsias-embedded/\" rm -rf \"/c/Users/bullo/.cache/tillandsias/build-hashes/\" rm -f /tmp/tillandsias-build/build-forge.lock)",
       "Bash(podman rm:*)",
-      "Bash(podman stop:*)"
+      "Bash(podman stop:*)",
+      "Bash(git log:*)",
+      "Bash(tasklist)",
+      "Bash([ -f \"/c/Users/bullo/AppData/Local/Tillandsias/uninstall.exe\" ])",
+      "Bash(\"/c/Users/bullo/AppData/Local/Tillandsias/uninstall.exe\" /S)",
+      "Bash(git stash:*)",
+      "Bash(./scripts/bump-version.sh:*)"
     ]
   }
 }
