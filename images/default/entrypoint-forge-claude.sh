@@ -57,7 +57,7 @@ update_claude() {
     trace_lifecycle "update" "claude-code: checking for updates..."
     local current_ver latest_ver
     current_ver="$("$CC_BIN" --version 2>/dev/null || echo "unknown")"
-    latest_ver="$(timeout 10 npm view @anthropic-ai/claude-code version 2>/dev/null || true)"
+    latest_ver="$(timeout 10 npm view @anthropic-ai/claude-code version </dev/null 2>/dev/null || true)"
     if [ -z "$latest_ver" ]; then
         trace_lifecycle "update" "claude-code: skipped (offline)"
         record_update_check "$stamp_file"
@@ -102,7 +102,7 @@ trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 # Always run to ensure /opsx commands are available, even if the project
 # was cloned without openspec config. Idempotent — no-ops if already set up.
 if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
-    "$OS_BIN" init --tools claude >/dev/null 2>&1 || true
+    "$OS_BIN" init --tools claude </dev/null >/dev/null 2>&1 || true
 fi
 
 # ── Banner ──────────────────────────────────────────────────

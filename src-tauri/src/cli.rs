@@ -118,7 +118,8 @@ pub enum CliMode {
     Version,
 
     /// `tillandsias --init` — pre-build development environments.
-    Init,
+    /// `tillandsias --init --force` — rebuild even if already built.
+    Init { force: bool },
 
     /// `tillandsias --stats` — print disk usage report and exit.
     Stats,
@@ -158,6 +159,7 @@ USAGE:
     tillandsias <path> --bash       Open maintenance terminal
     tillandsias --github-login      Authenticate with GitHub
     tillandsias --init              Pre-build development environments
+    tillandsias --init --force      Rebuild forge image from scratch
     tillandsias --stats             Show disk usage from Tillandsias artifacts
     tillandsias --clean             Remove stale artifacts and reclaim disk space
     tillandsias --update            Check for updates and apply if available
@@ -223,8 +225,10 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
     }
 
     // `tillandsias --init` or `tillandsias init` — pre-build images.
+    // `tillandsias --init --force` — rebuild even if already built.
     if args.iter().any(|a| a == "--init") || args.first().map(|s| s.as_str()) == Some("init") {
-        return Some((CliMode::Init, log_config));
+        let force = args.iter().any(|a| a == "--force");
+        return Some((CliMode::Init { force }, log_config));
     }
 
     // `tillandsias --stats` — disk usage report.

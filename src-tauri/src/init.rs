@@ -12,19 +12,27 @@ use crate::handlers::{forge_image_tag, prune_old_forge_images};
 use crate::i18n;
 use crate::strings;
 
-/// Run the init command. Returns true on success.
-pub fn run() -> bool {
+/// Run the init command. When `force` is true, rebuild even if the image exists.
+pub fn run_with_force(force: bool) -> bool {
     println!("{}", i18n::t("init.preparing"));
     println!();
 
     let tag = forge_image_tag();
 
-    // Check if forge image already exists
-    if image_exists(&tag) {
+    // Check if forge image already exists (skip when --force)
+    if !force && image_exists(&tag) {
         println!("  {}", i18n::t("init.already_ready"));
         println!();
         println!("{}", i18n::t("init.ready"));
         return true;
+    }
+
+    // If force-rebuilding, remove the existing image first
+    if force && image_exists(&tag) {
+        println!("  Removing existing image for rebuild...");
+        let _ = tillandsias_podman::podman_cmd_sync()
+            .args(["rmi", "--force", &tag])
+            .output();
     }
 
     // Check if another build is running

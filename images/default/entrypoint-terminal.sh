@@ -23,7 +23,7 @@ trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
 # ── OpenSpec init (every launch, silent) ────────────────────
 if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
-    "$OS_BIN" init >/dev/null 2>&1 || true
+    "$OS_BIN" init </dev/null >/dev/null 2>&1 || true
 fi
 
 # ── Welcome banner ──────────────────────────────────────────

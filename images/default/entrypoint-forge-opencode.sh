@@ -106,7 +106,7 @@ trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 # Always run to ensure /opsx commands are available, even if the project
 # was cloned without openspec config. Idempotent — no-ops if already set up.
 if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
-    "$OS_BIN" init --tools opencode >/dev/null 2>&1 || true
+    "$OS_BIN" init --tools opencode </dev/null >/dev/null 2>&1 || true
 fi
 
 # ── Banner ──────────────────────────────────────────────────

@@ -436,9 +436,14 @@ fn open_terminal(command: &str, title: &str) -> Result<(), String> {
             command.to_string()
         };
 
-        // Try Windows Terminal first (handles quoting properly)
+        // Try Windows Terminal first (handles quoting properly).
+        // After FreeConsole() in tray mode, inherited stdio handles are invalid.
+        // Use Stdio::null() to avoid ERROR_NOT_SUPPORTED (50) from stale handles.
         let wt_result = std::process::Command::new("wt")
             .args(["--title", title, "cmd", "/k", &shell_cmd])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .spawn();
 
         match wt_result {
@@ -447,6 +452,9 @@ fn open_terminal(command: &str, title: &str) -> Result<(), String> {
                 // Fallback: cmd /c start (legacy, quoting may be fragile)
                 std::process::Command::new("cmd")
                     .args(["/c", "start", &format!("\"{}\"", title), "cmd", "/k", &shell_cmd])
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
                     .spawn()
                     .map(|_| ())
                     .map_err(|e| format!("cmd: {e}"))

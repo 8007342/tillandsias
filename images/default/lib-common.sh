@@ -39,7 +39,7 @@ touch ~/.gitconfig 2>/dev/null || true
 # ── GitHub auth bridge ──────────────────────────────────────
 # Register gh as git credential helper so git push works with
 # gh's OAuth token. Non-interactive, fails silently if gh not installed.
-command -v gh &>/dev/null && gh auth setup-git 2>/dev/null || true
+command -v gh &>/dev/null && gh auth setup-git </dev/null 2>/dev/null || true
 
 # ── Shell configs ───────────────────────────────────────────
 # Deploy configs from /etc/skel/ to $HOME if not already present.
@@ -113,32 +113,26 @@ find_project_dir() {
     return 0
 }
 
-# ── Progress spinner ────────────────────────────────────────
+# ── Progress indicator ──────────────────────────────────────
 # @trace spec:install-progress
 # Usage: spin "message" command [args...]
-# Shows animated spinner on stderr while command runs.
-# Falls back to a static message if stderr is not a TTY.
+# Prints a status message, runs the command, prints dots while waiting.
+# Uses newline-based output (no \r) to avoid PTY buffering issues on
+# Windows terminals attached through podman.
 spin() {
     local msg="$1"; shift
-    if [ ! -t 2 ]; then
-        echo "  $msg" >&2
-        "$@" >/dev/null 2>&1
-        return $?
-    fi
-    local chars='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    printf '  %s' "$msg" >&2
     local spin_pid
     ( trap 'exit 0' TERM
       while true; do
-        for ((i=0; i<${#chars}; i++)); do
-            printf '\r  %s %s' "${chars:$i:1}" "$msg" >&2
-            sleep 0.1
-        done
+          sleep 2
+          printf '.' >&2
       done ) &
     spin_pid=$!
     local rc=0
-    "$@" >/dev/null 2>&1 || rc=$?
+    "$@" </dev/null >/dev/null 2>&1 || rc=$?
     kill "$spin_pid" 2>/dev/null; wait "$spin_pid" 2>/dev/null
-    printf '\r\033[K' >&2
+    echo "" >&2
     return $rc
 }
 

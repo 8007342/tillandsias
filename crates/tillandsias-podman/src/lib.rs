@@ -62,6 +62,9 @@ pub fn find_podman_path() -> &'static str {
 /// - Resolves podman by absolute path (AppImages may not have /usr/bin in PATH)
 /// - Removes `LD_LIBRARY_PATH` and `LD_PRELOAD` (AppImage bundled libs conflict
 ///   with host libraries, causing `undefined symbol: seccomp_export_bpf_mem`)
+///
+/// On Windows, uses CREATE_NO_WINDOW to prevent console window flashing, and
+/// explicitly sets piped stdio so handles remain valid after FreeConsole().
 pub fn podman_cmd() -> tokio::process::Command {
     let mut cmd = tokio::process::Command::new(find_podman_path());
     cmd.env_remove("LD_LIBRARY_PATH");
@@ -82,8 +85,18 @@ pub fn podman_cmd() -> tokio::process::Command {
     }
 
     // Prevent flashing console windows when podman is called from the tray app.
+    // After FreeConsole() the inherited stdio handles become invalid, which can
+    // cause ERROR_NOT_SUPPORTED (50) when Rust's stdlib sets STARTF_USESTDHANDLES
+    // with those stale handles. Piping all three streams ensures CreateProcess
+    // receives valid handles regardless of console state.
+    // @trace spec:podman-orchestration
     #[cfg(target_os = "windows")]
-    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    {
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        cmd.stdin(std::process::Stdio::null());
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
+    }
 
     cmd
 }
@@ -94,11 +107,14 @@ pub fn podman_cmd_sync() -> std::process::Command {
     cmd.env_remove("LD_LIBRARY_PATH");
     cmd.env_remove("LD_PRELOAD");
 
-    // Prevent flashing console windows when podman is called from the tray app.
+    // Prevent flashing console windows. See podman_cmd() for rationale.
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        cmd.stdin(std::process::Stdio::null());
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
     }
 
     // Close inherited file descriptors >= 3 before exec'ing podman.
