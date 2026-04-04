@@ -259,6 +259,11 @@ pub fn terminal_profile() -> ContainerProfile {
                 name: "GIT_COMMITTER_EMAIL",
                 value: EnvValue::FromContext(ContextKey::GitAuthorEmail),
             },
+            // @trace spec:inference-container
+            ProfileEnvVar {
+                name: "OLLAMA_HOST",
+                value: EnvValue::Literal("http://inference:11434"),
+            },
             // @trace spec:proxy-container, spec:enclave-network
             ProfileEnvVar {
                 name: "HTTP_PROXY",
@@ -330,6 +335,45 @@ pub fn proxy_profile() -> ContainerProfile {
         ],
         env_vars: vec![],
         secrets: vec![],
+        image_override: None,
+    }
+}
+
+/// Inference container — local LLM inference via ollama.
+///
+/// Runs an ollama server inside the enclave network. Forge containers connect
+/// to it via `OLLAMA_HOST=http://inference:11434`. The model cache is mounted
+/// dynamically at launch time from `~/.cache/tillandsias/models/`.
+///
+/// The inference container needs proxy env vars so ollama can download models
+/// through the enclave proxy. No secrets are needed.
+///
+/// @trace spec:inference-container
+pub fn inference_profile() -> ContainerProfile {
+    ContainerProfile {
+        entrypoint: "/usr/local/bin/entrypoint.sh",
+        working_dir: None,
+        mounts: vec![],  // Model cache mount added dynamically at launch time
+        env_vars: vec![
+            // Proxy env vars so ollama can download models through the proxy
+            ProfileEnvVar {
+                name: "HTTP_PROXY",
+                value: EnvValue::Literal("http://proxy:3128"),
+            },
+            ProfileEnvVar {
+                name: "HTTPS_PROXY",
+                value: EnvValue::Literal("http://proxy:3128"),
+            },
+            ProfileEnvVar {
+                name: "http_proxy",
+                value: EnvValue::Literal("http://proxy:3128"),
+            },
+            ProfileEnvVar {
+                name: "https_proxy",
+                value: EnvValue::Literal("http://proxy:3128"),
+            },
+        ],
+        secrets: vec![],  // No credentials needed
         image_override: None,
     }
 }
@@ -424,6 +468,12 @@ fn common_forge_env() -> Vec<ProfileEnvVar> {
             name: "TILLANDSIAS_GIT_SERVICE",
             value: EnvValue::Literal("git-service"),
         },
+        // @trace spec:inference-container
+        // Point forge containers to the inference service for local LLM access.
+        ProfileEnvVar {
+            name: "OLLAMA_HOST",
+            value: EnvValue::Literal("http://inference:11434"),
+        },
         // @trace spec:proxy-container, spec:enclave-network
         // Uppercase — standard for curl, wget, apt, pip, npm, cargo, etc.
         ProfileEnvVar {
@@ -517,26 +567,27 @@ mod tests {
     }
 
     #[test]
-    fn forge_profiles_have_sixteen_env_vars() {
+    fn forge_profiles_have_seventeen_env_vars() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
         // PROJECT, HOST_OS, AGENT, LANG, LANGUAGE,
         // GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME, GIT_COMMITTER_EMAIL,
-        // GIT_SERVICE,
+        // GIT_SERVICE, OLLAMA_HOST,
         // HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy
-        // @trace spec:proxy-container, spec:enclave-network, spec:git-mirror-service
-        assert_eq!(opencode.env_vars.len(), 16);
-        assert_eq!(claude.env_vars.len(), 16);
+        // @trace spec:proxy-container, spec:enclave-network, spec:git-mirror-service, spec:inference-container
+        assert_eq!(opencode.env_vars.len(), 17);
+        assert_eq!(claude.env_vars.len(), 17);
     }
 
     #[test]
-    fn terminal_has_fourteen_env_vars() {
+    fn terminal_has_fifteen_env_vars() {
         let profile = terminal_profile();
         // PROJECT, HOST_OS, LANG, LANGUAGE (no AGENT, no GIT_SERVICE)
         // + GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME, GIT_COMMITTER_EMAIL
+        // + OLLAMA_HOST
         // + HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy
-        // @trace spec:proxy-container, spec:enclave-network
-        assert_eq!(profile.env_vars.len(), 14);
+        // @trace spec:proxy-container, spec:enclave-network, spec:inference-container
+        assert_eq!(profile.env_vars.len(), 15);
     }
 
     // @trace spec:git-mirror-service
@@ -573,6 +624,42 @@ mod tests {
         assert!(
             profile.image_override.is_none(),
             "Git service image tag comes from LaunchContext"
+        );
+        assert_eq!(profile.entrypoint, "/usr/local/bin/entrypoint.sh");
+    }
+
+    // @trace spec:inference-container
+    #[test]
+    fn inference_has_proxy_env_vars_no_secrets_no_mounts() {
+        let profile = inference_profile();
+        assert!(profile.secrets.is_empty(), "Inference must have no secrets");
+        assert!(
+            profile.mounts.is_empty(),
+            "Inference mounts are added dynamically at launch time"
+        );
+        // 4 proxy env vars: HTTP_PROXY, HTTPS_PROXY, http_proxy, https_proxy
+        assert_eq!(
+            profile.env_vars.len(),
+            4,
+            "Inference should have 4 proxy env vars"
+        );
+        assert!(
+            profile
+                .env_vars
+                .iter()
+                .any(|e| e.name == "HTTP_PROXY"),
+            "Inference must have HTTP_PROXY"
+        );
+        assert!(
+            profile
+                .env_vars
+                .iter()
+                .any(|e| e.name == "https_proxy"),
+            "Inference must have https_proxy"
+        );
+        assert!(
+            profile.image_override.is_none(),
+            "Inference image tag comes from LaunchContext"
         );
         assert_eq!(profile.entrypoint, "/usr/local/bin/entrypoint.sh");
     }

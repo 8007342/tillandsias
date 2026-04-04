@@ -391,6 +391,23 @@ pub fn run(
         }
     }
 
+    // @trace spec:inference-container
+    // Ensure inference container is running (CLI mode).
+    {
+        let (inference_tx, _inference_rx) = tokio::sync::mpsc::channel::<tillandsias_core::event::BuildProgressEvent>(4);
+        let dummy_state = tillandsias_core::state::TrayState::new(tillandsias_core::state::PlatformInfo {
+            os: tillandsias_core::state::Os::detect(),
+            has_podman: true,
+            has_podman_machine: false,
+            gpu_devices: vec![],
+        });
+        if let Err(e) = rt.block_on(crate::handlers::ensure_inference_running(&dummy_state, inference_tx)) {
+            if debug {
+                eprintln!("  [debug] Inference setup failed: {e}");
+            }
+        }
+    }
+
     // @trace spec:git-mirror-service
     // Ensure git mirror and service for this project (CLI mode).
     {

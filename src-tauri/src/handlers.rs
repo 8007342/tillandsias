@@ -67,6 +67,180 @@ pub(crate) fn git_image_tag() -> String {
     format!("tillandsias-git:v{}", env!("TILLANDSIAS_FULL_VERSION"))
 }
 
+/// The versioned inference image tag.
+/// @trace spec:inference-container
+pub(crate) fn inference_image_tag() -> String {
+    format!("tillandsias-inference:v{}", env!("TILLANDSIAS_FULL_VERSION"))
+}
+
+/// The fixed container name for the inference service (not project-specific).
+const INFERENCE_CONTAINER_NAME: &str = "tillandsias-inference";
+
+/// Ensure the inference container is running.
+///
+/// Checks if `tillandsias-inference` container exists and is running. If not,
+/// builds the inference image if needed and starts a detached inference container
+/// on the enclave network with alias `inference`.
+///
+/// The model cache is mounted from `~/.cache/tillandsias/models/` to
+/// `/home/ollama/.ollama/models/` so downloaded models persist across restarts.
+///
+/// @trace spec:inference-container
+pub(crate) async fn ensure_inference_running(
+    state: &TrayState,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<(), String> {
+    // Check if already running (in our state or via podman inspect)
+    if state.running.iter().any(|c| c.name == INFERENCE_CONTAINER_NAME) {
+        debug!(spec = "inference-container", "Inference container already tracked in state");
+        return Ok(());
+    }
+
+    let client = PodmanClient::new();
+
+    // Check if it's running outside our state (e.g., surviving a restart)
+    if let Ok(inspect) = client.inspect_container(INFERENCE_CONTAINER_NAME).await {
+        if inspect.state == "running" {
+            debug!(spec = "inference-container", "Inference container already running (discovered)");
+            return Ok(());
+        }
+    }
+
+    info!(
+        accountability = true,
+        spec = "inference-container",
+        "Starting inference container"
+    );
+
+    // Ensure inference image exists — build if needed
+    let tag = inference_image_tag();
+    if !client.image_exists(&tag).await {
+        info!(tag = %tag, spec = "inference-container", "Inference image absent — building");
+
+        let _ = build_tx.try_send(BuildProgressEvent::Started {
+            image_name: "Inference".to_string(),
+        });
+
+        let build_result =
+            tokio::task::spawn_blocking(|| run_build_image_script("inference")).await;
+
+        match build_result {
+            Ok(Ok(())) => {
+                if !client.image_exists(&tag).await {
+                    error!(tag = %tag, spec = "inference-container", "Inference image still not found after build");
+                    let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                        image_name: "Inference".to_string(),
+                        reason: "Inference image not ready".to_string(),
+                    });
+                    return Err("Inference image not ready after build".into());
+                }
+                info!(tag = %tag, spec = "inference-container", "Inference image built");
+                let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                    image_name: "Inference".to_string(),
+                });
+            }
+            Ok(Err(ref e)) => {
+                error!(tag = %tag, error = %e, spec = "inference-container", "Inference image build failed");
+                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: "Inference".to_string(),
+                    reason: format!("Inference build failed: {e}"),
+                });
+                return Err(format!("Inference image build failed: {e}"));
+            }
+            Err(ref e) => {
+                error!(tag = %tag, error = %e, spec = "inference-container", "Inference image build task panicked");
+                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: "Inference".to_string(),
+                    reason: format!("Inference build panicked: {e}"),
+                });
+                return Err(format!("Inference image build panicked: {e}"));
+            }
+        }
+    }
+
+    // Build inference container args using the profile + LaunchContext
+    let profile = tillandsias_core::container_profile::inference_profile();
+    let cache = cache_dir();
+
+    // Ensure model cache dir exists
+    let models_cache = cache.join("models");
+    std::fs::create_dir_all(&models_cache).ok();
+
+    let ctx = tillandsias_core::container_profile::LaunchContext {
+        container_name: INFERENCE_CONTAINER_NAME.to_string(),
+        project_path: models_cache.clone(), // not meaningful for inference
+        project_name: "inference".to_string(),
+        cache_dir: cache.clone(),
+        port_range: (0, 0),                 // no ports exposed to host
+        host_os: tillandsias_core::config::detect_host_os(),
+        detached: true,
+        is_watch_root: false,
+        claude_dir: PathBuf::from("/nonexistent"),
+        gh_dir: PathBuf::from("/nonexistent"),
+        git_dir: PathBuf::from("/nonexistent"),
+        token_file_path: None,
+        custom_mounts: vec![],
+        image_tag: tag.clone(),
+        selected_language: "en".to_string(),
+        // @trace spec:inference-container, spec:enclave-network
+        network: Some(tillandsias_podman::ENCLAVE_NETWORK.to_string()),
+        git_author_name: String::new(),
+        git_author_email: String::new(),
+    };
+
+    let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
+
+    // Mount model cache dynamically: host models dir -> container ollama models dir
+    let model_mount = format!(
+        "{}:/home/ollama/.ollama/models:rw",
+        models_cache.display()
+    );
+    // Insert before the image tag (always last element)
+    run_args.insert(run_args.len() - 1, "-v".to_string());
+    run_args.insert(run_args.len() - 1, model_mount);
+
+    // Add network alias so forge containers can reach it as "inference"
+    run_args.insert(
+        run_args.len() - 1,
+        "--network-alias=inference".to_string(),
+    );
+
+    // Launch the inference container via podman run (detached)
+    match client.run_container(&run_args).await {
+        Ok(container_id) => {
+            info!(
+                accountability = true,
+                spec = "inference-container",
+                container_id = %container_id,
+                "Inference container started (detached)"
+            );
+            Ok(())
+        }
+        Err(e) => {
+            error!(
+                spec = "inference-container",
+                error = %e,
+                "Failed to start inference container"
+            );
+            Err(format!("Failed to start inference container: {e}"))
+        }
+    }
+}
+
+/// Stop the inference container if running. Best-effort, errors are logged.
+/// @trace spec:inference-container
+pub(crate) async fn stop_inference() {
+    let client = PodmanClient::new();
+    let launcher = tillandsias_podman::launch::ContainerLauncher::new(client);
+    match launcher.stop(INFERENCE_CONTAINER_NAME).await {
+        Ok(()) => info!(spec = "inference-container", "Inference container stopped"),
+        Err(e) => {
+            // Not an error if it wasn't running
+            debug!(spec = "inference-container", error = %e, "Inference stop returned error (may not have been running)");
+        }
+    }
+}
+
 /// Ensure the tillandsias-enclave internal network exists.
 /// Creates it if absent. Called before any container launch.
 /// @trace spec:enclave-network
@@ -1489,6 +1663,12 @@ pub async fn handle_attach_here(
         warn!(error = %e, spec = "proxy-container", "Proxy setup failed — forge will launch without proxy");
     }
 
+    // @trace spec:inference-container
+    // Ensure the inference container is running before launching the forge.
+    if let Err(e) = ensure_inference_running(state, build_tx.clone()).await {
+        warn!(error = %e, spec = "inference-container", "Inference setup failed — forge will launch without local inference");
+    }
+
     // @trace spec:git-mirror-service
     // Ensure git mirror and service for this project.
     // Runs synchronously (mirror setup involves git commands) then starts
@@ -1759,6 +1939,10 @@ pub async fn shutdown_all(state: &TrayState) {
         stop_git_service(project_name).await;
     }
 
+    // Stop the inference container
+    // @trace spec:inference-container
+    stop_inference().await;
+
     // Stop the proxy
     // @trace spec:proxy-container
     stop_proxy().await;
@@ -1825,6 +2009,12 @@ pub async fn handle_terminal(
     ensure_enclave_network().await?;
     if let Err(e) = ensure_proxy_running(state, build_tx.clone()).await {
         warn!(error = %e, spec = "proxy-container", "Proxy setup failed — terminal will launch without proxy");
+    }
+
+    // @trace spec:inference-container
+    // Ensure the inference container is running before launching the terminal.
+    if let Err(e) = ensure_inference_running(state, build_tx.clone()).await {
+        warn!(error = %e, spec = "inference-container", "Inference setup failed — terminal will launch without local inference");
     }
 
     // @trace spec:git-mirror-service
@@ -1987,6 +2177,12 @@ pub async fn handle_root_terminal(
     ensure_enclave_network().await?;
     if let Err(e) = ensure_proxy_running(state, build_tx.clone()).await {
         warn!(error = %e, spec = "proxy-container", "Proxy setup failed — root terminal will launch without proxy");
+    }
+
+    // @trace spec:inference-container
+    // Ensure the inference container is running before launching the root terminal.
+    if let Err(e) = ensure_inference_running(state, build_tx.clone()).await {
+        warn!(error = %e, spec = "inference-container", "Inference setup failed — root terminal will launch without local inference");
     }
 
     // Allocate port range — check actual podman containers for conflicts
@@ -2325,6 +2521,12 @@ pub async fn handle_serve_here(
     ensure_enclave_network().await?;
     if let Err(e) = ensure_proxy_running(state, build_tx.clone()).await {
         warn!(error = %e, spec = "proxy-container", "Proxy setup failed — web server will launch without proxy");
+    }
+
+    // @trace spec:inference-container
+    // Ensure the inference container is running before launching the web container.
+    if let Err(e) = ensure_inference_running(state, build_tx.clone()).await {
+        warn!(error = %e, spec = "inference-container", "Inference setup failed — web server will launch without local inference");
     }
 
     // Allocate port — base 8080, increment on conflict.

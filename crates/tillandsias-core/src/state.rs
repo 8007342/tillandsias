@@ -51,6 +51,10 @@ pub enum ContainerType {
     /// Named `tillandsias-<project>-git-service` — no genus allocation.
     /// @trace spec:git-mirror-service
     GitService,
+    /// Local LLM inference service — ollama server.
+    /// Named `tillandsias-inference` — shared, not project-specific.
+    /// @trace spec:inference-container
+    Inference,
 }
 
 /// Info about a running container environment.

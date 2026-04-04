@@ -619,6 +619,7 @@ fn main() {
                     .build()
                 {
                     rt.block_on(async {
+                        handlers::stop_inference().await;
                         handlers::stop_proxy().await;
                         handlers::cleanup_enclave_network().await;
                     });

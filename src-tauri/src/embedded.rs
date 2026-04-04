@@ -121,6 +121,13 @@ pub const GIT_CONTAINERFILE: &str = include_str!("../../images/git/Containerfile
 pub const POST_RECEIVE_HOOK: &str = include_str!("../../images/git/post-receive-hook.sh");
 
 // ---------------------------------------------------------------------------
+// Image sources — inference image
+// @trace spec:inference-container
+// ---------------------------------------------------------------------------
+pub const INFERENCE_ENTRYPOINT: &str = include_str!("../../images/inference/entrypoint.sh");
+pub const INFERENCE_CONTAINERFILE: &str = include_str!("../../images/inference/Containerfile");
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -181,6 +188,9 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 ///       entrypoint.sh
 ///       Containerfile
 ///       post-receive-hook.sh
+///     inference/
+///       entrypoint.sh
+///       Containerfile
 /// ```
 ///
 /// Returns the root temp directory path. The caller should clean up via
@@ -343,6 +353,21 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         )
         .ok();
     }
+
+    // -- images/inference/ --
+    // @trace spec:inference-container
+    let inference_dir = dir.join("images").join("inference");
+    fs::create_dir_all(&inference_dir).map_err(|e| format!("images/inference dir: {e}"))?;
+    write_lf(&inference_dir.join("entrypoint.sh"), INFERENCE_ENTRYPOINT)
+        .map_err(|e| format!("inference entrypoint: {e}"))?;
+    write_lf(&inference_dir.join("Containerfile"), INFERENCE_CONTAINERFILE)
+        .map_err(|e| format!("inference Containerfile: {e}"))?;
+    #[cfg(unix)]
+    fs::set_permissions(
+        inference_dir.join("entrypoint.sh"),
+        fs::Permissions::from_mode(0o755),
+    )
+    .ok();
 
     debug!(dir = %dir.display(), "Wrote embedded image sources to temp");
     Ok(dir)

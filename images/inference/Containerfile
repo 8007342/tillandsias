@@ -1,0 +1,30 @@
+# @trace spec:inference-container
+# Local LLM inference server for Tillandsias enclave network.
+# Runs ollama — models stay cached via volume mount.
+# Built on Fedora Minimal to match the forge image.
+FROM registry.fedoraproject.org/fedora-minimal:41
+
+# -- Minimal deps for the ollama install script --
+RUN microdnf install -y bash curl ca-certificates \
+    && microdnf clean all
+
+# -- Install ollama via official script --
+RUN curl -fsSL https://ollama.com/install.sh | sh
+
+# -- Create non-root user --
+RUN useradd -u 1000 -m -s /bin/bash ollama
+
+# -- Model cache directory (volume-mountable) --
+RUN mkdir -p /home/ollama/.ollama/models/ \
+    && chown -R 1000:1000 /home/ollama
+
+# -- Entrypoint --
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+USER 1000:1000
+
+EXPOSE 11434
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+ENV HOME=/home/ollama USER=ollama
