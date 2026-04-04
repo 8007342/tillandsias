@@ -156,23 +156,25 @@ Example accountability output:
 **Threat model:**
 The primary threats are: (1) an AI agent attempting to read credentials directly, and (2) token persistence beyond the container's lifetime. The token-file delivery mechanism addresses both. Long-term, `fine-grained-pat-rotation` reduces blast radius by scoping tokens to single repositories with 1-hour expiry.
 
-## Enclave Architecture Impact (Phase 3)
+## Enclave Architecture Impact (Phase 3 — ACTIVE)
 
-The enclave architecture fundamentally changes the threat model for secrets. In Phase 3, forge containers lose all credentials — the git service becomes the sole credential holder, communicating with the host keyring via D-Bus while remaining isolated on the internal `tillandsias-enclave` network with no external access.
+Phase 3 is live. The enclave architecture fundamentally changes the threat model for secrets. Forge containers have ZERO credentials — the git service is the sole credential holder, communicating with the host keyring via D-Bus while remaining isolated on the internal `tillandsias-enclave` network with no external access.
 
-**What changes:**
+**Current state:**
 
-| Aspect | Current (Phase 1-2) | Phase 3+ |
-|--------|---------------------|----------|
+| Aspect | Before (Phase 1-2) | Now (Phase 3) |
+|--------|---------------------|---------------|
 | GitHub token in forge | Yes (tmpfs + hosts.yml mounts) | ZERO — git service handles auth |
 | Claude API key in forge | Yes (env var) | Delivered via enclave IPC, not env var |
 | Forge external network | Direct access (transitional) | ZERO — enclave only, all traffic via proxy |
 | Credential exfiltration risk | Agent can read `/run/secrets/` (mitigated by deny list) | No credentials exist in forge to exfiltrate |
 | Git push flow | forge reads token -> pushes directly | forge pushes to git service (enclave) -> git service authenticates via D-Bus -> pushes to remote |
+| Git clone flow | Direct mount from host filesystem | Clone from git mirror service at startup (mirror-only, no fallback) |
+| GitHub Login | Standalone forge container with script | Exec into running git service, or temporary git service container |
 
-**Why this matters:** The current secret management (keyring -> tmpfs -> bind mount) is defense in depth against a single-container architecture. The enclave eliminates the need to deliver credentials into the forge at all. The git service acts as a credential proxy — it authenticates on behalf of forge containers without exposing tokens.
+**Why this matters:** The previous secret management (keyring -> tmpfs -> bind mount) was defense in depth against a single-container architecture. The enclave eliminates the need to deliver credentials into the forge at all. The git service acts as a credential proxy — it authenticates on behalf of forge containers without exposing tokens.
 
-The `hosts.yml` dual-path, the tmpfs token files, and the GIT_ASKPASS mechanism described above are all transitional. In Phase 3, they are replaced by enclave-internal git protocol traffic that never carries credentials.
+The `hosts.yml` dual-path, the tmpfs token files, and the GIT_ASKPASS mechanism described in earlier sections are legacy. In Phase 3, they are replaced by enclave-internal git protocol traffic that never carries credentials. Forge containers clone from the git mirror at startup and push back to it — all over the enclave network with no credentials.
 
 See `docs/cheatsheets/enclave-architecture.md` for the full enclave design, container types, and network topology.
 

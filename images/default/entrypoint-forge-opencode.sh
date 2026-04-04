@@ -11,31 +11,44 @@ source /usr/local/lib/tillandsias/lib-common.sh
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "opencode starting"
 
-# @trace spec:git-mirror-service
-# Clone project from git mirror (Phase 2: additive, falls back to direct mount)
+# @trace spec:git-mirror-service, spec:forge-offline
+# Clone project from git mirror (Phase 3: mirror-only, no direct mount)
 if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]]; then
     trace_lifecycle "git-mirror" "cloning from ${TILLANDSIAS_GIT_SERVICE}"
     MAX_RETRIES=5
     CLONE_SUCCESS=false
+    CLONE_DIR="/home/forge/src/${TILLANDSIAS_PROJECT}"
     for i in $(seq 1 $MAX_RETRIES); do
-        if git clone "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" "/home/forge/src/${TILLANDSIAS_PROJECT}.mirror" 2>/dev/null; then
+        if git clone "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" "$CLONE_DIR" 2>/dev/null; then
             trace_lifecycle "git-mirror" "clone successful"
             CLONE_SUCCESS=true
-            cd "/home/forge/src/${TILLANDSIAS_PROJECT}.mirror"
+            cd "$CLONE_DIR"
             # Configure push back to mirror
+            # @trace spec:git-mirror-service
             git remote set-url --push origin "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" 2>/dev/null || true
+            # Set git identity from host config
+            # @trace spec:forge-offline
+            if [[ -n "${GIT_AUTHOR_NAME:-}" ]]; then
+                git config user.name "$GIT_AUTHOR_NAME"
+            fi
+            if [[ -n "${GIT_AUTHOR_EMAIL:-}" ]]; then
+                git config user.email "$GIT_AUTHOR_EMAIL"
+            fi
             break
         fi
         if [[ $i -lt $MAX_RETRIES ]]; then
             trace_lifecycle "git-mirror" "git service not ready, retrying ($i/$MAX_RETRIES)..."
             sleep 1
         else
-            trace_lifecycle "git-mirror" "could not clone after $MAX_RETRIES attempts, using direct mount"
+            trace_lifecycle "git-mirror" "clone failed after $MAX_RETRIES attempts"
         fi
     done
     if [[ "$CLONE_SUCCESS" != "true" ]]; then
-        trace_lifecycle "git-mirror" "falling back to direct mount"
+        echo "[forge] ERROR: Could not clone project from git service."
+        echo "[forge] The git service may not be running. Dropping to shell."
+        exec bash
     fi
+    echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
 fi
 
 # ── OpenCode (official curl installer) ─────────────────────

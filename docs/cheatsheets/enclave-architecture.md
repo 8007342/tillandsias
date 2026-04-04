@@ -57,14 +57,14 @@ Source: `src-tauri/src/launch.rs`, `crates/tillandsias-core/src/container_profil
 
 ## Phased Rollout
 
-| Phase | What ships | Forge network | Forge credentials |
-|-------|-----------|---------------|-------------------|
-| **Phase 1** | Proxy + enclave network | Enclave + bridge (transitional) | Still has token mounts |
-| **Phase 2** | Git mirror service | Enclave + bridge (transitional) | Still has token mounts |
-| **Phase 3** | Credential isolation | Enclave only | ZERO — git service handles all auth |
-| **Phase 4** | Inference container | Enclave only | ZERO |
+| Phase | What ships | Forge network | Forge credentials | Status |
+|-------|-----------|---------------|-------------------|--------|
+| **Phase 1** | Proxy + enclave network | Enclave + bridge (transitional) | Still has token mounts | COMPLETE |
+| **Phase 2** | Git mirror service | Enclave + bridge (transitional) | Still has token mounts | COMPLETE |
+| **Phase 3** | Credential isolation + mirror-only clone | Enclave only | ZERO — git service handles all auth | COMPLETE |
+| **Phase 4** | Inference container | Enclave only | ZERO | Planned |
 
-Phase 1 is additive — it introduces the proxy without breaking existing workflows. Phase 3 is the security milestone where forge loses both direct internet and credentials.
+Phases 1-3 are complete. Phase 3 is the security milestone where forge loses both direct internet and credentials. Forge containers clone from the git mirror at startup (no fallback to direct mount) and push back via the enclave network. GitHub Login now runs inside the git service container instead of a standalone forge.
 
 @trace spec:enclave-network, spec:proxy-container
 

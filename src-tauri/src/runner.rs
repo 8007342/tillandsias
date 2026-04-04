@@ -184,7 +184,8 @@ fn image_size_display(tag: &str) -> String {
 
 /// Build a [`LaunchContext`] for CLI mode.
 ///
-/// @trace spec:secret-rotation
+/// Forge and terminal containers are credential-free: no token files,
+/// no hosts.yml, no Claude dir mounts. Git identity comes from env vars.
 fn build_cli_launch_context(
     container_name: &str,
     project_path: &Path,
@@ -196,29 +197,13 @@ fn build_cli_launch_context(
     let (gh_dir, git_dir) = crate::launch::ensure_secrets_dirs(cache);
     let host_os = tillandsias_core::config::detect_host_os();
 
-    // Refresh hosts.yml from native keyring before container launch.
-    crate::secrets::write_hosts_yml_from_keyring();
+    // Read git identity from the cached gitconfig (written by gh-auth-login.sh).
+    let (git_author_name, git_author_email) = crate::launch::read_git_identity(cache);
 
-    // Claude credentials directory — always create so the mount works on first auth
+    // Claude credentials directory — kept for struct compatibility but not mounted.
     let claude_dir = dirs::home_dir()
         .map(|h| h.join(".claude"))
         .unwrap_or_else(|| std::path::PathBuf::from("/tmp/.claude"));
-    if !claude_dir.exists() {
-        std::fs::create_dir_all(&claude_dir).ok();
-    }
-
-    // Write GitHub token to tmpfs-backed file for secure container injection.
-    // @trace spec:secret-rotation
-    let token_file_path = match crate::secrets::retrieve_github_token() {
-        Ok(Some(token)) => match crate::token_files::write_token(container_name, &token) {
-            Ok(path) => Some(path),
-            Err(e) => {
-                eprintln!("  Warning: token file write failed ({e}), using hosts.yml only");
-                None
-            }
-        },
-        _ => None,
-    };
 
     // Custom mounts from project config
     let project_config = load_project_config(project_path);
@@ -235,13 +220,15 @@ fn build_cli_launch_context(
         claude_dir,
         gh_dir,
         git_dir,
-        token_file_path,
+        token_file_path: None, // Forge/terminal containers are credential-free
         custom_mounts: project_config.mounts,
         image_tag: image_tag.to_string(),
         selected_language: tillandsias_core::config::load_global_config().i18n.language.clone(),
         // @trace spec:enclave-network
         // CLI-mode forge containers join the enclave network.
         network: Some(tillandsias_podman::ENCLAVE_NETWORK.to_string()),
+        git_author_name,
+        git_author_email,
     }
 }
 
@@ -292,9 +279,6 @@ pub fn run(
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "project".to_string());
-
-    // Display the tilde-collapsed path for readability
-    let display_path = tilde_path(&project_path);
 
     // Print the welcome banner before any other output — only in interactive mode.
     crate::cli::print_welcome_banner(debug);
@@ -469,28 +453,18 @@ pub fn run(
     }
     println!("  Name:   {container_name}");
     println!("  Ports:  {}-{}", base_port.0, base_port.1);
-    let proj_display = project_path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "project".to_string());
-    println!("  Mount:  {display_path} \u{2192} /home/forge/src/{proj_display}");
     println!("  Cache:  {}", tilde_path(&cache));
 
     // @trace spec:secret-management
-    // Show credential mounts transparently so users know what is shared
+    // Show credential-free status transparently
     println!();
-    println!("  Credentials shared with this environment:");
-    if ctx.token_file_path.is_some() {
-        println!("    Token:    tmpfs (RAM only, read-only, deleted on stop)");
+    println!("  Security: credential-free (no tokens, no secrets mounted)");
+    if !ctx.git_author_name.is_empty() {
+        println!("  Git ID:   {} <{}>", ctx.git_author_name, ctx.git_author_email);
     } else {
-        println!("    Token:    not available (GitHub login may be needed)");
+        println!("  Git ID:   not configured (run: tillandsias --login)");
     }
-    println!("    Git auth: protocol + username (no token in this file)");
-    println!("    Git ID:   {} <from .gitconfig>",
-        tilde_path(&ctx.git_dir.join(".gitconfig")));
-    if profile.secrets.iter().any(|s| s.kind == tillandsias_core::container_profile::SecretKind::ClaudeDir) {
-        println!("    Claude:   ~/.claude/ (session credentials, read-write)");
-    }
+    println!("  Code:     cloned from git mirror service (not host mount)");
 
     if debug {
         println!();
@@ -521,10 +495,6 @@ pub fn run(
 
     println!();
 
-    // Clean up token file after container exits (CLI mode runs synchronously).
-    // @trace spec:secret-rotation
-    crate::token_files::delete_token(&container_name);
-
     match status {
         Ok(s) => {
             println!("{}", i18n::t("cli.env_stopped"));
@@ -539,43 +509,97 @@ pub fn run(
 
 /// Run the GitHub login flow interactively in the current terminal.
 ///
-/// Extracts the embedded `gh-auth-login.sh` script to a temp file and
-/// executes it with inherited stdio so the user can authenticate directly.
+/// Phase 3: If a git service container is already running for any project,
+/// exec `gh auth login` inside it. Otherwise, start a temporary git service
+/// container with D-Bus access on the enclave network, run the auth flow,
+/// and let `--rm` clean it up.
 ///
 /// Returns `true` on success, `false` on failure.
+///
+/// @trace spec:git-mirror-service, spec:secret-management
 pub fn run_github_login() -> bool {
     crate::cli::print_welcome_banner(false);
 
-    // Ensure forge image exists (build inline if missing).
-    let tag = crate::handlers::forge_image_tag();
-    {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("tokio runtime");
-        let client = tillandsias_podman::PodmanClient::new();
-        if !rt.block_on(client.image_exists(&tag)) {
-            println!();
-            println!("  Building development environment first...");
-            if let Err(e) = crate::init::run_build_only() {
-                eprintln!("  Failed to build environment: {e}");
-                return false;
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("tokio runtime");
+    let client = tillandsias_podman::PodmanClient::new();
+    let podman_path = tillandsias_podman::find_podman_path();
+
+    // Check if any git service container is already running via podman ps.
+    // @trace spec:git-mirror-service
+    let running_git = {
+        let output = tillandsias_podman::podman_cmd_sync()
+            .args(["ps", "--filter", "name=tillandsias-git-", "--format", "{{.Names}}"])
+            .output();
+        match output {
+            Ok(o) if o.status.success() => {
+                let names = String::from_utf8_lossy(&o.stdout);
+                names.lines().next().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
             }
+            _ => None,
+        }
+    };
+
+    if let Some(container_name) = running_git {
+        println!();
+        println!("  Found running git service: {container_name}");
+        println!("  Running GitHub authentication inside it...");
+        println!();
+
+        let status = std::process::Command::new(&podman_path)
+            .args(["exec", "-it", &container_name, "gh", "auth", "login", "--git-protocol", "https"])
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status();
+
+        return match status {
+            Ok(s) => {
+                if s.success() {
+                    println!();
+                    println!("  GitHub authentication complete.");
+                    crate::secrets::migrate_token_to_keyring();
+                }
+                s.success()
+            }
+            Err(e) => {
+                eprintln!("  Error: failed to exec into git service: {e}");
+                false
+            }
+        };
+    }
+
+    // No git service running — ensure git image exists and start a temporary container.
+    let tag = crate::handlers::git_image_tag();
+
+    if !rt.block_on(client.image_exists(&tag)) {
+        println!();
+        println!("  Building git service image first...");
+        if let Err(e) = run_build_image_script("git", false) {
+            eprintln!("  Failed to build git service image: {e}");
+            return false;
         }
     }
 
+    // Ensure enclave network exists.
+    if let Err(e) = rt.block_on(crate::handlers::ensure_enclave_network()) {
+        eprintln!("  Warning: enclave network setup failed: {e}");
+    }
+
     // On Windows, run gh auth login directly via podman (no bash).
-    // On Unix, use the gh-auth-login.sh script which handles D-Bus forwarding.
+    // On Unix, use the same direct approach (Phase 3 no longer needs the script).
     #[cfg(target_os = "windows")]
     return run_github_login_direct(&tag);
 
     #[cfg(not(target_os = "windows"))]
-    return run_github_login_bash(&tag);
+    return run_github_login_git_service(&tag);
 }
 
-/// Windows: run `gh auth login` directly in a forge container via podman.
+/// Windows: run `gh auth login` directly in a temporary git service container via podman.
 /// No bash, no scripts — just podman run.
-// @trace spec:secret-management, spec:cross-platform
+// @trace spec:secret-management, spec:cross-platform, spec:git-mirror-service
 #[cfg(target_os = "windows")]
 fn run_github_login_direct(tag: &str) -> bool {
 
@@ -712,36 +736,49 @@ fn prompt_with_default(
     if trimmed.is_empty() { default.to_string() } else { trimmed }
 }
 
-/// Unix: use the gh-auth-login.sh script (handles D-Bus, host gh, etc.)
+/// Unix: run `gh auth login` in a temporary git service container on the enclave network.
+/// @trace spec:git-mirror-service, spec:enclave-network
 #[cfg(not(target_os = "windows"))]
-fn run_github_login_bash(tag: &str) -> bool {
-    let script_path = match crate::embedded::write_temp_script(
-        "gh-auth-login.sh",
-        crate::embedded::GH_AUTH_LOGIN,
-    ) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("Error: failed to extract login script: {e}");
-            return false;
-        }
-    };
+fn run_github_login_git_service(tag: &str) -> bool {
+    println!();
+    println!("  Starting GitHub authentication...");
+    println!("  (You'll be prompted to paste a GitHub token)");
+    println!();
 
-    let status = std::process::Command::new(&script_path)
-        .env_remove("LD_LIBRARY_PATH")
-        .env_remove("LD_PRELOAD")
-        .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
-        .env("FORGE_IMAGE_TAG", tag)
+    let network = tillandsias_podman::ENCLAVE_NETWORK;
+
+    let status = tillandsias_podman::podman_cmd_sync()
+        .args([
+            "run", "-it", "--rm", "--init",
+            "--name", "tillandsias-gh-login",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--userns=keep-id",
+            "--security-opt=label=disable",
+            &format!("--network={network}"),
+            "--entrypoint=",
+        ])
+        .arg(tag)
+        .args(["gh", "auth", "login", "--git-protocol", "https"])
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .status();
 
-    std::fs::remove_file(&script_path).ok();
-
     match status {
-        Ok(s) => s.success(),
+        Ok(s) => {
+            if s.success() {
+                println!();
+                println!("  GitHub authentication complete.");
+                println!();
+                crate::secrets::migrate_token_to_keyring();
+            } else {
+                eprintln!("  GitHub authentication failed.");
+            }
+            s.success()
+        }
         Err(e) => {
-            eprintln!("Error: failed to run login script: {e}");
+            eprintln!("Error: failed to run GitHub login container: {e}");
             false
         }
     }

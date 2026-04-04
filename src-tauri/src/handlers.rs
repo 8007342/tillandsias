@@ -16,13 +16,13 @@
 //!   --rm                        Ephemeral: container removed on exit
 //!
 //! Volume mounts are limited to:
-//!   1. Project directory (rw) -- user's own files, mounted at /home/forge/src/<name>
-//!   2. Cache directory (rw)   -- ~/.cache/tillandsias for tool persistence
-//!   3. Secrets directory (rw) -- gh credentials (refreshed from OS keyring) + .gitconfig only
+//!   1. Cache directory (rw)   -- ~/.cache/tillandsias for tool persistence
 //!
 //! NOT mounted (by design):
+//!   - Project directory (code comes from git mirror service)
+//!   - Secrets/credentials (forge containers are credential-free)
 //!   - Host root filesystem or /
-//!   - Other user projects (only the selected project)
+//!   - Other user projects
 //!   - System directories (/etc, /var, /usr)
 //!   - Docker/Podman socket (no container-in-container)
 //!
@@ -197,6 +197,8 @@ pub(crate) async fn ensure_proxy_running(
         // @trace spec:proxy-container, spec:enclave-network
         // Proxy is dual-homed: enclave network (for forge containers) + bridge (for external access)
         network: Some(format!("{},bridge", tillandsias_podman::ENCLAVE_NETWORK)),
+        git_author_name: String::new(),
+        git_author_email: String::new(),
     };
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
@@ -581,6 +583,8 @@ pub(crate) async fn ensure_git_service_running(
         selected_language: "en".to_string(),
         // @trace spec:git-mirror-service, spec:enclave-network
         network: Some(tillandsias_podman::ENCLAVE_NETWORK.to_string()),
+        git_author_name: String::new(),
+        git_author_email: String::new(),
     };
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
@@ -1231,10 +1235,9 @@ fn forge_profile(
 
 /// Build a [`LaunchContext`] for forge and terminal launches.
 ///
-/// Resolves all paths, secrets, and custom mounts needed by `build_podman_args()`.
-/// Writes the GitHub token to a tmpfs-backed file for secure injection.
-///
-/// @trace spec:secret-rotation
+/// Resolves all paths, custom mounts, and git identity needed by
+/// `build_podman_args()`. Forge and terminal containers are credential-free:
+/// no token files, no hosts.yml, no Claude dir mounts.
 fn build_launch_context(
     container_name: &str,
     project_path: &Path,
@@ -1248,47 +1251,14 @@ fn build_launch_context(
     let (gh_dir, git_dir) = crate::launch::ensure_secrets_dirs(cache);
     let host_os = tillandsias_core::config::detect_host_os();
 
-    // Claude credentials directory — always create so the mount works on first auth
+    // Read git identity from the cached gitconfig (written by gh-auth-login.sh).
+    let (git_author_name, git_author_email) = crate::launch::read_git_identity(cache);
+
+    // Claude credentials directory — kept for LaunchContext struct compatibility
+    // but no longer mounted into forge containers.
     let claude_dir = dirs::home_dir()
         .map(|h| h.join(".claude"))
         .unwrap_or_else(|| PathBuf::from("/tmp/.claude"));
-    if !claude_dir.exists() {
-        std::fs::create_dir_all(&claude_dir).ok();
-    }
-
-    // Write GitHub token to tmpfs-backed file for secure container injection.
-    // @trace spec:secret-rotation
-    let token_file_path = match crate::secrets::retrieve_github_token() {
-        Ok(Some(token)) => {
-            match crate::token_files::write_token(container_name, &token) {
-                Ok(path) => Some(path),
-                Err(e) => {
-                    warn!(
-                        target: "secrets",
-                        accountability = true,
-                        category = "secrets",
-                        spec = "secret-rotation",
-                        "Failed to write token file for {container_name}: {e} — falling back to hosts.yml only"
-                    );
-                    None
-                }
-            }
-        }
-        Ok(None) => {
-            debug!("No GitHub token in keyring — skipping token file");
-            None
-        }
-        Err(e) => {
-            warn!(
-                target: "secrets",
-                accountability = true,
-                category = "secrets",
-                spec = "secret-rotation",
-                "Keyring unavailable for token file: {e} — falling back to hosts.yml only"
-            );
-            None
-        }
-    };
 
     // Custom mounts from project config
     let project_config = tillandsias_core::config::load_project_config(project_path);
@@ -1305,7 +1275,7 @@ fn build_launch_context(
         claude_dir,
         gh_dir,
         git_dir,
-        token_file_path,
+        token_file_path: None, // Forge/terminal containers are credential-free
         custom_mounts: project_config.mounts,
         image_tag: image_tag.to_string(),
         selected_language: tillandsias_core::config::load_global_config().i18n.language.clone(),
@@ -1313,6 +1283,8 @@ fn build_launch_context(
         // Forge and terminal containers join the enclave network so they route
         // through the proxy. The proxy itself gets dual-homed separately.
         network: Some(tillandsias_podman::ENCLAVE_NETWORK.to_string()),
+        git_author_name,
+        git_author_email,
     }
 }
 
@@ -1556,10 +1528,6 @@ pub async fn handle_attach_here(
         }
     }
 
-    // Refresh hosts.yml from native keyring so the container gets
-    // a current GitHub token without plain text lingering on disk.
-    crate::secrets::write_hosts_yml_from_keyring();
-
     // Detect whether the project path IS the watch root (e.g., ~/src/) rather
     // than a project inside it. When true, mount at /home/forge/src/ directly
     // instead of nesting as /home/forge/src/src/.
@@ -1611,29 +1579,16 @@ pub async fn handle_attach_here(
         "Terminal opened with OpenCode"
     );
 
-    // Accountability: log the secret mount summary for this container launch.
-    // @trace spec:secret-rotation
+    // Accountability: log credential-free forge launch.
     {
-        let has_token_file = ctx.token_file_path.is_some();
-        let has_gh = ctx.gh_dir.join("hosts.yml").exists();
-        let has_claude_dir = ctx.claude_dir.exists();
-        let token_detail = if has_token_file {
-            "token-file(tmpfs,ro)"
-        } else {
-            "no-token-file"
-        };
-        let secret_summary = match (has_gh, has_claude_dir) {
-            (true, true) => format!("{token_detail}, gh(ro), git(rw), claude-dir(rw)"),
-            (true, false) => format!("{token_detail}, gh(ro), git(rw) | No Claude dir"),
-            (false, true) => format!("{token_detail}, claude-dir(rw) | No GitHub token in hosts.yml"),
-            (false, false) => format!("{token_detail} | No other secrets"),
-        };
+        let has_git_identity = !ctx.git_author_name.is_empty();
         info!(
             accountability = true,
             category = "secrets",
-            safety = %secret_summary,
-            spec = "environment-runtime, secret-rotation",
-            "Environment {container_name} launched with secrets: {secret_summary}",
+            safety = "credential-free (no token, no hosts.yml, no claude-dir)",
+            git_identity = has_git_identity,
+            spec = "environment-runtime",
+            "Environment {container_name} launched credential-free | git identity: {has_git_identity}",
         );
     }
 
@@ -1897,9 +1852,6 @@ pub async fn handle_terminal(
         }
     }
 
-    // Refresh hosts.yml from native keyring before terminal launch.
-    crate::secrets::write_hosts_yml_from_keyring();
-
     // Allocate port range — check actual podman containers for conflicts
     let mut existing_ports: Vec<(u16, u16)> = state.running.iter().map(|c| c.port_range).collect();
     existing_ports.extend(query_occupied_ports());
@@ -1961,15 +1913,14 @@ pub async fn handle_terminal(
                 port_range = ?port_range,
                 "Maintenance terminal opened"
             );
-            // Accountability: log the secret mount summary.
+            // Accountability: log credential-free terminal launch.
             {
-                let has_gh = ctx.gh_dir.join("hosts.yml").exists();
                 info!(
                     accountability = true,
                     category = "secrets",
-                    safety = "gh(ro), git(rw) | Terminal profile, no Claude secrets",
+                    safety = "credential-free (no token, no hosts.yml)",
                     spec = "environment-runtime",
-                    "Maintenance terminal {container_name} launched | gh: {has_gh}",
+                    "Maintenance terminal {container_name} launched credential-free",
                 );
             }
             Ok(())
@@ -2038,9 +1989,6 @@ pub async fn handle_root_terminal(
         warn!(error = %e, spec = "proxy-container", "Proxy setup failed — root terminal will launch without proxy");
     }
 
-    // Refresh hosts.yml from native keyring before terminal launch.
-    crate::secrets::write_hosts_yml_from_keyring();
-
     // Allocate port range — check actual podman containers for conflicts
     let mut existing_ports: Vec<(u16, u16)> = state.running.iter().map(|c| c.port_range).collect();
     existing_ports.extend(query_occupied_ports());
@@ -2105,15 +2053,14 @@ pub async fn handle_root_terminal(
                 port_range = ?port_range,
                 "Root terminal opened"
             );
-            // Accountability: log the secret mount summary.
+            // Accountability: log credential-free root terminal launch.
             {
-                let has_gh = ctx.gh_dir.join("hosts.yml").exists();
                 info!(
                     accountability = true,
                     category = "secrets",
-                    safety = "gh(ro), git(rw) | Root terminal, no Claude secrets",
+                    safety = "credential-free (no token, no hosts.yml)",
                     spec = "environment-runtime",
-                    "Root terminal {container_name} launched | gh: {has_gh}",
+                    "Root terminal {container_name} launched credential-free",
                 );
             }
             Ok(())
@@ -2139,94 +2086,113 @@ pub async fn handle_root_terminal(
 ///
 /// No filesystem scripts are trusted — everything comes from the signed binary.
 ///
-/// TODO(Phase 3): If a git service container is already running for any project,
+/// Phase 3: If a git service container is already running for any project,
 /// exec `gh auth login` inside it (it already has D-Bus for keyring access).
-/// If no git service is running, start a temporary one for auth and stop it after.
-/// The current flow still works — just uses a standalone container.
-/// @trace spec:git-mirror-service
+/// If no git service is running, start a temporary one with D-Bus on the
+/// enclave network, run the auth flow, and stop it after.
+///
+/// @trace spec:git-mirror-service, spec:secret-management
 pub async fn handle_github_login(
-    _state: &TrayState,
+    state: &TrayState,
     build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<(), String> {
-    info!("GitHub Login: checking forge image");
+    info!("GitHub Login: looking for running git service container");
+
+    let podman_path = tillandsias_podman::find_podman_path();
+
+    // Check if any git service container is already running.
+    // @trace spec:git-mirror-service
+    if let Some(git_container) = state
+        .running
+        .iter()
+        .find(|c| c.container_type == tillandsias_core::state::ContainerType::GitService)
+    {
+        info!(
+            container = %git_container.name,
+            "Found running git service — exec gh auth login inside it"
+        );
+
+        let exec_cmd = format!(
+            "{} exec -it {} gh auth login --git-protocol https",
+            podman_path, git_container.name
+        );
+        return open_terminal(&exec_cmd, "GitHub Login")
+            .map_err(|e| format!("Failed to open terminal: {e}"));
+    }
+
+    // No git service running — ensure git image exists and start a temporary one.
+    info!("GitHub Login: no running git service, starting temporary container");
 
     let client = PodmanClient::new();
-    let tag = forge_image_tag();
+    let tag = git_image_tag();
 
     if !client.image_exists(&tag).await {
-        info!(tag = %tag, "Forge image missing — building before GitHub Login");
+        info!(tag = %tag, "Git service image missing — building before GitHub Login");
 
-        // Show "Building environment..." chip in tray menu
         let _ = build_tx.try_send(BuildProgressEvent::Started {
-            image_name: "forge".to_string(),
+            image_name: "Git service".to_string(),
         });
 
-        let build_result = tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
+        let build_result = tokio::task::spawn_blocking(|| run_build_image_script("git")).await;
 
         match build_result {
             Ok(Ok(())) => {
-                // Verify the image actually exists now
                 if !client.image_exists(&tag).await {
-                    error!(tag = %tag, "Image still not found after build completed (GitHub Login)");
+                    error!(tag = %tag, "Git service image still not found after build (GitHub Login)");
                     let _ = build_tx.try_send(BuildProgressEvent::Failed {
-                        image_name: "forge".to_string(),
-                        reason: "Development environment not ready yet".to_string(),
+                        image_name: "Git service".to_string(),
+                        reason: "Git service image not ready".to_string(),
                     });
                     return Err(strings::ENV_NOT_READY.into());
                 }
-                info!(
-                    tag = %tag,
-                    "Image built successfully — proceeding with GitHub Login"
-                );
+                info!(tag = %tag, "Git service image built — proceeding with GitHub Login");
                 let _ = build_tx.try_send(BuildProgressEvent::Completed {
-                    image_name: "forge".to_string(),
+                    image_name: "Git service".to_string(),
                 });
             }
             Ok(Err(ref e)) => {
-                error!(tag = %tag, error = %e, "Image build failed (GitHub Login)");
+                error!(tag = %tag, error = %e, "Git service image build failed (GitHub Login)");
                 let _ = build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: "forge".to_string(),
+                    image_name: "Git service".to_string(),
                     reason: "Tillandsias is setting up".to_string(),
                 });
                 return Err(strings::SETUP_ERROR.into());
             }
             Err(ref e) => {
-                error!(tag = %tag, error = %e, "Image build task panicked (GitHub Login)");
+                error!(tag = %tag, error = %e, "Git service image build task panicked (GitHub Login)");
                 let _ = build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: "forge".to_string(),
+                    image_name: "Git service".to_string(),
                     reason: "Tillandsias is setting up".to_string(),
                 });
                 return Err(strings::SETUP_ERROR.into());
             }
         }
     } else {
-        info!(
-            tag = %tag,
-            "Forge image present — proceeding with GitHub Login"
-        );
+        info!(tag = %tag, "Git service image present — proceeding with GitHub Login");
     }
 
-    info!("GitHub Login: extracting embedded script to temp");
+    // Ensure enclave network exists for the temporary container.
+    ensure_enclave_network().await.ok();
 
-    let script_path =
-        crate::embedded::write_temp_script("gh-auth-login.sh", crate::embedded::GH_AUTH_LOGIN)
-            .map_err(|e| {
-                error!(error = %e, "Failed to extract embedded gh-auth-login.sh to temp");
-                strings::INSTALL_INCOMPLETE
-            })?;
+    // Launch a temporary git service container with D-Bus access for keyring auth.
+    // The container runs `gh auth login` interactively, then is removed (--rm).
+    // @trace spec:git-mirror-service, spec:enclave-network
+    let temp_name = "tillandsias-gh-login";
+    let network = tillandsias_podman::ENCLAVE_NETWORK;
+    let exec_cmd = format!(
+        "{podman_path} run -it --rm --init \
+         --name {temp_name} \
+         --cap-drop=ALL \
+         --security-opt=no-new-privileges \
+         --userns=keep-id \
+         --security-opt=label=disable \
+         --network={network} \
+         --entrypoint='' \
+         {tag} \
+         gh auth login --git-protocol https",
+    );
 
-    // Set env vars that gh-auth-login.sh requires. open_terminal spawns a
-    // child process that inherits these. They are set on the current process
-    // (not a Command builder) because open_terminal's various terminal
-    // backends all inherit the parent environment.
-    // SAFETY: Tillandsias is single-threaded at this point in the menu handler;
-    // the async runtime is on the same thread and no parallel env reads occur.
-    unsafe {
-        std::env::set_var("FORGE_IMAGE_TAG", forge_image_tag());
-        std::env::set_var("PODMAN_PATH", tillandsias_podman::find_podman_path());
-    }
-
-    open_terminal(&crate::embedded::bash_path(&script_path), "GitHub Login")
+    open_terminal(&exec_cmd, "GitHub Login")
         .map_err(|e| format!("Failed to open terminal: {e}"))
 }
 

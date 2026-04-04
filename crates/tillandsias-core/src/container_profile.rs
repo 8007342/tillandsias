@@ -103,6 +103,10 @@ pub enum ContextKey {
     /// The user's selected language as a full POSIX LANG value (e.g., "ja_JP.UTF-8").
     /// @trace spec:environment-runtime
     Language,
+    /// Git author name, read from the cached gitconfig.
+    GitAuthorName,
+    /// Git author email, read from the cached gitconfig.
+    GitAuthorEmail,
 }
 
 /// A secret that may be mounted as a volume or injected as an env var.
@@ -174,6 +178,14 @@ pub struct LaunchContext {
     /// `Some("tillandsias-enclave,bridge")` for dual-homing.
     /// @trace spec:enclave-network, spec:proxy-container
     pub network: Option<String>,
+
+    /// Git author name for GIT_AUTHOR_NAME / GIT_COMMITTER_NAME env vars.
+    /// Read from `~/.cache/tillandsias/secrets/git/.gitconfig` at launch time.
+    pub git_author_name: String,
+
+    /// Git author email for GIT_AUTHOR_EMAIL / GIT_COMMITTER_EMAIL env vars.
+    /// Read from `~/.cache/tillandsias/secrets/git/.gitconfig` at launch time.
+    pub git_author_email: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -181,42 +193,32 @@ pub struct LaunchContext {
 // ---------------------------------------------------------------------------
 
 // @trace spec:environment-runtime, knowledge:infra/podman-rootless
-/// Forge container for OpenCode (no Claude secrets).
+/// Forge container for OpenCode (no secrets — fully offline, credential-free).
 pub fn forge_opencode_profile() -> ContainerProfile {
     ContainerProfile {
         entrypoint: "/usr/local/bin/entrypoint-forge-opencode.sh",
         working_dir: None,
         mounts: common_forge_mounts(),
         env_vars: common_forge_env(),
-        secrets: vec![
-            SecretMount {
-                kind: SecretKind::GitHubToken,
-            },
-        ],
+        secrets: vec![],
         image_override: None,
     }
 }
 
-/// Forge container for Claude (with Claude dir + API key).
+/// Forge container for Claude (no secrets — fully offline, credential-free).
+// TODO: Claude authentication needs a credential service (Phase 5+)
 pub fn forge_claude_profile() -> ContainerProfile {
     ContainerProfile {
         entrypoint: "/usr/local/bin/entrypoint-forge-claude.sh",
         working_dir: None,
         mounts: common_forge_mounts(),
         env_vars: common_forge_env(),
-        secrets: vec![
-            SecretMount {
-                kind: SecretKind::GitHubToken,
-            },
-            SecretMount {
-                kind: SecretKind::ClaudeDir,
-            },
-        ],
+        secrets: vec![],
         image_override: None,
     }
 }
 
-/// Maintenance terminal — fish shell, no agent secrets, no API keys.
+/// Maintenance terminal — fish shell, no secrets, no API keys.
 pub fn terminal_profile() -> ContainerProfile {
     ContainerProfile {
         entrypoint: "/usr/local/bin/entrypoint-terminal.sh",
@@ -231,10 +233,6 @@ pub fn terminal_profile() -> ContainerProfile {
                 name: "TILLANDSIAS_HOST_OS",
                 value: EnvValue::FromContext(ContextKey::HostOs),
             },
-            ProfileEnvVar {
-                name: "GIT_CONFIG_GLOBAL",
-                value: EnvValue::Literal("/home/forge/.config/tillandsias-git/.gitconfig"),
-            },
             // @trace spec:environment-runtime
             ProfileEnvVar {
                 name: "LANG",
@@ -243,6 +241,23 @@ pub fn terminal_profile() -> ContainerProfile {
             ProfileEnvVar {
                 name: "LANGUAGE",
                 value: EnvValue::FromContext(ContextKey::Language),
+            },
+            // Git identity from cached gitconfig (replaces mounted .gitconfig)
+            ProfileEnvVar {
+                name: "GIT_AUTHOR_NAME",
+                value: EnvValue::FromContext(ContextKey::GitAuthorName),
+            },
+            ProfileEnvVar {
+                name: "GIT_AUTHOR_EMAIL",
+                value: EnvValue::FromContext(ContextKey::GitAuthorEmail),
+            },
+            ProfileEnvVar {
+                name: "GIT_COMMITTER_NAME",
+                value: EnvValue::FromContext(ContextKey::GitAuthorName),
+            },
+            ProfileEnvVar {
+                name: "GIT_COMMITTER_EMAIL",
+                value: EnvValue::FromContext(ContextKey::GitAuthorEmail),
             },
             // @trace spec:proxy-container, spec:enclave-network
             ProfileEnvVar {
@@ -270,11 +285,7 @@ pub fn terminal_profile() -> ContainerProfile {
                 value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
             },
         ],
-        secrets: vec![
-            SecretMount {
-                kind: SecretKind::GitHubToken,
-            },
-        ],
+        secrets: vec![],
         image_override: None,
     }
 }
@@ -357,26 +368,12 @@ pub fn git_service_profile() -> ContainerProfile {
 // ---------------------------------------------------------------------------
 
 fn common_forge_mounts() -> Vec<ProfileMount> {
+    // Only the build cache mount remains. Project code comes from the git mirror
+    // service, and credentials are no longer mounted into forge containers.
     vec![
-        ProfileMount {
-            host_key: MountSource::ProjectDir,
-            // Container path for project is resolved dynamically (watch root vs subdir)
-            container_path: "/home/forge/src",
-            mode: MountMode::Rw,
-        },
         ProfileMount {
             host_key: MountSource::CacheDir,
             container_path: "/home/forge/.cache/tillandsias",
-            mode: MountMode::Rw,
-        },
-        ProfileMount {
-            host_key: MountSource::SecretsSubdir("gh"),
-            container_path: "/home/forge/.config/gh",
-            mode: MountMode::Ro,
-        },
-        ProfileMount {
-            host_key: MountSource::SecretsSubdir("git"),
-            container_path: "/home/forge/.config/tillandsias-git",
             mode: MountMode::Rw,
         },
     ]
@@ -393,10 +390,6 @@ fn common_forge_env() -> Vec<ProfileEnvVar> {
             value: EnvValue::FromContext(ContextKey::HostOs),
         },
         ProfileEnvVar {
-            name: "GIT_CONFIG_GLOBAL",
-            value: EnvValue::Literal("/home/forge/.config/tillandsias-git/.gitconfig"),
-        },
-        ProfileEnvVar {
             name: "TILLANDSIAS_AGENT",
             value: EnvValue::FromContext(ContextKey::AgentName),
         },
@@ -408,6 +401,23 @@ fn common_forge_env() -> Vec<ProfileEnvVar> {
         ProfileEnvVar {
             name: "LANGUAGE",
             value: EnvValue::FromContext(ContextKey::Language),
+        },
+        // Git identity from cached gitconfig (replaces mounted .gitconfig)
+        ProfileEnvVar {
+            name: "GIT_AUTHOR_NAME",
+            value: EnvValue::FromContext(ContextKey::GitAuthorName),
+        },
+        ProfileEnvVar {
+            name: "GIT_AUTHOR_EMAIL",
+            value: EnvValue::FromContext(ContextKey::GitAuthorEmail),
+        },
+        ProfileEnvVar {
+            name: "GIT_COMMITTER_NAME",
+            value: EnvValue::FromContext(ContextKey::GitAuthorName),
+        },
+        ProfileEnvVar {
+            name: "GIT_COMMITTER_EMAIL",
+            value: EnvValue::FromContext(ContextKey::GitAuthorEmail),
         },
         // @trace spec:git-mirror-service
         ProfileEnvVar {
@@ -453,15 +463,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn forge_opencode_has_github_token_secret() {
+    fn forge_opencode_has_no_secrets() {
         let profile = forge_opencode_profile();
-        assert_eq!(profile.secrets.len(), 1);
-        assert!(
-            profile
-                .secrets
-                .iter()
-                .any(|s| s.kind == SecretKind::GitHubToken)
-        );
+        assert!(profile.secrets.is_empty(), "Forge opencode must be credential-free");
         assert_eq!(
             profile.entrypoint,
             "/usr/local/bin/entrypoint-forge-opencode.sh"
@@ -469,33 +473,15 @@ mod tests {
     }
 
     #[test]
-    fn forge_claude_has_claude_and_github_secrets() {
+    fn forge_claude_has_no_secrets() {
         let profile = forge_claude_profile();
-        assert_eq!(profile.secrets.len(), 2, "Claude profile should have GitHubToken + ClaudeDir");
-        assert!(
-            profile
-                .secrets
-                .iter()
-                .any(|s| s.kind == SecretKind::GitHubToken)
-        );
-        assert!(
-            profile
-                .secrets
-                .iter()
-                .any(|s| s.kind == SecretKind::ClaudeDir)
-        );
+        assert!(profile.secrets.is_empty(), "Forge claude must be credential-free");
     }
 
     #[test]
-    fn terminal_has_github_token_secret() {
+    fn terminal_has_no_secrets() {
         let profile = terminal_profile();
-        assert_eq!(profile.secrets.len(), 1);
-        assert!(
-            profile
-                .secrets
-                .iter()
-                .any(|s| s.kind == SecretKind::GitHubToken)
-        );
+        assert!(profile.secrets.is_empty(), "Terminal must be credential-free");
         assert_eq!(profile.entrypoint, "/usr/local/bin/entrypoint-terminal.sh");
         assert!(matches!(
             profile.working_dir,
@@ -521,32 +507,36 @@ mod tests {
     }
 
     #[test]
-    fn forge_profiles_have_four_mounts() {
+    fn forge_profiles_have_one_mount() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
-        // project, cache, gh, git
-        assert_eq!(opencode.mounts.len(), 4);
-        assert_eq!(claude.mounts.len(), 4);
+        // cache only (project dir, gh, git mounts removed)
+        assert_eq!(opencode.mounts.len(), 1);
+        assert_eq!(claude.mounts.len(), 1);
+        assert_eq!(opencode.mounts[0].container_path, "/home/forge/.cache/tillandsias");
     }
 
     #[test]
-    fn forge_profiles_have_thirteen_env_vars() {
+    fn forge_profiles_have_sixteen_env_vars() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
-        // PROJECT, HOST_OS, GIT_CONFIG_GLOBAL, AGENT, LANG, LANGUAGE, GIT_SERVICE
-        // + HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy
+        // PROJECT, HOST_OS, AGENT, LANG, LANGUAGE,
+        // GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME, GIT_COMMITTER_EMAIL,
+        // GIT_SERVICE,
+        // HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy
         // @trace spec:proxy-container, spec:enclave-network, spec:git-mirror-service
-        assert_eq!(opencode.env_vars.len(), 13);
-        assert_eq!(claude.env_vars.len(), 13);
+        assert_eq!(opencode.env_vars.len(), 16);
+        assert_eq!(claude.env_vars.len(), 16);
     }
 
     #[test]
-    fn terminal_has_eleven_env_vars() {
+    fn terminal_has_fourteen_env_vars() {
         let profile = terminal_profile();
-        // PROJECT, HOST_OS, GIT_CONFIG_GLOBAL, LANG, LANGUAGE (no AGENT)
+        // PROJECT, HOST_OS, LANG, LANGUAGE (no AGENT, no GIT_SERVICE)
+        // + GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME, GIT_COMMITTER_EMAIL
         // + HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy
         // @trace spec:proxy-container, spec:enclave-network
-        assert_eq!(profile.env_vars.len(), 11);
+        assert_eq!(profile.env_vars.len(), 14);
     }
 
     // @trace spec:git-mirror-service
