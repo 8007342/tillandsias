@@ -3,28 +3,31 @@
 ## Purpose
 TBD - created by archiving change iconography-gh-auth-bash-mode. Update Purpose after archive.
 ## Requirements
-### Requirement: Standalone GitHub authentication script
-The project SHALL provide a `gh-auth-login.sh` script that runs `gh auth login` and git identity setup inside a forge container with full interactive TTY.
+### Requirement: GitHub Login runs in git service container
+When the user triggers "GitHub Login", the system SHALL run `gh auth login` inside the git service container (which has D-Bus for host keyring access). If no git service is running, a temporary one SHALL be started. The standalone forge-based auth flow SHALL be removed.
 
-#### Scenario: Default invocation
-- **WHEN** `./gh-auth-login.sh` is run in a terminal
-- **THEN** a forge container starts interactively, prompts for git name and email, runs `gh auth login`, and persists credentials to `~/.cache/tillandsias/secrets/`
+@trace spec:gh-auth-script, spec:git-mirror-service, spec:forge-offline
 
-#### Scenario: Credentials already configured
-- **WHEN** `./gh-auth-login.sh` is run and `~/.cache/tillandsias/secrets/gh/hosts.yml` exists
-- **THEN** the script informs the user that credentials exist and offers to re-authenticate
+#### Scenario: GitHub Login with running git service
+- **WHEN** the user clicks "GitHub Login" in the tray
+- **AND** a git service container is running
+- **THEN** the system SHALL exec `gh auth login` inside the running git service container
+- **AND** credentials SHALL be stored in the host keyring via D-Bus
 
-#### Scenario: Forge image not available
-- **WHEN** `./gh-auth-login.sh` is run and the forge image is not present
-- **THEN** the script offers to build it via `scripts/build-image.sh`
+#### Scenario: GitHub Login without running git service
+- **WHEN** the user clicks "GitHub Login"
+- **AND** no git service container is running
+- **THEN** the system SHALL start a temporary git service container with D-Bus
+- **AND** run `gh auth login` inside it
+- **AND** stop the temporary container after auth completes
 
-#### Scenario: Help flag
-- **WHEN** `./gh-auth-login.sh --help` is run
-- **THEN** usage information is displayed
-
-#### Scenario: Status check
-- **WHEN** `./gh-auth-login.sh --status` is run
-- **THEN** the script reports whether GitHub credentials and git identity are configured
+#### Scenario: Credential refresh while agents work
+- **WHEN** agents are working in forge containers
+- **AND** a git push fails due to expired credentials
+- **AND** the user clicks "GitHub Login"
+- **THEN** the credential refresh SHALL happen in the git service container
+- **AND** subsequent pushes from forge containers SHALL succeed
+- **AND** no forge containers need to be restarted
 
 ### Requirement: Remove leftover skill
 The file `images/default/skills/command/gh-auth-login.md` SHALL be deleted.

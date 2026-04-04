@@ -30,19 +30,30 @@ Container state changes SHALL be detected via `podman events --format json` as a
 - **THEN** the application falls back to exponential backoff status checks starting at 1 second, backing off to a maximum of 30 seconds, and MUST NOT degrade to fixed-interval polling
 
 ### Requirement: Security-hardened container defaults
-Every container launched by Tillandsias SHALL include non-negotiable security flags that MUST NOT be weakened by configuration. Additional restrictions MAY be added.
+Every Tillandsias-managed container SHALL be launched with non-negotiable security flags that cannot be overridden by profiles, config, or any external source. The flags SHALL include `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`, `--security-opt=label=disable`, `--rm`, `--init`, and `--stop-timeout=10`. Additionally, all containers SHALL be attached to the `tillandsias-enclave` internal network. The proxy container SHALL additionally be attached to the default bridge network. Forge containers SHALL additionally have zero credential mounts and enclave-only networking.
+
+@trace spec:podman-orchestration, spec:enclave-network, spec:forge-offline
 
 #### Scenario: Default container launch
-- **WHEN** a container is launched with default settings
-- **THEN** the container runs with `--rm`, `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`, `--security-opt=label=disable`, and `--init` (for proper PID 1 signal handling and zombie reaping)
+- **WHEN** a container is launched by Tillandsias
+- **THEN** the command SHALL include `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`, `--security-opt=label=disable`, `--rm`, `--init`, `--stop-timeout=10`
+- **AND** the command SHALL include `--network=tillandsias-enclave`
+
+#### Scenario: Proxy container launch
+- **WHEN** the proxy container is launched
+- **THEN** it SHALL include all non-negotiable security flags
+- **AND** it SHALL include `--network=tillandsias-enclave,bridge` for dual-homed access
+
+#### Scenario: Forge container security posture
+- **WHEN** a forge container is launched
+- **THEN** it SHALL have `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`
+- **AND** `--network=tillandsias-enclave` (no bridge)
+- **AND** no `-v` mounts for tokens, gh config, git config, or project directory
+- **AND** only cache mount and custom mounts (if configured)
 
 #### Scenario: Attempting to weaken security
-- **WHEN** a per-project config attempts to disable cap-drop or no-new-privileges
-- **THEN** the security flags remain enforced and the weakening configuration is ignored
-
-#### Scenario: Strengthening security
-- **WHEN** a per-project config adds `read_only = true` or `network = "none"`
-- **THEN** the additional restrictions are applied on top of the non-negotiable defaults
+- **WHEN** a profile or config attempts to override security flags
+- **THEN** the hardcoded flags SHALL take precedence and the override SHALL be ignored
 
 #### Scenario: Seccomp profile compatibility
 - **WHEN** a container is launched with the default seccomp profile
@@ -105,23 +116,32 @@ Rootless containers SHALL use the platform-default networking backend. As of Pod
 - **THEN** networking uses slirp4netns as the default backend
 
 ### Requirement: Volume mount strategy
-Container volume mounts SHALL follow a secure, minimal strategy with configurable overrides for power users. Because `--security-opt=label=disable` is applied as a non-negotiable security default (disabling SELinux separation for the container), volume mounts do not require `:z` or `:Z` SELinux relabeling suffixes.
+Forge containers SHALL mount only the cache directory. Project code comes from git clone. Secrets come from nowhere (forge has none). Git identity comes from environment variables. The proxy container SHALL additionally mount a persistent cache volume for squid's disk cache. Because `--security-opt=label=disable` is applied, volume mounts do not require `:z` or `:Z` SELinux relabeling suffixes.
 
-#### Scenario: Default mounts
-- **WHEN** a container is launched for a project at `~/src/my-project`
-- **THEN** the project directory is mounted read-write to the container's workspace path, and the shared cache directory (`~/.cache/tillandsias/`) is mounted for persistent caches
+@trace spec:podman-orchestration, spec:forge-offline
+
+#### Scenario: Forge mounts (enclave architecture)
+- **WHEN** a forge container is launched
+- **THEN** the only profile mount SHALL be the cache directory at `/home/forge/.cache/tillandsias:rw`
+- **AND** no project directory mount SHALL be present
+- **AND** no gh config or git config mounts SHALL be present
+
+#### Scenario: Proxy cache mount
+- **WHEN** the proxy container is launched
+- **THEN** the proxy cache directory SHALL be mounted at `/var/spool/squid:rw`
+- **AND** the host path SHALL be `~/.cache/tillandsias/proxy-cache/`
 
 #### Scenario: Custom mounts
-- **WHEN** a per-project config specifies additional mounts
-- **THEN** the configured mounts are added alongside the defaults, with the specified access mode (ro/rw)
+- **WHEN** a project config defines additional mounts
+- **THEN** they SHALL be appended after the profile mounts
 
 #### Scenario: Shared Nix cache
-- **WHEN** multiple containers are running concurrently
-- **THEN** all containers share the same Nix cache directory (`~/.cache/tillandsias/nix/`) enabling build artifact reuse across projects
+- **WHEN** the nix builder toolbox is used
+- **THEN** the nix store cache SHALL be mounted at the nix store location inside the container
 
 #### Scenario: SELinux relabeling not required
-- **WHEN** a volume is mounted into a container
-- **THEN** no `:z` or `:Z` suffix is needed because `--security-opt=label=disable` disables SELinux confinement for the container process, making relabeling unnecessary
+- **WHEN** containers run with `--userns=keep-id`
+- **THEN** SELinux relabeling (`:Z` suffix) SHALL NOT be used because `--security-opt=label=disable` is already applied
 
 ### Requirement: Image build and cache
 The podman client SHALL support building container images from a Containerfile and caching them in the local image store.
@@ -174,3 +194,28 @@ The Terminal (Ground) handler SHALL use the port allocator instead of hardcoded 
 - **WHEN** the user opens a Terminal for a project
 - **THEN** ports are allocated via the same allocator as Attach Here, avoiding conflicts with other running environments
 
+### Requirement: Git service container managed per-project
+The system SHALL manage one git service container per project with the name `tillandsias-git-<project>`. The container SHALL be attached to the enclave network with the network alias `git-service`. The mirror volume SHALL be bind-mounted from `~/.cache/tillandsias/mirrors/<project>/`.
+
+@trace spec:podman-orchestration, spec:git-mirror-service
+
+#### Scenario: Git service container started
+- **WHEN** a git service container is started for project "myapp"
+- **THEN** the container name SHALL be `tillandsias-git-myapp`
+- **AND** it SHALL be on network `tillandsias-enclave` with alias `git-service`
+- **AND** the mirror SHALL be mounted at `/srv/git/<project>`
+
+#### Scenario: Git service container stopped
+- **WHEN** the last forge container for "myapp" stops
+- **THEN** `tillandsias-git-myapp` SHALL be stopped
+
+### Requirement: Inference container managed as shared service
+The system SHALL manage the inference container (`tillandsias-inference`) as a shared service on the enclave network with network alias `inference`. The model cache volume SHALL be bind-mounted from the host.
+
+@trace spec:inference-container, spec:podman-orchestration
+
+#### Scenario: Inference container started
+- **WHEN** the inference container is started
+- **THEN** it SHALL be on `tillandsias-enclave` network with alias `inference`
+- **AND** the models volume SHALL be mounted at `/home/ollama/.ollama/models/`
+- **AND** `HTTP_PROXY` and `HTTPS_PROXY` SHALL be set for model downloads

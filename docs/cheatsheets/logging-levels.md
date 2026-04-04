@@ -20,7 +20,7 @@ When `--log` is present, it takes full precedence over all environment variables
 Source: `src-tauri/src/logging.rs`
 @trace spec:logging-accountability
 
-### The six modules
+### The nine modules
 
 | Module | What it covers | Rust tracing targets |
 |--------|---------------|----------------------|
@@ -30,6 +30,9 @@ Source: `src-tauri/src/logging.rs`
 | `scanner` | Filesystem watcher events, project discovery | `tillandsias_scanner` |
 | `menu` | Tray menu builds, item rendering | `tillandsias_tray::menu`, `tillandsias_tray::event_loop` |
 | `events` | Main event loop dispatch, podman container events | `tillandsias_tray::event_loop`, `tillandsias_podman::events` |
+| `proxy` | Proxy container start/stop, health-check restart | `tillandsias_tray::handlers`, `tillandsias_tray::proxy` |
+| `enclave` | Enclave network create/remove, shutdown lifecycle | `tillandsias_tray::handlers`, `tillandsias_tray::enclave` |
+| `git` | Git mirror create, git service start/stop, push | `tillandsias_tray::handlers`, `tillandsias_tray::git` |
 
 Source: `src-tauri/src/logging.rs` (`module_to_targets` function)
 Source: `src-tauri/src/cli.rs` (`VALID_MODULES` constant)
@@ -56,6 +59,9 @@ Accountability windows are a separate layer on top of the normal log levels. The
 | `--log-secret-management` | `secrets` | Token writes, keyring access, cleanup, refresh |
 | `--log-image-management` | `containers` | Forge image build, pull, staleness detection (future) |
 | `--log-update-cycle` | `updates` | Version check, download, verify, apply, restart (future) |
+| `--log-proxy` | `proxy` | Proxy container start, stop, health-check restart |
+| `--log-enclave` | `enclave` | Enclave network create, remove, shutdown lifecycle |
+| `--log-git` | `git` | Git mirror create, git service start/stop, push operations |
 
 Accountability output format:
 ```
@@ -137,6 +143,10 @@ tail -f ~/Library/Logs/tillandsias/tillandsias.log          # macOS
 | Project not appearing in tray menu | `tillandsias --log=scanner:debug` |
 | Tray menu items wrong / missing | `tillandsias --log=menu:debug` |
 | Self-update failed | `tillandsias --log-update-cycle --update` |
+| Proxy not caching / offline failures | `tillandsias --log-proxy /path/to/project` |
+| Enclave network issues | `tillandsias --log-enclave /path/to/project` |
+| Git mirror clone or push fails | `tillandsias --log-git /path/to/project` |
+| Full enclave audit | `tillandsias --log-enclave --log-proxy --log-git /path/to/project` |
 | Need everything for a bug report | `tillandsias --log=secrets:debug;containers:debug;events:debug;menu:debug` |
 
 ## Failure Modes

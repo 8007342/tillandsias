@@ -34,15 +34,18 @@ The "Attach Here" menu action SHALL launch a configured container environment fo
 - **THEN** the application attempts to pull the image, showing a non-technical progress indication in the tray ("Preparing environment...")
 
 ### Requirement: Ephemeral by design
-Every environment container SHALL be ephemeral — created on demand and destroyed after use. No container state beyond mounted volumes SHALL persist.
+Environments SHALL be ephemeral — uncommitted changes are lost on stop. Committed changes persist through the git mirror to the host filesystem and remote (if configured).
+
+@trace spec:environment-runtime, spec:forge-offline
 
 #### Scenario: Environment stopped
-- **WHEN** an environment container is stopped
-- **THEN** the container rootfs is destroyed (via `--rm` flag) and only the mounted project directory and cache volumes persist
+- **WHEN** a forge container stops
+- **THEN** uncommitted changes SHALL be lost
+- **AND** committed changes SHALL exist in the git mirror
 
 #### Scenario: Restart after stop
-- **WHEN** the user starts an environment for a project that was previously stopped
-- **THEN** a fresh container is created from the configured image with no state carried over from the previous run
+- **WHEN** a forge container is restarted for the same project
+- **THEN** it SHALL clone fresh from the mirror (which has all committed work)
 
 ### Requirement: Idempotent environment creation
 Starting an environment for the same project with the same configuration SHALL always produce the same result regardless of how many times it has been done before.
@@ -94,17 +97,74 @@ The configuration system SHALL support a two-level hierarchy: global defaults at
 - **THEN** the global config is located at `~/.config/tillandsias/config.toml`
 
 ### Requirement: Attach Here launches container and opens terminal
-The "Attach Here" action SHALL build the default image if needed, start a container, and open a terminal window with OpenCode running inside.
+When the user triggers "Attach Here", the system SHALL ensure enclave, proxy, mirror, and git service are ready. The forge container SHALL clone from the git mirror. No project directory mount, no credential mounts.
 
-#### Scenario: First Attach Here (image not built)
-- **WHEN** the user clicks "Attach Here" and no `tillandsias-forge:latest` image exists
-- **THEN** the image is built from the bundled Containerfile, then the container starts and a terminal opens
+@trace spec:environment-runtime, spec:forge-offline
 
-#### Scenario: Subsequent Attach Here (image cached)
-- **WHEN** the user clicks "Attach Here" and the image already exists
-- **THEN** the container starts immediately and a terminal opens within 5 seconds
+#### Scenario: Attach Here launches isolated forge
+- **WHEN** the user clicks "Attach Here"
+- **THEN** the forge container SHALL be on enclave-only network
+- **AND** code SHALL come from git mirror clone
+- **AND** no credentials SHALL be mounted
+- **AND** cache directory SHALL still be mounted for build performance
+
+#### Scenario: First Attach Here (full initialization)
+- **WHEN** the user clicks "Attach Here" for a new project
+- **THEN** the system SHALL ensure enclave network, proxy, git mirror, and git service
+- **AND** launch the forge container on the enclave network
+- **AND** the forge entrypoint SHALL run `git clone git://git-service/<project>` into the ephemeral filesystem
+
+#### Scenario: Subsequent Attach Here (services already running)
+- **WHEN** the user clicks "Attach Here" and all services are running
+- **THEN** the system SHALL launch the forge container directly
+- **AND** the forge SHALL clone from the existing mirror (instant, local)
+
+#### Scenario: Multiple containers for same project
+- **WHEN** the user launches a second forge container for the same project
+- **THEN** both containers SHALL have independent working trees
+- **AND** both SHALL clone from the same git mirror
+- **AND** the git service SHALL already be running (started by first container)
 
 #### Scenario: Terminal shows OpenCode
-- **WHEN** the terminal opens after Attach Here
-- **THEN** OpenCode is running in the terminal, ready to accept input, with the project directory mounted
+- **WHEN** the forge-opencode profile is selected
+- **THEN** the OpenCode agent SHALL start inside the container
+- **AND** `HTTP_PROXY` and `HTTPS_PROXY` SHALL be set for package installations
 
+### Requirement: Proxy environment variables in forge containers
+All forge containers SHALL have `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` environment variables set. `NO_PROXY` SHALL include `localhost,127.0.0.1,git-service` to allow local and git-daemon traffic to bypass the proxy.
+
+@trace spec:environment-runtime, spec:proxy-container
+
+#### Scenario: Proxy env vars present in forge
+- **WHEN** a forge container is launched
+- **THEN** the environment SHALL include `HTTP_PROXY=http://proxy:3128`
+- **AND** `HTTPS_PROXY=http://proxy:3128`
+- **AND** `NO_PROXY=localhost,127.0.0.1,git-service`
+
+#### Scenario: Proxy env vars absent in proxy container
+- **WHEN** the proxy container is launched
+- **THEN** it SHALL NOT have `HTTP_PROXY` or `HTTPS_PROXY` set (it IS the proxy)
+
+### Requirement: Forge entrypoint clones from git mirror
+The forge container entrypoint SHALL clone the project from the git mirror via `git clone git://git-service/<project>` into `/home/forge/src/<project>`. The `TILLANDSIAS_GIT_SERVICE` environment variable SHALL contain the git service hostname. Uncommitted changes are ephemeral -- lost when the container stops.
+
+@trace spec:environment-runtime, spec:git-mirror-service
+
+#### Scenario: Forge clones on startup
+- **WHEN** a forge container starts
+- **THEN** the entrypoint SHALL run `git clone git://git-service/$TILLANDSIAS_PROJECT /home/forge/src/$TILLANDSIAS_PROJECT`
+- **AND** set the working directory to the cloned project
+
+#### Scenario: Clone fails (git service not ready)
+- **WHEN** the git clone fails (e.g., git service not yet listening)
+- **THEN** the entrypoint SHALL retry up to 5 times with 1-second delays
+- **AND** if all retries fail, print an error and drop to a shell
+
+### Requirement: Ollama host env var in forge containers
+All forge containers SHALL have `OLLAMA_HOST=http://inference:11434` set so that tools and agents can query local LLM models.
+
+@trace spec:inference-container, spec:environment-runtime
+
+#### Scenario: Forge has OLLAMA_HOST
+- **WHEN** a forge container is launched
+- **THEN** the environment SHALL include `OLLAMA_HOST=http://inference:11434`

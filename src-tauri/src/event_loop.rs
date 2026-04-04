@@ -329,7 +329,12 @@ pub async fn run(
                         Err(_) => false,
                     };
                     if !proxy_running {
-                        warn!(spec = "proxy-container", "Proxy container not running — restarting");
+                        warn!(
+                            accountability = true,
+                            category = "proxy",
+                            spec = "proxy-container",
+                            "Proxy container not running — restarting"
+                        );
                         if let Err(e) = handlers::ensure_enclave_network().await {
                             error!(spec = "enclave-network", error = %e, "Failed to ensure enclave network for proxy restart");
                         }

@@ -77,6 +77,32 @@ openspec/                     # Spec-driven development artifacts
 - **Config-driven** — global at `~/.config/tillandsias/config.toml`, per-project at `.tillandsias/config.toml`
 - **Forge image is external** — Tillandsias orchestrates containers but doesn't build them. Default image: `ghcr.io/8007342/macuahuitl:latest`
 
+## Enclave Architecture
+
+Tillandsias uses a multi-container enclave for security isolation. Coding containers are fully offline with zero credentials.
+
+| Container | Image | Role | Network | Credentials |
+|-----------|-------|------|---------|-------------|
+| **Proxy** | `tillandsias-proxy` | Caching HTTP/S proxy with domain allowlist | External + enclave | None |
+| **Git Service** | `tillandsias-git` | Bare mirror, git daemon, auto-push | Enclave only | D-Bus → host keyring |
+| **Forge** | `tillandsias-forge` | Dev environment, coding agents | Enclave only | **None** |
+| **Inference** | `tillandsias-inference` | Local ollama for LLM | Enclave only | None |
+
+**Key principles:**
+- Forge containers have ZERO credentials and ZERO external network access
+- Code comes from git mirror clone, packages through proxy, inference from ollama
+- Uncommitted changes are ephemeral — lost on container stop
+- Multiple forge containers per project, each with independent git working tree
+- All operations logged via `--log-enclave`, `--log-proxy`, `--log-git` with `@trace` links
+
+**Images are built via:**
+```bash
+scripts/build-image.sh forge      # Dev environment
+scripts/build-image.sh proxy      # Caching proxy
+scripts/build-image.sh git        # Git mirror service
+scripts/build-image.sh inference  # Local LLM inference
+```
+
 ## CI/CD — Conservative Cloud Usage
 
 Both CI and Release workflows are **manual trigger only** (`workflow_dispatch`). They NEVER run automatically on push or PR. This is intentional — cloud minutes are expensive.

@@ -84,3 +84,60 @@ Accountability tagging fields SHALL NOT appear as inline key=value pairs in the 
 - **WHEN** an event has fields `accountability = true, category = "secrets", safety = "...", spec = "..."`
 - **THEN** none of these four fields SHALL appear in the `{key=val}` suffix of the log line
 - **AND** any other fields (e.g., `container`, `error`) SHALL still appear in the suffix
+
+### Requirement: Proxy accountability window
+The system SHALL provide a `--log-proxy` accountability flag that enables a curated view of proxy operations. Events SHALL include domain, request size, allow/deny status, and cache hit/miss. No request content, credentials, or context parameters SHALL appear in proxy logs. Each event SHALL include a clickable `@trace spec:proxy-container` link.
+
+@trace spec:runtime-logging, spec:proxy-container
+
+#### Scenario: Proxy log flag enables proxy events
+- **WHEN** the application is launched with `--log-proxy`
+- **THEN** proxy request events SHALL be visible in the accountability output
+- **AND** each event SHALL include `@trace spec:proxy-container`
+
+#### Scenario: Proxy log excludes secrets
+- **WHEN** proxy events are logged
+- **THEN** no request bodies, headers, cookies, or credentials SHALL appear in the output
+- **AND** only domain, size, status (allow/deny), and cache status SHALL be included
+
+### Requirement: Enclave accountability window
+The system SHALL provide a `--log-enclave` accountability flag that enables a curated view of enclave lifecycle operations. Events SHALL include network creation/removal, container attachment/detachment, and health check results. Each event SHALL include a clickable `@trace spec:enclave-network` link.
+
+@trace spec:runtime-logging, spec:enclave-network
+
+#### Scenario: Enclave log flag enables lifecycle events
+- **WHEN** the application is launched with `--log-enclave`
+- **THEN** enclave lifecycle events SHALL be visible in the accountability output
+- **AND** each event SHALL include `@trace spec:enclave-network`
+
+#### Scenario: Enclave log shows network creation
+- **WHEN** the enclave network is created
+- **AND** `--log-enclave` is active
+- **THEN** the output SHALL show `[enclave] Network created: tillandsias-enclave`
+
+### Requirement: Git accountability window
+The system SHALL provide a `--log-git` accountability flag that enables a curated view of git mirror operations. Events SHALL include mirror creation/update, clone/push from forge, and remote push results. No credentials SHALL appear in logs. Each event SHALL include a clickable `@trace spec:git-mirror-service` link.
+
+@trace spec:runtime-logging, spec:git-mirror-service
+
+#### Scenario: Git log flag enables mirror events
+- **WHEN** the application is launched with `--log-git`
+- **THEN** git mirror events SHALL be visible in the accountability output
+
+#### Scenario: Remote push failure logged prominently
+- **WHEN** a post-receive hook fails to push to remote
+- **AND** `--log-git` is active
+- **THEN** the output SHALL show the failure at WARN level with the error message
+
+### Requirement: All enclave accountability windows emit real events
+The `--log-proxy`, `--log-enclave`, and `--log-git` accountability windows SHALL emit structured events for all enclave operations. Events SHALL use the `accountability = true` field and include `@trace spec:<name>` links.
+
+@trace spec:runtime-logging
+
+#### Scenario: Enclave events emitted during attach
+- **WHEN** the user clicks "Attach Here" with `--log-enclave` active
+- **THEN** the output SHALL show network creation, proxy start, git service start, inference start, and forge launch events
+
+#### Scenario: Git events emitted during push
+- **WHEN** a forge container pushes to the mirror with `--log-git` active
+- **THEN** the output SHALL show the push event and remote push result

@@ -108,6 +108,7 @@ pub(crate) async fn ensure_inference_running(
 
     info!(
         accountability = true,
+        category = "inference",
         spec = "inference-container",
         "Starting inference container"
     );
@@ -210,6 +211,7 @@ pub(crate) async fn ensure_inference_running(
         Ok(container_id) => {
             info!(
                 accountability = true,
+                category = "inference",
                 spec = "inference-container",
                 container_id = %container_id,
                 "Inference container started (detached)"
@@ -233,7 +235,12 @@ pub(crate) async fn stop_inference() {
     let client = PodmanClient::new();
     let launcher = tillandsias_podman::launch::ContainerLauncher::new(client);
     match launcher.stop(INFERENCE_CONTAINER_NAME).await {
-        Ok(()) => info!(spec = "inference-container", "Inference container stopped"),
+        Ok(()) => info!(
+            accountability = true,
+            category = "inference",
+            spec = "inference-container",
+            "Inference container stopped"
+        ),
         Err(e) => {
             // Not an error if it wasn't running
             debug!(spec = "inference-container", error = %e, "Inference stop returned error (may not have been running)");
@@ -251,6 +258,7 @@ pub(crate) async fn ensure_enclave_network() -> Result<(), String> {
         info!(
             network = name,
             accountability = true,
+            category = "enclave",
             spec = "enclave-network",
             "Creating enclave network"
         );
@@ -294,6 +302,7 @@ pub(crate) async fn ensure_proxy_running(
 
     info!(
         accountability = true,
+        category = "proxy",
         spec = "proxy-container",
         "Starting proxy container"
     );
@@ -388,6 +397,7 @@ pub(crate) async fn ensure_proxy_running(
         Ok(container_id) => {
             info!(
                 accountability = true,
+                category = "proxy",
                 spec = "proxy-container",
                 container_id = %container_id,
                 "Proxy container started (detached)"
@@ -411,7 +421,12 @@ pub(crate) async fn stop_proxy() {
     let client = PodmanClient::new();
     let launcher = tillandsias_podman::launch::ContainerLauncher::new(client);
     match launcher.stop(PROXY_CONTAINER_NAME).await {
-        Ok(()) => info!(spec = "proxy-container", "Proxy container stopped"),
+        Ok(()) => info!(
+            accountability = true,
+            category = "proxy",
+            spec = "proxy-container",
+            "Proxy container stopped"
+        ),
         Err(e) => {
             // Not an error if it wasn't running
             debug!(spec = "proxy-container", error = %e, "Proxy stop returned error (may not have been running)");
@@ -427,7 +442,12 @@ pub(crate) async fn cleanup_enclave_network() {
     let name = tillandsias_podman::ENCLAVE_NETWORK;
     if client.network_exists(name).await {
         match client.remove_network(name).await {
-            Ok(()) => info!(spec = "enclave-network", "Enclave network removed"),
+            Ok(()) => info!(
+                accountability = true,
+                category = "enclave",
+                spec = "enclave-network",
+                "Enclave network removed"
+            ),
             Err(e) => debug!(spec = "enclave-network", error = %e, "Enclave network removal failed (may still have attached containers)"),
         }
     }
@@ -624,6 +644,7 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
 
     info!(
         accountability = true,
+        category = "git",
         spec = "git-mirror-service",
         project = %project_name,
         mirror = %mirror_path.display(),
@@ -666,6 +687,7 @@ pub(crate) async fn ensure_git_service_running(
 
     info!(
         accountability = true,
+        category = "git",
         spec = "git-mirror-service",
         project = %project_name,
         "Starting git service container"
@@ -785,6 +807,7 @@ pub(crate) async fn ensure_git_service_running(
         Ok(container_id) => {
             info!(
                 accountability = true,
+                category = "git",
                 spec = "git-mirror-service",
                 container_id = %container_id,
                 project = %project_name,
@@ -821,7 +844,13 @@ pub(crate) async fn stop_git_service(project_name: &str) {
     let client = PodmanClient::new();
     let launcher = tillandsias_podman::launch::ContainerLauncher::new(client);
     match launcher.stop(&name).await {
-        Ok(()) => info!(spec = "git-mirror-service", project = %project_name, "Git service container stopped"),
+        Ok(()) => info!(
+            accountability = true,
+            category = "git",
+            spec = "git-mirror-service",
+            project = %project_name,
+            "Git service container stopped"
+        ),
         Err(e) => {
             debug!(spec = "git-mirror-service", project = %project_name, error = %e, "Git service stop returned error (may not have been running)");
         }
@@ -1900,10 +1929,14 @@ pub async fn handle_destroy(
 ///
 /// Also stops infrastructure containers (git services, proxy) and cleans up
 /// the enclave network.
+///
+/// @trace spec:enclave-network, spec:podman-orchestration
 pub async fn shutdown_all(state: &TrayState) {
     info!(
+        accountability = true,
+        category = "enclave",
         count = state.running.len(),
-        spec = "podman-orchestration",
+        spec = "podman-orchestration, enclave-network",
         "Shutting down: stopping all managed containers"
     );
 
@@ -1951,7 +1984,12 @@ pub async fn shutdown_all(state: &TrayState) {
     // @trace spec:enclave-network
     cleanup_enclave_network().await;
 
-    info!("All containers stopped, shutdown complete");
+    info!(
+        accountability = true,
+        category = "enclave",
+        spec = "enclave-network",
+        "All containers stopped, enclave shut down"
+    );
 }
 
 /// Handle "Maintenance" — open fish/bash in a forge container for the project.
