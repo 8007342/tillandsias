@@ -8,7 +8,7 @@
 
 use crate::build_lock;
 use crate::embedded;
-use crate::handlers::{forge_image_tag, prune_old_forge_images};
+use crate::handlers::{forge_image_tag, prune_old_images};
 use crate::i18n;
 use crate::strings;
 
@@ -150,7 +150,7 @@ fn build_forge_image() -> Result<(), String> {
         embedded::cleanup_image_sources();
 
         if status.success() {
-            prune_old_forge_images(&tag);
+            prune_old_images();
             return Ok(());
         } else {
             eprintln!(
@@ -182,7 +182,7 @@ fn build_forge_image() -> Result<(), String> {
         embedded::cleanup_image_sources();
 
         if status.success() {
-            prune_old_forge_images(&tag);
+            prune_old_images();
             Ok(())
         } else {
             eprintln!(

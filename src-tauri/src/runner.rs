@@ -107,7 +107,7 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         crate::build_lock::release(image_name);
 
         if status.success() {
-            crate::handlers::prune_old_forge_images(&tag);
+            crate::handlers::prune_old_images();
             return Ok(());
         } else {
             if debug {
@@ -162,7 +162,7 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
 
     if status.success() {
         // Prune older versioned forge images to reclaim disk space
-        crate::handlers::prune_old_forge_images(&tag);
+        crate::handlers::prune_old_images();
         Ok(())
     } else {
         if debug {

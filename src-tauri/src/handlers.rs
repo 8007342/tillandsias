@@ -1112,7 +1112,16 @@ pub(crate) fn any_versioned_forge_exists() -> bool {
 /// Remove older `tillandsias-forge:v*` images, keeping only `current_tag`.
 ///
 /// Best-effort — failures are logged but do not block operation.
-pub(crate) fn prune_old_forge_images(current_tag: &str) {
+/// Prune old versioned images for ALL tillandsias image types.
+/// Keeps only the current version tag for each type (forge, proxy, git, inference).
+pub(crate) fn prune_old_images() {
+    let current_tags = [
+        forge_image_tag(),
+        proxy_image_tag(),
+        git_image_tag(),
+        inference_image_tag(),
+    ];
+
     let output = tillandsias_podman::podman_cmd_sync()
         .args(["images", "--format", "{{.Repository}}:{{.Tag}}"])
         .output();
@@ -1120,22 +1129,21 @@ pub(crate) fn prune_old_forge_images(current_tag: &str) {
     let images_to_remove: Vec<String> = match output {
         Ok(o) => {
             let stdout = String::from_utf8_lossy(&o.stdout);
-            // Extract just the tag portion of current_tag for comparison
-            // (handles both "tillandsias-forge:v0.1.97" and "localhost/tillandsias-forge:v0.1.97")
-            let current_suffix = current_tag
-                .rsplit_once(':')
-                .map(|(_, tag)| tag)
-                .unwrap_or(current_tag);
             stdout
                 .lines()
                 .filter(|line| {
                     let trimmed = line.trim();
-                    // Match any tillandsias-forge image (with or without localhost/ prefix).
-                    // Remove ALL old versioned tags AND the "latest" tag (build-image.sh
-                    // re-creates it). Keep only the current version tag.
-                    let is_forge = trimmed.contains("tillandsias-forge:");
-                    let is_current = trimmed.ends_with(&format!(":{current_suffix}"));
-                    is_forge && !is_current
+                    // Only target tillandsias images
+                    let is_tillandsias = trimmed.contains("tillandsias-forge:")
+                        || trimmed.contains("tillandsias-proxy:")
+                        || trimmed.contains("tillandsias-git:")
+                        || trimmed.contains("tillandsias-inference:");
+                    // Keep current version tags
+                    let is_current = current_tags.iter().any(|tag| {
+                        let suffix = tag.rsplit_once(':').map(|(_, t)| t).unwrap_or(tag);
+                        trimmed.ends_with(&format!(":{suffix}"))
+                    });
+                    is_tillandsias && !is_current
                 })
                 .map(|s| s.trim().to_string())
                 .collect()
@@ -1147,20 +1155,20 @@ pub(crate) fn prune_old_forge_images(current_tag: &str) {
     };
 
     for image in &images_to_remove {
-        info!(image = %image, "Pruning old forge image");
+        info!(image = %image, "Pruning old image");
         let result = tillandsias_podman::podman_cmd_sync()
             .args(["rmi", image])
             .output();
         match result {
             Ok(o) if o.status.success() => {
-                info!(image = %image, "Pruned old forge image");
+                info!(image = %image, "Pruned old image");
             }
             Ok(o) => {
                 let stderr = String::from_utf8_lossy(&o.stderr);
-                warn!(image = %image, stderr = %stderr, "Failed to prune old forge image");
+                warn!(image = %image, stderr = %stderr, "Failed to prune old image");
             }
             Err(e) => {
-                warn!(image = %image, error = %e, "Failed to prune old forge image");
+                warn!(image = %image, error = %e, "Failed to prune old image");
             }
         }
     }
@@ -1635,7 +1643,7 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         debug!(output = %stdout, "podman build completed");
-        prune_old_forge_images(&tag);
+        prune_old_images();
         return Ok(());
     }
 
@@ -1690,7 +1698,7 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         debug!(output = %stdout, "build-image.sh completed");
-        prune_old_forge_images(&tag);
+        prune_old_images();
 
         Ok(())
     }
@@ -1996,7 +2004,7 @@ pub async fn handle_attach_here(
                 }
                 info!(tag = %tag, spec = "default-image", "Image ready");
                 // Prune older forge images after successful build
-                prune_old_forge_images(&tag);
+                prune_old_images();
                 // Notify event loop: build completed (menu chip: ✅ forge ready)
                 let _ = build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: "forge".to_string(),
