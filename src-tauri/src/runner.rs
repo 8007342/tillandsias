@@ -470,7 +470,8 @@ pub fn run(
     }
     println!("  Name:   {container_name}");
     // Enclave-only containers don't expose ports to the host
-    if ctx.network.as_deref() != Some(tillandsias_podman::ENCLAVE_NETWORK) {
+    let is_enclave = ctx.network.as_deref().is_some_and(|n| n.starts_with(tillandsias_podman::ENCLAVE_NETWORK));
+    if !is_enclave {
         println!("  Ports:  {}-{}", base_port.0, base_port.1);
     }
     println!("  Cache:  {}", tilde_path(&cache));

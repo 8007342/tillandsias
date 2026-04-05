@@ -184,7 +184,8 @@ pub(crate) async fn ensure_inference_running(
         image_tag: tag.clone(),
         selected_language: "en".to_string(),
         // @trace spec:inference-container, spec:enclave-network
-        network: Some(tillandsias_podman::ENCLAVE_NETWORK.to_string()),
+        // Alias "inference" so forge containers can reach it by name
+        network: Some(format!("{}:alias=inference", tillandsias_podman::ENCLAVE_NETWORK)),
         git_author_name: String::new(),
         git_author_email: String::new(),
     };
@@ -199,12 +200,6 @@ pub(crate) async fn ensure_inference_running(
     // Insert before the image tag (always last element)
     run_args.insert(run_args.len() - 1, "-v".to_string());
     run_args.insert(run_args.len() - 1, model_mount);
-
-    // Add network alias so forge containers can reach it as "inference"
-    run_args.insert(
-        run_args.len() - 1,
-        "--network-alias=inference".to_string(),
-    );
 
     // Launch the inference container via podman run (detached)
     match client.run_container(&run_args).await {
@@ -380,18 +375,13 @@ pub(crate) async fn ensure_proxy_running(
         // @trace spec:proxy-container, spec:enclave-network
         // Proxy is dual-homed: enclave network (for forge containers) + default (for external access).
         // Rootless podman uses "podman" as the default network name (not "bridge").
-        network: Some(format!("{},podman", tillandsias_podman::ENCLAVE_NETWORK)),
+        // Dual-homed: enclave (with alias "proxy") + podman (external access)
+        network: Some(format!("{}:alias=proxy,podman", tillandsias_podman::ENCLAVE_NETWORK)),
         git_author_name: String::new(),
         git_author_email: String::new(),
     };
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
-
-    // The proxy also needs a network alias so forge containers can reach it as "proxy"
-    run_args.insert(
-        run_args.len() - 1, // before the image tag (always last)
-        "--network-alias=proxy".to_string(),
-    );
 
     // Launch the proxy container via podman run (detached)
     match client.run_container(&run_args).await {
@@ -779,7 +769,8 @@ pub(crate) async fn ensure_git_service_running(
         image_tag: tag.clone(),
         selected_language: "en".to_string(),
         // @trace spec:git-mirror-service, spec:enclave-network
-        network: Some(tillandsias_podman::ENCLAVE_NETWORK.to_string()),
+        // Alias "git-service" so forge containers can clone from git://git-service/<project>
+        network: Some(format!("{}:alias=git-service", tillandsias_podman::ENCLAVE_NETWORK)),
         git_author_name: String::new(),
         git_author_email: String::new(),
     };
@@ -796,12 +787,6 @@ pub(crate) async fn ensure_git_service_running(
     // Insert before the image tag (always last element)
     run_args.insert(run_args.len() - 1, "-v".to_string());
     run_args.insert(run_args.len() - 1, mirror_mount);
-
-    // Add network alias so forge containers can reach it as "git-service"
-    run_args.insert(
-        run_args.len() - 1,
-        "--network-alias=git-service".to_string(),
-    );
 
     // Launch the git service container via podman run (detached)
     match client.run_container(&run_args).await {

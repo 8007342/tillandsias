@@ -74,7 +74,12 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     // containers with no network (legacy) or dual-homed containers.
     // @trace spec:enclave-network, spec:proxy-container
     // -----------------------------------------------------------------------
-    let is_enclave_only = ctx.network.as_deref() == Some(tillandsias_podman::ENCLAVE_NETWORK);
+    let is_enclave_only = ctx.network.as_deref().is_some_and(|n| {
+        // Enclave-only if network starts with the enclave name and doesn't include
+        // a second network (comma-separated means dual-homed, e.g., "enclave:alias=proxy,podman")
+        let enclave = tillandsias_podman::ENCLAVE_NETWORK;
+        n.starts_with(enclave) && !n.contains(',')
+    });
     if ctx.port_range != (0, 0) && !is_enclave_only {
         args.push("-p".into());
         args.push(format!(
