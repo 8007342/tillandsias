@@ -167,9 +167,14 @@ impl PodmanClient {
                     .as_str()
                     .unwrap_or("unknown")
                     .to_string();
+                let image = inspect["ImageName"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string();
                 Ok(ContainerInspect {
                     name: name.to_string(),
                     state,
+                    image,
                 })
             } else {
                 Err(PodmanError::NotFound(name.to_string()))
@@ -405,6 +410,7 @@ pub fn network_exists_sync(name: &str) -> bool {
 pub struct ContainerInspect {
     pub name: String,
     pub state: String,
+    pub image: String,
 }
 
 #[derive(Debug, Clone)]

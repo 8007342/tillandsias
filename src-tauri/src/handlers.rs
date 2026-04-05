@@ -287,11 +287,25 @@ pub(crate) async fn ensure_proxy_running(
 
     let client = PodmanClient::new();
 
-    // Check if it's running outside our state (e.g., surviving a restart)
+    // Check if it's running outside our state (e.g., surviving a restart).
+    // If running but with a stale image version, stop it and rebuild.
     if let Ok(inspect) = client.inspect_container(PROXY_CONTAINER_NAME).await {
         if inspect.state == "running" {
-            debug!(spec = "proxy-container", "Proxy container already running (discovered)");
-            return Ok(());
+            let expected_tag = proxy_image_tag();
+            if inspect.image.contains(&expected_tag) {
+                debug!(spec = "proxy-container", "Proxy container already running (correct version)");
+                return Ok(());
+            }
+            // Stale version — stop it so we can start the correct one
+            warn!(
+                spec = "proxy-container",
+                current = %inspect.image,
+                expected = %expected_tag,
+                "Proxy container running stale version — restarting"
+            );
+            let _ = client.stop_container(PROXY_CONTAINER_NAME, 5).await;
+            // Wait briefly for cleanup
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
     }
 
@@ -2146,6 +2160,19 @@ pub async fn shutdown_all(state: &TrayState) {
     // Stop the proxy
     // @trace spec:proxy-container
     stop_proxy().await;
+
+    // Catch-all: stop any remaining tillandsias-* containers that may be orphaned
+    // from previous sessions or not tracked in state.
+    // @trace spec:enclave-network
+    let cleanup_client = PodmanClient::new();
+    if let Ok(containers) = cleanup_client.list_containers("tillandsias-").await {
+        for entry in &containers {
+            if entry.state == "running" {
+                info!(container = %entry.name, "Stopping orphaned container on shutdown");
+                let _ = launcher.stop(&entry.name).await;
+            }
+        }
+    }
 
     // Clean up the enclave network
     // @trace spec:enclave-network
