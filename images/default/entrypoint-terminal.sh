@@ -19,7 +19,7 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
     CLONE_SUCCESS=false
     CLONE_DIR="/home/forge/src/${TILLANDSIAS_PROJECT}"
     for i in $(seq 1 $MAX_RETRIES); do
-        if git clone "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" "$CLONE_DIR" 2>/dev/null; then
+        if git clone "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" "$CLONE_DIR" 2>&1; then
             trace_lifecycle "git-mirror" "clone successful"
             CLONE_SUCCESS=true
             cd "$CLONE_DIR"

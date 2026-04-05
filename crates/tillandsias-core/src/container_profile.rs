@@ -261,6 +261,11 @@ pub fn terminal_profile() -> ContainerProfile {
                 name: "GIT_COMMITTER_EMAIL",
                 value: EnvValue::FromContext(ContextKey::GitAuthorEmail),
             },
+            // @trace spec:git-mirror-service
+            ProfileEnvVar {
+                name: "TILLANDSIAS_GIT_SERVICE",
+                value: EnvValue::Literal("git-service"),
+            },
             // @trace spec:inference-container
             ProfileEnvVar {
                 name: "OLLAMA_HOST",
@@ -580,14 +585,14 @@ mod tests {
     }
 
     #[test]
-    fn terminal_has_fifteen_env_vars() {
+    fn terminal_has_sixteen_env_vars() {
         let profile = terminal_profile();
-        // PROJECT, HOST_OS, LANG, LANGUAGE (no AGENT, no GIT_SERVICE)
+        // PROJECT, HOST_OS, LANG, LANGUAGE (no AGENT)
         // + GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME, GIT_COMMITTER_EMAIL
-        // + OLLAMA_HOST
+        // + TILLANDSIAS_GIT_SERVICE, OLLAMA_HOST
         // + HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy
-        // @trace spec:proxy-container, spec:enclave-network, spec:inference-container
-        assert_eq!(profile.env_vars.len(), 15);
+        // @trace spec:proxy-container, spec:enclave-network, spec:inference-container, spec:git-mirror-service
+        assert_eq!(profile.env_vars.len(), 16);
     }
 
     // @trace spec:git-mirror-service
