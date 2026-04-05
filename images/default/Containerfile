@@ -73,5 +73,6 @@ RUN chown -R 1000:1000 /home/forge
 USER 1000:1000
 WORKDIR /home/forge/src
 ENTRYPOINT ["/usr/local/bin/entrypoint-forge-claude.sh"]
-EXPOSE 3000-3099
+# No EXPOSE — forge containers live on the enclave network only.
+# @trace spec:forge-offline, spec:enclave-network
 ENV HOME=/home/forge USER=forge

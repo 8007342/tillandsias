@@ -4,7 +4,7 @@
 # Built on Alpine — minimal footprint (~15MB).
 FROM docker.io/library/alpine:3.20
 
-RUN apk add --no-cache git bash openssh-client \
+RUN apk add --no-cache git git-daemon bash openssh-client \
     && adduser -D -u 1000 -s /bin/bash git \
     && mkdir -p /srv/git /var/log/git-service \
     && chown -R git:git /srv/git /var/log/git-service
