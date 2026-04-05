@@ -373,15 +373,17 @@ pub(crate) async fn ensure_proxy_running(
         image_tag: tag.clone(),
         selected_language: "en".to_string(),
         // @trace spec:proxy-container, spec:enclave-network
-        // Proxy is dual-homed: enclave network (for forge containers) + default (for external access).
-        // Rootless podman uses "podman" as the default network name (not "bridge").
-        // Dual-homed: enclave (with alias "proxy") + podman (external access)
-        network: Some(format!("{}:alias=proxy,podman", tillandsias_podman::ENCLAVE_NETWORK)),
+        // Primary network: enclave with alias "proxy" for DNS resolution
+        network: Some(format!("{}:alias=proxy", tillandsias_podman::ENCLAVE_NETWORK)),
         git_author_name: String::new(),
         git_author_email: String::new(),
     };
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
+
+    // Proxy is dual-homed: add the default "podman" network for external access.
+    // Must be a separate --network flag (comma syntax is parsed as aliases, not networks).
+    run_args.insert(run_args.len() - 1, "--network=podman".to_string());
 
     // Launch the proxy container via podman run (detached)
     match client.run_container(&run_args).await {

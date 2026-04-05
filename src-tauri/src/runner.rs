@@ -336,16 +336,19 @@ pub fn run(
         image_name
     };
 
-    // Try embedded build script (always available in the signed binary)
-    println!("  {}", i18n::t("cli.ensuring_image"));
-    if let Err(e) = run_build_image_script(source_name, debug)
-        && debug
-    {
-        eprintln!("  Build script failed: {e}");
+    // Check if image already exists — skip build if present
+    let image_exists = rt.block_on(client.image_exists(&tag));
+    if !image_exists {
+        println!("  {}", i18n::t("cli.ensuring_image"));
+        if let Err(e) = run_build_image_script(source_name, debug)
+            && debug
+        {
+            eprintln!("  Build script failed: {e}");
+        }
     }
 
-    // Verify image exists
-    let image_exists = rt.block_on(client.image_exists(&tag));
+    // Verify image exists (either pre-existing or just built)
+    let image_exists = image_exists || rt.block_on(client.image_exists(&tag));
     if image_exists {
         let size = image_size_display(&tag);
         println!("{}", i18n::tf("cli.image_ready", &[("size", &size)]));
