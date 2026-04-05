@@ -5,7 +5,7 @@
 FROM registry.fedoraproject.org/fedora-minimal:41
 
 # -- Minimal deps for the ollama install script --
-RUN microdnf install -y bash curl ca-certificates zstd \
+RUN microdnf install -y bash curl ca-certificates zstd tar gzip \
     && microdnf clean all
 
 # -- Install ollama via official script --

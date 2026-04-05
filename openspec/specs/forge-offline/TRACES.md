@@ -11,3 +11,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-forge-opencode.sh#L30](../../../images/default/entrypoint-forge-opencode.sh#L30)
 - [images/default/entrypoint-terminal.sh#L14](../../../images/default/entrypoint-terminal.sh#L14)
 - [images/default/entrypoint-terminal.sh#L30](../../../images/default/entrypoint-terminal.sh#L30)
+- [images/default/forge-welcome.sh#L121](../../../images/default/forge-welcome.sh#L121)

@@ -469,7 +469,10 @@ pub fn run(
         println!("{}", i18n::t("cli.starting_env"));
     }
     println!("  Name:   {container_name}");
-    println!("  Ports:  {}-{}", base_port.0, base_port.1);
+    // Enclave-only containers don't expose ports to the host
+    if ctx.network.as_deref() != Some(tillandsias_podman::ENCLAVE_NETWORK) {
+        println!("  Ports:  {}-{}", base_port.0, base_port.1);
+    }
     println!("  Cache:  {}", tilde_path(&cache));
 
     // @trace spec:secret-management

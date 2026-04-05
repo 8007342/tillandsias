@@ -113,6 +113,15 @@ pub const WEB_ENTRYPOINT: &str = include_str!("../../images/web/entrypoint.sh");
 pub const WEB_CONTAINERFILE: &str = include_str!("../../images/web/Containerfile");
 
 // ---------------------------------------------------------------------------
+// Image sources — proxy image
+// @trace spec:proxy-container
+// ---------------------------------------------------------------------------
+pub const PROXY_ENTRYPOINT: &str = include_str!("../../images/proxy/entrypoint.sh");
+pub const PROXY_CONTAINERFILE: &str = include_str!("../../images/proxy/Containerfile");
+pub const PROXY_SQUID_CONF: &str = include_str!("../../images/proxy/squid.conf");
+pub const PROXY_ALLOWLIST: &str = include_str!("../../images/proxy/allowlist.txt");
+
+// ---------------------------------------------------------------------------
 // Image sources — git service image
 // @trace spec:git-mirror-service
 // ---------------------------------------------------------------------------
@@ -326,6 +335,25 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     #[cfg(unix)]
     fs::set_permissions(
         web_dir.join("entrypoint.sh"),
+        fs::Permissions::from_mode(0o755),
+    )
+    .ok();
+
+    // -- images/proxy/ --
+    // @trace spec:proxy-container
+    let proxy_dir = dir.join("images").join("proxy");
+    fs::create_dir_all(&proxy_dir).map_err(|e| format!("images/proxy dir: {e}"))?;
+    write_lf(&proxy_dir.join("entrypoint.sh"), PROXY_ENTRYPOINT)
+        .map_err(|e| format!("proxy entrypoint: {e}"))?;
+    write_lf(&proxy_dir.join("Containerfile"), PROXY_CONTAINERFILE)
+        .map_err(|e| format!("proxy Containerfile: {e}"))?;
+    write_lf(&proxy_dir.join("squid.conf"), PROXY_SQUID_CONF)
+        .map_err(|e| format!("proxy squid.conf: {e}"))?;
+    write_lf(&proxy_dir.join("allowlist.txt"), PROXY_ALLOWLIST)
+        .map_err(|e| format!("proxy allowlist: {e}"))?;
+    #[cfg(unix)]
+    fs::set_permissions(
+        proxy_dir.join("entrypoint.sh"),
         fs::Permissions::from_mode(0o755),
     )
     .ok();
