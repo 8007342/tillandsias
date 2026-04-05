@@ -10,14 +10,14 @@ if [ ! -d /var/spool/squid/00 ]; then
     echo "Cache directories created."
 fi
 
-# Initialize SSL certificate database if not present.
-# This is where sslcrtd stores dynamically generated server certificates.
+# Initialize SSL certificate database.
+# Must recreate on every launch because --userns=keep-id changes ownership.
 # @trace spec:proxy-container
-if [ ! -d /var/lib/squid/ssl_db/certs ]; then
-    echo "Initializing SSL certificate database..."
-    /usr/lib/squid/security_file_certgen -c -s /var/lib/squid/ssl_db -M 16
-    echo "SSL certificate database created."
-fi
+echo "Initializing SSL certificate database..."
+rm -rf /var/lib/squid/ssl_db 2>/dev/null || true
+mkdir -p /var/lib/squid/ssl_db
+/usr/lib/squid/security_file_certgen -c -s /var/lib/squid/ssl_db -M 16
+echo "SSL certificate database created."
 
 # Validate that the intermediate CA cert and key were injected.
 if [ ! -f /etc/squid/certs/intermediate.crt ] || [ ! -f /etc/squid/certs/intermediate.key ]; then

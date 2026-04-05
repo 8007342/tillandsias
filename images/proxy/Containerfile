@@ -10,9 +10,8 @@ FROM docker.io/library/alpine:3.20
 RUN apk add --no-cache squid openssl bash ca-certificates \
     && adduser -D -u 1000 -s /sbin/nologin proxy \
     && mkdir -p /var/spool/squid /var/log/squid /var/run/squid \
-    && mkdir -p /var/lib/squid/ssl_db /etc/squid/certs \
-    && chown -R proxy:proxy /var/spool/squid /var/log/squid /var/run/squid \
-    && chown -R proxy:proxy /var/lib/squid/ssl_db
+    && mkdir -p /var/lib/squid /etc/squid/certs \
+    && chown -R proxy:proxy /var/spool/squid /var/log/squid /var/run/squid /var/lib/squid
 
 COPY squid.conf /etc/squid/squid.conf
 COPY allowlist.txt /etc/squid/allowlist.txt
