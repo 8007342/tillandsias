@@ -13,6 +13,31 @@ use tillandsias_core::config::{
 };
 use tillandsias_core::genus::TillandsiaGenus;
 use tillandsias_core::state::ContainerInfo;
+
+/// Drop guard that cleans up enclave service containers on any exit path
+/// (normal return, panic, SIGINT after podman forwards it, etc.).
+/// @trace spec:enclave-network
+struct EnclaveCleanupGuard {
+    project_name: String,
+}
+
+impl Drop for EnclaveCleanupGuard {
+    fn drop(&mut self) {
+        // Build a minimal tokio runtime for async cleanup.
+        // This is safe in Drop — we're the last thing running before process exit.
+        if let Ok(rt) = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            rt.block_on(async {
+                crate::handlers::stop_git_service(&self.project_name).await;
+                crate::handlers::stop_inference().await;
+                crate::handlers::stop_proxy().await;
+                crate::handlers::cleanup_enclave_network().await;
+            });
+        }
+    }
+}
 use tillandsias_podman::PodmanClient;
 
 use crate::i18n;
@@ -396,6 +421,14 @@ pub fn run(
         return false;
     }
 
+    // Drop guard ensures service containers are cleaned up on ANY exit path:
+    // normal return, panic, Ctrl+C (podman forwards SIGINT, container exits,
+    // .status() returns, then guard drops during stack unwinding).
+    // @trace spec:enclave-network
+    let _enclave_guard = EnclaveCleanupGuard {
+        project_name: project_name.clone(),
+    };
+
     // Select profile based on mode: --bash uses terminal profile, otherwise forge.
     // --opencode / --claude override the configured agent for this session.
     let selected_agent = agent_override.unwrap_or(global_config.agent.selected);
@@ -477,15 +510,7 @@ pub fn run(
 
     println!();
 
-    // Clean up enclave service containers after forge exits.
-    // In CLI mode, there's no persistent event loop to manage lifecycle.
-    // @trace spec:enclave-network
-    rt.block_on(async {
-        crate::handlers::stop_git_service(&project_name).await;
-        crate::handlers::stop_inference().await;
-        crate::handlers::stop_proxy().await;
-        crate::handlers::cleanup_enclave_network().await;
-    });
+    // Service container cleanup handled by EnclaveCleanupGuard (Drop).
 
     match status {
         Ok(s) => {
