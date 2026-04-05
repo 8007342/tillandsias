@@ -509,15 +509,16 @@ mod tests {
     }
 
     #[test]
-    fn terminal_has_working_dir() {
+    fn terminal_has_no_working_dir() {
+        // Terminal no longer sets -w because the project dir doesn't exist
+        // until the entrypoint clones from the git mirror.
         let profile = container_profile::terminal_profile();
         let ctx = test_context();
         let args = build_podman_args(&profile, &ctx);
-        let w_idx = args
-            .iter()
-            .position(|a| a == "-w")
-            .expect("-w flag present");
-        assert_eq!(args[w_idx + 1], "/home/forge/src/myproject");
+        assert!(
+            !args.contains(&"-w".to_string()),
+            "Terminal should not set -w (entrypoint clones then cd's)"
+        );
     }
 
     #[test]

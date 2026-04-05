@@ -378,8 +378,9 @@ pub(crate) async fn ensure_proxy_running(
         image_tag: tag.clone(),
         selected_language: "en".to_string(),
         // @trace spec:proxy-container, spec:enclave-network
-        // Proxy is dual-homed: enclave network (for forge containers) + bridge (for external access)
-        network: Some(format!("{},bridge", tillandsias_podman::ENCLAVE_NETWORK)),
+        // Proxy is dual-homed: enclave network (for forge containers) + default (for external access).
+        // Rootless podman uses "podman" as the default network name (not "bridge").
+        network: Some(format!("{},podman", tillandsias_podman::ENCLAVE_NETWORK)),
         git_author_name: String::new(),
         git_author_email: String::new(),
     };
@@ -1327,10 +1328,11 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
 
     let script = source_dir.join("scripts").join("build-image.sh");
     // Use the correct versioned tag for each image type.
-    // @trace spec:default-image, spec:proxy-container, spec:git-mirror-service
+    // @trace spec:default-image, spec:proxy-container, spec:git-mirror-service, spec:inference-container
     let tag = match image_name {
         "proxy" => proxy_image_tag(),
         "git" => git_image_tag(),
+        "inference" => inference_image_tag(),
         _ => forge_image_tag(),
     };
     info!(script = %script.display(), image = image_name, tag = %tag, spec = "default-image, nix-builder", "Running embedded build-image.sh");

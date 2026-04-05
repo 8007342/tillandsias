@@ -222,7 +222,9 @@ pub fn forge_claude_profile() -> ContainerProfile {
 pub fn terminal_profile() -> ContainerProfile {
     ContainerProfile {
         entrypoint: "/usr/local/bin/entrypoint-terminal.sh",
-        working_dir: Some(WorkingDir::ProjectSubdir),
+        // No working_dir — entrypoint clones from git mirror then cd's.
+        // Setting -w would fail because the directory doesn't exist until after clone.
+        working_dir: None,
         mounts: common_forge_mounts(),
         env_vars: vec![
             ProfileEnvVar {
@@ -533,10 +535,8 @@ mod tests {
         let profile = terminal_profile();
         assert!(profile.secrets.is_empty(), "Terminal must be credential-free");
         assert_eq!(profile.entrypoint, "/usr/local/bin/entrypoint-terminal.sh");
-        assert!(matches!(
-            profile.working_dir,
-            Some(WorkingDir::ProjectSubdir)
-        ));
+        // No working_dir — entrypoint clones from mirror then cd's into project
+        assert!(profile.working_dir.is_none());
     }
 
     #[test]
