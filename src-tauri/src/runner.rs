@@ -134,17 +134,7 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         // even when launched from Finder (which has a minimal PATH).
         .env("PODMAN_PATH", tillandsias_podman::find_podman_path());
 
-    // Route image builds through the proxy cache (except the proxy's own build).
-    // @trace spec:proxy-container
-    if image_name != "proxy" {
-        if let Ok(ip) = crate::handlers::get_proxy_ip_pub() {
-            let proxy_url = format!("http://{}:3128", ip);
-            cmd.env("HTTP_PROXY", &proxy_url);
-            cmd.env("HTTPS_PROXY", &proxy_url);
-            cmd.env("http_proxy", &proxy_url);
-            cmd.env("https_proxy", &proxy_url);
-        }
-    }
+    // NOTE: Image builds do NOT go through the proxy. See handlers.rs for rationale.
 
     let status = cmd
         .stdin(std::process::Stdio::inherit())
