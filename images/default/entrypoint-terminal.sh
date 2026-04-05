@@ -10,14 +10,17 @@ source /usr/local/lib/tillandsias/lib-common.sh
 
 # @trace spec:proxy-container
 # Trust the Tillandsias enclave CA chain for HTTPS proxy caching.
+# NOTE: update-ca-trust requires write access to /etc/pki/ which is denied
+# under --cap-drop=ALL. The || true ensures this is non-fatal — tools use
+# NODE_EXTRA_CA_CERTS and SSL_CERT_FILE env vars as the primary trust path.
 CA_CHAIN="/run/tillandsias/ca-chain.crt"
 if [ -f "$CA_CHAIN" ]; then
     if command -v update-ca-trust &>/dev/null; then
-        cp "$CA_CHAIN" /etc/pki/ca-trust/source/anchors/tillandsias-ca.crt 2>/dev/null
-        update-ca-trust 2>/dev/null
+        cp "$CA_CHAIN" /etc/pki/ca-trust/source/anchors/tillandsias-ca.crt 2>/dev/null && \
+        update-ca-trust 2>/dev/null || true
     elif command -v update-ca-certificates &>/dev/null; then
-        cp "$CA_CHAIN" /usr/local/share/ca-certificates/tillandsias-ca.crt 2>/dev/null
-        update-ca-certificates 2>/dev/null
+        cp "$CA_CHAIN" /usr/local/share/ca-certificates/tillandsias-ca.crt 2>/dev/null && \
+        update-ca-certificates 2>/dev/null || true
     fi
 fi
 
