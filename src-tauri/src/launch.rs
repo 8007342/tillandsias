@@ -69,10 +69,13 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     }
 
     // -----------------------------------------------------------------------
-    // Port range (skipped when (0,0) — e.g., proxy containers expose no ports)
-    // @trace spec:proxy-container
+    // Port range — skipped for enclave-only containers (they communicate
+    // through the internal network, not host ports). Only expose ports for
+    // containers with no network (legacy) or dual-homed containers.
+    // @trace spec:enclave-network, spec:proxy-container
     // -----------------------------------------------------------------------
-    if ctx.port_range != (0, 0) {
+    let is_enclave_only = ctx.network.as_deref() == Some(tillandsias_podman::ENCLAVE_NETWORK);
+    if ctx.port_range != (0, 0) && !is_enclave_only {
         args.push("-p".into());
         args.push(format!(
             "{}-{}:{}-{}",

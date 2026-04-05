@@ -118,22 +118,22 @@ echo ""
 printf "  ${B_WHITE}%s${RST}   ${B_CYAN}%s${RST}\n" "$L_WELCOME_PROJECT" "$PROJECT"
 printf "  ${B_WHITE}%s${RST}     ${ITAL}%s${RST}  ${DIM}+${RST}  ${ITAL}%s${RST}\n" "$L_WELCOME_FORGE" "$GUEST_OS" "$HOST_OS"
 echo ""
-printf "  ${B_WHITE}%s${RST}\n" "$L_WELCOME_MOUNTS"
-printf "    ${B_GREEN}%-38s${RST} ${A} ${DIM}%-26s${RST} ${B_GREEN}rw${RST}\n" \
-    "/home/forge/src/$PROJECT"  "~/src/$PROJECT"
-printf "    ${B_GREEN}%-38s${RST} ${A} ${DIM}%-26s${RST} ${B_GREEN}rw${RST}\n" \
-    "/home/forge/.cache/tillandsias"      "~/.cache/tillandsias"
-# @trace spec:forge-welcome — mount table with ramdisk awareness
-printf "    ${D_RED}%-38s${RST} ${A} ${B_BLUE}%-26s${RST} ${B_RED}ro${RST}\n" \
-    "/home/forge/.config/gh"              "secrets/gh"
-printf "    ${D_RED}%-38s${RST} ${A} ${B_BLUE}%-26s${RST} ${B_RED}ro${RST}\n" \
-    "/home/forge/.config/tillandsias-git" "secrets/git"
-if [ -f /run/secrets/github_token ]; then
-    printf "    ${D_RED}%-38s${RST} ${A} ${B_MAGENTA}%-26s${RST} ${B_MAGENTA}ro*${RST}\n" \
-        "/run/secrets/github_token"           "ramdisk"
+# @trace spec:forge-offline, spec:enclave-network
+printf "  ${B_WHITE}Security${RST}\n"
+printf "    ${B_GREEN}Network${RST}       ${DIM}enclave only (no internet, packages via proxy)${RST}\n"
+printf "    ${B_GREEN}Credentials${RST}   ${DIM}none (git auth via mirror service)${RST}\n"
+printf "    ${B_GREEN}Code${RST}          ${DIM}cloned from git mirror (uncommitted work is ephemeral)${RST}\n"
+echo ""
+printf "  ${B_WHITE}Services${RST}\n"
+printf "    ${B_CYAN}proxy${RST}         ${DIM}caching HTTP/S proxy (allowlisted domains)${RST}\n"
+printf "    ${B_CYAN}git-service${RST}   ${DIM}git mirror + auto-push to remote${RST}\n"
+if curl -s "http://inference:11434/api/version" >/dev/null 2>&1; then
+    printf "    ${B_CYAN}inference${RST}     ${DIM}ollama (local LLM)${RST}\n"
 fi
 echo ""
-printf "    ${B_MAGENTA}* ramdisk — never touches disk, RAM-only${RST}\n"
+printf "  ${B_WHITE}Mounts${RST}\n"
+printf "    ${B_GREEN}%-38s${RST} ${A} ${DIM}%-26s${RST} ${B_GREEN}rw${RST}\n" \
+    "/home/forge/.cache/tillandsias"      "~/.cache/tillandsias"
 echo ""
 printf "  ${B_YELLOW}→${RST} Project at ${B_WHITE}/home/forge/src/%s${RST}\n" "$PROJECT"
 echo ""
