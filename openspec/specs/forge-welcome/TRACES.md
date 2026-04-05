@@ -7,7 +7,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [images/default/entrypoint-forge-claude.sh#L24](../../../images/default/entrypoint-forge-claude.sh#L24)
 - [images/default/entrypoint-forge-opencode.sh#L24](../../../images/default/entrypoint-forge-opencode.sh#L24)
-- [images/default/entrypoint-terminal.sh#L24](../../../images/default/entrypoint-terminal.sh#L24)
+- [images/default/entrypoint-terminal.sh#L27](../../../images/default/entrypoint-terminal.sh#L27)
 - [images/default/forge-welcome.sh#L8](../../../images/default/forge-welcome.sh#L8)
 - [images/default/locales/ar.sh#L4](../../../images/default/locales/ar.sh#L4)
 - [images/default/locales/fr.sh#L4](../../../images/default/locales/fr.sh#L4)

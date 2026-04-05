@@ -13,9 +13,9 @@ fi
 # Initialize SSL certificate database.
 # Must recreate on every launch because --userns=keep-id changes ownership.
 # @trace spec:proxy-container
+# security_file_certgen -c creates the directory itself — it MUST NOT exist.
 echo "Initializing SSL certificate database..."
 rm -rf /var/lib/squid/ssl_db 2>/dev/null || true
-mkdir -p /var/lib/squid/ssl_db
 /usr/lib/squid/security_file_certgen -c -s /var/lib/squid/ssl_db -M 16
 echo "SSL certificate database created."
 
