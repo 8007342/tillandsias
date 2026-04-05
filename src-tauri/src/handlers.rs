@@ -1413,11 +1413,20 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
             .env_remove("LD_PRELOAD")
             .env("PODMAN_PATH", tillandsias_podman::find_podman_path());
 
-        // NOTE: Image builds do NOT go through the proxy. Fedora/Alpine mirrors
-        // use metalink redirects to random third-party domains not in our allowlist,
-        // and squid can't cache HTTPS anyway (without MITM). The proxy is for
-        // runtime containers only (forge, git, inference).
+        // Route image builds through the proxy's PERMISSIVE port (3129).
+        // Port 3129 allows all domains (Fedora/Alpine mirrors use random third-party hosts).
+        // Port 3128 is the STRICT port for runtime containers (allowlist only).
+        // Both ports share the same disk cache.
         // @trace spec:proxy-container
+        if image_name != "proxy" {
+            if let Ok(ip) = get_proxy_ip() {
+                let proxy_url = format!("http://{}:3129", ip);
+                cmd.env("HTTP_PROXY", &proxy_url);
+                cmd.env("HTTPS_PROXY", &proxy_url);
+                cmd.env("http_proxy", &proxy_url);
+                cmd.env("https_proxy", &proxy_url);
+            }
+        }
 
         let output = cmd.output()
             .map_err(|e| {

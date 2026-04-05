@@ -214,12 +214,24 @@ if [[ "$FLAG_BACKEND" == "fedora" ]]; then
         exit 1
     fi
 
-    # NOTE: Image builds do NOT go through the proxy. Fedora/Alpine mirrors
-    # use metalink redirects to random third-party domains not in our allowlist,
-    # and squid can't cache HTTPS without MITM. Proxy is for runtime only.
+    # Pass proxy env vars as build args if available.
+    # Image builds use the proxy's PERMISSIVE port (3129) which allows all domains.
+    # This caches metalink responses and package downloads across builds.
+    # @trace spec:proxy-container
+    PROXY_BUILD_ARGS=()
+    if [[ -n "${HTTP_PROXY:-}" ]]; then
+        _info "Routing build through proxy: ${HTTP_PROXY}"
+        PROXY_BUILD_ARGS+=(
+            "--build-arg" "HTTP_PROXY=${HTTP_PROXY}"
+            "--build-arg" "HTTPS_PROXY=${HTTPS_PROXY:-$HTTP_PROXY}"
+            "--build-arg" "http_proxy=${http_proxy:-$HTTP_PROXY}"
+            "--build-arg" "https_proxy=${https_proxy:-$HTTP_PROXY}"
+        )
+    fi
 
     "$PODMAN" build \
         --tag "$IMAGE_TAG" \
+        "${PROXY_BUILD_ARGS[@]+"${PROXY_BUILD_ARGS[@]}"}" \
         -f "$CONTAINERFILE" \
         "$IMAGE_DIR/"
 
