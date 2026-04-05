@@ -477,6 +477,16 @@ pub fn run(
 
     println!();
 
+    // Clean up enclave service containers after forge exits.
+    // In CLI mode, there's no persistent event loop to manage lifecycle.
+    // @trace spec:enclave-network
+    rt.block_on(async {
+        crate::handlers::stop_git_service(&project_name).await;
+        crate::handlers::stop_inference().await;
+        crate::handlers::stop_proxy().await;
+        crate::handlers::cleanup_enclave_network().await;
+    });
+
     match status {
         Ok(s) => {
             println!("{}", i18n::t("cli.env_stopped"));
