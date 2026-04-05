@@ -482,7 +482,9 @@ pub fn run(
         base_port,
         &tag,
     );
-    let run_args = crate::launch::build_podman_args(&profile, &ctx);
+    let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
+    // @trace spec:proxy-container
+    crate::handlers::inject_ca_chain_mounts_pub(&mut run_args);
 
     println!();
     if bash {

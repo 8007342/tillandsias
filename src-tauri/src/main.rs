@@ -5,6 +5,7 @@
 
 mod accountability;
 mod build_lock;
+mod ca;
 mod cleanup;
 mod cli;
 #[cfg(target_os = "linux")]

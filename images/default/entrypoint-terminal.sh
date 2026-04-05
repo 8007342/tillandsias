@@ -8,6 +8,19 @@
 
 source /usr/local/lib/tillandsias/lib-common.sh
 
+# @trace spec:proxy-container
+# Trust the Tillandsias enclave CA chain for HTTPS proxy caching.
+CA_CHAIN="/run/tillandsias/ca-chain.crt"
+if [ -f "$CA_CHAIN" ]; then
+    if command -v update-ca-trust &>/dev/null; then
+        cp "$CA_CHAIN" /etc/pki/ca-trust/source/anchors/tillandsias-ca.crt 2>/dev/null
+        update-ca-trust 2>/dev/null
+    elif command -v update-ca-certificates &>/dev/null; then
+        cp "$CA_CHAIN" /usr/local/share/ca-certificates/tillandsias-ca.crt 2>/dev/null
+        update-ca-certificates 2>/dev/null
+    fi
+fi
+
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "terminal starting"
 

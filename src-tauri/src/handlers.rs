@@ -348,6 +348,48 @@ pub(crate) async fn ensure_proxy_running(
         }
     }
 
+    // @trace spec:proxy-container
+    // Generate CA certificates for SSL bump (MITM HTTPS caching).
+    // 1. Ensure root CA exists (long-lived, persisted on host)
+    // 2. Generate ephemeral intermediate CA (30-day, written to tmpfs)
+    // 3. Build the CA chain (intermediate + root) for forge trust injection
+    let (root_cert_path, root_key_path) = crate::ca::ensure_root_ca()?;
+    let (intermediate_cert_pem, intermediate_key_pem) =
+        crate::ca::generate_intermediate_ca(&root_cert_path, &root_key_path)?;
+    let chain_pem = crate::ca::ca_chain_pem(&root_cert_path, &intermediate_cert_pem)?;
+
+    // Write intermediate cert/key and chain to tmpfs for bind-mounting
+    let certs_dir = crate::ca::proxy_certs_dir();
+    std::fs::create_dir_all(&certs_dir)
+        .map_err(|e| format!("Failed to create proxy certs dir: {e}"))?;
+
+    let int_cert_path = certs_dir.join("intermediate.crt");
+    let int_key_path = certs_dir.join("intermediate.key");
+    let chain_path = certs_dir.join("ca-chain.crt");
+
+    std::fs::write(&int_cert_path, &intermediate_cert_pem)
+        .map_err(|e| format!("Failed to write intermediate cert: {e}"))?;
+    std::fs::write(&int_key_path, &intermediate_key_pem)
+        .map_err(|e| format!("Failed to write intermediate key: {e}"))?;
+    std::fs::write(&chain_path, &chain_pem)
+        .map_err(|e| format!("Failed to write CA chain: {e}"))?;
+
+    // Set key file to mode 0600 (owner read/write only)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&int_key_path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| format!("Failed to set intermediate key permissions: {e}"))?;
+    }
+
+    info!(
+        accountability = true,
+        category = "ca",
+        spec = "proxy-container",
+        "CA certificates written to tmpfs at {}",
+        certs_dir.display()
+    );
+
     // Build proxy container args using the profile + LaunchContext
     let profile = tillandsias_core::container_profile::proxy_profile();
     let cache = cache_dir();
@@ -384,6 +426,24 @@ pub(crate) async fn ensure_proxy_running(
     // Proxy is dual-homed: add the default "podman" network for external access.
     // Must be a separate --network flag (comma syntax is parsed as aliases, not networks).
     run_args.insert(run_args.len() - 1, "--network=podman".to_string());
+
+    // @trace spec:proxy-container
+    // Mount intermediate CA cert + key into the proxy for ssl-bump.
+    // These are read by squid to generate per-domain server certificates.
+    run_args.insert(
+        run_args.len() - 1,
+        format!(
+            "-v={}:/etc/squid/certs/intermediate.crt:ro",
+            int_cert_path.display()
+        ),
+    );
+    run_args.insert(
+        run_args.len() - 1,
+        format!(
+            "-v={}:/etc/squid/certs/intermediate.key:ro",
+            int_key_path.display()
+        ),
+    );
 
     // Launch the proxy container via podman run (detached)
     match client.run_container(&run_args).await {
@@ -1540,6 +1600,64 @@ fn build_launch_context(
     }
 }
 
+/// Inject CA chain mount and trust env vars into forge/terminal podman args.
+///
+/// Adds a read-only bind mount of the CA chain file at
+/// `/run/tillandsias/ca-chain.crt` and sets `NODE_EXTRA_CA_CERTS`,
+/// `SSL_CERT_FILE`, and `REQUESTS_CA_BUNDLE` so that tools inside the
+/// container trust the proxy's dynamically generated server certificates.
+///
+/// The volume and env args are inserted before the final image tag argument.
+///
+/// @trace spec:proxy-container
+fn inject_ca_chain_mounts(run_args: &mut Vec<String>) {
+    let chain_path = crate::ca::proxy_certs_dir().join("ca-chain.crt");
+    if !chain_path.exists() {
+        debug!(
+            spec = "proxy-container",
+            "CA chain not found at {} — skipping CA trust injection",
+            chain_path.display()
+        );
+        return;
+    }
+
+    // Insert before the last element (the image tag).
+    let pos = run_args.len().saturating_sub(1);
+
+    // Volume mount: CA chain into a standard path inside the container
+    run_args.insert(
+        pos,
+        format!(
+            "-v={}:/run/tillandsias/ca-chain.crt:ro",
+            chain_path.display()
+        ),
+    );
+
+    // @trace spec:proxy-container
+    // Trust env vars: tell common package managers / runtimes to use the chain.
+    // NODE_EXTRA_CA_CERTS: Node.js (npm, yarn, pnpm)
+    // SSL_CERT_FILE: OpenSSL-based tools, Go, rustls
+    // REQUESTS_CA_BUNDLE: Python requests, pip
+    run_args.insert(
+        pos + 1,
+        "-e=NODE_EXTRA_CA_CERTS=/run/tillandsias/ca-chain.crt".to_string(),
+    );
+    run_args.insert(
+        pos + 2,
+        "-e=SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt".to_string(),
+    );
+    run_args.insert(
+        pos + 3,
+        "-e=REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt".to_string(),
+    );
+}
+
+/// Public wrapper for `inject_ca_chain_mounts` — used by `runner.rs` (CLI mode).
+/// @trace spec:proxy-container
+pub fn inject_ca_chain_mounts_pub(run_args: &mut Vec<String>) {
+    inject_ca_chain_mounts(run_args);
+}
+
 /// Remove orphaned tillandsias containers not tracked in state.
 ///
 /// Queries podman for all containers matching `tillandsias-*`, then removes
@@ -1808,7 +1926,9 @@ pub async fn handle_attach_here(
         is_watch_root,
         &tag,
     );
-    let run_args = crate::launch::build_podman_args(&profile, &ctx);
+    let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
+    // @trace spec:proxy-container
+    inject_ca_chain_mounts(&mut run_args);
 
     let mut podman_parts = vec![
         tillandsias_podman::find_podman_path().to_string(),
@@ -2157,7 +2277,9 @@ pub async fn handle_terminal(
         false, // not watch root
         &tag,
     );
-    let run_args = crate::launch::build_podman_args(&profile, &ctx);
+    let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
+    // @trace spec:proxy-container
+    inject_ca_chain_mounts(&mut run_args);
 
     let mut podman_parts = vec![
         tillandsias_podman::find_podman_path().to_string(),
@@ -2303,7 +2425,9 @@ pub async fn handle_root_terminal(
         true,  // watch root — mount at /home/forge/src directly
         &tag,
     );
-    let run_args = crate::launch::build_podman_args(&profile, &ctx);
+    let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
+    // @trace spec:proxy-container
+    inject_ca_chain_mounts(&mut run_args);
 
     let mut podman_parts = vec![
         tillandsias_podman::find_podman_path().to_string(),
