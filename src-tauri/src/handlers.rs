@@ -969,12 +969,22 @@ pub async fn ensure_enclave_ready(
         let inf_state = state.clone();
         let inf_tx = build_tx.clone();
         tokio::spawn(async move {
-            if let Err(e) = ensure_inference_running(&inf_state, inf_tx).await {
-                warn!(
-                    error = %e,
-                    spec = "inference-container",
-                    "Inference setup failed — containers will launch without local inference"
-                );
+            match ensure_inference_running(&inf_state, inf_tx).await {
+                Ok(()) => {
+                    info!(
+                        accountability = true,
+                        category = "inference",
+                        spec = "inference-container",
+                        "Inference container ready (background build complete)"
+                    );
+                }
+                Err(e) => {
+                    warn!(
+                        error = %e,
+                        spec = "inference-container",
+                        "Inference setup failed — containers will launch without local inference"
+                    );
+                }
             }
         });
     }
