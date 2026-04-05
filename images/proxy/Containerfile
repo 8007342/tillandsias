@@ -5,7 +5,9 @@ FROM docker.io/library/alpine:3.20
 
 # squid + openssl for SSL bump support
 # ca-certificates for upstream TLS verification
-RUN apk add --no-cache squid squid-openssl openssl bash ca-certificates \
+# Alpine's squid package includes SSL support (--enable-ssl-crtd) by default.
+# No separate squid-openssl package exists on Alpine 3.20.
+RUN apk add --no-cache squid openssl bash ca-certificates \
     && adduser -D -u 1000 -s /sbin/nologin proxy \
     && mkdir -p /var/spool/squid /var/log/squid /var/run/squid \
     && mkdir -p /var/lib/squid/ssl_db /etc/squid/certs \
