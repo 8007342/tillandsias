@@ -961,13 +961,22 @@ pub async fn ensure_enclave_ready(
     // Step 1+2: Infrastructure services (network + proxy) — hard requirement
     ensure_infrastructure_ready(state, build_tx.clone()).await?;
 
-    // Step 3: Inference — soft requirement (non-fatal)
-    if let Err(e) = ensure_inference_running(state, build_tx.clone()).await {
-        warn!(
-            error = %e,
-            spec = "inference-container",
-            "Inference setup failed — containers will launch without local inference"
-        );
+    // Step 3: Inference — soft requirement, non-blocking.
+    // Inference image is large (~200MB ollama download) and shouldn't delay forge launch.
+    // Start it in the background — it'll be ready by the time the user needs it.
+    // @trace spec:inference-container
+    {
+        let inf_state = state.clone();
+        let inf_tx = build_tx.clone();
+        tokio::spawn(async move {
+            if let Err(e) = ensure_inference_running(&inf_state, inf_tx).await {
+                warn!(
+                    error = %e,
+                    spec = "inference-container",
+                    "Inference setup failed — containers will launch without local inference"
+                );
+            }
+        });
     }
 
     // Step 4+5: Git mirror + service — soft requirement (non-fatal)
