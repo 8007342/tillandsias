@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <!-- Tectorum dried: brown fuzzy ball -->
-  <g transform="translate(32,38) scale(1.4)">
+  <g transform="translate(32,56) scale(2.0)">
     <circle cx="0" cy="-10" r="12" fill="#b09968" stroke="#98804c" stroke-width="1.5"/>
     <line x1="-8" y1="-16" x2="-12" y2="-20" stroke="#d0bb88" stroke-width="1.5" stroke-linecap="round"/>
     <line x1="0" y1="-22" x2="0" y2="-26" stroke="#d0bb88" stroke-width="1.5" stroke-linecap="round"/>

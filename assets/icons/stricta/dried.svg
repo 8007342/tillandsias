@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <!-- Stricta dried: brown stiff leaves -->
-  <g transform="translate(32,40) scale(1.4)">
+  <g transform="translate(32,60) scale(2.0)">
     <polygon points="0,-30 -3,-6 3,-6" fill="#b09968" stroke="#98804c" stroke-width="1.5"/>
     <polygon points="-8,-26 -7,-4 -3,-8" fill="#c0aa78" stroke="#98804c" stroke-width="1.5"/>
     <polygon points="8,-26 7,-4 3,-8" fill="#c0aa78" stroke="#98804c" stroke-width="1.5"/>

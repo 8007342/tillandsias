@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <!-- Usneoides (Spanish moss) bud: short hanging strands -->
-  <g transform="translate(32,6) scale(1.4)">
+  <g transform="translate(32,2) scale(1.8)">
     <line x1="-8" y1="0" x2="8" y2="0" stroke="#5a9a5a" stroke-width="2.5"/>
     <path d="M-6,0 C-7,10 -5,20 -6,28" fill="none" stroke="#7ec87e" stroke-width="2.5" stroke-linecap="round"/>
     <path d="M-2,0 C-3,12 -1,22 -2,32" fill="none" stroke="#95d895" stroke-width="2.5" stroke-linecap="round"/>

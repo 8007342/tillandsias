@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <!-- Ionantha bloom: leaves blush red at tips, violet flower -->
-  <g transform="translate(32,38) scale(1.4)">
+  <g transform="translate(32,56) scale(1.8)">
     <polygon points="0,-24 -4,-4 4,-4" fill="#6ab86a" stroke="#4a8a4a" stroke-width="1.5"/>
     <polygon points="-10,-20 -6,-2 -2,-8" fill="#7ec87e" stroke="#4a8a4a" stroke-width="1.5"/>
     <polygon points="10,-20 6,-2 2,-8" fill="#7ec87e" stroke="#4a8a4a" stroke-width="1.5"/>

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <!-- Bulbosa dried: brown round base -->
-  <g transform="translate(32,42) scale(1.4)">
+  <g transform="translate(32,58) scale(1.8)">
     <ellipse cx="0" cy="-8" rx="12" ry="10" fill="#b09968" stroke="#98804c" stroke-width="1.5"/>
     <path d="M-2,-16 C-4,-28 -1,-32 0,-28" fill="none" stroke="#c0aa78" stroke-width="2.5" stroke-linecap="round"/>
     <path d="M2,-16 C6,-26 3,-30 2,-26" fill="none" stroke="#d0bb88" stroke-width="2" stroke-linecap="round"/>

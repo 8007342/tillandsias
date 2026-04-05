@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <!-- Aeranthos bloom: upright rosette with violet-blue flower spike -->
-  <g transform="translate(32,40) scale(1.3)">
+  <g transform="translate(32,62) scale(1.5)">
     <ellipse cx="0" cy="-12" rx="8" ry="18" fill="#6ab86a" stroke="#4a8a4a" stroke-width="1.5"/>
     <ellipse cx="-7" cy="-10" rx="5" ry="14" fill="#7ec87e" stroke="#4a8a4a" stroke-width="1.5" transform="rotate(20)"/>
     <ellipse cx="7" cy="-10" rx="5" ry="14" fill="#7ec87e" stroke="#4a8a4a" stroke-width="1.5" transform="rotate(-20)"/>

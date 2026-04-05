@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <!-- Caput-Medusae bud: bulbous base with snake-like tentacle leaves -->
-  <g transform="translate(32,40) scale(1.4)">
+  <g transform="translate(32,48) scale(1.7)">
     <ellipse cx="0" cy="-6" rx="10" ry="8" fill="#7ec87e" stroke="#5a9a5a" stroke-width="1.5"/>
     <path d="M-4,-12 C-8,-22 -14,-26 -16,-20" fill="none" stroke="#95d895" stroke-width="2.5" stroke-linecap="round"/>
     <path d="M4,-12 C8,-22 14,-26 16,-20" fill="none" stroke="#95d895" stroke-width="2.5" stroke-linecap="round"/>
