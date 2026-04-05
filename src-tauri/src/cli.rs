@@ -136,8 +136,8 @@ pub enum CliMode {
     /// `tillandsias --version` — print version and exit.
     Version,
 
-    /// `tillandsias --init` — pre-build development environments.
-    /// `tillandsias --init --force` — rebuild even if already built.
+    /// `tillandsias --init` — pre-build all container images (proxy, forge, git, inference).
+    /// `tillandsias --init --force` — rebuild all from scratch.
     Init { force: bool },
 
     /// `tillandsias --stats` — print disk usage report and exit.
