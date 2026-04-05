@@ -385,77 +385,15 @@ pub fn run(
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
 
-    // @trace spec:enclave-network, spec:proxy-container
-    // Ensure the enclave network and proxy are running before launching the container.
-    // Proxy is a hard requirement — all containers depend on it for network access.
-    if let Err(e) = rt.block_on(crate::handlers::ensure_enclave_network()) {
+    // @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container
+    // Single unified enclave setup: network, proxy, inference, mirror, git service.
+    // Creates dummy state/build_tx internally — CLI mode has no tray event loop.
+    if let Err(e) = crate::handlers::ensure_enclave_ready_cli(&rt, &project_path, &project_name) {
         eprintln!("  \u{2717} {}", i18n::t("errors.env_not_ready"));
         if debug {
-            eprintln!("  [debug] Enclave network setup failed: {e}");
+            eprintln!("  [debug] Enclave setup failed: {e}");
         }
         return false;
-    }
-    // Proxy setup in CLI mode: use a dummy build_tx since there is no tray event loop.
-    {
-        let (proxy_tx, _proxy_rx) = tokio::sync::mpsc::channel::<tillandsias_core::event::BuildProgressEvent>(4);
-        let dummy_state = tillandsias_core::state::TrayState::new(tillandsias_core::state::PlatformInfo {
-            os: tillandsias_core::state::Os::detect(),
-            has_podman: true,
-            has_podman_machine: false,
-            gpu_devices: vec![],
-        });
-        if let Err(e) = rt.block_on(crate::handlers::ensure_proxy_running(&dummy_state, proxy_tx)) {
-            eprintln!("  \u{2717} Proxy required but failed to start");
-            if debug {
-                eprintln!("  [debug] Proxy setup failed: {e}");
-            }
-            return false;
-        }
-    }
-
-    // @trace spec:inference-container
-    // Ensure inference container is running (CLI mode).
-    {
-        let (inference_tx, _inference_rx) = tokio::sync::mpsc::channel::<tillandsias_core::event::BuildProgressEvent>(4);
-        let dummy_state = tillandsias_core::state::TrayState::new(tillandsias_core::state::PlatformInfo {
-            os: tillandsias_core::state::Os::detect(),
-            has_podman: true,
-            has_podman_machine: false,
-            gpu_devices: vec![],
-        });
-        if let Err(e) = rt.block_on(crate::handlers::ensure_inference_running(&dummy_state, inference_tx)) {
-            if debug {
-                eprintln!("  [debug] Inference setup failed: {e}");
-            }
-        }
-    }
-
-    // @trace spec:git-mirror-service
-    // Ensure git mirror and service for this project (CLI mode).
-    {
-        let pp = project_path.clone();
-        let pn = project_name.clone();
-        match crate::handlers::ensure_mirror_sync(&pp, &pn) {
-            Ok(mirror_path) => {
-                let (git_tx, _git_rx) = tokio::sync::mpsc::channel::<tillandsias_core::event::BuildProgressEvent>(4);
-                let dummy_state = tillandsias_core::state::TrayState::new(tillandsias_core::state::PlatformInfo {
-                    os: tillandsias_core::state::Os::detect(),
-                    has_podman: true,
-                    has_podman_machine: false,
-                    gpu_devices: vec![],
-                });
-                if let Err(e) = rt.block_on(crate::handlers::ensure_git_service_running(&pn, &mirror_path, &dummy_state, git_tx)) {
-                    if debug {
-                        eprintln!("  [debug] Git service setup failed: {e}");
-                    }
-                }
-            }
-            Err(e) => {
-                if debug {
-                    eprintln!("  [debug] Mirror setup failed: {e}");
-                }
-            }
-        }
     }
 
     // Select profile based on mode: --bash uses terminal profile, otherwise forge.

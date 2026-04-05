@@ -370,18 +370,13 @@ fn main() {
                 }
 
                 // @trace spec:enclave-network, spec:proxy-container
-                // Enclave setup FIRST — proxy must be running before any other image builds.
+                // Infrastructure setup FIRST — proxy must be running before any other image builds.
                 // This ensures forge/git/inference image builds route through the proxy cache.
                 if podman_usable {
                     info!("Setting up enclave network and proxy (required for all operations)");
-                    if let Err(e) = handlers::ensure_enclave_network().await {
-                        warn!(error = %e, "Enclave network setup failed at launch");
-                    }
-                    {
-                        let s = state_for_loop.lock().unwrap().clone();
-                        if let Err(e) = handlers::ensure_proxy_running(&s, build_tx.clone()).await {
-                            warn!(error = %e, "Proxy setup failed at launch — image builds will bypass cache");
-                        }
+                    let s = state_for_loop.lock().unwrap().clone();
+                    if let Err(e) = handlers::ensure_infrastructure_ready(&s, build_tx.clone()).await {
+                        warn!(error = %e, "Infrastructure setup failed at launch — image builds will bypass cache");
                     }
                 }
 

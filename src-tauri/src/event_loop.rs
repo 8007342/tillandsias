@@ -335,11 +335,8 @@ pub async fn run(
                             spec = "proxy-container",
                             "Proxy container not running — restarting"
                         );
-                        if let Err(e) = handlers::ensure_enclave_network().await {
-                            error!(spec = "enclave-network", error = %e, "Failed to ensure enclave network for proxy restart");
-                        }
-                        if let Err(e) = handlers::ensure_proxy_running(&state, build_tx.clone()).await {
-                            error!(spec = "proxy-container", error = %e, "Proxy restart failed");
+                        if let Err(e) = handlers::ensure_infrastructure_ready(&state, build_tx.clone()).await {
+                            error!(spec = "proxy-container", error = %e, "Infrastructure restart failed");
                         }
                     }
                 }

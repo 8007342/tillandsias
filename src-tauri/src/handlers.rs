@@ -98,11 +98,24 @@ pub(crate) async fn ensure_inference_running(
 
     let client = PodmanClient::new();
 
-    // Check if it's running outside our state (e.g., surviving a restart)
+    // Check if it's running outside our state (e.g., surviving a restart).
+    // If running but with a stale image version, stop it and rebuild.
     if let Ok(inspect) = client.inspect_container(INFERENCE_CONTAINER_NAME).await {
         if inspect.state == "running" {
-            debug!(spec = "inference-container", "Inference container already running (discovered)");
-            return Ok(());
+            let expected_tag = inference_image_tag();
+            if inspect.image.contains(&expected_tag) {
+                debug!(spec = "inference-container", "Inference container already running (correct version)");
+                return Ok(());
+            }
+            // Stale version — stop it so we can start the correct one
+            warn!(
+                spec = "inference-container",
+                current = %inspect.image,
+                expected = %expected_tag,
+                "Inference container running stale version — restarting"
+            );
+            let _ = client.stop_container(INFERENCE_CONTAINER_NAME, 5).await;
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
     }
 
@@ -744,11 +757,25 @@ pub(crate) async fn ensure_git_service_running(
 
     let client = PodmanClient::new();
 
-    // Check if it's running outside our state
+    // Check if it's running outside our state.
+    // If running but with a stale image version, stop it and rebuild.
     if let Ok(inspect) = client.inspect_container(&container_name).await {
         if inspect.state == "running" {
-            debug!(spec = "git-mirror-service", project = %project_name, "Git service already running (discovered)");
-            return Ok(());
+            let expected_tag = git_image_tag();
+            if inspect.image.contains(&expected_tag) {
+                debug!(spec = "git-mirror-service", project = %project_name, "Git service already running (correct version)");
+                return Ok(());
+            }
+            // Stale version — stop it so we can start the correct one
+            warn!(
+                spec = "git-mirror-service",
+                project = %project_name,
+                current = %inspect.image,
+                expected = %expected_tag,
+                "Git service running stale version — restarting"
+            );
+            let _ = client.stop_container(&container_name, 5).await;
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
     }
 
@@ -893,10 +920,146 @@ pub(crate) async fn ensure_git_service_running(
     }
 }
 
-/// Public synchronous wrapper around `ensure_mirror` for CLI mode.
-/// @trace spec:git-mirror-service
-pub fn ensure_mirror_sync(project_path: &Path, project_name: &str) -> Result<PathBuf, String> {
-    ensure_mirror(project_path, project_name)
+// ---------------------------------------------------------------------------
+// Unified enclave startup
+// @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container
+// ---------------------------------------------------------------------------
+
+/// Result of a successful enclave readiness check.
+///
+/// Contains any context that callers need after the enclave is ready
+/// (e.g., the mirror path for a project).
+pub struct EnclaveContext {
+    /// Path to the bare git mirror for the project, if one was created.
+    /// `None` when the enclave was set up without a project (infrastructure only).
+    pub mirror_path: Option<PathBuf>,
+}
+
+/// Ensure the full enclave is ready for a project.
+///
+/// This is THE single entry point for all startup flows (tray menu handlers,
+/// CLI mode) that need the complete enclave — network, proxy, inference,
+/// git mirror, and git service.
+///
+/// Steps (in order):
+/// 1. Create enclave network (if absent)
+/// 2. Start proxy (build image if needed, check version, restart if stale)
+/// 3. Start inference (build image if needed, check version, restart if stale)
+/// 4. Initialize git mirror for the project
+/// 5. Start git service for the project (check version, restart if stale)
+///
+/// Inference and git mirror/service failures are non-fatal — the forge will
+/// launch without those capabilities, with warnings logged.
+///
+/// @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container
+pub async fn ensure_enclave_ready(
+    project_path: &Path,
+    project_name: &str,
+    state: &TrayState,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<EnclaveContext, String> {
+    // Step 1+2: Infrastructure services (network + proxy) — hard requirement
+    ensure_infrastructure_ready(state, build_tx.clone()).await?;
+
+    // Step 3: Inference — soft requirement (non-fatal)
+    if let Err(e) = ensure_inference_running(state, build_tx.clone()).await {
+        warn!(
+            error = %e,
+            spec = "inference-container",
+            "Inference setup failed — containers will launch without local inference"
+        );
+    }
+
+    // Step 4+5: Git mirror + service — soft requirement (non-fatal)
+    let mirror_path = match tokio::task::spawn_blocking({
+        let pp = project_path.to_path_buf();
+        let pn = project_name.to_string();
+        move || ensure_mirror(&pp, &pn)
+    })
+    .await
+    {
+        Ok(Ok(mirror_path)) => {
+            if let Err(e) =
+                ensure_git_service_running(project_name, &mirror_path, state, build_tx.clone())
+                    .await
+            {
+                warn!(
+                    error = %e,
+                    spec = "git-mirror-service",
+                    "Git service setup failed — containers will launch without git mirror"
+                );
+            }
+            Some(mirror_path)
+        }
+        Ok(Err(e)) => {
+            warn!(
+                error = %e,
+                spec = "git-mirror-service",
+                "Mirror setup failed — containers will launch without git mirror"
+            );
+            None
+        }
+        Err(e) => {
+            warn!(
+                error = %e,
+                spec = "git-mirror-service",
+                "Mirror setup task panicked — containers will launch without git mirror"
+            );
+            None
+        }
+    };
+
+    Ok(EnclaveContext {
+        mirror_path,
+    })
+}
+
+/// Ensure infrastructure services are ready (network + proxy), without
+/// project-specific services.
+///
+/// Called at tray startup (before any project is selected) and as the first
+/// step of `ensure_enclave_ready()`. Also used by handlers that need the
+/// enclave network and proxy but not git mirror/service (e.g., root terminal,
+/// serve-here).
+///
+/// @trace spec:enclave-network, spec:proxy-container
+pub async fn ensure_infrastructure_ready(
+    state: &TrayState,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<(), String> {
+    ensure_enclave_network().await?;
+    ensure_proxy_running(state, build_tx).await?;
+    Ok(())
+}
+
+/// Ensure the full enclave is ready in CLI (synchronous) mode.
+///
+/// Creates the dummy `TrayState` and `build_tx` channel internally so the
+/// caller doesn't need to manage them. Uses the provided tokio runtime for
+/// async calls.
+///
+/// @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container
+pub fn ensure_enclave_ready_cli(
+    rt: &tokio::runtime::Runtime,
+    project_path: &Path,
+    project_name: &str,
+) -> Result<EnclaveContext, String> {
+    let (build_tx, _build_rx) =
+        tokio::sync::mpsc::channel::<tillandsias_core::event::BuildProgressEvent>(4);
+    let dummy_state = tillandsias_core::state::TrayState::new(
+        tillandsias_core::state::PlatformInfo {
+            os: tillandsias_core::state::Os::detect(),
+            has_podman: true,
+            has_podman_machine: false,
+            gpu_devices: vec![],
+        },
+    );
+    rt.block_on(ensure_enclave_ready(
+        project_path,
+        project_name,
+        &dummy_state,
+        build_tx,
+    ))
 }
 
 /// Stop the git service container for a project. Best-effort, errors are logged.
@@ -1866,55 +2029,9 @@ pub async fn handle_attach_here(
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
 
-    // @trace spec:enclave-network, spec:proxy-container
-    // Ensure the enclave network and proxy are running before launching the forge.
-    ensure_enclave_network().await?;
-    ensure_proxy_running(state, build_tx.clone()).await?;
-
-    // @trace spec:inference-container
-    // Ensure the inference container is running before launching the forge.
-    if let Err(e) = ensure_inference_running(state, build_tx.clone()).await {
-        warn!(error = %e, spec = "inference-container", "Inference setup failed — forge will launch without local inference");
-    }
-
-    // @trace spec:git-mirror-service
-    // Ensure git mirror and service for this project.
-    // Runs synchronously (mirror setup involves git commands) then starts
-    // the detached git service container on the enclave network.
-    match tokio::task::spawn_blocking({
-        let pp = project_path.clone();
-        let pn = project_name.clone();
-        move || ensure_mirror(&pp, &pn)
-    })
-    .await
-    {
-        Ok(Ok(mirror_path)) => {
-            if let Err(e) =
-                ensure_git_service_running(&project_name, &mirror_path, state, build_tx.clone())
-                    .await
-            {
-                warn!(
-                    error = %e,
-                    spec = "git-mirror-service",
-                    "Git service setup failed — forge will launch without git mirror"
-                );
-            }
-        }
-        Ok(Err(e)) => {
-            warn!(
-                error = %e,
-                spec = "git-mirror-service",
-                "Mirror setup failed — forge will launch without git mirror"
-            );
-        }
-        Err(e) => {
-            warn!(
-                error = %e,
-                spec = "git-mirror-service",
-                "Mirror setup task panicked — forge will launch without git mirror"
-            );
-        }
-    }
+    // @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container
+    // Single unified enclave setup: network, proxy, inference, mirror, git service.
+    let _enclave = ensure_enclave_ready(&project_path, &project_name, state, build_tx.clone()).await?;
 
     // Detect whether the project path IS the watch root (e.g., ~/src/) rather
     // than a project inside it. When true, mount at /home/forge/src/ directly
@@ -2236,41 +2353,9 @@ pub async fn handle_terminal(
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
 
-    // @trace spec:enclave-network, spec:proxy-container
-    // Ensure the enclave network and proxy are running before launching the terminal.
-    ensure_enclave_network().await?;
-    ensure_proxy_running(state, build_tx.clone()).await?;
-
-    // @trace spec:inference-container
-    // Ensure the inference container is running before launching the terminal.
-    if let Err(e) = ensure_inference_running(state, build_tx.clone()).await {
-        warn!(error = %e, spec = "inference-container", "Inference setup failed — terminal will launch without local inference");
-    }
-
-    // @trace spec:git-mirror-service
-    // Ensure git mirror and service for this project (same as handle_attach_here).
-    match tokio::task::spawn_blocking({
-        let pp = project_path.clone();
-        let pn = project_name.clone();
-        move || ensure_mirror(&pp, &pn)
-    })
-    .await
-    {
-        Ok(Ok(mirror_path)) => {
-            if let Err(e) =
-                ensure_git_service_running(&project_name, &mirror_path, state, build_tx.clone())
-                    .await
-            {
-                warn!(error = %e, spec = "git-mirror-service", "Git service setup failed — terminal will launch without git mirror");
-            }
-        }
-        Ok(Err(e)) => {
-            warn!(error = %e, spec = "git-mirror-service", "Mirror setup failed — terminal will launch without git mirror");
-        }
-        Err(e) => {
-            warn!(error = %e, spec = "git-mirror-service", "Mirror setup task panicked — terminal will launch without git mirror");
-        }
-    }
+    // @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container
+    // Single unified enclave setup: network, proxy, inference, mirror, git service.
+    let _enclave = ensure_enclave_ready(&project_path, &project_name, state, build_tx.clone()).await?;
 
     // Allocate port range — check actual podman containers for conflicts
     let mut existing_ports: Vec<(u16, u16)> = state.running.iter().map(|c| c.port_range).collect();
@@ -2404,13 +2489,9 @@ pub async fn handle_root_terminal(
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
 
-    // @trace spec:enclave-network, spec:proxy-container
-    // Ensure the enclave network and proxy are running before launching the root terminal.
-    ensure_enclave_network().await?;
-    ensure_proxy_running(state, build_tx.clone()).await?;
-
-    // @trace spec:inference-container
-    // Ensure the inference container is running before launching the root terminal.
+    // @trace spec:enclave-network, spec:proxy-container, spec:inference-container
+    // Infrastructure + inference (no git mirror needed for root terminal).
+    ensure_infrastructure_ready(state, build_tx.clone()).await?;
     if let Err(e) = ensure_inference_running(state, build_tx.clone()).await {
         warn!(error = %e, spec = "inference-container", "Inference setup failed — root terminal will launch without local inference");
     }
@@ -2748,13 +2829,9 @@ pub async fn handle_serve_here(
         detect_document_root(&project_path)
     };
 
-    // @trace spec:enclave-network, spec:proxy-container
-    // Ensure the enclave network and proxy are running before launching the web container.
-    ensure_enclave_network().await?;
-    ensure_proxy_running(state, build_tx.clone()).await?;
-
-    // @trace spec:inference-container
-    // Ensure the inference container is running before launching the web container.
+    // @trace spec:enclave-network, spec:proxy-container, spec:inference-container
+    // Infrastructure + inference (no git mirror needed for web containers).
+    ensure_infrastructure_ready(state, build_tx.clone()).await?;
     if let Err(e) = ensure_inference_running(state, build_tx.clone()).await {
         warn!(error = %e, spec = "inference-container", "Inference setup failed — web server will launch without local inference");
     }
