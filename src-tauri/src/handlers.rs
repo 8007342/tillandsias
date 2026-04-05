@@ -16,7 +16,7 @@
 //!   --rm                        Ephemeral: container removed on exit
 //!
 //! Volume mounts are limited to:
-//!   1. Cache directory (rw)   -- ~/.cache/tillandsias for tool persistence
+//!   (none — proxy handles caching, code comes from git mirror)
 //!
 //! NOT mounted (by design):
 //!   - Project directory (code comes from git mirror service)
@@ -1290,6 +1290,44 @@ fn send_notification(summary: &str, body: &str) {
     }
 }
 
+/// Get the proxy container's IP address on the default "podman" network.
+///
+/// Used to route image builds through the proxy cache. Build containers run
+/// on the host's default network (not the enclave), so we need the proxy's
+/// IP on the "podman" network rather than its enclave alias.
+///
+/// @trace spec:proxy-container
+fn get_proxy_ip() -> Result<String, String> {
+    let output = tillandsias_podman::podman_cmd_sync()
+        .args([
+            "inspect",
+            PROXY_CONTAINER_NAME,
+            "--format",
+            "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}",
+        ])
+        .output()
+        .map_err(|e| format!("inspect failed: {e}"))?;
+
+    if !output.status.success() {
+        return Err("proxy not running".into());
+    }
+
+    // Parse the IPs — prefer the one NOT on the enclave (10.89.0.x).
+    // The podman default network typically uses 10.88.0.x.
+    let ips = String::from_utf8_lossy(&output.stdout);
+    for ip in ips.trim().split_whitespace() {
+        if !ip.starts_with("10.89.") {
+            return Ok(ip.to_string());
+        }
+    }
+    // Fallback: use any IP
+    ips.trim()
+        .split_whitespace()
+        .next()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "no IP found".into())
+}
+
 /// Run `build-image.sh` from the embedded binary scripts.
 ///
 /// Extracts image sources + build scripts to temp, executes, cleans up.
@@ -1367,14 +1405,29 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
     // On Unix, use the build-image.sh script (handles nix + fedora backends).
     #[cfg(not(target_os = "windows"))]
     {
-        let output = std::process::Command::new(&script)
-            .arg(image_name)
+        let mut cmd = std::process::Command::new(&script);
+        cmd.arg(image_name)
             .args(["--tag", &tag, "--backend", "fedora"])
             .current_dir(&source_dir)
             .env_remove("LD_LIBRARY_PATH")
             .env_remove("LD_PRELOAD")
-            .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
-            .output()
+            .env("PODMAN_PATH", tillandsias_podman::find_podman_path());
+
+        // Route image builds through the proxy cache (except the proxy's own build).
+        // Podman automatically forwards HTTP_PROXY/HTTPS_PROXY from the environment
+        // as build args to RUN commands inside the Containerfile.
+        // @trace spec:proxy-container
+        if image_name != "proxy" {
+            if let Ok(ip) = get_proxy_ip() {
+                let proxy_url = format!("http://{}:3128", ip);
+                cmd.env("HTTP_PROXY", &proxy_url);
+                cmd.env("HTTPS_PROXY", &proxy_url);
+                cmd.env("http_proxy", &proxy_url);
+                cmd.env("https_proxy", &proxy_url);
+            }
+        }
+
+        let output = cmd.output()
             .map_err(|e| {
                 error!(script = %script.display(), image = image_name, error = %e, "Failed to launch image build script");
                 strings::SETUP_ERROR
@@ -1409,6 +1462,12 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
 /// launch-time forge auto-build.
 pub fn run_build_image_script_pub(image_name: &str) -> Result<(), String> {
     run_build_image_script(image_name)
+}
+
+/// Public wrapper around `get_proxy_ip` for use from `runner.rs`.
+/// @trace spec:proxy-container
+pub fn get_proxy_ip_pub() -> Result<String, String> {
+    get_proxy_ip()
 }
 
 /// Select the appropriate container profile for a forge launch based on the agent.
@@ -1677,9 +1736,7 @@ pub async fn handle_attach_here(
     // @trace spec:enclave-network, spec:proxy-container
     // Ensure the enclave network and proxy are running before launching the forge.
     ensure_enclave_network().await?;
-    if let Err(e) = ensure_proxy_running(state, build_tx.clone()).await {
-        warn!(error = %e, spec = "proxy-container", "Proxy setup failed — forge will launch without proxy");
-    }
+    ensure_proxy_running(state, build_tx.clone()).await?;
 
     // @trace spec:inference-container
     // Ensure the inference container is running before launching the forge.
@@ -2034,9 +2091,7 @@ pub async fn handle_terminal(
     // @trace spec:enclave-network, spec:proxy-container
     // Ensure the enclave network and proxy are running before launching the terminal.
     ensure_enclave_network().await?;
-    if let Err(e) = ensure_proxy_running(state, build_tx.clone()).await {
-        warn!(error = %e, spec = "proxy-container", "Proxy setup failed — terminal will launch without proxy");
-    }
+    ensure_proxy_running(state, build_tx.clone()).await?;
 
     // @trace spec:inference-container
     // Ensure the inference container is running before launching the terminal.
@@ -2202,9 +2257,7 @@ pub async fn handle_root_terminal(
     // @trace spec:enclave-network, spec:proxy-container
     // Ensure the enclave network and proxy are running before launching the root terminal.
     ensure_enclave_network().await?;
-    if let Err(e) = ensure_proxy_running(state, build_tx.clone()).await {
-        warn!(error = %e, spec = "proxy-container", "Proxy setup failed — root terminal will launch without proxy");
-    }
+    ensure_proxy_running(state, build_tx.clone()).await?;
 
     // @trace spec:inference-container
     // Ensure the inference container is running before launching the root terminal.
@@ -2546,9 +2599,7 @@ pub async fn handle_serve_here(
     // @trace spec:enclave-network, spec:proxy-container
     // Ensure the enclave network and proxy are running before launching the web container.
     ensure_enclave_network().await?;
-    if let Err(e) = ensure_proxy_running(state, build_tx.clone()).await {
-        warn!(error = %e, spec = "proxy-container", "Proxy setup failed — web server will launch without proxy");
-    }
+    ensure_proxy_running(state, build_tx.clone()).await?;
 
     // @trace spec:inference-container
     // Ensure the inference container is running before launching the web container.

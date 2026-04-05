@@ -125,15 +125,28 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
     {
     let mut cmd = std::process::Command::new(&script);
 
-    let status = cmd
-        .arg(image_name)
+    cmd.arg(image_name)
         .args(["--tag", &tag, "--backend", "fedora"])
         .current_dir(&source_dir)
         .env_remove("LD_LIBRARY_PATH")
         .env_remove("LD_PRELOAD")
         // Pass the resolved podman path so build-image.sh can find podman
         // even when launched from Finder (which has a minimal PATH).
-        .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
+        .env("PODMAN_PATH", tillandsias_podman::find_podman_path());
+
+    // Route image builds through the proxy cache (except the proxy's own build).
+    // @trace spec:proxy-container
+    if image_name != "proxy" {
+        if let Ok(ip) = crate::handlers::get_proxy_ip_pub() {
+            let proxy_url = format!("http://{}:3128", ip);
+            cmd.env("HTTP_PROXY", &proxy_url);
+            cmd.env("HTTPS_PROXY", &proxy_url);
+            cmd.env("http_proxy", &proxy_url);
+            cmd.env("https_proxy", &proxy_url);
+        }
+    }
+
+    let status = cmd
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
@@ -373,10 +386,13 @@ pub fn run(
 
     // @trace spec:enclave-network, spec:proxy-container
     // Ensure the enclave network and proxy are running before launching the container.
+    // Proxy is a hard requirement — all containers depend on it for network access.
     if let Err(e) = rt.block_on(crate::handlers::ensure_enclave_network()) {
+        eprintln!("  \u{2717} {}", i18n::t("errors.env_not_ready"));
         if debug {
             eprintln!("  [debug] Enclave network setup failed: {e}");
         }
+        return false;
     }
     // Proxy setup in CLI mode: use a dummy build_tx since there is no tray event loop.
     {
@@ -388,9 +404,11 @@ pub fn run(
             gpu_devices: vec![],
         });
         if let Err(e) = rt.block_on(crate::handlers::ensure_proxy_running(&dummy_state, proxy_tx)) {
+            eprintln!("  \u{2717} Proxy required but failed to start");
             if debug {
                 eprintln!("  [debug] Proxy setup failed: {e}");
             }
+            return false;
         }
     }
 
@@ -477,7 +495,6 @@ pub fn run(
     if !is_enclave {
         println!("  Ports:  {}-{}", base_port.0, base_port.1);
     }
-    println!("  Cache:  {}", tilde_path(&cache));
 
     // @trace spec:secret-management
     // Show credential-free status transparently
@@ -806,14 +823,4 @@ fn run_github_login_git_service(tag: &str) -> bool {
             false
         }
     }
-}
-
-/// Collapse a path's home directory prefix to `~` for display.
-fn tilde_path(path: &Path) -> String {
-    if let Some(home) = dirs::home_dir()
-        && let Ok(suffix) = path.strip_prefix(&home)
-    {
-        return format!("~/{}", suffix.display());
-    }
-    path.display().to_string()
 }

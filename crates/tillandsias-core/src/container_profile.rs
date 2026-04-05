@@ -419,15 +419,10 @@ pub fn git_service_profile() -> ContainerProfile {
 // ---------------------------------------------------------------------------
 
 fn common_forge_mounts() -> Vec<ProfileMount> {
-    // Only the build cache mount remains. Project code comes from the git mirror
+    // No mounts — proxy handles package caching, code comes from git mirror
     // service, and credentials are no longer mounted into forge containers.
-    vec![
-        ProfileMount {
-            host_key: MountSource::CacheDir,
-            container_path: "/home/forge/.cache/tillandsias",
-            mode: MountMode::Rw,
-        },
-    ]
+    // @trace spec:proxy-container
+    vec![]
 }
 
 fn common_forge_env() -> Vec<ProfileEnvVar> {
@@ -562,13 +557,13 @@ mod tests {
     }
 
     #[test]
-    fn forge_profiles_have_one_mount() {
+    fn forge_profiles_have_zero_mounts() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
-        // cache only (project dir, gh, git mounts removed)
-        assert_eq!(opencode.mounts.len(), 1);
-        assert_eq!(claude.mounts.len(), 1);
-        assert_eq!(opencode.mounts[0].container_path, "/home/forge/.cache/tillandsias");
+        // No mounts — proxy handles caching, code comes from git mirror
+        // @trace spec:proxy-container
+        assert_eq!(opencode.mounts.len(), 0);
+        assert_eq!(claude.mounts.len(), 0);
     }
 
     #[test]
