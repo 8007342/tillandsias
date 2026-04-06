@@ -991,6 +991,17 @@ pub async fn ensure_enclave_ready(
         }
     };
 
+    // @trace spec:enclave-network
+    info!(
+        accountability = true,
+        category = "enclave",
+        spec = "enclave-network",
+        proxy = PROXY_CONTAINER_NAME,
+        git_service = %format!("tillandsias-git-{}", project_name),
+        inference = INFERENCE_CONTAINER_NAME,
+        "Enclave ready — forge depends on: proxy (strict:3128), git-service (git://9418), inference (http://11434)"
+    );
+
     Ok(EnclaveContext {
         mirror_path,
     })
@@ -1011,6 +1022,16 @@ pub async fn ensure_infrastructure_ready(
 ) -> Result<(), String> {
     ensure_enclave_network().await?;
     ensure_proxy_running(state, build_tx).await?;
+
+    // @trace spec:enclave-network, spec:proxy-container
+    info!(
+        accountability = true,
+        category = "enclave",
+        spec = "enclave-network",
+        proxy = PROXY_CONTAINER_NAME,
+        "Infrastructure ready — proxy (strict:3128, permissive:3129)"
+    );
+
     Ok(())
 }
 
@@ -1608,6 +1629,17 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
             })?;
 
         crate::embedded::cleanup_image_sources();
+
+        // Clean up any leftover buildah containers from builds
+        // @trace spec:default-image
+        let _ = std::process::Command::new("buildah")
+            .args(["rm", "--all"])
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+
         crate::build_lock::release(image_name);
 
         if !output.status.success() {
@@ -1653,6 +1685,17 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
             })?;
 
         crate::embedded::cleanup_image_sources();
+
+        // Clean up any leftover buildah containers from builds
+        // @trace spec:default-image
+        let _ = std::process::Command::new("buildah")
+            .args(["rm", "--all"])
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+
         crate::build_lock::release(image_name);
 
         if !output.status.success() {

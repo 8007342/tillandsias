@@ -156,8 +156,28 @@ pub fn run_with_force(force: bool) -> bool {
 
     embedded::cleanup_image_sources();
 
+    // Clean up any leftover buildah containers from builds
+    // @trace spec:default-image
+    let _ = std::process::Command::new("buildah")
+        .args(["rm", "--all"])
+        .env_remove("LD_LIBRARY_PATH")
+        .env_remove("LD_PRELOAD")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+
     // Prune old images after building new ones
     prune_old_images();
+
+    // @trace spec:enclave-network, spec:init-command
+    if all_success {
+        println!();
+        println!("  Enclave images:");
+        println!("    \u{2713} proxy      \u{2014} caching HTTPS proxy with domain allowlist");
+        println!("    \u{2713} forge      \u{2014} development environment");
+        println!("    \u{2713} git        \u{2014} git mirror service (bare repos + daemon)");
+        println!("    \u{2713} inference  \u{2014} local LLM (ollama)");
+    }
 
     println!();
     if all_success {

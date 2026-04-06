@@ -129,6 +129,17 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
             })?;
 
         crate::embedded::cleanup_image_sources();
+
+        // Clean up any leftover buildah containers from builds
+        // @trace spec:default-image
+        let _ = std::process::Command::new("buildah")
+            .args(["rm", "--all"])
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+
         crate::build_lock::release(image_name);
 
         if status.success() {
@@ -173,6 +184,17 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         })?;
 
     crate::embedded::cleanup_image_sources();
+
+    // Clean up any leftover buildah containers from builds
+    // @trace spec:default-image
+    let _ = std::process::Command::new("buildah")
+        .args(["rm", "--all"])
+        .env_remove("LD_LIBRARY_PATH")
+        .env_remove("LD_PRELOAD")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+
     crate::build_lock::release(image_name);
 
     if status.success() {
@@ -470,6 +492,13 @@ pub fn run(
         println!("  Git ID:   not configured (run: tillandsias --login)");
     }
     println!("  Code:     cloned from git mirror service (not host mount)");
+
+    // @trace spec:enclave-network
+    println!();
+    println!("  Enclave:");
+    println!("    proxy      \u{2192} strict:3128 (allowlist), permissive:3129 (builds)");
+    println!("    git-service \u{2192} git://9418 (mirror)");
+    println!("    inference  \u{2192} http://11434 (ollama, optional)");
 
     if debug {
         println!();
