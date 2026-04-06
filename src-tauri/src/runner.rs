@@ -159,18 +159,8 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         // even when launched from Finder (which has a minimal PATH).
         .env("PODMAN_PATH", tillandsias_podman::find_podman_path());
 
-    // Route image builds through the proxy's PERMISSIVE port (3129).
-    // Port 3129 allows all domains (mirrors use random hosts). Port 3128 is strict.
-    // @trace spec:proxy-container
-    if image_name != "proxy" {
-        if let Ok(ip) = crate::handlers::get_proxy_ip_pub() {
-            let proxy_url = format!("http://{}:3129", ip);
-            cmd.env("HTTP_PROXY", &proxy_url);
-            cmd.env("HTTPS_PROXY", &proxy_url);
-            cmd.env("http_proxy", &proxy_url);
-            cmd.env("https_proxy", &proxy_url);
-        }
-    }
+    // Image builds do NOT go through the proxy — SSL bump requires CA trust
+    // that build containers don't have. See handlers.rs for full rationale.
 
     let status = cmd
         .stdin(std::process::Stdio::inherit())

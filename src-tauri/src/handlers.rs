@@ -1677,20 +1677,11 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
             .env_remove("LD_PRELOAD")
             .env("PODMAN_PATH", tillandsias_podman::find_podman_path());
 
-        // Route image builds through the proxy's PERMISSIVE port (3129).
-        // Port 3129 allows all domains (Fedora/Alpine mirrors use random third-party hosts).
-        // Port 3128 is the STRICT port for runtime containers (allowlist only).
-        // Both ports share the same disk cache.
+        // Image builds do NOT go through the proxy. SSL bump on port 3129
+        // intercepts HTTPS, but build containers don't have our CA cert
+        // installed — they'd reject the MITM'd certificate. Runtime containers
+        // have the CA chain injected via bind-mount + update-ca-trust.
         // @trace spec:proxy-container
-        if image_name != "proxy" {
-            if let Ok(ip) = get_proxy_ip() {
-                let proxy_url = format!("http://{}:3129", ip);
-                cmd.env("HTTP_PROXY", &proxy_url);
-                cmd.env("HTTPS_PROXY", &proxy_url);
-                cmd.env("http_proxy", &proxy_url);
-                cmd.env("https_proxy", &proxy_url);
-            }
-        }
 
         let output = cmd.output()
             .map_err(|e| {
