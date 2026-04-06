@@ -4,11 +4,16 @@
 # Built on Fedora Minimal to match the forge image.
 FROM registry.fedoraproject.org/fedora-minimal:43
 
-# -- Minimal deps for the ollama install script --
-RUN microdnf install -y bash curl ca-certificates zstd tar gzip \
+# -- Deps for ollama install + GPU detection --
+# pciutils provides lspci (GPU autodetection by ollama installer)
+# @trace spec:inference-container
+RUN microdnf install -y bash curl ca-certificates zstd tar gzip pciutils \
     && microdnf clean all
 
 # -- Install ollama via official script --
+# The installer uses lspci to detect NVIDIA/AMD GPUs and downloads
+# the appropriate GPU libraries (CUDA/ROCm). At runtime, the host GPU
+# is passed through via --device=/dev/nvidia0 etc.
 RUN curl -fsSL https://ollama.com/install.sh | sh
 
 # -- Create non-root user --
