@@ -80,6 +80,21 @@
 .huggingface.co
 .openai.com
 .anthropic.com
+.together.ai
+.groq.com
+.fireworks.ai
+.deepseek.com
+.mistral.ai
+.cerebras.ai
+.sambanova.ai
+
+# --- AI search/tools (used by coding agents) ---
+.exa.ai
+.tavily.com
+.serper.dev
+.brave.com
+.perplexity.ai
+.searchapi.io
 
 # --- Documentation ---
 .docs.rs

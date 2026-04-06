@@ -2,7 +2,7 @@
 # Local LLM inference server for Tillandsias enclave network.
 # Runs ollama — models stay cached via volume mount.
 # Built on Fedora Minimal to match the forge image.
-FROM registry.fedoraproject.org/fedora-minimal:41
+FROM registry.fedoraproject.org/fedora-minimal:43
 
 # -- Minimal deps for the ollama install script --
 RUN microdnf install -y bash curl ca-certificates zstd tar gzip \
