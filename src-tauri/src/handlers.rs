@@ -376,46 +376,9 @@ pub(crate) async fn ensure_proxy_running(
     }
 
     // @trace spec:proxy-container
-    // Generate CA certificates for SSL bump (MITM HTTPS caching).
-    // 1. Ensure root CA exists (long-lived, persisted on host)
-    // 2. Generate ephemeral intermediate CA (30-day, written to tmpfs)
-    // 3. Build the CA chain (intermediate + root) for forge trust injection
-    let (root_cert_path, root_key_path) = crate::ca::ensure_root_ca()?;
-    let (intermediate_cert_pem, intermediate_key_pem) =
-        crate::ca::generate_intermediate_ca(&root_cert_path, &root_key_path)?;
-    let chain_pem = crate::ca::ca_chain_pem(&root_cert_path, &intermediate_cert_pem)?;
-
-    // Write intermediate cert/key and chain to tmpfs for bind-mounting
-    let certs_dir = crate::ca::proxy_certs_dir();
-    std::fs::create_dir_all(&certs_dir)
-        .map_err(|e| format!("Failed to create proxy certs dir: {e}"))?;
-
-    let int_cert_path = certs_dir.join("intermediate.crt");
-    let int_key_path = certs_dir.join("intermediate.key");
-    let chain_path = certs_dir.join("ca-chain.crt");
-
-    std::fs::write(&int_cert_path, &intermediate_cert_pem)
-        .map_err(|e| format!("Failed to write intermediate cert: {e}"))?;
-    std::fs::write(&int_key_path, &intermediate_key_pem)
-        .map_err(|e| format!("Failed to write intermediate key: {e}"))?;
-    std::fs::write(&chain_path, &chain_pem)
-        .map_err(|e| format!("Failed to write CA chain: {e}"))?;
-
-    // Set key file to mode 0600 (owner read/write only)
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&int_key_path, std::fs::Permissions::from_mode(0o600))
-            .map_err(|e| format!("Failed to set intermediate key permissions: {e}"))?;
-    }
-
-    info!(
-        accountability = true,
-        category = "ca",
-        spec = "proxy-container",
-        "CA certificates written to tmpfs at {}",
-        certs_dir.display()
-    );
+    // Generate ephemeral CA chain (root + intermediate) fresh on every launch.
+    // Everything on tmpfs — dies with the session. Takes ~5ms.
+    let certs_dir = crate::ca::generate_ephemeral_certs()?;
 
     // Build proxy container args using the profile + LaunchContext
     let profile = tillandsias_core::container_profile::proxy_profile();
@@ -461,14 +424,14 @@ pub(crate) async fn ensure_proxy_running(
         run_args.len() - 1,
         format!(
             "-v={}:/etc/squid/certs/intermediate.crt:ro",
-            int_cert_path.display()
+            certs_dir.join("intermediate.crt").display()
         ),
     );
     run_args.insert(
         run_args.len() - 1,
         format!(
             "-v={}:/etc/squid/certs/intermediate.key:ro",
-            int_key_path.display()
+            certs_dir.join("intermediate.key").display()
         ),
     );
 
