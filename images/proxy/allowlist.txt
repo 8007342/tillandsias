@@ -47,6 +47,7 @@
 .gradle.org
 .google.com
 .microsoft.com
+.opencode.ai
 
 # --- VCS (git dependencies) ---
 .github.com

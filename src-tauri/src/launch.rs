@@ -329,7 +329,33 @@ pub fn read_git_identity(cache_dir: &Path) -> (String, String) {
         }
     }
 
-    (name, email)
+    // Sanitize to prevent command injection via env vars.
+    // Rust's Command API doesn't use a shell, but defense-in-depth
+    // strips control chars and suspicious sequences.
+    // @trace spec:podman-orchestration
+    (sanitize_identity(&name), sanitize_identity(&email))
+}
+
+/// Strip potentially dangerous characters from user identity strings.
+/// Allows Unicode letters, numbers, spaces, and common name/email chars.
+/// @trace spec:podman-orchestration
+fn sanitize_identity(input: &str) -> String {
+    input
+        .chars()
+        .filter(|c| {
+            // Allow printable chars, reject control chars and shell metacharacters
+            !c.is_control()
+                && *c != ';'
+                && *c != '|'
+                && *c != '&'
+                && *c != '`'
+                && *c != '$'
+                && *c != '\\'
+                && *c != '"'
+                && *c != '\''
+        })
+        .take(256) // max length
+        .collect()
 }
 
 /// Ensure secrets directories exist and return their paths.
