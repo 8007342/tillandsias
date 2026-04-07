@@ -500,6 +500,11 @@ mod tests {
             assert!(args.contains(&"--rm".to_string()));
             assert!(args.contains(&"--init".to_string()));
             assert!(args.contains(&"--stop-timeout=10".to_string()));
+            // pids-limit must always be present
+            assert!(
+                args.iter().any(|a| a.starts_with("--pids-limit=")),
+                "Missing --pids-limit"
+            );
         }
     }
 
@@ -817,5 +822,100 @@ mod tests {
             !last.starts_with('-'),
             "Last arg should be image tag, got: {last}"
         );
+    }
+
+    // @trace spec:podman-orchestration, spec:secret-management
+    #[test]
+    fn pids_limit_per_container_type() {
+        let cases: Vec<(container_profile::ContainerProfile, u32)> = vec![
+            (container_profile::forge_opencode_profile(), 512),
+            (container_profile::forge_claude_profile(), 512),
+            (container_profile::terminal_profile(), 512),
+            (container_profile::git_service_profile(), 64),
+            (container_profile::proxy_profile(), 32),
+            (container_profile::inference_profile(), 128),
+            (container_profile::web_profile(), 32),
+        ];
+
+        // SAFETY: Test-only env var manipulation.
+        unsafe { std::env::remove_var("DBUS_SESSION_BUS_ADDRESS") };
+
+        for (profile, expected_limit) in &cases {
+            let mut ctx = test_context();
+            ctx.token_file_path = None;
+            let args = build_podman_args(profile, &ctx);
+            let expected = format!("--pids-limit={expected_limit}");
+            assert!(
+                args.contains(&expected),
+                "Expected {expected} for profile with entrypoint {}",
+                profile.entrypoint
+            );
+        }
+    }
+
+    // @trace spec:podman-orchestration
+    #[test]
+    fn service_containers_have_read_only_fs() {
+        let read_only_profiles = [
+            container_profile::git_service_profile(),
+            container_profile::proxy_profile(),
+            container_profile::inference_profile(),
+            container_profile::web_profile(),
+        ];
+
+        // SAFETY: Test-only env var manipulation.
+        unsafe { std::env::remove_var("DBUS_SESSION_BUS_ADDRESS") };
+
+        for profile in &read_only_profiles {
+            let mut ctx = test_context();
+            ctx.token_file_path = None;
+            let args = build_podman_args(profile, &ctx);
+            assert!(
+                args.contains(&"--read-only".to_string()),
+                "Service container {} should have --read-only",
+                profile.entrypoint
+            );
+            // All read-only containers must have at least /tmp as tmpfs
+            assert!(
+                args.contains(&"--tmpfs=/tmp".to_string()),
+                "Read-only container {} should have --tmpfs=/tmp",
+                profile.entrypoint
+            );
+        }
+    }
+
+    // @trace spec:podman-orchestration
+    #[test]
+    fn forge_containers_are_not_read_only() {
+        let mutable_profiles = [
+            container_profile::forge_opencode_profile(),
+            container_profile::forge_claude_profile(),
+            container_profile::terminal_profile(),
+        ];
+
+        for profile in &mutable_profiles {
+            let args = build_podman_args(profile, &test_context());
+            assert!(
+                !args.contains(&"--read-only".to_string()),
+                "Forge/terminal {} should NOT have --read-only",
+                profile.entrypoint
+            );
+        }
+    }
+
+    // @trace spec:proxy-container
+    #[test]
+    fn proxy_has_squid_tmpfs_mounts() {
+        // SAFETY: Test-only env var manipulation.
+        unsafe { std::env::remove_var("DBUS_SESSION_BUS_ADDRESS") };
+
+        let profile = container_profile::proxy_profile();
+        let mut ctx = test_context();
+        ctx.token_file_path = None;
+        let args = build_podman_args(&profile, &ctx);
+        assert!(args.contains(&"--tmpfs=/var/run/squid".to_string()),
+            "Proxy must have --tmpfs=/var/run/squid");
+        assert!(args.contains(&"--tmpfs=/var/log/squid".to_string()),
+            "Proxy must have --tmpfs=/var/log/squid");
     }
 }

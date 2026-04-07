@@ -2902,15 +2902,19 @@ pub async fn handle_serve_here(
 
     // Build `podman run` command for the web container.
     //
-    // Security guarantees (audited 2026-03-29):
+    // Security guarantees (audited 2026-03-29, hardened 2026-04-05):
     //   - --cap-drop=ALL             No Linux capabilities
     //   - --security-opt=no-new-privileges  No suid escalation
     //   - --userns=keep-id           Rootless, host UID mapped
     //   - --security-opt=label=disable  Bind mount on Silverblue
     //   - --rm                       Ephemeral, removed on exit
+    //   - --pids-limit=32            Only httpd processes allowed
+    //   - --read-only                Immutable root filesystem
+    //   - --tmpfs /tmp, /var/run     Runtime dirs only
     //   - Only mount: document_root → /var/www:ro (read-only)
     //   - Port: 127.0.0.1:<port>:8080 — localhost only, no external exposure
     //   - NO secrets mounted (no gh, no git, no claude, no API keys)
+    // @trace spec:podman-orchestration, spec:secret-management
     let podman_bin = tillandsias_podman::find_podman_path();
     let podman_cmd = format!(
         "{podman_bin} run -it --rm --init --stop-timeout=10 \
@@ -2919,6 +2923,10 @@ pub async fn handle_serve_here(
         --security-opt=no-new-privileges \
         --userns=keep-id \
         --security-opt=label=disable \
+        --pids-limit=32 \
+        --read-only \
+        --tmpfs=/tmp \
+        --tmpfs=/var/run \
         -p 127.0.0.1:{port}:8080 \
         -v {}:/var/www:ro \
         {web_image}",

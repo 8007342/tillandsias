@@ -36,6 +36,21 @@ pub struct ContainerProfile {
 
     /// Override the default image tag (e.g., web uses `tillandsias-web`).
     pub image_override: Option<&'static str>,
+
+    /// Process limit (`--pids-limit`). Prevents fork bombs and constrains
+    /// each container to its intended workload.
+    /// @trace spec:secret-management, spec:podman-orchestration
+    pub pids_limit: u32,
+
+    /// Make the root filesystem read-only (`--read-only`). Service containers
+    /// (git, proxy, inference) use this; forge/terminal need mutable workspace.
+    /// @trace spec:podman-orchestration
+    pub read_only: bool,
+
+    /// Tmpfs mounts for runtime directories when `read_only` is true.
+    /// Each entry is a container path (e.g., "/tmp", "/var/run/squid").
+    /// @trace spec:podman-orchestration
+    pub tmpfs_mounts: Vec<&'static str>,
 }
 
 /// A volume mount with a logical host key resolved at launch time.
@@ -206,6 +221,9 @@ pub fn forge_opencode_profile() -> ContainerProfile {
         env_vars: common_forge_env(),
         secrets: vec![],
         image_override: None,
+        pids_limit: 512,      // Compilers, language servers, AI tools
+        read_only: false,      // Forge needs mutable workspace
+        tmpfs_mounts: vec![],
     }
 }
 
@@ -219,6 +237,9 @@ pub fn forge_claude_profile() -> ContainerProfile {
         env_vars: common_forge_env(),
         secrets: vec![],
         image_override: None,
+        pids_limit: 512,      // Compilers, language servers, AI tools
+        read_only: false,      // Forge needs mutable workspace
+        tmpfs_mounts: vec![],
     }
 }
 
@@ -230,6 +251,9 @@ pub fn terminal_profile() -> ContainerProfile {
         // Setting -w would fail because the directory doesn't exist until after clone.
         working_dir: None,
         mounts: common_forge_mounts(),
+        pids_limit: 512,      // Same as forge (maintenance shell)
+        read_only: false,      // Terminal needs mutable workspace
+        tmpfs_mounts: vec![],
         env_vars: vec![
             ProfileEnvVar {
                 name: "TILLANDSIAS_PROJECT",
@@ -319,6 +343,9 @@ pub fn web_profile() -> ContainerProfile {
         env_vars: vec![],
         secrets: vec![],
         image_override: Some("tillandsias-web:latest"),
+        pids_limit: 32,        // Only httpd
+        read_only: true,       // Static file server — no writes needed
+        tmpfs_mounts: vec!["/tmp", "/var/run"],
     }
 }
 
@@ -347,6 +374,9 @@ pub fn proxy_profile() -> ContainerProfile {
         env_vars: vec![],
         secrets: vec![],
         image_override: None,
+        pids_limit: 32,        // Only squid + helpers
+        read_only: true,       // Service container — immutable root FS
+        tmpfs_mounts: vec!["/tmp", "/var/run/squid", "/var/log/squid"],
     }
 }
 
@@ -386,6 +416,9 @@ pub fn inference_profile() -> ContainerProfile {
         ],
         secrets: vec![],  // No credentials needed
         image_override: None,
+        pids_limit: 128,       // Ollama server + model runners
+        read_only: true,       // Service container — immutable root FS
+        tmpfs_mounts: vec!["/tmp"],
     }
 }
 
@@ -399,7 +432,7 @@ pub fn inference_profile() -> ContainerProfile {
 /// forwarding (primary, for host keyring access) and a GitHub token fallback
 /// for environments where D-Bus is unavailable.
 ///
-/// @trace spec:git-mirror-service
+/// @trace spec:git-mirror-service, spec:secret-management
 pub fn git_service_profile() -> ContainerProfile {
     ContainerProfile {
         entrypoint: "/usr/local/bin/entrypoint.sh",
@@ -415,6 +448,9 @@ pub fn git_service_profile() -> ContainerProfile {
             },
         ],
         image_override: None,
+        pids_limit: 64,        // Only git-daemon + git processes
+        read_only: true,       // Service container — immutable root FS
+        tmpfs_mounts: vec!["/tmp"],
     }
 }
 
@@ -719,5 +755,85 @@ mod tests {
                 "Tool binary {bin} must be under {container_mount}"
             );
         }
+    }
+
+    // @trace spec:podman-orchestration, spec:secret-management
+    #[test]
+    fn all_profiles_have_pids_limit() {
+        let profiles = [
+            ("forge_opencode", forge_opencode_profile()),
+            ("forge_claude", forge_claude_profile()),
+            ("terminal", terminal_profile()),
+            ("web", web_profile()),
+            ("proxy", proxy_profile()),
+            ("inference", inference_profile()),
+            ("git_service", git_service_profile()),
+        ];
+
+        for (name, profile) in &profiles {
+            assert!(
+                profile.pids_limit > 0,
+                "Profile {name} must have a non-zero pids_limit"
+            );
+        }
+    }
+
+    // @trace spec:podman-orchestration, spec:secret-management
+    #[test]
+    fn pids_limits_match_container_roles() {
+        assert_eq!(forge_opencode_profile().pids_limit, 512, "Forge opencode: compilers + LSP + AI");
+        assert_eq!(forge_claude_profile().pids_limit, 512, "Forge claude: compilers + LSP + AI");
+        assert_eq!(terminal_profile().pids_limit, 512, "Terminal: same as forge");
+        assert_eq!(git_service_profile().pids_limit, 64, "Git service: git-daemon + git only");
+        assert_eq!(proxy_profile().pids_limit, 32, "Proxy: squid + helpers only");
+        assert_eq!(inference_profile().pids_limit, 128, "Inference: ollama + model runners");
+        assert_eq!(web_profile().pids_limit, 32, "Web: httpd only");
+    }
+
+    // @trace spec:podman-orchestration
+    #[test]
+    fn service_containers_are_read_only() {
+        assert!(git_service_profile().read_only, "Git service must be read-only");
+        assert!(proxy_profile().read_only, "Proxy must be read-only");
+        assert!(inference_profile().read_only, "Inference must be read-only");
+        assert!(web_profile().read_only, "Web must be read-only");
+    }
+
+    // @trace spec:podman-orchestration
+    #[test]
+    fn forge_containers_are_not_read_only() {
+        assert!(!forge_opencode_profile().read_only, "Forge opencode must NOT be read-only");
+        assert!(!forge_claude_profile().read_only, "Forge claude must NOT be read-only");
+        assert!(!terminal_profile().read_only, "Terminal must NOT be read-only");
+    }
+
+    // @trace spec:podman-orchestration
+    #[test]
+    fn read_only_containers_have_tmpfs_mounts() {
+        let profiles = [
+            ("git_service", git_service_profile()),
+            ("proxy", proxy_profile()),
+            ("inference", inference_profile()),
+            ("web", web_profile()),
+        ];
+
+        for (name, profile) in &profiles {
+            assert!(
+                profile.read_only,
+                "Profile {name} should be read-only"
+            );
+            assert!(
+                profile.tmpfs_mounts.contains(&"/tmp"),
+                "Read-only profile {name} must have /tmp as tmpfs"
+            );
+        }
+    }
+
+    // @trace spec:proxy-container
+    #[test]
+    fn proxy_has_squid_runtime_tmpfs() {
+        let profile = proxy_profile();
+        assert!(profile.tmpfs_mounts.contains(&"/var/run/squid"), "Proxy must have /var/run/squid tmpfs");
+        assert!(profile.tmpfs_mounts.contains(&"/var/log/squid"), "Proxy must have /var/log/squid tmpfs");
     }
 }

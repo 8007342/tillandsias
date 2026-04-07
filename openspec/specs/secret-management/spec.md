@@ -185,6 +185,40 @@ All credential operations SHALL be logged to the `--log-secret-management` accou
 - **WHEN** a token file is deleted on container stop or app exit
 - **THEN** an accountability log entry SHALL record the revocation event with the container name
 
+### Requirement: Process isolation and hardening
+
+Each container type SHALL have a `--pids-limit` matching its intended workload, preventing fork bombs and constraining process count. Service containers (git, proxy, inference, web) SHALL run with `--read-only` root filesystems with explicit `--tmpfs` mounts for runtime directories.
+
+@trace spec:secret-management
+
+#### Scenario: Git service process isolation
+- **WHEN** a git service container is launched
+- **THEN** it SHALL have `--pids-limit=64` (only git-daemon + git processes)
+- **AND** it SHALL be the sole container with D-Bus session bus access
+- **AND** it SHALL run with `--read-only` root filesystem and `--tmpfs=/tmp`
+
+#### Scenario: Forge containers have zero credential mounts and zero D-Bus
+- **WHEN** a forge container (opencode, claude) or terminal container is launched
+- **THEN** it SHALL have `--pids-limit=512` (compilers, language servers, AI tools)
+- **AND** it SHALL have zero D-Bus access, zero credential mounts
+- **AND** it SHALL NOT have `--read-only` (mutable workspace required)
+
+#### Scenario: Proxy container has CA certs only
+- **WHEN** the proxy container is launched
+- **THEN** it SHALL have `--pids-limit=32` (only squid + helpers)
+- **AND** it SHALL have only CA certificate mounts — no credentials, no D-Bus, no tokens
+- **AND** it SHALL run with `--read-only` root filesystem and `--tmpfs=/tmp --tmpfs=/var/run/squid --tmpfs=/var/log/squid`
+
+#### Scenario: Inference container has no credentials
+- **WHEN** the inference container is launched
+- **THEN** it SHALL have `--pids-limit=128` (ollama server + model runners)
+- **AND** it SHALL run with `--read-only` root filesystem and `--tmpfs=/tmp`
+
+#### Scenario: Web container is maximally restricted
+- **WHEN** a web container is launched
+- **THEN** it SHALL have `--pids-limit=32` (only httpd)
+- **AND** it SHALL run with `--read-only` root filesystem and `--tmpfs=/tmp --tmpfs=/var/run`
+
 ### Requirement: AppImage environment sanitization
 
 The authentication script SHALL unset `LD_LIBRARY_PATH` and `LD_PRELOAD` before invoking podman. These variables are set by AppImage extraction and break podman's ability to launch containers.
