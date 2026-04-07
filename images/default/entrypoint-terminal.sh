@@ -16,11 +16,19 @@ source /usr/local/lib/tillandsias/lib-common.sh
 CA_CHAIN="/run/tillandsias/ca-chain.crt"
 if [ -f "$CA_CHAIN" ]; then
     if command -v update-ca-trust &>/dev/null; then
-        cp "$CA_CHAIN" /etc/pki/ca-trust/source/anchors/tillandsias-ca.crt 2>/dev/null && \
-        update-ca-trust 2>/dev/null || true
+        if ! cp "$CA_CHAIN" /etc/pki/ca-trust/source/anchors/tillandsias-ca.crt 2>/dev/null; then
+            echo "[entrypoint] WARNING: Failed to install CA certificate — proxy HTTPS caching may not work" >&2
+        fi
+        if ! update-ca-trust 2>/dev/null; then
+            echo "[entrypoint] WARNING: Failed to update CA trust store" >&2
+        fi
     elif command -v update-ca-certificates &>/dev/null; then
-        cp "$CA_CHAIN" /usr/local/share/ca-certificates/tillandsias-ca.crt 2>/dev/null && \
-        update-ca-certificates 2>/dev/null || true
+        if ! cp "$CA_CHAIN" /usr/local/share/ca-certificates/tillandsias-ca.crt 2>/dev/null; then
+            echo "[entrypoint] WARNING: Failed to install CA certificate — proxy HTTPS caching may not work" >&2
+        fi
+        if ! update-ca-certificates 2>/dev/null; then
+            echo "[entrypoint] WARNING: Failed to update CA trust store" >&2
+        fi
     fi
 fi
 
@@ -41,7 +49,9 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
             cd "$CLONE_DIR"
             # Configure push back to mirror
             # @trace spec:git-mirror-service
-            git remote set-url --push origin "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" 2>/dev/null || true
+            if ! git remote set-url --push origin "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" 2>/dev/null; then
+                echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
+            fi
             # Set git identity from host config
             # @trace spec:forge-offline
             if [[ -n "${GIT_AUTHOR_NAME:-}" ]]; then
@@ -79,7 +89,10 @@ trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
 # ── OpenSpec init (every launch, silent) ────────────────────
 if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
-    "$OS_BIN" init </dev/null >/dev/null 2>&1 || true
+    if ! OS_OUTPUT=$("$OS_BIN" init </dev/null 2>&1); then
+        echo "[entrypoint] WARNING: OpenSpec init failed — /opsx commands may not work" >&2
+        echo "[entrypoint] $OS_OUTPUT" >&2
+    fi
 fi
 
 # ── Welcome banner ──────────────────────────────────────────

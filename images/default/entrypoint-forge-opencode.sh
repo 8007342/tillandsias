@@ -13,11 +13,19 @@ source /usr/local/lib/tillandsias/lib-common.sh
 CA_CHAIN="/run/tillandsias/ca-chain.crt"
 if [ -f "$CA_CHAIN" ]; then
     if command -v update-ca-trust &>/dev/null; then
-        cp "$CA_CHAIN" /etc/pki/ca-trust/source/anchors/tillandsias-ca.crt 2>/dev/null && \
-        update-ca-trust 2>/dev/null || true
+        if ! cp "$CA_CHAIN" /etc/pki/ca-trust/source/anchors/tillandsias-ca.crt 2>/dev/null; then
+            echo "[entrypoint] WARNING: Failed to install CA certificate — proxy HTTPS caching may not work" >&2
+        fi
+        if ! update-ca-trust 2>/dev/null; then
+            echo "[entrypoint] WARNING: Failed to update CA trust store" >&2
+        fi
     elif command -v update-ca-certificates &>/dev/null; then
-        cp "$CA_CHAIN" /usr/local/share/ca-certificates/tillandsias-ca.crt 2>/dev/null && \
-        update-ca-certificates 2>/dev/null || true
+        if ! cp "$CA_CHAIN" /usr/local/share/ca-certificates/tillandsias-ca.crt 2>/dev/null; then
+            echo "[entrypoint] WARNING: Failed to install CA certificate — proxy HTTPS caching may not work" >&2
+        fi
+        if ! update-ca-certificates 2>/dev/null; then
+            echo "[entrypoint] WARNING: Failed to update CA trust store" >&2
+        fi
     fi
 fi
 
@@ -38,7 +46,9 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
             cd "$CLONE_DIR"
             # Configure push back to mirror
             # @trace spec:git-mirror-service
-            git remote set-url --push origin "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" 2>/dev/null || true
+            if ! git remote set-url --push origin "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" 2>/dev/null; then
+                echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
+            fi
             # Set git identity from host config
             # @trace spec:forge-offline
             if [[ -n "${GIT_AUTHOR_NAME:-}" ]]; then
@@ -126,8 +136,13 @@ ensure_opencode() {
         trace_lifecycle "install" "opencode: fresh install via curl"
         set +e
         export OPENCODE_INSTALL_DIR="$OC_DIR"
-        spin "${L_INSTALLING_OPENCODE:-Installing OpenCode...}" bash -c 'curl -fsSL https://opencode.ai/install | bash' 2>&1
+        OC_OUTPUT=$(spin "${L_INSTALLING_OPENCODE:-Installing OpenCode...}" bash -c 'curl -fsSL https://opencode.ai/install | bash' 2>&1)
+        OC_EXIT=$?
         set -e
+        if [ $OC_EXIT -ne 0 ]; then
+            echo "[entrypoint] WARNING: OpenCode installer exited with code $OC_EXIT" >&2
+            echo "[entrypoint] $OC_OUTPUT" >&2
+        fi
 
         # If installer ignored OPENCODE_INSTALL_DIR (common), relocate binary
         if [ ! -x "$OC_BIN" ] && [ -f "$OC_NATIVE" ]; then
@@ -151,8 +166,13 @@ ensure_opencode() {
     fi
     trace_lifecycle "update" "opencode: checking for updates..."
     set +e
-    spin "${L_INSTALLING_OPENCODE:-Installing OpenCode...}" bash -c 'curl -fsSL https://opencode.ai/install | bash'
+    OC_OUTPUT=$(spin "${L_INSTALLING_OPENCODE:-Installing OpenCode...}" bash -c 'curl -fsSL https://opencode.ai/install | bash' 2>&1)
+    OC_EXIT=$?
     set -e
+    if [ $OC_EXIT -ne 0 ]; then
+        echo "[entrypoint] WARNING: OpenCode update exited with code $OC_EXIT" >&2
+        echo "[entrypoint] $OC_OUTPUT" >&2
+    fi
     # Refresh wrapper/copy if updated
     if [ -f "$OC_NATIVE" ]; then
         _make_opencode_wrapper
@@ -180,7 +200,10 @@ trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 # Always run to ensure /opsx commands are available, even if the project
 # was cloned without openspec config. Idempotent — no-ops if already set up.
 if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
-    "$OS_BIN" init --tools opencode </dev/null >/dev/null 2>&1 || true
+    if ! OS_OUTPUT=$("$OS_BIN" init --tools opencode </dev/null 2>&1); then
+        echo "[entrypoint] WARNING: OpenSpec init failed — /opsx commands may not work" >&2
+        echo "[entrypoint] $OS_OUTPUT" >&2
+    fi
 fi
 
 # ── Banner ──────────────────────────────────────────────────
