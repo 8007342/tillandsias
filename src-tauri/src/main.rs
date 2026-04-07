@@ -222,7 +222,9 @@ fn main() {
                                     if let Ok(icon) = tauri::image::Image::from_bytes(
                                         icons::tray_icon_png(TrayIconState::Mature),
                                     ) {
-                                        let _ = tray.set_icon(Some(icon));
+                                        if let Err(e) = tray.set_icon(Some(icon)) {
+                                            debug!(error = %e, "Tray icon update failed (cosmetic)");
+                                        }
                                     }
                                 }
                             }
@@ -314,7 +316,9 @@ fn main() {
                         if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
                             TrayIconState::Dried,
                         )) {
-                            let _ = tray.set_icon(Some(icon));
+                            if let Err(e) = tray.set_icon(Some(icon)) {
+                                debug!(error = %e, "Tray icon update failed (cosmetic)");
+                            }
                         }
                     }
                     // Rebuild menu to show Dried state
@@ -506,9 +510,11 @@ fn main() {
 
                         // Notify the event loop and update the icon to Building.
                         // forge_available remains false (already the default).
-                        let _ = build_tx.try_send(BuildProgressEvent::Started {
+                        if build_tx.try_send(BuildProgressEvent::Started {
                             image_name: chip_name.clone(),
-                        });
+                        }).is_err() {
+                            debug!("Build progress channel full/closed — UI may show stale state");
+                        }
                         {
                             let mut s = state_for_loop.lock().unwrap();
                             s.active_builds
@@ -527,7 +533,9 @@ fn main() {
                             if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
                                 TrayIconState::Building,
                             )) {
-                                let _ = tray.set_icon(Some(icon));
+                                if let Err(e) = tray.set_icon(Some(icon)) {
+                                    debug!(error = %e, "Tray icon update failed (cosmetic)");
+                                }
                             }
                         }
                         rebuild_menu(&app_handle_for_loop, &state_for_loop);
@@ -547,9 +555,11 @@ fn main() {
                                     let mut s = state_for_loop.lock().unwrap();
                                     s.forge_available = true;
                                 }
-                                let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                                if build_tx.try_send(BuildProgressEvent::Completed {
                                     image_name: chip_name,
-                                });
+                                }).is_err() {
+                                    debug!("Build progress channel full/closed — UI may show stale state");
+                                }
                                 // @trace spec:tray-app
                                 // Desktop notification so the user knows the forge is ready,
                                 // even if they're not watching the tray menu.
@@ -560,17 +570,21 @@ fn main() {
                             }
                             Ok(Err(ref e)) => {
                                 warn!(error = %e, "Auto forge build failed at launch");
-                                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                                if build_tx.try_send(BuildProgressEvent::Failed {
                                     image_name: chip_name,
                                     reason: e.clone(),
-                                });
+                                }).is_err() {
+                                    debug!("Build progress channel full/closed — UI may show stale state");
+                                }
                             }
                             Err(ref e) => {
                                 warn!(error = %e, "Auto forge build task panicked at launch");
-                                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                                if build_tx.try_send(BuildProgressEvent::Failed {
                                     image_name: chip_name,
                                     reason: format!("Build task panicked: {e}"),
-                                });
+                                }).is_err() {
+                                    debug!("Build progress channel full/closed — UI may show stale state");
+                                }
                             }
                         }
                     } else {
@@ -588,7 +602,9 @@ fn main() {
                             if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
                                 TrayIconState::Mature,
                             )) {
-                                let _ = tray.set_icon(Some(icon));
+                                if let Err(e) = tray.set_icon(Some(icon)) {
+                                    debug!(error = %e, "Tray icon update failed (cosmetic)");
+                                }
                             }
                         }
                         rebuild_menu(&app_handle_for_loop, &state_for_loop);
@@ -678,7 +694,9 @@ fn main() {
                                     new_icon_state,
                                 )) {
                                     Ok(icon) => {
-                                        let _ = tray.set_icon(Some(icon));
+                                        if let Err(e) = tray.set_icon(Some(icon)) {
+                                            debug!(error = %e, "Tray icon update failed (cosmetic)");
+                                        }
                                         debug!(
                                             old = ?old_icon_state,
                                             new = ?new_icon_state,
@@ -795,7 +813,9 @@ fn rebuild_menu(app_handle: &tauri::AppHandle, state: &Arc<Mutex<TrayState>>) {
             if let Some(tray_lock) = TRAY_ICON.get()
                 && let Ok(tray) = tray_lock.lock()
             {
-                let _ = tray.set_menu(Some(new_menu));
+                if let Err(e) = tray.set_menu(Some(new_menu)) {
+                    debug!(error = %e, "Tray menu update failed (cosmetic)");
+                }
                 debug!(
                     projects = s.projects.len(),
                     running = s.running.len(),
@@ -891,6 +911,8 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
     };
 
     if let Some(cmd) = command {
-        let _ = tx.try_send(cmd);
+        if tx.try_send(cmd).is_err() {
+            debug!("Menu command channel full/closed — action may be dropped");
+        }
     }
 }
