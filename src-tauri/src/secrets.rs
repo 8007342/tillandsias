@@ -79,7 +79,7 @@ pub fn retrieve_github_token() -> Result<Option<String>, String> {
             info!(
                 accountability = true,
                 category = "secrets",
-                safety = "Never written to disk, injected via bind mount",
+                safety = "Retrieved via D-Bus session bus, never written to disk",
                 spec = "native-secrets-store",
                 "GitHub token retrieved from OS keyring"
             );
