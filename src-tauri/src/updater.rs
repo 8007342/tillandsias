@@ -19,7 +19,6 @@ use crate::update_log;
 /// Shared state for tracking whether an update is available across tray
 /// menu rebuilds and user interactions.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct UpdateState {
     /// The new version string (e.g., "0.2.0") when an update is available.
     pub available_version: Arc<Mutex<Option<String>>>,

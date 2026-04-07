@@ -256,7 +256,7 @@ where
             // Accountability format:
             //   TIMESTAMP LEVEL [category] message {extra fields}
             //     -> safety note
-            //     @trace spec:name https://...
+            //     @trace spec:logging-accountability
             let cat = fields.category.as_deref().unwrap_or("unknown");
 
             if ansi {
