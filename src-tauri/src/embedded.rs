@@ -16,7 +16,7 @@ use std::path::PathBuf;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// Convert a path to MSYS2 format suitable for Git Bash.
 ///
@@ -234,16 +234,22 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     .map_err(|e| format!("build-tools-overlay.sh: {e}"))?;
     #[cfg(unix)]
     {
-        fs::set_permissions(
-            scripts_dir.join("build-image.sh"),
-            fs::Permissions::from_mode(0o700),
-        )
-        .ok();
-        fs::set_permissions(
-            scripts_dir.join("build-tools-overlay.sh"),
-            fs::Permissions::from_mode(0o700),
-        )
-        .ok();
+        let path = scripts_dir.join("build-image.sh");
+        if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o700)) {
+            warn!(
+                file = %path.display(),
+                error = %e,
+                "Failed to set executable permission — container entrypoint may fail"
+            );
+        }
+        let path = scripts_dir.join("build-tools-overlay.sh");
+        if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o700)) {
+            warn!(
+                file = %path.display(),
+                error = %e,
+                "Failed to set executable permission — container entrypoint may fail"
+            );
+        }
     }
 
     // -- images/default/ --
@@ -281,31 +287,22 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     .map_err(|e| format!("git-askpass-tillandsias.sh: {e}"))?;
     #[cfg(unix)]
     {
-        fs::set_permissions(
-            default_dir.join("entrypoint.sh"),
-            fs::Permissions::from_mode(0o755),
-        )
-        .ok();
-        fs::set_permissions(
-            default_dir.join("entrypoint-forge-opencode.sh"),
-            fs::Permissions::from_mode(0o755),
-        )
-        .ok();
-        fs::set_permissions(
-            default_dir.join("entrypoint-forge-claude.sh"),
-            fs::Permissions::from_mode(0o755),
-        )
-        .ok();
-        fs::set_permissions(
-            default_dir.join("entrypoint-terminal.sh"),
-            fs::Permissions::from_mode(0o755),
-        )
-        .ok();
-        fs::set_permissions(
-            default_dir.join("git-askpass-tillandsias.sh"),
-            fs::Permissions::from_mode(0o755),
-        )
-        .ok();
+        for name in [
+            "entrypoint.sh",
+            "entrypoint-forge-opencode.sh",
+            "entrypoint-forge-claude.sh",
+            "entrypoint-terminal.sh",
+            "git-askpass-tillandsias.sh",
+        ] {
+            let path = default_dir.join(name);
+            if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
+                warn!(
+                    file = %path.display(),
+                    error = %e,
+                    "Failed to set executable permission — container entrypoint may fail"
+                );
+            }
+        }
     }
 
     // Shell configs
@@ -347,11 +344,16 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     write_lf(&web_dir.join("Containerfile"), WEB_CONTAINERFILE)
         .map_err(|e| format!("web Containerfile: {e}"))?;
     #[cfg(unix)]
-    fs::set_permissions(
-        web_dir.join("entrypoint.sh"),
-        fs::Permissions::from_mode(0o755),
-    )
-    .ok();
+    {
+        let path = web_dir.join("entrypoint.sh");
+        if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
+            warn!(
+                file = %path.display(),
+                error = %e,
+                "Failed to set executable permission — container entrypoint may fail"
+            );
+        }
+    }
 
     // -- images/proxy/ --
     // @trace spec:proxy-container
@@ -366,11 +368,16 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     write_lf(&proxy_dir.join("allowlist.txt"), PROXY_ALLOWLIST)
         .map_err(|e| format!("proxy allowlist: {e}"))?;
     #[cfg(unix)]
-    fs::set_permissions(
-        proxy_dir.join("entrypoint.sh"),
-        fs::Permissions::from_mode(0o755),
-    )
-    .ok();
+    {
+        let path = proxy_dir.join("entrypoint.sh");
+        if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
+            warn!(
+                file = %path.display(),
+                error = %e,
+                "Failed to set executable permission — container entrypoint may fail"
+            );
+        }
+    }
 
     // -- images/git/ --
     // @trace spec:git-mirror-service
@@ -384,16 +391,16 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("git post-receive-hook: {e}"))?;
     #[cfg(unix)]
     {
-        fs::set_permissions(
-            git_dir.join("entrypoint.sh"),
-            fs::Permissions::from_mode(0o755),
-        )
-        .ok();
-        fs::set_permissions(
-            git_dir.join("post-receive-hook.sh"),
-            fs::Permissions::from_mode(0o755),
-        )
-        .ok();
+        for name in ["entrypoint.sh", "post-receive-hook.sh"] {
+            let path = git_dir.join(name);
+            if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
+                warn!(
+                    file = %path.display(),
+                    error = %e,
+                    "Failed to set executable permission — container entrypoint may fail"
+                );
+            }
+        }
     }
 
     // -- images/inference/ --
@@ -405,11 +412,16 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     write_lf(&inference_dir.join("Containerfile"), INFERENCE_CONTAINERFILE)
         .map_err(|e| format!("inference Containerfile: {e}"))?;
     #[cfg(unix)]
-    fs::set_permissions(
-        inference_dir.join("entrypoint.sh"),
-        fs::Permissions::from_mode(0o755),
-    )
-    .ok();
+    {
+        let path = inference_dir.join("entrypoint.sh");
+        if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
+            warn!(
+                file = %path.display(),
+                error = %e,
+                "Failed to set executable permission — container entrypoint may fail"
+            );
+        }
+    }
 
     debug!(dir = %dir.display(), "Wrote embedded image sources to temp");
     Ok(dir)

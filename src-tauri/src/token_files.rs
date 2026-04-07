@@ -82,7 +82,15 @@ pub fn write_token(container_name: &str, token: &str) -> Result<PathBuf, String>
         .map_err(|e| format!("Cannot create token directory {}: {e}", container_dir.display()))?;
 
     #[cfg(unix)]
-    fs::set_permissions(&container_dir, fs::Permissions::from_mode(0o700)).ok();
+    if let Err(e) = fs::set_permissions(&container_dir, fs::Permissions::from_mode(0o700)) {
+        warn!(
+            accountability = true,
+            category = "secrets",
+            spec = "secret-management",
+            error = %e,
+            "Token directory permissions not set to 0700 — may be world-readable"
+        );
+    }
 
     let token_path = container_dir.join("github_token");
     let tmp_path = container_dir.join("github_token.tmp");

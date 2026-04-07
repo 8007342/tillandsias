@@ -14,7 +14,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, KeyPair, KeyUsagePurpose};
-use tracing::{info, info_span};
+use tracing::{info, info_span, warn};
 
 /// Return the tmpfs directory for ephemeral CA files.
 /// Everything here dies with the session (logout/reboot).
@@ -98,7 +98,16 @@ pub fn generate_ephemeral_certs() -> Result<PathBuf, String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(dir.join("intermediate.key"), fs::Permissions::from_mode(0o600)).ok();
+        let key_path = dir.join("intermediate.key");
+        if let Err(e) = fs::set_permissions(&key_path, fs::Permissions::from_mode(0o600)) {
+            warn!(
+                accountability = true,
+                category = "secrets",
+                spec = "proxy-container",
+                error = %e,
+                "Intermediate CA key permissions not set to 0600 — key may be world-readable"
+            );
+        }
     }
 
     info!(
