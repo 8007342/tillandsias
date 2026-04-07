@@ -14,7 +14,12 @@ RUN microdnf install -y bash curl ca-certificates zstd tar gzip pciutils \
 # The installer uses lspci to detect NVIDIA/AMD GPUs and downloads
 # the appropriate GPU libraries (CUDA/ROCm). At runtime, the host GPU
 # is passed through via --device=/dev/nvidia0 etc.
-RUN curl -fsSL https://ollama.com/install.sh | sh
+# The || true is needed because the ollama installer tries to add the
+# NVIDIA repo via `dnf5 config-manager` which is a plugin not present
+# in fedora-minimal:43. The installer exits non-zero even though ollama
+# itself installs successfully. We verify the binary exists afterward.
+RUN curl -fsSL https://ollama.com/install.sh | sh || true
+RUN test -x /usr/local/bin/ollama || { echo "ERROR: ollama binary not found after install"; exit 1; }
 
 # -- Create non-root user --
 RUN useradd -u 1000 -m -s /bin/bash ollama

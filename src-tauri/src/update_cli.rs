@@ -113,7 +113,7 @@ pub fn run() -> bool {
     let json_text = match fetch_url(UPDATE_ENDPOINT) {
         Ok(t) => t,
         Err(e) => {
-            eprintln!("  Error: failed to fetch update manifest: {e}");
+            eprintln!("  {}", i18n::tf("update.fetch_error", &[("error", &e.to_string())]));
             update_log::append_entry(&format!(
                 "ERROR: failed to fetch update manifest: {e}"
             ));
@@ -125,7 +125,7 @@ pub fn run() -> bool {
     let manifest: LatestJson = match serde_json::from_str(&json_text) {
         Ok(m) => m,
         Err(e) => {
-            eprintln!("  Error: failed to parse update manifest: {e}");
+            eprintln!("  {}", i18n::tf("update.parse_error", &[("error", &e.to_string())]));
             update_log::append_entry(&format!(
                 "ERROR: failed to parse update manifest: {e}"
             ));
@@ -165,11 +165,14 @@ pub fn run() -> bool {
         Some(e) => e,
         None => {
             eprintln!(
-                "  Error: no update artifact found for platform '{platform_key}' in manifest"
+                "  {}",
+                i18n::tf("update.no_artifact", &[("platform", &platform_key)])
             );
             eprintln!(
-                "  Available platforms: {:?}",
-                manifest.platforms.keys().collect::<Vec<_>>()
+                "  {}",
+                i18n::tf("update.available_platforms", &[
+                    ("platforms", &format!("{:?}", manifest.platforms.keys().collect::<Vec<_>>()))
+                ])
             );
             update_log::append_entry(&format!(
                 "ERROR: no artifact for platform '{platform_key}'"
@@ -181,7 +184,7 @@ pub fn run() -> bool {
     // Detect install location — platform-specific.
     let install_target = detect_install_target();
     if install_target.is_none() {
-        println!("  Download the new version manually from:");
+        println!("  {}", i18n::t("update.manual_download"));
         println!("    {}", entry.url);
         update_log::append_entry(&format!(
             "UPDATE CHECK: v{current} \u{2192} v{latest_display} available (manual download — install location not detected)"
@@ -195,7 +198,7 @@ pub fn run() -> bool {
     let archive_path = match download_update(&entry.url) {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("  Error: download failed: {e}");
+            eprintln!("  {}", i18n::tf("update.download_error", &[("error", &e.to_string())]));
             update_log::append_entry(&format!("ERROR: download failed: {e}"));
             return false;
         }
@@ -216,7 +219,7 @@ pub fn run() -> bool {
     // Apply the update — dispatches to platform-specific logic.
     println!("  {}", i18n::t("update.applying"));
     if let Err(e) = apply_update(&archive_path, &install_target, &entry.url) {
-        eprintln!("  Error: failed to apply update: {e}");
+        eprintln!("  {}", i18n::tf("update.apply_error", &[("error", &e.to_string())]));
         update_log::append_entry(&format!("ERROR: failed to apply update: {e}"));
         let _ = std::fs::remove_file(&archive_path);
         return false;

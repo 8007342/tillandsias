@@ -91,7 +91,7 @@ fn parse_log_value(value: &str) -> Vec<ModuleLevel> {
         }
 
         let Some((module, level)) = pair.split_once(':') else {
-            eprintln!("Warning: Invalid log pair (expected module:level): {pair}");
+            eprintln!("{}", crate::i18n::tf("cli.welcome.log_invalid_pair", &[("pair", pair)]));
             continue;
         };
 
@@ -100,16 +100,22 @@ fn parse_log_value(value: &str) -> Vec<ModuleLevel> {
 
         if !VALID_MODULES.contains(&module) {
             eprintln!(
-                "Warning: Unknown log module: {module}. Valid modules: {}",
-                VALID_MODULES.join(", ")
+                "{}",
+                crate::i18n::tf("cli.welcome.log_unknown_module", &[
+                    ("module", module),
+                    ("valid", &VALID_MODULES.join(", ")),
+                ])
             );
             continue;
         }
 
         if !VALID_LEVELS.contains(&level.as_str()) {
             eprintln!(
-                "Error: Invalid log level: {level}. Valid levels: {}",
-                VALID_LEVELS.join(", ")
+                "{}",
+                crate::i18n::tf("cli.welcome.log_invalid_level", &[
+                    ("level", &level),
+                    ("valid", &VALID_LEVELS.join(", ")),
+                ])
             );
             // Fall back to info for this module
             result.push(ModuleLevel {
@@ -296,7 +302,7 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
                 let flag = args[i].clone();
                 i += 1;
                 if i >= args.len() {
-                    eprintln!("Error: {flag} requires a value");
+                    eprintln!("{}", crate::i18n::tf("cli.welcome.flag_requires_value", &[("flag", &flag)]));
                     print!("{USAGE}");
                     return None;
                 }
@@ -563,29 +569,37 @@ pub fn print_welcome_banner(debug: bool) {
     const RESET: &str = "\x1b[0m";
     const DIM_RED: &str = "\x1b[2;31m";
 
-    println!("{GREEN}Tillandsias v{version}{RESET}");
+    println!("{GREEN}{}{RESET}", crate::i18n::tf("cli.welcome.title", &[("version", version)]));
 
     // OS line
-    println!("   {DIM}OS:{RESET}     {CYAN}{os}{RESET}");
+    println!("   {DIM}{}{RESET} {CYAN}{os}{RESET}", crate::i18n::t("cli.welcome.os_label"));
 
     // Podman line
     match detect_podman_version() {
         Some(pv) => {
-            println!("   {DIM}Podman:{RESET} {CYAN}{pv}{RESET}");
+            println!("   {DIM}{}{RESET} {CYAN}{pv}{RESET}", crate::i18n::t("cli.welcome.podman_label"));
 
             // Forge line (only when podman is available)
             match check_forge_image_status() {
                 ForgeStatus::Ready(tag) => {
-                    println!("   {DIM}Forge:{RESET}  {CYAN}{tag} (ready){RESET}");
+                    println!(
+                        "   {DIM}Forge:{RESET}  {CYAN}{}{RESET}",
+                        crate::i18n::tf("cli.welcome.forge_ready", &[("tag", &tag)])
+                    );
                 }
                 ForgeStatus::UpdateNeeded { expected, current } => {
                     println!(
-                        "   {DIM}Forge:{RESET}  {YELLOW}update needed (current: {current}, expected: {expected}){RESET}"
+                        "   {DIM}Forge:{RESET}  {YELLOW}{}{RESET}",
+                        crate::i18n::tf("cli.welcome.forge_update_needed", &[
+                            ("current", &current),
+                            ("expected", &expected),
+                        ])
                     );
                 }
                 ForgeStatus::NotBuilt => {
                     println!(
-                        "   {DIM}Forge:{RESET}  {YELLOW}not built (run: tillandsias init){RESET}"
+                        "   {DIM}Forge:{RESET}  {YELLOW}{}{RESET}",
+                        crate::i18n::t("cli.welcome.forge_not_built")
                     );
                 }
                 ForgeStatus::PodmanUnavailable => {
@@ -595,9 +609,9 @@ pub fn print_welcome_banner(debug: bool) {
             }
         }
         None => {
-            println!("   {DIM}Podman:{RESET} {DIM_RED}not found{RESET}");
+            println!("   {DIM}{}{RESET} {DIM_RED}{}{RESET}", crate::i18n::t("cli.welcome.podman_label"), crate::i18n::t("cli.welcome.podman_not_found"));
             println!();
-            println!("   {YELLOW}Install podman to use Tillandsias.{RESET}");
+            println!("   {YELLOW}{}{RESET}", crate::i18n::t("cli.welcome.install_podman"));
         }
     }
 

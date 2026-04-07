@@ -66,7 +66,7 @@ pub fn run_with_force(force: bool) -> bool {
 
         // Skip if already present and not forcing
         if !force && image_exists(&tag) {
-            println!("  \u{2713} {image_name}: {tag} (ready)");
+            println!("  {}", i18n::tf("init.build.image_ready", &[("name", image_name), ("tag", &tag)]));
             continue;
         }
 
@@ -77,18 +77,18 @@ pub fn run_with_force(force: bool) -> bool {
                 .output();
         }
 
-        println!("  Building {image_name}...");
+        println!("  {}", i18n::tf("init.build.building", &[("name", image_name)]));
 
         // Acquire build lock for this image type
         if build_lock::is_running(image_name) {
-            println!("    Waiting for another build...");
+            println!("    {}", i18n::t("init.build.waiting_for_build"));
             if let Err(e) = build_lock::wait_for_build(image_name) {
                 eprintln!("    [internal] Wait timed out: {e}");
                 all_success = false;
                 continue;
             }
             if image_exists(&tag) {
-                println!("  \u{2713} {image_name}: {tag} (ready)");
+                println!("  {}", i18n::tf("init.build.image_ready", &[("name", image_name), ("tag", &tag)]));
                 continue;
             }
         }
@@ -138,17 +138,23 @@ pub fn run_with_force(force: bool) -> bool {
 
         match status {
             Ok(s) if s.success() => {
-                println!("  \u{2713} {image_name}: {tag}");
+                println!("  {}", i18n::tf("init.build.build_success", &[("name", image_name), ("tag", &tag)]));
             }
             Ok(s) => {
                 eprintln!(
-                    "  \u{2717} {image_name}: build failed (exit {})",
-                    s.code().unwrap_or(-1)
+                    "  {}",
+                    i18n::tf("init.build.build_failed", &[
+                        ("name", image_name),
+                        ("code", &s.code().unwrap_or(-1).to_string()),
+                    ])
                 );
                 all_success = false;
             }
             Err(e) => {
-                eprintln!("  \u{2717} {image_name}: {e}");
+                eprintln!(
+                    "  {}",
+                    i18n::tf("init.build.build_error", &[("name", image_name), ("error", &e.to_string())])
+                );
                 all_success = false;
             }
         }
@@ -172,18 +178,18 @@ pub fn run_with_force(force: bool) -> bool {
     // @trace spec:enclave-network, spec:init-command
     if all_success {
         println!();
-        println!("  Enclave images:");
-        println!("    \u{2713} proxy      \u{2014} caching HTTPS proxy with domain allowlist");
-        println!("    \u{2713} forge      \u{2014} development environment");
-        println!("    \u{2713} git        \u{2014} git mirror service (bare repos + daemon)");
-        println!("    \u{2713} inference  \u{2014} local LLM (ollama)");
+        println!("  {}", i18n::t("init.build.enclave_title"));
+        println!("  {}", i18n::t("init.build.proxy_desc"));
+        println!("  {}", i18n::t("init.build.forge_desc"));
+        println!("  {}", i18n::t("init.build.git_desc"));
+        println!("  {}", i18n::t("init.build.inference_desc"));
     }
 
     println!();
     if all_success {
         println!("{}", i18n::t("init.ready_run"));
     } else {
-        eprintln!("  Some images failed to build. Run with --debug for details.");
+        eprintln!("  {}", i18n::t("init.build.some_failed"));
     }
     all_success
 }

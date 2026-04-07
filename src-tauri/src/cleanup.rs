@@ -111,7 +111,7 @@ pub fn run_stats() -> bool {
         if relevant.is_empty() {
             println!("  {}", i18n::t("stats.images_none"));
         } else {
-            println!("  Images:");
+            println!("  {}", i18n::t("stats.images_label"));
             for line in &relevant {
                 println!("    {line}");
             }
@@ -136,7 +136,7 @@ pub fn run_stats() -> bool {
         if containers.is_empty() {
             println!("  {}", i18n::t("stats.containers_none"));
         } else {
-            println!("  Containers:");
+            println!("  {}", i18n::t("stats.containers_label"));
             for line in &containers {
                 println!("    {line}");
             }
@@ -153,12 +153,14 @@ pub fn run_stats() -> bool {
     total_bytes += nix_bytes;
     if nix_bytes > 0 {
         println!(
-            "  Nix cache:       {} ({})",
-            nix_path.display(),
-            human_bytes(nix_bytes)
+            "  {}",
+            i18n::tf("stats.nix_cache_present", &[
+                ("path", &nix_path.display().to_string()),
+                ("size", &human_bytes(nix_bytes)),
+            ])
         );
     } else {
-        println!("  Nix cache:       (not present)");
+        println!("  {}", i18n::t("stats.nix_cache_not_present"));
     }
 
     // --- Cargo registry cache ---
@@ -167,12 +169,14 @@ pub fn run_stats() -> bool {
     total_bytes += cargo_bytes;
     if cargo_bytes > 0 {
         println!(
-            "  Cargo cache:     {} ({})",
-            cargo_path.display(),
-            human_bytes(cargo_bytes)
+            "  {}",
+            i18n::tf("stats.cargo_cache_present", &[
+                ("path", &cargo_path.display().to_string()),
+                ("size", &human_bytes(cargo_bytes)),
+            ])
         );
     } else {
-        println!("  Cargo cache:     (not present)");
+        println!("  {}", i18n::t("stats.cargo_cache_not_present"));
     }
 
     // --- Installed binary ---
@@ -181,21 +185,28 @@ pub fn run_stats() -> bool {
     total_bytes += bin_bytes;
     if bin_bytes > 0 {
         println!(
-            "  Installed binary: {} ({})",
-            bin_path.display(),
-            human_bytes(bin_bytes)
+            "  {}",
+            i18n::tf("stats.binary_present", &[
+                ("path", &bin_path.display().to_string()),
+                ("size", &human_bytes(bin_bytes)),
+            ])
         );
     } else {
         println!(
-            "  Installed binary: (not installed at {})",
-            bin_path.display()
+            "  {}",
+            i18n::tf("stats.binary_not_present", &[
+                ("path", &bin_path.display().to_string()),
+            ])
         );
     }
 
     // --- Last update ---
     let last_update = update_log::read_last_entry()
-        .unwrap_or_else(|| "(no update log)".to_string());
-    println!("  Last update:      {last_update}");
+        .unwrap_or_else(|| i18n::t("stats.no_update_log").to_string());
+    println!(
+        "  {}",
+        i18n::tf("stats.last_update", &[("entry", &last_update)])
+    );
 
     println!();
     println!(
@@ -222,16 +233,19 @@ pub fn run_clean() -> bool {
     if prune_ok {
         let pruned: Vec<&str> = prune_out.lines().filter(|l| !l.trim().is_empty()).collect();
         if pruned.is_empty() {
-            println!("  Images:     no dangling images to remove");
+            println!("  {}", i18n::t("clean.images_none_dangling"));
         } else {
             anything_cleaned = true;
-            println!("  Images:     removed {} dangling image(s)", pruned.len());
+            println!(
+                "  {}",
+                i18n::tf("clean.images_removed", &[("count", &pruned.len().to_string())])
+            );
             for line in &pruned {
                 println!("    {line}");
             }
         }
     } else {
-        println!("  Images:     (podman not available — skipped)");
+        println!("  {}", i18n::t("clean.images_no_podman"));
     }
 
     // --- Stopped tillandsias containers ---
@@ -253,24 +267,24 @@ pub fn run_clean() -> bool {
             .collect();
 
         if names.is_empty() {
-            println!("  Containers: no stopped tillandsias containers");
+            println!("  {}", i18n::t("clean.containers_none_stopped"));
         } else {
             anything_cleaned = true;
             println!(
-                "  Containers: removing {} stopped container(s)...",
-                names.len()
+                "  {}",
+                i18n::tf("clean.containers_removing", &[("count", &names.len().to_string())])
             );
             for name in &names {
                 let (_, ok) = podman_run(&["rm", name]);
                 if ok {
-                    println!("    removed: {name}");
+                    println!("  {}", i18n::tf("clean.container_removed", &[("name", name)]));
                 } else {
-                    println!("    failed to remove: {name}");
+                    println!("  {}", i18n::tf("clean.container_failed", &[("name", name)]));
                 }
             }
         }
     } else {
-        println!("  Containers: (podman not available — skipped)");
+        println!("  {}", i18n::t("clean.containers_no_podman"));
     }
 
     // --- Nix cache ---
@@ -281,17 +295,25 @@ pub fn run_clean() -> bool {
             Ok(()) => {
                 anything_cleaned = true;
                 println!(
-                    "  Nix cache:  removed {} ({})",
-                    nix_path.display(),
-                    human_bytes(size_before)
+                    "  {}",
+                    i18n::tf("clean.nix_cache_removed", &[
+                        ("path", &nix_path.display().to_string()),
+                        ("size", &human_bytes(size_before)),
+                    ])
                 );
             }
             Err(e) => {
-                println!("  Nix cache:  failed to remove {}: {e}", nix_path.display());
+                println!(
+                    "  {}",
+                    i18n::tf("clean.nix_cache_failed", &[
+                        ("path", &nix_path.display().to_string()),
+                        ("error", &e.to_string()),
+                    ])
+                );
             }
         }
     } else {
-        println!("  Nix cache:  (not present)");
+        println!("  {}", i18n::t("clean.nix_cache_not_present"));
     }
 
     println!();
