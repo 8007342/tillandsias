@@ -95,7 +95,7 @@ The `hosts.yml` mount will be removed in Phase 4 of `fine-grained-pat-rotation`,
 
 The forge image's `opencode.json` contains a deny list that blocks the AI agent from directly reading `/run/secrets/`. This provides defense in depth: even if an agent attempts `cat /run/secrets/github_token`, the file is not accessible through OpenCode's tool system. The agent should use `git push` (which invokes GIT_ASKPASS transparently) rather than raw token access.
 
-@trace spec:secrets-management
+@trace spec:secret-management
 
 ## CLI Commands
 

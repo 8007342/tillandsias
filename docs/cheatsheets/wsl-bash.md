@@ -2,7 +2,7 @@
 
 How the Windows Subsystem for Linux works, how it maps paths, and how it interacts with Podman and native Windows processes.
 
-@trace spec:cross-platform, spec:podman-lifecycle
+@trace spec:cross-platform, spec:podman-orchestration
 
 ## Architecture: WSL1 vs WSL2
 
@@ -185,7 +185,7 @@ To apply changes: `wsl --shutdown` then relaunch.
 
 Tillandsias uses Podman for container orchestration. On Windows, Podman runs inside WSL2.
 
-@trace spec:podman-lifecycle
+@trace spec:podman-orchestration
 
 ### Two Approaches
 
