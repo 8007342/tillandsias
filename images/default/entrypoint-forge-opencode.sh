@@ -67,8 +67,24 @@ fi
 # ── OpenCode (official curl installer) ─────────────────────
 # On Fedora (default): pre-built binary executes directly (standard glibc).
 # On Nix: binary needs the Nix dynamic linker — a wrapper is created.
-OC_DIR="$CACHE/opencode"
-OC_BIN="$OC_DIR/bin/opencode"
+# @trace spec:layered-tools-overlay
+# Check for pre-installed tools overlay before falling back to inline install.
+TOOLS_DIR="/home/forge/.tools"
+TOOLS_OC_BIN="$TOOLS_DIR/opencode/bin/opencode"
+_OPENCODE_FROM_OVERLAY=false
+
+if [ -x "$TOOLS_OC_BIN" ]; then
+    # Tools overlay present — use pre-installed binary
+    export PATH="$TOOLS_DIR/opencode/bin:$PATH"
+    OC_DIR="$TOOLS_DIR/opencode"
+    OC_BIN="$TOOLS_OC_BIN"
+    _OPENCODE_FROM_OVERLAY=true
+    trace_lifecycle "install" "opencode: using tools overlay ($TOOLS_OC_BIN)"
+else
+    # Fallback: install inline (first launch or overlay not ready)
+    OC_DIR="$CACHE/opencode"
+    OC_BIN="$OC_DIR/bin/opencode"
+fi
 OC_NATIVE="$HOME/.opencode/bin/opencode"
 
 _make_opencode_wrapper() {
@@ -98,6 +114,11 @@ WRAPPER
 }
 
 ensure_opencode() {
+    # @trace spec:layered-tools-overlay
+    if [ "$_OPENCODE_FROM_OVERLAY" = true ]; then
+        trace_lifecycle "install" "opencode: skipped (overlay)"
+        return 0
+    fi
     local stamp_file="$OC_DIR/.last-update-check"
     mkdir -p "$OC_DIR/bin" 2>/dev/null || true
 

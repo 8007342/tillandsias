@@ -70,10 +70,31 @@ _CLAUDE_KEY="${ANTHROPIC_API_KEY:-}"
 unset ANTHROPIC_API_KEY
 
 # ── Claude Code (npm installer, cached) ─────────────────────
-CC_PREFIX="$CACHE/claude"
-CC_BIN="$CC_PREFIX/bin/claude"
+# @trace spec:layered-tools-overlay
+# Check for pre-installed tools overlay before falling back to inline install.
+TOOLS_DIR="/home/forge/.tools"
+TOOLS_CC_BIN="$TOOLS_DIR/claude/bin/claude"
+_CLAUDE_FROM_OVERLAY=false
+
+if [ -x "$TOOLS_CC_BIN" ]; then
+    # Tools overlay present — use pre-installed binary
+    export PATH="$TOOLS_DIR/claude/bin:$PATH"
+    CC_PREFIX="$TOOLS_DIR/claude"
+    CC_BIN="$TOOLS_CC_BIN"
+    _CLAUDE_FROM_OVERLAY=true
+    trace_lifecycle "install" "claude-code: using tools overlay ($TOOLS_CC_BIN)"
+else
+    # Fallback: install inline (first launch or overlay not ready)
+    CC_PREFIX="$CACHE/claude"
+    CC_BIN="$CC_PREFIX/bin/claude"
+fi
 
 install_claude() {
+    # @trace spec:layered-tools-overlay
+    if [ "$_CLAUDE_FROM_OVERLAY" = true ]; then
+        trace_lifecycle "install" "claude-code: skipped (overlay)"
+        return 0
+    fi
     mkdir -p "$CC_PREFIX" 2>/dev/null || true
     if [ ! -x "$CC_BIN" ]; then
         trace_lifecycle "install" "claude-code: fresh install starting"
@@ -98,6 +119,11 @@ install_claude() {
 }
 
 update_claude() {
+    # @trace spec:layered-tools-overlay
+    if [ "$_CLAUDE_FROM_OVERLAY" = true ]; then
+        trace_lifecycle "update" "claude-code: skipped (overlay)"
+        return 0
+    fi
     local stamp_file="$CC_PREFIX/.last-update-check"
     if ! needs_update_check "$stamp_file"; then
         trace_lifecycle "update" "claude-code: skipped (checked <24h ago)"

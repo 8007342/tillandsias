@@ -139,6 +139,12 @@ spin() {
 # ── OpenSpec install (npm to user prefix, cached) ──────────
 # @trace spec:forge-shell-tools
 install_openspec() {
+    # @trace spec:layered-tools-overlay
+    if [ -x "/home/forge/.tools/openspec/bin/openspec" ]; then
+        export PATH="/home/forge/.tools/openspec/bin:$PATH"
+        trace_lifecycle "install" "openspec: using tools overlay (/home/forge/.tools/openspec/bin/openspec)"
+        return 0
+    fi
     local os_prefix="$CACHE/openspec"
     local os_bin="$os_prefix/bin/openspec"
     mkdir -p "$os_prefix" 2>/dev/null || true
