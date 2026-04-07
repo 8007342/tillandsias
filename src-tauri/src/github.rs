@@ -23,14 +23,12 @@ pub struct RemoteRepo {
     pub full_name: String,
 }
 
-/// JSON shape returned by `gh repo list --json name,nameWithOwner,url`.
+/// JSON shape returned by `gh repo list --json name,nameWithOwner`.
 #[derive(Debug, Deserialize)]
 struct GhRepoEntry {
     name: String,
     #[serde(rename = "nameWithOwner")]
     name_with_owner: String,
-    #[allow(dead_code)]
-    url: String,
 }
 
 /// Fetch the authenticated user's GitHub repositories.
@@ -59,7 +57,7 @@ pub async fn fetch_repos() -> Result<Vec<RemoteRepo>, String> {
             "repo",
             "list",
             "--json",
-            "name,nameWithOwner,url",
+            "name,nameWithOwner",
             "--limit",
             "100",
         ],
