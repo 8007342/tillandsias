@@ -133,8 +133,12 @@ pub(crate) async fn ensure_inference_running(
     if !client.image_exists(&tag).await {
         info!(tag = %tag, spec = "inference-container", "Inference image absent — building");
 
+        // @trace spec:inference-container
+        // User-friendly chip name — never expose "inference" or "image" to users.
+        let chip_name = "Inference Engine".to_string();
+
         let _ = build_tx.try_send(BuildProgressEvent::Started {
-            image_name: "Inference".to_string(),
+            image_name: chip_name.clone(),
         });
 
         let build_result =
@@ -145,20 +149,20 @@ pub(crate) async fn ensure_inference_running(
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, spec = "inference-container", "Inference image still not found after build");
                     let _ = build_tx.try_send(BuildProgressEvent::Failed {
-                        image_name: "Inference".to_string(),
+                        image_name: chip_name,
                         reason: "Inference image not ready".to_string(),
                     });
                     return Err("Inference image not ready after build".into());
                 }
                 info!(tag = %tag, spec = "inference-container", "Inference image built");
                 let _ = build_tx.try_send(BuildProgressEvent::Completed {
-                    image_name: "Inference".to_string(),
+                    image_name: chip_name,
                 });
             }
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, spec = "inference-container", "Inference image build failed");
                 let _ = build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: "Inference".to_string(),
+                    image_name: chip_name,
                     reason: format!("Inference build failed: {e}"),
                 });
                 return Err(format!("Inference image build failed: {e}"));
@@ -166,7 +170,7 @@ pub(crate) async fn ensure_inference_running(
             Err(ref e) => {
                 error!(tag = %tag, error = %e, spec = "inference-container", "Inference image build task panicked");
                 let _ = build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: "Inference".to_string(),
+                    image_name: chip_name,
                     reason: format!("Inference build panicked: {e}"),
                 });
                 return Err(format!("Inference image build panicked: {e}"));
@@ -336,8 +340,12 @@ pub(crate) async fn ensure_proxy_running(
     if !client.image_exists(&tag).await {
         info!(tag = %tag, spec = "proxy-container", "Proxy image absent — building");
 
+        // @trace spec:proxy-container
+        // User-friendly chip name — never expose "proxy" or "image" to users.
+        let chip_name = "Enclave".to_string();
+
         let _ = build_tx.try_send(BuildProgressEvent::Started {
-            image_name: "Proxy".to_string(),
+            image_name: chip_name.clone(),
         });
 
         let build_result =
@@ -348,20 +356,20 @@ pub(crate) async fn ensure_proxy_running(
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, spec = "proxy-container", "Proxy image still not found after build");
                     let _ = build_tx.try_send(BuildProgressEvent::Failed {
-                        image_name: "Proxy".to_string(),
+                        image_name: chip_name,
                         reason: "Proxy image not ready".to_string(),
                     });
                     return Err("Proxy image not ready after build".into());
                 }
                 info!(tag = %tag, spec = "proxy-container", "Proxy image built");
                 let _ = build_tx.try_send(BuildProgressEvent::Completed {
-                    image_name: "Proxy".to_string(),
+                    image_name: chip_name,
                 });
             }
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, spec = "proxy-container", "Proxy image build failed");
                 let _ = build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: "Proxy".to_string(),
+                    image_name: chip_name,
                     reason: format!("Proxy build failed: {e}"),
                 });
                 return Err(format!("Proxy image build failed: {e}"));
@@ -369,7 +377,7 @@ pub(crate) async fn ensure_proxy_running(
             Err(ref e) => {
                 error!(tag = %tag, error = %e, spec = "proxy-container", "Proxy image build task panicked");
                 let _ = build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: "Proxy".to_string(),
+                    image_name: chip_name,
                     reason: format!("Proxy build panicked: {e}"),
                 });
                 return Err(format!("Proxy image build panicked: {e}"));
@@ -757,8 +765,12 @@ pub(crate) async fn ensure_git_service_running(
     if !client.image_exists(&tag).await {
         info!(tag = %tag, spec = "git-mirror-service", "Git service image absent — building");
 
+        // @trace spec:git-mirror-service
+        // User-friendly chip name — never expose "git service" or "image" to users.
+        let chip_name = "Code Mirror".to_string();
+
         let _ = build_tx.try_send(BuildProgressEvent::Started {
-            image_name: "Git service".to_string(),
+            image_name: chip_name.clone(),
         });
 
         let build_result =
@@ -769,20 +781,20 @@ pub(crate) async fn ensure_git_service_running(
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, spec = "git-mirror-service", "Git service image still not found after build");
                     let _ = build_tx.try_send(BuildProgressEvent::Failed {
-                        image_name: "Git service".to_string(),
+                        image_name: chip_name,
                         reason: "Git service image not ready".to_string(),
                     });
                     return Err("Git service image not ready after build".into());
                 }
                 info!(tag = %tag, spec = "git-mirror-service", "Git service image built");
                 let _ = build_tx.try_send(BuildProgressEvent::Completed {
-                    image_name: "Git service".to_string(),
+                    image_name: chip_name,
                 });
             }
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, spec = "git-mirror-service", "Git service image build failed");
                 let _ = build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: "Git service".to_string(),
+                    image_name: chip_name,
                     reason: format!("Git service build failed: {e}"),
                 });
                 return Err(format!("Git service image build failed: {e}"));
@@ -790,7 +802,7 @@ pub(crate) async fn ensure_git_service_running(
             Err(ref e) => {
                 error!(tag = %tag, error = %e, spec = "git-mirror-service", "Git service image build task panicked");
                 let _ = build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: "Git service".to_string(),
+                    image_name: chip_name,
                     reason: format!("Git service build panicked: {e}"),
                 });
                 return Err(format!("Git service image build panicked: {e}"));
@@ -968,7 +980,7 @@ pub async fn ensure_enclave_ready(
     // so it comes after infrastructure is ready. Failure is non-fatal — entrypoints
     // have inline install fallback.
     // @trace spec:layered-tools-overlay
-    if let Err(e) = ensure_tools_overlay().await {
+    if let Err(e) = ensure_tools_overlay(build_tx.clone()).await {
         warn!(
             error = %e,
             spec = "layered-tools-overlay",

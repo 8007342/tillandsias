@@ -373,18 +373,75 @@ fn main() {
                 // @trace spec:enclave-network, spec:proxy-container, spec:tray-app
                 // Infrastructure setup FIRST — proxy must be running before any other image builds.
                 // This ensures forge/git/inference image builds route through the proxy cache.
+                //
+                // Show an "Enclave" build chip so the user sees progress while the
+                // enclave network and proxy are being initialized.
                 if podman_usable {
                     info!("Setting up enclave network and proxy (required for all operations)");
+
+                    // Push the chip directly to shared state (event loop not yet running)
+                    // so the tray menu shows immediate feedback.
+                    let enclave_chip_name = "Enclave".to_string();
+                    {
+                        let mut s = state_for_loop.lock().unwrap();
+                        s.active_builds
+                            .push(tillandsias_core::state::BuildProgress {
+                                image_name: enclave_chip_name.clone(),
+                                status: tillandsias_core::state::BuildStatus::InProgress,
+                                started_at: std::time::Instant::now(),
+                                completed_at: None,
+                            });
+                    }
+                    rebuild_menu(&app_handle_for_loop, &state_for_loop);
+
                     let s = state_for_loop.lock().unwrap().clone();
-                    if let Err(e) = handlers::ensure_infrastructure_ready(&s, build_tx.clone()).await {
-                        warn!(error = %e, "Infrastructure setup failed at launch — image builds will bypass cache");
-                        // @trace spec:tray-app
-                        // Notify user so infrastructure failure is not silent.
-                        // The tray continues in degraded mode (forge builds bypass proxy cache).
-                        handlers::send_notification(
-                            "Tillandsias",
-                            i18n::t("notifications.infrastructure_failed"),
-                        );
+                    match handlers::ensure_infrastructure_ready(&s, build_tx.clone()).await {
+                        Ok(()) => {
+                            // Mark the enclave chip as completed in shared state.
+                            // Also send via build_tx so the event loop's copy gets updated
+                            // once it starts (with the 10s fadeout timer).
+                            {
+                                let mut s = state_for_loop.lock().unwrap();
+                                if let Some(entry) = s.active_builds
+                                    .iter_mut()
+                                    .find(|b| b.image_name == enclave_chip_name)
+                                {
+                                    entry.status = tillandsias_core::state::BuildStatus::Completed;
+                                    entry.completed_at = Some(std::time::Instant::now());
+                                }
+                            }
+                            let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                                image_name: enclave_chip_name,
+                            });
+                            rebuild_menu(&app_handle_for_loop, &state_for_loop);
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "Infrastructure setup failed at launch — image builds will bypass cache");
+                            // Mark the enclave chip as failed in shared state.
+                            {
+                                let mut s = state_for_loop.lock().unwrap();
+                                if let Some(entry) = s.active_builds
+                                    .iter_mut()
+                                    .find(|b| b.image_name == enclave_chip_name)
+                                {
+                                    entry.status = tillandsias_core::state::BuildStatus::Failed(e.clone());
+                                    entry.completed_at = Some(std::time::Instant::now());
+                                }
+                            }
+                            let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                                image_name: enclave_chip_name,
+                                reason: e,
+                            });
+                            rebuild_menu(&app_handle_for_loop, &state_for_loop);
+
+                            // @trace spec:tray-app
+                            // Notify user so infrastructure failure is not silent.
+                            // The tray continues in degraded mode (forge builds bypass proxy cache).
+                            handlers::send_notification(
+                                "Tillandsias",
+                                i18n::t("notifications.infrastructure_failed"),
+                            );
+                        }
                     }
                 }
 

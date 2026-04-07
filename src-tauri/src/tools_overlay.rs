@@ -150,7 +150,9 @@ pub(crate) fn probe_tool_version(binary: &Path, args: &[&str]) -> String {
 /// Returns `Err` only on first-launch build failure.
 ///
 /// @trace spec:layered-tools-overlay
-pub(crate) async fn ensure_tools_overlay() -> Result<(), String> {
+pub(crate) async fn ensure_tools_overlay(
+    build_tx: tokio::sync::mpsc::Sender<tillandsias_core::event::BuildProgressEvent>,
+) -> Result<(), String> {
     let cache = cache_dir();
     let overlay_dir = cache.join("tools-overlay");
     let current = overlay_dir.join("current");
@@ -170,7 +172,26 @@ pub(crate) async fn ensure_tools_overlay() -> Result<(), String> {
                 // @trace spec:layered-tools-overlay
                 // Forge image mismatch = binary incompatibility risk.
                 // Must rebuild BLOCKING before launching containers.
-                return rebuild_tools_overlay(&overlay_dir).await;
+                // User-friendly chip name — never expose "overlay" to users.
+                let chip_name = "Software Layer".to_string();
+                let _ = build_tx.try_send(tillandsias_core::event::BuildProgressEvent::Started {
+                    image_name: chip_name.clone(),
+                });
+                let result = rebuild_tools_overlay(&overlay_dir).await;
+                match &result {
+                    Ok(()) => {
+                        let _ = build_tx.try_send(tillandsias_core::event::BuildProgressEvent::Completed {
+                            image_name: chip_name,
+                        });
+                    }
+                    Err(reason) => {
+                        let _ = build_tx.try_send(tillandsias_core::event::BuildProgressEvent::Failed {
+                            image_name: chip_name,
+                            reason: reason.clone(),
+                        });
+                    }
+                }
+                return result;
             }
         }
         debug!(
@@ -188,7 +209,27 @@ pub(crate) async fn ensure_tools_overlay() -> Result<(), String> {
         spec = "layered-tools-overlay",
         "Building tools overlay (first time)..."
     );
-    build_tools_overlay_versioned(&overlay_dir, "v1").await
+    // @trace spec:layered-tools-overlay
+    // User-friendly chip name — never expose "overlay" to users.
+    let chip_name = "Software Layer".to_string();
+    let _ = build_tx.try_send(tillandsias_core::event::BuildProgressEvent::Started {
+        image_name: chip_name.clone(),
+    });
+    let result = build_tools_overlay_versioned(&overlay_dir, "v1").await;
+    match &result {
+        Ok(()) => {
+            let _ = build_tx.try_send(tillandsias_core::event::BuildProgressEvent::Completed {
+                image_name: chip_name,
+            });
+        }
+        Err(reason) => {
+            let _ = build_tx.try_send(tillandsias_core::event::BuildProgressEvent::Failed {
+                image_name: chip_name,
+                reason: reason.clone(),
+            });
+        }
+    }
+    result
 }
 
 /// Build the tools overlay by running `build-tools-overlay.sh` in a
