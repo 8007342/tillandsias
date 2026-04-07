@@ -1510,7 +1510,7 @@ fn open_terminal(command: &str, title: &str) -> Result<(), String> {
 ///
 /// Uses `notify-send` on Linux, `osascript` on macOS.
 /// Silently ignored on failure — notifications are advisory only.
-fn send_notification(summary: &str, body: &str) {
+pub(crate) fn send_notification(summary: &str, body: &str) {
     #[cfg(target_os = "linux")]
     {
         let _ = std::process::Command::new("notify-send")
@@ -1916,6 +1916,18 @@ pub async fn handle_attach_here(
         .unwrap_or_else(|| "unknown".to_string());
 
     info!(project = %project_name, "Attach Here requested");
+
+    // Forge-readiness guard: if the forge image is not yet available (still building
+    // or not yet checked), notify the user and return early. The tray menu should
+    // already have this item disabled, but this is defense-in-depth against race
+    // conditions or future code paths that bypass the menu gate.
+    // @trace spec:tray-app
+    if !state.forge_available {
+        let msg = crate::i18n::t("notifications.forge_not_ready");
+        info!(project = %project_name, "Forge-readiness guard fired — image not yet available");
+        send_notification("Tillandsias", msg);
+        return Err("Forge image not yet available".into());
+    }
 
     // Don't-relaunch guard: if a forge container for this project is already running,
     // notify the user and return early instead of spawning a second environment.

@@ -97,6 +97,8 @@ no_terminal = "No terminal emulator found (tried ptyxis, gnome-terminal, konsole
 [notifications]
 already_running = "Already running — look for '{title}' in your windows"
 claude_credentials_cleared = "Claude credentials cleared. Next launch will prompt for authentication."
+forge_not_ready = "Setting up — please wait a moment."
+infrastructure_failed = "Setup encountered an issue. Some features may be slow."
 
 # ── Stats command ────────────────────────────────────────────
 [stats]

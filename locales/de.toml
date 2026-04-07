@@ -97,6 +97,8 @@ no_terminal = "Kein Terminalemulator gefunden (versucht: ptyxis, gnome-terminal,
 [notifications]
 already_running = "Läuft bereits — suche nach '{title}' in deinen Fenstern"
 claude_credentials_cleared = "Claude-Zugangsdaten gelöscht. Beim nächsten Start wird eine Authentifizierung angefordert."
+forge_not_ready = "Wird eingerichtet — bitte einen Moment warten."
+infrastructure_failed = "Bei der Einrichtung ist ein Problem aufgetreten. Einige Funktionen sind möglicherweise langsam."
 
 # ── Stats command ────────────────────────────────────────────
 [stats]
