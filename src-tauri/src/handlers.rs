@@ -559,6 +559,11 @@ enum GitProjectState {
 }
 
 /// Detect the git state of a project directory.
+///
+/// Parses `.git/config` directly to extract the origin remote URL.
+/// Does NOT require `git` to be installed on the host — works on
+/// immutable OSes (Silverblue, etc.) where only podman is available.
+///
 /// @trace spec:git-mirror-service
 fn detect_project_git_state(project_path: &Path) -> GitProjectState {
     let git_dir = project_path.join(".git");
@@ -566,23 +571,100 @@ fn detect_project_git_state(project_path: &Path) -> GitProjectState {
         return GitProjectState::NotGitRepo;
     }
 
-    let output = std::process::Command::new("git")
-        .args(["-C", &project_path.display().to_string(), "remote", "get-url", "origin"])
-        .env_remove("LD_LIBRARY_PATH")
-        .env_remove("LD_PRELOAD")
-        .output();
+    // Parse .git/config directly — no git binary needed.
+    let config_path = git_dir.join("config");
+    let contents = match std::fs::read_to_string(&config_path) {
+        Ok(c) => c,
+        Err(_) => return GitProjectState::LocalRepo,
+    };
 
-    match output {
-        Ok(o) if o.status.success() => {
-            let url = String::from_utf8_lossy(&o.stdout).trim().to_string();
-            if url.is_empty() {
-                GitProjectState::LocalRepo
-            } else {
-                GitProjectState::RemoteRepo { remote_url: url }
+    // Look for [remote "origin"] section and extract url = <value>
+    let mut in_origin_section = false;
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_origin_section = trimmed == "[remote \"origin\"]";
+            continue;
+        }
+        if in_origin_section {
+            if let Some(url) = trimmed.strip_prefix("url") {
+                let url = url.trim().strip_prefix('=').unwrap_or("").trim();
+                if !url.is_empty() {
+                    return GitProjectState::RemoteRepo {
+                        remote_url: url.to_string(),
+                    };
+                }
             }
         }
-        _ => GitProjectState::LocalRepo,
     }
+
+    GitProjectState::LocalRepo
+}
+
+/// Check whether `git` is available on the host.
+///
+/// On immutable OSes like Fedora Silverblue, `git` is not installed
+/// on the host — all git operations must run inside a container.
+///
+/// @trace spec:git-mirror-service
+fn host_has_git() -> bool {
+    std::process::Command::new("git")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+/// Run a git command on the host if available, otherwise inside a
+/// temporary container using the git image.
+///
+/// `mounts` are `(host_path, container_path, mode)` tuples.
+///
+/// @trace spec:git-mirror-service
+fn run_git(
+    args: &[&str],
+    mounts: &[(&str, &str, &str)],
+) -> Result<std::process::Output, String> {
+    if host_has_git() {
+        return std::process::Command::new("git")
+            .args(args)
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            .output()
+            .map_err(|e| format!("git failed: {e}"));
+    }
+
+    // Containerized path: run git inside the git image.
+    // @trace spec:git-mirror-service
+    let mut podman_args: Vec<String> = vec![
+        "run".into(), "--rm".into(),
+        "--cap-drop=ALL".into(),
+        "--security-opt=no-new-privileges".into(),
+        "--userns=keep-id".into(),
+        "--security-opt=label=disable".into(),
+    ];
+
+    for (host, container, mode) in mounts {
+        podman_args.push("-v".into());
+        podman_args.push(format!("{host}:{container}:{mode}"));
+    }
+
+    podman_args.push("--entrypoint".into());
+    podman_args.push("git".into());
+    podman_args.push(git_image_tag());
+    podman_args.extend(args.iter().map(|a| a.to_string()));
+
+    debug!(
+        spec = "git-mirror-service",
+        args = %podman_args.join(" "),
+        "Running containerized git (no host git)"
+    );
+
+    tillandsias_podman::podman_cmd_sync()
+        .args(&podman_args)
+        .output()
+        .map_err(|e| format!("containerized git failed: {e}"))
 }
 
 /// Create or update the bare git mirror for a project.
@@ -592,29 +674,46 @@ fn detect_project_git_state(project_path: &Path) -> GitProjectState {
 /// If the mirror exists, runs `git fetch --all` to sync from the remote.
 /// If it doesn't exist, detects the project's git state and clones accordingly:
 /// - `NotGitRepo` → initializes git in the project, then clones
-/// - `RemoteRepo` → clones from the remote URL
-/// - `LocalRepo` → clones from the local path
+/// - `RemoteRepo` / `LocalRepo` → clones from the local path
 ///
 /// After cloning, installs the embedded post-receive hook.
 ///
+/// All git operations work on hosts without `git` installed (e.g.,
+/// Fedora Silverblue) by running inside a temporary container.
+///
 /// @trace spec:git-mirror-service
 fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, String> {
-    let mirror_path = cache_dir().join("mirrors").join(project_name);
+    let mirrors_dir = cache_dir().join("mirrors");
+    let mirror_path = mirrors_dir.join(project_name);
+    std::fs::create_dir_all(&mirrors_dir)
+        .map_err(|e| format!("Cannot create mirrors directory: {e}"))?;
+
+    let pp = project_path.display().to_string();
+    let mp = mirror_path.display().to_string();
+    let md = mirrors_dir.display().to_string();
+
+    // When host has git, use host paths directly.
+    // When containerized, use container mount paths.
+    let has_git = host_has_git();
+    let container_mirror = format!("/mirrors/{project_name}");
+
+    // Common mounts for containerized git operations
+    let mounts: Vec<(&str, &str, &str)> = vec![
+        (&pp, "/project", "rw"),
+        (&md, "/mirrors", "rw"),
+    ];
 
     // If mirror already exists, just fetch updates
     if mirror_path.join("HEAD").exists() {
         info!(
             spec = "git-mirror-service",
             project = %project_name,
-            mirror = %mirror_path.display(),
+            mirror = %mp,
             "Mirror exists — fetching updates"
         );
-        let output = std::process::Command::new("git")
-            .args(["-C", &mirror_path.display().to_string(), "fetch", "--all"])
-            .env_remove("LD_LIBRARY_PATH")
-            .env_remove("LD_PRELOAD")
-            .output();
-        match output {
+
+        let mirror_ref = if has_git { mp.as_str() } else { container_mirror.as_str() };
+        match run_git(&["-C", mirror_ref, "fetch", "--all"], &mounts) {
             Ok(o) if o.status.success() => {
                 debug!(spec = "git-mirror-service", project = %project_name, "Mirror fetch succeeded");
             }
@@ -647,66 +746,55 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
     // For NotGitRepo, initialize git in the project first
     if matches!(state, GitProjectState::NotGitRepo) {
         info!(spec = "git-mirror-service", project = %project_name, "Initializing git in project directory");
-        let pp = project_path.display().to_string();
-        let init = std::process::Command::new("git")
-            .args(["-C", &pp, "init"])
-            .env_remove("LD_LIBRARY_PATH")
-            .env_remove("LD_PRELOAD")
-            .output()
+
+        let init_dir = if has_git { pp.as_str() } else { "/project" };
+
+        let init = run_git(&["-C", init_dir, "init"], &mounts)
             .map_err(|e| format!("git init failed: {e}"))?;
         if !init.status.success() {
             return Err(format!("git init failed: {}", String::from_utf8_lossy(&init.stderr)));
         }
-        let add = std::process::Command::new("git")
-            .args(["-C", &pp, "add", "-A"])
-            .env_remove("LD_LIBRARY_PATH")
-            .env_remove("LD_PRELOAD")
-            .output()
+
+        let add = run_git(&["-C", init_dir, "add", "-A"], &mounts)
             .map_err(|e| format!("git add failed: {e}"))?;
         if !add.status.success() {
             return Err(format!("git add failed: {}", String::from_utf8_lossy(&add.stderr)));
         }
-        let commit = std::process::Command::new("git")
-            .args(["-C", &pp, "commit", "-m", "Initial commit"])
-            .env_remove("LD_LIBRARY_PATH")
-            .env_remove("LD_PRELOAD")
-            .output()
-            .map_err(|e| format!("git commit failed: {e}"))?;
+
+        let commit = run_git(
+            &["-C", init_dir, "commit", "-m", "Initial commit"],
+            &mounts,
+        )
+        .map_err(|e| format!("git commit failed: {e}"))?;
         if !commit.status.success() {
             let stderr = String::from_utf8_lossy(&commit.stderr);
-            // "nothing to commit" is not an error — the directory may be empty
             if !stderr.contains("nothing to commit") {
                 return Err(format!("git commit failed: {stderr}"));
             }
         }
     }
 
-    // Determine clone source
-    let clone_source = match &state {
-        GitProjectState::RemoteRepo { remote_url } => remote_url.clone(),
-        _ => project_path.display().to_string(),
+    // Always clone from local path — even for RemoteRepo, the local copy
+    // has all refs and the mirror inherits the remote config.
+    let (clone_source, clone_dest) = if has_git {
+        (pp.clone(), mp.clone())
+    } else {
+        ("/project".to_string(), container_mirror.clone())
     };
-
-    // Ensure parent directory exists
-    if let Some(parent) = mirror_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Cannot create mirrors directory: {e}"))?;
-    }
 
     // Clone as a bare mirror
     info!(
         spec = "git-mirror-service",
         project = %project_name,
-        source = %clone_source,
-        mirror = %mirror_path.display(),
+        source = %pp,
+        mirror = %mp,
         "Cloning mirror"
     );
-    let clone_output = std::process::Command::new("git")
-        .args(["clone", "--mirror", &clone_source, &mirror_path.display().to_string()])
-        .env_remove("LD_LIBRARY_PATH")
-        .env_remove("LD_PRELOAD")
-        .output()
-        .map_err(|e| format!("git clone --mirror failed: {e}"))?;
+    let clone_output = run_git(
+        &["clone", "--mirror", &clone_source, &clone_dest],
+        &mounts,
+    )
+    .map_err(|e| format!("git clone --mirror failed: {e}"))?;
     if !clone_output.status.success() {
         let stderr = String::from_utf8_lossy(&clone_output.stderr);
         return Err(format!("git clone --mirror failed: {stderr}"));
