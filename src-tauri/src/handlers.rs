@@ -1315,130 +1315,14 @@ fn open_terminal(command: &str, title: &str) -> Result<(), String> {
 
     #[cfg(target_os = "macos")]
     {
-        // macOS terminal fallback chain: try CLI terminals first, then AppleScript.
-        // CLI terminals are preferred because they don't depend on AppleScript's
-        // fragile app-scripting bridge (which breaks when default terminal changes).
-
-        // 1. Ghostty — must use `open -na Ghostty.app` on macOS (direct CLI
-        //    invocation is unsupported). Config uses --key=value syntax.
-        if std::path::Path::new("/Applications/Ghostty.app").exists() {
-            let mut args = vec![
-                "-na".into(),
-                "Ghostty.app".into(),
-                "--args".into(),
-                format!("--title={title}"),
-                "-e".into(),
-                "bash".into(),
-                "-c".into(),
-                command.into(),
-            ];
-            // --wait-after-command keeps the window open when the command exits,
-            // so users can read output / errors before the window closes.
-            args.insert(3, "--wait-after-command".into());
-            match std::process::Command::new("open").args(&args).spawn() {
-                Ok(_) => {
-                    tracing::debug!(terminal = "Ghostty", "Opened terminal via open -na");
-                    return Ok(());
-                }
-                Err(e) => {
-                    tracing::warn!(terminal = "Ghostty", error = %e, "Ghostty launch failed, trying next");
-                }
-            }
-        }
-
-        // 2. Other CLI terminals — detected via `which`, launched directly.
-        let cli_terminals: &[(&str, &dyn Fn(&str, &str) -> Vec<String>)] = &[
-            ("kitty", &|cmd: &str, title: &str| {
-                vec![
-                    "--title".into(),
-                    title.into(),
-                    "bash".into(),
-                    "-c".into(),
-                    cmd.into(),
-                ]
-            }),
-            ("alacritty", &|cmd: &str, title: &str| {
-                vec![
-                    "--title".into(),
-                    title.into(),
-                    "-e".into(),
-                    "bash".into(),
-                    "-c".into(),
-                    cmd.into(),
-                ]
-            }),
-            ("wezterm", &|cmd: &str, _title: &str| {
-                vec![
-                    "start".into(),
-                    "--".into(),
-                    "bash".into(),
-                    "-c".into(),
-                    cmd.into(),
-                ]
-            }),
-        ];
-
-        for (term, build_args) in cli_terminals {
-            let found = std::process::Command::new("which")
-                .arg(term)
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status()
-                .is_ok_and(|s| s.success());
-
-            if !found {
-                continue;
-            }
-
-            let args = build_args(command, title);
-            match std::process::Command::new(term)
-                .args(&args)
-                .spawn()
-            {
-                Ok(_) => {
-                    tracing::debug!(terminal = term, "Opened terminal via CLI");
-                    return Ok(());
-                }
-                Err(e) => {
-                    tracing::warn!(terminal = term, error = %e, "CLI terminal spawn failed, trying next");
-                    continue;
-                }
-            }
-        }
-
-        // 2. AppleScript terminals — iTerm2 then Terminal.app.
-        //    Use .output() (blocking) to detect failures and fall through.
+        // macOS: use Terminal.app exclusively via AppleScript.
+        // Terminal.app ships with every Mac and is always available.
+        // Third-party terminals (Ghostty, iTerm2, etc.) are intentionally
+        // unsupported — each has its own CLI quirks and update cadence that
+        // make a fallback chain fragile and unmaintainable.
+        // @trace spec:tray-app
+        let _ = title; // Terminal.app title-setting removed (unreliable on macOS 26+)
         let escaped_cmd = command.replace('\\', "\\\\").replace('"', "\\\"");
-        let escaped_title = title.replace('\\', "\\\\").replace('"', "\\\"");
-
-        // iTerm2
-        if std::path::Path::new("/Applications/iTerm.app").exists() {
-            let script = format!(
-                "tell app \"iTerm2\"\n\
-                     create window with default profile command \"clear && {escaped_cmd}\"\n\
-                     tell current session of current window\n\
-                         set name to \"{escaped_title}\"\n\
-                     end tell\n\
-                     activate\n\
-                 end tell"
-            );
-            if let Ok(out) = std::process::Command::new("osascript")
-                .args(["-e", &script])
-                .output()
-            {
-                if out.status.success() {
-                    tracing::debug!(terminal = "iTerm2", "Opened terminal via AppleScript");
-                    return Ok(());
-                }
-                let stderr = String::from_utf8_lossy(&out.stderr);
-                tracing::warn!(terminal = "iTerm2", error = %stderr, "AppleScript failed, trying next");
-            }
-        }
-
-        // Terminal.app — always available on macOS (last resort)
-        // Note: `set custom title` requires `has custom title` on the tab,
-        // but macOS 26+ removed that property. Use a try block so title-setting
-        // is best-effort — the command still runs even if titling fails.
         let script = format!(
             "tell app \"Terminal\"\n\
                  do script \"clear && {escaped_cmd}\"\n\
@@ -1455,10 +1339,7 @@ fn open_terminal(command: &str, title: &str) -> Result<(), String> {
             }
             Ok(out) => {
                 let stderr = String::from_utf8_lossy(&out.stderr);
-                Err(format!(
-                    "No terminal emulator worked (tried ghostty, kitty, alacritty, wezterm, iTerm2, Terminal.app). \
-                     Last error: {stderr}"
-                ))
+                Err(format!("Terminal.app launch failed: {stderr}"))
             }
             Err(e) => Err(format!("osascript: {e}")),
         }
