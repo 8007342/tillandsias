@@ -414,9 +414,11 @@ fn main() {
                                     entry.completed_at = Some(std::time::Instant::now());
                                 }
                             }
-                            let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                            if build_tx.try_send(BuildProgressEvent::Completed {
                                 image_name: enclave_chip_name,
-                            });
+                            }).is_err() {
+                                debug!("Build progress channel full/closed — UI may show stale state");
+                            }
                             rebuild_menu(&app_handle_for_loop, &state_for_loop);
                         }
                         Err(e) => {
@@ -432,10 +434,12 @@ fn main() {
                                     entry.completed_at = Some(std::time::Instant::now());
                                 }
                             }
-                            let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                            if build_tx.try_send(BuildProgressEvent::Failed {
                                 image_name: enclave_chip_name,
                                 reason: e,
-                            });
+                            }).is_err() {
+                                debug!("Build progress channel full/closed — UI may show stale state");
+                            }
                             rebuild_menu(&app_handle_for_loop, &state_for_loop);
 
                             // @trace spec:tray-app

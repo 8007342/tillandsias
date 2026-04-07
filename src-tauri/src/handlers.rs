@@ -139,9 +139,11 @@ pub(crate) async fn ensure_inference_running(
         // User-friendly chip name — never expose "inference" or "image" to users.
         let chip_name = "Inference Engine".to_string();
 
-        let _ = build_tx.try_send(BuildProgressEvent::Started {
+        if build_tx.try_send(BuildProgressEvent::Started {
             image_name: chip_name.clone(),
-        });
+        }).is_err() {
+            debug!("Build progress channel full/closed — UI may show stale state");
+        }
 
         let build_result =
             tokio::task::spawn_blocking(|| run_build_image_script("inference")).await;
@@ -150,7 +152,7 @@ pub(crate) async fn ensure_inference_running(
             Ok(Ok(())) => {
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, spec = "inference-container", "Inference image still not found after build");
-                    let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    if build_tx.try_send(BuildProgressEvent::Failed {
                         image_name: chip_name,
                         reason: "Inference image not ready".to_string(),
                     }).is_err() {
@@ -159,13 +161,15 @@ pub(crate) async fn ensure_inference_running(
                     return Err("Inference image not ready after build".into());
                 }
                 info!(tag = %tag, spec = "inference-container", "Inference image built");
-                let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                if build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: chip_name,
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
             }
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, spec = "inference-container", "Inference image build failed");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: chip_name,
                     reason: format!("Inference build failed: {e}"),
                 }).is_err() {
@@ -175,7 +179,7 @@ pub(crate) async fn ensure_inference_running(
             }
             Err(ref e) => {
                 error!(tag = %tag, error = %e, spec = "inference-container", "Inference image build task panicked");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: chip_name,
                     reason: format!("Inference build panicked: {e}"),
                 }).is_err() {
@@ -354,9 +358,11 @@ pub(crate) async fn ensure_proxy_running(
         // User-friendly chip name — never expose "proxy" or "image" to users.
         let chip_name = "Enclave".to_string();
 
-        let _ = build_tx.try_send(BuildProgressEvent::Started {
+        if build_tx.try_send(BuildProgressEvent::Started {
             image_name: chip_name.clone(),
-        });
+        }).is_err() {
+            debug!("Build progress channel full/closed — UI may show stale state");
+        }
 
         let build_result =
             tokio::task::spawn_blocking(|| run_build_image_script("proxy")).await;
@@ -365,7 +371,7 @@ pub(crate) async fn ensure_proxy_running(
             Ok(Ok(())) => {
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, spec = "proxy-container", "Proxy image still not found after build");
-                    let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    if build_tx.try_send(BuildProgressEvent::Failed {
                         image_name: chip_name,
                         reason: "Proxy image not ready".to_string(),
                     }).is_err() {
@@ -374,13 +380,15 @@ pub(crate) async fn ensure_proxy_running(
                     return Err("Proxy image not ready after build".into());
                 }
                 info!(tag = %tag, spec = "proxy-container", "Proxy image built");
-                let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                if build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: chip_name,
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
             }
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, spec = "proxy-container", "Proxy image build failed");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: chip_name,
                     reason: format!("Proxy build failed: {e}"),
                 }).is_err() {
@@ -390,7 +398,7 @@ pub(crate) async fn ensure_proxy_running(
             }
             Err(ref e) => {
                 error!(tag = %tag, error = %e, spec = "proxy-container", "Proxy image build task panicked");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: chip_name,
                     reason: format!("Proxy build panicked: {e}"),
                 }).is_err() {
@@ -799,9 +807,11 @@ pub(crate) async fn ensure_git_service_running(
         // User-friendly chip name — never expose "git service" or "image" to users.
         let chip_name = "Code Mirror".to_string();
 
-        let _ = build_tx.try_send(BuildProgressEvent::Started {
+        if build_tx.try_send(BuildProgressEvent::Started {
             image_name: chip_name.clone(),
-        });
+        }).is_err() {
+            debug!("Build progress channel full/closed — UI may show stale state");
+        }
 
         let build_result =
             tokio::task::spawn_blocking(|| run_build_image_script("git")).await;
@@ -810,7 +820,7 @@ pub(crate) async fn ensure_git_service_running(
             Ok(Ok(())) => {
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, spec = "git-mirror-service", "Git service image still not found after build");
-                    let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    if build_tx.try_send(BuildProgressEvent::Failed {
                         image_name: chip_name,
                         reason: "Git service image not ready".to_string(),
                     }).is_err() {
@@ -819,13 +829,15 @@ pub(crate) async fn ensure_git_service_running(
                     return Err("Git service image not ready after build".into());
                 }
                 info!(tag = %tag, spec = "git-mirror-service", "Git service image built");
-                let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                if build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: chip_name,
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
             }
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, spec = "git-mirror-service", "Git service image build failed");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: chip_name,
                     reason: format!("Git service build failed: {e}"),
                 }).is_err() {
@@ -835,7 +847,7 @@ pub(crate) async fn ensure_git_service_running(
             }
             Err(ref e) => {
                 error!(tag = %tag, error = %e, spec = "git-mirror-service", "Git service image build task panicked");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: chip_name,
                     reason: format!("Git service build panicked: {e}"),
                 }).is_err() {
