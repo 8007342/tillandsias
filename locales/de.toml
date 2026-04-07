@@ -100,6 +100,7 @@ claude_credentials_cleared = "Claude-Zugangsdaten gelöscht. Beim nächsten Star
 forge_not_ready = "Wird eingerichtet — bitte einen Moment warten."
 forge_ready = "Bereit — du kannst dich jetzt mit jedem Projekt verbinden."
 infrastructure_failed = "Bei der Einrichtung ist ein Problem aufgetreten. Einige Funktionen sind möglicherweise langsam."
+tools_updated = "Entwicklungstools wurden aktualisiert. Neue Umgebungen verwenden die neuesten Versionen."
 
 # ── Stats command ────────────────────────────────────────────
 [stats]

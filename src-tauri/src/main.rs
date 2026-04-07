@@ -25,6 +25,7 @@ mod secrets;
 mod singleton;
 mod strings;
 mod token_files;
+mod tools_overlay;
 mod update_cli;
 mod update_log;
 mod updater;

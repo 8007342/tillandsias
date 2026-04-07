@@ -100,6 +100,7 @@ claude_credentials_cleared = "Claude credentials cleared. Next launch will promp
 forge_not_ready = "Setting up — please wait a moment."
 forge_ready = "Ready — you can now attach to any project."
 infrastructure_failed = "Setup encountered an issue. Some features may be slow."
+tools_updated = "Development tools have been updated. New environments will use the latest versions."
 
 # ── Stats command ────────────────────────────────────────────
 [stats]

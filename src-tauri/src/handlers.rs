@@ -886,318 +886,13 @@ pub(crate) async fn ensure_git_service_running(
 }
 
 // ---------------------------------------------------------------------------
-// Tools overlay — pre-installed AI coding tools
+// Tools overlay — delegated to tools_overlay module
 // @trace spec:layered-tools-overlay
 // ---------------------------------------------------------------------------
 
-/// Manifest describing the contents of a tools overlay directory.
-///
-/// Written as `.manifest.json` inside each versioned overlay directory
-/// (e.g., `~/.cache/tillandsias/tools-overlay/v1/.manifest.json`).
-///
+/// Re-export from tools_overlay module for backward compatibility.
 /// @trace spec:layered-tools-overlay
-#[derive(Debug, Serialize, Deserialize)]
-struct ToolsManifest {
-    /// Overlay format version (always 1 for now).
-    version: u32,
-    /// ISO 8601 timestamp when the overlay was built.
-    created: String,
-    /// Forge image tag used to build the overlay (e.g., "tillandsias-forge:v0.1.97.83").
-    forge_image: String,
-    /// Per-tool version and install timestamp.
-    tools: HashMap<String, ToolEntry>,
-}
-
-/// A single tool entry in the tools manifest.
-///
-/// @trace spec:layered-tools-overlay
-#[derive(Debug, Serialize, Deserialize)]
-struct ToolEntry {
-    /// Tool version string (e.g., "1.0.34").
-    version: String,
-    /// ISO 8601 timestamp when this tool was installed.
-    installed: String,
-}
-
-/// Read the tools manifest from a versioned overlay directory.
-///
-/// Expects `.manifest.json` to exist in `dir`. Returns `Err` if the file
-/// is missing or unparseable.
-///
-/// @trace spec:layered-tools-overlay
-fn read_manifest(dir: &Path) -> Result<ToolsManifest, String> {
-    let path = dir.join(".manifest.json");
-    let content = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Cannot read manifest at {}: {e}", path.display()))?;
-    serde_json::from_str(&content)
-        .map_err(|e| format!("Cannot parse manifest at {}: {e}", path.display()))
-}
-
-/// Write a tools manifest to a versioned overlay directory.
-///
-/// Creates `.manifest.json` in `dir`, pretty-printed for human readability.
-///
-/// @trace spec:layered-tools-overlay
-fn write_manifest(dir: &Path, manifest: &ToolsManifest) -> Result<(), String> {
-    let path = dir.join(".manifest.json");
-    let json = serde_json::to_string_pretty(manifest)
-        .map_err(|e| format!("Cannot serialize manifest: {e}"))?;
-    std::fs::write(&path, json)
-        .map_err(|e| format!("Cannot write manifest to {}: {e}", path.display()))
-}
-
-/// Ensure the tools overlay directory exists and is up to date.
-///
-/// On first launch: runs the builder script (blocking).
-/// On subsequent launches: validates the `current` symlink exists and checks
-/// the forge image version. If the forge image has changed, logs a warning
-/// but does not block (Phase 2 will add background rebuild).
-///
-/// Returns `Ok(())` on success or if the overlay is usable (even if stale).
-/// Returns `Err` only on first-launch build failure.
-///
-/// @trace spec:layered-tools-overlay
-pub(crate) async fn ensure_tools_overlay() -> Result<(), String> {
-    let cache = cache_dir();
-    let overlay_dir = cache.join("tools-overlay");
-    let current = overlay_dir.join("current");
-
-    // If current symlink exists and points to a valid directory, we're good
-    if current.exists() && current.is_dir() {
-        // Check forge image version match — trigger rebuild if mismatched
-        if let Ok(manifest) = read_manifest(&current) {
-            let expected_tag = forge_image_tag();
-            if manifest.forge_image != expected_tag {
-                info!(
-                    old = %manifest.forge_image,
-                    new = %expected_tag,
-                    spec = "layered-tools-overlay",
-                    "Forge image changed — tools overlay needs rebuild"
-                );
-                // Don't block — use stale overlay for now.
-                // Phase 2 will spawn a background rebuild task.
-            }
-        }
-        debug!(
-            spec = "layered-tools-overlay",
-            overlay = %current.display(),
-            "Tools overlay ready"
-        );
-        return Ok(());
-    }
-
-    // First launch — build the overlay (blocking)
-    info!(
-        accountability = true,
-        category = "tools",
-        spec = "layered-tools-overlay",
-        "Building tools overlay (first time)..."
-    );
-    build_tools_overlay_blocking(&overlay_dir).await
-}
-
-/// Build the tools overlay by running `build-tools-overlay.sh` in a
-/// blocking subprocess.
-///
-/// Steps:
-/// 1. Create a versioned directory (v1/)
-/// 2. Extract embedded scripts to temp
-/// 3. Run `scripts/build-tools-overlay.sh <v1-dir> <forge-image-tag>`
-/// 4. Write `.manifest.json` with tool versions
-/// 5. Create the `current` symlink pointing to `v1/`
-///
-/// @trace spec:layered-tools-overlay
-async fn build_tools_overlay_blocking(overlay_dir: &Path) -> Result<(), String> {
-    let overlay_dir = overlay_dir.to_path_buf();
-    let forge_tag = forge_image_tag();
-
-    tokio::task::spawn_blocking(move || {
-        // Step 1: Create versioned directory
-        let version_dir = overlay_dir.join("v1");
-        std::fs::create_dir_all(&version_dir).map_err(|e| {
-            format!(
-                "Cannot create overlay directory {}: {e}",
-                version_dir.display()
-            )
-        })?;
-
-        // Step 2: Extract embedded scripts
-        let source_dir = crate::embedded::write_image_sources().map_err(|e| {
-            error!(error = %e, spec = "layered-tools-overlay", "Failed to extract embedded scripts");
-            format!("Failed to extract embedded scripts: {e}")
-        })?;
-
-        let script = source_dir.join("scripts").join("build-tools-overlay.sh");
-        if !script.exists() {
-            crate::embedded::cleanup_image_sources();
-            return Err(format!(
-                "build-tools-overlay.sh not found at {}",
-                script.display()
-            ));
-        }
-
-        // Step 3: Run the builder script
-        info!(
-            script = %script.display(),
-            output = %version_dir.display(),
-            forge_image = %forge_tag,
-            spec = "layered-tools-overlay",
-            "Running build-tools-overlay.sh"
-        );
-
-        let output = std::process::Command::new(&script)
-            .arg(version_dir.to_str().unwrap_or_default())
-            .arg(&forge_tag)
-            .env_remove("LD_LIBRARY_PATH")
-            .env_remove("LD_PRELOAD")
-            .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
-            .output()
-            .map_err(|e| {
-                error!(
-                    script = %script.display(),
-                    error = %e,
-                    spec = "layered-tools-overlay",
-                    "Failed to launch build-tools-overlay.sh"
-                );
-                format!("Failed to launch build-tools-overlay.sh: {e}")
-            })?;
-
-        crate::embedded::cleanup_image_sources();
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            error!(
-                exit_code = output.status.code().unwrap_or(-1),
-                stdout = %stdout,
-                stderr = %stderr,
-                spec = "layered-tools-overlay",
-                "build-tools-overlay.sh failed"
-            );
-            return Err(format!(
-                "Tools overlay build failed (exit {})",
-                output.status.code().unwrap_or(-1)
-            ));
-        }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        debug!(output = %stdout, spec = "layered-tools-overlay", "build-tools-overlay.sh completed");
-
-        // Step 4: Write manifest
-        let now = iso8601_now();
-        let manifest = ToolsManifest {
-            version: 1,
-            created: now.clone(),
-            forge_image: forge_tag.clone(),
-            tools: {
-                let mut map = HashMap::new();
-                // Probe installed tool versions from the overlay directory
-                let claude_ver = probe_tool_version(
-                    &version_dir.join("claude").join("bin").join("claude"),
-                    &["--version"],
-                );
-                let openspec_ver = probe_tool_version(
-                    &version_dir.join("openspec").join("bin").join("openspec"),
-                    &["--version"],
-                );
-                let opencode_ver = probe_tool_version(
-                    &version_dir.join("opencode").join("bin").join("opencode"),
-                    &["--version"],
-                );
-
-                map.insert(
-                    "claude".to_string(),
-                    ToolEntry {
-                        version: claude_ver,
-                        installed: now.clone(),
-                    },
-                );
-                map.insert(
-                    "openspec".to_string(),
-                    ToolEntry {
-                        version: openspec_ver,
-                        installed: now.clone(),
-                    },
-                );
-                map.insert(
-                    "opencode".to_string(),
-                    ToolEntry {
-                        version: opencode_ver,
-                        installed: now,
-                    },
-                );
-                map
-            },
-        };
-
-        write_manifest(&version_dir, &manifest)?;
-        info!(
-            spec = "layered-tools-overlay",
-            forge_image = %manifest.forge_image,
-            "Wrote tools overlay manifest"
-        );
-
-        // Step 5: Create `current` symlink pointing to `v1/`
-        let current_link = overlay_dir.join("current");
-        // Remove existing symlink/file if present
-        let _ = std::fs::remove_file(&current_link);
-        #[cfg(unix)]
-        std::os::unix::fs::symlink("v1", &current_link)
-            .map_err(|e| format!("Cannot create current symlink: {e}"))?;
-        #[cfg(windows)]
-        std::os::windows::fs::symlink_dir("v1", &current_link)
-            .map_err(|e| format!("Cannot create current symlink: {e}"))?;
-
-        info!(
-            accountability = true,
-            category = "tools",
-            spec = "layered-tools-overlay",
-            overlay = %version_dir.display(),
-            "Tools overlay built and ready"
-        );
-
-        Ok(())
-    })
-    .await
-    .map_err(|e| format!("Tools overlay build task panicked: {e}"))?
-}
-
-/// Get the current timestamp in ISO 8601 format (UTC).
-///
-/// Uses the system `date` command, falling back to "unknown" on failure.
-fn iso8601_now() -> String {
-    std::process::Command::new("date")
-        .args(["-u", "+%Y-%m-%dT%H:%M:%SZ"])
-        .output()
-        .ok()
-        .and_then(|o| {
-            if o.status.success() {
-                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
-            } else {
-                None
-            }
-        })
-        .unwrap_or_else(|| "unknown".to_string())
-}
-
-/// Probe a tool binary for its version string.
-///
-/// Runs `<binary> <args>` and returns the trimmed stdout, or "unknown" on failure.
-/// @trace spec:layered-tools-overlay
-fn probe_tool_version(binary: &Path, args: &[&str]) -> String {
-    std::process::Command::new(binary)
-        .args(args)
-        .output()
-        .ok()
-        .and_then(|o| {
-            if o.status.success() {
-                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
-            } else {
-                None
-            }
-        })
-        .unwrap_or_else(|| "unknown".to_string())
-}
+pub(crate) use crate::tools_overlay::ensure_tools_overlay;
 
 // ---------------------------------------------------------------------------
 // Unified enclave startup
@@ -2469,6 +2164,12 @@ pub async fn handle_attach_here(
         project.assigned_genus = Some(genus);
     }
 
+    // P2-4: Spawn background tools overlay update after successful launch.
+    // Non-blocking — container is already running, this checks for newer
+    // tool versions in the background.
+    // @trace spec:layered-tools-overlay
+    crate::tools_overlay::spawn_background_update();
+
     let elapsed = start.elapsed();
     info!(
         duration_secs = elapsed.as_secs_f64(),
@@ -2795,6 +2496,9 @@ pub async fn handle_terminal(
                     "Maintenance terminal {container_name} launched credential-free",
                 );
             }
+            // P2-4: Spawn background tools overlay update after successful launch.
+            // @trace spec:layered-tools-overlay
+            crate::tools_overlay::spawn_background_update();
             Ok(())
         }
         Err(e) => {

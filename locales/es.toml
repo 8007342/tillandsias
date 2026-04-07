@@ -92,6 +92,7 @@ claude_credentials_cleared = "Credenciales de Claude eliminadas. El próximo ini
 forge_not_ready = "Configurando — por favor espera un momento."
 forge_ready = "Listo — ya puedes conectarte a cualquier proyecto."
 infrastructure_failed = "La configuración encontró un problema. Algunas funciones podrían ser lentas."
+tools_updated = "Las herramientas de desarrollo se han actualizado. Los nuevos entornos usarán las últimas versiones."
 
 # ── Stats command ────────────────────────────────────────────
 [stats]
