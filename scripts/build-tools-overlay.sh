@@ -189,8 +189,13 @@ _step "Installing Claude Code..."
         export OPENCODE_INSTALL_DIR=/home/forge/.tools/opencode
         mkdir -p /home/forge/.tools/opencode/bin
         set +e
-        curl -fsSL https://opencode.ai/install | bash 2>&1
+        OC_OUTPUT=$(curl -fsSL https://opencode.ai/install | bash 2>&1)
+        OC_EXIT=$?
         set -e
+        if [ $OC_EXIT -ne 0 ]; then
+            echo "[tools-overlay] WARNING: OpenCode installer exited with code $OC_EXIT" >&2
+            echo "[tools-overlay] $OC_OUTPUT" >&2
+        fi
 
         # If installer ignored OPENCODE_INSTALL_DIR (common), relocate binary
         if [ ! -x /home/forge/.tools/opencode/bin/opencode ] && [ -f "$HOME/.opencode/bin/opencode" ]; then

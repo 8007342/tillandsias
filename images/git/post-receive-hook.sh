@@ -15,7 +15,9 @@ fi
 if OUTPUT="$(git push --mirror origin 2>&1)"; then
     echo "[git-mirror] Push to origin: success"
 else
-    echo "[git-mirror] Push to origin: FAILED: $OUTPUT"
+    # WARN level — visible in --log-git accountability window
+    echo "[git-mirror] WARNING: Push to origin FAILED — changes may not be synced" >&2
+    echo "[git-mirror] Error: $OUTPUT" >&2
 fi
 
 exit 0
