@@ -244,13 +244,32 @@ impl PodmanClient {
     /// Force kill a container.
     pub async fn kill_container(&self, name: &str) -> Result<(), PodmanError> {
         debug!(name, "Killing container");
-        let _ = crate::podman_cmd().args(["kill", name]).output().await;
+        match crate::podman_cmd().args(["kill", name]).output().await {
+            Ok(output) if !output.status.success() => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                warn!(name, %stderr, "Container kill failed — may already be stopped");
+            }
+            Err(e) => {
+                warn!(name, error = %e, "Container kill command failed");
+            }
+            _ => {}
+        }
         Ok(())
     }
 
     /// Remove a container.
     pub async fn remove_container(&self, name: &str) -> Result<(), PodmanError> {
-        let _ = crate::podman_cmd().args(["rm", "-f", name]).output().await;
+        debug!(name, "Removing container");
+        match crate::podman_cmd().args(["rm", "-f", name]).output().await {
+            Ok(output) if !output.status.success() => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                warn!(name, %stderr, "Container removal failed — may not exist");
+            }
+            Err(e) => {
+                warn!(name, error = %e, "Container removal command failed");
+            }
+            _ => {}
+        }
         Ok(())
     }
 
@@ -350,7 +369,7 @@ impl PodmanClient {
         }
     }
 
-    /// Remove a podman network. Fails silently if containers are still attached.
+    /// Remove a podman network. Returns Ok(()) even on failure (callers handle gracefully).
     /// @trace spec:enclave-network
     pub async fn remove_network(&self, name: &str) -> Result<(), PodmanError> {
         debug!(name, "Removing network");
@@ -362,13 +381,18 @@ impl PodmanClient {
 
         if output.status.success() {
             info!(name, "Network removed");
-            Ok(())
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            // Fail silently if containers are still attached
-            warn!(name, %stderr, "Network removal returned error (may still have attached containers)");
-            Ok(())
+            let stderr_lower = stderr.to_lowercase();
+            if stderr_lower.contains("has connected containers")
+                || stderr_lower.contains("being used")
+            {
+                warn!(name, %stderr, "Network removal blocked — containers still attached (zombie risk)");
+            } else {
+                tracing::error!(name, %stderr, "Network removal failed");
+            }
         }
+        Ok(())
     }
 
     /// Start a container with the given arguments.

@@ -116,7 +116,9 @@ pub(crate) async fn ensure_inference_running(
                 expected = %expected_tag,
                 "Inference container running stale version — restarting"
             );
-            let _ = client.stop_container(INFERENCE_CONTAINER_NAME, 5).await;
+            if let Err(e) = client.stop_container(INFERENCE_CONTAINER_NAME, 5).await {
+                warn!(container = INFERENCE_CONTAINER_NAME, error = %e, "Failed to stop stale inference container");
+            }
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
     }
@@ -133,9 +135,11 @@ pub(crate) async fn ensure_inference_running(
     if !client.image_exists(&tag).await {
         info!(tag = %tag, spec = "inference-container", "Inference image absent — building");
 
-        let _ = build_tx.try_send(BuildProgressEvent::Started {
+        if build_tx.try_send(BuildProgressEvent::Started {
             image_name: "Inference".to_string(),
-        });
+        }).is_err() {
+            debug!("Build progress channel full/closed — UI may show stale state");
+        }
 
         let build_result =
             tokio::task::spawn_blocking(|| run_build_image_script("inference")).await;
@@ -144,31 +148,39 @@ pub(crate) async fn ensure_inference_running(
             Ok(Ok(())) => {
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, spec = "inference-container", "Inference image still not found after build");
-                    let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    if build_tx.try_send(BuildProgressEvent::Failed {
                         image_name: "Inference".to_string(),
                         reason: "Inference image not ready".to_string(),
-                    });
+                    }).is_err() {
+                        debug!("Build progress channel full/closed — UI may show stale state");
+                    }
                     return Err("Inference image not ready after build".into());
                 }
                 info!(tag = %tag, spec = "inference-container", "Inference image built");
-                let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                if build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: "Inference".to_string(),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
             }
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, spec = "inference-container", "Inference image build failed");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "Inference".to_string(),
                     reason: format!("Inference build failed: {e}"),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
                 return Err(format!("Inference image build failed: {e}"));
             }
             Err(ref e) => {
                 error!(tag = %tag, error = %e, spec = "inference-container", "Inference image build task panicked");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "Inference".to_string(),
                     reason: format!("Inference build panicked: {e}"),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
                 return Err(format!("Inference image build panicked: {e}"));
             }
         }
@@ -318,7 +330,9 @@ pub(crate) async fn ensure_proxy_running(
                 expected = %expected_tag,
                 "Proxy container running stale version — restarting"
             );
-            let _ = client.stop_container(PROXY_CONTAINER_NAME, 5).await;
+            if let Err(e) = client.stop_container(PROXY_CONTAINER_NAME, 5).await {
+                warn!(container = PROXY_CONTAINER_NAME, error = %e, "Failed to stop stale proxy container");
+            }
             // Wait briefly for cleanup
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
@@ -336,9 +350,11 @@ pub(crate) async fn ensure_proxy_running(
     if !client.image_exists(&tag).await {
         info!(tag = %tag, spec = "proxy-container", "Proxy image absent — building");
 
-        let _ = build_tx.try_send(BuildProgressEvent::Started {
+        if build_tx.try_send(BuildProgressEvent::Started {
             image_name: "Proxy".to_string(),
-        });
+        }).is_err() {
+            debug!("Build progress channel full/closed — UI may show stale state");
+        }
 
         let build_result =
             tokio::task::spawn_blocking(|| run_build_image_script("proxy")).await;
@@ -347,31 +363,39 @@ pub(crate) async fn ensure_proxy_running(
             Ok(Ok(())) => {
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, spec = "proxy-container", "Proxy image still not found after build");
-                    let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    if build_tx.try_send(BuildProgressEvent::Failed {
                         image_name: "Proxy".to_string(),
                         reason: "Proxy image not ready".to_string(),
-                    });
+                    }).is_err() {
+                        debug!("Build progress channel full/closed — UI may show stale state");
+                    }
                     return Err("Proxy image not ready after build".into());
                 }
                 info!(tag = %tag, spec = "proxy-container", "Proxy image built");
-                let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                if build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: "Proxy".to_string(),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
             }
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, spec = "proxy-container", "Proxy image build failed");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "Proxy".to_string(),
                     reason: format!("Proxy build failed: {e}"),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
                 return Err(format!("Proxy image build failed: {e}"));
             }
             Err(ref e) => {
                 error!(tag = %tag, error = %e, spec = "proxy-container", "Proxy image build task panicked");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "Proxy".to_string(),
                     reason: format!("Proxy build panicked: {e}"),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
                 return Err(format!("Proxy image build panicked: {e}"));
             }
         }
@@ -493,7 +517,7 @@ pub(crate) async fn cleanup_enclave_network() {
                 spec = "enclave-network",
                 "Enclave network removed"
             ),
-            Err(e) => debug!(spec = "enclave-network", error = %e, "Enclave network removal failed (may still have attached containers)"),
+            Err(e) => warn!(spec = "enclave-network", error = %e, "Enclave network removal failed — zombie containers may exist"),
         }
     }
 }
@@ -739,7 +763,9 @@ pub(crate) async fn ensure_git_service_running(
                 expected = %expected_tag,
                 "Git service running stale version — restarting"
             );
-            let _ = client.stop_container(&container_name, 5).await;
+            if let Err(e) = client.stop_container(&container_name, 5).await {
+                warn!(container = %container_name, error = %e, "Failed to stop stale git service container");
+            }
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
     }
@@ -757,9 +783,11 @@ pub(crate) async fn ensure_git_service_running(
     if !client.image_exists(&tag).await {
         info!(tag = %tag, spec = "git-mirror-service", "Git service image absent — building");
 
-        let _ = build_tx.try_send(BuildProgressEvent::Started {
+        if build_tx.try_send(BuildProgressEvent::Started {
             image_name: "Git service".to_string(),
-        });
+        }).is_err() {
+            debug!("Build progress channel full/closed — UI may show stale state");
+        }
 
         let build_result =
             tokio::task::spawn_blocking(|| run_build_image_script("git")).await;
@@ -768,31 +796,39 @@ pub(crate) async fn ensure_git_service_running(
             Ok(Ok(())) => {
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, spec = "git-mirror-service", "Git service image still not found after build");
-                    let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    if build_tx.try_send(BuildProgressEvent::Failed {
                         image_name: "Git service".to_string(),
                         reason: "Git service image not ready".to_string(),
-                    });
+                    }).is_err() {
+                        debug!("Build progress channel full/closed — UI may show stale state");
+                    }
                     return Err("Git service image not ready after build".into());
                 }
                 info!(tag = %tag, spec = "git-mirror-service", "Git service image built");
-                let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                if build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: "Git service".to_string(),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
             }
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, spec = "git-mirror-service", "Git service image build failed");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "Git service".to_string(),
                     reason: format!("Git service build failed: {e}"),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
                 return Err(format!("Git service image build failed: {e}"));
             }
             Err(ref e) => {
                 error!(tag = %tag, error = %e, spec = "git-mirror-service", "Git service image build task panicked");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "Git service".to_string(),
                     reason: format!("Git service build panicked: {e}"),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
                 return Err(format!("Git service image build panicked: {e}"));
             }
         }
@@ -922,8 +958,8 @@ pub struct EnclaveContext {
 /// 4. Initialize git mirror for the project
 /// 5. Start git service for the project (check version, restart if stale)
 ///
-/// Inference and git mirror/service failures are non-fatal — the forge will
-/// launch without those capabilities, with warnings logged.
+/// Inference failures are non-fatal — the forge will launch without inference.
+/// Git mirror creation failures propagate as errors (no silent continue).
 ///
 /// @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container
 pub async fn ensure_enclave_ready(
@@ -976,7 +1012,7 @@ pub async fn ensure_enclave_ready(
         );
     }
 
-    // Step 4+5: Git mirror + service — soft requirement (non-fatal)
+    // Step 4+5: Git mirror + service — mirror creation failure propagates
     let mirror_path = match tokio::task::spawn_blocking({
         let pp = project_path.to_path_buf();
         let pn = project_name.to_string();
@@ -998,20 +1034,10 @@ pub async fn ensure_enclave_ready(
             Some(mirror_path)
         }
         Ok(Err(e)) => {
-            warn!(
-                error = %e,
-                spec = "git-mirror-service",
-                "Mirror setup failed — containers will launch without git mirror"
-            );
-            None
+            return Err(format!("Mirror setup failed: {e}"));
         }
         Err(e) => {
-            warn!(
-                error = %e,
-                spec = "git-mirror-service",
-                "Mirror setup task panicked — containers will launch without git mirror"
-            );
-            None
+            return Err(format!("Mirror setup task panicked: {e}"));
         }
     };
 
@@ -1418,11 +1444,14 @@ fn open_terminal(command: &str, title: &str) -> Result<(), String> {
 pub(crate) fn send_notification(summary: &str, body: &str) {
     #[cfg(target_os = "linux")]
     {
-        let _ = std::process::Command::new("notify-send")
+        if let Err(e) = std::process::Command::new("notify-send")
             .env_remove("LD_LIBRARY_PATH")
             .env_remove("LD_PRELOAD")
             .args([summary, body])
-            .spawn();
+            .spawn()
+        {
+            debug!(error = %e, "Desktop notification failed (cosmetic)");
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -1431,9 +1460,12 @@ pub(crate) fn send_notification(summary: &str, body: &str) {
         let escaped_body = body.replace('"', "\\\"");
         let script =
             format!("display notification \"{escaped_body}\" with title \"{escaped_summary}\"");
-        let _ = std::process::Command::new("osascript")
+        if let Err(e) = std::process::Command::new("osascript")
             .args(["-e", &script])
-            .spawn();
+            .spawn()
+        {
+            debug!(error = %e, "Desktop notification failed (cosmetic)");
+        }
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -1915,9 +1947,11 @@ pub async fn handle_attach_here(
         info!(tag = %tag, "Ensuring forge image is up to date...");
 
         // Notify event loop: build started (menu chip: ⏳ Building forge...)
-        let _ = build_tx.try_send(BuildProgressEvent::Started {
+        if build_tx.try_send(BuildProgressEvent::Started {
             image_name: "forge".to_string(),
-        });
+        }).is_err() {
+            debug!("Build progress channel full/closed — UI may show stale state");
+        }
 
         let build_result =
             tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
@@ -1927,10 +1961,12 @@ pub async fn handle_attach_here(
                 // Verify the image actually exists now
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, "Image still not found after build completed");
-                    let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    if build_tx.try_send(BuildProgressEvent::Failed {
                         image_name: "forge".to_string(),
                         reason: "Development environment not ready yet".to_string(),
-                    });
+                    }).is_err() {
+                        debug!("Build progress channel full/closed — UI may show stale state");
+                    }
                     state.running.retain(|c| c.name != container_name);
                     allocator.release(&project_name, genus);
                     return Err(strings::ENV_NOT_READY.into());
@@ -1939,26 +1975,32 @@ pub async fn handle_attach_here(
                 // Prune older forge images after successful build
                 prune_old_images();
                 // Notify event loop: build completed (menu chip: ✅ forge ready)
-                let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                if build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: "forge".to_string(),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
             }
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, "Image build failed");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "forge".to_string(),
                     reason: "Tillandsias is setting up".to_string(),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
                 state.running.retain(|c| c.name != container_name);
                 allocator.release(&project_name, genus);
                 return Err(strings::SETUP_ERROR.into());
             }
             Err(ref e) => {
                 error!(tag = %tag, error = %e, "Image build task panicked");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "forge".to_string(),
                     reason: "Tillandsias is setting up".to_string(),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
                 state.running.retain(|c| c.name != container_name);
                 allocator.release(&project_name, genus);
                 return Err(strings::SETUP_ERROR.into());
@@ -2233,7 +2275,9 @@ pub async fn shutdown_all(state: &TrayState) {
         for entry in &containers {
             if entry.state == "running" {
                 info!(container = %entry.name, "Stopping orphaned container on shutdown");
-                let _ = launcher.stop(&entry.name).await;
+                if let Err(e) = launcher.stop(&entry.name).await {
+                    warn!(container = %entry.name, error = %e, "Failed to stop orphaned container on shutdown");
+                }
             }
         }
     }
@@ -2351,16 +2395,20 @@ pub async fn handle_terminal(
     let title = format!("{} {}", display_emoji, project_name);
 
     // Notify event loop: maintenance setup in progress (menu chip: ⛏️ Setting up Maintenance...)
-    let _ = build_tx.try_send(BuildProgressEvent::Started {
+    if build_tx.try_send(BuildProgressEvent::Started {
         image_name: "Maintenance".to_string(),
-    });
+    }).is_err() {
+        debug!("Build progress channel full/closed — UI may show stale state");
+    }
 
     match open_terminal(&podman_cmd, &title) {
         Ok(()) => {
             // Terminal launched — notify completed so chip shows briefly
-            let _ = build_tx.try_send(BuildProgressEvent::Completed {
+            if build_tx.try_send(BuildProgressEvent::Completed {
                 image_name: "Maintenance".to_string(),
-            });
+            }).is_err() {
+                debug!("Build progress channel full/closed — UI may show stale state");
+            }
             info!(
                 container = %container_name,
                 genus = %genus.display_name(),
@@ -2387,10 +2435,12 @@ pub async fn handle_terminal(
             state.running.retain(|c| c.name != container_name);
             allocator.release(&project_name, genus);
             tool_allocator.release(&project_name, &display_emoji);
-            let _ = build_tx.try_send(BuildProgressEvent::Failed {
+            if build_tx.try_send(BuildProgressEvent::Failed {
                 image_name: "Maintenance".to_string(),
                 reason: e.clone(),
-            });
+            }).is_err() {
+                debug!("Build progress channel full/closed — UI may show stale state");
+            }
             Err(format!("Failed to open terminal: {e}"))
         }
     }
@@ -2497,15 +2547,19 @@ pub async fn handle_root_terminal(
     let title = "\u{1F6E0}\u{FE0F} Root".to_string();
 
     // Notify event loop: maintenance setup in progress
-    let _ = build_tx.try_send(BuildProgressEvent::Started {
+    if build_tx.try_send(BuildProgressEvent::Started {
         image_name: "Maintenance".to_string(),
-    });
+    }).is_err() {
+        debug!("Build progress channel full/closed — UI may show stale state");
+    }
 
     match open_terminal(&podman_cmd, &title) {
         Ok(()) => {
-            let _ = build_tx.try_send(BuildProgressEvent::Completed {
+            if build_tx.try_send(BuildProgressEvent::Completed {
                 image_name: "Maintenance".to_string(),
-            });
+            }).is_err() {
+                debug!("Build progress channel full/closed — UI may show stale state");
+            }
             info!(
                 container = %container_name,
                 genus = %genus.display_name(),
@@ -2527,10 +2581,12 @@ pub async fn handle_root_terminal(
         Err(e) => {
             state.running.retain(|c| c.name != container_name);
             allocator.release(&project_name, genus);
-            let _ = build_tx.try_send(BuildProgressEvent::Failed {
+            if build_tx.try_send(BuildProgressEvent::Failed {
                 image_name: "Maintenance".to_string(),
                 reason: e.clone(),
-            });
+            }).is_err() {
+                debug!("Build progress channel full/closed — UI may show stale state");
+            }
             Err(format!("Failed to open root terminal: {e}"))
         }
     }
@@ -2588,9 +2644,11 @@ pub async fn handle_github_login(
     if !client.image_exists(&tag).await {
         info!(tag = %tag, "Git service image missing — building before GitHub Login");
 
-        let _ = build_tx.try_send(BuildProgressEvent::Started {
+        if build_tx.try_send(BuildProgressEvent::Started {
             image_name: "Git service".to_string(),
-        });
+        }).is_err() {
+            debug!("Build progress channel full/closed — UI may show stale state");
+        }
 
         let build_result = tokio::task::spawn_blocking(|| run_build_image_script("git")).await;
 
@@ -2598,31 +2656,39 @@ pub async fn handle_github_login(
             Ok(Ok(())) => {
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, "Git service image still not found after build (GitHub Login)");
-                    let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    if build_tx.try_send(BuildProgressEvent::Failed {
                         image_name: "Git service".to_string(),
                         reason: "Git service image not ready".to_string(),
-                    });
+                    }).is_err() {
+                        debug!("Build progress channel full/closed — UI may show stale state");
+                    }
                     return Err(strings::ENV_NOT_READY.into());
                 }
                 info!(tag = %tag, "Git service image built — proceeding with GitHub Login");
-                let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                if build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: "Git service".to_string(),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
             }
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, "Git service image build failed (GitHub Login)");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "Git service".to_string(),
                     reason: "Tillandsias is setting up".to_string(),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
                 return Err(strings::SETUP_ERROR.into());
             }
             Err(ref e) => {
                 error!(tag = %tag, error = %e, "Git service image build task panicked (GitHub Login)");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "Git service".to_string(),
                     reason: "Tillandsias is setting up".to_string(),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
                 return Err(strings::SETUP_ERROR.into());
             }
         }
@@ -2805,38 +2871,48 @@ pub async fn handle_serve_here(
     let client = PodmanClient::new();
     if !client.image_exists(web_image).await {
         info!(image = web_image, "Web image not found, building...");
-        let _ = build_tx.try_send(BuildProgressEvent::Started {
+        if build_tx.try_send(BuildProgressEvent::Started {
             image_name: "Web server".to_string(),
-        });
+        }).is_err() {
+            debug!("Build progress channel full/closed — UI may show stale state");
+        }
         let build_result = tokio::task::spawn_blocking(|| run_build_image_script("web")).await;
         match build_result {
             Ok(Ok(())) => {
                 if !client.image_exists(web_image).await {
                     error!(image = web_image, "Web image still not found after build");
-                    let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    if build_tx.try_send(BuildProgressEvent::Failed {
                         image_name: "Web server".to_string(),
                         reason: "Web server image not ready".to_string(),
-                    });
+                    }).is_err() {
+                        debug!("Build progress channel full/closed — UI may show stale state");
+                    }
                     return Err("Web server image is not ready yet".into());
                 }
-                let _ = build_tx.try_send(BuildProgressEvent::Completed {
+                if build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: "Web server".to_string(),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
             }
             Ok(Err(ref e)) => {
                 error!(image = web_image, error = %e, "Web image build failed");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "Web server".to_string(),
                     reason: "Web server image build failed".to_string(),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
                 return Err(strings::SETUP_ERROR.into());
             }
             Err(ref e) => {
                 error!(image = web_image, error = %e, "Web image build task panicked");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                if build_tx.try_send(BuildProgressEvent::Failed {
                     image_name: "Web server".to_string(),
                     reason: "Web server image build failed".to_string(),
-                });
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
                 return Err(strings::SETUP_ERROR.into());
             }
         }
