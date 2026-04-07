@@ -12,7 +12,7 @@ Downloads the NSIS installer, runs it silently, checks for Podman, and initializ
 
 ## Podman on Windows
 
-@trace spec:podman-lifecycle
+@trace spec:podman-orchestration
 
 | Task | Command | Notes |
 |------|---------|-------|
