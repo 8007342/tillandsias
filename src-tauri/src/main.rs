@@ -492,6 +492,13 @@ fn main() {
                                 let _ = build_tx.try_send(BuildProgressEvent::Completed {
                                     image_name: chip_name,
                                 });
+                                // @trace spec:tray-app
+                                // Desktop notification so the user knows the forge is ready,
+                                // even if they're not watching the tray menu.
+                                handlers::send_notification(
+                                    "Tillandsias",
+                                    i18n::t("notifications.forge_ready"),
+                                );
                             }
                             Ok(Err(ref e)) => {
                                 warn!(error = %e, "Auto forge build failed at launch");

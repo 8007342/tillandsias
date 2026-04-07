@@ -90,6 +90,7 @@ no_terminal = "No se encontró un emulador de terminal (se probó ptyxis, gnome-
 already_running = "Ya está en ejecución — busca '{title}' en tus ventanas"
 claude_credentials_cleared = "Credenciales de Claude eliminadas. El próximo inicio solicitará autenticación."
 forge_not_ready = "Configurando — por favor espera un momento."
+forge_ready = "Listo — ya puedes conectarte a cualquier proyecto."
 infrastructure_failed = "La configuración encontró un problema. Algunas funciones podrían ser lentas."
 
 # ── Stats command ────────────────────────────────────────────
