@@ -455,6 +455,18 @@ pub(crate) async fn ensure_proxy_running(
                 container_id = %container_id,
                 "Proxy container started (detached)"
             );
+
+            // @trace spec:secret-management
+            info!(
+                accountability = true,
+                category = "secrets",
+                safety = "CA certs only — no credentials, no D-Bus, no tokens",
+                pids_limit = 32,
+                read_only = true,
+                spec = "secret-management",
+                "Proxy container has CA certs only — zero credentials, pids-limit=32, read-only FS"
+            );
+
             Ok(())
         }
         Err(e) => {
@@ -814,7 +826,10 @@ pub(crate) async fn ensure_git_service_running(
     let profile = tillandsias_core::container_profile::git_service_profile();
     let cache = cache_dir();
 
-    // The git service needs a token file for the fallback GitHubToken secret
+    // Token file is a FALLBACK for when D-Bus session bus is unavailable.
+    // D-Bus forwarding is the preferred auth path. Token file mount is a
+    // security downgrade logged at WARN level in launch.rs.
+    // @trace spec:secret-management
     let token_file_path = match crate::secrets::retrieve_github_token() {
         Ok(Some(token)) => {
             match crate::token_files::write_token(&container_name, &token) {
@@ -878,6 +893,18 @@ pub(crate) async fn ensure_git_service_running(
                 container_id = %container_id,
                 project = %project_name,
                 "Git service container started (detached)"
+            );
+
+            // @trace spec:secret-management
+            info!(
+                accountability = true,
+                category = "secrets",
+                safety = "D-Bus session bus access granted — sole container with credential access",
+                pids_limit = 64,
+                read_only = true,
+                spec = "secret-management",
+                container = %container_name,
+                "Credential isolation boundary: git service has D-Bus access, pids-limit=64, read-only FS"
             );
 
             // Brief wait for git daemon to be ready
@@ -2040,15 +2067,17 @@ pub async fn handle_attach_here(
     );
 
     // Accountability: log credential-free forge launch.
+    // @trace spec:secret-management
     {
         let has_git_identity = !ctx.git_author_name.is_empty();
         info!(
             accountability = true,
             category = "secrets",
-            safety = "credential-free (no token, no hosts.yml, no claude-dir)",
+            safety = "credential-free (no token, no hosts.yml, no claude-dir, no D-Bus)",
             git_identity = has_git_identity,
-            spec = "environment-runtime",
-            "Environment {container_name} launched credential-free | git identity: {has_git_identity}",
+            pids_limit = 512,
+            spec = "secret-management",
+            "Environment {container_name} launched credential-free — zero D-Bus, zero credentials, pids-limit=512",
         );
     }
 
@@ -2380,13 +2409,15 @@ pub async fn handle_terminal(
                 "Maintenance terminal opened"
             );
             // Accountability: log credential-free terminal launch.
+            // @trace spec:secret-management
             {
                 info!(
                     accountability = true,
                     category = "secrets",
-                    safety = "credential-free (no token, no hosts.yml)",
-                    spec = "environment-runtime",
-                    "Maintenance terminal {container_name} launched credential-free",
+                    safety = "credential-free (no token, no hosts.yml, no D-Bus)",
+                    pids_limit = 512,
+                    spec = "secret-management",
+                    "Maintenance terminal {container_name} launched credential-free — zero D-Bus, zero credentials, pids-limit=512",
                 );
             }
             // P2-4: Spawn background tools overlay update after successful launch.
@@ -2525,13 +2556,15 @@ pub async fn handle_root_terminal(
                 "Root terminal opened"
             );
             // Accountability: log credential-free root terminal launch.
+            // @trace spec:secret-management
             {
                 info!(
                     accountability = true,
                     category = "secrets",
-                    safety = "credential-free (no token, no hosts.yml)",
-                    spec = "environment-runtime",
-                    "Root terminal {container_name} launched credential-free",
+                    safety = "credential-free (no token, no hosts.yml, no D-Bus)",
+                    pids_limit = 512,
+                    spec = "secret-management",
+                    "Root terminal {container_name} launched credential-free — zero D-Bus, zero credentials, pids-limit=512",
                 );
             }
             Ok(())

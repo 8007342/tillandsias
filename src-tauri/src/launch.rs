@@ -51,6 +51,26 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     args.push("--security-opt=label=disable".into());
 
     // -----------------------------------------------------------------------
+    // Process limit — prevents fork bombs, constrains each container to its
+    // intended workload. Values are set per-profile in container_profile.rs.
+    // @trace spec:podman-orchestration, spec:secret-management
+    // -----------------------------------------------------------------------
+    args.push(format!("--pids-limit={}", profile.pids_limit));
+
+    // -----------------------------------------------------------------------
+    // Read-only root filesystem — service containers (git, proxy, inference,
+    // web) run with immutable root FS. Runtime dirs get explicit tmpfs mounts.
+    // Forge/terminal containers need mutable workspace and skip this.
+    // @trace spec:podman-orchestration
+    // -----------------------------------------------------------------------
+    if profile.read_only {
+        args.push("--read-only".into());
+        for tmpfs_path in &profile.tmpfs_mounts {
+            args.push(format!("--tmpfs={tmpfs_path}"));
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // GPU passthrough (Linux only)
     // @trace spec:podman-orchestration/gpu-passthrough
     // -----------------------------------------------------------------------
@@ -166,7 +186,20 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     for secret in &profile.secrets {
         match &secret.kind {
             SecretKind::GitHubToken => {
+                // @trace spec:secret-management
+                // Token file mount is a FALLBACK for when D-Bus is unavailable
+                // (e.g., headless/SSH, possibly Windows). The preferred path is
+                // D-Bus session bus → host keyring. If we reach this code path,
+                // something prevented D-Bus forwarding — log at WARN level.
                 if let Some(ref token_path) = ctx.token_file_path {
+                    tracing::warn!(
+                        accountability = true,
+                        category = "secrets",
+                        safety = "Falling back to tmpfs token mount — D-Bus session bus unavailable",
+                        spec = "secret-management",
+                        container = %ctx.container_name,
+                        "Security downgrade: using token file mount instead of D-Bus keyring access"
+                    );
                     args.push("-v".into());
                     args.push(format!(
                         "{}:/run/secrets/github_token:ro",
@@ -197,6 +230,16 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
                     args.push(format!("{}:{}:ro", socket_path, socket_path));
                     args.push("-e".into());
                     args.push(format!("DBUS_SESSION_BUS_ADDRESS={}", addr));
+
+                    // @trace spec:secret-management
+                    tracing::info!(
+                        accountability = true,
+                        category = "secrets",
+                        safety = "D-Bus session bus forwarded to git service only — forge containers have zero credential access",
+                        spec = "secret-management",
+                        container = %ctx.container_name,
+                        "Credential isolation boundary: git service is the sole D-Bus consumer"
+                    );
                 }
             }
         }
