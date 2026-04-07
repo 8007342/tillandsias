@@ -8,6 +8,8 @@
 
 use std::path::{Path, PathBuf};
 
+use tracing::warn;
+
 use tillandsias_core::config::{
     GlobalConfig, SelectedAgent, cache_dir, load_global_config, load_project_config,
 };
@@ -420,7 +422,9 @@ pub fn run(
 
     // Ensure cache directory exists
     let cache = cache_dir();
-    std::fs::create_dir_all(&cache).ok();
+    if let Err(e) = std::fs::create_dir_all(&cache) {
+        warn!(error = %e, path = %cache.display(), "Failed to create cache directory");
+    }
 
     // @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container
     // Single unified enclave setup: network, proxy, inference, mirror, git service.
@@ -645,10 +649,16 @@ fn run_github_login_direct(tag: &str) -> bool {
     let git_dir = secrets_dir.join("git");
     let gitconfig = git_dir.join(".gitconfig");
 
-    std::fs::create_dir_all(&gh_dir).ok();
-    std::fs::create_dir_all(&git_dir).ok();
+    if let Err(e) = std::fs::create_dir_all(&gh_dir) {
+        warn!(error = %e, path = %gh_dir.display(), "Failed to create cache directory");
+    }
+    if let Err(e) = std::fs::create_dir_all(&git_dir) {
+        warn!(error = %e, path = %git_dir.display(), "Failed to create cache directory");
+    }
     if !gitconfig.exists() {
-        std::fs::write(&gitconfig, "").ok();
+        if let Err(e) = std::fs::write(&gitconfig, "") {
+            warn!(error = %e, path = %gitconfig.display(), "Failed to initialize gitconfig");
+        }
     }
 
     // Prompt for git identity
@@ -673,8 +683,10 @@ fn run_github_login_direct(tag: &str) -> bool {
 
     // Write gitconfig
     let gitconfig_content = format!("[user]\n\tname = {git_name}\n\temail = {git_email}\n");
-    std::fs::write(&gitconfig, gitconfig_content).ok();
-    println!("  Git identity saved: {git_name} <{git_email}>");
+    match std::fs::write(&gitconfig, gitconfig_content) {
+        Ok(()) => println!("  Git identity saved: {git_name} <{git_email}>"),
+        Err(e) => eprintln!("  WARNING: Failed to save git identity: {e}"),
+    }
 
     // Security flags (same as gh-auth-login.sh)
     let security_flags = [
@@ -765,9 +777,12 @@ fn prompt_with_default(
     } else {
         print!("  {prompt} [{default}]: ");
     }
-    stdout.flush().ok();
+    if let Err(e) = stdout.flush() {
+        warn!(error = %e, "Failed to flush stdout for user prompt");
+    }
     let mut input = String::new();
-    stdin.lock().read_line(&mut input).ok();
+    // read_line failure yields empty input, which falls back to default — acceptable
+    let _ = stdin.lock().read_line(&mut input);
     let trimmed = input.trim().to_string();
     if trimmed.is_empty() { default.to_string() } else { trimmed }
 }
