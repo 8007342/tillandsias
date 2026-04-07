@@ -60,6 +60,10 @@ pub enum MountSource {
     CacheDir,
     /// A subdirectory under the secrets dir (e.g., "gh", "git").
     SecretsSubdir(&'static str),
+    /// Pre-built tools overlay directory (~/.cache/tillandsias/tools-overlay/current).
+    /// Resolved at launch time; mount is skipped if the overlay doesn't exist yet.
+    /// @trace spec:layered-tools-overlay
+    ToolsOverlay,
 }
 
 /// Mount permission mode.
@@ -419,10 +423,16 @@ pub fn git_service_profile() -> ContainerProfile {
 // ---------------------------------------------------------------------------
 
 fn common_forge_mounts() -> Vec<ProfileMount> {
-    // No mounts — proxy handles package caching, code comes from git mirror
-    // service, and credentials are no longer mounted into forge containers.
-    // @trace spec:proxy-container
-    vec![]
+    // Code comes from git mirror service, packages through proxy.
+    // The only mount is the pre-built tools overlay (read-only).
+    // @trace spec:proxy-container, spec:layered-tools-overlay
+    vec![
+        ProfileMount {
+            host_key: MountSource::ToolsOverlay,
+            container_path: "/home/forge/.tools",
+            mode: MountMode::Ro,
+        },
+    ]
 }
 
 fn common_forge_env() -> Vec<ProfileEnvVar> {
@@ -556,14 +566,18 @@ mod tests {
         assert_eq!(profile.image_override, Some("tillandsias-web:latest"));
     }
 
+    // @trace spec:layered-tools-overlay
     #[test]
-    fn forge_profiles_have_zero_mounts() {
+    fn forge_profiles_have_tools_overlay_mount() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
-        // No mounts — proxy handles caching, code comes from git mirror
-        // @trace spec:proxy-container
-        assert_eq!(opencode.mounts.len(), 0);
-        assert_eq!(claude.mounts.len(), 0);
+        // Only mount is the read-only tools overlay
+        // @trace spec:proxy-container, spec:layered-tools-overlay
+        assert_eq!(opencode.mounts.len(), 1);
+        assert_eq!(claude.mounts.len(), 1);
+        assert_eq!(opencode.mounts[0].container_path, "/home/forge/.tools");
+        assert_eq!(opencode.mounts[0].mode, MountMode::Ro);
+        assert!(matches!(opencode.mounts[0].host_key, MountSource::ToolsOverlay));
     }
 
     #[test]

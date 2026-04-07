@@ -144,7 +144,10 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     // @trace spec:podman-orchestration/volume-mount-strategy
     // -----------------------------------------------------------------------
     for mount in &profile.mounts {
-        let host_path = resolve_mount_source(&mount.host_key, ctx);
+        let host_path = match resolve_mount_source(&mount.host_key, ctx) {
+            Some(p) => p,
+            None => continue, // Skip mount — source doesn't exist yet
+        };
         let container_path =
             resolve_container_path(mount.container_path, mount.host_key.clone(), ctx);
         args.push("-v".into());
@@ -255,12 +258,16 @@ pub fn shell_quote_join(args: &[String]) -> String {
 }
 
 /// Resolve a logical mount source to an absolute host path.
-fn resolve_mount_source(source: &MountSource, ctx: &LaunchContext) -> String {
+///
+/// Returns `None` when the source does not exist yet (e.g., tools overlay
+/// not built). The caller skips the mount in that case.
+/// @trace spec:layered-tools-overlay
+fn resolve_mount_source(source: &MountSource, ctx: &LaunchContext) -> Option<String> {
     match source {
-        MountSource::ProjectDir => ctx.project_path.display().to_string(),
-        MountSource::CacheDir => ctx.cache_dir.display().to_string(),
+        MountSource::ProjectDir => Some(ctx.project_path.display().to_string()),
+        MountSource::CacheDir => Some(ctx.cache_dir.display().to_string()),
         MountSource::SecretsSubdir(subdir) => {
-            match *subdir {
+            Some(match *subdir {
                 "gh" => ctx.gh_dir.display().to_string(),
                 "git" => ctx.git_dir.display().to_string(),
                 other => {
@@ -271,6 +278,19 @@ fn resolve_mount_source(source: &MountSource, ctx: &LaunchContext) -> String {
                         .display()
                         .to_string()
                 }
+            })
+        }
+        // @trace spec:layered-tools-overlay
+        MountSource::ToolsOverlay => {
+            let overlay_path = ctx.cache_dir
+                .join("tools-overlay")
+                .join("current");
+            // Only mount if the overlay exists (graceful fallback).
+            // Entrypoints will fall back to inline install when absent.
+            if overlay_path.exists() {
+                Some(overlay_path.display().to_string())
+            } else {
+                None
             }
         }
     }
@@ -686,6 +706,44 @@ mod tests {
             !joined.contains("DBUS_SESSION_BUS_ADDRESS"),
             "D-Bus env var should not appear when host env is unset"
         );
+    }
+
+    // @trace spec:layered-tools-overlay
+    #[test]
+    fn tools_overlay_skipped_when_dir_absent() {
+        let profile = container_profile::forge_opencode_profile();
+        let ctx = test_context();
+        let args = build_podman_args(&profile, &ctx);
+        let joined = args.join(" ");
+        // Tools overlay dir doesn't exist in the test context, so mount is skipped
+        assert!(
+            !joined.contains("/home/forge/.tools"),
+            "Tools overlay mount should be skipped when directory doesn't exist"
+        );
+    }
+
+    // @trace spec:layered-tools-overlay
+    #[test]
+    fn tools_overlay_mounted_when_dir_exists() {
+        let profile = container_profile::forge_claude_profile();
+        let tmp_dir = std::env::temp_dir().join("tillandsias-test-tools-overlay");
+        let overlay_dir = tmp_dir.join("tools-overlay").join("current");
+        std::fs::create_dir_all(&overlay_dir).unwrap();
+
+        let mut ctx = test_context();
+        ctx.cache_dir = tmp_dir.clone();
+
+        let args = build_podman_args(&profile, &ctx);
+        let joined = args.join(" ");
+
+        let expected = format!("{}:/home/forge/.tools:ro", overlay_dir.display());
+        assert!(
+            joined.contains(&expected),
+            "Tools overlay should be mounted read-only. Expected: {expected}\nGot: {joined}"
+        );
+
+        // Clean up
+        std::fs::remove_dir_all(&tmp_dir).ok();
     }
 
     // @trace spec:git-mirror-service
