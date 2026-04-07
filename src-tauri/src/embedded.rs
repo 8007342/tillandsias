@@ -55,6 +55,7 @@ fn write_lf(path: &std::path::Path, content: &str) -> std::io::Result<()> {
 // Executable scripts
 // ---------------------------------------------------------------------------
 pub const BUILD_IMAGE: &str = include_str!("../../scripts/build-image.sh");
+pub const BUILD_TOOLS_OVERLAY: &str = include_str!("../../scripts/build-tools-overlay.sh");
 pub const GH_AUTH_LOGIN: &str = include_str!("../../gh-auth-login.sh");
 
 // ---------------------------------------------------------------------------
@@ -182,6 +183,7 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 ///   flake.lock
 ///   scripts/
 ///     build-image.sh
+///     build-tools-overlay.sh
 ///   images/
 ///     default/
 ///       entrypoint.sh
@@ -225,12 +227,24 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     fs::create_dir_all(&scripts_dir).map_err(|e| format!("scripts dir: {e}"))?;
     write_lf(&scripts_dir.join("build-image.sh"), BUILD_IMAGE)
         .map_err(|e| format!("build-image.sh: {e}"))?;
-    #[cfg(unix)]
-    fs::set_permissions(
-        scripts_dir.join("build-image.sh"),
-        fs::Permissions::from_mode(0o700),
+    write_lf(
+        &scripts_dir.join("build-tools-overlay.sh"),
+        BUILD_TOOLS_OVERLAY,
     )
-    .ok();
+    .map_err(|e| format!("build-tools-overlay.sh: {e}"))?;
+    #[cfg(unix)]
+    {
+        fs::set_permissions(
+            scripts_dir.join("build-image.sh"),
+            fs::Permissions::from_mode(0o700),
+        )
+        .ok();
+        fs::set_permissions(
+            scripts_dir.join("build-tools-overlay.sh"),
+            fs::Permissions::from_mode(0o700),
+        )
+        .ok();
+    }
 
     // -- images/default/ --
     let default_dir = dir.join("images").join("default");
