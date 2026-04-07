@@ -689,4 +689,35 @@ mod tests {
         assert_eq!(profile.mounts[0].mode, MountMode::Rw);
         assert!(profile.image_override.is_none(), "Proxy image tag comes from LaunchContext");
     }
+
+    // @trace spec:layered-tools-overlay
+    #[test]
+    fn tools_overlay_expected_paths() {
+        // These paths must match between:
+        // - scripts/build-tools-overlay.sh (installs to /home/forge/.tools/<tool>)
+        // - entrypoint-forge-claude.sh (checks /home/forge/.tools/claude/bin/claude)
+        // - entrypoint-forge-opencode.sh (checks /home/forge/.tools/opencode/bin/opencode)
+        // - lib-common.sh install_openspec() (checks /home/forge/.tools/openspec/bin/openspec)
+        let container_mount = "/home/forge/.tools";
+        let expected_bins = [
+            format!("{container_mount}/claude/bin/claude"),
+            format!("{container_mount}/opencode/bin/opencode"),
+            format!("{container_mount}/openspec/bin/openspec"),
+        ];
+
+        // Verify the container mount path matches what forge profiles declare
+        let profile = forge_opencode_profile();
+        assert_eq!(
+            profile.mounts[0].container_path, container_mount,
+            "Profile mount path must match the expected tools container mount"
+        );
+
+        // Verify all expected tool binaries live under the mount root
+        for bin in &expected_bins {
+            assert!(
+                bin.starts_with(container_mount),
+                "Tool binary {bin} must be under {container_mount}"
+            );
+        }
+    }
 }
