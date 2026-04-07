@@ -4,6 +4,8 @@
 //! delay) and periodic checks at a configurable interval (default 6 hours).
 //! Uses Tauri's built-in updater plugin with mandatory Ed25519 signature
 //! verification. Never blocks the main event loop or the tray UI thread.
+//!
+//! @trace spec:update-system
 
 use std::sync::Arc;
 
@@ -19,7 +21,6 @@ use crate::update_log;
 /// Shared state for tracking whether an update is available across tray
 /// menu rebuilds and user interactions.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct UpdateState {
     /// The new version string (e.g., "0.2.0") when an update is available.
     pub available_version: Arc<Mutex<Option<String>>>,
@@ -43,6 +44,7 @@ impl Default for UpdateState {
 /// 2. A periodic check at the configured interval (default 6 hours).
 ///
 /// Both tasks run entirely in the background and never block the UI.
+// @trace spec:update-system
 pub fn spawn_update_tasks(app: &AppHandle, update_state: UpdateState) {
     let config = load_global_config();
     let updates_config = config.updates;
@@ -139,6 +141,7 @@ fn send_update_notification(app: &AppHandle, version: &str) {
 ///
 /// On failure (e.g., network loss mid-download), the tray menu reverts to
 /// showing "Update available" so the user can retry.
+// @trace spec:update-system
 #[allow(dead_code)]
 pub async fn install_update(app: &AppHandle, state: &UpdateState) {
     // Guard against duplicate installs

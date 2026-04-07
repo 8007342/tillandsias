@@ -1,0 +1,4 @@
+name: pre-commit-trace-warnings
+status: complete
+created: 2026-04-05
+specs: [spec-traceability]

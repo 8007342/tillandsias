@@ -9,6 +9,8 @@
 //! - Linux:   `$XDG_RUNTIME_DIR/tillandsias.lock`
 //! - macOS:   `$TMPDIR/tillandsias.lock`
 //! - Windows: `%TEMP%\tillandsias.lock`
+//!
+//! @trace spec:singleton-guard
 
 use std::path::PathBuf;
 
@@ -46,6 +48,7 @@ pub fn lock_path() -> PathBuf {
 /// On success, the lock file is written with the current PID and `Ok(())` is returned.
 /// On failure (another live instance holds the lock), `Err(())` is returned.
 /// The caller should exit silently.
+// @trace spec:singleton-guard
 pub fn try_acquire() -> Result<(), ()> {
     let path = lock_path();
     debug!(?path, "Checking singleton lock");

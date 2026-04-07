@@ -25,6 +25,7 @@ mod secrets;
 mod singleton;
 mod strings;
 mod token_files;
+mod tools_overlay;
 mod update_cli;
 mod update_log;
 mod updater;
@@ -369,7 +370,7 @@ fn main() {
                     }
                 }
 
-                // @trace spec:enclave-network, spec:proxy-container
+                // @trace spec:enclave-network, spec:proxy-container, spec:tray-app
                 // Infrastructure setup FIRST — proxy must be running before any other image builds.
                 // This ensures forge/git/inference image builds route through the proxy cache.
                 if podman_usable {
@@ -377,13 +378,38 @@ fn main() {
                     let s = state_for_loop.lock().unwrap().clone();
                     if let Err(e) = handlers::ensure_infrastructure_ready(&s, build_tx.clone()).await {
                         warn!(error = %e, "Infrastructure setup failed at launch — image builds will bypass cache");
+                        // @trace spec:tray-app
+                        // Notify user so infrastructure failure is not silent.
+                        // The tray continues in degraded mode (forge builds bypass proxy cache).
+                        handlers::send_notification(
+                            "Tillandsias",
+                            i18n::t("notifications.infrastructure_failed"),
+                        );
                     }
                 }
 
                 // Launch-time forge image check — build automatically if absent or stale.
                 // forge_available starts as false; we set it to true only when the image
                 // is confirmed present (no build needed) or after a successful build.
+                //
+                // @trace spec:tray-app
+                // Show a "Setting up..." chip during the startup check so the user
+                // understands why menu items are disabled. This chip is replaced by
+                // the build chip if a build is needed, or removed if the image is present.
                 if podman_usable {
+                    let setup_chip_name = "Tillandsias".to_string();
+                    {
+                        let mut s = state_for_loop.lock().unwrap();
+                        s.active_builds
+                            .push(tillandsias_core::state::BuildProgress {
+                                image_name: setup_chip_name.clone(),
+                                status: tillandsias_core::state::BuildStatus::InProgress,
+                                started_at: std::time::Instant::now(),
+                                completed_at: None,
+                            });
+                    }
+                    rebuild_menu(&app_handle_for_loop, &state_for_loop);
+
                     let forge_client = tillandsias_podman::PodmanClient::new();
                     let tag = handlers::forge_image_tag();
 
@@ -399,6 +425,14 @@ fn main() {
                             debug!(attempt, tag = %tag, "image_exists returned false, retrying...");
                             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                         }
+                    }
+
+                    // Remove the "Setting up..." chip — the build chip or completion
+                    // will take over from here.
+                    {
+                        let mut s = state_for_loop.lock().unwrap();
+                        s.active_builds
+                            .retain(|b| b.image_name != setup_chip_name);
                     }
 
                     if !image_present {
@@ -459,6 +493,13 @@ fn main() {
                                 let _ = build_tx.try_send(BuildProgressEvent::Completed {
                                     image_name: chip_name,
                                 });
+                                // @trace spec:tray-app
+                                // Desktop notification so the user knows the forge is ready,
+                                // even if they're not watching the tray menu.
+                                handlers::send_notification(
+                                    "Tillandsias",
+                                    i18n::t("notifications.forge_ready"),
+                                );
                             }
                             Ok(Err(ref e)) => {
                                 warn!(error = %e, "Auto forge build failed at launch");

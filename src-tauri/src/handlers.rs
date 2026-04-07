@@ -28,9 +28,11 @@
 //!
 //! @trace spec:podman-orchestration, spec:default-image, spec:tray-app
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, instrument, warn};
 
@@ -884,6 +886,15 @@ pub(crate) async fn ensure_git_service_running(
 }
 
 // ---------------------------------------------------------------------------
+// Tools overlay — delegated to tools_overlay module
+// @trace spec:layered-tools-overlay
+// ---------------------------------------------------------------------------
+
+/// Re-export from tools_overlay module for backward compatibility.
+/// @trace spec:layered-tools-overlay
+pub(crate) use crate::tools_overlay::ensure_tools_overlay;
+
+// ---------------------------------------------------------------------------
 // Unified enclave startup
 // @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container
 // ---------------------------------------------------------------------------
@@ -950,6 +961,19 @@ pub async fn ensure_enclave_ready(
                 }
             }
         });
+    }
+
+    // Step 3b: Tools overlay — soft requirement.
+    // The overlay build requires the forge image (it runs a temporary forge container),
+    // so it comes after infrastructure is ready. Failure is non-fatal — entrypoints
+    // have inline install fallback.
+    // @trace spec:layered-tools-overlay
+    if let Err(e) = ensure_tools_overlay().await {
+        warn!(
+            error = %e,
+            spec = "layered-tools-overlay",
+            "Tools overlay setup failed — containers will install tools inline"
+        );
     }
 
     // Step 4+5: Git mirror + service — soft requirement (non-fatal)
@@ -1391,7 +1415,7 @@ fn open_terminal(command: &str, title: &str) -> Result<(), String> {
 ///
 /// Uses `notify-send` on Linux, `osascript` on macOS.
 /// Silently ignored on failure — notifications are advisory only.
-fn send_notification(summary: &str, body: &str) {
+pub(crate) fn send_notification(summary: &str, body: &str) {
     #[cfg(target_os = "linux")]
     {
         let _ = std::process::Command::new("notify-send")
@@ -1798,6 +1822,18 @@ pub async fn handle_attach_here(
 
     info!(project = %project_name, "Attach Here requested");
 
+    // Forge-readiness guard: if the forge image is not yet available (still building
+    // or not yet checked), notify the user and return early. The tray menu should
+    // already have this item disabled, but this is defense-in-depth against race
+    // conditions or future code paths that bypass the menu gate.
+    // @trace spec:tray-app
+    if !state.forge_available {
+        let msg = crate::i18n::t("notifications.forge_not_ready");
+        info!(project = %project_name, "Forge-readiness guard fired — image not yet available");
+        send_notification("Tillandsias", msg);
+        return Err("Forge image not yet available".into());
+    }
+
     // Don't-relaunch guard: if a forge container for this project is already running,
     // notify the user and return early instead of spawning a second environment.
     // Git service containers are infrastructure — they don't count as "already running".
@@ -2008,6 +2044,12 @@ pub async fn handle_attach_here(
     if let Some(project) = state.projects.iter_mut().find(|p| p.path == project_path) {
         project.assigned_genus = Some(genus);
     }
+
+    // P2-4: Spawn background tools overlay update after successful launch.
+    // Non-blocking — container is already running, this checks for newer
+    // tool versions in the background.
+    // @trace spec:layered-tools-overlay
+    crate::tools_overlay::spawn_background_update();
 
     let elapsed = start.elapsed();
     info!(
@@ -2335,6 +2377,9 @@ pub async fn handle_terminal(
                     "Maintenance terminal {container_name} launched credential-free",
                 );
             }
+            // P2-4: Spawn background tools overlay update after successful launch.
+            // @trace spec:layered-tools-overlay
+            crate::tools_overlay::spawn_background_update();
             Ok(())
         }
         Err(e) => {

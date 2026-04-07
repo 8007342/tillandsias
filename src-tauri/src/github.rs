@@ -4,6 +4,8 @@
 //! a forge container, and clones selected repos into the scanner's watched
 //! directory. All operations reuse the same security flags and secret mounts
 //! as other podman operations.
+//!
+//! @trace spec:remote-projects, spec:gh-auth-script
 
 use std::path::Path;
 
@@ -23,14 +25,12 @@ pub struct RemoteRepo {
     pub full_name: String,
 }
 
-/// JSON shape returned by `gh repo list --json name,nameWithOwner,url`.
+/// JSON shape returned by `gh repo list --json name,nameWithOwner`.
 #[derive(Debug, Deserialize)]
 struct GhRepoEntry {
     name: String,
     #[serde(rename = "nameWithOwner")]
     name_with_owner: String,
-    #[allow(dead_code)]
-    url: String,
 }
 
 /// Fetch the authenticated user's GitHub repositories.
@@ -38,6 +38,7 @@ struct GhRepoEntry {
 /// Runs `gh repo list --json name,nameWithOwner,url --limit 100` inside a
 /// forge container with GitHub credentials mounted. Returns the parsed list
 /// or an error string.
+// @trace spec:remote-projects
 #[instrument(skip_all)]
 pub async fn fetch_repos() -> Result<Vec<RemoteRepo>, String> {
     let cache = cache_dir();
@@ -59,7 +60,7 @@ pub async fn fetch_repos() -> Result<Vec<RemoteRepo>, String> {
             "repo",
             "list",
             "--json",
-            "name,nameWithOwner,url",
+            "name,nameWithOwner",
             "--limit",
             "100",
         ],
@@ -102,6 +103,7 @@ pub async fn fetch_repos() -> Result<Vec<RemoteRepo>, String> {
 ///
 /// Runs `gh repo clone <full_name> <target_dir>` inside a forge container
 /// with GitHub credentials and the target directory mounted.
+// @trace spec:remote-projects
 #[instrument(skip_all, fields(repo = %full_name, target = %target_dir.display()))]
 pub async fn clone_repo(full_name: &str, target_dir: &Path) -> Result<(), String> {
     let cache = cache_dir();

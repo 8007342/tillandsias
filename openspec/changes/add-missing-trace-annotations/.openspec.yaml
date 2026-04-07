@@ -1,0 +1,4 @@
+name: add-missing-trace-annotations
+type: docs
+status: complete
+specs: [update-system, podman-orchestration, singleton-guard, remote-projects, cli-mode, gh-auth-script]
