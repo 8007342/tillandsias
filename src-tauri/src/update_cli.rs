@@ -5,6 +5,8 @@
 //! available. Runs entirely in a blocking context — the Tauri event loop is
 //! never constructed.
 //!
+//! @trace spec:update-system
+//!
 //! # Update endpoint
 //!
 //! The endpoint is the same one configured in `tauri.conf.json` for the
@@ -91,6 +93,7 @@ struct PlatformEntry {
 
 /// Run the `--update` CLI command. Returns `true` on success (up-to-date or
 /// update applied), `false` on error.
+// @trace spec:update-system
 pub fn run() -> bool {
     // Install rustls crypto provider before any reqwest calls.
     // Tauri normally does this during its setup, but --update runs before Tauri.
@@ -369,6 +372,7 @@ fn detect_install_target() -> Option<PathBuf> {
 ///
 /// - **Linux AppImage**: raw `.AppImage` → chmod + rename; `.tar.gz` → extract + replace.
 /// - **macOS .app**: `.app.tar.gz` → extract + replace bundle.
+// @trace spec:update-system
 fn apply_update(
     download_path: &std::path::Path,
     install_target: &std::path::Path,

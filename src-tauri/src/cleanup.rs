@@ -1,6 +1,8 @@
 //! `tillandsias --stats` and `tillandsias --clean` implementation.
 //!
 //! These commands print to stdout and exit — they never enter the Tauri event loop.
+//!
+//! @trace spec:cli-mode
 
 use std::path::{Path, PathBuf};
 
@@ -89,6 +91,7 @@ fn podman_run(args: &[&str]) -> (String, bool) {
 // --stats
 // ---------------------------------------------------------------------------
 
+// @trace spec:cli-mode
 pub fn run_stats() -> bool {
     println!("{}", i18n::t("stats.title"));
     println!();
@@ -222,6 +225,7 @@ pub fn run_stats() -> bool {
 // --clean
 // ---------------------------------------------------------------------------
 
+// @trace spec:cli-mode
 pub fn run_clean() -> bool {
     println!("{}", i18n::t("clean.title"));
     println!();

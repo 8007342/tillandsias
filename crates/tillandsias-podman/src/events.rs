@@ -1,3 +1,5 @@
+// @trace spec:podman-orchestration
+
 use std::collections::HashSet;
 use std::time::Duration;
 
@@ -34,6 +36,7 @@ impl PodmanEventStream {
     /// The outer loop has its own exponential backoff (2s → 5min) to prevent
     /// tight retry loops when podman is persistently unavailable (e.g. machine
     /// not running on macOS/Windows).
+    // @trace spec:podman-orchestration
     pub async fn stream(self, tx: mpsc::Sender<PodmanEvent>) {
         let mut attempt: u32 = 0;
 
