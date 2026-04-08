@@ -207,9 +207,6 @@ pub(crate) async fn ensure_inference_running(
         host_os: tillandsias_core::config::detect_host_os(),
         detached: true,
         is_watch_root: false,
-        claude_dir: PathBuf::from("/nonexistent"),
-        gh_dir: PathBuf::from("/nonexistent"),
-        git_dir: PathBuf::from("/nonexistent"),
         token_file_path: None,
         custom_mounts: vec![],
         image_tag: tag.clone(),
@@ -431,9 +428,6 @@ pub(crate) async fn ensure_proxy_running(
         host_os: tillandsias_core::config::detect_host_os(),
         detached: true,
         is_watch_root: false,
-        claude_dir: PathBuf::from("/nonexistent"),
-        gh_dir: PathBuf::from("/nonexistent"),
-        git_dir: PathBuf::from("/nonexistent"),
         token_file_path: None,
         custom_mounts: vec![],
         image_tag: tag.clone(),
@@ -980,9 +974,6 @@ pub(crate) async fn ensure_git_service_running(
         host_os: tillandsias_core::config::detect_host_os(),
         detached: true,
         is_watch_root: false,
-        claude_dir: PathBuf::from("/nonexistent"),
-        gh_dir: PathBuf::from("/nonexistent"),
-        git_dir: PathBuf::from("/nonexistent"),
         token_file_path,
         custom_mounts: vec![],
         image_tag: tag.clone(),
@@ -1825,17 +1816,10 @@ fn build_launch_context(
     is_watch_root: bool,
     image_tag: &str,
 ) -> tillandsias_core::container_profile::LaunchContext {
-    let (gh_dir, git_dir) = crate::launch::ensure_secrets_dirs(cache);
     let host_os = tillandsias_core::config::detect_host_os();
 
     // Read git identity from the cached gitconfig (written by gh-auth-login.sh).
     let (git_author_name, git_author_email) = crate::launch::read_git_identity(cache);
-
-    // Claude credentials directory — kept for LaunchContext struct compatibility
-    // but no longer mounted into forge containers.
-    let claude_dir = dirs::home_dir()
-        .map(|h| h.join(".claude"))
-        .unwrap_or_else(|| PathBuf::from("/tmp/.claude"));
 
     // Custom mounts from project config
     let project_config = tillandsias_core::config::load_project_config(project_path);
@@ -1849,9 +1833,6 @@ fn build_launch_context(
         host_os,
         detached,
         is_watch_root,
-        claude_dir,
-        gh_dir,
-        git_dir,
         token_file_path: None, // Forge/terminal containers are credential-free
         custom_mounts: project_config.mounts,
         image_tag: image_tag.to_string(),

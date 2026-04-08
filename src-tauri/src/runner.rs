@@ -247,16 +247,10 @@ fn build_cli_launch_context(
     port_range: (u16, u16),
     image_tag: &str,
 ) -> tillandsias_core::container_profile::LaunchContext {
-    let (gh_dir, git_dir) = crate::launch::ensure_secrets_dirs(cache);
     let host_os = tillandsias_core::config::detect_host_os();
 
     // Read git identity from the cached gitconfig (written by gh-auth-login.sh).
     let (git_author_name, git_author_email) = crate::launch::read_git_identity(cache);
-
-    // Claude credentials directory — kept for struct compatibility but not mounted.
-    let claude_dir = dirs::home_dir()
-        .map(|h| h.join(".claude"))
-        .unwrap_or_else(|| std::path::PathBuf::from("/tmp/.claude"));
 
     // Custom mounts from project config
     let project_config = load_project_config(project_path);
@@ -270,9 +264,6 @@ fn build_cli_launch_context(
         host_os,
         detached: false,
         is_watch_root: false,
-        claude_dir,
-        gh_dir,
-        git_dir,
         token_file_path: None, // Forge/terminal containers are credential-free
         custom_mounts: project_config.mounts,
         image_tag: image_tag.to_string(),

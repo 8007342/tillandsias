@@ -73,8 +73,6 @@ pub enum MountSource {
     ProjectDir,
     /// The tillandsias cache directory (~/.cache/tillandsias).
     CacheDir,
-    /// A subdirectory under the secrets dir (e.g., "gh", "git").
-    SecretsSubdir(&'static str),
     /// Pre-built tools overlay directory (~/.cache/tillandsias/tools-overlay/current).
     /// Resolved at launch time; mount is skipped if the overlay doesn't exist yet.
     /// @trace spec:layered-tools-overlay
@@ -138,10 +136,9 @@ pub struct SecretMount {
 /// The types of secrets a profile can request.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecretKind {
-    /// Mount ~/.claude/ into the container (rw).
-    ClaudeDir,
     /// Mount GitHub token file at /run/secrets/github_token (ro).
-    /// @trace spec:secret-rotation
+    /// Fallback for when D-Bus is unavailable (logged at WARN level).
+    /// @trace spec:secret-rotation, spec:secret-management
     GitHubToken,
     /// Forward the host D-Bus session bus socket for keyring access.
     /// @trace spec:git-mirror-service, spec:secret-management
@@ -168,11 +165,6 @@ pub struct LaunchContext {
     pub host_os: String,
     pub detached: bool,
     pub is_watch_root: bool,
-
-    // Resolved secret paths (filesystem)
-    pub claude_dir: PathBuf,
-    pub gh_dir: PathBuf,
-    pub git_dir: PathBuf,
 
     /// Path to the tmpfs-backed GitHub token file for this container.
     /// When `Some`, the file is bind-mounted at `/run/secrets/github_token:ro`

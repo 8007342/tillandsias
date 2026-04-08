@@ -211,10 +211,6 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
                     );
                 }
             }
-            SecretKind::ClaudeDir => {
-                args.push("-v".into());
-                args.push(format!("{}:/home/forge/.claude:rw", ctx.claude_dir.display()));
-            }
             SecretKind::DbusSession => {
                 // Forward host D-Bus session bus for keyring access.
                 // The socket path is extracted from DBUS_SESSION_BUS_ADDRESS
@@ -309,20 +305,6 @@ fn resolve_mount_source(source: &MountSource, ctx: &LaunchContext) -> Option<Str
     match source {
         MountSource::ProjectDir => Some(ctx.project_path.display().to_string()),
         MountSource::CacheDir => Some(ctx.cache_dir.display().to_string()),
-        MountSource::SecretsSubdir(subdir) => {
-            Some(match *subdir {
-                "gh" => ctx.gh_dir.display().to_string(),
-                "git" => ctx.git_dir.display().to_string(),
-                other => {
-                    // Fallback: secrets/<subdir> under cache
-                    ctx.cache_dir
-                        .join("secrets")
-                        .join(other)
-                        .display()
-                        .to_string()
-                }
-            })
-        }
         // @trace spec:layered-tools-overlay
         MountSource::ToolsOverlay => {
             let overlay_path = ctx.cache_dir
@@ -464,9 +446,6 @@ mod tests {
             host_os: "Fedora Silverblue 43".into(),
             detached: false,
             is_watch_root: false,
-            claude_dir: PathBuf::from("/home/user/.claude"),
-            gh_dir: PathBuf::from("/home/user/.cache/tillandsias/secrets/gh"),
-            git_dir: PathBuf::from("/home/user/.cache/tillandsias/secrets/git"),
             token_file_path: Some(PathBuf::from(
                 "/run/user/1000/tillandsias/tokens/tillandsias-myproject-aeranthos/github_token",
             )),
