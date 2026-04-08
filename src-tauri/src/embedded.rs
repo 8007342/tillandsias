@@ -88,6 +88,13 @@ pub const FORGE_GIT_ASKPASS: &str =
 pub const CONFIG_OVERLAY_OPENCODE: &str =
     include_str!("../../images/default/config-overlay/opencode/config.json");
 
+// Config overlay — methodology instruction files for AI agents
+// @trace spec:layered-tools-overlay
+pub const CONFIG_OVERLAY_INSTRUCTIONS_METHODOLOGY: &str =
+    include_str!("../../images/default/config-overlay/opencode/instructions/methodology.md");
+pub const CONFIG_OVERLAY_INSTRUCTIONS_FLUTTER: &str =
+    include_str!("../../images/default/config-overlay/opencode/instructions/flutter.md");
+
 // MCP servers — lightweight tool scripts for forge containers
 // @trace spec:layered-tools-overlay, spec:git-mirror-service
 pub const CONFIG_OVERLAY_MCP_GIT_TOOLS: &str =
@@ -338,6 +345,22 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     )
     .map_err(|e| format!("config-overlay/opencode/config.json: {e}"))?;
 
+    // Config overlay — methodology instruction files for AI agents
+    // @trace spec:layered-tools-overlay
+    let instructions_dir = config_overlay_dir.join("instructions");
+    fs::create_dir_all(&instructions_dir)
+        .map_err(|e| format!("config-overlay/opencode/instructions dir: {e}"))?;
+    write_lf(
+        &instructions_dir.join("methodology.md"),
+        CONFIG_OVERLAY_INSTRUCTIONS_METHODOLOGY,
+    )
+    .map_err(|e| format!("config-overlay/opencode/instructions/methodology.md: {e}"))?;
+    write_lf(
+        &instructions_dir.join("flutter.md"),
+        CONFIG_OVERLAY_INSTRUCTIONS_FLUTTER,
+    )
+    .map_err(|e| format!("config-overlay/opencode/instructions/flutter.md: {e}"))?;
+
     // Config overlay — MCP servers
     // @trace spec:layered-tools-overlay
     let mcp_dir = default_dir.join("config-overlay").join("mcp");
@@ -499,6 +522,22 @@ pub fn extract_config_overlay() -> Result<PathBuf, String> {
         .map_err(|e| format!("Cannot create config-overlay/opencode dir: {e}"))?;
     write_lf(&opencode_dir.join("config.json"), CONFIG_OVERLAY_OPENCODE)
         .map_err(|e| format!("config-overlay/opencode/config.json: {e}"))?;
+
+    // -- opencode/instructions/ -- methodology docs for AI agents
+    // @trace spec:layered-tools-overlay
+    let instructions_dir = opencode_dir.join("instructions");
+    fs::create_dir_all(&instructions_dir)
+        .map_err(|e| format!("Cannot create config-overlay/opencode/instructions dir: {e}"))?;
+    write_lf(
+        &instructions_dir.join("methodology.md"),
+        CONFIG_OVERLAY_INSTRUCTIONS_METHODOLOGY,
+    )
+    .map_err(|e| format!("config-overlay/opencode/instructions/methodology.md: {e}"))?;
+    write_lf(
+        &instructions_dir.join("flutter.md"),
+        CONFIG_OVERLAY_INSTRUCTIONS_FLUTTER,
+    )
+    .map_err(|e| format!("config-overlay/opencode/instructions/flutter.md: {e}"))?;
 
     // -- mcp/ -- MCP server scripts (must be executable)
     // @trace spec:layered-tools-overlay
