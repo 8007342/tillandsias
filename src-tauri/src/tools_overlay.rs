@@ -300,14 +300,24 @@ fn build_overlay_sync(
         "Running build-tools-overlay.sh"
     );
 
-    let output = std::process::Command::new(&script)
-        .arg(version_dir.to_str().unwrap_or_default())
+    // Pass CA chain path so the builder script can mount it into the
+    // temporary container — required for HTTPS through the MITM proxy.
+    // @trace spec:proxy-container, spec:layered-tools-overlay
+    let ca_chain = crate::ca::proxy_certs_dir().join("ca-chain.crt");
+
+    let mut cmd = std::process::Command::new(&script);
+    cmd.arg(version_dir.to_str().unwrap_or_default())
         .arg(forge_tag)
         .env_remove("LD_LIBRARY_PATH")
         .env_remove("LD_PRELOAD")
         .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
-        .env("TOOLS_OVERLAY_QUIET", "1")
-        .output()
+        .env("TOOLS_OVERLAY_QUIET", "1");
+
+    if ca_chain.exists() {
+        cmd.env("CA_CHAIN_PATH", &ca_chain);
+    }
+
+    let output = cmd.output()
         .map_err(|e| {
             error!(
                 script = %script.display(),

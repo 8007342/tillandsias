@@ -143,6 +143,21 @@ if "$PODMAN" network exists tillandsias-enclave 2>/dev/null; then
         -e http_proxy=http://proxy:3128
         -e https_proxy=http://proxy:3128
     )
+
+    # Mount the ephemeral CA chain so HTTPS through the MITM proxy is trusted.
+    # CA_CHAIN_PATH is set by the Rust caller (tools_overlay.rs).
+    # @trace spec:proxy-container, spec:layered-tools-overlay
+    if [[ -n "${CA_CHAIN_PATH:-}" ]] && [[ -f "$CA_CHAIN_PATH" ]]; then
+        _info "Mounting CA chain for proxy trust"
+        PROXY_ARGS+=(
+            -v "${CA_CHAIN_PATH}:/run/tillandsias/ca-chain.crt:ro"
+            -e NODE_EXTRA_CA_CERTS=/run/tillandsias/ca-chain.crt
+            -e SSL_CERT_FILE=/run/tillandsias/ca-chain.crt
+            -e REQUESTS_CA_BUNDLE=/run/tillandsias/ca-chain.crt
+        )
+    else
+        _warn "No CA chain found — HTTPS through proxy may fail"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
