@@ -318,6 +318,23 @@ fn resolve_mount_source(source: &MountSource, ctx: &LaunchContext) -> Option<Str
                 None
             }
         }
+        // @trace spec:layered-tools-overlay
+        // Configs live on tmpfs (ramdisk) for fast reads — zero disk I/O.
+        MountSource::ConfigOverlay => {
+            let base = if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+                std::path::PathBuf::from(xdg)
+            } else {
+                std::env::temp_dir()
+            };
+            let overlay_path = base
+                .join("tillandsias")
+                .join("config-overlay");
+            if overlay_path.exists() {
+                Some(overlay_path.display().to_string())
+            } else {
+                None // Skip mount — entrypoints will use defaults
+            }
+        }
     }
 }
 

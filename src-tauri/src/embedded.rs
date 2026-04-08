@@ -83,6 +83,11 @@ pub const FORGE_OPENCODE_JSON: &str = include_str!("../../images/default/opencod
 pub const FORGE_GIT_ASKPASS: &str =
     include_str!("../../images/default/git-askpass-tillandsias.sh");
 
+// Config overlay — opinionated configs extracted to ramdisk (tmpfs)
+// @trace spec:layered-tools-overlay
+pub const CONFIG_OVERLAY_OPENCODE: &str =
+    include_str!("../../images/default/config-overlay/opencode/config.json");
+
 // Shell configs
 pub const SHELL_BASHRC: &str = include_str!("../../images/default/shell/bashrc");
 pub const SHELL_FISH_CONFIG: &str = include_str!("../../images/default/shell/config.fish");
@@ -424,6 +429,33 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     }
 
     debug!(dir = %dir.display(), "Wrote embedded image sources to temp");
+    Ok(dir)
+}
+
+/// Extract embedded config overlay files to tmpfs (ramdisk).
+///
+/// Writes opinionated config files to `$XDG_RUNTIME_DIR/tillandsias/config-overlay/`
+/// where they live on RAM-backed tmpfs for maximum read speed. Container entrypoints
+/// symlink into this directory — no copying, every read goes to ramdisk.
+///
+/// Called early in the startup flow, before containers launch.
+///
+/// @trace spec:layered-tools-overlay
+pub fn extract_config_overlay() -> Result<PathBuf, String> {
+    let dir = runtime_dir().join("config-overlay");
+
+    // Recreate fresh each time — configs may have changed between versions
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).map_err(|e| format!("Cannot create config-overlay dir: {e}"))?;
+
+    // -- opencode/ --
+    let opencode_dir = dir.join("opencode");
+    fs::create_dir_all(&opencode_dir)
+        .map_err(|e| format!("Cannot create config-overlay/opencode dir: {e}"))?;
+    write_lf(&opencode_dir.join("config.json"), CONFIG_OVERLAY_OPENCODE)
+        .map_err(|e| format!("config-overlay/opencode/config.json: {e}"))?;
+
+    debug!(dir = %dir.display(), "Extracted config overlay to tmpfs");
     Ok(dir)
 }
 

@@ -77,6 +77,11 @@ pub enum MountSource {
     /// Resolved at launch time; mount is skipped if the overlay doesn't exist yet.
     /// @trace spec:layered-tools-overlay
     ToolsOverlay,
+    /// Opinionated config overlay on tmpfs (ramdisk) for fast reads.
+    /// Resolved at launch time from `$XDG_RUNTIME_DIR/tillandsias/config-overlay/`.
+    /// Mount is skipped if the tmpfs directory doesn't exist yet.
+    /// @trace spec:layered-tools-overlay
+    ConfigOverlay,
 }
 
 /// Mount permission mode.
@@ -452,12 +457,19 @@ pub fn git_service_profile() -> ContainerProfile {
 
 fn common_forge_mounts() -> Vec<ProfileMount> {
     // Code comes from git mirror service, packages through proxy.
-    // The only mount is the pre-built tools overlay (read-only).
+    // Mounts: pre-built tools overlay + config overlay (both read-only).
     // @trace spec:proxy-container, spec:layered-tools-overlay
     vec![
         ProfileMount {
             host_key: MountSource::ToolsOverlay,
             container_path: "/home/forge/.tools",
+            mode: MountMode::Ro,
+        },
+        // @trace spec:layered-tools-overlay
+        // Opinionated configs on ramdisk — entrypoints symlink into ~/.config/
+        ProfileMount {
+            host_key: MountSource::ConfigOverlay,
+            container_path: "/home/forge/.config-overlay",
             mode: MountMode::Ro,
         },
     ]
@@ -599,13 +611,30 @@ mod tests {
     fn forge_profiles_have_tools_overlay_mount() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
-        // Only mount is the read-only tools overlay
+        // Mounts: tools overlay + config overlay (both read-only)
         // @trace spec:proxy-container, spec:layered-tools-overlay
-        assert_eq!(opencode.mounts.len(), 1);
-        assert_eq!(claude.mounts.len(), 1);
+        assert_eq!(opencode.mounts.len(), 2);
+        assert_eq!(claude.mounts.len(), 2);
         assert_eq!(opencode.mounts[0].container_path, "/home/forge/.tools");
         assert_eq!(opencode.mounts[0].mode, MountMode::Ro);
         assert!(matches!(opencode.mounts[0].host_key, MountSource::ToolsOverlay));
+    }
+
+    // @trace spec:layered-tools-overlay
+    #[test]
+    fn forge_profiles_have_config_overlay_mount() {
+        let opencode = forge_opencode_profile();
+        let claude = forge_claude_profile();
+        let terminal = terminal_profile();
+        // Config overlay mount is second in forge profiles, first in terminal
+        let oc_cfg = opencode.mounts.iter().find(|m| matches!(m.host_key, MountSource::ConfigOverlay));
+        let cc_cfg = claude.mounts.iter().find(|m| matches!(m.host_key, MountSource::ConfigOverlay));
+        let tm_cfg = terminal.mounts.iter().find(|m| matches!(m.host_key, MountSource::ConfigOverlay));
+        assert!(oc_cfg.is_some(), "OpenCode profile must have ConfigOverlay mount");
+        assert!(cc_cfg.is_some(), "Claude profile must have ConfigOverlay mount");
+        assert!(tm_cfg.is_some(), "Terminal profile must have ConfigOverlay mount");
+        assert_eq!(oc_cfg.unwrap().container_path, "/home/forge/.config-overlay");
+        assert_eq!(oc_cfg.unwrap().mode, MountMode::Ro);
     }
 
     #[test]

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false,
+  "model": "ollama/qwen2.5:0.5b",
+  "small_model": "ollama/qwen2.5:0.5b",
+  "provider": {
+    "ollama": {
+      "api_url": "http://inference:11434"
+    }
+  },
+  "instructions": {
+    "**/*.dart": "Flutter project. Use Material 3. Prefer StatelessWidget. Follow clean architecture.",
+    "**/*.rs": "Rust project. Use tracing for logging. Add @trace spec:<name> annotations. Follow existing patterns.",
+    "openspec/**": "OpenSpec directory. Never modify specs without user approval. Specs converge toward intent, not code.",
+    "**/*.sh": "Shell script. Use set -euo pipefail. Log warnings to stderr. Never silently suppress errors."
+  },
+  "permission": {
+    "allow": ["Bash(*)", "Read(*)", "Glob(*)", "Grep(*)", "Edit(*)", "Write(*)"],
+    "deny": []
+  }
+}

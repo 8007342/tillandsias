@@ -1,0 +1,54 @@
+{
+  "tiers": [
+    {
+      "id": "T0",
+      "name": "qwen2.5:0.5b",
+      "size_mb": 350,
+      "vram_required_gb": 0,
+      "role": "instant",
+      "description": "Triggers, classification, tiny edits",
+      "pull_at_init": true
+    },
+    {
+      "id": "T1",
+      "name": "tinyllama:1.1b",
+      "size_mb": 600,
+      "vram_required_gb": 0,
+      "role": "fast",
+      "description": "Summaries, changelogs, progress tracking",
+      "pull_at_init": true
+    },
+    {
+      "id": "T2",
+      "name": "phi3.5:3.8b",
+      "size_mb": 2200,
+      "vram_required_gb": 4,
+      "role": "capable",
+      "description": "Code generation, refactoring, explanations"
+    },
+    {
+      "id": "T3",
+      "name": "qwen2.5-coder:7b",
+      "size_mb": 4500,
+      "vram_required_gb": 6,
+      "role": "code",
+      "description": "Code-specific tasks, reliable structured output"
+    },
+    {
+      "id": "T4",
+      "name": "llama3.2:8b",
+      "size_mb": 4700,
+      "vram_required_gb": 8,
+      "role": "strong",
+      "description": "Complex reasoning, architecture decisions"
+    },
+    {
+      "id": "T5",
+      "name": "qwen2.5:13b",
+      "size_mb": 8000,
+      "vram_required_gb": 12,
+      "role": "power",
+      "description": "Near-API quality, multi-step reasoning"
+    }
+  ]
+}
