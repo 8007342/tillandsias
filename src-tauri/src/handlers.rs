@@ -1205,6 +1205,13 @@ pub async fn ensure_infrastructure_ready(
     Ok(())
 }
 
+/// Public wrapper around `ensure_enclave_network` for use from `main.rs`
+/// launch-time initialization.
+/// @trace spec:enclave-network
+pub async fn ensure_enclave_network_pub() -> Result<(), String> {
+    ensure_enclave_network().await
+}
+
 /// Ensure the full enclave is ready in CLI (synchronous) mode.
 ///
 /// Creates the dummy `TrayState` and `build_tx` channel internally so the

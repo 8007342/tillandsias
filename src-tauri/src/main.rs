@@ -374,227 +374,63 @@ fn main() {
                     }
                 }
 
-                // @trace spec:enclave-network, spec:proxy-container, spec:tray-app
-                // Infrastructure setup FIRST — proxy must be running before any other image builds.
-                // This ensures forge/git/inference image builds route through the proxy cache.
+                // @trace spec:enclave-network, spec:proxy-container, spec:tray-app,
+                // spec:git-mirror-service, spec:inference-container, spec:init-command
                 //
-                // Show an "Enclave" build chip so the user sees progress while the
-                // enclave network and proxy are being initialized.
-                if podman_usable {
-                    info!("Setting up enclave network and proxy (required for all operations)");
-
-                    // Push the chip directly to shared state (event loop not yet running)
-                    // so the tray menu shows immediate feedback.
-                    let enclave_chip_name = "Enclave".to_string();
-                    {
-                        let mut s = state_for_loop.lock().unwrap();
-                        s.active_builds
-                            .push(tillandsias_core::state::BuildProgress {
-                                image_name: enclave_chip_name.clone(),
-                                status: tillandsias_core::state::BuildStatus::InProgress,
-                                started_at: std::time::Instant::now(),
-                                completed_at: None,
-                            });
-                    }
-                    rebuild_menu(&app_handle_for_loop, &state_for_loop);
-
-                    let s = state_for_loop.lock().unwrap().clone();
-                    match handlers::ensure_infrastructure_ready(&s, build_tx.clone()).await {
-                        Ok(()) => {
-                            // Mark the enclave chip as completed in shared state.
-                            // Also send via build_tx so the event loop's copy gets updated
-                            // once it starts (with the 10s fadeout timer).
-                            {
-                                let mut s = state_for_loop.lock().unwrap();
-                                if let Some(entry) = s.active_builds
-                                    .iter_mut()
-                                    .find(|b| b.image_name == enclave_chip_name)
-                                {
-                                    entry.status = tillandsias_core::state::BuildStatus::Completed;
-                                    entry.completed_at = Some(std::time::Instant::now());
-                                }
-                            }
-                            if build_tx.try_send(BuildProgressEvent::Completed {
-                                image_name: enclave_chip_name,
-                            }).is_err() {
-                                debug!("Build progress channel full/closed — UI may show stale state");
-                            }
-                            rebuild_menu(&app_handle_for_loop, &state_for_loop);
-                        }
-                        Err(e) => {
-                            warn!(error = %e, "Infrastructure setup failed at launch — image builds will bypass cache");
-                            // Mark the enclave chip as failed in shared state.
-                            {
-                                let mut s = state_for_loop.lock().unwrap();
-                                if let Some(entry) = s.active_builds
-                                    .iter_mut()
-                                    .find(|b| b.image_name == enclave_chip_name)
-                                {
-                                    entry.status = tillandsias_core::state::BuildStatus::Failed(e.clone());
-                                    entry.completed_at = Some(std::time::Instant::now());
-                                }
-                            }
-                            if build_tx.try_send(BuildProgressEvent::Failed {
-                                image_name: enclave_chip_name,
-                                reason: e,
-                            }).is_err() {
-                                debug!("Build progress channel full/closed — UI may show stale state");
-                            }
-                            rebuild_menu(&app_handle_for_loop, &state_for_loop);
-
-                            // @trace spec:tray-app
-                            // Notify user so infrastructure failure is not silent.
-                            // The tray continues in degraded mode (forge builds bypass proxy cache).
-                            handlers::send_notification(
-                                "Tillandsias",
-                                i18n::t("notifications.infrastructure_failed"),
-                            );
-                        }
-                    }
-                }
-
-                // Launch-time forge image check — build automatically if absent or stale.
-                // forge_available starts as false; we set it to true only when the image
-                // is confirmed present (no build needed) or after a successful build.
+                // Unified initialization — build ALL images like --init does.
+                // Ensures the tray is fully ready on first launch without requiring
+                // a separate `--init` run. Menus stay disabled until all images are
+                // confirmed present (or built). Builds are sequential: proxy first
+                // (foundation), then forge, git, inference.
                 //
-                // @trace spec:tray-app
-                // Show a "Setting up..." chip during the startup check so the user
-                // understands why menu items are disabled. This chip is replaced by
-                // the build chip if a build is needed, or removed if the image is present.
+                // Image types and their user-facing chip names:
+                const INIT_IMAGE_TYPES: &[(&str, &str, fn() -> String)] = &[
+                    ("proxy",     "Enclave",          handlers::proxy_image_tag),
+                    ("forge",     "Forge",            handlers::forge_image_tag),
+                    ("git",       "Code Mirror",      handlers::git_image_tag),
+                    ("inference", "Inference Engine",  handlers::inference_image_tag),
+                ];
+
                 if podman_usable {
-                    let setup_chip_name = "Tillandsias".to_string();
-                    {
-                        let mut s = state_for_loop.lock().unwrap();
-                        s.active_builds
-                            .push(tillandsias_core::state::BuildProgress {
-                                image_name: setup_chip_name.clone(),
-                                status: tillandsias_core::state::BuildStatus::InProgress,
-                                started_at: std::time::Instant::now(),
-                                completed_at: None,
-                            });
+                    // Step 1: Ensure the enclave network exists (needed before any
+                    // container or image build that routes through the proxy).
+                    info!("Ensuring enclave network exists (required for all operations)");
+                    if let Err(e) = handlers::ensure_enclave_network_pub().await {
+                        warn!(error = %e, "Enclave network creation failed — builds may bypass proxy cache");
                     }
-                    rebuild_menu(&app_handle_for_loop, &state_for_loop);
 
-                    let forge_client = tillandsias_podman::PodmanClient::new();
-                    let tag = handlers::forge_image_tag();
+                    // Step 2: Check which images are missing.
+                    let check_client = tillandsias_podman::PodmanClient::new();
+                    let mut needs_build = Vec::new();
 
-                    // Retry image_exists check — defense-in-depth against transient
-                    // socket failures after machine start on macOS.
-                    let mut image_present = false;
-                    for attempt in 0..3u32 {
-                        if forge_client.image_exists(&tag).await {
-                            image_present = true;
-                            break;
+                    for &(image_name, chip_name, tag_fn) in INIT_IMAGE_TYPES {
+                        let tag = tag_fn();
+
+                        // Retry image_exists check — defense-in-depth against transient
+                        // socket failures after machine start on macOS.
+                        let mut present = false;
+                        for attempt in 0..3u32 {
+                            if check_client.image_exists(&tag).await {
+                                present = true;
+                                break;
+                            }
+                            if attempt < 2 {
+                                debug!(attempt, tag = %tag, "image_exists returned false, retrying...");
+                                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                            }
                         }
-                        if attempt < 2 {
-                            debug!(attempt, tag = %tag, "image_exists returned false, retrying...");
-                            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                        }
-                    }
 
-                    // Remove the "Setting up..." chip — the build chip or completion
-                    // will take over from here.
-                    {
-                        let mut s = state_for_loop.lock().unwrap();
-                        s.active_builds
-                            .retain(|b| b.image_name != setup_chip_name);
-                    }
-
-                    if !image_present {
-                        info!(tag = %tag, "Forge image absent at launch — triggering auto-build");
-
-                        // Detect whether this is a first-time build or an update:
-                        // if any tillandsias-forge:v* image exists, it's an update.
-                        let is_update = handlers::any_versioned_forge_exists();
-                        let chip_name = if is_update {
-                            "Updated Forge".to_string()
+                        if present {
+                            info!(tag = %tag, image = image_name, "Image present at launch");
                         } else {
-                            "Forge".to_string()
-                        };
+                            info!(tag = %tag, image = image_name, "Image absent at launch — queued for build");
+                            needs_build.push((image_name, chip_name, tag));
+                        }
+                    }
 
-                        // Notify the event loop and update the icon to Building.
-                        // forge_available remains false (already the default).
-                        if build_tx.try_send(BuildProgressEvent::Started {
-                            image_name: chip_name.clone(),
-                        }).is_err() {
-                            debug!("Build progress channel full/closed — UI may show stale state");
-                        }
-                        {
-                            let mut s = state_for_loop.lock().unwrap();
-                            s.active_builds
-                                .push(tillandsias_core::state::BuildProgress {
-                                    image_name: chip_name.clone(),
-                                    status: tillandsias_core::state::BuildStatus::InProgress,
-                                    started_at: std::time::Instant::now(),
-                                    completed_at: None,
-                                });
-                            s.tray_icon_state = TrayIconState::Building;
-                            // forge_available is already false — keep it false during build
-                        }
-                        if let Some(tray_lock) = TRAY_ICON.get()
-                            && let Ok(tray) = tray_lock.lock()
-                        {
-                            if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
-                                TrayIconState::Building,
-                            )) {
-                                if let Err(e) = tray.set_icon(Some(icon)) {
-                                    debug!(error = %e, "Tray icon update failed (cosmetic)");
-                                }
-                            }
-                        }
-                        rebuild_menu(&app_handle_for_loop, &state_for_loop);
-
-                        // Run the build (blocking in a worker thread)
-                        let build_result = tokio::task::spawn_blocking(|| {
-                            handlers::run_build_image_script_pub("forge")
-                        })
-                        .await;
-
-                        match build_result {
-                            Ok(Ok(())) => {
-                                info!(tag = %tag, "Forge image built at launch");
-                                // Mark forge as available before sending Completed so the
-                                // menu rebuild triggered by the event sees forge_available=true.
-                                {
-                                    let mut s = state_for_loop.lock().unwrap();
-                                    s.forge_available = true;
-                                }
-                                if build_tx.try_send(BuildProgressEvent::Completed {
-                                    image_name: chip_name,
-                                }).is_err() {
-                                    debug!("Build progress channel full/closed — UI may show stale state");
-                                }
-                                // @trace spec:tray-app
-                                // Desktop notification so the user knows the forge is ready,
-                                // even if they're not watching the tray menu.
-                                handlers::send_notification(
-                                    "Tillandsias",
-                                    i18n::t("notifications.forge_ready"),
-                                );
-                            }
-                            Ok(Err(ref e)) => {
-                                warn!(error = %e, "Auto forge build failed at launch");
-                                if build_tx.try_send(BuildProgressEvent::Failed {
-                                    image_name: chip_name,
-                                    reason: e.clone(),
-                                }).is_err() {
-                                    debug!("Build progress channel full/closed — UI may show stale state");
-                                }
-                            }
-                            Err(ref e) => {
-                                warn!(error = %e, "Auto forge build task panicked at launch");
-                                if build_tx.try_send(BuildProgressEvent::Failed {
-                                    image_name: chip_name,
-                                    reason: format!("Build task panicked: {e}"),
-                                }).is_err() {
-                                    debug!("Build progress channel full/closed — UI may show stale state");
-                                }
-                            }
-                        }
-                    } else {
-                        info!(tag = %tag, "Forge image present at launch");
-                        // Image is ready — transition from Pup to Mature.
-                        // @trace spec:tray-icon-lifecycle
+                    if needs_build.is_empty() {
+                        // All images already present — go straight to ready state.
+                        info!("All images present at launch — skipping builds");
                         {
                             let mut s = state_for_loop.lock().unwrap();
                             s.forge_available = true;
@@ -610,6 +446,164 @@ fn main() {
                                     debug!(error = %e, "Tray icon update failed (cosmetic)");
                                 }
                             }
+                        }
+                        rebuild_menu(&app_handle_for_loop, &state_for_loop);
+                    } else {
+                        // Step 3: Build missing images sequentially with per-component chips.
+                        // Set icon to Building and keep forge_available = false.
+                        {
+                            let mut s = state_for_loop.lock().unwrap();
+                            s.tray_icon_state = TrayIconState::Building;
+                        }
+                        if let Some(tray_lock) = TRAY_ICON.get()
+                            && let Ok(tray) = tray_lock.lock()
+                        {
+                            if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                                TrayIconState::Building,
+                            )) {
+                                if let Err(e) = tray.set_icon(Some(icon)) {
+                                    debug!(error = %e, "Tray icon update failed (cosmetic)");
+                                }
+                            }
+                        }
+                        rebuild_menu(&app_handle_for_loop, &state_for_loop);
+
+                        let mut proxy_ok = true;  // assume ok unless proxy is in needs_build and fails
+                        let mut forge_ok = true;   // assume ok unless forge is in needs_build and fails
+
+                        for (image_name, chip_name, tag) in &needs_build {
+                            let chip_label = chip_name.to_string();
+
+                            // Show "Building {name}..." chip
+                            {
+                                let mut s = state_for_loop.lock().unwrap();
+                                s.active_builds
+                                    .push(tillandsias_core::state::BuildProgress {
+                                        image_name: chip_label.clone(),
+                                        status: tillandsias_core::state::BuildStatus::InProgress,
+                                        started_at: std::time::Instant::now(),
+                                        completed_at: None,
+                                    });
+                            }
+                            if build_tx.try_send(BuildProgressEvent::Started {
+                                image_name: chip_label.clone(),
+                            }).is_err() {
+                                debug!("Build progress channel full/closed — UI may show stale state");
+                            }
+                            rebuild_menu(&app_handle_for_loop, &state_for_loop);
+
+                            info!(image = *image_name, tag = %tag, "Building image at launch");
+
+                            // Build image (blocking — podman build is synchronous)
+                            let build_name = image_name.to_string();
+                            let build_result = tokio::task::spawn_blocking(move || {
+                                handlers::run_build_image_script_pub(&build_name)
+                            })
+                            .await;
+
+                            match build_result {
+                                Ok(Ok(())) => {
+                                    info!(image = *image_name, tag = %tag, "Image built at launch");
+                                    // Mark chip as completed
+                                    {
+                                        let mut s = state_for_loop.lock().unwrap();
+                                        if let Some(entry) = s.active_builds
+                                            .iter_mut()
+                                            .find(|b| b.image_name == chip_label)
+                                        {
+                                            entry.status = tillandsias_core::state::BuildStatus::Completed;
+                                            entry.completed_at = Some(std::time::Instant::now());
+                                        }
+                                    }
+                                    if build_tx.try_send(BuildProgressEvent::Completed {
+                                        image_name: chip_label,
+                                    }).is_err() {
+                                        debug!("Build progress channel full/closed — UI may show stale state");
+                                    }
+                                    rebuild_menu(&app_handle_for_loop, &state_for_loop);
+                                }
+                                Ok(Err(ref e)) => {
+                                    warn!(image = *image_name, error = %e, "Image build failed at launch");
+                                    if *image_name == "proxy" { proxy_ok = false; }
+                                    if *image_name == "forge" { forge_ok = false; }
+                                    {
+                                        let mut s = state_for_loop.lock().unwrap();
+                                        if let Some(entry) = s.active_builds
+                                            .iter_mut()
+                                            .find(|b| b.image_name == chip_label)
+                                        {
+                                            entry.status = tillandsias_core::state::BuildStatus::Failed(e.clone());
+                                            entry.completed_at = Some(std::time::Instant::now());
+                                        }
+                                    }
+                                    if build_tx.try_send(BuildProgressEvent::Failed {
+                                        image_name: chip_label,
+                                        reason: e.clone(),
+                                    }).is_err() {
+                                        debug!("Build progress channel full/closed — UI may show stale state");
+                                    }
+                                    rebuild_menu(&app_handle_for_loop, &state_for_loop);
+                                    // Continue building remaining images — don't abort all
+                                }
+                                Err(ref e) => {
+                                    warn!(image = *image_name, error = %e, "Image build task panicked at launch");
+                                    if *image_name == "proxy" { proxy_ok = false; }
+                                    if *image_name == "forge" { forge_ok = false; }
+                                    let reason = format!("Build task panicked: {e}");
+                                    {
+                                        let mut s = state_for_loop.lock().unwrap();
+                                        if let Some(entry) = s.active_builds
+                                            .iter_mut()
+                                            .find(|b| b.image_name == chip_label)
+                                        {
+                                            entry.status = tillandsias_core::state::BuildStatus::Failed(reason.clone());
+                                            entry.completed_at = Some(std::time::Instant::now());
+                                        }
+                                    }
+                                    if build_tx.try_send(BuildProgressEvent::Failed {
+                                        image_name: chip_label,
+                                        reason,
+                                    }).is_err() {
+                                        debug!("Build progress channel full/closed — UI may show stale state");
+                                    }
+                                    rebuild_menu(&app_handle_for_loop, &state_for_loop);
+                                }
+                            }
+                        }
+
+                        // Step 4: Set forge_available if at least proxy + forge succeeded.
+                        // forge_available gates menu items — only enable when the core
+                        // images needed for "Attach Here" are confirmed ready.
+                        if proxy_ok && forge_ok {
+                            {
+                                let mut s = state_for_loop.lock().unwrap();
+                                s.forge_available = true;
+                                s.tray_icon_state = TrayIconState::Mature;
+                            }
+                            if let Some(tray_lock) = TRAY_ICON.get()
+                                && let Ok(tray) = tray_lock.lock()
+                            {
+                                if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                                    TrayIconState::Mature,
+                                )) {
+                                    if let Err(e) = tray.set_icon(Some(icon)) {
+                                        debug!(error = %e, "Tray icon update failed (cosmetic)");
+                                    }
+                                }
+                            }
+                            // @trace spec:tray-app
+                            // Desktop notification so the user knows the system is ready,
+                            // even if they're not watching the tray menu.
+                            handlers::send_notification(
+                                "Tillandsias",
+                                i18n::t("notifications.forge_ready"),
+                            );
+                        } else {
+                            warn!("Core images (proxy/forge) failed — menus remain disabled");
+                            handlers::send_notification(
+                                "Tillandsias",
+                                i18n::t("notifications.infrastructure_failed"),
+                            );
                         }
                         rebuild_menu(&app_handle_for_loop, &state_for_loop);
                     }
