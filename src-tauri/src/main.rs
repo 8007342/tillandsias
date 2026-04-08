@@ -13,6 +13,7 @@ mod desktop;
 mod embedded;
 mod event_loop;
 mod github;
+mod gpu;
 mod handlers;
 mod i18n;
 mod init;
