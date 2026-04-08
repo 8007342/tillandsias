@@ -739,6 +739,59 @@ async fn rebuild_tools_overlay(overlay_dir: &Path) -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
+// Synchronous init-time entry point
+// @trace spec:layered-tools-overlay, spec:init-command
+// ---------------------------------------------------------------------------
+
+/// Build the tools overlay synchronously for `--init` and tray startup.
+///
+/// Checks if the current overlay matches the forge image tag. If not (or if
+/// no overlay exists), builds it. Returns `Ok(())` on success, `Err` on
+/// build failure. Non-fatal — callers should log and continue.
+///
+/// This does NOT require a tokio runtime or a build_tx channel.
+///
+/// @trace spec:layered-tools-overlay, spec:init-command
+pub fn build_overlay_for_init() -> Result<(), String> {
+    let cache = cache_dir();
+    let overlay_dir = cache.join("tools-overlay");
+    let current = overlay_dir.join("current");
+
+    let expected_tag = forge_image_tag();
+
+    // Check if current overlay exists and matches the forge image
+    if current.exists() && current.is_dir() {
+        if let Ok(manifest) = read_manifest(&current) {
+            if manifest.forge_image == expected_tag {
+                info!(
+                    spec = "layered-tools-overlay",
+                    "Tools overlay already up to date for {expected_tag}"
+                );
+                return Ok(());
+            }
+            info!(
+                old = %manifest.forge_image,
+                new = %expected_tag,
+                spec = "layered-tools-overlay",
+                "Tools overlay stale — rebuilding for new forge image"
+            );
+            let next = next_version_number(&overlay_dir);
+            let version_name = format!("v{next}");
+            build_overlay_sync(&overlay_dir, &version_name, &expected_tag)?;
+            prune_old_versions(&overlay_dir);
+            return Ok(());
+        }
+    }
+
+    // First launch — build v1
+    info!(
+        spec = "layered-tools-overlay",
+        "Building tools overlay (init)"
+    );
+    build_overlay_sync(&overlay_dir, "v1", &expected_tag)
+}
+
+// ---------------------------------------------------------------------------
 // P2-4: Background update check (wired into post-launch flow)
 // @trace spec:layered-tools-overlay
 // ---------------------------------------------------------------------------

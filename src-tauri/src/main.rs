@@ -431,6 +431,14 @@ fn main() {
                     if needs_build.is_empty() {
                         // All images already present — go straight to ready state.
                         info!("All images present at launch — skipping builds");
+
+                        // @trace spec:layered-tools-overlay
+                        // Build tools overlay if needed (non-fatal).
+                        let overlay_build_tx = build_tx.clone();
+                        if let Err(e) = crate::tools_overlay::ensure_tools_overlay(overlay_build_tx).await {
+                            warn!(error = %e, spec = "layered-tools-overlay", "Tools overlay build failed at launch (non-fatal)");
+                        }
+
                         {
                             let mut s = state_for_loop.lock().unwrap();
                             s.forge_available = true;
@@ -571,7 +579,16 @@ fn main() {
                             }
                         }
 
-                        // Step 4: Set forge_available if at least proxy + forge succeeded.
+                        // Step 4: Build tools overlay now that forge image is ready.
+                        // @trace spec:layered-tools-overlay
+                        if proxy_ok && forge_ok {
+                            let overlay_build_tx = build_tx.clone();
+                            if let Err(e) = crate::tools_overlay::ensure_tools_overlay(overlay_build_tx).await {
+                                warn!(error = %e, spec = "layered-tools-overlay", "Tools overlay build failed at launch (non-fatal)");
+                            }
+                        }
+
+                        // Step 5: Set forge_available if at least proxy + forge succeeded.
                         // forge_available gates menu items — only enable when the core
                         // images needed for "Attach Here" are confirmed ready.
                         if proxy_ok && forge_ok {

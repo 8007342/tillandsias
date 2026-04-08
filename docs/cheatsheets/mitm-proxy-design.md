@@ -148,9 +148,11 @@ keyUsage=critical,keyCertSign,cRLSign")  \
 - The proxy's `ssl_bump` config references these files
 
 **Delivery to forge container** (trust injection):
-- Bind-mount `root.crt` + `intermediate.crt` into forge at `/usr/local/share/ca-certificates/`
-- Run `update-ca-certificates` (Alpine/Debian) or `update-ca-trust` (Fedora) in entrypoint
-- Alternatively: set `SSL_CERT_FILE` / `REQUESTS_CA_BUNDLE` env vars
+- Bind-mount `ca-chain.crt` (root + intermediate) into forge at `/run/tillandsias/ca-chain.crt:ro`
+- Podman env: `NODE_EXTRA_CA_CERTS=/run/tillandsias/ca-chain.crt` (Node.js adds to built-in trust)
+- Entrypoint creates combined bundle: `cat $SYSTEM_CA $CA_CHAIN > /tmp/tillandsias-combined-ca.crt`
+- Entrypoint exports `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` pointing to the combined bundle
+- NOTE: `update-ca-trust` / `update-ca-certificates` cannot work under `--cap-drop=ALL` + `--userns=keep-id` (non-root, read-only system dirs). The combined bundle approach is the production path.
 
 **Destruction**:
 - Intermediate key lives only on the host in `$XDG_RUNTIME_DIR/tillandsias/certs/<container-name>/`

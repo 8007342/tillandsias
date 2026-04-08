@@ -1881,20 +1881,14 @@ fn inject_ca_chain_mounts(run_args: &mut Vec<String>) {
 
     // @trace spec:proxy-container
     // Trust env vars: tell common package managers / runtimes to use the chain.
-    // NODE_EXTRA_CA_CERTS: Node.js (npm, yarn, pnpm)
-    // SSL_CERT_FILE: OpenSSL-based tools, Go, rustls
-    // REQUESTS_CA_BUNDLE: Python requests, pip
+    // NODE_EXTRA_CA_CERTS: Node.js (npm, yarn, pnpm) — adds to built-in trust store
+    // SSL_CERT_FILE / REQUESTS_CA_BUNDLE: handled by entrypoint scripts which
+    // create a combined bundle (system CAs + proxy CA) at /tmp/tillandsias-combined-ca.crt.
+    // We don't set them here because the correct system CA path varies by distro
+    // (Fedora: /etc/pki/tls/certs/ca-bundle.crt, Debian: /etc/ssl/certs/ca-certificates.crt).
     run_args.insert(
         pos + 1,
         "-e=NODE_EXTRA_CA_CERTS=/run/tillandsias/ca-chain.crt".to_string(),
-    );
-    run_args.insert(
-        pos + 2,
-        "-e=SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt".to_string(),
-    );
-    run_args.insert(
-        pos + 3,
-        "-e=REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt".to_string(),
     );
 }
 

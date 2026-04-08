@@ -182,6 +182,8 @@ proxy_desc = "  ✓ proxy      — caching HTTPS proxy with domain allowlist"
 forge_desc = "  ✓ forge      — development environment"
 git_desc = "  ✓ git        — git mirror service (bare repos + daemon)"
 inference_desc = "  ✓ inference  — local LLM (ollama)"
+tools_overlay = "Building software layer (Claude Code, OpenSpec, OpenCode)..."
+tools_overlay_ready = "✓ Software layer ready"
 
 # ── CLI welcome banner ──────────────────────────────────────
 [cli.welcome]

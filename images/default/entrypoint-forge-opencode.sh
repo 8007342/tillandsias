@@ -10,22 +10,24 @@ source /usr/local/lib/tillandsias/lib-common.sh
 
 # @trace spec:proxy-container
 # Trust the Tillandsias enclave CA chain for HTTPS proxy caching.
+# System trust store updates require root (denied under --cap-drop=ALL).
+# Instead, create a combined CA bundle (system CAs + proxy CA) in /tmp
+# and export SSL_CERT_FILE / REQUESTS_CA_BUNDLE so curl, pip, and other
+# OpenSSL-based tools trust the MITM proxy. Node.js uses NODE_EXTRA_CA_CERTS
+# (set by podman env) which adds to its built-in trust store separately.
 CA_CHAIN="/run/tillandsias/ca-chain.crt"
 if [ -f "$CA_CHAIN" ]; then
-    if command -v update-ca-trust &>/dev/null; then
-        if ! cp "$CA_CHAIN" /etc/pki/ca-trust/source/anchors/tillandsias-ca.crt 2>/dev/null; then
-            echo "[entrypoint] WARNING: Failed to install CA certificate — proxy HTTPS caching may not work" >&2
-        fi
-        if ! update-ca-trust 2>/dev/null; then
-            echo "[entrypoint] WARNING: Failed to update CA trust store" >&2
-        fi
-    elif command -v update-ca-certificates &>/dev/null; then
-        if ! cp "$CA_CHAIN" /usr/local/share/ca-certificates/tillandsias-ca.crt 2>/dev/null; then
-            echo "[entrypoint] WARNING: Failed to install CA certificate — proxy HTTPS caching may not work" >&2
-        fi
-        if ! update-ca-certificates 2>/dev/null; then
-            echo "[entrypoint] WARNING: Failed to update CA trust store" >&2
-        fi
+    SYSTEM_CA=""
+    if [ -f /etc/pki/tls/certs/ca-bundle.crt ]; then
+        SYSTEM_CA=/etc/pki/tls/certs/ca-bundle.crt
+    elif [ -f /etc/ssl/certs/ca-certificates.crt ]; then
+        SYSTEM_CA=/etc/ssl/certs/ca-certificates.crt
+    fi
+    if [ -n "$SYSTEM_CA" ]; then
+        COMBINED="/tmp/tillandsias-combined-ca.crt"
+        cat "$SYSTEM_CA" "$CA_CHAIN" > "$COMBINED" 2>/dev/null
+        export SSL_CERT_FILE="$COMBINED"
+        export REQUESTS_CA_BUNDLE="$COMBINED"
     fi
 fi
 

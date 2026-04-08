@@ -37,13 +37,12 @@ mkdir -p ~/.config/gh 2>/dev/null || true
 touch ~/.gitconfig 2>/dev/null || true
 
 # ── GitHub auth bridge ──────────────────────────────────────
-# Register gh as git credential helper so git push works with
-# gh's OAuth token. Non-interactive, non-blocking if gh not installed.
+# Register gh as git credential helper IF gh has a valid token.
+# In enclave mode, forge containers have zero credentials — git auth
+# goes through the git mirror service, so this is expected to be a no-op.
 # @trace spec:secret-management
 if command -v gh &>/dev/null; then
-    if ! gh auth setup-git </dev/null 2>/dev/null; then
-        echo "[common] WARNING: gh auth setup-git failed — git push may not authenticate" >&2
-    fi
+    gh auth setup-git </dev/null 2>/dev/null || true
 fi
 
 # ── Shell configs ───────────────────────────────────────────

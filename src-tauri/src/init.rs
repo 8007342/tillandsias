@@ -175,6 +175,24 @@ pub fn run_with_force(force: bool) -> bool {
     // Prune old images after building new ones
     prune_old_images();
 
+    // @trace spec:layered-tools-overlay, spec:init-command
+    // Build the tools overlay now that the forge image is ready.
+    // During --init no enclave is running, so the overlay builder uses
+    // direct internet (no proxy, no CA chain needed).
+    if all_success {
+        println!();
+        println!("  {}", i18n::t("init.build.tools_overlay"));
+        match crate::tools_overlay::build_overlay_for_init() {
+            Ok(()) => {
+                println!("  {}", i18n::t("init.build.tools_overlay_ready"));
+            }
+            Err(e) => {
+                eprintln!("  [tools-overlay] {e}");
+                // Non-fatal — overlay will be built on first container launch
+            }
+        }
+    }
+
     // @trace spec:enclave-network, spec:init-command
     if all_success {
         println!();
