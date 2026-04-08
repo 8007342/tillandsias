@@ -1,8 +1,193 @@
 # Tillandsias — Romanian string table
-# Stub file — missing keys fall back to English.
+# All user-facing strings for the Rust tray app and CLI.
+#
+# Keys use dot-notation matching code organisation:
+#   menu.*       Tray menu labels
+#   cli.*        CLI attach/runner output
+#   init.*       `tillandsias --init` output
+#   errors.*     Error messages
+#   notifications.*  Desktop notifications
+#   stats.*      `tillandsias --stats` output
+#   clean.*      `tillandsias --clean` output
+#   update.*     `tillandsias --update` output
 
+# ── App ─────────────────────────────────────────────────────
 [app]
 name = "Tillandsias"
 
+# ── Tray menu ───────────────────────────────────────────────
 [menu]
-language = "Limbă"
+attach_here = "Conecteaza aici"
+root_terminal = "🛠️ Radacina"
+projects = "Proiecte"
+no_projects = "Niciun proiect detectat"
+settings = "Setari"
+quit = "Inchide Tillandsias"
+blooming = "In inflorire"
+maintenance = "⛏️ Intretinere"
+serve_here = "🔗 Serveste aici"
+serving = "🔗 In servire"
+seedlings = "🌱 Rasaduri"
+language = "Limba"
+credit = "de Tlatoani"
+version = "Tillandsias v{version}"
+
+[menu.github]
+label = "GitHub"
+login = "🔑 Autentificare GitHub"
+login_refresh = "🔒 Reimprospatare autentificare GitHub"
+loading = "Se incarca..."
+all_cloned = "Toate depozitele clonate local"
+login_first = "Autentificati-va mai intai pe GitHub"
+could_not_fetch = "Nu s-au putut obtine depozitele"
+cloning = "Se cloneaza {name}..."
+remote_projects = "Proiecte la distanta"
+
+[menu.claude]
+reset_credentials = "🔒 Resetare credentiale Claude"
+
+[menu.web]
+already_serving = "Deja in servire — deschide http://localhost:{port}"
+
+[menu.build]
+in_progress = "⏳ Se construieste {name}..."
+maintenance_setup = "⛏️ Se configureaza intretinerea..."
+completed = "✅ {name} gata"
+failed = "❌ Construirea {name} a esuat"
+
+# ── CLI output ───────────────────────────────────────────────
+[cli]
+attaching = "Tillandsias — Conectare la {name}"
+checking_image = "Se verifica imaginea... {tag}"
+ensuring_image = "Se asigura ca imaginea este actualizata..."
+image_ready = "✓ Imagine gata ({size})"
+starting_env = "Se porneste mediul..."
+starting_terminal = "Se porneste terminalul (shell fish)..."
+launching = "Se lanseaza... (Ctrl+C pentru oprire)"
+env_stopped = "Mediu oprit."
+waiting_setup = "Se asteapta finalizarea configurarii..."
+
+# ── Init command ─────────────────────────────────────────────
+[init]
+preparing = "Tillandsias init — pregatirea mediului de dezvoltare"
+already_ready = "✓ Mediul de dezvoltare este deja pregatit"
+ready = "Gata."
+setup_in_progress = "⌛ Configurarea este deja in curs, se asteapta..."
+setup_timed_out = "✗ Timpul de configurare a expirat. Daca problema persista, reinstalati de la https://github.com/8007342/tillandsias"
+env_ready = "✓ Mediu pregatit"
+waiting = "⌛ Se asteapta finalizarea configurarii..."
+setting_up = "Se configureaza mediul de dezvoltare..."
+first_run_note = "(Poate dura cateva minute la prima rulare)"
+dev_env_ready = "✓ Mediul de dezvoltare este pregatit"
+ready_run = "Gata. Rulati: tillandsias"
+setup_failed = "✗ Configurarea a esuat: {error}"
+
+# ── Error messages ───────────────────────────────────────────
+[errors]
+setup = "Tillandsias se configureaza. Daca problema persista, reinstalati de la https://github.com/8007342/tillandsias"
+env_not_ready = "Mediul de dezvoltare nu este inca pregatit. Tillandsias il va configura automat — incercati din nou in cateva minute."
+install_incomplete = "Instalarea Tillandsias ar putea fi incompleta. Reinstalati de la https://github.com/8007342/tillandsias"
+podman_unavailable = "Podman nu este disponibil"
+no_podman = "Eroare: podman nu este instalat sau nu se afla in PATH"
+genera_exhausted = "Toate genurile epuizate pentru proiectul {name}"
+terminal_failed = "Nu s-a putut deschide terminalul: {error}"
+no_terminal = "Niciun emulator de terminal gasit (s-au incercat ptyxis, gnome-terminal, konsole, xterm)"
+
+# ── Desktop notifications ────────────────────────────────────
+[notifications]
+already_running = "Deja in executie — cautati '{title}' in ferestrele dumneavoastra"
+claude_credentials_cleared = "Credentialele Claude au fost sterse. Urmatoarea lansare va solicita autentificarea."
+forge_not_ready = "Se configureaza — va rugam asteptati un moment."
+forge_ready = "Gata — acum va puteti conecta la orice proiect."
+infrastructure_failed = "Configurarea a intampinat o problema. Unele functionalitati pot fi lente."
+tools_updated = "Instrumentele de dezvoltare au fost actualizate. Noile medii vor folosi cele mai recente versiuni."
+
+# ── Stats command ────────────────────────────────────────────
+[stats]
+title = "Tillandsias — raport de utilizare disc"
+images_label = "Imagini:"
+images_none = "Imagini:     (niciuna)"
+images_no_podman = "Imagini:     (podman indisponibil)"
+containers_label = "Medii:"
+containers_none = "Medii: (niciunul)"
+containers_no_podman = "Medii: (podman indisponibil)"
+nix_cache_label = "Cache Nix:"
+nix_cache_present = "Cache Nix:       {path} ({size})"
+nix_cache_not_present = "Cache Nix:       (absent)"
+cargo_cache_label = "Cache Cargo:"
+cargo_cache_present = "Cache Cargo:     {path} ({size})"
+cargo_cache_not_present = "Cache Cargo:     (absent)"
+binary_present = "Binar instalat: {path} ({size})"
+binary_not_present = "Binar instalat: (neinstalat la {path})"
+last_update = "Ultima actualizare: {entry}"
+no_update_log = "(fara jurnal de actualizari)"
+total = "Total (cache-uri + binar): {size}"
+podman_note = "(Stocarea imaginilor podman este gestionata de podman — vezi 'podman system df')"
+
+# ── Clean command ────────────────────────────────────────────
+[clean]
+title = "Tillandsias — curatare artefacte"
+complete = "Curatare finalizata."
+nothing = "Nimic de curatat."
+images_none_dangling = "Imagini:     nicio imagine orfana de sters"
+images_removed = "Imagini:     {count} imagine/imagini orfane sterse"
+images_no_podman = "Imagini:     (podman indisponibil — omis)"
+containers_none_stopped = "Medii: niciun mediu tillandsias oprit"
+containers_removing = "Medii: se sterg {count} medii oprite..."
+container_removed = "  sters: {name}"
+container_failed = "  stergere esuata: {name}"
+containers_no_podman = "Medii: (podman indisponibil — omis)"
+nix_cache_removed = "Cache Nix:  sters {path} ({size})"
+nix_cache_failed = "Cache Nix:  stergerea {path} a esuat: {error}"
+nix_cache_not_present = "Cache Nix:  (absent)"
+
+# ── Update command ───────────────────────────────────────────
+[update]
+version = "Tillandsias v{version}"
+checking = "Se cauta actualizari..."
+up_to_date = "Deja la zi."
+available = "Actualizare disponibila: v{version}"
+downloading = "Se descarca..."
+downloaded = "Descarcat ({size})"
+applying = "Se aplica actualizarea..."
+updated = "Actualizat la v{version}"
+restart_note = "Reporniti aplicatia pentru a folosi noua versiune."
+fetch_error = "Eroare: nu s-a putut obtine manifestul de actualizare: {error}"
+parse_error = "Eroare: nu s-a putut analiza manifestul de actualizare: {error}"
+no_artifact = "Eroare: niciun artefact de actualizare gasit pentru platforma '{platform}' in manifest"
+available_platforms = "Platforme disponibile: {platforms}"
+manual_download = "Descarcati noua versiune manual de la:"
+download_error = "Eroare: descarcarea a esuat: {error}"
+apply_error = "Eroare: aplicarea actualizarii a esuat: {error}"
+
+# ── Init output ─────────────────────────────────────────────
+[init.build]
+image_ready = "✓ {name}: {tag} (gata)"
+building = "Se construieste {name}..."
+waiting_for_build = "  Se asteapta alta construire..."
+build_success = "✓ {name}: {tag}"
+build_failed = "✗ {name}: construirea a esuat (cod {code})"
+build_error = "✗ {name}: {error}"
+some_failed = "Unele imagini nu au putut fi construite. Rulati cu --debug pentru detalii."
+enclave_title = "Imaginile enclavei:"
+proxy_desc = "  ✓ proxy      — proxy HTTPS cu cache si lista de domenii permise"
+forge_desc = "  ✓ forge      — mediu de dezvoltare"
+git_desc = "  ✓ git        — serviciu oglinda git (depozite bare + daemon)"
+inference_desc = "  ✓ inference  — LLM local (ollama)"
+tools_overlay = "Se construieste stratul de software (Claude Code, OpenSpec, OpenCode)..."
+tools_overlay_ready = "✓ Stratul de software este gata"
+
+# ── CLI welcome banner ──────────────────────────────────────
+[cli.welcome]
+title = "Tillandsias v{version}"
+os_label = "OS:"
+podman_label = "Podman:"
+podman_not_found = "negasit"
+forge_ready = "{tag} (gata)"
+forge_update_needed = "actualizare necesara (curent: {current}, asteptat: {expected})"
+forge_not_built = "neconstruit (rulati: tillandsias init)"
+install_podman = "Instalati podman pentru a folosi Tillandsias."
+log_invalid_pair = "Avertisment: pereche de log invalida (format asteptat modul:nivel): {pair}"
+log_unknown_module = "Avertisment: modul de log necunoscut: {module}. Module valide: {valid}"
+log_invalid_level = "Eroare: nivel de log invalid: {level}. Niveluri valide: {valid}"
+flag_requires_value = "Eroare: {flag} necesita o valoare"

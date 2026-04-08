@@ -1,8 +1,171 @@
-# Tillandsias — Nahuatl string table
-# Stub file — missing keys fall back to English.
+# Tillandsias — Nāhuatl string table
 
 [app]
 name = "Tillandsias"
 
 [menu]
+attach_here = "Nican ximotlāli"
+root_terminal = "🛠️ Nēlhuayōtl"
+projects = "Tēquitl"
+no_projects = "Ahmo ōmottac cē tēquitl"
+settings = "Tlamachiliztli"
+quit = "Xictzacua Tillandsias"
+blooming = "Cuepōni"
+maintenance = "⛏️ Tlapātiliztli"
+serve_here = "🔗 Nican xictēmaca"
+serving = "🔗 Motēmaca"
+seedlings = "🌱 Xīnachtli"
 language = "Tlahtōlli"
+credit = "Tlatoāni īpal"
+version = "Tillandsias v{version}"
+
+[menu.github]
+label = "GitHub"
+login = "🔑 GitHub calaquiliztli"
+login_refresh = "🔒 GitHub calaquiliztli yancuīcāyōtl"
+loading = "Motēmōhua..."
+all_cloned = "Mochi tlatēmōlli ōmocōpīnqueh nican"
+login_first = "Achtopa xicalaqui GitHub"
+could_not_fetch = "Ahmo ōhuelītic tlatēmōlli"
+cloning = "{name} mocōpīna..."
+remote_projects = "Huēhca tēquitl"
+
+[menu.claude]
+reset_credentials = "🔒 Claude nēltilīliztli xictlālcuepa"
+
+[menu.web]
+already_serving = "Yē motēmaca — xictlapo http://localhost:{port}"
+
+[menu.build]
+in_progress = "⏳ {name} mochichihua..."
+maintenance_setup = "⛏️ Tlapātiliztli motlālia..."
+completed = "✅ {name} yēcauhqui"
+failed = "❌ {name} chichihualiztli ōpōliuh"
+
+[cli]
+attaching = "Tillandsias — {name} īhuān motlālia"
+checking_image = "Īxiptlatl motlachīlia... {tag}"
+ensuring_image = "Īxiptlatl yancuīc motlachīlia..."
+image_ready = "✓ Īxiptlatl yēcauhqui ({size})"
+starting_env = "Tēquiticāyōtl mopēhua..."
+starting_terminal = "Tlahtōlcalli mopēhua (fish shell)..."
+launching = "Mopēhua... (Ctrl+C ic xictzacua)"
+env_stopped = "Tēquiticāyōtl ōmicac."
+waiting_setup = "Motlachīxtoc ic tlāliztli tlāmiz..."
+
+[init]
+preparing = "Tillandsias init — tēquiticāyōtl mochichihua"
+already_ready = "✓ Tēquiticāyōtl yē yēcauhqui"
+ready = "Yēcauhqui."
+setup_in_progress = "⌛ Tlāliztli yē mochīhua, motlachīxtoc..."
+setup_timed_out = "✗ Tlāliztli cāhuitl ōtlān. Intlā ohhuic, xictlālcuepa: https://github.com/8007342/tillandsias"
+env_ready = "✓ Tēquiticāyōtl yēcauhqui"
+waiting = "⌛ Motlachīxtoc ic tlāliztli tlāmiz..."
+setting_up = "Tēquiticāyōtl motlālia..."
+first_run_note = "(Achto mīqui cequi cāhuitl)"
+dev_env_ready = "✓ Tēquiticāyōtl yēcauhqui"
+ready_run = "Yēcauhqui. Xictēquitilti: tillandsias"
+setup_failed = "✗ Tlāliztli ōpōliuh: {error}"
+
+[errors]
+setup = "Tillandsias motlālia. Intlā ohhuic, xictlālcuepa: https://github.com/8007342/tillandsias"
+env_not_ready = "Tēquiticāyōtl ayamo yēcauhqui. Tillandsias mocēlīz motlāliz — xicchiya cequi cāhuitl."
+install_incomplete = "Tillandsias tlāliztli ahmo ōtlānqui. Xictlālcuepa: https://github.com/8007342/tillandsias"
+podman_unavailable = "podman ahmo oncah"
+no_podman = "Ahtlahtlacolli: podman ahmo tlālīlli ahnozo ahmo oncah PATH"
+genera_exhausted = "Mochi genera ōtlānqueh ic tēquitl {name}"
+terminal_failed = "Ahmo ōhuelītic tlahtōlcalli tlapo: {error}"
+no_terminal = "Ahmo ōmottac tlahtōlcalli (ptyxis, gnome-terminal, konsole, xterm ōtlayēyēcolōc)"
+
+[notifications]
+already_running = "Yē motēquitiltia — xitlachiya '{title}' motēntlāpaloāyan"
+claude_credentials_cleared = "Claude nēltilīliztli ōmopōpoloh. Occēppa calaquiliztli motlahtlanīz."
+forge_not_ready = "Mochichihua — xicchiya."
+forge_ready = "Yēcauhqui — axcān huelītīz cē tēquitl tictlālia."
+infrastructure_failed = "Tlāliztli ōquīz āhuilli. Cequi tlamantli ahmo yōllōtiz."
+tools_updated = "Tēquitēquitl ōyancuīcāyac. Yancuīc tēquiticāyōtl yancuīc tlamantli quitēquitiltīz."
+
+[stats]
+title = "Tillandsias — tēmalteōtlapoalli"
+images_label = "Īxiptlatlmeh:"
+images_none = "Īxiptlatlmeh:     (ahtlē)"
+images_no_podman = "Īxiptlatlmeh:     (podman ahmo oncah)"
+containers_label = "Tēcōncalli:"
+containers_none = "Tēcōncalli: (ahtlē)"
+containers_no_podman = "Tēcōncalli: (podman ahmo oncah)"
+nix_cache_label = "Nix nēchicōlli:"
+nix_cache_present = "Nix nēchicōlli:       {path} ({size})"
+nix_cache_not_present = "Nix nēchicōlli:       (ahmo oncah)"
+cargo_cache_label = "Cargo nēchicōlli:"
+cargo_cache_present = "Cargo nēchicōlli:     {path} ({size})"
+cargo_cache_not_present = "Cargo nēchicōlli:     (ahmo oncah)"
+binary_present = "Tlālīlli tēquitēquitl: {path} ({size})"
+binary_not_present = "Tlālīlli tēquitēquitl: (ahmo tlālīlli {path})"
+last_update = "Tlamiliztli yancuīcāyōtl:      {entry}"
+no_update_log = "(ahmo yancuīcāyōtl tlapoalli)"
+total = "Centetl (nēchicōlli + tēquitēquitl): {size}"
+podman_note = "(podman īxiptlatl nēchicōlli podman quitlachīlia — 'podman system df' xiquitta)"
+
+[clean]
+title = "Tillandsias — tlachipahualiztli"
+complete = "Tlachipahualiztli ōtlān."
+nothing = "Ahtlē tlachipahuaz."
+images_none_dangling = "Īxiptlatlmeh:     ahmo oncah tlapōlōlīz"
+images_removed = "Īxiptlatlmeh:     {count} ahnenquīztli īxiptlatlmeh ōmopōpoloh"
+images_no_podman = "Īxiptlatlmeh:     (podman ahmo oncah — ōmopanāhuīc)"
+containers_none_stopped = "Tēcōncalli: ahmo oncah icnoyōhualli tillandsias tēcōncalli"
+containers_removing = "Tēcōncalli: {count} icnoyōhualli tēcōncalli mopōpolōhua..."
+container_removed = "  ōmopōpoloh: {name}"
+container_failed = "  ahmo ōhuelītic mopōpoloa: {name}"
+containers_no_podman = "Tēcōncalli: (podman ahmo oncah — ōmopanāhuīc)"
+nix_cache_removed = "Nix nēchicōlli:  {path} ({size}) ōmopōpoloh"
+nix_cache_failed = "Nix nēchicōlli:  ahmo ōhuelītic mopōpoloa {path}: {error}"
+nix_cache_not_present = "Nix nēchicōlli:  (ahmo oncah)"
+
+[update]
+version = "Tillandsias v{version}"
+checking = "Yancuīcāyōtl motēmōhua..."
+up_to_date = "Yē yancuīc."
+available = "Yancuīcāyōtl oncah: v{version}"
+downloading = "Motēmōhua..."
+downloaded = "Ōtēmōc ({size})"
+applying = "Yancuīcāyōtl motlālia..."
+updated = "Ōyancuīcāyac v{version}"
+restart_note = "Xictlālcuepa in tēquitēquitl ic yancuīc tlamantli."
+fetch_error = "Ahtlahtlacolli: ahmo ōhuelītic yancuīcāyōtl āmatl: {error}"
+parse_error = "Ahtlahtlacolli: ahmo ōhuelītic yancuīcāyōtl āmatl tlahcuilōlli: {error}"
+no_artifact = "Ahtlahtlacolli: ahmo ōmottac yancuīcāyōtl ic '{platform}'"
+available_platforms = "Tēquiticāyōtl oncah: {platforms}"
+manual_download = "Yancuīc tlamantli nican xictēmō:"
+download_error = "Ahtlahtlacolli: tēmōliztli ōpōliuh: {error}"
+apply_error = "Ahtlahtlacolli: ahmo ōhuelītic yancuīcāyōtl tlāliztli: {error}"
+
+[init.build]
+image_ready = "✓ {name}: {tag} (yēcauhqui)"
+building = "{name} mochichihua..."
+waiting_for_build = "  Occē chichihualiztli motlachīxtoc..."
+build_success = "✓ {name}: {tag}"
+build_failed = "✗ {name}: chichihualiztli ōpōliuh (quīzaliztli {code})"
+build_error = "✗ {name}: {error}"
+some_failed = "Cequi īxiptlatlmeh ahmo ōmochichiuhqueh. --debug ic xictēquitilti."
+enclave_title = "Caltēnānhualli īxiptlatlmeh:"
+proxy_desc = "  ✓ proxy      — nēchicōlīz HTTPS tlayēcānaliztli"
+forge_desc = "  ✓ forge      — tēquiticāyōtl"
+git_desc = "  ✓ git        — git tēzcatl tēquitl"
+inference_desc = "  ✓ inference  — nican LLM (ollama)"
+tools_overlay = "Tēquitēquitl pētlachihualiztli mochichihua (Claude Code, OpenSpec, OpenCode)..."
+tools_overlay_ready = "✓ Tēquitēquitl pētlachihualiztli yēcauhqui"
+
+[cli.welcome]
+title = "Tillandsias v{version}"
+os_label = "OS:"
+podman_label = "Podman:"
+podman_not_found = "ahmo ōmottac"
+forge_ready = "{tag} (yēcauhqui)"
+forge_update_needed = "yancuīcāyōtl monequi (axcān: {current}, monequi: {expected})"
+forge_not_built = "ahmo ōmochiuh (xictēquitilti: tillandsias init)"
+install_podman = "Xictlāli podman ic Tillandsias tictēquitiltīz."
+log_invalid_pair = "Tēīxīmachiliztli: ahcualli tlapoalli tētl (monequi module:level): {pair}"
+log_unknown_module = "Tēīxīmachiliztli: ahmo īximachōni tlapoalli: {module}. Cualli tlapoalli: {valid}"
+log_invalid_level = "Ahtlahtlacolli: ahcualli tlapoalli tlachīxticāyōtl: {level}. Cualli: {valid}"
+flag_requires_value = "Ahtlahtlacolli: {flag} monequi cē tlamantli"

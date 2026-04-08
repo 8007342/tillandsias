@@ -1,8 +1,171 @@
-# Tillandsias — Tamil string table
-# Stub file — missing keys fall back to English.
+# Tillandsias — Tamil (தமிழ்) string table
 
 [app]
 name = "Tillandsias"
 
 [menu]
+attach_here = "இங்கே இணைக்கவும்"
+root_terminal = "🛠️ ரூட்"
+projects = "திட்டங்கள்"
+no_projects = "திட்டங்கள் எதுவும் கண்டறியப்படவில்லை"
+settings = "அமைப்புகள்"
+quit = "Tillandsias-ஐ நிறுத்து"
+blooming = "மலர்கிறது"
+maintenance = "⛏️ பராமரிப்பு"
+serve_here = "🔗 இங்கே வழங்கு"
+serving = "🔗 வழங்கப்படுகிறது"
+seedlings = "🌱 நாற்றுகள்"
 language = "மொழி"
+credit = "Tlatoāni உருவாக்கம்"
+version = "Tillandsias v{version}"
+
+[menu.github]
+label = "GitHub"
+login = "🔑 GitHub உள்நுழைவு"
+login_refresh = "🔒 GitHub உள்நுழைவு புதுப்பிப்பு"
+loading = "ஏற்றுகிறது..."
+all_cloned = "அனைத்து களஞ்சியங்களும் உள்ளூரில் நகலெடுக்கப்பட்டுள்ளன"
+login_first = "முதலில் GitHub-இல் உள்நுழையவும்"
+could_not_fetch = "களஞ்சியங்களைப் பெற இயலவில்லை"
+cloning = "{name} நகலெடுக்கப்படுகிறது..."
+remote_projects = "தொலைநிலைத் திட்டங்கள்"
+
+[menu.claude]
+reset_credentials = "🔒 Claude சான்றுகளை மீட்டமை"
+
+[menu.web]
+already_serving = "ஏற்கனவே வழங்கப்படுகிறது — http://localhost:{port} திறக்கவும்"
+
+[menu.build]
+in_progress = "⏳ {name} உருவாக்கப்படுகிறது..."
+maintenance_setup = "⛏️ பராமரிப்பு அமைக்கப்படுகிறது..."
+completed = "✅ {name} தயார்"
+failed = "❌ {name} உருவாக்கம் தோல்வி"
+
+[cli]
+attaching = "Tillandsias — {name}-உடன் இணைகிறது"
+checking_image = "படிமம் சரிபார்க்கப்படுகிறது... {tag}"
+ensuring_image = "படிமம் புதுப்பித்த நிலையில் உள்ளதா எனச் சரிபார்க்கிறது..."
+image_ready = "✓ படிமம் தயார் ({size})"
+starting_env = "சூழல் தொடங்குகிறது..."
+starting_terminal = "முனையம் தொடங்குகிறது (fish shell)..."
+launching = "தொடங்குகிறது... (நிறுத்த Ctrl+C)"
+env_stopped = "சூழல் நிறுத்தப்பட்டது."
+waiting_setup = "அமைப்பு முடிவடையக் காத்திருக்கிறது..."
+
+[init]
+preparing = "Tillandsias init — மேம்பாட்டுச் சூழல் தயாராகிறது"
+already_ready = "✓ மேம்பாட்டுச் சூழல் ஏற்கனவே தயார்"
+ready = "தயார்."
+setup_in_progress = "⌛ அமைப்பு ஏற்கனவே நடைபெறுகிறது, காத்திருக்கிறது..."
+setup_timed_out = "✗ அமைப்பு நேரம் முடிந்தது. இது தொடர்ந்தால், https://github.com/8007342/tillandsias இலிருந்து மீண்டும் நிறுவுக"
+env_ready = "✓ சூழல் தயார்"
+waiting = "⌛ அமைப்பு முடிவடையக் காத்திருக்கிறது..."
+setting_up = "மேம்பாட்டுச் சூழல் அமைக்கப்படுகிறது..."
+first_run_note = "(முதல் முறை சில நிமிடங்கள் ஆகலாம்)"
+dev_env_ready = "✓ மேம்பாட்டுச் சூழல் தயார்"
+ready_run = "தயார். இயக்குக: tillandsias"
+setup_failed = "✗ அமைப்பு தோல்வி: {error}"
+
+[errors]
+setup = "Tillandsias அமைக்கப்படுகிறது. இது தொடர்ந்தால், https://github.com/8007342/tillandsias இலிருந்து மீண்டும் நிறுவுக"
+env_not_ready = "மேம்பாட்டுச் சூழல் இன்னும் தயாராகவில்லை. Tillandsias தானாகவே அமைக்கும் — சில நிமிடங்கள் கழித்து மீண்டும் முயற்சிக்கவும்."
+install_incomplete = "Tillandsias நிறுவல் முழுமையடையாமல் இருக்கலாம். https://github.com/8007342/tillandsias இலிருந்து மீண்டும் நிறுவுக"
+podman_unavailable = "podman கிடைக்கவில்லை"
+no_podman = "பிழை: podman நிறுவப்படவில்லை அல்லது PATH-இல் இல்லை"
+genera_exhausted = "திட்டம் {name}-க்கான அனைத்து ஜெனரா தீர்ந்தது"
+terminal_failed = "முனையம் திறக்க இயலவில்லை: {error}"
+no_terminal = "முனைய முகப்பு கிடைக்கவில்லை (ptyxis, gnome-terminal, konsole, xterm முயற்சிக்கப்பட்டன)"
+
+[notifications]
+already_running = "ஏற்கனவே இயங்குகிறது — உங்கள் சாளரங்களில் '{title}' பாருங்கள்"
+claude_credentials_cleared = "Claude சான்றுகள் நீக்கப்பட்டன. அடுத்த தொடக்கத்தில் அங்கீகாரம் கேட்கப்படும்."
+forge_not_ready = "தயாராகிறது — சிறிது காத்திருக்கவும்."
+forge_ready = "தயார் — இப்போது எந்தத் திட்டத்திலும் இணையலாம்."
+infrastructure_failed = "அமைப்பில் சிக்கல் ஏற்பட்டது. சில அம்சங்கள் மெதுவாக இருக்கலாம்."
+tools_updated = "மேம்பாட்டுக் கருவிகள் புதுப்பிக்கப்பட்டன. புதிய சூழல்கள் சமீபத்திய பதிப்புகளைப் பயன்படுத்தும்."
+
+[stats]
+title = "Tillandsias — வட்டு பயன்பாட்டு அறிக்கை"
+images_label = "படிமங்கள்:"
+images_none = "படிமங்கள்:     (எதுவுமில்லை)"
+images_no_podman = "படிமங்கள்:     (podman கிடைக்கவில்லை)"
+containers_label = "கொள்கலன்கள்:"
+containers_none = "கொள்கலன்கள்: (எதுவுமில்லை)"
+containers_no_podman = "கொள்கலன்கள்: (podman கிடைக்கவில்லை)"
+nix_cache_label = "Nix தற்காலிகம்:"
+nix_cache_present = "Nix தற்காலிகம்:       {path} ({size})"
+nix_cache_not_present = "Nix தற்காலிகம்:       (இல்லை)"
+cargo_cache_label = "Cargo தற்காலிகம்:"
+cargo_cache_present = "Cargo தற்காலிகம்:     {path} ({size})"
+cargo_cache_not_present = "Cargo தற்காலிகம்:     (இல்லை)"
+binary_present = "நிறுவப்பட்ட நிரல்: {path} ({size})"
+binary_not_present = "நிறுவப்பட்ட நிரல்: ({path}-இல் நிறுவப்படவில்லை)"
+last_update = "கடைசி புதுப்பிப்பு:      {entry}"
+no_update_log = "(புதுப்பிப்பு பதிவு இல்லை)"
+total = "மொத்தம் (தற்காலிகம் + நிரல்): {size}"
+podman_note = "(podman படிம சேமிப்பு podman நிர்வகிக்கிறது — 'podman system df' பாருங்கள்)"
+
+[clean]
+title = "Tillandsias — உருப்படி சுத்தம்"
+complete = "சுத்தம் முடிந்தது."
+nothing = "சுத்தம் செய்ய ஒன்றுமில்லை."
+images_none_dangling = "படிமங்கள்:     நீக்க பயனற்ற படிமங்கள் இல்லை"
+images_removed = "படிமங்கள்:     {count} பயனற்ற படிமங்கள் நீக்கப்பட்டன"
+images_no_podman = "படிமங்கள்:     (podman கிடைக்கவில்லை — தவிர்க்கப்பட்டது)"
+containers_none_stopped = "கொள்கலன்கள்: நிறுத்தப்பட்ட tillandsias கொள்கலன்கள் இல்லை"
+containers_removing = "கொள்கலன்கள்: {count} நிறுத்தப்பட்ட கொள்கலன்கள் நீக்கப்படுகின்றன..."
+container_removed = "  நீக்கப்பட்டது: {name}"
+container_failed = "  நீக்க இயலவில்லை: {name}"
+containers_no_podman = "கொள்கலன்கள்: (podman கிடைக்கவில்லை — தவிர்க்கப்பட்டது)"
+nix_cache_removed = "Nix தற்காலிகம்:  {path} ({size}) நீக்கப்பட்டது"
+nix_cache_failed = "Nix தற்காலிகம்:  {path} நீக்க இயலவில்லை: {error}"
+nix_cache_not_present = "Nix தற்காலிகம்:  (இல்லை)"
+
+[update]
+version = "Tillandsias v{version}"
+checking = "புதுப்பிப்புகள் சரிபார்க்கப்படுகின்றன..."
+up_to_date = "ஏற்கனவே புதுப்பித்த நிலையில் உள்ளது."
+available = "புதுப்பிப்பு கிடைக்கிறது: v{version}"
+downloading = "பதிவிறக்கம் செய்கிறது..."
+downloaded = "பதிவிறக்கம் செய்யப்பட்டது ({size})"
+applying = "புதுப்பிப்பு பொருத்தப்படுகிறது..."
+updated = "v{version}-க்குப் புதுப்பிக்கப்பட்டது"
+restart_note = "புதிய பதிப்பைப் பயன்படுத்த பயன்பாட்டை மறுதொடக்கம் செய்யுங்கள்."
+fetch_error = "பிழை: புதுப்பிப்பு விவரக்குறிப்பைப் பெற இயலவில்லை: {error}"
+parse_error = "பிழை: புதுப்பிப்பு விவரக்குறிப்பைப் பகுப்பாய்வு செய்ய இயலவில்லை: {error}"
+no_artifact = "பிழை: '{platform}' தளத்திற்கான புதுப்பிப்பு விவரக்குறிப்பில் உருப்படி இல்லை"
+available_platforms = "கிடைக்கும் தளங்கள்: {platforms}"
+manual_download = "புதிய பதிப்பை இங்கிருந்து கைமுறையாகப் பதிவிறக்கவும்:"
+download_error = "பிழை: பதிவிறக்கம் தோல்வி: {error}"
+apply_error = "பிழை: புதுப்பிப்பு பொருத்த இயலவில்லை: {error}"
+
+[init.build]
+image_ready = "✓ {name}: {tag} (தயார்)"
+building = "{name} உருவாக்கப்படுகிறது..."
+waiting_for_build = "  மற்றொரு உருவாக்கத்திற்குக் காத்திருக்கிறது..."
+build_success = "✓ {name}: {tag}"
+build_failed = "✗ {name}: உருவாக்கம் தோல்வி (வெளியேறல் {code})"
+build_error = "✗ {name}: {error}"
+some_failed = "சில படிமங்கள் உருவாக்க இயலவில்லை. விவரங்களுக்கு --debug உடன் இயக்குக."
+enclave_title = "எந்க்லேவ் படிமங்கள்:"
+proxy_desc = "  ✓ proxy      — டொமைன் அனுமதிப்பட்டியலுடன் கூடிய கேச்சிங் HTTPS ப்ராக்சி"
+forge_desc = "  ✓ forge      — மேம்பாட்டுச் சூழல்"
+git_desc = "  ✓ git        — git கண்ணாடி சேவை (வெறும் களஞ்சியங்கள் + டேமன்)"
+inference_desc = "  ✓ inference  — உள்ளூர் LLM (ollama)"
+tools_overlay = "மென்பொருள் அடுக்கு உருவாக்கப்படுகிறது (Claude Code, OpenSpec, OpenCode)..."
+tools_overlay_ready = "✓ மென்பொருள் அடுக்கு தயார்"
+
+[cli.welcome]
+title = "Tillandsias v{version}"
+os_label = "OS:"
+podman_label = "Podman:"
+podman_not_found = "கிடைக்கவில்லை"
+forge_ready = "{tag} (தயார்)"
+forge_update_needed = "புதுப்பிப்பு தேவை (தற்போதையது: {current}, எதிர்பார்ப்பது: {expected})"
+forge_not_built = "உருவாக்கப்படவில்லை (இயக்குக: tillandsias init)"
+install_podman = "Tillandsias பயன்படுத்த podman நிறுவுக."
+log_invalid_pair = "எச்சரிக்கை: தவறான பதிவு ஜோடி (எதிர்பார்ப்பது module:level): {pair}"
+log_unknown_module = "எச்சரிக்கை: அறியாத பதிவு தொகுதி: {module}. சரியான தொகுதிகள்: {valid}"
+log_invalid_level = "பிழை: தவறான பதிவு நிலை: {level}. சரியான நிலைகள்: {valid}"
+flag_requires_value = "பிழை: {flag}-க்கு ஒரு மதிப்பு தேவை"

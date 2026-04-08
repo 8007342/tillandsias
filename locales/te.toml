@@ -1,8 +1,171 @@
-# Tillandsias — Telugu string table
-# Stub file — missing keys fall back to English.
+# Tillandsias — Telugu (తెలుగు) string table
 
 [app]
 name = "Tillandsias"
 
 [menu]
+attach_here = "ఇక్కడ అనుసంధానించు"
+root_terminal = "🛠️ రూట్"
+projects = "ప్రాజెక్టులు"
+no_projects = "ప్రాజెక్టులు ఏవీ కనుగొనబడలేదు"
+settings = "సెట్టింగ్‌లు"
+quit = "Tillandsias మూసివేయి"
+blooming = "వికసిస్తోంది"
+maintenance = "⛏️ నిర్వహణ"
+serve_here = "🔗 ఇక్కడ అందించు"
+serving = "🔗 అందించబడుతోంది"
+seedlings = "🌱 మొలకలు"
 language = "భాష"
+credit = "Tlatoāni రూపకల్పన"
+version = "Tillandsias v{version}"
+
+[menu.github]
+label = "GitHub"
+login = "🔑 GitHub లాగిన్"
+login_refresh = "🔒 GitHub లాగిన్ రిఫ్రెష్"
+loading = "లోడ్ అవుతోంది..."
+all_cloned = "అన్ని రిపాజిటరీలు స్థానికంగా క్లోన్ చేయబడ్డాయి"
+login_first = "ముందుగా GitHub లో లాగిన్ అవ్వండి"
+could_not_fetch = "రిపాజిటరీలు పొందడం సాధ్యం కాలేదు"
+cloning = "{name} క్లోన్ అవుతోంది..."
+remote_projects = "రిమోట్ ప్రాజెక్టులు"
+
+[menu.claude]
+reset_credentials = "🔒 Claude ఆధారాలు రీసెట్ చేయి"
+
+[menu.web]
+already_serving = "ఇప్పటికే అందించబడుతోంది — http://localhost:{port} తెరవండి"
+
+[menu.build]
+in_progress = "⏳ {name} నిర్మించబడుతోంది..."
+maintenance_setup = "⛏️ నిర్వహణ సిద్ధమవుతోంది..."
+completed = "✅ {name} సిద్ధం"
+failed = "❌ {name} నిర్మాణం విఫలం"
+
+[cli]
+attaching = "Tillandsias — {name} కు అనుసంధానమవుతోంది"
+checking_image = "ఇమేజ్ తనిఖీ అవుతోంది... {tag}"
+ensuring_image = "ఇమేజ్ తాజాగా ఉందని నిర్ధారిస్తోంది..."
+image_ready = "✓ ఇమేజ్ సిద్ధం ({size})"
+starting_env = "వాతావరణం ప్రారంభమవుతోంది..."
+starting_terminal = "టెర్మినల్ ప్రారంభమవుతోంది (fish shell)..."
+launching = "ప్రారంభమవుతోంది... (ఆపడానికి Ctrl+C)"
+env_stopped = "వాతావరణం ఆపివేయబడింది."
+waiting_setup = "సెటప్ పూర్తవడానికి వేచి ఉంది..."
+
+[init]
+preparing = "Tillandsias init — అభివృద్ధి వాతావరణం సిద్ధమవుతోంది"
+already_ready = "✓ అభివృద్ధి వాతావరణం ఇప్పటికే సిద్ధం"
+ready = "సిద్ధం."
+setup_in_progress = "⌛ సెటప్ ఇప్పటికే జరుగుతోంది, వేచి ఉంది..."
+setup_timed_out = "✗ సెటప్ సమయం ముగిసింది. ఇది కొనసాగితే, దయచేసి https://github.com/8007342/tillandsias నుండి మళ్ళీ ఇన్‌స్టాల్ చేయండి"
+env_ready = "✓ వాతావరణం సిద్ధం"
+waiting = "⌛ సెటప్ పూర్తవడానికి వేచి ఉంది..."
+setting_up = "అభివృద్ధి వాతావరణం సెటప్ అవుతోంది..."
+first_run_note = "(మొదటిసారి కొన్ని నిమిషాలు పట్టవచ్చు)"
+dev_env_ready = "✓ అభివృద్ధి వాతావరణం సిద్ధం"
+ready_run = "సిద్ధం. అమలు చేయండి: tillandsias"
+setup_failed = "✗ సెటప్ విఫలం: {error}"
+
+[errors]
+setup = "Tillandsias సెటప్ అవుతోంది. ఇది కొనసాగితే, దయచేసి https://github.com/8007342/tillandsias నుండి మళ్ళీ ఇన్‌స్టాల్ చేయండి"
+env_not_ready = "అభివృద్ధి వాతావరణం ఇంకా సిద్ధం కాలేదు. Tillandsias దీన్ని స్వయంచాలకంగా సెటప్ చేస్తుంది — దయచేసి కొన్ని నిమిషాల తర్వాత మళ్ళీ ప్రయత్నించండి."
+install_incomplete = "Tillandsias ఇన్‌స్టాలేషన్ అసంపూర్ణంగా ఉండవచ్చు. దయచేసి https://github.com/8007342/tillandsias నుండి మళ్ళీ ఇన్‌స్టాల్ చేయండి"
+podman_unavailable = "podman అందుబాటులో లేదు"
+no_podman = "లోపం: podman ఇన్‌స్టాల్ చేయబడలేదు లేదా PATH లో లేదు"
+genera_exhausted = "ప్రాజెక్ట్ {name} కోసం అన్ని జెనెరా అయిపోయాయి"
+terminal_failed = "టెర్మినల్ తెరవడం విఫలం: {error}"
+no_terminal = "టెర్మినల్ ఎమ్యులేటర్ కనుగొనబడలేదు (ptyxis, gnome-terminal, konsole, xterm ప్రయత్నించబడ్డాయి)"
+
+[notifications]
+already_running = "ఇప్పటికే అమలవుతోంది — మీ విండోలలో '{title}' చూడండి"
+claude_credentials_cleared = "Claude ఆధారాలు తొలగించబడ్డాయి. తదుపరి ప్రారంభంలో ప్రమాణీకరణ అడగబడుతుంది."
+forge_not_ready = "సిద్ధమవుతోంది — దయచేసి కొంచెం వేచి ఉండండి."
+forge_ready = "సిద్ధం — ఇప్పుడు ఏ ప్రాజెక్టుకైనా అనుసంధానం చేయవచ్చు."
+infrastructure_failed = "సెటప్‌లో సమస్య ఎదురైంది. కొన్ని ఫీచర్లు నెమ్మదిగా ఉండవచ్చు."
+tools_updated = "అభివృద్ధి సాధనాలు నవీకరించబడ్డాయి. కొత్త వాతావరణాలు తాజా సంస్కరణలను ఉపయోగిస్తాయి."
+
+[stats]
+title = "Tillandsias — డిస్క్ వినియోగ నివేదిక"
+images_label = "ఇమేజ్‌లు:"
+images_none = "ఇమేజ్‌లు:     (ఏమీ లేవు)"
+images_no_podman = "ఇమేజ్‌లు:     (podman అందుబాటులో లేదు)"
+containers_label = "కంటైనర్లు:"
+containers_none = "కంటైనర్లు: (ఏమీ లేవు)"
+containers_no_podman = "కంటైనర్లు: (podman అందుబాటులో లేదు)"
+nix_cache_label = "Nix కాష్:"
+nix_cache_present = "Nix కాష్:       {path} ({size})"
+nix_cache_not_present = "Nix కాష్:       (లేదు)"
+cargo_cache_label = "Cargo కాష్:"
+cargo_cache_present = "Cargo కాష్:     {path} ({size})"
+cargo_cache_not_present = "Cargo కాష్:     (లేదు)"
+binary_present = "ఇన్‌స్టాల్ చేసిన బైనరీ: {path} ({size})"
+binary_not_present = "ఇన్‌స్టాల్ చేసిన బైనరీ: ({path} లో ఇన్‌స్టాల్ చేయబడలేదు)"
+last_update = "చివరి నవీకరణ:      {entry}"
+no_update_log = "(నవీకరణ లాగ్ లేదు)"
+total = "మొత్తం (కాష్ + బైనరీ): {size}"
+podman_note = "(podman ఇమేజ్ నిల్వ podman నిర్వహిస్తుంది — 'podman system df' చూడండి)"
+
+[clean]
+title = "Tillandsias — ఆర్టిఫ్యాక్ట్ శుభ్రపరచడం"
+complete = "శుభ్రపరచడం పూర్తయింది."
+nothing = "శుభ్రపరచడానికి ఏమీ లేదు."
+images_none_dangling = "ఇమేజ్‌లు:     తొలగించడానికి అనవసర ఇమేజ్‌లు లేవు"
+images_removed = "ఇమేజ్‌లు:     {count} అనవసర ఇమేజ్‌లు తొలగించబడ్డాయి"
+images_no_podman = "ఇమేజ్‌లు:     (podman అందుబాటులో లేదు — దాటవేయబడింది)"
+containers_none_stopped = "కంటైనర్లు: ఆపివేసిన tillandsias కంటైనర్లు లేవు"
+containers_removing = "కంటైనర్లు: {count} ఆపివేసిన కంటైనర్లు తొలగించబడుతున్నాయి..."
+container_removed = "  తొలగించబడింది: {name}"
+container_failed = "  తొలగించడం విఫలం: {name}"
+containers_no_podman = "కంటైనర్లు: (podman అందుబాటులో లేదు — దాటవేయబడింది)"
+nix_cache_removed = "Nix కాష్:  {path} ({size}) తొలగించబడింది"
+nix_cache_failed = "Nix కాష్:  {path} తొలగించడం విఫలం: {error}"
+nix_cache_not_present = "Nix కాష్:  (లేదు)"
+
+[update]
+version = "Tillandsias v{version}"
+checking = "నవీకరణలు తనిఖీ చేయబడుతున్నాయి..."
+up_to_date = "ఇప్పటికే తాజాగా ఉంది."
+available = "నవీకరణ అందుబాటులో ఉంది: v{version}"
+downloading = "డౌన్‌లోడ్ అవుతోంది..."
+downloaded = "డౌన్‌లోడ్ అయింది ({size})"
+applying = "నవీకరణ వర్తింపజేయబడుతోంది..."
+updated = "v{version} కు నవీకరించబడింది"
+restart_note = "కొత్త సంస్కరణను ఉపయోగించడానికి అప్లికేషన్‌ను పునఃప్రారంభించండి."
+fetch_error = "లోపం: నవీకరణ మానిఫెస్ట్ పొందడం విఫలం: {error}"
+parse_error = "లోపం: నవీకరణ మానిఫెస్ట్ విశ్లేషించడం విఫలం: {error}"
+no_artifact = "లోపం: '{platform}' ప్లాట్‌ఫారమ్ కోసం మానిఫెస్ట్‌లో నవీకరణ ఆర్టిఫ్యాక్ట్ కనుగొనబడలేదు"
+available_platforms = "అందుబాటులోని ప్లాట్‌ఫారమ్‌లు: {platforms}"
+manual_download = "కొత్త సంస్కరణను ఇక్కడ నుండి మాన్యువల్‌గా డౌన్‌లోడ్ చేయండి:"
+download_error = "లోపం: డౌన్‌లోడ్ విఫలం: {error}"
+apply_error = "లోపం: నవీకరణ వర్తింపజేయడం విఫలం: {error}"
+
+[init.build]
+image_ready = "✓ {name}: {tag} (సిద్ధం)"
+building = "{name} నిర్మించబడుతోంది..."
+waiting_for_build = "  మరో నిర్మాణం కోసం వేచి ఉంది..."
+build_success = "✓ {name}: {tag}"
+build_failed = "✗ {name}: నిర్మాణం విఫలం (నిష్క్రమణ {code})"
+build_error = "✗ {name}: {error}"
+some_failed = "కొన్ని ఇమేజ్‌లు నిర్మించడం విఫలం. వివరాలకు --debug తో అమలు చేయండి."
+enclave_title = "ఎన్‌క్లేవ్ ఇమేజ్‌లు:"
+proxy_desc = "  ✓ proxy      — డొమైన్ అనుమతి జాబితాతో కాషింగ్ HTTPS ప్రాక్సీ"
+forge_desc = "  ✓ forge      — అభివృద్ధి వాతావరణం"
+git_desc = "  ✓ git        — git అద్దం సేవ (బేర్ రిపాజ్ + డేమన్)"
+inference_desc = "  ✓ inference  — స్థానిక LLM (ollama)"
+tools_overlay = "సాఫ్ట్‌వేర్ పొర నిర్మించబడుతోంది (Claude Code, OpenSpec, OpenCode)..."
+tools_overlay_ready = "✓ సాఫ్ట్‌వేర్ పొర సిద్ధం"
+
+[cli.welcome]
+title = "Tillandsias v{version}"
+os_label = "OS:"
+podman_label = "Podman:"
+podman_not_found = "కనుగొనబడలేదు"
+forge_ready = "{tag} (సిద్ధం)"
+forge_update_needed = "నవీకరణ అవసరం (ప్రస్తుతం: {current}, ఆశించినది: {expected})"
+forge_not_built = "నిర్మించబడలేదు (అమలు చేయండి: tillandsias init)"
+install_podman = "Tillandsias ఉపయోగించడానికి podman ఇన్‌స్టాల్ చేయండి."
+log_invalid_pair = "హెచ్చరిక: చెల్లని లాగ్ జత (ఆశించినది module:level): {pair}"
+log_unknown_module = "హెచ్చరిక: తెలియని లాగ్ మాడ్యూల్: {module}. చెల్లుబాటు అయ్యే మాడ్యూల్‌లు: {valid}"
+log_invalid_level = "లోపం: చెల్లని లాగ్ స్థాయి: {level}. చెల్లుబాటు అయ్యే స్థాయిలు: {valid}"
+flag_requires_value = "లోపం: {flag} కు ఒక విలువ అవసరం"

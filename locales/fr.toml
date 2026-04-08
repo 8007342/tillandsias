@@ -1,8 +1,193 @@
 # Tillandsias — French string table
-# Stub file — missing keys fall back to English.
+# All user-facing strings for the Rust tray app and CLI.
+#
+# Keys use dot-notation matching code organisation:
+#   menu.*       Tray menu labels
+#   cli.*        CLI attach/runner output
+#   init.*       `tillandsias --init` output
+#   errors.*     Error messages
+#   notifications.*  Desktop notifications
+#   stats.*      `tillandsias --stats` output
+#   clean.*      `tillandsias --clean` output
+#   update.*     `tillandsias --update` output
 
+# ── App ─────────────────────────────────────────────────────
 [app]
 name = "Tillandsias"
 
+# ── Tray menu ───────────────────────────────────────────────
 [menu]
+attach_here = "Se connecter ici"
+root_terminal = "🛠️ Racine"
+projects = "Projets"
+no_projects = "Aucun projet detecte"
+settings = "Parametres"
+quit = "Quitter Tillandsias"
+blooming = "En floraison"
+maintenance = "⛏️ Maintenance"
+serve_here = "🔗 Servir ici"
+serving = "🔗 En service"
+seedlings = "🌱 Semis"
 language = "Langue"
+credit = "par Tlatoani"
+version = "Tillandsias v{version}"
+
+[menu.github]
+label = "GitHub"
+login = "🔑 Connexion GitHub"
+login_refresh = "🔒 Actualiser la connexion GitHub"
+loading = "Chargement..."
+all_cloned = "Tous les depots clones localement"
+login_first = "Connectez-vous d'abord a GitHub"
+could_not_fetch = "Impossible de recuperer les depots"
+cloning = "Clonage de {name}..."
+remote_projects = "Projets distants"
+
+[menu.claude]
+reset_credentials = "🔒 Reinitialiser les identifiants Claude"
+
+[menu.web]
+already_serving = "Deja en service — ouvrir http://localhost:{port}"
+
+[menu.build]
+in_progress = "⏳ Construction de {name}..."
+maintenance_setup = "⛏️ Configuration de la maintenance..."
+completed = "✅ {name} pret"
+failed = "❌ Echec de la construction de {name}"
+
+# ── CLI output ───────────────────────────────────────────────
+[cli]
+attaching = "Tillandsias — Connexion a {name}"
+checking_image = "Verification de l'image... {tag}"
+ensuring_image = "Mise a jour de l'image..."
+image_ready = "✓ Image prete ({size})"
+starting_env = "Demarrage de l'environnement..."
+starting_terminal = "Demarrage du terminal (shell fish)..."
+launching = "Lancement... (Ctrl+C pour arreter)"
+env_stopped = "Environnement arrete."
+waiting_setup = "En attente de la fin de la configuration..."
+
+# ── Init command ─────────────────────────────────────────────
+[init]
+preparing = "Tillandsias init — preparation de l'environnement de developpement"
+already_ready = "✓ Environnement de developpement deja pret"
+ready = "Pret."
+setup_in_progress = "⌛ Configuration deja en cours, veuillez patienter..."
+setup_timed_out = "✗ Delai de configuration expire. Si le probleme persiste, veuillez reinstaller depuis https://github.com/8007342/tillandsias"
+env_ready = "✓ Environnement pret"
+waiting = "⌛ En attente de la fin de la configuration..."
+setting_up = "Configuration de l'environnement de developpement..."
+first_run_note = "(Cela peut prendre quelques minutes au premier lancement)"
+dev_env_ready = "✓ Environnement de developpement pret"
+ready_run = "Pret. Executez : tillandsias"
+setup_failed = "✗ Echec de la configuration : {error}"
+
+# ── Error messages ───────────────────────────────────────────
+[errors]
+setup = "Tillandsias est en cours de configuration. Si le probleme persiste, veuillez reinstaller depuis https://github.com/8007342/tillandsias"
+env_not_ready = "L'environnement de developpement n'est pas encore pret. Tillandsias le configurera automatiquement — veuillez reessayer dans quelques minutes."
+install_incomplete = "L'installation de Tillandsias est peut-etre incomplete. Veuillez reinstaller depuis https://github.com/8007342/tillandsias"
+podman_unavailable = "Podman n'est pas disponible"
+no_podman = "Erreur : podman n'est pas installe ou n'est pas dans le PATH"
+genera_exhausted = "Tous les genres sont epuises pour le projet {name}"
+terminal_failed = "Echec de l'ouverture du terminal : {error}"
+no_terminal = "Aucun emulateur de terminal trouve (essaye ptyxis, gnome-terminal, konsole, xterm)"
+
+# ── Desktop notifications ────────────────────────────────────
+[notifications]
+already_running = "Deja en cours d'execution — cherchez '{title}' dans vos fenetres"
+claude_credentials_cleared = "Identifiants Claude effaces. Le prochain lancement demandera une authentification."
+forge_not_ready = "Configuration en cours — veuillez patienter un instant."
+forge_ready = "Pret — vous pouvez maintenant vous connecter a n'importe quel projet."
+infrastructure_failed = "La configuration a rencontre un probleme. Certaines fonctionnalites peuvent etre lentes."
+tools_updated = "Les outils de developpement ont ete mis a jour. Les nouveaux environnements utiliseront les dernieres versions."
+
+# ── Stats command ────────────────────────────────────────────
+[stats]
+title = "Tillandsias — rapport d'utilisation disque"
+images_label = "Images :"
+images_none = "Images :     (aucune)"
+images_no_podman = "Images :     (podman non disponible)"
+containers_label = "Environnements :"
+containers_none = "Environnements : (aucun)"
+containers_no_podman = "Environnements : (podman non disponible)"
+nix_cache_label = "Cache Nix :"
+nix_cache_present = "Cache Nix :       {path} ({size})"
+nix_cache_not_present = "Cache Nix :       (absent)"
+cargo_cache_label = "Cache Cargo :"
+cargo_cache_present = "Cache Cargo :     {path} ({size})"
+cargo_cache_not_present = "Cache Cargo :     (absent)"
+binary_present = "Binaire installe : {path} ({size})"
+binary_not_present = "Binaire installe : (non installe a {path})"
+last_update = "Derniere mise a jour : {entry}"
+no_update_log = "(aucun journal de mise a jour)"
+total = "Total (caches + binaire) : {size}"
+podman_note = "(Le stockage des images podman est gere par podman — voir 'podman system df')"
+
+# ── Clean command ────────────────────────────────────────────
+[clean]
+title = "Tillandsias — nettoyage des artefacts"
+complete = "Nettoyage termine."
+nothing = "Rien a nettoyer."
+images_none_dangling = "Images :     aucune image orpheline a supprimer"
+images_removed = "Images :     {count} image(s) orpheline(s) supprimee(s)"
+images_no_podman = "Images :     (podman non disponible — ignore)"
+containers_none_stopped = "Environnements : aucun environnement tillandsias arrete"
+containers_removing = "Environnements : suppression de {count} environnement(s) arrete(s)..."
+container_removed = "  supprime : {name}"
+container_failed = "  echec de la suppression : {name}"
+containers_no_podman = "Environnements : (podman non disponible — ignore)"
+nix_cache_removed = "Cache Nix :  supprime {path} ({size})"
+nix_cache_failed = "Cache Nix :  echec de la suppression de {path} : {error}"
+nix_cache_not_present = "Cache Nix :  (absent)"
+
+# ── Update command ───────────────────────────────────────────
+[update]
+version = "Tillandsias v{version}"
+checking = "Recherche de mises a jour..."
+up_to_date = "Deja a jour."
+available = "Mise a jour disponible : v{version}"
+downloading = "Telechargement..."
+downloaded = "Telecharge ({size})"
+applying = "Application de la mise a jour..."
+updated = "Mis a jour vers v{version}"
+restart_note = "Redemarrez l'application pour utiliser la nouvelle version."
+fetch_error = "Erreur : echec de la recuperation du manifeste de mise a jour : {error}"
+parse_error = "Erreur : echec de l'analyse du manifeste de mise a jour : {error}"
+no_artifact = "Erreur : aucun artefact de mise a jour trouve pour la plateforme '{platform}' dans le manifeste"
+available_platforms = "Plateformes disponibles : {platforms}"
+manual_download = "Telechargez la nouvelle version manuellement depuis :"
+download_error = "Erreur : echec du telechargement : {error}"
+apply_error = "Erreur : echec de l'application de la mise a jour : {error}"
+
+# ── Init output ─────────────────────────────────────────────
+[init.build]
+image_ready = "✓ {name} : {tag} (pret)"
+building = "Construction de {name}..."
+waiting_for_build = "  En attente d'une autre construction..."
+build_success = "✓ {name} : {tag}"
+build_failed = "✗ {name} : echec de la construction (code {code})"
+build_error = "✗ {name} : {error}"
+some_failed = "Certaines images n'ont pas pu etre construites. Relancez avec --debug pour plus de details."
+enclave_title = "Images de l'enclave :"
+proxy_desc = "  ✓ proxy      — proxy HTTPS avec cache et liste de domaines autorises"
+forge_desc = "  ✓ forge      — environnement de developpement"
+git_desc = "  ✓ git        — service miroir git (depots nus + daemon)"
+inference_desc = "  ✓ inference  — LLM local (ollama)"
+tools_overlay = "Construction de la couche logicielle (Claude Code, OpenSpec, OpenCode)..."
+tools_overlay_ready = "✓ Couche logicielle prete"
+
+# ── CLI welcome banner ──────────────────────────────────────
+[cli.welcome]
+title = "Tillandsias v{version}"
+os_label = "OS :"
+podman_label = "Podman :"
+podman_not_found = "non trouve"
+forge_ready = "{tag} (pret)"
+forge_update_needed = "mise a jour necessaire (actuel : {current}, attendu : {expected})"
+forge_not_built = "non construit (executez : tillandsias init)"
+install_podman = "Installez podman pour utiliser Tillandsias."
+log_invalid_pair = "Avertissement : paire de log invalide (format attendu module:level) : {pair}"
+log_unknown_module = "Avertissement : module de log inconnu : {module}. Modules valides : {valid}"
+log_invalid_level = "Erreur : niveau de log invalide : {level}. Niveaux valides : {valid}"
+flag_requires_value = "Erreur : {flag} necessite une valeur"
