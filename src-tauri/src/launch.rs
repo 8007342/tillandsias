@@ -793,11 +793,19 @@ mod tests {
     // @trace spec:layered-tools-overlay
     #[test]
     fn config_overlay_skipped_when_dir_absent() {
+        // Ensure the overlay dir does NOT exist (another test may have created it)
+        let base = if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+            std::path::PathBuf::from(xdg)
+        } else {
+            std::env::temp_dir()
+        };
+        let overlay_dir = base.join("tillandsias").join("config-overlay");
+        let _ = std::fs::remove_dir_all(&overlay_dir);
+
         let profile = container_profile::forge_opencode_profile();
         let ctx = test_context();
         let args = build_podman_args(&profile, &ctx);
         let joined = args.join(" ");
-        // Config overlay dir doesn't exist on tmpfs in test, so mount is skipped
         assert!(
             !joined.contains("/home/forge/.config-overlay"),
             "Config overlay mount should be skipped when tmpfs directory doesn't exist"
