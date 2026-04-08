@@ -1126,18 +1126,11 @@ pub async fn ensure_enclave_ready(
         });
     }
 
-    // Step 3b: Tools overlay — soft requirement.
-    // The overlay build requires the forge image (it runs a temporary forge container),
-    // so it comes after infrastructure is ready. Failure is non-fatal — entrypoints
-    // have inline install fallback.
+    // NOTE: Tools overlay (ensure_tools_overlay) is NOT called here because it
+    // requires the forge image to exist (it runs a temporary forge container).
+    // On first launch, the forge image may not be built yet. Instead, tools
+    // overlay is called from handle_attach_here() AFTER forge image is confirmed.
     // @trace spec:layered-tools-overlay
-    if let Err(e) = ensure_tools_overlay(build_tx.clone()).await {
-        warn!(
-            error = %e,
-            spec = "layered-tools-overlay",
-            "Tools overlay setup failed — containers will install tools inline"
-        );
-    }
 
     // Step 4+5: Git mirror + service — mirror creation failure propagates
     let mirror_path = match tokio::task::spawn_blocking({
@@ -2142,6 +2135,18 @@ pub async fn handle_attach_here(
     // @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container
     // Single unified enclave setup: network, proxy, inference, mirror, git service.
     let _enclave = ensure_enclave_ready(&project_path, &project_name, state, build_tx.clone()).await?;
+
+    // @trace spec:layered-tools-overlay
+    // Tools overlay runs HERE — after forge image is confirmed ready (above) and
+    // enclave is up (proxy available for npm downloads). Failure is non-fatal:
+    // entrypoints fall back to inline install.
+    if let Err(e) = crate::tools_overlay::ensure_tools_overlay(build_tx.clone()).await {
+        warn!(
+            error = %e,
+            spec = "layered-tools-overlay",
+            "Tools overlay setup failed — containers will install tools inline"
+        );
+    }
 
     // Detect whether the project path IS the watch root (e.g., ~/src/) rather
     // than a project inside it. When true, mount at /home/forge/src/ directly
