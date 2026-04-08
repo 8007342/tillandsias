@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use tokio::sync::mpsc;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use tillandsias_core::project::{Project, ProjectChange};
 
@@ -128,14 +128,36 @@ impl Scanner {
             notify::Config::default(),
         )?;
 
-        // Watch each configured path (non-recursive — we only care about depth 1-2)
+        // @trace spec:filesystem-scanner — graceful degradation for watch setup
+        // Watch each configured path (non-recursive — we only care about depth 1-2).
+        // Errors are logged and skipped rather than propagated — the scanner degrades
+        // gracefully when paths are missing, permissions are denied, or inotify watch
+        // limits are exhausted.
+        let mut active_watches = 0usize;
         for watch_path in &self.config.watch_paths {
-            if watch_path.exists() {
-                watcher.watch(watch_path, RecursiveMode::NonRecursive)?;
-                info!(?watch_path, "Watching for project changes");
+            if !watch_path.exists() {
+                warn!(?watch_path, "Watch path does not exist, skipping");
+                continue;
+            }
 
-                // Also watch each existing project directory (depth 2)
-                if let Ok(entries) = std::fs::read_dir(watch_path) {
+            match watcher.watch(watch_path, RecursiveMode::NonRecursive) {
+                Ok(()) => {
+                    active_watches += 1;
+                    info!(?watch_path, "Watching for project changes");
+                }
+                Err(e) => {
+                    warn!(
+                        ?watch_path,
+                        ?e,
+                        "Failed to watch path (permission denied or watch limit reached), skipping"
+                    );
+                    continue;
+                }
+            }
+
+            // Also watch each existing project directory (depth 2)
+            match std::fs::read_dir(watch_path) {
+                Ok(entries) => {
                     for entry in entries.flatten() {
                         let path = entry.path();
                         if path.is_dir()
@@ -143,11 +165,35 @@ impl Scanner {
                                 .file_name()
                                 .is_some_and(|n| n.to_string_lossy().starts_with('.'))
                         {
-                            let _ = watcher.watch(&path, RecursiveMode::NonRecursive);
+                            match watcher.watch(&path, RecursiveMode::NonRecursive) {
+                                Ok(()) => {
+                                    active_watches += 1;
+                                }
+                                Err(e) => {
+                                    debug!(
+                                        ?path,
+                                        ?e,
+                                        "Failed to add depth-2 watch, continuing without it"
+                                    );
+                                }
+                            }
                         }
                     }
                 }
+                Err(e) => {
+                    warn!(
+                        ?watch_path,
+                        ?e,
+                        "Failed to read watch path for depth-2 scanning"
+                    );
+                }
             }
+        }
+
+        if active_watches == 0 {
+            error!("No watch paths could be registered — scanner will not detect changes");
+        } else {
+            info!(active_watches, "Filesystem watches established");
         }
 
         // Debounce accumulator: path → pending since
@@ -362,6 +408,94 @@ mod tests {
             }
         }
 
+        handle.abort();
+    }
+
+    // @trace spec:filesystem-scanner — graceful degradation tests
+
+    #[test]
+    fn initial_scan_skips_nonexistent_watch_path() {
+        let config = ScannerConfig {
+            watch_paths: vec![PathBuf::from("/nonexistent/path/that/does/not/exist")],
+            debounce: Duration::from_millis(100),
+        };
+
+        let mut scanner = Scanner::new(config);
+        let changes = scanner.initial_scan();
+        // Should return empty, not panic
+        assert!(changes.is_empty());
+    }
+
+    #[test]
+    fn initial_scan_mixed_valid_and_invalid_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("valid-project");
+        fs::create_dir_all(&project).unwrap();
+        fs::write(project.join("Cargo.toml"), "[package]").unwrap();
+
+        let config = ScannerConfig {
+            watch_paths: vec![
+                PathBuf::from("/nonexistent/path"),
+                dir.path().to_path_buf(),
+            ],
+            debounce: Duration::from_millis(100),
+        };
+
+        let mut scanner = Scanner::new(config);
+        let changes = scanner.initial_scan();
+        // Should find the project from the valid path and skip the invalid one
+        assert_eq!(changes.len(), 1);
+        match &changes[0] {
+            ProjectChange::Discovered(p) => {
+                assert_eq!(p.name, "valid-project");
+            }
+            _ => panic!("Expected Discovered"),
+        }
+    }
+
+    #[tokio::test]
+    async fn watch_survives_nonexistent_watch_path() {
+        let config = ScannerConfig {
+            watch_paths: vec![PathBuf::from("/nonexistent/watch/path")],
+            debounce: Duration::from_millis(100),
+        };
+
+        let (tx, _rx) = mpsc::channel(16);
+        let scanner = Scanner::new(config);
+
+        // Start watcher — should not crash, should enter the event loop
+        let handle = tokio::spawn(async move {
+            let result = scanner.watch(tx).await;
+            // Should succeed (enters the loop), not return Err
+            result
+        });
+
+        // Give it a moment, then abort — the point is it didn't crash
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn watch_survives_mixed_valid_and_invalid_paths() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let config = ScannerConfig {
+            watch_paths: vec![
+                PathBuf::from("/nonexistent/watch/path"),
+                dir.path().to_path_buf(),
+            ],
+            debounce: Duration::from_millis(100),
+        };
+
+        let (tx, _rx) = mpsc::channel(16);
+        let scanner = Scanner::new(config);
+
+        let handle = tokio::spawn(async move {
+            scanner.watch(tx).await
+        });
+
+        // Give it a moment — should set up watches for the valid path without crashing
+        tokio::time::sleep(Duration::from_millis(200)).await;
         handle.abort();
     }
 }
