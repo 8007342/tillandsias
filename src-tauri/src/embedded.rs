@@ -88,6 +88,13 @@ pub const FORGE_GIT_ASKPASS: &str =
 pub const CONFIG_OVERLAY_OPENCODE: &str =
     include_str!("../../images/default/config-overlay/opencode/config.json");
 
+// MCP servers — lightweight tool scripts for forge containers
+// @trace spec:layered-tools-overlay, spec:git-mirror-service
+pub const CONFIG_OVERLAY_MCP_GIT_TOOLS: &str =
+    include_str!("../../images/default/config-overlay/mcp/git-tools.sh");
+pub const CONFIG_OVERLAY_MCP_PROJECT_INFO: &str =
+    include_str!("../../images/default/config-overlay/mcp/project-info.sh");
+
 // Shell configs
 pub const SHELL_BASHRC: &str = include_str!("../../images/default/shell/bashrc");
 pub const SHELL_FISH_CONFIG: &str = include_str!("../../images/default/shell/config.fish");
@@ -196,6 +203,8 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 ///       opencode.json
 ///       skills/command/{bash,bash-private}.md
 ///       shell/{bashrc,config.fish,zshrc}
+///       config-overlay/opencode/config.json
+///       config-overlay/mcp/{git-tools,project-info}.sh
 ///       locales/{en,es,ja,zh-Hant,zh-Hans,ar,ko,hi,ta,te,fr,pt,it,ro,ru,nah,de}.sh
 ///     web/
 ///       entrypoint.sh
@@ -328,6 +337,31 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         CONFIG_OVERLAY_OPENCODE,
     )
     .map_err(|e| format!("config-overlay/opencode/config.json: {e}"))?;
+
+    // Config overlay — MCP servers
+    // @trace spec:layered-tools-overlay
+    let mcp_dir = default_dir.join("config-overlay").join("mcp");
+    fs::create_dir_all(&mcp_dir).map_err(|e| format!("config-overlay/mcp dir: {e}"))?;
+    write_lf(&mcp_dir.join("git-tools.sh"), CONFIG_OVERLAY_MCP_GIT_TOOLS)
+        .map_err(|e| format!("config-overlay/mcp/git-tools.sh: {e}"))?;
+    write_lf(
+        &mcp_dir.join("project-info.sh"),
+        CONFIG_OVERLAY_MCP_PROJECT_INFO,
+    )
+    .map_err(|e| format!("config-overlay/mcp/project-info.sh: {e}"))?;
+    #[cfg(unix)]
+    {
+        for name in ["git-tools.sh", "project-info.sh"] {
+            let path = mcp_dir.join(name);
+            if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
+                warn!(
+                    file = %path.display(),
+                    error = %e,
+                    "Failed to set executable permission — MCP server may fail"
+                );
+            }
+        }
+    }
 
     // Locale files
     let locales_dir = default_dir.join("locales");
@@ -465,6 +499,35 @@ pub fn extract_config_overlay() -> Result<PathBuf, String> {
         .map_err(|e| format!("Cannot create config-overlay/opencode dir: {e}"))?;
     write_lf(&opencode_dir.join("config.json"), CONFIG_OVERLAY_OPENCODE)
         .map_err(|e| format!("config-overlay/opencode/config.json: {e}"))?;
+
+    // -- mcp/ -- MCP server scripts (must be executable)
+    // @trace spec:layered-tools-overlay
+    let mcp_dir = dir.join("mcp");
+    fs::create_dir_all(&mcp_dir)
+        .map_err(|e| format!("Cannot create config-overlay/mcp dir: {e}"))?;
+    write_lf(
+        &mcp_dir.join("git-tools.sh"),
+        CONFIG_OVERLAY_MCP_GIT_TOOLS,
+    )
+    .map_err(|e| format!("config-overlay/mcp/git-tools.sh: {e}"))?;
+    write_lf(
+        &mcp_dir.join("project-info.sh"),
+        CONFIG_OVERLAY_MCP_PROJECT_INFO,
+    )
+    .map_err(|e| format!("config-overlay/mcp/project-info.sh: {e}"))?;
+    #[cfg(unix)]
+    {
+        for name in ["git-tools.sh", "project-info.sh"] {
+            let path = mcp_dir.join(name);
+            if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
+                warn!(
+                    file = %path.display(),
+                    error = %e,
+                    "Failed to set executable permission — MCP server may fail"
+                );
+            }
+        }
+    }
 
     debug!(dir = %dir.display(), "Extracted config overlay to tmpfs");
     Ok(dir)
