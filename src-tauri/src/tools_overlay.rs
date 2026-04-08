@@ -173,7 +173,7 @@ pub(crate) async fn ensure_tools_overlay(
                 // Forge image mismatch = binary incompatibility risk.
                 // Must rebuild BLOCKING before launching containers.
                 // User-friendly chip name — never expose "overlay" to users.
-                let chip_name = "Software Layer".to_string();
+                let chip_name = i18n::t("menu.build.chip_software_layer").to_string();
                 let _ = build_tx.try_send(tillandsias_core::event::BuildProgressEvent::Started {
                     image_name: chip_name.clone(),
                 });
@@ -211,7 +211,7 @@ pub(crate) async fn ensure_tools_overlay(
     );
     // @trace spec:layered-tools-overlay
     // User-friendly chip name — never expose "overlay" to users.
-    let chip_name = "Software Layer".to_string();
+    let chip_name = i18n::t("menu.build.chip_software_layer").to_string();
     let _ = build_tx.try_send(tillandsias_core::event::BuildProgressEvent::Started {
         image_name: chip_name.clone(),
     });

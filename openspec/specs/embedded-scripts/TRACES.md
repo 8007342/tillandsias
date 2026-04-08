@@ -5,5 +5,13 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [.claude/worktrees/agent-a34c4579/src-tauri/src/embedded.rs#L11](../../../.claude/worktrees/agent-a34c4579/src-tauri/src/embedded.rs#L11)
+- [.claude/worktrees/agent-a34c4579/src-tauri/src/embedded.rs#L210](../../../.claude/worktrees/agent-a34c4579/src-tauri/src/embedded.rs#L210)
+- [.claude/worktrees/agent-a5cace87/src-tauri/src/embedded.rs#L11](../../../.claude/worktrees/agent-a5cace87/src-tauri/src/embedded.rs#L11)
+- [.claude/worktrees/agent-a5cace87/src-tauri/src/embedded.rs#L210](../../../.claude/worktrees/agent-a5cace87/src-tauri/src/embedded.rs#L210)
+- [.claude/worktrees/agent-a5cf1626/src-tauri/src/embedded.rs#L11](../../../.claude/worktrees/agent-a5cf1626/src-tauri/src/embedded.rs#L11)
+- [.claude/worktrees/agent-a5cf1626/src-tauri/src/embedded.rs#L210](../../../.claude/worktrees/agent-a5cf1626/src-tauri/src/embedded.rs#L210)
+- [.claude/worktrees/agent-acbd09ef/src-tauri/src/embedded.rs#L11](../../../.claude/worktrees/agent-acbd09ef/src-tauri/src/embedded.rs#L11)
+- [.claude/worktrees/agent-acbd09ef/src-tauri/src/embedded.rs#L210](../../../.claude/worktrees/agent-acbd09ef/src-tauri/src/embedded.rs#L210)
 - [src-tauri/src/embedded.rs#L11](../../../src-tauri/src/embedded.rs#L11)
-- [src-tauri/src/embedded.rs#L208](../../../src-tauri/src/embedded.rs#L208)
+- [src-tauri/src/embedded.rs#L210](../../../src-tauri/src/embedded.rs#L210)

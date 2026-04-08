@@ -54,6 +54,14 @@ in_progress = "⏳ {name} wird erstellt..."
 maintenance_setup = "⛏️ Wartung wird eingerichtet..."
 completed = "✅ {name} bereit"
 failed = "❌ {name} Erstellung fehlgeschlagen"
+chip_forge = "Entwicklungsumgebung"
+chip_enclave = "Enklave"
+chip_inference_engine = "Inferenzmaschine"
+chip_code_mirror = "Code-Spiegel"
+chip_maintenance = "Wartung"
+chip_git_service = "Git-Dienst"
+chip_web_server = "Webserver"
+chip_software_layer = "Softwareschicht"
 
 # ── CLI output ───────────────────────────────────────────────
 [cli]

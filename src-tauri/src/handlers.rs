@@ -137,7 +137,7 @@ pub(crate) async fn ensure_inference_running(
 
         // @trace spec:inference-container
         // User-friendly chip name — never expose "inference" or "image" to users.
-        let chip_name = "Inference Engine".to_string();
+        let chip_name = crate::i18n::t("menu.build.chip_inference_engine").to_string();
 
         if build_tx.try_send(BuildProgressEvent::Started {
             image_name: chip_name.clone(),
@@ -353,7 +353,7 @@ pub(crate) async fn ensure_proxy_running(
 
         // @trace spec:proxy-container
         // User-friendly chip name — never expose "proxy" or "image" to users.
-        let chip_name = "Enclave".to_string();
+        let chip_name = crate::i18n::t("menu.build.chip_enclave").to_string();
 
         if build_tx.try_send(BuildProgressEvent::Started {
             image_name: chip_name.clone(),
@@ -887,7 +887,7 @@ pub(crate) async fn ensure_git_service_running(
 
         // @trace spec:git-mirror-service
         // User-friendly chip name — never expose "git service" or "image" to users.
-        let chip_name = "Code Mirror".to_string();
+        let chip_name = crate::i18n::t("menu.build.chip_code_mirror").to_string();
 
         if build_tx.try_send(BuildProgressEvent::Started {
             image_name: chip_name.clone(),
@@ -2056,7 +2056,7 @@ pub async fn handle_attach_here(
 
         // Notify event loop: build started (menu chip: ⏳ Building forge...)
         if build_tx.try_send(BuildProgressEvent::Started {
-            image_name: "forge".to_string(),
+            image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
         }).is_err() {
             debug!("Build progress channel full/closed — UI may show stale state");
         }
@@ -2070,7 +2070,7 @@ pub async fn handle_attach_here(
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, "Image still not found after build completed");
                     if build_tx.try_send(BuildProgressEvent::Failed {
-                        image_name: "forge".to_string(),
+                        image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
                         reason: "Development environment not ready yet".to_string(),
                     }).is_err() {
                         debug!("Build progress channel full/closed — UI may show stale state");
@@ -2084,7 +2084,7 @@ pub async fn handle_attach_here(
                 prune_old_images();
                 // Notify event loop: build completed (menu chip: ✅ forge ready)
                 if build_tx.try_send(BuildProgressEvent::Completed {
-                    image_name: "forge".to_string(),
+                    image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
                 }).is_err() {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
@@ -2092,7 +2092,7 @@ pub async fn handle_attach_here(
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, "Image build failed");
                 if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: "forge".to_string(),
+                    image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
                     reason: "Tillandsias is setting up".to_string(),
                 }).is_err() {
                     debug!("Build progress channel full/closed — UI may show stale state");
@@ -2104,7 +2104,7 @@ pub async fn handle_attach_here(
             Err(ref e) => {
                 error!(tag = %tag, error = %e, "Image build task panicked");
                 if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: "forge".to_string(),
+                    image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
                     reason: "Tillandsias is setting up".to_string(),
                 }).is_err() {
                     debug!("Build progress channel full/closed — UI may show stale state");
@@ -2518,7 +2518,7 @@ pub async fn handle_terminal(
 
     // Notify event loop: maintenance setup in progress (menu chip: ⛏️ Setting up Maintenance...)
     if build_tx.try_send(BuildProgressEvent::Started {
-        image_name: "Maintenance".to_string(),
+        image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
     }).is_err() {
         debug!("Build progress channel full/closed — UI may show stale state");
     }
@@ -2527,7 +2527,7 @@ pub async fn handle_terminal(
         Ok(()) => {
             // Terminal launched — notify completed so chip shows briefly
             if build_tx.try_send(BuildProgressEvent::Completed {
-                image_name: "Maintenance".to_string(),
+                image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
             }).is_err() {
                 debug!("Build progress channel full/closed — UI may show stale state");
             }
@@ -2560,7 +2560,7 @@ pub async fn handle_terminal(
             allocator.release(&project_name, genus);
             tool_allocator.release(&project_name, &display_emoji);
             if build_tx.try_send(BuildProgressEvent::Failed {
-                image_name: "Maintenance".to_string(),
+                image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
                 reason: e.clone(),
             }).is_err() {
                 debug!("Build progress channel full/closed — UI may show stale state");
@@ -2672,7 +2672,7 @@ pub async fn handle_root_terminal(
 
     // Notify event loop: maintenance setup in progress
     if build_tx.try_send(BuildProgressEvent::Started {
-        image_name: "Maintenance".to_string(),
+        image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
     }).is_err() {
         debug!("Build progress channel full/closed — UI may show stale state");
     }
@@ -2680,7 +2680,7 @@ pub async fn handle_root_terminal(
     match open_terminal(&podman_cmd, &title) {
         Ok(()) => {
             if build_tx.try_send(BuildProgressEvent::Completed {
-                image_name: "Maintenance".to_string(),
+                image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
             }).is_err() {
                 debug!("Build progress channel full/closed — UI may show stale state");
             }
@@ -2708,7 +2708,7 @@ pub async fn handle_root_terminal(
             state.running.retain(|c| c.name != container_name);
             allocator.release(&project_name, genus);
             if build_tx.try_send(BuildProgressEvent::Failed {
-                image_name: "Maintenance".to_string(),
+                image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
                 reason: e.clone(),
             }).is_err() {
                 debug!("Build progress channel full/closed — UI may show stale state");
@@ -2771,7 +2771,7 @@ pub async fn handle_github_login(
         info!(tag = %tag, "Git service image missing — building before GitHub Login");
 
         if build_tx.try_send(BuildProgressEvent::Started {
-            image_name: "Git service".to_string(),
+            image_name: crate::i18n::t("menu.build.chip_git_service").to_string(),
         }).is_err() {
             debug!("Build progress channel full/closed — UI may show stale state");
         }
@@ -2783,7 +2783,7 @@ pub async fn handle_github_login(
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, "Git service image still not found after build (GitHub Login)");
                     if build_tx.try_send(BuildProgressEvent::Failed {
-                        image_name: "Git service".to_string(),
+                        image_name: crate::i18n::t("menu.build.chip_git_service").to_string(),
                         reason: "Git service image not ready".to_string(),
                     }).is_err() {
                         debug!("Build progress channel full/closed — UI may show stale state");
@@ -2792,7 +2792,7 @@ pub async fn handle_github_login(
                 }
                 info!(tag = %tag, "Git service image built — proceeding with GitHub Login");
                 if build_tx.try_send(BuildProgressEvent::Completed {
-                    image_name: "Git service".to_string(),
+                    image_name: crate::i18n::t("menu.build.chip_git_service").to_string(),
                 }).is_err() {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
@@ -2800,7 +2800,7 @@ pub async fn handle_github_login(
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, "Git service image build failed (GitHub Login)");
                 if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: "Git service".to_string(),
+                    image_name: crate::i18n::t("menu.build.chip_git_service").to_string(),
                     reason: "Tillandsias is setting up".to_string(),
                 }).is_err() {
                     debug!("Build progress channel full/closed — UI may show stale state");
@@ -2810,7 +2810,7 @@ pub async fn handle_github_login(
             Err(ref e) => {
                 error!(tag = %tag, error = %e, "Git service image build task panicked (GitHub Login)");
                 if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: "Git service".to_string(),
+                    image_name: crate::i18n::t("menu.build.chip_git_service").to_string(),
                     reason: "Tillandsias is setting up".to_string(),
                 }).is_err() {
                     debug!("Build progress channel full/closed — UI may show stale state");
@@ -2871,7 +2871,7 @@ pub fn handle_claude_reset_credentials() -> Result<(), String> {
                 }
             }
             info!("Claude credentials cleared — next launch will re-authenticate");
-            send_notification("Tillandsias", "Claude credentials cleared. Next launch will prompt for authentication.");
+            send_notification("Tillandsias", crate::i18n::t("notifications.claude_credentials_cleared"));
             Ok(())
         }
         Err(e) => Err(format!("Failed to read Claude credentials directory: {e}")),
@@ -2942,7 +2942,7 @@ pub async fn handle_serve_here(
     // notify the user and return early instead of spawning a second server.
     if let Some(existing) = state.running.iter().find(|c| c.name == container_name) {
         let port = existing.port_range.0;
-        let msg = format!("Already serving — open http://localhost:{port}");
+        let msg = crate::i18n::tf("menu.web.already_serving", &[("port", &port.to_string())]);
         info!(project = %project_name, port, "Don't-relaunch guard fired — web container already running");
         send_notification("Tillandsias", &msg);
         return Err(format!(
@@ -2998,7 +2998,7 @@ pub async fn handle_serve_here(
     if !client.image_exists(web_image).await {
         info!(image = web_image, "Web image not found, building...");
         if build_tx.try_send(BuildProgressEvent::Started {
-            image_name: "Web server".to_string(),
+            image_name: crate::i18n::t("menu.build.chip_web_server").to_string(),
         }).is_err() {
             debug!("Build progress channel full/closed — UI may show stale state");
         }
@@ -3008,7 +3008,7 @@ pub async fn handle_serve_here(
                 if !client.image_exists(web_image).await {
                     error!(image = web_image, "Web image still not found after build");
                     if build_tx.try_send(BuildProgressEvent::Failed {
-                        image_name: "Web server".to_string(),
+                        image_name: crate::i18n::t("menu.build.chip_web_server").to_string(),
                         reason: "Web server image not ready".to_string(),
                     }).is_err() {
                         debug!("Build progress channel full/closed — UI may show stale state");
@@ -3016,7 +3016,7 @@ pub async fn handle_serve_here(
                     return Err("Web server image is not ready yet".into());
                 }
                 if build_tx.try_send(BuildProgressEvent::Completed {
-                    image_name: "Web server".to_string(),
+                    image_name: crate::i18n::t("menu.build.chip_web_server").to_string(),
                 }).is_err() {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
@@ -3024,7 +3024,7 @@ pub async fn handle_serve_here(
             Ok(Err(ref e)) => {
                 error!(image = web_image, error = %e, "Web image build failed");
                 if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: "Web server".to_string(),
+                    image_name: crate::i18n::t("menu.build.chip_web_server").to_string(),
                     reason: "Web server image build failed".to_string(),
                 }).is_err() {
                     debug!("Build progress channel full/closed — UI may show stale state");
@@ -3034,7 +3034,7 @@ pub async fn handle_serve_here(
             Err(ref e) => {
                 error!(image = web_image, error = %e, "Web image build task panicked");
                 if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: "Web server".to_string(),
+                    image_name: crate::i18n::t("menu.build.chip_web_server").to_string(),
                     reason: "Web server image build failed".to_string(),
                 }).is_err() {
                     debug!("Build progress channel full/closed — UI may show stale state");
