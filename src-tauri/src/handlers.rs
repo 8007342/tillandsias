@@ -1181,6 +1181,13 @@ pub async fn ensure_infrastructure_ready(
     state: &TrayState,
     build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<(), String> {
+    // @trace spec:layered-tools-overlay
+    // Extract config overlay to tmpfs before containers launch.
+    // Non-fatal — containers will use defaults if extraction fails.
+    if let Err(e) = crate::embedded::extract_config_overlay() {
+        warn!(error = %e, spec = "layered-tools-overlay", "Config overlay extraction failed — containers will use default configs");
+    }
+
     ensure_enclave_network().await?;
     ensure_proxy_running(state, build_tx).await?;
 

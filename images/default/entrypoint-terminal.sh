@@ -77,6 +77,16 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
     echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
 fi
 
+# ── Config overlay (ramdisk symlinks) ──────────────────────
+# @trace spec:layered-tools-overlay
+# Symlink tool configs to ramdisk overlay (zero disk I/O reads)
+OVERLAY="/home/forge/.config-overlay"
+if [ -d "$OVERLAY/opencode" ]; then
+    mkdir -p ~/.config
+    ln -sfn "$OVERLAY/opencode" ~/.config/opencode
+    trace_lifecycle "config" "opencode: symlinked to ramdisk overlay"
+fi
+
 # ── OpenSpec (available in maintenance terminals too) ───────
 # @trace spec:forge-shell-tools
 install_openspec

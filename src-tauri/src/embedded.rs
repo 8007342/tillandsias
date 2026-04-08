@@ -318,6 +318,17 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("config.fish: {e}"))?;
     write_lf(&shell_dir.join("zshrc"), SHELL_ZSHRC).map_err(|e| format!("zshrc: {e}"))?;
 
+    // Config overlay — opinionated configs extracted to ramdisk at runtime
+    // @trace spec:layered-tools-overlay
+    let config_overlay_dir = default_dir.join("config-overlay").join("opencode");
+    fs::create_dir_all(&config_overlay_dir)
+        .map_err(|e| format!("config-overlay/opencode dir: {e}"))?;
+    write_lf(
+        &config_overlay_dir.join("config.json"),
+        CONFIG_OVERLAY_OPENCODE,
+    )
+    .map_err(|e| format!("config-overlay/opencode/config.json: {e}"))?;
+
     // Locale files
     let locales_dir = default_dir.join("locales");
     fs::create_dir_all(&locales_dir).map_err(|e| format!("locales dir: {e}"))?;

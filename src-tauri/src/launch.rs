@@ -790,6 +790,50 @@ mod tests {
         std::fs::remove_dir_all(&tmp_dir).ok();
     }
 
+    // @trace spec:layered-tools-overlay
+    #[test]
+    fn config_overlay_skipped_when_dir_absent() {
+        let profile = container_profile::forge_opencode_profile();
+        let ctx = test_context();
+        let args = build_podman_args(&profile, &ctx);
+        let joined = args.join(" ");
+        // Config overlay dir doesn't exist on tmpfs in test, so mount is skipped
+        assert!(
+            !joined.contains("/home/forge/.config-overlay"),
+            "Config overlay mount should be skipped when tmpfs directory doesn't exist"
+        );
+    }
+
+    // @trace spec:layered-tools-overlay
+    #[test]
+    fn config_overlay_mounted_when_dir_exists() {
+        let profile = container_profile::forge_opencode_profile();
+
+        // Create the config-overlay directory under the real runtime dir
+        // (or temp dir if XDG_RUNTIME_DIR is unset) — avoids env var races
+        // with other tests.
+        let base = if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+            std::path::PathBuf::from(xdg)
+        } else {
+            std::env::temp_dir()
+        };
+        let overlay_dir = base.join("tillandsias").join("config-overlay");
+        std::fs::create_dir_all(&overlay_dir).unwrap();
+
+        let ctx = test_context();
+        let args = build_podman_args(&profile, &ctx);
+        let joined = args.join(" ");
+
+        let expected = format!("{}:/home/forge/.config-overlay:ro", overlay_dir.display());
+        assert!(
+            joined.contains(&expected),
+            "Config overlay should be mounted read-only. Expected: {expected}\nGot: {joined}"
+        );
+
+        // Clean up — remove only the config-overlay dir, not the parent
+        std::fs::remove_dir_all(&overlay_dir).ok();
+    }
+
     // @trace spec:git-mirror-service
     #[test]
     fn git_service_has_no_mounts_no_env_vars() {
