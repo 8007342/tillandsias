@@ -1089,6 +1089,12 @@ pub async fn ensure_enclave_ready(
     // Step 1+2: Infrastructure services (network + proxy) — hard requirement
     ensure_infrastructure_ready(state, build_tx.clone()).await?;
 
+    // Step 2.5: GPU detection — detect hardware, select optimal models,
+    // and patch the config overlay on ramdisk (if extracted).
+    // Runs synchronously (fast — just invokes nvidia-smi).
+    // @trace spec:inference-container
+    crate::gpu::detect_and_patch_models();
+
     // Step 3: Inference — soft requirement, non-blocking.
     // Inference image is large (~200MB ollama download) and shouldn't delay forge launch.
     // Start it in the background — it'll be ready by the time the user needs it.
