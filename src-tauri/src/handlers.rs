@@ -130,10 +130,18 @@ pub(crate) async fn ensure_inference_running(
         "Starting inference container"
     );
 
-    // Ensure inference image exists — build if needed
-    let tag = inference_image_tag();
-    if !client.image_exists(&tag).await {
-        info!(tag = %tag, spec = "inference-container", "Inference image absent — building");
+    // Ensure inference image is up to date — always invoke the build script
+    // (it handles staleness internally via hash check and exits fast when current).
+    // @trace spec:forge-staleness, spec:inference-container
+    let mut tag = inference_image_tag();
+
+    // Check for a newer inference image (forward compatibility)
+    if let Some(newer_tag) = find_newer_image(&tag) {
+        warn!(expected = %tag, found = %newer_tag, spec = "inference-container", "Found newer inference image — using it");
+        tag = newer_tag;
+    } else {
+        // No newer image — ensure current version is built and up to date
+        info!(tag = %tag, spec = "inference-container", "Ensuring inference image is up to date...");
 
         // @trace spec:inference-container
         // User-friendly chip name — never expose "inference" or "image" to users.
@@ -160,7 +168,8 @@ pub(crate) async fn ensure_inference_running(
                     }
                     return Err("Inference image not ready after build".into());
                 }
-                info!(tag = %tag, spec = "inference-container", "Inference image built");
+                info!(tag = %tag, spec = "inference-container", "Inference image ready");
+                prune_old_images();
                 if build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: chip_name,
                 }).is_err() {
@@ -346,10 +355,18 @@ pub(crate) async fn ensure_proxy_running(
         "Starting proxy container"
     );
 
-    // Ensure proxy image exists — build if needed
-    let tag = proxy_image_tag();
-    if !client.image_exists(&tag).await {
-        info!(tag = %tag, spec = "proxy-container", "Proxy image absent — building");
+    // Ensure proxy image is up to date — always invoke the build script
+    // (it handles staleness internally via hash check and exits fast when current).
+    // @trace spec:forge-staleness, spec:proxy-container
+    let mut tag = proxy_image_tag();
+
+    // Check for a newer proxy image (forward compatibility)
+    if let Some(newer_tag) = find_newer_image(&tag) {
+        warn!(expected = %tag, found = %newer_tag, spec = "proxy-container", "Found newer proxy image — using it");
+        tag = newer_tag;
+    } else {
+        // No newer image — ensure current version is built and up to date
+        info!(tag = %tag, spec = "proxy-container", "Ensuring proxy image is up to date...");
 
         // @trace spec:proxy-container
         // User-friendly chip name — never expose "proxy" or "image" to users.
@@ -376,7 +393,8 @@ pub(crate) async fn ensure_proxy_running(
                     }
                     return Err("Proxy image not ready after build".into());
                 }
-                info!(tag = %tag, spec = "proxy-container", "Proxy image built");
+                info!(tag = %tag, spec = "proxy-container", "Proxy image ready");
+                prune_old_images();
                 if build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: chip_name,
                 }).is_err() {
@@ -880,10 +898,18 @@ pub(crate) async fn ensure_git_service_running(
         "Starting git service container"
     );
 
-    // Ensure git image exists — build if needed
-    let tag = git_image_tag();
-    if !client.image_exists(&tag).await {
-        info!(tag = %tag, spec = "git-mirror-service", "Git service image absent — building");
+    // Ensure git image is up to date — always invoke the build script
+    // (it handles staleness internally via hash check and exits fast when current).
+    // @trace spec:forge-staleness, spec:git-mirror-service
+    let mut tag = git_image_tag();
+
+    // Check for a newer git image (forward compatibility)
+    if let Some(newer_tag) = find_newer_image(&tag) {
+        warn!(expected = %tag, found = %newer_tag, spec = "git-mirror-service", "Found newer git image — using it");
+        tag = newer_tag;
+    } else {
+        // No newer image — ensure current version is built and up to date
+        info!(tag = %tag, spec = "git-mirror-service", "Ensuring git service image is up to date...");
 
         // @trace spec:git-mirror-service
         // User-friendly chip name — never expose "git service" or "image" to users.
@@ -910,7 +936,8 @@ pub(crate) async fn ensure_git_service_running(
                     }
                     return Err("Git service image not ready after build".into());
                 }
-                info!(tag = %tag, spec = "git-mirror-service", "Git service image built");
+                info!(tag = %tag, spec = "git-mirror-service", "Git service image ready");
+                prune_old_images();
                 if build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: chip_name,
                 }).is_err() {
@@ -1363,35 +1390,42 @@ pub(crate) fn prune_old_images() {
         .output();
 }
 
-/// Find the newest `tillandsias-forge:v*` image by parsing version numbers.
+/// Find the newest `tillandsias-<image_type>:v*` image by parsing version numbers.
 ///
-/// Returns `Some(tag)` if a forge image exists with a higher version than
+/// Returns `Some(tag)` if an image exists with a higher version than
 /// `expected_tag`. Returns `None` if no newer image exists.
-pub(crate) fn find_newer_forge_image(expected_tag: &str) -> Option<String> {
-    let expected_version = expected_tag.strip_prefix("tillandsias-forge:v")?;
+///
+/// `expected_tag` must be in the format `tillandsias-<type>:v<version>`.
+/// @trace spec:forge-staleness, spec:forge-forward-compat
+pub(crate) fn find_newer_image(expected_tag: &str) -> Option<String> {
+    // Extract the repository prefix (e.g., "tillandsias-forge") and version
+    let (repo, version_with_v) = expected_tag.rsplit_once(':')?;
+    let expected_version = version_with_v.strip_prefix('v')?;
     let expected_parts: Vec<u64> = expected_version
         .split('.')
         .filter_map(|s| s.parse().ok())
         .collect();
 
+    let filter = format!("reference={repo}:v*");
     let output = tillandsias_podman::podman_cmd_sync()
         .args([
             "images",
             "--format",
             "{{.Repository}}:{{.Tag}}",
             "--filter",
-            "reference=tillandsias-forge:v*",
+            &filter,
         ])
         .output()
         .ok()?;
 
+    let prefix = format!("{repo}:v");
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut newest_tag: Option<String> = None;
     let mut newest_parts: Vec<u64> = expected_parts.clone();
 
     for line in stdout.lines() {
         let tag = line.trim();
-        if let Some(version_str) = tag.strip_prefix("tillandsias-forge:v") {
+        if let Some(version_str) = tag.strip_prefix(&prefix) {
             let parts: Vec<u64> = version_str
                 .split('.')
                 .filter_map(|s| s.parse().ok())
@@ -1413,6 +1447,12 @@ pub(crate) fn find_newer_forge_image(expected_tag: &str) -> Option<String> {
     }
 
     newest_tag
+}
+
+/// Convenience wrapper: find newer forge image specifically.
+/// @trace spec:forge-staleness, spec:forge-forward-compat
+pub(crate) fn find_newer_forge_image(expected_tag: &str) -> Option<String> {
+    find_newer_image(expected_tag)
 }
 
 /// Open a terminal window running a command with a custom title.
@@ -2462,18 +2502,77 @@ pub async fn handle_terminal(
 
     debug!(project = %project_name, genus = %genus.display_name(), tool = %display_emoji, "Genus and tool allocated for maintenance terminal");
 
+    // Ensure forge image is up to date — always invoke the build script
+    // (it handles staleness internally via hash check and exits fast when current).
+    // @trace spec:forge-staleness, spec:forge-forward-compat
     let client = PodmanClient::new();
     let mut tag = forge_image_tag();
-    // Use newer image if available (forward compatibility)
+
+    // Check for a newer forge image (forward compatibility)
     if let Some(newer_tag) = find_newer_forge_image(&tag) {
         warn!(expected = %tag, found = %newer_tag, "Using newer forge image for terminal");
         tag = newer_tag;
-    }
-    if !client.image_exists(&tag).await {
-        error!(tag = %tag, "Image not found when opening maintenance terminal");
-        allocator.release(&project_name, genus);
-        tool_allocator.release(&project_name, &display_emoji);
-        return Err(strings::ENV_NOT_READY.into());
+    } else {
+        // No newer image — ensure current version is built and up to date
+        info!(tag = %tag, "Ensuring forge image is up to date for maintenance terminal...");
+
+        let chip_name = crate::i18n::t("menu.build.chip_forge").to_string();
+        if build_tx.try_send(BuildProgressEvent::Started {
+            image_name: chip_name.clone(),
+        }).is_err() {
+            debug!("Build progress channel full/closed — UI may show stale state");
+        }
+
+        let build_result =
+            tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
+
+        match build_result {
+            Ok(Ok(())) => {
+                if !client.image_exists(&tag).await {
+                    error!(tag = %tag, "Image still not found after build (maintenance terminal)");
+                    if build_tx.try_send(BuildProgressEvent::Failed {
+                        image_name: chip_name,
+                        reason: "Development environment not ready yet".to_string(),
+                    }).is_err() {
+                        debug!("Build progress channel full/closed — UI may show stale state");
+                    }
+                    allocator.release(&project_name, genus);
+                    tool_allocator.release(&project_name, &display_emoji);
+                    return Err(strings::ENV_NOT_READY.into());
+                }
+                info!(tag = %tag, "Forge image ready for maintenance terminal");
+                prune_old_images();
+                if build_tx.try_send(BuildProgressEvent::Completed {
+                    image_name: chip_name,
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
+            }
+            Ok(Err(ref e)) => {
+                error!(tag = %tag, error = %e, "Image build failed (maintenance terminal)");
+                if build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: chip_name,
+                    reason: "Tillandsias is setting up".to_string(),
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
+                allocator.release(&project_name, genus);
+                tool_allocator.release(&project_name, &display_emoji);
+                return Err(strings::SETUP_ERROR.into());
+            }
+            Err(ref e) => {
+                error!(tag = %tag, error = %e, "Image build task panicked (maintenance terminal)");
+                if build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: chip_name,
+                    reason: "Tillandsias is setting up".to_string(),
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
+                allocator.release(&project_name, genus);
+                tool_allocator.release(&project_name, &display_emoji);
+                return Err(strings::SETUP_ERROR.into());
+            }
+        }
     }
 
     let cache = cache_dir();
@@ -2615,12 +2714,74 @@ pub async fn handle_root_terminal(
 
     debug!(genus = %genus.display_name(), "Genus allocated for root terminal");
 
+    // Ensure forge image is up to date — always invoke the build script
+    // (it handles staleness internally via hash check and exits fast when current).
+    // @trace spec:forge-staleness, spec:forge-forward-compat
     let client = PodmanClient::new();
-    let tag = forge_image_tag();
-    if !client.image_exists(&tag).await {
-        error!(tag = %tag, "Image not found when opening root terminal");
-        allocator.release(&project_name, genus);
-        return Err(strings::ENV_NOT_READY.into());
+    let mut tag = forge_image_tag();
+
+    // Check for a newer forge image (forward compatibility)
+    if let Some(newer_tag) = find_newer_forge_image(&tag) {
+        warn!(expected = %tag, found = %newer_tag, "Using newer forge image for root terminal");
+        tag = newer_tag;
+    } else {
+        // No newer image — ensure current version is built and up to date
+        info!(tag = %tag, "Ensuring forge image is up to date for root terminal...");
+
+        let chip_name = crate::i18n::t("menu.build.chip_forge").to_string();
+        if build_tx.try_send(BuildProgressEvent::Started {
+            image_name: chip_name.clone(),
+        }).is_err() {
+            debug!("Build progress channel full/closed — UI may show stale state");
+        }
+
+        let build_result =
+            tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
+
+        match build_result {
+            Ok(Ok(())) => {
+                if !client.image_exists(&tag).await {
+                    error!(tag = %tag, "Image still not found after build (root terminal)");
+                    if build_tx.try_send(BuildProgressEvent::Failed {
+                        image_name: chip_name,
+                        reason: "Development environment not ready yet".to_string(),
+                    }).is_err() {
+                        debug!("Build progress channel full/closed — UI may show stale state");
+                    }
+                    allocator.release(&project_name, genus);
+                    return Err(strings::ENV_NOT_READY.into());
+                }
+                info!(tag = %tag, "Forge image ready for root terminal");
+                prune_old_images();
+                if build_tx.try_send(BuildProgressEvent::Completed {
+                    image_name: chip_name,
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
+            }
+            Ok(Err(ref e)) => {
+                error!(tag = %tag, error = %e, "Image build failed (root terminal)");
+                if build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: chip_name,
+                    reason: "Tillandsias is setting up".to_string(),
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
+                allocator.release(&project_name, genus);
+                return Err(strings::SETUP_ERROR.into());
+            }
+            Err(ref e) => {
+                error!(tag = %tag, error = %e, "Image build task panicked (root terminal)");
+                if build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: chip_name,
+                    reason: "Tillandsias is setting up".to_string(),
+                }).is_err() {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
+                allocator.release(&project_name, genus);
+                return Err(strings::SETUP_ERROR.into());
+            }
+        }
     }
 
     let cache = cache_dir();
@@ -2774,14 +2935,21 @@ pub async fn handle_github_login(
             .map_err(|e| format!("Failed to open terminal: {e}"));
     }
 
-    // No git service running — ensure git image exists and start a temporary one.
+    // No git service running — ensure git image is up to date and start a temporary one.
+    // Always invoke the build script for staleness check.
+    // @trace spec:forge-staleness, spec:git-mirror-service
     info!("GitHub Login: no running git service, starting temporary container");
 
     let client = PodmanClient::new();
-    let tag = git_image_tag();
+    let mut tag = git_image_tag();
 
-    if !client.image_exists(&tag).await {
-        info!(tag = %tag, "Git service image missing — building before GitHub Login");
+    // Check for a newer git image (forward compatibility)
+    if let Some(newer_tag) = find_newer_image(&tag) {
+        warn!(expected = %tag, found = %newer_tag, "Using newer git image for GitHub Login");
+        tag = newer_tag;
+    } else {
+        // No newer image — ensure current version is built and up to date
+        info!(tag = %tag, "Ensuring git service image is up to date for GitHub Login...");
 
         if build_tx.try_send(BuildProgressEvent::Started {
             image_name: crate::i18n::t("menu.build.chip_git_service").to_string(),
@@ -2803,7 +2971,8 @@ pub async fn handle_github_login(
                     }
                     return Err(strings::ENV_NOT_READY.into());
                 }
-                info!(tag = %tag, "Git service image built — proceeding with GitHub Login");
+                info!(tag = %tag, "Git service image ready — proceeding with GitHub Login");
+                prune_old_images();
                 if build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: crate::i18n::t("menu.build.chip_git_service").to_string(),
                 }).is_err() {
@@ -2831,8 +3000,6 @@ pub async fn handle_github_login(
                 return Err(strings::SETUP_ERROR.into());
             }
         }
-    } else {
-        info!(tag = %tag, "Git service image present — proceeding with GitHub Login");
     }
 
     // Ensure enclave network exists for the temporary container.
@@ -3005,11 +3172,13 @@ pub async fn handle_serve_here(
     let port_range = allocate_port_range(base_port, &existing_ports);
     let port = port_range.0;
 
-    // Check that the web image exists; build it if missing (same pattern as forge in handle_attach_here)
+    // Ensure web image is up to date — always invoke the build script
+    // (it handles staleness internally via hash check and exits fast when current).
+    // @trace spec:forge-staleness
     let web_image = "tillandsias-web:latest";
     let client = PodmanClient::new();
-    if !client.image_exists(web_image).await {
-        info!(image = web_image, "Web image not found, building...");
+    {
+        info!(image = web_image, "Ensuring web image is up to date...");
         if build_tx.try_send(BuildProgressEvent::Started {
             image_name: crate::i18n::t("menu.build.chip_web_server").to_string(),
         }).is_err() {
@@ -3028,6 +3197,7 @@ pub async fn handle_serve_here(
                     }
                     return Err("Web server image is not ready yet".into());
                 }
+                prune_old_images();
                 if build_tx.try_send(BuildProgressEvent::Completed {
                     image_name: crate::i18n::t("menu.build.chip_web_server").to_string(),
                 }).is_err() {

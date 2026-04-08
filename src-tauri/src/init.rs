@@ -27,20 +27,9 @@ pub fn run_with_force(force: bool) -> bool {
     println!("{}", i18n::t("init.preparing"));
     println!();
 
-    // Check if ALL images already exist (skip when --force)
-    if !force {
-        let all_present = IMAGE_TYPES
-            .iter()
-            .all(|(_, tag_fn)| image_exists(&tag_fn()));
-
-        if all_present {
-            println!("  {}", i18n::t("init.already_ready"));
-            println!();
-            println!("{}", i18n::t("init.ready"));
-            return true;
-        }
-    }
-
+    // Always invoke the build script for each image — it handles staleness
+    // internally via hash check and exits fast when up to date.
+    // @trace spec:forge-staleness
     println!("  {}", i18n::t("init.setting_up"));
     println!("  {}", i18n::t("init.first_run_note"));
     println!();
@@ -63,12 +52,6 @@ pub fn run_with_force(force: bool) -> bool {
 
     for (image_name, tag_fn) in IMAGE_TYPES {
         let tag = tag_fn();
-
-        // Skip if already present and not forcing
-        if !force && image_exists(&tag) {
-            println!("  {}", i18n::tf("init.build.image_ready", &[("name", image_name), ("tag", &tag)]));
-            continue;
-        }
 
         // Remove existing image if force-rebuilding
         if force && image_exists(&tag) {
