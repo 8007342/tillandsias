@@ -11,7 +11,7 @@
 //! @trace spec:proxy-container
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, KeyPair, KeyUsagePurpose};
 use tracing::{info, info_span, warn};

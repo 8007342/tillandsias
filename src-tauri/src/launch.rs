@@ -400,6 +400,7 @@ fn sanitize_identity(input: &str) -> String {
 /// ensures the `.gitconfig` file exists inside the git dir.
 ///
 /// Returns `(gh_dir, git_dir)`.
+#[allow(dead_code)] // API surface — used by GitHub login and secrets mount flows
 pub fn ensure_secrets_dirs(cache_dir: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
     let secrets_dir = cache_dir.join("secrets");
     let gh_dir = secrets_dir.join("gh");

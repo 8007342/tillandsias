@@ -31,6 +31,7 @@ const GITHUB_TOKEN_KEY: &str = "github-oauth-token";
 ///
 /// Returns `Ok(())` on success. Returns `Err` if the keyring is
 /// unavailable — the caller should log and fall back.
+#[allow(dead_code)] // API surface — used by GitHub login flow (--github-login)
 pub fn store_github_token(token: &str) -> Result<(), String> {
     let _span = info_span!("store_github_token", accountability = true, category = "secrets").entered();
     let entry = keyring::Entry::new(SERVICE, GITHUB_TOKEN_KEY)

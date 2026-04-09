@@ -28,11 +28,9 @@
 //!
 //! @trace spec:podman-orchestration, spec:default-image, spec:tray-app
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, instrument, warn};
 
@@ -561,7 +559,11 @@ pub(crate) async fn cleanup_enclave_network() {
 #[derive(Debug)]
 enum GitProjectState {
     /// Has a `.git` directory with a configured `origin` remote.
-    RemoteRepo { remote_url: String },
+    // remote_url is parsed and stored for future use (e.g., displaying origin in UI)
+    RemoteRepo {
+        #[allow(dead_code)]
+        remote_url: String,
+    },
     /// Has a `.git` directory but no `origin` remote.
     LocalRepo,
     /// Not a git repository.
@@ -1049,9 +1051,8 @@ pub(crate) async fn ensure_git_service_running(
 // @trace spec:layered-tools-overlay
 // ---------------------------------------------------------------------------
 
-/// Re-export from tools_overlay module for backward compatibility.
-/// @trace spec:layered-tools-overlay
-pub(crate) use crate::tools_overlay::ensure_tools_overlay;
+// NOTE: tools_overlay::ensure_tools_overlay is called via the full
+// crate::tools_overlay::ensure_tools_overlay path in handle_attach_here().
 
 // ---------------------------------------------------------------------------
 // Unified enclave startup
@@ -1065,6 +1066,8 @@ pub(crate) use crate::tools_overlay::ensure_tools_overlay;
 pub struct EnclaveContext {
     /// Path to the bare git mirror for the project, if one was created.
     /// `None` when the enclave was set up without a project (infrastructure only).
+    // Stored for callers that will need it (e.g., forge container mount points).
+    #[allow(dead_code)]
     pub mirror_path: Option<PathBuf>,
 }
 
@@ -1275,6 +1278,7 @@ pub(crate) async fn stop_git_service(project_name: &str) {
 ///
 /// Used to distinguish "first time" builds (no previous image) from "update"
 /// builds (upgrading from an older version).
+#[allow(dead_code)] // API surface — called from upgrade/migration paths
 pub(crate) fn any_versioned_forge_exists() -> bool {
     let output = tillandsias_podman::podman_cmd_sync()
         .args([
@@ -1631,6 +1635,7 @@ pub(crate) fn send_notification(summary: &str, body: &str) {
 /// IP on the "podman" network rather than its enclave alias.
 ///
 /// @trace spec:proxy-container
+#[allow(dead_code)] // API surface — used by image builds routed through proxy
 fn get_proxy_ip() -> Result<String, String> {
     let output = tillandsias_podman::podman_cmd_sync()
         .args([
@@ -1814,6 +1819,7 @@ pub fn run_build_image_script_pub(image_name: &str) -> Result<(), String> {
 
 /// Public wrapper around `get_proxy_ip` for use from `runner.rs`.
 /// @trace spec:proxy-container
+#[allow(dead_code)] // API surface — used by image builds routed through proxy
 pub fn get_proxy_ip_pub() -> Result<String, String> {
     get_proxy_ip()
 }

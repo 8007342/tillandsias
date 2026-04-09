@@ -26,6 +26,7 @@ use tracing::{debug, warn};
 /// there's no automatic path translation, so we must do it explicitly.
 ///
 /// On non-Windows, returns the path as-is.
+#[allow(dead_code)] // Cross-platform utility — used on Windows launch paths
 pub fn bash_path(path: &std::path::Path) -> String {
     let s = path.to_string_lossy().replace('\\', "/");
     if cfg!(target_os = "windows") {
@@ -56,6 +57,7 @@ fn write_lf(path: &std::path::Path, content: &str) -> std::io::Result<()> {
 // ---------------------------------------------------------------------------
 pub const BUILD_IMAGE: &str = include_str!("../../scripts/build-image.sh");
 pub const BUILD_TOOLS_OVERLAY: &str = include_str!("../../scripts/build-tools-overlay.sh");
+#[allow(dead_code)] // Used by GitHub login flow (--github-login CLI path)
 pub const GH_AUTH_LOGIN: &str = include_str!("../../gh-auth-login.sh");
 
 // ---------------------------------------------------------------------------

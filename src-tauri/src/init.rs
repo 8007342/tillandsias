@@ -178,12 +178,14 @@ pub fn run_with_force(force: bool) -> bool {
 }
 
 /// Entry point for `tillandsias --init` (no --force).
+#[allow(dead_code)] // CLI entry point — called from main when --init has no --force flag
 pub fn run() -> bool {
     run_with_force(false)
 }
 
 /// Build the forge image without the init banner/flow.
 /// Used by --github-login to build inline before running the auth script.
+#[allow(dead_code)] // API surface — used by --github-login CLI path
 pub fn run_build_only() -> Result<(), String> {
     let source_dir = embedded::write_image_sources().map_err(|e| {
         eprintln!("  [internal] Failed to extract embedded image sources: {e}");
