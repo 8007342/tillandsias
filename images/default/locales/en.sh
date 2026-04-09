@@ -28,12 +28,45 @@ L_AGENT_NOT_AVAILABLE="Claude Code not available. Starting bash."
 L_OPENCODE_NOT_AVAILABLE="OpenCode not available. Starting bash."
 L_UNKNOWN_AGENT="Unknown agent '%s'. Starting bash."
 
+# ── CA / proxy warnings ─────────────────────────────────────────
+L_WARN_CA_INSTALL="WARNING: Failed to install CA certificate — proxy HTTPS caching may not work"
+L_WARN_CA_UPDATE="WARNING: Failed to update CA trust store"
+
+# ── Git mirror messages ─────────────────────────────────────────
+L_WARN_PUSH_URL="WARNING: Failed to set push URL — git push may not work"
+L_GIT_CLONE_FAILED="ERROR: Could not clone project from git service."
+L_GIT_CLONE_HINT="The git service may not be running. Dropping to shell."
+L_GIT_EPHEMERAL="All changes must be committed to persist. Uncommitted work is lost on stop."
+
+# ── Auth / init warnings ────────────────────────────────────────
+L_WARN_GH_AUTH="WARNING: gh auth setup-git failed — git push may not authenticate"
+L_WARN_OPENSPEC_INIT="WARNING: OpenSpec init failed — /opsx commands may not work"
+
+# ── Installer exit warnings ──────────────────────────────────────
+L_WARN_OPENCODE_EXIT="WARNING: OpenCode installer exited with code"
+L_WARN_OPENCODE_UPDATE_EXIT="WARNING: OpenCode update exited with code"
+
+# ── Updating messages ───────────────────────────────────────────
+L_UPDATING_CLAUDE="Updating Claude Code..."
+L_UPDATING_OPENCODE="Updating OpenCode..."
+
 # ── forge-welcome.sh ──────────────────────────────────────────
 L_WELCOME_TITLE="🌱 Tillandsias Forge"
 L_WELCOME_PROJECT="Project"
 L_WELCOME_FORGE="Forge"
 L_WELCOME_MOUNTS="Mounts"
 L_WELCOME_PROJECT_AT="→ Project at /home/forge/src/%s"
+L_WELCOME_SECURITY="Security"
+L_WELCOME_NETWORK="Network"
+L_WELCOME_NETWORK_DESC="enclave only (no internet, packages via proxy)"
+L_WELCOME_CREDENTIALS="Credentials"
+L_WELCOME_CREDENTIALS_DESC="none (git auth via mirror service)"
+L_WELCOME_CODE="Code"
+L_WELCOME_CODE_DESC="cloned from git mirror (uncommitted work is ephemeral)"
+L_WELCOME_SERVICES="Services"
+L_WELCOME_PROXY_DESC="caching HTTP/S proxy (allowlisted domains)"
+L_WELCOME_GIT_DESC="git mirror + auto-push to remote"
+L_WELCOME_INFERENCE_DESC="ollama (local LLM)"
 
 # ── Tips (rotating, shown at login) ──────────────────────────
 L_TIP_1="Type help to learn about the Fish shell"

@@ -11,20 +11,21 @@ source /usr/local/lib/tillandsias/lib-common.sh
 # @trace spec:proxy-container
 # Trust the Tillandsias enclave CA chain for HTTPS proxy caching.
 CA_CHAIN="/run/tillandsias/ca-chain.crt"
+# @trace spec:environment-runtime
 if [ -f "$CA_CHAIN" ]; then
     if command -v update-ca-trust &>/dev/null; then
         if ! cp "$CA_CHAIN" /etc/pki/ca-trust/source/anchors/tillandsias-ca.crt 2>/dev/null; then
-            echo "[entrypoint] WARNING: Failed to install CA certificate — proxy HTTPS caching may not work" >&2
+            echo "[entrypoint] ${L_WARN_CA_INSTALL:-WARNING: Failed to install CA certificate — proxy HTTPS caching may not work}" >&2
         fi
         if ! update-ca-trust 2>/dev/null; then
-            echo "[entrypoint] WARNING: Failed to update CA trust store" >&2
+            echo "[entrypoint] ${L_WARN_CA_UPDATE:-WARNING: Failed to update CA trust store}" >&2
         fi
     elif command -v update-ca-certificates &>/dev/null; then
         if ! cp "$CA_CHAIN" /usr/local/share/ca-certificates/tillandsias-ca.crt 2>/dev/null; then
-            echo "[entrypoint] WARNING: Failed to install CA certificate — proxy HTTPS caching may not work" >&2
+            echo "[entrypoint] ${L_WARN_CA_INSTALL:-WARNING: Failed to install CA certificate — proxy HTTPS caching may not work}" >&2
         fi
         if ! update-ca-certificates 2>/dev/null; then
-            echo "[entrypoint] WARNING: Failed to update CA trust store" >&2
+            echo "[entrypoint] ${L_WARN_CA_UPDATE:-WARNING: Failed to update CA trust store}" >&2
         fi
     fi
 fi
@@ -47,7 +48,7 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
             # Configure push back to mirror
             # @trace spec:git-mirror-service
             if ! git remote set-url --push origin "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" 2>/dev/null; then
-                echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
+                echo "[entrypoint] ${L_WARN_PUSH_URL:-WARNING: Failed to set push URL — git push may not work}" >&2
             fi
             # Set git identity from host config
             # @trace spec:forge-offline
@@ -67,11 +68,11 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
         fi
     done
     if [[ "$CLONE_SUCCESS" != "true" ]]; then
-        echo "[forge] ERROR: Could not clone project from git service."
-        echo "[forge] The git service may not be running. Dropping to shell."
+        echo "[forge] ${L_GIT_CLONE_FAILED:-ERROR: Could not clone project from git service.}"
+        echo "[forge] ${L_GIT_CLONE_HINT:-The git service may not be running. Dropping to shell.}"
         exec bash
     fi
-    echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
+    echo "[forge] ${L_GIT_EPHEMERAL:-All changes must be committed to persist. Uncommitted work is lost on stop.}"
 fi
 
 # ── Config overlay (ramdisk symlinks) ──────────────────────
@@ -110,7 +111,7 @@ else
 fi
 
 install_claude() {
-    # @trace spec:layered-tools-overlay
+    # @trace spec:layered-tools-overlay, spec:install-progress
     if [ "$_CLAUDE_FROM_OVERLAY" = true ]; then
         trace_lifecycle "install" "claude-code: skipped (overlay)"
         return 0
@@ -139,7 +140,7 @@ install_claude() {
 }
 
 update_claude() {
-    # @trace spec:layered-tools-overlay
+    # @trace spec:layered-tools-overlay, spec:install-progress
     if [ "$_CLAUDE_FROM_OVERLAY" = true ]; then
         trace_lifecycle "update" "claude-code: skipped (overlay)"
         return 0
@@ -164,7 +165,7 @@ update_claude() {
     fi
     if [ "$current_ver" != "$latest_ver" ]; then
         trace_lifecycle "update" "claude-code: updating $current_ver -> $latest_ver"
-        if spin "${L_INSTALLING_CLAUDE:-Installing Claude Code...}" npm install -g --prefix "$CC_PREFIX" @anthropic-ai/claude-code; then
+        if spin "${L_UPDATING_CLAUDE:-Updating Claude Code...}" npm install -g --prefix "$CC_PREFIX" @anthropic-ai/claude-code; then
             trace_lifecycle "update" "claude-code: updated to $("$CC_BIN" --version 2>/dev/null || echo "$latest_ver")"
         else
             trace_lifecycle "update" "claude-code: update FAILED, keeping $current_ver"
@@ -202,7 +203,7 @@ trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 # was cloned without openspec config. Idempotent — no-ops if already set up.
 if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
     if ! OS_OUTPUT=$("$OS_BIN" init --tools claude </dev/null 2>&1); then
-        echo "[entrypoint] WARNING: OpenSpec init failed — /opsx commands may not work" >&2
+        echo "[entrypoint] ${L_WARN_OPENSPEC_INIT:-WARNING: OpenSpec init failed — /opsx commands may not work}" >&2
         echo "[entrypoint] $OS_OUTPUT" >&2
     fi
 fi
