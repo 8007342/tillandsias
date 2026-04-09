@@ -42,7 +42,7 @@ touch ~/.gitconfig 2>/dev/null || true
 # @trace spec:secret-management
 if command -v gh &>/dev/null; then
     if ! gh auth setup-git </dev/null 2>/dev/null; then
-        echo "[common] WARNING: gh auth setup-git failed — git push may not authenticate" >&2
+        echo "[common] ${L_WARN_GH_AUTH:-WARNING: gh auth setup-git failed — git push may not authenticate}" >&2
     fi
 fi
 

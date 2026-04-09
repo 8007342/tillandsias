@@ -14,20 +14,21 @@ source /usr/local/lib/tillandsias/lib-common.sh
 # under --cap-drop=ALL. The || true ensures this is non-fatal — tools use
 # NODE_EXTRA_CA_CERTS and SSL_CERT_FILE env vars as the primary trust path.
 CA_CHAIN="/run/tillandsias/ca-chain.crt"
+# @trace spec:environment-runtime
 if [ -f "$CA_CHAIN" ]; then
     if command -v update-ca-trust &>/dev/null; then
         if ! cp "$CA_CHAIN" /etc/pki/ca-trust/source/anchors/tillandsias-ca.crt 2>/dev/null; then
-            echo "[entrypoint] WARNING: Failed to install CA certificate — proxy HTTPS caching may not work" >&2
+            echo "[entrypoint] ${L_WARN_CA_INSTALL:-WARNING: Failed to install CA certificate — proxy HTTPS caching may not work}" >&2
         fi
         if ! update-ca-trust 2>/dev/null; then
-            echo "[entrypoint] WARNING: Failed to update CA trust store" >&2
+            echo "[entrypoint] ${L_WARN_CA_UPDATE:-WARNING: Failed to update CA trust store}" >&2
         fi
     elif command -v update-ca-certificates &>/dev/null; then
         if ! cp "$CA_CHAIN" /usr/local/share/ca-certificates/tillandsias-ca.crt 2>/dev/null; then
-            echo "[entrypoint] WARNING: Failed to install CA certificate — proxy HTTPS caching may not work" >&2
+            echo "[entrypoint] ${L_WARN_CA_INSTALL:-WARNING: Failed to install CA certificate — proxy HTTPS caching may not work}" >&2
         fi
         if ! update-ca-certificates 2>/dev/null; then
-            echo "[entrypoint] WARNING: Failed to update CA trust store" >&2
+            echo "[entrypoint] ${L_WARN_CA_UPDATE:-WARNING: Failed to update CA trust store}" >&2
         fi
     fi
 fi
@@ -50,7 +51,7 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
             # Configure push back to mirror
             # @trace spec:git-mirror-service
             if ! git remote set-url --push origin "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" 2>/dev/null; then
-                echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
+                echo "[entrypoint] ${L_WARN_PUSH_URL:-WARNING: Failed to set push URL — git push may not work}" >&2
             fi
             # Set git identity from host config
             # @trace spec:forge-offline
@@ -70,11 +71,11 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
         fi
     done
     if [[ "$CLONE_SUCCESS" != "true" ]]; then
-        echo "[forge] ERROR: Could not clone project from git service."
-        echo "[forge] The git service may not be running. Dropping to shell."
+        echo "[forge] ${L_GIT_CLONE_FAILED:-ERROR: Could not clone project from git service.}"
+        echo "[forge] ${L_GIT_CLONE_HINT:-The git service may not be running. Dropping to shell.}"
         exec bash
     fi
-    echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
+    echo "[forge] ${L_GIT_EPHEMERAL:-All changes must be committed to persist. Uncommitted work is lost on stop.}"
 fi
 
 # ── OpenSpec (available in maintenance terminals too) ───────
@@ -90,7 +91,7 @@ trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 # ── OpenSpec init (every launch, silent) ────────────────────
 if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
     if ! OS_OUTPUT=$("$OS_BIN" init </dev/null 2>&1); then
-        echo "[entrypoint] WARNING: OpenSpec init failed — /opsx commands may not work" >&2
+        echo "[entrypoint] ${L_WARN_OPENSPEC_INIT:-WARNING: OpenSpec init failed — /opsx commands may not work}" >&2
         echo "[entrypoint] $OS_OUTPUT" >&2
     fi
 fi
