@@ -264,7 +264,6 @@ fn build_cli_launch_context(
         host_os,
         detached: false,
         is_watch_root: false,
-        token_file_path: None, // Forge/terminal containers are credential-free
         custom_mounts: project_config.mounts,
         image_tag: image_tag.to_string(),
         selected_language: tillandsias_core::config::load_global_config().i18n.language.clone(),
@@ -591,7 +590,6 @@ pub fn run_github_login() -> bool {
                 if s.success() {
                     println!();
                     println!("  GitHub authentication complete.");
-                    crate::secrets::migrate_token_to_keyring();
                 }
                 s.success()
             }
@@ -731,10 +729,6 @@ fn run_github_login_direct(tag: &str) -> bool {
     println!("  GitHub authentication complete.");
     println!();
 
-    // Migrate the token from hosts.yml to the native keyring so
-    // subsequent launches can inject it via tmpfs.
-    crate::secrets::migrate_token_to_keyring();
-
     true
 }
 
@@ -813,7 +807,6 @@ fn run_github_login_git_service(tag: &str) -> bool {
                 println!();
                 println!("  GitHub authentication complete.");
                 println!();
-                crate::secrets::migrate_token_to_keyring();
             } else {
                 eprintln!("  GitHub authentication failed.");
             }

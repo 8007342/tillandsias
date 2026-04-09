@@ -141,11 +141,9 @@ pub struct SecretMount {
 /// The types of secrets a profile can request.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecretKind {
-    /// Mount GitHub token file at /run/secrets/github_token (ro).
-    /// Fallback for when D-Bus is unavailable (logged at WARN level).
-    /// @trace spec:secret-rotation, spec:secret-management
-    GitHubToken,
     /// Forward the host D-Bus session bus socket for keyring access.
+    /// D-Bus is the sole credential path — if unavailable, git operations
+    /// fail explicitly rather than falling back to less-secure mechanisms.
     /// @trace spec:git-mirror-service, spec:secret-management
     DbusSession,
 }
@@ -170,12 +168,6 @@ pub struct LaunchContext {
     pub host_os: String,
     pub detached: bool,
     pub is_watch_root: bool,
-
-    /// Path to the tmpfs-backed GitHub token file for this container.
-    /// When `Some`, the file is bind-mounted at `/run/secrets/github_token:ro`
-    /// and `GIT_ASKPASS` is set to the forge image's askpass script.
-    /// @trace spec:secret-rotation
-    pub token_file_path: Option<PathBuf>,
 
     // Custom mounts from project config
     pub custom_mounts: Vec<crate::config::MountConfig>,
@@ -425,9 +417,8 @@ pub fn inference_profile() -> ContainerProfile {
 /// and fetch from this service instead of hitting the internet directly.
 ///
 /// Mounts are intentionally empty — the mirror volume is added dynamically at
-/// launch time based on the project being served. Secrets include D-Bus socket
-/// forwarding (primary, for host keyring access) and a GitHub token fallback
-/// for environments where D-Bus is unavailable.
+/// launch time based on the project being served. D-Bus session bus forwarding
+/// is the sole credential path — if unavailable, git operations fail explicitly.
 ///
 /// @trace spec:git-mirror-service, spec:secret-management
 pub fn git_service_profile() -> ContainerProfile {
@@ -439,9 +430,6 @@ pub fn git_service_profile() -> ContainerProfile {
         secrets: vec![
             SecretMount {
                 kind: SecretKind::DbusSession,
-            },
-            SecretMount {
-                kind: SecretKind::GitHubToken, // Fallback for when D-Bus unavailable
             },
         ],
         image_override: None,
@@ -593,13 +581,6 @@ mod tests {
     fn web_has_readonly_mount_only() {
         let profile = web_profile();
         assert!(profile.secrets.is_empty(), "Web profile should have no secrets");
-        assert!(
-            !profile
-                .secrets
-                .iter()
-                .any(|s| s.kind == SecretKind::GitHubToken),
-            "Web profile must NOT have GitHubToken"
-        );
         assert!(profile.env_vars.is_empty());
         assert_eq!(profile.mounts.len(), 1);
         assert_eq!(profile.mounts[0].mode, MountMode::Ro);
@@ -661,14 +642,14 @@ mod tests {
         assert_eq!(profile.env_vars.len(), 16);
     }
 
-    // @trace spec:git-mirror-service
+    // @trace spec:git-mirror-service, spec:secret-management
     #[test]
-    fn git_service_has_dbus_and_token_secrets_no_mounts() {
+    fn git_service_has_dbus_only_no_mounts() {
         let profile = git_service_profile();
         assert_eq!(
             profile.secrets.len(),
-            2,
-            "Git service should have DbusSession + GitHubToken"
+            1,
+            "Git service should have DbusSession only (D-Bus is the sole credential path)"
         );
         assert!(
             profile
@@ -676,13 +657,6 @@ mod tests {
                 .iter()
                 .any(|s| s.kind == SecretKind::DbusSession),
             "Git service must have DbusSession for keyring access"
-        );
-        assert!(
-            profile
-                .secrets
-                .iter()
-                .any(|s| s.kind == SecretKind::GitHubToken),
-            "Git service must have GitHubToken as fallback"
         );
         assert!(
             profile.mounts.is_empty(),

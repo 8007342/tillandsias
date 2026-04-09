@@ -181,36 +181,10 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
 
     // -----------------------------------------------------------------------
     // Secret mounts (only present for profiles that declare them)
-    // @trace spec:secret-rotation
+    // @trace spec:secret-management
     // -----------------------------------------------------------------------
     for secret in &profile.secrets {
         match &secret.kind {
-            SecretKind::GitHubToken => {
-                // @trace spec:secret-management
-                // Token file mount is a FALLBACK for when D-Bus is unavailable
-                // (e.g., headless/SSH, possibly Windows). The preferred path is
-                // D-Bus session bus → host keyring. If we reach this code path,
-                // something prevented D-Bus forwarding — log at WARN level.
-                if let Some(ref token_path) = ctx.token_file_path {
-                    tracing::warn!(
-                        accountability = true,
-                        category = "secrets",
-                        safety = "Falling back to tmpfs token mount — D-Bus session bus unavailable",
-                        spec = "secret-management",
-                        container = %ctx.container_name,
-                        "Security downgrade: using token file mount instead of D-Bus keyring access"
-                    );
-                    args.push("-v".into());
-                    args.push(format!(
-                        "{}:/run/secrets/github_token:ro",
-                        token_path.display()
-                    ));
-                    args.push("-e".into());
-                    args.push(
-                        "GIT_ASKPASS=/usr/local/bin/git-askpass-tillandsias.sh".into(),
-                    );
-                }
-            }
             SecretKind::DbusSession => {
                 // Forward host D-Bus session bus for keyring access.
                 // The socket path is extracted from DBUS_SESSION_BUS_ADDRESS
@@ -463,9 +437,6 @@ mod tests {
             host_os: "Fedora Silverblue 43".into(),
             detached: false,
             is_watch_root: false,
-            token_file_path: Some(PathBuf::from(
-                "/run/user/1000/tillandsias/tokens/tillandsias-myproject-aeranthos/github_token",
-            )),
             custom_mounts: vec![],
             image_tag: "tillandsias-forge:v0.1.90".into(),
             selected_language: "en".into(),
@@ -676,17 +647,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn github_token_absent_when_token_file_path_is_none() {
-        let profile = container_profile::forge_opencode_profile();
-        let mut ctx = test_context();
-        ctx.token_file_path = None;
-        let args = build_podman_args(&profile, &ctx);
-        let joined = args.join(" ");
-        assert!(!joined.contains("/run/secrets/github_token"));
-        assert!(!joined.contains("GIT_ASKPASS"));
-    }
-
     // @trace spec:git-mirror-service, spec:secret-management
     #[test]
     fn dbus_session_mounts_socket_when_env_set() {
@@ -723,10 +683,10 @@ mod tests {
             "DBUS_SESSION_BUS_ADDRESS env var missing"
         );
 
-        // GitHub token fallback should also be present
+        // No token file fallback — D-Bus is the sole credential path
         assert!(
-            joined.contains("/run/secrets/github_token:ro"),
-            "GitHubToken fallback should still be mounted"
+            !joined.contains("/run/secrets/github_token"),
+            "GitHubToken fallback must not be present — D-Bus is the sole credential path"
         );
 
         // Clean up
@@ -848,8 +808,7 @@ mod tests {
         let profile = container_profile::git_service_profile();
         // SAFETY: Test-only env var manipulation.
         unsafe { std::env::remove_var("DBUS_SESSION_BUS_ADDRESS") };
-        let mut ctx = test_context();
-        ctx.token_file_path = None; // Also remove token to test bare profile
+        let ctx = test_context();
 
         let args = build_podman_args(&profile, &ctx);
         let joined = args.join(" ");
@@ -889,8 +848,7 @@ mod tests {
         unsafe { std::env::remove_var("DBUS_SESSION_BUS_ADDRESS") };
 
         for (profile, expected_limit) in &cases {
-            let mut ctx = test_context();
-            ctx.token_file_path = None;
+            let ctx = test_context();
             let args = build_podman_args(profile, &ctx);
             let expected = format!("--pids-limit={expected_limit}");
             assert!(
@@ -915,8 +873,7 @@ mod tests {
         unsafe { std::env::remove_var("DBUS_SESSION_BUS_ADDRESS") };
 
         for profile in &read_only_profiles {
-            let mut ctx = test_context();
-            ctx.token_file_path = None;
+            let ctx = test_context();
             let args = build_podman_args(profile, &ctx);
             assert!(
                 args.contains(&"--read-only".to_string()),
@@ -958,8 +915,7 @@ mod tests {
         unsafe { std::env::remove_var("DBUS_SESSION_BUS_ADDRESS") };
 
         let profile = container_profile::proxy_profile();
-        let mut ctx = test_context();
-        ctx.token_file_path = None;
+        let ctx = test_context();
         let args = build_podman_args(&profile, &ctx);
         assert!(args.contains(&"--tmpfs=/var/run/squid".to_string()),
             "Proxy must have --tmpfs=/var/run/squid");

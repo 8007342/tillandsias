@@ -216,7 +216,6 @@ pub(crate) async fn ensure_inference_running(
         host_os: tillandsias_core::config::detect_host_os(),
         detached: true,
         is_watch_root: false,
-        token_file_path: None,
         custom_mounts: vec![],
         image_tag: tag.clone(),
         selected_language: "en".to_string(),
@@ -446,7 +445,6 @@ pub(crate) async fn ensure_proxy_running(
         host_os: tillandsias_core::config::detect_host_os(),
         detached: true,
         is_watch_root: false,
-        token_file_path: None,
         custom_mounts: vec![],
         image_tag: tag.clone(),
         selected_language: "en".to_string(),
@@ -968,29 +966,10 @@ pub(crate) async fn ensure_git_service_running(
     }
 
     // Build git service container args using the profile + LaunchContext
+    // D-Bus session bus forwarding is the sole credential path.
+    // @trace spec:secret-management, spec:git-mirror-service
     let profile = tillandsias_core::container_profile::git_service_profile();
     let cache = cache_dir();
-
-    // Token file is a FALLBACK for when D-Bus session bus is unavailable.
-    // D-Bus forwarding is the preferred auth path. Token file mount is a
-    // security downgrade logged at WARN level in launch.rs.
-    // @trace spec:secret-management
-    let token_file_path = match crate::secrets::retrieve_github_token() {
-        Ok(Some(token)) => {
-            match crate::token_files::write_token(&container_name, &token) {
-                Ok(path) => Some(path),
-                Err(e) => {
-                    warn!(
-                        spec = "git-mirror-service",
-                        error = %e,
-                        "Failed to write token file for git service — D-Bus auth only"
-                    );
-                    None
-                }
-            }
-        }
-        _ => None,
-    };
 
     let ctx = tillandsias_core::container_profile::LaunchContext {
         container_name: container_name.clone(),
@@ -1001,7 +980,6 @@ pub(crate) async fn ensure_git_service_running(
         host_os: tillandsias_core::config::detect_host_os(),
         detached: true,
         is_watch_root: false,
-        token_file_path,
         custom_mounts: vec![],
         image_tag: tag.clone(),
         selected_language: "en".to_string(),
@@ -1886,7 +1864,6 @@ fn build_launch_context(
         host_os,
         detached,
         is_watch_root,
-        token_file_path: None, // Forge/terminal containers are credential-free
         custom_mounts: project_config.mounts,
         image_tag: image_tag.to_string(),
         selected_language: tillandsias_core::config::load_global_config().i18n.language.clone(),

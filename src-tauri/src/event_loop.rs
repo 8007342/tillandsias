@@ -5,8 +5,6 @@
 //!
 //! @trace spec:tray-app, spec:podman-orchestration
 
-use std::collections::HashSet;
-use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 
 use tokio::sync::mpsc;
@@ -71,25 +69,6 @@ pub async fn run(
     // The receiver is a separate local that we select on.
     let (prune_tx, mut prune_rx) = mpsc::channel::<()>(32);
 
-    // Token refresh timer — rewrites token files every 55 minutes.
-    // For OAuth tokens this is a no-op (same token), but it establishes
-    // the infrastructure for future App token rotation (fine-grained-pat-rotation).
-    // @trace spec:secret-rotation
-    let mut token_refresh_interval = tokio::time::interval(Duration::from_secs(55 * 60));
-    token_refresh_interval.tick().await; // consume first immediate tick
-
-    // Track which containers have active token files for refresh.
-    let tracked_containers: Arc<StdMutex<HashSet<String>>> =
-        Arc::new(StdMutex::new(HashSet::new()));
-
-    // Seed tracked containers from any containers already running at startup.
-    {
-        let mut tracked = tracked_containers.lock().unwrap();
-        for container in &state.running {
-            tracked.insert(container.name.clone());
-        }
-    }
-
     // Proxy health check timer — restarts the proxy if it crashed.
     // @trace spec:proxy-container
     let mut proxy_health_interval = tokio::time::interval(Duration::from_secs(60));
@@ -107,7 +86,7 @@ pub async fn run(
 
             // Podman: container state changes
             Some(event) = podman_rx.recv() => {
-                handle_podman_event(event, &mut state, &mut allocator, &mut tool_allocator, &tracked_containers);
+                handle_podman_event(event, &mut state, &mut allocator, &mut tool_allocator);
                 prune_completed_builds(&mut state);
                 on_state_change(&state);
             }
@@ -136,7 +115,7 @@ pub async fn run(
                     MenuCommand::AttachHere { project_path } => {
                         match handlers::handle_attach_here(project_path, &mut state, &mut allocator, build_tx.clone()).await {
                             Ok(_event) => {
-                                sync_tracked_containers(&state, &tracked_containers);
+
                                 prune_completed_builds(&mut state);
                                 on_state_change(&state);
                             }
@@ -153,7 +132,7 @@ pub async fn run(
                     MenuCommand::Stop { container_name, genus: _ } => {
                         match handlers::handle_stop(container_name, &mut state, &mut allocator).await {
                             Ok(_event) => {
-                                sync_tracked_containers(&state, &tracked_containers);
+
                                 prune_completed_builds(&mut state);
                                 on_state_change(&state);
                             }
@@ -165,7 +144,7 @@ pub async fn run(
                     MenuCommand::Destroy { container_name, genus: _ } => {
                         match handlers::handle_destroy(container_name, &mut state, &mut allocator).await {
                             Ok(_event) => {
-                                sync_tracked_containers(&state, &tracked_containers);
+
                                 prune_completed_builds(&mut state);
                                 on_state_change(&state);
                             }
@@ -178,7 +157,7 @@ pub async fn run(
                         info!(project = ?project_path, "Terminal requested");
                         match handlers::handle_terminal(project_path, &mut state, &mut allocator, &mut tool_allocator, build_tx.clone()).await {
                             Ok(()) => {
-                                sync_tracked_containers(&state, &tracked_containers);
+
                                 prune_completed_builds(&mut state);
                                 on_state_change(&state);
                             }
@@ -217,7 +196,7 @@ pub async fn run(
                         };
                         match handlers::handle_root_terminal(watch_path, &mut state, &mut allocator, &mut tool_allocator, build_tx.clone()).await {
                             Ok(()) => {
-                                sync_tracked_containers(&state, &tracked_containers);
+
                                 prune_completed_builds(&mut state);
                                 on_state_change(&state);
                             }
@@ -298,17 +277,6 @@ pub async fn run(
                     } else {
                         remote_fetch_errors = 0;
                     }
-                }
-            }
-
-            // Token refresh: rewrite token files for all tracked containers (55-minute interval).
-            // @trace spec:secret-rotation
-            _ = token_refresh_interval.tick() => {
-                let containers: Vec<String> = {
-                    tracked_containers.lock().unwrap().iter().cloned().collect()
-                };
-                if !containers.is_empty() {
-                    refresh_token_files(&containers);
                 }
             }
 
@@ -574,13 +542,12 @@ async fn handle_clone_project(
 
 /// Process a podman container state change event.
 ///
-/// @trace spec:secret-rotation (token cleanup on container stop)
+/// @trace spec:podman-orchestration
 fn handle_podman_event(
     event: tillandsias_podman::events::PodmanEvent,
     state: &mut TrayState,
     allocator: &mut GenusAllocator,
     tool_allocator: &mut ToolAllocator,
-    tracked_containers: &Arc<StdMutex<HashSet<String>>>,
 ) {
     debug!(
         container = %event.container_name,
@@ -604,11 +571,6 @@ fn handle_podman_event(
             ContainerState::Stopped | ContainerState::Absent
         ) {
             let name = event.container_name.clone();
-
-            // Clean up token file for this container immediately.
-            // @trace spec:secret-rotation
-            crate::token_files::delete_token(&name);
-            tracked_containers.lock().unwrap().remove(&name);
 
             if let Some(pos) = state.running.iter().position(|c| c.name == name) {
                 let removed = state.running.remove(pos);
@@ -714,67 +676,3 @@ fn handle_podman_event(
     }
 }
 
-/// Sync the tracked_containers set from the current TrayState.
-///
-/// Called after state changes to keep the refresh timer's set in sync
-/// with actually running containers.
-fn sync_tracked_containers(
-    state: &TrayState,
-    tracked: &Arc<StdMutex<HashSet<String>>>,
-) {
-    let mut set = tracked.lock().unwrap();
-    set.clear();
-    for container in &state.running {
-        set.insert(container.name.clone());
-    }
-}
-
-/// Refresh token files for all tracked containers.
-///
-/// Re-reads the GitHub token from the keyring and atomically rewrites each
-/// container's token file. For OAuth tokens this writes the same content
-/// (no-op in effect), but establishes the infrastructure for future
-/// App token rotation.
-///
-/// @trace spec:secret-rotation
-fn refresh_token_files(containers: &[String]) {
-    let token = match crate::secrets::retrieve_github_token() {
-        Ok(Some(t)) => t,
-        Ok(None) => {
-            debug!(target: "secrets", "No GitHub token in keyring during refresh — skipping");
-            return;
-        }
-        Err(e) => {
-            warn!(
-                target: "secrets",
-                accountability = true,
-                category = "secrets",
-                spec = "secret-rotation",
-                "Keyring unavailable during token refresh, existing tokens preserved: {e}",
-            );
-            return;
-        }
-    };
-
-    for container_name in containers {
-        match crate::token_files::write_token(container_name, &token) {
-            Ok(_) => {
-                info!(
-                    target: "secrets",
-                    accountability = true,
-                    category = "secrets",
-                    spec = "secret-rotation",
-                    "Token refreshed for {container_name} (55min rotation)",
-                );
-            }
-            Err(e) => {
-                warn!(
-                    target: "secrets",
-                    container = %container_name,
-                    error = %e,
-                    "Failed to refresh token file",
-                );
-            }
-        }
-    }
-}

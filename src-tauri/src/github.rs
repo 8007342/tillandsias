@@ -43,14 +43,14 @@ struct GhRepoEntry {
 pub async fn fetch_repos() -> Result<Vec<RemoteRepo>, String> {
     let cache = cache_dir();
     let secrets_dir = cache.join("secrets");
-    let gh_dir = secrets_dir.join("gh");
 
-    // Refresh hosts.yml from native keyring before checking.
-    crate::secrets::write_hosts_yml_from_keyring();
-
-    // Verify credentials exist before spawning a container
-    if !gh_dir.join("hosts.yml").exists() {
-        return Err("No GitHub credentials found".to_string());
+    // Verify credentials exist in the keyring before spawning a container.
+    // D-Bus is the sole credential path — no hosts.yml fallback.
+    // @trace spec:native-secrets-store, spec:secret-management
+    match crate::secrets::retrieve_github_token() {
+        Ok(Some(_)) => { /* token in keyring, proceed */ }
+        Ok(None) => return Err("No GitHub credentials found in keyring".to_string()),
+        Err(e) => return Err(format!("Keyring unavailable: {e}")),
     }
 
     let args = build_gh_run_args(
@@ -108,9 +108,6 @@ pub async fn fetch_repos() -> Result<Vec<RemoteRepo>, String> {
 pub async fn clone_repo(full_name: &str, target_dir: &Path) -> Result<(), String> {
     let cache = cache_dir();
     let secrets_dir = cache.join("secrets");
-
-    // Refresh hosts.yml from native keyring before clone.
-    crate::secrets::write_hosts_yml_from_keyring();
 
     // Ensure the parent directory exists so we can mount it
     let parent = target_dir
