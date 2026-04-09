@@ -22,7 +22,9 @@
 - [x] **P2-5**: Add forge image version comparison to `ensure_tools_overlay()` -- trigger blocking rebuild if manifest's `forge_image` does not match current tag. @trace spec:layered-tools-overlay
 - [x] **P2-6**: Add CLI/tray notification for overlay status (building, updated, up-to-date). @trace spec:layered-tools-overlay
 
-## Phase 3: Cross-Platform Validation
+## Phase 3: Cross-Platform Validation (DEFERRED)
+
+> **Note:** Phase 3 is deferred to platform-specific branches (osx-next, windows-next). Phase 1 + Phase 2 are complete and working on Linux. Cross-platform validation will happen when those platforms are actively developed.
 
 - [ ] **P3-1**: Test overlay on macOS with podman machine -- verify bind-mount through virtiofs, symlink behavior, npm path resolution. @trace spec:layered-tools-overlay
 - [ ] **P3-2**: Test overlay on Windows with podman machine -- verify bind-mount through 9p, symlink behavior inside WSL2 VM. @trace spec:layered-tools-overlay

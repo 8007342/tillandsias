@@ -18,8 +18,8 @@
 
 ## Phase 2: GPU-Aware Model Tiers
 
-- [ ] **GPU-1**: Add GPU detection function to `src-tauri/src/handlers.rs` -- detect NVIDIA/AMD GPUs via `lspci`, `nvidia-smi`, or sysfs. Classify into tiers: none, low (<=4GB VRAM), mid (4-12GB), high (>=12GB). @trace spec:inference-container
-- [ ] **GPU-2**: Define model tier mapping -- high: `qwen2.5:7b`/`qwen2.5:7b`, mid: `qwen2.5:3b`/`qwen2.5:1.5b`, low: `qwen2.5:1.5b`/`qwen2.5:0.5b`, none: `qwen2.5:0.5b`/`qwen2.5:0.5b`. @trace spec:inference-container
-- [ ] **GPU-3**: Patch config overlay JSON at runtime -- after extracting static config, overwrite model fields based on detected GPU tier. Write patched config.json back to ramdisk. @trace spec:layered-tools-overlay, spec:inference-container
-- [ ] **GPU-4**: Log GPU detection results at enclave startup -- tier, GPU name, VRAM, selected models. @trace spec:inference-container
-- [ ] **GPU-5**: Add integration test -- verify model fields in config.json change based on simulated GPU tiers. @trace spec:inference-container
+- [x] **GPU-1**: Add GPU detection function to `src-tauri/src/handlers.rs` -- detect NVIDIA/AMD GPUs via `lspci`, `nvidia-smi`, or sysfs. Classify into tiers: none, low (<=4GB VRAM), mid (4-12GB), high (>=12GB). @trace spec:inference-container
+- [x] **GPU-2**: Define model tier mapping -- high: `qwen2.5:7b`/`qwen2.5:7b`, mid: `qwen2.5:3b`/`qwen2.5:1.5b`, low: `qwen2.5:1.5b`/`qwen2.5:0.5b`, none: `qwen2.5:0.5b`/`qwen2.5:0.5b`. @trace spec:inference-container
+- [x] **GPU-3**: Patch config overlay JSON at runtime -- after extracting static config, overwrite model fields based on detected GPU tier. Write patched config.json back to ramdisk. @trace spec:layered-tools-overlay, spec:inference-container
+- [x] **GPU-4**: Log GPU detection results at enclave startup -- tier, GPU name, VRAM, selected models. @trace spec:inference-container
+- [x] **GPU-5**: Add integration test -- verify model fields in config.json change based on simulated GPU tiers. @trace spec:inference-container
