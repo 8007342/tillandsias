@@ -7,4 +7,5 @@
 
 pub const SETUP_ERROR: &str = "Tillandsias is setting up. If this persists, please reinstall from https://github.com/8007342/tillandsias";
 pub const ENV_NOT_READY: &str = "Development environment not ready yet. Tillandsias will set it up automatically \u{2014} please try again in a few minutes.";
+#[allow(dead_code)] // Reserved for installation validation error path
 pub const INSTALL_INCOMPLETE: &str = "Tillandsias installation may be incomplete. Please reinstall from https://github.com/8007342/tillandsias";

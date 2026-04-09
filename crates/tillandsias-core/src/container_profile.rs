@@ -77,6 +77,11 @@ pub enum MountSource {
     /// Resolved at launch time; mount is skipped if the overlay doesn't exist yet.
     /// @trace spec:layered-tools-overlay
     ToolsOverlay,
+    /// Opinionated config overlay on tmpfs (ramdisk) for fast reads.
+    /// Resolved at launch time from `$XDG_RUNTIME_DIR/tillandsias/config-overlay/`.
+    /// Mount is skipped if the tmpfs directory doesn't exist yet.
+    /// @trace spec:layered-tools-overlay
+    ConfigOverlay,
 }
 
 /// Mount permission mode.
@@ -136,11 +141,9 @@ pub struct SecretMount {
 /// The types of secrets a profile can request.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecretKind {
-    /// Mount GitHub token file at /run/secrets/github_token (ro).
-    /// Fallback for when D-Bus is unavailable (logged at WARN level).
-    /// @trace spec:secret-rotation, spec:secret-management
-    GitHubToken,
     /// Forward the host D-Bus session bus socket for keyring access.
+    /// D-Bus is the sole credential path — if unavailable, git operations
+    /// fail explicitly rather than falling back to less-secure mechanisms.
     /// @trace spec:git-mirror-service, spec:secret-management
     DbusSession,
 }
@@ -165,12 +168,6 @@ pub struct LaunchContext {
     pub host_os: String,
     pub detached: bool,
     pub is_watch_root: bool,
-
-    /// Path to the tmpfs-backed GitHub token file for this container.
-    /// When `Some`, the file is bind-mounted at `/run/secrets/github_token:ro`
-    /// and `GIT_ASKPASS` is set to the forge image's askpass script.
-    /// @trace spec:secret-rotation
-    pub token_file_path: Option<PathBuf>,
 
     // Custom mounts from project config
     pub custom_mounts: Vec<crate::config::MountConfig>,
@@ -420,9 +417,8 @@ pub fn inference_profile() -> ContainerProfile {
 /// and fetch from this service instead of hitting the internet directly.
 ///
 /// Mounts are intentionally empty — the mirror volume is added dynamically at
-/// launch time based on the project being served. Secrets include D-Bus socket
-/// forwarding (primary, for host keyring access) and a GitHub token fallback
-/// for environments where D-Bus is unavailable.
+/// launch time based on the project being served. D-Bus session bus forwarding
+/// is the sole credential path — if unavailable, git operations fail explicitly.
 ///
 /// @trace spec:git-mirror-service, spec:secret-management
 pub fn git_service_profile() -> ContainerProfile {
@@ -434,9 +430,6 @@ pub fn git_service_profile() -> ContainerProfile {
         secrets: vec![
             SecretMount {
                 kind: SecretKind::DbusSession,
-            },
-            SecretMount {
-                kind: SecretKind::GitHubToken, // Fallback for when D-Bus unavailable
             },
         ],
         image_override: None,
@@ -452,12 +445,19 @@ pub fn git_service_profile() -> ContainerProfile {
 
 fn common_forge_mounts() -> Vec<ProfileMount> {
     // Code comes from git mirror service, packages through proxy.
-    // The only mount is the pre-built tools overlay (read-only).
+    // Mounts: pre-built tools overlay + config overlay (both read-only).
     // @trace spec:proxy-container, spec:layered-tools-overlay
     vec![
         ProfileMount {
             host_key: MountSource::ToolsOverlay,
             container_path: "/home/forge/.tools",
+            mode: MountMode::Ro,
+        },
+        // @trace spec:layered-tools-overlay
+        // Opinionated configs on ramdisk — entrypoints symlink into ~/.config/
+        ProfileMount {
+            host_key: MountSource::ConfigOverlay,
+            container_path: "/home/forge/.config-overlay",
             mode: MountMode::Ro,
         },
     ]
@@ -581,13 +581,6 @@ mod tests {
     fn web_has_readonly_mount_only() {
         let profile = web_profile();
         assert!(profile.secrets.is_empty(), "Web profile should have no secrets");
-        assert!(
-            !profile
-                .secrets
-                .iter()
-                .any(|s| s.kind == SecretKind::GitHubToken),
-            "Web profile must NOT have GitHubToken"
-        );
         assert!(profile.env_vars.is_empty());
         assert_eq!(profile.mounts.len(), 1);
         assert_eq!(profile.mounts[0].mode, MountMode::Ro);
@@ -599,13 +592,30 @@ mod tests {
     fn forge_profiles_have_tools_overlay_mount() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
-        // Only mount is the read-only tools overlay
+        // Mounts: tools overlay + config overlay (both read-only)
         // @trace spec:proxy-container, spec:layered-tools-overlay
-        assert_eq!(opencode.mounts.len(), 1);
-        assert_eq!(claude.mounts.len(), 1);
+        assert_eq!(opencode.mounts.len(), 2);
+        assert_eq!(claude.mounts.len(), 2);
         assert_eq!(opencode.mounts[0].container_path, "/home/forge/.tools");
         assert_eq!(opencode.mounts[0].mode, MountMode::Ro);
         assert!(matches!(opencode.mounts[0].host_key, MountSource::ToolsOverlay));
+    }
+
+    // @trace spec:layered-tools-overlay
+    #[test]
+    fn forge_profiles_have_config_overlay_mount() {
+        let opencode = forge_opencode_profile();
+        let claude = forge_claude_profile();
+        let terminal = terminal_profile();
+        // Config overlay mount is second in forge profiles, first in terminal
+        let oc_cfg = opencode.mounts.iter().find(|m| matches!(m.host_key, MountSource::ConfigOverlay));
+        let cc_cfg = claude.mounts.iter().find(|m| matches!(m.host_key, MountSource::ConfigOverlay));
+        let tm_cfg = terminal.mounts.iter().find(|m| matches!(m.host_key, MountSource::ConfigOverlay));
+        assert!(oc_cfg.is_some(), "OpenCode profile must have ConfigOverlay mount");
+        assert!(cc_cfg.is_some(), "Claude profile must have ConfigOverlay mount");
+        assert!(tm_cfg.is_some(), "Terminal profile must have ConfigOverlay mount");
+        assert_eq!(oc_cfg.unwrap().container_path, "/home/forge/.config-overlay");
+        assert_eq!(oc_cfg.unwrap().mode, MountMode::Ro);
     }
 
     #[test]
@@ -632,14 +642,14 @@ mod tests {
         assert_eq!(profile.env_vars.len(), 16);
     }
 
-    // @trace spec:git-mirror-service
+    // @trace spec:git-mirror-service, spec:secret-management
     #[test]
-    fn git_service_has_dbus_and_token_secrets_no_mounts() {
+    fn git_service_has_dbus_only_no_mounts() {
         let profile = git_service_profile();
         assert_eq!(
             profile.secrets.len(),
-            2,
-            "Git service should have DbusSession + GitHubToken"
+            1,
+            "Git service should have DbusSession only (D-Bus is the sole credential path)"
         );
         assert!(
             profile
@@ -647,13 +657,6 @@ mod tests {
                 .iter()
                 .any(|s| s.kind == SecretKind::DbusSession),
             "Git service must have DbusSession for keyring access"
-        );
-        assert!(
-            profile
-                .secrets
-                .iter()
-                .any(|s| s.kind == SecretKind::GitHubToken),
-            "Git service must have GitHubToken as fallback"
         );
         assert!(
             profile.mounts.is_empty(),

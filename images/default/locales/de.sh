@@ -28,12 +28,45 @@ L_AGENT_NOT_AVAILABLE="Claude Code nicht verfügbar. Bash wird gestartet."
 L_OPENCODE_NOT_AVAILABLE="OpenCode nicht verfügbar. Bash wird gestartet."
 L_UNKNOWN_AGENT="Unbekannter Agent '%s'. Bash wird gestartet."
 
+# ── CA- / Proxy-Warnungen ───────────────────────────────────────
+L_WARN_CA_INSTALL="WARNUNG: CA-Zertifikat konnte nicht installiert werden — HTTPS-Proxy-Caching funktioniert möglicherweise nicht"
+L_WARN_CA_UPDATE="WARNUNG: CA-Vertrauensspeicher konnte nicht aktualisiert werden"
+
+# ── Git-Spiegel-Nachrichten ──────────────────────────────────────
+L_WARN_PUSH_URL="WARNUNG: Push-URL konnte nicht gesetzt werden — git push funktioniert möglicherweise nicht"
+L_GIT_CLONE_FAILED="FEHLER: Projekt konnte nicht vom Git-Dienst geklont werden."
+L_GIT_CLONE_HINT="Der Git-Dienst läuft möglicherweise nicht. Terminal wird geöffnet."
+L_GIT_EPHEMERAL="Alle Änderungen müssen committet werden, um zu bestehen. Nicht committete Arbeit geht beim Stoppen verloren."
+
+# ── Authentifizierungs- / Init-Warnungen ─────────────────────────
+L_WARN_GH_AUTH="WARNUNG: gh auth setup-git fehlgeschlagen — git push authentifiziert möglicherweise nicht"
+L_WARN_OPENSPEC_INIT="WARNUNG: OpenSpec-Initialisierung fehlgeschlagen — /opsx-Befehle funktionieren möglicherweise nicht"
+
+# ── Installer-Beendigungswarnungen ───────────────────────────────
+L_WARN_OPENCODE_EXIT="WARNUNG: OpenCode-Installer wurde mit Code beendet"
+L_WARN_OPENCODE_UPDATE_EXIT="WARNUNG: OpenCode-Aktualisierung wurde mit Code beendet"
+
+# ── Aktualisierungsnachrichten ───────────────────────────────────
+L_UPDATING_CLAUDE="Claude Code wird aktualisiert..."
+L_UPDATING_OPENCODE="OpenCode wird aktualisiert..."
+
 # ── forge-welcome.sh ──────────────────────────────────────────
 L_WELCOME_TITLE="🌱 Tillandsias Forge"
 L_WELCOME_PROJECT="Projekt"
 L_WELCOME_FORGE="Forge"
 L_WELCOME_MOUNTS="Einbindungen"
 L_WELCOME_PROJECT_AT="→ Projekt unter /home/forge/src/%s"
+L_WELCOME_SECURITY="Sicherheit"
+L_WELCOME_NETWORK="Netzwerk"
+L_WELCOME_NETWORK_DESC="nur Enklave (kein Internet, Pakete über Proxy)"
+L_WELCOME_CREDENTIALS="Anmeldedaten"
+L_WELCOME_CREDENTIALS_DESC="keine (Git-Authentifizierung über Spiegeldienst)"
+L_WELCOME_CODE="Code"
+L_WELCOME_CODE_DESC="vom Git-Spiegel geklont (nicht committete Arbeit ist flüchtig)"
+L_WELCOME_SERVICES="Dienste"
+L_WELCOME_PROXY_DESC="cachender HTTP/S-Proxy (erlaubte Domains)"
+L_WELCOME_GIT_DESC="Git-Spiegel + automatischer Push zum Remote"
+L_WELCOME_INFERENCE_DESC="Ollama (lokales LLM)"
 
 # ── Tipps (wechselnd, beim Anmelden angezeigt) ──────────────
 L_TIP_1="Tippe help, um mehr über die Fish-Shell zu erfahren"

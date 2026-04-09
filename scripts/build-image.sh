@@ -146,6 +146,21 @@ _step "Building image: ${BOLD}${IMAGE_TAG}${NC}"
 # ---------------------------------------------------------------------------
 mkdir -p "$CACHE_DIR"
 
+# Clean up old unversioned hash files (legacy format: .last-build-forge.sha256)
+# These carry over across version bumps, creating false "up to date" results.
+# @trace spec:forge-staleness
+for _old in "$CACHE_DIR/.last-build-forge.sha256" \
+            "$CACHE_DIR/.last-build-proxy.sha256" \
+            "$CACHE_DIR/.last-build-git.sha256" \
+            "$CACHE_DIR/.last-build-inference.sha256" \
+            "$CACHE_DIR/.last-build-web.sha256"; do
+    if [[ -f "$_old" ]]; then
+        _info "Removing legacy hash file: $(basename "$_old")"
+        rm -f "$_old"
+    fi
+done
+unset _old
+
 _is_git_repo() {
     git -C "$ROOT" rev-parse --is-inside-work-tree &>/dev/null
 }

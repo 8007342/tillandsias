@@ -28,12 +28,45 @@ L_AGENT_NOT_AVAILABLE="Claude Code no está disponible. Iniciando bash."
 L_OPENCODE_NOT_AVAILABLE="OpenCode no está disponible. Iniciando bash."
 L_UNKNOWN_AGENT="Agente desconocido '%s'. Iniciando bash."
 
+# ── CA / advertencias de proxy ───────────────────────────────────
+L_WARN_CA_INSTALL="ADVERTENCIA: No se pudo instalar el certificado CA — el caché HTTPS del proxy podría no funcionar"
+L_WARN_CA_UPDATE="ADVERTENCIA: No se pudo actualizar el almacén de confianza CA"
+
+# ── Mensajes del espejo git ──────────────────────────────────────
+L_WARN_PUSH_URL="ADVERTENCIA: No se pudo configurar la URL de push — git push podría no funcionar"
+L_GIT_CLONE_FAILED="ERROR: No se pudo clonar el proyecto desde el servicio git."
+L_GIT_CLONE_HINT="El servicio git podría no estar ejecutándose. Abriendo terminal."
+L_GIT_EPHEMERAL="Todos los cambios deben ser confirmados (commit) para persistir. El trabajo no confirmado se pierde al detener."
+
+# ── Advertencias de autenticación / inicialización ───────────────
+L_WARN_GH_AUTH="ADVERTENCIA: gh auth setup-git falló — git push podría no autenticarse"
+L_WARN_OPENSPEC_INIT="ADVERTENCIA: La inicialización de OpenSpec falló — los comandos /opsx podrían no funcionar"
+
+# ── Advertencias de salida del instalador ────────────────────────
+L_WARN_OPENCODE_EXIT="ADVERTENCIA: El instalador de OpenCode terminó con código"
+L_WARN_OPENCODE_UPDATE_EXIT="ADVERTENCIA: La actualización de OpenCode terminó con código"
+
+# ── Mensajes de actualización ────────────────────────────────────
+L_UPDATING_CLAUDE="Actualizando Claude Code..."
+L_UPDATING_OPENCODE="Actualizando OpenCode..."
+
 # ── forge-welcome.sh ──────────────────────────────────────────
 L_WELCOME_TITLE="🌱 Tillandsias Forge"
 L_WELCOME_PROJECT="Proyecto"
 L_WELCOME_FORGE="Forge"
 L_WELCOME_MOUNTS="Montajes"
 L_WELCOME_PROJECT_AT="→ Proyecto en /home/forge/src/%s"
+L_WELCOME_SECURITY="Seguridad"
+L_WELCOME_NETWORK="Red"
+L_WELCOME_NETWORK_DESC="solo enclave (sin internet, paquetes vía proxy)"
+L_WELCOME_CREDENTIALS="Credenciales"
+L_WELCOME_CREDENTIALS_DESC="ninguna (autenticación git vía servicio espejo)"
+L_WELCOME_CODE="Código"
+L_WELCOME_CODE_DESC="clonado del espejo git (el trabajo no confirmado es efímero)"
+L_WELCOME_SERVICES="Servicios"
+L_WELCOME_PROXY_DESC="proxy HTTP/S con caché (dominios permitidos)"
+L_WELCOME_GIT_DESC="espejo git + push automático al remoto"
+L_WELCOME_INFERENCE_DESC="ollama (LLM local)"
 
 # ── Tips (rotatorios, mostrados al iniciar sesión) ────────────
 L_TIP_1="Escribe help para aprender sobre el shell Fish"

@@ -26,6 +26,7 @@ use tracing::{debug, warn};
 /// there's no automatic path translation, so we must do it explicitly.
 ///
 /// On non-Windows, returns the path as-is.
+#[allow(dead_code)] // Cross-platform utility — used on Windows launch paths
 pub fn bash_path(path: &std::path::Path) -> String {
     let s = path.to_string_lossy().replace('\\', "/");
     if cfg!(target_os = "windows") {
@@ -56,6 +57,7 @@ fn write_lf(path: &std::path::Path, content: &str) -> std::io::Result<()> {
 // ---------------------------------------------------------------------------
 pub const BUILD_IMAGE: &str = include_str!("../../scripts/build-image.sh");
 pub const BUILD_TOOLS_OVERLAY: &str = include_str!("../../scripts/build-tools-overlay.sh");
+#[allow(dead_code)] // Used by GitHub login flow (--github-login CLI path)
 pub const GH_AUTH_LOGIN: &str = include_str!("../../gh-auth-login.sh");
 
 // ---------------------------------------------------------------------------
@@ -82,6 +84,25 @@ pub const FORGE_OPENCODE_JSON: &str = include_str!("../../images/default/opencod
 // GIT_ASKPASS helper for secure token delivery
 pub const FORGE_GIT_ASKPASS: &str =
     include_str!("../../images/default/git-askpass-tillandsias.sh");
+
+// Config overlay — opinionated configs extracted to ramdisk (tmpfs)
+// @trace spec:layered-tools-overlay
+pub const CONFIG_OVERLAY_OPENCODE: &str =
+    include_str!("../../images/default/config-overlay/opencode/config.json");
+
+// Config overlay — methodology instruction files for AI agents
+// @trace spec:layered-tools-overlay
+pub const CONFIG_OVERLAY_INSTRUCTIONS_METHODOLOGY: &str =
+    include_str!("../../images/default/config-overlay/opencode/instructions/methodology.md");
+pub const CONFIG_OVERLAY_INSTRUCTIONS_FLUTTER: &str =
+    include_str!("../../images/default/config-overlay/opencode/instructions/flutter.md");
+
+// MCP servers — lightweight tool scripts for forge containers
+// @trace spec:layered-tools-overlay, spec:git-mirror-service
+pub const CONFIG_OVERLAY_MCP_GIT_TOOLS: &str =
+    include_str!("../../images/default/config-overlay/mcp/git-tools.sh");
+pub const CONFIG_OVERLAY_MCP_PROJECT_INFO: &str =
+    include_str!("../../images/default/config-overlay/mcp/project-info.sh");
 
 // Shell configs
 pub const SHELL_BASHRC: &str = include_str!("../../images/default/shell/bashrc");
@@ -191,6 +212,8 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 ///       opencode.json
 ///       skills/command/{bash,bash-private}.md
 ///       shell/{bashrc,config.fish,zshrc}
+///       config-overlay/opencode/config.json
+///       config-overlay/mcp/{git-tools,project-info}.sh
 ///       locales/{en,es,ja,zh-Hant,zh-Hans,ar,ko,hi,ta,te,fr,pt,it,ro,ru,nah,de}.sh
 ///     web/
 ///       entrypoint.sh
@@ -313,6 +336,58 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("config.fish: {e}"))?;
     write_lf(&shell_dir.join("zshrc"), SHELL_ZSHRC).map_err(|e| format!("zshrc: {e}"))?;
 
+    // Config overlay — opinionated configs extracted to ramdisk at runtime
+    // @trace spec:layered-tools-overlay
+    let config_overlay_dir = default_dir.join("config-overlay").join("opencode");
+    fs::create_dir_all(&config_overlay_dir)
+        .map_err(|e| format!("config-overlay/opencode dir: {e}"))?;
+    write_lf(
+        &config_overlay_dir.join("config.json"),
+        CONFIG_OVERLAY_OPENCODE,
+    )
+    .map_err(|e| format!("config-overlay/opencode/config.json: {e}"))?;
+
+    // Config overlay — methodology instruction files for AI agents
+    // @trace spec:layered-tools-overlay
+    let instructions_dir = config_overlay_dir.join("instructions");
+    fs::create_dir_all(&instructions_dir)
+        .map_err(|e| format!("config-overlay/opencode/instructions dir: {e}"))?;
+    write_lf(
+        &instructions_dir.join("methodology.md"),
+        CONFIG_OVERLAY_INSTRUCTIONS_METHODOLOGY,
+    )
+    .map_err(|e| format!("config-overlay/opencode/instructions/methodology.md: {e}"))?;
+    write_lf(
+        &instructions_dir.join("flutter.md"),
+        CONFIG_OVERLAY_INSTRUCTIONS_FLUTTER,
+    )
+    .map_err(|e| format!("config-overlay/opencode/instructions/flutter.md: {e}"))?;
+
+    // Config overlay — MCP servers
+    // @trace spec:layered-tools-overlay
+    let mcp_dir = default_dir.join("config-overlay").join("mcp");
+    fs::create_dir_all(&mcp_dir).map_err(|e| format!("config-overlay/mcp dir: {e}"))?;
+    write_lf(&mcp_dir.join("git-tools.sh"), CONFIG_OVERLAY_MCP_GIT_TOOLS)
+        .map_err(|e| format!("config-overlay/mcp/git-tools.sh: {e}"))?;
+    write_lf(
+        &mcp_dir.join("project-info.sh"),
+        CONFIG_OVERLAY_MCP_PROJECT_INFO,
+    )
+    .map_err(|e| format!("config-overlay/mcp/project-info.sh: {e}"))?;
+    #[cfg(unix)]
+    {
+        for name in ["git-tools.sh", "project-info.sh"] {
+            let path = mcp_dir.join(name);
+            if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
+                warn!(
+                    file = %path.display(),
+                    error = %e,
+                    "Failed to set executable permission — MCP server may fail"
+                );
+            }
+        }
+    }
+
     // Locale files
     let locales_dir = default_dir.join("locales");
     fs::create_dir_all(&locales_dir).map_err(|e| format!("locales dir: {e}"))?;
@@ -424,6 +499,78 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     }
 
     debug!(dir = %dir.display(), "Wrote embedded image sources to temp");
+    Ok(dir)
+}
+
+/// Extract embedded config overlay files to tmpfs (ramdisk).
+///
+/// Writes opinionated config files to `$XDG_RUNTIME_DIR/tillandsias/config-overlay/`
+/// where they live on RAM-backed tmpfs for maximum read speed. Container entrypoints
+/// symlink into this directory — no copying, every read goes to ramdisk.
+///
+/// Called early in the startup flow, before containers launch.
+///
+/// @trace spec:layered-tools-overlay
+pub fn extract_config_overlay() -> Result<PathBuf, String> {
+    let dir = runtime_dir().join("config-overlay");
+
+    // Recreate fresh each time — configs may have changed between versions
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).map_err(|e| format!("Cannot create config-overlay dir: {e}"))?;
+
+    // -- opencode/ --
+    let opencode_dir = dir.join("opencode");
+    fs::create_dir_all(&opencode_dir)
+        .map_err(|e| format!("Cannot create config-overlay/opencode dir: {e}"))?;
+    write_lf(&opencode_dir.join("config.json"), CONFIG_OVERLAY_OPENCODE)
+        .map_err(|e| format!("config-overlay/opencode/config.json: {e}"))?;
+
+    // -- opencode/instructions/ -- methodology docs for AI agents
+    // @trace spec:layered-tools-overlay
+    let instructions_dir = opencode_dir.join("instructions");
+    fs::create_dir_all(&instructions_dir)
+        .map_err(|e| format!("Cannot create config-overlay/opencode/instructions dir: {e}"))?;
+    write_lf(
+        &instructions_dir.join("methodology.md"),
+        CONFIG_OVERLAY_INSTRUCTIONS_METHODOLOGY,
+    )
+    .map_err(|e| format!("config-overlay/opencode/instructions/methodology.md: {e}"))?;
+    write_lf(
+        &instructions_dir.join("flutter.md"),
+        CONFIG_OVERLAY_INSTRUCTIONS_FLUTTER,
+    )
+    .map_err(|e| format!("config-overlay/opencode/instructions/flutter.md: {e}"))?;
+
+    // -- mcp/ -- MCP server scripts (must be executable)
+    // @trace spec:layered-tools-overlay
+    let mcp_dir = dir.join("mcp");
+    fs::create_dir_all(&mcp_dir)
+        .map_err(|e| format!("Cannot create config-overlay/mcp dir: {e}"))?;
+    write_lf(
+        &mcp_dir.join("git-tools.sh"),
+        CONFIG_OVERLAY_MCP_GIT_TOOLS,
+    )
+    .map_err(|e| format!("config-overlay/mcp/git-tools.sh: {e}"))?;
+    write_lf(
+        &mcp_dir.join("project-info.sh"),
+        CONFIG_OVERLAY_MCP_PROJECT_INFO,
+    )
+    .map_err(|e| format!("config-overlay/mcp/project-info.sh: {e}"))?;
+    #[cfg(unix)]
+    {
+        for name in ["git-tools.sh", "project-info.sh"] {
+            let path = mcp_dir.join(name);
+            if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
+                warn!(
+                    file = %path.display(),
+                    error = %e,
+                    "Failed to set executable permission — MCP server may fail"
+                );
+            }
+        }
+    }
+
+    debug!(dir = %dir.display(), "Extracted config overlay to tmpfs");
     Ok(dir)
 }
 
