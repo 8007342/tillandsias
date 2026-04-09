@@ -182,7 +182,7 @@ tillandsias --clean
 | **No new privileges** | `--security-opt=no-new-privileges` | No setuid/setgid exploitation |
 | **User namespace** | `--userns=keep-id` | Container user matches host user (no root) |
 | **Ephemeral containers** | `--rm` on every container | No persistent state leakage |
-| **Agent deny list** | OpenCode `opencode.json` | AI agent cannot read `/run/secrets/` |
+| **Agent isolation** | Container mount topology | Sensitive dirs not mounted into forge |
 
 ### Per-container security posture
 

@@ -91,9 +91,9 @@ Currently, both the `hosts.yml` mount (at `/home/forge/.config/gh/`) and the tmp
 
 The `hosts.yml` mount will be removed in Phase 4 of `fine-grained-pat-rotation`, when the `GH_TOKEN` environment variable can point to the scoped installation token instead.
 
-### OpenCode / Claude agent deny list
+### Agent credential isolation
 
-The forge image's `opencode.json` contains a deny list that blocks the AI agent from directly reading `/run/secrets/`. This provides defense in depth: even if an agent attempts `cat /run/secrets/github_token`, the file is not accessible through OpenCode's tool system. The agent should use `git push` (which invokes GIT_ASKPASS transparently) rather than raw token access.
+Forge containers have ZERO credentials — sensitive directories (`~/.config/gh`, `~/.claude`, `/run/secrets/`) are protected by container mount topology, not by agent config deny lists. Secrets never enter the forge container; git authentication flows through the git mirror service via D-Bus to the host keyring.
 
 @trace spec:secret-management
 
