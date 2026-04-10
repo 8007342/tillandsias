@@ -359,60 +359,87 @@ jobs:
           cat release-artifacts/latest.json
 
       # -- Create GitHub Release with verification instructions ---------------
+      #
+      # Uses gh CLI directly instead of softprops/action-gh-release. The
+      # softprops action still uses Node 20 (deprecated 2025-09-19, removed
+      # from runners 2026-09-16) and the maintainer has not merged any of the
+      # open Node 24 migration PRs. gh CLI is pre-installed on all runners
+      # and has no Node version dependency.
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
-        with:
-          tag_name: v${{ env.VERSION }}
-          draft: false
-          prerelease: ${{ contains(env.VERSION, '-rc') || contains(env.VERSION, '-beta') || contains(env.VERSION, '-alpha') }}
-          generate_release_notes: true
-          body: |
-            ## Verify artifact signatures (Cosign)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Build release notes file: our verification body + GitHub auto-generated changelog
+          NOTES_FILE="$(mktemp)"
+          cat > "${NOTES_FILE}" <<'BODY_EOF'
+          ## Verify artifact signatures (Cosign)
 
-            All release artifacts are signed with [Sigstore Cosign](https://docs.sigstore.dev/) using keyless mode via GitHub Actions OIDC identity. Every signature is recorded in the [Rekor transparency log](https://rekor.sigstore.dev/).
+          All release artifacts are signed with [Sigstore Cosign](https://docs.sigstore.dev/) using keyless mode via GitHub Actions OIDC identity. Every signature is recorded in the [Rekor transparency log](https://rekor.sigstore.dev/).
 
-            ### Install Cosign
+          ### Install Cosign
 
-            ```bash
-            # macOS (Homebrew)
-            brew install cosign
+          ```bash
+          # macOS (Homebrew)
+          brew install cosign
 
-            # Debian / Ubuntu
-            sudo apt-get install cosign
+          # Debian / Ubuntu
+          sudo apt-get install cosign
 
-            # Or download from: https://github.com/sigstore/cosign/releases
-            ```
+          # Or download from: https://github.com/sigstore/cosign/releases
+          ```
 
-            ### Verify a downloaded binary
+          ### Verify a downloaded binary
 
-            Download the binary along with its `.cosign.bundle` file, then run:
+          Download the binary along with its `.cosign.bundle` file, then run:
 
-            ```bash
-            cosign verify-blob \
-              --bundle <ARTIFACT>.cosign.bundle \
-              --certificate-identity-regexp "https://github.com/.*/tillandsias/" \
-              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-              <ARTIFACT>
-            ```
+          ```bash
+          cosign verify-blob \
+            --bundle <ARTIFACT>.cosign.bundle \
+            --certificate-identity-regexp "https://github.com/.*/tillandsias/" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            <ARTIFACT>
+          ```
 
-            Replace `<ARTIFACT>` with the filename you downloaded.
+          Replace `<ARTIFACT>` with the filename you downloaded.
 
-            > **Note:** Requires Cosign v3.0+ (the bundle format is the default in v3.0).
-            > Older Cosign versions used separate `.cosign.sig` and `.cosign.cert` files.
+          > **Note:** Requires Cosign v3.0+ (the bundle format is the default in v3.0).
+          > Older Cosign versions used separate `.cosign.sig` and `.cosign.cert` files.
 
-            ### Verify SHA256 checksums
+          ### Verify SHA256 checksums
 
-            ```bash
-            sha256sum -c SHA256SUMS
-            ```
+          ```bash
+          sha256sum -c SHA256SUMS
+          ```
+          BODY_EOF
 
-            For detailed instructions, see [docs/VERIFICATION.md](https://github.com/${{ github.repository }}/blob/main/docs/VERIFICATION.md).
-          files: |
-            release-artifacts/*
-            scripts/install.sh
-            scripts/uninstall.sh
-            scripts/install.ps1
+          # Append the verification docs link (uses ${REPO} from env)
+          printf '\nFor detailed instructions, see [docs/VERIFICATION.md](https://github.com/%s/blob/main/docs/VERIFICATION.md).\n' "${REPO}" >> "${NOTES_FILE}"
+
+          # Append GitHub auto-generated release notes (changelog since previous tag)
+          GENERATED="$(gh api "repos/${REPO}/releases/generate-notes" \
+            -f tag_name="v${VERSION}" \
+            --jq '.body' 2>/dev/null || echo "")"
+          if [ -n "${GENERATED}" ]; then
+            printf '\n%s\n' "${GENERATED}" >> "${NOTES_FILE}"
+          fi
+
+          # Determine prerelease flag from version string
+          PRERELEASE_FLAG=""
+          case "${VERSION}" in
+            *-rc*|*-beta*|*-alpha*) PRERELEASE_FLAG="--prerelease" ;;
+          esac
+
+          # Create the release with all artifacts
+          gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
+            --notes-file "${NOTES_FILE}" \
+            ${PRERELEASE_FLAG} \
+            release-artifacts/* \
+            scripts/install.sh \
+            scripts/uninstall.sh \
+            scripts/install.ps1 \
             scripts/uninstall.ps1
 
   # ---------------------------------------------------------------------------
