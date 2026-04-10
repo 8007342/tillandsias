@@ -149,6 +149,61 @@ if [ "$PLATFORM" = "macos" ]; then
         ln -sf "$MACOS_BIN" "$INSTALL_DIR/tillandsias"
         echo "  ✓ CLI symlink at $INSTALL_DIR/tillandsias"
     fi
+
+    # ---- Ensure Podman runtime is installed (via MacPorts) ----
+    # Tillandsias requires the Podman runtime CLI, NOT Podman Desktop.
+    # On macOS we install via MacPorts (not Homebrew) — MacPorts puts podman
+    # at /opt/local/bin/podman which find_podman_path() already detects.
+    if ! command -v podman &>/dev/null && [ ! -x /opt/local/bin/podman ]; then
+        echo ""
+        if command -v port &>/dev/null; then
+            echo "  Podman runtime not found. Installing via MacPorts..."
+            echo "  (You may be prompted for your sudo password)"
+            if sudo port install podman; then
+                echo "  ✓ Podman runtime installed via MacPorts"
+            else
+                echo "  ⚠ MacPorts failed to install podman. Run manually:"
+                echo "      sudo port install podman"
+            fi
+        else
+            echo "  ⚠ Podman runtime not found and MacPorts is not installed."
+            echo ""
+            echo "  Tillandsias requires the Podman runtime CLI (not Podman Desktop)."
+            echo "  Install MacPorts first:  https://www.macports.org/install.php"
+            echo "  Then run:                sudo port install podman"
+            echo ""
+            echo "  After installing podman, re-run this installer or just launch:"
+            echo "    tillandsias"
+        fi
+    fi
+
+    # ---- Initialize Podman Machine if needed ----
+    # Podman on macOS requires a Linux VM (the "machine"). Auto-init + start
+    # so the user doesn't have to know about this Podman implementation detail.
+    if command -v podman &>/dev/null || [ -x /opt/local/bin/podman ]; then
+        PODMAN_BIN="$(command -v podman || echo /opt/local/bin/podman)"
+        # Check if a machine exists
+        if ! "$PODMAN_BIN" machine list --format '{{.Name}}' 2>/dev/null | grep -q .; then
+            echo ""
+            echo "  Initializing Podman machine (first-time setup)..."
+            if "$PODMAN_BIN" machine init 2>/dev/null; then
+                echo "  ✓ Podman machine created"
+            else
+                echo "  ⚠ Podman machine init failed — you may need to run it manually:"
+                echo "    podman machine init"
+            fi
+        fi
+        # Start machine if not running
+        if ! "$PODMAN_BIN" machine list --format '{{.Name}} {{.Running}}' 2>/dev/null | grep -q "true"; then
+            echo "  Starting Podman machine..."
+            if "$PODMAN_BIN" machine start 2>/dev/null; then
+                echo "  ✓ Podman machine running"
+            else
+                echo "  ⚠ Podman machine start failed — start it manually:"
+                echo "    podman machine start"
+            fi
+        fi
+    fi
 fi
 
 # Install uninstall script
@@ -224,9 +279,32 @@ if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
     echo ""
 fi
 
-# Pre-build container images in the background (only for non-AppImage installs,
-# and only if we have a working terminal — not when piped from curl).
-if [ -t 0 ] && [ -x "$INSTALL_DIR/tillandsias" ] && command -v podman &>/dev/null; then
+# On Linux: warn if podman runtime is missing (we don't auto-install on Linux
+# because system package managers are the canonical install path — every
+# distro has a `podman` package).
+if [ "$PLATFORM" = "linux" ] && ! command -v podman &>/dev/null; then
+    echo "  ⚠ Podman runtime is not installed."
+    echo "    Tillandsias requires the Podman runtime CLI (not Podman Desktop)."
+    echo ""
+    if command -v dnf &>/dev/null; then
+        echo "    Install with: sudo dnf install podman"
+    elif command -v apt-get &>/dev/null; then
+        echo "    Install with: sudo apt-get install podman"
+    elif command -v pacman &>/dev/null; then
+        echo "    Install with: sudo pacman -S podman"
+    elif command -v zypper &>/dev/null; then
+        echo "    Install with: sudo zypper install podman"
+    else
+        echo "    Install via your distribution's package manager."
+    fi
+    echo ""
+fi
+
+# Pre-build container images in the background (only if we have a working
+# terminal — not when piped from curl).
+# Detect podman in PATH or at MacPorts location (/opt/local/bin/podman).
+if [ -t 0 ] && [ -x "$INSTALL_DIR/tillandsias" ] && \
+   { command -v podman &>/dev/null || [ -x /opt/local/bin/podman ]; }; then
     echo "  Building container images in the background..."
     nohup "$INSTALL_DIR/tillandsias" --init >/tmp/tillandsias-init.log 2>&1 &
     echo "  (Progress: tail -f /tmp/tillandsias-init.log)"
