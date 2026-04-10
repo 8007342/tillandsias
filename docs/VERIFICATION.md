@@ -10,15 +10,15 @@ Verification is optional for normal use, but recommended for anyone who wants to
 
 ## What you need
 
-For each artifact you want to verify, download three files from the GitHub Release:
+- **Cosign v3.0+** (older versions used a separate signature/certificate format)
+- For each artifact you want to verify, download two files from the GitHub Release:
 
 | File | Purpose |
 |------|---------|
 | `<artifact>` | The binary (e.g., `.AppImage`, `.dmg`, `.exe`) |
-| `<artifact>.cosign.sig` | Cosign signature |
-| `<artifact>.cosign.cert` | Fulcio signing certificate |
+| `<artifact>.cosign.bundle` | Sigstore bundle (signature, Fulcio cert, transparency log proof, signed timestamp) |
 
-> **Note:** Tauri also produces `.sig` files for auto-update bundles (Ed25519 signatures). Those are separate from the `.cosign.sig` files used for Cosign verification.
+> **Note:** Tauri also produces `.sig` files for auto-update bundles (Ed25519 signatures). Those are separate from the `.cosign.bundle` files used for Cosign verification.
 
 ## Install Cosign
 
@@ -61,46 +61,43 @@ See the [Cosign installation docs](https://docs.sigstore.dev/cosign/system_confi
 The repository includes a helper script that wraps the verification command:
 
 ```bash
-./scripts/verify.sh tillandsias_0.1.0_amd64.AppImage
+./scripts/verify.sh Tillandsias-linux-x86_64.AppImage
 ```
 
-The script checks that the `.cosign.sig` and `.cosign.cert` files are present alongside the artifact and runs the appropriate `cosign verify-blob` command.
+The script checks that the `.cosign.bundle` file is present alongside the artifact and runs the appropriate `cosign verify-blob` command.
 
 ### Manual verification
 
-Run `cosign verify-blob` directly with the certificate identity and OIDC issuer flags:
+Run `cosign verify-blob` directly with the bundle file:
 
 **Linux (AppImage)**
 
 ```bash
 cosign verify-blob \
-  --certificate tillandsias_0.1.0_amd64.AppImage.cosign.cert \
-  --signature tillandsias_0.1.0_amd64.AppImage.cosign.sig \
+  --bundle Tillandsias-linux-x86_64.AppImage.cosign.bundle \
   --certificate-identity-regexp "https://github.com/.*/tillandsias/" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-  tillandsias_0.1.0_amd64.AppImage
+  Tillandsias-linux-x86_64.AppImage
 ```
 
 **macOS (DMG)**
 
 ```bash
 cosign verify-blob \
-  --certificate Tillandsias_0.1.0_aarch64.dmg.cosign.cert \
-  --signature Tillandsias_0.1.0_aarch64.dmg.cosign.sig \
+  --bundle Tillandsias-macos-aarch64.dmg.cosign.bundle \
   --certificate-identity-regexp "https://github.com/.*/tillandsias/" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-  Tillandsias_0.1.0_aarch64.dmg
+  Tillandsias-macos-aarch64.dmg
 ```
 
 **Windows (EXE)**
 
 ```bash
 cosign verify-blob \
-  --certificate Tillandsias_0.1.0_x64-setup.exe.cosign.cert \
-  --signature Tillandsias_0.1.0_x64-setup.exe.cosign.sig \
+  --bundle Tillandsias-windows-x86_64.exe.cosign.bundle \
   --certificate-identity-regexp "https://github.com/.*/tillandsias/" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-  Tillandsias_0.1.0_x64-setup.exe
+  Tillandsias-windows-x86_64.exe
 ```
 
 Replace the filenames with the actual artifact names from your release. The exact names vary by version.
@@ -131,19 +128,18 @@ On macOS, use `shasum -a 256 -c SHA256SUMS` instead.
 
 ## Offline verification
 
-If Rekor (the transparency log) is temporarily unavailable, you can still verify using the certificate and signature alone by adding the `--insecure-ignore-tlog` flag:
+If Rekor (the transparency log) is temporarily unavailable, you can still verify using the bundle alone by adding the `--insecure-ignore-tlog` flag:
 
 ```bash
 cosign verify-blob \
-  --certificate <artifact>.cosign.cert \
-  --signature <artifact>.cosign.sig \
+  --bundle <artifact>.cosign.bundle \
   --certificate-identity-regexp "https://github.com/.*/tillandsias/" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   --insecure-ignore-tlog \
   <artifact>
 ```
 
-This skips the transparency log check. The signature and certificate still provide cryptographic proof of origin, but without the timestamped log entry, you lose the non-repudiation guarantee. Use this only when Rekor is unavailable.
+This skips the transparency log check. The signature and certificate inside the bundle still provide cryptographic proof of origin, but without the timestamped log entry, you lose the non-repudiation guarantee. Use this only when Rekor is unavailable.
 
 ## Searching the Rekor transparency log
 
@@ -166,7 +162,7 @@ When a release is built in GitHub Actions:
 4. Cosign signs the artifact with the ephemeral key.
 5. The signature, certificate, and artifact hash are recorded in **Rekor** (the transparency log).
 6. The ephemeral key is discarded -- it cannot be recovered or reused.
-7. The `.cosign.sig` and `.cosign.cert` files are uploaded alongside the binary in the GitHub Release.
+7. A single `.cosign.bundle` file is uploaded alongside the binary in the GitHub Release. The bundle contains the signature, certificate, signed timestamp, and Rekor inclusion proof.
 
 When you verify, Cosign checks that:
 - The signature matches the artifact content (integrity).

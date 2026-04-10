@@ -4,18 +4,17 @@
 # Usage: ./scripts/verify.sh <artifact>
 #
 # Prerequisites:
-#   - cosign installed (https://github.com/sigstore/cosign/releases)
-#   - The artifact's .cosign.sig and .cosign.cert files in the same directory
+#   - cosign v3.0+ installed (https://github.com/sigstore/cosign/releases)
+#   - The artifact's .cosign.bundle file in the same directory
 #
 # Example:
-#   ./scripts/verify.sh tillandsias_0.1.0_amd64.AppImage
+#   ./scripts/verify.sh Tillandsias-linux-x86_64.AppImage
 #
-# The script expects these files alongside the artifact:
-#   <artifact>.cosign.sig   - Cosign signature
-#   <artifact>.cosign.cert  - Fulcio signing certificate
+# The script expects this file alongside the artifact:
+#   <artifact>.cosign.bundle  - Sigstore bundle (signature, cert, timestamp)
 #
 # Note: Tauri also produces Ed25519 .sig files for auto-update bundles.
-# Those are separate from the Cosign .cosign.sig files used here.
+# Those are separate from the Cosign .cosign.bundle files used here.
 
 set -euo pipefail
 
@@ -34,7 +33,7 @@ if [ $# -lt 1 ]; then
   echo "Usage: $0 <artifact>" >&2
   echo "" >&2
   echo "Example:" >&2
-  echo "  $0 tillandsias-v0.1.0-linux-x86_64.AppImage" >&2
+  echo "  $0 Tillandsias-linux-x86_64.AppImage" >&2
   exit 1
 fi
 
@@ -45,17 +44,10 @@ if [ ! -f "${ARTIFACT}" ]; then
   exit 1
 fi
 
-SIG_FILE="${ARTIFACT}.cosign.sig"
-CERT_FILE="${ARTIFACT}.cosign.cert"
+BUNDLE_FILE="${ARTIFACT}.cosign.bundle"
 
-if [ ! -f "${SIG_FILE}" ]; then
-  echo "Error: Cosign signature file not found: ${SIG_FILE}" >&2
-  echo "Download it from the same GitHub Release as the artifact." >&2
-  exit 1
-fi
-
-if [ ! -f "${CERT_FILE}" ]; then
-  echo "Error: Cosign certificate file not found: ${CERT_FILE}" >&2
+if [ ! -f "${BUNDLE_FILE}" ]; then
+  echo "Error: Cosign bundle file not found: ${BUNDLE_FILE}" >&2
   echo "Download it from the same GitHub Release as the artifact." >&2
   exit 1
 fi
@@ -67,7 +59,7 @@ fi
 if ! command -v cosign &>/dev/null; then
   echo "Error: cosign is not installed." >&2
   echo "" >&2
-  echo "Install cosign:" >&2
+  echo "Install cosign v3.0+:" >&2
   echo "  macOS:         brew install cosign" >&2
   echo "  Debian/Ubuntu: sudo apt-get install cosign" >&2
   echo "  Fedora:        sudo dnf install cosign" >&2
@@ -81,13 +73,11 @@ fi
 # ---------------------------------------------------------------------------
 
 echo "Verifying: ${ARTIFACT}"
-echo "  Signature:   ${SIG_FILE}"
-echo "  Certificate: ${CERT_FILE}"
+echo "  Bundle: ${BUNDLE_FILE}"
 echo ""
 
 cosign verify-blob \
-  --certificate "${CERT_FILE}" \
-  --signature "${SIG_FILE}" \
+  --bundle "${BUNDLE_FILE}" \
   --certificate-identity-regexp "${CERTIFICATE_IDENTITY_REGEXP}" \
   --certificate-oidc-issuer "${CERTIFICATE_OIDC_ISSUER}" \
   "${ARTIFACT}"

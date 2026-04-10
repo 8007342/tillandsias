@@ -4,8 +4,8 @@ title: Sigstore & Cosign Binary Signing
 category: ci/signing
 tags: [sigstore, cosign, signing, rekor, fulcio, oidc, transparency-log, keyless]
 upstream: https://docs.sigstore.dev/
-version_pinned: "2.x"
-last_verified: "2026-03-30"
+version_pinned: "3.x"
+last_verified: "2026-04-10"
 authority: official
 ---
 
@@ -87,26 +87,67 @@ cosign verify ghcr.io/org/image@sha256:abc123 \
 
 ## Blob Signing
 
+### Cosign v3.0+ (current default behavior)
+
+In v3.0+, `--new-bundle-format=true` and `--use-signing-config=true` are defaults.
+This means:
+- `--output-signature` and `--output-certificate` are **deprecated and silently ignored**
+- `--bundle <file>` is **REQUIRED** when signing
+- `--oidc-issuer` and other service URL flags **conflict with the default SigningConfig**
+
 ```bash
-# Sign a file (keyless, bundle output -- recommended)
-cosign sign-blob myfile.tar.gz --bundle myfile.sigstore.json --yes
+# Sign a file (keyless, v3.0+ correct usage)
+cosign sign-blob --yes --bundle myfile.cosign.bundle myfile.tar.gz
 
-# Sign a file (key-based)
-cosign sign-blob --key cosign.key myfile.tar.gz --bundle myfile.sigstore.json
-
-# Verify blob (keyless)
-cosign verify-blob myfile.tar.gz --bundle myfile.sigstore.json \
+# Verify blob (keyless, v3.0+)
+cosign verify-blob --bundle myfile.cosign.bundle \
   --certificate-identity=user@example.com \
-  --certificate-oidc-issuer=https://accounts.google.com
+  --certificate-oidc-issuer=https://accounts.google.com \
+  myfile.tar.gz
 
-# Verify blob (key-based)
-cosign verify-blob --key cosign.pub myfile.tar.gz --bundle myfile.sigstore.json
+# Sign with key (no OIDC, no bundle required)
+cosign sign-blob --key cosign.key myfile.tar.gz
 
-# Legacy: separate signature + certificate outputs (not recommended)
-cosign sign-blob myfile.tar.gz \
-  --output-signature myfile.sig \
-  --output-certificate myfile.cert --yes
+# Verify with key
+cosign verify-blob --key cosign.pub --signature myfile.sig myfile.tar.gz
 ```
+
+### Common v3.0+ errors
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `cannot specify service URLs and use signing config` | Passed `--oidc-issuer`, `--fulcio-url`, etc. with default SigningConfig | Drop the explicit URL flags — defaults handle GitHub Actions OIDC |
+| `WARNING: --output-signature is deprecated` | Used legacy flag with default new-bundle-format | Use `--bundle <file>` instead |
+| `create bundle file: open : no such file or directory` | Default new-bundle-format requires `--bundle` but none provided | Add `--bundle <file>` flag |
+| `--bundle ... must be set when --use-signing-config is set` | Same as above, different phrasing | Add `--bundle <file>` flag |
+
+### Opting out of new bundle format (legacy mode)
+
+Only if you genuinely need separate `.sig`/`.cert` files for backward compat:
+
+```bash
+cosign sign-blob --yes \
+  --new-bundle-format=false \
+  --use-signing-config=false \
+  --fulcio-url=https://fulcio.sigstore.dev \
+  --rekor-url=https://rekor.sigstore.dev \
+  --output-signature myfile.sig \
+  --output-certificate myfile.cert \
+  myfile.tar.gz
+```
+
+This is **not recommended** — the new bundle format is the future direction.
+
+### Sigstore-installer version mapping
+
+| `sigstore/cosign-installer` action version | Installs cosign |
+|---|---|
+| `v3.7.0` | v2.4.x |
+| `v4.0.x` | v3.0.x |
+| `v4.1.1` | **v3.0.5** ← enforces new bundle format |
+
+If you must stay on legacy `--output-signature`/`--output-certificate` syntax,
+pin `cosign-installer` to v3.7.0 or older.
 
 ## Bundle Format
 
@@ -131,17 +172,16 @@ jobs:
       packages: write          # If pushing to GHCR
 
     steps:
-      - uses: sigstore/cosign-installer@v3
-        with:
-          cosign-release: 'v2.4.1'    # Pin version
+      - uses: sigstore/cosign-installer@v4    # v4.x installs cosign v3.0+
 
       - name: Sign container image
         run: cosign sign --yes ghcr.io/org/image@${{ steps.build.outputs.digest }}
 
       - name: Sign release binary
         run: |
+          # v3.0+: --bundle is REQUIRED, no --oidc-issuer (conflicts with SigningConfig)
           cosign sign-blob --yes \
-            --bundle myapp.sigstore.json \
+            --bundle myapp.cosign.bundle \
             myapp-linux-amd64
 
       - name: Verify

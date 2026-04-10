@@ -230,29 +230,28 @@ jobs:
           for artifact in *; do
             # Skip non-binary files: checksums, Tauri Ed25519 sigs, Cosign outputs
             case "${artifact}" in
-              SHA256SUMS|*.sig|*.cosign.sig|*.cosign.cert) continue ;;
+              SHA256SUMS|*.sig|*.cosign.bundle) continue ;;
             esac
 
             echo "::group::Signing ${artifact}"
-            # Cosign v3.0+ uses SigningConfig by default which auto-detects
-            # GitHub Actions OIDC ambient identity. Specifying --oidc-issuer
-            # explicitly conflicts with SigningConfig and fails:
-            # "cannot specify service URLs and use signing config"
+            # Cosign v3.0+ requires --bundle (single file containing signature,
+            # cert, timestamp, and inclusion proof). The legacy
+            # --output-signature/--output-certificate flags are deprecated and
+            # silently ignored. The default SigningConfig auto-detects GitHub
+            # Actions OIDC ambient identity, so no --oidc-issuer needed.
             cosign sign-blob \
               --yes \
-              --output-signature "${artifact}.cosign.sig" \
-              --output-certificate "${artifact}.cosign.cert" \
+              --bundle "${artifact}.cosign.bundle" \
               "${artifact}"
 
-            # Verify the signature and certificate files were created
-            if [ ! -f "${artifact}.cosign.sig" ] || [ ! -f "${artifact}.cosign.cert" ]; then
-              echo "::error::Signing failed for ${artifact} -- missing .cosign.sig or .cosign.cert file"
+            # Verify the bundle file was created
+            if [ ! -f "${artifact}.cosign.bundle" ]; then
+              echo "::error::Signing failed for ${artifact} -- missing .cosign.bundle file"
               exit 1
             fi
 
             echo "Signed: ${artifact}"
-            echo "  -> ${artifact}.cosign.sig"
-            echo "  -> ${artifact}.cosign.cert"
+            echo "  -> ${artifact}.cosign.bundle"
             echo "::endgroup::"
           done
 
@@ -263,14 +262,14 @@ jobs:
           SIGNED=0
           for artifact in *; do
             case "${artifact}" in
-              SHA256SUMS|*.sig|*.cosign.sig|*.cosign.cert) continue ;;
+              SHA256SUMS|*.sig|*.cosign.bundle) continue ;;
             esac
             EXPECTED=$((EXPECTED + 1))
-            if [ -f "${artifact}.cosign.sig" ] && [ -f "${artifact}.cosign.cert" ]; then
+            if [ -f "${artifact}.cosign.bundle" ]; then
               SIGNED=$((SIGNED + 1))
-              echo "OK: ${artifact} (.cosign.sig + .cosign.cert present)"
+              echo "OK: ${artifact} (.cosign.bundle present)"
             else
-              echo "::error::MISSING Cosign signature files for ${artifact}"
+              echo "::error::MISSING Cosign bundle file for ${artifact}"
               exit 1
             fi
           done
@@ -387,18 +386,20 @@ jobs:
 
             ### Verify a downloaded binary
 
-            Download the binary along with its `.cosign.sig` and `.cosign.cert` files, then run:
+            Download the binary along with its `.cosign.bundle` file, then run:
 
             ```bash
             cosign verify-blob \
-              --certificate <ARTIFACT>.cosign.cert \
-              --signature <ARTIFACT>.cosign.sig \
+              --bundle <ARTIFACT>.cosign.bundle \
               --certificate-identity-regexp "https://github.com/.*/tillandsias/" \
               --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
               <ARTIFACT>
             ```
 
             Replace `<ARTIFACT>` with the filename you downloaded.
+
+            > **Note:** Requires Cosign v3.0+ (the bundle format is the default in v3.0).
+            > Older Cosign versions used separate `.cosign.sig` and `.cosign.cert` files.
 
             ### Verify SHA256 checksums
 
