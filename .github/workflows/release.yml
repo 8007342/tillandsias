@@ -234,9 +234,12 @@ jobs:
             esac
 
             echo "::group::Signing ${artifact}"
+            # Cosign v3.0+ uses SigningConfig by default which auto-detects
+            # GitHub Actions OIDC ambient identity. Specifying --oidc-issuer
+            # explicitly conflicts with SigningConfig and fails:
+            # "cannot specify service URLs and use signing config"
             cosign sign-blob \
               --yes \
-              --oidc-issuer "https://token.actions.githubusercontent.com" \
               --output-signature "${artifact}.cosign.sig" \
               --output-certificate "${artifact}.cosign.cert" \
               "${artifact}"
