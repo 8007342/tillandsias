@@ -564,11 +564,12 @@ pub(crate) async fn ensure_proxy_running(
             // because podman's internal DNS hasn't registered the "proxy" alias yet,
             // or squid hasn't finished initializing its SSL cert database.
             //
-            // DISTRO: Proxy is Alpine — uses busybox wget (built-in), NOT curl.
-            // bash /dev/tcp does not exist in Alpine busybox.
+            // DISTRO: Proxy is Alpine — uses busybox nc (netcat).
+            // wget --spider returns 400 (squid rejects non-proxy requests).
+            // nc -z is a pure TCP port probe — succeeds if squid is listening.
             for attempt in 0..15u32 {
                 let check = tillandsias_podman::podman_cmd()
-                    .args(["exec", PROXY_CONTAINER_NAME, "wget", "-q", "--spider", "--timeout=2", "http://localhost:3128"])
+                    .args(["exec", PROXY_CONTAINER_NAME, "sh", "-c", "nc -z localhost 3128"])
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
                     .status()
@@ -627,8 +628,10 @@ pub(crate) async fn stop_proxy() {
 ///
 /// @trace spec:proxy-container
 pub(crate) async fn is_proxy_healthy() -> bool {
+    // DISTRO: Proxy is Alpine — busybox nc (netcat) for TCP probe.
+    // wget --spider returns 400 because squid rejects non-proxy HTTP requests.
     let check = tillandsias_podman::podman_cmd()
-        .args(["exec", PROXY_CONTAINER_NAME, "wget", "-q", "--spider", "--timeout=2", "http://localhost:3128"])
+        .args(["exec", PROXY_CONTAINER_NAME, "sh", "-c", "nc -z localhost 3128"])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()

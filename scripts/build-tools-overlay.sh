@@ -204,11 +204,13 @@ _step "Installing Claude Code..."
         # The proxy container may have just started — podman internal DNS
         # needs a moment to register the "proxy" alias on the enclave network.
         # DISTRO: This runs inside the forge container (Fedora) which has curl.
-        #         Do NOT use wget here — it works, but curl is the canonical tool on Fedora.
+        # Use curl with proxy settings to test THROUGH the proxy, not AT the proxy.
+        # A direct HTTP request to port 3128 returns 400 (squid rejects non-proxy requests).
+        # Instead, test that the proxy can actually forward a request.
         if [ -n "${HTTP_PROXY:-}" ]; then
             echo "[tools-overlay] Waiting for proxy to be ready..."
             for i in $(seq 1 30); do
-                if curl -s --max-time 2 -o /dev/null http://proxy:3128 2>/dev/null; then
+                if curl -sf --max-time 3 --proxy http://proxy:3128 -o /dev/null http://registry.npmjs.org/ 2>/dev/null; then
                     echo "[tools-overlay] Proxy ready"
                     break
                 fi

@@ -141,16 +141,17 @@ pub(crate) fn probe_tool_version(binary: &Path, args: &[&str]) -> String {
 
 /// Synchronous proxy health check for use in non-async contexts.
 ///
-/// Runs `podman exec tillandsias-proxy wget --spider` and returns `true` if
-/// the proxy responds on port 3128. Used by `build_overlay_for_init()` which
+/// Runs `podman exec tillandsias-proxy nc -z localhost 3128` and returns `true`
+/// if squid is listening on port 3128. Used by `build_overlay_for_init()` which
 /// runs outside a tokio runtime.
 ///
-/// DISTRO: Proxy is Alpine — busybox wget is built-in, curl is NOT available.
+/// DISTRO: Proxy is Alpine — busybox nc (netcat) is built-in.
+/// wget --spider returns 400 because squid rejects non-proxy requests.
 ///
 /// @trace spec:proxy-container
 fn is_proxy_healthy_sync() -> bool {
     let result = tillandsias_podman::podman_cmd_sync()
-        .args(["exec", "tillandsias-proxy", "wget", "-q", "--spider", "--timeout=2", "http://localhost:3128"])
+        .args(["exec", "tillandsias-proxy", "sh", "-c", "nc -z localhost 3128"])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status();
