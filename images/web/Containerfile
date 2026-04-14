@@ -1,6 +1,9 @@
+# @trace spec:web-image
 # Reference only — images are built via flake.nix
+# DISTRO: Alpine — busybox sh, no bash. Entrypoint uses #!/bin/sh (POSIX).
 FROM docker.io/library/alpine:latest
 
+# DISTRO: apk (Alpine), NOT microdnf/dnf (Fedora)
 RUN apk add --no-cache busybox-extras
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh

@@ -203,6 +203,8 @@ _step "Installing Claude Code..."
         # Wait for proxy DNS + TCP readiness before npm fetches.
         # The proxy container may have just started — podman internal DNS
         # needs a moment to register the "proxy" alias on the enclave network.
+        # DISTRO: This runs inside the forge container (Fedora) which has curl.
+        #         Do NOT use wget here — it works, but curl is the canonical tool on Fedora.
         if [ -n "${HTTP_PROXY:-}" ]; then
             echo "[tools-overlay] Waiting for proxy to be ready..."
             for i in $(seq 1 30); do

@@ -2,9 +2,15 @@
 # Standard glibc, SELinux-ready, FHS-compliant.
 # Pre-built binaries (OpenCode, Claude Code) execute directly — no linker hacks.
 # @trace spec:default-image
+# DISTRO: Fedora Minimal 43 — microdnf (NOT dnf), glibc, bash default.
+#         Both curl AND wget installed explicitly.
+#         User creation: useradd (NOT Alpine's adduser -D).
+#         CA bundle at /etc/pki/tls/certs/ca-bundle.crt.
 FROM registry.fedoraproject.org/fedora-minimal:43
 
+# @trace spec:default-image — forge system packages
 # ── System packages ────────────────────────────────────────────
+# DISTRO: microdnf (Fedora Minimal), NOT apk (Alpine) or dnf (standard Fedora)
 RUN microdnf install -y \
         bash coreutils findutils grep sed gawk tar gzip xz \
         procps-ng shadow-utils ca-certificates \
@@ -20,6 +26,7 @@ RUN curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install
     && mv /root/.local/bin/zoxide /usr/local/bin/zoxide || true
 
 # ── Create forge user ──────────────────────────────────────────
+# DISTRO: useradd (Fedora shadow-utils), NOT adduser -D (Alpine)
 RUN useradd -u 1000 -m -s /bin/bash forge
 
 # ── Directory structure ────────────────────────────────────────

@@ -145,6 +145,8 @@ pub(crate) fn probe_tool_version(binary: &Path, args: &[&str]) -> String {
 /// the proxy responds on port 3128. Used by `build_overlay_for_init()` which
 /// runs outside a tokio runtime.
 ///
+/// DISTRO: Proxy is Alpine — busybox wget is built-in, curl is NOT available.
+///
 /// @trace spec:proxy-container
 fn is_proxy_healthy_sync() -> bool {
     let result = tillandsias_podman::podman_cmd_sync()

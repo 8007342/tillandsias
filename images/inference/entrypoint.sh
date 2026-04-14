@@ -3,6 +3,8 @@ set -e
 # @trace spec:inference-container
 # Entrypoint for the Tillandsias inference container.
 # Starts ollama listening on all interfaces so forge containers can reach it.
+# DISTRO: Fedora Minimal 43 — has curl (NOT wget), bash, pciutils.
+#         Rust health checks use curl, not wget (see handlers.rs).
 
 # Bind to all interfaces — reachable from other containers in the enclave.
 export OLLAMA_HOST=0.0.0.0:11434

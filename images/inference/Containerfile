@@ -2,11 +2,18 @@
 # Local LLM inference server for Tillandsias enclave network.
 # Runs ollama — models stay cached via volume mount.
 # Built on Fedora Minimal to match the forge image.
+# DISTRO: Fedora Minimal 43 — microdnf (NOT dnf), glibc, bash default.
+#         Health checks use curl (installed explicitly, NOT wget).
+#         User creation: useradd (NOT Alpine's adduser -D).
+#         CA bundle at /etc/pki/tls/certs/ca-bundle.crt (NOT Alpine's /etc/ssl/).
 FROM registry.fedoraproject.org/fedora-minimal:43
 
+# @trace spec:inference-container — runtime deps for ollama + GPU
 # -- Deps for ollama install + GPU detection --
 # pciutils provides lspci (GPU autodetection by ollama installer)
-# @trace spec:inference-container
+# DISTRO: microdnf (Fedora Minimal), NOT apk (Alpine) or dnf (standard Fedora)
+# DISTRO: wget intentionally omitted — curl is the HTTP tool here.
+#         Rust health checks (handlers.rs) MUST use curl, not wget.
 RUN microdnf install -y bash curl ca-certificates zstd tar gzip pciutils \
     && microdnf clean all
 
@@ -22,6 +29,7 @@ RUN curl -fsSL https://ollama.com/install.sh | sh || true
 RUN test -x /usr/local/bin/ollama || { echo "ERROR: ollama binary not found after install"; exit 1; }
 
 # -- Create non-root user --
+# DISTRO: useradd (Fedora shadow-utils), NOT adduser -D (Alpine)
 RUN useradd -u 1000 -m -s /bin/bash ollama
 
 # -- Model cache directory (volume-mountable) --
