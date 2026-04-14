@@ -60,24 +60,27 @@ if (-not $wslPath) {
     wsl --set-default-version 2 2>$null | Out-Null
 }
 
-# --- Ensure Podman CLI is available ---
+# --- Ensure Podman runtime is available ---
+# Tillandsias requires the Podman runtime CLI (winget package: RedHat.Podman),
+# NOT Podman Desktop (winget package: RedHat.Podman-Desktop). Podman Desktop
+# is a GUI on top of the runtime — we don't want or need it.
 $podmanPath = Get-Command podman -ErrorAction SilentlyContinue
 if (-not $podmanPath) {
     Write-Host ""
-    Write-Host "  Podman CLI not found. Installing via winget..." -ForegroundColor Cyan
+    Write-Host "  Podman runtime not found. Installing via winget (RedHat.Podman, not Podman Desktop)..." -ForegroundColor Cyan
     $wingetPath = Get-Command winget -ErrorAction SilentlyContinue
     if ($wingetPath) {
         winget install --id RedHat.Podman --accept-source-agreements --accept-package-agreements --silent
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "  Podman installed." -ForegroundColor Green
+            Write-Host "  Podman runtime installed." -ForegroundColor Green
             # Refresh PATH for this session
             $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
         } else {
-            Write-Host "  winget install failed. Install Podman manually:" -ForegroundColor Yellow
+            Write-Host "  winget install failed. Install Podman runtime manually:" -ForegroundColor Yellow
             Write-Host "    winget install RedHat.Podman" -ForegroundColor Yellow
         }
     } else {
-        Write-Host "  winget not available. Install Podman manually from:" -ForegroundColor Yellow
+        Write-Host "  winget not available. Install Podman runtime manually from:" -ForegroundColor Yellow
         Write-Host "    https://github.com/containers/podman/releases" -ForegroundColor Yellow
     }
 }
