@@ -29,12 +29,42 @@
 //! @trace spec:podman-orchestration, spec:default-image, spec:tray-app
 
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::Duration;
 
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::strings;
+
+/// Global mutex to serialize ALL podman image builds.
+///
+/// Rootless podman cannot handle concurrent `podman build` operations — they
+/// corrupt the overlay storage, producing "identifier is not a container",
+/// "layer not known", and false "image not found" errors.
+///
+/// Every call to `run_build_image_script()` acquires this mutex first. The
+/// per-image `build_lock` (PID file) handles cross-process coordination;
+/// this mutex handles intra-process serialization.
+///
+/// Uses `std::sync::Mutex` (not `tokio::sync::Mutex`) because
+/// `run_build_image_script` is synchronous and runs on `spawn_blocking` threads.
+///
+/// @trace spec:default-image
+static BUILD_MUTEX: Mutex<()> = Mutex::new(());
+
+/// Acquire the global build mutex, serializing podman image builds.
+///
+/// Returns a `MutexGuard` that releases the lock when dropped.
+/// Recovers from poisoned mutex (a panicking build shouldn't block all future builds).
+///
+/// @trace spec:default-image
+pub fn build_mutex_lock() -> std::sync::MutexGuard<'static, ()> {
+    BUILD_MUTEX.lock().unwrap_or_else(|e| {
+        tracing::warn!("BUILD_MUTEX poisoned, recovering: {e}");
+        e.into_inner()
+    })
+}
 
 use tillandsias_core::config::{GlobalConfig, cache_dir, load_global_config, load_project_config};
 use tillandsias_core::event::{AppEvent, BuildProgressEvent, ContainerState};
@@ -1077,15 +1107,16 @@ pub struct EnclaveContext {
 /// CLI mode) that need the complete enclave — network, proxy, inference,
 /// git mirror, and git service.
 ///
-/// Steps (in order):
+/// Steps (in order, ALL SEQUENTIAL — no concurrent podman builds):
 /// 1. Create enclave network (if absent)
 /// 2. Start proxy (build image if needed, check version, restart if stale)
 /// 3. Start inference (build image if needed, check version, restart if stale)
 /// 4. Initialize git mirror for the project
 /// 5. Start git service for the project (check version, restart if stale)
 ///
-/// Inference failures are non-fatal — the forge will launch without inference.
-/// Git mirror creation failures propagate as errors (no silent continue).
+/// Image builds are serialized to prevent rootless podman overlay storage
+/// corruption. Inference failures are non-fatal — the forge will launch
+/// without inference. Git mirror creation failures propagate as errors.
 ///
 /// @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container
 pub async fn ensure_enclave_ready(
@@ -1103,32 +1134,27 @@ pub async fn ensure_enclave_ready(
     // @trace spec:inference-container
     crate::gpu::detect_and_patch_models();
 
-    // Step 3: Inference — soft requirement, non-blocking.
-    // Inference image is large (~200MB ollama download) and shouldn't delay forge launch.
-    // Start it in the background — it'll be ready by the time the user needs it.
+    // Step 3: Inference — soft requirement, SEQUENTIAL.
+    // Must run sequentially because rootless podman corrupts overlay storage
+    // when concurrent `podman build` operations run simultaneously.
+    // Failure is non-fatal — the forge will launch without inference.
     // @trace spec:inference-container
-    {
-        let inf_state = state.clone();
-        let inf_tx = build_tx.clone();
-        tokio::spawn(async move {
-            match ensure_inference_running(&inf_state, inf_tx).await {
-                Ok(()) => {
-                    info!(
-                        accountability = true,
-                        category = "inference",
-                        spec = "inference-container",
-                        "Inference container ready (background build complete)"
-                    );
-                }
-                Err(e) => {
-                    warn!(
-                        error = %e,
-                        spec = "inference-container",
-                        "Inference setup failed — containers will launch without local inference"
-                    );
-                }
-            }
-        });
+    match ensure_inference_running(state, build_tx.clone()).await {
+        Ok(()) => {
+            info!(
+                accountability = true,
+                category = "inference",
+                spec = "inference-container",
+                "Inference container ready"
+            );
+        }
+        Err(e) => {
+            warn!(
+                error = %e,
+                spec = "inference-container",
+                "Inference setup failed — containers will launch without local inference"
+            );
+        }
     }
 
     // NOTE: Tools overlay (ensure_tools_overlay) is NOT called here because it
@@ -1672,6 +1698,11 @@ fn get_proxy_ip() -> Result<String, String> {
 /// Extracts image sources + build scripts to temp, executes, cleans up.
 /// No filesystem scripts are trusted — everything comes from the signed binary.
 fn run_build_image_script(image_name: &str) -> Result<(), String> {
+    // Serialize all image builds — rootless podman corrupts overlay storage
+    // when concurrent `podman build` operations run simultaneously.
+    // @trace spec:default-image
+    let _build_guard = build_mutex_lock();
+
     // Check if another process is already building this image
     if crate::build_lock::is_running(image_name) {
         info!(image = image_name, "Build already in progress, waiting...");

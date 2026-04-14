@@ -65,6 +65,12 @@ fn image_tag(name: &str) -> String {
 /// Extracts image sources + build scripts to temp, executes with inherited
 /// stdio so the user sees progress, then cleans up.
 fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
+    // Serialize all image builds — rootless podman corrupts overlay storage
+    // when concurrent `podman build` operations run simultaneously.
+    // Uses the same global mutex from handlers.rs.
+    // @trace spec:default-image
+    let _build_guard = crate::handlers::build_mutex_lock();
+
     // Check if another process (e.g., tillandsias --init) is already building
     if crate::build_lock::is_running(image_name) {
         println!("  {}", i18n::t("cli.waiting_setup"));

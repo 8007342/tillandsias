@@ -315,9 +315,21 @@ else
     fi
 fi
 
-# Verify the image exists
-if ! "$PODMAN" image exists "$IMAGE_TAG" 2>/dev/null; then
-    _error "Image ${IMAGE_TAG} not found after load. Something went wrong."
+# Verify the image exists — retry briefly because podman storage may need
+# a moment to flush after a build completes (prevents false negatives).
+# @trace spec:default-image
+_image_found=false
+for _attempt in 1 2 3; do
+    if "$PODMAN" image exists "$IMAGE_TAG" 2>/dev/null; then
+        _image_found=true
+        break
+    fi
+    _warn "Image ${IMAGE_TAG} not found on attempt ${_attempt}/3, retrying..."
+    sleep 1
+done
+
+if [[ "$_image_found" == false ]]; then
+    _error "Image ${IMAGE_TAG} not found after build + 3 retries. Something went wrong."
     exit 1
 fi
 
