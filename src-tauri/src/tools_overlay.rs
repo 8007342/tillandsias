@@ -135,6 +135,27 @@ pub(crate) fn probe_tool_version(binary: &Path, args: &[&str]) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Proxy health (synchronous — for init/blocking paths)
+// @trace spec:proxy-container
+// ---------------------------------------------------------------------------
+
+/// Synchronous proxy health check for use in non-async contexts.
+///
+/// Runs `podman exec tillandsias-proxy wget --spider` and returns `true` if
+/// the proxy responds on port 3128. Used by `build_overlay_for_init()` which
+/// runs outside a tokio runtime.
+///
+/// @trace spec:proxy-container
+fn is_proxy_healthy_sync() -> bool {
+    let result = tillandsias_podman::podman_cmd_sync()
+        .args(["exec", "tillandsias-proxy", "wget", "-q", "--spider", "--timeout=2", "http://localhost:3128"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+    result.map(|s| s.success()).unwrap_or(false)
+}
+
+// ---------------------------------------------------------------------------
 // Phase 1 entry points (moved from handlers.rs)
 // @trace spec:layered-tools-overlay
 // ---------------------------------------------------------------------------
@@ -251,8 +272,22 @@ async fn build_tools_overlay_versioned(
     let version_name = version_name.to_string();
     let forge_tag = forge_image_tag();
 
+    // @trace spec:proxy-container, spec:layered-tools-overlay
+    // Check proxy health BEFORE entering the blocking build.
+    // If the proxy is not responding, the builder script must NOT join
+    // the enclave network (which has no default internet route).
+    // We signal this by omitting CA_CHAIN_PATH — the script uses its
+    // presence to decide between enclave routing and direct access.
+    let proxy_healthy = crate::handlers::is_proxy_healthy().await;
+    if !proxy_healthy {
+        warn!(
+            spec = "layered-tools-overlay",
+            "Proxy not healthy — tools overlay will use direct network access"
+        );
+    }
+
     tokio::task::spawn_blocking(move || {
-        build_overlay_sync(&overlay_dir, &version_name, &forge_tag)
+        build_overlay_sync(&overlay_dir, &version_name, &forge_tag, proxy_healthy)
     })
     .await
     .map_err(|e| format!("Tools overlay build task panicked: {e}"))?
@@ -261,11 +296,17 @@ async fn build_tools_overlay_versioned(
 /// Synchronous overlay build — runs the builder script and writes manifest.
 ///
 /// Extracted so both first-launch and background-rebuild can share logic.
+///
+/// `proxy_healthy`: when `true`, the CA chain is passed to the builder script
+/// so it routes through the enclave proxy. When `false`, the builder uses
+/// direct network access (default bridge network, no proxy).
+///
 /// @trace spec:layered-tools-overlay
 fn build_overlay_sync(
     overlay_dir: &Path,
     version_name: &str,
     forge_tag: &str,
+    proxy_healthy: bool,
 ) -> Result<(), String> {
     // Step 1: Create versioned directory
     let version_dir = overlay_dir.join(version_name);
@@ -302,6 +343,16 @@ fn build_overlay_sync(
 
     // Pass CA chain path so the builder script can mount it into the
     // temporary container — required for HTTPS through the MITM proxy.
+    //
+    // CA_CHAIN_PATH serves double duty: it tells the builder script to
+    // (1) join the enclave network and route through proxy, and
+    // (2) mount the CA chain for HTTPS trust through the MITM proxy.
+    //
+    // When proxy is NOT healthy, we deliberately omit CA_CHAIN_PATH so
+    // the builder uses the default bridge network with direct internet
+    // access. This prevents the container from being stuck on the enclave
+    // network with no working proxy and no default internet route.
+    //
     // @trace spec:proxy-container, spec:layered-tools-overlay
     let ca_chain = crate::ca::proxy_certs_dir().join("ca-chain.crt");
 
@@ -313,8 +364,10 @@ fn build_overlay_sync(
         .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
         .env("TOOLS_OVERLAY_QUIET", "1");
 
-    if ca_chain.exists() {
+    if proxy_healthy && ca_chain.exists() {
         cmd.env("CA_CHAIN_PATH", &ca_chain);
+    } else if !proxy_healthy {
+        info!(spec = "layered-tools-overlay", "Proxy unhealthy — builder will use direct network access");
     }
 
     let output = cmd.output()
@@ -777,7 +830,9 @@ pub fn build_overlay_for_init() -> Result<(), String> {
             );
             let next = next_version_number(&overlay_dir);
             let version_name = format!("v{next}");
-            build_overlay_sync(&overlay_dir, &version_name, &expected_tag)?;
+            // Sync context — check proxy health synchronously via podman exec.
+            let proxy_ok = is_proxy_healthy_sync();
+            build_overlay_sync(&overlay_dir, &version_name, &expected_tag, proxy_ok)?;
             prune_old_versions(&overlay_dir);
             return Ok(());
         }
@@ -788,7 +843,8 @@ pub fn build_overlay_for_init() -> Result<(), String> {
         spec = "layered-tools-overlay",
         "Building tools overlay (init)"
     );
-    build_overlay_sync(&overlay_dir, "v1", &expected_tag)
+    let proxy_ok = is_proxy_healthy_sync();
+    build_overlay_sync(&overlay_dir, "v1", &expected_tag, proxy_ok)
 }
 
 // ---------------------------------------------------------------------------

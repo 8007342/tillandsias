@@ -130,12 +130,22 @@ _info "Using forge image: ${BOLD}${FORGE_IMAGE}${NC}"
 mkdir -p "$OUTPUT_DIR"/{claude,opencode,openspec}
 
 # ---------------------------------------------------------------------------
-# Network detection — use enclave proxy if available
+# Network detection — use enclave proxy if CA_CHAIN_PATH is set
 # ---------------------------------------------------------------------------
 # @trace spec:proxy-container, spec:layered-tools-overlay
+#
+# CA_CHAIN_PATH is set by the Rust caller (tools_overlay.rs) ONLY when the
+# proxy container has passed a health check. This serves as the single
+# signal for enclave routing:
+#   - CA_CHAIN_PATH set     -> proxy is healthy, use enclave network + proxy
+#   - CA_CHAIN_PATH not set -> proxy unhealthy or absent, use direct access
+#
+# Previously this checked `podman network exists tillandsias-enclave`, but
+# the enclave network has no default internet route. If the proxy is down,
+# the container would be stuck with no connectivity at all.
 PROXY_ARGS=()
-if "$PODMAN" network exists tillandsias-enclave 2>/dev/null; then
-    _info "Enclave network detected, routing through proxy"
+if [[ -n "${CA_CHAIN_PATH:-}" ]] && [[ -f "$CA_CHAIN_PATH" ]]; then
+    _info "Proxy healthy — routing through enclave proxy"
     PROXY_ARGS=(
         --network=tillandsias-enclave
         -e HTTP_PROXY=http://proxy:3128
@@ -145,19 +155,16 @@ if "$PODMAN" network exists tillandsias-enclave 2>/dev/null; then
     )
 
     # Mount the ephemeral CA chain so HTTPS through the MITM proxy is trusted.
-    # CA_CHAIN_PATH is set by the Rust caller (tools_overlay.rs).
     # @trace spec:proxy-container, spec:layered-tools-overlay
-    if [[ -n "${CA_CHAIN_PATH:-}" ]] && [[ -f "$CA_CHAIN_PATH" ]]; then
-        _info "Mounting CA chain for proxy trust"
-        PROXY_ARGS+=(
-            -v "${CA_CHAIN_PATH}:/run/tillandsias/ca-chain.crt:ro"
-            -e NODE_EXTRA_CA_CERTS=/run/tillandsias/ca-chain.crt
-            -e SSL_CERT_FILE=/run/tillandsias/ca-chain.crt
-            -e REQUESTS_CA_BUNDLE=/run/tillandsias/ca-chain.crt
-        )
-    else
-        _warn "No CA chain found — HTTPS through proxy may fail"
-    fi
+    _info "Mounting CA chain for proxy trust"
+    PROXY_ARGS+=(
+        -v "${CA_CHAIN_PATH}:/run/tillandsias/ca-chain.crt:ro"
+        -e NODE_EXTRA_CA_CERTS=/run/tillandsias/ca-chain.crt
+        -e SSL_CERT_FILE=/run/tillandsias/ca-chain.crt
+        -e REQUESTS_CA_BUNDLE=/run/tillandsias/ca-chain.crt
+    )
+else
+    _info "No proxy — using direct network access"
 fi
 
 # ---------------------------------------------------------------------------

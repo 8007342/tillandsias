@@ -275,6 +275,34 @@ pub(crate) async fn ensure_inference_running(
                 container_id = %container_id,
                 "Inference container started (detached)"
             );
+
+            // @trace spec:inference-container
+            // Health check: verify ollama API is responding before declaring ready.
+            // Uses wget (Alpine-compatible) to probe the ollama version endpoint.
+            for attempt in 0..10u32 {
+                let check = tillandsias_podman::podman_cmd()
+                    .args(["exec", INFERENCE_CONTAINER_NAME, "wget", "-q", "--spider", "--timeout=2", "http://localhost:11434/api/version"])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .await;
+                if check.map(|s| s.success()).unwrap_or(false) {
+                    info!(spec = "inference-container", attempt, "Inference health check passed");
+                    break;
+                }
+                if attempt < 9 {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                } else {
+                    warn!(
+                        accountability = true,
+                        category = "capability",
+                        safety = "DEGRADED: inference container started but API not responding",
+                        spec = "inference-container",
+                        "Inference health check failed after 10 attempts — proceeding with degraded inference"
+                    );
+                }
+            }
+
             Ok(())
         }
         Err(e) => {
@@ -534,9 +562,12 @@ pub(crate) async fn ensure_proxy_running(
             // Without this, containers/builds that start immediately after may fail
             // because podman's internal DNS hasn't registered the "proxy" alias yet,
             // or squid hasn't finished initializing its SSL cert database.
+            //
+            // Uses `wget --spider` instead of bash /dev/tcp — the proxy image is
+            // Alpine (busybox sh), which doesn't support bashisms.
             for attempt in 0..15u32 {
                 let check = tillandsias_podman::podman_cmd()
-                    .args(["exec", PROXY_CONTAINER_NAME, "bash", "-c", "echo > /dev/tcp/localhost/3128"])
+                    .args(["exec", PROXY_CONTAINER_NAME, "wget", "-q", "--spider", "--timeout=2", "http://localhost:3128"])
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
                     .status()
@@ -582,6 +613,25 @@ pub(crate) async fn stop_proxy() {
             debug!(spec = "proxy-container", error = %e, "Proxy stop returned error (may not have been running)");
         }
     }
+}
+
+/// Check if the proxy container is running and responding on port 3128.
+///
+/// Performs a single health probe using `wget --spider` (Alpine-compatible).
+/// Returns `true` if the proxy responds, `false` otherwise.
+///
+/// Used by both `ensure_proxy_running` (readiness loop) and `tools_overlay`
+/// (to decide whether to route builds through the enclave or direct).
+///
+/// @trace spec:proxy-container
+pub(crate) async fn is_proxy_healthy() -> bool {
+    let check = tillandsias_podman::podman_cmd()
+        .args(["exec", PROXY_CONTAINER_NAME, "wget", "-q", "--spider", "--timeout=2", "http://localhost:3128"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .await;
+    check.map(|s| s.success()).unwrap_or(false)
 }
 
 /// Remove the enclave network if no containers are attached.
@@ -1082,8 +1132,33 @@ pub(crate) async fn ensure_git_service_running(
                 "Credential isolation boundary: git service has D-Bus access, pids-limit=64, read-only FS"
             );
 
-            // Brief wait for git daemon to be ready
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            // @trace spec:git-mirror-service
+            // Health check: verify git daemon is listening on port 9418.
+            // Uses `nc -z` (busybox netcat) for a TCP connection check.
+            for attempt in 0..10u32 {
+                let check = tillandsias_podman::podman_cmd()
+                    .args(["exec", &container_name, "sh", "-c", "nc -z localhost 9418"])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .await;
+                if check.map(|s| s.success()).unwrap_or(false) {
+                    info!(spec = "git-mirror-service", project = %project_name, attempt, "Git service health check passed");
+                    break;
+                }
+                if attempt < 9 {
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                } else {
+                    warn!(
+                        accountability = true,
+                        category = "capability",
+                        safety = "DEGRADED: git service started but daemon not responding on port 9418",
+                        spec = "git-mirror-service",
+                        project = %project_name,
+                        "Git service health check failed after 10 attempts — proceeding with degraded git"
+                    );
+                }
+            }
 
             Ok(())
         }
