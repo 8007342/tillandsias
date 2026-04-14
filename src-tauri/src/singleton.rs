@@ -89,7 +89,16 @@ pub fn try_acquire() -> Result<(), ()> {
         Err(e) => {
             // If we can't write the lock file, log but proceed anyway.
             // Not being able to create the lock shouldn't prevent startup.
-            warn!(?path, error = %e, "Failed to write lock file, proceeding without lock");
+            // TODO: Remove fallback — make this a hard error
+            warn!(
+                accountability = true,
+                category = "security",
+                safety = "DEGRADED: no single-instance protection — risk of concurrent conflicts",
+                spec = "singleton-guard",
+                ?path,
+                error = %e,
+                "Singleton lock write failed — proceeding without mutual exclusion"
+            );
             Ok(())
         }
     }

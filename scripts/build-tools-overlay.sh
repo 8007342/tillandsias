@@ -204,7 +204,9 @@ _step "Installing Claude Code..."
                     break
                 fi
                 if [ "$i" -eq 30 ]; then
-                    echo "[tools-overlay] WARNING: Proxy not responding after 30s — continuing without proxy" >&2
+                    # TODO: Remove fallback — make this a hard error
+                    echo "[tools-overlay] WARNING: SECURITY DEGRADATION — proxy not responding, falling back to DIRECT internet access" >&2
+                    echo "[tools-overlay] WARNING: Network traffic will NOT be monitored or cached" >&2
                     unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy
                 fi
                 sleep 1

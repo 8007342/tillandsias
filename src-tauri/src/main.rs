@@ -261,7 +261,14 @@ fn main() {
                     if !client.has_machine().await {
                         info!("No podman machine found, initializing...");
                         if !client.init_machine().await {
-                            warn!("Podman machine init failed");
+                            // TODO: Remove fallback — make this a hard error
+                            warn!(
+                                accountability = true,
+                                category = "runtime",
+                                safety = "DEGRADED: podman machine init failed — container operations unavailable",
+                                spec = "podman-machine",
+                                "Podman machine init failed"
+                            );
                         }
                     }
                     info!("Podman machine not running, starting automatically...");
@@ -272,10 +279,24 @@ fn main() {
                         if client.wait_for_ready(5).await {
                             has_machine = true;
                         } else {
-                            warn!("Podman machine started but API not ready after retries");
+                            // TODO: Remove fallback — make this a hard error
+                            warn!(
+                                accountability = true,
+                                category = "runtime",
+                                safety = "DEGRADED: podman API not ready — container operations may fail",
+                                spec = "podman-machine",
+                                "Podman machine started but API not ready after retries"
+                            );
                         }
                     } else {
-                        warn!("Podman machine auto-start failed — falling back to dried state");
+                        // TODO: Remove fallback — make this a hard error
+                        warn!(
+                            accountability = true,
+                            category = "runtime",
+                            safety = "DEGRADED: podman machine not running — all container operations unavailable",
+                            spec = "podman-machine",
+                            "Podman machine auto-start failed — falling back to dried state"
+                        );
                     }
                 }
 
@@ -428,7 +449,15 @@ fn main() {
                         // Build tools overlay if needed (non-fatal).
                         let overlay_build_tx = build_tx.clone();
                         if let Err(e) = crate::tools_overlay::ensure_tools_overlay(overlay_build_tx).await {
-                            warn!(error = %e, spec = "layered-tools-overlay", "Tools overlay build failed at launch (non-fatal)");
+                            // TODO: Remove fallback — make this a hard error
+                            warn!(
+                                accountability = true,
+                                category = "performance",
+                                safety = "DEGRADED: tools will be installed per-container instead of from cache",
+                                spec = "layered-tools-overlay",
+                                error = %e,
+                                "Tools overlay setup failed — performance degradation"
+                            );
                         }
 
                         {
@@ -576,7 +605,15 @@ fn main() {
                         if proxy_ok && forge_ok {
                             let overlay_build_tx = build_tx.clone();
                             if let Err(e) = crate::tools_overlay::ensure_tools_overlay(overlay_build_tx).await {
-                                warn!(error = %e, spec = "layered-tools-overlay", "Tools overlay build failed at launch (non-fatal)");
+                                // TODO: Remove fallback — make this a hard error
+                                warn!(
+                                    accountability = true,
+                                    category = "performance",
+                                    safety = "DEGRADED: tools will be installed per-container instead of from cache",
+                                    spec = "layered-tools-overlay",
+                                    error = %e,
+                                    "Tools overlay setup failed — performance degradation"
+                                );
                             }
                         }
 

@@ -1172,9 +1172,13 @@ pub async fn ensure_enclave_ready(
             );
         }
         Err(e) => {
+            // TODO: Remove fallback — make this a hard error
             warn!(
-                error = %e,
+                accountability = true,
+                category = "capability",
+                safety = "DEGRADED: no local LLM inference — AI features unavailable in containers",
                 spec = "inference-container",
+                error = %e,
                 "Inference setup failed — containers will launch without local inference"
             );
         }
@@ -1199,9 +1203,13 @@ pub async fn ensure_enclave_ready(
                 ensure_git_service_running(project_name, &mirror_path, state, build_tx.clone())
                     .await
             {
+                // TODO: Remove fallback — make this a hard error
                 warn!(
-                    error = %e,
+                    accountability = true,
+                    category = "capability",
+                    safety = "DEGRADED: no git mirror — containers will lack project code history",
                     spec = "git-mirror-service",
+                    error = %e,
                     "Git service setup failed — containers will launch without git mirror"
                 );
             }
@@ -2213,10 +2221,14 @@ pub async fn handle_attach_here(
     // enclave is up (proxy available for npm downloads). Failure is non-fatal:
     // entrypoints fall back to inline install.
     if let Err(e) = crate::tools_overlay::ensure_tools_overlay(build_tx.clone()).await {
+        // TODO: Remove fallback — make this a hard error
         warn!(
-            error = %e,
+            accountability = true,
+            category = "performance",
+            safety = "DEGRADED: tools will be installed per-container instead of from cache",
             spec = "layered-tools-overlay",
-            "Tools overlay setup failed — containers will install tools inline"
+            error = %e,
+            "Tools overlay setup failed — performance degradation"
         );
     }
 
@@ -2822,7 +2834,15 @@ pub async fn handle_root_terminal(
     // Infrastructure + inference (no git mirror needed for root terminal).
     ensure_infrastructure_ready(state, build_tx.clone()).await?;
     if let Err(e) = ensure_inference_running(state, build_tx.clone()).await {
-        warn!(error = %e, spec = "inference-container", "Inference setup failed — root terminal will launch without local inference");
+        // TODO: Remove fallback — make this a hard error
+        warn!(
+            accountability = true,
+            category = "capability",
+            safety = "DEGRADED: no local LLM inference — AI features unavailable in root terminal",
+            spec = "inference-container",
+            error = %e,
+            "Inference setup failed — root terminal will launch without local inference"
+        );
     }
 
     // Allocate port range — check actual podman containers for conflicts
@@ -3186,7 +3206,15 @@ pub async fn handle_serve_here(
     // Infrastructure + inference (no git mirror needed for web containers).
     ensure_infrastructure_ready(state, build_tx.clone()).await?;
     if let Err(e) = ensure_inference_running(state, build_tx.clone()).await {
-        warn!(error = %e, spec = "inference-container", "Inference setup failed — web server will launch without local inference");
+        // TODO: Remove fallback — make this a hard error
+        warn!(
+            accountability = true,
+            category = "capability",
+            safety = "DEGRADED: no local LLM inference — AI features unavailable in web server",
+            spec = "inference-container",
+            error = %e,
+            "Inference setup failed — web server will launch without local inference"
+        );
     }
 
     // Allocate port — base 8080, increment on conflict.

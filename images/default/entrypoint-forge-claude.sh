@@ -69,8 +69,9 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
         fi
     done
     if [[ "$CLONE_SUCCESS" != "true" ]]; then
-        echo "[forge] ERROR: Could not clone project from git service."
-        echo "[forge] The git service may not be running. Dropping to shell."
+        # TODO: Remove fallback — make this a hard error
+        echo "[forge] WARNING: DEGRADED — git clone failed, dropping to shell without project code" >&2
+        echo "[forge] The git service may not be running." >&2
         exec bash
     fi
     echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
@@ -215,5 +216,7 @@ else
     echo "${L_RETRY_HINT:-To retry: restart the container}"
     echo "${L_CLEAR_CACHE_CLAUDE:-To clear cache: rm -rf ~/.cache/tillandsias/claude/}"
     echo ""
+    # TODO: Remove fallback — make this a hard error
+    echo "[forge] WARNING: DEGRADED — Claude Code unavailable, dropping to shell" >&2
     exec bash
 fi

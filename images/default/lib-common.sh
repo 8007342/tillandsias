@@ -160,7 +160,8 @@ install_openspec() {
                 echo "  ${L_OPENSPEC_NOT_FOUND:-✗ OpenSpec binary not found after install}" >&2
             fi
         else
-            echo "  ${L_OPENSPEC_FAILED:-OpenSpec install failed (non-fatal, continuing)}" >&2
+            # TODO: Remove fallback — make this a hard error
+            echo "  ${L_OPENSPEC_FAILED:-[common] WARNING: DEGRADED — OpenSpec unavailable, /opsx commands will not work}" >&2
         fi
     fi
 }
