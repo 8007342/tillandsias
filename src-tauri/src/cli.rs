@@ -155,6 +155,11 @@ pub enum CliMode {
     /// `tillandsias --update` — check for updates and apply if available, then exit.
     Update,
 
+    /// `tillandsias --uninstall` — remove Tillandsias from the system.
+    /// `tillandsias --uninstall --wipe` — also remove cache and container images.
+    // @trace spec:app-lifecycle
+    Uninstall { wipe: bool },
+
     /// `tillandsias --github-login` — run GitHub authentication flow and exit.
     GitHubLogin,
 
@@ -188,6 +193,8 @@ USAGE:
     tillandsias --stats             Show disk usage from Tillandsias artifacts
     tillandsias --clean             Remove stale artifacts and reclaim disk space
     tillandsias --update            Check for updates and apply if available
+    tillandsias --uninstall         Remove Tillandsias from your system
+    tillandsias --uninstall --wipe  Remove everything including cache and images
     tillandsias --version           Show version information
     tillandsias --help              Show this help
 
@@ -215,6 +222,8 @@ MAINTENANCE:
   --stats                    Show disk usage from artifacts
   --clean                    Remove stale artifacts
   --update                   Check for and apply updates
+  --uninstall                Remove Tillandsias from your system
+  --uninstall --wipe         Remove everything including cache and images
 ";
 
 /// Parse CLI arguments and return the appropriate mode plus log configuration.
@@ -266,6 +275,14 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
     // `tillandsias --update` — check for updates and apply.
     if args.iter().any(|a| a == "--update") {
         return Some((CliMode::Update, log_config));
+    }
+
+    // `tillandsias --uninstall` — remove Tillandsias from the system.
+    // `tillandsias --uninstall --wipe` — also remove cache and container images.
+    // @trace spec:app-lifecycle
+    if args.iter().any(|a| a == "--uninstall") {
+        let wipe = args.iter().any(|a| a == "--wipe");
+        return Some((CliMode::Uninstall { wipe }, log_config));
     }
 
     // `tillandsias --github-login` — run GitHub auth flow.

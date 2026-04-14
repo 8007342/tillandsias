@@ -26,6 +26,7 @@ mod secrets;
 mod singleton;
 mod strings;
 mod tools_overlay;
+mod uninstall;
 mod update_cli;
 mod update_log;
 mod updater;
@@ -100,6 +101,12 @@ fn main() {
     if matches!(cli_mode, cli::CliMode::Update) {
         let success = update_cli::run();
         std::process::exit(if success { 0 } else { 1 });
+    }
+
+    // Uninstall mode — remove Tillandsias from the system and exit.
+    // @trace spec:app-lifecycle
+    if let cli::CliMode::Uninstall { wipe } = cli_mode {
+        std::process::exit(if crate::uninstall::run(wipe) { 0 } else { 1 });
     }
 
     // GitHub Login mode — run authentication flow interactively and exit.

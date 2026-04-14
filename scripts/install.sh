@@ -206,16 +206,9 @@ if [ "$PLATFORM" = "macos" ]; then
     fi
 fi
 
-# Install uninstall script
-UNINSTALL_URL="${RELEASE_URL}/download/uninstall.sh"
-if curl -fsSL -o "$INSTALL_DIR/tillandsias-uninstall" "$UNINSTALL_URL" 2>/dev/null; then
-    chmod +x "$INSTALL_DIR/tillandsias-uninstall"
-else
-    echo "  Warning: Could not download uninstaller. You can uninstall manually by removing:"
-    echo "    $INSTALL_DIR/tillandsias"
-    echo "    $LIB_DIR"
-    echo "    $DATA_DIR"
-fi
+# Uninstall is built into the main binary: tillandsias --uninstall [--wipe]
+# Remove legacy uninstaller if it exists from a previous install.
+rm -f "$INSTALL_DIR/tillandsias-uninstall" 2>/dev/null || true
 
 if [ "$PLATFORM" = "linux" ]; then
     echo "  ✓ Installed to $INSTALL_DIR/tillandsias"
