@@ -1,40 +1,88 @@
+# =====================================================================
 # Tillandsias Configuration
-# =========================
-# This file controls how Tillandsias discovers projects and launches environments.
-# Location: ~/.config/tillandsias/config.toml (Linux)
-#           ~/Library/Application Support/tillandsias/config.toml (macOS)
-#           %APPDATA%/tillandsias/config.toml (Windows)
+# =====================================================================
+#
+# This file controls how Tillandsias works on your computer.
+# You normally don't need to change anything here — the app
+# manages itself automatically. But if you're curious, here's
+# what everything does!
+#
+# This file is safe to delete — Tillandsias will recreate it
+# with default settings on next launch.
+#
+# =====================================================================
+
+# -- Where to find your projects ----------------------------------------
+#
+# Tillandsias watches these folders for projects to show in the
+# tray menu. Add any folder where you keep your code.
+#
+# Example: watch_paths = ["/home/you/projects", "/home/you/work"]
 
 [scanner]
-# Directories to watch for projects. Default: ~/src
-# Each directory is scanned for project folders at depth 1.
 watch_paths = ["~/src"]
 
-# How long to wait (milliseconds) after a filesystem change before processing.
-# Higher values batch more changes together and reduce resource usage.
-# Lower values detect changes faster but may cause unnecessary rescans.
-# Default: 2000 (2 seconds)
+# How long to wait (in milliseconds) after a file changes before
+# refreshing the project list. Higher values mean fewer refreshes
+# but slower detection. Lower values are more responsive but may
+# cause unnecessary work. Default: 2000 (2 seconds).
 debounce_ms = 2000
 
-[defaults]
-# Default container image for new environments.
-# Power users can override this per-project in .tillandsias/config.toml
-# Default: the Macuahuitl forge image
-image = "ghcr.io/8007342/macuahuitl:latest"
+# -- Your language -------------------------------------------------------
+#
+# Tillandsias speaks many languages! Set yours here, or change it
+# from the tray menu under Settings > Language.
+#
+# Available: en, es, de, fr, pt, it, ro, ru, ja, ko, zh-Hans,
+#            zh-Hant, ar, hi, ta, te, nah
 
-# Default port range mapped from environment to your machine.
-# Each concurrent environment gets a non-overlapping range automatically.
-# Default: 3000-3019
+[i18n]
+language = "en"
+
+# -- Your preferred coding assistant --------------------------------------
+#
+# Which AI coding tool opens when you click "Attach Here".
+# You can also choose from the tray menu.
+#
+# Options: "opencode" or "claude"
+
+[agent]
+selected = "opencode"
+
+# -- Automatic updates ----------------------------------------------------
+#
+# Tillandsias checks for updates automatically so you always
+# have the latest features and security fixes.
+
+[updates]
+check_interval_hours = 6  # Check every 6 hours
+check_on_launch = true     # Also check when the app starts
+
+# -- Advanced: Port range -------------------------------------------------
+#
+# When Tillandsias creates a development environment, it needs
+# some network ports for communication. These ports are only
+# accessible on your computer (not from the internet).
+#
+# You probably don't need to change this unless another app
+# is using ports in this range.
+
+[defaults]
 port_range = "3000-3019"
 
-[autostart]
-# Start Tillandsias automatically on login. Default: false.
-enabled = false
+# -- Security (read-only) -------------------------------------------------
+#
+# These security settings are always on and cannot be changed.
+# They're listed here so you know what's protecting your system:
+#
+#   cap_drop_all:       Drops all special permissions from environments
+#   no_new_privileges:  Prevents programs from gaining extra access
+#   userns_keep_id:     Your files keep their normal ownership
+#
+# These settings protect your code and your computer.
+# They cannot be weakened, even by editing this file.
 
 [security]
-# Security flags applied to every environment. These are non-negotiable
-# and cannot be weakened — they protect your system from untrusted code.
-# You can add additional restrictions per-project but never remove these.
 cap_drop_all = true
 no_new_privileges = true
 userns_keep_id = true

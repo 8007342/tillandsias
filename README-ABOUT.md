@@ -81,8 +81,7 @@ watch_paths = ["~/src"]
 debounce_ms = 2000
 
 [defaults]
-image = "ghcr.io/8007342/macuahuitl:latest"
-port_range = "3000-3099"
+port_range = "3000-3019"
 
 [security]
 cap_drop_all = true

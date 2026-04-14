@@ -75,7 +75,7 @@ openspec/                     # Spec-driven development artifacts
 - **No JSON in hot paths** — `postcard` for internal IPC, TOML for user config
 - **Container naming** — `tillandsias-<project>-<genus>` (e.g., `tillandsias-my-app-aeranthos`)
 - **Config-driven** — global at `~/.config/tillandsias/config.toml`, per-project at `.tillandsias/config.toml`
-- **Forge image is external** — Tillandsias orchestrates containers but doesn't build them. Default image: `ghcr.io/8007342/macuahuitl:latest`
+- **Forge image is local** — Tillandsias builds and manages its own forge images. Default image: `tillandsias-forge` (version tag computed at runtime from `forge_image_tag()`)
 
 ## Enclave Architecture
 

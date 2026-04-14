@@ -4,8 +4,8 @@ use tracing::{debug, warn};
 
 use crate::state::Os;
 
-/// Default container image.
-const DEFAULT_IMAGE: &str = "ghcr.io/8007342/macuahuitl:latest";
+/// Default container image (base name — version tag computed at runtime).
+const DEFAULT_IMAGE: &str = "tillandsias-forge";
 
 /// Default port range start.
 const DEFAULT_PORT_START: u16 = 3000;
@@ -362,10 +362,128 @@ pub fn load_global_config() -> GlobalConfig {
     load_global_config_from(&path)
 }
 
+/// Generate a verbose, user-friendly config file with extensive comments.
+///
+/// Average Joe should understand every setting and feel safe. Technical
+/// jargon is avoided. Security settings are documented as read-only.
+///
+/// @trace spec:environment-runtime
+pub fn generate_verbose_config(config: &GlobalConfig) -> String {
+    let watch_paths: Vec<String> = config
+        .scanner
+        .watch_paths
+        .iter()
+        .map(|p| format!("\"{}\"", p.display()))
+        .collect();
+    let watch_paths_str = watch_paths.join(", ");
+
+    format!(
+        r#"# =====================================================================
+# Tillandsias Configuration
+# =====================================================================
+#
+# This file controls how Tillandsias works on your computer.
+# You normally don't need to change anything here — the app
+# manages itself automatically. But if you're curious, here's
+# what everything does!
+#
+# This file is safe to delete — Tillandsias will recreate it
+# with default settings on next launch.
+#
+# =====================================================================
+
+# -- Where to find your projects ----------------------------------------
+#
+# Tillandsias watches these folders for projects to show in the
+# tray menu. Add any folder where you keep your code.
+#
+# Example: watch_paths = ["/home/you/projects", "/home/you/work"]
+
+[scanner]
+watch_paths = [{watch_paths}]
+
+# How long to wait (in milliseconds) after a file changes before
+# refreshing the project list. Higher values mean fewer refreshes
+# but slower detection. Lower values are more responsive but may
+# cause unnecessary work. Default: 2000 (2 seconds).
+debounce_ms = {debounce_ms}
+
+# -- Your language -------------------------------------------------------
+#
+# Tillandsias speaks many languages! Set yours here, or change it
+# from the tray menu under Settings > Language.
+#
+# Available: en, es, de, fr, pt, it, ro, ru, ja, ko, zh-Hans,
+#            zh-Hant, ar, hi, ta, te, nah
+
+[i18n]
+language = "{language}"
+
+# -- Your preferred coding assistant --------------------------------------
+#
+# Which AI coding tool opens when you click "Attach Here".
+# You can also choose from the tray menu.
+#
+# Options: "opencode" or "claude"
+
+[agent]
+selected = "{agent}"
+
+# -- Automatic updates ----------------------------------------------------
+#
+# Tillandsias checks for updates automatically so you always
+# have the latest features and security fixes.
+
+[updates]
+check_interval_hours = {check_interval_hours}  # Check every {check_interval_hours} hours
+check_on_launch = {check_on_launch}     # Also check when the app starts
+
+# -- Advanced: Port range -------------------------------------------------
+#
+# When Tillandsias creates a development environment, it needs
+# some network ports for communication. These ports are only
+# accessible on your computer (not from the internet).
+#
+# You probably don't need to change this unless another app
+# is using ports in this range.
+
+[defaults]
+port_range = "{port_range}"
+
+# -- Security (read-only) -------------------------------------------------
+#
+# These security settings are always on and cannot be changed.
+# They're listed here so you know what's protecting your system:
+#
+#   cap_drop_all:       Drops all special permissions from environments
+#   no_new_privileges:  Prevents programs from gaining extra access
+#   userns_keep_id:     Your files keep their normal ownership
+#
+# These settings protect your code and your computer.
+# They cannot be weakened, even by editing this file.
+
+[security]
+cap_drop_all = true
+no_new_privileges = true
+userns_keep_id = true
+"#,
+        watch_paths = watch_paths_str,
+        debounce_ms = config.scanner.debounce_ms,
+        language = config.i18n.language,
+        agent = config.agent.selected.as_env_str(),
+        check_interval_hours = config.updates.check_interval_hours,
+        check_on_launch = config.updates.check_on_launch,
+        port_range = config.defaults.port_range,
+    )
+}
+
 /// Save the selected language to the global config file.
 ///
-/// Reads the existing config, updates the i18n section, and writes it back.
+/// Reads the existing config, updates the i18n section, and writes it back
+/// as a verbose, user-friendly file with extensive comments.
 /// Creates the config directory and file if they don't exist.
+///
+/// @trace spec:environment-runtime
 pub fn save_selected_language(language: &str) {
     let dir = config_dir();
     if let Err(e) = std::fs::create_dir_all(&dir) {
@@ -377,17 +495,11 @@ pub fn save_selected_language(language: &str) {
     let mut config = load_global_config_from(&path);
     config.i18n.language = language.to_string();
 
-    match toml::to_string_pretty(&config) {
-        Ok(contents) => {
-            if let Err(e) = std::fs::write(&path, contents) {
-                warn!(error = %e, "Failed to write config file");
-            } else {
-                debug!(?path, language, "Language selection saved");
-            }
-        }
-        Err(e) => {
-            warn!(error = %e, "Failed to serialize config");
-        }
+    let contents = generate_verbose_config(&config);
+    if let Err(e) = std::fs::write(&path, &contents) {
+        warn!(error = %e, "Failed to write config file");
+    } else {
+        debug!(?path, language, "Language selection saved");
     }
 }
 
@@ -421,8 +533,11 @@ pub fn language_to_lang_value(code: &str) -> &'static str {
 
 /// Save the selected agent to the global config file.
 ///
-/// Reads the existing config, updates the agent section, and writes it back.
+/// Reads the existing config, updates the agent section, and writes it back
+/// as a verbose, user-friendly file with extensive comments.
 /// Creates the config directory and file if they don't exist.
+///
+/// @trace spec:environment-runtime
 pub fn save_selected_agent(agent: SelectedAgent) {
     let dir = config_dir();
     if let Err(e) = std::fs::create_dir_all(&dir) {
@@ -434,17 +549,11 @@ pub fn save_selected_agent(agent: SelectedAgent) {
     let mut config = load_global_config_from(&path);
     config.agent.selected = agent;
 
-    match toml::to_string_pretty(&config) {
-        Ok(contents) => {
-            if let Err(e) = std::fs::write(&path, contents) {
-                warn!(error = %e, "Failed to write config file");
-            } else {
-                debug!(?path, agent = agent.as_env_str(), "Agent selection saved");
-            }
-        }
-        Err(e) => {
-            warn!(error = %e, "Failed to serialize config");
-        }
+    let contents = generate_verbose_config(&config);
+    if let Err(e) = std::fs::write(&path, &contents) {
+        warn!(error = %e, "Failed to write config file");
+    } else {
+        debug!(?path, agent = agent.as_env_str(), "Agent selection saved");
     }
 }
 
@@ -613,6 +722,38 @@ debounce_ms = 5000
         assert!(config.security.cap_drop_all);
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn verbose_config_roundtrips() {
+        let config = GlobalConfig::default();
+        let verbose = generate_verbose_config(&config);
+
+        // The verbose output must be parseable back to a valid config
+        let parsed: GlobalConfig = toml::from_str(&verbose).unwrap();
+        assert_eq!(parsed.scanner.debounce_ms, config.scanner.debounce_ms);
+        assert_eq!(parsed.defaults.port_range, config.defaults.port_range);
+        assert_eq!(parsed.i18n.language, config.i18n.language);
+        assert_eq!(parsed.agent.selected, config.agent.selected);
+        assert_eq!(
+            parsed.updates.check_interval_hours,
+            config.updates.check_interval_hours
+        );
+        assert_eq!(parsed.updates.check_on_launch, config.updates.check_on_launch);
+        assert!(parsed.security.cap_drop_all);
+        assert!(parsed.security.no_new_privileges);
+        assert!(parsed.security.userns_keep_id);
+    }
+
+    #[test]
+    fn verbose_config_contains_comments() {
+        let config = GlobalConfig::default();
+        let verbose = generate_verbose_config(&config);
+
+        assert!(verbose.contains("This file is safe to delete"));
+        assert!(verbose.contains("Your preferred coding assistant"));
+        assert!(verbose.contains("cannot be weakened"));
+        assert!(verbose.contains("Your language"));
     }
 }
 
