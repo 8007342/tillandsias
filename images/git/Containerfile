@@ -2,8 +2,14 @@
 # Lightweight git daemon for Tillandsias enclave network.
 # Mirrors repositories from forge containers and optionally pushes to remotes.
 # Built on Alpine — minimal footprint (~15MB).
+# DISTRO: Alpine 3.20 — busybox sh default, bash installed explicitly.
+#         Health checks use nc -z (busybox netcat, NOT /dev/tcp).
+#         User creation: adduser -D (NOT useradd).
 FROM docker.io/library/alpine:3.20
 
+# @trace spec:git-mirror-service — git daemon + bash for entrypoint
+# DISTRO: apk add --no-cache (Alpine), NOT microdnf/dnf (Fedora)
+# DISTRO: adduser -D (Alpine), NOT useradd (Fedora)
 RUN apk add --no-cache git git-daemon bash openssh-client \
     && adduser -D -u 1000 -s /bin/bash git \
     && mkdir -p /srv/git /var/log/git-service \

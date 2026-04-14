@@ -4,6 +4,8 @@ set -e
 # Entrypoint for the Tillandsias git service container.
 # Runs git daemon in foreground, serving all repositories under /srv/git.
 # Forge containers push here; post-receive hooks mirror to configured remotes.
+# DISTRO: Alpine 3.20 — bash installed explicitly via apk add bash.
+#         Uses POSIX-compatible constructs only (no [[ ]], no arrays).
 
 echo "========================================"
 echo "  tillandsias git service"

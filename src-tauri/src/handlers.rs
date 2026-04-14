@@ -278,10 +278,11 @@ pub(crate) async fn ensure_inference_running(
 
             // @trace spec:inference-container
             // Health check: verify ollama API is responding before declaring ready.
-            // Uses wget (Alpine-compatible) to probe the ollama version endpoint.
+            // DISTRO: inference is Fedora Minimal — has curl, NOT wget.
+            // Alpine containers use wget (busybox); Fedora containers use curl.
             for attempt in 0..10u32 {
                 let check = tillandsias_podman::podman_cmd()
-                    .args(["exec", INFERENCE_CONTAINER_NAME, "wget", "-q", "--spider", "--timeout=2", "http://localhost:11434/api/version"])
+                    .args(["exec", INFERENCE_CONTAINER_NAME, "curl", "-sf", "--max-time", "2", "-o", "/dev/null", "http://localhost:11434/api/version"])
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
                     .status()
@@ -563,11 +564,12 @@ pub(crate) async fn ensure_proxy_running(
             // because podman's internal DNS hasn't registered the "proxy" alias yet,
             // or squid hasn't finished initializing its SSL cert database.
             //
-            // Uses `wget --spider` instead of bash /dev/tcp — the proxy image is
-            // Alpine (busybox sh), which doesn't support bashisms.
+            // DISTRO: Proxy is Alpine — uses busybox nc (netcat).
+            // wget --spider returns 400 (squid rejects non-proxy requests).
+            // nc -z is a pure TCP port probe — succeeds if squid is listening.
             for attempt in 0..15u32 {
                 let check = tillandsias_podman::podman_cmd()
-                    .args(["exec", PROXY_CONTAINER_NAME, "wget", "-q", "--spider", "--timeout=2", "http://localhost:3128"])
+                    .args(["exec", PROXY_CONTAINER_NAME, "sh", "-c", "nc -z localhost 3128"])
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
                     .status()
@@ -617,7 +619,8 @@ pub(crate) async fn stop_proxy() {
 
 /// Check if the proxy container is running and responding on port 3128.
 ///
-/// Performs a single health probe using `wget --spider` (Alpine-compatible).
+/// Performs a single health probe using `wget --spider`.
+/// DISTRO: Proxy is Alpine — busybox wget is built-in, curl is NOT available.
 /// Returns `true` if the proxy responds, `false` otherwise.
 ///
 /// Used by both `ensure_proxy_running` (readiness loop) and `tools_overlay`
@@ -625,8 +628,10 @@ pub(crate) async fn stop_proxy() {
 ///
 /// @trace spec:proxy-container
 pub(crate) async fn is_proxy_healthy() -> bool {
+    // DISTRO: Proxy is Alpine — busybox nc (netcat) for TCP probe.
+    // wget --spider returns 400 because squid rejects non-proxy HTTP requests.
     let check = tillandsias_podman::podman_cmd()
-        .args(["exec", PROXY_CONTAINER_NAME, "wget", "-q", "--spider", "--timeout=2", "http://localhost:3128"])
+        .args(["exec", PROXY_CONTAINER_NAME, "sh", "-c", "nc -z localhost 3128"])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
@@ -1134,7 +1139,8 @@ pub(crate) async fn ensure_git_service_running(
 
             // @trace spec:git-mirror-service
             // Health check: verify git daemon is listening on port 9418.
-            // Uses `nc -z` (busybox netcat) for a TCP connection check.
+            // DISTRO: Git service is Alpine — uses busybox nc (built-in).
+            // nc -z does a zero-I/O TCP connect check.
             for attempt in 0..10u32 {
                 let check = tillandsias_podman::podman_cmd()
                     .args(["exec", &container_name, "sh", "-c", "nc -z localhost 9418"])

@@ -1,12 +1,20 @@
 # @trace spec:proxy-container
 # MITM caching HTTP/HTTPS forward proxy for Tillandsias enclave network.
 # Built on Alpine + squid — minimal footprint (~15-20MB).
+# DISTRO: Alpine 3.20 — busybox sh default, bash installed explicitly.
+#         Health checks use wget (busybox built-in, NOT curl).
+#         CA bundle at /etc/ssl/certs/ca-certificates.crt (NOT Fedora's /etc/pki/).
+#         User creation: adduser -D (NOT useradd).
 FROM docker.io/library/alpine:3.20
 
+# @trace spec:proxy-container — squid + SSL for MITM proxy
 # squid + openssl for SSL bump support
 # ca-certificates for upstream TLS verification
+# bash: entrypoint.sh uses #!/bin/bash (busybox sh would also work but bash is explicit)
 # Alpine's squid package includes SSL support (--enable-ssl-crtd) by default.
 # No separate squid-openssl package exists on Alpine 3.20.
+# DISTRO: apk add --no-cache (Alpine), NOT microdnf/dnf (Fedora)
+# DISTRO: adduser -D (Alpine), NOT useradd (Fedora)
 RUN apk add --no-cache squid openssl bash ca-certificates \
     && adduser -D -u 1000 -s /sbin/nologin proxy \
     && mkdir -p /var/spool/squid /var/log/squid /var/run/squid \

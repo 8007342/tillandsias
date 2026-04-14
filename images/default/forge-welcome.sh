@@ -138,6 +138,7 @@ echo ""
 printf "  ${B_WHITE}%s${RST}\n" "$L_WELCOME_SERVICES"
 printf "    ${B_CYAN}proxy${RST}         ${DIM}%s${RST}\n" "$L_WELCOME_PROXY_DESC"
 printf "    ${B_CYAN}git-service${RST}   ${DIM}%s${RST}\n" "$L_WELCOME_GIT_DESC"
+# DISTRO: Forge is Fedora — curl available. Do NOT use wget for consistency.
 if curl -s "http://inference:11434/api/version" >/dev/null 2>&1; then
     printf "    ${B_CYAN}inference${RST}     ${DIM}%s${RST}\n" "$L_WELCOME_INFERENCE_DESC"
 fi

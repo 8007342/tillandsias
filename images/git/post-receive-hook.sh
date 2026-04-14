@@ -4,6 +4,8 @@
 # Installed into each mirror's hooks/post-receive directory.
 # Pushes to the configured origin remote after receiving from a forge container.
 # Always exits 0 — never blocks the forge's push even if the remote push fails.
+# DISTRO: Alpine 3.20 — bash installed explicitly via apk add bash.
+#         Uses POSIX-compatible constructs only (no [[ ]], no arrays).
 
 REMOTE_URL="$(git remote get-url origin 2>/dev/null || true)"
 

@@ -2,6 +2,8 @@
 set -e
 # @trace spec:proxy-container
 # Entrypoint for the Tillandsias MITM caching proxy container.
+# DISTRO: Alpine 3.20 — bash installed explicitly via apk add bash.
+#         Uses POSIX-compatible constructs only (no [[ ]], no arrays).
 
 # Initialize cache structure if swap directories don't exist yet.
 if [ ! -d /var/spool/squid/00 ]; then

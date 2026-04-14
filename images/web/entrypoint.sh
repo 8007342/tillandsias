@@ -1,5 +1,8 @@
 #!/bin/sh
 set -e
+# @trace spec:web-image
+# DISTRO: Alpine — uses #!/bin/sh (busybox ash). No bash dependency.
+#         httpd is busybox built-in. No curl/wget needed.
 
 PROJECT_NAME="$(basename "$(pwd)")"
 
