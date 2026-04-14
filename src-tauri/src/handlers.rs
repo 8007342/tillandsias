@@ -529,6 +529,29 @@ pub(crate) async fn ensure_proxy_running(
                 "Proxy container has CA certs only — zero credentials, pids-limit=32, read-only FS"
             );
 
+            // @trace spec:proxy-container
+            // Wait for squid to accept connections before declaring the proxy ready.
+            // Without this, containers/builds that start immediately after may fail
+            // because podman's internal DNS hasn't registered the "proxy" alias yet,
+            // or squid hasn't finished initializing its SSL cert database.
+            for attempt in 0..15u32 {
+                let check = tillandsias_podman::podman_cmd()
+                    .args(["exec", PROXY_CONTAINER_NAME, "bash", "-c", "echo > /dev/tcp/localhost/3128"])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .await;
+                if check.map(|s| s.success()).unwrap_or(false) {
+                    info!(spec = "proxy-container", attempt, "Proxy readiness check passed");
+                    break;
+                }
+                if attempt < 14 {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                } else {
+                    warn!(spec = "proxy-container", "Proxy readiness check failed after 15 attempts — proceeding anyway");
+                }
+            }
+
             Ok(())
         }
         Err(e) => {

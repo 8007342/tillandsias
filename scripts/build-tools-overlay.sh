@@ -192,6 +192,25 @@ _step "Installing Claude Code..."
     -c '
         set -euo pipefail
 
+        # @trace spec:proxy-container, spec:layered-tools-overlay
+        # Wait for proxy DNS + TCP readiness before npm fetches.
+        # The proxy container may have just started — podman internal DNS
+        # needs a moment to register the "proxy" alias on the enclave network.
+        if [ -n "${HTTP_PROXY:-}" ]; then
+            echo "[tools-overlay] Waiting for proxy to be ready..."
+            for i in $(seq 1 30); do
+                if curl -s --max-time 2 -o /dev/null http://proxy:3128 2>/dev/null; then
+                    echo "[tools-overlay] Proxy ready"
+                    break
+                fi
+                if [ "$i" -eq 30 ]; then
+                    echo "[tools-overlay] WARNING: Proxy not responding after 30s — continuing without proxy" >&2
+                    unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy
+                fi
+                sleep 1
+            done
+        fi
+
         echo "[tools-overlay] Installing Claude Code..."
         npm install -g --prefix /home/forge/.tools/claude @anthropic-ai/claude-code 2>&1
 
