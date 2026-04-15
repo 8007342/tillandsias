@@ -863,11 +863,10 @@ mod tests {
     // @trace spec:podman-orchestration
     #[test]
     fn service_containers_have_read_only_fs() {
-        // Note: proxy is NOT read-only (squid needs writable runtime dirs).
-        // Proxy has its own test: proxy_is_not_read_only.
+        // Proxy and inference are NOT read-only — they need writable runtime dirs.
+        // With --userns=keep-id, tmpfs dirs are root-owned but process runs as UID 1000.
         let read_only_profiles = [
             container_profile::git_service_profile(),
-            container_profile::inference_profile(),
             container_profile::web_profile(),
         ];
 

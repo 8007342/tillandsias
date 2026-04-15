@@ -280,7 +280,9 @@ pub(crate) async fn ensure_inference_running(
             // Health check: verify ollama API is responding before declaring ready.
             // DISTRO: inference is Fedora Minimal — has curl, NOT wget.
             // Alpine containers use wget (busybox); Fedora containers use curl.
-            for attempt in 0..10u32 {
+            // Ollama takes 15-30s to start (database init, model loading).
+            // 30 attempts × 1s = 30s timeout.
+            for attempt in 0..30u32 {
                 let check = tillandsias_podman::podman_cmd()
                     .args(["exec", INFERENCE_CONTAINER_NAME, "curl", "-sf", "--max-time", "2", "-o", "/dev/null", "http://localhost:11434/api/version"])
                     .stdout(std::process::Stdio::null())
@@ -291,7 +293,7 @@ pub(crate) async fn ensure_inference_running(
                     info!(spec = "inference-container", attempt, "Inference health check passed");
                     break;
                 }
-                if attempt < 9 {
+                if attempt < 29 {
                     tokio::time::sleep(Duration::from_secs(1)).await;
                 } else {
                     warn!(
@@ -299,7 +301,7 @@ pub(crate) async fn ensure_inference_running(
                         category = "capability",
                         safety = "DEGRADED: inference container started but API not responding",
                         spec = "inference-container",
-                        "Inference health check failed after 10 attempts — proceeding with degraded inference"
+                        "Inference health check failed after 30 attempts — proceeding with degraded inference"
                     );
                 }
             }

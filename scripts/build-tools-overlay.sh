@@ -224,6 +224,18 @@ _step "Installing Claude Code..."
             done
         fi
 
+        # @trace spec:proxy-container
+        # Make curl trust our MITM proxy CA chain.
+        # NODE_EXTRA_CA_CERTS works for npm, but curl uses CURL_CA_BUNDLE.
+        # We can'"'"'t write to /etc/pki (--cap-drop=ALL + --userns=keep-id = no root).
+        # DISTRO: Fedora curl respects CURL_CA_BUNDLE env var.
+        CA_CHAIN="/run/tillandsias/ca-chain.crt"
+        if [ -f "$CA_CHAIN" ]; then
+            # Create a combined bundle: system certs + our proxy CA
+            cat /etc/pki/tls/certs/ca-bundle.crt "$CA_CHAIN" > /tmp/ca-bundle-combined.crt 2>/dev/null || true
+            export CURL_CA_BUNDLE=/tmp/ca-bundle-combined.crt
+        fi
+
         echo "[tools-overlay] Installing Claude Code..."
         npm install -g --prefix /home/forge/.tools/claude @anthropic-ai/claude-code 2>&1
 

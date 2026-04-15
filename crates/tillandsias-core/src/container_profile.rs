@@ -411,8 +411,11 @@ pub fn inference_profile() -> ContainerProfile {
         secrets: vec![],  // No credentials needed
         image_override: None,
         pids_limit: 128,       // Ollama server + model runners
-        read_only: true,       // Service container — immutable root FS
-        tmpfs_mounts: vec!["/tmp"],
+        // NOT read-only: ollama needs writable home dir for runtime state,
+        // model downloads, and temporary files. Same --userns=keep-id
+        // tmpfs ownership issue as squid (UID 1000 can't write root-owned tmpfs).
+        read_only: false,
+        tmpfs_mounts: vec![],
     }
 }
 
@@ -794,9 +797,8 @@ mod tests {
     #[test]
     fn service_containers_are_read_only() {
         assert!(git_service_profile().read_only, "Git service must be read-only");
-        // Proxy is NOT read-only — squid needs writable runtime dirs.
-        // See proxy_is_not_read_only test.
-        assert!(inference_profile().read_only, "Inference must be read-only");
+        // Proxy and inference are NOT read-only — they need writable runtime dirs.
+        // With --userns=keep-id, tmpfs dirs are root-owned but process runs as UID 1000.
         assert!(web_profile().read_only, "Web must be read-only");
     }
 
@@ -811,9 +813,10 @@ mod tests {
     // @trace spec:podman-orchestration
     #[test]
     fn read_only_containers_have_tmpfs_mounts() {
+        // Only git_service and web are read-only.
+        // Proxy and inference need writable dirs (--userns=keep-id tmpfs ownership issue).
         let profiles = [
             ("git_service", git_service_profile()),
-            ("inference", inference_profile()),
             ("web", web_profile()),
         ];
 
