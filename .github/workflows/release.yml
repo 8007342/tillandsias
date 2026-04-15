@@ -317,7 +317,14 @@ jobs:
 
           LINUX_SIG="$(read_sig 'Tillandsias-linux-x86_64.AppImage.sig')"
           MACOS_AARCH64_SIG="$(read_sig 'Tillandsias-macos-aarch64.app.tar.gz.sig')"
-          WINDOWS_NSIS_SIG="$(read_sig 'Tillandsias-windows-x86_64-setup.nsis.zip.sig')"
+          # Try .nsis.zip.sig first (Tauri v1), fall back to .exe (Tauri v2)
+          WINDOWS_SIG="$(read_sig 'Tillandsias-windows-x86_64-setup.nsis.zip.sig')"
+          WINDOWS_URL="${BASE_URL}/Tillandsias-windows-x86_64-setup.nsis.zip"
+          if [ -z "$WINDOWS_SIG" ] || [ ! -f "release-artifacts/Tillandsias-windows-x86_64-setup.nsis.zip" ]; then
+            # Tauri v2 produces .exe directly, no .nsis.zip wrapper
+            WINDOWS_SIG=""
+            WINDOWS_URL="${BASE_URL}/Tillandsias-windows-x86_64-setup.exe"
+          fi
           WINDOWS_MSI_SIG="$(read_sig 'Tillandsias_${SEMVER}_x64_en-US.msi.sig')"
 
           # Build the manifest. Platform keys follow Tauri v2 convention:
@@ -338,8 +345,8 @@ jobs:
                 "signature": "${MACOS_AARCH64_SIG}"
               },
               "windows-x86_64": {
-                "url": "${BASE_URL}/Tillandsias-windows-x86_64-setup.nsis.zip",
-                "signature": "${WINDOWS_NSIS_SIG}"
+                "url": "${WINDOWS_URL}",
+                "signature": "${WINDOWS_SIG}"
               }
             }
           }

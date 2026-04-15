@@ -297,6 +297,8 @@ fn download_update(url: &str) -> Result<PathBuf, String> {
     // can determine whether extraction is needed.
     let filename = if url.ends_with(".AppImage") {
         "tillandsias-update.AppImage"
+    } else if url.ends_with(".exe") {
+        "tillandsias-update-setup.exe"
     } else {
         "tillandsias-update.tar.gz"
     };
@@ -464,8 +466,9 @@ fn apply_macos_update(
 
 /// Apply a Windows NSIS update.
 ///
-/// The downloaded artifact is a `.nsis.zip` containing the NSIS installer exe.
-/// Extract and run it with `/S` (silent) flag to update in-place.
+/// The downloaded artifact is either a `.exe` installer directly (Tauri v2)
+/// or a `.nsis.zip` containing the installer (Tauri v1).
+/// Run with `/S` (silent) flag to update in-place.
 ///
 /// @trace spec:update-system, spec:cross-platform
 #[allow(dead_code)] // Only compiled on Windows
@@ -473,28 +476,33 @@ fn apply_windows_update(
     download_path: &std::path::Path,
     _install_target: &std::path::Path,
 ) -> Result<(), String> {
-    let tmp_dir = std::env::temp_dir().join("tillandsias-update-extract");
-    let _ = std::fs::remove_dir_all(&tmp_dir);
-    std::fs::create_dir_all(&tmp_dir)
-        .map_err(|e| format!("failed to create temp extract dir: {e}"))?;
+    // If the download IS an exe, run it directly (Tauri v2)
+    let setup_exe = if download_path.extension().map(|e| e == "exe").unwrap_or(false) {
+        download_path.to_path_buf()
+    } else {
+        // Extract .nsis.zip (Tauri v1 fallback)
+        let tmp_dir = std::env::temp_dir().join("tillandsias-update-extract");
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        std::fs::create_dir_all(&tmp_dir)
+            .map_err(|e| format!("failed to create temp extract dir: {e}"))?;
 
-    // Extract the .nsis.zip
-    let status = std::process::Command::new("tar")
-        .args([
-            "xf",
-            download_path.to_str().unwrap_or(""),
-            "-C",
-            tmp_dir.to_str().unwrap_or(""),
-        ])
-        .status()
-        .map_err(|e| format!("tar not found or failed to spawn: {e}"))?;
+        let status = std::process::Command::new("tar")
+            .args([
+                "xf",
+                download_path.to_str().unwrap_or(""),
+                "-C",
+                tmp_dir.to_str().unwrap_or(""),
+            ])
+            .status()
+            .map_err(|e| format!("tar not found or failed to spawn: {e}"))?;
 
-    if !status.success() {
-        return Err("zip extraction failed".to_string());
-    }
+        if !status.success() {
+            return Err("zip extraction failed".to_string());
+        }
 
-    // Find the setup exe in the extracted directory
-    let setup_exe = find_exe_in_dir(&tmp_dir)?;
+        // Find the setup exe in the extracted directory
+        find_exe_in_dir(&tmp_dir)?
+    };
 
     // Run the installer silently — it replaces the running binary
     let status = std::process::Command::new(&setup_exe)
@@ -506,8 +514,8 @@ fn apply_windows_update(
         return Err(format!("installer exited with code {}", status.code().unwrap_or(-1)));
     }
 
-    // Clean up
-    let _ = std::fs::remove_dir_all(&tmp_dir);
+    // Clean up temp files
+    let _ = std::fs::remove_dir_all(std::env::temp_dir().join("tillandsias-update-extract"));
     Ok(())
 }
 
