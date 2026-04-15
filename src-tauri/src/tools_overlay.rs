@@ -371,45 +371,51 @@ fn build_overlay_sync(
 
     #[cfg(target_os = "windows")]
     let output = {
-        // Windows: can't run bash scripts directly. Use podman run with
-        // inline install commands (same approach as init.rs for image builds).
+        // Windows: run the bash script via Git Bash (bundled with Git for Windows).
+        // The script handles proxy detection, CA chain, enclave routing — same as Unix.
         // @trace spec:layered-tools-overlay, spec:cross-platform
-        let version_dir_str = version_dir.to_str().unwrap_or_default();
-        // Convert Windows path to forward slashes for podman
-        let version_dir_unix = version_dir_str.replace('\\', "/");
+        let script = source_dir.join("scripts").join("build-tools-overlay.sh");
+        if !script.exists() {
+            crate::embedded::cleanup_image_sources();
+            return Err(format!(
+                "build-tools-overlay.sh not found at {}",
+                script.display()
+            ));
+        }
 
-        info!(spec = "layered-tools-overlay", "Windows: using direct podman run for tools overlay build");
+        // Find Git Bash — standard install locations
+        let bash_path = [
+            r"C:\Program Files\Git\bin\bash.exe",
+            r"C:\Program Files (x86)\Git\bin\bash.exe",
+        ]
+        .iter()
+        .find(|p| std::path::Path::new(p).exists())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "bash.exe".to_string()); // fall back to PATH
 
-        tillandsias_podman::podman_cmd_sync()
-            .args([
-                "run", "--rm", "--init",
-                "--cap-drop=ALL",
-                "--security-opt=no-new-privileges",
-                "--userns=keep-id",
-                "--security-opt=label=disable",
-                "-v", &format!("{version_dir_unix}:/home/forge/.tools:rw"),
-                "--entrypoint", "bash",
-            ])
+        info!(
+            bash = %bash_path,
+            spec = "layered-tools-overlay",
+            "Windows: running build-tools-overlay.sh via Git Bash"
+        );
+
+        let mut cmd = std::process::Command::new(&bash_path);
+        cmd.arg(script.to_str().unwrap_or_default())
+            .arg(version_dir.to_str().unwrap_or_default())
             .arg(forge_tag)
-            .args(["-c", "set -euo pipefail && \
-                echo '[tools-overlay] Installing Claude Code...' && \
-                npm install -g --prefix /home/forge/.tools/claude @anthropic-ai/claude-code 2>&1 && \
-                echo '[tools-overlay] Installing OpenSpec...' && \
-                npm install -g --prefix /home/forge/.tools/openspec @fission-ai/openspec 2>&1 && \
-                echo '[tools-overlay] Installing OpenCode...' && \
-                export OPENCODE_INSTALL_DIR=/home/forge/.tools/opencode && \
-                mkdir -p /home/forge/.tools/opencode/bin && \
-                (curl -fsSL https://opencode.ai/install | bash 2>&1 || true) && \
-                if [ ! -x /home/forge/.tools/opencode/bin/opencode ] && [ -f \"$HOME/.opencode/bin/opencode\" ]; then \
-                    cp \"$HOME/.opencode/bin/opencode\" /home/forge/.tools/opencode/bin/opencode && \
-                    chmod +x /home/forge/.tools/opencode/bin/opencode; \
-                fi && \
-                echo '[tools-overlay] Done.'"])
-            .output()
-            .map_err(|e| {
-                error!(error = %e, spec = "layered-tools-overlay", "Failed to run podman for tools overlay");
-                format!("Failed to run podman for tools overlay: {e}")
-            })?
+            .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
+            .env("TOOLS_OVERLAY_QUIET", "1");
+
+        if proxy_healthy && ca_chain.exists() {
+            cmd.env("CA_CHAIN_PATH", &ca_chain);
+        } else if !proxy_healthy {
+            info!(spec = "layered-tools-overlay", "Proxy unhealthy — builder will use direct network access");
+        }
+
+        cmd.output().map_err(|e| {
+            error!(error = %e, spec = "layered-tools-overlay", "Failed to launch build script via Git Bash");
+            format!("Failed to launch build-tools-overlay.sh via Git Bash: {e}")
+        })?
     };
 
     crate::embedded::cleanup_image_sources();
