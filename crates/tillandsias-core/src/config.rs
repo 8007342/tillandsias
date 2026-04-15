@@ -341,6 +341,20 @@ pub fn log_dir() -> PathBuf {
     }
 }
 
+/// Per-container log directory under the platform-aware log root.
+///
+/// Returns `<log_dir>/containers/<container_name>/logs/`.
+/// Each container gets an isolated log directory for accountability and
+/// log rotation. The caller is responsible for creating the directory.
+///
+/// @trace spec:podman-orchestration
+pub fn container_log_dir(container_name: &str) -> PathBuf {
+    log_dir()
+        .join("containers")
+        .join(container_name)
+        .join("logs")
+}
+
 /// Platform-aware cache directory.
 pub fn cache_dir() -> PathBuf {
     match Os::detect() {

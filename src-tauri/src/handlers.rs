@@ -231,6 +231,9 @@ pub(crate) async fn ensure_inference_running(
     let profile = tillandsias_core::container_profile::inference_profile();
     let cache = cache_dir();
 
+    // @trace spec:podman-orchestration
+    ensure_container_log_dir(INFERENCE_CONTAINER_NAME);
+
     // Ensure model cache dir exists
     let models_cache = cache.join("models");
     std::fs::create_dir_all(&models_cache).ok();
@@ -491,6 +494,9 @@ pub(crate) async fn ensure_proxy_running(
     let profile = tillandsias_core::container_profile::proxy_profile();
     let cache = cache_dir();
 
+    // @trace spec:podman-orchestration
+    ensure_container_log_dir(PROXY_CONTAINER_NAME);
+
     // Ensure cache dir for proxy exists
     let proxy_cache = cache.join("proxy-cache");
     std::fs::create_dir_all(&proxy_cache).ok();
@@ -656,6 +662,102 @@ pub(crate) async fn cleanup_enclave_network() {
                 "Enclave network removed"
             ),
             Err(e) => warn!(spec = "enclave-network", error = %e, "Enclave network removal failed — zombie containers may exist"),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Per-container log management
+// @trace spec:podman-orchestration
+// ---------------------------------------------------------------------------
+
+/// Maximum total size of a container's log directory before rotation (10 MB).
+const CONTAINER_LOG_MAX_BYTES: u64 = 10 * 1024 * 1024;
+
+/// Create the per-container log directory and rotate old logs if oversized.
+///
+/// Called before every container launch. If the log directory already exists
+/// and exceeds `CONTAINER_LOG_MAX_BYTES`, the oldest files are deleted until
+/// the total is under the limit.
+///
+/// @trace spec:podman-orchestration
+fn ensure_container_log_dir(container_name: &str) {
+    let log_dir = tillandsias_core::config::container_log_dir(container_name);
+    if let Err(e) = std::fs::create_dir_all(&log_dir) {
+        warn!(
+            container = %container_name,
+            error = %e,
+            spec = "podman-orchestration",
+            "Failed to create container log directory"
+        );
+        return;
+    }
+
+    // Check total size and rotate if needed
+    rotate_container_logs(&log_dir, container_name);
+}
+
+/// Rotate (trim) log files in a directory if total size exceeds the limit.
+///
+/// Collects all files, sorts by modification time (oldest first), and deletes
+/// until the total is under `CONTAINER_LOG_MAX_BYTES`.
+///
+/// @trace spec:podman-orchestration
+fn rotate_container_logs(log_dir: &Path, container_name: &str) {
+    let entries: Vec<_> = match std::fs::read_dir(log_dir) {
+        Ok(rd) => rd.filter_map(|e| e.ok()).collect(),
+        Err(_) => return,
+    };
+
+    // Collect file paths with metadata (size + modified time)
+    let mut files: Vec<(PathBuf, u64, std::time::SystemTime)> = Vec::new();
+    let mut total_size: u64 = 0;
+
+    for entry in &entries {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        if let Ok(meta) = entry.metadata() {
+            let size = meta.len();
+            let modified = meta.modified().unwrap_or(std::time::UNIX_EPOCH);
+            total_size += size;
+            files.push((path, size, modified));
+        }
+    }
+
+    if total_size <= CONTAINER_LOG_MAX_BYTES {
+        return;
+    }
+
+    // Sort oldest first
+    files.sort_by_key(|(_, _, mtime)| *mtime);
+
+    info!(
+        container = %container_name,
+        total_bytes = total_size,
+        limit_bytes = CONTAINER_LOG_MAX_BYTES,
+        spec = "podman-orchestration",
+        "Rotating container logs (over limit)"
+    );
+
+    for (path, size, _) in &files {
+        if total_size <= CONTAINER_LOG_MAX_BYTES {
+            break;
+        }
+        if let Err(e) = std::fs::remove_file(path) {
+            warn!(
+                path = %path.display(),
+                error = %e,
+                "Failed to remove old log file during rotation"
+            );
+        } else {
+            total_size = total_size.saturating_sub(*size);
+            debug!(
+                path = %path.display(),
+                freed_bytes = size,
+                "Removed old log file"
+            );
         }
     }
 }
@@ -941,6 +1043,52 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
         "Post-receive hook installed"
     );
 
+    // Fix mirror origin URL: `git clone --mirror` sets origin to the local
+    // path we cloned from. If the project has a real remote (e.g., github.com),
+    // update the mirror's origin to that URL. This way the post-receive hook
+    // pushes to the real remote (through the git service's D-Bus keyring access)
+    // instead of trying to push to an inaccessible local path.
+    // @trace spec:git-mirror-service
+    if let GitProjectState::RemoteRepo { ref remote_url } = state {
+        let mirror_ref = if has_git { mp.as_str() } else { container_mirror.as_str() };
+        match run_git(
+            &["-C", mirror_ref, "remote", "set-url", "origin", remote_url],
+            &mounts,
+        ) {
+            Ok(o) if o.status.success() => {
+                info!(
+                    spec = "git-mirror-service",
+                    project = %project_name,
+                    remote_url = %remote_url,
+                    "Mirror origin set to project's remote URL"
+                );
+            }
+            Ok(o) => {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                warn!(
+                    spec = "git-mirror-service",
+                    project = %project_name,
+                    stderr = %stderr,
+                    "Failed to set mirror origin URL — post-receive push may fail"
+                );
+            }
+            Err(e) => {
+                warn!(
+                    spec = "git-mirror-service",
+                    project = %project_name,
+                    error = %e,
+                    "Failed to set mirror origin URL — post-receive push may fail"
+                );
+            }
+        }
+    } else {
+        debug!(
+            spec = "git-mirror-service",
+            project = %project_name,
+            "Project has no remote — mirror origin stays as local path (push will be a no-op)"
+        );
+    }
+
     info!(
         accountability = true,
         category = "git",
@@ -1082,6 +1230,9 @@ pub(crate) async fn ensure_git_service_running(
     // @trace spec:secret-management, spec:git-mirror-service
     let profile = tillandsias_core::container_profile::git_service_profile();
     let cache = cache_dir();
+
+    // @trace spec:podman-orchestration
+    ensure_container_log_dir(&container_name);
 
     let ctx = tillandsias_core::container_profile::LaunchContext {
         container_name: container_name.clone(),
@@ -2324,6 +2475,9 @@ pub async fn handle_attach_here(
         .iter()
         .any(|wp| wp == &project_path);
 
+    // @trace spec:podman-orchestration
+    ensure_container_log_dir(&container_name);
+
     // Build the full `podman run -it --rm ...` command string.
     // We open a terminal window running this command — the terminal provides
     // the TTY, podman passes it to the container, opencode gets a real terminal.
@@ -2948,6 +3102,9 @@ pub async fn handle_root_terminal(
     };
     state.running.push(placeholder);
     info!(container = %container_name, "Root terminal registered (bud state)");
+
+    // @trace spec:podman-orchestration
+    ensure_container_log_dir(&container_name);
 
     // Use terminal profile with SrcRoot working dir for the root terminal
     let mut profile = tillandsias_core::container_profile::terminal_profile();

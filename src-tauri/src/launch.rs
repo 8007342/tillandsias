@@ -309,6 +309,13 @@ fn resolve_mount_source(source: &MountSource, ctx: &LaunchContext) -> Option<Str
                 None // Skip mount — entrypoints will use defaults
             }
         }
+        // @trace spec:podman-orchestration
+        // Per-container log directory — each container writes its own logs.
+        MountSource::ContainerLogs => {
+            let log_path = tillandsias_core::config::container_log_dir(&ctx.container_name);
+            // Always resolve — the caller creates the directory before launch.
+            Some(log_path.display().to_string())
+        }
     }
 }
 

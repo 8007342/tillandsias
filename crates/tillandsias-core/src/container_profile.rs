@@ -82,6 +82,11 @@ pub enum MountSource {
     /// Mount is skipped if the tmpfs directory doesn't exist yet.
     /// @trace spec:layered-tools-overlay
     ConfigOverlay,
+    /// Per-container log directory.
+    /// Resolved at launch time to `~/.local/state/tillandsias/containers/<name>/logs/`.
+    /// Each container gets its own isolated log directory mounted RW.
+    /// @trace spec:podman-orchestration
+    ContainerLogs,
 }
 
 /// Mount permission mode.
@@ -324,11 +329,19 @@ pub fn web_profile() -> ContainerProfile {
     ContainerProfile {
         entrypoint: "/entrypoint.sh",
         working_dir: None,
-        mounts: vec![ProfileMount {
-            host_key: MountSource::ProjectDir,
-            container_path: "/var/www/html",
-            mode: MountMode::Ro,
-        }],
+        mounts: vec![
+            ProfileMount {
+                host_key: MountSource::ProjectDir,
+                container_path: "/var/www/html",
+                mode: MountMode::Ro,
+            },
+            // @trace spec:podman-orchestration
+            ProfileMount {
+                host_key: MountSource::ContainerLogs,
+                container_path: "/var/log/tillandsias",
+                mode: MountMode::Rw,
+            },
+        ],
         env_vars: vec![],
         secrets: vec![],
         image_override: Some("tillandsias-web:latest"),
@@ -357,6 +370,12 @@ pub fn proxy_profile() -> ContainerProfile {
             ProfileMount {
                 host_key: MountSource::CacheDir,
                 container_path: "/var/spool/squid",
+                mode: MountMode::Rw,
+            },
+            // @trace spec:podman-orchestration
+            ProfileMount {
+                host_key: MountSource::ContainerLogs,
+                container_path: "/var/log/tillandsias",
                 mode: MountMode::Rw,
             },
         ],
@@ -388,7 +407,15 @@ pub fn inference_profile() -> ContainerProfile {
     ContainerProfile {
         entrypoint: "/usr/local/bin/entrypoint.sh",
         working_dir: None,
-        mounts: vec![],  // Model cache mount added dynamically at launch time
+        mounts: vec![
+            // @trace spec:podman-orchestration
+            // Model cache mount added dynamically at launch time; log dir from profile.
+            ProfileMount {
+                host_key: MountSource::ContainerLogs,
+                container_path: "/var/log/tillandsias",
+                mode: MountMode::Rw,
+            },
+        ],
         env_vars: vec![
             // Proxy env vars so ollama can download models through the proxy
             ProfileEnvVar {
@@ -433,7 +460,15 @@ pub fn git_service_profile() -> ContainerProfile {
     ContainerProfile {
         entrypoint: "/usr/local/bin/entrypoint.sh",
         working_dir: None,
-        mounts: vec![], // Mirror volume added dynamically per-project
+        mounts: vec![
+            // @trace spec:podman-orchestration
+            // Mirror volume added dynamically per-project; log dir from profile.
+            ProfileMount {
+                host_key: MountSource::ContainerLogs,
+                container_path: "/var/log/tillandsias",
+                mode: MountMode::Rw,
+            },
+        ],
         env_vars: vec![],
         secrets: vec![
             SecretMount {
@@ -453,8 +488,9 @@ pub fn git_service_profile() -> ContainerProfile {
 
 fn common_forge_mounts() -> Vec<ProfileMount> {
     // Code comes from git mirror service, packages through proxy.
-    // Mounts: pre-built tools overlay + config overlay (both read-only).
-    // @trace spec:proxy-container, spec:layered-tools-overlay
+    // Mounts: pre-built tools overlay + config overlay (both read-only),
+    // plus per-container log directory (RW).
+    // @trace spec:proxy-container, spec:layered-tools-overlay, spec:podman-orchestration
     vec![
         ProfileMount {
             host_key: MountSource::ToolsOverlay,
@@ -467,6 +503,13 @@ fn common_forge_mounts() -> Vec<ProfileMount> {
             host_key: MountSource::ConfigOverlay,
             container_path: "/home/forge/.config-overlay",
             mode: MountMode::Ro,
+        },
+        // @trace spec:podman-orchestration
+        // Per-container log directory — each container writes its own logs in isolation.
+        ProfileMount {
+            host_key: MountSource::ContainerLogs,
+            container_path: "/var/log/tillandsias",
+            mode: MountMode::Rw,
         },
     ]
 }
@@ -586,24 +629,27 @@ mod tests {
     }
 
     #[test]
-    fn web_has_readonly_mount_only() {
+    fn web_has_readonly_mount_and_logs() {
         let profile = web_profile();
         assert!(profile.secrets.is_empty(), "Web profile should have no secrets");
         assert!(profile.env_vars.is_empty());
-        assert_eq!(profile.mounts.len(), 1);
+        assert_eq!(profile.mounts.len(), 2, "Web has project mount + container logs");
         assert_eq!(profile.mounts[0].mode, MountMode::Ro);
+        assert!(matches!(profile.mounts[1].host_key, MountSource::ContainerLogs));
+        assert_eq!(profile.mounts[1].container_path, "/var/log/tillandsias");
+        assert_eq!(profile.mounts[1].mode, MountMode::Rw);
         assert_eq!(profile.image_override, Some("tillandsias-web:latest"));
     }
 
-    // @trace spec:layered-tools-overlay
+    // @trace spec:layered-tools-overlay, spec:podman-orchestration
     #[test]
     fn forge_profiles_have_tools_overlay_mount() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
-        // Mounts: tools overlay + config overlay (both read-only)
-        // @trace spec:proxy-container, spec:layered-tools-overlay
-        assert_eq!(opencode.mounts.len(), 2);
-        assert_eq!(claude.mounts.len(), 2);
+        // Mounts: tools overlay + config overlay (both read-only) + container logs (RW)
+        // @trace spec:proxy-container, spec:layered-tools-overlay, spec:podman-orchestration
+        assert_eq!(opencode.mounts.len(), 3);
+        assert_eq!(claude.mounts.len(), 3);
         assert_eq!(opencode.mounts[0].container_path, "/home/forge/.tools");
         assert_eq!(opencode.mounts[0].mode, MountMode::Ro);
         assert!(matches!(opencode.mounts[0].host_key, MountSource::ToolsOverlay));
@@ -650,9 +696,9 @@ mod tests {
         assert_eq!(profile.env_vars.len(), 16);
     }
 
-    // @trace spec:git-mirror-service, spec:secret-management
+    // @trace spec:git-mirror-service, spec:secret-management, spec:podman-orchestration
     #[test]
-    fn git_service_has_dbus_only_no_mounts() {
+    fn git_service_has_dbus_and_log_mount() {
         let profile = git_service_profile();
         assert_eq!(
             profile.secrets.len(),
@@ -666,10 +712,18 @@ mod tests {
                 .any(|s| s.kind == SecretKind::DbusSession),
             "Git service must have DbusSession for keyring access"
         );
-        assert!(
-            profile.mounts.is_empty(),
-            "Git service mounts are added dynamically per-project"
+        // Only static mount is ContainerLogs — mirror volume added dynamically per-project
+        assert_eq!(
+            profile.mounts.len(),
+            1,
+            "Git service has only the ContainerLogs mount (mirror added dynamically)"
         );
+        assert!(
+            matches!(profile.mounts[0].host_key, MountSource::ContainerLogs),
+            "Git service mount must be ContainerLogs"
+        );
+        assert_eq!(profile.mounts[0].container_path, "/var/log/tillandsias");
+        assert_eq!(profile.mounts[0].mode, MountMode::Rw);
         assert!(
             profile.env_vars.is_empty(),
             "Git service has no static env vars"
@@ -681,15 +735,23 @@ mod tests {
         assert_eq!(profile.entrypoint, "/usr/local/bin/entrypoint.sh");
     }
 
-    // @trace spec:inference-container
+    // @trace spec:inference-container, spec:podman-orchestration
     #[test]
-    fn inference_has_proxy_env_vars_no_secrets_no_mounts() {
+    fn inference_has_proxy_env_vars_no_secrets_with_log_mount() {
         let profile = inference_profile();
         assert!(profile.secrets.is_empty(), "Inference must have no secrets");
-        assert!(
-            profile.mounts.is_empty(),
-            "Inference mounts are added dynamically at launch time"
+        // Only static mount is ContainerLogs — model cache added dynamically at launch time
+        assert_eq!(
+            profile.mounts.len(),
+            1,
+            "Inference has only the ContainerLogs mount (model cache added dynamically)"
         );
+        assert!(
+            matches!(profile.mounts[0].host_key, MountSource::ContainerLogs),
+            "Inference mount must be ContainerLogs"
+        );
+        assert_eq!(profile.mounts[0].container_path, "/var/log/tillandsias");
+        assert_eq!(profile.mounts[0].mode, MountMode::Rw);
         // 4 proxy env vars: HTTP_PROXY, HTTPS_PROXY, http_proxy, https_proxy
         assert_eq!(
             profile.env_vars.len(),
@@ -717,15 +779,18 @@ mod tests {
         assert_eq!(profile.entrypoint, "/usr/local/bin/entrypoint.sh");
     }
 
-    // @trace spec:proxy-container, spec:enclave-network
+    // @trace spec:proxy-container, spec:enclave-network, spec:podman-orchestration
     #[test]
     fn proxy_has_no_secrets_no_env_vars() {
         let profile = proxy_profile();
         assert!(profile.secrets.is_empty(), "Proxy must have no secrets");
         assert!(profile.env_vars.is_empty(), "Proxy is a passive service — no env vars");
-        assert_eq!(profile.mounts.len(), 1, "Proxy has only the cache mount");
+        assert_eq!(profile.mounts.len(), 2, "Proxy has cache mount + container logs");
         assert_eq!(profile.mounts[0].container_path, "/var/spool/squid");
         assert_eq!(profile.mounts[0].mode, MountMode::Rw);
+        assert!(matches!(profile.mounts[1].host_key, MountSource::ContainerLogs));
+        assert_eq!(profile.mounts[1].container_path, "/var/log/tillandsias");
+        assert_eq!(profile.mounts[1].mode, MountMode::Rw);
         assert!(profile.image_override.is_none(), "Proxy image tag comes from LaunchContext");
     }
 
@@ -840,5 +905,31 @@ mod tests {
         // squid runs as UID 1000 via --userns=keep-id → permission denied.
         let profile = proxy_profile();
         assert!(!profile.read_only, "Proxy must NOT be read-only (squid needs writable runtime dirs)");
+    }
+
+    // @trace spec:podman-orchestration
+    #[test]
+    fn all_profiles_have_container_logs_mount() {
+        let profiles: Vec<(&str, ContainerProfile)> = vec![
+            ("forge_opencode", forge_opencode_profile()),
+            ("forge_claude", forge_claude_profile()),
+            ("terminal", terminal_profile()),
+            ("web", web_profile()),
+            ("proxy", proxy_profile()),
+            ("inference", inference_profile()),
+            ("git_service", git_service_profile()),
+        ];
+
+        for (name, profile) in &profiles {
+            let has_log_mount = profile.mounts.iter().any(|m| {
+                matches!(m.host_key, MountSource::ContainerLogs)
+                    && m.container_path == "/var/log/tillandsias"
+                    && m.mode == MountMode::Rw
+            });
+            assert!(
+                has_log_mount,
+                "Profile {name} must have a ContainerLogs mount at /var/log/tillandsias (RW)"
+            );
+        }
     }
 }
