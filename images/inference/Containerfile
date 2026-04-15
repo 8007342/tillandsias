@@ -8,25 +8,34 @@
 #         CA bundle at /etc/pki/tls/certs/ca-bundle.crt (NOT Alpine's /etc/ssl/).
 FROM registry.fedoraproject.org/fedora-minimal:43
 
-# @trace spec:inference-container — runtime deps for ollama + GPU
-# -- Deps for ollama install + GPU detection --
-# pciutils provides lspci (GPU autodetection by ollama installer)
+# @trace spec:inference-container — runtime deps for ollama
+# -- Minimal deps for running ollama CPU-only --
+# pciutils provides lspci (runtime GPU detection in entrypoint)
 # DISTRO: microdnf (Fedora Minimal), NOT apk (Alpine) or dnf (standard Fedora)
 # DISTRO: wget intentionally omitted — curl is the HTTP tool here.
 #         Rust health checks (handlers.rs) MUST use curl, not wget.
 RUN microdnf install -y bash curl ca-certificates zstd tar gzip pciutils \
     && microdnf clean all
 
-# -- Install ollama via official script --
-# The installer uses lspci to detect NVIDIA/AMD GPUs and downloads
-# the appropriate GPU libraries (CUDA/ROCm). At runtime, the host GPU
-# is passed through via --device=/dev/nvidia0 etc.
-# The || true is needed because the ollama installer tries to add the
-# NVIDIA repo via `dnf5 config-manager` which is a plugin not present
-# in fedora-minimal:43. The installer exits non-zero even though ollama
-# itself installs successfully. We verify the binary exists afterward.
-RUN curl -fsSL https://ollama.com/install.sh | sh || true
-RUN test -x /usr/local/bin/ollama || { echo "ERROR: ollama binary not found after install"; exit 1; }
+# @trace spec:inference-container
+# -- Install ollama binary directly (CPU-only) --
+# The official install script downloads ~2GB including GPU libraries
+# (CUDA runners, ROCm, etc.) even on CPU-only systems. Instead, we
+# download the release tarball and extract ONLY bin/ollama, skipping
+# the lib/ollama/ directory which contains GPU runners (~1.8GB).
+#
+# GPU users: the entrypoint detects GPUs at runtime. GPU runner libs
+# can be volume-mounted or pulled on demand if needed.
+#
+# The tarball extracts to: bin/ollama (~200MB) + lib/ollama/ (~1.8GB).
+# We only need bin/ollama for CPU inference.
+RUN curl -fsSL -o /tmp/ollama.tar.zst \
+    "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst" \
+    && mkdir -p /usr/local/bin \
+    && zstd -d /tmp/ollama.tar.zst -o /tmp/ollama.tar \
+    && tar -xf /tmp/ollama.tar -C /usr/local bin/ollama \
+    && rm -f /tmp/ollama.tar.zst /tmp/ollama.tar \
+    && test -x /usr/local/bin/ollama
 
 # -- Create non-root user --
 # DISTRO: useradd (Fedora shadow-utils), NOT adduser -D (Alpine)

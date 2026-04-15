@@ -10,20 +10,17 @@ FROM registry.fedoraproject.org/fedora-minimal:43
 
 # @trace spec:default-image — forge system packages
 # ── System packages ────────────────────────────────────────────
+# LEAN forge: essential dev tools only. Terminal UX tools (mc, vim, nano,
+# eza, bat, fd-find, fzf, htop, tree, zoxide) removed to save ~90MB.
+# Users who need them can install via the tools overlay or microdnf.
 # DISTRO: microdnf (Fedora Minimal), NOT apk (Alpine) or dnf (standard Fedora)
 RUN microdnf install -y \
         bash coreutils findutils grep sed gawk tar gzip xz \
         procps-ng shadow-utils ca-certificates \
         fish zsh \
         git gh curl wget jq ripgrep \
-        mc vim-minimal nano \
-        eza bat fd-find fzf htop tree \
         nodejs npm \
     && microdnf clean all
-
-# ── zoxide (not in Fedora repos) ──────────────────────────────
-RUN curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash \
-    && mv /root/.local/bin/zoxide /usr/local/bin/zoxide || true
 
 # ── Create forge user ──────────────────────────────────────────
 # DISTRO: useradd (Fedora shadow-utils), NOT adduser -D (Alpine)

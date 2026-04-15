@@ -36,10 +36,16 @@ impl PodmanClient {
     }
 
     /// Initialize a new Podman Machine (macOS/Windows). Returns true on success.
+    ///
+    /// Uses `--disk-size=10` to limit the VM to 10GB instead of the default
+    /// 20GB. The enclave runs lean containers (forge <400MB, inference <500MB,
+    /// proxy <25MB, git <30MB) so 10GB is sufficient with headroom for models.
+    ///
+    /// @trace spec:cross-platform
     pub async fn init_machine(&self) -> bool {
-        info!("Initializing podman machine...");
+        info!("Initializing podman machine (disk-size=10GB)...");
         let output = crate::podman_cmd()
-            .args(["machine", "init"])
+            .args(["machine", "init", "--disk-size", "10"])
             .output()
             .await;
 

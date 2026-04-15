@@ -764,7 +764,11 @@ fn current_version_name(overlay_dir: &Path) -> Option<String> {
         .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
 }
 
-/// Clean up old version directories, keeping the current and one rollback.
+/// Clean up old version directories, keeping only the current version.
+///
+/// Each overlay version is ~234MB. Previously we kept current + one rollback,
+/// but that wastes ~234MB of disk. If the current version is broken, a
+/// rebuild is fast enough that a rollback slot isn't worth the storage cost.
 ///
 /// @trace spec:layered-tools-overlay
 fn prune_old_versions(overlay_dir: &Path) {
@@ -786,8 +790,8 @@ fn prune_old_versions(overlay_dir: &Path) {
     // Sort descending — highest version first
     versions.sort_by(|a, b| b.0.cmp(&a.0));
 
-    // Keep the top 2 (current + one rollback), delete the rest
-    for (_, name) in versions.iter().skip(2) {
+    // Keep only 1 version (current), delete everything else
+    for (_, name) in versions.iter().skip(1) {
         // Never delete the current target
         if current_target.as_deref() == Some(name.as_str()) {
             continue;
@@ -829,7 +833,7 @@ async fn rebuild_tools_overlay(overlay_dir: &Path) -> Result<(), String> {
 
     build_tools_overlay_versioned(overlay_dir, &version_name).await?;
 
-    // Prune old versions (keep current + one rollback)
+    // Prune old versions (keep only current)
     prune_old_versions(overlay_dir);
 
     Ok(())
@@ -1152,7 +1156,7 @@ mod tests {
     }
 
     #[test]
-    fn prune_old_versions_keeps_two() {
+    fn prune_old_versions_keeps_one() {
         let tmp = std::env::temp_dir().join("tillandsias-test-overlay-prune");
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(tmp.join("v1")).unwrap();
@@ -1168,10 +1172,10 @@ mod tests {
 
         prune_old_versions(&tmp);
 
-        // v3 and v4 should remain, v1 and v2 should be pruned
+        // Only v4 (current) should remain, all others pruned
         assert!(!tmp.join("v1").exists(), "v1 should be pruned");
         assert!(!tmp.join("v2").exists(), "v2 should be pruned");
-        assert!(tmp.join("v3").exists(), "v3 should remain (rollback)");
+        assert!(!tmp.join("v3").exists(), "v3 should be pruned (no rollback slot)");
         assert!(tmp.join("v4").exists(), "v4 should remain (current)");
 
         std::fs::remove_dir_all(&tmp).ok();

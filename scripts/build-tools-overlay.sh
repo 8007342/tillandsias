@@ -242,6 +242,10 @@ _step "Installing Claude Code..."
         echo "[tools-overlay] Installing OpenSpec..."
         npm install -g --prefix /home/forge/.tools/openspec @fission-ai/openspec 2>&1
 
+        # Clean npm cache — saves ~50-100MB inside the overlay directory.
+        # The cache is useless after install since overlays are mounted read-only.
+        npm cache clean --force 2>&1 || true
+
         echo "[tools-overlay] Installing OpenCode..."
         # The curl installer may ignore OPENCODE_INSTALL_DIR, so we handle
         # both cases: direct install to the target dir, or relocate afterward.
