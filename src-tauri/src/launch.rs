@@ -863,9 +863,10 @@ mod tests {
     // @trace spec:podman-orchestration
     #[test]
     fn service_containers_have_read_only_fs() {
+        // Note: proxy is NOT read-only (squid needs writable runtime dirs).
+        // Proxy has its own test: proxy_is_not_read_only.
         let read_only_profiles = [
             container_profile::git_service_profile(),
-            container_profile::proxy_profile(),
             container_profile::inference_profile(),
             container_profile::web_profile(),
         ];
@@ -911,18 +912,18 @@ mod tests {
 
     // @trace spec:proxy-container
     #[test]
-    fn proxy_has_squid_tmpfs_mounts() {
-        // SAFETY: Test-only env var manipulation.
+    fn proxy_is_not_read_only() {
+        // Proxy needs writable runtime dirs (/var/spool/squid, /var/run/squid, etc).
+        // With --read-only + --tmpfs, dirs are root-owned but squid runs as UID 1000
+        // via --userns=keep-id → permission denied → squid crashes.
         unsafe { std::env::remove_var("DBUS_SESSION_BUS_ADDRESS") };
 
         let profile = container_profile::proxy_profile();
         let ctx = test_context();
         let args = build_podman_args(&profile, &ctx);
-        assert!(args.contains(&"--tmpfs=/var/run/squid".to_string()),
-            "Proxy must have --tmpfs=/var/run/squid");
-        assert!(args.contains(&"--tmpfs=/var/log/squid".to_string()),
-            "Proxy must have --tmpfs=/var/log/squid");
-        assert!(args.contains(&"--tmpfs=/var/lib/squid".to_string()),
-            "Proxy must have --tmpfs=/var/lib/squid for SSL cert DB");
+        assert!(
+            !args.contains(&"--read-only".to_string()),
+            "Proxy must NOT have --read-only (squid needs writable runtime dirs)"
+        );
     }
 }

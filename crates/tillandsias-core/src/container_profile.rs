@@ -364,10 +364,13 @@ pub fn proxy_profile() -> ContainerProfile {
         secrets: vec![],
         image_override: None,
         pids_limit: 32,        // Only squid + helpers
-        read_only: true,       // Service container — immutable root FS
-        // DISTRO: Alpine squid needs these writable dirs:
-        // /var/lib/squid  — SSL certificate database (security_file_certgen)
-        tmpfs_mounts: vec!["/tmp", "/var/run/squid", "/var/log/squid", "/var/lib/squid"],
+        // NOT read-only: squid needs writable /var/spool/squid (cache),
+        // /var/run/squid (PID), /var/log/squid (logs), /var/lib/squid (SSL DB).
+        // With --read-only + --tmpfs, the tmpfs dirs are root-owned but squid
+        // runs as UID 1000 (proxy) via --userns=keep-id → permission denied.
+        // Security comes from cap-drop, pids-limit, and enclave isolation.
+        read_only: false,
+        tmpfs_mounts: vec![],
     }
 }
 
@@ -791,7 +794,8 @@ mod tests {
     #[test]
     fn service_containers_are_read_only() {
         assert!(git_service_profile().read_only, "Git service must be read-only");
-        assert!(proxy_profile().read_only, "Proxy must be read-only");
+        // Proxy is NOT read-only — squid needs writable runtime dirs.
+        // See proxy_is_not_read_only test.
         assert!(inference_profile().read_only, "Inference must be read-only");
         assert!(web_profile().read_only, "Web must be read-only");
     }
@@ -809,7 +813,6 @@ mod tests {
     fn read_only_containers_have_tmpfs_mounts() {
         let profiles = [
             ("git_service", git_service_profile()),
-            ("proxy", proxy_profile()),
             ("inference", inference_profile()),
             ("web", web_profile()),
         ];
@@ -828,10 +831,11 @@ mod tests {
 
     // @trace spec:proxy-container
     #[test]
-    fn proxy_has_squid_runtime_tmpfs() {
+    fn proxy_is_not_read_only() {
+        // Proxy needs writable /var/spool/squid, /var/run/squid, /var/log/squid,
+        // /var/lib/squid. With --read-only + --tmpfs, dirs are root-owned but
+        // squid runs as UID 1000 via --userns=keep-id → permission denied.
         let profile = proxy_profile();
-        assert!(profile.tmpfs_mounts.contains(&"/var/run/squid"), "Proxy must have /var/run/squid tmpfs");
-        assert!(profile.tmpfs_mounts.contains(&"/var/log/squid"), "Proxy must have /var/log/squid tmpfs");
-        assert!(profile.tmpfs_mounts.contains(&"/var/lib/squid"), "Proxy must have /var/lib/squid tmpfs for SSL cert DB");
+        assert!(!profile.read_only, "Proxy must NOT be read-only (squid needs writable runtime dirs)");
     }
 }
