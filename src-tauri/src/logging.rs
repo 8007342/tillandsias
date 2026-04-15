@@ -30,43 +30,43 @@ use crate::cli::{AccountabilityWindow, LogConfig};
 /// Map a user-facing module name to one or more Rust tracing targets.
 ///
 /// These targets match the crate/module paths used in `tracing` macros.
-/// The `tillandsias_tray` crate is referenced as `tillandsias` in tracing
+/// The `tillandsias` crate is referenced as `tillandsias` in tracing
 /// targets because of how the binary crate's module path works.
 ///
 /// Used by `build_filter_from_config` and tested from `cli::tests`.
 pub fn module_to_targets(module: &str) -> Vec<&'static str> {
     match module {
-        "secrets" => vec!["tillandsias_tray::secrets", "tillandsias_tray::launch"],
+        "secrets" => vec!["tillandsias::secrets", "tillandsias::launch"],
         "containers" => vec![
-            "tillandsias_tray::handlers",
-            "tillandsias_tray::launch",
+            "tillandsias::handlers",
+            "tillandsias::launch",
             "tillandsias_podman",
         ],
         "updates" => vec![
-            "tillandsias_tray::updater",
-            "tillandsias_tray::update_cli",
-            "tillandsias_tray::update_log",
+            "tillandsias::updater",
+            "tillandsias::update_cli",
+            "tillandsias::update_log",
         ],
         "scanner" => vec!["tillandsias_scanner"],
-        "menu" => vec!["tillandsias_tray::menu", "tillandsias_tray::event_loop"],
+        "menu" => vec!["tillandsias::menu", "tillandsias::event_loop"],
         "events" => vec![
-            "tillandsias_tray::event_loop",
+            "tillandsias::event_loop",
             "tillandsias_podman::events",
         ],
         // @trace spec:proxy-container
         "proxy" => vec![
-            "tillandsias_tray::handlers",
-            "tillandsias_tray::proxy",
+            "tillandsias::handlers",
+            "tillandsias::proxy",
         ],
         // @trace spec:enclave-network
         "enclave" => vec![
-            "tillandsias_tray::handlers",
-            "tillandsias_tray::enclave",
+            "tillandsias::handlers",
+            "tillandsias::enclave",
         ],
         // @trace spec:git-mirror-service
         "git" => vec![
-            "tillandsias_tray::handlers",
-            "tillandsias_tray::git",
+            "tillandsias::handlers",
+            "tillandsias::git",
         ],
         _ => vec![],
     }
@@ -90,7 +90,7 @@ fn build_filter(config: &LogConfig) -> EnvFilter {
     }
 
     // Start with a base that allows info-level for the tillandsias crates.
-    let mut directives = vec!["tillandsias_tray=info".to_string()];
+    let mut directives = vec!["tillandsias=info".to_string()];
 
     // Apply per-module overrides from --log flag.
     for ml in &config.modules {
@@ -123,18 +123,18 @@ fn build_filter(config: &LogConfig) -> EnvFilter {
     let filter_str = directives.join(",");
     EnvFilter::try_new(&filter_str).unwrap_or_else(|_| {
         eprintln!("Warning: Failed to parse log filter: {filter_str}");
-        EnvFilter::new("tillandsias_tray=info")
+        EnvFilter::new("tillandsias=info")
     })
 }
 
 /// Build an [`EnvFilter`] by checking `TILLANDSIAS_LOG` first, then `RUST_LOG`,
-/// falling back to `"tillandsias_tray=info"`.
+/// falling back to `"tillandsias=info"`.
 fn build_env_filter() -> EnvFilter {
     if let Ok(val) = std::env::var("TILLANDSIAS_LOG") {
-        EnvFilter::try_new(&val).unwrap_or_else(|_| EnvFilter::new("tillandsias_tray=info"))
+        EnvFilter::try_new(&val).unwrap_or_else(|_| EnvFilter::new("tillandsias=info"))
     } else {
         EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("tillandsias_tray=info"))
+            .unwrap_or_else(|_| EnvFilter::new("tillandsias=info"))
     }
 }
 

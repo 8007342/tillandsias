@@ -16,7 +16,7 @@
   <url type="bugtracker">https://github.com/8007342/tillandsias/issues</url>
   <launchable type="desktop-id">Tillandsias.desktop</launchable>
   <provides>
-    <binary>tillandsias-tray</binary>
+    <binary>tillandsias</binary>
   </provides>
   <categories>
     <category>Development</category>

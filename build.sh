@@ -435,7 +435,7 @@ if [[ "$FLAG_RELEASE" == true ]]; then
     # The updater error is expected in toolbox — ignore it.
     _run bash -c "cd '$SCRIPT_DIR' && cargo tauri build --bundles ${BUNDLES}" 2>&1 || {
         # Check if the binary was built despite the bundle error
-        if [[ -f "$SCRIPT_DIR/target/release/tillandsias-tray" ]]; then
+        if [[ -f "$SCRIPT_DIR/target/release/tillandsias" ]]; then
             _warn "Some bundles failed (updater needs AppImage — CI handles that)"
         else
             _error "Build failed"
@@ -449,10 +449,10 @@ if [[ "$FLAG_RELEASE" == true ]]; then
     podman image prune -f 2>/dev/null && _info "Dangling images pruned" || true
 
     # Show built artifacts
-    RELEASE_BIN="$SCRIPT_DIR/target/release/tillandsias-tray"
+    RELEASE_BIN="$SCRIPT_DIR/target/release/tillandsias"
     BUNDLE_DIR="$SCRIPT_DIR/target/release/bundle"
     if [[ -f "$RELEASE_BIN" ]]; then
-        _info "Binary: tillandsias-tray ($(du -h "$RELEASE_BIN" | cut -f1))"
+        _info "Binary: tillandsias ($(du -h "$RELEASE_BIN" | cut -f1))"
     fi
     if [[ -d "$BUNDLE_DIR" ]]; then
         find "$BUNDLE_DIR" -type f \( -name "*.AppImage" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) 2>/dev/null | while read -r f; do

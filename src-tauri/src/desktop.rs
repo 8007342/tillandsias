@@ -96,7 +96,7 @@ fn write_desktop_file(
          Icon=tillandsias\n\
          Categories=Development;\n\
          Terminal=false\n\
-         StartupWMClass=tillandsias-tray\n"
+         StartupWMClass=tillandsias\n"
     );
 
     fs::write(desktop_file, &content)

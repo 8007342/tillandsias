@@ -140,7 +140,7 @@ if [ "$PLATFORM" = "macos" ]; then
     echo "  ✓ Installed Tillandsias.app to ~/Applications/"
 
     # Create CLI symlink in ~/.local/bin/
-    MACOS_BIN="$APP_DEST/Tillandsias.app/Contents/MacOS/tillandsias-tray"
+    MACOS_BIN="$APP_DEST/Tillandsias.app/Contents/MacOS/tillandsias"
     # Fallback: find the executable if the name differs
     if [ ! -f "$MACOS_BIN" ]; then
         MACOS_BIN="$(find "$APP_DEST/Tillandsias.app/Contents/MacOS" -type f -perm +111 2>/dev/null | head -1)"

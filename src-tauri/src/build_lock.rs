@@ -28,7 +28,7 @@ fn is_alive(pid: u32) -> bool {
     let comm_path = format!("/proc/{pid}/comm");
     if let Ok(comm) = fs::read_to_string(comm_path) {
         let name = comm.trim();
-        // Build processes could be: tillandsias-tray, nix, bash, sh
+        // Build processes could be: tillandsias, nix, bash, sh
         // (build-image.sh runs via bash, nix build runs via nix)
         name.starts_with("tillandsias") || name == "nix" || name == "bash" || name == "sh"
     } else {

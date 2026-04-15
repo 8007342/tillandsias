@@ -238,11 +238,11 @@ if [[ "$FLAG_RELEASE" == true ]]; then
     done
 
     # Show built artifacts
-    RELEASE_BIN="$SCRIPT_DIR/target/$TARGET/release/tillandsias-tray"
-    [[ ! -f "$RELEASE_BIN" ]] && RELEASE_BIN="$SCRIPT_DIR/target/release/tillandsias-tray"
+    RELEASE_BIN="$SCRIPT_DIR/target/$TARGET/release/tillandsias"
+    [[ ! -f "$RELEASE_BIN" ]] && RELEASE_BIN="$SCRIPT_DIR/target/release/tillandsias"
 
     if [[ -f "$RELEASE_BIN" ]]; then
-        _info "Binary: tillandsias-tray ($(du -h "$RELEASE_BIN" | cut -f1 | xargs))"
+        _info "Binary: tillandsias ($(du -h "$RELEASE_BIN" | cut -f1 | xargs))"
     fi
     if [[ -n "$BUNDLE_DIR" ]]; then
         find "$BUNDLE_DIR" -type f \( -name "*.dmg" -o -name "*.app.tar.gz" \) 2>/dev/null | while read -r f; do
@@ -268,7 +268,7 @@ if [[ "$FLAG_RELEASE" == true ]]; then
         _info "Installed Tillandsias.app to ~/Applications/"
 
         # Create CLI symlink
-        MACOS_BIN="$APP_BUNDLE/Contents/MacOS/tillandsias-tray"
+        MACOS_BIN="$APP_BUNDLE/Contents/MacOS/tillandsias"
         # Fallback: find the executable if the name differs
         if [[ ! -f "$MACOS_BIN" ]]; then
             MACOS_BIN="$(find "$APP_BUNDLE/Contents/MacOS" -type f -perm +111 | head -1)"

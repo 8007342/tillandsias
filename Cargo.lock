@@ -5073,47 +5073,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "tillandsias-core"
-version = "0.1.154"
-dependencies = [
- "dirs",
- "postcard",
- "resvg",
- "serde",
- "thiserror 2.0.18",
- "tiny-skia",
- "toml 0.8.2",
- "tracing",
-]
-
-[[package]]
-name = "tillandsias-podman"
-version = "0.1.154"
-dependencies = [
- "libc",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tillandsias-core",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "tillandsias-scanner"
-version = "0.1.154"
-dependencies = [
- "dirs",
- "notify",
- "tempfile",
- "tillandsias-core",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "tillandsias-tray"
-version = "0.1.154"
+name = "tillandsias"
+version = "0.1.156"
 dependencies = [
  "dirs",
  "hex",
@@ -5139,6 +5100,45 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "tillandsias-core"
+version = "0.1.156"
+dependencies = [
+ "dirs",
+ "postcard",
+ "resvg",
+ "serde",
+ "thiserror 2.0.18",
+ "tiny-skia",
+ "toml 0.8.2",
+ "tracing",
+]
+
+[[package]]
+name = "tillandsias-podman"
+version = "0.1.156"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tillandsias-core",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "tillandsias-scanner"
+version = "0.1.156"
+dependencies = [
+ "dirs",
+ "notify",
+ "tempfile",
+ "tillandsias-core",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

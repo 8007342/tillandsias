@@ -215,8 +215,8 @@ if [[ "$FLAG_RELEASE" == true ]]; then
     RELEASE_DIR="$SCRIPT_DIR/target/$TARGET/release"
     BUNDLE_DIR="$RELEASE_DIR/bundle"
 
-    if [[ -f "$RELEASE_DIR/tillandsias-tray.exe" ]]; then
-        _info "Binary: tillandsias-tray.exe ($(du -h "$RELEASE_DIR/tillandsias-tray.exe" | cut -f1))"
+    if [[ -f "$RELEASE_DIR/tillandsias.exe" ]]; then
+        _info "Binary: tillandsias.exe ($(du -h "$RELEASE_DIR/tillandsias.exe" | cut -f1))"
     fi
 
     if [[ -d "$BUNDLE_DIR" ]]; then
