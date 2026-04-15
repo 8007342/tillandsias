@@ -363,6 +363,20 @@ fn detect_install_target() -> Option<PathBuf> {
             let sys_path = PathBuf::from("/Applications/Tillandsias.app");
             sys_path.exists().then_some(sys_path)
         }
+    } else if cfg!(target_os = "windows") {
+        // Windows: NSIS installer puts the exe in %LOCALAPPDATA%\Tillandsias\
+        // Also try the current exe location (portable/manual install).
+        std::env::current_exe().ok().and_then(|exe| {
+            if exe.exists() {
+                Some(exe)
+            } else {
+                None
+            }
+        }).or_else(|| {
+            let local_app = std::env::var("LOCALAPPDATA").ok()?;
+            let path = PathBuf::from(local_app).join("Tillandsias").join("tillandsias-tray.exe");
+            path.exists().then_some(path)
+        })
     } else {
         None
     }
@@ -380,6 +394,8 @@ fn apply_update(
 ) -> Result<(), String> {
     if cfg!(target_os = "macos") {
         apply_macos_update(download_path, install_target)
+    } else if cfg!(target_os = "windows") {
+        apply_windows_update(download_path, install_target)
     } else {
         apply_appimage_update(download_path, install_target, download_url)
     }
@@ -444,6 +460,75 @@ fn apply_macos_update(
     let _ = std::fs::remove_dir_all(&tmp_dir);
 
     Ok(())
+}
+
+/// Apply a Windows NSIS update.
+///
+/// The downloaded artifact is a `.nsis.zip` containing the NSIS installer exe.
+/// Extract and run it with `/S` (silent) flag to update in-place.
+///
+/// @trace spec:update-system, spec:cross-platform
+#[allow(dead_code)] // Only compiled on Windows
+fn apply_windows_update(
+    download_path: &std::path::Path,
+    _install_target: &std::path::Path,
+) -> Result<(), String> {
+    let tmp_dir = std::env::temp_dir().join("tillandsias-update-extract");
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+    std::fs::create_dir_all(&tmp_dir)
+        .map_err(|e| format!("failed to create temp extract dir: {e}"))?;
+
+    // Extract the .nsis.zip
+    let status = std::process::Command::new("tar")
+        .args([
+            "xf",
+            download_path.to_str().unwrap_or(""),
+            "-C",
+            tmp_dir.to_str().unwrap_or(""),
+        ])
+        .status()
+        .map_err(|e| format!("tar not found or failed to spawn: {e}"))?;
+
+    if !status.success() {
+        return Err("zip extraction failed".to_string());
+    }
+
+    // Find the setup exe in the extracted directory
+    let setup_exe = find_exe_in_dir(&tmp_dir)?;
+
+    // Run the installer silently — it replaces the running binary
+    let status = std::process::Command::new(&setup_exe)
+        .arg("/S") // NSIS silent install flag
+        .status()
+        .map_err(|e| format!("failed to run installer: {e}"))?;
+
+    if !status.success() {
+        return Err(format!("installer exited with code {}", status.code().unwrap_or(-1)));
+    }
+
+    // Clean up
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+    Ok(())
+}
+
+/// Walk a directory and return the path of the first `.exe` file found.
+#[allow(dead_code)]
+fn find_exe_in_dir(dir: &std::path::Path) -> Result<PathBuf, String> {
+    for entry in std::fs::read_dir(dir).map_err(|e| format!("cannot read extract dir: {e}"))? {
+        let entry = entry.map_err(|e| format!("directory read error: {e}"))?;
+        let path = entry.path();
+        if let Some(ext) = path.extension() {
+            if ext.eq_ignore_ascii_case("exe") {
+                return Ok(path);
+            }
+        }
+        if path.is_dir() {
+            if let Ok(inner) = find_exe_in_dir(&path) {
+                return Ok(inner);
+            }
+        }
+    }
+    Err("no .exe file found in update archive".to_string())
 }
 
 /// Walk a directory and return the path of the first `.app` bundle found.
