@@ -401,7 +401,7 @@ fn build_overlay_sync(
         };
 
         let wsl_script = to_wsl_path(&script);
-        let wsl_version_dir = to_wsl_path(version_dir);
+        let wsl_version_dir = to_wsl_path(&version_dir);
 
         info!(
             spec = "layered-tools-overlay",
