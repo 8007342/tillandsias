@@ -985,8 +985,14 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
             return Err(format!("git add failed: {}", String::from_utf8_lossy(&add.stderr)));
         }
 
+        // Use explicit author identity — the host/container may not have
+        // global git config, and we don't want to require --github-login
+        // just to initialize a mirror.
         let commit = run_git(
-            &["-C", init_dir, "commit", "-m", "Initial commit"],
+            &["-C", init_dir,
+              "-c", "user.name=Tillandsias",
+              "-c", "user.email=tillandsias@local",
+              "commit", "-m", "Initial commit"],
             &mounts,
         )
         .map_err(|e| format!("git commit failed: {e}"))?;
