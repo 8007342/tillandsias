@@ -146,13 +146,28 @@ mkdir -p "$OUTPUT_DIR"/{claude,opencode,openspec}
 PROXY_ARGS=()
 if [[ -n "${CA_CHAIN_PATH:-}" ]] && [[ -f "$CA_CHAIN_PATH" ]]; then
     _info "Proxy healthy — routing through enclave proxy"
-    PROXY_ARGS=(
-        --network=tillandsias-enclave
-        -e HTTP_PROXY=http://proxy:3128
-        -e HTTPS_PROXY=http://proxy:3128
-        -e http_proxy=http://proxy:3128
-        -e https_proxy=http://proxy:3128
-    )
+
+    # @trace spec:enclave-network
+    # On podman machine (macOS/Windows), internal network DNS doesn't work
+    # through gvproxy. Use default network + localhost port mapping instead
+    # of the enclave network with DNS aliases.
+    if [[ "${TILLANDSIAS_PORT_MAPPING:-}" == "1" ]]; then
+        _info "Podman machine detected — using localhost port mapping"
+        PROXY_ARGS=(
+            -e HTTP_PROXY=http://localhost:3128
+            -e HTTPS_PROXY=http://localhost:3128
+            -e http_proxy=http://localhost:3128
+            -e https_proxy=http://localhost:3128
+        )
+    else
+        PROXY_ARGS=(
+            --network=tillandsias-enclave
+            -e HTTP_PROXY=http://proxy:3128
+            -e HTTPS_PROXY=http://proxy:3128
+            -e http_proxy=http://proxy:3128
+            -e https_proxy=http://proxy:3128
+        )
+    fi
 
     # Mount the ephemeral CA chain so HTTPS through the MITM proxy is trusted.
     # @trace spec:proxy-container, spec:layered-tools-overlay

@@ -357,6 +357,13 @@ fn build_overlay_sync(
             .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
             .env("TOOLS_OVERLAY_QUIET", "1");
 
+        // @trace spec:enclave-network
+        // On podman machine, tell the builder script to use localhost port
+        // mapping instead of the enclave network with DNS aliases.
+        if tillandsias_core::state::Os::detect().needs_podman_machine() {
+            cmd.env("TILLANDSIAS_PORT_MAPPING", "1");
+        }
+
         if proxy_healthy && ca_chain.exists() {
             cmd.env("CA_CHAIN_PATH", &ca_chain);
         } else if !proxy_healthy {
@@ -412,6 +419,10 @@ fn build_overlay_sync(
         cmd.args(["bash", &wsl_script, &wsl_version_dir, forge_tag])
             .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
             .env("TOOLS_OVERLAY_QUIET", "1");
+
+        // @trace spec:enclave-network
+        // Windows always uses podman machine — always set port mapping.
+        cmd.env("TILLANDSIAS_PORT_MAPPING", "1");
 
         if proxy_healthy && ca_chain.exists() {
             cmd.env("CA_CHAIN_PATH", to_wsl_path(&ca_chain));

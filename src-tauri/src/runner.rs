@@ -261,6 +261,8 @@ fn build_cli_launch_context(
     // Custom mounts from project config
     let project_config = load_project_config(project_path);
 
+    let port_mapping = tillandsias_core::state::Os::detect().needs_podman_machine();
+
     tillandsias_core::container_profile::LaunchContext {
         container_name: container_name.to_string(),
         project_path: project_path.to_path_buf(),
@@ -274,10 +276,16 @@ fn build_cli_launch_context(
         image_tag: image_tag.to_string(),
         selected_language: tillandsias_core::config::load_global_config().i18n.language.clone(),
         // @trace spec:enclave-network
-        // CLI-mode forge containers join the enclave network.
-        network: Some(tillandsias_podman::ENCLAVE_NETWORK.to_string()),
+        // On Linux: CLI-mode forge containers join the enclave network.
+        // On podman machine: no network flag (default), localhost port mapping.
+        network: if port_mapping {
+            None
+        } else {
+            Some(tillandsias_podman::ENCLAVE_NETWORK.to_string())
+        },
         git_author_name,
         git_author_email,
+        use_port_mapping: port_mapping,
     }
 }
 
@@ -505,10 +513,17 @@ pub fn run(
 
     // @trace spec:enclave-network
     println!();
-    println!("  Enclave:");
-    println!("    proxy      \u{2192} strict:3128 (allowlist), permissive:3129 (builds)");
-    println!("    git-service \u{2192} git://9418 (mirror)");
-    println!("    inference  \u{2192} http://11434 (ollama, optional)");
+    if ctx.use_port_mapping {
+        println!("  Enclave (port mapping):");
+        println!("    proxy      \u{2192} localhost:3128 (allowlist), localhost:3129 (builds)");
+        println!("    git-service \u{2192} localhost:9418 (mirror)");
+        println!("    inference  \u{2192} localhost:11434 (ollama, optional)");
+    } else {
+        println!("  Enclave:");
+        println!("    proxy      \u{2192} strict:3128 (allowlist), permissive:3129 (builds)");
+        println!("    git-service \u{2192} git://9418 (mirror)");
+        println!("    inference  \u{2192} http://11434 (ollama, optional)");
+    }
 
     if debug {
         println!();

@@ -238,6 +238,8 @@ pub(crate) async fn ensure_inference_running(
     let models_cache = cache.join("models");
     std::fs::create_dir_all(&models_cache).ok();
 
+    let port_mapping = needs_port_mapping();
+
     let ctx = tillandsias_core::container_profile::LaunchContext {
         container_name: INFERENCE_CONTAINER_NAME.to_string(),
         project_path: models_cache.clone(), // not meaningful for inference
@@ -251,13 +253,27 @@ pub(crate) async fn ensure_inference_running(
         image_tag: tag.clone(),
         selected_language: "en".to_string(),
         // @trace spec:inference-container, spec:enclave-network
-        // Alias "inference" so forge containers can reach it by name
-        network: Some(format!("{}:alias=inference", tillandsias_podman::ENCLAVE_NETWORK)),
+        // On Linux: enclave network with alias "inference" for DNS resolution.
+        // On podman machine: no network flag (default), ports published to host.
+        network: if port_mapping {
+            None
+        } else {
+            Some(format!("{}:alias=inference", tillandsias_podman::ENCLAVE_NETWORK))
+        },
         git_author_name: String::new(),
         git_author_email: String::new(),
+        use_port_mapping: port_mapping,
     };
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
+
+    // @trace spec:enclave-network
+    // On podman machine, publish port 11434 so other containers can reach
+    // the inference service via localhost:11434.
+    if port_mapping {
+        run_args.insert(run_args.len() - 1, "-p".to_string());
+        run_args.insert(run_args.len() - 1, "11434:11434".to_string());
+    }
 
     // Mount model cache dynamically: host models dir -> container ollama models dir
     let model_mount = format!(
@@ -284,8 +300,9 @@ pub(crate) async fn ensure_inference_running(
             // DISTRO: inference is Fedora Minimal — has curl, NOT wget.
             // Alpine containers use wget (busybox); Fedora containers use curl.
             // Ollama takes 15-30s to start (database init, model loading).
-            // 30 attempts × 1s = 30s timeout.
-            for attempt in 0..30u32 {
+            // On podman machine, containers take longer to start — double the timeout.
+            let max_attempts: u32 = if port_mapping { 60 } else { 30 };
+            for attempt in 0..max_attempts {
                 let check = tillandsias_podman::podman_cmd()
                     .args(["exec", INFERENCE_CONTAINER_NAME, "curl", "-sf", "--max-time", "2", "-o", "/dev/null", "http://localhost:11434/api/version"])
                     .stdout(std::process::Stdio::null())
@@ -296,7 +313,7 @@ pub(crate) async fn ensure_inference_running(
                     info!(spec = "inference-container", attempt, "Inference health check passed");
                     break;
                 }
-                if attempt < 29 {
+                if attempt < max_attempts - 1 {
                     tokio::time::sleep(Duration::from_secs(1)).await;
                 } else {
                     warn!(
@@ -304,7 +321,7 @@ pub(crate) async fn ensure_inference_running(
                         category = "capability",
                         safety = "DEGRADED: inference container started but API not responding",
                         spec = "inference-container",
-                        "Inference health check failed after 30 attempts — proceeding with degraded inference"
+                        "Inference health check failed after {max_attempts} attempts — proceeding with degraded inference"
                     );
                 }
             }
@@ -343,8 +360,26 @@ pub(crate) async fn stop_inference() {
 
 /// Ensure the tillandsias-enclave internal network exists.
 /// Creates it if absent. Called before any container launch.
+///
+/// On podman machine (macOS/Windows), skips network creation entirely.
+/// Internal network DNS doesn't work through gvproxy, so containers
+/// use the default podman network with localhost port mapping instead.
+///
 /// @trace spec:enclave-network
 pub(crate) async fn ensure_enclave_network() -> Result<(), String> {
+    // @trace spec:enclave-network
+    // On podman machine, internal network DNS is broken through gvproxy.
+    // Skip enclave network creation — use default network + port mapping.
+    if tillandsias_core::state::Os::detect().needs_podman_machine() {
+        info!(
+            accountability = true,
+            category = "enclave",
+            spec = "enclave-network",
+            "Podman machine detected — skipping enclave network (using localhost port mapping)"
+        );
+        return Ok(());
+    }
+
     let client = PodmanClient::new();
     let name = tillandsias_podman::ENCLAVE_NETWORK;
     if !client.network_exists(name).await {
@@ -361,6 +396,17 @@ pub(crate) async fn ensure_enclave_network() -> Result<(), String> {
             .map_err(|e| format!("Failed to create enclave network: {e}"))?;
     }
     Ok(())
+}
+
+/// Whether the current platform needs localhost port mapping instead of DNS aliases.
+///
+/// Returns `true` on podman machine (macOS/Windows) where internal network DNS
+/// doesn't work through gvproxy. Services publish ports to the host and containers
+/// communicate via `localhost:<port>`.
+///
+/// @trace spec:enclave-network
+fn needs_port_mapping() -> bool {
+    tillandsias_core::state::Os::detect().needs_podman_machine()
 }
 
 /// The fixed container name for the proxy (not project-specific).
@@ -501,6 +547,8 @@ pub(crate) async fn ensure_proxy_running(
     let proxy_cache = cache.join("proxy-cache");
     std::fs::create_dir_all(&proxy_cache).ok();
 
+    let port_mapping = needs_port_mapping();
+
     let ctx = tillandsias_core::container_profile::LaunchContext {
         container_name: PROXY_CONTAINER_NAME.to_string(),
         project_path: proxy_cache.clone(),  // not meaningful for proxy
@@ -514,17 +562,33 @@ pub(crate) async fn ensure_proxy_running(
         image_tag: tag.clone(),
         selected_language: "en".to_string(),
         // @trace spec:proxy-container, spec:enclave-network
-        // Primary network: enclave with alias "proxy" for DNS resolution
-        network: Some(format!("{}:alias=proxy", tillandsias_podman::ENCLAVE_NETWORK)),
+        // On Linux: enclave network with alias "proxy" for DNS resolution.
+        // On podman machine: no network flag (default), ports published to host.
+        network: if port_mapping {
+            None
+        } else {
+            Some(format!("{}:alias=proxy", tillandsias_podman::ENCLAVE_NETWORK))
+        },
         git_author_name: String::new(),
         git_author_email: String::new(),
+        use_port_mapping: port_mapping,
     };
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
 
-    // Proxy is dual-homed: add the default "podman" network for external access.
-    // Must be a separate --network flag (comma syntax is parsed as aliases, not networks).
-    run_args.insert(run_args.len() - 1, "--network=podman".to_string());
+    // @trace spec:enclave-network
+    if port_mapping {
+        // On podman machine: publish proxy ports so containers can reach them
+        // via localhost:3128 (strict) and localhost:3129 (permissive).
+        run_args.insert(run_args.len() - 1, "-p".to_string());
+        run_args.insert(run_args.len() - 1, "3128:3128".to_string());
+        run_args.insert(run_args.len() - 1, "-p".to_string());
+        run_args.insert(run_args.len() - 1, "3129:3129".to_string());
+    } else {
+        // Proxy is dual-homed: add the default "podman" network for external access.
+        // Must be a separate --network flag (comma syntax is parsed as aliases, not networks).
+        run_args.insert(run_args.len() - 1, "--network=podman".to_string());
+    }
 
     // @trace spec:proxy-container
     // Mount intermediate CA cert + key into the proxy for ssl-bump.
@@ -575,7 +639,9 @@ pub(crate) async fn ensure_proxy_running(
             // DISTRO: Proxy is Alpine — uses busybox nc (netcat).
             // wget --spider returns 400 (squid rejects non-proxy requests).
             // nc -z is a pure TCP port probe — succeeds if squid is listening.
-            for attempt in 0..15u32 {
+            // On podman machine, containers take longer to start — double the timeout.
+            let max_attempts: u32 = if port_mapping { 30 } else { 15 };
+            for attempt in 0..max_attempts {
                 let check = tillandsias_podman::podman_cmd()
                     .args(["exec", PROXY_CONTAINER_NAME, "sh", "-c", "nc -z localhost 3128"])
                     .stdout(std::process::Stdio::null())
@@ -586,10 +652,10 @@ pub(crate) async fn ensure_proxy_running(
                     info!(spec = "proxy-container", attempt, "Proxy readiness check passed");
                     break;
                 }
-                if attempt < 14 {
+                if attempt < max_attempts - 1 {
                     tokio::time::sleep(Duration::from_secs(1)).await;
                 } else {
-                    warn!(spec = "proxy-container", "Proxy readiness check failed after 15 attempts — proceeding anyway");
+                    warn!(spec = "proxy-container", "Proxy readiness check failed after {max_attempts} attempts — proceeding anyway");
                 }
             }
 
@@ -649,8 +715,13 @@ pub(crate) async fn is_proxy_healthy() -> bool {
 
 /// Remove the enclave network if no containers are attached.
 /// Best-effort — silently ignores errors (e.g., containers still attached).
+/// On podman machine, the enclave network was never created — nothing to do.
 /// @trace spec:enclave-network
 pub(crate) async fn cleanup_enclave_network() {
+    // On podman machine, no enclave network was created — skip cleanup.
+    if needs_port_mapping() {
+        return;
+    }
     let client = PodmanClient::new();
     let name = tillandsias_podman::ENCLAVE_NETWORK;
     if client.network_exists(name).await {
@@ -1240,6 +1311,8 @@ pub(crate) async fn ensure_git_service_running(
     // @trace spec:podman-orchestration
     ensure_container_log_dir(&container_name);
 
+    let port_mapping = needs_port_mapping();
+
     let ctx = tillandsias_core::container_profile::LaunchContext {
         container_name: container_name.clone(),
         project_path: mirror_path.to_path_buf(),
@@ -1253,13 +1326,27 @@ pub(crate) async fn ensure_git_service_running(
         image_tag: tag.clone(),
         selected_language: "en".to_string(),
         // @trace spec:git-mirror-service, spec:enclave-network
-        // Alias "git-service" so forge containers can clone from git://git-service/<project>
-        network: Some(format!("{}:alias=git-service", tillandsias_podman::ENCLAVE_NETWORK)),
+        // On Linux: enclave network with alias "git-service" for DNS resolution.
+        // On podman machine: no network flag (default), port 9418 published to host.
+        network: if port_mapping {
+            None
+        } else {
+            Some(format!("{}:alias=git-service", tillandsias_podman::ENCLAVE_NETWORK))
+        },
         git_author_name: String::new(),
         git_author_email: String::new(),
+        use_port_mapping: port_mapping,
     };
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
+
+    // @trace spec:enclave-network
+    // On podman machine, publish port 9418 so other containers can reach
+    // the git daemon via localhost:9418.
+    if port_mapping {
+        run_args.insert(run_args.len() - 1, "-p".to_string());
+        run_args.insert(run_args.len() - 1, "9418:9418".to_string());
+    }
 
     // Add the mirror volume mount dynamically (not in the profile)
     // Mirror is mounted at /srv/git/<project_name> (rw) matching the git daemon base-path
@@ -1300,7 +1387,9 @@ pub(crate) async fn ensure_git_service_running(
             // Health check: verify git daemon is listening on port 9418.
             // DISTRO: Git service is Alpine — uses busybox nc (built-in).
             // nc -z does a zero-I/O TCP connect check.
-            for attempt in 0..10u32 {
+            // On podman machine, containers take longer to start — double the timeout.
+            let max_attempts: u32 = if port_mapping { 20 } else { 10 };
+            for attempt in 0..max_attempts {
                 let check = tillandsias_podman::podman_cmd()
                     .args(["exec", &container_name, "sh", "-c", "nc -z localhost 9418"])
                     .stdout(std::process::Stdio::null())
@@ -1311,7 +1400,7 @@ pub(crate) async fn ensure_git_service_running(
                     info!(spec = "git-mirror-service", project = %project_name, attempt, "Git service health check passed");
                     break;
                 }
-                if attempt < 9 {
+                if attempt < max_attempts - 1 {
                     tokio::time::sleep(Duration::from_millis(500)).await;
                 } else {
                     warn!(
@@ -1320,7 +1409,7 @@ pub(crate) async fn ensure_git_service_running(
                         safety = "DEGRADED: git service started but daemon not responding on port 9418",
                         spec = "git-mirror-service",
                         project = %project_name,
-                        "Git service health check failed after 10 attempts — proceeding with degraded git"
+                        "Git service health check failed after {max_attempts} attempts — proceeding with degraded git"
                     );
                 }
             }
@@ -2156,6 +2245,7 @@ fn build_launch_context(
     image_tag: &str,
 ) -> tillandsias_core::container_profile::LaunchContext {
     let host_os = tillandsias_core::config::detect_host_os();
+    let port_mapping = needs_port_mapping();
 
     // Read git identity from the cached gitconfig (written by gh-auth-login.sh).
     let (git_author_name, git_author_email) = crate::launch::read_git_identity(cache);
@@ -2176,11 +2266,18 @@ fn build_launch_context(
         image_tag: image_tag.to_string(),
         selected_language: tillandsias_core::config::load_global_config().i18n.language.clone(),
         // @trace spec:enclave-network
-        // Forge and terminal containers join the enclave network so they route
-        // through the proxy. The proxy itself gets dual-homed separately.
-        network: Some(tillandsias_podman::ENCLAVE_NETWORK.to_string()),
+        // On Linux: forge and terminal containers join the enclave network so
+        // they route through the proxy. The proxy itself gets dual-homed separately.
+        // On podman machine: no network flag (default). Services are reached
+        // via localhost port mapping; env vars are rewritten accordingly.
+        network: if port_mapping {
+            None
+        } else {
+            Some(tillandsias_podman::ENCLAVE_NETWORK.to_string())
+        },
         git_author_name,
         git_author_email,
+        use_port_mapping: port_mapping,
     }
 }
 

@@ -153,7 +153,18 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
                 ContextKey::GitAuthorName => ctx.git_author_name.clone(),
                 ContextKey::GitAuthorEmail => ctx.git_author_email.clone(),
             },
-            EnvValue::Literal(s) => s.to_string(),
+            EnvValue::Literal(s) => {
+                // @trace spec:enclave-network
+                // On podman machine (macOS/Windows), rewrite enclave DNS aliases
+                // to localhost. Internal network DNS doesn't work through gvproxy,
+                // so services publish ports to the host and containers reach them
+                // via localhost:<port> instead.
+                if ctx.use_port_mapping {
+                    rewrite_enclave_env(env_var.name, s)
+                } else {
+                    s.to_string()
+                }
+            }
         };
         args.push("-e".into());
         args.push(format!("{}={}", env_var.name, value));
@@ -268,6 +279,33 @@ pub fn shell_quote_join(args: &[String]) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// Rewrite enclave service env var values for podman machine (localhost port mapping).
+///
+/// On podman machine (macOS/Windows), internal network DNS doesn't work through
+/// gvproxy. Services publish ports to the host, so containers reach them via
+/// `localhost:<port>` instead of DNS aliases like `proxy`, `git-service`, `inference`.
+///
+/// Only rewrites known enclave service env vars — all others pass through unchanged.
+///
+/// @trace spec:enclave-network
+fn rewrite_enclave_env(name: &str, original: &str) -> String {
+    match name {
+        // Proxy: http://proxy:3128 -> http://localhost:3128
+        "HTTP_PROXY" | "HTTPS_PROXY" | "http_proxy" | "https_proxy" => {
+            original.replace("proxy:3128", "localhost:3128")
+        }
+        // Git service hostname: git-service -> localhost
+        "TILLANDSIAS_GIT_SERVICE" if original == "git-service" => "localhost".to_string(),
+        // Ollama: http://inference:11434 -> http://localhost:11434
+        "OLLAMA_HOST" => original.replace("inference:11434", "localhost:11434"),
+        // NO_PROXY: remove git-service from bypass list (it's now localhost)
+        "NO_PROXY" | "no_proxy" => {
+            original.replace(",git-service", "")
+        }
+        _ => original.to_string(),
+    }
 }
 
 /// Resolve a logical mount source to an absolute host path.
@@ -459,6 +497,7 @@ mod tests {
             network: None,
             git_author_name: "Test User".into(),
             git_author_email: "test@example.com".into(),
+            use_port_mapping: false,
         }
     }
 
@@ -938,6 +977,130 @@ mod tests {
         assert!(
             !args.contains(&"--read-only".to_string()),
             "Proxy must NOT have --read-only (squid needs writable runtime dirs)"
+        );
+    }
+
+    // @trace spec:enclave-network
+    #[test]
+    fn port_mapping_rewrites_enclave_env_vars() {
+        let profile = container_profile::forge_opencode_profile();
+        let mut ctx = test_context();
+        ctx.use_port_mapping = true;
+        let args = build_podman_args(&profile, &ctx);
+        let joined = args.join(" ");
+
+        // Proxy env vars should use localhost instead of DNS alias
+        assert!(
+            joined.contains("HTTP_PROXY=http://localhost:3128"),
+            "HTTP_PROXY should use localhost on podman machine.\nGot: {joined}"
+        );
+        assert!(
+            joined.contains("HTTPS_PROXY=http://localhost:3128"),
+            "HTTPS_PROXY should use localhost on podman machine"
+        );
+        assert!(
+            joined.contains("http_proxy=http://localhost:3128"),
+            "http_proxy should use localhost on podman machine"
+        );
+        assert!(
+            joined.contains("https_proxy=http://localhost:3128"),
+            "https_proxy should use localhost on podman machine"
+        );
+
+        // Git service should use localhost
+        assert!(
+            joined.contains("TILLANDSIAS_GIT_SERVICE=localhost"),
+            "TILLANDSIAS_GIT_SERVICE should be localhost on podman machine.\nGot: {joined}"
+        );
+
+        // Ollama should use localhost
+        assert!(
+            joined.contains("OLLAMA_HOST=http://localhost:11434"),
+            "OLLAMA_HOST should use localhost on podman machine.\nGot: {joined}"
+        );
+
+        // NO_PROXY should not include git-service
+        assert!(
+            joined.contains("NO_PROXY=localhost,127.0.0.1"),
+            "NO_PROXY should not include git-service on podman machine.\nGot: {joined}"
+        );
+        assert!(
+            !joined.contains("NO_PROXY=localhost,127.0.0.1,git-service"),
+            "NO_PROXY must not include git-service on podman machine"
+        );
+    }
+
+    // @trace spec:enclave-network
+    #[test]
+    fn rewrite_enclave_env_rewrites_known_vars() {
+        assert_eq!(
+            super::rewrite_enclave_env("HTTP_PROXY", "http://proxy:3128"),
+            "http://localhost:3128"
+        );
+        assert_eq!(
+            super::rewrite_enclave_env("HTTPS_PROXY", "http://proxy:3128"),
+            "http://localhost:3128"
+        );
+        assert_eq!(
+            super::rewrite_enclave_env("http_proxy", "http://proxy:3128"),
+            "http://localhost:3128"
+        );
+        assert_eq!(
+            super::rewrite_enclave_env("https_proxy", "http://proxy:3128"),
+            "http://localhost:3128"
+        );
+        assert_eq!(
+            super::rewrite_enclave_env("TILLANDSIAS_GIT_SERVICE", "git-service"),
+            "localhost"
+        );
+        assert_eq!(
+            super::rewrite_enclave_env("OLLAMA_HOST", "http://inference:11434"),
+            "http://localhost:11434"
+        );
+        assert_eq!(
+            super::rewrite_enclave_env("NO_PROXY", "localhost,127.0.0.1,git-service"),
+            "localhost,127.0.0.1"
+        );
+        assert_eq!(
+            super::rewrite_enclave_env("no_proxy", "localhost,127.0.0.1,git-service"),
+            "localhost,127.0.0.1"
+        );
+    }
+
+    // @trace spec:enclave-network
+    #[test]
+    fn rewrite_enclave_env_passes_through_unknown_vars() {
+        assert_eq!(
+            super::rewrite_enclave_env("TILLANDSIAS_PROJECT", "myproject"),
+            "myproject"
+        );
+        assert_eq!(
+            super::rewrite_enclave_env("SOME_OTHER_VAR", "value"),
+            "value"
+        );
+    }
+
+    // @trace spec:enclave-network
+    #[test]
+    fn no_port_mapping_keeps_dns_aliases() {
+        let profile = container_profile::forge_opencode_profile();
+        let mut ctx = test_context();
+        ctx.use_port_mapping = false;
+        let args = build_podman_args(&profile, &ctx);
+        let joined = args.join(" ");
+
+        // Proxy env vars should use DNS aliases
+        assert!(
+            joined.contains("HTTP_PROXY=http://proxy:3128"),
+            "HTTP_PROXY should use DNS alias when not on podman machine.\nGot: {joined}"
+        );
+        assert!(
+            joined.contains("TILLANDSIAS_GIT_SERVICE=git-service"),
+            "TILLANDSIAS_GIT_SERVICE should use DNS alias when not on podman machine"
+        );
+        assert!(
+            joined.contains("OLLAMA_HOST=http://inference:11434"),
+            "OLLAMA_HOST should use DNS alias when not on podman machine"
         );
     }
 }

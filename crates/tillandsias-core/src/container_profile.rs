@@ -199,6 +199,22 @@ pub struct LaunchContext {
     /// Git author email for GIT_AUTHOR_EMAIL / GIT_COMMITTER_EMAIL env vars.
     /// Read from `~/.cache/tillandsias/secrets/git/.gitconfig` at launch time.
     pub git_author_email: String,
+
+    /// When true, containers use localhost port mapping instead of DNS aliases.
+    ///
+    /// On podman machine (macOS/Windows), the internal enclave network's DNS
+    /// doesn't work through gvproxy. Containers can't resolve aliases like
+    /// `proxy`, `git-service`, `inference`. Instead, services publish ports
+    /// to the host and containers reach them via `localhost:<port>`.
+    ///
+    /// When true, `build_podman_args()` rewrites enclave service env vars:
+    /// - `HTTP_PROXY`/`HTTPS_PROXY` -> `http://localhost:3128`
+    /// - `TILLANDSIAS_GIT_SERVICE` -> `localhost`
+    /// - `OLLAMA_HOST` -> `http://localhost:11434`
+    /// - `NO_PROXY` -> `localhost,127.0.0.1`
+    ///
+    /// @trace spec:enclave-network
+    pub use_port_mapping: bool,
 }
 
 // ---------------------------------------------------------------------------
