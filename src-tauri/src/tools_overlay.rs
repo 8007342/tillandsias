@@ -537,12 +537,39 @@ fn swap_current_symlink(overlay_dir: &Path, target: &str) -> Result<(), String> 
 
     #[cfg(windows)]
     {
-        let _ = std::fs::remove_file(&current_link);
-        std::os::windows::fs::symlink_dir(target, &current_link)
-            .map_err(|e| format!("Cannot create current symlink: {e}"))?;
+        // Windows symlinks require Developer Mode or admin privileges.
+        // Use a directory junction instead — no special privileges needed,
+        // works like a symlink for our purposes (transparent path redirection).
+        // @trace spec:cross-platform
+        let _ = remove_junction_or_dir(&current_link);
+        let target_path = overlay_dir.join(target);
+        let status = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J",
+                current_link.to_str().unwrap_or_default(),
+                target_path.to_str().unwrap_or_default()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map_err(|e| format!("Cannot create junction: {e}"))?;
+        if !status.success() {
+            // Fallback: just write a text file with the path
+            // (resolve_mount_source will read it)
+            return Err(format!("Cannot create directory junction for tools overlay"));
+        }
     }
 
     Ok(())
+}
+
+/// Remove a junction point or directory on Windows.
+#[cfg(windows)]
+fn remove_junction_or_dir(path: &Path) -> std::io::Result<()> {
+    if path.exists() {
+        // Junctions appear as directories — use remove_dir (not remove_file)
+        std::fs::remove_dir(path).or_else(|_| std::fs::remove_file(path))
+    } else {
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
