@@ -326,63 +326,91 @@ fn build_overlay_sync(
         format!("Failed to extract embedded scripts: {e}")
     })?;
 
-    let script = source_dir.join("scripts").join("build-tools-overlay.sh");
-    if !script.exists() {
-        crate::embedded::cleanup_image_sources();
-        return Err(format!(
-            "build-tools-overlay.sh not found at {}",
-            script.display()
-        ));
-    }
-
-    // Step 3: Run the builder script
+    // Step 3: Run the builder
     info!(
-        script = %script.display(),
         output = %version_dir.display(),
         forge_image = %forge_tag,
         spec = "layered-tools-overlay",
-        "Running build-tools-overlay.sh"
+        "Running tools overlay builder"
     );
 
-    // Pass CA chain path so the builder script can mount it into the
-    // temporary container — required for HTTPS through the MITM proxy.
-    //
-    // CA_CHAIN_PATH serves double duty: it tells the builder script to
-    // (1) join the enclave network and route through proxy, and
-    // (2) mount the CA chain for HTTPS trust through the MITM proxy.
-    //
-    // When proxy is NOT healthy, we deliberately omit CA_CHAIN_PATH so
-    // the builder uses the default bridge network with direct internet
-    // access. This prevents the container from being stuck on the enclave
-    // network with no working proxy and no default internet route.
-    //
     // @trace spec:proxy-container, spec:layered-tools-overlay
     let ca_chain = crate::ca::proxy_certs_dir().join("ca-chain.crt");
 
-    let mut cmd = std::process::Command::new(&script);
-    cmd.arg(version_dir.to_str().unwrap_or_default())
-        .arg(forge_tag)
-        .env_remove("LD_LIBRARY_PATH")
-        .env_remove("LD_PRELOAD")
-        .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
-        .env("TOOLS_OVERLAY_QUIET", "1");
+    #[cfg(not(target_os = "windows"))]
+    let output = {
+        // Unix: run build-tools-overlay.sh bash script
+        let script = source_dir.join("scripts").join("build-tools-overlay.sh");
+        if !script.exists() {
+            crate::embedded::cleanup_image_sources();
+            return Err(format!(
+                "build-tools-overlay.sh not found at {}",
+                script.display()
+            ));
+        }
 
-    if proxy_healthy && ca_chain.exists() {
-        cmd.env("CA_CHAIN_PATH", &ca_chain);
-    } else if !proxy_healthy {
-        info!(spec = "layered-tools-overlay", "Proxy unhealthy — builder will use direct network access");
-    }
+        let mut cmd = std::process::Command::new(&script);
+        cmd.arg(version_dir.to_str().unwrap_or_default())
+            .arg(forge_tag)
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
+            .env("TOOLS_OVERLAY_QUIET", "1");
 
-    let output = cmd.output()
-        .map_err(|e| {
-            error!(
-                script = %script.display(),
-                error = %e,
-                spec = "layered-tools-overlay",
-                "Failed to launch build-tools-overlay.sh"
-            );
+        if proxy_healthy && ca_chain.exists() {
+            cmd.env("CA_CHAIN_PATH", &ca_chain);
+        } else if !proxy_healthy {
+            info!(spec = "layered-tools-overlay", "Proxy unhealthy — builder will use direct network access");
+        }
+
+        cmd.output().map_err(|e| {
+            error!(error = %e, spec = "layered-tools-overlay", "Failed to launch build script");
             format!("Failed to launch build-tools-overlay.sh: {e}")
-        })?;
+        })?
+    };
+
+    #[cfg(target_os = "windows")]
+    let output = {
+        // Windows: can't run bash scripts directly. Use podman run with
+        // inline install commands (same approach as init.rs for image builds).
+        // @trace spec:layered-tools-overlay, spec:cross-platform
+        let version_dir_str = version_dir.to_str().unwrap_or_default();
+        // Convert Windows path to forward slashes for podman
+        let version_dir_unix = version_dir_str.replace('\\', "/");
+
+        info!(spec = "layered-tools-overlay", "Windows: using direct podman run for tools overlay build");
+
+        tillandsias_podman::podman_cmd_sync()
+            .args([
+                "run", "--rm", "--init",
+                "--cap-drop=ALL",
+                "--security-opt=no-new-privileges",
+                "--userns=keep-id",
+                "--security-opt=label=disable",
+                "-v", &format!("{version_dir_unix}:/home/forge/.tools:rw"),
+                "--entrypoint", "bash",
+            ])
+            .arg(forge_tag)
+            .args(["-c", "set -euo pipefail && \
+                echo '[tools-overlay] Installing Claude Code...' && \
+                npm install -g --prefix /home/forge/.tools/claude @anthropic-ai/claude-code 2>&1 && \
+                echo '[tools-overlay] Installing OpenSpec...' && \
+                npm install -g --prefix /home/forge/.tools/openspec @fission-ai/openspec 2>&1 && \
+                echo '[tools-overlay] Installing OpenCode...' && \
+                export OPENCODE_INSTALL_DIR=/home/forge/.tools/opencode && \
+                mkdir -p /home/forge/.tools/opencode/bin && \
+                (curl -fsSL https://opencode.ai/install | bash 2>&1 || true) && \
+                if [ ! -x /home/forge/.tools/opencode/bin/opencode ] && [ -f \"$HOME/.opencode/bin/opencode\" ]; then \
+                    cp \"$HOME/.opencode/bin/opencode\" /home/forge/.tools/opencode/bin/opencode && \
+                    chmod +x /home/forge/.tools/opencode/bin/opencode; \
+                fi && \
+                echo '[tools-overlay] Done.'"])
+            .output()
+            .map_err(|e| {
+                error!(error = %e, spec = "layered-tools-overlay", "Failed to run podman for tools overlay");
+                format!("Failed to run podman for tools overlay: {e}")
+            })?
+    };
 
     crate::embedded::cleanup_image_sources();
 
