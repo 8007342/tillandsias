@@ -313,7 +313,15 @@ fn resolve_mount_source(source: &MountSource, ctx: &LaunchContext) -> Option<Str
         // Per-container log directory — each container writes its own logs.
         MountSource::ContainerLogs => {
             let log_path = tillandsias_core::config::container_log_dir(&ctx.container_name);
-            // Always resolve — the caller creates the directory before launch.
+            // Create the directory if missing — podman fails with
+            // "no such file or directory" if the mount source doesn't exist.
+            if let Err(e) = std::fs::create_dir_all(&log_path) {
+                tracing::warn!(
+                    container = %ctx.container_name,
+                    error = %e,
+                    "Failed to create container log directory"
+                );
+            }
             Some(log_path.display().to_string())
         }
     }

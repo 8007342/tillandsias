@@ -349,9 +349,14 @@ pub fn log_dir() -> PathBuf {
 ///
 /// @trace spec:podman-orchestration
 pub fn container_log_dir(container_name: &str) -> PathBuf {
+    // Strip redundant "tillandsias-" prefix — already namespaced under
+    // ~/.local/state/tillandsias/containers/
+    let short_name = container_name
+        .strip_prefix("tillandsias-")
+        .unwrap_or(container_name);
     log_dir()
         .join("containers")
-        .join(container_name)
+        .join(short_name)
         .join("logs")
 }
 
