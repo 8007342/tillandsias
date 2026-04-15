@@ -27,6 +27,32 @@ pub fn run_with_force(force: bool) -> bool {
     println!("{}", i18n::t("init.preparing"));
     println!();
 
+    // On macOS/Windows, podman requires a VM (podman machine).
+    // Init and start it before any image builds.
+    // @trace spec:podman-orchestration
+    if tillandsias_core::state::Os::detect().needs_podman_machine() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime for podman machine");
+        let client = tillandsias_podman::PodmanClient::new();
+
+        if !rt.block_on(client.has_machine()) {
+            println!("  Initializing container runtime...");
+            rt.block_on(client.init_machine());
+        }
+        if !rt.block_on(client.is_machine_running()) {
+            println!("  Starting container runtime...");
+            if !rt.block_on(client.start_machine()) {
+                eprintln!("  \u{2717} Container runtime failed to start.");
+                eprintln!("  Try manually: podman machine init && podman machine start");
+                return false;
+            }
+            // Wait for API to be ready
+            rt.block_on(client.wait_for_ready(10));
+        }
+    }
+
     // Always invoke the build script for each image — it handles staleness
     // internally via hash check and exits fast when up to date.
     // @trace spec:forge-staleness
