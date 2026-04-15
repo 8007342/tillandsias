@@ -300,8 +300,9 @@ pub(crate) async fn ensure_inference_running(
             // DISTRO: inference is Fedora Minimal — has curl, NOT wget.
             // Alpine containers use wget (busybox); Fedora containers use curl.
             // Ollama takes 15-30s to start (database init, model loading).
-            // On podman machine, containers take longer to start — double the timeout.
-            let max_attempts: u32 = if port_mapping { 60 } else { 30 };
+            // Exponential backoff: 1s, 2s, 4s, 8s, 8s... (capped at 8s).
+            // 10 attempts covers ~55s total, enough for both fast and slow starts.
+            let max_attempts: u32 = 10;
             for attempt in 0..max_attempts {
                 let check = tillandsias_podman::podman_cmd()
                     .args(["exec", INFERENCE_CONTAINER_NAME, "curl", "-sf", "--max-time", "2", "-o", "/dev/null", "http://localhost:11434/api/version"])
@@ -314,7 +315,8 @@ pub(crate) async fn ensure_inference_running(
                     break;
                 }
                 if attempt < max_attempts - 1 {
-                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    let delay = Duration::from_secs((1u64 << attempt).min(8));
+                    tokio::time::sleep(delay).await;
                 } else {
                     warn!(
                         accountability = true,
@@ -639,8 +641,8 @@ pub(crate) async fn ensure_proxy_running(
             // DISTRO: Proxy is Alpine — uses busybox nc (netcat).
             // wget --spider returns 400 (squid rejects non-proxy requests).
             // nc -z is a pure TCP port probe — succeeds if squid is listening.
-            // On podman machine, containers take longer to start — double the timeout.
-            let max_attempts: u32 = if port_mapping { 30 } else { 15 };
+            // Exponential backoff: 1s, 2s, 4s, 8s, 8s... (capped at 8s).
+            let max_attempts: u32 = 10;
             for attempt in 0..max_attempts {
                 let check = tillandsias_podman::podman_cmd()
                     .args(["exec", PROXY_CONTAINER_NAME, "sh", "-c", "nc -z localhost 3128"])
@@ -653,7 +655,8 @@ pub(crate) async fn ensure_proxy_running(
                     break;
                 }
                 if attempt < max_attempts - 1 {
-                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    let delay = Duration::from_secs((1u64 << attempt).min(8));
+                    tokio::time::sleep(delay).await;
                 } else {
                     warn!(spec = "proxy-container", "Proxy readiness check failed after {max_attempts} attempts — proceeding anyway");
                 }
@@ -1387,8 +1390,8 @@ pub(crate) async fn ensure_git_service_running(
             // Health check: verify git daemon is listening on port 9418.
             // DISTRO: Git service is Alpine — uses busybox nc (built-in).
             // nc -z does a zero-I/O TCP connect check.
-            // On podman machine, containers take longer to start — double the timeout.
-            let max_attempts: u32 = if port_mapping { 20 } else { 10 };
+            // Exponential backoff: 1s, 2s, 4s, 8s, 8s... (capped at 8s).
+            let max_attempts: u32 = 10;
             for attempt in 0..max_attempts {
                 let check = tillandsias_podman::podman_cmd()
                     .args(["exec", &container_name, "sh", "-c", "nc -z localhost 9418"])
@@ -1401,7 +1404,8 @@ pub(crate) async fn ensure_git_service_running(
                     break;
                 }
                 if attempt < max_attempts - 1 {
-                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    let delay = Duration::from_secs((1u64 << attempt).min(8));
+                    tokio::time::sleep(delay).await;
                 } else {
                     warn!(
                         accountability = true,
