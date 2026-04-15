@@ -633,20 +633,12 @@ pub fn run_github_login() -> bool {
         eprintln!("  Warning: enclave network setup failed: {e}");
     }
 
-    // Run gh auth login in a temporary FORGE container (not git service).
-    // The git service image (Alpine) doesn't have gh installed.
-    // The forge image (Fedora) has gh, git, and all needed tools.
+    // Run gh auth login in a temporary GIT SERVICE container (NOT forge).
+    // The forge is UNTRUSTED (runs AI-generated code, npm deps, etc).
+    // GitHub credentials must NEVER touch the forge environment.
+    // The git service image now has gh installed (Alpine github-cli package).
     // @trace spec:secret-management
-    let forge_tag = crate::handlers::forge_image_tag();
-    if !rt.block_on(client.image_exists(&forge_tag)) {
-        println!();
-        println!("  Building forge image first...");
-        if let Err(e) = run_build_image_script("forge", false) {
-            eprintln!("  Failed to build forge image: {e}");
-            return false;
-        }
-    }
-    return run_github_login_forge(&forge_tag);
+    return run_github_login_git_service(&tag);
 }
 
 /// Windows: run `gh auth login` directly in a temporary git service container via podman.
@@ -799,9 +791,37 @@ fn prompt_with_default(
 /// @trace spec:git-mirror-service, spec:enclave-network
 #[cfg(not(target_os = "windows"))]
 fn run_github_login_git_service(tag: &str) -> bool {
-    println!();
+    // @trace spec:secret-management
+    // Git identity prompt — saved to host cache, injected into forge containers.
+    // This runs on the HOST (not in any container) — just a text prompt.
+    let cache = tillandsias_core::config::cache_dir();
+    let gitconfig = cache.join("secrets").join("git").join(".gitconfig");
+    if let Some(parent) = gitconfig.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    let (current_name, current_email) = crate::launch::read_git_identity(&cache);
+    if current_name.is_empty() || current_email.is_empty() {
+        println!();
+        println!("  First, let's set up your git identity.");
+        println!("  (This is used for commit authorship)");
+        println!();
+
+        let name = prompt_with_default("  Your name", &current_name);
+        let email = prompt_with_default("  Your email", &current_email);
+
+        if !name.is_empty() && !email.is_empty() {
+            let content = format!("[user]\n\tname = {name}\n\temail = {email}\n");
+            match std::fs::write(&gitconfig, &content) {
+                Ok(()) => println!("  ✓ Git identity saved."),
+                Err(e) => eprintln!("  WARNING: Failed to save git identity: {e}"),
+            }
+        }
+        println!();
+    }
+
     println!("  Starting GitHub authentication...");
-    println!("  (You'll be prompted to paste a GitHub token)");
+    println!("  (Running in the trusted git service container — credentials never touch the forge)");
     println!();
 
     let network = tillandsias_podman::ENCLAVE_NETWORK;
@@ -837,86 +857,6 @@ fn run_github_login_git_service(tag: &str) -> bool {
         }
         Err(e) => {
             eprintln!("Error: failed to run GitHub login container: {e}");
-            false
-        }
-    }
-}
-
-/// Run `gh auth login` in a temporary forge container.
-/// The forge image has `gh` installed (Alpine git image does not).
-/// Also prompts for git identity (name/email) and saves to cache.
-///
-/// @trace spec:secret-management, spec:git-mirror-service
-fn run_github_login_forge(forge_tag: &str) -> bool {
-    println!();
-    println!("  Starting GitHub authentication...");
-    println!("  (You'll be prompted to authenticate with GitHub)");
-    println!();
-
-    // First: prompt for git identity on the HOST (saved to cache config)
-    let cache = tillandsias_core::config::cache_dir();
-    let gitconfig = cache.join("secrets").join("git").join(".gitconfig");
-    if let Some(parent) = gitconfig.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-
-    let (current_name, current_email) = crate::launch::read_git_identity(&cache);
-    if current_name.is_empty() || current_email.is_empty() {
-        println!("  First, let's set up your git identity.");
-        println!("  (This is used for commit authorship)");
-        println!();
-
-        let name = prompt_with_default("  Your name", &current_name);
-        let email = prompt_with_default("  Your email", &current_email);
-
-        if !name.is_empty() && !email.is_empty() {
-            let content = format!("[user]\n\tname = {name}\n\temail = {email}\n");
-            match std::fs::write(&gitconfig, &content) {
-                Ok(()) => println!("  ✓ Git identity saved."),
-                Err(e) => eprintln!("  WARNING: Failed to save git identity: {e}"),
-            }
-        }
-        println!();
-    }
-
-    // Then: run gh auth login inside a forge container
-    let network = tillandsias_podman::ENCLAVE_NETWORK;
-
-    let status = tillandsias_podman::podman_cmd_sync()
-        .args([
-            "run", "-it", "--rm", "--init",
-            "--name", "tillandsias-gh-login",
-            "--cap-drop=ALL",
-            "--security-opt=no-new-privileges",
-            "--userns=keep-id",
-            "--security-opt=label=disable",
-            &format!("--network={network}"),
-            "--entrypoint=",
-        ])
-        .arg(forge_tag)
-        .args(["gh", "auth", "login", "--git-protocol", "https"])
-        .stdin(std::process::Stdio::inherit())
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status();
-
-    match status {
-        Ok(s) => {
-            if s.success() {
-                println!();
-                println!("  ✓ GitHub authentication complete.");
-                println!("  ✓ Git identity configured.");
-                println!();
-                println!("  You can now use Tillandsias to open projects and commit changes.");
-            } else {
-                eprintln!("  GitHub authentication failed (gh exited with error).");
-                eprintln!("  Your git identity was saved — you can still commit locally.");
-            }
-            // Return true even if gh auth fails — git identity was still saved
-            true
-        }
-        Err(e) => {
-            eprintln!("Error: failed to run login container: {e}");
             false
         }
     }

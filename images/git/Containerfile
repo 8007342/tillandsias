@@ -7,10 +7,12 @@
 #         User creation: adduser -D (NOT useradd).
 FROM docker.io/library/alpine:3.20
 
-# @trace spec:git-mirror-service — git daemon + bash for entrypoint
+# @trace spec:git-mirror-service, spec:secret-management
+# gh CLI is installed here (trusted container) — NOT in the forge (untrusted).
+# GitHub credentials must never touch the forge environment.
 # DISTRO: apk add --no-cache (Alpine), NOT microdnf/dnf (Fedora)
 # DISTRO: adduser -D (Alpine), NOT useradd (Fedora)
-RUN apk add --no-cache git git-daemon bash openssh-client \
+RUN apk add --no-cache git git-daemon bash openssh-client github-cli \
     && adduser -D -u 1000 -s /bin/bash git \
     && mkdir -p /srv/git /var/log/git-service \
     && chown -R git:git /srv/git /var/log/git-service
