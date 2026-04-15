@@ -557,8 +557,8 @@ pub fn run(
 ///
 /// Phase 3: If a git service container is already running for any project,
 /// exec `gh auth login` inside it. Otherwise, start a temporary git service
-/// container with D-Bus access on the enclave network, run the auth flow,
-/// and let `--rm` clean it up.
+/// container on the default bridge network (for direct internet to github.com),
+/// run the auth flow, and let `--rm` clean it up.
 ///
 /// Returns `true` on success, `false` on failure.
 ///
@@ -628,15 +628,12 @@ pub fn run_github_login() -> bool {
         }
     }
 
-    // Ensure enclave network exists.
-    if let Err(e) = rt.block_on(crate::handlers::ensure_enclave_network()) {
-        eprintln!("  Warning: enclave network setup failed: {e}");
-    }
-
     // Run gh auth login in a temporary GIT SERVICE container (NOT forge).
     // The forge is UNTRUSTED (runs AI-generated code, npm deps, etc).
     // GitHub credentials must NEVER touch the forge environment.
     // The git service image now has gh installed (Alpine github-cli package).
+    // No enclave network needed — the login container uses default bridge
+    // for direct internet access to github.com.
     // @trace spec:secret-management
     return run_github_login_git_service(&tag);
 }
@@ -702,7 +699,7 @@ fn run_github_login_direct(tag: &str) -> bool {
     println!("  (You'll be prompted to paste a GitHub token)");
     println!();
 
-    // Run gh auth login interactively in forge container.
+    // Run gh auth login interactively in git service container.
     // Use raw Command (not podman_cmd_sync) to avoid CREATE_NO_WINDOW
     // which kills the interactive TTY that gh auth login needs.
     let status = std::process::Command::new(tillandsias_podman::find_podman_path())
@@ -760,9 +757,11 @@ fn read_gitconfig_value(path: &std::path::Path, key: &str) -> String {
         .unwrap_or_default()
 }
 
-/// Run `gh auth login` in a temporary git service container on the enclave network.
-/// Used on ALL platforms — the git service image (Alpine) now has gh installed.
-/// @trace spec:git-mirror-service, spec:enclave-network, spec:secret-management
+/// Run `gh auth login` in a temporary git service container.
+/// Uses the default bridge network (NOT the enclave) — the login container
+/// only needs direct internet access to github.com for the OAuth flow.
+/// It doesn't need enclave DNS aliases (proxy, git-service, inference).
+/// @trace spec:git-mirror-service, spec:secret-management
 fn run_github_login_git_service(tag: &str) -> bool {
     // @trace spec:secret-management
     // Git identity prompt — saved to host cache, injected into forge containers.
@@ -797,8 +796,10 @@ fn run_github_login_git_service(tag: &str) -> bool {
     println!("  (Running in the trusted git service container — credentials never touch the forge)");
     println!();
 
-    let network = tillandsias_podman::ENCLAVE_NETWORK;
-
+    // Use default bridge network (no --network flag) so gh can reach github.com.
+    // The enclave network has NO external internet — only the proxy provides
+    // outbound access, but gh needs direct HTTPS to github.com for OAuth.
+    // @trace spec:secret-management
     let status = tillandsias_podman::podman_cmd_sync()
         .args([
             "run", "-it", "--rm", "--init",
@@ -807,7 +808,6 @@ fn run_github_login_git_service(tag: &str) -> bool {
             "--security-opt=no-new-privileges",
             "--userns=keep-id",
             "--security-opt=label=disable",
-            &format!("--network={network}"),
             "--entrypoint=",
         ])
         .arg(tag)

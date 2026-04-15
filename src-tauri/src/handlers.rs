@@ -3026,9 +3026,9 @@ pub async fn handle_root_terminal(
     }
 }
 
-/// Handle "GitHub Login" — build forge image if missing, then run gh-auth-login.sh.
+/// Handle "GitHub Login" — build git service image if missing, then run `gh auth login`.
 ///
-/// On first launch the forge image does not exist yet. Rather than failing with
+/// On first launch the git image does not exist yet. Rather than failing with
 /// "Cannot find build-image.sh", this handler builds the image first (same
 /// pipeline as Attach Here) and shows a progress chip in the tray while it
 /// waits. Only after the image is confirmed present does it open the terminal.
@@ -3036,9 +3036,9 @@ pub async fn handle_root_terminal(
 /// No filesystem scripts are trusted — everything comes from the signed binary.
 ///
 /// Phase 3: If a git service container is already running for any project,
-/// exec `gh auth login` inside it (it already has D-Bus for keyring access).
-/// If no git service is running, start a temporary one with D-Bus on the
-/// enclave network, run the auth flow, and stop it after.
+/// exec `gh auth login` inside it. If no git service is running, start a
+/// temporary one on the default bridge network (for direct internet access
+/// to github.com), run the auth flow, and let `--rm` clean it up.
 ///
 /// @trace spec:git-mirror-service, spec:secret-management
 pub async fn handle_github_login(
@@ -3136,14 +3136,24 @@ pub async fn handle_github_login(
         }
     }
 
-    // Ensure enclave network exists for the temporary container.
-    ensure_enclave_network().await.ok();
+    // Check git identity — warn if not configured (tray can't prompt interactively).
+    // @trace spec:secret-management
+    let cache = tillandsias_core::config::cache_dir();
+    let (git_name, git_email) = crate::launch::read_git_identity(&cache);
+    if git_name.is_empty() || git_email.is_empty() {
+        info!("Git identity not configured — user should run `tillandsias --login` first");
+        send_notification(
+            "Git Identity Not Set",
+            "Run `tillandsias --login` from the terminal to set your name and email before authenticating.",
+        );
+    }
 
-    // Launch a temporary git service container with D-Bus access for keyring auth.
-    // The container runs `gh auth login` interactively, then is removed (--rm).
-    // @trace spec:git-mirror-service, spec:enclave-network
+    // Launch a temporary git service container for the auth flow.
+    // Uses default bridge network (no --network flag) so gh can reach github.com.
+    // The enclave network has NO external internet — only the proxy provides
+    // outbound access, but gh needs direct HTTPS to github.com for OAuth.
+    // @trace spec:git-mirror-service, spec:secret-management
     let temp_name = "tillandsias-gh-login";
-    let network = tillandsias_podman::ENCLAVE_NETWORK;
     let exec_cmd = format!(
         "{podman_path} run -it --rm --init \
          --name {temp_name} \
@@ -3151,7 +3161,6 @@ pub async fn handle_github_login(
          --security-opt=no-new-privileges \
          --userns=keep-id \
          --security-opt=label=disable \
-         --network={network} \
          --entrypoint='' \
          {tag} \
          gh auth login --git-protocol https",
