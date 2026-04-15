@@ -371,8 +371,10 @@ fn build_overlay_sync(
 
     #[cfg(target_os = "windows")]
     let output = {
-        // Windows: run the bash script via Git Bash (bundled with Git for Windows).
-        // The script handles proxy detection, CA chain, enclave routing — same as Unix.
+        // Windows: run the same bash script via WSL (Windows Subsystem for Linux).
+        // WSL is required by podman on Windows anyway (podman machine uses WSL2),
+        // so it's always available. This ensures the SAME script runs on all
+        // platforms — no separate Windows code path.
         // @trace spec:layered-tools-overlay, spec:cross-platform
         let script = source_dir.join("scripts").join("build-tools-overlay.sh");
         if !script.exists() {
@@ -383,38 +385,43 @@ fn build_overlay_sync(
             ));
         }
 
-        // Find Git Bash — standard install locations
-        let bash_path = [
-            r"C:\Program Files\Git\bin\bash.exe",
-            r"C:\Program Files (x86)\Git\bin\bash.exe",
-        ]
-        .iter()
-        .find(|p| std::path::Path::new(p).exists())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| "bash.exe".to_string()); // fall back to PATH
+        // Convert Windows paths to WSL paths: C:\Users\foo → /mnt/c/Users/foo
+        let to_wsl_path = |p: &std::path::Path| -> String {
+            let s = p.to_str().unwrap_or_default().replace('\\', "/");
+            if let Some(rest) = s.strip_prefix("C:/") {
+                format!("/mnt/c/{rest}")
+            } else if let Some(rest) = s.strip_prefix("D:/") {
+                format!("/mnt/d/{rest}")
+            } else if s.len() >= 3 && s.as_bytes()[1] == b':' && s.as_bytes()[2] == b'/' {
+                let drive = (s.as_bytes()[0] as char).to_ascii_lowercase();
+                format!("/mnt/{drive}/{}", &s[3..])
+            } else {
+                s
+            }
+        };
+
+        let wsl_script = to_wsl_path(&script);
+        let wsl_version_dir = to_wsl_path(version_dir);
 
         info!(
-            bash = %bash_path,
             spec = "layered-tools-overlay",
-            "Windows: running build-tools-overlay.sh via Git Bash"
+            "Windows: running build-tools-overlay.sh via WSL"
         );
 
-        let mut cmd = std::process::Command::new(&bash_path);
-        cmd.arg(script.to_str().unwrap_or_default())
-            .arg(version_dir.to_str().unwrap_or_default())
-            .arg(forge_tag)
+        let mut cmd = std::process::Command::new("wsl");
+        cmd.args(["bash", &wsl_script, &wsl_version_dir, forge_tag])
             .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
             .env("TOOLS_OVERLAY_QUIET", "1");
 
         if proxy_healthy && ca_chain.exists() {
-            cmd.env("CA_CHAIN_PATH", &ca_chain);
+            cmd.env("CA_CHAIN_PATH", to_wsl_path(&ca_chain));
         } else if !proxy_healthy {
             info!(spec = "layered-tools-overlay", "Proxy unhealthy — builder will use direct network access");
         }
 
         cmd.output().map_err(|e| {
-            error!(error = %e, spec = "layered-tools-overlay", "Failed to launch build script via Git Bash");
-            format!("Failed to launch build-tools-overlay.sh via Git Bash: {e}")
+            error!(error = %e, spec = "layered-tools-overlay", "Failed to launch build script via WSL");
+            format!("Failed to launch build-tools-overlay.sh via WSL: {e}")
         })?
     };
 
