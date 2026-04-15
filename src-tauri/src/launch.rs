@@ -922,5 +922,7 @@ mod tests {
             "Proxy must have --tmpfs=/var/run/squid");
         assert!(args.contains(&"--tmpfs=/var/log/squid".to_string()),
             "Proxy must have --tmpfs=/var/log/squid");
+        assert!(args.contains(&"--tmpfs=/var/lib/squid".to_string()),
+            "Proxy must have --tmpfs=/var/lib/squid for SSL cert DB");
     }
 }

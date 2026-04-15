@@ -365,7 +365,9 @@ pub fn proxy_profile() -> ContainerProfile {
         image_override: None,
         pids_limit: 32,        // Only squid + helpers
         read_only: true,       // Service container — immutable root FS
-        tmpfs_mounts: vec!["/tmp", "/var/run/squid", "/var/log/squid"],
+        // DISTRO: Alpine squid needs these writable dirs:
+        // /var/lib/squid  — SSL certificate database (security_file_certgen)
+        tmpfs_mounts: vec!["/tmp", "/var/run/squid", "/var/log/squid", "/var/lib/squid"],
     }
 }
 
@@ -830,5 +832,6 @@ mod tests {
         let profile = proxy_profile();
         assert!(profile.tmpfs_mounts.contains(&"/var/run/squid"), "Proxy must have /var/run/squid tmpfs");
         assert!(profile.tmpfs_mounts.contains(&"/var/log/squid"), "Proxy must have /var/log/squid tmpfs");
+        assert!(profile.tmpfs_mounts.contains(&"/var/lib/squid"), "Proxy must have /var/lib/squid tmpfs for SSL cert DB");
     }
 }
