@@ -670,15 +670,12 @@ fn run_github_login_direct(tag: &str) -> bool {
     println!("=== GitHub Login ===");
     println!();
 
-    let stdin = std::io::stdin();
-    let mut stdout = std::io::stdout();
-
     // Read existing name/email from gitconfig
     let existing_name = read_gitconfig_value(&gitconfig, "name");
     let existing_email = read_gitconfig_value(&gitconfig, "email");
 
-    let git_name = prompt_with_default(&stdin, &mut stdout, "Your name (for git commits)", &existing_name);
-    let git_email = prompt_with_default(&stdin, &mut stdout, "Your email (for git commits)", &existing_email);
+    let git_name = prompt_with_default("  Your name (for git commits)", &existing_name);
+    let git_email = prompt_with_default("  Your email (for git commits)", &existing_email);
 
     if git_name.is_empty() || git_email.is_empty() {
         eprintln!("  Name and email are required.");
@@ -763,33 +760,9 @@ fn read_gitconfig_value(path: &std::path::Path, key: &str) -> String {
         .unwrap_or_default()
 }
 
-#[cfg(target_os = "windows")]
-fn prompt_with_default(
-    stdin: &std::io::Stdin,
-    stdout: &mut std::io::Stdout,
-    prompt: &str,
-    default: &str,
-) -> String {
-    use std::io::Write;
-    use std::io::BufRead;
-    if default.is_empty() {
-        print!("  {prompt}: ");
-    } else {
-        print!("  {prompt} [{default}]: ");
-    }
-    if let Err(e) = stdout.flush() {
-        warn!(error = %e, "Failed to flush stdout for user prompt");
-    }
-    let mut input = String::new();
-    // read_line failure yields empty input, which falls back to default — acceptable
-    let _ = stdin.lock().read_line(&mut input);
-    let trimmed = input.trim().to_string();
-    if trimmed.is_empty() { default.to_string() } else { trimmed }
-}
-
-/// Unix: run `gh auth login` in a temporary git service container on the enclave network.
-/// @trace spec:git-mirror-service, spec:enclave-network
-#[cfg(not(target_os = "windows"))]
+/// Run `gh auth login` in a temporary git service container on the enclave network.
+/// Used on ALL platforms — the git service image (Alpine) now has gh installed.
+/// @trace spec:git-mirror-service, spec:enclave-network, spec:secret-management
 fn run_github_login_git_service(tag: &str) -> bool {
     // @trace spec:secret-management
     // Git identity prompt — saved to host cache, injected into forge containers.
