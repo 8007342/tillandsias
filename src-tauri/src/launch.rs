@@ -171,6 +171,22 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     }
 
     // -----------------------------------------------------------------------
+    // Host aliases for podman machine (Windows/macOS)
+    // @trace spec:enclave-network, spec:cross-platform
+    // When using port mapping, env vars point to localhost:<port> for
+    // connectivity. But we ALSO inject --add-host entries so containers
+    // can resolve the friendly service names (proxy, git-service, inference)
+    // to 127.0.0.1. Power users see meaningful names in /etc/hosts, logs,
+    // and diagnostic output.
+    // -----------------------------------------------------------------------
+    if ctx.use_port_mapping {
+        for alias in ["proxy", "git-service", "inference"] {
+            args.push("--add-host".into());
+            args.push(format!("{alias}:127.0.0.1"));
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Volume mounts (resolved from context)
     // @trace spec:podman-orchestration/volume-mount-strategy
     // -----------------------------------------------------------------------
