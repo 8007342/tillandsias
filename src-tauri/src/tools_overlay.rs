@@ -16,7 +16,9 @@
 //! @trace spec:layered-tools-overlay
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::{OnceLock, RwLock};
+use std::time::{Instant, SystemTime};
 
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, warn};
@@ -25,6 +27,97 @@ use tillandsias_core::config::cache_dir;
 
 use crate::handlers::{forge_image_tag, send_notification};
 use crate::i18n;
+
+// ---------------------------------------------------------------------------
+// Process-lifetime overlay snapshot cache
+//
+// The overlay never changes between launches in the warm case (same forge
+// image tag, same source files). Compute the lookup answer once per tray
+// process and reuse it on every "Attach Here" — skipping `exists()`,
+// manifest JSON deserialization, and proxy health-check entirely on the
+// hot path.
+//
+// Invariants:
+//   - `forge_tag` is the forge image tag the snapshot was last validated
+//     against. If `forge_image_tag()` ever returns something different
+//     (post-update / new install), the snapshot is stale and the slow
+//     path repopulates.
+//   - The background update task in `spawn_background_update` MUST clear
+//     the snapshot after successfully rebuilding the overlay so the next
+//     launch picks up the new symlink target.
+//
+// @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+struct OverlaySnapshot {
+    /// Resolved `~/.cache/tillandsias/tools-overlay/current` directory path.
+    current_path: PathBuf,
+    /// Forge image tag the snapshot was validated against.
+    forge_tag: String,
+    /// When the snapshot was populated; reserved for a future
+    /// `--debug-overlay` CLI flag that prints cache age + stats.
+    #[allow(dead_code)]
+    built_at: SystemTime,
+}
+
+static OVERLAY_SNAPSHOT: OnceLock<RwLock<Option<OverlaySnapshot>>> = OnceLock::new();
+
+fn snapshot_cell() -> &'static RwLock<Option<OverlaySnapshot>> {
+    OVERLAY_SNAPSHOT.get_or_init(|| RwLock::new(None))
+}
+
+/// Fast-path lookup. Returns the cached overlay path iff the snapshot is
+/// valid for the *current* forge image tag. Sub-millisecond when populated.
+///
+/// @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse
+pub(crate) fn cached_overlay_for(forge_tag: &str) -> Option<PathBuf> {
+    let cell = snapshot_cell();
+    let guard = cell.read().ok()?;
+    let snap = guard.as_ref()?;
+    if snap.forge_tag == forge_tag {
+        Some(snap.current_path.clone())
+    } else {
+        None
+    }
+}
+
+/// Populate the snapshot. Called from the slow path after the manifest +
+/// symlink + forge-tag agreement have all been verified.
+///
+/// @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse
+fn populate_snapshot(current_path: PathBuf, forge_tag: String) {
+    let snap = OverlaySnapshot {
+        current_path: current_path.clone(),
+        forge_tag: forge_tag.clone(),
+        built_at: SystemTime::now(),
+    };
+    if let Ok(mut guard) = snapshot_cell().write() {
+        *guard = Some(snap);
+        info!(
+            spec = "layered-tools-overlay, tools-overlay-fast-reuse",
+            path = %current_path.display(),
+            forge_tag = %forge_tag,
+            "Overlay snapshot cached for process lifetime"
+        );
+    }
+}
+
+/// Invalidate the snapshot. Called by rebuild paths so the next launch
+/// repopulates from the freshly-built overlay version.
+///
+/// @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse
+pub(crate) fn invalidate_overlay_snapshot() {
+    if let Ok(mut guard) = snapshot_cell().write() {
+        if guard.is_some() {
+            *guard = None;
+            debug!(
+                spec = "layered-tools-overlay, tools-overlay-fast-reuse",
+                "Overlay snapshot invalidated"
+            );
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Manifest types
@@ -177,6 +270,22 @@ fn is_proxy_healthy_sync() -> bool {
 pub(crate) async fn ensure_tools_overlay(
     build_tx: tokio::sync::mpsc::Sender<tillandsias_core::event::BuildProgressEvent>,
 ) -> Result<(), String> {
+    let expected_tag = forge_image_tag();
+
+    // @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse
+    // Fast path: process-lifetime snapshot. Sub-millisecond when populated.
+    // Skips exists() syscall, manifest deserialization, and any further
+    // I/O entirely on the warm-launch hot path.
+    let lookup_start = Instant::now();
+    if let Some(_path) = cached_overlay_for(&expected_tag) {
+        debug!(
+            spec = "layered-tools-overlay, tools-overlay-fast-reuse",
+            elapsed_micros = lookup_start.elapsed().as_micros() as u64,
+            "Tools overlay snapshot cache hit"
+        );
+        return Ok(());
+    }
+
     let cache = cache_dir();
     let overlay_dir = cache.join("tools-overlay");
     let current = overlay_dir.join("current");
@@ -185,7 +294,6 @@ pub(crate) async fn ensure_tools_overlay(
     if current.exists() && current.is_dir() {
         // P2-5: Forge image version comparison — BLOCKING rebuild if mismatched
         if let Ok(manifest) = read_manifest(&current) {
-            let expected_tag = forge_image_tag();
             if manifest.forge_image != expected_tag {
                 info!(
                     old = %manifest.forge_image,
@@ -217,6 +325,10 @@ pub(crate) async fn ensure_tools_overlay(
                 }
                 return result;
             }
+            // Forge tag matches and overlay exists — populate the snapshot
+            // so subsequent launches skip this whole block.
+            // @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse
+            populate_snapshot(current.clone(), expected_tag.clone());
         }
         debug!(
             spec = "layered-tools-overlay",
@@ -874,6 +986,11 @@ async fn rebuild_tools_overlay(overlay_dir: &Path) -> Result<(), String> {
     // Prune old versions (keep only current)
     prune_old_versions(overlay_dir);
 
+    // @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse
+    // Snapshot is now stale — drop it so the next launch repopulates from
+    // the new symlink target.
+    invalidate_overlay_snapshot();
+
     Ok(())
 }
 
@@ -906,6 +1023,10 @@ pub fn build_overlay_for_init() -> Result<(), String> {
                     spec = "layered-tools-overlay",
                     "Tools overlay already up to date for {expected_tag}"
                 );
+                // @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse
+                // Eager populate at startup so the first "Attach Here" gets
+                // the snapshot cache hit instead of paying the slow path.
+                populate_snapshot(current.clone(), expected_tag.clone());
                 return Ok(());
             }
             info!(
@@ -920,6 +1041,10 @@ pub fn build_overlay_for_init() -> Result<(), String> {
             let proxy_ok = is_proxy_healthy_sync();
             build_overlay_sync(&overlay_dir, &version_name, &expected_tag, proxy_ok)?;
             prune_old_versions(&overlay_dir);
+            // @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse
+            // Stale rebuild completed — invalidate any prior snapshot so the
+            // next reader populates from the freshly-swapped symlink target.
+            invalidate_overlay_snapshot();
             return Ok(());
         }
     }
@@ -930,7 +1055,14 @@ pub fn build_overlay_for_init() -> Result<(), String> {
         "Building tools overlay (init)"
     );
     let proxy_ok = is_proxy_healthy_sync();
-    build_overlay_sync(&overlay_dir, "v1", &expected_tag, proxy_ok)
+    let result = build_overlay_sync(&overlay_dir, "v1", &expected_tag, proxy_ok);
+    if result.is_ok() {
+        // @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse
+        // First-time build succeeded — invalidate so the next reader picks
+        // up the freshly-created symlink (slow-path will populate cleanly).
+        invalidate_overlay_snapshot();
+    }
+    result
 }
 
 // ---------------------------------------------------------------------------
@@ -1269,5 +1401,66 @@ mod tests {
         assert_eq!(current_version_name(&tmp), None);
 
         std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    // Snapshot-cache tests serialize on the global static, so they all run
+    // sequentially via a shared lock. Without serialization, a parallel test
+    // could populate while another expects empty.
+    static SNAPSHOT_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn reset_snapshot_for_test() {
+        if let Ok(mut guard) = snapshot_cell().write() {
+            *guard = None;
+        }
+    }
+
+    // @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse
+    #[test]
+    fn snapshot_returns_none_when_unpopulated() {
+        let _g = SNAPSHOT_TEST_LOCK.lock().unwrap();
+        reset_snapshot_for_test();
+        assert!(cached_overlay_for("tillandsias-forge:v0.0.0.0").is_none());
+    }
+
+    // @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse
+    #[test]
+    fn snapshot_returns_some_when_tag_matches() {
+        let _g = SNAPSHOT_TEST_LOCK.lock().unwrap();
+        reset_snapshot_for_test();
+        let path = std::path::PathBuf::from("/some/cache/tools-overlay/current");
+        populate_snapshot(path.clone(), "tillandsias-forge:v9.9.9.9".to_string());
+        assert_eq!(
+            cached_overlay_for("tillandsias-forge:v9.9.9.9"),
+            Some(path)
+        );
+        reset_snapshot_for_test();
+    }
+
+    // @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse
+    #[test]
+    fn snapshot_returns_none_on_tag_mismatch() {
+        let _g = SNAPSHOT_TEST_LOCK.lock().unwrap();
+        reset_snapshot_for_test();
+        populate_snapshot(
+            std::path::PathBuf::from("/some/cache/tools-overlay/current"),
+            "tillandsias-forge:v1.0.0.0".to_string(),
+        );
+        assert!(cached_overlay_for("tillandsias-forge:v2.0.0.0").is_none());
+        reset_snapshot_for_test();
+    }
+
+    // @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse
+    #[test]
+    fn invalidate_clears_snapshot() {
+        let _g = SNAPSHOT_TEST_LOCK.lock().unwrap();
+        reset_snapshot_for_test();
+        let tag = "tillandsias-forge:v3.0.0.0".to_string();
+        populate_snapshot(
+            std::path::PathBuf::from("/some/cache/tools-overlay/current"),
+            tag.clone(),
+        );
+        assert!(cached_overlay_for(&tag).is_some());
+        invalidate_overlay_snapshot();
+        assert!(cached_overlay_for(&tag).is_none());
     }
 }

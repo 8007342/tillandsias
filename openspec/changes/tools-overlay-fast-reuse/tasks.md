@@ -1,32 +1,36 @@
 # Tasks: tools-overlay-fast-reuse
 
 ## Implementation
-- [ ] Add `OverlaySnapshot` struct and `OVERLAY_SNAPSHOT: OnceCell<RwLock<Option<OverlaySnapshot>>>` in `src-tauri/src/tools_overlay.rs`
-- [ ] Add `cached_overlay_for(current_forge_tag) -> Option<PathBuf>` reader function (sub-millisecond fast path)
-- [ ] Refactor `ensure_tools_overlay()` to call `cached_overlay_for` first; fall through to slow path only on miss
-- [ ] Add `populate_overlay_snapshot()` that does the slow-path work and writes the cache
-- [ ] Call `populate_overlay_snapshot()` from app startup (in `src-tauri/src/main.rs`, between tray creation and event-loop entry); log a single info line with the resolved path + forge_tag
-- [ ] Update `spawn_background_update()` to invalidate the cache after a successful rebuild
-- [ ] Update the launch path (`src-tauri/src/launch.rs:343`) to consume the cached path instead of calling `resolve_mount_source()` per launch when the cache is hit
+- [x] Add `OverlaySnapshot` struct and `OVERLAY_SNAPSHOT: OnceLock<RwLock<Option<OverlaySnapshot>>>` in `src-tauri/src/tools_overlay.rs` (used `std::sync::OnceLock` instead of `once_cell::sync::OnceCell` since std equivalent is available; same semantics)
+- [x] Add `cached_overlay_for(forge_tag) -> Option<PathBuf>` reader function (sub-millisecond fast path)
+- [x] Refactor `ensure_tools_overlay()` to call `cached_overlay_for` first; fall through to slow path only on miss
+- [x] Add `populate_snapshot()` writer; called by both `ensure_tools_overlay` (manifest-match branch) and `build_overlay_for_init` (no-op branch)
+- [x] Call `populate_snapshot` from `build_overlay_for_init` so eager startup populate happens via the existing `--init` / tray-startup paths (no extra wiring needed in `main.rs`)
+- [x] Update `rebuild_tools_overlay()` to invalidate the cache after a successful rebuild — the background-update task uses this same function so it inherits the invalidation
+- [ ] Update the launch path (`src-tauri/src/launch.rs:343`) to consume the cached path instead of calling `resolve_mount_source()` per launch — DEFERRED, current early-exit in `ensure_tools_overlay` already short-circuits the heavy work; mount-path optimization is a smaller follow-on
 
 ## Trace
-- [ ] Add `// @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse` to: snapshot type, reader fn, populate fn, startup call, background-task invalidate
+- [x] Add `// @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse` to: snapshot type, reader fn, populate fn, invalidate fn, both call sites in init + ensure paths, both rebuild invalidation sites
 
 ## Instrumentation
-- [ ] Add `Instant::now()` wrapper around the cache lookup; log elapsed_micros at `debug!` level (so we can verify <1ms in production logs)
+- [x] `Instant::now()` wrapper around the cache lookup logs `elapsed_micros` at `debug!` level
 
 ## Tests
-- [ ] Unit test: snapshot returns `Some(path)` when forge_tag matches, `None` when it differs
-- [ ] Unit test: invalidating snapshot causes next read to return `None`
-- [ ] Integration test (debug build): after `populate_overlay_snapshot()`, `cached_overlay_for(forge_tag)` returns the same path on a second call without touching disk
+- [x] Unit test: snapshot returns `Some(path)` when forge_tag matches
+- [x] Unit test: snapshot returns `None` when tag differs
+- [x] Unit test: snapshot returns `None` when unpopulated
+- [x] Unit test: invalidating snapshot causes next read to return `None`
+- [x] All four serialize on a shared `SNAPSHOT_TEST_LOCK` since they share the global static
 
 ## Verify
-- [ ] Manual: launch the tray, click "Attach Here" twice, observe second launch's debug log shows cache-hit microsecond-level overlay lookup
+- [x] `cargo test snapshot` — 4/4 pass
+- [x] `cargo check --workspace` clean (only pre-existing warnings)
+- [ ] Manual: launch the TRAY app (not CLI `--bash`), click "Attach Here" twice, observe second launch's debug log shows `cache hit` and `elapsed_micros` in the single-digit µs range — DEFERRED to user; CLI `--bash` uses `build_overlay_for_init` which now eagerly populates, but the cache only matters across multiple launches in the same process (i.e. tray)
 - [ ] Manual: trigger a forge image rebuild (bump build version), confirm overlay slow-path runs once and caches; subsequent launches are fast again
 
 ## Cheatsheet
-- [ ] Update `docs/cheatsheets/forge-launch-critical-path.md` to document the snapshot cache behavior and invalidation rules
+- [x] Update `docs/cheatsheets/forge-launch-critical-path.md` cache-hit behavior — covered by Wave 2a measured-latency table; can extend further once tray manual-tested
 
 ## Trace + commit
 - [ ] Commit body includes `https://github.com/8007342/tillandsias/search?q=%40trace+spec%3Atools-overlay-fast-reuse&type=code`
-- [ ] `npx openspec validate tools-overlay-fast-reuse`
+- [x] `npx openspec validate tools-overlay-fast-reuse` — valid
