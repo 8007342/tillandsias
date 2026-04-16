@@ -333,17 +333,31 @@ fn resolve_mount_source(source: &MountSource, ctx: &LaunchContext) -> Option<Str
     match source {
         MountSource::ProjectDir => Some(ctx.project_path.display().to_string()),
         MountSource::CacheDir => Some(ctx.cache_dir.display().to_string()),
-        // @trace spec:layered-tools-overlay
+        // @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse, spec:overlay-mount-cache
+        // Fast-path: process-lifetime snapshot cache. The cache is populated
+        // by `ensure_tools_overlay()` which is awaited in `handle_attach_here`
+        // BEFORE `build_podman_args` (the function that calls us), so this
+        // should always hit on the warm path.
+        //
+        // Defensive fallback: if the snapshot was invalidated mid-launch
+        // (race with a background rebuild) or the user is on a code path
+        // that bypassed `ensure_tools_overlay`, fall back to the original
+        // `exists()` check. Entrypoints additionally fall back to inline
+        // install if no mount is provided at all.
         MountSource::ToolsOverlay => {
-            let overlay_path = ctx.cache_dir
-                .join("tools-overlay")
-                .join("current");
-            // Only mount if the overlay exists (graceful fallback).
-            // Entrypoints will fall back to inline install when absent.
-            if overlay_path.exists() {
-                Some(overlay_path.display().to_string())
+            if let Some(path) = crate::tools_overlay::cached_overlay_for(
+                &crate::handlers::forge_image_tag(),
+            ) {
+                Some(path.display().to_string())
             } else {
-                None
+                let overlay_path = ctx.cache_dir
+                    .join("tools-overlay")
+                    .join("current");
+                if overlay_path.exists() {
+                    Some(overlay_path.display().to_string())
+                } else {
+                    None
+                }
             }
         }
         // @trace spec:layered-tools-overlay

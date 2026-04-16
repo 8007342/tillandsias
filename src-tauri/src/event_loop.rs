@@ -602,18 +602,24 @@ fn handle_podman_event(
                         project.assigned_genus = None;
                     }
 
-                    // @trace spec:git-mirror-service
-                    // Stop the git service if this was the last forge/maintenance
-                    // container for this project.
-                    if matches!(
-                        removed.container_type,
-                        ContainerType::Forge | ContainerType::Maintenance
-                    ) {
-                        let project_name = removed.project_name.clone();
-                        tokio::task::spawn(async move {
-                            handlers::stop_git_service(&project_name).await;
-                        });
-                    }
+                    // @trace spec:git-mirror-service, spec:persistent-git-service
+                    // Git service container is intentionally NOT stopped here.
+                    // It is tray-session-scoped infrastructure (like proxy +
+                    // inference): kept alive across forge launches so the next
+                    // "Attach Here" for this project skips the ~3s git-image
+                    // staleness check + container-start cycle. The mirror cache
+                    // on disk persists either way; running the daemon costs
+                    // ~10 MB RAM per project, which is negligible compared to
+                    // the latency win on every relaunch.
+                    //
+                    // Cleanup happens in two places:
+                    //   - `shutdown_all` (app exit) — stops every git-service
+                    //     present in state.running, not just those whose forge
+                    //     is still alive at exit time.
+                    //   - `EnclaveCleanupGuard` (CLI mode, runner.rs) — stops
+                    //     git-service on `tillandsias <project>` exit since
+                    //     CLI mode is one-shot and has no tray to host the
+                    //     persistent service.
                 }
             }
         }

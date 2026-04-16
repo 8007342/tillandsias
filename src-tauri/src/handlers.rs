@@ -2832,7 +2832,15 @@ pub async fn shutdown_all(state: &TrayState) {
     let client = PodmanClient::new();
     let launcher = ContainerLauncher::new(client);
 
-    // Collect unique project names that have git services to stop
+    // @trace spec:git-mirror-service, spec:persistent-git-service
+    // Collect git-service project names from `state.running` directly. Since
+    // the per-forge "stop git-service" trigger was removed, git-services may
+    // outlive their original forges by an arbitrary amount of time. They live
+    // in state.running as `ContainerType::GitService` rows (populated by the
+    // event-loop discovery code in event_loop.rs ~line 632). Iterating those
+    // rows is the authoritative way to find every git-service to clean up at
+    // shutdown — derivation from "projects with active forges" would miss any
+    // git-service whose forge already exited earlier in the session.
     let mut git_service_projects: Vec<String> = Vec::new();
 
     for container in &state.running {
@@ -2843,20 +2851,18 @@ pub async fn shutdown_all(state: &TrayState) {
             }
         }
 
-        // Track projects that may have git services running
-        // @trace spec:git-mirror-service
+        // @trace spec:git-mirror-service, spec:persistent-git-service
         if matches!(
             container.container_type,
-            tillandsias_core::state::ContainerType::Forge
-                | tillandsias_core::state::ContainerType::Maintenance
+            tillandsias_core::state::ContainerType::GitService
         ) && !git_service_projects.contains(&container.project_name)
         {
             git_service_projects.push(container.project_name.clone());
         }
     }
 
-    // Stop git service containers for all projects
-    // @trace spec:git-mirror-service
+    // Stop git service containers for every project that had one running.
+    // @trace spec:git-mirror-service, spec:persistent-git-service
     for project_name in &git_service_projects {
         stop_git_service(project_name).await;
     }
