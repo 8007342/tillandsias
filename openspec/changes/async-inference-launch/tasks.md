@@ -1,12 +1,12 @@
 # Tasks: async-inference-launch
 
 ## Refactor
-- [ ] Verify `TrayState` shareability across spawned tasks (likely needs `Arc` wrapping or already `Clone`)
-- [ ] Replace the inline `match ensure_inference_running(...).await` in `ensure_enclave_ready` (handlers.rs ~line 1498) with `tokio::spawn(async move { ... })`
-- [ ] Move the `info!`/`warn!` accountability log into the spawned task body
-- [ ] Add an `Instant::now()` timer at spawn site and log elapsed seconds when the spawned task completes (Ok path)
-- [ ] Update the "Enclave ready" log line at the end of `ensure_enclave_ready` to reflect "inference launching async"
-- [ ] Add `@trace spec:inference-container, spec:async-inference-launch` to the new spawn site
+- [x] Verify `TrayState` shareability across spawned tasks — `#[derive(Clone)]` on the struct in `crates/tillandsias-core/src/state.rs:191`
+- [x] Replace the inline `match ensure_inference_running(...).await` in `ensure_enclave_ready` (handlers.rs ~line 1498) with `tokio::spawn(async move { ... })`
+- [x] Move the `info!`/`warn!` accountability log into the spawned task body
+- [x] Add an `Instant::now()` timer at spawn site and log elapsed seconds when the spawned task completes (both Ok and Err paths)
+- [x] Update the "Enclave ready" log line at the end of `ensure_enclave_ready` to reflect "inference launching async"
+- [x] Add `@trace spec:inference-container, spec:async-inference-launch` to the new spawn site
 
 ## Forge entrypoint tolerance
 - [ ] Audit `images/default/entrypoint-forge-claude.sh` for any inference URL references; confirm graceful behavior

@@ -1490,32 +1490,40 @@ pub async fn ensure_enclave_ready(
     // @trace spec:inference-container
     crate::gpu::detect_and_patch_models();
 
-    // Step 3: Inference — soft requirement, SEQUENTIAL.
-    // Must run sequentially because rootless podman corrupts overlay storage
-    // when concurrent `podman build` operations run simultaneously.
-    // Failure is non-fatal — the forge will launch without inference.
-    // @trace spec:inference-container
-    match ensure_inference_running(state, build_tx.clone()).await {
-        Ok(()) => {
-            info!(
+    // Step 3: Inference — soft requirement, ASYNC (off the critical path).
+    //
+    // Inference is the slowest enclave service (15-30s ollama init + up to
+    // 55s health-check backoff). It is non-fatal: the forge launches without
+    // it. Spawn fire-and-forget so the launch path proceeds to git mirror +
+    // forge while inference warms up.
+    //
+    // BUILD_MUTEX (handlers.rs ~line 54) still serializes concurrent podman
+    // builds, so spawning here does not race with the forge or proxy builds.
+    //
+    // @trace spec:inference-container, spec:async-inference-launch
+    let inference_state = state.clone();
+    let inference_build_tx = build_tx.clone();
+    let inference_spawn_at = std::time::Instant::now();
+    tokio::spawn(async move {
+        match ensure_inference_running(&inference_state, inference_build_tx).await {
+            Ok(()) => info!(
                 accountability = true,
                 category = "inference",
-                spec = "inference-container",
-                "Inference container ready"
-            );
-        }
-        Err(e) => {
-            // TODO: Remove fallback — make this a hard error
-            warn!(
+                spec = "inference-container, async-inference-launch",
+                elapsed_secs = inference_spawn_at.elapsed().as_secs_f64(),
+                "Inference container ready (async)"
+            ),
+            Err(e) => warn!(
                 accountability = true,
                 category = "capability",
                 safety = "DEGRADED: no local LLM inference — AI features unavailable in containers",
-                spec = "inference-container",
+                spec = "inference-container, async-inference-launch",
+                elapsed_secs = inference_spawn_at.elapsed().as_secs_f64(),
                 error = %e,
-                "Inference setup failed — containers will launch without local inference"
-            );
+                "Inference setup failed (async) — containers will launch without local inference"
+            ),
         }
-    }
+    });
 
     // NOTE: Tools overlay (ensure_tools_overlay) is NOT called here because it
     // requires the forge image to exist (it runs a temporary forge container).
@@ -1556,15 +1564,15 @@ pub async fn ensure_enclave_ready(
         }
     };
 
-    // @trace spec:enclave-network
+    // @trace spec:enclave-network, spec:async-inference-launch
     info!(
         accountability = true,
         category = "enclave",
-        spec = "enclave-network",
+        spec = "enclave-network, async-inference-launch",
         proxy = PROXY_CONTAINER_NAME,
         git_service = %format!("tillandsias-git-{}", project_name),
         inference = INFERENCE_CONTAINER_NAME,
-        "Enclave ready — forge depends on: proxy (strict:3128), git-service (git://9418), inference (http://11434)"
+        "Enclave ready — proxy (strict:3128) + git-service (git://9418) ready; inference (http://11434) launching async"
     );
 
     Ok(EnclaveContext {
