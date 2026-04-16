@@ -2057,6 +2057,29 @@ fn get_proxy_ip() -> Result<String, String> {
         .ok_or_else(|| "no IP found".into())
 }
 
+/// Resolve the Containerfile + build-context directory for a given image name.
+///
+/// Mirrors the `case` statement in `scripts/build-image.sh` so the Windows
+/// direct-podman-build path (which doesn't shell out to bash) routes to the
+/// correct image sources instead of always building the forge.
+///
+/// @trace spec:default-image, spec:fix-windows-image-routing
+#[allow(dead_code)] // Used on Windows; non-Windows path shells out to build-image.sh
+fn image_build_paths(source_dir: &std::path::Path, image_name: &str) -> (PathBuf, PathBuf) {
+    let subdir = match image_name {
+        "proxy" => "proxy",
+        "git" => "git",
+        "inference" => "inference",
+        "web" => "web",
+        // forge / default / unknown all build the forge image. Keeping this
+        // permissive matches build-image.sh's behavior; the image_name
+        // validation lives at the call sites that compute the tag.
+        _ => "default",
+    };
+    let dir = source_dir.join("images").join(subdir);
+    (dir.join("Containerfile"), dir)
+}
+
 /// Run `build-image.sh` from the embedded binary scripts.
 ///
 /// Extracts image sources + build scripts to temp, executes, cleans up.
@@ -2100,9 +2123,18 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
     // Git Bash's MSYS2 doesn't initialize properly from native Windows processes.
     #[cfg(target_os = "windows")]
     {
-        let containerfile = source_dir.join("images").join("default").join("Containerfile");
-        let context_dir = source_dir.join("images").join("default");
-        info!(image = image_name, tag = %tag, "Running podman build directly (Windows)");
+        // @trace spec:default-image, spec:fix-windows-image-routing
+        // Route Containerfile + context by image_name. Mirrors the `case` in
+        // scripts/build-image.sh so Windows builds the right image instead of
+        // tagging the forge image with proxy/git/inference names.
+        let (containerfile, context_dir) = image_build_paths(&source_dir, image_name);
+        info!(
+            image = image_name,
+            tag = %tag,
+            containerfile = %containerfile.display(),
+            spec = "default-image, fix-windows-image-routing",
+            "Running podman build directly (Windows)"
+        );
 
         let output = tillandsias_podman::podman_cmd_sync()
             .args(["build", "--tag", &tag, "-f"])
@@ -3710,6 +3742,41 @@ pub async fn handle_serve_here(
         Err(e) => {
             state.running.retain(|c| c.name != container_name);
             Err(format!("Failed to open web server terminal: {e}"))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    // @trace spec:default-image, spec:fix-windows-image-routing
+    #[test]
+    fn image_build_paths_routes_each_image_to_its_own_subdir() {
+        let root = Path::new("/tmp/sources");
+
+        let cases = [
+            ("forge", "default"),
+            ("proxy", "proxy"),
+            ("git", "git"),
+            ("inference", "inference"),
+            ("web", "web"),
+            ("definitely-not-real", "default"),
+        ];
+
+        for (image_name, expected_subdir) in cases {
+            let (containerfile, context) = image_build_paths(root, image_name);
+            let expected_dir = root.join("images").join(expected_subdir);
+            assert_eq!(
+                context, expected_dir,
+                "context for {image_name} should be {expected_dir:?}"
+            );
+            assert_eq!(
+                containerfile,
+                expected_dir.join("Containerfile"),
+                "Containerfile for {image_name} should live in {expected_dir:?}"
+            );
         }
     }
 }

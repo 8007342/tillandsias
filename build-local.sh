@@ -15,29 +15,31 @@ if [[ "${1:-}" == "--release" ]]; then
     RELEASE=true
 fi
 
-# Kill running instance
+# Kill running instance — try both legacy and current binary names
 powershell.exe -Command "Stop-Process -Name tillandsias-tray -Force -ErrorAction SilentlyContinue" 2>/dev/null || true
+powershell.exe -Command "Stop-Process -Name tillandsias -Force -ErrorAction SilentlyContinue" 2>/dev/null || true
 sleep 1
 
-# Build
+# Build (the binary was renamed from tillandsias-tray to tillandsias in v0.1.157;
+# the package name is now `tillandsias` per src-tauri/Cargo.toml).
 if $RELEASE; then
     echo "Building release..."
-    cargo build --release -p tillandsias-tray
-    BIN="target/release/tillandsias-tray.exe"
+    cargo build --release -p tillandsias
+    BIN="target/release/tillandsias.exe"
 else
     echo "Building debug..."
-    cargo build -p tillandsias-tray
-    BIN="target/debug/tillandsias-tray.exe"
+    cargo build -p tillandsias
+    BIN="target/debug/tillandsias.exe"
 fi
 
 # Read version from the built binary
 VERSION=$(cat VERSION)
 echo "Version: $VERSION"
 
-# Install
+# Install — copy under both names so legacy shortcuts/scripts keep working.
 mkdir -p "$INSTALL_DIR"
-cp "$BIN" "$INSTALL_DIR/tillandsias-tray.exe"
 cp "$BIN" "$INSTALL_DIR/tillandsias.exe"
+cp "$BIN" "$INSTALL_DIR/tillandsias-tray.exe"
 echo "Installed to $INSTALL_DIR"
 
 # Remove ALL forge images so the fresh build triggers a forge rebuild on launch
