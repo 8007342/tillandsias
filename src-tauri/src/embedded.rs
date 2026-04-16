@@ -18,6 +18,36 @@ use std::os::unix::fs::PermissionsExt;
 
 use tracing::{debug, warn};
 
+/// Strip the Windows extended-path prefix `\\?\` (and `\\?\UNC\`) from a path.
+///
+/// `Path::canonicalize()` on Windows returns paths in the extended form
+/// `\\?\C:\Users\foo` to bypass the legacy MAX_PATH=260 limit. Most consumers
+/// (including git, podman, tracing log fields) handle this fine — but `git
+/// clone <source>` parses the leading `\\` as a UNC URL and then chokes on
+/// the `?` character with "hostname contains invalid characters".
+///
+/// This helper strips the `\\?\` prefix when the remainder is a normal
+/// drive-letter path. UNC paths (`\\?\UNC\server\share`) are *not* simplified
+/// because there is no shorter form for them.
+///
+/// On non-Windows, returns the path unchanged.
+///
+/// @trace spec:cli-mode, spec:cross-platform, spec:fix-windows-extended-path
+pub fn simplify_path(path: &std::path::Path) -> PathBuf {
+    if !cfg!(target_os = "windows") {
+        return path.to_path_buf();
+    }
+    let s = path.to_string_lossy();
+    // Strip `\\?\` if followed by a drive letter (e.g. `\\?\C:\foo`).
+    // Leave `\\?\UNC\server\share` alone — UNC paths cannot be simplified.
+    if let Some(rest) = s.strip_prefix(r"\\?\") {
+        if !rest.starts_with("UNC\\") && rest.len() >= 2 && rest.as_bytes()[1] == b':' {
+            return PathBuf::from(rest);
+        }
+    }
+    path.to_path_buf()
+}
+
 /// Convert a path to MSYS2 format suitable for Git Bash.
 ///
 /// On Windows, `C:\Users\foo` must become `/c/Users/foo` — not just `C:/Users/foo`.
@@ -588,4 +618,48 @@ pub fn cleanup_image_sources() {
     // Also clean up legacy shared dir if it exists
     let legacy = runtime_dir().join("image-sources");
     let _ = fs::remove_dir_all(&legacy);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    // @trace spec:fix-windows-extended-path
+    #[test]
+    fn simplify_path_strips_extended_drive_prefix() {
+        // Only meaningful on Windows; on Unix the function is identity.
+        let p = Path::new(r"\\?\C:\Users\bullo\src\tillandsias");
+        let out = simplify_path(p);
+        if cfg!(target_os = "windows") {
+            assert_eq!(out, PathBuf::from(r"C:\Users\bullo\src\tillandsias"));
+        } else {
+            assert_eq!(out, p.to_path_buf());
+        }
+    }
+
+    // @trace spec:fix-windows-extended-path
+    #[test]
+    fn simplify_path_preserves_unc_paths() {
+        // \\?\UNC\server\share has no shorter form — leave it alone.
+        let p = Path::new(r"\\?\UNC\server\share\dir");
+        let out = simplify_path(p);
+        assert_eq!(out, p.to_path_buf());
+    }
+
+    // @trace spec:fix-windows-extended-path
+    #[test]
+    fn simplify_path_passthrough_when_no_prefix() {
+        let p = Path::new(r"C:\Users\bullo");
+        let out = simplify_path(p);
+        assert_eq!(out, p.to_path_buf());
+    }
+
+    // @trace spec:fix-windows-extended-path
+    #[test]
+    fn simplify_path_unix_paths_unchanged() {
+        let p = Path::new("/home/forge/src/test1");
+        let out = simplify_path(p);
+        assert_eq!(out, p.to_path_buf());
+    }
 }

@@ -320,7 +320,7 @@ pub fn run(
     };
 
     let project_path = match resolved.canonicalize() {
-        Ok(p) => p,
+        Ok(p) => crate::embedded::simplify_path(&p),
         Err(e) => {
             eprintln!("Error: cannot resolve path '{}': {e}", path.display());
             return false;

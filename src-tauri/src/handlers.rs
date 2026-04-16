@@ -986,7 +986,13 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
     std::fs::create_dir_all(&mirrors_dir)
         .map_err(|e| format!("Cannot create mirrors directory: {e}"))?;
 
-    let pp = project_path.display().to_string();
+    // @trace spec:cli-mode, spec:fix-windows-extended-path
+    // Defensive: strip the Windows extended-path prefix `\\?\` if it survived
+    // upstream. `git clone <source>` parses leading `\\` as a UNC URL and
+    // chokes on the `?` with "hostname contains invalid characters". The CLI
+    // entry strips this after canonicalize(), but tray callers may not have.
+    let project_path_simple = crate::embedded::simplify_path(project_path);
+    let pp = project_path_simple.display().to_string();
     let mp = mirror_path.display().to_string();
     let md = mirrors_dir.display().to_string();
 
