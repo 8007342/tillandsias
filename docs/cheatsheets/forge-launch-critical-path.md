@@ -24,7 +24,7 @@ Tools overlay is now built during initialization, not deferred to first containe
 | 2 | Check/build forge image | `runner.rs:342-411` | `podman image exists` | "Image not found" error |
 | 3 | Start proxy container | `handlers.rs:ensure_infrastructure_ready()` | Podman socket | Hang or "proxy failed" |
 | 4 | Generate ephemeral CA chain | `ca.rs:generate_ca_chain()` | rcgen crate | "CA chain generation failed" |
-| 5 | Start inference container | `handlers.rs` (background) | Proxy ready | Non-fatal, logs warning |
+| 5 | Start inference container | `handlers.rs:ensure_enclave_ready()` via `tokio::spawn` | Proxy ready (queues on BUILD_MUTEX) | Non-fatal, logs warning. **Async since `async-inference-launch`** — does NOT block subsequent steps. |
 | 6 | Ensure tools overlay (safety net) | `handlers.rs:handle_attach_here()` | Forge image + proxy + CA | Fast no-op if init already built it |
 | 7 | Start git service | `handlers.rs` | Enclave network | "Git service failed" |
 | 8 | Create git mirror | `handlers.rs` | Git service running | "Mirror creation failed" |
@@ -163,6 +163,19 @@ cat ~/.cache/tillandsias/tools-overlay/current/.manifest.json
 ls -la ~/.cache/tillandsias/tools-overlay/
 cat ~/.cache/tillandsias/tools-overlay/current/.manifest.json
 ```
+
+## Measured Latency (Windows 11 + podman 5.8.2 / WSL machine)
+
+@trace spec:async-inference-launch, spec:fix-windows-image-routing
+
+| Scenario | Time to enclave-ready | Notes |
+|----------|-----------------------|-------|
+| First-ever launch (cold images) | ~2-5 min | Builds 4 images from scratch, downloads ollama tarball, etc. |
+| Cold launch (images cached, no containers up) | ~12 s | Proxy build/start ~6 s + git mirror+service ~6 s. Inference fires async — does NOT add to this number. |
+| Warm launch (proxy + inference up, no forge for project) | ~5 s | Almost entirely git-service container start (~3 s) + mirror update (~0.5 s) |
+| Warm launch (forge for project also already up) | ~5 s | Currently re-runs git-service startup even when forge already alive — **opportunity**: short-circuit when project's forge container exists |
+
+**Path to <2 s warm launch**: short-circuit `ensure_enclave_ready()` when the requested project's forge is already running, AND keep the per-project git-service container alive across forge teardowns.
 
 ## Related
 
