@@ -17,11 +17,11 @@ GitHub tokens SHALL be stored on tmpfs (RAM-backed filesystem), never on persist
 - **THEN** the token is written to `$TMPDIR/tillandsias/tokens/<container-name>/github_token`
 - **AND** a warning is logged: "XDG_RUNTIME_DIR unavailable, using TMPDIR for token storage"
 
-#### Scenario: Fallback to hosts.yml
+#### Scenario: No writable tmpfs available
 - **GIVEN** neither `$XDG_RUNTIME_DIR` nor `$TMPDIR` is writable
 - **WHEN** a container is about to be launched
-- **THEN** the container falls back to the existing `hosts.yml` mount
-- **AND** a warning is logged: "tmpfs unavailable, falling back to hosts.yml mount"
+- **THEN** the launch SHALL abort with a user-facing error
+- **AND** no token SHALL be written to persistent storage
 
 ### Requirement: GIT_ASKPASS credential delivery
 Containers SHALL use a GIT_ASKPASS helper script for git authentication via the mounted token file.
@@ -112,7 +112,7 @@ A background task SHALL periodically rewrite token files to prepare for future r
 - **AND** a warning is logged: "Keyring unavailable during token refresh, existing token preserved"
 
 ### Requirement: Accountability logging for token operations
-All token lifecycle events SHALL be logged to the accountability window when `--log-secret-management` is active.
+All token lifecycle events SHALL be logged to the accountability window when `--log-secrets-management` is active.
 
 #### Scenario: Token write logged
 - **WHEN** a token file is written
@@ -149,15 +149,13 @@ All token lifecycle events SHALL be logged to the accountability window when `--
 ## MODIFIED Requirements
 
 ### Requirement: Container volume mounts (updated)
-Container volume mounts SHALL include a token file mount in addition to the existing hosts.yml mount.
+Container volume mounts SHALL deliver GitHub credentials exclusively through the tmpfs token file — no directory-level credential mounts.
 
-#### Scenario: Dual-path mounts (Phase 1)
-- **WHEN** a forge or terminal container is launched
-- **THEN** the container has BOTH:
-  - `-v <tmpfs_path>:/run/secrets/github_token:ro` (new, for git via GIT_ASKPASS)
-  - `-v <cache>/secrets/gh:/home/forge/.config/gh:ro` (existing, for gh CLI)
-- **AND** git operations use GIT_ASKPASS (reads token file)
-- **AND** gh CLI operations use hosts.yml (reads mounted directory)
+#### Scenario: Token file is the sole credential mount
+- **WHEN** a forge or terminal container is launched with `SecretKind::GitHubToken`
+- **THEN** the container has `-v <tmpfs_path>:/run/secrets/github_token:ro`
+- **AND** `GIT_ASKPASS` is set so git operations read the tmpfs token file
+- **AND** `gh` CLI operations use the same token via `gh auth login --with-token` at entrypoint, or via the credential helper configured by `gh auth setup-git`
 
 ### Requirement: Container profile secrets (updated)
 The container profile system SHALL support GitHub token as a secret kind.

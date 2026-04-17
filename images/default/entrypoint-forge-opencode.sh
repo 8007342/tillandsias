@@ -71,130 +71,54 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
         fi
     done
     if [[ "$CLONE_SUCCESS" != "true" ]]; then
-        # TODO: Remove fallback — make this a hard error
-        echo "[forge] WARNING: DEGRADED — git clone failed, dropping to shell without project code" >&2
-        echo "[forge] The git service may not be running." >&2
-        exec bash
+        echo "[forge] FATAL: git clone failed from git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" >&2
+        echo "[forge] The git mirror service is unreachable or has not finished initialising." >&2
+        exit 1
     fi
     echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
 fi
 
-# ── OpenCode (official curl installer) ─────────────────────
-# On Fedora (default): pre-built binary executes directly (standard glibc).
-# On Nix: binary needs the Nix dynamic linker — a wrapper is created.
+# ── OpenCode (tools overlay only) ──────────────────────────
 # @trace spec:layered-tools-overlay
-# Check for pre-installed tools overlay before falling back to inline install.
+# Hard requirement: tools overlay mounted at /home/forge/.tools. The host
+# tray builds and mounts it before launching the container. Inline install
+# fallback removed — missing overlay is a fatal error.
 TOOLS_DIR="/home/forge/.tools"
-TOOLS_OC_BIN="$TOOLS_DIR/opencode/bin/opencode"
-_OPENCODE_FROM_OVERLAY=false
+OC_DIR="$TOOLS_DIR/opencode"
+OC_BIN="$OC_DIR/bin/opencode"
 
-if [ -x "$TOOLS_OC_BIN" ]; then
-    # Tools overlay present — use pre-installed binary
-    export PATH="$TOOLS_DIR/opencode/bin:$PATH"
-    OC_DIR="$TOOLS_DIR/opencode"
-    OC_BIN="$TOOLS_OC_BIN"
-    _OPENCODE_FROM_OVERLAY=true
-    trace_lifecycle "install" "opencode: using tools overlay ($TOOLS_OC_BIN)"
-else
-    # Fallback: install inline (first launch or overlay not ready)
-    OC_DIR="$CACHE/opencode"
-    OC_BIN="$OC_DIR/bin/opencode"
+if [ ! -x "$OC_BIN" ]; then
+    echo "[entrypoint] FATAL: OpenCode not found in tools overlay at $OC_BIN" >&2
+    echo "[entrypoint] The tools overlay is missing or incomplete. The host tray" >&2
+    echo "[entrypoint] should have built it before launching this container." >&2
+    exit 1
 fi
-OC_NATIVE="$HOME/.opencode/bin/opencode"
+export PATH="$OC_DIR/bin:$PATH"
+trace_lifecycle "install" "opencode: overlay ($OC_BIN)"
 
-_make_opencode_wrapper() {
-    # The curl installer puts the binary at ~/.opencode/bin/opencode.
-    # We need it at $OC_BIN (persistent cache). On Nix images, the binary
-    # can't execute directly, so we create a wrapper with the Nix linker.
-    local native="$OC_NATIVE"
-    [ -f "$native" ] || return 1
-
-    local nix_ld
-    nix_ld="$(find /nix/store -name 'ld-linux-*.so.*' -path '*/lib/ld-linux-*' 2>/dev/null | head -1)"
-
-    if [ -n "$nix_ld" ]; then
-        trace_lifecycle "install" "opencode: Nix image detected, creating linker wrapper"
-        local nix_lib_dir
-        nix_lib_dir="$(dirname "$nix_ld")"
-        cat > "$OC_BIN" <<WRAPPER
-#!/usr/bin/env bash
-exec "$nix_ld" --library-path "$nix_lib_dir" "$native" "\$@"
-WRAPPER
-        chmod +x "$OC_BIN"
-    else
-        # Standard FHS (Fedora) — binary executes directly
-        cp "$native" "$OC_BIN"
-        chmod +x "$OC_BIN"
-    fi
-}
-
-ensure_opencode() {
-    # @trace spec:layered-tools-overlay
-    if [ "$_OPENCODE_FROM_OVERLAY" = true ]; then
-        trace_lifecycle "install" "opencode: skipped (overlay)"
-        return 0
-    fi
-    local stamp_file="$OC_DIR/.last-update-check"
-    mkdir -p "$OC_DIR/bin" 2>/dev/null || true
-
-    if [ ! -x "$OC_BIN" ]; then
-        trace_lifecycle "install" "opencode: fresh install via curl"
-        set +e
-        export OPENCODE_INSTALL_DIR="$OC_DIR"
-        OC_OUTPUT=$(spin "${L_INSTALLING_OPENCODE:-Installing OpenCode...}" bash -c 'curl -fsSL https://opencode.ai/install | bash' 2>&1)
-        OC_EXIT=$?
-        set -e
-        if [ $OC_EXIT -ne 0 ]; then
-            echo "[entrypoint] WARNING: OpenCode installer exited with code $OC_EXIT" >&2
-            echo "[entrypoint] $OC_OUTPUT" >&2
-        fi
-
-        # If installer ignored OPENCODE_INSTALL_DIR (common), relocate binary
-        if [ ! -x "$OC_BIN" ] && [ -f "$OC_NATIVE" ]; then
-            _make_opencode_wrapper
-        fi
-
-        if [ -x "$OC_BIN" ]; then
-            trace_lifecycle "install" "opencode: ready ($("$OC_BIN" --version 2>/dev/null || echo "unknown"))"
-            printf "  ${L_INSTALLED_OPENCODE:-OpenCode ready: %s}\n" "$("$OC_BIN" --version 2>/dev/null || echo "")" >&2
-            record_update_check "$stamp_file"
-        else
-            trace_lifecycle "install" "opencode: FAILED (binary not found)"
-        fi
-        return 0
-    fi
-
-    # Subsequent launches: only update if stamp is stale (daily throttle)
-    if ! needs_update_check "$stamp_file"; then
-        trace_lifecycle "update" "opencode: skipped (checked <24h ago)"
-        return 0
-    fi
-    trace_lifecycle "update" "opencode: checking for updates..."
-    set +e
-    OC_OUTPUT=$(spin "${L_INSTALLING_OPENCODE:-Installing OpenCode...}" bash -c 'curl -fsSL https://opencode.ai/install | bash' 2>&1)
-    OC_EXIT=$?
-    set -e
-    if [ $OC_EXIT -ne 0 ]; then
-        echo "[entrypoint] WARNING: OpenCode update exited with code $OC_EXIT" >&2
-        echo "[entrypoint] $OC_OUTPUT" >&2
-    fi
-    # Refresh wrapper/copy if updated
-    if [ -f "$OC_NATIVE" ]; then
-        _make_opencode_wrapper
-    fi
-    trace_lifecycle "update" "opencode: $("$OC_BIN" --version 2>/dev/null || echo "ready")"
-    record_update_check "$stamp_file"
-}
-
-# ── OpenSpec (shared function from lib-common.sh) ────────────
+# ── OpenSpec (overlay-only, shared helper) ──────────────────
 # @trace spec:forge-shell-tools
-install_openspec
-OS_BIN="$CACHE/openspec/bin/openspec"
+require_openspec
+OS_BIN="/home/forge/.tools/openspec/bin/openspec"
 
-# ── Install and update OpenCode ─────────────────────────────
-ensure_opencode || true
+trace_lifecycle "entrypoint" "opencode ready"
 
-trace_lifecycle "entrypoint" "opencode installed"
+# ── Inference probe (async-inference-launch contract) ───────
+# The inference container is started asynchronously off the forge's critical
+# path (see spec:async-inference-launch). Probe the endpoint with a short
+# timeout; log for accountability but do NOT block — opencode's config.json
+# points at http://inference:11434 and opencode itself will surface a clear
+# provider error if the user invokes a local-LLM action before inference
+# is ready. If the user never uses local inference, it doesn't matter that
+# the probe failed.
+# @trace spec:async-inference-launch, spec:inference-container
+if command -v curl &>/dev/null; then
+    if curl -m 1 -sf "http://inference:11434/api/version" >/dev/null 2>&1; then
+        trace_lifecycle "inference" "ready (probe passed)"
+    else
+        trace_lifecycle "inference" "not-ready (probe failed; opencode will surface provider error if you try local inference)"
+    fi
+fi
 
 # ── Find project directory ──────────────────────────────────
 find_project_dir
@@ -216,19 +140,5 @@ show_banner "opencode"
 
 # ── Launch OpenCode ─────────────────────────────────────────
 trace_lifecycle "entrypoint" "opencode launching"
-export PATH="$OC_DIR/bin:$PATH"
-if [ -x "$OC_BIN" ]; then
-    trace_lifecycle "exec" "launching opencode ($OC_BIN)"
-    exec "$OC_BIN" "$@"
-else
-    trace_lifecycle "exec" "FAILED — opencode not found at $OC_BIN"
-    echo ""
-    echo "${L_OPENCODE_INSTALL_FAILED:-ERROR: OpenCode failed to install.}"
-    echo ""
-    echo "${L_RETRY_HINT:-To retry: restart the container}"
-    echo "${L_CLEAR_CACHE_OPENCODE:-To clear cache: rm -rf ~/.cache/tillandsias/opencode/}"
-    echo ""
-    # TODO: Remove fallback — make this a hard error
-    echo "[forge] WARNING: DEGRADED — OpenCode unavailable, dropping to shell" >&2
-    exec bash
-fi
+trace_lifecycle "exec" "launching opencode ($OC_BIN)"
+exec "$OC_BIN" "$@"

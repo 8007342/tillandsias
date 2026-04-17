@@ -7,7 +7,7 @@ Forge containers operate offline -- no credentials, no project mounts, no direct
 ## Requirements
 
 ### Requirement: Forge containers have zero credentials
-Forge containers SHALL NOT have any credential mounts. No GitHub token file, no hosts.yml, no Claude directory, no D-Bus socket. Credentials are exclusively owned by the git service container.
+Forge containers SHALL NOT have any credential mounts. No GitHub token file, no Claude directory, no D-Bus socket. Credentials are exclusively owned by the git service container.
 
 @trace spec:forge-offline
 

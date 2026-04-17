@@ -33,17 +33,12 @@ _LOCALE_FILE="/etc/tillandsias/locales/${_LOCALE}.sh"
 unset _LOCALE_RAW _LOCALE _LOCALE_FILE
 
 # ── Secrets directories ─────────────────────────────────────
-mkdir -p ~/.config/gh 2>/dev/null || true
+# Forge containers carry ZERO credentials. Git identity is the only
+# artifact the forge needs on disk; the gh CLI is not wired to a token
+# here — authenticated git traffic flows through the git mirror service,
+# which bridges to the host OS keyring via D-Bus.
+# @trace spec:secrets-management
 touch ~/.gitconfig 2>/dev/null || true
-
-# ── GitHub auth bridge ──────────────────────────────────────
-# Register gh as git credential helper IF gh has a valid token.
-# In enclave mode, forge containers have zero credentials — git auth
-# goes through the git mirror service, so this is expected to be a no-op.
-# @trace spec:secret-management
-if command -v gh &>/dev/null; then
-    gh auth setup-git </dev/null 2>/dev/null || true
-fi
 
 # ── Shell configs ───────────────────────────────────────────
 # Deploy configs from /etc/skel/ to $HOME if not already present.
@@ -140,30 +135,21 @@ spin() {
     return $rc
 }
 
-# ── OpenSpec install (npm to user prefix, cached) ──────────
-# @trace spec:forge-shell-tools
-install_openspec() {
-    # @trace spec:layered-tools-overlay
-    if [ -x "/home/forge/.tools/openspec/bin/openspec" ]; then
-        export PATH="/home/forge/.tools/openspec/bin:$PATH"
-        trace_lifecycle "install" "openspec: using tools overlay (/home/forge/.tools/openspec/bin/openspec)"
-        return 0
+# ── OpenSpec (overlay-only) ─────────────────────────────────
+# @trace spec:forge-shell-tools, spec:layered-tools-overlay
+# Hard requirement: the tools overlay must be mounted. Inline install
+# fallback removed — if the overlay is missing, fail the entrypoint
+# so the real error (overlay build failure, bad mount) is visible.
+require_openspec() {
+    local overlay_bin="/home/forge/.tools/openspec/bin/openspec"
+    if [ ! -x "$overlay_bin" ]; then
+        echo "[entrypoint] FATAL: OpenSpec not found in tools overlay at $overlay_bin" >&2
+        echo "[entrypoint] The tools overlay is missing or incomplete. The host tray" >&2
+        echo "[entrypoint] should have built it before launching this container." >&2
+        exit 1
     fi
-    local os_prefix="$CACHE/openspec"
-    local os_bin="$os_prefix/bin/openspec"
-    mkdir -p "$os_prefix" 2>/dev/null || true
-    if [ ! -x "$os_bin" ]; then
-        if spin "${L_INSTALLING_OPENSPEC:-Installing OpenSpec...}" npm install -g --prefix "$os_prefix" @fission-ai/openspec; then
-            if [ -x "$os_bin" ]; then
-                echo "  ${L_INSTALLED_OPENSPEC:-✓ OpenSpec installed}" >&2
-            else
-                echo "  ${L_OPENSPEC_NOT_FOUND:-✗ OpenSpec binary not found after install}" >&2
-            fi
-        else
-            # TODO: Remove fallback — make this a hard error
-            echo "  ${L_OPENSPEC_FAILED:-[common] WARNING: DEGRADED — OpenSpec unavailable, /opsx commands will not work}" >&2
-        fi
-    fi
+    export PATH="/home/forge/.tools/openspec/bin:$PATH"
+    trace_lifecycle "install" "openspec: overlay ($overlay_bin)"
 }
 
 # ── Banner ──────────────────────────────────────────────────

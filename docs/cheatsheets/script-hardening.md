@@ -320,7 +320,7 @@ mv -- "$tmpfile" "$target_file"
 # mv is atomic on the same filesystem (POSIX guarantee)
 ```
 
-Source: `docs/cheatsheets/secret-management.md` describes this atomic write pattern for token files
+Source: `docs/cheatsheets/secrets-management.md` describes this atomic write pattern for token files
 
 ## Avoiding TOCTOU Races
 

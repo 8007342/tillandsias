@@ -15,14 +15,16 @@ All three domains follow the same principle: **secure by default, transparent to
 
 ## Secret Categories
 
-| Category | Scope | Host Storage Path | Container Mount | Access |
-|----------|-------|-------------------|-----------------|--------|
-| GitHub auth | Shared (all projects) | `~/.cache/tillandsias/secrets/gh/` | `~/.config/gh/` | rw |
+| Category | Scope | Host Storage | Container Mount | Access |
+|----------|-------|--------------|-----------------|--------|
+| GitHub OAuth token | Shared (all projects) | Host OS keyring (GNOME Keyring / Keychain / Credential Manager) | none — brokered by git service | n/a |
 | Git identity | Shared | `~/.cache/tillandsias/secrets/git/` | `~/.gitconfig`, `~/.config/git/` | ro |
 | SSH keys | Shared | `~/.cache/tillandsias/secrets/ssh/` | `~/.ssh/` | ro |
 | Project tokens | Per-project | `<project>/.tillandsias/secrets/` | `<project>/.env` | rw |
 
 **Shared** means the same credential is available in every forge environment. **Per-project** means the credential is only mounted into the forge for that specific project.
+
+GitHub tokens never enter the forge container. They live in the host OS keyring and are read on demand by the git service container (over D-Bus on Linux, via Keychain Services on macOS, via Credential Manager on Windows). The git service performs all authenticated GitHub traffic on behalf of the forge, which speaks plain git protocol to the enclave-local mirror.
 
 Default behavior is shared. Per-project overrides are configured in `.tillandsias/config.toml`:
 
@@ -64,19 +66,19 @@ Host paths are mapped to standard tool-expected paths inside containers:
 
 ```
 Host: ~/.cache/tillandsias/secrets/
-  |-- gh/           --> Container: ~/.config/gh/           (rw)
   |-- git/          --> Container: ~/.gitconfig + ~/.config/git/  (ro)
-  |-- ssh/          --> Container: ~/.ssh/                  (ro)
-  +-- per-project/  --> Container: <project>/.env           (rw)
+  |-- ssh/          --> Container: ~/.ssh/                        (ro)
+  +-- per-project/  --> Container: <project>/.env                 (rw)
 ```
+
+The GitHub token is not on this list. It lives in the host OS keyring and is consumed only by the git service container via a D-Bus bridge (or platform equivalent). The forge receives no token material on any path.
 
 **Mount flags:**
 
 | Secret | Mount Mode | Rationale |
 |--------|-----------|-----------|
 | SSH keys | `:ro` | Forge should never modify SSH keys |
-| GitHub auth | `:rw` | `gh auth refresh` needs write access to update tokens |
-| Git config | `:ro` | Identity is set on host, forge reads it |
+| Git config | `:ro` | Identity is set on host, forge reads it for commit metadata |
 | Per-project secrets | `:rw` | Project may generate or rotate tokens |
 
 All mounts use `--userns=keep-id` so file ownership maps correctly between host and container.

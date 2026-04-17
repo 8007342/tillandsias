@@ -12,7 +12,7 @@
 
 ## Defensive guard
 - [x] Unit test for `image_build_paths` covering forge/proxy/git/inference/web/unknown
-- [ ] (Optional, debug-only) On startup, run `podman image inspect` over the four enclave tags and warn if any two share an ID, with `spec = "default-image, fix-windows-image-routing"` log field
+- [x] (Optional, debug-only) On startup, run `podman image inspect` over the four enclave tags and warn if any two share an ID, with `spec = "default-image, fix-windows-image-routing"` log field
 
 ## Build + verify
 - [x] `./scripts/bump-version.sh --bump-build` to invalidate stale cache + tag new builds distinctly (bumped to 0.1.157.181)
@@ -27,5 +27,5 @@
 - [x] Update `docs/cheatsheets/windows-setup.md` with the `podman rmi` recovery command for users who installed v0.1.157.180 or earlier on Windows
 
 ## Trace + commit
-- [ ] Commit message body includes `https://github.com/8007342/tillandsias/search?q=%40trace+spec%3Afix-windows-image-routing&type=code`
+- [x] Commit message body includes `https://github.com/8007342/tillandsias/search?q=%40trace+spec%3Afix-windows-image-routing&type=code`
 - [x] OpenSpec validate: `npx openspec validate fix-windows-image-routing` — valid

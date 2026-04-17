@@ -191,7 +191,7 @@ Numbers from a clean-install verification run (podman machine wiped + reinitiali
 ## Related
 
 - `docs/cheatsheets/mitm-proxy-design.md` — Full MITM proxy architecture and cert lifecycle
-- `docs/cheatsheets/secret-management.md` — Credential delivery (separate from CA trust)
+- `docs/cheatsheets/secrets-management.md` — Credential delivery (separate from CA trust)
 - `docs/cheatsheets/enclave-architecture.md` — Network topology and container roles
 - `openspec/specs/proxy-container/spec.md` — Proxy container spec
 - `openspec/specs/layered-tools-overlay/spec.md` — Tools overlay spec

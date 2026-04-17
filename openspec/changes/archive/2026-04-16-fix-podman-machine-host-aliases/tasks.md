@@ -24,4 +24,4 @@
 
 ## Trace + commit
 - [x] OpenSpec validate
-- [ ] Commit body includes `https://github.com/8007342/tillandsias/search?q=%40trace+spec%3Afix-podman-machine-host-aliases&type=code`
+- [x] Commit body includes `https://github.com/8007342/tillandsias/search?q=%40trace+spec%3Afix-podman-machine-host-aliases&type=code`

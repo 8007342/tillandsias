@@ -7,7 +7,7 @@
 #         User creation: adduser -D (NOT useradd).
 FROM docker.io/library/alpine:3.20
 
-# @trace spec:git-mirror-service, spec:secret-management
+# @trace spec:git-mirror-service, spec:secrets-management
 # gh CLI is installed here (trusted container) — NOT in the forge (untrusted).
 # GitHub credentials must never touch the forge environment.
 # DISTRO: apk add --no-cache (Alpine), NOT microdnf/dnf (Fedora)
@@ -19,7 +19,13 @@ RUN apk add --no-cache git git-daemon bash openssh-client github-cli \
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY post-receive-hook.sh /usr/local/share/git-service/post-receive-hook.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/share/git-service/post-receive-hook.sh
+# GIT_ASKPASS helper — reads the OAuth token from /run/secrets/github_token
+# (bind-mounted :ro by the host tray) and feeds it to git's HTTPS auth prompt.
+# @trace spec:secrets-management, spec:git-mirror-service
+COPY git-askpass-tillandsias.sh /usr/local/bin/git-askpass-tillandsias.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh \
+              /usr/local/share/git-service/post-receive-hook.sh \
+              /usr/local/bin/git-askpass-tillandsias.sh
 
 USER git
 

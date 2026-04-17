@@ -87,8 +87,11 @@ fn write_lf(path: &std::path::Path, content: &str) -> std::io::Result<()> {
 // ---------------------------------------------------------------------------
 pub const BUILD_IMAGE: &str = include_str!("../../scripts/build-image.sh");
 pub const BUILD_TOOLS_OVERLAY: &str = include_str!("../../scripts/build-tools-overlay.sh");
-#[allow(dead_code)] // Used by GitHub login flow (--github-login CLI path)
-pub const GH_AUTH_LOGIN: &str = include_str!("../../gh-auth-login.sh");
+// @trace spec:native-secrets-store
+// GitHub login is driven from Rust (`runner::run_github_login`): `gh auth
+// login` runs via `podman exec` against a keep-alive git-service container,
+// the token is harvested with `gh auth token`, stored in the OS keyring,
+// and the container is torn down. No embedded shell wrapper needed.
 
 // ---------------------------------------------------------------------------
 // Image sources — flake
@@ -180,6 +183,9 @@ pub const PROXY_ALLOWLIST: &str = include_str!("../../images/proxy/allowlist.txt
 pub const GIT_ENTRYPOINT: &str = include_str!("../../images/git/entrypoint.sh");
 pub const GIT_CONTAINERFILE: &str = include_str!("../../images/git/Containerfile");
 pub const POST_RECEIVE_HOOK: &str = include_str!("../../images/git/post-receive-hook.sh");
+// @trace spec:secrets-management, spec:git-mirror-service
+pub const GIT_ASKPASS_TILLANDSIAS: &str =
+    include_str!("../../images/git/git-askpass-tillandsias.sh");
 
 // ---------------------------------------------------------------------------
 // Image sources — inference image
@@ -494,9 +500,12 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("git Containerfile: {e}"))?;
     write_lf(&git_dir.join("post-receive-hook.sh"), POST_RECEIVE_HOOK)
         .map_err(|e| format!("git post-receive-hook: {e}"))?;
+    // @trace spec:secrets-management, spec:git-mirror-service
+    write_lf(&git_dir.join("git-askpass-tillandsias.sh"), GIT_ASKPASS_TILLANDSIAS)
+        .map_err(|e| format!("git askpass script: {e}"))?;
     #[cfg(unix)]
     {
-        for name in ["entrypoint.sh", "post-receive-hook.sh"] {
+        for name in ["entrypoint.sh", "post-receive-hook.sh", "git-askpass-tillandsias.sh"] {
             let path = git_dir.join(name);
             if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
                 warn!(

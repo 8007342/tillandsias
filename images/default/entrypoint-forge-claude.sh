@@ -71,10 +71,9 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
         fi
     done
     if [[ "$CLONE_SUCCESS" != "true" ]]; then
-        # TODO: Remove fallback — make this a hard error
-        echo "[forge] WARNING: DEGRADED — git clone failed, dropping to shell without project code" >&2
-        echo "[forge] The git service may not be running." >&2
-        exec bash
+        echo "[forge] FATAL: git clone failed from git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" >&2
+        echo "[forge] The git mirror service is unreachable or has not finished initialising." >&2
+        exit 1
     fi
     echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
 fi
@@ -84,100 +83,28 @@ fi
 _CLAUDE_KEY="${ANTHROPIC_API_KEY:-}"
 unset ANTHROPIC_API_KEY
 
-# ── Claude Code (npm installer, cached) ─────────────────────
+# ── Claude Code (tools overlay only) ───────────────────────
 # @trace spec:layered-tools-overlay
-# Check for pre-installed tools overlay before falling back to inline install.
+# Hard requirement: tools overlay mounted at /home/forge/.tools. The host
+# tray builds and mounts it before launching the container. Inline install
+# fallback removed — missing overlay is a fatal error.
 TOOLS_DIR="/home/forge/.tools"
-TOOLS_CC_BIN="$TOOLS_DIR/claude/bin/claude"
-_CLAUDE_FROM_OVERLAY=false
+CC_PREFIX="$TOOLS_DIR/claude"
+CC_BIN="$CC_PREFIX/bin/claude"
 
-if [ -x "$TOOLS_CC_BIN" ]; then
-    # Tools overlay present — use pre-installed binary
-    export PATH="$TOOLS_DIR/claude/bin:$PATH"
-    CC_PREFIX="$TOOLS_DIR/claude"
-    CC_BIN="$TOOLS_CC_BIN"
-    _CLAUDE_FROM_OVERLAY=true
-    trace_lifecycle "install" "claude-code: using tools overlay ($TOOLS_CC_BIN)"
-else
-    # Fallback: install inline (first launch or overlay not ready)
-    CC_PREFIX="$CACHE/claude"
-    CC_BIN="$CC_PREFIX/bin/claude"
+if [ ! -x "$CC_BIN" ]; then
+    echo "[entrypoint] FATAL: Claude Code not found in tools overlay at $CC_BIN" >&2
+    echo "[entrypoint] The tools overlay is missing or incomplete. The host tray" >&2
+    echo "[entrypoint] should have built it before launching this container." >&2
+    exit 1
 fi
+export PATH="$CC_PREFIX/bin:$PATH"
+trace_lifecycle "install" "claude-code: overlay ($CC_BIN)"
 
-install_claude() {
-    # @trace spec:layered-tools-overlay
-    if [ "$_CLAUDE_FROM_OVERLAY" = true ]; then
-        trace_lifecycle "install" "claude-code: skipped (overlay)"
-        return 0
-    fi
-    mkdir -p "$CC_PREFIX" 2>/dev/null || true
-    if [ ! -x "$CC_BIN" ]; then
-        trace_lifecycle "install" "claude-code: fresh install starting"
-        if spin "${L_INSTALLING_CLAUDE:-Installing Claude Code...}" npm install -g --prefix "$CC_PREFIX" @anthropic-ai/claude-code; then
-            trace_lifecycle "install" "claude-code: npm install succeeded"
-        else
-            trace_lifecycle "install" "claude-code: npm install FAILED"
-        fi
-        if [ -x "$CC_BIN" ]; then
-            local cc_ver
-            cc_ver="$("$CC_BIN" --version 2>&1 || true)"
-            trace_lifecycle "install" "claude-code: ready ($cc_ver)"
-            printf "  ${L_INSTALLED_CLAUDE:-Claude Code ready: %s}\n" "$cc_ver" >&2
-        else
-            trace_lifecycle "install" "claude-code: binary NOT FOUND after install at $CC_BIN"
-            echo "  ${L_CLAUDE_NOT_FOUND:-Claude Code binary not found after install.}" >&2
-        fi
-    else
-        trace_lifecycle "install" "claude-code: cached ($("$CC_BIN" --version 2>/dev/null || echo "unknown"))"
-    fi
-    export PATH="$CC_PREFIX/bin:$PATH"
-}
-
-update_claude() {
-    # @trace spec:layered-tools-overlay
-    if [ "$_CLAUDE_FROM_OVERLAY" = true ]; then
-        trace_lifecycle "update" "claude-code: skipped (overlay)"
-        return 0
-    fi
-    local stamp_file="$CC_PREFIX/.last-update-check"
-    if ! needs_update_check "$stamp_file"; then
-        trace_lifecycle "update" "claude-code: skipped (checked <24h ago)"
-        return 0
-    fi
-    if [ ! -x "$CC_BIN" ]; then
-        trace_lifecycle "update" "claude-code: skipped (not installed)"
-        return 0
-    fi
-    trace_lifecycle "update" "claude-code: checking for updates..."
-    local current_ver latest_ver
-    current_ver="$("$CC_BIN" --version 2>/dev/null || echo "unknown")"
-    latest_ver="$(timeout 10 npm view @anthropic-ai/claude-code version </dev/null 2>/dev/null || true)"
-    if [ -z "$latest_ver" ]; then
-        trace_lifecycle "update" "claude-code: skipped (offline)"
-        record_update_check "$stamp_file"
-        return 0
-    fi
-    if [ "$current_ver" != "$latest_ver" ]; then
-        trace_lifecycle "update" "claude-code: updating $current_ver -> $latest_ver"
-        if spin "${L_INSTALLING_CLAUDE:-Installing Claude Code...}" npm install -g --prefix "$CC_PREFIX" @anthropic-ai/claude-code; then
-            trace_lifecycle "update" "claude-code: updated to $("$CC_BIN" --version 2>/dev/null || echo "$latest_ver")"
-        else
-            trace_lifecycle "update" "claude-code: update FAILED, keeping $current_ver"
-        fi
-    else
-        trace_lifecycle "update" "claude-code: up to date ($current_ver)"
-    fi
-    record_update_check "$stamp_file"
-}
-
-# ── OpenSpec (shared function from lib-common.sh) ────────────
+# ── OpenSpec (overlay-only, shared helper) ──────────────────
 # @trace spec:forge-shell-tools
-install_openspec
-OS_BIN="$CACHE/openspec/bin/openspec"
-
-# ── Install and update Claude Code ──────────────────────────
-install_claude
-update_claude
+require_openspec
+OS_BIN="/home/forge/.tools/openspec/bin/openspec"
 
 # ── Credential check ────────────────────────────────────────
 if [ -d "$HOME/.claude" ]; then
@@ -207,18 +134,5 @@ show_banner "claude"
 
 # ── Launch Claude Code ──────────────────────────────────────
 trace_lifecycle "entrypoint" "claude launching"
-if [ -x "$CC_BIN" ]; then
-    trace_lifecycle "exec" "launching claude-code ($CC_BIN)"
-    exec "$CC_BIN" "$@"
-else
-    trace_lifecycle "exec" "FAILED — claude-code not found at $CC_BIN"
-    echo ""
-    echo "${L_INSTALL_FAILED_CLAUDE:-ERROR: Claude Code failed to install.}"
-    echo ""
-    echo "${L_RETRY_HINT:-To retry: restart the container}"
-    echo "${L_CLEAR_CACHE_CLAUDE:-To clear cache: rm -rf ~/.cache/tillandsias/claude/}"
-    echo ""
-    # TODO: Remove fallback — make this a hard error
-    echo "[forge] WARNING: DEGRADED — Claude Code unavailable, dropping to shell" >&2
-    exec bash
-fi
+trace_lifecycle "exec" "launching claude-code ($CC_BIN)"
+exec "$CC_BIN" "$@"

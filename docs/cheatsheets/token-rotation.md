@@ -57,7 +57,7 @@ File permissions: `0600` (owner only)
     - calls /usr/local/bin/git-askpass-tillandsias "Password for 'https://github.com':"
     - script runs: cat /run/secrets/github_token
     - returns token as password; username = "x-access-token"
-    - push succeeds (no gh CLI or hosts.yml needed for git operations)
+    - push succeeds
 
 [6] 55 minutes later: refresh task fires
     - retrieve token from OS keyring
@@ -139,10 +139,10 @@ Layer 1 handles the normal case. Layer 2 handles graceful shutdown when containe
 
 ```bash
 # Watch token write, refresh, and delete events in real time
-tillandsias --log-secret-management /path/to/project
+tillandsias --log-secrets-management /path/to/project
 
 # Same with trace-level detail (includes spec URLs)
-tillandsias --log=secrets:trace --log-secret-management /path/to/project
+tillandsias --log=secrets:trace --log-secrets-management /path/to/project
 
 # Inspect tmpfs token directory manually (Linux)
 ls -la /run/user/$(id -u)/tillandsias/tokens/
@@ -160,28 +160,28 @@ findmnt --target /run/user/$(id -u)/
 | Scenario | What happens | Recovery |
 |----------|-------------|----------|
 | `$XDG_RUNTIME_DIR` not set | Warning logged; falls back to `$TMPDIR`; token file still on tmpfs on most systems | Set `XDG_RUNTIME_DIR=/run/user/$(id -u)` in environment |
-| `$XDG_RUNTIME_DIR` not writable | Warning logged; falls back to `hosts.yml` mount only; GIT_ASKPASS will fail to read token | Check permissions: `ls -la /run/user/$(id -u)/` |
+| `$XDG_RUNTIME_DIR` not writable | Warning logged; token file cannot be delivered to the container; GIT_ASKPASS fails inside the container | Check permissions: `ls -la /run/user/$(id -u)/` |
 | OS keyring locked mid-session | 55-minute refresh fails; warning logged; current token file remains valid until container stops | Unlock keyring (usually requires desktop session); next refresh succeeds automatically |
-| OS keyring unavailable (headless server) | Token file cannot be written; falls back to `hosts.yml` mount | Run on a system with a keyring daemon, or store token in `hosts.yml` manually |
-| Token file write fails (tmpfs full) | Error logged; previous token file remains; `--log-secret-management` shows details | Check tmpfs usage: `df -h /run/user/$(id -u)/`; tmpfs is usually sized at 50% of RAM |
+| OS keyring unavailable (headless server) | Token file cannot be written; authenticated git operations fail until keyring is available | Run on a system with a keyring daemon, or configure a Secret Service backend in the headless environment |
+| Token file write fails (tmpfs full) | Error logged; previous token file remains; `--log-secrets-management` shows details | Check tmpfs usage: `df -h /run/user/$(id -u)/`; tmpfs is usually sized at 50% of RAM |
 | Atomic rename fails (same-fs guarantee violated) | `.tmp` file is deleted; error logged; previous token untouched | Should not occur on standard Linux (`.tmp` and final file in same directory). If it does, check filesystem type: `findmnt --target /run/user/<uid>/` |
 | Container stops before cleanup (SIGKILL) | Token file remains on tmpfs | Cleaned by app-exit handler or session end; tmpfs is cleared on reboot or logout |
 | App receives SIGKILL (`kill -9`) | All cleanup layers are bypassed | Token files remain on tmpfs until session end; same OAuth token is also in keyring; no new attack surface |
 
 ## Security Model
 
-### Before vs. after vs. future
+### Current vs. future
 
-| Property | Before (hosts.yml) | Now (tmpfs + GIT_ASKPASS) | Future (App tokens) |
-|----------|--------------------|--------------------------|---------------------|
-| Token in `/proc/*/environ` | Possible (if env var) | No | No |
-| Token on persistent disk | Yes (`~/.cache/.../hosts.yml`) | No (tmpfs only) | No (tmpfs only) |
-| Token scope | All repositories | All repositories | Single repository |
-| Token lifetime | Indefinite (OAuth) | Indefinite (OAuth) | 1 hour |
-| Survives container stop | Yes | No (deleted) | No (deleted) |
-| Survives app exit | Yes | No (cleanup guard) | No (cleanup guard) |
-| Survives reboot | Yes | No (tmpfs cleared) | No (tmpfs cleared) |
-| Container can mint new tokens | N/A | No | No (no private key) |
+| Property | Now (keyring + tmpfs + GIT_ASKPASS) | Future (App tokens) |
+|----------|-------------------------------------|---------------------|
+| Token in `/proc/*/environ` | No | No |
+| Token on persistent disk | No (keyring only; tmpfs for delivery) | No (keyring only; tmpfs for delivery) |
+| Token scope | All repositories | Single repository |
+| Token lifetime | Indefinite (OAuth) | 1 hour |
+| Survives container stop | No (tmpfs file deleted) | No (tmpfs file deleted) |
+| Survives app exit | No (cleanup guard) | No (cleanup guard) |
+| Survives reboot | No (tmpfs cleared) | No (tmpfs cleared) |
+| Container can mint new tokens | No | No (no private key) |
 
 ### What remains the same
 
@@ -200,7 +200,7 @@ The current infrastructure is Phase 1 of a four-phase plan defined in `fine-grai
 | 1 (current) | tmpfs token file, GIT_ASKPASS, 55-min refresh | Full OAuth token, indefinite lifetime |
 | 2 | GitHub App registration + token minting API | Per-repo installation token, 1-hour expiry |
 | 3 | Rotation daemon with Track/Untrack + event loop integration | Per-repo installation token, auto-rotated at 55min |
-| 4 | Remove `hosts.yml` mount; set `GH_TOKEN` to token file for `gh` CLI | Per-repo installation token, all git + gh CLI operations |
+| 4 | Set `GH_TOKEN` to the tmpfs token file for `gh` CLI as well as git | Per-repo installation token, all git + gh CLI operations |
 
 When Phase 2 is implemented, the only change to the delivery path is: replace `retrieve_github_token()` (keyring read) with `mint_installation_token()` (GitHub App API call) as the token source. The file write, mount, GIT_ASKPASS script, and cleanup logic are unchanged.
 
@@ -215,5 +215,5 @@ When Phase 2 is implemented, the only change to the delivery path is: replace `r
 - `src-tauri/src/secrets.rs` — keyring retrieval (`retrieve_github_token`)
 
 **Cheatsheets:**
-- `docs/cheatsheets/secret-management.md` — full secrets lifecycle, all secret types
-- `docs/cheatsheets/logging-levels.md` — how to use `--log-secret-management`
+- `docs/cheatsheets/secrets-management.md` — full secrets lifecycle, all secret types
+- `docs/cheatsheets/logging-levels.md` — how to use `--log-secrets-management`

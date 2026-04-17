@@ -1,63 +1,54 @@
 # SECRETS.md
 
-Secrets architecture for Tillandsias forge containers.
+Secrets architecture for Tillandsias forge environments.
 
 ---
 
 ## 1. Overview
 
-Tillandsias manages secrets (GitHub tokens, SSH keys, git credentials) transparently. Users never see encryption mechanics -- it "just works." You authenticate once, and every forge container session has access to your credentials without re-authentication.
+Tillandsias manages secrets (GitHub tokens, SSH keys, git identity) transparently. Users never see encryption mechanics -- it "just works." You authenticate once, the token lands in the host OS keyring, and every forge session is authenticated without the token ever entering a forge container.
 
-Secrets persist between forge runs and are shared across projects where appropriate. The system follows the same philosophy as the rest of Tillandsias: invisible infrastructure, zero cognitive load.
+The architecture follows the same philosophy as the rest of Tillandsias: invisible infrastructure, zero cognitive load, no credentials in untrusted components.
 
 ---
 
-## 2. Secret Categories
+## 2. Credential Flow
+
+GitHub tokens live exclusively in the host OS's native secret store. The git service container inside the enclave reads them on demand through a D-Bus bridge and performs authenticated traffic to GitHub on behalf of the forge.
+
+| Platform | Backend | Service / target |
+|----------|---------|------------------|
+| Linux (GNOME / KDE via Secret Service) | libsecret / GNOME Keyring | `service=tillandsias`, `username=github-oauth-token` |
+| macOS | Keychain Services (Generic Password) | `service=tillandsias`, `account=github-oauth-token` |
+| Windows | Credential Manager (DPAPI) | `target=tillandsias:github-oauth-token` |
+
+No plaintext token file is written to disk at any point. The forge container receives no token, no keyring handle, and no D-Bus socket.
+
+---
+
+## 3. Secret Categories
 
 | Category | Scope | Storage | Example |
 |----------|-------|---------|---------|
-| GitHub auth | Shared (all projects) | `~/.cache/tillandsias/secrets/gh/` | `gh auth` tokens |
+| GitHub OAuth token | Shared (all projects) | Host OS keyring | `gh auth` token |
 | Git identity | Shared | `~/.cache/tillandsias/secrets/git/` | user.name, user.email, .gitconfig |
 | SSH keys | Shared | `~/.cache/tillandsias/secrets/ssh/` | id_ed25519, known_hosts |
 | Project tokens | Per-project | `<project>/.tillandsias/secrets/` | API keys, .env files |
 
-**Shared** means the same credential is available in every forge container. **Per-project** means the credential is only mounted into the forge for that specific project.
+**Shared** means the credential is available in every forge session for this user. **Per-project** means the credential is only mounted into the forge for that specific project.
 
 ---
 
-## 3. Current Implementation (MVP)
+## 4. Component Trust Boundaries
 
-For now, secrets are plain files mounted as volumes into forge containers.
+| Component | Trust Level | Sees Token |
+|-----------|-------------|-----------|
+| Host tray app (signed binary) | Trusted | Writes / reads keyring |
+| Git service container | Trusted (within enclave) | Reads token via D-Bus per operation |
+| Forge container | Untrusted | **Never** — speaks plain git protocol to the mirror |
+| User code / AI agents inside forge | Hostile | **Never** — no credential path reaches them |
 
-- GitHub credentials are stored via `gh auth login` into `~/.cache/tillandsias/secrets/gh/`
-- Git config (user.name, user.email) lives in `~/.cache/tillandsias/secrets/git/`
-- SSH keys are copied or symlinked into `~/.cache/tillandsias/secrets/ssh/`
-- All secret directories use restrictive UNIX permissions: `0700` for directories, `0600` for files
-
-These directories are transparently mounted into containers at the paths where tools expect them (`~/.config/gh/`, `~/.gitconfig`, `~/.ssh/`). No configuration required from the user.
-
----
-
-## 4. Future: Encrypted Secrets Filesystem
-
-Phase 2 introduces encryption at rest using either a LUKS-encrypted loop device or `gocryptfs`:
-
-**How it works:**
-
-1. On first `tillandsias` install, a symmetric encryption key is generated and stored in the system keyring (GNOME Keyring, macOS Keychain, Windows Credential Manager)
-2. `~/.cache/tillandsias/secrets/` is backed by an encrypted filesystem
-3. On container launch: the tray app unlocks the encrypted store using the keyring, mounts the decrypted view, and bind-mounts into the container
-4. On container stop: the decrypted view is unmounted
-5. From the host filesystem perspective: `~/.cache/tillandsias/secrets/` contains only encrypted blobs when no container is running
-
-**Why `gocryptfs` over LUKS:**
-
-- No root required (userspace FUSE)
-- Per-file encryption (plays well with git, backups, sync)
-- Cross-platform potential (Linux/macOS; Windows via cppcryptfs)
-- Smaller attack surface than full block device encryption
-
-**Fallback:** If the system keyring is unavailable, prompt for a passphrase on first container launch per session.
+The forge has no D-Bus socket mount, no keyring handle, no token file, and no outbound network access. Even a fully compromised agent cannot exfiltrate a credential it cannot see.
 
 ---
 
@@ -73,7 +64,7 @@ Most credentials belong to the person, not the project:
 | API keys (.env) | **Per-project** | Different services per project |
 | Deploy keys | **Per-project** | Specific repo access |
 
-**Default behavior:** Shared. All forge containers get the same GitHub token, git identity, and SSH keys.
+**Default behavior:** Shared. All forge sessions share the same git identity, GitHub auth, and SSH keys.
 
 **Per-project override:** Place credentials in `<project>/.tillandsias/secrets/` and configure in `.tillandsias/config.toml`:
 
@@ -88,96 +79,51 @@ gh-auth = "per-project"
 
 ---
 
-## 6. Should .git Credentials Be Per-Project?
-
-**Analysis:**
-
-- **Git identity (user.name/email):** NO -- you are the same person regardless of which project you are working on. Using different identities per project is an edge case (work vs personal), handled by opt-in override.
-- **GitHub auth token:** NO -- you use one GitHub account. Multiple accounts are rare and handled by per-project override.
-- **Deploy keys:** YES -- deploy keys grant access to a specific repository. They must not leak across projects.
-
-**Recommendation:** Shared by default. The `.tillandsias/config.toml` per-project override covers the edge cases without burdening the common case.
-
----
-
-## 7. Security Model
+## 6. Security Model
 
 | Threat | Mitigation |
 |--------|------------|
-| Agent reads secrets | `/bash-private` patterns, `agent_blocked` skills prevent agent from reading credential files |
-| Container escape | `--cap-drop=ALL`, `--security-opt=no-new-privileges`, rootless podman |
-| Host reads secrets at rest | Phase 2: encrypted at rest via gocryptfs, key in system keyring |
-| Cross-project secret leak | Per-project secrets mounted only into that project's forge container |
-| Token appears in AI context | Private auth flow -- credentials never enter the conversation |
-| Backup exposure | Encrypted blobs safe to back up; decryption requires keyring access |
-| Stolen laptop | System keyring locked by OS login; encrypted secrets unreadable without session |
-
-**Trust zones remain unchanged:**
-
-| Component | Trust Level |
-|-----------|-------------|
-| Tray App | Trusted (manages keyring, mounts secrets) |
-| Forge Container | Untrusted (has mounted secrets, but agent is restricted) |
-| User Code | Hostile (no secret access beyond what the forge explicitly provides) |
+| Agent inside forge reads a token | Forge has no token — it lives in the host keyring and is used only by the git service |
+| Container escape from forge | `--cap-drop=ALL`, `--security-opt=no-new-privileges`, rootless podman, enclave network with no egress |
+| Escape from the git service | Git service has no code execution surface exposed to the forge — only git protocol |
+| Host reads secrets at rest | OS keyring encryption (DPAPI on Windows, file-encrypted kwallet/keyring on Linux, Keychain on macOS) |
+| Cross-project secret leak | Per-project secrets mounted only into that project's forge |
+| Token in AI context | Tokens are never passed to the forge, so they cannot appear in agent tool output |
+| Backup exposure | Keyring backends are excluded from standard user-data backups; Tillandsias writes no plaintext token to `~/.cache/` |
+| Stolen laptop | OS login unlocks the keyring; without login, the token is unreadable |
 
 ---
 
-## 8. Mount Strategy
+## 7. Mount Strategy
 
-Host paths are mapped to standard tool-expected paths inside containers:
+The forge container receives only what it needs for the work itself — source code, caches, git identity for commit attribution:
 
 ```
 Host: ~/.cache/tillandsias/secrets/
-  |-- gh/           --> Container: ~/.config/gh/
-  |-- git/          --> Container: ~/.gitconfig + ~/.config/git/
-  |-- ssh/          --> Container: ~/.ssh/ (read-only)
-  +-- per-project/  --> Container: <project>/.env (per-project only)
+  |-- git/          --> Container: ~/.gitconfig + ~/.config/git/  (ro)
+  |-- ssh/          --> Container: ~/.ssh/                        (ro, per policy)
+  +-- per-project/  --> Container: <project>/.env                 (rw, per policy)
 ```
+
+GitHub tokens are **not** mounted into the forge. All GitHub-authenticated traffic (clone, fetch, push, API calls) is brokered by the git service container, which lives on the enclave network and bridges to the host keyring via D-Bus.
 
 **Mount flags:**
 
-- SSH keys: `:ro` (read-only) -- forge should never modify SSH keys
-- GitHub auth: `:rw` -- `gh auth refresh` needs write access to update tokens
-- Git config: `:ro` -- identity is set on host, forge reads it
-- Per-project secrets: `:rw` -- project may generate or rotate tokens
+| Secret | Mount Mode | Rationale |
+|--------|-----------|-----------|
+| SSH keys | `:ro` | Forge should never modify SSH keys |
+| Git config | `:ro` | Identity is set on host, forge reads it for commit metadata |
+| Per-project secrets | `:rw` | Project may generate or rotate tokens |
 
-**Container launch (conceptual):**
-
-```bash
-podman run \
-  --cap-drop=ALL \
-  --security-opt=no-new-privileges \
-  -v ~/.cache/tillandsias/secrets/gh:~/.config/gh:rw \
-  -v ~/.cache/tillandsias/secrets/git/gitconfig:~/.gitconfig:ro \
-  -v ~/.cache/tillandsias/secrets/ssh:~/.ssh:ro \
-  forge-image
-```
+All mounts use `--userns=keep-id` so file ownership maps correctly between host and container.
 
 ---
 
-## 9. Implementation Phases
+## 8. Lifecycle
 
-### Phase 1 (now): Plain directory mounts
-
-- Create `~/.cache/tillandsias/secrets/` directory structure on first run
-- Store credentials as plain files with `0600`/`0700` permissions
-- Mount into containers via podman volume flags
-- Implement `/gh-auth-login` skill for initial GitHub authentication
-- Agent blocked from reading credential paths
-
-### Phase 2: Encrypted storage
-
-- Integrate `gocryptfs` for encrypted-at-rest secrets directory
-- Key stored in system keyring (GNOME Keyring / macOS Keychain / Windows Credential Manager)
-- Auto-unlock on container launch, auto-lock on container stop
-- Transparent to all existing mount paths -- no changes to container configuration
-- Fallback to passphrase prompt if keyring unavailable
-
-### Phase 3: Per-project isolation and deploy keys
-
-- Per-project secret directories with `.tillandsias/config.toml` configuration
-- Deploy key management: generate, store, mount per-project SSH keys
-- Secret rotation reminders (token expiry detection)
-- Multi-identity support (work/personal git identity switching)
+1. **First authentication:** `tillandsias --github-login` launches the host-side OAuth flow; the token lands directly in the host OS keyring.
+2. **On each forge launch:** no token material is prepared, written, or mounted into the forge. The git service container reads the token from the keyring (via D-Bus on Linux, Security framework on macOS, Credential Manager on Windows) each time it needs to contact GitHub.
+3. **On forge stop:** nothing credential-related needs cleanup — the forge never held a token.
+4. **On token rotation / re-auth:** `tillandsias --github-login` overwrites the keyring entry; the next git service operation picks up the new token automatically.
 
 ---

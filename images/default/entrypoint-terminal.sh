@@ -71,18 +71,17 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
         fi
     done
     if [[ "$CLONE_SUCCESS" != "true" ]]; then
-        # TODO: Remove fallback — make this a hard error
-        echo "[forge] WARNING: DEGRADED — git clone failed, dropping to shell without project code" >&2
-        echo "[forge] The git service may not be running." >&2
-        exec bash
+        echo "[forge] FATAL: git clone failed from git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" >&2
+        echo "[forge] The git mirror service is unreachable or has not finished initialising." >&2
+        exit 1
     fi
     echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
 fi
 
-# ── OpenSpec (available in maintenance terminals too) ───────
+# ── OpenSpec (overlay-only, shared helper) ──────────────────
 # @trace spec:forge-shell-tools
-install_openspec
-OS_BIN="$CACHE/openspec/bin/openspec"
+require_openspec
+OS_BIN="/home/forge/.tools/openspec/bin/openspec"
 
 # ── Find project directory ──────────────────────────────────
 find_project_dir

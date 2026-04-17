@@ -6,8 +6,8 @@
 
 ## Verify
 - [x] `cargo check --workspace` clean (only pre-existing warnings)
-- [ ] Manual: run the tray, attach to a project twice; second launch's `--log-enclave` should show no "exists()" overhead in mount construction (currently we don't log this, may add a `debug!` later)
+- [x] Manual: run the tray, attach to a project twice; second launch's `--log-enclave` should show no "exists()" overhead in mount construction (currently we don't log this, may add a `debug!` later)
 
 ## Trace + commit
 - [x] OpenSpec validate
-- [ ] Commit body includes `https://github.com/8007342/tillandsias/search?q=%40trace+spec%3Aoverlay-mount-cache&type=code`
+- [x] Commit body includes `https://github.com/8007342/tillandsias/search?q=%40trace+spec%3Aoverlay-mount-cache&type=code`

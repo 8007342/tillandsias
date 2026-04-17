@@ -79,7 +79,9 @@ pub fn try_acquire() -> Result<(), ()> {
         }
     }
 
-    // Write our PID to the lock file.
+    // Write our PID to the lock file. Inability to create the lock is a
+    // hard error: two concurrent trays would race on podman image builds
+    // and per-project state, exactly the scenario the guard exists for.
     let our_pid = std::process::id();
     match std::fs::write(&path, our_pid.to_string()) {
         Ok(()) => {
@@ -87,19 +89,13 @@ pub fn try_acquire() -> Result<(), ()> {
             Ok(())
         }
         Err(e) => {
-            // If we can't write the lock file, log but proceed anyway.
-            // Not being able to create the lock shouldn't prevent startup.
-            // TODO: Remove fallback — make this a hard error
             warn!(
-                accountability = true,
-                category = "security",
-                safety = "DEGRADED: no single-instance protection — risk of concurrent conflicts",
                 spec = "singleton-guard",
                 ?path,
                 error = %e,
-                "Singleton lock write failed — proceeding without mutual exclusion"
+                "Singleton lock write failed — refusing to start",
             );
-            Ok(())
+            Err(())
         }
     }
 }

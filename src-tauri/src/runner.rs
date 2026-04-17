@@ -244,7 +244,10 @@ fn image_size_display(tag: &str) -> String {
 /// Build a [`LaunchContext`] for CLI mode.
 ///
 /// Forge and terminal containers are credential-free: no token files,
-/// no hosts.yml, no Claude dir mounts. Git identity comes from env vars.
+/// no on-disk gh state, no Claude dir mounts. Git identity comes from
+/// env vars.
+///
+/// @trace spec:native-secrets-store
 fn build_cli_launch_context(
     container_name: &str,
     project_path: &Path,
@@ -285,6 +288,7 @@ fn build_cli_launch_context(
         },
         git_author_name,
         git_author_email,
+        token_file_path: None, // forge/terminal containers are credential-free
         use_port_mapping: port_mapping,
     }
 }
@@ -500,7 +504,7 @@ pub fn run(
         println!("  Ports:  {}-{}", base_port.0, base_port.1);
     }
 
-    // @trace spec:secret-management
+    // @trace spec:secrets-management
     // Show credential-free status transparently
     println!();
     println!("  Security: credential-free (no tokens, no secrets mounted)");
@@ -577,7 +581,7 @@ pub fn run(
 ///
 /// Returns `true` on success, `false` on failure.
 ///
-/// @trace spec:git-mirror-service, spec:secret-management
+/// @trace spec:git-mirror-service, spec:secrets-management
 pub fn run_github_login() -> bool {
     crate::cli::print_welcome_banner(false);
 
@@ -586,52 +590,18 @@ pub fn run_github_login() -> bool {
         .build()
         .expect("tokio runtime");
     let client = tillandsias_podman::PodmanClient::new();
-    let podman_path = tillandsias_podman::find_podman_path();
 
-    // Check if any git service container is already running via podman ps.
-    // @trace spec:git-mirror-service
-    let running_git = {
-        let output = tillandsias_podman::podman_cmd_sync()
-            .args(["ps", "--filter", "name=tillandsias-git-", "--format", "{{.Names}}"])
-            .output();
-        match output {
-            Ok(o) if o.status.success() => {
-                let names = String::from_utf8_lossy(&o.stdout);
-                names.lines().next().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
-            }
-            _ => None,
-        }
-    };
-
-    if let Some(container_name) = running_git {
-        println!();
-        println!("  Found running git service: {container_name}");
-        println!("  Running GitHub authentication inside it...");
-        println!();
-
-        let status = std::process::Command::new(&podman_path)
-            .args(["exec", "-it", &container_name, "gh", "auth", "login", "--git-protocol", "https"])
-            .stdin(std::process::Stdio::inherit())
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .status();
-
-        return match status {
-            Ok(s) => {
-                if s.success() {
-                    println!();
-                    println!("  GitHub authentication complete.");
-                }
-                s.success()
-            }
-            Err(e) => {
-                eprintln!("  Error: failed to exec into git service: {e}");
-                false
-            }
-        };
-    }
-
-    // No git service running — ensure git image exists and start a temporary container.
+    // Always launch a dedicated ephemeral container for the auth flow.
+    //
+    // Rationale: an already-running per-project git-service is `--read-only`
+    // with a tmpfs list that does NOT include `/home/git/.config`. `gh auth
+    // login` would try to mkdir that path and fail. Even if we widened the
+    // tmpfs, exec'ing into the long-lived service would skip the host-side
+    // `gh auth token` extraction + keyring store, leaving the host vault
+    // empty. One unified path: `run_github_login_git_service` spins up its
+    // own writable container, runs the auth, extracts the token, persists
+    // to the host OS keyring, then tears the container down.
+    // @trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
     let tag = crate::handlers::git_image_tag();
 
     if !rt.block_on(client.image_exists(&tag)) {
@@ -649,59 +619,67 @@ pub fn run_github_login() -> bool {
     // The git service image now has gh installed (Alpine github-cli package).
     // No enclave network needed — the login container uses default bridge
     // for direct internet access to github.com.
-    // @trace spec:secret-management
+    // @trace spec:secrets-management
     return run_github_login_git_service(&tag);
 }
 
-/// Windows: run `gh auth login` directly in a temporary git service container via podman.
-/// No bash, no scripts — just podman run.
-// @trace spec:secret-management, spec:cross-platform, spec:git-mirror-service
-#[cfg(target_os = "windows")]
-fn run_github_login_direct(tag: &str) -> bool {
-
+/// Run `gh auth login` in a temporary git service container, then extract
+/// the OAuth token + username and persist them to the host's native keyring.
+///
+/// Lifecycle:
+///   1. Prompt for git identity (name/email) → host `<cache>/secrets/git/.gitconfig`
+///   2. Start a keep-alive git-service container (no host mount, no `--rm`)
+///   3. `podman exec -it` into it to run `gh auth login` interactively
+///   4. `podman exec` to run `gh auth token` + `gh api user --jq .login`
+///   5. Store the token in the native keyring via `secrets::store_github_token`
+///      (Windows Credential Manager / macOS Keychain / Linux Secret Service)
+///   6. `podman stop` + `podman rm` the keep-alive container — all gh state
+///      dies with it
+///
+/// Uses the default bridge network (NOT the enclave) — the login container
+/// only needs direct internet access to github.com for the OAuth flow.
+///
+/// @trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
+fn run_github_login_git_service(tag: &str) -> bool {
     let cache = tillandsias_core::config::cache_dir();
-    let secrets_dir = cache.join("secrets");
-    let gh_dir = secrets_dir.join("gh");
-    let git_dir = secrets_dir.join("git");
-    let gitconfig = git_dir.join(".gitconfig");
-
-    if let Err(e) = std::fs::create_dir_all(&gh_dir) {
-        warn!(error = %e, path = %gh_dir.display(), "Failed to create cache directory");
-    }
-    if let Err(e) = std::fs::create_dir_all(&git_dir) {
-        warn!(error = %e, path = %git_dir.display(), "Failed to create cache directory");
-    }
-    if !gitconfig.exists() {
-        if let Err(e) = std::fs::write(&gitconfig, "") {
-            warn!(error = %e, path = %gitconfig.display(), "Failed to initialize gitconfig");
-        }
+    let gitconfig = cache.join("secrets").join("git").join(".gitconfig");
+    if let Some(parent) = gitconfig.parent() {
+        let _ = std::fs::create_dir_all(parent);
     }
 
-    // Prompt for git identity
+    // @trace spec:secrets-management
+    // Git identity prompt — always ask during GitHub Login so the user can
+    // confirm or correct values. Pre-fill the defaults from the tillandsias
+    // cache if set; otherwise fall back to the host `~/.gitconfig`. Whatever
+    // the user accepts (or types) is written to the cache gitconfig — that's
+    // the copy forge containers mount for commit authorship.
+    let (default_name, default_email) = crate::launch::read_git_identity(&cache);
     println!();
-    println!("=== GitHub Login ===");
+    println!("  Confirm your git identity (used for commit authorship).");
+    println!("  Press Enter to accept the default in brackets.");
     println!();
 
-    // Read existing name/email from gitconfig
-    let existing_name = read_gitconfig_value(&gitconfig, "name");
-    let existing_email = read_gitconfig_value(&gitconfig, "email");
+    let name = prompt_with_default("  Your name", &default_name);
+    let email = prompt_with_default("  Your email", &default_email);
 
-    let git_name = prompt_with_default("  Your name (for git commits)", &existing_name);
-    let git_email = prompt_with_default("  Your email (for git commits)", &existing_email);
-
-    if git_name.is_empty() || git_email.is_empty() {
-        eprintln!("  Name and email are required.");
+    if name.is_empty() || email.is_empty() {
+        eprintln!("  Name and email are required — aborting.");
         return false;
     }
-
-    // Write gitconfig
-    let gitconfig_content = format!("[user]\n\tname = {git_name}\n\temail = {git_email}\n");
-    match std::fs::write(&gitconfig, gitconfig_content) {
-        Ok(()) => println!("  Git identity saved: {git_name} <{git_email}>"),
-        Err(e) => eprintln!("  WARNING: Failed to save git identity: {e}"),
+    let content = format!("[user]\n\tname = {name}\n\temail = {email}\n");
+    if let Err(e) = std::fs::write(&gitconfig, &content) {
+        eprintln!("  Error: failed to save git identity to {}: {e}", gitconfig.display());
+        return false;
     }
+    println!("  \u{2713} Git identity saved.");
+    println!();
 
-    // Security flags (same as gh-auth-login.sh)
+    println!("  Starting GitHub authentication...");
+    println!("  (Running in the trusted git service container — credentials never touch the forge)");
+    println!();
+
+    // Shared security flags across every podman invocation below.
+    // @trace spec:secrets-management
     let security_flags = [
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
@@ -709,145 +687,174 @@ fn run_github_login_direct(tag: &str) -> bool {
         "--security-opt=label=disable",
     ];
 
-    println!();
-    println!("  Starting GitHub authentication...");
-    println!("  (You'll be prompted to paste a GitHub token)");
-    println!();
+    let podman_path = tillandsias_podman::find_podman_path();
+    let container_name = "tillandsias-gh-login";
 
-    // Run gh auth login interactively in git service container.
-    // Use raw Command (not podman_cmd_sync) to avoid CREATE_NO_WINDOW
-    // which kills the interactive TTY that gh auth login needs.
-    let status = std::process::Command::new(tillandsias_podman::find_podman_path())
-        .args(["run", "-it", "--rm", "--init", "--name", "tillandsias-gh-login"])
-        .args(security_flags)
-        .args(["--entrypoint", ""])
-        .args(["-e", "GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig"])
-        .arg("-v").arg(format!("{}:/home/forge/.config/gh", gh_dir.display()))
-        .arg("-v").arg(format!("{}:/home/forge/.config/tillandsias-git:rw", git_dir.display()))
-        .arg(tag)
-        .args(["gh", "auth", "login", "--git-protocol", "https"])
-        .stdin(std::process::Stdio::inherit())
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
+    // Defensive cleanup: a previous aborted run may have left the container
+    // behind. `podman rm -f` on a missing name is a harmless no-op.
+    let _ = tillandsias_podman::podman_cmd_sync()
+        .args(["rm", "-f", container_name])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .status();
 
-    if let Ok(s) = &status {
-        if !s.success() {
-            eprintln!("  GitHub authentication failed.");
+    // @trace spec:native-secrets-store
+    // Step 1: start a keep-alive container. NO host mount for gh state —
+    // the OAuth token will be harvested via `gh auth token` inside this same
+    // container and stored in the host keyring. When we stop + rm the
+    // container below, all gh on-disk state is destroyed with it.
+    let start_status = tillandsias_podman::podman_cmd_sync()
+        .args(["run", "-d", "--init"])
+        .args(["--name", container_name])
+        .args(security_flags)
+        .args(["--entrypoint", "sleep"])
+        .arg(tag)
+        .arg("infinity")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::inherit())
+        .status();
+    match start_status {
+        Ok(s) if s.success() => {}
+        Ok(_) => {
+            eprintln!("  Error: failed to start login container.");
+            return false;
+        }
+        Err(e) => {
+            eprintln!("  Error: failed to start login container: {e}");
             return false;
         }
     }
 
-    // Run setup-git in a separate non-interactive container
-    let _ = tillandsias_podman::podman_cmd_sync()
-        .args(["run", "--rm", "--init"])
-        .args(security_flags)
-        .args(["--entrypoint", ""])
-        .arg("-v").arg(format!("{}:/home/forge/.config/gh", gh_dir.display()))
-        .arg("-v").arg(format!("{}:/home/forge/.config/tillandsias-git:rw", git_dir.display()))
-        .arg(tag)
-        .args(["gh", "auth", "setup-git"])
-        .output();
-
-    println!();
-    println!("  GitHub authentication complete.");
-    println!();
-
-    true
-}
-
-#[cfg(target_os = "windows")]
-fn read_gitconfig_value(path: &std::path::Path, key: &str) -> String {
-    std::fs::read_to_string(path)
-        .unwrap_or_default()
-        .lines()
-        .find_map(|line| {
-            let trimmed = line.trim();
-            if trimmed.starts_with(key) {
-                trimmed.split('=').nth(1).map(|v| v.trim().to_string())
-            } else {
-                None
-            }
-        })
-        .unwrap_or_default()
-}
-
-/// Run `gh auth login` in a temporary git service container.
-/// Uses the default bridge network (NOT the enclave) — the login container
-/// only needs direct internet access to github.com for the OAuth flow.
-/// It doesn't need enclave DNS aliases (proxy, git-service, inference).
-/// @trace spec:git-mirror-service, spec:secret-management
-fn run_github_login_git_service(tag: &str) -> bool {
-    // @trace spec:secret-management
-    // Git identity prompt — saved to host cache, injected into forge containers.
-    // This runs on the HOST (not in any container) — just a text prompt.
-    let cache = tillandsias_core::config::cache_dir();
-    let gitconfig = cache.join("secrets").join("git").join(".gitconfig");
-    if let Some(parent) = gitconfig.parent() {
-        let _ = std::fs::create_dir_all(parent);
+    // Drop guard: stop + rm the container on every exit path below so a
+    // failed flow doesn't leak credentials-bearing state.
+    struct LoginContainerGuard<'a> {
+        podman: &'a str,
+        name: &'a str,
     }
-
-    let (current_name, current_email) = crate::launch::read_git_identity(&cache);
-    if current_name.is_empty() || current_email.is_empty() {
-        println!();
-        println!("  First, let's set up your git identity.");
-        println!("  (This is used for commit authorship)");
-        println!();
-
-        let name = prompt_with_default("  Your name", &current_name);
-        let email = prompt_with_default("  Your email", &current_email);
-
-        if !name.is_empty() && !email.is_empty() {
-            let content = format!("[user]\n\tname = {name}\n\temail = {email}\n");
-            match std::fs::write(&gitconfig, &content) {
-                Ok(()) => println!("  ✓ Git identity saved."),
-                Err(e) => eprintln!("  WARNING: Failed to save git identity: {e}"),
-            }
+    impl Drop for LoginContainerGuard<'_> {
+        fn drop(&mut self) {
+            let _ = std::process::Command::new(self.podman)
+                .args(["rm", "-f", self.name])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
         }
-        println!();
     }
+    let _guard = LoginContainerGuard {
+        podman: &podman_path,
+        name: container_name,
+    };
 
-    println!("  Starting GitHub authentication...");
-    println!("  (Running in the trusted git service container — credentials never touch the forge)");
-    println!();
-
-    // Use default bridge network (no --network flag) so gh can reach github.com.
-    // The enclave network has NO external internet — only the proxy provides
-    // outbound access, but gh needs direct HTTPS to github.com for OAuth.
-    // @trace spec:secret-management
-    let status = tillandsias_podman::podman_cmd_sync()
-        .args([
-            "run", "-it", "--rm", "--init",
-            "--name", "tillandsias-gh-login",
-            "--cap-drop=ALL",
-            "--security-opt=no-new-privileges",
-            "--userns=keep-id",
-            "--security-opt=label=disable",
-            "--entrypoint=",
-        ])
-        .arg(tag)
+    // Step 2: interactive `gh auth login` via podman exec. Use raw Command
+    // (not podman_cmd_sync) so stdin/stdout/stderr inherit the real TTY —
+    // the CREATE_NO_WINDOW wrapper in podman_cmd_sync on Windows breaks the
+    // interactive device-code flow.
+    // @trace spec:secrets-management, spec:cross-platform
+    let status = std::process::Command::new(&podman_path)
+        .args(["exec", "-it", container_name])
         .args(["gh", "auth", "login", "--git-protocol", "https"])
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .status();
-
     match status {
-        Ok(s) => {
-            if s.success() {
-                println!();
-                println!("  GitHub authentication complete.");
-                println!();
-            } else {
-                eprintln!("  GitHub authentication failed.");
-            }
-            s.success()
+        Ok(s) if s.success() => {}
+        Ok(_) => {
+            eprintln!("  GitHub authentication failed.");
+            return false;
         }
         Err(e) => {
-            eprintln!("Error: failed to run GitHub login container: {e}");
-            false
+            eprintln!("  Error: failed to exec gh auth login: {e}");
+            return false;
         }
     }
+
+    // Step 3: extract token via `gh auth token`.
+    //
+    // Security posture for the extraction:
+    //   - stdin = Stdio::null  → child can't read host stdin
+    //   - stdout = Stdio::piped → token bytes flow into a memory buffer in
+    //     this host process; they NEVER reach a terminal device. Even if
+    //     the user invoked `tillandsias --github-login` from a TTY, the
+    //     pipe redirection severs the child's stdout from the parent's
+    //     terminal fd before the child runs. Belt-and-suspenders: explicit
+    //     here so future changes to `podman_cmd_sync()` defaults can't
+    //     silently revert to Stdio::inherit.
+    //   - stderr = Stdio::piped → captured for diagnostics; gh's stderr
+    //     never contains the token, but on error we redact stderr below
+    //     before printing.
+    //   - The captured token is wrapped in `zeroize::Zeroizing<String>` so
+    //     its heap allocation is overwritten when the local goes out of
+    //     scope, mitigating process-memory scrape / core-dump disclosure.
+    // @trace spec:secrets-management, spec:native-secrets-store
+    use zeroize::Zeroizing;
+    let token_out = tillandsias_podman::podman_cmd_sync()
+        .args(["exec", container_name, "gh", "auth", "token"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output();
+    let token: Zeroizing<String> = match token_out {
+        Ok(o) if o.status.success() => {
+            Zeroizing::new(String::from_utf8_lossy(&o.stdout).trim().to_string())
+        }
+        Ok(o) => {
+            // Don't echo gh's stderr verbatim — it shouldn't contain the
+            // token but we don't want to be the one to find out otherwise.
+            // Surface a generic message; raw stderr is in the file logs only.
+            tracing::error!(
+                spec = "secrets-management",
+                exit_code = o.status.code().unwrap_or(-1),
+                "gh auth token failed (raw stderr suppressed from console for safety)"
+            );
+            eprintln!("  Error: `gh auth token` exited non-zero. See file logs under `--log-secrets-management` for details.");
+            return false;
+        }
+        Err(e) => {
+            eprintln!("  Error: failed to run `gh auth token`: {e}");
+            return false;
+        }
+    };
+    if token.is_empty() {
+        eprintln!("  Error: extracted empty token from gh — aborting.");
+        return false;
+    }
+
+    // Step 4: extract GitHub username via `gh api user`. Same headless
+    // piping discipline (defense-in-depth even though `--jq .login` only
+    // returns a public-by-design username field).
+    let user_out = tillandsias_podman::podman_cmd_sync()
+        .args(["exec", container_name, "gh", "api", "user", "--jq", ".login"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output();
+    let github_user = match user_out {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).trim().to_string(),
+        _ => String::new(), // non-fatal; username is advisory
+    };
+
+    // Step 5: persist token in the host OS keyring. The `&str` deref of
+    // Zeroizing<String> is what crosses into the keyring API; the keyring
+    // crate copies it once into the OS vault and our local buffer is
+    // wiped on Drop at the end of this function.
+    // @trace spec:native-secrets-store, spec:secrets-management
+    if let Err(e) = crate::secrets::store_github_token(&token) {
+        eprintln!("  Error: failed to store token in host keyring: {e}");
+        return false;
+    }
+
+    // Step 6: the drop guard will tear down the container on return,
+    // destroying the ephemeral gh on-disk state with it.
+
+    println!();
+    if github_user.is_empty() {
+        println!("  \u{2713} GitHub token saved to host keyring.");
+    } else {
+        println!("  \u{2713} GitHub token saved to host keyring for {github_user}.");
+    }
+    println!();
+    true
 }
 
 fn prompt_with_default(label: &str, default: &str) -> String {

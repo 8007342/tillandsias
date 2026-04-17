@@ -39,7 +39,7 @@ const VALID_LEVELS: &[&str] = &["off", "error", "warn", "info", "debug", "trace"
 /// of a specific subsystem's operations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AccountabilityWindow {
-    /// `--log-secret-management` — trace secret lifecycle operations.
+    /// `--log-secrets-management` — trace secret lifecycle operations.
     SecretManagement,
     /// `--log-image-management` — trace container image build/pull operations (future).
     ImageManagement,
@@ -199,7 +199,7 @@ USAGE:
     tillandsias --help              Show this help
 
 ACCOUNTABILITY:
-  --log-secret-management    Show how secrets are safely handled
+  --log-secrets-management    Show how secrets are safely handled
   --log-image-management     Show environment lifecycle
   --log-update-cycle         Show update check and apply flow
   --log-proxy                Show proxy request and cache operations
@@ -218,7 +218,7 @@ OPTIONS:
   --help                     Show this help
 
 MAINTENANCE:
-  init                       Pre-build development environment
+  --init                     Pre-build development environment
   --stats                    Show disk usage from artifacts
   --clean                    Remove stale artifacts
   --update                   Check for and apply updates
@@ -255,9 +255,9 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
         return Some((CliMode::Version, log_config));
     }
 
-    // `tillandsias --init` or `tillandsias init` — pre-build images.
+    // `tillandsias --init` — pre-build images.
     // `tillandsias --init --force` — rebuild even if already built.
-    if args.iter().any(|a| a == "--init") || args.first().map(|s| s.as_str()) == Some("init") {
+    if args.iter().any(|a| a == "--init") {
         let force = args.iter().any(|a| a == "--force");
         return Some((CliMode::Init { force }, log_config));
     }
@@ -332,7 +332,7 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
                 agent_override = Some(SelectedAgent::Claude);
             }
             // Log flags — already parsed by parse_log_flags(), skip here.
-            "--log-secret-management" | "--log-image-management" | "--log-update-cycle"
+            "--log-secrets-management" | "--log-image-management" | "--log-update-cycle"
             | "--log-proxy" | "--log-enclave" | "--log-git" => {}
             arg if arg.starts_with("--log=") => {}
             arg => {
@@ -369,7 +369,7 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
 
 /// Extract log configuration flags from the argument list.
 ///
-/// Scans for `--log=...`, `--log-secret-management`, `--log-image-management`,
+/// Scans for `--log=...`, `--log-secrets-management`, `--log-image-management`,
 /// `--log-update-cycle`, `--log-proxy`, `--log-enclave`, and `--log-git`. These flags are orthogonal to the mode — they
 /// configure the tracing subscriber regardless of whether the app runs as a
 /// tray, attach, or utility command.
@@ -379,7 +379,7 @@ fn parse_log_flags(args: &[String]) -> LogConfig {
     for arg in args {
         if let Some(value) = arg.strip_prefix("--log=") {
             config.modules = parse_log_value(value);
-        } else if arg == "--log-secret-management" {
+        } else if arg == "--log-secrets-management" {
             if !config
                 .accountability
                 .contains(&AccountabilityWindow::SecretManagement)
@@ -555,7 +555,7 @@ pub fn check_forge_image_status() -> ForgeStatus {
 /// - `debug` is true (debug output replaces the banner with more detailed info)
 ///
 /// Called only in CLI attach mode — tray mode and subcommands (`--help`,
-/// `--stats`, `--clean`, `--update`, `init`) do not call this function.
+/// `--stats`, `--clean`, `--update`, `--init`) do not call this function.
 pub fn print_welcome_banner(debug: bool) {
     use std::io::IsTerminal as _;
 
@@ -773,7 +773,7 @@ mod tests {
     fn parse_log_flags_combined() {
         let args: Vec<String> = vec![
             "--log=secrets:trace;containers:debug".into(),
-            "--log-secret-management".into(),
+            "--log-secrets-management".into(),
             "some-path".into(),
         ];
         let config = parse_log_flags(&args);
@@ -788,8 +788,8 @@ mod tests {
     #[test]
     fn parse_log_flags_no_duplicates() {
         let args: Vec<String> = vec![
-            "--log-secret-management".into(),
-            "--log-secret-management".into(),
+            "--log-secrets-management".into(),
+            "--log-secrets-management".into(),
         ];
         let config = parse_log_flags(&args);
         assert_eq!(config.accountability.len(), 1);

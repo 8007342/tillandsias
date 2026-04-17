@@ -2,13 +2,13 @@
 
 How popular GitHub tools store credentials and how Tillandsias can consume them.
 
-@trace spec:native-secrets-store, spec:secret-management
+@trace spec:native-secrets-store, spec:secrets-management
 
 ## Tool Credential Storage
 
 ### gh CLI (GitHub CLI)
 
-**Default (v2.40+):** OS keyring. Plaintext `hosts.yml` only with `--insecure-storage`.
+**Default (v2.40+):** OS keyring.
 
 | Platform | Backend | Service | Account |
 |----------|---------|---------|---------|
@@ -17,15 +17,6 @@ How popular GitHub tools store credentials and how Tillandsias can consume them.
 | Windows | Credential Manager | `gh:github.com` | GitHub username |
 
 **Token format in keyring:** base64-encoded with prefix `go-keyring-base64:`
-
-**When keyring works, `hosts.yml` contains only metadata:**
-```yaml
-github.com:
-    git_protocol: https
-    users:
-        "8007342":
-    user: "8007342"
-```
 
 **Read token programmatically:**
 ```bash
@@ -135,7 +126,7 @@ When authenticating GitHub, check in order:
 4. **Host keyring: `tillandsias` / `github-oauth-token`** — our own entry from previous sessions
 5. **Fallback: run `gh auth login`** — on host if `gh` installed, in forge container with D-Bus forwarding otherwise
 
-@trace spec:secret-management
+@trace spec:secrets-management
 
 ## git credential.helper Options
 

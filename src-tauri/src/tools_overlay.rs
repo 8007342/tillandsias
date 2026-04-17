@@ -522,15 +522,35 @@ fn build_overlay_sync(
         let wsl_script = to_wsl_path(&script);
         let wsl_version_dir = to_wsl_path(&version_dir);
 
+        // @trace spec:layered-tools-overlay, spec:cross-platform
+        // Translate the Windows podman.exe path into a WSL-visible form so the
+        // builder shells back out to the host podman via WSL interop. Without
+        // this, `wsl.exe bash ...` lands in the default WSL distro (often
+        // `podman-machine-default`) whose in-VM /usr/sbin/podman talks to an
+        // empty rootful store — invisible to the host rootless storage that
+        // actually holds the forge image. We pass the Windows exe via
+        // /mnt/c/... so WSL interop executes it with the correct storage.
+        let podman_wsl_path = to_wsl_path(std::path::Path::new(
+            &tillandsias_podman::find_podman_path(),
+        ));
+
         info!(
             spec = "layered-tools-overlay",
+            podman_path = %podman_wsl_path,
             "Windows: running build-tools-overlay.sh via WSL"
         );
 
         let mut cmd = std::process::Command::new("wsl");
         cmd.args(["bash", &wsl_script, &wsl_version_dir, forge_tag])
-            .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
-            .env("TOOLS_OVERLAY_QUIET", "1");
+            .env("PODMAN_PATH", &podman_wsl_path)
+            .env("TOOLS_OVERLAY_QUIET", "1")
+            // WSLENV names the env vars that should cross the Win→Linux
+            // boundary. /u marks each as "translate to Unix path". Without
+            // this listing, wsl.exe drops the env vars entirely.
+            .env(
+                "WSLENV",
+                "PODMAN_PATH/u:TOOLS_OVERLAY_QUIET:TILLANDSIAS_PORT_MAPPING:CA_CHAIN_PATH/u",
+            );
 
         // @trace spec:enclave-network
         // Windows always uses podman machine — always set port mapping.

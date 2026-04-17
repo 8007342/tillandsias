@@ -53,7 +53,7 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     // -----------------------------------------------------------------------
     // Process limit — prevents fork bombs, constrains each container to its
     // intended workload. Values are set per-profile in container_profile.rs.
-    // @trace spec:podman-orchestration, spec:secret-management
+    // @trace spec:podman-orchestration, spec:secrets-management
     // -----------------------------------------------------------------------
     args.push(format!("--pids-limit={}", profile.pids_limit));
 
@@ -166,6 +166,22 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
                 }
             }
         };
+        // @trace spec:git-mirror-service
+        // Skip git identity vars when empty — git treats `GIT_AUTHOR_NAME=""`
+        // as an explicit empty name and refuses to commit with "empty ident
+        // name not allowed", even when [user] is set in a gitconfig. If we
+        // cannot resolve the identity, let git use its own resolution chain
+        // inside the container (entrypoint sets config from whatever we pass
+        // as non-empty; if we pass nothing, it'll error loudly only on commit,
+        // with a clear message).
+        let is_git_identity = matches!(
+            env_var.value,
+            EnvValue::FromContext(ContextKey::GitAuthorName)
+                | EnvValue::FromContext(ContextKey::GitAuthorEmail)
+        );
+        if is_git_identity && value.is_empty() {
+            continue;
+        }
         args.push("-e".into());
         args.push(format!("{}={}", env_var.name, value));
     }
@@ -216,34 +232,39 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
 
     // -----------------------------------------------------------------------
     // Secret mounts (only present for profiles that declare them)
-    // @trace spec:secret-management
+    //
+    // The host has already read the GitHub token from the OS keyring and
+    // written it to `ctx.token_file_path`. We bind-mount that file read-only
+    // at the fixed in-container path `/run/secrets/github_token`. If the
+    // context carries no path (no token in keyring → user not logged in),
+    // the mount is skipped; git operations requiring auth will fail loudly.
+    // The host is responsible for unlinking the file when the container stops.
+    // @trace spec:secrets-management, spec:native-secrets-store
     // -----------------------------------------------------------------------
     for secret in &profile.secrets {
         match &secret.kind {
-            SecretKind::DbusSession => {
-                // Forward host D-Bus session bus for keyring access.
-                // The socket path is extracted from DBUS_SESSION_BUS_ADDRESS
-                // and bind-mounted read-only. With --userns=keep-id the UID
-                // matches, so D-Bus auth succeeds without mounting the entire
-                // runtime directory.
-                // @trace spec:git-mirror-service, spec:secret-management
-                if let Ok(addr) = std::env::var("DBUS_SESSION_BUS_ADDRESS")
-                    && let Some(socket_path) = addr.strip_prefix("unix:path=")
-                    && std::path::Path::new(socket_path).exists()
-                {
+            SecretKind::GitHubToken => {
+                if let Some(ref token_file) = ctx.token_file_path {
                     args.push("-v".into());
-                    args.push(format!("{}:{}:ro", socket_path, socket_path));
+                    args.push(format!("{}:/run/secrets/github_token:ro", token_file.display()));
                     args.push("-e".into());
-                    args.push(format!("DBUS_SESSION_BUS_ADDRESS={}", addr));
+                    args.push("GIT_ASKPASS=/usr/local/bin/git-askpass-tillandsias.sh".into());
 
-                    // @trace spec:secret-management
                     tracing::info!(
                         accountability = true,
                         category = "secrets",
-                        safety = "D-Bus session bus forwarded to git service only — forge containers have zero credential access",
-                        spec = "secret-management",
+                        safety = "GitHub token bind-mounted :ro from host keyring; container sees only this file, no D-Bus, no keyring API",
+                        spec = "secrets-management",
                         container = %ctx.container_name,
-                        "Credential isolation boundary: git service is the sole D-Bus consumer"
+                        "Credential isolation boundary: GitHub token delivered via ephemeral tmpfs file"
+                    );
+                } else {
+                    tracing::warn!(
+                        accountability = true,
+                        category = "secrets",
+                        spec = "secrets-management",
+                        container = %ctx.container_name,
+                        "Container requested GitHubToken but no token is available in host keyring — authenticated git operations will fail"
                     );
                 }
             }
@@ -417,13 +438,45 @@ fn resolve_container_path(
     }
 }
 
-/// Read git author name and email from the cached gitconfig file.
+/// Read git author name and email.
 ///
-/// Parses `~/.cache/tillandsias/secrets/git/.gitconfig` for `[user]` section
-/// values. Returns `("", "")` if the file is missing or unparseable.
+/// Precedence:
+///   1. `<cache_dir>/secrets/git/.gitconfig` (Tillandsias-managed, set via
+///      `tillandsias --github-login` or the manual identity prompt)
+///   2. `~/.gitconfig` (the user's host git config, same on all platforms)
+///
+/// Returns `("", "")` when neither source has a `[user]` name/email. The
+/// caller MUST treat empty values as "do not inject GIT_AUTHOR_* env vars"
+/// — empty strings cause git to abort with "empty ident name not allowed".
+/// @trace spec:git-mirror-service
 pub fn read_git_identity(cache_dir: &Path) -> (String, String) {
-    let gitconfig = cache_dir.join("secrets").join("git").join(".gitconfig");
-    let content = match std::fs::read_to_string(&gitconfig) {
+    let cache_gitconfig = cache_dir.join("secrets").join("git").join(".gitconfig");
+    let (mut name, mut email) = parse_user_from_gitconfig(&cache_gitconfig);
+
+    // Host fallback — identical across Linux/macOS/Windows.
+    if (name.is_empty() || email.is_empty())
+        && let Some(home) = dirs::home_dir()
+    {
+        let (host_name, host_email) = parse_user_from_gitconfig(&home.join(".gitconfig"));
+        if name.is_empty() {
+            name = host_name;
+        }
+        if email.is_empty() {
+            email = host_email;
+        }
+    }
+
+    // Sanitize to prevent command injection via env vars.
+    // Rust's Command API doesn't use a shell, but defense-in-depth
+    // strips control chars and suspicious sequences.
+    // @trace spec:podman-orchestration
+    (sanitize_identity(&name), sanitize_identity(&email))
+}
+
+/// Parse `[user] name = ... / email = ...` out of a gitconfig-style file.
+/// Returns `("", "")` on any error (missing file, unparseable, missing fields).
+fn parse_user_from_gitconfig(path: &Path) -> (String, String) {
+    let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
         Err(_) => return (String::new(), String::new()),
     };
@@ -451,11 +504,7 @@ pub fn read_git_identity(cache_dir: &Path) -> (String, String) {
         }
     }
 
-    // Sanitize to prevent command injection via env vars.
-    // Rust's Command API doesn't use a shell, but defense-in-depth
-    // strips control chars and suspicious sequences.
-    // @trace spec:podman-orchestration
-    (sanitize_identity(&name), sanitize_identity(&email))
+    (name, email)
 }
 
 /// Strip potentially dangerous characters from user identity strings.
@@ -480,19 +529,18 @@ fn sanitize_identity(input: &str) -> String {
         .collect()
 }
 
-/// Ensure secrets directories exist and return their paths.
+/// Ensure the git secrets directory exists and return its path.
 ///
-/// Creates `secrets/gh/` and `secrets/git/` under the cache dir, and
-/// ensures the `.gitconfig` file exists inside the git dir.
+/// Creates `secrets/git/` under the cache dir and ensures the `.gitconfig`
+/// file exists inside it. This directory holds ONLY the git commit-identity
+/// config; GitHub OAuth tokens live in the OS keyring.
 ///
-/// Returns `(gh_dir, git_dir)`.
+/// @trace spec:native-secrets-store
 #[allow(dead_code)] // API surface — used by GitHub login and secrets mount flows
-pub fn ensure_secrets_dirs(cache_dir: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
+pub fn ensure_secrets_dirs(cache_dir: &Path) -> std::path::PathBuf {
     let secrets_dir = cache_dir.join("secrets");
-    let gh_dir = secrets_dir.join("gh");
     let git_dir = secrets_dir.join("git");
 
-    std::fs::create_dir_all(&gh_dir).ok();
     std::fs::create_dir_all(&git_dir).ok();
 
     // Ensure .gitconfig FILE exists inside the git dir
@@ -501,7 +549,7 @@ pub fn ensure_secrets_dirs(cache_dir: &Path) -> (std::path::PathBuf, std::path::
         std::fs::File::create(&gitconfig_path).ok();
     }
 
-    (gh_dir, git_dir)
+    git_dir
 }
 
 // ---------------------------------------------------------------------------
@@ -530,6 +578,7 @@ mod tests {
             network: None,
             git_author_name: "Test User".into(),
             git_author_email: "test@example.com".into(),
+            token_file_path: None,
             use_port_mapping: false,
         }
     }
@@ -735,7 +784,7 @@ mod tests {
         );
     }
 
-    // @trace spec:git-mirror-service, spec:secret-management
+    // @trace spec:git-mirror-service, spec:secrets-management
     #[test]
     fn dbus_session_mounts_socket_when_env_set() {
         // Create a temp file to act as the D-Bus socket
@@ -919,7 +968,7 @@ mod tests {
         );
     }
 
-    // @trace spec:podman-orchestration, spec:secret-management
+    // @trace spec:podman-orchestration, spec:secrets-management
     #[test]
     fn pids_limit_per_container_type() {
         let cases: Vec<(container_profile::ContainerProfile, u32)> = vec![

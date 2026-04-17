@@ -38,8 +38,16 @@ fi
 # ---------------------------------------------------------------------------
 # Resolve the podman binary: prefer PODMAN_PATH from Rust caller, then
 # check known absolute paths, then fall back to bare "podman" (PATH lookup).
+#
+# Windows-via-WSL note: the Rust caller passes the host's podman.exe as a
+# /mnt/c/... path. WSL interop can execute .exe files directly, so we accept
+# the path when it exists as a regular file (the -x bit isn't set on
+# interop-mounted Windows binaries). This keeps the resolver cross-platform
+# identical: same PODMAN_PATH env var, same fallback chain.
 # ---------------------------------------------------------------------------
-if [[ -n "${PODMAN_PATH:-}" ]] && [[ -x "$PODMAN_PATH" ]]; then
+if [[ -n "${PODMAN_PATH:-}" ]] && [[ "$PODMAN_PATH" == *.exe ]] && [[ -f "$PODMAN_PATH" ]]; then
+    PODMAN="$PODMAN_PATH"
+elif [[ -n "${PODMAN_PATH:-}" ]] && [[ -x "$PODMAN_PATH" ]]; then
     PODMAN="$PODMAN_PATH"
 elif [[ -x /opt/homebrew/bin/podman ]]; then
     PODMAN=/opt/homebrew/bin/podman
@@ -224,19 +232,24 @@ _step "Installing Claude Code..."
         # Instead, test that the proxy can actually forward a request.
         if [ -n "${HTTP_PROXY:-}" ]; then
             echo "[tools-overlay] Waiting for proxy to be ready..."
+            proxy_ready=0
             for i in $(seq 1 30); do
                 if curl -sf --max-time 3 --proxy http://proxy:3128 -o /dev/null http://registry.npmjs.org/ 2>/dev/null; then
                     echo "[tools-overlay] Proxy ready"
+                    proxy_ready=1
                     break
-                fi
-                if [ "$i" -eq 30 ]; then
-                    # TODO: Remove fallback — make this a hard error
-                    echo "[tools-overlay] WARNING: SECURITY DEGRADATION — proxy not responding, falling back to DIRECT internet access" >&2
-                    echo "[tools-overlay] WARNING: Network traffic will NOT be monitored or cached" >&2
-                    unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy
                 fi
                 sleep 1
             done
+            if [ "$proxy_ready" -ne 1 ]; then
+                # @trace spec:proxy-container, spec:enclave-network
+                # Proxy unreachable → hard fail. The enclave boundary is the
+                # whole point of the overlay build; unsetting HTTP(S)_PROXY
+                # and fetching from the open internet is a security breach.
+                echo "[tools-overlay] FATAL: proxy unreachable after 30s — refusing to build overlay" >&2
+                echo "[tools-overlay] The enclave proxy must be healthy before the overlay is built." >&2
+                exit 1
+            fi
         fi
 
         # @trace spec:proxy-container

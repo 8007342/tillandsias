@@ -957,4 +957,4 @@ The host Tillandsias binary generates certificates using `rcgen` (compiled in). 
 
 **Cheatsheets:**
 - `docs/cheatsheets/enclave-architecture.md` -- full enclave design
-- `docs/cheatsheets/secret-management.md` -- credential lifecycle
+- `docs/cheatsheets/secrets-management.md` -- credential lifecycle

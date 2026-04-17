@@ -678,14 +678,13 @@ fn build_chip_label(build: &tillandsias_core::state::BuildProgress) -> String {
 }
 
 /// Check if GitHub authentication is needed.
-/// Returns true if no gh credentials exist in the native keyring or secrets cache.
+///
+/// Returns `true` when the OS keyring has no GitHub OAuth token, OR when the
+/// keyring itself is unavailable. In either case the UI must surface a login
+/// prompt: we cannot authenticate without a token, and we no longer keep any
+/// on-disk fallback to fall through to.
+///
+/// @trace spec:native-secrets-store
 pub(crate) fn needs_github_login() -> bool {
-    // Check keyring first — token may exist there without a hosts.yml on disk.
-    if let Ok(Some(_)) = crate::secrets::retrieve_github_token() {
-        return false;
-    }
-    // Fallback: check the plain text file.
-    let cache = tillandsias_core::config::cache_dir();
-    let gh_hosts = cache.join("secrets").join("gh").join("hosts.yml");
-    !gh_hosts.exists()
+    !matches!(crate::secrets::retrieve_github_token(), Ok(Some(_)))
 }
