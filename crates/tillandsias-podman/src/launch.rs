@@ -221,6 +221,35 @@ fn parse_port_output(output: &str) -> Vec<(u16, u16)> {
     ranges
 }
 
+/// Default ephemeral port range for OpenCode Web sessions (inclusive).
+pub const DEFAULT_WEB_PORT_START: u16 = 17000;
+/// Default ephemeral port range end for OpenCode Web sessions (inclusive).
+pub const DEFAULT_WEB_PORT_END: u16 = 17999;
+
+/// Allocate a single free host port within the given inclusive range.
+///
+/// Iterates from `range_start` to `range_end` inclusive, returning the first
+/// port P such that:
+///   (a) P is not listed in `occupied`, and
+///   (b) a TCP bind to `127.0.0.1:P` succeeds (the port is free on the host).
+///
+/// The TCP probe binds a `TcpListener` within a short-lived scope and drops it
+/// immediately, releasing the port before returning. Returns `None` if no port
+/// in the range satisfies both conditions.
+// @trace spec:opencode-web-session
+pub fn allocate_single_port(range_start: u16, range_end: u16, occupied: &[u16]) -> Option<u16> {
+    for port in range_start..=range_end {
+        if occupied.contains(&port) {
+            continue;
+        }
+        // Short-lived TCP bind probe — dropped immediately on scope exit.
+        if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
+            return Some(port);
+        }
+    }
+    None
+}
+
 /// Allocate a non-overlapping port range for a new environment.
 pub fn allocate_port_range(base: (u16, u16), existing_ranges: &[(u16, u16)]) -> (u16, u16) {
     let range_size = base.1 - base.0;
@@ -382,5 +411,42 @@ mod tests {
     fn container_naming_convention() {
         let name = ContainerInfo::container_name("my-project", TillandsiaGenus::Ionantha);
         assert_eq!(name, "tillandsias-my-project-ionantha");
+    }
+
+    #[test]
+    fn allocate_single_port_first_free() {
+        let p = allocate_single_port(DEFAULT_WEB_PORT_START, DEFAULT_WEB_PORT_END, &[])
+            .expect("expected a free port in the default web range");
+        assert!(p >= DEFAULT_WEB_PORT_START && p <= DEFAULT_WEB_PORT_END);
+    }
+
+    #[test]
+    fn allocate_single_port_skips_occupied() {
+        let p = allocate_single_port(17000, 17010, &[17000, 17001, 17002])
+            .expect("expected a free port above the occupied prefix");
+        assert!(p >= 17003, "port {p} should be >= 17003");
+    }
+
+    #[test]
+    fn allocate_single_port_distinct() {
+        let mut occupied: Vec<u16> = Vec::new();
+        let first = allocate_single_port(DEFAULT_WEB_PORT_START, DEFAULT_WEB_PORT_END, &occupied)
+            .expect("first allocation should succeed");
+        occupied.push(first);
+        let second = allocate_single_port(DEFAULT_WEB_PORT_START, DEFAULT_WEB_PORT_END, &occupied)
+            .expect("second allocation should succeed");
+        assert_ne!(
+            first, second,
+            "successive allocations with first pushed into occupied must differ"
+        );
+    }
+
+    #[test]
+    fn allocate_single_port_exhausted() {
+        let result = allocate_single_port(17000, 17000, &[17000]);
+        assert!(
+            result.is_none(),
+            "single-port range fully occupied should yield None"
+        );
     }
 }

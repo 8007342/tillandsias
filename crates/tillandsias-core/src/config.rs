@@ -20,11 +20,17 @@ const DEFAULT_DEBOUNCE_MS: u64 = 2000;
 pub enum SelectedAgent {
     OpenCode,
     Claude,
+    /// OpenCode's browser-based UI served by `opencode serve` and rendered
+    /// in an embedded Tauri webview. Default for new installs.
+    /// @trace spec:opencode-web-session
+    #[serde(rename = "opencode-web")]
+    OpenCodeWeb,
 }
 
+// @trace spec:opencode-web-session
 impl Default for SelectedAgent {
     fn default() -> Self {
-        Self::OpenCode
+        Self::OpenCodeWeb
     }
 }
 
@@ -34,6 +40,7 @@ impl SelectedAgent {
         match self {
             Self::OpenCode => "opencode",
             Self::Claude => "claude",
+            Self::OpenCodeWeb => "opencode-web",
         }
     }
 
@@ -42,6 +49,7 @@ impl SelectedAgent {
         match s.to_lowercase().as_str() {
             "opencode" => Some(Self::OpenCode),
             "claude" => Some(Self::Claude),
+            "opencode-web" => Some(Self::OpenCodeWeb),
             _ => None,
         }
     }
@@ -51,7 +59,14 @@ impl SelectedAgent {
         match self {
             Self::OpenCode => "OpenCode",
             Self::Claude => "Claude",
+            Self::OpenCodeWeb => "OpenCode Web",
         }
+    }
+
+    /// Returns true if the agent is the browser-based OpenCode Web variant.
+    /// @trace spec:opencode-web-session
+    pub fn is_web(&self) -> bool {
+        matches!(self, Self::OpenCodeWeb)
     }
 }
 
@@ -773,6 +788,101 @@ debounce_ms = 5000
         assert!(verbose.contains("Your preferred coding assistant"));
         assert!(verbose.contains("cannot be weakened"));
         assert!(verbose.contains("Your language"));
+    }
+
+    // @trace spec:opencode-web-session
+    #[test]
+    fn selected_agent_default_is_opencode_web() {
+        assert_eq!(SelectedAgent::default(), SelectedAgent::OpenCodeWeb);
+    }
+
+    // @trace spec:opencode-web-session
+    #[test]
+    fn selected_agent_as_env_str() {
+        assert_eq!(SelectedAgent::OpenCode.as_env_str(), "opencode");
+        assert_eq!(SelectedAgent::Claude.as_env_str(), "claude");
+        assert_eq!(SelectedAgent::OpenCodeWeb.as_env_str(), "opencode-web");
+    }
+
+    // @trace spec:opencode-web-session
+    #[test]
+    fn selected_agent_from_str_opt() {
+        assert_eq!(
+            SelectedAgent::from_str_opt("opencode"),
+            Some(SelectedAgent::OpenCode)
+        );
+        assert_eq!(
+            SelectedAgent::from_str_opt("claude"),
+            Some(SelectedAgent::Claude)
+        );
+        assert_eq!(
+            SelectedAgent::from_str_opt("opencode-web"),
+            Some(SelectedAgent::OpenCodeWeb)
+        );
+        // case-insensitive per existing style
+        assert_eq!(
+            SelectedAgent::from_str_opt("OpenCode-Web"),
+            Some(SelectedAgent::OpenCodeWeb)
+        );
+        assert_eq!(SelectedAgent::from_str_opt("unknown"), None);
+    }
+
+    // @trace spec:opencode-web-session
+    #[test]
+    fn selected_agent_display_name() {
+        assert_eq!(SelectedAgent::OpenCode.display_name(), "OpenCode");
+        assert_eq!(SelectedAgent::Claude.display_name(), "Claude");
+        assert_eq!(SelectedAgent::OpenCodeWeb.display_name(), "OpenCode Web");
+    }
+
+    // @trace spec:opencode-web-session
+    #[test]
+    fn selected_agent_is_web() {
+        assert!(!SelectedAgent::OpenCode.is_web());
+        assert!(!SelectedAgent::Claude.is_web());
+        assert!(SelectedAgent::OpenCodeWeb.is_web());
+    }
+
+    // @trace spec:opencode-web-session
+    #[test]
+    fn selected_agent_serde_roundtrip() {
+        // Existing variants serialize as plain lowercase (rename_all = "lowercase").
+        let opencode = toml::to_string(&AgentConfig {
+            selected: SelectedAgent::OpenCode,
+        })
+        .unwrap();
+        assert!(opencode.contains("selected = \"opencode\""));
+
+        let claude = toml::to_string(&AgentConfig {
+            selected: SelectedAgent::Claude,
+        })
+        .unwrap();
+        assert!(claude.contains("selected = \"claude\""));
+
+        // OpenCodeWeb uses the explicit #[serde(rename = "opencode-web")] form.
+        let web = toml::to_string(&AgentConfig {
+            selected: SelectedAgent::OpenCodeWeb,
+        })
+        .unwrap();
+        assert!(
+            web.contains("selected = \"opencode-web\""),
+            "expected opencode-web, got: {web}"
+        );
+
+        // Deserialize back.
+        let parsed: AgentConfig = toml::from_str("selected = \"opencode-web\"").unwrap();
+        assert_eq!(parsed.selected, SelectedAgent::OpenCodeWeb);
+        let parsed: AgentConfig = toml::from_str("selected = \"opencode\"").unwrap();
+        assert_eq!(parsed.selected, SelectedAgent::OpenCode);
+        let parsed: AgentConfig = toml::from_str("selected = \"claude\"").unwrap();
+        assert_eq!(parsed.selected, SelectedAgent::Claude);
+    }
+
+    // @trace spec:opencode-web-session
+    #[test]
+    fn agent_config_default_is_opencode_web() {
+        let cfg = AgentConfig::default();
+        assert_eq!(cfg.selected, SelectedAgent::OpenCodeWeb);
     }
 }
 

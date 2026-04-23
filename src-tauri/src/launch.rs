@@ -40,7 +40,12 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     // Non-negotiable security flags (hardcoded, NEVER from profile)
     // @trace spec:podman-orchestration/security-hardened-defaults, knowledge:infra/podman-security
     // -----------------------------------------------------------------------
-    args.push("--rm".into());
+    // @trace spec:opencode-web-session
+    // Persistent containers (OpenCode Web) deliberately omit `--rm` so they
+    // survive the originating click. `-d` is still applied when `ctx.detached`.
+    if !ctx.persistent {
+        args.push("--rm".into());
+    }
     args.push("--init".into());
     args.push("--stop-timeout=10".into());
     args.push("--name".into());
@@ -100,7 +105,24 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
         let enclave = tillandsias_podman::ENCLAVE_NETWORK;
         n.starts_with(enclave) && !n.contains(',')
     });
-    if ctx.port_range != (0, 0) && !is_enclave_only {
+    // @trace spec:opencode-web-session
+    // OpenCode Web joins the enclave but MUST publish a loopback-only host
+    // port so the Tauri webview (running on the host) can reach the server.
+    // When `web_host_port` is Some, emit a single-port publish bound to
+    // 127.0.0.1 and skip the legacy range publish entirely — overrides the
+    // enclave-only skip above.
+    if let Some(p) = ctx.web_host_port {
+        if ctx.port_range != (0, 0) {
+            tracing::debug!(
+                container = %ctx.container_name,
+                web_host_port = p,
+                port_range = ?ctx.port_range,
+                "web_host_port set alongside port_range; ignoring port_range to avoid double-publish"
+            );
+        }
+        args.push("-p".into());
+        args.push(format!("127.0.0.1:{}:4096", p));
+    } else if ctx.port_range != (0, 0) && !is_enclave_only {
         args.push("-p".into());
         args.push(format!(
             "{}-{}:{}-{}",
@@ -136,11 +158,17 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
             EnvValue::FromContext(key) => match key {
                 ContextKey::ProjectName => ctx.project_name.clone(),
                 ContextKey::HostOs => ctx.host_os.clone(),
+                // @trace spec:opencode-web-session, spec:environment-runtime
                 ContextKey::AgentName => {
                     // The agent name is derived from which profile is used;
-                    // forge-opencode -> "opencode", forge-claude -> "claude".
-                    // We infer it from the entrypoint to keep profiles self-contained.
-                    if profile.entrypoint.contains("opencode") {
+                    // forge-opencode-web -> "opencode-web", forge-opencode -> "opencode",
+                    // forge-claude -> "claude". We infer it from the entrypoint to keep
+                    // profiles self-contained. Most-specific substring wins — the
+                    // `opencode-web` arm MUST come before `opencode` because the web
+                    // entrypoint path also contains the substring `opencode`.
+                    if profile.entrypoint.contains("opencode-web") {
+                        "opencode-web".to_string()
+                    } else if profile.entrypoint.contains("opencode") {
                         "opencode".to_string()
                     } else {
                         "claude".to_string()
@@ -514,6 +542,8 @@ mod tests {
             git_author_name: "Test User".into(),
             git_author_email: "test@example.com".into(),
             use_port_mapping: false,
+            persistent: false,
+            web_host_port: None,
         }
     }
 
@@ -1117,6 +1147,112 @@ mod tests {
         assert!(
             joined.contains("OLLAMA_HOST=http://inference:11434"),
             "OLLAMA_HOST should use DNS alias when not on podman machine"
+        );
+    }
+
+    /// Helper: find whether `args` contains `flag` immediately followed by `value`.
+    fn has_flag_value(args: &[String], flag: &str, value: &str) -> bool {
+        args.windows(2)
+            .any(|w| w[0] == flag && w[1] == value)
+    }
+
+    // @trace spec:opencode-web-session
+    #[test]
+    fn test_web_host_port_produces_loopback_publish() {
+        let profile = container_profile::forge_opencode_web_profile();
+        let mut ctx = test_context();
+        ctx.detached = true;
+        ctx.persistent = true;
+        ctx.web_host_port = Some(17000);
+        // Clear range so we're certain the loopback publish is the only -p.
+        ctx.port_range = (0, 0);
+
+        let args = build_podman_args(&profile, &ctx);
+
+        assert!(
+            has_flag_value(&args, "-p", "127.0.0.1:17000:4096"),
+            "Expected `-p 127.0.0.1:17000:4096` in args, got: {args:?}"
+        );
+        assert!(
+            !args.contains(&"--rm".to_string()),
+            "Persistent container must NOT have --rm, got: {args:?}"
+        );
+        assert!(
+            args.contains(&"-d".to_string()),
+            "Detached container must have -d, got: {args:?}"
+        );
+    }
+
+    // @trace spec:opencode-web-session
+    #[test]
+    fn test_persistent_without_web_port_still_publishes_range() {
+        let profile = container_profile::forge_opencode_profile();
+        let mut ctx = test_context();
+        ctx.persistent = true;
+        ctx.web_host_port = None;
+        ctx.port_range = (3000, 3019);
+        // Ensure no enclave-only short-circuit kicks in.
+        ctx.network = None;
+
+        let args = build_podman_args(&profile, &ctx);
+
+        assert!(
+            has_flag_value(&args, "-p", "3000-3019:3000-3019"),
+            "Expected legacy range publish `-p 3000-3019:3000-3019`, got: {args:?}"
+        );
+        assert!(
+            !args.contains(&"--rm".to_string()),
+            "Persistent container must NOT have --rm, got: {args:?}"
+        );
+    }
+
+    // @trace spec:opencode-web-session
+    #[test]
+    fn test_web_host_port_overrides_enclave_only_skip() {
+        let profile = container_profile::forge_opencode_web_profile();
+        let mut ctx = test_context();
+        ctx.detached = true;
+        ctx.persistent = true;
+        ctx.network = Some(tillandsias_podman::ENCLAVE_NETWORK.to_string());
+        ctx.web_host_port = Some(17000);
+
+        let args = build_podman_args(&profile, &ctx);
+
+        // Even though the container is enclave-only (which normally suppresses
+        // port publishing), the web_host_port override must still emit the
+        // loopback publish.
+        assert!(
+            has_flag_value(&args, "-p", "127.0.0.1:17000:4096"),
+            "web_host_port must override enclave-only skip; got: {args:?}"
+        );
+        // And it must be bound to loopback — never 0.0.0.0 or bare.
+        let joined = args.join(" ");
+        assert!(
+            !joined.contains("0.0.0.0"),
+            "Publish must never bind to 0.0.0.0; got: {joined}"
+        );
+    }
+
+    // @trace spec:opencode-web-session, spec:environment-runtime
+    #[test]
+    fn test_agent_name_opencode_web_wins() {
+        let profile = container_profile::forge_opencode_web_profile();
+        // Sanity: the web profile's entrypoint contains both "opencode-web" and "opencode".
+        assert!(profile.entrypoint.contains("opencode-web"));
+        assert!(profile.entrypoint.contains("opencode"));
+
+        let args = build_podman_args(&profile, &test_context());
+        let joined = args.join(" ");
+
+        assert!(
+            joined.contains("TILLANDSIAS_AGENT=opencode-web"),
+            "AgentName must resolve to `opencode-web` for the web entrypoint, got: {joined}"
+        );
+        // Make sure the less-specific arm didn't win.
+        assert!(
+            !joined.contains("TILLANDSIAS_AGENT=opencode ")
+                && !joined.ends_with("TILLANDSIAS_AGENT=opencode"),
+            "AgentName must NOT resolve to plain `opencode` for the web entrypoint, got: {joined}"
         );
     }
 }

@@ -40,9 +40,15 @@ pub enum ContainerType {
     Forge,
     /// Maintenance terminal launched via "Maintenance" (runs fish/bash).
     Maintenance,
-    /// Web server launched via "Serve Here" (runs tillandsias-web / httpd).
+    /// Static web server launched via "Serve Here" (runs tillandsias-web / httpd).
     /// Named `tillandsias-<project>-web` — no genus allocation.
     Web,
+    /// Persistent OpenCode Web forge running `opencode serve` on :4096.
+    /// Named `tillandsias-<project>-forge` — no genus allocation. Distinct
+    /// from `Web` (which is the static-httpd "Serve Here" feature).
+    /// @trace spec:opencode-web-session — persistent forge running 'opencode serve' on :4096.
+    #[serde(rename = "opencode-web")]
+    OpenCodeWeb,
     /// Caching HTTP/HTTPS proxy with domain allowlist.
     /// Named `tillandsias-<project>-proxy` — no genus allocation.
     /// @trace spec:proxy-container, spec:enclave-network
@@ -113,8 +119,31 @@ impl ContainerInfo {
     }
 
     /// Build a web container name for a project: `tillandsias-<project>-web`.
+    ///
+    /// Used by the "Serve Here" static web server. No genus is appended —
+    /// there is at most one static-httpd container per project, so a stable
+    /// deterministic name is preferable for lookup and teardown.
     pub fn web_container_name(project_name: &str) -> String {
         format!("tillandsias-{}-web", project_name)
+    }
+
+    /// Name for persistent OpenCode Web forge containers: `tillandsias-<project>-forge`.
+    /// Distinct from `web_container_name` (Serve Here's static httpd).
+    /// @trace spec:opencode-web-session, spec:podman-orchestration
+    pub fn forge_container_name(project_name: &str) -> String {
+        format!("tillandsias-{}-forge", project_name)
+    }
+
+    /// Parse `tillandsias-<project>-forge` → Some(project). None for any other shape.
+    /// Rejects names ending in `-web` (Serve Here) and names that look like `tillandsias-<genus>` with no project.
+    /// @trace spec:opencode-web-session
+    pub fn parse_forge_container_name(name: &str) -> Option<String> {
+        let stripped = name.strip_prefix("tillandsias-")?;
+        let project = stripped.strip_suffix("-forge")?;
+        if project.is_empty() {
+            return None;
+        }
+        Some(project.to_string())
     }
 
     /// Build a git service container name for a project: `tillandsias-git-<project>`.
@@ -389,6 +418,44 @@ mod tests {
         // and web-parsing should correctly extract the project name.
         let project = ContainerInfo::parse_web_container_name("tillandsias-frontend-web");
         assert_eq!(project, Some("frontend".to_string()));
+    }
+
+    // @trace spec:opencode-web-session
+    #[test]
+    fn forge_container_name_format() {
+        let name = ContainerInfo::forge_container_name("my-project");
+        assert_eq!(name, "tillandsias-my-project-forge");
+    }
+
+    // @trace spec:opencode-web-session
+    #[test]
+    fn parse_forge_container_name_valid() {
+        let name = ContainerInfo::forge_container_name("my-project");
+        let parsed = ContainerInfo::parse_forge_container_name(&name);
+        assert_eq!(parsed, Some("my-project".to_string()));
+    }
+
+    // @trace spec:opencode-web-session
+    #[test]
+    fn parse_forge_container_name_rejects_web() {
+        // Wrong suffix — Serve Here container, not OpenCode Web forge.
+        assert!(ContainerInfo::parse_forge_container_name("tillandsias-my-app-web").is_none());
+    }
+
+    // @trace spec:opencode-web-session
+    #[test]
+    fn parse_forge_container_name_rejects_genus() {
+        // Genus-suffixed container is not a forge-named container.
+        assert!(
+            ContainerInfo::parse_forge_container_name("tillandsias-my-app-aeranthos").is_none()
+        );
+    }
+
+    // @trace spec:opencode-web-session
+    #[test]
+    fn parse_forge_container_name_hyphenated_project() {
+        let parsed = ContainerInfo::parse_forge_container_name("tillandsias-cool-project-forge");
+        assert_eq!(parsed, Some("cool-project".to_string()));
     }
 
     // @trace spec:git-mirror-service

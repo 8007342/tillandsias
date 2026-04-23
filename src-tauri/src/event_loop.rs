@@ -141,6 +141,19 @@ pub async fn run(
                             }
                         }
                     }
+                    // @trace spec:opencode-web-session, spec:tray-app
+                    MenuCommand::StopProject { project_path } => {
+                        info!(project = ?project_path, "Stop project requested");
+                        match handlers::handle_stop_project(project_path, &mut state).await {
+                            Ok(()) => {
+                                prune_completed_builds(&mut state);
+                                on_state_change(&state);
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Stop project failed");
+                            }
+                        }
+                    }
                     MenuCommand::Destroy { container_name, genus: _ } => {
                         match handlers::handle_destroy(container_name, &mut state, &mut allocator).await {
                             Ok(_event) => {

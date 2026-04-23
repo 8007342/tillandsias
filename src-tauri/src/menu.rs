@@ -70,6 +70,17 @@ pub mod ids {
         gen_id(&format!("serve:{}", project_path.display()))
     }
 
+    /// Build a "stop project" menu item ID for a project path.
+    ///
+    /// Used by the OpenCode Web per-project Stop entry to tear down the
+    /// persistent `tillandsias-<project>-forge` container without requiring
+    /// the caller to know the container name.
+    ///
+    /// @trace spec:opencode-web-session, spec:tray-app
+    pub fn stop_project(project_path: &std::path::Path) -> String {
+        gen_id(&format!("stop-project:{}", project_path.display()))
+    }
+
     /// Build a "clone" menu item ID encoding both full_name and name.
     pub fn clone_project(full_name: &str, name: &str) -> String {
         gen_id(&format!("clone:{full_name}\t{name}"))
@@ -470,8 +481,11 @@ fn build_seedlings_submenu<R: Runtime>(
 
     let mut submenu = SubmenuBuilder::new(app, i18n::t("menu.seedlings"));
 
-    // Available agents: OpenCode, Claude
+    // Available agents: OpenCode Web (default), OpenCode, Claude.
+    // OpenCode Web is first so the default choice is at the top.
+    // @trace spec:opencode-web-session, spec:tray-app
     let agents: &[(SelectedAgent, &str)] = &[
+        (SelectedAgent::OpenCodeWeb, "OpenCode Web"),
         (SelectedAgent::OpenCode, "OpenCode"),
         (SelectedAgent::Claude, "Claude"),
     ];
@@ -581,6 +595,14 @@ fn build_project_submenu<R: Runtime>(
         .running
         .iter()
         .any(|c| c.project_name == project.name && c.container_type == ContainerType::Web);
+    // Persistent opencode-web forge container for this project — drives the
+    // per-project "Stop" menu entry. Distinct from ContainerType::Web (static
+    // httpd) and from ContainerType::Forge (ephemeral CLI sessions).
+    // @trace spec:opencode-web-session, spec:tray-app
+    let opencode_web_running = state
+        .running
+        .iter()
+        .any(|c| c.project_name == project.name && c.container_type == ContainerType::OpenCodeWeb);
 
     let maintenance_running = !tool_emojis.is_empty();
 
@@ -653,6 +675,17 @@ fn build_project_submenu<R: Runtime>(
             .enabled(!web_running)
             .build(app)?,
     );
+
+    // "Stop" — only shown when a persistent OpenCode Web (forge) container is
+    // running for this project. Genus-named forge/maintenance containers keep
+    // their own per-container Stop flow (handled via ids::parse "stop" arm).
+    // @trace spec:opencode-web-session, spec:tray-app
+    if opencode_web_running {
+        submenu = submenu.item(
+            &MenuItemBuilder::with_id(ids::stop_project(&project.path), i18n::t("menu.stop"))
+                .build(app)?,
+        );
+    }
 
     submenu.build()
 }

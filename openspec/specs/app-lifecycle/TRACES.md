@@ -5,6 +5,17 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [.claude/worktrees/agent-a39c05e5/src-tauri/src/desktop.rs#L10](../../../.claude/worktrees/agent-a39c05e5/src-tauri/src/desktop.rs#L10)
-- [.claude/worktrees/agent-afef0b13/src-tauri/src/desktop.rs#L10](../../../.claude/worktrees/agent-afef0b13/src-tauri/src/desktop.rs#L10)
+- [scripts/uninstall.sh#L3](../../../scripts/uninstall.sh#L3)
+- [src-tauri/src/cli.rs#L160](../../../src-tauri/src/cli.rs#L160)
+- [src-tauri/src/cli.rs#L282](../../../src-tauri/src/cli.rs#L282)
 - [src-tauri/src/desktop.rs#L10](../../../src-tauri/src/desktop.rs#L10)
+- [src-tauri/src/handlers.rs#L3325](../../../src-tauri/src/handlers.rs#L3325)
+- [src-tauri/src/main.rs#L108](../../../src-tauri/src/main.rs#L108)
+- [src-tauri/src/uninstall.rs#L7](../../../src-tauri/src/uninstall.rs#L7)
+- [src-tauri/src/uninstall.rs#L39](../../../src-tauri/src/uninstall.rs#L39)
+- [src-tauri/src/uninstall.rs#L166](../../../src-tauri/src/uninstall.rs#L166)
+- [src-tauri/src/uninstall.rs#L190](../../../src-tauri/src/uninstall.rs#L190)
+- [src-tauri/src/uninstall.rs#L314](../../../src-tauri/src/uninstall.rs#L314)
+- [src-tauri/src/uninstall.rs#L363](../../../src-tauri/src/uninstall.rs#L363)
+- [src-tauri/src/webview.rs#L113](../../../src-tauri/src/webview.rs#L113)
+- [src-tauri/src/webview.rs#L226](../../../src-tauri/src/webview.rs#L226)

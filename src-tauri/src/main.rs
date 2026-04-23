@@ -30,6 +30,7 @@ mod uninstall;
 mod update_cli;
 mod update_log;
 mod updater;
+mod webview;
 
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -183,6 +184,13 @@ fn main() {
         .manage(update_state.clone())
         .setup(move |app| {
             let app_handle = app.handle().clone();
+
+            // Register the global AppHandle used by the opencode-web webview
+            // module to spawn and close WebviewWindows from non-Tauri contexts
+            // (menu command dispatch, shutdown_all). Must run before any
+            // "Attach Here" click can reach the web-session flow.
+            // @trace spec:opencode-web-session
+            crate::webview::set_app_handle(app_handle.clone());
 
             // Spawn updater background tasks
             updater::spawn_update_tasks(&app_handle, update_state);
@@ -916,6 +924,10 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
                             None
                         }
                     }
+                    // @trace spec:opencode-web-session, spec:tray-app
+                    "stop-project" => Some(MenuCommand::StopProject {
+                        project_path: payload.into(),
+                    }),
                     "destroy" => {
                         if let Some((_, genus)) = ContainerInfo::parse_container_name(payload) {
                             Some(MenuCommand::Destroy {

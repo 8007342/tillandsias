@@ -7,7 +7,3 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [build.sh#L24](../../../build.sh#L24)
 - [build.sh#L262](../../../build.sh#L262)
-- [.claude/worktrees/agent-a39c05e5/build.sh#L24](../../../.claude/worktrees/agent-a39c05e5/build.sh#L24)
-- [.claude/worktrees/agent-a39c05e5/build.sh#L262](../../../.claude/worktrees/agent-a39c05e5/build.sh#L262)
-- [.claude/worktrees/agent-afef0b13/build.sh#L24](../../../.claude/worktrees/agent-afef0b13/build.sh#L24)
-- [.claude/worktrees/agent-afef0b13/build.sh#L262](../../../.claude/worktrees/agent-afef0b13/build.sh#L262)

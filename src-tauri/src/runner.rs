@@ -286,6 +286,9 @@ fn build_cli_launch_context(
         git_author_name,
         git_author_email,
         use_port_mapping: port_mapping,
+        // @trace spec:opencode-web-session
+        persistent: false,
+        web_host_port: None,
     }
 }
 
@@ -471,6 +474,10 @@ pub fn run(
             }
             SelectedAgent::Claude => {
                 tillandsias_core::container_profile::forge_claude_profile()
+            }
+            // @trace spec:opencode-web-session
+            SelectedAgent::OpenCodeWeb => {
+                tillandsias_core::container_profile::forge_opencode_web_profile()
             }
         }
     };

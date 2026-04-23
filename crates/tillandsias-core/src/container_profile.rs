@@ -215,6 +215,17 @@ pub struct LaunchContext {
     ///
     /// @trace spec:enclave-network
     pub use_port_mapping: bool,
+
+    /// @trace spec:opencode-web-session
+    /// If true, skip `--rm` so the container persists after its originating
+    /// click. Used by OpenCode Web forge containers.
+    pub persistent: bool,
+
+    /// @trace spec:opencode-web-session
+    /// If Some(host_port), publish `127.0.0.1:<host_port>:4096` and override
+    /// the enclave-only port-skip logic. Mutually exclusive with the legacy
+    /// port_range publish — when Some, port_range is ignored.
+    pub web_host_port: Option<u16>,
 }
 
 // ---------------------------------------------------------------------------
@@ -249,6 +260,25 @@ pub fn forge_claude_profile() -> ContainerProfile {
         image_override: None,
         pids_limit: 512,      // Compilers, language servers, AI tools
         read_only: false,      // Forge needs mutable workspace
+        tmpfs_mounts: vec![],
+    }
+}
+
+// @trace spec:opencode-web-session, spec:default-image
+/// Forge container for OpenCode Web (headless HTTP server on :4096; no TTY).
+/// Reuses the same mounts and env vars as the CLI OpenCode profile; only the
+/// entrypoint differs. `TILLANDSIAS_AGENT` is set to `opencode-web` by the
+/// caller's context, which routes to `entrypoint-forge-opencode-web.sh`.
+pub fn forge_opencode_web_profile() -> ContainerProfile {
+    ContainerProfile {
+        entrypoint: "/usr/local/bin/entrypoint-forge-opencode-web.sh",
+        working_dir: None,
+        mounts: common_forge_mounts(),
+        env_vars: common_forge_env(),
+        secrets: vec![],
+        image_override: None,
+        pids_limit: 512,
+        read_only: false,
         tmpfs_mounts: vec![],
     }
 }

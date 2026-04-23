@@ -263,6 +263,9 @@ pub(crate) async fn ensure_inference_running(
         git_author_name: String::new(),
         git_author_email: String::new(),
         use_port_mapping: port_mapping,
+        // @trace spec:opencode-web-session
+        persistent: false,
+        web_host_port: None,
     };
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
@@ -574,6 +577,9 @@ pub(crate) async fn ensure_proxy_running(
         git_author_name: String::new(),
         git_author_email: String::new(),
         use_port_mapping: port_mapping,
+        // @trace spec:opencode-web-session
+        persistent: false,
+        web_host_port: None,
     };
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
@@ -1339,6 +1345,9 @@ pub(crate) async fn ensure_git_service_running(
         git_author_name: String::new(),
         git_author_email: String::new(),
         use_port_mapping: port_mapping,
+        // @trace spec:opencode-web-session
+        persistent: false,
+        web_host_port: None,
     };
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
@@ -2230,6 +2239,10 @@ fn forge_profile(
         tillandsias_core::config::SelectedAgent::Claude => {
             tillandsias_core::container_profile::forge_claude_profile()
         }
+        // @trace spec:opencode-web-session
+        tillandsias_core::config::SelectedAgent::OpenCodeWeb => {
+            tillandsias_core::container_profile::forge_opencode_web_profile()
+        }
     }
 }
 
@@ -2282,6 +2295,9 @@ fn build_launch_context(
         git_author_name,
         git_author_email,
         use_port_mapping: port_mapping,
+        // @trace spec:opencode-web-session
+        persistent: false,
+        web_host_port: None,
     }
 }
 
@@ -2407,6 +2423,14 @@ pub async fn handle_attach_here(
         return Err("Forge image not yet available".into());
     }
 
+    // @trace spec:opencode-web-session
+    // Branch to the web-session flow when the user has picked OpenCode Web.
+    // The terminal flow below remains for opt-in `opencode` / `claude` users.
+    let global_config = load_global_config();
+    if global_config.agent.selected.is_web() {
+        return handle_attach_web(project_path, state, allocator, build_tx).await;
+    }
+
     // Don't-relaunch guard: if a forge container for this project is already running,
     // notify the user and return early instead of spawning a second environment.
     // Git service containers are infrastructure — they don't count as "already running".
@@ -2441,8 +2465,8 @@ pub async fn handle_attach_here(
 
     debug!(project = %project_name, genus = %genus.display_name(), "Genus allocated");
 
-    // Load and merge configuration
-    let global_config = load_global_config();
+    // Load and merge configuration (global_config is loaded earlier for the
+    // web-branch decision and reused here).
     let project_config = load_project_config(&project_path);
     let _resolved = global_config.merge_with_project(&project_config);
 
@@ -2668,6 +2692,515 @@ pub async fn handle_attach_here(
     })
 }
 
+/// Attach Here in OpenCode Web mode — start (or reuse) a persistent forge
+/// container running `opencode serve`, wait for its HTTP server to become
+/// ready, and open a Tauri WebviewWindow at the loopback-bound host port.
+///
+/// Multiple webviews can attach to the same container concurrently. Closing
+/// a webview does not stop the container; use `handle_stop_project` (the
+/// "Stop" tray item) to tear it down explicitly.
+///
+/// @trace spec:opencode-web-session
+#[instrument(
+    skip(state, allocator, build_tx),
+    fields(
+        project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()),
+        operation = "attach-web",
+        spec = "opencode-web-session, podman-orchestration, default-image"
+    )
+)]
+pub async fn handle_attach_web(
+    project_path: PathBuf,
+    state: &mut TrayState,
+    allocator: &mut GenusAllocator,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<AppEvent, String> {
+    let start = std::time::Instant::now();
+    let project_name = project_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    info!(project = %project_name, spec = "opencode-web-session", "Attach Here (web) requested");
+
+    // @trace spec:opencode-web-session
+    // Forge-readiness guard: web mode still needs the forge image (opencode serve
+    // runs from it). The terminal branch did this check too; we repeat it here so
+    // a direct call to handle_attach_web() is safe.
+    if !state.forge_available {
+        let msg = crate::i18n::t("notifications.forge_not_ready");
+        info!(project = %project_name, "Forge-readiness guard fired — image not yet available (web mode)");
+        send_notification("Tillandsias", msg);
+        return Err("Forge image not yet available".into());
+    }
+
+    let container_name = ContainerInfo::forge_container_name(&project_name);
+
+    // @trace spec:opencode-web-session
+    // Reattach path: if the per-project forge web container is already tracked
+    // as running, reuse its host port and open another webview against the
+    // existing server. Do NOT spawn a second container — per the spec, there
+    // is at most one `tillandsias-<project>-forge` per project.
+    let existing_port_opt = state
+        .running
+        .iter()
+        .find(|c| {
+            c.name == container_name
+                && matches!(
+                    c.container_type,
+                    tillandsias_core::state::ContainerType::OpenCodeWeb
+                )
+        })
+        .map(|c| c.port_range.0);
+
+    if let Some(host_port) = existing_port_opt {
+        info!(
+            project = %project_name,
+            port = host_port,
+            spec = "opencode-web-session",
+            "Reusing existing forge web container — opening additional webview"
+        );
+        // Wait for readiness again — cheap if already healthy, essential if the
+        // container was created moments ago by a concurrent click.
+        if let Err(e) = crate::webview::wait_for_web_ready(host_port).await {
+            let msg = format!(
+                "OpenCode Web server not responding for '{}': {}",
+                project_name, e
+            );
+            send_notification("Tillandsias", &msg);
+            return Err(msg);
+        }
+        // Find the genus for the title (should exist since we matched above).
+        let genus_label = state
+            .running
+            .iter()
+            .find(|c| c.name == container_name)
+            .map(|c| c.genus.display_name().to_string())
+            .unwrap_or_default();
+        if let Err(e) =
+            crate::webview::open_web_session_global(&project_name, &genus_label, host_port)
+        {
+            warn!(
+                project = %project_name,
+                port = host_port,
+                error = %e,
+                spec = "opencode-web-session",
+                "Failed to open additional webview (container remains running)"
+            );
+        }
+        return Ok(AppEvent::ContainerStateChange {
+            container_name,
+            new_state: ContainerState::Running,
+        });
+    }
+
+    // Clean up orphaned containers before allocating resources
+    cleanup_stale_containers(state).await;
+
+    // Allocate a genus (for icon/label only — the container name itself does
+    // not carry the genus in web mode).
+    // @trace spec:opencode-web-session
+    let genus = allocator
+        .allocate(&project_name)
+        .ok_or_else(|| format!("All genera exhausted for project {project_name}"))?;
+
+    debug!(project = %project_name, genus = %genus.display_name(), "Genus allocated (web mode)");
+
+    // @trace spec:opencode-web-session
+    // Allocate a single free host port in the ephemeral range. We merge
+    // in-memory state (single-port ranges tracked as `(p, p)`) with what
+    // podman reports as occupied.
+    let already_used_ports: Vec<u16> = {
+        let mut ports: Vec<u16> = state.running.iter().map(|c| c.port_range.0).collect();
+        // query_occupied_ports() returns (start, end) ranges; flatten to
+        // individual ports so we skip any host port currently bound.
+        for (s, e) in query_occupied_ports() {
+            for p in s..=e {
+                ports.push(p);
+            }
+        }
+        ports
+    };
+    let host_port = tillandsias_podman::launch::allocate_single_port(
+        tillandsias_podman::launch::DEFAULT_WEB_PORT_START,
+        tillandsias_podman::launch::DEFAULT_WEB_PORT_END,
+        &already_used_ports,
+    )
+    .ok_or_else(|| {
+        allocator.release(&project_name, genus);
+        "no free host port in 17000-17999".to_string()
+    })?;
+
+    info!(
+        project = %project_name,
+        port = host_port,
+        spec = "opencode-web-session",
+        "Allocated single host port for web session"
+    );
+
+    // Pre-register the container in bud state so the tray reflects activity
+    // while the image-build / enclave-setup pipeline runs.
+    // @trace spec:opencode-web-session
+    let display_emoji = "\u{1F517}".to_string(); // 🔗 — distinct from forge flower
+    let placeholder = ContainerInfo {
+        name: container_name.clone(),
+        project_name: project_name.clone(),
+        genus,
+        state: ContainerState::Creating,
+        port_range: (host_port, host_port),
+        container_type: tillandsias_core::state::ContainerType::OpenCodeWeb,
+        display_emoji: display_emoji.clone(),
+    };
+    state.running.push(placeholder);
+    info!(container = %container_name, "Preparing web environment... (bud state)");
+
+    // @trace spec:default-image
+    // Ensure the forge image is up to date. Identical pipeline to the terminal
+    // branch — clarity > DRY in this single change.
+    let client = PodmanClient::new();
+    let mut tag = forge_image_tag();
+
+    if let Some(newer_tag) = find_newer_forge_image(&tag) {
+        warn!(
+            expected = %tag,
+            found = %newer_tag,
+            "Found a newer forge image than expected — using it (web mode)"
+        );
+        tag = newer_tag;
+    } else {
+        info!(tag = %tag, "Ensuring forge image is up to date (web mode)...");
+        if build_tx
+            .try_send(BuildProgressEvent::Started {
+                image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
+            })
+            .is_err()
+        {
+            debug!("Build progress channel full/closed — UI may show stale state");
+        }
+
+        let build_result =
+            tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
+
+        match build_result {
+            Ok(Ok(())) => {
+                if !client.image_exists(&tag).await {
+                    error!(tag = %tag, "Image still not found after build completed (web mode)");
+                    if build_tx
+                        .try_send(BuildProgressEvent::Failed {
+                            image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
+                            reason: "Development environment not ready yet".to_string(),
+                        })
+                        .is_err()
+                    {
+                        debug!("Build progress channel full/closed — UI may show stale state");
+                    }
+                    state.running.retain(|c| c.name != container_name);
+                    allocator.release(&project_name, genus);
+                    return Err(strings::ENV_NOT_READY.into());
+                }
+                info!(tag = %tag, spec = "default-image", "Image ready (web mode)");
+                prune_old_images();
+                if build_tx
+                    .try_send(BuildProgressEvent::Completed {
+                        image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
+                    })
+                    .is_err()
+                {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
+            }
+            Ok(Err(ref e)) => {
+                error!(tag = %tag, error = %e, "Image build failed (web mode)");
+                if build_tx
+                    .try_send(BuildProgressEvent::Failed {
+                        image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
+                        reason: "Tillandsias is setting up".to_string(),
+                    })
+                    .is_err()
+                {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
+                state.running.retain(|c| c.name != container_name);
+                allocator.release(&project_name, genus);
+                return Err(strings::SETUP_ERROR.into());
+            }
+            Err(ref e) => {
+                error!(tag = %tag, error = %e, "Image build task panicked (web mode)");
+                if build_tx
+                    .try_send(BuildProgressEvent::Failed {
+                        image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
+                        reason: "Tillandsias is setting up".to_string(),
+                    })
+                    .is_err()
+                {
+                    debug!("Build progress channel full/closed — UI may show stale state");
+                }
+                state.running.retain(|c| c.name != container_name);
+                allocator.release(&project_name, genus);
+                return Err(strings::SETUP_ERROR.into());
+            }
+        }
+    }
+
+    let cache = cache_dir();
+    std::fs::create_dir_all(&cache).ok();
+
+    // @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container
+    if let Err(e) =
+        ensure_enclave_ready(&project_path, &project_name, state, build_tx.clone()).await
+    {
+        state.running.retain(|c| c.name != container_name);
+        allocator.release(&project_name, genus);
+        return Err(e);
+    }
+
+    // @trace spec:layered-tools-overlay
+    if let Err(e) = crate::tools_overlay::ensure_tools_overlay(build_tx.clone()).await {
+        warn!(
+            accountability = true,
+            category = "performance",
+            safety = "DEGRADED: tools will be installed per-container instead of from cache",
+            spec = "layered-tools-overlay",
+            error = %e,
+            "Tools overlay setup failed — performance degradation (web mode)"
+        );
+    }
+
+    let global_config = load_global_config();
+    let is_watch_root = global_config
+        .scanner
+        .watch_paths
+        .iter()
+        .any(|wp| wp == &project_path);
+
+    // @trace spec:podman-orchestration
+    ensure_container_log_dir(&container_name);
+
+    // @trace spec:opencode-web-session
+    // Build the detached / persistent launch context. `web_host_port = Some(p)`
+    // makes `build_podman_args()` emit `-p 127.0.0.1:<p>:4096` and suppress the
+    // forge-range publish. `persistent: true` drops `--rm` so the container
+    // survives a single webview closing. `forge_opencode_web_profile()` wires
+    // the entrypoint to `opencode serve`.
+    let profile = forge_profile(tillandsias_core::config::SelectedAgent::OpenCodeWeb);
+    let mut ctx = build_launch_context(
+        &container_name,
+        &project_path,
+        &project_name,
+        &cache,
+        (host_port, host_port),
+        true, // detached
+        is_watch_root,
+        &tag,
+    );
+    ctx.persistent = true;
+    ctx.web_host_port = Some(host_port);
+
+    let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
+    // @trace spec:proxy-container
+    inject_ca_chain_mounts(&mut run_args);
+
+    // Launch detached — no terminal.
+    match client.run_container(&run_args).await {
+        Ok(container_id) => {
+            info!(
+                accountability = true,
+                category = "enclave",
+                spec = "opencode-web-session, podman-orchestration",
+                container = %container_name,
+                container_id = %container_id,
+                port = host_port,
+                "OpenCode Web container started (detached, persistent)"
+            );
+        }
+        Err(e) => {
+            error!(
+                container = %container_name,
+                error = %e,
+                spec = "opencode-web-session",
+                "Failed to start OpenCode Web container"
+            );
+            state.running.retain(|c| c.name != container_name);
+            allocator.release(&project_name, genus);
+            return Err(format!("Failed to start web container: {e}"));
+        }
+    }
+
+    // @trace spec:opencode-web-session
+    // Health-wait for the loopback server before opening the webview.
+    // On timeout: the container stays running (user can retry); we only
+    // fail the open attempt.
+    if let Err(e) = crate::webview::wait_for_web_ready(host_port).await {
+        warn!(
+            project = %project_name,
+            port = host_port,
+            error = %e,
+            spec = "opencode-web-session",
+            "OpenCode Web server failed readiness probe — leaving container running for retry"
+        );
+        let msg = format!(
+            "OpenCode Web server did not start for '{}' — try again in a moment",
+            project_name
+        );
+        send_notification("Tillandsias", &msg);
+        return Err(e);
+    }
+
+    // @trace spec:opencode-web-session
+    // Open the Tauri webview. Failure is decoupled from container health —
+    // log a warning and keep the container running for another attempt.
+    if let Err(e) = crate::webview::open_web_session_global(
+        &project_name,
+        genus.display_name(),
+        host_port,
+    ) {
+        warn!(
+            project = %project_name,
+            port = host_port,
+            error = %e,
+            spec = "opencode-web-session",
+            "Failed to open webview window (container remains running)"
+        );
+    }
+
+    // Accountability: credential-free, loopback-only, detached.
+    // @trace spec:secret-management, spec:opencode-web-session
+    {
+        let has_git_identity = !ctx.git_author_name.is_empty();
+        info!(
+            accountability = true,
+            category = "secrets",
+            safety = "credential-free (no token, no hosts.yml, no claude-dir, no D-Bus), loopback-only (127.0.0.1)",
+            git_identity = has_git_identity,
+            pids_limit = 512,
+            spec = "secret-management, opencode-web-session",
+            "Environment {container_name} launched credential-free (web mode) — zero D-Bus, zero credentials, pids-limit=512, 127.0.0.1:{host_port}:4096",
+        );
+    }
+
+    if let Some(project) = state.projects.iter_mut().find(|p| p.path == project_path) {
+        project.assigned_genus = Some(genus);
+    }
+
+    // @trace spec:layered-tools-overlay
+    crate::tools_overlay::spawn_background_update();
+
+    let elapsed = start.elapsed();
+    info!(
+        duration_secs = elapsed.as_secs_f64(),
+        container = %container_name,
+        port = host_port,
+        spec = "opencode-web-session",
+        "Attach Here (web) completed"
+    );
+
+    Ok(AppEvent::ContainerStateChange {
+        container_name: container_name.clone(),
+        new_state: ContainerState::Creating,
+    })
+}
+
+/// Stop the per-project OpenCode Web container, close all webviews opened
+/// against it, and remove it from `TrayState::running`. No-op (returns `Ok`)
+/// if the project has no tracked web container.
+///
+/// @trace spec:opencode-web-session
+#[instrument(
+    skip(state),
+    fields(
+        project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()),
+        operation = "stop-project",
+        spec = "opencode-web-session, app-lifecycle"
+    )
+)]
+pub async fn handle_stop_project(
+    project_path: PathBuf,
+    state: &mut TrayState,
+) -> Result<(), String> {
+    let project_name = project_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // @trace spec:opencode-web-session
+    let container_opt = state
+        .running
+        .iter()
+        .find(|c| {
+            c.project_name == project_name
+                && matches!(
+                    c.container_type,
+                    tillandsias_core::state::ContainerType::OpenCodeWeb
+                )
+        })
+        .cloned();
+
+    let container = match container_opt {
+        Some(c) => c,
+        None => {
+            info!(
+                project = %project_name,
+                spec = "opencode-web-session",
+                "Stop requested but no OpenCode Web container is tracked for project — nothing to do"
+            );
+            return Ok(());
+        }
+    };
+
+    info!(
+        container = %container.name,
+        project = %project_name,
+        spec = "opencode-web-session",
+        "Stop project requested — closing webviews and stopping web container"
+    );
+
+    // @trace spec:opencode-web-session
+    // Close webviews first so the user sees them vanish before the container
+    // actually stops. Order doesn't affect correctness but matches intent.
+    crate::webview::close_web_sessions_for_project_global(&project_name);
+
+    let client = PodmanClient::new();
+    let launcher = ContainerLauncher::new(client);
+    if let Err(e) = launcher.stop(&container.name).await {
+        // Graceful fallback: the launcher already did SIGTERM→SIGKILL; if that
+        // still failed (container already gone, podman flaky), log and proceed
+        // so state doesn't desync.
+        warn!(
+            container = %container.name,
+            error = %e,
+            spec = "opencode-web-session",
+            "launcher.stop failed — removing from state anyway"
+        );
+    }
+
+    state
+        .running
+        .retain(|c| c.name != container.name);
+
+    // If no more environments remain for this project, clear the assigned genus.
+    let still_running = state
+        .running
+        .iter()
+        .any(|c| c.project_name == project_name);
+    if !still_running
+        && let Some(project) = state
+            .projects
+            .iter_mut()
+            .find(|p| p.name == project_name)
+    {
+        project.assigned_genus = None;
+    }
+
+    info!(
+        container = %container.name,
+        project = %project_name,
+        spec = "opencode-web-session",
+        "Web container stopped and removed from state"
+    );
+
+    Ok(())
+}
+
 /// Handle the "Stop" action: graceful stop with SIGTERM -> 10s -> SIGKILL,
 /// update icon to dried bloom during shutdown.
 #[instrument(skip(state, allocator), fields(container = %container_name, operation = "stop", spec = "podman-orchestration"))]
@@ -2789,6 +3322,12 @@ pub async fn shutdown_all(state: &TrayState) {
         "Shutting down: stopping all managed containers"
     );
 
+    // @trace spec:app-lifecycle, spec:opencode-web-session
+    // Close every open OpenCode Web webview first so the UI fades out before
+    // the backing containers begin to stop. Failures are logged inside the
+    // helper and do not block the rest of the shutdown sequence.
+    crate::webview::close_all_web_sessions_global();
+
     let client = PodmanClient::new();
     let launcher = ContainerLauncher::new(client);
 
@@ -2804,16 +3343,24 @@ pub async fn shutdown_all(state: &TrayState) {
         }
 
         // Track projects that may have git services running
-        // @trace spec:git-mirror-service
+        // @trace spec:git-mirror-service, spec:opencode-web-session
+        // OpenCodeWeb containers also clone from the project's git mirror,
+        // so their project needs its git service stopped on shutdown too.
         if matches!(
             container.container_type,
             tillandsias_core::state::ContainerType::Forge
                 | tillandsias_core::state::ContainerType::Maintenance
+                | tillandsias_core::state::ContainerType::OpenCodeWeb
         ) && !git_service_projects.contains(&container.project_name)
         {
             git_service_projects.push(container.project_name.clone());
         }
     }
+
+    // @trace spec:opencode-web-session
+    // The generic stop-by-name loop above already handles ContainerType::OpenCodeWeb
+    // — no special casing required. The orphan sweep below matches
+    // `tillandsias-*-forge` via the existing `tillandsias-` prefix filter.
 
     // Stop git service containers for all projects
     // @trace spec:git-mirror-service
@@ -2830,8 +3377,10 @@ pub async fn shutdown_all(state: &TrayState) {
     stop_proxy().await;
 
     // Catch-all: stop any remaining tillandsias-* containers that may be orphaned
-    // from previous sessions or not tracked in state.
-    // @trace spec:enclave-network
+    // from previous sessions or not tracked in state. The `tillandsias-` prefix
+    // already covers `tillandsias-*-forge` (OpenCode Web) and every other
+    // container variant.
+    // @trace spec:enclave-network, spec:opencode-web-session
     let cleanup_client = PodmanClient::new();
     if let Ok(containers) = cleanup_client.list_containers("tillandsias-").await {
         for entry in &containers {
