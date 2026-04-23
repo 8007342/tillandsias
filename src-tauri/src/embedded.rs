@@ -117,9 +117,11 @@ pub const FORGE_WELCOME: &str = include_str!("../../images/default/forge-welcome
 pub const FORGE_CONTAINERFILE: &str = include_str!("../../images/default/Containerfile");
 pub const FORGE_OPENCODE_JSON: &str = include_str!("../../images/default/opencode.json");
 
-// GIT_ASKPASS helper for secure token delivery
-pub const FORGE_GIT_ASKPASS: &str =
-    include_str!("../../images/default/git-askpass-tillandsias.sh");
+// No forge GIT_ASKPASS const — the forge-side askpass was tombstoned.
+// Forge containers have ZERO credentials; only the git-service container
+// receives the ephemeral token (see images/git/git-askpass-tillandsias.sh
+// + GIT_SERVICE_ASKPASS below).
+// @trace spec:secrets-management, spec:forge-offline
 
 // Config overlay — opinionated configs extracted to ramdisk (tmpfs)
 // @trace spec:layered-tools-overlay
@@ -348,11 +350,8 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("Containerfile: {e}"))?;
     write_lf(&default_dir.join("opencode.json"), FORGE_OPENCODE_JSON)
         .map_err(|e| format!("opencode.json: {e}"))?;
-    write_lf(
-        &default_dir.join("git-askpass-tillandsias.sh"),
-        FORGE_GIT_ASKPASS,
-    )
-    .map_err(|e| format!("git-askpass-tillandsias.sh: {e}"))?;
+    // No forge GIT_ASKPASS — tombstoned.
+    // @trace spec:secrets-management
     #[cfg(unix)]
     {
         for name in [
@@ -362,7 +361,6 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
             "entrypoint-forge-opencode-web.sh",
             "entrypoint-forge-claude.sh",
             "entrypoint-terminal.sh",
-            "git-askpass-tillandsias.sh",
         ] {
             let path = default_dir.join(name);
             if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {

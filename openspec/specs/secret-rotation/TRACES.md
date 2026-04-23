@@ -6,4 +6,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [flake.nix#L126](../../../flake.nix#L126)
-- [images/default/git-askpass-tillandsias.sh#L6](../../../images/default/git-askpass-tillandsias.sh#L6)
+- [src-tauri/src/secrets.rs#L162](../../../src-tauri/src/secrets.rs#L162)
+- [src-tauri/src/secrets.rs#L201](../../../src-tauri/src/secrets.rs#L201)

@@ -308,8 +308,24 @@ pub(crate) async fn ensure_inference_running(
             // 10 attempts covers ~55s total, enough for both fast and slow starts.
             let max_attempts: u32 = 10;
             for attempt in 0..max_attempts {
+                // --noproxy '*' bypasses HTTP_PROXY/HTTPS_PROXY for this
+                // probe. Without it curl tries to reach localhost:11434
+                // through the enclave proxy, which refuses and returns an
+                // HTTP 502 — making healthy inference look dead.
                 let check = tillandsias_podman::podman_cmd()
-                    .args(["exec", INFERENCE_CONTAINER_NAME, "curl", "-sf", "--max-time", "2", "-o", "/dev/null", "http://localhost:11434/api/version"])
+                    .args([
+                        "exec",
+                        INFERENCE_CONTAINER_NAME,
+                        "curl",
+                        "-sf",
+                        "--noproxy",
+                        "*",
+                        "--max-time",
+                        "2",
+                        "-o",
+                        "/dev/null",
+                        "http://localhost:11434/api/version",
+                    ])
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
                     .status()
@@ -1508,14 +1524,24 @@ pub(crate) async fn ensure_git_service_running(
 
             // @trace spec:git-mirror-service
             // Health check: verify git daemon is listening on port 9418.
-            // DISTRO: Git service is Alpine — uses busybox nc (built-in).
-            // nc -z does a zero-I/O TCP connect check.
+            // DISTRO: Git service is Alpine — busybox nc only.
+            //
+            // BusyBox `nc -z` is broken on BusyBox v1.36.1 (Alpine 3.20): it
+            // returns exit 1 even when the port is open. Use a timed connect
+            // with stdin from /dev/null instead — that works reliably on the
+            // same binary and is what nc was always happy to do.
             // Exponential backoff: 1s, 2s, 4s, 8s, 8s... (capped at 8s).
             let max_attempts: u32 = 10;
             let mut ready = false;
             for attempt in 0..max_attempts {
                 let check = tillandsias_podman::podman_cmd()
-                    .args(["exec", &container_name, "sh", "-c", "nc -z localhost 9418"])
+                    .args([
+                        "exec",
+                        &container_name,
+                        "sh",
+                        "-c",
+                        "nc -w 1 127.0.0.1 9418 </dev/null",
+                    ])
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
                     .status()

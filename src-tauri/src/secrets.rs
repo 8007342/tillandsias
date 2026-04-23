@@ -159,7 +159,7 @@ fn token_file_path(container_name: &str) -> PathBuf {
 /// directory mode is `0700`. On Windows, NTFS inherits the per-user ACL
 /// from `%LOCALAPPDATA%` which is already user-scoped.
 ///
-/// @trace spec:secrets-management, spec:native-secrets-store
+/// @trace spec:secrets-management, spec:native-secrets-store, spec:secret-rotation
 pub fn prepare_token_file(container_name: &str) -> Result<Option<PathBuf>, String> {
     let token = match retrieve_github_token()? {
         Some(t) => t,
@@ -198,7 +198,7 @@ pub fn prepare_token_file(container_name: &str) -> Result<Option<PathBuf>, Strin
 /// Remove the ephemeral token file for `container_name` and its parent dir.
 /// Idempotent; silent-ok if nothing is there.
 ///
-/// @trace spec:secrets-management
+/// @trace spec:secrets-management, spec:secret-rotation
 pub fn cleanup_token_file(container_name: &str) {
     let path = token_file_path(container_name);
     if let Err(e) = std::fs::remove_file(&path) {

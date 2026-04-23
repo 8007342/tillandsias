@@ -48,9 +48,12 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/entrypoint-forge-claude.sh \
              /usr/local/bin/entrypoint-terminal.sh
 
-# ── GIT_ASKPASS helper ─────────────────────────────────────────
-COPY git-askpass-tillandsias.sh /usr/local/bin/git-askpass-tillandsias.sh
-RUN chmod 0755 /usr/local/bin/git-askpass-tillandsias.sh
+# No GIT_ASKPASS helper in the forge image — forge containers have ZERO
+# credentials. The old askpass was a dead-code vector superseded by the
+# native-secrets-store model: only the git-service container receives the
+# ephemeral token, and the forge pushes/pulls via the enclave-internal
+# git:// mirror which requires no auth.
+# @trace spec:secrets-management, spec:forge-offline, spec:native-secrets-store
 
 # ── OpenCode config ────────────────────────────────────────────
 COPY opencode.json /home/forge/.config/opencode/config.json
