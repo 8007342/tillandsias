@@ -39,7 +39,7 @@ Every code change MUST carry a `// @trace spec:opencode-web-session` (or relevan
 - [x] 3.8 `cargo test --workspace` (252 passed, 1 pre-existing flake in isolation-only test) + `cargo clippy --workspace` (no new warnings).
 - [x] 3.9 Rebuild forge image: `scripts/build-image.sh forge` — built `localhost/tillandsias-forge:latest`, new entrypoint confirmed present, dispatcher routes `opencode-web` correctly.
 - [x] 3.10 Headless smoke test: launched `entrypoint-forge-opencode-web.sh` in a detached container with `-p 127.0.0.1:17500:4096`; confirmed `opencode serve` listens on 0.0.0.0:4096 inside, HTTP 200 returned on `http://127.0.0.1:17500/` after ~6s. Full UI-side smoke test (webview open, Stop, quit) deferred to user since the agent environment has no display.
-- [ ] 3.11 `./scripts/bump-version.sh --bump-changes`, commit with `@trace spec:opencode-web-session` URL, push `linux-next`.
+- [x] 3.11 `./scripts/bump-version.sh --bump-changes` → v0.1.158.182. Committed on `linux-next` (commit `001edad`) with the @trace URL. Push deferred to after archive + merge-to-main.
 
 ## 4. Wave 4 — Merge and release
 
