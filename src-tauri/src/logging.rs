@@ -16,6 +16,7 @@ use std::io::IsTerminal;
 
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -169,11 +170,14 @@ pub fn init(config: &LogConfig) -> WorkerGuard {
     let filter = build_filter(config);
 
     // Pretty-print to stderr only when running in a terminal.
+    // Wrap the stderr writer so a closed terminal (BrokenPipe/EPIPE) doesn't
+    // crash the tray — the file appender keeps receiving every event.
+    // @trace spec:tray-cli-coexistence
     let stderr_layer = if std::io::stderr().is_terminal() {
         Some(
             tracing_subscriber::fmt::layer()
                 .event_format(crate::log_format::TillandsiasFormat::new())
-                .with_writer(std::io::stderr),
+                .with_writer(BrokenPipeStderr),
         )
     } else {
         None
@@ -186,4 +190,84 @@ pub fn init(config: &LogConfig) -> WorkerGuard {
         .init();
 
     guard
+}
+
+// ---------------------------------------------------------------------------
+// Broken-pipe-tolerant stderr writer
+// ---------------------------------------------------------------------------
+
+/// Writer that swallows `BrokenPipe` errors so a closed terminal doesn't
+/// crash the process. Other errors propagate normally.
+///
+/// @trace spec:tray-cli-coexistence
+struct BrokenPipeFilter<W>(W);
+
+impl<W: std::io::Write> std::io::Write for BrokenPipeFilter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self.0.write(buf) {
+            Ok(n) => Ok(n),
+            Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(buf.len()),
+            Err(e) => Err(e),
+        }
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self.0.flush() {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+/// `MakeWriter` that produces a `BrokenPipeFilter<Stderr>` per write.
+///
+/// @trace spec:tray-cli-coexistence
+struct BrokenPipeStderr;
+
+impl<'a> MakeWriter<'a> for BrokenPipeStderr {
+    type Writer = BrokenPipeFilter<std::io::Stderr>;
+    fn make_writer(&'a self) -> Self::Writer {
+        BrokenPipeFilter(std::io::stderr())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn broken_pipe_writer_swallows_errors() {
+        use std::io::Write;
+        struct AlwaysBrokenPipe;
+        impl Write for AlwaysBrokenPipe {
+            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe))
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe))
+            }
+        }
+        let mut w = BrokenPipeFilter(AlwaysBrokenPipe);
+        assert_eq!(w.write(b"hello").unwrap(), 5);
+        assert!(w.flush().is_ok());
+    }
+
+    #[test]
+    fn broken_pipe_writer_passes_other_errors() {
+        use std::io::Write;
+        struct OtherError;
+        impl Write for OtherError {
+            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let mut w = BrokenPipeFilter(OtherError);
+        assert_eq!(
+            w.write(b"x").unwrap_err().kind(),
+            std::io::ErrorKind::PermissionDenied
+        );
+    }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias"
-version = "0.1.159"
+version = "0.1.160"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -40,6 +40,12 @@ time = "0.3"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_System_Console"] }
+
+# Unix: setsid() in tray_spawn::spawn_detached_tray() to detach the child
+# from the parent's process group / controlling terminal.
+# @trace spec:tray-cli-coexistence
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"

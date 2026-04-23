@@ -57,6 +57,12 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
 
 # ── OpenCode config ────────────────────────────────────────────
 COPY opencode.json /home/forge/.config/opencode/config.json
+# @trace spec:opencode-web-session, spec:default-image
+# Default UI theme (tokyonight) — applies to both `opencode` TUI and
+# `opencode serve` web UI. Overrideable per-project by mounting a different
+# tui.json into ~/.config/opencode/ (project workspace bind takes precedence
+# at the user-config layer when applications resolve XDG paths).
+COPY config-overlay/opencode/tui.json /home/forge/.config/opencode/tui.json
 
 # ── Shell configs ──────────────────────────────────────────────
 RUN mkdir -p /etc/skel/.config/fish

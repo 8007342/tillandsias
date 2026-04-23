@@ -128,6 +128,10 @@ pub const FORGE_OPENCODE_JSON: &str = include_str!("../../images/default/opencod
 pub const CONFIG_OVERLAY_OPENCODE: &str =
     include_str!("../../images/default/config-overlay/opencode/config.json");
 
+// @trace spec:opencode-web-session, spec:default-image
+pub const CONFIG_OVERLAY_OPENCODE_TUI: &str =
+    include_str!("../../images/default/config-overlay/opencode/tui.json");
+
 // Config overlay — methodology instruction files for AI agents
 // @trace spec:layered-tools-overlay
 pub const CONFIG_OVERLAY_INSTRUCTIONS_METHODOLOGY: &str =
@@ -391,6 +395,12 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         CONFIG_OVERLAY_OPENCODE,
     )
     .map_err(|e| format!("config-overlay/opencode/config.json: {e}"))?;
+    // @trace spec:opencode-web-session, spec:default-image
+    write_lf(
+        &config_overlay_dir.join("tui.json"),
+        CONFIG_OVERLAY_OPENCODE_TUI,
+    )
+    .map_err(|e| format!("config-overlay/opencode/tui.json: {e}"))?;
 
     // Config overlay — methodology instruction files for AI agents
     // @trace spec:layered-tools-overlay

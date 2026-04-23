@@ -17,14 +17,34 @@ use tillandsias_core::genus::TillandsiaGenus;
 use tillandsias_core::state::ContainerInfo;
 
 /// Drop guard that cleans up enclave service containers on any exit path
-/// (normal return, panic, SIGINT after podman forwards it, etc.).
-/// @trace spec:enclave-network
+/// (normal return, panic, SIGINT after podman forwards it, etc.) — but only
+/// when no tray was spawned alongside this CLI session. When a graphical
+/// session is detected, the tray child takes over enclave ownership and
+/// this guard becomes a no-op so the tray's containers survive CLI exit.
+///
+/// @trace spec:enclave-network, spec:tray-cli-coexistence, spec:cli-mode
 struct EnclaveCleanupGuard {
     project_name: String,
 }
 
 impl Drop for EnclaveCleanupGuard {
     fn drop(&mut self) {
+        // If the parent CLI ran in a graphical session, a tray child was
+        // spawned and now owns the enclave (proxy/git/inference). Tearing
+        // down here would yank infrastructure out from under it. The tray's
+        // own crash-recovery sweep handles the case where the tray spawn
+        // failed silently.
+        // @trace spec:tray-cli-coexistence
+        if crate::desktop_env::has_graphical_session() {
+            tracing::debug!(
+                spec = "tray-cli-coexistence",
+                project = %self.project_name,
+                "EnclaveCleanupGuard skipped — tray child owns the enclave"
+            );
+            return;
+        }
+
+        // Headless CLI: nothing else owns these containers, so clean up.
         // Build a minimal tokio runtime for async cleanup.
         // This is safe in Drop — we're the last thing running before process exit.
         if let Ok(rt) = tokio::runtime::Builder::new_current_thread()
@@ -362,6 +382,59 @@ pub fn run(
         .build()
         .expect("Failed to create tokio runtime");
 
+    // @trace spec:cli-mode, spec:app-lifecycle
+    // First Ctrl+C: clean up enclave infrastructure and exit 0.
+    // Second Ctrl+C: fall through to default termination (so user can always
+    // force-quit). The handler runs in a tokio task on the same runtime that
+    // drives podman; the foreground `podman run -it --rm` still owns the TTY.
+    //
+    // When a tray child is running alongside this CLI (graphical session),
+    // Ctrl+C just exits this CLI cleanly — the tray and the enclave keep
+    // serving the user's other projects. The forge container dies with
+    // --rm naturally because podman receives the SIGINT before us.
+    //
+    // When headless (no tray), this CLI is the sole owner of the enclave
+    // and we tear it down explicitly so nothing is left running after exit.
+    //
+    // A second Ctrl+C falls through to default termination so the user can
+    // always force-quit if cleanup hangs.
+    let cleanup_started = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    {
+        let started = cleanup_started.clone();
+        let project_for_cleanup = project_name.clone();
+        rt.spawn(async move {
+            // Wait for first SIGINT.
+            let _ = tokio::signal::ctrl_c().await;
+            if started
+                .compare_exchange(
+                    false,
+                    true,
+                    std::sync::atomic::Ordering::SeqCst,
+                    std::sync::atomic::Ordering::SeqCst,
+                )
+                .is_err()
+            {
+                return;
+            }
+            // i18n key `cli.stopping` does not exist yet — hardcoded English
+            // for v1; translate when the rest of the cli.* family gets a pass.
+            eprintln!("\n  Stopping...");
+
+            // @trace spec:tray-cli-coexistence, spec:cli-mode
+            if crate::desktop_env::has_graphical_session() {
+                eprintln!("  Tray is still running — open the menu for project actions.");
+                std::process::exit(0);
+            }
+
+            // Headless: this CLI is the sole owner. Tear down the enclave.
+            crate::handlers::stop_git_service(&project_for_cleanup).await;
+            crate::handlers::stop_inference().await;
+            crate::handlers::stop_proxy().await;
+            crate::handlers::cleanup_enclave_network().await;
+            std::process::exit(0);
+        });
+    }
+
     let client = PodmanClient::new();
 
     // Verify podman is available
@@ -570,6 +643,14 @@ pub fn run(
     match status {
         Ok(s) => {
             println!("{}", i18n::t("cli.env_stopped"));
+            // @trace spec:cli-mode, spec:tray-cli-coexistence
+            // On a graphical session main.rs spawned the tray child before
+            // calling runner::run, so by the time podman exits cleanly the
+            // tray is still up. Tell the user where Tillandsias went.
+            // Headless sessions never get a tray, so suppress the line.
+            if crate::desktop_env::has_graphical_session() {
+                println!("  \u{2713} OpenCode session ended \u{2014} Tillandsias tray is still running.");
+            }
             s.success()
         }
         Err(e) => {

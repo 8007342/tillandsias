@@ -10,6 +10,7 @@ mod cleanup;
 mod cli;
 #[cfg(target_os = "linux")]
 mod desktop;
+mod desktop_env;
 mod embedded;
 mod event_loop;
 mod github;
@@ -26,6 +27,7 @@ mod secrets;
 mod singleton;
 mod strings;
 mod tools_overlay;
+mod tray_spawn;
 mod uninstall;
 mod update_cli;
 mod update_log;
@@ -128,6 +130,22 @@ fn main() {
     {
         // Initialize tracing for file logging (CLI output uses println!)
         let _log_guard = logging::init(&log_config);
+
+        // @trace spec:cli-mode, spec:tray-cli-coexistence
+        // When invoked from a graphical session, also bring up the tray icon
+        // in a detached child process so the user has a tray to manage other
+        // projects while the foreground attach runs (and after it exits).
+        // Spawned BEFORE runner::run so the tray comes up while the CLI does
+        // its enclave bring-up. Singleton guard in the child handles the
+        // "tray already running" case silently.
+        if desktop_env::has_graphical_session() {
+            if let Err(e) = tray_spawn::spawn_detached_tray() {
+                tracing::warn!(error = %e, "Tray spawn failed — CLI continues");
+            } else {
+                println!("  Tillandsias tray launched in background — open the menu for project actions.");
+            }
+        }
+
         let success = runner::run(path, &image, debug, bash, agent_override);
         std::process::exit(if success { 0 } else { 1 });
     }
@@ -853,6 +871,27 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building tillandsias")
         .run(move |_app, event| {
+            // @trace spec:opencode-web-session, spec:app-lifecycle
+            // Closing a webview window must not exit the tray. Tauri's default
+            // behaviour treats the last closed window as "app done", but our
+            // tray icon is not a window. Filter `web-*` close events early so
+            // they never propagate to RunEvent::ExitRequested.
+            if let tauri::RunEvent::WindowEvent {
+                label,
+                event: tauri::WindowEvent::CloseRequested { .. },
+                ..
+            } = &event
+            {
+                if label.starts_with("web-") {
+                    tracing::debug!(
+                        spec = "opencode-web-session",
+                        label = %label,
+                        "webview close intercepted — tray remains"
+                    );
+                    return;
+                }
+            }
+
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 info!("Exit requested");
 
