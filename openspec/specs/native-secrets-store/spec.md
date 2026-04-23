@@ -2,51 +2,58 @@
 
 ## Purpose
 
-Store the GitHub OAuth token in the host OS's native secret service (GNOME Keyring, macOS Keychain, Windows Credential Manager) instead of relying on the plain text `~/.cache/tillandsias/secrets/gh/hosts.yml` file.
+Store and retrieve the GitHub OAuth token in the host OS's platform-native secret service. The host Rust process is the sole consumer of the keyring; containers never call any keyring API. This is the source of truth for GitHub credentials — no plaintext credential files live on persistent disk.
 
 ## Requirements
 
-### Requirement: Store GitHub token in native keyring
+### Requirement: Platform-native keyring backend
 
-The application SHALL store the GitHub OAuth token in the OS native secret service under service name `tillandsias` with key `github-oauth-token`.
+The application SHALL use the platform-native secret service exclusively, accessed in-process via the `keyring` crate.
 
-#### Scenario: Token stored after authentication
-- **WHEN** `gh auth login` completes successfully via the GitHub Login flow
-- **THEN** the OAuth token is read from `hosts.yml` and stored in the native keyring
+@trace spec:native-secrets-store
 
-#### Scenario: Keyring unavailable
-- **WHEN** the native keyring is not available (no D-Bus, headless, locked)
-- **THEN** the application logs a warning and falls back to reading `hosts.yml` directly
-- **AND** no error is shown to the user
+#### Scenario: Linux backend
+- **WHEN** the application runs on Linux
+- **THEN** the keyring SHALL be accessed via libsecret against the Secret Service D-Bus API (GNOME Keyring, KDE Wallet, or any compatible Secret Service implementation)
 
-### Requirement: Retrieve token for container launch
+#### Scenario: macOS backend
+- **WHEN** the application runs on macOS
+- **THEN** the keyring SHALL be accessed via Keychain Services (Security framework, Generic Password class)
 
-The application SHALL retrieve the GitHub token from the native keyring and write a `hosts.yml` file before launching any container that needs GitHub credentials.
+#### Scenario: Windows backend
+- **WHEN** the application runs on Windows
+- **THEN** the keyring SHALL be accessed via Credential Manager (Wincred, `CredWriteW` / `CredReadW` / `CredDeleteW`)
 
-#### Scenario: Token available in keyring
-- **WHEN** a container launch is requested and a token exists in the keyring
-- **THEN** the token is written to `~/.cache/tillandsias/secrets/gh/hosts.yml` before `podman run`
+### Requirement: Single keyring entry for the GitHub token
 
-#### Scenario: Token not in keyring, hosts.yml exists
-- **WHEN** a container launch is requested and the keyring has no token but `hosts.yml` exists
-- **THEN** the existing `hosts.yml` is used as-is (fallback behavior)
+The GitHub OAuth token SHALL be stored under a single, fixed keyring entry shared by all platforms.
 
-#### Scenario: No token anywhere
-- **WHEN** a container launch is requested and neither the keyring nor `hosts.yml` has a token
-- **THEN** the container launches without GitHub credentials (gh CLI will prompt if needed)
+@trace spec:native-secrets-store
 
-### Requirement: Auto-migrate existing tokens
+#### Scenario: Canonical entry coordinates
+- **WHEN** any of `store_github_token`, `retrieve_github_token`, or `delete_github_token` is invoked
+- **THEN** the keyring entry SHALL be created with service name `tillandsias` and key `github-oauth-token`
+- **AND** these constants SHALL match `SERVICE` and `GITHUB_TOKEN_KEY` in `src-tauri/src/secrets.rs`
 
-The application SHALL automatically migrate an existing plain text token from `hosts.yml` into the native keyring on first run after this change.
+### Requirement: Host-only keyring API surface
 
-#### Scenario: First run with existing credentials
-- **WHEN** the application starts and `hosts.yml` contains a token but the keyring entry is empty
-- **THEN** the token is stored in the keyring silently
+The functions `store_github_token`, `retrieve_github_token`, and `delete_github_token` SHALL be the sole APIs for accessing the GitHub OAuth token, and SHALL execute exclusively in the host Rust process. No container, entrypoint script, or subprocess SHALL call the keyring directly.
 
-#### Scenario: First run without existing credentials
-- **WHEN** the application starts and no `hosts.yml` exists
-- **THEN** no migration occurs and no error is raised
+@trace spec:native-secrets-store, spec:secrets-management
 
-#### Scenario: Keyring already has token
-- **WHEN** the application starts and both `hosts.yml` and keyring have tokens
-- **THEN** no migration occurs (keyring takes precedence)
+#### Scenario: Store after successful authentication
+- **WHEN** the `--github-login` flow successfully extracts a token via `gh auth token`
+- **THEN** the host Rust process SHALL call `store_github_token(token)`
+- **AND** the function SHALL return `Err` if the keyring is unreachable, causing the login flow to abort with no token written to disk
+
+#### Scenario: Retrieve at container launch
+- **WHEN** a container with `SecretKind::GitHubToken` is about to launch
+- **THEN** the host SHALL call `retrieve_github_token()` in-process
+- **AND** on `Ok(Some(token))` the host SHALL write it to the per-container ephemeral file defined in `spec:secrets-management`
+- **AND** on `Ok(None)` the host SHALL skip the bind mount and proceed with launch
+- **AND** on `Err` the host SHALL surface the error to the user (no fallback path)
+
+#### Scenario: Logout removes the entry
+- **WHEN** `delete_github_token()` is invoked
+- **THEN** the keyring entry SHALL be removed
+- **AND** the function SHALL return `Ok(())` even if no entry existed (idempotent)

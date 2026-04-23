@@ -45,10 +45,16 @@ Tillandsias isolates development environments using a 4-container enclave behind
 
 | Container | Image | Network | Credentials | Lifecycle | Purpose |
 |-----------|-------|---------|-------------|-----------|---------|
-| **proxy** | `tillandsias-proxy:v{VER}` (~15MB, Alpine + squid) | enclave + bridge (dual-homed) | None | Shared, long-lived (app lifetime) | Caching HTTP/HTTPS proxy, domain allowlist, egress firewall |
-| **git** | `tillandsias-git:v{VER}` | enclave only | D-Bus to host keyring | Shared, long-lived (app lifetime) | Git mirror, credential-isolated push/pull (Phase 2-3) |
-| **forge** | `tillandsias-forge:v{VER}` or `macuahuitl:latest` | enclave only | None (Phase 3+) | Per-project, user-initiated | Development environment, AI agent workspace |
-| **inference** | `tillandsias-inference:v{VER}` | enclave only | None | Shared, long-lived (app lifetime) | Local AI model serving via ollama (Phase 4) |
+| **proxy** | `tillandsias-proxy:v{VER}` (~15MB, Alpine + squid) | enclave + bridge (dual-homed) | None | Tray-session-scoped (started on first attach, stopped on tray exit) | Caching HTTP/HTTPS proxy, domain allowlist, egress firewall |
+| **git** | `tillandsias-git:v{VER}` | enclave only | `/run/secrets/github_token` (`:ro` tmpfs from host keyring) | Tray-session + per-project (one per project, persists across forge stops within a tray session) | Git mirror, credential-isolated push/pull |
+| **forge** | `tillandsias-forge:v{VER}` | enclave only | **None** | Per-project, user-initiated (each "Attach Here" click) | Development environment, AI agent workspace |
+| **inference** | `tillandsias-inference:v{VER}` | enclave only | None | Tray-session-scoped; started asynchronously off the critical path | Local AI model serving via ollama |
+
+**Lifetime model:**
+
+- **Tray mode**: `proxy` / `inference` are shared singletons for the tray-app's lifetime. `tillandsias-git-<project>` persists per project within a tray session — it does NOT shut down when the last forge for that project exits, so the next `Attach Here` to the same project skips git-service startup entirely (see `spec:persistent-git-service`). All services are torn down on tray exit via `EnclaveCleanupGuard`.
+- **CLI mode** (`tillandsias --attach`): one-shot. `EnclaveCleanupGuard` stops proxy / inference / git-service and removes the enclave network on process exit (clean, panic, or Ctrl-C).
+- **Crash recovery**: `TerminateProcess` / SIGKILL bypass Drop. Next tray startup runs `handlers::sweep_orphan_containers()` + `secrets::cleanup_all_token_files()` to reap anything left behind.
 
 All containers: `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`, `--security-opt=label=disable`, `--rm`, `--init`, `--stop-timeout=10`
 
@@ -88,7 +94,7 @@ These cross the enclave boundary. Each is logged to an accountability window.
 | Path | Mechanism | From | To | Accountability | Purpose |
 |------|-----------|------|----|----------------|---------|
 | Remote push/pull | D-Bus | git service | host keyring | `--log-git` | Credential retrieval for authenticated git ops |
-| Secret injection | D-Bus | git service | host keyring | `--log-secret-management` | Token read from OS keyring |
+| Secret injection | D-Bus | git service | host keyring | `--log-secrets-management` | Token read from OS keyring |
 | Model downloads | HTTP via proxy | inference | proxy -> internet | `--log-proxy` | Pulling ollama models through allowlist |
 | Proxy egress | HTTP/HTTPS | proxy | internet | `--log-proxy` | All outbound traffic (allowlist enforced) |
 
@@ -161,7 +167,7 @@ tillandsias --log=proxy:trace
 tillandsias --log=enclave:trace
 
 # All enclave-related telemetry at once
-tillandsias --log-proxy --log-enclave --log-secret-management
+tillandsias --log-proxy --log-enclave --log-secrets-management
 
 # Purge proxy cache (force re-download of all packages)
 tillandsias --clean
@@ -225,6 +231,6 @@ The enclave architecture addresses three primary threats:
 - `crates/tillandsias-podman/` — Network create/inspect/remove
 
 **Cheatsheets:**
-- `docs/cheatsheets/secret-management.md` — Token lifecycle and credential delivery
+- `docs/cheatsheets/secrets-management.md` — Token lifecycle and credential delivery
 - `docs/cheatsheets/token-rotation.md` — Fine-grained PAT refresh schedule
 - `docs/cheatsheets/logging-levels.md` — Full logging system reference

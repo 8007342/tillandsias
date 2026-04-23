@@ -2,7 +2,7 @@
 
 ## Overview
 
-Tillandsias uses a structured logging system built on the `tracing` crate. Log output is always written to a file. When running in a terminal, it is also pretty-printed to stderr. Six user-facing module names map to Rust tracing targets; five log levels control verbosity per module. Accountability windows (`--log-secret-management`, etc.) add a separate curated stderr layer that shows the "what and why" of sensitive operations in plain language.
+Tillandsias uses a structured logging system built on the `tracing` crate. Log output is always written to a file. When running in a terminal, it is also pretty-printed to stderr. Six user-facing module names map to Rust tracing targets; five log levels control verbosity per module. Accountability windows (`--log-secrets-management`, etc.) add a separate curated stderr layer that shows the "what and why" of sensitive operations in plain language.
 
 ## How It Works
 
@@ -24,7 +24,7 @@ Source: `src-tauri/src/logging.rs`
 
 | Module | What it covers | Rust tracing targets |
 |--------|---------------|----------------------|
-| `secrets` | Keyring access, token file writes, hosts.yml refresh, cleanup | `tillandsias_tray::secrets`, `tillandsias_tray::launch` |
+| `secrets` | Keyring access, token file writes, cleanup | `tillandsias_tray::secrets`, `tillandsias_tray::launch` |
 | `containers` | Container start/stop/destroy, podman command args | `tillandsias_tray::handlers`, `tillandsias_tray::launch`, `tillandsias_podman` |
 | `updates` | Version check, download, apply, restart | `tillandsias_tray::updater`, `tillandsias_tray::update_cli`, `tillandsias_tray::update_log` |
 | `scanner` | Filesystem watcher events, project discovery | `tillandsias_scanner` |
@@ -56,7 +56,7 @@ Accountability windows are a separate layer on top of the normal log levels. The
 
 | Flag | Module activated | What it shows |
 |------|-----------------|---------------|
-| `--log-secret-management` | `secrets` | Token writes, keyring access, cleanup, refresh |
+| `--log-secrets-management` | `secrets` | Token writes, keyring access, cleanup, refresh |
 | `--log-image-management` | `containers` | Forge image build, pull, staleness detection (future) |
 | `--log-update-cycle` | `updates` | Version check, download, verify, apply, restart (future) |
 | `--log-proxy` | `proxy` | Proxy container start, stop, health-check restart |
@@ -80,7 +80,7 @@ Source: `src-tauri/src/accountability.rs`
 
 ```
 # Accountability window for secrets, plus trace-level detail for containers
-tillandsias --log-secret-management --log=containers:trace /path/to/project
+tillandsias --log-secrets-management --log=containers:trace /path/to/project
 
 # All modules at debug level
 tillandsias --log=secrets:debug;containers:debug;updates:debug;scanner:debug;menu:debug;events:debug
@@ -89,7 +89,7 @@ tillandsias --log=secrets:debug;containers:debug;updates:debug;scanner:debug;men
 tillandsias --log=scanner:off;secrets:trace
 ```
 
-When `--log=secrets:trace` is combined with `--log-secret-management`, the accountability layer shows the formatted summary and the trace layer shows the raw detailed events. Both are active simultaneously.
+When `--log=secrets:trace` is combined with `--log-secrets-management`, the accountability layer shows the formatted summary and the trace layer shows the raw detailed events. Both are active simultaneously.
 
 ### Where log files live
 
@@ -109,10 +109,10 @@ Source: `crates/tillandsias-core/src/config.rs` (`log_dir` function)
 
 ```bash
 # Watch secret lifecycle events (most common debugging command)
-tillandsias --log-secret-management
+tillandsias --log-secrets-management
 
 # Watch secret events with full trace detail (includes spec links)
-tillandsias --log=secrets:trace --log-secret-management
+tillandsias --log=secrets:trace --log-secrets-management
 
 # Trace all container operations for a specific project attach
 tillandsias --log=containers:trace /path/to/project
@@ -138,7 +138,7 @@ tail -f ~/Library/Logs/tillandsias/tillandsias.log          # macOS
 
 | Problem | Recommended command |
 |---------|---------------------|
-| Git push fails inside container | `tillandsias --log-secret-management /path/to/project` |
+| Git push fails inside container | `tillandsias --log-secrets-management /path/to/project` |
 | Container doesn't start | `tillandsias --log=containers:debug /path/to/project` |
 | Project not appearing in tray menu | `tillandsias --log=scanner:debug` |
 | Tray menu items wrong / missing | `tillandsias --log=menu:debug` |
@@ -164,7 +164,7 @@ tail -f ~/Library/Logs/tillandsias/tillandsias.log          # macOS
 Log files do not contain tokens, keys, or passwords. The logging system is designed so that:
 
 - Accountability events show *what operation occurred* and *which spec governs it*, but never the token value itself.
-- `trace`-level logs may include file paths (e.g., `hosts.yml written to /path/...`) but not file contents.
+- `trace`-level logs may include file paths (e.g., `token file written to /run/user/.../github_token`) but not file contents.
 - The `safety` field in accountability output describes what protection applies (e.g., "Token stored in OS keyring, not written to disk").
 
 If sharing a log file for support, no scrubbing is required for credentials. File paths and container names will be present.
@@ -183,5 +183,5 @@ If sharing a log file for support, no scrubbing is required for credentials. Fil
 - `src-tauri/src/cli.rs` — `VALID_MODULES`, `VALID_LEVELS`, `parse_log_flags`, CLI help text
 
 **Cheatsheets:**
-- `docs/cheatsheets/secret-management.md` — secrets subsystem detail
+- `docs/cheatsheets/secrets-management.md` — secrets subsystem detail
 - `docs/cheatsheets/token-rotation.md` — token refresh task detail

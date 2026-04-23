@@ -1,160 +1,180 @@
 # OS Vault / Keyring Credentials
 
-Cross-platform reference for native credential storage APIs used by Tillandsias.
+Cross-platform reference for the native credential vaults Tillandsias uses on Linux, macOS, and Windows. The host Rust process is the **sole consumer** of the OS keyring; containers never link against any keyring API and never receive a D-Bus, Keychain, or Wincred handle. This cheatsheet describes the per-OS vault, what the `keyring` crate does on top of it, and how to inspect entries from the command line.
 
-@trace spec:native-secrets-store, spec:secret-management
+@trace spec:native-secrets-store, spec:secrets-management
 
-## Platform APIs
+## Per-OS vault at a glance
 
-| Platform | API | Entry Schema | CLI Inspection |
-|----------|-----|-------------|----------------|
-| **Linux/GNOME** | Secret Service D-Bus (`org.freedesktop.secrets`) | Attribute-based: `service` + `username` attrs | `secret-tool` |
-| **Linux/KDE** | KWallet (+ Secret Service since KF 5.97) | Wallet > Folder > Entry key | `kwallet-query` |
-| **macOS** | Keychain Services (Security framework) | Generic Password: `service` + `account` | `security` |
-| **Windows** | Credential Manager (DPAPI) | `TargetName` + `Type` | `cmdkey` |
+| Platform | Vault | Backend API | On-disk store | CLI inspection |
+|----------|-------|-------------|----------------|----------------|
+| Linux | Secret Service (GNOME Keyring, KWallet 5.97+, KeePassXC, …) | libsecret over D-Bus (`org.freedesktop.secrets`) | `~/.local/share/keyrings/` (encrypted at rest, opened on desktop login) | `secret-tool` |
+| macOS | Keychain Services (Generic Password class) | Security framework (in-process Mach IPC to `securityd`) | `~/Library/Keychains/login.keychain-db` | `security` |
+| Windows | Credential Manager (Wincred) | `Advapi32.dll` — `CredWriteW` / `CredReadW` / `CredDeleteW` | `%LOCALAPPDATA%\Microsoft\Credentials\` (DPAPI-encrypted to user SID) | `cmdkey` |
 
-## Entry Identification
+Per-vendor canonical references:
+- Linux: [Secret Service API specification](https://specifications.freedesktop.org/secret-service/latest/) (freedesktop.org)
+- macOS: [Keychain services](https://developer.apple.com/documentation/security/keychain-services) (Apple Developer)
+- Windows: [CREDENTIAL structure](https://learn.microsoft.com/en-us/windows/win32/api/wincred/ns-wincred-credentiala), [CredWriteW](https://learn.microsoft.com/en-us/windows/win32/api/wincred/nf-wincred-credwritew), [cmdkey](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/cmdkey) (Microsoft Learn)
 
-### Linux — Secret Service D-Bus
+## How Tillandsias uses these vaults
 
-Items have **attributes** (string key/value pairs for lookup) and a **secret** (the encrypted value).
-Attributes are NOT encrypted. No per-item ACL — any same-user process can read everything.
+Tillandsias talks to all three vaults through the Rust [`keyring`](https://crates.io/crates/keyring) crate. The crate exposes a single platform-neutral API:
+
+```rust
+let entry = keyring::Entry::new("tillandsias", "github-oauth-token")?;
+entry.set_password(&token)?;          // Linux: libsecret store; macOS: SecItemAdd; Windows: CredWriteW
+let token = entry.get_password()?;    // matching reads via the same paths
+entry.delete_credential()?;           // logout / rotation
+```
+
+Three rules constrain the call sites:
+
+1. The keyring is touched **only** by the host Tillandsias binary. No container, entrypoint script, or subprocess opens a keyring handle.
+2. The entry coordinates are fixed: service `tillandsias`, key `github-oauth-token`. Constructing an `Entry` requires both, so Tillandsias cannot read or write any other application's row.
+3. After `retrieve_github_token()` returns, the host writes the token to a per-container ephemeral file (mode `0600` on Unix; per-user NTFS ACL on Windows), bind-mounts that file read-only at `/run/secrets/github_token` into the git-service container, and unlinks it on container stop. No container ever sees the keyring itself.
+
+Source: `src-tauri/src/secrets.rs` (`store_github_token`, `retrieve_github_token`, `delete_github_token`, `prepare_token_file`, `cleanup_token_file`).
+
+## Linux — Secret Service
+
+Items are stored as **attributes** (string key/value pairs, used for lookup) plus a **secret blob**. Attributes are not encrypted; the blob is. There is no per-item ACL — once the user's collection is unlocked (typically at desktop login), any process running as the same user can read every entry in it.
 
 ```bash
-# Store
-secret-tool store --label="My Token" service myapp username myuser
+# Store a row
+secret-tool store --label="My Token" service tillandsias username github-oauth-token
 
-# Lookup (returns secret on stdout)
-secret-tool lookup service myapp username myuser
+# Lookup (returns the secret on stdout)
+secret-tool lookup service tillandsias username github-oauth-token
 
-# Search (shows all metadata, no secret)
-secret-tool search --all service myapp
+# Search metadata for a service (no secret returned)
+secret-tool search --all service tillandsias
 
 # Clear
-secret-tool clear service myapp username myuser
+secret-tool clear service tillandsias username github-oauth-token
 ```
 
-**Storage location:** `~/.local/share/keyrings/`
-**D-Bus address:** `$DBUS_SESSION_BUS_ADDRESS` (typically `unix:path=/run/user/$UID/bus`)
-**Desktop support:** GNOME Keyring (auto-starts), KDE Wallet 5.97+ (via ksecretd), KeePassXC (optional provider)
+The `keyring` crate (with `sync-secret-service` + `crypto-rust`) writes the row with these attributes:
 
-> Ref: [GNOME Keyring — ArchWiki](https://wiki.archlinux.org/title/GNOME/Keyring)
-> Ref: [freedesktop.org Secret Storage Spec](https://freedesktop.org/wiki/Specifications/secret-storage-spec/secrets-api-0.1.html)
+```
+xdg:schema  = org.freedesktop.Secret.Generic
+service     = tillandsias
+username    = github-oauth-token
+application = rust-keyring
+target      = default
+```
 
-### Linux — KDE Wallet
+KWallet 5.97+ exposes the same `org.freedesktop.secrets` interface, so the crate works unchanged on Plasma desktops.
 
-Hierarchical: **Wallet** (e.g., `kdewallet`) > **Folder** (e.g., `Passwords`) > **Entry** (key → secret).
+> Ref: [Secret Service API specification](https://specifications.freedesktop.org/secret-service/latest/)
+
+### Headless-Linux caveat
+
+A bare SSH session into a Linux box has **no desktop session, no Secret Service daemon, no D-Bus session bus**. `tillandsias --github-login` will surface an error like `NoStorageAccess` from the `keyring` crate when it tries to call `store_github_token`. To enable the keyring on a headless host, run one of these before invoking Tillandsias:
 
 ```bash
-# List folders in wallet
-kwallet-query -l kdewallet
+# Option 1: start gnome-keyring-daemon manually and unlock it
+eval "$(gnome-keyring-daemon --unlock --daemonize)"
 
-# List entries in folder
-kwallet-query -l kdewallet -f Passwords
-
-# Read entry
-kwallet-query -r entryname kdewallet -f Passwords
-
-# Write (via kwalletcli, third-party)
-echo "secret" | kwalletcli -f Passwords -e entryname -P
+# Option 2: wrap Tillandsias in a fresh dbus session
+dbus-run-session -- tillandsias --github-login
 ```
 
-**D-Bus interface:** `org.kde.kwalletd6` (native), plus `org.freedesktop.secrets` (since KF 5.97)
-**Storage:** `~/.local/share/kwalletd/` (encrypted `.kwl` files, Blowfish or GPG)
+This caveat is purely about the **host** reaching its **own** keyring. No container ever needs D-Bus.
 
-> Ref: [KDE Wallet — ArchWiki](https://wiki.archlinux.org/title/KDE_Wallet)
+## macOS — Keychain
 
-### macOS — Keychain
-
-Two item classes relevant to credential storage:
+Tillandsias uses the Generic Password item class (`kSecClassGenericPassword`), keyed on `service` + `account`.
 
 | Class | Identified by | Use case |
 |-------|---------------|----------|
-| **Generic Password** | `service` + `account` | App tokens (gh, Tillandsias) |
-| **Internet Password** | `server` + `protocol` + `account` | Web credentials (git, browsers) |
+| Generic Password | `service` + `account` | App tokens (Tillandsias) |
+| Internet Password | `server` + `protocol` + `account` | Web credentials (browsers, git-credential-osxkeychain) |
 
 ```bash
-# Read generic password
-security find-generic-password -s "gh:github.com" -a "username" -w
+# Read the Tillandsias entry
+security find-generic-password -s "tillandsias" -a "github-oauth-token" -w
 
-# Store generic password (-U = update if exists)
-security add-generic-password -s "myservice" -a "myaccount" -w "secret" -U
+# Store / update (-U overwrites if it exists)
+security add-generic-password -s "tillandsias" -a "github-oauth-token" -w "<token>" -U
 
 # Delete
-security delete-generic-password -s "myservice" -a "myaccount"
-
-# Read internet password (used by git-credential-osxkeychain)
-security find-internet-password -s github.com -a "username" -w
+security delete-generic-password -s "tillandsias" -a "github-oauth-token"
 ```
 
-**Per-item ACL:** Each entry has an access list of approved apps. First access by a new app triggers a user prompt.
-**Storage:** `~/Library/Keychains/login.keychain-db`
+Per-item ACL: each entry carries an access list of approved binaries. The first time a freshly-rebuilt Tillandsias touches the entry, macOS prompts the user for keychain unlock; subsequent calls from the same code-signed binary are silent.
 
-> Ref: [Apple Keychain Services](https://developer.apple.com/documentation/security/keychain-services)
-> Ref: [Apple TN3137: On Mac keychains](https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains)
+> Ref: [Keychain services](https://developer.apple.com/documentation/security/keychain-services)
 
-### Windows — Credential Manager
+## Windows — Credential Manager
 
-Flat store: `TargetName` + `Type` uniquely identify an entry.
+Credential Manager is a flat per-user vault. `TargetName` + `Type` uniquely identify an entry. The blob is encrypted at rest by DPAPI using a master key derived from the user's logon credential, so another Windows account on the same machine cannot decrypt it without first unlocking that user's profile.
 
-| Field | Purpose |
-|-------|---------|
-| `TargetName` | Primary identifier (e.g., `git:https://github.com`) |
-| `Type` | `CRED_TYPE_GENERIC` (1) or `CRED_TYPE_DOMAIN_PASSWORD` (2) |
-| `UserName` | Associated account |
-| `CredentialBlob` | The secret (byte array, DPAPI-encrypted at rest) |
+| Field | Value used by Tillandsias |
+|-------|----------------------------|
+| `Type` | `CRED_TYPE_GENERIC` (1) |
+| `TargetName` | `github-oauth-token.tillandsias` (`keyring` crate format: `"{user}.{service}"`) |
+| `UserName` | `github-oauth-token` |
+| `Persist` | `CRED_PERSIST_ENTERPRISE` (3) — survives reboot |
 
 ```cmd
-cmdkey /list
-cmdkey /generic:MyTarget /user:MyUser /pass:MyPass
-cmdkey /delete:MyTarget
+:: List all credentials (filter to ours)
+cmdkey /list | findstr tillandsias
+
+:: Delete the Tillandsias entry
+cmdkey /delete:github-oauth-token.tillandsias
 ```
 
-**Storage:** DPAPI-encrypted in `%LOCALAPPDATA%\Microsoft\Credentials\` (opaque files)
-**Limitation:** Does NOT work over SSH sessions.
+The blob value is **not** exposed by `cmdkey`; DPAPI hands it back only via `CredReadW` running in the user's logon session. Service accounts and pure network logons cannot use Credential Manager — `CredWriteW` returns `ERROR_NO_SUCH_LOGON_SESSION`. SSH sessions into Windows are subject to the same restriction.
 
-> Ref: [CREDENTIAL structure — Microsoft Learn](https://learn.microsoft.com/en-us/windows/win32/api/wincred/ns-wincred-credentiala)
+For the full Windows-side lifecycle, including the GUI inspection path and what happens when a user manually deletes the entry, see `docs/cheatsheets/windows-credential-manager.md`.
 
-## Tillandsias Keyring Entries
+> Ref: [CREDENTIAL structure](https://learn.microsoft.com/en-us/windows/win32/api/wincred/ns-wincred-credentiala) · [CredWriteW](https://learn.microsoft.com/en-us/windows/win32/api/wincred/nf-wincred-credwritew) · [cmdkey](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/cmdkey)
 
-| Secret | Service | Account/Key | Backend |
-|--------|---------|-------------|---------|
-| GitHub OAuth token | `tillandsias` | `github-oauth-token` | `keyring` crate v3 (`sync-secret-service`, `crypto-rust`) |
+## Tillandsias keyring entries
 
-**Rust crate attributes on Linux (GNOME):**
-```
-xdg:schema = org.freedesktop.Secret.Generic
-application = rust-keyring
-service = tillandsias
-target = default
-username = github-oauth-token
-```
+| Secret | `keyring` service | `keyring` key | TargetName on Windows | Backend per OS |
+|--------|-------------------|---------------|------------------------|----------------|
+| GitHub OAuth token | `tillandsias` | `github-oauth-token` | `github-oauth-token.tillandsias` | libsecret / Keychain / Wincred |
 
-Source: `src-tauri/src/secrets.rs:31-35`, `Cargo.toml:24`
+Source: `src-tauri/src/secrets.rs` (`SERVICE`, `GITHUB_TOKEN_KEY` constants).
 
-## D-Bus Forwarding into Containers
+## What Tillandsias deliberately does NOT do
 
-For `gh auth login` inside a container to write to the HOST keyring:
+- No container is launched with `DBUS_SESSION_BUS_ADDRESS` set, no D-Bus socket bind-mount, no Secret Service forwarding of any kind. Forge, terminal, proxy, inference, and git-service containers all run without any keyring transport.
+- No fallback to plaintext on disk. If the host keyring is unreachable, `store_github_token` and `retrieve_github_token` return `Err` and the caller surfaces the failure rather than degrade.
+- No enumeration of other apps' entries. `keyring::Entry::new(SERVICE, KEY)` requires both coordinates up front; the crate never iterates the vault, so Tillandsias only ever touches its own row.
 
-```bash
-podman run -it --rm \
-  --userns=keep-id \
-  -v /run/user/$UID/bus:/run/user/$UID/bus:ro \
-  -e DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$UID/bus \
-  -e XDG_RUNTIME_DIR=/run/user/$UID \
-  $IMAGE gh auth login
-```
+## Troubleshooting
 
-**Requirements:** `--userns=keep-id` (UID must match for D-Bus auth), bus socket mounted, env vars set.
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| `Keyring unavailable` on Linux desktop | Secret Service daemon not yet running, or login keyring still locked | Open Seahorse / KWalletManager, unlock; retry |
+| `NoStorageAccess` on headless Linux | No D-Bus session bus, no Secret Service | Run `gnome-keyring-daemon --unlock --daemonize` or wrap with `dbus-run-session` (see Headless-Linux caveat) |
+| macOS prompts on every launch | Code signature changed (typical for local dev builds) | Approve once, or sign the build with the same identity |
+| Windows `ERROR_NO_SUCH_LOGON_SESSION` | Running as a service / network logon / over SSH | Run Tillandsias as the interactive desktop user |
+| Entry vanished from vault | User deleted it via `cmdkey /delete`, Seahorse, or Keychain Access | `retrieve_github_token` returns `Ok(None)`; user is prompted to re-run `tillandsias --github-login` |
 
-**Security:** Only use for short-lived auth containers. Do NOT forward D-Bus into long-running dev containers — it exposes the entire keyring and all D-Bus services.
+## Security notes
 
-> Ref: [Podman D-Bus session discussion](https://github.com/containers/podman/discussions/16772)
-> Ref: [Toolbox — containers/toolbox](https://github.com/containers/toolbox)
+- **Linux Secret Service has no per-item ACL.** Once unlocked, any same-user process reads every entry. CVE-2018-19358 is the canonical reference. Tillandsias mitigates by keeping forge containers entirely off the keyring path.
+- **macOS Keychain has per-item ACL** with first-access prompts.
+- **Windows Credential Manager** has no per-app ACL but DPAPI binds blobs to the user SID, so cross-account reads are blocked.
+- All three vaults are **only as strong as the user's login**. A compromised desktop session is a compromised vault — for that threat model see the `fine-grained-pat-rotation` design which scopes tokens to single repos with short expiry.
 
-## Security Notes
+## Related
 
-- **Linux Secret Service has NO per-item ACL.** Any same-user process can read all entries once the collection is unlocked (typically at desktop login). CVE-2018-19358.
-- **macOS Keychain HAS per-item ACL.** New apps trigger a user prompt on first access.
-- **Windows Credential Manager** is accessible to any same-user process (similar to Linux).
-- **Headless/SSH:** No Secret Service available — tools fall back to plaintext. Tillandsias gracefully degrades to `hosts.yml` if keyring is unavailable.
+**Cheatsheets:**
+- `docs/cheatsheets/secrets-management.md` — overall secret architecture (start here)
+- `docs/cheatsheets/windows-credential-manager.md` — Windows-specific lifecycle and GUI inspection
+- `docs/cheatsheets/github-credential-tools.md` — how `gh`, GCM, and git credential helpers store tokens
+- `docs/cheatsheets/token-rotation.md` — refresh task that touches the keyring on a timer
+
+**Source files:**
+- `src-tauri/src/secrets.rs` — `keyring` crate calls and ephemeral-file delivery
+- `src-tauri/src/runner.rs` — `--github-login` flow that populates the keyring
+- `src-tauri/src/launch.rs` — bind-mount of `/run/secrets/github_token`
+
+**Specs:**
+- `openspec/specs/native-secrets-store/spec.md`
+- `openspec/specs/secrets-management/spec.md`

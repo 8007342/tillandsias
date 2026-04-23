@@ -95,6 +95,8 @@ Tillandsias uses a multi-container enclave for security isolation. Coding contai
 - Multiple forge containers per project, each with independent git working tree
 - All operations logged via `--log-enclave`, `--log-proxy`, `--log-git` with `@trace` links
 
+**Credential flow:** GitHub tokens live exclusively in the host OS keyring (Linux: Secret Service / GNOME Keyring via D-Bus; macOS: Keychain; Windows: Credential Manager). The git service container reads the token through a D-Bus bridge and performs authenticated push/fetch against GitHub on behalf of the forge. Forge containers never see tokens — they speak plain git protocol to the enclave-local mirror.
+
 **Images are built via:**
 ```bash
 scripts/build-image.sh forge      # Dev environment
@@ -211,7 +213,21 @@ Add `@trace spec:<name>` annotations in ALL code changes. Traces are the connect
 
 Document operational knowledge in `docs/cheatsheets/` with `@trace` annotations and scannable tables.
 
-Current: `logging-levels.md`, `secret-management.md`, `token-rotation.md`, `terminal-tools.md`.
+Current: `logging-levels.md`, `secrets-management.md`, `token-rotation.md`, `terminal-tools.md`.
+
+## Plugins & Skills
+
+Invoke installed skills proactively when their trigger fires. Order below is by expected frequency in this project.
+
+- **OpenSpec suite (`opsx:new`, `opsx:ff`, `opsx:apply`, `opsx:verify`, `opsx:archive`, `opsx:sync`, plus `openspec-*` equivalents)**: the primary workflow gate. See the **OpenSpec — Monotonic Convergence** section above for rules and sequencing. Never bypass with ad-hoc edits.
+- **`simplify`**: invoke after implementing a non-trivial change (new module, refactor, >100 LOC touched) and before `opsx:verify`. Catches duplication, leaky abstractions, and hot-path JSON (forbidden here — use `postcard`).
+- **`security-review`**: invoke before merging any branch that touches enclave containers, credential paths, proxy/git-service config, `--cap-drop`/`--security-opt`/`--userns` flags, keyring/D-Bus code, or anything under `src-tauri/` that crosses the host/forge boundary.
+- **`review`**: invoke before `gh pr create` on branches destined for `main` from `linux-next`/`osx-next`/`windows-next`. Complements `security-review`; run both for enclave-adjacent work.
+- **`less-permission-prompts`**: invoke opportunistically when the session has racked up repeated permission prompts for read-only commands. Scans transcripts and updates `.claude/settings.json`.
+- **`update-config`**: invoke for any settings.json / hooks change, or when the user asks for automated "from now on" behavior (memory cannot satisfy those — hooks can).
+- **`claude-api`**: invoke only if work touches Anthropic SDK code (none in-tree today; reserved for future inference-container client code).
+- **`loop` / `schedule`**: invoke only when the user explicitly asks for recurring or cron-scheduled tasks. Never for one-offs.
+- **`init`, `keybindings-help`**: not load-bearing for this project; do not invoke unless explicitly requested.
 
 ## Agent Waves
 

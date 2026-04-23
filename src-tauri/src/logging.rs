@@ -7,7 +7,7 @@
 //!   3. `RUST_LOG` environment variable
 //!   4. Default: `tillandsias=info` (lowest priority)
 //!
-//! Accountability windows (`--log-secret-management`, etc.) are composable
+//! Accountability windows (`--log-secrets-management`, etc.) are composable
 //! with `--log` and add a curated stderr layer for sensitive operations.
 //!
 //! @trace spec:logging-accountability

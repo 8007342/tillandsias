@@ -83,3 +83,27 @@ cargo clippy --workspace   # Lint
 | "connection closed unexpectedly" | PowerShell 5.1 TLS issue — fixed in install.ps1 |
 | Machine won't start after sleep | `podman machine stop && podman machine start` |
 | Disk space warning | `podman system prune -a` to clean images |
+| Proxy/git/inference do nothing on launch (v0.1.157.180 or earlier) | See "Stale enclave images" below — `podman rmi` the four enclave tags and relaunch |
+
+### Stale enclave images (v0.1.157.180 and earlier)
+
+@trace spec:fix-windows-image-routing, spec:default-image
+
+In versions ≤ v0.1.157.180 the Windows image-build path always built the forge image and tagged it as `tillandsias-forge`, `tillandsias-proxy`, `tillandsias-git`, **and** `tillandsias-inference`. All four tags resolved to the same image ID and the same forge entrypoint, so launching the proxy/git/inference containers either did nothing useful or crashed.
+
+Detect: `podman images | grep tillandsias-` — if all four enclave tags show the same `IMAGE ID`, you are affected.
+
+Fix on existing installs after upgrading to a version with the bug fix:
+
+```bash
+# Wipe the broken tag set so the next launch builds the right images
+podman rmi localhost/tillandsias-forge:v<old> \
+           localhost/tillandsias-proxy:v<old> \
+           localhost/tillandsias-git:v<old>   \
+           localhost/tillandsias-inference:v<old>
+
+# Launch the tray; first "Attach Here" rebuilds each image from its
+# own Containerfile (images/{default,proxy,git,inference}/Containerfile).
+```
+
+After the rebuild, re-run `podman images | grep tillandsias-` and verify the four enclave tags now show **different** image IDs.

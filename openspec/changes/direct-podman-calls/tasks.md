@@ -31,7 +31,7 @@
 
 ### 1.5 Add @trace annotations
 - [ ] Add `// @trace spec:direct-podman-calls` to the new gh discovery function
-- [ ] Add `// @trace spec:direct-podman-calls, spec:secret-management` to the direct GitHub Login handler
+- [ ] Add `// @trace spec:direct-podman-calls, spec:secrets-management` to the direct GitHub Login handler
 - [ ] Update existing `// @trace spec:gh-auth-script` references to include `spec:direct-podman-calls`
 
 ### 1.6 Test Phase 1

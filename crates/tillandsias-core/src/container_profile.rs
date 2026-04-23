@@ -39,7 +39,7 @@ pub struct ContainerProfile {
 
     /// Process limit (`--pids-limit`). Prevents fork bombs and constrains
     /// each container to its intended workload.
-    /// @trace spec:secret-management, spec:podman-orchestration
+    /// @trace spec:secrets-management, spec:podman-orchestration
     pub pids_limit: u32,
 
     /// Make the root filesystem read-only (`--read-only`). Service containers
@@ -144,13 +144,20 @@ pub struct SecretMount {
 }
 
 /// The types of secrets a profile can request.
+///
+/// Tokens live exclusively in the host OS keyring (Linux Secret Service,
+/// macOS Keychain, Windows Credential Manager). The host reads the keyring
+/// at container launch, writes the token to an ephemeral file, and bind-
+/// mounts it read-only into the container. The container never sees D-Bus,
+/// the keyring, or any host credential beyond this one file.
+/// @trace spec:secrets-management, spec:native-secrets-store
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecretKind {
-    /// Forward the host D-Bus session bus socket for keyring access.
-    /// D-Bus is the sole credential path — if unavailable, git operations
-    /// fail explicitly rather than falling back to less-secure mechanisms.
-    /// @trace spec:git-mirror-service, spec:secret-management
-    DbusSession,
+    /// Bind-mount the GitHub OAuth token at `/run/secrets/github_token:ro`.
+    /// The host writes the token from the OS keyring to `ctx.token_file_path`
+    /// before launch and unlinks it when the container stops.
+    /// @trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
+    GitHubToken,
 }
 
 /// Working directory specification inside the container.
@@ -199,6 +206,16 @@ pub struct LaunchContext {
     /// Git author email for GIT_AUTHOR_EMAIL / GIT_COMMITTER_EMAIL env vars.
     /// Read from `~/.cache/tillandsias/secrets/git/.gitconfig` at launch time.
     pub git_author_email: String,
+
+    /// Absolute host path to an ephemeral file holding the GitHub OAuth token.
+    ///
+    /// Populated by the orchestrator when the profile includes
+    /// `SecretKind::GitHubToken` and the host keyring has a token. `None`
+    /// means no token is available (login required) or the profile does
+    /// not request one. The host is responsible for writing this file with
+    /// mode 0600 before launch and unlinking it on container stop.
+    /// @trace spec:secrets-management, spec:native-secrets-store
+    pub token_file_path: Option<PathBuf>,
 
     /// When true, containers use localhost port mapping instead of DNS aliases.
     ///
@@ -492,16 +509,18 @@ pub fn inference_profile() -> ContainerProfile {
     }
 }
 
-/// Git service container — bare mirror + git daemon + D-Bus for credentials.
+/// Git service container — bare mirror + git daemon + tmpfs GitHub token.
 ///
 /// Runs a local git daemon inside the enclave network. Forge containers clone
 /// and fetch from this service instead of hitting the internet directly.
 ///
-/// Mounts are intentionally empty — the mirror volume is added dynamically at
-/// launch time based on the project being served. D-Bus session bus forwarding
-/// is the sole credential path — if unavailable, git operations fail explicitly.
+/// Mounts: log dir always; mirror volume added dynamically per-project.
+/// Credentials: the host writes the GitHub OAuth token (from the OS keyring)
+/// to an ephemeral file and bind-mounts it read-only at
+/// `/run/secrets/github_token`. The container never sees D-Bus, the host
+/// keyring, or any other host secret.
 ///
-/// @trace spec:git-mirror-service, spec:secret-management
+/// @trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
 pub fn git_service_profile() -> ContainerProfile {
     ContainerProfile {
         entrypoint: "/usr/local/bin/entrypoint.sh",
@@ -518,7 +537,7 @@ pub fn git_service_profile() -> ContainerProfile {
         env_vars: vec![],
         secrets: vec![
             SecretMount {
-                kind: SecretKind::DbusSession,
+                kind: SecretKind::GitHubToken,
             },
         ],
         image_override: None,
@@ -742,21 +761,21 @@ mod tests {
         assert_eq!(profile.env_vars.len(), 16);
     }
 
-    // @trace spec:git-mirror-service, spec:secret-management, spec:podman-orchestration
+    // @trace spec:git-mirror-service, spec:secrets-management, spec:podman-orchestration
     #[test]
-    fn git_service_has_dbus_and_log_mount() {
+    fn git_service_has_github_token_and_log_mount() {
         let profile = git_service_profile();
         assert_eq!(
             profile.secrets.len(),
             1,
-            "Git service should have DbusSession only (D-Bus is the sole credential path)"
+            "Git service should request GitHubToken only (host keyring → tmpfs mount)"
         );
         assert!(
             profile
                 .secrets
                 .iter()
-                .any(|s| s.kind == SecretKind::DbusSession),
-            "Git service must have DbusSession for keyring access"
+                .any(|s| s.kind == SecretKind::GitHubToken),
+            "Git service must request GitHubToken for authenticated push/fetch"
         );
         // Only static mount is ContainerLogs — mirror volume added dynamically per-project
         assert_eq!(
@@ -871,7 +890,7 @@ mod tests {
         }
     }
 
-    // @trace spec:podman-orchestration, spec:secret-management
+    // @trace spec:podman-orchestration, spec:secrets-management
     #[test]
     fn all_profiles_have_pids_limit() {
         let profiles = [
@@ -892,7 +911,7 @@ mod tests {
         }
     }
 
-    // @trace spec:podman-orchestration, spec:secret-management
+    // @trace spec:podman-orchestration, spec:secrets-management
     #[test]
     fn pids_limits_match_container_roles() {
         assert_eq!(forge_opencode_profile().pids_limit, 512, "Forge opencode: compilers + LSP + AI");

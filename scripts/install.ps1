@@ -36,14 +36,6 @@ if ($proc.ExitCode -ne 0) {
 Remove-Item $setupPath -Force -ErrorAction SilentlyContinue
 Write-Host "  Tillandsias installed." -ForegroundColor Green
 
-# --- Create short alias (tillandsias.exe → tillandsias-tray.exe) ---
-$installDir = "$env:LOCALAPPDATA\Tillandsias"
-$trayExe = "$installDir\tillandsias-tray.exe"
-$aliasExe = "$installDir\tillandsias.exe"
-if ((Test-Path $trayExe) -and (-not (Test-Path $aliasExe))) {
-    Copy-Item $trayExe $aliasExe
-}
-
 # --- Ensure WSL2 is available (required by Podman) ---
 $wslPath = Get-Command wsl -ErrorAction SilentlyContinue
 if (-not $wslPath) {

@@ -2,17 +2,36 @@
 //!
 //! Fetches the authenticated user's repositories using the `gh` CLI inside
 //! a forge container, and clones selected repos into the scanner's watched
-//! directory. All operations reuse the same security flags and secret mounts
-//! as other podman operations.
+//! directory. All operations reuse the same security flags as other podman
+//! operations.
 //!
-//! @trace spec:remote-projects, spec:gh-auth-script
+//! # Credential delivery
+//!
+//! These are short-lived `podman run` invocations (one shot, `--rm`). The
+//! token is read from the host OS keyring on the host side, then passed to
+//! the child podman process via `Command::env("GH_TOKEN", token)` — that
+//! sets the variable in the *podman CLI process's* environment only, not
+//! in this process's environment. Podman is then asked to forward it into
+//! the container via the bare-name form `-e GH_TOKEN` (no value on the
+//! command line). End result:
+//!
+//!   - Token never appears in `ps aux` (no value in argv)
+//!   - Token never persists on the host filesystem
+//!   - Token visible only in `/proc/<podman-pid>/environ` for the brief
+//!     lifetime of the podman child, readable only by the same UID
+//!   - Inside the container, `gh` reads `GH_TOKEN` natively (its documented
+//!     non-interactive auth path) — no `gh auth login`, no on-disk hosts.yml
+//!
+//! The host-side `String` holding the token is wrapped in
+//! `zeroize::Zeroizing<String>` so its heap allocation is wiped on Drop.
+//!
+//! @trace spec:remote-projects, spec:gh-auth-script, spec:native-secrets-store, spec:secrets-management
 
 use std::path::Path;
 
 use serde::Deserialize;
 use tracing::{debug, error, info, instrument};
-
-use tillandsias_core::config::cache_dir;
+use zeroize::Zeroizing;
 
 use crate::handlers::forge_image_tag;
 
@@ -35,40 +54,40 @@ struct GhRepoEntry {
 
 /// Fetch the authenticated user's GitHub repositories.
 ///
-/// Runs `gh repo list --json name,nameWithOwner,url --limit 100` inside a
-/// forge container with GitHub credentials mounted. Returns the parsed list
-/// or an error string.
-// @trace spec:remote-projects
+/// Runs `gh repo list --json name,nameWithOwner --limit 100` inside an
+/// ephemeral forge container with `GH_TOKEN` injected from the host
+/// keyring (see module docs for the no-leak passing scheme). Returns the
+/// parsed list or an error string.
+/// @trace spec:remote-projects, spec:secrets-management
 #[instrument(skip_all)]
 pub async fn fetch_repos() -> Result<Vec<RemoteRepo>, String> {
-    let cache = cache_dir();
-    let secrets_dir = cache.join("secrets");
-
-    // Verify credentials exist in the keyring before spawning a container.
-    // D-Bus is the sole credential path — no hosts.yml fallback.
-    // @trace spec:native-secrets-store, spec:secret-management
-    match crate::secrets::retrieve_github_token() {
-        Ok(Some(_)) => { /* token in keyring, proceed */ }
+    // Read the token (not just check existence) so we can hand it to the
+    // child podman process via env. Wrap in Zeroizing so the host-side heap
+    // allocation is wiped when this function returns.
+    // @trace spec:native-secrets-store, spec:secrets-management
+    let token: Zeroizing<String> = match crate::secrets::retrieve_github_token() {
+        Ok(Some(t)) => Zeroizing::new(t),
         Ok(None) => return Err("No GitHub credentials found in keyring".to_string()),
         Err(e) => return Err(format!("Keyring unavailable: {e}")),
-    }
+    };
 
-    let args = build_gh_run_args(
-        &secrets_dir,
-        &[
-            "gh",
-            "repo",
-            "list",
-            "--json",
-            "name,nameWithOwner",
-            "--limit",
-            "100",
-        ],
-    );
+    let args = build_gh_run_args(&[
+        "gh",
+        "repo",
+        "list",
+        "--json",
+        "name,nameWithOwner",
+        "--limit",
+        "100",
+    ]);
 
     info!("Fetching remote repos via gh CLI");
 
+    // `Command::env(K, V)` puts the var in the spawned podman process's
+    // environment ONLY — not in this Rust process's environment. The
+    // `-e GH_TOKEN` arg (no `=value`) tells podman to forward it.
     let output = tillandsias_podman::podman_cmd()
+        .env("GH_TOKEN", token.as_str())
         .arg("run")
         .args(&args)
         .output()
@@ -76,9 +95,11 @@ pub async fn fetch_repos() -> Result<Vec<RemoteRepo>, String> {
         .map_err(|e| format!("Failed to run podman: {e}"))?;
 
     if !output.status.success() {
+        // gh's stderr on auth failure says e.g. "authentication required";
+        // it does NOT echo GH_TOKEN — it's an env var, not a CLI arg.
         let stderr = String::from_utf8_lossy(&output.stderr);
         error!(stderr = %stderr, "gh repo list failed");
-        return Err(format!("gh repo list failed: {stderr}"));
+        return Err(format!("gh repo list failed: {}", stderr.trim()));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -101,14 +122,13 @@ pub async fn fetch_repos() -> Result<Vec<RemoteRepo>, String> {
 
 /// Clone a remote repository into the target directory.
 ///
-/// Runs `gh repo clone <full_name> <target_dir>` inside a forge container
-/// with GitHub credentials and the target directory mounted.
-// @trace spec:remote-projects
+/// Runs `gh repo clone <full_name> <target_dir>` inside an ephemeral forge
+/// container with `GH_TOKEN` injected from the host keyring (see module
+/// docs for the no-leak passing scheme) and the target's parent directory
+/// bind-mounted RW so the clone lands on the host filesystem.
+/// @trace spec:remote-projects, spec:secrets-management
 #[instrument(skip_all, fields(repo = %full_name, target = %target_dir.display()))]
 pub async fn clone_repo(full_name: &str, target_dir: &Path) -> Result<(), String> {
-    let cache = cache_dir();
-    let secrets_dir = cache.join("secrets");
-
     // Ensure the parent directory exists so we can mount it
     let parent = target_dir
         .parent()
@@ -118,6 +138,15 @@ pub async fn clone_repo(full_name: &str, target_dir: &Path) -> Result<(), String
         .file_name()
         .ok_or_else(|| "Cannot determine directory name for clone target".to_string())?
         .to_string_lossy();
+
+    // Read the token from the host keyring; clone needs auth for private repos
+    // and rate-limit headroom for public ones.
+    // @trace spec:native-secrets-store, spec:secrets-management
+    let token: Zeroizing<String> = match crate::secrets::retrieve_github_token() {
+        Ok(Some(t)) => Zeroizing::new(t),
+        Ok(None) => return Err("No GitHub credentials found in keyring".to_string()),
+        Err(e) => return Err(format!("Keyring unavailable: {e}")),
+    };
 
     // The container mounts the parent of the target dir (e.g., ~/src)
     // and clones into /home/forge/src/<name>
@@ -136,24 +165,11 @@ pub async fn clone_repo(full_name: &str, target_dir: &Path) -> Result<(), String
     args.push("-v".to_string());
     args.push(format!("{}:/home/forge/src", parent.display()));
 
-    // Mount GitHub credentials (read-only)
-    args.push("-v".to_string());
-    args.push(format!(
-        "{}:/home/forge/.config/gh:ro",
-        secrets_dir.join("gh").display()
-    ));
-
-    // Mount git config directory (read-write, gh auth needs to write) + env var
-    let git_dir = secrets_dir.join("git");
-    if git_dir.exists() {
-        args.push("-v".to_string());
-        args.push(format!(
-            "{}:/home/forge/.config/tillandsias-git:rw",
-            git_dir.display()
-        ));
-        args.push("-e".to_string());
-        args.push("GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig".to_string());
-    }
+    // Forward GH_TOKEN from the calling podman process's env (set below
+    // via Command::env). Bare-name `-e GH_TOKEN` tells podman to inherit;
+    // no value appears on the command line.
+    args.push("-e".to_string());
+    args.push("GH_TOKEN".to_string());
 
     // Override entrypoint to skip forge setup
     args.push("--entrypoint".to_string());
@@ -168,6 +184,7 @@ pub async fn clone_repo(full_name: &str, target_dir: &Path) -> Result<(), String
     info!(repo = %full_name, "Cloning repository");
 
     let output = tillandsias_podman::podman_cmd()
+        .env("GH_TOKEN", token.as_str())
         .arg("run")
         .args(&args)
         .output()
@@ -177,7 +194,7 @@ pub async fn clone_repo(full_name: &str, target_dir: &Path) -> Result<(), String
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         error!(repo = %full_name, stderr = %stderr, "Clone failed");
-        return Err(format!("Clone failed: {stderr}"));
+        return Err(format!("Clone failed: {}", stderr.trim()));
     }
 
     info!(repo = %full_name, "Clone completed");
@@ -186,10 +203,11 @@ pub async fn clone_repo(full_name: &str, target_dir: &Path) -> Result<(), String
 
 /// Build common podman run arguments for short-lived gh CLI operations.
 ///
-/// Returns args for `podman run <args>` — ephemeral, security-hardened,
-/// with GitHub credentials mounted read-only. Uses `--entrypoint` to
-/// bypass the forge image's default entrypoint (which installs opencode).
-fn build_gh_run_args(secrets_dir: &Path, command: &[&str]) -> Vec<String> {
+/// Returns args for `podman run <args>` — ephemeral, security-hardened, with
+/// a bare-name `-e GH_TOKEN` so podman inherits the token from the calling
+/// process's environment (the caller MUST set it via `Command::env`).
+/// @trace spec:secrets-management, spec:native-secrets-store
+fn build_gh_run_args(command: &[&str]) -> Vec<String> {
     let mut args = vec![
         "--rm".to_string(),
         "--init".to_string(),
@@ -197,26 +215,11 @@ fn build_gh_run_args(secrets_dir: &Path, command: &[&str]) -> Vec<String> {
         "--security-opt=no-new-privileges".to_string(),
         "--userns=keep-id".to_string(),
         "--security-opt=label=disable".to_string(),
+        // Forward GH_TOKEN from the calling process's env. No value here
+        // means "inherit from caller" — token never appears in argv.
+        "-e".to_string(),
+        "GH_TOKEN".to_string(),
     ];
-
-    // Mount GitHub CLI credentials (read-only for fetch/clone operations)
-    args.push("-v".to_string());
-    args.push(format!(
-        "{}:/home/forge/.config/gh:ro",
-        secrets_dir.join("gh").display()
-    ));
-
-    // Mount git config directory (read-write, gh auth needs to write) + env var to find it
-    let git_dir = secrets_dir.join("git");
-    if git_dir.exists() {
-        args.push("-v".to_string());
-        args.push(format!(
-            "{}:/home/forge/.config/tillandsias-git:rw",
-            git_dir.display()
-        ));
-        args.push("-e".to_string());
-        args.push("GIT_CONFIG_GLOBAL=/home/forge/.config/tillandsias-git/.gitconfig".to_string());
-    }
 
     // Override entrypoint to skip forge setup (opencode/openspec install)
     args.push("--entrypoint".to_string());

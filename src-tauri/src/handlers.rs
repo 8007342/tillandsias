@@ -262,6 +262,7 @@ pub(crate) async fn ensure_inference_running(
         },
         git_author_name: String::new(),
         git_author_email: String::new(),
+        token_file_path: None,
         use_port_mapping: port_mapping,
         // @trace spec:opencode-web-session
         persistent: false,
@@ -576,6 +577,7 @@ pub(crate) async fn ensure_proxy_running(
         },
         git_author_name: String::new(),
         git_author_email: String::new(),
+        token_file_path: None,
         use_port_mapping: port_mapping,
         // @trace spec:opencode-web-session
         persistent: false,
@@ -627,7 +629,7 @@ pub(crate) async fn ensure_proxy_running(
                 "Proxy container started (detached)"
             );
 
-            // @trace spec:secret-management
+            // @trace spec:secrets-management
             info!(
                 accountability = true,
                 category = "secrets",
@@ -649,6 +651,7 @@ pub(crate) async fn ensure_proxy_running(
             // nc -z is a pure TCP port probe — succeeds if squid is listening.
             // Exponential backoff: 1s, 2s, 4s, 8s, 8s... (capped at 8s).
             let max_attempts: u32 = 10;
+            let mut ready = false;
             for attempt in 0..max_attempts {
                 let check = tillandsias_podman::podman_cmd()
                     .args(["exec", PROXY_CONTAINER_NAME, "sh", "-c", "nc -z localhost 3128"])
@@ -658,14 +661,23 @@ pub(crate) async fn ensure_proxy_running(
                     .await;
                 if check.map(|s| s.success()).unwrap_or(false) {
                     info!(spec = "proxy-container", attempt, "Proxy readiness check passed");
+                    ready = true;
                     break;
                 }
                 if attempt < max_attempts - 1 {
                     let delay = Duration::from_secs((1u64 << attempt).min(8));
                     tokio::time::sleep(delay).await;
-                } else {
-                    warn!(spec = "proxy-container", "Proxy readiness check failed after {max_attempts} attempts — proceeding anyway");
                 }
+            }
+
+            if !ready {
+                error!(
+                    spec = "proxy-container",
+                    "Proxy readiness check failed after {max_attempts} attempts — refusing to proceed",
+                );
+                return Err(format!(
+                    "Proxy container not responding on :3128 after {max_attempts} attempts",
+                ));
             }
 
             Ok(())
@@ -744,6 +756,78 @@ pub(crate) async fn cleanup_enclave_network() {
             Err(e) => warn!(spec = "enclave-network", error = %e, "Enclave network removal failed — zombie containers may exist"),
         }
     }
+}
+
+/// Startup crash-recovery: stop every running `tillandsias-*` container
+/// and remove the enclave network.
+///
+/// Our containers all launch with `--rm`, so stopping them also deletes the
+/// container layer. The `podman ps --filter name=tillandsias-*` + `podman
+/// stop` path is safe to call unconditionally at startup: if the prior
+/// tillandsias session exited cleanly, there are no running containers and
+/// this is a no-op; if the prior session crashed / was SIGKILL'd, its
+/// `EnclaveCleanupGuard` Drop handler never ran and we recover here.
+///
+/// Never blocks startup on podman slowness: a single best-effort `podman ps`
+/// is issued; per-container stops run sequentially but with a short timeout
+/// inherited from `--stop-timeout=10`.
+///
+/// @trace spec:podman-orchestration, spec:secrets-management
+pub(crate) async fn sweep_orphan_containers() {
+    let output = tillandsias_podman::podman_cmd()
+        .args(["ps", "--filter", "name=tillandsias-", "--format", "{{.Names}}"])
+        .output()
+        .await;
+    let names = match output {
+        Ok(o) if o.status.success() => {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        }
+        Ok(o) => {
+            debug!(
+                exit_code = o.status.code().unwrap_or(-1),
+                "podman ps exited non-zero during orphan sweep — skipping"
+            );
+            return;
+        }
+        Err(e) => {
+            debug!(error = %e, "podman ps failed during orphan sweep — skipping");
+            return;
+        }
+    };
+    if names.is_empty() {
+        debug!("Orphan sweep: no running tillandsias-* containers");
+        return;
+    }
+    info!(
+        accountability = true,
+        category = "enclave",
+        spec = "podman-orchestration",
+        orphan_count = names.len(),
+        "Orphan sweep: stopping containers left over from a prior session"
+    );
+    let client = PodmanClient::new();
+    let launcher = tillandsias_podman::launch::ContainerLauncher::new(client);
+    for name in &names {
+        if let Err(e) = launcher.stop(name).await {
+            debug!(container = %name, error = %e, "Orphan container stop returned error (may have exited already)");
+        }
+        // Belt-and-suspenders: our runtime always uses `--rm`, so stop also
+        // deletes. But older installations or hand-built containers might
+        // not; force-remove here so the orphan is fully gone either way.
+        let _ = tillandsias_podman::podman_cmd()
+            .args(["rm", "-f", name])
+            .output()
+            .await;
+        // Also wipe any residual token file for this container.
+        crate::secrets::cleanup_token_file(name);
+    }
+    // Finally clear the enclave network itself — safe to recreate on next launch.
+    cleanup_enclave_network().await;
 }
 
 // ---------------------------------------------------------------------------
@@ -992,7 +1076,13 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
     std::fs::create_dir_all(&mirrors_dir)
         .map_err(|e| format!("Cannot create mirrors directory: {e}"))?;
 
-    let pp = project_path.display().to_string();
+    // @trace spec:cli-mode, spec:fix-windows-extended-path
+    // Defensive: strip the Windows extended-path prefix `\\?\` if it survived
+    // upstream. `git clone <source>` parses leading `\\` as a UNC URL and
+    // chokes on the `?` with "hostname contains invalid characters". The CLI
+    // entry strips this after canonicalize(), but tray callers may not have.
+    let project_path_simple = crate::embedded::simplify_path(project_path);
+    let pp = project_path_simple.display().to_string();
     let mp = mirror_path.display().to_string();
     let md = mirrors_dir.display().to_string();
 
@@ -1311,14 +1401,34 @@ pub(crate) async fn ensure_git_service_running(
         }
     }
 
-    // Build git service container args using the profile + LaunchContext
-    // D-Bus session bus forwarding is the sole credential path.
-    // @trace spec:secret-management, spec:git-mirror-service
+    // Build git service container args using the profile + LaunchContext.
+    // Credential delivery: the host reads the GitHub OAuth token from the
+    // OS keyring and writes it to a per-container ephemeral file. The
+    // file is bind-mounted :ro at /run/secrets/github_token. The container
+    // has NO D-Bus, NO keyring access, NO knowledge of the host vault.
+    // @trace spec:secrets-management, spec:native-secrets-store, spec:git-mirror-service
     let profile = tillandsias_core::container_profile::git_service_profile();
     let cache = cache_dir();
 
     // @trace spec:podman-orchestration
     ensure_container_log_dir(&container_name);
+
+    // @trace spec:secrets-management, spec:native-secrets-store
+    // Materialize the token file on tmpfs (best-effort: missing token just
+    // means the container launches without credentials and authenticated
+    // push/fetch will fail with a clear auth error — expected UX when the
+    // user hasn't run --github-login yet).
+    let token_file_path = match crate::secrets::prepare_token_file(&container_name) {
+        Ok(maybe_path) => maybe_path,
+        Err(e) => {
+            warn!(
+                spec = "secrets-management",
+                error = %e,
+                "Could not prepare token file — git service will launch without credentials"
+            );
+            None
+        }
+    };
 
     let port_mapping = needs_port_mapping();
 
@@ -1344,6 +1454,7 @@ pub(crate) async fn ensure_git_service_running(
         },
         git_author_name: String::new(),
         git_author_email: String::new(),
+        token_file_path,
         use_port_mapping: port_mapping,
         // @trace spec:opencode-web-session
         persistent: false,
@@ -1383,16 +1494,16 @@ pub(crate) async fn ensure_git_service_running(
                 "Git service container started (detached)"
             );
 
-            // @trace spec:secret-management
+            // @trace spec:secrets-management, spec:native-secrets-store
             info!(
                 accountability = true,
                 category = "secrets",
-                safety = "D-Bus session bus access granted — sole container with credential access",
+                safety = "GitHub token delivered via ephemeral :ro tmpfs file from host keyring — no D-Bus, no keyring API inside container",
                 pids_limit = 64,
                 read_only = true,
-                spec = "secret-management",
+                spec = "secrets-management",
                 container = %container_name,
-                "Credential isolation boundary: git service has D-Bus access, pids-limit=64, read-only FS"
+                "Credential isolation boundary: git service has tmpfs token file only, pids-limit=64, read-only FS"
             );
 
             // @trace spec:git-mirror-service
@@ -1401,6 +1512,7 @@ pub(crate) async fn ensure_git_service_running(
             // nc -z does a zero-I/O TCP connect check.
             // Exponential backoff: 1s, 2s, 4s, 8s, 8s... (capped at 8s).
             let max_attempts: u32 = 10;
+            let mut ready = false;
             for attempt in 0..max_attempts {
                 let check = tillandsias_podman::podman_cmd()
                     .args(["exec", &container_name, "sh", "-c", "nc -z localhost 9418"])
@@ -1410,21 +1522,24 @@ pub(crate) async fn ensure_git_service_running(
                     .await;
                 if check.map(|s| s.success()).unwrap_or(false) {
                     info!(spec = "git-mirror-service", project = %project_name, attempt, "Git service health check passed");
+                    ready = true;
                     break;
                 }
                 if attempt < max_attempts - 1 {
                     let delay = Duration::from_secs((1u64 << attempt).min(8));
                     tokio::time::sleep(delay).await;
-                } else {
-                    warn!(
-                        accountability = true,
-                        category = "capability",
-                        safety = "DEGRADED: git service started but daemon not responding on port 9418",
-                        spec = "git-mirror-service",
-                        project = %project_name,
-                        "Git service health check failed after {max_attempts} attempts — proceeding with degraded git"
-                    );
                 }
+            }
+
+            if !ready {
+                error!(
+                    spec = "git-mirror-service",
+                    project = %project_name,
+                    "Git service daemon not responding on :9418 after {max_attempts} attempts — refusing to proceed",
+                );
+                return Err(format!(
+                    "Git service not responding on :9418 after {max_attempts} attempts",
+                ));
             }
 
             Ok(())
@@ -1499,32 +1614,40 @@ pub async fn ensure_enclave_ready(
     // @trace spec:inference-container
     crate::gpu::detect_and_patch_models();
 
-    // Step 3: Inference — soft requirement, SEQUENTIAL.
-    // Must run sequentially because rootless podman corrupts overlay storage
-    // when concurrent `podman build` operations run simultaneously.
-    // Failure is non-fatal — the forge will launch without inference.
-    // @trace spec:inference-container
-    match ensure_inference_running(state, build_tx.clone()).await {
-        Ok(()) => {
-            info!(
+    // Step 3: Inference — soft requirement, ASYNC (off the critical path).
+    //
+    // Inference is the slowest enclave service (15-30s ollama init + up to
+    // 55s health-check backoff). It is non-fatal: the forge launches without
+    // it. Spawn fire-and-forget so the launch path proceeds to git mirror +
+    // forge while inference warms up.
+    //
+    // BUILD_MUTEX (handlers.rs ~line 54) still serializes concurrent podman
+    // builds, so spawning here does not race with the forge or proxy builds.
+    //
+    // @trace spec:inference-container, spec:async-inference-launch
+    let inference_state = state.clone();
+    let inference_build_tx = build_tx.clone();
+    let inference_spawn_at = std::time::Instant::now();
+    tokio::spawn(async move {
+        match ensure_inference_running(&inference_state, inference_build_tx).await {
+            Ok(()) => info!(
                 accountability = true,
                 category = "inference",
-                spec = "inference-container",
-                "Inference container ready"
-            );
-        }
-        Err(e) => {
-            // TODO: Remove fallback — make this a hard error
-            warn!(
+                spec = "inference-container, async-inference-launch",
+                elapsed_secs = inference_spawn_at.elapsed().as_secs_f64(),
+                "Inference container ready (async)"
+            ),
+            Err(e) => warn!(
                 accountability = true,
                 category = "capability",
                 safety = "DEGRADED: no local LLM inference — AI features unavailable in containers",
-                spec = "inference-container",
+                spec = "inference-container, async-inference-launch",
+                elapsed_secs = inference_spawn_at.elapsed().as_secs_f64(),
                 error = %e,
-                "Inference setup failed — containers will launch without local inference"
-            );
+                "Inference setup failed (async) — containers will launch without local inference"
+            ),
         }
-    }
+    });
 
     // NOTE: Tools overlay (ensure_tools_overlay) is NOT called here because it
     // requires the forge image to exist (it runs a temporary forge container).
@@ -1541,20 +1664,19 @@ pub async fn ensure_enclave_ready(
     .await
     {
         Ok(Ok(mirror_path)) => {
-            if let Err(e) =
-                ensure_git_service_running(project_name, &mirror_path, state, build_tx.clone())
-                    .await
-            {
-                // TODO: Remove fallback — make this a hard error
-                warn!(
-                    accountability = true,
-                    category = "capability",
-                    safety = "DEGRADED: no git mirror — containers will lack project code history",
-                    spec = "git-mirror-service",
-                    error = %e,
-                    "Git service setup failed — containers will launch without git mirror"
-                );
-            }
+            // Git service is load-bearing: forge entrypoints clone from
+            // git://git-service/<project> on launch. No service → forge
+            // starts with no code. Propagate the error hard.
+            ensure_git_service_running(project_name, &mirror_path, state, build_tx.clone())
+                .await
+                .map_err(|e| {
+                    error!(
+                        spec = "git-mirror-service",
+                        error = %e,
+                        "Git service setup failed — refusing to proceed",
+                    );
+                    e
+                })?;
             Some(mirror_path)
         }
         Ok(Err(e)) => {
@@ -1565,15 +1687,15 @@ pub async fn ensure_enclave_ready(
         }
     };
 
-    // @trace spec:enclave-network
+    // @trace spec:enclave-network, spec:async-inference-launch
     info!(
         accountability = true,
         category = "enclave",
-        spec = "enclave-network",
+        spec = "enclave-network, async-inference-launch",
         proxy = PROXY_CONTAINER_NAME,
         git_service = %format!("tillandsias-git-{}", project_name),
         inference = INFERENCE_CONTAINER_NAME,
-        "Enclave ready — forge depends on: proxy (strict:3128), git-service (git://9418), inference (http://11434)"
+        "Enclave ready — proxy (strict:3128) + git-service (git://9418) ready; inference (http://11434) launching async"
     );
 
     Ok(EnclaveContext {
@@ -1654,7 +1776,8 @@ pub fn ensure_enclave_ready_cli(
 }
 
 /// Stop the git service container for a project. Best-effort, errors are logged.
-/// @trace spec:git-mirror-service
+/// Also unlinks the ephemeral GitHub token file materialised at launch.
+/// @trace spec:git-mirror-service, spec:secrets-management
 pub(crate) async fn stop_git_service(project_name: &str) {
     let name = tillandsias_core::state::ContainerInfo::git_service_container_name(project_name);
     let client = PodmanClient::new();
@@ -1671,6 +1794,11 @@ pub(crate) async fn stop_git_service(project_name: &str) {
             debug!(spec = "git-mirror-service", project = %project_name, error = %e, "Git service stop returned error (may not have been running)");
         }
     }
+
+    // @trace spec:secrets-management, spec:native-secrets-store
+    // The token file only exists while the container is running; remove it
+    // now so a crash or manual podman rm doesn't leave secret state behind.
+    crate::secrets::cleanup_token_file(&name);
 }
 
 /// Check whether ANY versioned forge image (`tillandsias-forge:v*`) exists.
@@ -2066,6 +2194,29 @@ fn get_proxy_ip() -> Result<String, String> {
         .ok_or_else(|| "no IP found".into())
 }
 
+/// Resolve the Containerfile + build-context directory for a given image name.
+///
+/// Mirrors the `case` statement in `scripts/build-image.sh` so the Windows
+/// direct-podman-build path (which doesn't shell out to bash) routes to the
+/// correct image sources instead of always building the forge.
+///
+/// @trace spec:default-image, spec:fix-windows-image-routing
+#[allow(dead_code)] // Used on Windows; non-Windows path shells out to build-image.sh
+fn image_build_paths(source_dir: &std::path::Path, image_name: &str) -> (PathBuf, PathBuf) {
+    let subdir = match image_name {
+        "proxy" => "proxy",
+        "git" => "git",
+        "inference" => "inference",
+        "web" => "web",
+        // forge / default / unknown all build the forge image. Keeping this
+        // permissive matches build-image.sh's behavior; the image_name
+        // validation lives at the call sites that compute the tag.
+        _ => "default",
+    };
+    let dir = source_dir.join("images").join(subdir);
+    (dir.join("Containerfile"), dir)
+}
+
 /// Run `build-image.sh` from the embedded binary scripts.
 ///
 /// Extracts image sources + build scripts to temp, executes, cleans up.
@@ -2109,9 +2260,18 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
     // Git Bash's MSYS2 doesn't initialize properly from native Windows processes.
     #[cfg(target_os = "windows")]
     {
-        let containerfile = source_dir.join("images").join("default").join("Containerfile");
-        let context_dir = source_dir.join("images").join("default");
-        info!(image = image_name, tag = %tag, "Running podman build directly (Windows)");
+        // @trace spec:default-image, spec:fix-windows-image-routing
+        // Route Containerfile + context by image_name. Mirrors the `case` in
+        // scripts/build-image.sh so Windows builds the right image instead of
+        // tagging the forge image with proxy/git/inference names.
+        let (containerfile, context_dir) = image_build_paths(&source_dir, image_name);
+        info!(
+            image = image_name,
+            tag = %tag,
+            containerfile = %containerfile.display(),
+            spec = "default-image, fix-windows-image-routing",
+            "Running podman build directly (Windows)"
+        );
 
         let output = tillandsias_podman::podman_cmd_sync()
             .args(["build", "--tag", &tag, "-f"])
@@ -2250,7 +2410,9 @@ fn forge_profile(
 ///
 /// Resolves all paths, custom mounts, and git identity needed by
 /// `build_podman_args()`. Forge and terminal containers are credential-free:
-/// no token files, no hosts.yml, no Claude dir mounts.
+/// no token files, no Claude dir mounts.
+///
+/// @trace spec:native-secrets-store
 fn build_launch_context(
     container_name: &str,
     project_path: &Path,
@@ -2294,6 +2456,7 @@ fn build_launch_context(
         },
         git_author_name,
         git_author_email,
+        token_file_path: None, // forge/terminal containers are credential-free
         use_port_mapping: port_mapping,
         // @trace spec:opencode-web-session
         persistent: false,
@@ -2583,18 +2746,18 @@ pub async fn handle_attach_here(
 
     // @trace spec:layered-tools-overlay
     // Tools overlay runs HERE — after forge image is confirmed ready (above) and
-    // enclave is up (proxy available for npm downloads). Failure is non-fatal:
-    // entrypoints fall back to inline install.
+    // enclave is up (proxy available for npm downloads). Hard failure: no
+    // per-container fallback — if the overlay cannot be built we refuse the
+    // launch so the real ordering/build error is visible.
     if let Err(e) = crate::tools_overlay::ensure_tools_overlay(build_tx.clone()).await {
-        // TODO: Remove fallback — make this a hard error
-        warn!(
-            accountability = true,
-            category = "performance",
-            safety = "DEGRADED: tools will be installed per-container instead of from cache",
+        error!(
             spec = "layered-tools-overlay",
             error = %e,
-            "Tools overlay setup failed — performance degradation"
+            "Tools overlay build failed — aborting attach"
         );
+        state.running.retain(|c| c.name != container_name);
+        allocator.release(&project_name, genus);
+        return Err(strings::SETUP_ERROR.into());
     }
 
     // Detect whether the project path IS the watch root (e.g., ~/src/) rather
@@ -2654,13 +2817,13 @@ pub async fn handle_attach_here(
     );
 
     // Accountability: log credential-free forge launch.
-    // @trace spec:secret-management
+    // @trace spec:secrets-management
     {
         let has_git_identity = !ctx.git_author_name.is_empty();
         info!(
             accountability = true,
             category = "secrets",
-            safety = "credential-free (no token, no hosts.yml, no claude-dir, no D-Bus)",
+            safety = "credential-free (no token, no claude-dir, no D-Bus)",
             git_identity = has_git_identity,
             pids_limit = 512,
             spec = "secret-management",
@@ -3064,7 +3227,7 @@ pub async fn handle_attach_web(
     }
 
     // Accountability: credential-free, loopback-only, detached.
-    // @trace spec:secret-management, spec:opencode-web-session
+    // @trace spec:secrets-management, spec:opencode-web-session
     {
         let has_git_identity = !ctx.git_author_name.is_empty();
         info!(
@@ -3073,7 +3236,7 @@ pub async fn handle_attach_web(
             safety = "credential-free (no token, no hosts.yml, no claude-dir, no D-Bus), loopback-only (127.0.0.1)",
             git_identity = has_git_identity,
             pids_limit = 512,
-            spec = "secret-management, opencode-web-session",
+            spec = "secrets-management, opencode-web-session",
             "Environment {container_name} launched credential-free (web mode) — zero D-Bus, zero credentials, pids-limit=512, 127.0.0.1:{host_port}:4096",
         );
     }
@@ -3331,7 +3494,15 @@ pub async fn shutdown_all(state: &TrayState) {
     let client = PodmanClient::new();
     let launcher = ContainerLauncher::new(client);
 
-    // Collect unique project names that have git services to stop
+    // @trace spec:git-mirror-service, spec:persistent-git-service
+    // Collect git-service project names from `state.running` directly. Since
+    // the per-forge "stop git-service" trigger was removed, git-services may
+    // outlive their original forges by an arbitrary amount of time. They live
+    // in state.running as `ContainerType::GitService` rows (populated by the
+    // event-loop discovery code in event_loop.rs ~line 632). Iterating those
+    // rows is the authoritative way to find every git-service to clean up at
+    // shutdown — derivation from "projects with active forges" would miss any
+    // git-service whose forge already exited earlier in the session.
     let mut git_service_projects: Vec<String> = Vec::new();
 
     for container in &state.running {
@@ -3342,28 +3513,29 @@ pub async fn shutdown_all(state: &TrayState) {
             }
         }
 
-        // Track projects that may have git services running
-        // @trace spec:git-mirror-service, spec:opencode-web-session
-        // OpenCodeWeb containers also clone from the project's git mirror,
-        // so their project needs its git service stopped on shutdown too.
+        // Track projects that need their git service stopped.
+        // @trace spec:git-mirror-service, spec:persistent-git-service, spec:opencode-web-session
+        // Union: tracked GitService containers (persistent-git-service) AND projects whose
+        // forge/maintenance/OpenCodeWeb containers imply a git service exists for them.
+        // OpenCodeWeb containers clone from the project's git mirror, so their project needs
+        // its git service torn down on shutdown.
         if matches!(
             container.container_type,
             tillandsias_core::state::ContainerType::Forge
                 | tillandsias_core::state::ContainerType::Maintenance
                 | tillandsias_core::state::ContainerType::OpenCodeWeb
+                | tillandsias_core::state::ContainerType::GitService
         ) && !git_service_projects.contains(&container.project_name)
         {
             git_service_projects.push(container.project_name.clone());
         }
     }
 
-    // @trace spec:opencode-web-session
-    // The generic stop-by-name loop above already handles ContainerType::OpenCodeWeb
-    // — no special casing required. The orphan sweep below matches
-    // `tillandsias-*-forge` via the existing `tillandsias-` prefix filter.
-
-    // Stop git service containers for all projects
-    // @trace spec:git-mirror-service
+    // The generic stop-by-name loop above already handles every ContainerType,
+    // including OpenCodeWeb — no special casing required. The orphan sweep below
+    // matches `tillandsias-*-forge` via the existing `tillandsias-` prefix filter.
+    // Stop git service containers for every project that had one tracked.
+    // @trace spec:git-mirror-service, spec:persistent-git-service, spec:opencode-web-session
     for project_name in &git_service_projects {
         stop_git_service(project_name).await;
     }
@@ -3586,12 +3758,12 @@ pub async fn handle_terminal(
                 "Maintenance terminal opened"
             );
             // Accountability: log credential-free terminal launch.
-            // @trace spec:secret-management
+            // @trace spec:secrets-management
             {
                 info!(
                     accountability = true,
                     category = "secrets",
-                    safety = "credential-free (no token, no hosts.yml, no D-Bus)",
+                    safety = "credential-free (no token, no D-Bus)",
                     pids_limit = 512,
                     spec = "secret-management",
                     "Maintenance terminal {container_name} launched credential-free — zero D-Bus, zero credentials, pids-limit=512",
@@ -3812,12 +3984,12 @@ pub async fn handle_root_terminal(
                 "Root terminal opened"
             );
             // Accountability: log credential-free root terminal launch.
-            // @trace spec:secret-management
+            // @trace spec:secrets-management
             {
                 info!(
                     accountability = true,
                     category = "secrets",
-                    safety = "credential-free (no token, no hosts.yml, no D-Bus)",
+                    safety = "credential-free (no token, no D-Bus)",
                     pids_limit = 512,
                     spec = "secret-management",
                     "Root terminal {container_name} launched credential-free — zero D-Bus, zero credentials, pids-limit=512",
@@ -3848,138 +4020,34 @@ pub async fn handle_root_terminal(
 ///
 /// No filesystem scripts are trusted — everything comes from the signed binary.
 ///
-/// Phase 3: If a git service container is already running for any project,
-/// exec `gh auth login` inside it. If no git service is running, start a
-/// temporary one on the default bridge network (for direct internet access
-/// to github.com), run the auth flow, and let `--rm` clean it up.
+/// Tray-side "GitHub Login": open a terminal running our own binary with
+/// `--github-login`. The CLI flow (`runner::run_github_login`) is the
+/// single implementation — it prompts for git identity, runs `gh auth login`
+/// inside a keep-alive git-service container (no host mounts), harvests the
+/// resulting OAuth token via `gh auth token`, stores it in the native
+/// keyring, and tears the container down so no on-disk gh state survives.
+/// Tray and CLI must stay identical.
 ///
-/// @trace spec:git-mirror-service, spec:secret-management
+/// @trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
 pub async fn handle_github_login(
-    state: &TrayState,
-    build_tx: mpsc::Sender<BuildProgressEvent>,
+    _state: &TrayState,
+    _build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<(), String> {
-    info!("GitHub Login: looking for running git service container");
+    info!("GitHub Login: spawning `tillandsias --github-login` in a terminal");
 
-    let podman_path = tillandsias_podman::find_podman_path();
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("Cannot locate own executable: {e}"))?;
 
-    // Check if any git service container is already running.
-    // @trace spec:git-mirror-service
-    if let Some(git_container) = state
-        .running
-        .iter()
-        .find(|c| c.container_type == tillandsias_core::state::ContainerType::GitService)
-    {
-        info!(
-            container = %git_container.name,
-            "Found running git service — exec gh auth login inside it"
-        );
-
-        let exec_cmd = format!(
-            "{} exec -it {} gh auth login --git-protocol https",
-            podman_path, git_container.name
-        );
-        return open_terminal(&exec_cmd, "GitHub Login")
-            .map_err(|e| format!("Failed to open terminal: {e}"));
-    }
-
-    // No git service running — ensure git image is up to date and start a temporary one.
-    // Always invoke the build script for staleness check.
-    // @trace spec:forge-staleness, spec:git-mirror-service
-    info!("GitHub Login: no running git service, starting temporary container");
-
-    let client = PodmanClient::new();
-    let mut tag = git_image_tag();
-
-    // Check for a newer git image (forward compatibility)
-    if let Some(newer_tag) = find_newer_image(&tag) {
-        warn!(expected = %tag, found = %newer_tag, "Using newer git image for GitHub Login");
-        tag = newer_tag;
+    // open_terminal takes a command string it hands to the OS's shell.
+    // Quote the executable path so spaces (Program Files, username etc.) work.
+    let exe_str = exe.to_string_lossy();
+    let cmd = if exe_str.contains(' ') {
+        format!("\"{exe_str}\" --github-login")
     } else {
-        // No newer image — ensure current version is built and up to date
-        info!(tag = %tag, "Ensuring git service image is up to date for GitHub Login...");
+        format!("{exe_str} --github-login")
+    };
 
-        if build_tx.try_send(BuildProgressEvent::Started {
-            image_name: crate::i18n::t("menu.build.chip_git_service").to_string(),
-        }).is_err() {
-            debug!("Build progress channel full/closed — UI may show stale state");
-        }
-
-        let build_result = tokio::task::spawn_blocking(|| run_build_image_script("git")).await;
-
-        match build_result {
-            Ok(Ok(())) => {
-                if !client.image_exists(&tag).await {
-                    error!(tag = %tag, "Git service image still not found after build (GitHub Login)");
-                    if build_tx.try_send(BuildProgressEvent::Failed {
-                        image_name: crate::i18n::t("menu.build.chip_git_service").to_string(),
-                        reason: "Git service image not ready".to_string(),
-                    }).is_err() {
-                        debug!("Build progress channel full/closed — UI may show stale state");
-                    }
-                    return Err(strings::ENV_NOT_READY.into());
-                }
-                info!(tag = %tag, "Git service image ready — proceeding with GitHub Login");
-                prune_old_images();
-                if build_tx.try_send(BuildProgressEvent::Completed {
-                    image_name: crate::i18n::t("menu.build.chip_git_service").to_string(),
-                }).is_err() {
-                    debug!("Build progress channel full/closed — UI may show stale state");
-                }
-            }
-            Ok(Err(ref e)) => {
-                error!(tag = %tag, error = %e, "Git service image build failed (GitHub Login)");
-                if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: crate::i18n::t("menu.build.chip_git_service").to_string(),
-                    reason: "Tillandsias is setting up".to_string(),
-                }).is_err() {
-                    debug!("Build progress channel full/closed — UI may show stale state");
-                }
-                return Err(strings::SETUP_ERROR.into());
-            }
-            Err(ref e) => {
-                error!(tag = %tag, error = %e, "Git service image build task panicked (GitHub Login)");
-                if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: crate::i18n::t("menu.build.chip_git_service").to_string(),
-                    reason: "Tillandsias is setting up".to_string(),
-                }).is_err() {
-                    debug!("Build progress channel full/closed — UI may show stale state");
-                }
-                return Err(strings::SETUP_ERROR.into());
-            }
-        }
-    }
-
-    // Check git identity — warn if not configured (tray can't prompt interactively).
-    // @trace spec:secret-management
-    let cache = tillandsias_core::config::cache_dir();
-    let (git_name, git_email) = crate::launch::read_git_identity(&cache);
-    if git_name.is_empty() || git_email.is_empty() {
-        info!("Git identity not configured — user should run `tillandsias --login` first");
-        send_notification(
-            "Git Identity Not Set",
-            "Run `tillandsias --login` from the terminal to set your name and email before authenticating.",
-        );
-    }
-
-    // Launch a temporary git service container for the auth flow.
-    // Uses default bridge network (no --network flag) so gh can reach github.com.
-    // The enclave network has NO external internet — only the proxy provides
-    // outbound access, but gh needs direct HTTPS to github.com for OAuth.
-    // @trace spec:git-mirror-service, spec:secret-management
-    let temp_name = "tillandsias-gh-login";
-    let exec_cmd = format!(
-        "{podman_path} run -it --rm --init \
-         --name {temp_name} \
-         --cap-drop=ALL \
-         --security-opt=no-new-privileges \
-         --userns=keep-id \
-         --security-opt=label=disable \
-         --entrypoint='' \
-         {tag} \
-         gh auth login --git-protocol https",
-    );
-
-    open_terminal(&exec_cmd, "GitHub Login")
+    open_terminal(&cmd, "GitHub Login")
         .map_err(|e| format!("Failed to open terminal: {e}"))
 }
 
@@ -4218,7 +4286,7 @@ pub async fn handle_serve_here(
     //   - Only mount: document_root → /var/www:ro (read-only)
     //   - Port: 127.0.0.1:<port>:8080 — localhost only, no external exposure
     //   - NO secrets mounted (no gh, no git, no claude, no API keys)
-    // @trace spec:podman-orchestration, spec:secret-management
+    // @trace spec:podman-orchestration, spec:secrets-management
     let podman_bin = tillandsias_podman::find_podman_path();
     let podman_cmd = format!(
         "{podman_bin} run -it --rm --init --stop-timeout=10 \
@@ -4259,6 +4327,41 @@ pub async fn handle_serve_here(
         Err(e) => {
             state.running.retain(|c| c.name != container_name);
             Err(format!("Failed to open web server terminal: {e}"))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    // @trace spec:default-image, spec:fix-windows-image-routing
+    #[test]
+    fn image_build_paths_routes_each_image_to_its_own_subdir() {
+        let root = Path::new("/tmp/sources");
+
+        let cases = [
+            ("forge", "default"),
+            ("proxy", "proxy"),
+            ("git", "git"),
+            ("inference", "inference"),
+            ("web", "web"),
+            ("definitely-not-real", "default"),
+        ];
+
+        for (image_name, expected_subdir) in cases {
+            let (containerfile, context) = image_build_paths(root, image_name);
+            let expected_dir = root.join("images").join(expected_subdir);
+            assert_eq!(
+                context, expected_dir,
+                "context for {image_name} should be {expected_dir:?}"
+            );
+            assert_eq!(
+                containerfile,
+                expected_dir.join("Containerfile"),
+                "Containerfile for {image_name} should live in {expected_dir:?}"
+            );
         }
     }
 }

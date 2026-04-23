@@ -75,17 +75,18 @@ The bare mirror SHALL contain a `post-receive` hook that automatically pushes to
 ### Requirement: D-Bus forwarding for host keyring access
 The git service container SHALL have the host's D-Bus session bus socket forwarded so that `gh` CLI can access the host OS keyring for GitHub credentials. Credentials SHALL never be written to disk inside the container.
 
-@trace spec:git-mirror-service, spec:secret-management
+@trace spec:git-mirror-service, spec:secrets-management
 
 #### Scenario: gh auth uses host keyring
 - **WHEN** the git service container runs `gh auth token`
 - **THEN** it SHALL retrieve the token from the host OS keyring via D-Bus
 - **AND** no token SHALL be written to any file inside the container
 
-#### Scenario: D-Bus unavailable fallback
+#### Scenario: D-Bus unavailable
 - **WHEN** the D-Bus session bus is not available (headless/SSH)
-- **THEN** the git service SHALL fall back to hosts.yml bind mount (same as current behavior)
-- **AND** log a warning via `--log-git`
+- **THEN** the git service container SHALL start without credential access
+- **AND** remote push operations SHALL fail with an authentication error until the user re-authenticates via "GitHub Login" in an environment with a reachable keyring
+- **AND** the system SHALL log a warning via `--log-git`
 
 ### Requirement: Git service container lifecycle
 The git service container SHALL be started per-project when the first forge container launches and stopped when all forge containers for that project stop. The container name SHALL be `tillandsias-git-<project>`.

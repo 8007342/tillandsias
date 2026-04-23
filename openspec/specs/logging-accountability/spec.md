@@ -36,23 +36,23 @@ Users SHALL be able to control log verbosity for individual subsystems via a CLI
 Users SHALL be able to enable curated views of sensitive subsystem operations.
 
 #### Scenario: Secret management accountability window
-- **WHEN** the user runs `tillandsias --log-secret-management <project>`
+- **WHEN** the user runs `tillandsias --log-secrets-management <project>`
 - **THEN** each secrets operation produces output in the format:
   ```
   [secrets] v0.1.97.76 | <human-readable summary>
     Spec: <spec-name>
-    Cheatsheet: docs/cheatsheets/secret-management.md
+    Cheatsheet: docs/cheatsheets/secrets-management.md
   ```
 - **AND** no actual secret values (tokens, keys, passwords) appear in the output
 - **AND** operations include: keyring retrieval, token file writes, secret injection into containers, token rotation events
 
 #### Scenario: Accountability window composes with --log
-- **WHEN** the user runs `tillandsias --log-secret-management --log=scanner:debug <project>`
+- **WHEN** the user runs `tillandsias --log-secrets-management --log=scanner:debug <project>`
 - **THEN** both the accountability window output AND scanner debug output are visible
 - **AND** the accountability formatter applies only to secrets operations
 
 #### Scenario: Accountability window in tray mode
-- **WHEN** the user runs `tillandsias --log-secret-management` (no project path, tray mode)
+- **WHEN** the user runs `tillandsias --log-secrets-management` (no project path, tray mode)
 - **THEN** accountability output is written to the log file at `~/.local/state/tillandsias/tillandsias.log`
 - **AND** if stderr is a terminal, accountability output is also printed to stderr
 - **AND** if stderr is not a terminal (e.g., launched from desktop file), only the log file receives output

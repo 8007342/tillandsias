@@ -5,6 +5,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [src-tauri/src/github.rs#L8](../../../src-tauri/src/github.rs#L8)
-- [src-tauri/src/github.rs#L41](../../../src-tauri/src/github.rs#L41)
-- [src-tauri/src/github.rs#L106](../../../src-tauri/src/github.rs#L106)
+- [src-tauri/src/github.rs#L28](../../../src-tauri/src/github.rs#L28)
+- [src-tauri/src/github.rs#L61](../../../src-tauri/src/github.rs#L61)
+- [src-tauri/src/github.rs#L129](../../../src-tauri/src/github.rs#L129)

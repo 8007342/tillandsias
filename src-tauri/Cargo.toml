@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias"
-version = "0.1.158"
+version = "0.1.159"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -21,7 +21,16 @@ tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 dirs = { workspace = true }
-keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
+# Platform-specific backends: without one of these keyring v3 builds a no-op
+# mock store — writes appear to succeed but nothing lands in the OS vault.
+# Linux: Secret Service over D-Bus. macOS: Keychain Services. Windows: Wincred.
+# @trace spec:native-secrets-store
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust", "apple-native", "windows-native"] }
+# zeroize is already pulled in transitively by keyring; declare it directly so
+# we can `Zeroizing<String>`-wrap the OAuth token and wipe its heap allocation
+# on drop (mitigates process-memory scrape / core-dump disclosure).
+# @trace spec:secrets-management
+zeroize = "1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 sha2 = "0.10"

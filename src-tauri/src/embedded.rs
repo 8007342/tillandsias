@@ -18,6 +18,36 @@ use std::os::unix::fs::PermissionsExt;
 
 use tracing::{debug, warn};
 
+/// Strip the Windows extended-path prefix `\\?\` (and `\\?\UNC\`) from a path.
+///
+/// `Path::canonicalize()` on Windows returns paths in the extended form
+/// `\\?\C:\Users\foo` to bypass the legacy MAX_PATH=260 limit. Most consumers
+/// (including git, podman, tracing log fields) handle this fine — but `git
+/// clone <source>` parses the leading `\\` as a UNC URL and then chokes on
+/// the `?` character with "hostname contains invalid characters".
+///
+/// This helper strips the `\\?\` prefix when the remainder is a normal
+/// drive-letter path. UNC paths (`\\?\UNC\server\share`) are *not* simplified
+/// because there is no shorter form for them.
+///
+/// On non-Windows, returns the path unchanged.
+///
+/// @trace spec:cli-mode, spec:cross-platform, spec:fix-windows-extended-path
+pub fn simplify_path(path: &std::path::Path) -> PathBuf {
+    if !cfg!(target_os = "windows") {
+        return path.to_path_buf();
+    }
+    let s = path.to_string_lossy();
+    // Strip `\\?\` if followed by a drive letter (e.g. `\\?\C:\foo`).
+    // Leave `\\?\UNC\server\share` alone — UNC paths cannot be simplified.
+    if let Some(rest) = s.strip_prefix(r"\\?\") {
+        if !rest.starts_with("UNC\\") && rest.len() >= 2 && rest.as_bytes()[1] == b':' {
+            return PathBuf::from(rest);
+        }
+    }
+    path.to_path_buf()
+}
+
 /// Convert a path to MSYS2 format suitable for Git Bash.
 ///
 /// On Windows, `C:\Users\foo` must become `/c/Users/foo` — not just `C:/Users/foo`.
@@ -57,8 +87,11 @@ fn write_lf(path: &std::path::Path, content: &str) -> std::io::Result<()> {
 // ---------------------------------------------------------------------------
 pub const BUILD_IMAGE: &str = include_str!("../../scripts/build-image.sh");
 pub const BUILD_TOOLS_OVERLAY: &str = include_str!("../../scripts/build-tools-overlay.sh");
-#[allow(dead_code)] // Used by GitHub login flow (--github-login CLI path)
-pub const GH_AUTH_LOGIN: &str = include_str!("../../gh-auth-login.sh");
+// @trace spec:native-secrets-store
+// GitHub login is driven from Rust (`runner::run_github_login`): `gh auth
+// login` runs via `podman exec` against a keep-alive git-service container,
+// the token is harvested with `gh auth token`, stored in the OS keyring,
+// and the container is torn down. No embedded shell wrapper needed.
 
 // ---------------------------------------------------------------------------
 // Image sources — flake
@@ -150,6 +183,9 @@ pub const PROXY_ALLOWLIST: &str = include_str!("../../images/proxy/allowlist.txt
 pub const GIT_ENTRYPOINT: &str = include_str!("../../images/git/entrypoint.sh");
 pub const GIT_CONTAINERFILE: &str = include_str!("../../images/git/Containerfile");
 pub const POST_RECEIVE_HOOK: &str = include_str!("../../images/git/post-receive-hook.sh");
+// @trace spec:secrets-management, spec:git-mirror-service
+pub const GIT_ASKPASS_TILLANDSIAS: &str =
+    include_str!("../../images/git/git-askpass-tillandsias.sh");
 
 // ---------------------------------------------------------------------------
 // Image sources — inference image
@@ -464,9 +500,12 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("git Containerfile: {e}"))?;
     write_lf(&git_dir.join("post-receive-hook.sh"), POST_RECEIVE_HOOK)
         .map_err(|e| format!("git post-receive-hook: {e}"))?;
+    // @trace spec:secrets-management, spec:git-mirror-service
+    write_lf(&git_dir.join("git-askpass-tillandsias.sh"), GIT_ASKPASS_TILLANDSIAS)
+        .map_err(|e| format!("git askpass script: {e}"))?;
     #[cfg(unix)]
     {
-        for name in ["entrypoint.sh", "post-receive-hook.sh"] {
+        for name in ["entrypoint.sh", "post-receive-hook.sh", "git-askpass-tillandsias.sh"] {
             let path = git_dir.join(name);
             if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
                 warn!(
@@ -588,4 +627,48 @@ pub fn cleanup_image_sources() {
     // Also clean up legacy shared dir if it exists
     let legacy = runtime_dir().join("image-sources");
     let _ = fs::remove_dir_all(&legacy);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    // @trace spec:fix-windows-extended-path
+    #[test]
+    fn simplify_path_strips_extended_drive_prefix() {
+        // Only meaningful on Windows; on Unix the function is identity.
+        let p = Path::new(r"\\?\C:\Users\bullo\src\tillandsias");
+        let out = simplify_path(p);
+        if cfg!(target_os = "windows") {
+            assert_eq!(out, PathBuf::from(r"C:\Users\bullo\src\tillandsias"));
+        } else {
+            assert_eq!(out, p.to_path_buf());
+        }
+    }
+
+    // @trace spec:fix-windows-extended-path
+    #[test]
+    fn simplify_path_preserves_unc_paths() {
+        // \\?\UNC\server\share has no shorter form — leave it alone.
+        let p = Path::new(r"\\?\UNC\server\share\dir");
+        let out = simplify_path(p);
+        assert_eq!(out, p.to_path_buf());
+    }
+
+    // @trace spec:fix-windows-extended-path
+    #[test]
+    fn simplify_path_passthrough_when_no_prefix() {
+        let p = Path::new(r"C:\Users\bullo");
+        let out = simplify_path(p);
+        assert_eq!(out, p.to_path_buf());
+    }
+
+    // @trace spec:fix-windows-extended-path
+    #[test]
+    fn simplify_path_unix_paths_unchanged() {
+        let p = Path::new("/home/forge/src/test1");
+        let out = simplify_path(p);
+        assert_eq!(out, p.to_path_buf());
+    }
 }

@@ -376,7 +376,7 @@ fn detect_install_target() -> Option<PathBuf> {
             }
         }).or_else(|| {
             let local_app = std::env::var("LOCALAPPDATA").ok()?;
-            let path = PathBuf::from(local_app).join("Tillandsias").join("tillandsias-tray.exe");
+            let path = PathBuf::from(local_app).join("Tillandsias").join("tillandsias.exe");
             path.exists().then_some(path)
         })
     } else {

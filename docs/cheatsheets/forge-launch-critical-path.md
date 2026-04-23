@@ -24,7 +24,7 @@ Tools overlay is now built during initialization, not deferred to first containe
 | 2 | Check/build forge image | `runner.rs:342-411` | `podman image exists` | "Image not found" error |
 | 3 | Start proxy container | `handlers.rs:ensure_infrastructure_ready()` | Podman socket | Hang or "proxy failed" |
 | 4 | Generate ephemeral CA chain | `ca.rs:generate_ca_chain()` | rcgen crate | "CA chain generation failed" |
-| 5 | Start inference container | `handlers.rs` (background) | Proxy ready | Non-fatal, logs warning |
+| 5 | Start inference container | `handlers.rs:ensure_enclave_ready()` via `tokio::spawn` | Proxy ready (queues on BUILD_MUTEX) | Non-fatal, logs warning. **Async since `async-inference-launch`** — does NOT block subsequent steps. |
 | 6 | Ensure tools overlay (safety net) | `handlers.rs:handle_attach_here()` | Forge image + proxy + CA | Fast no-op if init already built it |
 | 7 | Start git service | `handlers.rs` | Enclave network | "Git service failed" |
 | 8 | Create git mirror | `handlers.rs` | Git service running | "Mirror creation failed" |
@@ -164,10 +164,34 @@ ls -la ~/.cache/tillandsias/tools-overlay/
 cat ~/.cache/tillandsias/tools-overlay/current/.manifest.json
 ```
 
+## Measured Latency (Windows 11 + podman 5.8.2 / WSL machine)
+
+@trace spec:async-inference-launch, spec:fix-windows-image-routing, spec:persistent-git-service, spec:overlay-mount-cache
+
+Numbers from a clean-install verification run (podman machine wiped + reinitialized):
+
+| Scenario | Mode | Time | Notes |
+|----------|------|------|-------|
+| First-ever install + init | CLI `--init` | ~4 min | Downloads fedora-minimal:43 (136 MB) + alpine:3.20 (8 MB), builds 4 distinct enclave images, builds tools overlay |
+| Cold launch (images cached, no containers) | CLI `--bash` | ~18 s | Proxy ~6 s + git-service ~6 s; inference launches async (~3 s in parallel) — does NOT add to this number |
+| Warm launch (containers up, fresh process) | CLI `--bash` | ~6.5 s | Inference snapshot-cache hit (`elapsed_secs=0.29`), but git-service still rebuilds because CLI's `EnclaveCleanupGuard` stops it on every CLI exit |
+| Warm launch (containers up, tray mode) | Tray "Attach Here" | not measured here | **persistent-git-service** keeps git-service alive across forge teardowns in tray mode → expected ~1-2 s on second + later attaches in same tray session |
+
+**CLI vs tray distinction**: CLI mode is one-shot — `runner.rs:EnclaveCleanupGuard::drop()` tears down proxy + inference + git-service on every exit so each `tillandsias <project>` invocation is essentially cold. The tray hosts the persistent services for its lifetime; warm-relaunch performance in CLI is bounded by the cleanup guard, not the launch path.
+
+**Wave-4 architectural wins (shipped)**:
+- `tools-overlay-fast-reuse` + `overlay-mount-cache` — process-lifetime snapshot cache for the overlay path; sub-millisecond lookup on the warm path; avoids `exists()` syscall + manifest JSON read in both `ensure_tools_overlay` and `resolve_mount_source`.
+- `persistent-git-service` — per-project git-service is tray-session-scoped (was: stopped when last forge for project dies). Eliminates the ~3 s git-service rebuild on every relaunch in tray mode.
+- `async-inference-launch` — inference fires off the critical path; verified `elapsed_secs=0.29` on the async-ready log line on warm launch.
+
+**Path to <2 s warm launch (remaining)**:
+1. **Forge-already-running early-exit** — when the user re-attaches to a project whose forge is still alive, the existing `state.running` guard catches it but is fragile if state out-of-sync. Enhancing it to also scan podman + open a `podman exec` terminal into the existing container instead of failing would give a sub-100 ms re-attach. Tracked as task #11.
+2. **Manual tray-mode measurement** — the persistent-git-service win is verified by code path but not yet stopwatched in tray mode (CLI cleanup guard masks it). Need a brief tray manual test.
+
 ## Related
 
 - `docs/cheatsheets/mitm-proxy-design.md` — Full MITM proxy architecture and cert lifecycle
-- `docs/cheatsheets/secret-management.md` — Credential delivery (separate from CA trust)
+- `docs/cheatsheets/secrets-management.md` — Credential delivery (separate from CA trust)
 - `docs/cheatsheets/enclave-architecture.md` — Network topology and container roles
 - `openspec/specs/proxy-container/spec.md` — Proxy container spec
 - `openspec/specs/layered-tools-overlay/spec.md` — Tools overlay spec

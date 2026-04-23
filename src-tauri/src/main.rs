@@ -153,6 +153,23 @@ fn main() {
 
     info!("Tillandsias starting");
 
+    // @trace spec:secrets-management, spec:native-secrets-store, spec:podman-orchestration
+    // Crash-recovery sweep. TerminateProcess / SIGKILL bypass Rust's Drop
+    // guards, so a prior session that was force-killed can leave behind:
+    //   (1) ephemeral token files in the tmpfs-tokens directory
+    //   (2) running tillandsias-* containers with stale token-file mounts
+    // The tokens themselves stay valid in the OS keyring; what we clean
+    // here is everything that the dead session was supposed to tear down.
+    // Both sweeps are idempotent and no-op if the prior session exited
+    // cleanly.
+    crate::secrets::cleanup_all_token_files();
+    if let Ok(rt) = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        rt.block_on(handlers::sweep_orphan_containers());
+    }
+
     // Detect platform
     let platform = PlatformInfo {
         os: Os::detect(),
@@ -461,35 +478,59 @@ fn main() {
                         info!("All images present at launch — skipping builds");
 
                         // @trace spec:layered-tools-overlay
-                        // Build tools overlay if needed (non-fatal).
+                        // Build tools overlay. Hard failure — no per-container
+                        // fallback. Forge stays unavailable so the real error
+                        // (missing forge image, WSL broken, etc.) is visible.
                         let overlay_build_tx = build_tx.clone();
-                        if let Err(e) = crate::tools_overlay::ensure_tools_overlay(overlay_build_tx).await {
-                            // TODO: Remove fallback — make this a hard error
-                            warn!(
-                                accountability = true,
-                                category = "performance",
-                                safety = "DEGRADED: tools will be installed per-container instead of from cache",
-                                spec = "layered-tools-overlay",
-                                error = %e,
-                                "Tools overlay setup failed — performance degradation"
-                            );
-                        }
+                        let overlay_ok = match crate::tools_overlay::ensure_tools_overlay(overlay_build_tx).await {
+                            Ok(()) => true,
+                            Err(e) => {
+                                error!(
+                                    spec = "layered-tools-overlay",
+                                    error = %e,
+                                    "Tools overlay build failed — forge unavailable",
+                                );
+                                false
+                            }
+                        };
 
-                        {
-                            let mut s = state_for_loop.lock().unwrap();
-                            s.forge_available = true;
-                            s.tray_icon_state = TrayIconState::Mature;
-                        }
-                        if let Some(tray_lock) = TRAY_ICON.get()
-                            && let Ok(tray) = tray_lock.lock()
-                        {
-                            if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
-                                TrayIconState::Mature,
-                            )) {
-                                if let Err(e) = tray.set_icon(Some(icon)) {
-                                    debug!(error = %e, "Tray icon update failed (cosmetic)");
+                        if overlay_ok {
+                            {
+                                let mut s = state_for_loop.lock().unwrap();
+                                s.forge_available = true;
+                                s.tray_icon_state = TrayIconState::Mature;
+                            }
+                            if let Some(tray_lock) = TRAY_ICON.get()
+                                && let Ok(tray) = tray_lock.lock()
+                            {
+                                if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                                    TrayIconState::Mature,
+                                )) {
+                                    if let Err(e) = tray.set_icon(Some(icon)) {
+                                        debug!(error = %e, "Tray icon update failed (cosmetic)");
+                                    }
                                 }
                             }
+                        } else {
+                            {
+                                let mut s = state_for_loop.lock().unwrap();
+                                s.tray_icon_state = TrayIconState::Dried;
+                            }
+                            if let Some(tray_lock) = TRAY_ICON.get()
+                                && let Ok(tray) = tray_lock.lock()
+                            {
+                                if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                                    TrayIconState::Dried,
+                                )) {
+                                    if let Err(e) = tray.set_icon(Some(icon)) {
+                                        debug!(error = %e, "Tray icon update failed (cosmetic)");
+                                    }
+                                }
+                            }
+                            handlers::send_notification(
+                                "Tillandsias",
+                                i18n::t("notifications.infrastructure_failed"),
+                            );
                         }
                         rebuild_menu(&app_handle_for_loop, &state_for_loop);
                     } else {
@@ -616,26 +657,28 @@ fn main() {
                         }
 
                         // Step 4: Build tools overlay now that forge image is ready.
+                        // Hard failure — no per-container fallback. Overlay
+                        // failure keeps forge_available=false so the menu
+                        // reflects the real state.
                         // @trace spec:layered-tools-overlay
+                        let mut overlay_ok = false;
                         if proxy_ok && forge_ok {
                             let overlay_build_tx = build_tx.clone();
-                            if let Err(e) = crate::tools_overlay::ensure_tools_overlay(overlay_build_tx).await {
-                                // TODO: Remove fallback — make this a hard error
-                                warn!(
-                                    accountability = true,
-                                    category = "performance",
-                                    safety = "DEGRADED: tools will be installed per-container instead of from cache",
-                                    spec = "layered-tools-overlay",
-                                    error = %e,
-                                    "Tools overlay setup failed — performance degradation"
-                                );
+                            match crate::tools_overlay::ensure_tools_overlay(overlay_build_tx).await {
+                                Ok(()) => overlay_ok = true,
+                                Err(e) => {
+                                    error!(
+                                        spec = "layered-tools-overlay",
+                                        error = %e,
+                                        "Tools overlay build failed — forge unavailable",
+                                    );
+                                }
                             }
                         }
 
-                        // Step 5: Set forge_available if at least proxy + forge succeeded.
-                        // forge_available gates menu items — only enable when the core
-                        // images needed for "Attach Here" are confirmed ready.
-                        if proxy_ok && forge_ok {
+                        // Step 5: Set forge_available only if proxy + forge built AND
+                        // tools overlay succeeded. forge_available gates menu items.
+                        if proxy_ok && forge_ok && overlay_ok {
                             {
                                 let mut s = state_for_loop.lock().unwrap();
                                 s.forge_available = true;
@@ -660,7 +703,27 @@ fn main() {
                                 i18n::t("notifications.forge_ready"),
                             );
                         } else {
-                            warn!("Core images (proxy/forge) failed — menus remain disabled");
+                            warn!(
+                                proxy_ok,
+                                forge_ok,
+                                overlay_ok,
+                                "Setup incomplete (images or tools overlay) — menus remain disabled"
+                            );
+                            {
+                                let mut s = state_for_loop.lock().unwrap();
+                                s.tray_icon_state = TrayIconState::Dried;
+                            }
+                            if let Some(tray_lock) = TRAY_ICON.get()
+                                && let Ok(tray) = tray_lock.lock()
+                            {
+                                if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                                    TrayIconState::Dried,
+                                )) {
+                                    if let Err(e) = tray.set_icon(Some(icon)) {
+                                        debug!(error = %e, "Tray icon update failed (cosmetic)");
+                                    }
+                                }
+                            }
                             handlers::send_notification(
                                 "Tillandsias",
                                 i18n::t("notifications.infrastructure_failed"),
