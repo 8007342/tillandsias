@@ -106,6 +106,9 @@ pub const FORGE_ENTRYPOINT: &str = include_str!("../../images/default/entrypoint
 pub const FORGE_LIB_COMMON: &str = include_str!("../../images/default/lib-common.sh");
 pub const FORGE_ENTRYPOINT_OPENCODE: &str =
     include_str!("../../images/default/entrypoint-forge-opencode.sh");
+// @trace spec:opencode-web-session, spec:default-image
+pub const FORGE_ENTRYPOINT_OPENCODE_WEB: &str =
+    include_str!("../../images/default/entrypoint-forge-opencode-web.sh");
 pub const FORGE_ENTRYPOINT_CLAUDE: &str =
     include_str!("../../images/default/entrypoint-forge-claude.sh");
 pub const FORGE_ENTRYPOINT_TERMINAL: &str =
@@ -323,6 +326,12 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         FORGE_ENTRYPOINT_OPENCODE,
     )
     .map_err(|e| format!("entrypoint-forge-opencode.sh: {e}"))?;
+    // @trace spec:opencode-web-session, spec:default-image
+    write_lf(
+        &default_dir.join("entrypoint-forge-opencode-web.sh"),
+        FORGE_ENTRYPOINT_OPENCODE_WEB,
+    )
+    .map_err(|e| format!("entrypoint-forge-opencode-web.sh: {e}"))?;
     write_lf(
         &default_dir.join("entrypoint-forge-claude.sh"),
         FORGE_ENTRYPOINT_CLAUDE,
@@ -349,6 +358,8 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         for name in [
             "entrypoint.sh",
             "entrypoint-forge-opencode.sh",
+            // @trace spec:opencode-web-session
+            "entrypoint-forge-opencode-web.sh",
             "entrypoint-forge-claude.sh",
             "entrypoint-terminal.sh",
             "git-askpass-tillandsias.sh",
