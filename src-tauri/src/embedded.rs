@@ -682,4 +682,91 @@ mod tests {
         let out = simplify_path(p);
         assert_eq!(out, p.to_path_buf());
     }
+
+    // @trace spec:default-image, spec:embedded-scripts, spec:opencode-web-session
+    /// Guard against the v0.1.159.189 bug: every file that the Containerfile
+    /// expects under `images/default/` must be emitted by `write_image_sources()`.
+    /// This test walks the real `images/default/` directory on disk (build-time
+    /// cwd = crate root), then for each file checks that a file of the same
+    /// name lands in the extracted temp dir. If someone adds a new file to
+    /// `images/default/` without registering it in this module, the release
+    /// binary will fail at `podman build` time on the user's machine; this
+    /// test catches it pre-merge.
+    #[test]
+    fn every_default_image_source_is_embedded_and_extracted() {
+        // cwd when running unit tests for the `tillandsias` bin is the crate dir
+        // (`src-tauri/`). `images/default/` lives at the workspace root, one
+        // directory up.
+        let images_default = PathBuf::from("../images/default");
+        assert!(
+            images_default.is_dir(),
+            "expected workspace-relative {:?} to exist",
+            images_default
+        );
+
+        let expected: std::collections::HashSet<String> = std::fs::read_dir(&images_default)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            // Skip files that are NOT extracted because they're not part of the
+            // build context (e.g. sibling docs, config-overlay subdir content
+            // handled separately, or files read only at host-side build time).
+            // Keep this allowlist minimal; when adding, document why.
+            .filter(|name| {
+                // `opencode.json` is embedded via FORGE_OPENCODE_JSON — covered.
+                // `git-askpass-tillandsias.sh` is embedded — covered.
+                // `Containerfile` itself is embedded — covered.
+                // `forge-welcome.sh` is embedded — covered.
+                // `lib-common.sh` is embedded — covered.
+                // Currently every file on disk in images/default/ is expected
+                // to land in the extracted tree. If a future file is genuinely
+                // not wanted there (e.g. a README), add a `.gitkeep`-style
+                // carve-out here with a comment explaining why.
+                !name.starts_with(".") && name != "README.md"
+            })
+            .collect();
+
+        let extracted = write_image_sources().expect("write_image_sources should succeed");
+        let extracted_default = extracted.join("images/default");
+
+        let actual: std::collections::HashSet<String> = std::fs::read_dir(&extracted_default)
+            .expect("extracted images/default should exist")
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+
+        let missing: Vec<_> = expected.difference(&actual).collect();
+        assert!(
+            missing.is_empty(),
+            "images/default/ files present on disk but not embedded/extracted: {:?}\n\
+             Add them to `src-tauri/src/embedded.rs` (include_str! const + \
+             write_lf in write_image_sources(); if executable, also to the \
+             chmod loop).",
+            missing
+        );
+
+        // Also verify the specific OpenCode Web entrypoint that regressed in
+        // v0.1.159.189 is both present and executable on Unix.
+        let opencode_web =
+            extracted_default.join("entrypoint-forge-opencode-web.sh");
+        assert!(
+            opencode_web.is_file(),
+            "entrypoint-forge-opencode-web.sh must be extracted"
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&opencode_web).unwrap().permissions().mode();
+            assert!(
+                mode & 0o111 != 0,
+                "entrypoint-forge-opencode-web.sh must be executable; got mode {:o}",
+                mode
+            );
+        }
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&extracted);
+    }
 }
