@@ -53,8 +53,29 @@ ${preview}"
             escaped=$(echo "$result" | jq -Rs .)
             echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"content":[{"type":"text","text":'"$escaped"'}]}}'
             ;;
+        "prompts/list")
+            # @trace spec:opencode-web-session
+            # MCP spec: respond to prompts/list even when no prompts exist.
+            # Silence here hangs OpenCode's /command endpoint for 60s.
+            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"prompts":[]}}'
+            ;;
+        "resources/list")
+            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"resources":[]}}'
+            ;;
+        "resources/templates/list")
+            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"resourceTemplates":[]}}'
+            ;;
         "notifications/initialized")
             # Client acknowledgment - no response needed
+            ;;
+        *)
+            # @trace spec:opencode-web-session
+            # Respond to unknown methods with MCP's "method not found" error
+            # so OpenCode doesn't stall 60s waiting for a reply that never
+            # comes.
+            if [ -n "$id" ]; then
+                echo '{"jsonrpc":"2.0","id":"'"$id"'","error":{"code":-32601,"message":"Method not found: '"$method"'"}}'
+            fi
             ;;
     esac
 done

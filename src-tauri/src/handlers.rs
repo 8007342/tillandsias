@@ -2951,7 +2951,7 @@ pub async fn handle_attach_web(
         );
         // Wait for readiness again — cheap if already healthy, essential if the
         // container was created moments ago by a concurrent click.
-        if let Err(e) = crate::webview::wait_for_web_ready(host_port).await {
+        if let Err(e) = crate::browser::wait_for_web_ready(host_port).await {
             let msg = format!(
                 "OpenCode Web server not responding for '{}': {}",
                 project_name, e
@@ -2959,22 +2959,18 @@ pub async fn handle_attach_web(
             send_notification("Tillandsias", &msg);
             return Err(msg);
         }
-        // Find the genus for the title (should exist since we matched above).
-        let genus_label = state
-            .running
-            .iter()
-            .find(|c| c.name == container_name)
-            .map(|c| c.genus.display_name().to_string())
-            .unwrap_or_default();
-        if let Err(e) =
-            crate::webview::open_web_session_global(&project_name, &genus_label, host_port)
-        {
+        // @trace spec:opencode-web-session
+        // Reattach = launch a fresh native-browser window. We no longer have
+        // a single long-lived webview to "show" — each Attach Here click
+        // produces a new app-mode browser window against the same forge,
+        // giving the user parallel sessions naturally.
+        if let Err(e) = crate::browser::launch_for_project(&project_name, host_port) {
             warn!(
                 project = %project_name,
                 port = host_port,
                 error = %e,
                 spec = "opencode-web-session",
-                "Failed to open additional webview (container remains running)"
+                "Failed to launch native browser (container remains running)"
             );
         }
         return Ok(AppEvent::ContainerStateChange {
@@ -3216,10 +3212,10 @@ pub async fn handle_attach_web(
     }
 
     // @trace spec:opencode-web-session
-    // Health-wait for the loopback server before opening the webview.
+    // Health-wait for the loopback server before launching the browser.
     // On timeout: the container stays running (user can retry); we only
     // fail the open attempt.
-    if let Err(e) = crate::webview::wait_for_web_ready(host_port).await {
+    if let Err(e) = crate::browser::wait_for_web_ready(host_port).await {
         warn!(
             project = %project_name,
             port = host_port,
@@ -3236,19 +3232,18 @@ pub async fn handle_attach_web(
     }
 
     // @trace spec:opencode-web-session
-    // Open the Tauri webview. Failure is decoupled from container health —
-    // log a warning and keep the container running for another attempt.
-    if let Err(e) = crate::webview::open_web_session_global(
-        &project_name,
-        genus.display_name(),
-        host_port,
-    ) {
+    // Launch the user's native browser in app-mode against the forge URL.
+    // Failure is decoupled from container health — log a warning and keep
+    // the container running for another attempt. The `genus` label is
+    // retained only for tray UI (container icon + name).
+    let _ = genus; // label consumed elsewhere; browser URL uses project+port
+    if let Err(e) = crate::browser::launch_for_project(&project_name, host_port) {
         warn!(
             project = %project_name,
             port = host_port,
             error = %e,
             spec = "opencode-web-session",
-            "Failed to open webview window (container remains running)"
+            "Failed to launch native browser (container remains running)"
         );
     }
 
@@ -3344,9 +3339,11 @@ pub async fn handle_stop_project(
     );
 
     // @trace spec:opencode-web-session
-    // Close webviews first so the user sees them vanish before the container
-    // actually stops. Order doesn't affect correctness but matches intent.
-    crate::webview::close_web_sessions_for_project_global(&project_name);
+    // Browser windows are the user's property — we do NOT close them. When
+    // the container stops, the browser window pointing at the defunct
+    // forge transitions to "connection refused" on next reload. The user
+    // closes the window manually; killing user-spawned browser processes
+    // would be a respect boundary violation.
 
     let client = PodmanClient::new();
     let launcher = ContainerLauncher::new(client);
@@ -3512,13 +3509,26 @@ pub async fn shutdown_all(state: &TrayState) {
     );
 
     // @trace spec:app-lifecycle, spec:opencode-web-session
-    // Close every open OpenCode Web webview first so the UI fades out before
-    // the backing containers begin to stop. Failures are logged inside the
-    // helper and do not block the rest of the shutdown sequence.
-    crate::webview::close_all_web_sessions_global();
+    // Browser windows are user-owned — we do NOT close them on shutdown.
+    // Any native browser window still pointing at the forge URL will
+    // transition to a connection-refused page on next reload, which is the
+    // correct feedback. Killing user-spawned browser processes would be a
+    // respect-boundary violation (could take down the user's other tabs
+    // or work).
+
+    // @trace spec:git-mirror-service
+    // Final mirror -> host sync before we tear anything down. Catches any
+    // forge push that landed in the mirror in the last few ms (e.g. the
+    // inotify debounce window hadn't expired yet) so the user's host
+    // working copy is up to date before containers disappear.
+    {
+        let cfg = tillandsias_core::config::load_global_config();
+        let mirrors_root = tillandsias_core::config::cache_dir().join("mirrors");
+        crate::mirror_sync::sync_all_projects(&mirrors_root, &cfg.scanner.watch_paths);
+    }
 
     let client = PodmanClient::new();
-    let launcher = ContainerLauncher::new(client);
+    let launcher = ContainerLauncher::new(client.clone());
 
     // @trace spec:git-mirror-service, spec:persistent-git-service
     // Collect git-service project names from `state.running` directly. Since
@@ -3537,6 +3547,14 @@ pub async fn shutdown_all(state: &TrayState) {
             Err(e) => {
                 warn!(container = %container.name, error = %e, "Failed to stop container on shutdown")
             }
+        }
+        // @trace spec:enclave-network
+        // Stop alone leaves the container in "exited" state — still attached to
+        // the enclave network, which blocks `podman network rm` later. Remove
+        // the container immediately after stopping so the enclave can tear
+        // down cleanly. Errors are non-fatal (may already be gone).
+        if let Err(e) = client.remove_container(&container.name).await {
+            debug!(container = %container.name, error = %e, "remove_container on shutdown (non-fatal)");
         }
 
         // Track projects that need their git service stopped.
@@ -3587,6 +3605,14 @@ pub async fn shutdown_all(state: &TrayState) {
                 if let Err(e) = launcher.stop(&entry.name).await {
                     warn!(container = %entry.name, error = %e, "Failed to stop orphaned container on shutdown");
                 }
+            }
+            // @trace spec:enclave-network
+            // Remove EVERY tillandsias-* container (running or exited) so the
+            // enclave network has no residual attachments when we try to
+            // destroy it. A stale "exited" forge container from a previous
+            // crash will otherwise block network removal indefinitely.
+            if let Err(e) = cleanup_client.remove_container(&entry.name).await {
+                debug!(container = %entry.name, error = %e, "Orphan remove (non-fatal)");
             }
         }
     }

@@ -365,9 +365,16 @@ pub fn terminal_profile() -> ContainerProfile {
                 name: "HTTPS_PROXY",
                 value: EnvValue::Literal("http://proxy:3128"),
             },
+            // @trace spec:opencode-web-session, spec:proxy-container
+            // NO_PROXY covers loopback variants + every enclave-internal peer so
+            // intra-enclave traffic (inference:11434, git-service:9418, proxy
+            // self-reach) never hairpins through Squid. Without this, tools like
+            // opencode/bun see HTTP_PROXY set and route LOCAL requests through
+            // the proxy, which denies them because the destination isn't
+            // allowlisted — causing hangs on every inference probe.
             ProfileEnvVar {
                 name: "NO_PROXY",
-                value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
+                value: EnvValue::Literal("localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
             },
             ProfileEnvVar {
                 name: "http_proxy",
@@ -379,7 +386,7 @@ pub fn terminal_profile() -> ContainerProfile {
             },
             ProfileEnvVar {
                 name: "no_proxy",
-                value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
+                value: EnvValue::Literal("localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
             },
         ],
         secrets: vec![],
@@ -497,6 +504,20 @@ pub fn inference_profile() -> ContainerProfile {
                 name: "https_proxy",
                 value: EnvValue::Literal("http://proxy:3128"),
             },
+            // @trace spec:inference-container, spec:proxy-container
+            // NO_PROXY is mandatory here: ollama does internal health probes
+            // against its own listen address (0.0.0.0:11434, 127.0.0.1:11434)
+            // and these would otherwise traverse Squid and be denied — every
+            // denied probe delays model readiness. Covering enclave peers
+            // ensures any inter-container probe stays inside the network.
+            ProfileEnvVar {
+                name: "NO_PROXY",
+                value: EnvValue::Literal("localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service"),
+            },
+            ProfileEnvVar {
+                name: "no_proxy",
+                value: EnvValue::Literal("localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service"),
+            },
         ],
         secrets: vec![],  // No credentials needed
         image_override: None,
@@ -534,7 +555,45 @@ pub fn git_service_profile() -> ContainerProfile {
                 mode: MountMode::Rw,
             },
         ],
-        env_vars: vec![],
+        env_vars: vec![
+            // @trace spec:git-mirror-service, spec:proxy-container
+            // The post-receive hook pushes the bare mirror to GitHub via
+            // HTTPS. The enclave network has no external DNS or routing —
+            // without these proxy vars, `git push origin` fails with
+            // "Could not resolve host: github.com" and forge commits are
+            // silently stranded in the mirror (data-loss risk: if the
+            // mirror container dies before the push succeeds on retry,
+            // the commit is gone). Squid's allowlist already admits
+            // `.github.com`; ssl_bump is `splice all` so we don't need
+            // to inject the CA cert here — HTTPS is a plain CONNECT tunnel.
+            ProfileEnvVar {
+                name: "HTTP_PROXY",
+                value: EnvValue::Literal("http://proxy:3128"),
+            },
+            ProfileEnvVar {
+                name: "HTTPS_PROXY",
+                value: EnvValue::Literal("http://proxy:3128"),
+            },
+            ProfileEnvVar {
+                name: "http_proxy",
+                value: EnvValue::Literal("http://proxy:3128"),
+            },
+            ProfileEnvVar {
+                name: "https_proxy",
+                value: EnvValue::Literal("http://proxy:3128"),
+            },
+            // Loopback + enclave peers bypass the proxy so intra-service
+            // traffic (git-daemon on localhost, any future sidecar) stays
+            // local.
+            ProfileEnvVar {
+                name: "NO_PROXY",
+                value: EnvValue::Literal("localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
+            },
+            ProfileEnvVar {
+                name: "no_proxy",
+                value: EnvValue::Literal("localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
+            },
+        ],
         secrets: vec![
             SecretMount {
                 kind: SecretKind::GitHubToken,
@@ -640,9 +699,16 @@ fn common_forge_env() -> Vec<ProfileEnvVar> {
             name: "HTTPS_PROXY",
             value: EnvValue::Literal("http://proxy:3128"),
         },
+        // @trace spec:opencode-web-session, spec:proxy-container
+        // NO_PROXY lists every enclave-internal destination (loopback variants
+        // + service names) so intra-enclave traffic never hairpins through
+        // Squid. Without this, tools like opencode/bun see HTTP_PROXY set and
+        // route local requests through the proxy, which denies them because
+        // the destination isn't allowlisted — causing hangs on every
+        // inference probe. Applies to every forge variant.
         ProfileEnvVar {
             name: "NO_PROXY",
-            value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
+            value: EnvValue::Literal("localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
         },
         // Lowercase — required by libcurl, Go net/http, some Python libs.
         ProfileEnvVar {
@@ -655,7 +721,7 @@ fn common_forge_env() -> Vec<ProfileEnvVar> {
         },
         ProfileEnvVar {
             name: "no_proxy",
-            value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
+            value: EnvValue::Literal("localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
         },
     ]
 }
@@ -817,26 +883,36 @@ mod tests {
         );
         assert_eq!(profile.mounts[0].container_path, "/var/log/tillandsias");
         assert_eq!(profile.mounts[0].mode, MountMode::Rw);
-        // 4 proxy env vars: HTTP_PROXY, HTTPS_PROXY, http_proxy, https_proxy
+        // @trace spec:inference-container, spec:proxy-container
+        // 6 proxy env vars: HTTP_PROXY, HTTPS_PROXY, http_proxy, https_proxy,
+        // NO_PROXY, no_proxy. NO_PROXY is required so ollama's loopback probes
+        // don't hairpin through Squid (which would deny them).
         assert_eq!(
             profile.env_vars.len(),
-            4,
-            "Inference should have 4 proxy env vars"
+            6,
+            "Inference should have 6 proxy env vars (4 proxy + 2 bypass)"
         );
         assert!(
-            profile
-                .env_vars
-                .iter()
-                .any(|e| e.name == "HTTP_PROXY"),
+            profile.env_vars.iter().any(|e| e.name == "HTTP_PROXY"),
             "Inference must have HTTP_PROXY"
         );
         assert!(
-            profile
-                .env_vars
-                .iter()
-                .any(|e| e.name == "https_proxy"),
+            profile.env_vars.iter().any(|e| e.name == "https_proxy"),
             "Inference must have https_proxy"
         );
+        let no_proxy = profile
+            .env_vars
+            .iter()
+            .find(|e| e.name == "NO_PROXY")
+            .expect("Inference must have NO_PROXY");
+        if let EnvValue::Literal(v) = no_proxy.value {
+            assert!(
+                v.contains("0.0.0.0") && v.contains("127.0.0.1") && v.contains("localhost"),
+                "NO_PROXY must cover loopback; got: {v}"
+            );
+        } else {
+            panic!("NO_PROXY must be a literal");
+        }
         assert!(
             profile.image_override.is_none(),
             "Inference image tag comes from LaunchContext"

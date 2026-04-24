@@ -377,10 +377,16 @@ impl PodmanClient {
 
     /// Remove a podman network. Returns Ok(()) even on failure (callers handle gracefully).
     /// @trace spec:enclave-network
+    ///
+    /// Uses `podman network rm -f` so any lingering attached container
+    /// (e.g. an exited forge that wasn't yet `podman rm`-ed) does not block
+    /// teardown. The `-f` flag disconnects attached containers before removing
+    /// the network, which is exactly the behaviour the shutdown path wants
+    /// — we've already stopped those containers, we just want the network gone.
     pub async fn remove_network(&self, name: &str) -> Result<(), PodmanError> {
-        debug!(name, "Removing network");
+        debug!(name, "Removing network (force)");
         let output = crate::podman_cmd()
-            .args(["network", "rm", name])
+            .args(["network", "rm", "-f", name])
             .output()
             .await
             .map_err(|e| PodmanError::CommandFailed(format!("network rm: {e}")))?;
@@ -389,14 +395,7 @@ impl PodmanClient {
             info!(name, "Network removed");
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            let stderr_lower = stderr.to_lowercase();
-            if stderr_lower.contains("has connected containers")
-                || stderr_lower.contains("being used")
-            {
-                warn!(name, %stderr, "Network removal blocked — containers still attached (zombie risk)");
-            } else {
-                tracing::error!(name, %stderr, "Network removal failed");
-            }
+            tracing::error!(name, %stderr, "Network removal failed");
         }
         Ok(())
     }

@@ -98,6 +98,29 @@ fi
 export PATH="$OC_DIR/bin:$PATH"
 trace_lifecycle "install" "opencode: overlay ($OC_BIN)"
 
+# ── OpenCode config overlay (apply opinionated config) ──────
+# @trace spec:layered-tools-overlay, spec:opencode-web-session
+# The Containerfile baked a minimal stub at ~/.config/opencode/config.json.
+# Replace it with the host-mounted overlay (at /home/forge/.config-overlay/
+# opencode/config.json) so MCPs, instructions, dark theme, and the
+# enclave-local ollama baseURL all take effect. Without this step the
+# stub wins and OpenCode falls back to localhost:11434 which doesn't
+# exist inside the forge container.
+OVERLAY_CFG="/home/forge/.config-overlay/opencode/config.json"
+USER_CFG="/home/forge/.config/opencode/config.json"
+if [ -f "$OVERLAY_CFG" ]; then
+    mkdir -p "$(dirname "$USER_CFG")"
+    cp -f "$OVERLAY_CFG" "$USER_CFG"
+    trace_lifecycle "config" "opencode config overlay applied"
+fi
+# tui.json is already copied by the Containerfile, but apply the overlay's
+# version in case it was updated post-image-build.
+OVERLAY_TUI="/home/forge/.config-overlay/opencode/tui.json"
+USER_TUI="/home/forge/.config/opencode/tui.json"
+if [ -f "$OVERLAY_TUI" ]; then
+    cp -f "$OVERLAY_TUI" "$USER_TUI"
+fi
+
 # ── OpenSpec (overlay-only, shared helper) ──────────────────
 # @trace spec:forge-shell-tools
 require_openspec
@@ -130,10 +153,77 @@ if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
     fi
 fi
 
-# ── Launch OpenCode Web Server ──────────────────────────────
+# ── Seed clean OpenCode state per-container ──────────────────
+# @trace spec:opencode-web-session
+# Why: OpenCode persists to three locations:
+#   ~/.local/share/opencode   — SQLite db (projects, sessions, messages)
+#   ~/.local/state/opencode   — runtime state (pty sockets, temp caches)
+#   ~/.cache/opencode         — fetched assets, model blobs, internal caches
+# Community reports of first-prompt hangs have been traced to stale cache
+# directories (opencode.ai GH issues). Since Tillandsias forge containers are
+# ephemeral, a fresh wipe on every start costs nothing and prevents stale-
+# cache hangs + "global" pseudo-project cross-contamination.
+for dir in "$HOME/.local/share/opencode" "$HOME/.local/state/opencode" "$HOME/.cache/opencode"; do
+    if [ -d "$dir" ]; then
+        rm -rf "$dir"
+    fi
+    mkdir -p "$dir"
+done
+trace_lifecycle "opencode-state" "cleared opencode share/state/cache (per-container seed)"
+
+# ── Launch OpenCode Web Server (behind SSE keepalive proxy) ──
 # @trace spec:opencode-web-session, spec:default-image
-# Headless HTTP server on 0.0.0.0:4096 inside the container. The host-side
-# port publish binds 127.0.0.1 only — enforced in build_podman_args().
-trace_lifecycle "entrypoint" "opencode web serving on 0.0.0.0:4096"
-trace_lifecycle "exec" "launching opencode serve ($OC_BIN)"
-exec "$OC_BIN" serve --hostname 0.0.0.0 --port 4096
+#
+# Architecture:
+#   client → 0.0.0.0:4096 (sse-keepalive-proxy.js) → 127.0.0.1:4097 (opencode)
+#
+# Bun's default HTTP idleTimeout is 10s. opencode serve doesn't override it
+# and doesn't emit SSE keepalive comments, so `/event` and `/global/event`
+# streams get dropped by the server 10s after the last byte. That breaks the
+# web UI after the first prompt completes (the session goes idle, no bytes
+# flow, Bun drops the stream, UI shows "frozen"). The proxy injects `:\n\n`
+# (SSE comment) every 5s so bytes always flow → idleTimeout never trips.
+#
+# Sources: Bun docs https://bun.com/docs/runtime/http/server#idletimeout ,
+# WHATWG HTML server-sent-events keepalive comment spec, Bun issue #27479.
+#
+# CWD is $PROJECT_DIR (set above). opencode uses cwd to pick which project
+# the first request lands in, so this pins the container to the mounted
+# project and prevents a "global" pseudo-project from dominating.
+OC_INTERNAL_PORT=4097
+OC_EXPOSED_PORT=4096
+
+trace_lifecycle "entrypoint" "opencode web serving on 127.0.0.1:$OC_INTERNAL_PORT (internal)"
+"$OC_BIN" serve --hostname 127.0.0.1 --port "$OC_INTERNAL_PORT" &
+OC_PID=$!
+
+# Wait briefly for opencode to bind. If it fails early we exit with the
+# opencode exit code so the tray's readiness probe and retry logic behave
+# like before.
+for i in 1 2 3 4 5 6 7 8 9 10; do
+    if ! kill -0 "$OC_PID" 2>/dev/null; then
+        wait "$OC_PID"
+        exit $?
+    fi
+    if (exec 3<>/dev/tcp/127.0.0.1/$OC_INTERNAL_PORT) 2>/dev/null; then
+        exec 3>&- 3<&-
+        break
+    fi
+    sleep 0.5
+done
+
+# Forward SIGTERM/SIGINT to the opencode child so docker-style stop cleans up.
+trap 'kill -TERM "$OC_PID" 2>/dev/null; wait "$OC_PID"; exit $?' TERM INT
+
+trace_lifecycle "entrypoint" "sse-keepalive-proxy fronting :$OC_EXPOSED_PORT → :$OC_INTERNAL_PORT"
+trace_lifecycle "exec" "launching sse-keepalive-proxy.js"
+# Proxy runs in the foreground; when it exits, we also tear down opencode.
+LISTEN_HOST=0.0.0.0 LISTEN_PORT=$OC_EXPOSED_PORT \
+    UPSTREAM=127.0.0.1:$OC_INTERNAL_PORT \
+    KEEPALIVE_MS=5000 \
+    node /usr/local/bin/sse-keepalive-proxy.js
+PROXY_EXIT=$?
+
+kill -TERM "$OC_PID" 2>/dev/null
+wait "$OC_PID" 2>/dev/null
+exit "$PROXY_EXIT"

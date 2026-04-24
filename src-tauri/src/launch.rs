@@ -1086,10 +1086,13 @@ mod tests {
             "OLLAMA_HOST should use the inference alias on podman machine.\nGot: {joined}"
         );
 
-        // NO_PROXY keeps git-service in the bypass list (same as Linux)
+        // @trace spec:opencode-web-session, spec:proxy-container
+        // NO_PROXY lists every enclave-internal destination so intra-enclave
+        // traffic never hairpins through Squid. The full value includes
+        // loopback variants + each enclave peer (inference, proxy, git-service).
         assert!(
-            joined.contains("NO_PROXY=localhost,127.0.0.1,git-service"),
-            "NO_PROXY should include git-service on podman machine.\nGot: {joined}"
+            joined.contains("NO_PROXY=localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
+            "NO_PROXY should include every enclave peer on podman machine.\nGot: {joined}"
         );
 
         // --add-host entries route the friendly aliases to the host gateway
@@ -1123,8 +1126,8 @@ mod tests {
             ("https_proxy", "http://proxy:3128"),
             ("TILLANDSIAS_GIT_SERVICE", "git-service"),
             ("OLLAMA_HOST", "http://inference:11434"),
-            ("NO_PROXY", "localhost,127.0.0.1,git-service"),
-            ("no_proxy", "localhost,127.0.0.1,git-service"),
+            ("NO_PROXY", "localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
+            ("no_proxy", "localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
         ] {
             assert_eq!(
                 super::rewrite_enclave_env(name, value),
@@ -1247,11 +1250,28 @@ mod tests {
             "web_host_port must override enclave-only skip; got: {args:?}"
         );
         // And it must be bound to loopback — never 0.0.0.0 or bare.
-        let joined = args.join(" ");
+        // Check ONLY the publish (-p) args, not the whole arg string, because
+        // NO_PROXY legitimately contains "0.0.0.0" as a loopback bypass entry.
+        // @trace spec:opencode-web-session
+        let publish_args: Vec<&String> = args
+            .iter()
+            .zip(args.iter().skip(1))
+            .filter_map(|(a, b)| if a == "-p" { Some(b) } else { None })
+            .collect();
         assert!(
-            !joined.contains("0.0.0.0"),
-            "Publish must never bind to 0.0.0.0; got: {joined}"
+            !publish_args.is_empty(),
+            "expected at least one -p arg; got: {args:?}"
         );
+        for p in &publish_args {
+            assert!(
+                !p.contains("0.0.0.0"),
+                "Publish binding must never be 0.0.0.0; got: {p}"
+            );
+            assert!(
+                p.starts_with("127.0.0.1:"),
+                "Publish binding must start with 127.0.0.1:; got: {p}"
+            );
+        }
     }
 
     // @trace spec:opencode-web-session, spec:environment-runtime

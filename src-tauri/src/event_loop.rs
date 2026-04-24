@@ -46,6 +46,11 @@ pub async fn run(
     mut build_rx: mpsc::Receiver<BuildProgressEvent>,
     build_tx: mpsc::Sender<BuildProgressEvent>,
     on_state_change: MenuRebuildFn,
+    // @trace spec:app-lifecycle
+    // AppHandle is required so MenuCommand::Quit can call app_handle.exit(0)
+    // after shutdown_all(), triggering RunEvent::ExitRequested { code: Some(0) }
+    // which the main.rs handler recognises as an explicit exit.
+    app_handle: tauri::AppHandle<tauri::Wry>,
 ) {
     let mut allocator = GenusAllocator::new();
     let mut tool_allocator = ToolAllocator::new();
@@ -108,8 +113,16 @@ pub async fn run(
             Some(command) = menu_rx.recv() => {
                 match command {
                     MenuCommand::Quit => {
-                        info!(spec = "tray-app", "Quit requested from menu");
+                        // @trace spec:app-lifecycle, spec:opencode-web-session
+                        // Single owner of cleanup: stop every container, tear down
+                        // the enclave network, close every webview, then ask Tauri
+                        // to exit. The RunEvent::ExitRequested handler in main.rs
+                        // sees code=Some(0) and finalises without re-running
+                        // shutdown_all.
+                        info!(spec = "app-lifecycle", "Quit requested — running shutdown_all");
                         handlers::shutdown_all(&state).await;
+                        info!(spec = "app-lifecycle", "shutdown_all complete — requesting Tauri exit");
+                        app_handle.exit(0);
                         break;
                     }
                     MenuCommand::AttachHere { project_path } => {
@@ -584,6 +597,44 @@ fn handle_podman_event(
             ContainerState::Stopped | ContainerState::Absent
         ) {
             let name = event.container_name.clone();
+
+            // @trace spec:git-mirror-service
+            // When a forge (or opencode-web) container stops, its last push
+            // to the enclave mirror has landed. Fast-forward the host
+            // working copy at <watch_path>/<project> so what the user sees
+            // on disk matches what's on GitHub. Skips gracefully when the
+            // host is dirty, diverged, or absent — never clobbers user work.
+            if let Some(c) = state.running.iter().find(|c| c.name == name) {
+                if matches!(
+                    c.container_type,
+                    ContainerType::Forge
+                        | ContainerType::OpenCodeWeb
+                        | ContainerType::Maintenance
+                ) {
+                    let project_name = c.project_name.clone();
+                    let mirror_root = tillandsias_core::config::cache_dir().join("mirrors");
+                    let mirror_dir = mirror_root.join(&project_name);
+                    let global_config = load_global_config();
+                    for watch_path in &global_config.scanner.watch_paths {
+                        let host = watch_path.join(&project_name);
+                        if host.exists() {
+                            let result = crate::mirror_sync::sync_project(
+                                &project_name,
+                                &mirror_dir,
+                                &host,
+                            );
+                            debug!(
+                                spec = "git-mirror-service",
+                                project = %project_name,
+                                host = %host.display(),
+                                outcome = ?result,
+                                "mirror -> host sync on forge stop"
+                            );
+                            break;
+                        }
+                    }
+                }
+            }
 
             if let Some(pos) = state.running.iter().position(|c| c.name == name) {
                 let removed = state.running.remove(pos);

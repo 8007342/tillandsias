@@ -113,6 +113,12 @@ pub const FORGE_ENTRYPOINT_CLAUDE: &str =
     include_str!("../../images/default/entrypoint-forge-claude.sh");
 pub const FORGE_ENTRYPOINT_TERMINAL: &str =
     include_str!("../../images/default/entrypoint-terminal.sh");
+// @trace spec:opencode-web-session
+// Node.js SSE keepalive proxy — fronts `opencode serve` so Bun's default
+// 10s HTTP idleTimeout doesn't drop `/event` / `/global/event` streams
+// when the session goes idle.
+pub const FORGE_SSE_KEEPALIVE_PROXY: &str =
+    include_str!("../../images/default/sse-keepalive-proxy.js");
 pub const FORGE_WELCOME: &str = include_str!("../../images/default/forge-welcome.sh");
 pub const FORGE_CONTAINERFILE: &str = include_str!("../../images/default/Containerfile");
 pub const FORGE_OPENCODE_JSON: &str = include_str!("../../images/default/opencode.json");
@@ -348,6 +354,12 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         FORGE_ENTRYPOINT_TERMINAL,
     )
     .map_err(|e| format!("entrypoint-terminal.sh: {e}"))?;
+    // @trace spec:opencode-web-session
+    write_lf(
+        &default_dir.join("sse-keepalive-proxy.js"),
+        FORGE_SSE_KEEPALIVE_PROXY,
+    )
+    .map_err(|e| format!("sse-keepalive-proxy.js: {e}"))?;
     write_lf(&default_dir.join("forge-welcome.sh"), FORGE_WELCOME)
         .map_err(|e| format!("forge-welcome.sh: {e}"))?;
     write_lf(&default_dir.join("Containerfile"), FORGE_CONTAINERFILE)
@@ -365,6 +377,8 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
             "entrypoint-forge-opencode-web.sh",
             "entrypoint-forge-claude.sh",
             "entrypoint-terminal.sh",
+            // @trace spec:opencode-web-session
+            "sse-keepalive-proxy.js",
         ] {
             let path = default_dir.join(name);
             if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
@@ -572,8 +586,21 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
 pub fn extract_config_overlay() -> Result<PathBuf, String> {
     let dir = runtime_dir().join("config-overlay");
 
-    // Recreate fresh each time — configs may have changed between versions
-    let _ = fs::remove_dir_all(&dir);
+    // @trace spec:layered-tools-overlay, spec:opencode-web-session
+    // CRITICAL: preserve the directory inode. `extract_config_overlay` is
+    // invoked on every Attach Here (from `ensure_infrastructure_ready`),
+    // and running forge containers have their `.config-overlay` bind-mounted
+    // to this path. If we `remove_dir_all` + recreate, the new dir gets a
+    // new inode; bind mounts in existing containers become orphan
+    // "//deleted" entries and appear empty from inside — MCP scripts vanish
+    // mid-session, OpenCode's /command endpoint hangs 60s waiting for a
+    // stdio response that never comes, and the UI freezes.
+    //
+    // Instead, overwrite files in place. write_lf truncates + rewrites
+    // content; directories are created with `create_dir_all` which is a
+    // no-op if present. The inode the kernel gave us at first extraction
+    // is stable for the process lifetime, and every forge container sees
+    // live updates on subsequent re-extractions.
     fs::create_dir_all(&dir).map_err(|e| format!("Cannot create config-overlay dir: {e}"))?;
 
     // -- opencode/ --

@@ -20,6 +20,7 @@ mod i18n;
 mod init;
 mod launch;
 mod log_format;
+mod mirror_sync;
 mod logging;
 mod menu;
 mod runner;
@@ -32,7 +33,7 @@ mod uninstall;
 mod update_cli;
 mod update_log;
 mod updater;
-mod webview;
+mod browser;
 
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -220,12 +221,10 @@ fn main() {
         .setup(move |app| {
             let app_handle = app.handle().clone();
 
-            // Register the global AppHandle used by the opencode-web webview
-            // module to spawn and close WebviewWindows from non-Tauri contexts
-            // (menu command dispatch, shutdown_all). Must run before any
-            // "Attach Here" click can reach the web-session flow.
             // @trace spec:opencode-web-session
-            crate::webview::set_app_handle(app_handle.clone());
+            // OpenCode Web sessions now launch in the user's native browser
+            // (see src-tauri/src/browser.rs). Tauri no longer hosts a
+            // WebviewWindow for them — no AppHandle registration needed.
 
             // Spawn updater background tasks
             updater::spawn_update_tasks(&app_handle, update_state);
@@ -276,11 +275,21 @@ fn main() {
                             }
                         }
 
-                        // Quit fast-path — exit immediately, no channel round-trip
+                        // @trace spec:app-lifecycle
+                        // Quit is dispatched through the menu channel so the event loop
+                        // owns the sole shutdown_all() invocation. The event loop's Quit
+                        // arm stops every container, tears down the enclave network,
+                        // then calls app_handle.exit(0). A direct std::process::exit
+                        // here would bypass cleanup and leave stale containers + a
+                        // non-removable enclave network behind.
                         if id == menu::ids::QUIT {
                             info!("Quit requested");
-                            singleton::release();
-                            std::process::exit(0);
+                            if let Err(e) = menu_tx.blocking_send(MenuCommand::Quit) {
+                                warn!(error = %e, "menu channel closed — falling back to direct exit");
+                                singleton::release();
+                                std::process::exit(0);
+                            }
+                            return;
                         }
 
                         handle_menu_click(id, &menu_tx, &app_handle);
@@ -771,6 +780,37 @@ fn main() {
                     info!(count = s.projects.len(), "Initial project scan complete");
                 }
 
+                // @trace spec:git-mirror-service
+                // Startup mirror -> host sync: catch up any stranded commits
+                // from a previous session (e.g. tray crash between mirror
+                // receiving a push and the host working copy learning about
+                // it). Fast-forward only, skips dirty / diverged / detached
+                // hosts; see `src-tauri/src/mirror_sync.rs`.
+                //
+                // After the startup sweep, arm a filesystem watcher on the
+                // mirrors root. Every subsequent ref update in any project's
+                // mirror (from forge post-receive, startup retry-push, or
+                // manual push) triggers an event-driven sync for just that
+                // project. No polling; driven by inotify / FSEvents.
+                {
+                    let cfg = tillandsias_core::config::load_global_config();
+                    let mirrors_root = tillandsias_core::config::cache_dir().join("mirrors");
+                    crate::mirror_sync::sync_all_projects(
+                        &mirrors_root,
+                        &cfg.scanner.watch_paths,
+                    );
+                    if let Err(e) = crate::mirror_sync::spawn_watcher(
+                        mirrors_root.clone(),
+                        cfg.scanner.watch_paths.clone(),
+                    ) {
+                        warn!(
+                            spec = "git-mirror-service",
+                            error = %e,
+                            "failed to arm mirror watcher — falls back to per-container-stop sync only"
+                        );
+                    }
+                }
+
                 // Rebuild menu after initial scan
                 rebuild_menu(&app_handle_for_loop, &state_for_loop);
 
@@ -862,6 +902,11 @@ fn main() {
                     build_rx,
                     build_tx,
                     on_state_change,
+                    // @trace spec:app-lifecycle
+                    // Hand the event loop an AppHandle so its Quit arm can call
+                    // app.exit(0) after shutdown_all() — the only explicit exit
+                    // path in the app.
+                    app_handle_for_loop.clone(),
                 )
                 .await;
             });
@@ -871,44 +916,30 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building tillandsias")
         .run(move |_app, event| {
-            // @trace spec:opencode-web-session, spec:app-lifecycle
-            // Closing a webview window must not exit the tray. Tauri's default
-            // behaviour treats the last closed window as "app done", but our
-            // tray icon is not a window. Filter `web-*` close events early so
-            // they never propagate to RunEvent::ExitRequested.
-            if let tauri::RunEvent::WindowEvent {
-                label,
-                event: tauri::WindowEvent::CloseRequested { .. },
-                ..
-            } = &event
-            {
-                if label.starts_with("web-") {
+            // @trace spec:app-lifecycle
+            // Tauri no longer hosts any webview windows (OpenCode Web opens
+            // in the user's native browser). The only window event we could
+            // ever receive is defensive; RunEvent::ExitRequested handling
+            // below keeps the tray alive against spurious auto-exits.
+
+            // @trace spec:app-lifecycle
+            // ExitRequested discriminates on `code`:
+            //   code = None  -> Tauri auto-exit (last window closed). Prevent it —
+            //                   the tray icon is the app's identity, not any window.
+            //   code = Some  -> Explicit exit initiated by us (event_loop calls
+            //                   app.exit(0) after shutdown_all). Finalize and let
+            //                   Tauri exit. shutdown_all() already ran; we do NOT
+            //                   re-run it here.
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = &event {
+                if code.is_none() {
                     tracing::debug!(
-                        spec = "opencode-web-session",
-                        label = %label,
-                        "webview close intercepted — tray remains"
+                        spec = "app-lifecycle",
+                        "ExitRequested(None) — auto-exit prevented (tray persists)"
                     );
+                    api.prevent_exit();
                     return;
                 }
-            }
-
-            if let tauri::RunEvent::ExitRequested { .. } = event {
-                info!("Exit requested");
-
-                // @trace spec:proxy-container, spec:enclave-network
-                // Stop the proxy container and remove the enclave network on exit.
-                // Uses a blocking runtime since we are in the sync RunEvent handler.
-                if let Ok(rt) = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                {
-                    rt.block_on(async {
-                        handlers::stop_inference().await;
-                        handlers::stop_proxy().await;
-                        handlers::cleanup_enclave_network().await;
-                    });
-                }
-
+                info!(code = ?code, "Exit requested — finalizing");
                 singleton::release();
                 let _ = shutdown_tx.blocking_send(());
             }

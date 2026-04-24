@@ -42,11 +42,17 @@ COPY entrypoint-forge-opencode.sh /usr/local/bin/entrypoint-forge-opencode.sh
 COPY entrypoint-forge-opencode-web.sh /usr/local/bin/entrypoint-forge-opencode-web.sh
 COPY entrypoint-forge-claude.sh /usr/local/bin/entrypoint-forge-claude.sh
 COPY entrypoint-terminal.sh /usr/local/bin/entrypoint-terminal.sh
+# @trace spec:opencode-web-session
+# Tiny Node.js HTTP proxy that injects SSE keepalive comments so Bun's default
+# 10s idleTimeout doesn't drop /event and /global/event streams when the
+# session is idle. Fronts opencode serve on port 4096 → 4097.
+COPY sse-keepalive-proxy.js /usr/local/bin/sse-keepalive-proxy.js
 RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/entrypoint-forge-opencode.sh \
              /usr/local/bin/entrypoint-forge-opencode-web.sh \
              /usr/local/bin/entrypoint-forge-claude.sh \
-             /usr/local/bin/entrypoint-terminal.sh
+             /usr/local/bin/entrypoint-terminal.sh \
+             /usr/local/bin/sse-keepalive-proxy.js
 
 # No GIT_ASKPASS helper in the forge image — forge containers have ZERO
 # credentials. The old askpass was a dead-code vector superseded by the
