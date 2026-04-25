@@ -157,8 +157,15 @@ impl<R: Runtime> TrayMenu<R> {
     /// dynamic region above the separator is empty at this point —
     /// the first `apply_state` call will populate it.
     ///
-    /// @trace spec:tray-app
+    /// @trace spec:tray-app, spec:tray-projects-rename
     pub fn new(app: &AppHandle<R>) -> tauri::Result<Self> {
+        // The Language ▸ submenu is BUILT but NOT appended to the menu —
+        // i18n is hard-defaulted to "en" until the translation pipeline
+        // is fixed. Keeping the handle alive means re-enabling later is
+        // a one-line change (re-add `.item(&language)` below).
+        // @tombstone superseded:tray-projects-rename — kept for three
+        // releases (until 0.1.169.230). When re-enabling, also flip the
+        // hard-coded "en" in i18n::detect_locale back to OS detection.
         let language = build_language_submenu(app)?;
 
         let signature = MenuItemBuilder::with_id(ids::SIGNATURE, signature_label())
@@ -171,7 +178,10 @@ impl<R: Runtime> TrayMenu<R> {
 
         let root = MenuBuilder::new(app)
             .item(&separator_top)
-            .item(&language)
+            // @tombstone superseded:tray-projects-rename — Language ▸
+            // surfaced 17 locales but only en/de/es had translations,
+            // confusing users. Re-enable when i18n catches up:
+            // .item(&language)
             .item(&signature)
             .item(&quit)
             .build()?;
@@ -304,7 +314,8 @@ impl<R: Runtime> TrayMenu<R> {
             let remote = SubmenuBuilder::with_id(
                 app,
                 ids::REMOTE_PROJECTS,
-                i18n::t("menu.github.remote_projects"),
+                // @trace spec:tray-projects-rename
+                i18n::t("menu.cloud_projects"),
             );
             let mut remote = remote;
             for repo_name in &remote_only_names {

@@ -72,12 +72,39 @@ fn is_supported(lang: &str) -> bool {
 /// 3. `LANG`        — default locale
 /// 4. `LANGUAGE`    — GNU fallback chain (first entry used)
 ///
-/// Returns a 2-letter ISO 639-1 code (e.g., `"en"`, `"es"`).
-/// Falls back to `"en"` when no supported locale is detected.
+/// Returns the active UI locale code.
 ///
-/// On macOS, `defaults read -g AppleLanguages` is tried as a last resort
-/// because GUI applications often do not set `$LANG`.
+/// **Currently hard-coded to `"en"`** until the i18n translation pipeline
+/// catches up. Most embedded `.toml` locales are stubs — exposing them via
+/// `Language ▸` produced silent fallbacks that confused users (the menu
+/// implied 17 fully-translated locales when only en/de/es had real entries).
+/// The detection logic that previously read `LC_ALL` / `LANG` / `LANGUAGE`
+/// (and macOS `AppleLanguages`) is preserved below as a tombstoned helper
+/// `detect_locale_from_os` so re-enabling is a one-line change in this
+/// function plus un-tombstoning the `Language ▸` menu item in
+/// `tray_menu::TrayMenu::new`.
+///
+/// @trace spec:tray-projects-rename
+/// @cheatsheet runtime/forge-container.md
 pub fn detect_locale() -> &'static str {
+    // Hard-default until i18n re-enablement. See the tombstoned
+    // `detect_locale_from_os` for the original detection logic.
+    "en"
+}
+
+/// Original locale-detection logic — preserved as a tombstoned helper so
+/// re-enabling i18n is a single-line change in `detect_locale`. Walks
+/// `LC_ALL` / `LC_MESSAGES` / `LANG` / `LANGUAGE`, normalises Chinese
+/// variants, falls back to macOS `AppleLanguages`. Returns the first
+/// supported locale code or `"en"`.
+///
+/// @tombstone superseded:tray-projects-rename — kept for three releases
+/// (until 0.1.169.230). After that window, either re-promote this back
+/// to `detect_locale` (with the menu re-enabled) or delete it. Do NOT
+/// silently remove — the OS-detection logic took several iterations to
+/// get right (Chinese variants, macOS plist, encoding strip).
+#[allow(dead_code)]
+fn detect_locale_from_os() -> &'static str {
     for var in ["LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"] {
         if let Ok(val) = std::env::var(var) {
             if val.is_empty() {
