@@ -10,17 +10,133 @@ FROM registry.fedoraproject.org/fedora-minimal:43
 
 # @trace spec:default-image — forge system packages
 # ── System packages ────────────────────────────────────────────
-# LEAN forge: essential dev tools only. Terminal UX tools (mc, vim, nano,
-# eza, bat, fd-find, fzf, htop, tree, zoxide) removed to save ~90MB.
-# Users who need them can install via the tools overlay or microdnf.
-# DISTRO: microdnf (Fedora Minimal), NOT apk (Alpine) or dnf (standard Fedora)
+# FULL-BATTERY forge: every compiler, interpreter, and build tool a coding
+# agent typically reaches for, baked into the image at build time. The
+# ephemeral contract says tools never get downloaded at runtime — the
+# image IS the toolbox. The mutable overlay is ONLY for config files that
+# need to be writable at runtime (opencode session db, openspec init
+# output), NEVER for binaries.
+#
+# Layer grouping prioritises cache reuse: core utils rarely change, then
+# shells, then compilers, then language runtimes (biggest), then CLI
+# extras. Flutter gets its own layer because it's the heaviest single
+# component (~1GB).
+#
+# DISTRO: microdnf (Fedora Minimal), NOT apk (Alpine) or dnf (standard
+# Fedora). Some packages only exist under `dnf install --allowerasing`
+# — where the need arises we call microdnf with the matching flag.
 RUN microdnf install -y \
-        bash coreutils findutils grep sed gawk tar gzip xz \
-        procps-ng shadow-utils ca-certificates \
+        bash coreutils findutils grep sed gawk tar gzip xz unzip zip bzip2 zstd \
+        procps-ng shadow-utils ca-certificates which file less tree \
         fish zsh \
-        git gh curl wget jq ripgrep \
+        git git-lfs gh curl wget jq ripgrep fd-find fzf \
+        vim nano man-db \
+        # Build essentials — compile anything C/C++/Rust/Go/FFI-bound
+        gcc gcc-c++ clang lld llvm make cmake ninja-build \
+        autoconf automake libtool pkgconf pkgconf-pkg-config patch \
+        gdb strace ltrace binutils \
+        # Python ecosystem
+        python3 python3-pip python3-devel python3-virtualenv pipx \
+        # Node ecosystem (yarn + pnpm added below via corepack)
         nodejs npm \
+        # Java ecosystem
+        java-21-openjdk-devel maven \
+        # Go
+        golang \
+        # Rust toolchain from Fedora (rustup alternative is in /opt below)
+        rust cargo rust-std-static \
+        # Database clients (agents often need these)
+        sqlite postgresql \
+        # Networking / SSH clients
+        openssh-clients rsync iputils iproute bind-utils \
+        # Shell / fuzzy niceties the agent uses constantly
+        bash-completion socat netcat openssl \
     && microdnf clean all
+
+# ── Node yarn + pnpm via npm -g ────────────────────────────────
+# @trace spec:default-image
+# Fedora's nodejs ships without corepack (they strip experimental features),
+# so we install yarn + pnpm directly via npm. The npm prefix /usr lands the
+# binaries in /usr/bin which is on PATH for every shell.
+RUN npm install -g --prefix=/usr yarn pnpm \
+    && yarn --version \
+    && pnpm --version
+
+# ── Python dev extras (pinned reasonable versions) ─────────────
+# @trace spec:default-image
+# `pipx` for tools the agent may invoke directly (ruff, black, mypy,
+# pytest). Installed globally under /usr/local/pipx so they're on PATH
+# from every forge user without per-project pip installs.
+ENV PIPX_HOME=/opt/pipx \
+    PIPX_BIN_DIR=/usr/local/bin \
+    PATH=/usr/local/bin:$PATH
+RUN mkdir -p "$PIPX_HOME" \
+    && pipx install --global ruff \
+    && pipx install --global black \
+    && pipx install --global mypy \
+    && pipx install --global pytest \
+    && pipx install --global httpie \
+    && pipx install --global uv \
+    && pipx install --global poetry
+
+# ── Gradle (installed from upstream — Fedora's gradle is often old) ─
+# @trace spec:default-image
+ENV GRADLE_VERSION=8.10 \
+    GRADLE_HOME=/opt/gradle
+RUN curl -fsSL "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" \
+        -o /tmp/gradle.zip \
+    && unzip -q /tmp/gradle.zip -d /opt \
+    && mv "/opt/gradle-${GRADLE_VERSION}" "$GRADLE_HOME" \
+    && rm /tmp/gradle.zip \
+    && ln -s "$GRADLE_HOME/bin/gradle" /usr/local/bin/gradle
+
+# ── Flutter SDK (hard-installed at /opt/flutter, pre-cached) ───
+# @trace spec:default-image
+# Flutter is a heavyweight SDK (~1GB after precache) so it gets its own
+# layer for cache stability. Pinned to a stable release. `flutter precache
+# --linux` downloads Linux-desktop engine artefacts at image-build time so
+# the forge never touches the network to bootstrap Flutter.
+# Mobile (Android / iOS) tooling is NOT included — that requires Android
+# Studio SDK and platform-specific licenses; Flutter web + desktop work
+# without it.
+ENV FLUTTER_VERSION=3.24.5 \
+    FLUTTER_HOME=/opt/flutter \
+    PATH=/opt/flutter/bin:$PATH \
+    PUB_CACHE=/opt/flutter/.pub-cache
+RUN curl -fsSL "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
+        -o /tmp/flutter.tar.xz \
+    && tar -xJf /tmp/flutter.tar.xz -C /opt \
+    && rm /tmp/flutter.tar.xz \
+    && git config --system --add safe.directory "$FLUTTER_HOME" \
+    && "$FLUTTER_HOME/bin/flutter" --no-version-check config --no-analytics \
+    && "$FLUTTER_HOME/bin/flutter" --no-version-check precache --linux --web --no-android --no-ios --no-macos --no-windows \
+    && chmod -R a+rX "$FLUTTER_HOME"
+
+# ── Coding agents (hard-installed, NOT mutable overlay) ─────────
+# @trace spec:default-image, spec:tools-overlay-deprecated
+# OpenCode + Claude Code + OpenSpec used to live in the mutable
+# `.tools-overlay` image built at runtime against the proxy. That violated
+# the ephemeral contract: a downloaded binary in the user-writable layer is
+# state, not config. We move them into /opt at image-build time so:
+#   • forge containers boot with the agents already on PATH
+#   • the mutable overlay is reduced to genuine config (openspec init,
+#     opencode session db) which legitimately needs to be writable
+#   • image rebuilds are deterministic — same VERSION = same agent bins
+RUN mkdir -p /opt/agents/claude /opt/agents/openspec /opt/agents/opencode/bin \
+    && npm install -g --prefix=/opt/agents/claude @anthropic-ai/claude-code \
+    && npm install -g --prefix=/opt/agents/openspec @fission-ai/openspec \
+    && ln -s /opt/agents/claude/bin/claude /usr/local/bin/claude \
+    && ln -s /opt/agents/openspec/bin/openspec /usr/local/bin/openspec \
+    && curl -fsSL https://opencode.ai/install \
+        | OPENCODE_INSTALL_DIR=/opt/agents/opencode bash \
+    && if [ ! -x /opt/agents/opencode/bin/opencode ] && [ -x /root/.opencode/bin/opencode ]; then \
+           cp /root/.opencode/bin/opencode /opt/agents/opencode/bin/opencode; \
+       fi \
+    && rm -rf /root/.opencode \
+    && ln -s /opt/agents/opencode/bin/opencode /usr/local/bin/opencode \
+    && /usr/local/bin/claude --version \
+    && /usr/local/bin/openspec --version \
+    && /usr/local/bin/opencode --version
 
 # ── Create forge user ──────────────────────────────────────────
 # DISTRO: useradd (Fedora shadow-utils), NOT adduser -D (Alpine)

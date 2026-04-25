@@ -78,10 +78,12 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
     echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
 fi
 
-# ── OpenSpec (overlay-only, shared helper) ──────────────────
-# @trace spec:forge-shell-tools
+# ── OpenSpec + OpenCode (hard-installed) ────────────────────
+# @trace spec:default-image, spec:forge-shell-tools
+# Apply the opencode config overlay even in terminal mode so `opencode run`
+# from a maintenance shell finds the right model + provider.
 require_openspec
-OS_BIN="/home/forge/.tools/openspec/bin/openspec"
+apply_opencode_config_overlay
 
 # ── Find project directory ──────────────────────────────────
 find_project_dir

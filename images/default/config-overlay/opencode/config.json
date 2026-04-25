@@ -3,9 +3,12 @@
   "autoupdate": false,
   "default_agent": "build",
   "permission": "allow",
+  "model": "opencode/big-pickle",
+  "small_model": "opencode/gpt-5-nano",
   "instructions": [
     "/home/forge/.config-overlay/opencode/instructions/methodology.md",
-    "/home/forge/.config-overlay/opencode/instructions/flutter.md"
+    "/home/forge/.config-overlay/opencode/instructions/flutter.md",
+    "/home/forge/.config-overlay/opencode/instructions/model-routing.md"
   ],
   "provider": {
     "ollama": {

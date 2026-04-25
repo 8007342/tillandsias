@@ -144,6 +144,8 @@ pub const CONFIG_OVERLAY_INSTRUCTIONS_METHODOLOGY: &str =
     include_str!("../../images/default/config-overlay/opencode/instructions/methodology.md");
 pub const CONFIG_OVERLAY_INSTRUCTIONS_FLUTTER: &str =
     include_str!("../../images/default/config-overlay/opencode/instructions/flutter.md");
+pub const CONFIG_OVERLAY_INSTRUCTIONS_MODEL_ROUTING: &str =
+    include_str!("../../images/default/config-overlay/opencode/instructions/model-routing.md");
 
 // MCP servers — lightweight tool scripts for forge containers
 // @trace spec:layered-tools-overlay, spec:git-mirror-service
@@ -431,6 +433,11 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         CONFIG_OVERLAY_INSTRUCTIONS_FLUTTER,
     )
     .map_err(|e| format!("config-overlay/opencode/instructions/flutter.md: {e}"))?;
+    write_lf(
+        &instructions_dir.join("model-routing.md"),
+        CONFIG_OVERLAY_INSTRUCTIONS_MODEL_ROUTING,
+    )
+    .map_err(|e| format!("config-overlay/opencode/instructions/model-routing.md: {e}"))?;
 
     // Config overlay — MCP servers
     // @trace spec:layered-tools-overlay
@@ -625,6 +632,11 @@ pub fn extract_config_overlay() -> Result<PathBuf, String> {
         CONFIG_OVERLAY_INSTRUCTIONS_FLUTTER,
     )
     .map_err(|e| format!("config-overlay/opencode/instructions/flutter.md: {e}"))?;
+    write_lf(
+        &instructions_dir.join("model-routing.md"),
+        CONFIG_OVERLAY_INSTRUCTIONS_MODEL_ROUTING,
+    )
+    .map_err(|e| format!("config-overlay/opencode/instructions/model-routing.md: {e}"))?;
 
     // -- mcp/ -- MCP server scripts (must be executable)
     // @trace spec:layered-tools-overlay

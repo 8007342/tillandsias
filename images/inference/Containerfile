@@ -45,6 +45,35 @@ RUN useradd -u 1000 -m -s /bin/bash ollama
 RUN mkdir -p /home/ollama/.ollama/models/ \
     && chown -R 1000:1000 /home/ollama
 
+# ── Bake T0 + T1 tool-capable models into /opt/baked-models ─────
+# @trace spec:inference-container, spec:zen-default-with-ollama-analysis-pool
+# Pull at image build time (direct internet, no proxy) so we sidestep the
+# Squid SSL-bump EOF that runtime ollama pulls keep hitting (memory:
+# project_squid_ollama_eof.md). Stash under /opt/baked-models/ NOT under
+# /home/ollama/.ollama/models/ — the latter is bind-mounted at runtime
+# from ~/.cache/tillandsias/models, which would shadow the baked copy.
+# The entrypoint rsyncs from /opt/baked-models/ into the runtime cache
+# when manifests are missing. T0=qwen2.5:0.5b (~400MB), T1=llama3.2:3b
+# (~2GB). Both follow tool-call schemas, unlike tinyllama.
+RUN mkdir -p /opt/baked-models && chown -R 1000:1000 /opt/baked-models
+USER 1000:1000
+RUN OLLAMA_MODELS=/opt/baked-models \
+        OLLAMA_HOST=127.0.0.1:11434 \
+        /usr/local/bin/ollama serve & \
+    OLLAMA_PID=$! ; \
+    for i in $(seq 1 30); do \
+        OLLAMA_HOST=127.0.0.1:11434 /usr/local/bin/ollama list >/dev/null 2>&1 && break ; \
+        sleep 1 ; \
+    done ; \
+    OLLAMA_HOST=127.0.0.1:11434 OLLAMA_MODELS=/opt/baked-models \
+        /usr/local/bin/ollama pull qwen2.5:0.5b && \
+    OLLAMA_HOST=127.0.0.1:11434 OLLAMA_MODELS=/opt/baked-models \
+        /usr/local/bin/ollama pull llama3.2:3b && \
+    OLLAMA_HOST=127.0.0.1:11434 OLLAMA_MODELS=/opt/baked-models \
+        /usr/local/bin/ollama list ; \
+    kill "$OLLAMA_PID" 2>/dev/null ; wait "$OLLAMA_PID" 2>/dev/null ; true
+USER root
+
 # -- Entrypoint --
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

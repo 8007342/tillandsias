@@ -288,6 +288,20 @@ pub(crate) async fn ensure_inference_running(
     run_args.insert(run_args.len() - 1, "-v".to_string());
     run_args.insert(run_args.len() - 1, model_mount);
 
+    // @trace spec:inference-container, spec:proxy-container
+    // Inject proxy CA so ollama trusts the SSL-bumped certs from registry.ollama.ai.
+    // Without this, `ollama pull` fails with x509 unknown authority because
+    // Squid's MITM cert is signed by Tillandsias's own CA. Go reads SSL_CERT_FILE
+    // for crypto/tls verification.
+    inject_ca_chain_mounts(&mut run_args);
+    let chain_path = crate::ca::proxy_certs_dir().join("ca-chain.crt");
+    if chain_path.exists() {
+        run_args.insert(
+            run_args.len() - 1,
+            "-e=SSL_CERT_FILE=/run/tillandsias/ca-chain.crt".to_string(),
+        );
+    }
+
     // Launch the inference container via podman run (detached)
     match client.run_container(&run_args).await {
         Ok(container_id) => {

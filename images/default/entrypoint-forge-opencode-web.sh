@@ -80,51 +80,11 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
     echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
 fi
 
-# ── OpenCode (tools overlay only) ──────────────────────────
-# @trace spec:layered-tools-overlay
-# Hard requirement: tools overlay mounted at /home/forge/.tools. The host tray
-# builds and mounts it before launching the container. Inline install removed —
-# missing overlay is a fatal error.
-TOOLS_DIR="/home/forge/.tools"
-OC_DIR="$TOOLS_DIR/opencode"
-OC_BIN="$OC_DIR/bin/opencode"
-
-if [ ! -x "$OC_BIN" ]; then
-    echo "[entrypoint] FATAL: OpenCode not found in tools overlay at $OC_BIN" >&2
-    echo "[entrypoint] The tools overlay is missing or incomplete. The host tray" >&2
-    echo "[entrypoint] should have built it before launching this container." >&2
-    exit 1
-fi
-export PATH="$OC_DIR/bin:$PATH"
-trace_lifecycle "install" "opencode: overlay ($OC_BIN)"
-
-# ── OpenCode config overlay (apply opinionated config) ──────
-# @trace spec:layered-tools-overlay, spec:opencode-web-session
-# The Containerfile baked a minimal stub at ~/.config/opencode/config.json.
-# Replace it with the host-mounted overlay (at /home/forge/.config-overlay/
-# opencode/config.json) so MCPs, instructions, dark theme, and the
-# enclave-local ollama baseURL all take effect. Without this step the
-# stub wins and OpenCode falls back to localhost:11434 which doesn't
-# exist inside the forge container.
-OVERLAY_CFG="/home/forge/.config-overlay/opencode/config.json"
-USER_CFG="/home/forge/.config/opencode/config.json"
-if [ -f "$OVERLAY_CFG" ]; then
-    mkdir -p "$(dirname "$USER_CFG")"
-    cp -f "$OVERLAY_CFG" "$USER_CFG"
-    trace_lifecycle "config" "opencode config overlay applied"
-fi
-# tui.json is already copied by the Containerfile, but apply the overlay's
-# version in case it was updated post-image-build.
-OVERLAY_TUI="/home/forge/.config-overlay/opencode/tui.json"
-USER_TUI="/home/forge/.config/opencode/tui.json"
-if [ -f "$OVERLAY_TUI" ]; then
-    cp -f "$OVERLAY_TUI" "$USER_TUI"
-fi
-
-# ── OpenSpec (overlay-only, shared helper) ──────────────────
-# @trace spec:forge-shell-tools
+# ── OpenCode + OpenSpec (hard-installed) ───────────────────
+# @trace spec:default-image, spec:forge-shell-tools, spec:opencode-web-session
+require_opencode
 require_openspec
-OS_BIN="/home/forge/.tools/openspec/bin/openspec"
+apply_opencode_config_overlay
 
 trace_lifecycle "entrypoint" "opencode web ready"
 

@@ -135,21 +135,59 @@ spin() {
     return $rc
 }
 
-# ── OpenSpec (overlay-only) ─────────────────────────────────
-# @trace spec:forge-shell-tools, spec:layered-tools-overlay
-# Hard requirement: the tools overlay must be mounted. Inline install
-# fallback removed — if the overlay is missing, fail the entrypoint
-# so the real error (overlay build failure, bad mount) is visible.
-require_openspec() {
-    local overlay_bin="/home/forge/.tools/openspec/bin/openspec"
-    if [ ! -x "$overlay_bin" ]; then
-        echo "[entrypoint] FATAL: OpenSpec not found in tools overlay at $overlay_bin" >&2
-        echo "[entrypoint] The tools overlay is missing or incomplete. The host tray" >&2
-        echo "[entrypoint] should have built it before launching this container." >&2
+# ── Coding agents (hard-installed in image) ─────────────────
+# @trace spec:default-image, spec:forge-shell-tools
+# OpenCode, Claude Code, and OpenSpec are baked into /opt/agents/ at image
+# build time and symlinked into /usr/local/bin/ — see images/default/Containerfile.
+# These helpers verify presence and export the canonical bin path each
+# entrypoint needs. Failure here means the image is corrupt; bail loudly.
+require_opencode() {
+    OC_BIN="/usr/local/bin/opencode"
+    if [ ! -x "$OC_BIN" ]; then
+        echo "[entrypoint] FATAL: OpenCode missing at $OC_BIN — forge image is corrupt" >&2
         exit 1
     fi
-    export PATH="/home/forge/.tools/openspec/bin:$PATH"
-    trace_lifecycle "install" "openspec: overlay ($overlay_bin)"
+    trace_lifecycle "install" "opencode: hard-installed ($OC_BIN)"
+}
+
+require_claude() {
+    CC_BIN="/usr/local/bin/claude"
+    if [ ! -x "$CC_BIN" ]; then
+        echo "[entrypoint] FATAL: Claude Code missing at $CC_BIN — forge image is corrupt" >&2
+        exit 1
+    fi
+    trace_lifecycle "install" "claude-code: hard-installed ($CC_BIN)"
+}
+
+require_openspec() {
+    OS_BIN="/usr/local/bin/openspec"
+    if [ ! -x "$OS_BIN" ]; then
+        echo "[entrypoint] FATAL: OpenSpec missing at $OS_BIN — forge image is corrupt" >&2
+        exit 1
+    fi
+    trace_lifecycle "install" "openspec: hard-installed ($OS_BIN)"
+}
+
+# ── OpenCode config overlay ─────────────────────────────────
+# @trace spec:opencode-web-session, spec:layered-tools-overlay
+# The Containerfile bakes a minimal stub at ~/.config/opencode/config.json
+# (just `{ "autoupdate": false }`). Replace it with the host-mounted overlay
+# so MCPs, instructions, dark theme, and the enclave-local ollama baseURL
+# all take effect. Without this step the stub wins and OpenCode reports
+# "Model not found" because the provider list is empty. Idempotent.
+apply_opencode_config_overlay() {
+    local overlay_cfg="/home/forge/.config-overlay/opencode/config.json"
+    local overlay_tui="/home/forge/.config-overlay/opencode/tui.json"
+    local user_cfg="/home/forge/.config/opencode/config.json"
+    local user_tui="/home/forge/.config/opencode/tui.json"
+    mkdir -p "$(dirname "$user_cfg")"
+    if [ -f "$overlay_cfg" ]; then
+        cp -f "$overlay_cfg" "$user_cfg"
+        trace_lifecycle "config" "opencode config overlay applied"
+    fi
+    if [ -f "$overlay_tui" ]; then
+        cp -f "$overlay_tui" "$user_tui"
+    fi
 }
 
 # ── Banner ──────────────────────────────────────────────────

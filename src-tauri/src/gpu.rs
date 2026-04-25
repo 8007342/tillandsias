@@ -36,12 +36,24 @@ impl GpuTier {
     ///
     /// @trace spec:inference-container
     pub fn model_pair(&self) -> (&'static str, &'static str) {
+        // @trace spec:zen-default-with-ollama-analysis-pool
+        // Tool-call work stays on a Zen model (opencode/*) regardless of
+        // local hardware — Zen models follow opencode's tool-call protocol
+        // reliably. Local ollama is the analysis pool (small_model), tier-
+        // tagged by available CPU/GPU. Until ollama tool-calling is proven
+        // reliable, do NOT promote ollama to the primary slot here.
+        const ZEN_PRIMARY: &str = "opencode/big-pickle";
         match self {
-            GpuTier::None => ("ollama/qwen2.5:0.5b", "ollama/qwen2.5:0.5b"),
-            GpuTier::Low => ("ollama/phi3.5:3.8b", "ollama/qwen2.5:0.5b"),
-            GpuTier::Mid => ("ollama/qwen2.5-coder:7b", "ollama/qwen2.5:0.5b"),
-            GpuTier::High => ("ollama/llama3.2:8b", "ollama/tinyllama:1.1b"),
-            GpuTier::Ultra => ("ollama/qwen2.5:13b", "ollama/qwen2.5:0.5b"),
+            // No GPU / minimal RAM — analysis on the smallest baked model.
+            GpuTier::None => (ZEN_PRIMARY, "ollama/qwen2.5:0.5b"),
+            // Low: 3B analysis is fine on CPU.
+            GpuTier::Low => (ZEN_PRIMARY, "ollama/llama3.2:3b"),
+            // Mid: 7B coder analysis if pulled, else fall back at runtime.
+            GpuTier::Mid => (ZEN_PRIMARY, "ollama/qwen2.5-coder:7b"),
+            // High: still 7B analysis (14B costs too much for sub-tasks).
+            GpuTier::High => (ZEN_PRIMARY, "ollama/qwen2.5-coder:7b"),
+            // Ultra: 14B analysis pays off when GPU memory exists.
+            GpuTier::Ultra => (ZEN_PRIMARY, "ollama/qwen2.5:14b"),
         }
     }
 }
@@ -201,25 +213,27 @@ mod tests {
 
     #[test]
     fn gpu_tier_model_pairs() {
+        // Primary stays on Zen for tool calling regardless of local hardware.
+        // Small (analysis) model scales with available compute.
         assert_eq!(
             GpuTier::None.model_pair(),
-            ("ollama/qwen2.5:0.5b", "ollama/qwen2.5:0.5b")
+            ("opencode/big-pickle", "ollama/qwen2.5:0.5b")
         );
         assert_eq!(
             GpuTier::Low.model_pair(),
-            ("ollama/phi3.5:3.8b", "ollama/qwen2.5:0.5b")
+            ("opencode/big-pickle", "ollama/llama3.2:3b")
         );
         assert_eq!(
             GpuTier::Mid.model_pair(),
-            ("ollama/qwen2.5-coder:7b", "ollama/qwen2.5:0.5b")
+            ("opencode/big-pickle", "ollama/qwen2.5-coder:7b")
         );
         assert_eq!(
             GpuTier::High.model_pair(),
-            ("ollama/llama3.2:8b", "ollama/tinyllama:1.1b")
+            ("opencode/big-pickle", "ollama/qwen2.5-coder:7b")
         );
         assert_eq!(
             GpuTier::Ultra.model_pair(),
-            ("ollama/qwen2.5:13b", "ollama/qwen2.5:0.5b")
+            ("opencode/big-pickle", "ollama/qwen2.5:14b")
         );
     }
 
@@ -268,11 +282,11 @@ mod tests {
         let patched = serde_json::to_string_pretty(&config).unwrap();
         std::fs::write(&config_path, &patched).unwrap();
 
-        // Verify
+        // Verify — primary stays Zen, small_model is the tier's analysis model
         let result: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&config_path).unwrap()).unwrap();
-        assert_eq!(result["model"], "ollama/qwen2.5-coder:7b");
-        assert_eq!(result["small_model"], "ollama/qwen2.5:0.5b");
+        assert_eq!(result["model"], "opencode/big-pickle");
+        assert_eq!(result["small_model"], "ollama/qwen2.5-coder:7b");
         assert_eq!(result["autoupdate"], false); // Other fields preserved
     }
 
@@ -288,12 +302,12 @@ mod tests {
         ] {
             let (primary, small) = tier.model_pair();
             assert!(
-                primary.starts_with("ollama/"),
-                "Primary model for {tier:?} must start with ollama/"
+                primary.starts_with("opencode/"),
+                "Primary model for {tier:?} must be a Zen tool-caller (opencode/*)"
             );
             assert!(
                 small.starts_with("ollama/"),
-                "Small model for {tier:?} must start with ollama/"
+                "Small model for {tier:?} must be a local ollama analysis model"
             );
             // Ensure model strings are valid JSON values
             let val = serde_json::Value::String(primary.to_string());

@@ -83,28 +83,10 @@ fi
 _CLAUDE_KEY="${ANTHROPIC_API_KEY:-}"
 unset ANTHROPIC_API_KEY
 
-# ── Claude Code (tools overlay only) ───────────────────────
-# @trace spec:layered-tools-overlay
-# Hard requirement: tools overlay mounted at /home/forge/.tools. The host
-# tray builds and mounts it before launching the container. Inline install
-# fallback removed — missing overlay is a fatal error.
-TOOLS_DIR="/home/forge/.tools"
-CC_PREFIX="$TOOLS_DIR/claude"
-CC_BIN="$CC_PREFIX/bin/claude"
-
-if [ ! -x "$CC_BIN" ]; then
-    echo "[entrypoint] FATAL: Claude Code not found in tools overlay at $CC_BIN" >&2
-    echo "[entrypoint] The tools overlay is missing or incomplete. The host tray" >&2
-    echo "[entrypoint] should have built it before launching this container." >&2
-    exit 1
-fi
-export PATH="$CC_PREFIX/bin:$PATH"
-trace_lifecycle "install" "claude-code: overlay ($CC_BIN)"
-
-# ── OpenSpec (overlay-only, shared helper) ──────────────────
-# @trace spec:forge-shell-tools
+# ── Claude Code + OpenSpec (hard-installed) ────────────────
+# @trace spec:default-image, spec:forge-shell-tools
+require_claude
 require_openspec
-OS_BIN="/home/forge/.tools/openspec/bin/openspec"
 
 # ── Credential check ────────────────────────────────────────
 if [ -d "$HOME/.claude" ]; then

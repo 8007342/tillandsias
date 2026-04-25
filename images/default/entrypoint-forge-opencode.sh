@@ -78,28 +78,11 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
     echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
 fi
 
-# ── OpenCode (tools overlay only) ──────────────────────────
-# @trace spec:layered-tools-overlay
-# Hard requirement: tools overlay mounted at /home/forge/.tools. The host
-# tray builds and mounts it before launching the container. Inline install
-# fallback removed — missing overlay is a fatal error.
-TOOLS_DIR="/home/forge/.tools"
-OC_DIR="$TOOLS_DIR/opencode"
-OC_BIN="$OC_DIR/bin/opencode"
-
-if [ ! -x "$OC_BIN" ]; then
-    echo "[entrypoint] FATAL: OpenCode not found in tools overlay at $OC_BIN" >&2
-    echo "[entrypoint] The tools overlay is missing or incomplete. The host tray" >&2
-    echo "[entrypoint] should have built it before launching this container." >&2
-    exit 1
-fi
-export PATH="$OC_DIR/bin:$PATH"
-trace_lifecycle "install" "opencode: overlay ($OC_BIN)"
-
-# ── OpenSpec (overlay-only, shared helper) ──────────────────
-# @trace spec:forge-shell-tools
+# ── OpenCode + OpenSpec (hard-installed) ───────────────────
+# @trace spec:default-image, spec:forge-shell-tools
+require_opencode
 require_openspec
-OS_BIN="/home/forge/.tools/openspec/bin/openspec"
+apply_opencode_config_overlay
 
 trace_lifecycle "entrypoint" "opencode ready"
 
