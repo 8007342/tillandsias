@@ -747,23 +747,6 @@ pub(crate) async fn stop_proxy() {
 /// Performs a single health probe using `wget --spider`.
 /// DISTRO: Proxy is Alpine — busybox wget is built-in, curl is NOT available.
 /// Returns `true` if the proxy responds, `false` otherwise.
-///
-/// Used by both `ensure_proxy_running` (readiness loop) and `tools_overlay`
-/// (to decide whether to route builds through the enclave or direct).
-///
-/// @trace spec:proxy-container
-pub(crate) async fn is_proxy_healthy() -> bool {
-    // DISTRO: Proxy is Alpine — busybox nc (netcat) for TCP probe.
-    // wget --spider returns 400 because squid rejects non-proxy HTTP requests.
-    let check = tillandsias_podman::podman_cmd()
-        .args(["exec", PROXY_CONTAINER_NAME, "sh", "-c", "nc -z localhost 3128"])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .await;
-    check.map(|s| s.success()).unwrap_or(false)
-}
-
 /// Remove the enclave network if no containers are attached.
 /// Best-effort — silently ignores errors (e.g., containers still attached).
 /// On podman machine, the enclave network was never created — nothing to do.
@@ -1597,14 +1580,6 @@ pub(crate) async fn ensure_git_service_running(
 }
 
 // ---------------------------------------------------------------------------
-// Tools overlay — delegated to tools_overlay module
-// @trace spec:layered-tools-overlay
-// ---------------------------------------------------------------------------
-
-// NOTE: tools_overlay::ensure_tools_overlay is called via the full
-// crate::tools_overlay::ensure_tools_overlay path in handle_attach_here().
-
-// ---------------------------------------------------------------------------
 // Unified enclave startup
 // @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container
 // ---------------------------------------------------------------------------
@@ -1689,11 +1664,10 @@ pub async fn ensure_enclave_ready(
         }
     });
 
-    // NOTE: Tools overlay (ensure_tools_overlay) is NOT called here because it
-    // requires the forge image to exist (it runs a temporary forge container).
-    // On first launch, the forge image may not be built yet. Instead, tools
-    // overlay is called from handle_attach_here() AFTER forge image is confirmed.
-    // @trace spec:layered-tools-overlay
+    // Tools overlay tombstoned 2026-04-25 — agents (claude, opencode,
+    // openspec) are baked into the forge image at /usr/local/bin/. No
+    // separate overlay build step here.
+    // @trace spec:tombstone-tools-overlay
 
     // Step 4+5: Git mirror + service — mirror creation failure propagates
     let mirror_path = match tokio::task::spawn_blocking({
@@ -2784,21 +2758,9 @@ pub async fn handle_attach_here(
     // Single unified enclave setup: network, proxy, inference, mirror, git service.
     let _enclave = ensure_enclave_ready(&project_path, &project_name, state, build_tx.clone()).await?;
 
-    // @trace spec:layered-tools-overlay
-    // Tools overlay runs HERE — after forge image is confirmed ready (above) and
-    // enclave is up (proxy available for npm downloads). Hard failure: no
-    // per-container fallback — if the overlay cannot be built we refuse the
-    // launch so the real ordering/build error is visible.
-    if let Err(e) = crate::tools_overlay::ensure_tools_overlay(build_tx.clone()).await {
-        error!(
-            spec = "layered-tools-overlay",
-            error = %e,
-            "Tools overlay build failed — aborting attach"
-        );
-        state.running.retain(|c| c.name != container_name);
-        allocator.release(&project_name, genus);
-        return Err(strings::SETUP_ERROR.into());
-    }
+    // @trace spec:tombstone-tools-overlay
+    // Tools overlay removed — agents (claude, opencode, openspec) are hard-
+    // installed in the forge image at /usr/local/bin/. Nothing to build here.
 
     // Detect whether the project path IS the watch root (e.g., ~/src/) rather
     // than a project inside it. When true, mount at /home/forge/src/ directly
@@ -2876,11 +2838,8 @@ pub async fn handle_attach_here(
         project.assigned_genus = Some(genus);
     }
 
-    // P2-4: Spawn background tools overlay update after successful launch.
-    // Non-blocking — container is already running, this checks for newer
-    // tool versions in the background.
-    // @trace spec:layered-tools-overlay
-    crate::tools_overlay::spawn_background_update();
+    // Tools overlay background update tombstoned — agents are image-baked.
+    // @trace spec:tombstone-tools-overlay
 
     let elapsed = start.elapsed();
     info!(
@@ -3153,17 +3112,8 @@ pub async fn handle_attach_web(
         return Err(e);
     }
 
-    // @trace spec:layered-tools-overlay
-    if let Err(e) = crate::tools_overlay::ensure_tools_overlay(build_tx.clone()).await {
-        warn!(
-            accountability = true,
-            category = "performance",
-            safety = "DEGRADED: tools will be installed per-container instead of from cache",
-            spec = "layered-tools-overlay",
-            error = %e,
-            "Tools overlay setup failed — performance degradation (web mode)"
-        );
-    }
+    // Tools overlay tombstoned — agents hard-installed in forge image.
+    // @trace spec:tombstone-tools-overlay
 
     let global_config = load_global_config();
     let is_watch_root = global_config
@@ -3280,8 +3230,8 @@ pub async fn handle_attach_web(
         project.assigned_genus = Some(genus);
     }
 
-    // @trace spec:layered-tools-overlay
-    crate::tools_overlay::spawn_background_update();
+    // Tools overlay background update tombstoned — agents image-baked.
+    // @trace spec:tombstone-tools-overlay
 
     let elapsed = start.elapsed();
     info!(
@@ -3835,9 +3785,8 @@ pub async fn handle_terminal(
                     "Maintenance terminal {container_name} launched credential-free — zero D-Bus, zero credentials, pids-limit=512",
                 );
             }
-            // P2-4: Spawn background tools overlay update after successful launch.
-            // @trace spec:layered-tools-overlay
-            crate::tools_overlay::spawn_background_update();
+            // Tools overlay background update tombstoned — agents image-baked.
+            // @trace spec:tombstone-tools-overlay
             Ok(())
         }
         Err(e) => {

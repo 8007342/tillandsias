@@ -385,33 +385,6 @@ fn resolve_mount_source(source: &MountSource, ctx: &LaunchContext) -> Option<Str
     match source {
         MountSource::ProjectDir => Some(ctx.project_path.display().to_string()),
         MountSource::CacheDir => Some(ctx.cache_dir.display().to_string()),
-        // @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse, spec:overlay-mount-cache
-        // Fast-path: process-lifetime snapshot cache. The cache is populated
-        // by `ensure_tools_overlay()` which is awaited in `handle_attach_here`
-        // BEFORE `build_podman_args` (the function that calls us), so this
-        // should always hit on the warm path.
-        //
-        // Defensive fallback: if the snapshot was invalidated mid-launch
-        // (race with a background rebuild) or the user is on a code path
-        // that bypassed `ensure_tools_overlay`, fall back to the original
-        // `exists()` check. Entrypoints additionally fall back to inline
-        // install if no mount is provided at all.
-        MountSource::ToolsOverlay => {
-            if let Some(path) = crate::tools_overlay::cached_overlay_for(
-                &crate::handlers::forge_image_tag(),
-            ) {
-                Some(path.display().to_string())
-            } else {
-                let overlay_path = ctx.cache_dir
-                    .join("tools-overlay")
-                    .join("current");
-                if overlay_path.exists() {
-                    Some(overlay_path.display().to_string())
-                } else {
-                    None
-                }
-            }
-        }
         // @trace spec:layered-tools-overlay
         // Configs live on tmpfs (ramdisk) for fast reads — zero disk I/O.
         MountSource::ConfigOverlay => {
@@ -824,42 +797,25 @@ mod tests {
     // openspec/specs/native-secrets-store/spec.md.
     // @trace spec:secrets-management, spec:native-secrets-store
 
-    // @trace spec:layered-tools-overlay
+    // @trace spec:tombstone-tools-overlay
+    // Tools overlay was removed on 2026-04-25 — agents are hard-installed in
+    // the forge image at /usr/local/bin/. No mount to test for.
     #[test]
-    fn tools_overlay_skipped_when_dir_absent() {
-        let profile = container_profile::forge_opencode_profile();
-        let ctx = test_context();
-        let args = build_podman_args(&profile, &ctx);
-        let joined = args.join(" ");
-        // Tools overlay dir doesn't exist in the test context, so mount is skipped
-        assert!(
-            !joined.contains("/home/forge/.tools"),
-            "Tools overlay mount should be skipped when directory doesn't exist"
-        );
-    }
-
-    // @trace spec:layered-tools-overlay
-    #[test]
-    fn tools_overlay_mounted_when_dir_exists() {
-        let profile = container_profile::forge_claude_profile();
-        let tmp_dir = std::env::temp_dir().join("tillandsias-test-tools-overlay");
-        let overlay_dir = tmp_dir.join("tools-overlay").join("current");
-        std::fs::create_dir_all(&overlay_dir).unwrap();
-
-        let mut ctx = test_context();
-        ctx.cache_dir = tmp_dir.clone();
-
-        let args = build_podman_args(&profile, &ctx);
-        let joined = args.join(" ");
-
-        let expected = format!("{}:/home/forge/.tools:ro", overlay_dir.display());
-        assert!(
-            joined.contains(&expected),
-            "Tools overlay should be mounted read-only. Expected: {expected}\nGot: {joined}"
-        );
-
-        // Clean up
-        std::fs::remove_dir_all(&tmp_dir).ok();
+    fn forge_profiles_have_no_tools_overlay_mount() {
+        for profile in [
+            container_profile::forge_opencode_profile(),
+            container_profile::forge_claude_profile(),
+            container_profile::forge_opencode_web_profile(),
+            container_profile::terminal_profile(),
+        ] {
+            let ctx = test_context();
+            let args = build_podman_args(&profile, &ctx);
+            let joined = args.join(" ");
+            assert!(
+                !joined.contains("/home/forge/.tools"),
+                "No profile should mount the tools overlay — tombstoned.\nGot: {joined}"
+            );
+        }
     }
 
     // @trace spec:layered-tools-overlay

@@ -86,7 +86,9 @@ fn write_lf(path: &std::path::Path, content: &str) -> std::io::Result<()> {
 // Executable scripts
 // ---------------------------------------------------------------------------
 pub const BUILD_IMAGE: &str = include_str!("../../scripts/build-image.sh");
-pub const BUILD_TOOLS_OVERLAY: &str = include_str!("../../scripts/build-tools-overlay.sh");
+// build-tools-overlay.sh tombstoned 2026-04-25 — agents are hard-installed in
+// the forge image; no runtime overlay build required.
+// @trace spec:tombstone-tools-overlay
 // @trace spec:native-secrets-store
 // GitHub login is driven from Rust (`runner::run_github_login`): `gh auth
 // login` runs via `podman exec` against a keep-alive git-service container,
@@ -257,7 +259,6 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 ///   flake.lock
 ///   scripts/
 ///     build-image.sh
-///     build-tools-overlay.sh
 ///   images/
 ///     default/
 ///       entrypoint.sh
@@ -303,22 +304,11 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     fs::create_dir_all(&scripts_dir).map_err(|e| format!("scripts dir: {e}"))?;
     write_lf(&scripts_dir.join("build-image.sh"), BUILD_IMAGE)
         .map_err(|e| format!("build-image.sh: {e}"))?;
-    write_lf(
-        &scripts_dir.join("build-tools-overlay.sh"),
-        BUILD_TOOLS_OVERLAY,
-    )
-    .map_err(|e| format!("build-tools-overlay.sh: {e}"))?;
+    // build-tools-overlay.sh not emitted — tombstoned 2026-04-25.
+    // @trace spec:tombstone-tools-overlay
     #[cfg(unix)]
     {
         let path = scripts_dir.join("build-image.sh");
-        if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o700)) {
-            warn!(
-                file = %path.display(),
-                error = %e,
-                "Failed to set executable permission — container entrypoint may fail"
-            );
-        }
-        let path = scripts_dir.join("build-tools-overlay.sh");
         if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o700)) {
             warn!(
                 file = %path.display(),

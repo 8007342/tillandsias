@@ -521,15 +521,8 @@ pub fn run(
         return false;
     }
 
-    // @trace spec:layered-tools-overlay
-    // Build tools overlay if needed — must happen before build_podman_args()
-    // which resolves the overlay mount path. Non-fatal: entrypoints fall back
-    // to inline install if the overlay is absent.
-    if let Err(e) = crate::tools_overlay::build_overlay_for_init() {
-        if debug {
-            eprintln!("  [debug] Tools overlay build failed (non-fatal): {e}");
-        }
-    }
+    // Tools overlay tombstoned — agents hard-installed in forge image.
+    // @trace spec:tombstone-tools-overlay
 
     // Drop guard ensures service containers are cleaned up on ANY exit path:
     // normal return, panic, Ctrl+C (podman forwards SIGINT, container exits,

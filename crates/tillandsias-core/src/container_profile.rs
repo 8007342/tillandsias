@@ -73,10 +73,6 @@ pub enum MountSource {
     ProjectDir,
     /// The tillandsias cache directory (~/.cache/tillandsias).
     CacheDir,
-    /// Pre-built tools overlay directory (~/.cache/tillandsias/tools-overlay/current).
-    /// Resolved at launch time; mount is skipped if the overlay doesn't exist yet.
-    /// @trace spec:layered-tools-overlay
-    ToolsOverlay,
     /// Opinionated config overlay on tmpfs (ramdisk) for fast reads.
     /// Resolved at launch time from `$XDG_RUNTIME_DIR/tillandsias/config-overlay/`.
     /// Mount is skipped if the tmpfs directory doesn't exist yet.
@@ -612,24 +608,20 @@ pub fn git_service_profile() -> ContainerProfile {
 
 fn common_forge_mounts() -> Vec<ProfileMount> {
     // Code comes from git mirror service, packages through proxy.
-    // Mounts: pre-built tools overlay + config overlay (both read-only),
-    // plus per-container log directory (RW).
-    // @trace spec:proxy-container, spec:layered-tools-overlay, spec:podman-orchestration
+    // Mounts: config overlay (read-only ramdisk) + per-container log dir (RW).
+    // The old tools overlay was tombstoned on 2026-04-25 — agents (claude,
+    // opencode, openspec) are hard-installed in the forge image under
+    // /opt/agents/ with /usr/local/bin/ symlinks.
+    // @trace spec:proxy-container, spec:tombstone-tools-overlay, spec:podman-orchestration
     vec![
-        ProfileMount {
-            host_key: MountSource::ToolsOverlay,
-            container_path: "/home/forge/.tools",
-            mode: MountMode::Ro,
-        },
-        // @trace spec:layered-tools-overlay
-        // Opinionated configs on ramdisk — entrypoints symlink into ~/.config/
+        // Opinionated configs on ramdisk — entrypoints copy into ~/.config/
         ProfileMount {
             host_key: MountSource::ConfigOverlay,
             container_path: "/home/forge/.config-overlay",
             mode: MountMode::Ro,
         },
-        // @trace spec:podman-orchestration
         // Per-container log directory — each container writes its own logs in isolation.
+        // @trace spec:podman-orchestration
         ProfileMount {
             host_key: MountSource::ContainerLogs,
             container_path: "/var/log/tillandsias",
@@ -772,18 +764,19 @@ mod tests {
         assert_eq!(profile.image_override, Some("tillandsias-web:latest"));
     }
 
-    // @trace spec:layered-tools-overlay, spec:podman-orchestration
+    // @trace spec:tombstone-tools-overlay, spec:podman-orchestration
     #[test]
-    fn forge_profiles_have_tools_overlay_mount() {
+    fn forge_profiles_have_no_tools_overlay_mount() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
-        // Mounts: tools overlay + config overlay (both read-only) + container logs (RW)
-        // @trace spec:proxy-container, spec:layered-tools-overlay, spec:podman-orchestration
-        assert_eq!(opencode.mounts.len(), 3);
-        assert_eq!(claude.mounts.len(), 3);
-        assert_eq!(opencode.mounts[0].container_path, "/home/forge/.tools");
-        assert_eq!(opencode.mounts[0].mode, MountMode::Ro);
-        assert!(matches!(opencode.mounts[0].host_key, MountSource::ToolsOverlay));
+        // Mounts: config overlay (read-only) + container logs (RW). Tools
+        // overlay was tombstoned 2026-04-25 — agents are hard-installed.
+        assert_eq!(opencode.mounts.len(), 2);
+        assert_eq!(claude.mounts.len(), 2);
+        assert!(
+            !opencode.mounts.iter().any(|m| m.container_path == "/home/forge/.tools"),
+            "No profile should mount the tools overlay — tombstoned"
+        );
     }
 
     // @trace spec:layered-tools-overlay
@@ -855,9 +848,16 @@ mod tests {
         );
         assert_eq!(profile.mounts[0].container_path, "/var/log/tillandsias");
         assert_eq!(profile.mounts[0].mode, MountMode::Rw);
+        // Git service has HTTP(S)_PROXY + NO_PROXY env vars so the post-receive
+        // retry-push can reach github.com through the enclave proxy.
+        // @trace spec:git-mirror-service, spec:proxy-container
         assert!(
-            profile.env_vars.is_empty(),
-            "Git service has no static env vars"
+            profile.env_vars.iter().any(|e| e.name == "HTTPS_PROXY"),
+            "Git service needs HTTPS_PROXY for post-receive push to github.com"
+        );
+        assert!(
+            profile.env_vars.iter().any(|e| e.name == "NO_PROXY"),
+            "Git service needs NO_PROXY to bypass proxy for enclave peers"
         );
         assert!(
             profile.image_override.is_none(),
@@ -935,35 +935,18 @@ mod tests {
         assert!(profile.image_override.is_none(), "Proxy image tag comes from LaunchContext");
     }
 
-    // @trace spec:layered-tools-overlay
+    // @trace spec:tombstone-tools-overlay, spec:default-image
     #[test]
-    fn tools_overlay_expected_paths() {
-        // These paths must match between:
-        // - scripts/build-tools-overlay.sh (installs to /home/forge/.tools/<tool>)
-        // - entrypoint-forge-claude.sh (checks /home/forge/.tools/claude/bin/claude)
-        // - entrypoint-forge-opencode.sh (checks /home/forge/.tools/opencode/bin/opencode)
-        // - lib-common.sh install_openspec() (checks /home/forge/.tools/openspec/bin/openspec)
-        let container_mount = "/home/forge/.tools";
-        let expected_bins = [
-            format!("{container_mount}/claude/bin/claude"),
-            format!("{container_mount}/opencode/bin/opencode"),
-            format!("{container_mount}/openspec/bin/openspec"),
-        ];
-
-        // Verify the container mount path matches what forge profiles declare
+    fn agents_are_hard_installed_paths() {
+        // After the tombstone of the runtime tools overlay, agents live at
+        // /usr/local/bin/ (symlinked from /opt/agents/...) — baked into the
+        // forge image at build time per images/default/Containerfile.
+        // No profile mount targets /home/forge/.tools anymore.
         let profile = forge_opencode_profile();
-        assert_eq!(
-            profile.mounts[0].container_path, container_mount,
-            "Profile mount path must match the expected tools container mount"
+        assert!(
+            !profile.mounts.iter().any(|m| m.container_path == "/home/forge/.tools"),
+            "Profiles must not mount the old tools overlay — agents are image-baked"
         );
-
-        // Verify all expected tool binaries live under the mount root
-        for bin in &expected_bins {
-            assert!(
-                bin.starts_with(container_mount),
-                "Tool binary {bin} must be under {container_mount}"
-            );
-        }
     }
 
     // @trace spec:podman-orchestration, spec:secrets-management

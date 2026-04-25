@@ -27,7 +27,9 @@ mod runner;
 mod secrets;
 mod singleton;
 mod strings;
-mod tools_overlay;
+// Tools-overlay module tombstoned 2026-04-25 — agent binaries (claude,
+// openspec, opencode) are now hard-installed in the forge image at
+// /usr/local/bin/. See openspec/changes/archive/2026-04-25-tombstone-tools-overlay/.
 mod tray_spawn;
 mod uninstall;
 mod update_cli;
@@ -504,22 +506,11 @@ fn main() {
                         // All images already present — go straight to ready state.
                         info!("All images present at launch — skipping builds");
 
-                        // @trace spec:layered-tools-overlay
-                        // Build tools overlay. Hard failure — no per-container
-                        // fallback. Forge stays unavailable so the real error
-                        // (missing forge image, WSL broken, etc.) is visible.
-                        let overlay_build_tx = build_tx.clone();
-                        let overlay_ok = match crate::tools_overlay::ensure_tools_overlay(overlay_build_tx).await {
-                            Ok(()) => true,
-                            Err(e) => {
-                                error!(
-                                    spec = "layered-tools-overlay",
-                                    error = %e,
-                                    "Tools overlay build failed — forge unavailable",
-                                );
-                                false
-                            }
-                        };
+                        // @trace spec:tombstone-tools-overlay
+                        // Tools overlay tombstoned — agents are hard-installed in
+                        // the forge image at /usr/local/bin/ (see Containerfile).
+                        // Forge is available as soon as its image is present.
+                        let overlay_ok = true;
 
                         if overlay_ok {
                             {
@@ -683,29 +674,13 @@ fn main() {
                             }
                         }
 
-                        // Step 4: Build tools overlay now that forge image is ready.
-                        // Hard failure — no per-container fallback. Overlay
-                        // failure keeps forge_available=false so the menu
-                        // reflects the real state.
-                        // @trace spec:layered-tools-overlay
-                        let mut overlay_ok = false;
-                        if proxy_ok && forge_ok {
-                            let overlay_build_tx = build_tx.clone();
-                            match crate::tools_overlay::ensure_tools_overlay(overlay_build_tx).await {
-                                Ok(()) => overlay_ok = true,
-                                Err(e) => {
-                                    error!(
-                                        spec = "layered-tools-overlay",
-                                        error = %e,
-                                        "Tools overlay build failed — forge unavailable",
-                                    );
-                                }
-                            }
-                        }
+                        // Step 4 tombstoned: tools overlay removed — agents are
+                        // hard-installed in the forge image (/usr/local/bin/).
+                        // @trace spec:tombstone-tools-overlay
 
-                        // Step 5: Set forge_available only if proxy + forge built AND
-                        // tools overlay succeeded. forge_available gates menu items.
-                        if proxy_ok && forge_ok && overlay_ok {
+                        // Step 5: Set forge_available only if proxy + forge built.
+                        // forge_available gates menu items.
+                        if proxy_ok && forge_ok {
                             {
                                 let mut s = state_for_loop.lock().unwrap();
                                 s.forge_available = true;
@@ -733,8 +708,7 @@ fn main() {
                             warn!(
                                 proxy_ok,
                                 forge_ok,
-                                overlay_ok,
-                                "Setup incomplete (images or tools overlay) — menus remain disabled"
+                                "Setup incomplete — menus remain disabled"
                             );
                             {
                                 let mut s = state_for_loop.lock().unwrap();
