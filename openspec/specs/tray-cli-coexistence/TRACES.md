@@ -11,7 +11,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [src-tauri/src/logging.rs#L175](../../../src-tauri/src/logging.rs#L175)
 - [src-tauri/src/logging.rs#L202](../../../src-tauri/src/logging.rs#L202)
 - [src-tauri/src/logging.rs#L224](../../../src-tauri/src/logging.rs#L224)
-- [src-tauri/src/main.rs#L137](../../../src-tauri/src/main.rs#L137)
+- [src-tauri/src/main.rs#L160](../../../src-tauri/src/main.rs#L160)
 - [src-tauri/src/runner.rs#L25](../../../src-tauri/src/runner.rs#L25)
 - [src-tauri/src/runner.rs#L37](../../../src-tauri/src/runner.rs#L37)
 - [src-tauri/src/runner.rs#L423](../../../src-tauri/src/runner.rs#L423)

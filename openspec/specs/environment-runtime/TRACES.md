@@ -14,7 +14,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-core/src/container_profile.rs#L188](../../../crates/tillandsias-core/src/container_profile.rs#L188)
 - [crates/tillandsias-core/src/container_profile.rs#L248](../../../crates/tillandsias-core/src/container_profile.rs#L248)
 - [crates/tillandsias-core/src/container_profile.rs#L319](../../../crates/tillandsias-core/src/container_profile.rs#L319)
-- [crates/tillandsias-core/src/container_profile.rs#L647](../../../crates/tillandsias-core/src/container_profile.rs#L647)
+- [crates/tillandsias-core/src/container_profile.rs#L692](../../../crates/tillandsias-core/src/container_profile.rs#L692)
 - [images/default/entrypoint-forge-claude.sh#L20](../../../images/default/entrypoint-forge-claude.sh#L20)
 - [images/default/entrypoint-forge-opencode.sh#L20](../../../images/default/entrypoint-forge-opencode.sh#L20)
 - [images/default/entrypoint-forge-opencode-web.sh#L12](../../../images/default/entrypoint-forge-opencode-web.sh#L12)
