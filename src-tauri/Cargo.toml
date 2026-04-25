@@ -52,6 +52,10 @@ libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"
+# HTTP-mock server for github_health.rs unit tests. Lets us classify
+# responses against a local wiremock server without hitting api.github.com.
+# @trace spec:simplified-tray-ux
+wiremock = "0.6"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
