@@ -25,6 +25,20 @@ language = "Idioma"
 credit = "por Tlatoāni"
 version = "Tillandsias v{version}"
 
+# ── simplified-tray-ux state machine ────────────────────────
+building_chip = "⏳ Construyendo [{images}]"
+building_idle = "⏳ Preparando infraestructura..."
+ready_transient = "✅ Listo"
+sign_in_github = "🔑 Iniciar sesión en GitHub"
+github_unreachable_banner = "⚠ GitHub inaccesible, usando proyectos en caché"
+include_remote = "Incluir remotos"
+launch = "🚀 Abrir"
+maintenance_terminal = "⛏️ Terminal de mantenimiento"
+clone_and_launch = "⬇️ Clonar y abrir"
+signature = "— por Tlatoāni"
+no_local_projects = "No hay proyectos locales"
+no_remote_projects = "No hay proyectos remotos (o ya están todos clonados)"
+
 [menu.github]
 label = "GitHub"
 login = "🔑 Iniciar sesión en GitHub"

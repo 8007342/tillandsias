@@ -25,6 +25,7 @@ mod mirror_sync;
 mod logging;
 mod menu;
 mod runner;
+mod tray_menu;
 mod secrets;
 mod singleton;
 mod strings;
@@ -39,7 +40,6 @@ mod updater;
 mod browser;
 
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use tauri::tray::TrayIconBuilder;
 use tokio::sync::mpsc;
@@ -58,6 +58,28 @@ use updater::UpdateState;
 /// Global tray icon handle — needed for dynamic menu rebuilds.
 /// Set once during setup, never replaced.
 static TRAY_ICON: std::sync::OnceLock<Mutex<tauri::tray::TrayIcon>> = std::sync::OnceLock::new();
+
+/// Global pre-built tray menu. Stage transitions and projects-submenu
+/// rebuilds drive this handle directly. Set once during setup.
+///
+/// @trace spec:simplified-tray-ux
+static TRAY_MENU: std::sync::OnceLock<tray_menu::TrayMenu<tauri::Wry>> =
+    std::sync::OnceLock::new();
+
+/// Latest credential probe result. Cached for the process lifetime; only
+/// re-runs on user-initiated sign-in / sign-out actions per the spec.
+///
+/// @trace spec:simplified-tray-ux
+static CREDENTIAL_HEALTH: std::sync::OnceLock<
+    Mutex<Option<crate::github_health::CredentialHealth>>,
+> = std::sync::OnceLock::new();
+
+/// Shared TrayState handle, used by background tasks (credential probe,
+/// menu rebuilds from outside the event loop) without threading Arcs
+/// through every signature.
+///
+/// @trace spec:simplified-tray-ux
+static TRAY_STATE_HANDLE: std::sync::OnceLock<Arc<Mutex<TrayState>>> = std::sync::OnceLock::new();
 
 fn main() {
     // On Windows, hide the console window for tray-only mode (no args).
@@ -209,6 +231,10 @@ fn main() {
 
     let initial_state = TrayState::new(platform);
     let state = Arc::new(Mutex::new(initial_state));
+    // @trace spec:simplified-tray-ux
+    // Make the shared state accessible to background tasks without
+    // threading Arcs through every event_loop signature.
+    let _ = TRAY_STATE_HANDLE.set(state.clone());
 
     // Channel for menu commands → event loop
     let (menu_tx, menu_rx) = mpsc::channel::<MenuCommand>(64);
@@ -236,11 +262,17 @@ fn main() {
             // Spawn updater background tasks
             updater::spawn_update_tasks(&app_handle, update_state);
 
-            // Build initial tray menu
-            let tray_menu = {
-                let s = state_for_setup.lock().unwrap();
-                menu::build_tray_menu(&app_handle, &s)?
-            };
+            // @trace spec:simplified-tray-ux
+            // Pre-build the static tray menu once. Stage transitions toggle
+            // set_enabled on individual handles instead of rebuilding the
+            // tree (the legacy `menu::build_tray_menu` path is gone).
+            let tm = tray_menu::TrayMenu::<tauri::Wry>::new(&app_handle)?;
+            let menu_root = tm.root.clone();
+            // Store the pre-built menu globally so the event loop can drive it.
+            // Subsequent .new() calls would conflict; OnceLock prevents that.
+            if TRAY_MENU.set(tm).is_err() {
+                warn!("TRAY_MENU already initialised — duplicate setup?");
+            }
 
             // Build tray icon — store handle so it persists and callbacks remain active
             // Icon bytes come from the SVG→PNG build pipeline (Ionantha pup = startup state)
@@ -251,14 +283,16 @@ fn main() {
             let tray = TrayIconBuilder::new()
                 .icon(icon)
                 .tooltip("Tillandsias")
-                .menu(&tray_menu)
+                .menu(&menu_root)
                 .on_menu_event({
                     let menu_tx = menu_tx.clone();
-                    let app_handle = app_handle.clone();
                     let state_for_menu = state_for_setup.clone();
                     move |_app, event| {
-                        let raw_id = event.id().as_ref();
-                        let id = menu::ids::strip_gen(raw_id);
+                        // @trace spec:simplified-tray-ux
+                        // Stable IDs, no generation suffix. The new TrayMenu
+                        // reuses item handles forever, so libappindicator's
+                        // blank-label cache bug does not apply.
+                        let id = event.id().as_ref();
                         debug!(menu_id = %id, "Menu event received");
 
                         // Blooming → Mature: any menu interaction acknowledges
@@ -281,12 +315,8 @@ fn main() {
 
                         // @trace spec:app-lifecycle
                         // Quit is dispatched through the menu channel so the event loop
-                        // owns the sole shutdown_all() invocation. The event loop's Quit
-                        // arm stops every container, tears down the enclave network,
-                        // then calls app_handle.exit(0). A direct std::process::exit
-                        // here would bypass cleanup and leave stale containers + a
-                        // non-removable enclave network behind.
-                        if id == menu::ids::QUIT {
+                        // owns the sole shutdown_all() invocation.
+                        if id == tray_menu::ids::QUIT {
                             info!("Quit requested");
                             if let Err(e) = menu_tx.blocking_send(MenuCommand::Quit) {
                                 warn!(error = %e, "menu channel closed — falling back to direct exit");
@@ -296,7 +326,20 @@ fn main() {
                             return;
                         }
 
-                        handle_menu_click(id, &menu_tx, &app_handle);
+                        // Include-remote toggle: read the CheckMenuItem state
+                        // and forward the resolved value to the event loop so
+                        // it can rebuild the projects submenu accordingly.
+                        if id == tray_menu::ids::INCLUDE_REMOTE {
+                            if let Some(menu) = TRAY_MENU.get() {
+                                let include = menu.include_remote_checked();
+                                if let Err(e) = menu_tx.try_send(MenuCommand::IncludeRemoteToggle { include }) {
+                                    debug!(error = %e, "include-remote toggle dispatch failed");
+                                }
+                            }
+                            return;
+                        }
+
+                        handle_menu_click(id, &menu_tx);
                     }
                 })
                 .build(app)?;
@@ -544,6 +587,10 @@ fn main() {
                             );
                         }
                         rebuild_menu(&app_handle_for_loop, &state_for_loop);
+                        // @trace spec:simplified-tray-ux
+                        // All images already present — fire credential probe so we
+                        // can transition Ready → Authed/NoAuth/NetIssue.
+                        spawn_credential_probe(app_handle_for_loop.clone(), state_for_loop.clone());
                     } else {
                         // Step 3: Build missing images sequentially with per-component chips.
                         // Set icon to Building and keep forge_available = false.
@@ -715,6 +762,15 @@ fn main() {
                             );
                         }
                         rebuild_menu(&app_handle_for_loop, &state_for_loop);
+                        // @trace spec:simplified-tray-ux
+                        // Builds finished (success or partial failure). Fire the
+                        // credential probe so the tray transitions out of Ready.
+                        if proxy_ok && forge_ok {
+                            spawn_credential_probe(
+                                app_handle_for_loop.clone(),
+                                state_for_loop.clone(),
+                            );
+                        }
                     }
                 }
 
@@ -903,163 +959,133 @@ fn main() {
         });
 }
 
-/// Fingerprint of the last menu rebuild — avoids redundant `set_menu` calls
-/// that can steal window focus on Windows and AppImage.
-static LAST_MENU_FINGERPRINT: AtomicU64 = AtomicU64::new(0);
+// @trace spec:simplified-tray-ux
+// Stage selection driver. Determines which of the five stages the menu
+// should display from the live `TrayState` and the cached credential
+// probe result. Pure function — no Tauri side-effects.
+fn current_stage(s: &TrayState) -> tray_menu::Stage {
+    use tillandsias_core::state::BuildStatus;
 
-/// Compute a cheap fingerprint of menu-relevant state.
-/// Only structural changes (project count, running count, build chips, forge status)
-/// warrant a full menu rebuild.
-fn menu_fingerprint(s: &TrayState) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    // Include i18n generation so language changes force a rebuild
-    i18n::generation().hash(&mut h);
-    s.projects.len().hash(&mut h);
-    s.running.len().hash(&mut h);
-    s.active_builds.len().hash(&mut h);
-    s.forge_available.hash(&mut h);
-    s.has_podman.hash(&mut h);
-    s.tray_icon_state.hash(&mut h);
-    s.remote_repos_loading.hash(&mut h);
-    s.cloning_project.hash(&mut h);
-    // Hash project names to detect additions/removals
-    for p in &s.projects {
-        p.name.hash(&mut h);
+    // Booting: any in-progress build, or forge image not yet ready.
+    let any_in_progress = s
+        .active_builds
+        .iter()
+        .any(|b| matches!(b.status, BuildStatus::InProgress));
+    if any_in_progress || !s.forge_available {
+        return tray_menu::Stage::Booting;
     }
-    // Hash running container names
-    for r in &s.running {
-        r.name.hash(&mut h);
+
+    // Once images are ready, fall back to the cached credential probe.
+    // If the probe hasn't completed yet, show Ready (transient).
+    let health = CREDENTIAL_HEALTH
+        .get()
+        .and_then(|m| m.lock().ok().and_then(|g| g.clone()));
+    match health {
+        Some(h) => tray_menu::stage_from_health(&h),
+        None => tray_menu::Stage::Ready,
     }
-    // Hash build chip names + status
-    for b in &s.active_builds {
-        b.image_name.hash(&mut h);
-        std::mem::discriminant(&b.status).hash(&mut h);
-    }
-    h.finish()
 }
 
-/// Rebuild the tray menu from current state and apply it to the tray icon.
-/// Skips the rebuild if the menu-relevant state hasn't changed, avoiding
-/// focus-stealing on Windows and AppImage.
+/// Names of images currently being built — drives the building chip text.
+fn in_progress_image_names(s: &TrayState) -> Vec<String> {
+    use tillandsias_core::state::BuildStatus;
+    s.active_builds
+        .iter()
+        .filter(|b| matches!(b.status, BuildStatus::InProgress))
+        .map(|b| b.image_name.clone())
+        .collect()
+}
+
+/// Apply the latest state to the pre-built tray menu.
+///
+/// 1. Pick the right Stage from credential health + build progress.
+/// 2. Toggle stage-conditional items via `set_stage`.
+/// 3. Refresh the building chip text from active builds.
+/// 4. Rebuild the projects submenu (gated internally on a tuple change).
+///
+/// @trace spec:simplified-tray-ux
 fn rebuild_menu(app_handle: &tauri::AppHandle, state: &Arc<Mutex<TrayState>>) {
-    let s = state.lock().unwrap();
-
-    // Skip rebuild if menu content hasn't changed
-    let fp = menu_fingerprint(&s);
-    let prev = LAST_MENU_FINGERPRINT.swap(fp, Ordering::Relaxed);
-    if fp == prev {
+    let Some(menu) = TRAY_MENU.get() else {
+        debug!("TRAY_MENU not yet initialised — skipping rebuild");
         return;
-    }
+    };
+    let s = state.lock().unwrap();
+    let stage = current_stage(&s);
+    menu.set_stage(stage);
 
-    match menu::build_tray_menu(app_handle, &s) {
-        Ok(new_menu) => {
-            if let Some(tray_lock) = TRAY_ICON.get()
-                && let Ok(tray) = tray_lock.lock()
-            {
-                if let Err(e) = tray.set_menu(Some(new_menu)) {
-                    debug!(error = %e, "Tray menu update failed (cosmetic)");
-                }
-                debug!(
-                    projects = s.projects.len(),
-                    running = s.running.len(),
-                    "Tray menu rebuilt"
-                );
-            }
-        }
-        Err(e) => {
-            error!(error = %e, "Failed to rebuild tray menu");
-        }
+    let names = in_progress_image_names(&s);
+    let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+    menu.update_building_chip(&refs);
+
+    let include_remote = menu.include_remote_checked();
+    if let Err(e) = menu.update_projects(app_handle, &s, include_remote) {
+        debug!(error = %e, "update_projects failed (cosmetic)");
     }
 }
 
-/// Dispatch a menu click ID to the appropriate `MenuCommand`.
-fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::AppHandle) {
-    // Strip the generation suffix (e.g., "quit#5" -> "quit") added to avoid
-    // libappindicator's menu ID caching bug that causes blank labels.
-    let id = menu::ids::strip_gen(id);
-
-    let command = match id {
-        menu::ids::QUIT => None, // Handled via fast-path above
-        menu::ids::GITHUB_LOGIN => Some(MenuCommand::GitHubLogin),
-        menu::ids::CLAUDE_RESET_CREDENTIALS => Some(MenuCommand::ClaudeResetCredentials),
-        menu::ids::SETTINGS => Some(MenuCommand::Settings),
-        menu::ids::REFRESH_REMOTE_PROJECTS => Some(MenuCommand::RefreshRemoteProjects),
-        "root-terminal" => Some(MenuCommand::RootTerminal),
-        _ => {
-            if let Some((action, payload)) = menu::ids::parse(id) {
-                match action {
-                    "attach" => Some(MenuCommand::AttachHere {
-                        project_path: payload.into(),
-                    }),
-                    "terminal" => Some(MenuCommand::Terminal {
-                        project_path: payload.into(),
-                    }),
-                    "serve" => Some(MenuCommand::ServeHere {
-                        project_path: payload.into(),
-                    }),
-                    // "start" ID no longer emitted from menu but kept
-                    // for safety in case external callers use it.
-                    "start" => Some(MenuCommand::Start {
-                        project_path: payload.into(),
-                    }),
-                    "stop" => {
-                        if let Some((_, genus)) = ContainerInfo::parse_container_name(payload) {
-                            Some(MenuCommand::Stop {
-                                container_name: payload.to_string(),
-                                genus,
-                            })
-                        } else {
-                            warn!(id, "Cannot parse container name from stop action");
-                            None
-                        }
-                    }
-                    // @trace spec:opencode-web-session, spec:tray-app
-                    "stop-project" => Some(MenuCommand::StopProject {
-                        project_path: payload.into(),
-                    }),
-                    "destroy" => {
-                        if let Some((_, genus)) = ContainerInfo::parse_container_name(payload) {
-                            Some(MenuCommand::Destroy {
-                                container_name: payload.to_string(),
-                                genus,
-                            })
-                        } else {
-                            warn!(id, "Cannot parse container name from destroy action");
-                            None
-                        }
-                    }
-                    "clone" => {
-                        // Payload format: "<full_name>\t<name>"
-                        if let Some((full_name, name)) = payload.split_once('\t') {
-                            Some(MenuCommand::CloneProject {
-                                full_name: full_name.to_string(),
-                                name: name.to_string(),
-                            })
-                        } else {
-                            warn!(id, "Cannot parse clone project from menu ID");
-                            None
-                        }
-                    }
-                    "select-agent" => Some(MenuCommand::SelectAgent {
-                        agent: payload.to_string(),
-                    }),
-                    "select-lang" => Some(MenuCommand::SelectLanguage {
-                        language: payload.to_string(),
-                    }),
-                    _ => {
-                        debug!(action, "Unknown menu action");
-                        None
-                    }
-                }
-            } else {
-                None
-            }
-        }
-    };
-
-    if let Some(cmd) = command
+/// Dispatch a menu click ID to the appropriate `MenuCommand`. Returns
+/// `None` for IDs handled out-of-band (Quit, IncludeRemote — those are
+/// resolved at the call site in `on_menu_event`).
+fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>) {
+    if let Some(cmd) = tray_menu::dispatch_click(id)
         && tx.try_send(cmd).is_err() {
             debug!("Menu command channel full/closed — action may be dropped");
         }
+}
+
+/// Run the GitHub credential health probe in a background task and store
+/// the result in `CREDENTIAL_HEALTH`. After the probe completes the menu
+/// is rebuilt so the stage transitions to Authed / NoAuth / NetIssue.
+///
+/// Cached for the process lifetime; only re-runs on user-initiated
+/// sign-in / sign-out actions per the spec.
+///
+/// @trace spec:simplified-tray-ux
+/// Refresh the pre-built menu's static labels (called after a language
+/// change so the new strings take effect without rebuilding the tree).
+///
+/// @trace spec:simplified-tray-ux
+pub(crate) fn refresh_menu_labels() {
+    if let Some(menu) = TRAY_MENU.get() {
+        menu.refresh_static_labels();
+    }
+}
+
+/// Convenience wrapper for callers that already initialised
+/// `TRAY_STATE_HANDLE` (i.e. anything after tray setup). Accepts only
+/// the app handle; pulls the state Arc from the global slot.
+///
+/// @trace spec:simplified-tray-ux
+pub(crate) fn reprobe_credentials(app_handle: tauri::AppHandle) {
+    if let Some(state) = TRAY_STATE_HANDLE.get() {
+        spawn_credential_probe(app_handle, state.clone());
+    } else {
+        debug!("TRAY_STATE_HANDLE not set — cannot re-probe credentials");
+    }
+}
+
+pub(crate) fn spawn_credential_probe(
+    app_handle: tauri::AppHandle,
+    state: Arc<Mutex<TrayState>>,
+) {
+    // Initialise the slot if missing; clear it so the next read sees None
+    // (Ready transient) until the new probe completes.
+    let slot = CREDENTIAL_HEALTH.get_or_init(|| Mutex::new(None));
+    if let Ok(mut g) = slot.lock() {
+        *g = None;
+    }
+    tauri::async_runtime::spawn(async move {
+        let health = crate::github_health::probe().await;
+        info!(
+            spec = "simplified-tray-ux",
+            health = %health,
+            "Credential probe complete — applying stage"
+        );
+        if let Some(slot) = CREDENTIAL_HEALTH.get()
+            && let Ok(mut g) = slot.lock()
+        {
+            *g = Some(health);
+        }
+        rebuild_menu(&app_handle, &state);
+    });
 }

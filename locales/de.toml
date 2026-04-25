@@ -33,6 +33,20 @@ language = "Sprache"
 credit = "von Tlatoāni"
 version = "Tillandsias v{version}"
 
+# ── simplified-tray-ux state machine ────────────────────────
+building_chip = "⏳ Wird erstellt: [{images}]"
+building_idle = "⏳ Infrastruktur wird vorbereitet..."
+ready_transient = "✅ Bereit"
+sign_in_github = "🔑 Bei GitHub anmelden"
+github_unreachable_banner = "⚠ GitHub nicht erreichbar, verwende zwischengespeicherte Projekte"
+include_remote = "Remote-Projekte anzeigen"
+launch = "🚀 Starten"
+maintenance_terminal = "⛏️ Wartungsterminal"
+clone_and_launch = "⬇️ Klonen und Starten"
+signature = "— von Tlatoāni"
+no_local_projects = "Keine lokalen Projekte gefunden"
+no_remote_projects = "Keine Remote-Projekte (oder alle bereits geklont)"
+
 [menu.github]
 label = "GitHub"
 login = "🔑 GitHub-Anmeldung"

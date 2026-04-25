@@ -33,6 +33,21 @@ language = "Language"
 credit = "by Tlatoāni"
 version = "Tillandsias v{version}"
 
+# ── simplified-tray-ux state machine ────────────────────────
+# Stage labels and per-stage actions. @trace spec:simplified-tray-ux
+building_chip = "⏳ Building [{images}]"
+building_idle = "⏳ Building infrastructure..."
+ready_transient = "✅ Ready"
+sign_in_github = "🔑 Sign in to GitHub"
+github_unreachable_banner = "⚠ GitHub unreachable, using cached projects"
+include_remote = "Include remote"
+launch = "🚀 Launch"
+maintenance_terminal = "⛏️ Maintenance terminal"
+clone_and_launch = "⬇️ Clone & Launch"
+signature = "— by Tlatoāni"
+no_local_projects = "No local projects detected"
+no_remote_projects = "No remote projects (or all cloned)"
+
 [menu.github]
 label = "GitHub"
 login = "🔑 GitHub Login"

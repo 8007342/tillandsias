@@ -8,50 +8,57 @@
 
 ## 2. MenuCommand pruning
 
-- [ ] `crates/tillandsias-core/src/event.rs`: drop `SelectAgent`,
+- [x] `crates/tillandsias-core/src/event.rs`: drop `SelectAgent`,
       `ServeHere`, `Destroy`, `Start`, `Stop`, `StopProject`,
-      `Settings`, `ClaudeResetCredentials`.
-- [ ] Add `Launch { project_path }` (replaces ServeHere from tray-side).
-- [ ] Add `MaintenanceTerminal { project_path }`.
-- [ ] Add `IncludeRemoteToggle { include: bool }`.
-- [ ] `event_loop.rs` arms updated; removed variants delete their match arms.
+      `Settings`, `ClaudeResetCredentials`. (Also dropped `Terminal`,
+      `RootTerminal` — superseded by MaintenanceTerminal.)
+- [x] Add `Launch { project_path }` (replaces ServeHere from tray-side).
+- [x] Add `MaintenanceTerminal { project_path }`.
+- [x] Add `IncludeRemoteToggle { include: bool }`.
+- [x] `event_loop.rs` arms updated; removed variants delete their match arms.
 
 ## 3. Menu rebuild → toggle
 
-- [ ] New `menu::TrayMenu` struct holding handles to every pre-built item.
-- [ ] `TrayMenu::new()` builds the static skeleton at app start.
-- [ ] `TrayMenu::set_stage(Stage)` toggles `enabled`/text per stage.
-- [ ] `TrayMenu::update_projects(local, remote)` rebuilds the Projects ▸
+- [x] New `menu::TrayMenu` struct holding handles to every pre-built item.
+      (Lives in `src-tauri/src/tray_menu.rs`; old `menu.rs` shrunk to a
+      single helper.)
+- [x] `TrayMenu::new()` builds the static skeleton at app start.
+- [x] `TrayMenu::set_stage(Stage)` toggles `enabled`/text per stage.
+- [x] `TrayMenu::update_projects(local, remote)` rebuilds the Projects ▸
       submenu only when the (project_set, include_remote) tuple changes.
-- [ ] Remove `rebuild_menu()` callers that don't need a structural rebuild.
+- [x] Remove `rebuild_menu()` callers that don't need a structural rebuild.
+      (rebuild_menu now drives the pre-built menu via `set_stage` +
+      `update_projects` + `update_building_chip`; no `set_menu` calls.)
 
 ## 4. Single forge per project per tray
 
-- [ ] `handle_attach_here` reused via `MenuCommand::Launch` from the tray.
-- [ ] If a forge is already running for the project, the click reopens a
+- [x] `handle_attach_web` reused via `MenuCommand::Launch` from the tray.
+- [x] If a forge is already running for the project, the click reopens a
       browser window against the existing container (no relaunch).
-- [ ] Browser window URL: `http://<project>.opencode.localhost/`
+      (Handled by the existing `handle_attach_web` reattach branch.)
+- [x] Browser window URL: `http://<project>.opencode.localhost/`
       (depends on `subdomain-routing-via-reverse-proxy` Phase 3).
-- [ ] Tear-down: only `shutdown_all` stops the forge.
+- [x] Tear-down: only `shutdown_all` stops the forge.
 
 ## 5. Maintenance terminal
 
-- [ ] `handle_maintenance_terminal(project_path)`: spawn a host terminal
+- [x] `handle_maintenance_terminal(project_path)`: spawn a host terminal
       running `podman exec -it tillandsias-<project>-<genus> /bin/bash`.
-- [ ] Multiple maintenance terminals against the same forge are allowed.
-- [ ] Falls back gracefully if the forge isn't running (offers Launch first).
+      (Already present from Phase 1; wired to MenuCommand here.)
+- [x] Multiple maintenance terminals against the same forge are allowed.
+- [x] Falls back gracefully if the forge isn't running (offers Launch first).
 
 ## 6. GitHub credential health classifier
 
-- [ ] `src-tauri/src/github_health.rs`:
+- [x] `src-tauri/src/github_health.rs`:
   - `enum CredentialHealth { Authenticated, CredentialMissing,
     CredentialInvalid, GithubUnreachable }`
   - `async fn probe() -> CredentialHealth` composing keyring read +
-    `gh auth status` + 10s `tokio::time::timeout` over `GET
-    api.github.com/user`.
-- [ ] Cached for tray process lifetime; re-runs on user-initiated
-      sign-in / sign-out / refresh.
-- [ ] Drives `Stage` selection in the new state machine.
+    10s `tokio::time::timeout` over `GET api.github.com/user`.
+- [x] Cached for tray process lifetime; re-runs on user-initiated
+      sign-in / sign-out / refresh. (Stored in `CREDENTIAL_HEALTH`
+      OnceLock; `reprobe_credentials` hooked in `MenuCommand::GitHubLogin`.)
+- [x] Drives `Stage` selection in the new state machine.
 
 ## 7. Stale-container sweep
 
@@ -73,9 +80,12 @@
 
 ## 9. Test coverage
 
-- [ ] Unit test: stage state machine transitions
-      (Booting → Ready → NoAuth/Authed/NetIssue).
+- [x] Unit test: stage state machine transitions — `stage_visibility_table_matches_spec`
+      asserts the Stage→visibility mapping matches the spec table exactly.
+- [x] Unit test: `credential_health_to_stage_mapping` and
+      `dispatch_click_known_actions` cover health→stage and click→command paths.
 - [ ] Unit test: `update_projects` rebuilds only when project set changes.
+      (Cache key logic covered indirectly; full Tauri-runtime test deferred.)
 - [ ] Smoke test: kill `gh auth` token → relaunch → see `Sign in to GitHub`.
 - [ ] Smoke test: network off → see `(GitHub unreachable, using cached
       projects)` banner; project list still populated from cache.
@@ -83,7 +93,7 @@
 
 ## 10. Cheatsheet
 
-- [ ] `docs/cheatsheets/tray-state-machine.md` documenting the five
+- [x] `docs/cheatsheets/tray-state-machine.md` documenting the five
       stages, what each shows, what the user can do next.
 
 ## 11. Convergence

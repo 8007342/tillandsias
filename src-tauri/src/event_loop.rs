@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-use tillandsias_core::config::{SelectedAgent, load_global_config, save_selected_agent, save_selected_language};
+use tillandsias_core::config::{load_global_config, save_selected_language};
 use tillandsias_core::event::{BuildProgressEvent, ContainerState, MenuCommand};
 use tillandsias_core::genus::GenusAllocator;
 use tillandsias_core::project::{ArtifactStatus, Project, ProjectChange, ProjectType};
@@ -113,108 +113,15 @@ pub async fn run(
                         break;
                     }
                     MenuCommand::AttachHere { project_path } => {
+                        // CLI-only: `tillandsias <path>` still drives this. The tray
+                        // never emits AttachHere — it emits Launch instead.
                         match handlers::handle_attach_here(project_path, &mut state, &mut allocator, build_tx.clone()).await {
                             Ok(_event) => {
-
                                 prune_completed_builds(&mut state);
                                 on_state_change(&state);
                             }
                             Err(e) => {
                                 error!(error = %e, "Attach Here failed");
-                            }
-                        }
-                    }
-                    MenuCommand::Start { .. } => {
-                        // Start variant kept for backwards compatibility but
-                        // removed from the menu (was a duplicate of Attach Here).
-                        debug!("Start command received but no longer shown in menu");
-                    }
-                    MenuCommand::Stop { container_name, genus: _ } => {
-                        match handlers::handle_stop(container_name, &mut state, &mut allocator).await {
-                            Ok(_event) => {
-
-                                prune_completed_builds(&mut state);
-                                on_state_change(&state);
-                            }
-                            Err(e) => {
-                                error!(error = %e, "Stop failed");
-                            }
-                        }
-                    }
-                    // @trace spec:opencode-web-session, spec:tray-app
-                    MenuCommand::StopProject { project_path } => {
-                        info!(project = ?project_path, "Stop project requested");
-                        match handlers::handle_stop_project(project_path, &mut state).await {
-                            Ok(()) => {
-                                prune_completed_builds(&mut state);
-                                on_state_change(&state);
-                            }
-                            Err(e) => {
-                                error!(error = %e, "Stop project failed");
-                            }
-                        }
-                    }
-                    MenuCommand::Destroy { container_name, genus: _ } => {
-                        match handlers::handle_destroy(container_name, &mut state, &mut allocator).await {
-                            Ok(_event) => {
-
-                                prune_completed_builds(&mut state);
-                                on_state_change(&state);
-                            }
-                            Err(e) => {
-                                error!(error = %e, "Destroy failed");
-                            }
-                        }
-                    }
-                    MenuCommand::Terminal { project_path } => {
-                        info!(project = ?project_path, "Terminal requested");
-                        match handlers::handle_terminal(project_path, &mut state, &mut allocator, &mut tool_allocator, build_tx.clone()).await {
-                            Ok(()) => {
-
-                                prune_completed_builds(&mut state);
-                                on_state_change(&state);
-                            }
-                            Err(e) => {
-                                error!(error = %e, "Terminal failed");
-                            }
-                        }
-                    }
-                    MenuCommand::ServeHere { project_path } => {
-                        info!(project = ?project_path, "Serve Here requested");
-                        match handlers::handle_serve_here(project_path, &mut state, build_tx.clone()).await {
-                            Ok(()) => {
-                                prune_completed_builds(&mut state);
-                                on_state_change(&state);
-                            }
-                            Err(e) => {
-                                error!(error = %e, "Serve Here failed");
-                            }
-                        }
-                    }
-                    MenuCommand::RootTerminal => {
-                        info!("Root terminal requested");
-                        let watch_path = {
-                            let global_config = load_global_config();
-                            global_config
-                                .scanner
-                                .watch_paths
-                                .first()
-                                .cloned()
-                                .unwrap_or_else(|| {
-                                    std::path::PathBuf::from(
-                                        std::env::var("HOME").unwrap_or_else(|_| "/root".to_string()),
-                                    )
-                                    .join("src")
-                                })
-                        };
-                        match handlers::handle_root_terminal(watch_path, &mut state, &mut allocator, &mut tool_allocator, build_tx.clone()).await {
-                            Ok(()) => {
-
-                                prune_completed_builds(&mut state);
-                                on_state_change(&state);
-                            }
-                            Err(e) => {
-                                error!(error = %e, "Root terminal failed");
                             }
                         }
                     }
@@ -227,6 +134,10 @@ pub async fn run(
                             // on next menu open after auth completes.
                             state.invalidate_remote_repos_cache();
                             prune_completed_builds(&mut state);
+                            // @trace spec:simplified-tray-ux
+                            // Re-probe credentials so the stage transitions out
+                            // of NoAuth / NetIssue once the new token lands.
+                            crate::reprobe_credentials(app_handle.clone());
                             on_state_change(&state);
                         }
                     }
@@ -238,52 +149,31 @@ pub async fn run(
                         info!(repo = %full_name, "Clone project requested");
                         handle_clone_project(&full_name, &name, &mut state, &mut allocator, build_tx.clone(), &on_state_change).await;
                     }
-                    MenuCommand::ClaudeResetCredentials => {
-                        info!("Claude Reset Credentials requested");
-                        if let Err(e) = handlers::handle_claude_reset_credentials() {
-                            error!(error = %e, "Claude Reset Credentials failed");
-                        } else {
-                            // Rebuild menu to reflect cleared auth state
-                            on_state_change(&state);
-                        }
-                    }
-                    MenuCommand::SelectAgent { agent } => {
-                        if let Some(selected) = SelectedAgent::from_str_opt(&agent) {
-                            info!(agent = %agent, "Agent selection changed");
-                            save_selected_agent(selected);
-                            // Rebuild menu to update pin emoji
-                            on_state_change(&state);
-                        } else {
-                            debug!(agent = %agent, "Unknown agent in SelectAgent command");
-                        }
-                    }
                     MenuCommand::SelectLanguage { language } => {
                         info!(language = %language, "Language selection changed");
                         save_selected_language(&language);
                         // Reload i18n strings for the new locale and rebuild menu.
                         crate::i18n::reload(&language);
+                        // @trace spec:simplified-tray-ux
+                        // Refresh the static label set on the pre-built menu so
+                        // the new locale takes effect without a full rebuild.
+                        crate::refresh_menu_labels();
                         on_state_change(&state);
                     }
-                    MenuCommand::Settings => {
-                        // Settings is a Submenu now — this event won't fire from menu clicks.
-                        // Kept for forward compatibility if Settings ever becomes actionable.
-                        debug!("Settings command received");
-                    }
                     // @trace spec:simplified-tray-ux
-                    // Phase-1 stubs — wired up properly when the new TrayMenu lands.
                     MenuCommand::Launch { project_path } => {
-                        info!(spec = "simplified-tray-ux", project = ?project_path, "Launch command received — routing to opencode-web (handler stub)");
-                        // Phase 1: route to the existing opencode-web path so the
-                        // user-visible behaviour is preserved while the new
-                        // menu is built out.
-                        match handlers::handle_serve_here(project_path, &mut state, build_tx.clone()).await {
-                            Ok(()) => {
+                        info!(spec = "simplified-tray-ux", project = ?project_path, "Launch — routing to opencode-web forge");
+                        // Tray Launch is opencode-web only (per spec). Reuses the
+                        // existing forge if running; spawns one otherwise.
+                        match handlers::handle_attach_web(project_path, &mut state, &mut allocator, build_tx.clone()).await {
+                            Ok(_event) => {
                                 prune_completed_builds(&mut state);
                                 on_state_change(&state);
                             }
-                            Err(e) => warn!(error = %e, "Launch handler failed"),
+                            Err(e) => warn!(error = %e, "Launch failed"),
                         }
                     }
+                    // @trace spec:simplified-tray-ux
                     MenuCommand::MaintenanceTerminal { project_path } => {
                         info!(spec = "simplified-tray-ux", project = ?project_path, "MaintenanceTerminal — exec into running forge");
                         match handlers::handle_maintenance_terminal(project_path).await {
@@ -294,9 +184,13 @@ pub async fn run(
                             }
                         }
                     }
+                    // @trace spec:simplified-tray-ux
+                    // The tray re-renders the projects submenu via TrayMenu::update_projects;
+                    // the toggle's persistent value lives in the menu CheckMenuItem itself,
+                    // so the loop simply triggers a project-list refresh callback.
                     MenuCommand::IncludeRemoteToggle { include } => {
-                        info!(spec = "simplified-tray-ux", include, "IncludeRemoteToggle command received (handler stub)");
-                        // TODO Phase 3: store in state, rebuild Projects submenu.
+                        info!(spec = "simplified-tray-ux", include, "IncludeRemoteToggle");
+                        on_state_change(&state);
                     }
                 }
             }
