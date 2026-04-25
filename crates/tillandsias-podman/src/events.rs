@@ -44,7 +44,7 @@ impl PodmanEventStream {
             attempt += 1;
 
             // Log every attempt initially, then only every 5th to reduce spam
-            if attempt <= 3 || attempt % 5 == 0 {
+            if attempt <= 3 || attempt.is_multiple_of(5) {
                 info!(attempt, "Starting podman events listener");
             }
 
@@ -52,7 +52,7 @@ impl PodmanEventStream {
             match self.stream_events(&tx).await {
                 Ok(()) => return, // Clean shutdown (channel closed)
                 Err(e) => {
-                    if attempt <= 3 || attempt % 5 == 0 {
+                    if attempt <= 3 || attempt.is_multiple_of(5) {
                         warn!(
                             ?e,
                             attempt,

@@ -497,11 +497,10 @@ fn parse_user_from_gitconfig(path: &Path) -> (String, String) {
                 if let Some(val) = val.trim_start().strip_prefix('=') {
                     name = val.trim().to_string();
                 }
-            } else if let Some(val) = trimmed.strip_prefix("email") {
-                if let Some(val) = val.trim_start().strip_prefix('=') {
+            } else if let Some(val) = trimmed.strip_prefix("email")
+                && let Some(val) = val.trim_start().strip_prefix('=') {
                     email = val.trim().to_string();
                 }
-            }
         }
     }
 

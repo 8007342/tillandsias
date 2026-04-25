@@ -525,16 +525,14 @@ fn find_exe_in_dir(dir: &std::path::Path) -> Result<PathBuf, String> {
     for entry in std::fs::read_dir(dir).map_err(|e| format!("cannot read extract dir: {e}"))? {
         let entry = entry.map_err(|e| format!("directory read error: {e}"))?;
         let path = entry.path();
-        if let Some(ext) = path.extension() {
-            if ext.eq_ignore_ascii_case("exe") {
+        if let Some(ext) = path.extension()
+            && ext.eq_ignore_ascii_case("exe") {
                 return Ok(path);
             }
-        }
-        if path.is_dir() {
-            if let Ok(inner) = find_exe_in_dir(&path) {
+        if path.is_dir()
+            && let Ok(inner) = find_exe_in_dir(&path) {
                 return Ok(inner);
             }
-        }
     }
     Err("no .exe file found in update archive".to_string())
 }
@@ -544,13 +542,11 @@ fn find_app_bundle_in_dir(dir: &std::path::Path) -> Result<PathBuf, String> {
     for entry in std::fs::read_dir(dir).map_err(|e| format!("cannot read extract dir: {e}"))? {
         let entry = entry.map_err(|e| format!("directory read error: {e}"))?;
         let path = entry.path();
-        if path.is_dir() {
-            if let Some(ext) = path.extension() {
-                if ext.eq_ignore_ascii_case("app") {
+        if path.is_dir()
+            && let Some(ext) = path.extension()
+                && ext.eq_ignore_ascii_case("app") {
                     return Ok(path);
                 }
-            }
-        }
     }
     Err("no .app bundle found in update archive".to_string())
 }
@@ -627,11 +623,10 @@ fn find_appimage_in_dir(dir: &std::path::Path) -> Result<PathBuf, String> {
         {
             return Ok(path);
         }
-        if path.is_dir() {
-            if let Ok(inner) = find_appimage_in_dir(&path) {
+        if path.is_dir()
+            && let Ok(inner) = find_appimage_in_dir(&path) {
                 return Ok(inner);
             }
-        }
     }
     Err("no .AppImage file found in update archive".to_string())
 }

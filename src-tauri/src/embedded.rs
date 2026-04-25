@@ -40,11 +40,10 @@ pub fn simplify_path(path: &std::path::Path) -> PathBuf {
     let s = path.to_string_lossy();
     // Strip `\\?\` if followed by a drive letter (e.g. `\\?\C:\foo`).
     // Leave `\\?\UNC\server\share` alone — UNC paths cannot be simplified.
-    if let Some(rest) = s.strip_prefix(r"\\?\") {
-        if !rest.starts_with("UNC\\") && rest.len() >= 2 && rest.as_bytes()[1] == b':' {
+    if let Some(rest) = s.strip_prefix(r"\\?\")
+        && !rest.starts_with("UNC\\") && rest.len() >= 2 && rest.as_bytes()[1] == b':' {
             return PathBuf::from(rest);
         }
-    }
     path.to_path_buf()
 }
 

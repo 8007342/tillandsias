@@ -130,8 +130,8 @@ pub(crate) async fn ensure_inference_running(
 
     // Check if it's running outside our state (e.g., surviving a restart).
     // If running but with a stale image version, stop it and rebuild.
-    if let Ok(inspect) = client.inspect_container(INFERENCE_CONTAINER_NAME).await {
-        if inspect.state == "running" {
+    if let Ok(inspect) = client.inspect_container(INFERENCE_CONTAINER_NAME).await
+        && inspect.state == "running" {
             let expected_tag = inference_image_tag();
             if inspect.image.contains(&expected_tag) {
                 debug!(spec = "inference-container", "Inference container already running (correct version)");
@@ -149,7 +149,6 @@ pub(crate) async fn ensure_inference_running(
             }
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
-    }
 
     info!(
         accountability = true,
@@ -469,8 +468,8 @@ pub(crate) async fn ensure_proxy_running(
 
     // Check if it's running outside our state (e.g., surviving a restart).
     // If running but with a stale image version, stop it and rebuild.
-    if let Ok(inspect) = client.inspect_container(PROXY_CONTAINER_NAME).await {
-        if inspect.state == "running" {
+    if let Ok(inspect) = client.inspect_container(PROXY_CONTAINER_NAME).await
+        && inspect.state == "running" {
             let expected_tag = proxy_image_tag();
             if inspect.image.contains(&expected_tag) {
                 debug!(spec = "proxy-container", "Proxy container already running (correct version)");
@@ -489,7 +488,6 @@ pub(crate) async fn ensure_proxy_running(
             // Wait briefly for cleanup
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
-    }
 
     info!(
         accountability = true,
@@ -987,8 +985,8 @@ fn detect_project_git_state(project_path: &Path) -> GitProjectState {
             in_origin_section = trimmed == "[remote \"origin\"]";
             continue;
         }
-        if in_origin_section {
-            if let Some(url) = trimmed.strip_prefix("url") {
+        if in_origin_section
+            && let Some(url) = trimmed.strip_prefix("url") {
                 let url = url.trim().strip_prefix('=').unwrap_or("").trim();
                 if !url.is_empty() {
                     return GitProjectState::RemoteRepo {
@@ -996,7 +994,6 @@ fn detect_project_git_state(project_path: &Path) -> GitProjectState {
                     };
                 }
             }
-        }
     }
 
     GitProjectState::LocalRepo
@@ -1315,8 +1312,8 @@ pub(crate) async fn ensure_git_service_running(
 
     // Check if it's running outside our state.
     // If running but with a stale image version, stop it and rebuild.
-    if let Ok(inspect) = client.inspect_container(&container_name).await {
-        if inspect.state == "running" {
+    if let Ok(inspect) = client.inspect_container(&container_name).await
+        && inspect.state == "running" {
             let expected_tag = git_image_tag();
             if inspect.image.contains(&expected_tag) {
                 debug!(spec = "git-mirror-service", project = %project_name, "Git service already running (correct version)");
@@ -1335,7 +1332,6 @@ pub(crate) async fn ensure_git_service_running(
             }
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
-    }
 
     info!(
         accountability = true,
@@ -2195,14 +2191,13 @@ fn get_proxy_ip() -> Result<String, String> {
     // Parse the IPs — prefer the one NOT on the enclave (10.89.0.x).
     // The podman default network typically uses 10.88.0.x.
     let ips = String::from_utf8_lossy(&output.stdout);
-    for ip in ips.trim().split_whitespace() {
+    for ip in ips.split_whitespace() {
         if !ip.starts_with("10.89.") {
             return Ok(ip.to_string());
         }
     }
     // Fallback: use any IP
-    ips.trim()
-        .split_whitespace()
+    ips.split_whitespace()
         .next()
         .map(|s| s.to_string())
         .ok_or_else(|| "no IP found".into())

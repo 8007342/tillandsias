@@ -604,8 +604,8 @@ fn handle_podman_event(
             // working copy at <watch_path>/<project> so what the user sees
             // on disk matches what's on GitHub. Skips gracefully when the
             // host is dirty, diverged, or absent — never clobbers user work.
-            if let Some(c) = state.running.iter().find(|c| c.name == name) {
-                if matches!(
+            if let Some(c) = state.running.iter().find(|c| c.name == name)
+                && matches!(
                     c.container_type,
                     ContainerType::Forge
                         | ContainerType::OpenCodeWeb
@@ -634,7 +634,6 @@ fn handle_podman_event(
                         }
                     }
                 }
-            }
 
             if let Some(pos) = state.running.iter().position(|c| c.name == name) {
                 let removed = state.running.remove(pos);
@@ -657,8 +656,8 @@ fn handle_podman_event(
                                 ContainerType::Forge | ContainerType::Maintenance
                             )
                     });
-                if !still_has_forge {
-                    if let Some(project) = state
+                if !still_has_forge
+                    && let Some(project) = state
                         .projects
                         .iter_mut()
                         .find(|p| p.name == removed.project_name)
@@ -684,7 +683,6 @@ fn handle_podman_event(
                     //     git-service on `tillandsias <project>` exit since
                     //     CLI mode is one-shot and has no tray to host the
                     //     persistent service.
-                }
             }
         }
     } else if event.new_state == ContainerState::Running

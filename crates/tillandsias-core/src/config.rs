@@ -17,6 +17,7 @@ const DEFAULT_DEBOUNCE_MS: u64 = 2000;
 /// Which AI coding agent to launch in forge containers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum SelectedAgent {
     OpenCode,
     Claude,
@@ -24,15 +25,11 @@ pub enum SelectedAgent {
     /// in an embedded Tauri webview. Default for new installs.
     /// @trace spec:opencode-web-session
     #[serde(rename = "opencode-web")]
+    #[default]
     OpenCodeWeb,
 }
 
 // @trace spec:opencode-web-session
-impl Default for SelectedAgent {
-    fn default() -> Self {
-        Self::OpenCodeWeb
-    }
-}
 
 impl SelectedAgent {
     /// The string value passed as `TILLANDSIAS_AGENT` env var.
@@ -72,18 +69,12 @@ impl SelectedAgent {
 
 /// Agent selection configuration.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Default)]
 pub struct AgentConfig {
     #[serde(default)]
     pub selected: SelectedAgent,
 }
 
-impl Default for AgentConfig {
-    fn default() -> Self {
-        Self {
-            selected: SelectedAgent::default(),
-        }
-    }
-}
 
 /// Internationalization configuration.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

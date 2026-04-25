@@ -87,13 +87,12 @@ pub fn detect_gpu_tier() -> GpuTier {
     if let Ok(output) = std::process::Command::new("nvidia-smi")
         .args(["--query-gpu=memory.total", "--format=csv,noheader,nounits"])
         .output()
-    {
-        if output.status.success() {
+        && output.status.success() {
             let vram_str = String::from_utf8_lossy(&output.stdout);
             // nvidia-smi may report multiple GPUs (one line per GPU).
             // Use the first GPU's VRAM for tier classification.
-            if let Some(first_line) = vram_str.lines().next() {
-                if let Ok(vram_mib) = first_line.trim().parse::<u64>() {
+            if let Some(first_line) = vram_str.lines().next()
+                && let Ok(vram_mib) = first_line.trim().parse::<u64>() {
                     let vram_gb = vram_mib / 1024;
                     debug!(
                         vram_mib = vram_mib,
@@ -108,9 +107,7 @@ pub fn detect_gpu_tier() -> GpuTier {
                         _ => GpuTier::Ultra,
                     };
                 }
-            }
         }
-    }
 
     // TODO: AMD ROCm detection via rocm-smi
     debug!(

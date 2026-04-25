@@ -72,14 +72,13 @@ impl ToolAllocator {
 
     /// Release a tool emoji when a maintenance container stops.
     pub fn release(&mut self, project: &str, emoji: &str) {
-        if let Some(in_use) = self.allocated.get_mut(project) {
-            if let Some(idx) = TOOL_EMOJIS.iter().position(|&e| e == emoji) {
+        if let Some(in_use) = self.allocated.get_mut(project)
+            && let Some(idx) = TOOL_EMOJIS.iter().position(|&e| e == emoji) {
                 in_use.retain(|&i| i != idx);
                 if in_use.is_empty() {
                     self.allocated.remove(project);
                 }
             }
-        }
     }
 
     /// Seed the allocator from a list of already-running containers.

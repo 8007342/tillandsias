@@ -169,7 +169,7 @@ pub fn sync_project(project_name: &str, mirror_dir: &PathBuf, host_working_copy:
         .arg("fetch")
         .arg("--quiet")
         .arg(mirror_dir)
-        .arg(&format!("refs/heads/{branch}:refs/tillandsias-mirror/{branch}"))
+        .arg(format!("refs/heads/{branch}:refs/tillandsias-mirror/{branch}"))
         .output();
     match fetch_out {
         Ok(o) if o.status.success() => {}
@@ -198,7 +198,7 @@ pub fn sync_project(project_name: &str, mirror_dir: &PathBuf, host_working_copy:
         .arg("-C")
         .arg(host_working_copy)
         .args(["merge", "--ff-only", "--quiet"])
-        .arg(&format!("refs/tillandsias-mirror/{branch}"))
+        .arg(format!("refs/tillandsias-mirror/{branch}"))
         .output();
     match merge_out {
         Ok(o) if o.status.success() => {
@@ -375,11 +375,10 @@ pub fn spawn_watcher(mirrors_root: PathBuf, watch_paths: Vec<PathBuf>) -> Result
                     continue;
                 }
                 let now = Instant::now();
-                if let Some(last) = last_sync.get(&project) {
-                    if now.duration_since(*last) < debounce {
+                if let Some(last) = last_sync.get(&project)
+                    && now.duration_since(*last) < debounce {
                         continue;
                     }
-                }
                 last_sync.insert(project.clone(), now);
 
                 let mirror_dir = mirrors_root.join(&project);

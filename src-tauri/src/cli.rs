@@ -427,8 +427,8 @@ fn parse_log_flags(args: &[String]) -> LogConfig {
                     .push(AccountabilityWindow::EnclaveManagement);
             }
         // @trace spec:git-mirror-service
-        } else if arg == "--log-git" {
-            if !config
+        } else if arg == "--log-git"
+            && !config
                 .accountability
                 .contains(&AccountabilityWindow::GitManagement)
             {
@@ -436,7 +436,6 @@ fn parse_log_flags(args: &[String]) -> LogConfig {
                     .accountability
                     .push(AccountabilityWindow::GitManagement);
             }
-        }
     }
 
     config

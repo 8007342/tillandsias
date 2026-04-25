@@ -201,8 +201,8 @@ pub fn prepare_token_file(container_name: &str) -> Result<Option<PathBuf>, Strin
 /// @trace spec:secrets-management, spec:secret-rotation
 pub fn cleanup_token_file(container_name: &str) {
     let path = token_file_path(container_name);
-    if let Err(e) = std::fs::remove_file(&path) {
-        if e.kind() != std::io::ErrorKind::NotFound {
+    if let Err(e) = std::fs::remove_file(&path)
+        && e.kind() != std::io::ErrorKind::NotFound {
             warn!(
                 spec = "secrets-management",
                 container = %container_name,
@@ -210,7 +210,6 @@ pub fn cleanup_token_file(container_name: &str) {
                 "Token file unlink failed — may leak briefly until app exit sweep"
             );
         }
-    }
     if let Some(parent) = path.parent() {
         let _ = std::fs::remove_dir(parent);
     }
