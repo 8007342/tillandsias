@@ -8,7 +8,8 @@
   "instructions": [
     "/home/forge/.config-overlay/opencode/instructions/methodology.md",
     "/home/forge/.config-overlay/opencode/instructions/flutter.md",
-    "/home/forge/.config-overlay/opencode/instructions/model-routing.md"
+    "/home/forge/.config-overlay/opencode/instructions/model-routing.md",
+    "/home/forge/.config-overlay/opencode/instructions/web-services.md"
   ],
   "provider": {
     "ollama": {
