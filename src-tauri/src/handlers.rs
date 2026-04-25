@@ -892,14 +892,24 @@ pub(crate) async fn ensure_router_running(
         format!("-v={}:/run/router/dynamic.Caddyfile:rw", dyn_file.display()),
     );
 
-    // @trace spec:subdomain-routing-via-reverse-proxy
-    // Host loopback publish — 127.0.0.1:80 ONLY. NEVER 0.0.0.0:80. The host
-    // kernel restricts the listener so external clients can't reach port 80
-    // even if they spoof a Host header. *.localhost resolves to 127.0.0.1
-    // by RFC 6761 in browsers and systemd-resolved, so users transparently
-    // hit this listener when typing `<project>.<service>.localhost`.
+    // @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-session
+    // @cheatsheet runtime/forge-container.md
+    // Host loopback publish — 127.0.0.1:8080 ONLY. NEVER 0.0.0.0. The host
+    // kernel restricts the listener so external clients can't reach port 8080
+    // even if they spoof a Host header. The internal Caddy listener inside
+    // the container stays on :80 (allowed within the user namespace);
+    // only the host-side publish moves to :8080 because rootless podman
+    // cannot bind ports below `net.ipv4.ip_unprivileged_port_start`
+    // (default 1024 on Fedora/Silverblue/most distros). Browser-facing URL
+    // therefore carries `:8080` — see browser::build_subdomain_url.
+    //
+    // @tombstone superseded:fix-router-loopback-port — kept for three
+    // releases (until 0.1.169.230). Original publish was `127.0.0.1:80:80`
+    // which silently failed under rootless podman, producing the
+    // ERR_CONNECTION_REFUSED reported by the user against
+    // `<project>.opencode.localhost`.
     run_args.insert(run_args.len() - 1, "-p".to_string());
-    run_args.insert(run_args.len() - 1, "127.0.0.1:80:80".to_string());
+    run_args.insert(run_args.len() - 1, "127.0.0.1:8080:80".to_string());
 
     match client.run_container(&run_args).await {
         Ok(container_id) => {
