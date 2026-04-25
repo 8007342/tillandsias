@@ -28,7 +28,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-core/src/state.rs#L438](../../../crates/tillandsias-core/src/state.rs#L438)
 - [crates/tillandsias-core/src/state.rs#L445](../../../crates/tillandsias-core/src/state.rs#L445)
 - [crates/tillandsias-core/src/state.rs#L454](../../../crates/tillandsias-core/src/state.rs#L454)
-- [crates/tillandsias-podman/src/launch.rs#L239](../../../crates/tillandsias-podman/src/launch.rs#L239)
+- [crates/tillandsias-podman/src/launch.rs#L242](../../../crates/tillandsias-podman/src/launch.rs#L242)
 - [images/default/config-overlay/mcp/git-tools.sh#L53](../../../images/default/config-overlay/mcp/git-tools.sh#L53)
 - [images/default/config-overlay/mcp/git-tools.sh#L70](../../../images/default/config-overlay/mcp/git-tools.sh#L70)
 - [images/default/config-overlay/mcp/project-info.sh#L57](../../../images/default/config-overlay/mcp/project-info.sh#L57)

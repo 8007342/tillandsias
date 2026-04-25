@@ -6,7 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [build-local.sh#L7](../../../build-local.sh#L7)
-- [crates/tillandsias-podman/src/client.rs#L44](../../../crates/tillandsias-podman/src/client.rs#L44)
+- [crates/tillandsias-podman/src/client.rs#L61](../../../crates/tillandsias-podman/src/client.rs#L61)
 - [src-tauri/src/embedded.rs#L35](../../../src-tauri/src/embedded.rs#L35)
 - [src-tauri/src/launch.rs#L219](../../../src-tauri/src/launch.rs#L219)
 - [src-tauri/src/runner.rs#L833](../../../src-tauri/src/runner.rs#L833)

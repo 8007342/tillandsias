@@ -234,6 +234,38 @@ Two distinct directories:
 
 Both use `@trace` annotations and scannable tables. New tool/language references go in `cheatsheets/<category>/<topic>.md` using `cheatsheets/TEMPLATE.md`. Each new cheatsheet must also be added to `cheatsheets/INDEX.md`.
 
+### Provenance is mandatory in every cheatsheet
+
+Every cheatsheet under `cheatsheets/` SHALL include a `## Provenance` section listing at least one high-authority source URL and a `**Last updated:** YYYY-MM-DD` line. Authority hierarchy: vendor / standards body first (`python.org`, `rust-lang.org`, `oracle.com`, `aws.amazon.com`, `cloud.google.com`, `redhat.com`, IETF RFC, W3C/WHATWG), then recognised community projects (`mozilla.org/MDN`, `postgresql.org`, etc.). Stack Overflow / blogs / AI-generated docs are NEVER acceptable as primary provenance.
+
+Cheatsheets without provenance are REJECTED at review time. The `agent-cheatsheets` capability spec is the source of truth for the format and refresh cadence.
+
+### Cheatsheet citation traceability
+
+Code, log events, telemetry, and specs that derive their behaviour from a cheatsheet SHALL cite the cheatsheet by relative path:
+
+- Rust: `// @cheatsheet languages/rust.md`
+- Shell: `# @cheatsheet languages/bash.md`
+- Log events: `cheatsheet = "build/cargo.md"` field
+- OpenSpec: cite under `## Sources of Truth` (already mandated)
+
+This makes the cheatsheet → code → spec graph queryable by `git grep '@cheatsheet'` exactly like `@trace spec:`.
+
+## @tombstone — never silently delete
+
+Dead code, deprecated specs, and removed features get a `@tombstone superseded:<new>` (replacement exists) or `@tombstone obsolete:<old>` (no replacement) annotation. The block is commented out, NOT deleted, for **three releases** (since Tillandsias has a release cadence — VERSION track) before final deletion. The tombstone records the version it landed in so reviewers know when it's safe to delete.
+
+```rust
+// @tombstone superseded:tray-no-disabled-items
+// Old projection — removed in 0.1.169.226. Safe to delete after 0.1.169.229.
+//
+// fn set_stage(&self, stage: Stage) { ... }
+```
+
+This complements OpenSpec's `## REMOVED Requirements` section (which carries `**Reason**:` and `**Migration**:` — the spec-level tombstone). Together they form a complete audit of behavioural transitions.
+
+`git log -G '@tombstone'` reveals every transition; `cheatsheet = ...` and `tombstone = ...` log fields make runtime behaviour cross-reference removed code paths.
+
 Current: `logging-levels.md`, `secrets-management.md`, `token-rotation.md`, `terminal-tools.md`.
 
 ## Plugins & Skills
