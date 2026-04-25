@@ -2,8 +2,10 @@
 //!
 //! Replaces the Tauri WebKit2GTK webview entirely. On Attach Here (web mode),
 //! the tray detects the user's browser and spawns it in app-mode (single-site
-//! window, no tabs, no URL bar) pointed at the forge's local `.localhost`
-//! subdomain URL.
+//! window, no tabs, no URL bar) pointed at the forge's router-fronted
+//! `<project>.opencode.localhost` URL. The host-side router container
+//! (Caddy bound to `127.0.0.1:80`) reverse-proxies into the forge over the
+//! enclave network — port 80 is implicit, no path segment.
 //!
 //! Detection order (first match wins): Safari → Chrome → Chromium →
 //! Microsoft Edge → Firefox → OS default (xdg-open / open / start).
@@ -102,7 +104,7 @@ fn base64_url_encode(bytes: &[u8]) -> String {
     out.replace('+', "-").replace('/', "_")
 }
 
-/// Build the browser-facing URL for a project.
+/// Build the browser-facing URL for a project — legacy port-numbered form.
 ///
 /// Shape: `http://<project>.localhost:<port>/<base64url(/home/forge/src/<project>)>/`
 ///
@@ -122,12 +124,45 @@ fn base64_url_encode(bytes: &[u8]) -> String {
 ///   Per RFC 6761 §6.3, browsers resolve `*.localhost` to loopback.
 /// - `<port>` is the loopback-only host port the tray allocated for the forge.
 ///
-/// @trace spec:opencode-web-session
+/// **Deprecated**: superseded by [`build_subdomain_url`], which returns the
+/// router-fronted `<project>.opencode.localhost` form (port 80 implicit, no
+/// path segment). Kept for now so callers can migrate gradually.
+// TODO: remove once all callers migrate
+///
+/// @trace spec:opencode-web-session, spec:subdomain-routing-via-reverse-proxy
+#[allow(dead_code)]
 pub fn build_attach_url(project_name: &str, host_port: u16) -> String {
     let host_label = sanitize_hostname_label(project_name);
     let project_dir = format!("/home/forge/src/{project_name}");
     let dir_b64 = base64_url_encode(project_dir.as_bytes());
     format!("http://{host_label}.localhost:{host_port}/{dir_b64}/")
+}
+
+/// Build the browser-facing URL for a project — router-fronted subdomain form.
+///
+/// Shape: `http://<project>.opencode.localhost/`
+///
+/// The router container (Caddy) bound to `127.0.0.1:80` matches the Host
+/// header `<project>.opencode.localhost` and reverse-proxies to the
+/// project's forge container on the enclave network. Port 80 is implicit
+/// (no `:port` suffix in the URL) and there is no base64 path segment —
+/// the hostname carries both the project identity and the service
+/// identifier (`opencode`), and OpenCode's `InstanceMiddleware` resolves
+/// the project directory via `process.cwd()` (the forge entrypoint `cd`s
+/// into `$PROJECT_DIR` before launching `opencode serve`).
+///
+/// `*.localhost` is hardcoded to loopback in Chromium (M64+), Firefox
+/// (84+), and systemd-resolved (v245+), so no `/etc/hosts` entries are
+/// needed. The browser sees this as a secure context (W3C Secure Contexts
+/// §3.1) despite plain HTTP.
+///
+/// `<project>` is the sanitized project name (lowercase alphanumeric +
+/// hyphen).
+///
+/// @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-session
+pub fn build_subdomain_url(project_name: &str) -> String {
+    let host_label = sanitize_hostname_label(project_name);
+    format!("http://{host_label}.opencode.localhost/")
 }
 
 /// Probe `$PATH` for a given executable. Returns its absolute path on first
@@ -247,12 +282,20 @@ fn session_profile_dir(project_name: &str) -> PathBuf {
 /// or reap the exit if we decide to later. Most callers should just drop
 /// the handle immediately.
 ///
-/// @trace spec:opencode-web-session
+/// The URL handed to the browser is the router-fronted subdomain form
+/// (`http://<project>.opencode.localhost/`) — the host-side router
+/// container at `127.0.0.1:80` reverse-proxies into the forge. The
+/// `host_port` argument is retained only so callers can still pass through
+/// the port allocation that backs the legacy `-p 127.0.0.1:<port>:4096`
+/// publish; it is not embedded in the URL itself.
+///
+/// @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-session
 pub fn launch_for_project(project_name: &str, host_port: u16) -> Result<Child, String> {
-    let url = build_attach_url(project_name, host_port);
+    let _ = host_port; // see doc-comment: legacy publish stays for now, URL ignores it
+    let url = build_subdomain_url(project_name);
     let kind = detect_browser();
     info!(
-        spec = "opencode-web-session",
+        spec = "subdomain-routing-via-reverse-proxy",
         project = project_name,
         browser = kind.name(),
         url = %url,
@@ -438,6 +481,10 @@ mod tests {
 
     #[test]
     fn build_attach_url_has_hostname_and_base64_dir() {
+        // Legacy port-numbered URL builder — kept until all callers migrate
+        // to `build_subdomain_url`. Asserts the old shape so we notice if it
+        // is unintentionally changed before removal.
+        // @trace spec:opencode-web-session
         let url = build_attach_url("thinking-service", 17000);
         assert!(
             url.starts_with("http://thinking-service.localhost:17000/"),
@@ -465,6 +512,47 @@ mod tests {
             url.starts_with("http://myproject.localhost:17000/"),
             "got {url}"
         );
+    }
+
+    /// Router-fronted URL: hostname carries project + service, no port,
+    /// no path segment.
+    /// @trace spec:subdomain-routing-via-reverse-proxy
+    #[test]
+    fn build_subdomain_url_has_opencode_subdomain_no_port_no_path() {
+        let url = build_subdomain_url("thinking-service");
+        assert_eq!(
+            url, "http://thinking-service.opencode.localhost/",
+            "URL must be exactly <project>.opencode.localhost with no port \
+             and no path — got {url}"
+        );
+    }
+
+    /// @trace spec:subdomain-routing-via-reverse-proxy
+    #[test]
+    fn build_subdomain_url_no_ip_no_bare_localhost_no_port() {
+        let url = build_subdomain_url("thinking-service");
+        assert!(!url.contains("127.0.0.1"), "got {url}");
+        assert!(
+            !url.contains(":80/") && !url.contains(":17000/"),
+            "URL must not contain a port — got {url}"
+        );
+        // No base64 path segment — only "/"
+        assert!(url.ends_with(".opencode.localhost/"), "got {url}");
+    }
+
+    /// @trace spec:subdomain-routing-via-reverse-proxy
+    #[test]
+    fn build_subdomain_url_lowercases_mixed_case_project() {
+        let url = build_subdomain_url("MyProject");
+        assert_eq!(url, "http://myproject.opencode.localhost/");
+    }
+
+    /// @trace spec:subdomain-routing-via-reverse-proxy
+    #[test]
+    fn build_subdomain_url_sanitizes_invalid_label_chars() {
+        // Spaces and slashes become hyphens (matches host-label rules).
+        let url = build_subdomain_url("My App/sub");
+        assert_eq!(url, "http://my-app-sub.opencode.localhost/");
     }
 
     #[test]

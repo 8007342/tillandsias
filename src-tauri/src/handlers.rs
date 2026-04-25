@@ -972,6 +972,157 @@ pub(crate) async fn stop_router() {
     }
 }
 
+/// Regenerate the router's dynamic.Caddyfile from the currently-running
+/// forge containers and tell Caddy to reload.
+///
+/// Idempotent. Safe to call after every forge launch and after every
+/// shutdown.
+///
+/// Format per project:
+///     <project>.opencode.localhost:80 {
+///         reverse_proxy tillandsias-<project>-forge:4096
+///     }
+///
+/// Behaviour:
+/// - Iterates `state.running` filtered to OpenCodeWeb forge containers
+///   (named `tillandsias-<project>-forge`).
+/// - Writes the merged snippet to the host `dynamic.Caddyfile` that the
+///   router container bind-mounts at `/run/router/dynamic.Caddyfile`.
+/// - If the router container is running, executes
+///   `/usr/local/bin/router-reload.sh` inside it to apply the new
+///   routes synchronously. If the router isn't running yet, the write
+///   alone is sufficient — the router's entrypoint reads the file on
+///   the next start.
+/// - Best-effort: errors are logged but never propagated. The caller
+///   should not fail an attach because the router reload hiccupped;
+///   the forge container itself is healthy and reachable on the
+///   enclave.
+///
+/// @trace spec:subdomain-routing-via-reverse-proxy
+pub(crate) async fn regenerate_router_caddyfile(state: &TrayState) -> Result<(), String> {
+    // Build the dynamic Caddyfile contents from currently-tracked forge containers.
+    // @trace spec:subdomain-routing-via-reverse-proxy
+    let mut snippet = String::new();
+    let mut route_count = 0usize;
+    for entry in &state.running {
+        if !matches!(
+            entry.container_type,
+            tillandsias_core::state::ContainerType::OpenCodeWeb
+        ) {
+            continue;
+        }
+        let project = match ContainerInfo::parse_forge_container_name(&entry.name) {
+            Some(p) => p,
+            None => {
+                debug!(
+                    container = %entry.name,
+                    spec = "subdomain-routing-via-reverse-proxy",
+                    "OpenCodeWeb container name did not parse as forge — skipping route"
+                );
+                continue;
+            }
+        };
+        snippet.push_str(&format!(
+            "{project}.opencode.localhost:80 {{\n    reverse_proxy tillandsias-{project}-forge:4096\n}}\n",
+            project = project
+        ));
+        route_count += 1;
+    }
+
+    let dyn_dir = router_dynamic_caddyfile_host_path();
+    if let Err(e) = tokio::fs::create_dir_all(&dyn_dir).await {
+        warn!(
+            spec = "subdomain-routing-via-reverse-proxy",
+            dir = %dyn_dir.display(),
+            error = %e,
+            "Failed to ensure router dynamic dir — skipping Caddyfile regeneration"
+        );
+        return Ok(());
+    }
+    let dyn_file = dyn_dir.join("dynamic.Caddyfile");
+
+    if let Err(e) = tokio::fs::write(&dyn_file, snippet.as_bytes()).await {
+        warn!(
+            spec = "subdomain-routing-via-reverse-proxy",
+            path = %dyn_file.display(),
+            error = %e,
+            "Failed to write router dynamic.Caddyfile — routes may be stale"
+        );
+        return Ok(());
+    }
+
+    debug!(
+        spec = "subdomain-routing-via-reverse-proxy",
+        path = %dyn_file.display(),
+        routes = route_count,
+        "Wrote router dynamic.Caddyfile"
+    );
+
+    // If the router container isn't running, skip the reload — the file
+    // we just wrote will be picked up on the next router start via the
+    // bind-mount + entrypoint's initial merge.
+    // @trace spec:subdomain-routing-via-reverse-proxy
+    let client = PodmanClient::new();
+    match client.inspect_container(ROUTER_CONTAINER_NAME).await {
+        Ok(inspect) if inspect.state == "running" => {}
+        Ok(_) => {
+            debug!(
+                spec = "subdomain-routing-via-reverse-proxy",
+                "Router not running — wrote dynamic.Caddyfile only (entrypoint will pick it up on next start)"
+            );
+            return Ok(());
+        }
+        Err(_) => {
+            debug!(
+                spec = "subdomain-routing-via-reverse-proxy",
+                "Router inspect failed — skipping reload (next router start will pick up the file)"
+            );
+            return Ok(());
+        }
+    }
+
+    // Trigger the reload synchronously so callers know the new routes are
+    // live before returning to the user. Errors are logged but non-fatal.
+    // @trace spec:subdomain-routing-via-reverse-proxy
+    let reload_result = tillandsias_podman::podman_cmd()
+        .args([
+            "exec",
+            ROUTER_CONTAINER_NAME,
+            "/usr/local/bin/router-reload.sh",
+        ])
+        .output()
+        .await;
+    match reload_result {
+        Ok(out) if out.status.success() => {
+            info!(
+                accountability = true,
+                category = "router",
+                spec = "subdomain-routing-via-reverse-proxy",
+                routes = route_count,
+                "Router Caddyfile regenerated and reloaded"
+            );
+        }
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            warn!(
+                spec = "subdomain-routing-via-reverse-proxy",
+                exit_code = out.status.code().unwrap_or(-1),
+                stderr = %stderr,
+                "router-reload.sh exited non-zero — routes may not be live yet"
+            );
+        }
+        Err(e) => {
+            warn!(
+                spec = "subdomain-routing-via-reverse-proxy",
+                error = %e,
+                "Failed to invoke router-reload.sh — routes may not be live yet"
+            );
+        }
+    }
+
+    Ok(())
+}
+
 /// Stop the proxy container if running. Best-effort, errors are logged.
 /// @trace spec:proxy-container
 pub(crate) async fn stop_proxy() {
@@ -3210,17 +3361,21 @@ pub async fn handle_attach_web(
             send_notification("Tillandsias", &msg);
             return Err(msg);
         }
-        // @trace spec:opencode-web-session
+        // @trace spec:opencode-web-session, spec:subdomain-routing-via-reverse-proxy
         // Reattach = launch a fresh native-browser window. We no longer have
         // a single long-lived webview to "show" — each Attach Here click
         // produces a new app-mode browser window against the same forge,
         // giving the user parallel sessions naturally.
+        // The URL passed to the browser is the router-fronted
+        // `<project>.opencode.localhost` form — the legacy `host_port`
+        // argument is retained on the call only for the readiness probe
+        // path; it is not embedded in the URL.
         if let Err(e) = crate::browser::launch_for_project(&project_name, host_port) {
             warn!(
                 project = %project_name,
                 port = host_port,
                 error = %e,
-                spec = "opencode-web-session",
+                spec = "subdomain-routing-via-reverse-proxy",
                 "Failed to launch native browser (container remains running)"
             );
         }
@@ -3439,6 +3594,21 @@ pub async fn handle_attach_web(
                 port = host_port,
                 "OpenCode Web container started (detached, persistent)"
             );
+
+            // @trace spec:subdomain-routing-via-reverse-proxy
+            // The forge container is now alive on the enclave; rewrite the
+            // router's dynamic.Caddyfile so `<project>.opencode.localhost`
+            // resolves to it. Best-effort — failure here does NOT fail the
+            // attach (the loopback host-port path still works for OpenCode
+            // Web; only the friendly subdomain URL would be unreachable).
+            if let Err(e) = regenerate_router_caddyfile(state).await {
+                warn!(
+                    project = %project_name,
+                    error = %e,
+                    spec = "subdomain-routing-via-reverse-proxy",
+                    "Router Caddyfile regeneration returned error — continuing attach"
+                );
+            }
         }
         Err(e) => {
             error!(
@@ -3473,18 +3643,20 @@ pub async fn handle_attach_web(
         return Err(e);
     }
 
-    // @trace spec:opencode-web-session
+    // @trace spec:opencode-web-session, spec:subdomain-routing-via-reverse-proxy
     // Launch the user's native browser in app-mode against the forge URL.
     // Failure is decoupled from container health — log a warning and keep
     // the container running for another attempt. The `genus` label is
-    // retained only for tray UI (container icon + name).
-    let _ = genus; // label consumed elsewhere; browser URL uses project+port
+    // retained only for tray UI (container icon + name). The URL handed to
+    // the browser is `http://<project>.opencode.localhost/`; the router
+    // container reverse-proxies that to the forge on the enclave network.
+    let _ = genus; // label consumed elsewhere; browser URL is router-fronted
     if let Err(e) = crate::browser::launch_for_project(&project_name, host_port) {
         warn!(
             project = %project_name,
             port = host_port,
             error = %e,
-            spec = "opencode-web-session",
+            spec = "subdomain-routing-via-reverse-proxy",
             "Failed to launch native browser (container remains running)"
         );
     }
@@ -3829,6 +4001,16 @@ pub async fn shutdown_all(state: &TrayState) {
     // Stop the inference container
     // @trace spec:inference-container
     stop_inference().await;
+
+    // @trace spec:subdomain-routing-via-reverse-proxy
+    // Regenerate the dynamic Caddyfile from current `state.running` before
+    // tearing the router down. In the shutdown path this is mostly defensive:
+    // the router itself is about to stop, but rewriting the file leaves a
+    // consistent on-disk state for the next session's router start (which
+    // reads `dynamic.Caddyfile` via the bind-mount during entrypoint init).
+    if let Err(e) = regenerate_router_caddyfile(state).await {
+        debug!(spec = "subdomain-routing-via-reverse-proxy", error = %e, "Router Caddyfile regeneration on shutdown returned error (non-fatal)");
+    }
 
     // Stop the router (must come before proxy since Squid forwards to it).
     // @trace spec:subdomain-routing-via-reverse-proxy
