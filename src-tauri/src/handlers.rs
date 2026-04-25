@@ -1036,8 +1036,13 @@ pub(crate) async fn cleanup_enclave_network() {
 ///
 /// @trace spec:podman-orchestration, spec:secrets-management
 pub(crate) async fn sweep_orphan_containers() {
+    // @trace spec:simplified-tray-ux
+    // `-a` so we also see stopped/exited containers — a crashed prior
+    // session may have left an `exited` forge that hasn't been gc'd by
+    // podman yet. Recreating with the same name (`tillandsias-<project>-forge`)
+    // would otherwise fail with "container with same name already exists".
     let output = tillandsias_podman::podman_cmd()
-        .args(["ps", "--filter", "name=tillandsias-", "--format", "{{.Names}}"])
+        .args(["ps", "-a", "--filter", "name=tillandsias-", "--format", "{{.Names}}"])
         .output()
         .await;
     let names = match output {
@@ -1090,6 +1095,22 @@ pub(crate) async fn sweep_orphan_containers() {
     }
     // Finally clear the enclave network itself — safe to recreate on next launch.
     cleanup_enclave_network().await;
+}
+
+/// Pre-UI cleanup of stale containers from a prior session.
+///
+/// Public wrapper around `sweep_orphan_containers` for the spec name in
+/// `simplified-tray-ux`. Call this from `main.rs` BEFORE the event loop
+/// accepts user input — the singleton guard guarantees no other tray is
+/// running, so any `tillandsias-*` containers that exist must be
+/// orphans from a prior session that wasn't shut down cleanly.
+///
+/// Idempotent: no-op if there are no orphans. Best-effort: logs but does
+/// not fail the startup path on podman errors.
+///
+/// @trace spec:simplified-tray-ux, spec:podman-orchestration
+pub async fn pre_ui_cleanup_stale_containers() {
+    sweep_orphan_containers().await;
 }
 
 // ---------------------------------------------------------------------------

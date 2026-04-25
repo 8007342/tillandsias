@@ -189,7 +189,11 @@ fn main() {
         .enable_all()
         .build()
     {
-        rt.block_on(handlers::sweep_orphan_containers());
+        // @trace spec:simplified-tray-ux
+        // Pre-UI sweep: removes orphaned tillandsias-* containers
+        // (running OR stopped) and force-removes the enclave network
+        // before the event loop accepts user input.
+        rt.block_on(handlers::pre_ui_cleanup_stale_containers());
     }
 
     // Detect platform
