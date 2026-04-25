@@ -101,6 +101,15 @@ pub const FLAKE_NIX: &str = include_str!("../../flake.nix");
 pub const FLAKE_LOCK: &str = include_str!("../../flake.lock");
 
 // ---------------------------------------------------------------------------
+// Image sources — router (Caddy reverse proxy)
+// @trace spec:subdomain-routing-via-reverse-proxy
+// ---------------------------------------------------------------------------
+pub const ROUTER_CONTAINERFILE: &str = include_str!("../../images/router/Containerfile");
+pub const ROUTER_BASE_CADDYFILE: &str = include_str!("../../images/router/base.Caddyfile");
+pub const ROUTER_ENTRYPOINT: &str = include_str!("../../images/router/entrypoint.sh");
+pub const ROUTER_RELOAD_SCRIPT: &str = include_str!("../../images/router/router-reload.sh");
+
+// ---------------------------------------------------------------------------
 // Image sources — forge (default) image
 // ---------------------------------------------------------------------------
 pub const FORGE_ENTRYPOINT: &str = include_str!("../../images/default/entrypoint.sh");
@@ -523,6 +532,32 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
                 error = %e,
                 "Failed to set executable permission — container entrypoint may fail"
             );
+        }
+    }
+
+    // -- images/router/ --
+    // @trace spec:subdomain-routing-via-reverse-proxy
+    let router_dir = dir.join("images").join("router");
+    fs::create_dir_all(&router_dir).map_err(|e| format!("images/router dir: {e}"))?;
+    write_lf(&router_dir.join("Containerfile"), ROUTER_CONTAINERFILE)
+        .map_err(|e| format!("router Containerfile: {e}"))?;
+    write_lf(&router_dir.join("base.Caddyfile"), ROUTER_BASE_CADDYFILE)
+        .map_err(|e| format!("router base.Caddyfile: {e}"))?;
+    write_lf(&router_dir.join("entrypoint.sh"), ROUTER_ENTRYPOINT)
+        .map_err(|e| format!("router entrypoint: {e}"))?;
+    write_lf(&router_dir.join("router-reload.sh"), ROUTER_RELOAD_SCRIPT)
+        .map_err(|e| format!("router-reload.sh: {e}"))?;
+    #[cfg(unix)]
+    {
+        for name in ["entrypoint.sh", "router-reload.sh"] {
+            let path = router_dir.join(name);
+            if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
+                warn!(
+                    file = %path.display(),
+                    error = %e,
+                    "Failed to set executable permission — router script"
+                );
+            }
         }
     }
 

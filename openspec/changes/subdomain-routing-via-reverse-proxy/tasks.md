@@ -7,15 +7,23 @@
 - [x] Wire instruction file into `opencode/config.json` instructions list.
 - [x] Embed in `src-tauri/src/embedded.rs` (const + write call).
 
-## Phase 2 — router container + Squid forward (follow-up)
+## Phase 2 — router container + Squid forward
 
-- [ ] `images/router/Containerfile` based on Caddy 2.x.
-- [ ] `images/router/Caddyfile.template` with `*.<service>.localhost` patterns.
-- [ ] `crates/tillandsias-core/src/container_profile.rs`: `router_profile()`.
-- [ ] `src-tauri/src/handlers.rs`: `ensure_router_running()` analogous to proxy.
-- [ ] `crate::router::regenerate_caddyfile()` called on each attach.
-- [ ] Squid `allowlist.txt` adds `.localhost`; `squid.conf` adds `cache_peer router parent 80 0`.
-- [ ] Host-side bind `127.0.0.1:80` only — assert never `0.0.0.0:80`.
+- [x] `images/router/Containerfile` based on Caddy 2.x.
+- [x] `images/router/base.Caddyfile` with default 404 + remote_ip allowlist.
+- [x] `images/router/entrypoint.sh` merging base + dynamic Caddyfiles.
+- [x] `images/router/router-reload.sh` for `caddy reload` after dynamic edits.
+- [x] `crates/tillandsias-core/src/container_profile.rs`: `router_profile()`.
+- [x] `src-tauri/src/handlers.rs`: `ensure_router_running()` + `stop_router()`.
+- [x] Bind-mount the dynamic Caddyfile at `/run/router/dynamic.Caddyfile`.
+- [x] Squid `squid.conf` adds `acl localhost_subdomain dstdomain .localhost`,
+      `cache_peer router parent 80 0`, `never_direct`, `http_access`.
+- [x] Host-side bind `127.0.0.1:80` only — never `0.0.0.0:80`.
+- [x] Wire into `ensure_infrastructure_ready` (after proxy) and `shutdown_all`.
+- [x] `scripts/build-image.sh` recognises `router` image name.
+- [x] Embed router source files in `src-tauri/src/embedded.rs`.
+- [x] Smoke-tested locally: 404 on unknown hosts, dynamic route injection
+      + `caddy reload` produces 200 on the new route.
 
 ## Phase 3 — service-specific port conventions (follow-up)
 

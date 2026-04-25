@@ -1,0 +1,39 @@
+# @trace spec:subdomain-routing-via-reverse-proxy
+# Tillandsias router — Caddy 2 reverse proxy that maps
+# `<project>.<service>.localhost` to enclave containers by name + port.
+#
+# Two access paths, both defended in depth:
+#   1. Host loopback   — `-p 127.0.0.1:80:80` from the tray's podman invocation.
+#                        Host kernel restricts the listener to 127.0.0.1, so
+#                        the LAN/internet can't reach it at the socket level.
+#   2. Enclave network — alias `router` on the tillandsias-enclave bridge.
+#                        Forge agents reach this through HTTP_PROXY=proxy:3128;
+#                        Squid recognises `*.localhost` and forwards to
+#                        router:80 via cache_peer.
+#
+# Caddy ALSO enforces a `remote_ip` allowlist (127.0.0.1, ::1, RFC 1918
+# private blocks) — anything else gets a 403 before any route matches.
+# This is belt-and-suspenders on top of the binding-level loopback restriction.
+
+FROM docker.io/library/caddy:2-alpine
+
+# Runtime deps (curl for health probes from the tray)
+RUN apk add --no-cache curl
+
+# /run/router/ holds the dynamic Caddyfile written by the tray; create it
+# at build time so the entrypoint can rely on the directory existing
+# before any host bind-mount lands. Empty placeholder file means the
+# initial merge produces just the base config.
+RUN mkdir -p /run/router \
+    && touch /run/router/dynamic.Caddyfile
+
+# Static base config — enables admin API + gives a default 404 with the
+# trusted-source allowlist baked in. The dynamic per-project routes are
+# bind-mounted at /run/router/dynamic.Caddyfile and merged at startup.
+COPY base.Caddyfile /etc/caddy/base.Caddyfile
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY router-reload.sh /usr/local/bin/router-reload.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/router-reload.sh
+
+EXPOSE 80
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

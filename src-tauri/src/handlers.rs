@@ -103,6 +103,12 @@ pub(crate) fn inference_image_tag() -> String {
     format!("tillandsias-inference:v{}", env!("TILLANDSIAS_FULL_VERSION"))
 }
 
+/// The versioned router image tag.
+/// @trace spec:subdomain-routing-via-reverse-proxy
+pub(crate) fn router_image_tag() -> String {
+    format!("tillandsias-router:v{}", env!("TILLANDSIAS_FULL_VERSION"))
+}
+
 /// The fixed container name for the inference service (not project-specific).
 const INFERENCE_CONTAINER_NAME: &str = "tillandsias-inference";
 
@@ -717,6 +723,251 @@ pub(crate) async fn ensure_proxy_running(
                 "Failed to start proxy container"
             );
             Err(format!("Failed to start proxy container: {e}"))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Router container — Caddy reverse proxy mapping <project>.<service>.localhost
+// to enclave containers by name + port.
+// @trace spec:subdomain-routing-via-reverse-proxy
+// ---------------------------------------------------------------------------
+
+const ROUTER_CONTAINER_NAME: &str = "tillandsias-router";
+
+/// Path on host to the dynamic Caddyfile written by the tray, bind-mounted
+/// into the router container at `/run/router/dynamic.Caddyfile`.
+fn router_dynamic_caddyfile_host_path() -> std::path::PathBuf {
+    let base = if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+        std::path::PathBuf::from(xdg).join("tillandsias")
+    } else {
+        std::env::temp_dir().join("tillandsias-embedded")
+    };
+    base.join("router")
+}
+
+/// Ensure the router container is running.
+///
+/// Brings up `tillandsias-router` (Caddy 2) on the enclave with DNS alias
+/// `router` and a host loopback bind at `127.0.0.1:80`. The router only
+/// accepts traffic from RFC 1918 / loopback sources (defence-in-depth on
+/// top of the binding-level loopback restriction).
+///
+/// @trace spec:subdomain-routing-via-reverse-proxy, spec:enclave-network
+pub(crate) async fn ensure_router_running(
+    state: &TrayState,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<(), String> {
+    if state.running.iter().any(|c| c.name == ROUTER_CONTAINER_NAME) {
+        debug!(spec = "subdomain-routing-via-reverse-proxy", "Router already tracked in state");
+        return Ok(());
+    }
+
+    let client = PodmanClient::new();
+
+    if let Ok(inspect) = client.inspect_container(ROUTER_CONTAINER_NAME).await
+        && inspect.state == "running"
+    {
+        let expected_tag = router_image_tag();
+        if inspect.image.contains(&expected_tag) {
+            debug!(spec = "subdomain-routing-via-reverse-proxy", "Router already running (correct version)");
+            return Ok(());
+        }
+        warn!(
+            spec = "subdomain-routing-via-reverse-proxy",
+            current = %inspect.image,
+            expected = %expected_tag,
+            "Router running stale version — restarting"
+        );
+        if let Err(e) = client.stop_container(ROUTER_CONTAINER_NAME, 5).await {
+            warn!(container = ROUTER_CONTAINER_NAME, error = %e, "Failed to stop stale router");
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+
+    info!(
+        accountability = true,
+        category = "router",
+        spec = "subdomain-routing-via-reverse-proxy",
+        "Starting router container"
+    );
+
+    let mut tag = router_image_tag();
+    if let Some(newer) = find_newer_image(&tag) {
+        warn!(expected = %tag, found = %newer, spec = "subdomain-routing-via-reverse-proxy", "Found newer router image — using it");
+        tag = newer;
+    } else {
+        info!(tag = %tag, spec = "subdomain-routing-via-reverse-proxy", "Ensuring router image is up to date...");
+        let chip_name = "router".to_string();
+        if build_tx
+            .try_send(BuildProgressEvent::Started { image_name: chip_name.clone() })
+            .is_err()
+        {
+            debug!("Build progress channel full/closed — UI may show stale state");
+        }
+        let build_result =
+            tokio::task::spawn_blocking(|| run_build_image_script("router")).await;
+        match build_result {
+            Ok(Ok(())) => {
+                if !client.image_exists(&tag).await {
+                    error!(tag = %tag, spec = "subdomain-routing-via-reverse-proxy", "Router image still not found after build");
+                    let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                        image_name: chip_name,
+                        reason: "Router image not ready".to_string(),
+                    });
+                    return Err("Router image not ready after build".into());
+                }
+                let _ = build_tx.try_send(BuildProgressEvent::Completed { image_name: chip_name });
+            }
+            Ok(Err(ref e)) => {
+                error!(tag = %tag, error = %e, spec = "subdomain-routing-via-reverse-proxy", "Router image build failed");
+                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: chip_name,
+                    reason: format!("Router build failed: {e}"),
+                });
+                return Err(format!("Router image build failed: {e}"));
+            }
+            Err(ref e) => {
+                error!(tag = %tag, error = %e, spec = "subdomain-routing-via-reverse-proxy", "Router image build task panicked");
+                let _ = build_tx.try_send(BuildProgressEvent::Failed {
+                    image_name: chip_name,
+                    reason: format!("Router build panicked: {e}"),
+                });
+                return Err(format!("Router image build panicked: {e}"));
+            }
+        }
+    }
+
+    // Ensure the dynamic Caddyfile path exists. The tray rewrites this on each
+    // attach; on first start it's empty (router serves only the base catchall).
+    let dyn_dir = router_dynamic_caddyfile_host_path();
+    std::fs::create_dir_all(&dyn_dir)
+        .map_err(|e| format!("Cannot create router dynamic dir: {e}"))?;
+    let dyn_file = dyn_dir.join("dynamic.Caddyfile");
+    if !dyn_file.exists() {
+        std::fs::write(&dyn_file, "")
+            .map_err(|e| format!("Cannot create router dynamic.Caddyfile: {e}"))?;
+    }
+
+    ensure_container_log_dir(ROUTER_CONTAINER_NAME);
+
+    let port_mapping = needs_port_mapping();
+
+    let profile = tillandsias_core::container_profile::router_profile();
+    let ctx = tillandsias_core::container_profile::LaunchContext {
+        container_name: ROUTER_CONTAINER_NAME.to_string(),
+        project_path: dyn_dir.clone(),
+        project_name: "router".to_string(),
+        cache_dir: dyn_dir.clone(),
+        port_range: (0, 0),
+        host_os: tillandsias_core::config::detect_host_os(),
+        detached: true,
+        is_watch_root: false,
+        custom_mounts: vec![],
+        image_tag: tag.clone(),
+        selected_language: "en".to_string(),
+        // Enclave alias `router` so Squid's cache_peer + forge agents can resolve.
+        // @trace spec:subdomain-routing-via-reverse-proxy, spec:enclave-network
+        network: if port_mapping {
+            None
+        } else {
+            Some(format!("{}:alias=router", tillandsias_podman::ENCLAVE_NETWORK))
+        },
+        git_author_name: String::new(),
+        git_author_email: String::new(),
+        token_file_path: None,
+        use_port_mapping: port_mapping,
+        persistent: false,
+        web_host_port: None,
+    };
+
+    let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
+
+    // @trace spec:subdomain-routing-via-reverse-proxy
+    // Bind-mount the dynamic Caddyfile into the container at the path the
+    // entrypoint expects. The tray rewrites the host file and signals reload
+    // via `regenerate_router_caddyfile`.
+    run_args.insert(
+        run_args.len() - 1,
+        format!("-v={}:/run/router/dynamic.Caddyfile:rw", dyn_file.display()),
+    );
+
+    // @trace spec:subdomain-routing-via-reverse-proxy
+    // Host loopback publish — 127.0.0.1:80 ONLY. NEVER 0.0.0.0:80. The host
+    // kernel restricts the listener so external clients can't reach port 80
+    // even if they spoof a Host header. *.localhost resolves to 127.0.0.1
+    // by RFC 6761 in browsers and systemd-resolved, so users transparently
+    // hit this listener when typing `<project>.<service>.localhost`.
+    run_args.insert(run_args.len() - 1, "-p".to_string());
+    run_args.insert(run_args.len() - 1, "127.0.0.1:80:80".to_string());
+
+    match client.run_container(&run_args).await {
+        Ok(container_id) => {
+            info!(
+                accountability = true,
+                category = "router",
+                spec = "subdomain-routing-via-reverse-proxy",
+                container_id = %container_id,
+                "Router container started (detached, 127.0.0.1:80 host bind)"
+            );
+
+            // Like proxy and inference, the router isn't tracked in
+            // state.running. Liveness is checked via podman inspect.
+
+            // @trace spec:subdomain-routing-via-reverse-proxy
+            // Health probe: hit the router's catchall on enclave + host. The
+            // base.Caddyfile returns 404 for unknown hosts to trusted sources
+            // — that's the "ready" signal. We accept any 4xx as proof of life
+            // since 200 only happens once routes are loaded.
+            for attempt in 0..10 {
+                let check = tillandsias_podman::podman_cmd()
+                    .args([
+                        "exec",
+                        ROUTER_CONTAINER_NAME,
+                        "sh",
+                        "-c",
+                        "curl -fsS -o /dev/null -w '%{http_code}' http://127.0.0.1/ -H 'Host: ready.localhost' || true",
+                    ])
+                    .output()
+                    .await;
+                if let Ok(out) = check {
+                    let code = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    if code == "404" || code == "200" {
+                        info!(
+                            spec = "subdomain-routing-via-reverse-proxy",
+                            attempt,
+                            "Router readiness check passed"
+                        );
+                        return Ok(());
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                let _ = attempt;
+            }
+            warn!(spec = "subdomain-routing-via-reverse-proxy", "Router health probe never confirmed ready — continuing anyway");
+            Ok(())
+        }
+        Err(e) => {
+            error!(error = %e, spec = "subdomain-routing-via-reverse-proxy", "Router container failed to start");
+            Err(format!("Router start failed: {e}"))
+        }
+    }
+}
+
+/// Stop the router container if running. Best-effort, errors are logged.
+/// @trace spec:subdomain-routing-via-reverse-proxy
+pub(crate) async fn stop_router() {
+    let client = PodmanClient::new();
+    let launcher = tillandsias_podman::launch::ContainerLauncher::new(client);
+    match launcher.stop(ROUTER_CONTAINER_NAME).await {
+        Ok(()) => info!(
+            accountability = true,
+            category = "router",
+            spec = "subdomain-routing-via-reverse-proxy",
+            "Router container stopped"
+        ),
+        Err(e) => {
+            debug!(spec = "subdomain-routing-via-reverse-proxy", error = %e, "Router stop returned error (may not have been running)");
         }
     }
 }
@@ -1734,7 +1985,16 @@ pub async fn ensure_infrastructure_ready(
     }
 
     ensure_enclave_network().await?;
-    ensure_proxy_running(state, build_tx).await?;
+    ensure_proxy_running(state, build_tx.clone()).await?;
+
+    // @trace spec:subdomain-routing-via-reverse-proxy, spec:enclave-network
+    // Router (Caddy) — must come up after the proxy because Squid forwards
+    // *.localhost requests to it via cache_peer. If router fails, the rest
+    // of the enclave stays usable; agents just can't reach
+    // <project>.<service>.localhost URLs.
+    if let Err(e) = ensure_router_running(state, build_tx).await {
+        warn!(error = %e, spec = "subdomain-routing-via-reverse-proxy", "Router failed to start — *.localhost subdomain routing unavailable");
+    }
 
     // @trace spec:enclave-network, spec:proxy-container
     info!(
@@ -2217,6 +2477,7 @@ fn image_build_paths(source_dir: &std::path::Path, image_name: &str) -> (PathBuf
         "git" => "git",
         "inference" => "inference",
         "web" => "web",
+        "router" => "router",
         // forge / default / unknown all build the forge image. Keeping this
         // permissive matches build-image.sh's behavior; the image_name
         // validation lives at the call sites that compute the tag.
@@ -2261,6 +2522,7 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
         "proxy" => proxy_image_tag(),
         "git" => git_image_tag(),
         "inference" => inference_image_tag(),
+        "router" => router_image_tag(),
         _ => forge_image_tag(),
     };
     info!(script = %script.display(), image = image_name, tag = %tag, spec = "default-image, nix-builder", "Running embedded build-image.sh");
@@ -3546,6 +3808,10 @@ pub async fn shutdown_all(state: &TrayState) {
     // Stop the inference container
     // @trace spec:inference-container
     stop_inference().await;
+
+    // Stop the router (must come before proxy since Squid forwards to it).
+    // @trace spec:subdomain-routing-via-reverse-proxy
+    stop_router().await;
 
     // Stop the proxy
     // @trace spec:proxy-container

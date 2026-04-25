@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build container images using Nix inside an ephemeral podman container.
-# Usage: scripts/build-image.sh [forge|web|proxy|git|inference] [--force]
+# Usage: scripts/build-image.sh [forge|web|proxy|git|inference|router] [--force]
 #
 # This script:
 #   1. Checks if sources have changed since last build (staleness detection)
@@ -82,7 +82,7 @@ FLAG_BACKEND="fedora"  # Default: Fedora minimal. Use --backend nix for Nix imag
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        forge|web|proxy|git|inference)
+        forge|web|proxy|git|inference|router)
             IMAGE_NAME="$1"
             ;;
         --force)
@@ -97,7 +97,7 @@ while [[ $# -gt 0 ]]; do
             FLAG_BACKEND="$1"
             ;;
         --help|-h)
-            echo "Usage: scripts/build-image.sh [forge|web|proxy|git|inference] [--force] [--tag <tag>] [--backend fedora|nix]"
+            echo "Usage: scripts/build-image.sh [forge|web|proxy|git|inference|router] [--force] [--tag <tag>] [--backend fedora|nix]"
             echo ""
             echo "Build a container image."
             echo ""
@@ -173,7 +173,7 @@ _check_untracked_image_sources() {
         return 0
     fi
     local untracked
-    untracked="$(git -C "$ROOT" ls-files --others --exclude-standard -- images/default images/web images/proxy images/git images/inference 2>/dev/null)"
+    untracked="$(git -C "$ROOT" ls-files --others --exclude-standard -- images/default images/web images/proxy images/git images/inference images/router 2>/dev/null)"
     if [[ -n "$untracked" ]]; then
         _error "Untracked files in image sources (Nix will silently exclude them):"
         while IFS= read -r f; do
@@ -196,14 +196,14 @@ _compute_hash() {
 
     # Image source directories — use git ls-files to match Nix's view
     if _is_git_repo; then
-        for dir in images/default images/web images/proxy images/git images/inference; do
+        for dir in images/default images/web images/proxy images/git images/inference images/router; do
             while IFS= read -r f; do
                 [[ -n "$f" ]] && files+=("$ROOT/$f")
             done < <(git -C "$ROOT" ls-files -- "$dir" 2>/dev/null)
         done
     else
         _warn "Not a git repo — falling back to find (untracked file detection unavailable)"
-        for dir in "$ROOT/images/default" "$ROOT/images/web" "$ROOT/images/proxy" "$ROOT/images/git" "$ROOT/images/inference"; do
+        for dir in "$ROOT/images/default" "$ROOT/images/web" "$ROOT/images/proxy" "$ROOT/images/git" "$ROOT/images/inference" "$ROOT/images/router"; do
             if [[ -d "$dir" ]]; then
                 while IFS= read -r -d '' f; do
                     files+=("$f")
@@ -254,6 +254,7 @@ if [[ "$FLAG_BACKEND" == "fedora" ]]; then
         proxy)     IMAGE_DIR="$ROOT/images/proxy" ;;
         git)       IMAGE_DIR="$ROOT/images/git" ;;
         inference) IMAGE_DIR="$ROOT/images/inference" ;;
+        router)    IMAGE_DIR="$ROOT/images/router" ;;
         *)         IMAGE_DIR="$ROOT/images/default" ;;
     esac
     _step "Building ${BOLD}${IMAGE_TAG}${NC} via podman build (Fedora minimal)..."

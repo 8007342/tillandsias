@@ -417,6 +417,51 @@ pub fn web_profile() -> ContainerProfile {
     }
 }
 
+/// Router container — Caddy 2 reverse proxy mapping
+/// `<project>.<service>.localhost` to enclave containers by name + port.
+///
+/// Runs Caddy on port 80 inside the enclave (DNS alias `router`) and is
+/// host-published only on `127.0.0.1:80` (loopback). The host kernel
+/// restricts the listener to loopback; Caddy adds a defence-in-depth
+/// `remote_ip` allowlist that rejects any source not on loopback or RFC
+/// 1918 private blocks.
+///
+/// The dynamic Caddyfile is bind-mounted into the container at
+/// `/run/router/dynamic.Caddyfile` from
+/// `$XDG_RUNTIME_DIR/tillandsias/router/dynamic.Caddyfile` (tmpfs).
+/// `handlers::regenerate_router_caddyfile` rewrites it on each attach
+/// and signals reload via `caddy reload` over the container's local
+/// admin API.
+///
+/// @trace spec:subdomain-routing-via-reverse-proxy, spec:enclave-network
+pub fn router_profile() -> ContainerProfile {
+    ContainerProfile {
+        entrypoint: "/usr/local/bin/entrypoint.sh",
+        working_dir: None,
+        mounts: vec![
+            // Per-container log directory — Caddy writes access + error logs here.
+            // @trace spec:podman-orchestration
+            ProfileMount {
+                host_key: MountSource::ContainerLogs,
+                container_path: "/var/log/tillandsias",
+                mode: MountMode::Rw,
+            },
+            // The dynamic Caddyfile is bind-mounted dynamically by
+            // handlers::ensure_router_running so the path includes the
+            // tmpfs base resolved at launch time.
+        ],
+        env_vars: vec![],
+        secrets: vec![],
+        image_override: None,
+        pids_limit: 64,        // Caddy + a single watcher
+        // NOT read-only: caddy needs writable /tmp for the merged
+        // Caddyfile and /tmp/caddy-storage. Writable root is fine in
+        // a single-purpose container with no shell access.
+        read_only: false,
+        tmpfs_mounts: vec![],
+    }
+}
+
 /// Proxy container — caching HTTP/HTTPS proxy with domain allowlist.
 ///
 /// Runs a Squid-based forward proxy inside the enclave network. Forge containers
