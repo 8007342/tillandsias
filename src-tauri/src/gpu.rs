@@ -39,21 +39,26 @@ impl GpuTier {
         // @trace spec:zen-default-with-ollama-analysis-pool
         // Tool-call work stays on a Zen model (opencode/*) regardless of
         // local hardware — Zen models follow opencode's tool-call protocol
-        // reliably. Local ollama is the analysis pool (small_model), tier-
-        // tagged by available CPU/GPU. Until ollama tool-calling is proven
-        // reliable, do NOT promote ollama to the primary slot here.
+        // reliably. The small_model (analysis pool) is CLAMPED to what the
+        // inference image actually bakes at build time. Bigger models would
+        // benefit GPU users but we can't pull them reliably at runtime (squid
+        // SSL-bump EOF on ollama manifests, memory: project_squid_ollama_eof).
+        // Claiming a non-baked model leaves opencode pointing at a model
+        // that isn't there on fresh hosts.
+        //
+        // Baked tiers: T0 = qwen2.5:0.5b, T1 = llama3.2:3b.
+        // Users can override per-prompt with `--model ollama/<pulled>`.
         const ZEN_PRIMARY: &str = "opencode/big-pickle";
         match self {
-            // No GPU / minimal RAM — analysis on the smallest baked model.
+            // No GPU / minimal RAM — smallest baked model is enough.
             GpuTier::None => (ZEN_PRIMARY, "ollama/qwen2.5:0.5b"),
-            // Low: 3B analysis is fine on CPU.
-            GpuTier::Low => (ZEN_PRIMARY, "ollama/llama3.2:3b"),
-            // Mid: 7B coder analysis if pulled, else fall back at runtime.
-            GpuTier::Mid => (ZEN_PRIMARY, "ollama/qwen2.5-coder:7b"),
-            // High: still 7B analysis (14B costs too much for sub-tasks).
-            GpuTier::High => (ZEN_PRIMARY, "ollama/qwen2.5-coder:7b"),
-            // Ultra: 14B analysis pays off when GPU memory exists.
-            GpuTier::Ultra => (ZEN_PRIMARY, "ollama/qwen2.5:14b"),
+            // Everything with a GPU (Low through Ultra) uses the 3B baked
+            // model for analysis. Larger tiers benefit from GPU acceleration
+            // running the SAME model faster; swapping to a larger model is
+            // opt-in via per-prompt --model override.
+            GpuTier::Low | GpuTier::Mid | GpuTier::High | GpuTier::Ultra => {
+                (ZEN_PRIMARY, "ollama/llama3.2:3b")
+            }
         }
     }
 }
@@ -223,17 +228,19 @@ mod tests {
             GpuTier::Low.model_pair(),
             ("opencode/big-pickle", "ollama/llama3.2:3b")
         );
+        // Mid/High/Ultra all resolve to the T1 baked model (llama3.2:3b)
+        // until bigger tiers get image-baked or runtime pulls are unblocked.
         assert_eq!(
             GpuTier::Mid.model_pair(),
-            ("opencode/big-pickle", "ollama/qwen2.5-coder:7b")
+            ("opencode/big-pickle", "ollama/llama3.2:3b")
         );
         assert_eq!(
             GpuTier::High.model_pair(),
-            ("opencode/big-pickle", "ollama/qwen2.5-coder:7b")
+            ("opencode/big-pickle", "ollama/llama3.2:3b")
         );
         assert_eq!(
             GpuTier::Ultra.model_pair(),
-            ("opencode/big-pickle", "ollama/qwen2.5:14b")
+            ("opencode/big-pickle", "ollama/llama3.2:3b")
         );
     }
 
@@ -282,11 +289,13 @@ mod tests {
         let patched = serde_json::to_string_pretty(&config).unwrap();
         std::fs::write(&config_path, &patched).unwrap();
 
-        // Verify — primary stays Zen, small_model is the tier's analysis model
+        // Verify — primary stays Zen, small_model clamps to the baked T1
+        // (llama3.2:3b) since Mid-tier's aspirational qwen2.5-coder:7b isn't
+        // guaranteed to be in the cache.
         let result: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&config_path).unwrap()).unwrap();
         assert_eq!(result["model"], "opencode/big-pickle");
-        assert_eq!(result["small_model"], "ollama/qwen2.5-coder:7b");
+        assert_eq!(result["small_model"], "ollama/llama3.2:3b");
         assert_eq!(result["autoupdate"], false); // Other fields preserved
     }
 
