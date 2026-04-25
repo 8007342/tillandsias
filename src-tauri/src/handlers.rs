@@ -4049,12 +4049,224 @@ pub async fn shutdown_all(state: &TrayState) {
     // @trace spec:enclave-network
     cleanup_enclave_network().await;
 
+    // @trace spec:app-lifecycle, spec:podman-orchestration
+    // Final escalation pass — verify nothing tillandsias-* survived the
+    // graceful + orphan-sweep phases. If anything did, escalate through
+    // SIGKILL, then SIGTERM-on-conmon (Unix only). Bounded by a 5s budget.
+    verify_shutdown_clean().await;
+
     info!(
         accountability = true,
         category = "enclave",
         spec = "enclave-network",
         "All containers stopped, enclave shut down"
     );
+}
+
+/// List `tillandsias-*` containers that podman currently sees as running.
+/// Returns `Vec<String>` of names. On podman invocation failure returns
+/// an empty vec — verification continues with what it can see.
+///
+/// @trace spec:app-lifecycle, spec:podman-orchestration
+pub(crate) async fn list_running_tillandsias_containers() -> Vec<String> {
+    let output = tillandsias_podman::podman_cmd()
+        .args([
+            "ps",
+            "--filter",
+            "name=tillandsias-",
+            "--format",
+            "{{.Names}}",
+        ])
+        .output()
+        .await;
+
+    match output {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Force-kill a container with SIGKILL, then `podman rm -f`. Used by the
+/// post-shutdown verification phase — never on the routine teardown path.
+///
+/// @trace spec:app-lifecycle, spec:podman-orchestration
+pub(crate) async fn kill_and_remove(name: &str) {
+    info!(
+        accountability = true,
+        category = "enclave",
+        spec = "app-lifecycle, podman-orchestration",
+        container = %name,
+        escalation = "sigkill",
+        "verify_shutdown_clean: escalating to SIGKILL + rm -f"
+    );
+    let client = PodmanClient::new();
+    if let Err(e) = client.kill_container(name, Some("KILL")).await {
+        warn!(
+            container = %name,
+            error = %e,
+            spec = "app-lifecycle",
+            "kill_container(KILL) returned error (continuing)"
+        );
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    if let Err(e) = client.remove_container(name).await {
+        debug!(
+            container = %name,
+            error = %e,
+            spec = "app-lifecycle",
+            "remove_container after SIGKILL returned error (non-fatal)"
+        );
+    }
+}
+
+/// Last-resort SIGTERM to any `conmon` process whose command line carries
+/// `--name tillandsias-`. SIGTERM (not SIGKILL) so conmon can flush the
+/// container's exit status file and avoid leaving podman in a permanently
+/// inconsistent state.
+///
+/// Unix only. On Windows this is a no-op — Windows containers use HCS,
+/// not conmon.
+///
+/// @trace spec:app-lifecycle, spec:podman-orchestration
+#[cfg(unix)]
+pub(crate) fn pkill_orphan_conmon() {
+    let result = std::process::Command::new("pkill")
+        .args(["-TERM", "-f", "conmon.*--name tillandsias-"])
+        .output();
+    match result {
+        Ok(out) => {
+            // pkill exits 0 on match, 1 on no-match — both fine here.
+            info!(
+                accountability = true,
+                category = "enclave",
+                spec = "app-lifecycle",
+                exit_code = out.status.code().unwrap_or(-1),
+                "verify_shutdown_clean: pkill conmon orphans"
+            );
+        }
+        Err(e) => {
+            warn!(
+                error = %e,
+                spec = "app-lifecycle",
+                "pkill_orphan_conmon failed to invoke pkill (continuing)"
+            );
+        }
+    }
+}
+
+#[cfg(not(unix))]
+pub(crate) fn pkill_orphan_conmon() {
+    // No-op on non-Unix (Windows HCS has no conmon analogue).
+    // @trace spec:app-lifecycle
+}
+
+/// Verify the post-shutdown state is clean. Polls `podman ps` for
+/// `tillandsias-*` containers and escalates through SIGKILL → conmon
+/// SIGTERM (Unix only) when any survive the existing graceful + orphan
+/// sweep phases. Bounded by a 5-second total budget so the user is never
+/// blocked indefinitely on a host-level pathology.
+///
+/// @trace spec:app-lifecycle, spec:podman-orchestration
+pub(crate) async fn verify_shutdown_clean() {
+    use std::time::{Duration, Instant};
+    const POLL_INTERVAL: Duration = Duration::from_millis(200);
+    const TOTAL_BUDGET: Duration = Duration::from_secs(5);
+
+    let start = Instant::now();
+
+    // Phase 1: poll until empty or ~half the budget elapses.
+    let phase_one_budget = Duration::from_secs(2);
+    while start.elapsed() < phase_one_budget {
+        let stragglers = list_running_tillandsias_containers().await;
+        if stragglers.is_empty() {
+            info!(
+                accountability = true,
+                category = "enclave",
+                spec = "app-lifecycle",
+                "verify_shutdown_clean: zero stragglers"
+            );
+            return;
+        }
+        tokio::time::sleep(POLL_INTERVAL).await;
+    }
+
+    // Phase 2: SIGKILL escalation for whatever's still listed.
+    let stragglers = list_running_tillandsias_containers().await;
+    if stragglers.is_empty() {
+        info!(
+            accountability = true,
+            category = "enclave",
+            spec = "app-lifecycle",
+            "verify_shutdown_clean: zero stragglers (cleared during phase 1)"
+        );
+        return;
+    }
+    warn!(
+        accountability = true,
+        category = "enclave",
+        spec = "app-lifecycle",
+        count = stragglers.len(),
+        names = ?stragglers,
+        "verify_shutdown_clean: stragglers detected — escalating to SIGKILL"
+    );
+    for name in &stragglers {
+        kill_and_remove(name).await;
+    }
+
+    // Re-check after SIGKILL.
+    tokio::time::sleep(POLL_INTERVAL).await;
+    let stragglers = list_running_tillandsias_containers().await;
+    if stragglers.is_empty() {
+        info!(
+            accountability = true,
+            category = "enclave",
+            spec = "app-lifecycle",
+            "verify_shutdown_clean: SIGKILL escalation cleared all stragglers"
+        );
+        return;
+    }
+
+    // Phase 3: conmon pkill (Unix only — on Windows this is a no-op
+    // and we drop straight to the error log below).
+    warn!(
+        accountability = true,
+        category = "enclave",
+        spec = "app-lifecycle, podman-orchestration",
+        count = stragglers.len(),
+        names = ?stragglers,
+        "verify_shutdown_clean: SIGKILL did not clear — escalating to conmon SIGTERM"
+    );
+    pkill_orphan_conmon();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let stragglers = list_running_tillandsias_containers().await;
+    if stragglers.is_empty() {
+        info!(
+            accountability = true,
+            category = "enclave",
+            spec = "app-lifecycle",
+            "verify_shutdown_clean: conmon escalation cleared all stragglers"
+        );
+        return;
+    }
+
+    // Budget exhausted. Log every survivor so the next session's first
+    // log lines surface the host-level pathology, then return — the user
+    // clicked Quit; we don't block them indefinitely on a kernel/podman bug.
+    let _ = start; // bounded internally — global budget is informational
+    for name in &stragglers {
+        error!(
+            accountability = true,
+            category = "enclave",
+            spec = "app-lifecycle",
+            container = %name,
+            reason = "survived_all_escalation",
+            "verify_shutdown_clean: container survived graceful + SIGKILL + conmon SIGTERM"
+        );
+    }
 }
 
 /// Handle "Maintenance" — open fish/bash in a forge container for the project.

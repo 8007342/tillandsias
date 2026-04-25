@@ -1,5 +1,22 @@
 use tracing::{debug, info, instrument, warn};
 
+/// Build the argument list for `podman kill` — pure helper, unit-testable.
+///
+/// `signal = None` → `["kill", <name>]` (podman default = SIGTERM).
+/// `signal = Some(s)` → `["kill", "--signal", s, <name>]`.
+///
+/// @trace spec:app-lifecycle, spec:podman-orchestration
+fn build_kill_args(name: &str, signal: Option<&str>) -> Vec<String> {
+    let mut args = Vec::with_capacity(4);
+    args.push("kill".into());
+    if let Some(s) = signal {
+        args.push("--signal".into());
+        args.push(s.into());
+    }
+    args.push(name.into());
+    args
+}
+
 /// Async podman CLI client. All operations are non-blocking.
 #[derive(Debug, Clone)]
 pub struct PodmanClient;
@@ -248,9 +265,26 @@ impl PodmanClient {
     }
 
     /// Force kill a container.
-    pub async fn kill_container(&self, name: &str) -> Result<(), PodmanError> {
-        debug!(name, "Killing container");
-        match crate::podman_cmd().args(["kill", name]).output().await {
+    ///
+    /// `signal = None` invokes `podman kill <name>` with no `--signal` flag,
+    /// preserving today's exact behavior (podman default = SIGTERM). The
+    /// graceful-stop fallback in `ContainerLauncher::stop` calls this path.
+    ///
+    /// `signal = Some("KILL")` invokes `podman kill --signal=KILL <name>` —
+    /// used by the post-shutdown verification phase
+    /// (`handlers::verify_shutdown_clean`) when a container survived the
+    /// graceful pass. Always escalates to real SIGKILL, never SIGTERM.
+    ///
+    /// @trace spec:app-lifecycle, spec:podman-orchestration
+    pub async fn kill_container(
+        &self,
+        name: &str,
+        signal: Option<&str>,
+    ) -> Result<(), PodmanError> {
+        debug!(name, ?signal, "Killing container");
+        let args = build_kill_args(name, signal);
+        let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        match crate::podman_cmd().args(arg_refs).output().await {
             Ok(output) if !output.status.success() => {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 warn!(name, %stderr, "Container kill failed — may already be stopped");
@@ -495,5 +529,34 @@ mod tests {
     #[test]
     fn network_exists_sync_compiles() {
         let _ = network_exists_sync as fn(&str) -> bool;
+    }
+
+    /// Default-signal kill omits the `--signal` flag — preserves today's
+    /// behavior for the graceful-stop fallback path in `ContainerLauncher::stop`.
+    /// @trace spec:app-lifecycle, spec:podman-orchestration
+    #[test]
+    fn kill_container_default_signal_omits_flag() {
+        let args = build_kill_args("tillandsias-foo-forge", None);
+        assert_eq!(
+            args,
+            vec!["kill".to_string(), "tillandsias-foo-forge".to_string()]
+        );
+    }
+
+    /// Explicit SIGKILL escalation — used by the post-shutdown verification
+    /// phase when graceful failed.
+    /// @trace spec:app-lifecycle, spec:podman-orchestration
+    #[test]
+    fn kill_container_explicit_kill_signal_includes_flag() {
+        let args = build_kill_args("tillandsias-bar-forge", Some("KILL"));
+        assert_eq!(
+            args,
+            vec![
+                "kill".to_string(),
+                "--signal".to_string(),
+                "KILL".to_string(),
+                "tillandsias-bar-forge".to_string(),
+            ]
+        );
     }
 }

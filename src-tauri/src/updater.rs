@@ -230,7 +230,7 @@ async fn stop_all_containers() -> Result<(), String> {
                     error = %e,
                     "Failed to stop container gracefully, force killing"
                 );
-                let _ = client.kill_container(&container.name).await;
+                let _ = client.kill_container(&container.name, None).await;
             }
         }
     }
