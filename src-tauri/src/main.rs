@@ -14,6 +14,7 @@ mod desktop_env;
 mod embedded;
 mod event_loop;
 mod github;
+mod github_health;
 mod gpu;
 mod handlers;
 mod i18n;
