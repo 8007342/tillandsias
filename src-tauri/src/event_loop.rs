@@ -282,6 +282,35 @@ pub async fn run(
                         // Kept for forward compatibility if Settings ever becomes actionable.
                         debug!("Settings command received");
                     }
+                    // @trace spec:simplified-tray-ux
+                    // Phase-1 stubs — wired up properly when the new TrayMenu lands.
+                    MenuCommand::Launch { project_path } => {
+                        info!(spec = "simplified-tray-ux", project = ?project_path, "Launch command received — routing to opencode-web (handler stub)");
+                        // Phase 1: route to the existing opencode-web path so the
+                        // user-visible behaviour is preserved while the new
+                        // menu is built out.
+                        match handlers::handle_serve_here(project_path, &mut state, build_tx.clone()).await {
+                            Ok(()) => {
+                                prune_completed_builds(&mut state);
+                                on_state_change(&state);
+                            }
+                            Err(e) => warn!(error = %e, "Launch handler failed"),
+                        }
+                    }
+                    MenuCommand::MaintenanceTerminal { project_path } => {
+                        info!(spec = "simplified-tray-ux", project = ?project_path, "MaintenanceTerminal — exec into running forge");
+                        match handlers::handle_maintenance_terminal(project_path).await {
+                            Ok(()) => debug!("Maintenance terminal launched"),
+                            Err(e) => {
+                                warn!(error = %e, "Maintenance terminal failed");
+                                handlers::send_notification("Tillandsias", &e);
+                            }
+                        }
+                    }
+                    MenuCommand::IncludeRemoteToggle { include } => {
+                        info!(spec = "simplified-tray-ux", include, "IncludeRemoteToggle command received (handler stub)");
+                        // TODO Phase 3: store in state, rebuild Projects submenu.
+                    }
                 }
             }
 

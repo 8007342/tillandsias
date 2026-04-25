@@ -109,6 +109,25 @@ pub enum MenuCommand {
     /// Open settings
     Settings,
 
+    /// @trace spec:simplified-tray-ux
+    /// Launch the project's forge in opencode-web mode (the only tray-driven
+    /// launch option). Reuses an existing forge container if one is running;
+    /// otherwise spawns a fresh one. Subsequent clicks reopen another browser
+    /// window pointing at the same container — opencode-web supports
+    /// concurrent sessions in a single process.
+    Launch { project_path: PathBuf },
+
+    /// @trace spec:simplified-tray-ux
+    /// Open a host terminal running `podman exec -it` inside the project's
+    /// running forge container. Multiple maintenance terminals can be open
+    /// against the same forge.
+    MaintenanceTerminal { project_path: PathBuf },
+
+    /// @trace spec:simplified-tray-ux
+    /// Toggle whether the Projects ▸ submenu shows remote (uncloned) GitHub
+    /// repos in addition to local on-disk projects.
+    IncludeRemoteToggle { include: bool },
+
     /// Quit the application
     Quit,
 }

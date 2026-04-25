@@ -4076,6 +4076,60 @@ pub async fn handle_terminal(
 /// - Volume mount: `<watch_path>:/home/forge/src` (entire src tree, rw)
 /// - Window title: `🛠️ Root`
 /// - The `🛠️` emoji is reserved for this item and is absent from `TOOL_EMOJIS`.
+/// Open a host terminal that `podman exec -it`s into the project's
+/// running opencode-web forge container.
+///
+/// Spec: simplified-tray-ux. The maintenance terminal attaches to the
+/// SAME container as opencode-web — not a fresh one. Multiple maintenance
+/// terminals can be open against the same forge; they're independent
+/// shells in the existing container.
+///
+/// If the forge isn't running, returns an error so the caller can
+/// surface a "click Launch first" hint.
+///
+/// @trace spec:simplified-tray-ux
+pub async fn handle_maintenance_terminal(
+    project_path: PathBuf,
+) -> Result<(), String> {
+    let project_name = project_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "project".to_string());
+
+    let container_name = ContainerInfo::forge_container_name(&project_name);
+
+    let client = PodmanClient::new();
+    match client.inspect_container(&container_name).await {
+        Ok(inspect) if inspect.state == "running" => {}
+        Ok(inspect) => {
+            return Err(format!(
+                "Forge container `{container_name}` is in state `{}` — click Launch first.",
+                inspect.state
+            ));
+        }
+        Err(_) => {
+            return Err(format!(
+                "Forge container `{container_name}` is not running — click Launch first."
+            ));
+        }
+    }
+
+    let podman = tillandsias_podman::find_podman_path();
+    let title = format!("🛠️ {project_name} (maintenance)");
+    // -i: keep stdin open even if not attached. -t: allocate a TTY.
+    // -l: login shell so /etc/skel/.bashrc + /etc/skel/.zshrc kick in.
+    // We deliberately exec /bin/bash -l rather than fish so the user gets
+    // a predictable shell across distros.
+    let podman_cmd = format!("{podman} exec -it {container_name} /bin/bash -l");
+    info!(
+        spec = "simplified-tray-ux",
+        project = %project_name,
+        container = %container_name,
+        "Opening maintenance terminal (exec into running forge)"
+    );
+    open_terminal(&podman_cmd, &title)
+}
+
 pub async fn handle_root_terminal(
     watch_path: PathBuf,
     state: &mut TrayState,
