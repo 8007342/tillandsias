@@ -149,5 +149,12 @@ printf "    ${B_GREEN}%-38s${RST} ${A} ${DIM}%-26s${RST} ${B_GREEN}rw${RST}\n" \
 echo ""
 printf "  ${B_YELLOW}→${RST} Project at ${B_WHITE}/home/forge/src/%s${RST}\n" "$PROJECT"
 echo ""
+# @trace spec:agent-cheatsheets — surface the cheatsheets path on every attach
+# so agents and humans both see it before guessing tool flags.
+if [ -d "${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets}" ]; then
+    printf "  📚 ${B_WHITE}Cheatsheets${RST} ${DIM}cat${RST} ${B_CYAN}%s/INDEX.md${RST} ${DIM}| rg <topic>${RST}\n" \
+        "${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets}"
+    echo ""
+fi
 printf "  💡 %b\n" "$tip"
 echo ""

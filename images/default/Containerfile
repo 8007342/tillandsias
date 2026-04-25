@@ -51,6 +51,11 @@ RUN microdnf install -y \
         openssh-clients rsync iputils iproute bind-utils \
         # Shell / fuzzy niceties the agent uses constantly
         bash-completion socat netcat openssl \
+        # @trace spec:agent-cheatsheets, spec:default-image
+        # Shell-script lint + formatter (cited from cheatsheets/utils/shellcheck-shfmt.md
+        # as "added by agent-source-of-truth"). Both available from Fedora's repos.
+        # protobuf-compiler ships the `protoc` binary cheatsheets/web/protobuf.md depends on.
+        ShellCheck shfmt protobuf-compiler protobuf-devel xmlstarlet libxml2 \
     && microdnf clean all
 
 # ── Node yarn + pnpm via npm -g ────────────────────────────────
@@ -89,6 +94,25 @@ RUN curl -fsSL "https://services.gradle.org/distributions/gradle-${GRADLE_VERSIO
     && mv "/opt/gradle-${GRADLE_VERSION}" "$GRADLE_HOME" \
     && rm /tmp/gradle.zip \
     && ln -s "$GRADLE_HOME/bin/gradle" /usr/local/bin/gradle
+
+# ── yq (mikefarah, Go-based) and grpcurl ─────────────────────────
+# @trace spec:agent-cheatsheets, spec:default-image
+# Both are needed by cheatsheets/utils/yq.md and cheatsheets/web/grpc.md.
+# Neither has a Fedora package (kislyuk/yq is in EPEL but is a different,
+# Python-based tool — not what mikefarah/yq cheatsheet describes), so we
+# fetch upstream binaries pinned by version. Single layer for cache stability.
+ENV YQ_VERSION=4.45.1 \
+    GRPCURL_VERSION=1.9.1
+RUN curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" \
+        -o /usr/local/bin/yq \
+    && chmod +x /usr/local/bin/yq \
+    && /usr/local/bin/yq --version \
+    && curl -fsSL "https://github.com/fullstorydev/grpcurl/releases/download/v${GRPCURL_VERSION}/grpcurl_${GRPCURL_VERSION}_linux_x86_64.tar.gz" \
+        -o /tmp/grpcurl.tar.gz \
+    && tar -xzf /tmp/grpcurl.tar.gz --no-same-owner -C /usr/local/bin grpcurl \
+    && chmod +x /usr/local/bin/grpcurl \
+    && rm /tmp/grpcurl.tar.gz \
+    && /usr/local/bin/grpcurl -version 2>&1 | head -1
 
 # ── Flutter SDK (hard-installed at /opt/flutter, pre-cached) ───
 # @trace spec:default-image
@@ -204,6 +228,21 @@ RUN chmod +x /usr/local/share/tillandsias/forge-welcome.sh || true
 RUN mkdir -p /etc/tillandsias/locales
 COPY locales/ /etc/tillandsias/locales/
 
+# ── Agent cheatsheets ─────────────────────────────────────────
+# @trace spec:agent-cheatsheets, spec:default-image
+# `cheatsheets/` lives at the project root as the source of truth.
+# `scripts/build-image.sh` stages it into `images/default/.cheatsheets/`
+# right before podman build, so the COPY here resolves inside the build
+# context. The staged dir is removed after build completes.
+#
+# Owned root:root, world-readable, NOT writable by forge user — cheatsheets
+# are image-state. To suggest changes, agents write a
+# RUNTIME_LIMITATIONS_NNN.md in the project workspace (see
+# /opt/cheatsheets/runtime/runtime-limitations.md).
+RUN mkdir -p /opt/cheatsheets
+COPY .cheatsheets/ /opt/cheatsheets/
+RUN chmod -R a+rX /opt/cheatsheets && chmod -R go-w /opt/cheatsheets
+
 # ── Fix ownership ──────────────────────────────────────────────
 RUN chown -R 1000:1000 /home/forge
 
@@ -212,4 +251,5 @@ WORKDIR /home/forge/src
 ENTRYPOINT ["/usr/local/bin/entrypoint-forge-claude.sh"]
 # No EXPOSE — forge containers live on the enclave network only.
 # @trace spec:forge-offline, spec:enclave-network
-ENV HOME=/home/forge USER=forge
+ENV HOME=/home/forge USER=forge \
+    TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets

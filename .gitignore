@@ -23,3 +23,6 @@ result
 
 # Vendored debug sources
 vendor/debug/
+
+# Staged by scripts/build-image.sh — agent-cheatsheets
+images/default/.cheatsheets/

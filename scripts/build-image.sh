@@ -264,6 +264,24 @@ if [[ "$FLAG_BACKEND" == "fedora" ]]; then
         exit 1
     fi
 
+    # @trace spec:agent-cheatsheets, spec:default-image
+    # Stage the project-root `cheatsheets/` directory into the forge image's
+    # build context as `.cheatsheets/` so the Containerfile can `COPY` it.
+    # The cheatsheets are sourced from the repo root (single source of truth)
+    # but the build context is the per-image dir; copying is the simplest way
+    # to bridge that. The staged copy is gitignored.
+    if [[ "$IMAGE_NAME" == "forge" ]] || [[ "$IMAGE_NAME" == "default" ]]; then
+        if [[ -d "$ROOT/cheatsheets" ]]; then
+            _step "Staging cheatsheets/ into forge build context..."
+            rm -rf "$IMAGE_DIR/.cheatsheets"
+            cp -r "$ROOT/cheatsheets" "$IMAGE_DIR/.cheatsheets"
+        else
+            _warn "Project root has no cheatsheets/ dir — forge image will skip the layer"
+            mkdir -p "$IMAGE_DIR/.cheatsheets"
+            echo "Cheatsheets directory missing at build time" > "$IMAGE_DIR/.cheatsheets/MISSING.md"
+        fi
+    fi
+
     # Pass proxy env vars as build args if available.
     # Image builds do NOT go through the proxy — SSL bump requires CA trust
     # that build containers don't have. Proxy is for runtime containers only.
@@ -272,6 +290,11 @@ if [[ "$FLAG_BACKEND" == "fedora" ]]; then
         --tag "$IMAGE_TAG" \
         -f "$CONTAINERFILE" \
         "$IMAGE_DIR/"
+
+    # Clean up the staged cheatsheets so they don't accumulate in the build context.
+    if [[ "$IMAGE_NAME" == "forge" ]] || [[ "$IMAGE_NAME" == "default" ]]; then
+        rm -rf "$IMAGE_DIR/.cheatsheets"
+    fi
 
 else
     # ── Nix backend: nix build inside ephemeral container ─────

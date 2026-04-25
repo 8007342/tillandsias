@@ -209,9 +209,30 @@ Add `@trace spec:<name>` annotations in ALL code changes. Traces are the connect
 
 **Why:** Traces create bidirectional links between specs and implementation. Power users reading logs or source should follow a trace to the spec governing that behavior. The accountability log format renders `@trace spec:name URL` lines with clickable GitHub search links.
 
+## Sources of Truth — every spec references at least one cheatsheet
+
+Every NEW spec under `openspec/changes/<change>/specs/<capability>/spec.md` and `openspec/specs/<capability>/spec.md` SHALL include a `## Sources of Truth` section at the bottom listing one or more cheatsheets from `cheatsheets/` that informed the spec's implementation guidance. Format:
+
+```markdown
+## Sources of Truth
+
+- `cheatsheets/<category>/<filename>.md` — one-line reason this cheatsheet was load-bearing
+- `cheatsheets/<category>/<filename>.md` — one-line reason
+```
+
+`<category>` is one of `runtime`, `languages`, `utils`, `build`, `web`, `test`, `agents`. Filenames are lowercase-hyphenated. The cheatsheet path SHALL resolve to a real file in the repo. Missing or unresolvable references emit a `openspec validate` warning (non-blocking).
+
+**Why**: cheatsheets pin the version of each tool the forge ships and capture the idiomatic usage patterns. When a tool ships a breaking change, the cheatsheet is the single point of update — every spec that referenced it inherits the new pin. Without explicit Sources of Truth, spec-vs-tool drift is invisible until production breaks.
+
+**Existing specs** (those present before this convention landed) are exempt until a separate retrofit sweep adds the section. New specs MUST include the section from day one.
+
 ## Cheatsheets
 
-Document operational knowledge in `docs/cheatsheets/` with `@trace` annotations and scannable tables.
+Two distinct directories:
+- `docs/cheatsheets/` — Tillandsias-internal operational knowledge (tray state machine, secrets management, token rotation). Read by maintainers on the host.
+- `cheatsheets/` — agent-facing cheatsheets baked into the forge image at `/opt/cheatsheets/`. Read by agents inside the forge via `cat $TILLANDSIAS_CHEATSHEETS/INDEX.md | rg <topic>`.
+
+Both use `@trace` annotations and scannable tables. New tool/language references go in `cheatsheets/<category>/<topic>.md` using `cheatsheets/TEMPLATE.md`. Each new cheatsheet must also be added to `cheatsheets/INDEX.md`.
 
 Current: `logging-levels.md`, `secrets-management.md`, `token-rotation.md`, `terminal-tools.md`.
 
