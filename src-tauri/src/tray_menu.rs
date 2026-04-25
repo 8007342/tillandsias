@@ -1,55 +1,54 @@
-//! Pre-built tray menu with five-stage state machine.
+//! Pre-built tray menu — no disabled placeholders, dynamic top region.
 //!
-//! Implements the menu shape defined by `simplified-tray-ux`. Every static
-//! item is built once at app start; stage transitions toggle `set_enabled`
-//! and update text on the same handles rather than rebuilding the whole
-//! tree. Only the `Projects ▸` submenu rebuilds, and only when the
-//! (project_set, include_remote) tuple actually changes.
+//! Implements the menu shape defined by `tray-app`. The bottom row
+//! (Language ▸, signature, Quit) is built once at app start and never
+//! touched again — keeping it stable defeats libappindicator's
+//! blank-label cache bug. Everything above the divider — contextual
+//! status line, sign-in action, running-stack submenus, Projects ▸,
+//! Remote Projects ▸ — is appended and removed via `Menu::insert` /
+//! `Menu::remove` driven by `apply_state`.
 //!
 //! ```text
-//! Booting    → Building [forge/proxy/git/inference]  | Lang | ver | sig | Quit
-//! Ready      → Ready (≤2s)                          | Lang | ver | sig | Quit
-//! NoAuth     → Sign in to GitHub                    | Lang | ver | sig | Quit
-//! Authed     → Projects ▸                            | Lang | ver | sig | Quit
-//! NetIssue   → Sign in / banner / Projects ▸         | Lang | ver | sig | Quit
+//! Authed (with one running forge):
+//!   my-project 🌺 ▸          ┐
+//!   Projects ▸               │ dynamic region
+//!   Remote Projects ▸        ┘
+//!   ──────── separator ─────────
+//!   Language ▸               ┐
+//!   v0.1.169.225 — by Tlatoāni │ static row (built once)
+//!   Quit Tillandsias         ┘
 //! ```
 //!
-//! @trace spec:simplified-tray-ux
+//! @trace spec:tray-app
 
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use tauri::menu::{
-    CheckMenuItem, CheckMenuItemBuilder, IsMenuItem, Menu, MenuBuilder, MenuItem,
-    MenuItemBuilder, MenuItemKind, PredefinedMenuItem, Submenu, SubmenuBuilder,
+    IsMenuItem, Menu, MenuBuilder, MenuItem, MenuItemBuilder, MenuItemKind,
+    PredefinedMenuItem, Submenu, SubmenuBuilder,
 };
 use tauri::{AppHandle, Runtime};
 use tracing::{debug, warn};
 
 use tillandsias_core::config::load_global_config;
 use tillandsias_core::project::Project;
-use tillandsias_core::state::{ContainerType, RemoteRepoInfo, TrayState};
+use tillandsias_core::state::{BuildStatus, ContainerType, RemoteRepoInfo, TrayState};
 
 use crate::github_health::CredentialHealth;
 use crate::i18n;
 
 // ─── Menu IDs ────────────────────────────────────────────────────────────────
 
-/// Stable IDs used by `tray_menu`. Unlike the legacy menu these IDs do NOT
-/// carry a generation suffix because the items are pre-built once and never
-/// recycled across rebuilds — libappindicator's blank-label bug doesn't fire
-/// here.
+/// Stable IDs used by the tray menu.
 pub mod ids {
     pub const QUIT: &str = "tm.quit";
     pub const SIGN_IN: &str = "tm.sign-in";
-    pub const READY: &str = "tm.ready";
-    pub const BUILDING: &str = "tm.building";
-    pub const NET_BANNER: &str = "tm.net-banner";
-    pub const VERSION_LINE: &str = "tm.version";
+    pub const STATUS_LINE: &str = "tm.status";
     pub const SIGNATURE: &str = "tm.signature";
     pub const PROJECTS: &str = "tm.projects";
+    pub const REMOTE_PROJECTS: &str = "tm.remote-projects";
     pub const LANGUAGE: &str = "tm.language";
-    pub const INCLUDE_REMOTE: &str = "tm.include-remote";
 
     /// Build "tm.launch:<project_path>" — full project_path encoded.
     pub fn launch(project_path: &std::path::Path) -> String {
@@ -71,7 +70,7 @@ pub mod ids {
         format!("tm.lang:{code}")
     }
 
-    /// Parse a tray_menu ID into (action, payload) if recognised.
+    /// Parse a tray-menu ID into (action, payload) if recognised.
     pub fn parse(id: &str) -> Option<(&str, &str)> {
         let stripped = id.strip_prefix("tm.")?;
         Some(stripped.split_once(':').unwrap_or((stripped, "")))
@@ -80,10 +79,11 @@ pub mod ids {
 
 // ─── Stage state machine ─────────────────────────────────────────────────────
 
-/// One of the five lifecycle stages. Determines which top-level items are
-/// enabled. See `docs/cheatsheets/tray-state-machine.md`.
+/// One of the five lifecycle stages. The dynamic region's composition
+/// is derived from `(stage, state)` together — see
+/// `docs/cheatsheets/tray-state-machine.md` for the projection.
 ///
-/// @trace spec:simplified-tray-ux
+/// @trace spec:tray-app
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Stage {
     Booting,
@@ -93,68 +93,10 @@ pub enum Stage {
     NetIssue,
 }
 
-/// Per-stage item visibility table. Pure data — exists so unit tests can
-/// assert the stage→enabled mapping without instantiating Tauri.
+/// Map a `CredentialHealth` probe result to a `Stage`. The mapping
+/// matches the table in `docs/cheatsheets/tray-state-machine.md`.
 ///
-/// @trace spec:simplified-tray-ux
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct StageVisibility {
-    pub building: bool,
-    pub ready: bool,
-    pub sign_in: bool,
-    pub net_banner: bool,
-    pub projects: bool,
-}
-
-impl StageVisibility {
-    /// Map `Stage` → `StageVisibility`. Pure function, no Tauri dependency.
-    ///
-    /// @trace spec:simplified-tray-ux
-    pub const fn for_stage(stage: Stage) -> Self {
-        match stage {
-            Stage::Booting => Self {
-                building: true,
-                ready: false,
-                sign_in: false,
-                net_banner: false,
-                projects: false,
-            },
-            Stage::Ready => Self {
-                building: false,
-                ready: true,
-                sign_in: false,
-                net_banner: false,
-                projects: false,
-            },
-            Stage::NoAuth => Self {
-                building: false,
-                ready: false,
-                sign_in: true,
-                net_banner: false,
-                projects: false,
-            },
-            Stage::Authed => Self {
-                building: false,
-                ready: false,
-                sign_in: false,
-                net_banner: false,
-                projects: true,
-            },
-            Stage::NetIssue => Self {
-                building: false,
-                ready: false,
-                sign_in: true,
-                net_banner: true,
-                projects: true,
-            },
-        }
-    }
-}
-
-/// Map a `CredentialHealth` probe result to a `Stage`. The mapping matches
-/// the table in `docs/cheatsheets/tray-state-machine.md`.
-///
-/// @trace spec:simplified-tray-ux
+/// @trace spec:tray-app
 pub fn stage_from_health(health: &CredentialHealth) -> Stage {
     match health {
         CredentialHealth::Authenticated => Stage::Authed,
@@ -163,362 +105,410 @@ pub fn stage_from_health(health: &CredentialHealth) -> Stage {
     }
 }
 
+// ─── Maximum tool emojis in the running-stack label ──────────────────────────
+
+/// Cap the number of `Maintenance` tool emojis displayed next to a
+/// running stack's label. Beyond this, additional emojis are dropped
+/// (no overflow indicator) per the spec — tray labels are width-
+/// constrained on Linux indicators and macOS menu bars.
+///
+/// @trace spec:tray-app
+const MAX_TOOL_EMOJIS_IN_LABEL: usize = 5;
+
 // ─── TrayMenu ────────────────────────────────────────────────────────────────
 
-/// Cache key for the projects submenu rebuild gate.
+/// Cache key for the dynamic region's rebuild gate. Equality means
+/// nothing observable changed — the rebuild is skipped.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-struct ProjectsCacheKey {
-    local: Vec<String>,
-    remote: Vec<String>,
-    running_forges: Vec<String>,
-    include_remote: bool,
+struct DynamicCacheKey {
+    status_text: Option<String>,
+    sign_in_visible: bool,
+    /// `(label, project_name)` for each running stack, in render order.
+    running_stacks: Vec<(String, String)>,
+    /// Local project names + a per-project running-state flag (so the
+    /// "no Maintenance child when forge is down" rule invalidates the
+    /// cache when a forge starts/stops).
+    local_projects: Vec<(String, bool)>,
+    /// Remote project names available to clone (those not present locally).
+    remote_only_projects: Vec<String>,
 }
 
-/// Owner of every pre-built tray menu item. Constructed once at app setup;
-/// mutated only via `set_stage` / `update_*` methods.
+/// Owner of every tray menu handle. Static items (signature row,
+/// Language ▸, Quit) are built once at setup. Dynamic items above
+/// the divider are owned by `apply_state` — they are appended on
+/// demand via `Menu::insert(0, …)`.
 ///
-/// @trace spec:simplified-tray-ux
+/// @trace spec:tray-app
 pub struct TrayMenu<R: Runtime> {
     pub root: Menu<R>,
 
-    // Stage-toggleable items (top of menu).
-    building_chip: MenuItem<R>,
-    ready_indicator: MenuItem<R>,
-    sign_in: MenuItem<R>,
-    net_banner: MenuItem<R>,
-    projects_submenu: Submenu<R>,
-    include_remote_check: CheckMenuItem<R>,
-
-    // Static signature trio + Quit (always enabled below the divider).
-    // Held to keep the underlying handles alive for the lifetime of the menu;
-    // some are only read via `refresh_static_labels` on language changes.
+    // Static row — never rebuilt after setup.
+    separator_top: PredefinedMenuItem<R>,
     language: Submenu<R>,
-    #[allow(dead_code)]
-    version_line: MenuItem<R>,
-    signature_line: MenuItem<R>,
+    signature: MenuItem<R>,
     quit: MenuItem<R>,
 
-    // Cache for projects submenu rebuild gating.
-    projects_cache: Mutex<ProjectsCacheKey>,
+    // Dynamic-region cache key.
+    cache: Mutex<DynamicCacheKey>,
 }
 
 impl<R: Runtime> TrayMenu<R> {
-    /// Pre-build every static item and return the assembled `Menu`.
+    /// Pre-build the static row and return the assembled `Menu`. The
+    /// dynamic region above the separator is empty at this point —
+    /// the first `apply_state` call will populate it.
     ///
-    /// Layout (top → bottom):
-    /// ```text
-    /// 1. building_chip  | ready_indicator | sign_in   (one of these is enabled)
-    /// 2. net_banner                                   (NetIssue only)
-    /// 3. projects_submenu                             (Authed / NetIssue)
-    /// 4. ────── separator ──────
-    /// 5. language ▸
-    /// 6. version (disabled)
-    /// 7. signature (disabled)
-    /// 8. quit
-    /// ```
-    ///
-    /// @trace spec:simplified-tray-ux
+    /// @trace spec:tray-app
     pub fn new(app: &AppHandle<R>) -> tauri::Result<Self> {
-        let building_chip = MenuItemBuilder::with_id(ids::BUILDING, i18n::t("menu.building_idle"))
-            .enabled(false)
-            .build(app)?;
-
-        let ready_indicator =
-            MenuItemBuilder::with_id(ids::READY, i18n::t("menu.ready_transient"))
-                .enabled(false)
-                .build(app)?;
-
-        let sign_in = MenuItemBuilder::with_id(ids::SIGN_IN, i18n::t("menu.sign_in_github"))
-            .enabled(false)
-            .build(app)?;
-
-        let net_banner =
-            MenuItemBuilder::with_id(ids::NET_BANNER, i18n::t("menu.github_unreachable_banner"))
-                .enabled(false)
-                .build(app)?;
-
-        // Projects submenu — initially populated with the "Include remote" check
-        // item only. Updated via `update_projects` once we have project data.
-        let include_remote_check =
-            CheckMenuItemBuilder::with_id(ids::INCLUDE_REMOTE, i18n::t("menu.include_remote"))
-                .checked(false)
-                .build(app)?;
-
-        let projects_submenu = SubmenuBuilder::with_id(app, ids::PROJECTS, i18n::t("menu.projects"))
-            .item(&include_remote_check)
-            .separator()
-            .item(
-                &MenuItemBuilder::with_id("tm.no-local", i18n::t("menu.no_local_projects"))
-                    .enabled(false)
-                    .build(app)?,
-            )
-            .build()?;
-        // Disabled by default — Booting/Ready/NoAuth keep it off.
-        let _ = projects_submenu.set_enabled(false);
-
         let language = build_language_submenu(app)?;
 
-        let version_line = MenuItemBuilder::with_id(
-            ids::VERSION_LINE,
-            format!("v{}", env!("TILLANDSIAS_FULL_VERSION")),
-        )
-        .enabled(false)
-        .build(app)?;
-
-        let signature_line = MenuItemBuilder::with_id(ids::SIGNATURE, i18n::t("menu.signature"))
+        let signature = MenuItemBuilder::with_id(ids::SIGNATURE, signature_label())
             .enabled(false)
             .build(app)?;
 
         let quit = MenuItemBuilder::with_id(ids::QUIT, i18n::t("menu.quit")).build(app)?;
 
-        // Assemble top-level menu in stage-machine order.
         let separator_top = PredefinedMenuItem::separator(app)?;
 
-        let mut builder = MenuBuilder::new(app);
-        builder = builder
-            .item(&building_chip)
-            .item(&ready_indicator)
-            .item(&sign_in)
-            .item(&net_banner)
-            .item(&projects_submenu)
+        let root = MenuBuilder::new(app)
             .item(&separator_top)
             .item(&language)
-            .item(&version_line)
-            .item(&signature_line)
-            .item(&quit);
-        let root = builder.build()?;
+            .item(&signature)
+            .item(&quit)
+            .build()?;
 
-        let me = Self {
+        Ok(Self {
             root,
-            building_chip,
-            ready_indicator,
-            sign_in,
-            net_banner,
-            projects_submenu,
-            include_remote_check,
+            separator_top,
             language,
-            version_line,
-            signature_line,
+            signature,
             quit,
-            projects_cache: Mutex::new(ProjectsCacheKey::default()),
-        };
-
-        // Initial stage = Booting. Apply visibility so only the building chip is
-        // enabled among the top three items.
-        me.set_stage(Stage::Booting);
-
-        Ok(me)
+            cache: Mutex::new(DynamicCacheKey::default()),
+        })
     }
 
-    /// Apply the stage-machine visibility for `stage`. Calls `set_enabled`
-    /// on every stage-toggleable handle to match the spec's table. Static
-    /// items (language, version, signature, quit) are left untouched —
-    /// they're always enabled (or always disabled, in version/signature's
-    /// case) regardless of stage.
+    /// Apply the latest `(stage, state)` projection to the dynamic
+    /// region. Skips the rebuild if the cache key is unchanged.
     ///
-    /// Tauri 2 does not expose `set_visible` for native menus on every
-    /// platform; we emulate hide-by-disable. On platforms with quirky menu
-    /// redraw, disabled items still appear but cannot be clicked, which
-    /// matches the spec's stated guarantees.
+    /// The dynamic region's composition (top → bottom):
     ///
-    /// @trace spec:simplified-tray-ux
-    pub fn set_stage(&self, stage: Stage) {
-        let v = StageVisibility::for_stage(stage);
-        let _ = self.building_chip.set_enabled(v.building);
-        let _ = self.ready_indicator.set_enabled(v.ready);
-        let _ = self.sign_in.set_enabled(v.sign_in);
-        let _ = self.net_banner.set_enabled(v.net_banner);
-        let _ = self.projects_submenu.set_enabled(v.projects);
-        debug!(spec = "simplified-tray-ux", ?stage, ?v, "Stage applied");
-    }
-
-    /// Update the building chip text (e.g., "Building [forge, proxy]").
-    /// Idempotent — no-op when the new label matches the current one.
+    /// 1. optional contextual status line (disabled, single MenuItem)
+    /// 2. optional `🔑 Sign in to GitHub` (enabled action)
+    /// 3. running-stack submenus, sorted by project name
+    /// 4. optional `Projects ▸` (only if `state.projects` non-empty)
+    /// 5. optional `Remote Projects ▸` (only if `remote_only` non-empty)
     ///
-    /// Pass `None` to restore the idle building label.
+    /// All of (1)–(5) are appended above `separator_top`. The static
+    /// row at and below the separator is untouched.
     ///
-    /// @trace spec:simplified-tray-ux
-    pub fn update_building_chip(&self, in_progress_images: &[&str]) {
-        let label = if in_progress_images.is_empty() {
-            i18n::t("menu.building_idle").to_string()
-        } else {
-            i18n::tf(
-                "menu.building_chip",
-                &[("images", &in_progress_images.join(", "))],
-            )
-        };
-        if let Err(e) = self.building_chip.set_text(&label) {
-            debug!(error = %e, "set_text on building chip failed (cosmetic)");
-        }
-    }
-
-    /// Rebuild the `Projects ▸` submenu — only when the (local set, remote
-    /// set, include_remote) tuple actually changes. The cache key is held
-    /// internally so callers can invoke this freely on every state tick.
-    ///
-    /// @trace spec:simplified-tray-ux
-    pub fn update_projects(
+    /// @trace spec:tray-app
+    pub fn apply_state(
         &self,
         app: &AppHandle<R>,
+        stage: Stage,
         state: &TrayState,
-        include_remote: bool,
     ) -> tauri::Result<()> {
-        // Compute a stable cache key. Sort to defeat scanner-emitted
-        // ordering jitter.
-        let mut local: Vec<String> =
-            state.projects.iter().map(|p| p.name.clone()).collect();
-        local.sort();
-        let mut remote: Vec<String> = state
-            .remote_repos
+        let status = status_text(state, stage);
+        let sign_in_visible = matches!(stage, Stage::NoAuth | Stage::NetIssue);
+        let stacks = running_stacks(state);
+        let stacks_key: Vec<(String, String)> = stacks
             .iter()
-            .map(|r| r.name.clone())
+            .map(|s| (s.label(), s.project_name.clone()))
             .collect();
-        remote.sort();
-        let mut running_forges: Vec<String> = state
-            .running
-            .iter()
-            .filter(|c| matches!(c.container_type, ContainerType::OpenCodeWeb))
-            .map(|c| c.project_name.clone())
-            .collect();
-        running_forges.sort();
+        let local: Vec<(String, bool)> = {
+            let mut v: Vec<(String, bool)> = state
+                .projects
+                .iter()
+                .map(|p| {
+                    let running = state.running.iter().any(|c| {
+                        c.project_name == p.name
+                            && matches!(c.container_type, ContainerType::OpenCodeWeb)
+                    });
+                    (p.name.clone(), running)
+                })
+                .collect();
+            v.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+            v
+        };
+        let remote_only_names = remote_only_project_names(state);
 
-        let key = ProjectsCacheKey {
-            local,
-            remote,
-            running_forges,
-            include_remote,
+        let key = DynamicCacheKey {
+            status_text: status.clone(),
+            sign_in_visible,
+            running_stacks: stacks_key,
+            local_projects: local.clone(),
+            remote_only_projects: remote_only_names.clone(),
         };
 
         {
-            let cache = self.projects_cache.lock().unwrap();
+            let cache = self.cache.lock().unwrap();
             if *cache == key {
                 return Ok(());
             }
         }
 
-        // Wipe existing items and rebuild content. The submenu handle stays
-        // the same — only its children change.
-        // Capture an owned list of children first so the `items()` borrow drops
-        // before we call `remove`.
-        let existing: Vec<_> = self.projects_submenu.items()?;
+        // Wipe everything above `separator_top`. The static row at and
+        // below the separator stays put.
+        let existing = self.root.items()?;
         for kind in existing {
-            // `kind` is a MenuItemKind enum — pass through `IsMenuItem` impl.
-            let _ = remove_kind(&self.projects_submenu, &kind);
-        }
-
-        // Always-present header: Include remote checkbox + separator.
-        // Re-uses the long-lived check handle so the click-event ID is stable.
-        self.include_remote_check.set_checked(include_remote)?;
-        self.projects_submenu.append(&self.include_remote_check)?;
-        let sep1 = PredefinedMenuItem::separator(app)?;
-        self.projects_submenu.append(&sep1)?;
-
-        let local_projects = &state.projects;
-        if local_projects.is_empty() {
-            let placeholder = MenuItemBuilder::with_id(
-                "tm.no-local",
-                i18n::t("menu.no_local_projects"),
-            )
-            .enabled(false)
-            .build(app)?;
-            self.projects_submenu.append(&placeholder)?;
-        } else {
-            let mut sorted: Vec<&Project> = local_projects.iter().collect();
-            sorted.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-            for project in sorted {
-                let sub = build_local_project_submenu(app, project, state)?;
-                self.projects_submenu.append(&sub)?;
+            // Stop at the static separator — it's the boundary between
+            // dynamic (above) and static (at/below).
+            if kind_id(&kind).as_deref() == Some(self.separator_top.id().as_ref()) {
+                break;
             }
+            let _ = remove_kind(&self.root, &kind);
         }
 
-        if include_remote {
-            let watch_path = first_watch_path();
-            let local_names: Vec<String> = state
-                .projects
-                .iter()
-                .map(|p| p.name.clone())
-                .collect();
-            let remote_only: Vec<&RemoteRepoInfo> = state
-                .remote_repos
-                .iter()
-                .filter(|r| {
-                    !local_names.contains(&r.name) && !watch_path.join(&r.name).exists()
-                })
-                .collect();
+        // Build the dynamic items in render order (top → bottom).
+        // We insert at position 0 each time, so we must build in
+        // REVERSE so the final order is correct.
+        let mut idx = 0usize;
 
-            let sep2 = PredefinedMenuItem::separator(app)?;
-            self.projects_submenu.append(&sep2)?;
-
-            if remote_only.is_empty() {
-                let placeholder = MenuItemBuilder::with_id(
-                    "tm.no-remote",
-                    i18n::t("menu.no_remote_projects"),
-                )
+        if let Some(text) = status.as_deref() {
+            let item = MenuItemBuilder::with_id(ids::STATUS_LINE, text)
                 .enabled(false)
                 .build(app)?;
-                self.projects_submenu.append(&placeholder)?;
-            } else {
-                for repo in remote_only {
-                    let sub = build_remote_project_submenu(app, repo)?;
-                    self.projects_submenu.append(&sub)?;
-                }
-            }
+            self.root.insert(&item as &dyn IsMenuItem<R>, idx)?;
+            idx += 1;
         }
 
+        if sign_in_visible {
+            let item =
+                MenuItemBuilder::with_id(ids::SIGN_IN, i18n::t("menu.sign_in_github")).build(app)?;
+            self.root.insert(&item as &dyn IsMenuItem<R>, idx)?;
+            idx += 1;
+        }
+
+        for stack in &stacks {
+            let sub = build_running_stack_submenu(app, stack)?;
+            self.root.insert(&sub as &dyn IsMenuItem<R>, idx)?;
+            idx += 1;
+        }
+
+        // Local Projects ▸ — only if at least one local project exists.
+        if !local.is_empty() {
+            let projects = SubmenuBuilder::with_id(app, ids::PROJECTS, i18n::t("menu.projects"));
+            let mut projects = projects;
+            for (name, running) in &local {
+                if let Some(project) = state.projects.iter().find(|p| &p.name == name) {
+                    let sub = build_local_project_submenu(app, project, *running)?;
+                    projects = projects.item(&sub);
+                }
+            }
+            let projects = projects.build()?;
+            self.root.insert(&projects as &dyn IsMenuItem<R>, idx)?;
+            idx += 1;
+        }
+
+        // Remote Projects ▸ — only if at least one uncloned remote.
+        if !remote_only_names.is_empty() {
+            let remote = SubmenuBuilder::with_id(
+                app,
+                ids::REMOTE_PROJECTS,
+                i18n::t("menu.github.remote_projects"),
+            );
+            let mut remote = remote;
+            for repo_name in &remote_only_names {
+                if let Some(repo) = state.remote_repos.iter().find(|r| &r.name == repo_name) {
+                    let sub = build_remote_project_submenu(app, repo)?;
+                    remote = remote.item(&sub);
+                }
+            }
+            let remote = remote.build()?;
+            self.root.insert(&remote as &dyn IsMenuItem<R>, idx)?;
+        }
+
+        let _ = idx; // last write may not increment; silence future drift
+
         // Commit the cache key only after the rebuild succeeds.
-        let mut cache = self.projects_cache.lock().unwrap();
+        let mut cache = self.cache.lock().unwrap();
         *cache = key;
+        debug!(spec = "tray-app", "Dynamic region applied");
         Ok(())
     }
 
-    /// Returns the current state of the "Include remote" check item.
-    /// Defaults to `false` if the underlying call fails.
+    /// Refresh static labels — called after a language change so the
+    /// new locale takes effect without rebuilding the tree. The dynamic
+    /// region's labels are recomputed on every `apply_state` pass, so
+    /// they pick up the new locale on the next event-loop tick.
     ///
-    /// @trace spec:simplified-tray-ux
-    pub fn include_remote_checked(&self) -> bool {
-        self.include_remote_check.is_checked().unwrap_or(false)
-    }
-
-    /// Reference accessors — used by the unit tests and main.rs to rebuild
-    /// references when an external caller (i18n reload) changes labels.
-    ///
-    /// @trace spec:simplified-tray-ux
+    /// @trace spec:tray-app
     pub fn refresh_static_labels(&self) {
-        let _ = self.building_chip.set_text(i18n::t("menu.building_idle"));
-        let _ = self
-            .ready_indicator
-            .set_text(i18n::t("menu.ready_transient"));
-        let _ = self.sign_in.set_text(i18n::t("menu.sign_in_github"));
-        let _ = self
-            .net_banner
-            .set_text(i18n::t("menu.github_unreachable_banner"));
-        let _ = self.projects_submenu.set_text(i18n::t("menu.projects"));
-        let _ = self
-            .include_remote_check
-            .set_text(i18n::t("menu.include_remote"));
+        let _ = self.signature.set_text(signature_label());
         let _ = self.language.set_text(i18n::t("menu.language"));
-        let _ = self.signature_line.set_text(i18n::t("menu.signature"));
         let _ = self.quit.set_text(i18n::t("menu.quit"));
     }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Status text — pure function ─────────────────────────────────────────────
 
-/// Remove a `MenuItemKind` from a submenu. `Submenu::remove` takes a
-/// `&dyn IsMenuItem<R>`, not a `MenuItemKind`, so we dispatch on the
-/// variant.
-fn remove_kind<R: Runtime>(
-    submenu: &Submenu<R>,
-    kind: &MenuItemKind<R>,
-) -> tauri::Result<()> {
-    match kind {
-        MenuItemKind::MenuItem(m) => submenu.remove(m as &dyn IsMenuItem<R>),
-        MenuItemKind::Submenu(s) => submenu.remove(s as &dyn IsMenuItem<R>),
-        MenuItemKind::Predefined(p) => submenu.remove(p as &dyn IsMenuItem<R>),
-        MenuItemKind::Check(c) => submenu.remove(c as &dyn IsMenuItem<R>),
-        MenuItemKind::Icon(i) => submenu.remove(i as &dyn IsMenuItem<R>),
+/// Compose the contextual status line. Returns `None` when no
+/// condition is active (the menu omits the row entirely in that case).
+///
+/// Conditions joined with `menu.status.separator`:
+/// - In-flight builds: text from `menu.status.building_one`/`_many`.
+/// - Builds completed within the 2 s flash window: `menu.status.ready`.
+/// - `Stage::NetIssue`: `menu.status.github_unreachable`.
+///
+/// @trace spec:tray-app
+pub fn status_text(state: &TrayState, stage: Stage) -> Option<String> {
+    use std::time::Duration;
+    const READY_FLASH: Duration = Duration::from_secs(2);
+
+    let mut fragments: Vec<String> = Vec::new();
+
+    let in_progress: Vec<&str> = state
+        .active_builds
+        .iter()
+        .filter(|b| matches!(b.status, BuildStatus::InProgress))
+        .map(|b| b.image_name.as_str())
+        .collect();
+    if in_progress.len() == 1 {
+        fragments.push(i18n::tf(
+            "menu.status.building_one",
+            &[("image", in_progress[0])],
+        ));
+    } else if in_progress.len() > 1 {
+        fragments.push(i18n::tf(
+            "menu.status.building_many",
+            &[("images", &in_progress.join(", "))],
+        ));
+    }
+
+    let ready_recent: Vec<&str> = state
+        .active_builds
+        .iter()
+        .filter(|b| matches!(b.status, BuildStatus::Completed))
+        .filter(|b| {
+            b.completed_at
+                .map(|t| t.elapsed() < READY_FLASH)
+                .unwrap_or(false)
+        })
+        .map(|b| b.image_name.as_str())
+        .collect();
+    for name in ready_recent {
+        fragments.push(i18n::tf("menu.status.ready", &[("image", name)]));
+    }
+
+    if matches!(stage, Stage::NetIssue) {
+        fragments.push(i18n::t("menu.status.github_unreachable").to_string());
+    }
+
+    if fragments.is_empty() {
+        None
+    } else {
+        let sep = i18n::t("menu.status.separator").to_string();
+        Some(fragments.join(&sep))
     }
 }
+
+// ─── Running stacks — pure function ──────────────────────────────────────────
+
+/// One running per-project stack — the data needed to render a
+/// top-level submenu for it.
+///
+/// @trace spec:tray-app
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunningStack {
+    pub project_name: String,
+    pub project_path: PathBuf,
+    /// `🌺` (or whatever the OpenCodeWeb container's `display_emoji` is)
+    /// when a `OpenCodeWeb` container is running for this project; else
+    /// `None`. We don't fall back to the genus flower — bloom
+    /// communicates "live web session", not "forge alive".
+    pub bloom: Option<String>,
+    /// Up to `MAX_TOOL_EMOJIS_IN_LABEL` emojis from running
+    /// `Maintenance` containers, in `state.running` insertion order.
+    pub tool_emojis: Vec<String>,
+}
+
+impl RunningStack {
+    /// Render the submenu label: `<project>[ <bloom>][ <tools>]`.
+    pub fn label(&self) -> String {
+        let mut out = self.project_name.clone();
+        if let Some(b) = &self.bloom {
+            out.push(' ');
+            out.push_str(b);
+        }
+        if !self.tool_emojis.is_empty() {
+            out.push(' ');
+            out.push_str(&self.tool_emojis.join(""));
+        }
+        out
+    }
+}
+
+/// Compute the running stacks from `state.running`. A project appears
+/// here when it has at least one container of type `Forge`,
+/// `OpenCodeWeb`, or `Maintenance`. Sorted by lowercase project name.
+///
+/// @trace spec:tray-app
+pub fn running_stacks(state: &TrayState) -> Vec<RunningStack> {
+    use std::collections::BTreeMap;
+
+    // Group by project_name so we hit each project exactly once.
+    let mut by_project: BTreeMap<String, RunningStack> = BTreeMap::new();
+
+    for c in &state.running {
+        if !matches!(
+            c.container_type,
+            ContainerType::Forge | ContainerType::OpenCodeWeb | ContainerType::Maintenance
+        ) {
+            continue;
+        }
+
+        let key = c.project_name.to_lowercase();
+        let entry = by_project.entry(key).or_insert_with(|| RunningStack {
+            project_name: c.project_name.clone(),
+            project_path: PathBuf::new(), // filled below from state.projects
+            bloom: None,
+            tool_emojis: Vec::new(),
+        });
+
+        match c.container_type {
+            ContainerType::OpenCodeWeb if !c.display_emoji.is_empty() => {
+                entry.bloom = Some(c.display_emoji.clone());
+            }
+            ContainerType::Maintenance if !c.display_emoji.is_empty() => {
+                if entry.tool_emojis.len() < MAX_TOOL_EMOJIS_IN_LABEL {
+                    entry.tool_emojis.push(c.display_emoji.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Resolve project_path from state.projects. If the project is no
+    // longer on disk (deleted while a container is still running),
+    // fall back to a watch_path-relative guess so the menu still
+    // dispatches something coherent.
+    let watch_root = first_watch_path();
+    for stack in by_project.values_mut() {
+        if let Some(p) = state.projects.iter().find(|p| p.name == stack.project_name) {
+            stack.project_path = p.path.clone();
+        } else {
+            stack.project_path = watch_root.join(&stack.project_name);
+        }
+    }
+
+    by_project.into_values().collect()
+}
+
+/// Names of remote repos that are not present locally and not on disk
+/// under any watch path. Sorted ASCII.
+fn remote_only_project_names(state: &TrayState) -> Vec<String> {
+    let watch_path = first_watch_path();
+    let local: Vec<String> = state.projects.iter().map(|p| p.name.clone()).collect();
+    let mut out: Vec<String> = state
+        .remote_repos
+        .iter()
+        .filter(|r| !local.contains(&r.name) && !watch_path.join(&r.name).exists())
+        .map(|r| r.name.clone())
+        .collect();
+    out.sort();
+    out
+}
+
+// ─── Submenu builders ────────────────────────────────────────────────────────
 
 /// Configured first watch path (defaults to `~/src`).
 fn first_watch_path() -> PathBuf {
@@ -534,46 +524,65 @@ fn first_watch_path() -> PathBuf {
         })
 }
 
-/// Build a per-local-project submenu: Launch + Maintenance terminal.
-/// The Maintenance terminal item is disabled when no opencode-web forge is
-/// running for the project.
+/// Build a top-level running-stack submenu — `<label> ▸` with two
+/// children: `🌱 Attach Another` and `🔧 Maintenance`.
 ///
-/// @trace spec:simplified-tray-ux
-fn build_local_project_submenu<R: Runtime>(
+/// @trace spec:tray-app
+fn build_running_stack_submenu<R: Runtime>(
     app: &AppHandle<R>,
-    project: &Project,
-    state: &TrayState,
+    stack: &RunningStack,
 ) -> tauri::Result<Submenu<R>> {
-    let forge_running = state.running.iter().any(|c| {
-        c.project_name == project.name
-            && matches!(c.container_type, ContainerType::OpenCodeWeb)
-    });
-
-    let label = if forge_running {
-        format!("🌺 {}", project.name)
-    } else {
-        project.name.clone()
-    };
-
-    let launch_item = MenuItemBuilder::with_id(ids::launch(&project.path), i18n::t("menu.launch"))
-        .build(app)?;
-
-    let maint_item = MenuItemBuilder::with_id(
-        ids::maint(&project.path),
-        i18n::t("menu.maintenance_terminal"),
+    let attach = MenuItemBuilder::with_id(
+        ids::launch(&stack.project_path),
+        i18n::t("menu.attach_another_with_emoji"),
     )
-    .enabled(forge_running)
     .build(app)?;
 
-    SubmenuBuilder::new(app, &label)
-        .item(&launch_item)
-        .item(&maint_item)
+    let maint = MenuItemBuilder::with_id(
+        ids::maint(&stack.project_path),
+        i18n::t("menu.maintenance"),
+    )
+    .build(app)?;
+
+    SubmenuBuilder::new(app, stack.label())
+        .item(&attach)
+        .item(&maint)
         .build()
 }
 
-/// Build a per-remote-project submenu: just "Clone & Launch".
+/// Build a per-local-project submenu inside `Projects ▸`. Always shows
+/// `🌱 Attach Here`. `🔧 Maintenance` is only present when the project's
+/// forge is currently running — never disabled.
 ///
-/// @trace spec:simplified-tray-ux
+/// @trace spec:tray-app
+fn build_local_project_submenu<R: Runtime>(
+    app: &AppHandle<R>,
+    project: &Project,
+    forge_running: bool,
+) -> tauri::Result<Submenu<R>> {
+    let attach_here = MenuItemBuilder::with_id(
+        ids::launch(&project.path),
+        i18n::t("menu.attach_here_with_emoji"),
+    )
+    .build(app)?;
+
+    let mut sub = SubmenuBuilder::new(app, &project.name).item(&attach_here);
+
+    if forge_running {
+        let maint = MenuItemBuilder::with_id(
+            ids::maint(&project.path),
+            i18n::t("menu.maintenance"),
+        )
+        .build(app)?;
+        sub = sub.item(&maint);
+    }
+
+    sub.build()
+}
+
+/// Build a per-remote-project submenu — single `Clone & Launch` child.
+///
+/// @trace spec:tray-app
 fn build_remote_project_submenu<R: Runtime>(
     app: &AppHandle<R>,
     repo: &RemoteRepoInfo,
@@ -589,10 +598,9 @@ fn build_remote_project_submenu<R: Runtime>(
         .build()
 }
 
-/// Build the language selector submenu. Same set of locales as the legacy
-/// menu — a pin emoji marks the currently selected one.
+/// Build the language selector submenu — pin emoji marks the active locale.
 ///
-/// @trace spec:simplified-tray-ux
+/// @trace spec:tray-app
 fn build_language_submenu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Submenu<R>> {
     let global_config = load_global_config();
     let selected = global_config.i18n.language.clone();
@@ -632,24 +640,53 @@ fn build_language_submenu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Subme
     submenu.build()
 }
 
+/// Static signature label, interpolating the version at runtime.
+fn signature_label() -> String {
+    i18n::tf(
+        "menu.signature_with_version",
+        &[("version", env!("TILLANDSIAS_FULL_VERSION"))],
+    )
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/// Read the ID off a `MenuItemKind` regardless of variant.
+fn kind_id<R: Runtime>(kind: &MenuItemKind<R>) -> Option<String> {
+    match kind {
+        MenuItemKind::MenuItem(m) => Some(m.id().as_ref().to_string()),
+        MenuItemKind::Submenu(s) => Some(s.id().as_ref().to_string()),
+        MenuItemKind::Predefined(p) => Some(p.id().as_ref().to_string()),
+        MenuItemKind::Check(c) => Some(c.id().as_ref().to_string()),
+        MenuItemKind::Icon(i) => Some(i.id().as_ref().to_string()),
+    }
+}
+
+/// Remove a `MenuItemKind` from a menu. `Menu::remove` takes a
+/// `&dyn IsMenuItem<R>`, not a `MenuItemKind`, so we dispatch on the
+/// variant.
+fn remove_kind<R: Runtime>(root: &Menu<R>, kind: &MenuItemKind<R>) -> tauri::Result<()> {
+    match kind {
+        MenuItemKind::MenuItem(m) => root.remove(m as &dyn IsMenuItem<R>),
+        MenuItemKind::Submenu(s) => root.remove(s as &dyn IsMenuItem<R>),
+        MenuItemKind::Predefined(p) => root.remove(p as &dyn IsMenuItem<R>),
+        MenuItemKind::Check(c) => root.remove(c as &dyn IsMenuItem<R>),
+        MenuItemKind::Icon(i) => root.remove(i as &dyn IsMenuItem<R>),
+    }
+}
+
 // ─── Click dispatch ──────────────────────────────────────────────────────────
 
-/// Cleanly dispatch a tray-menu click ID to a `MenuCommand`. Unknown IDs
-/// fall through to `None`. Caller logs and ignores `None`.
+/// Cleanly dispatch a tray-menu click ID to a `MenuCommand`. Unknown
+/// IDs (including any legacy `tm.include-remote` from an old menu
+/// snapshot) fall through to `None`. Caller logs and ignores `None`.
 ///
-/// @trace spec:simplified-tray-ux
+/// @trace spec:tray-app
 pub fn dispatch_click(id: &str) -> Option<tillandsias_core::event::MenuCommand> {
     use tillandsias_core::event::MenuCommand;
 
     match id {
         ids::QUIT => Some(MenuCommand::Quit),
         ids::SIGN_IN => Some(MenuCommand::GitHubLogin),
-        ids::INCLUDE_REMOTE => {
-            // Toggling logic requires reading the current check state; the
-            // caller (main.rs) does that and dispatches IncludeRemoteToggle
-            // with the resolved value.
-            None
-        }
         _ => {
             let (action, payload) = ids::parse(id)?;
             match action {
@@ -670,7 +707,7 @@ pub fn dispatch_click(id: &str) -> Option<tillandsias_core::event::MenuCommand> 
                     language: payload.to_string(),
                 }),
                 other => {
-                    warn!(spec = "simplified-tray-ux", action = other, "Unknown tray_menu action");
+                    warn!(spec = "tray-app", action = other, "Unknown tray-menu action");
                     None
                 }
             }
@@ -683,54 +720,34 @@ pub fn dispatch_click(id: &str) -> Option<tillandsias_core::event::MenuCommand> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, Instant};
+    use tillandsias_core::event::ContainerState;
+    use tillandsias_core::genus::TillandsiaGenus;
+    use tillandsias_core::state::{BuildProgress, ContainerInfo, PlatformInfo, Os};
 
-    /// Stage → visibility mapping must match the spec's table exactly.
-    /// @trace spec:simplified-tray-ux
-    #[test]
-    fn stage_visibility_table_matches_spec() {
-        // Booting: only the building chip.
-        let v = StageVisibility::for_stage(Stage::Booting);
-        assert!(v.building);
-        assert!(!v.ready);
-        assert!(!v.sign_in);
-        assert!(!v.net_banner);
-        assert!(!v.projects);
+    fn empty_state() -> TrayState {
+        TrayState::new(PlatformInfo {
+            os: Os::detect(),
+            has_podman: true,
+            has_podman_machine: false,
+            gpu_devices: vec![],
+        })
+    }
 
-        // Ready: only the transient ready indicator.
-        let v = StageVisibility::for_stage(Stage::Ready);
-        assert!(!v.building);
-        assert!(v.ready);
-        assert!(!v.sign_in);
-        assert!(!v.net_banner);
-        assert!(!v.projects);
-
-        // NoAuth: only sign-in.
-        let v = StageVisibility::for_stage(Stage::NoAuth);
-        assert!(!v.building);
-        assert!(!v.ready);
-        assert!(v.sign_in);
-        assert!(!v.net_banner);
-        assert!(!v.projects);
-
-        // Authed: only Projects.
-        let v = StageVisibility::for_stage(Stage::Authed);
-        assert!(!v.building);
-        assert!(!v.ready);
-        assert!(!v.sign_in);
-        assert!(!v.net_banner);
-        assert!(v.projects);
-
-        // NetIssue: sign-in + banner + projects.
-        let v = StageVisibility::for_stage(Stage::NetIssue);
-        assert!(!v.building);
-        assert!(!v.ready);
-        assert!(v.sign_in);
-        assert!(v.net_banner);
-        assert!(v.projects);
+    fn forge_container(project: &str, kind: ContainerType, emoji: &str) -> ContainerInfo {
+        ContainerInfo {
+            name: format!("tillandsias-{project}-forge"),
+            project_name: project.to_string(),
+            genus: TillandsiaGenus::ALL[0],
+            state: ContainerState::Running,
+            port_range: (0, 0),
+            container_type: kind,
+            display_emoji: emoji.to_string(),
+        }
     }
 
     /// CredentialHealth → Stage mapping must match the cheatsheet table.
-    /// @trace spec:simplified-tray-ux
+    /// @trace spec:tray-app
     #[test]
     fn credential_health_to_stage_mapping() {
         assert_eq!(
@@ -753,9 +770,137 @@ mod tests {
         );
     }
 
-    /// Click dispatch maps action prefixes to the correct MenuCommand
-    /// variant. Unknown / malformed IDs return None.
-    /// @trace spec:simplified-tray-ux
+    /// Idle + authed produces no status text — the menu omits the row.
+    /// @trace spec:tray-app
+    #[test]
+    fn status_text_idle_authed_is_none() {
+        let state = empty_state();
+        assert_eq!(status_text(&state, Stage::Authed), None);
+    }
+
+    /// In-flight build surfaces a single `Building {image}…` fragment.
+    /// @trace spec:tray-app
+    #[test]
+    fn status_text_in_progress_build_surfaces() {
+        let mut state = empty_state();
+        state.active_builds.push(BuildProgress {
+            image_name: "Forge".to_string(),
+            status: BuildStatus::InProgress,
+            started_at: Instant::now(),
+            completed_at: None,
+        });
+        let s = status_text(&state, Stage::Booting).expect("expected Some");
+        assert!(s.contains("Forge"), "got {s}");
+        assert!(s.contains("Building"), "got {s}");
+    }
+
+    /// NetIssue stage adds the GitHub-unreachable fragment, joined to
+    /// any other active condition.
+    /// @trace spec:tray-app
+    #[test]
+    fn status_text_netissue_adds_github_unreachable() {
+        let state = empty_state();
+        let s = status_text(&state, Stage::NetIssue).expect("expected Some");
+        assert!(s.contains("GitHub unreachable"), "got {s}");
+    }
+
+    /// `running_stacks` orders by lowercase project name regardless of
+    /// `state.running` insertion order.
+    /// @trace spec:tray-app
+    #[test]
+    fn running_stacks_orders_by_lowercase_name() {
+        let mut state = empty_state();
+        state
+            .running
+            .push(forge_container("Zeta", ContainerType::OpenCodeWeb, "🌺"));
+        state
+            .running
+            .push(forge_container("alpha", ContainerType::OpenCodeWeb, "🌺"));
+        state
+            .running
+            .push(forge_container("Mango", ContainerType::OpenCodeWeb, "🌺"));
+        let names: Vec<String> = running_stacks(&state)
+            .into_iter()
+            .map(|s| s.project_name)
+            .collect();
+        assert_eq!(names, vec!["alpha", "Mango", "Zeta"]);
+    }
+
+    /// Tool emojis appear in `state.running` insertion order, capped at
+    /// `MAX_TOOL_EMOJIS_IN_LABEL`.
+    /// @trace spec:tray-app
+    #[test]
+    fn running_stacks_caps_tool_emojis() {
+        let mut state = empty_state();
+        state.running.push(forge_container(
+            "demo",
+            ContainerType::OpenCodeWeb,
+            "🌺",
+        ));
+        for emoji in ["🔧", "🪛", "🔨", "🪚", "⚙️", "🔩", "🧰"] {
+            state
+                .running
+                .push(forge_container("demo", ContainerType::Maintenance, emoji));
+        }
+
+        let stacks = running_stacks(&state);
+        assert_eq!(stacks.len(), 1);
+        assert_eq!(stacks[0].project_name, "demo");
+        assert_eq!(stacks[0].bloom.as_deref(), Some("🌺"));
+        assert_eq!(stacks[0].tool_emojis.len(), MAX_TOOL_EMOJIS_IN_LABEL);
+        assert_eq!(
+            stacks[0].tool_emojis,
+            vec!["🔧", "🪛", "🔨", "🪚", "⚙️"]
+        );
+    }
+
+    /// Bloom is `None` for a project with only a `Forge` container —
+    /// bloom communicates "live web session", not "forge alive".
+    /// @trace spec:tray-app
+    #[test]
+    fn running_stacks_no_bloom_when_only_forge() {
+        let mut state = empty_state();
+        state
+            .running
+            .push(forge_container("hot", ContainerType::Forge, "🌷"));
+        let stacks = running_stacks(&state);
+        assert_eq!(stacks.len(), 1);
+        assert_eq!(stacks[0].bloom, None);
+    }
+
+    /// Running-stack label format: `<project>[ <bloom>][ <tools>]`.
+    /// @trace spec:tray-app
+    #[test]
+    fn running_stack_label_order_is_name_bloom_tools() {
+        let stack = RunningStack {
+            project_name: "demo".to_string(),
+            project_path: PathBuf::from("/tmp/demo"),
+            bloom: Some("🌺".to_string()),
+            tool_emojis: vec!["🔧".to_string(), "🪛".to_string()],
+        };
+        assert_eq!(stack.label(), "demo 🌺 🔧🪛");
+
+        let no_tools = RunningStack {
+            project_name: "demo".to_string(),
+            project_path: PathBuf::from("/tmp/demo"),
+            bloom: Some("🌺".to_string()),
+            tool_emojis: vec![],
+        };
+        assert_eq!(no_tools.label(), "demo 🌺");
+
+        let no_bloom = RunningStack {
+            project_name: "demo".to_string(),
+            project_path: PathBuf::from("/tmp/demo"),
+            bloom: None,
+            tool_emojis: vec!["🔧".to_string()],
+        };
+        assert_eq!(no_bloom.label(), "demo 🔧");
+    }
+
+    /// Click dispatch maps the kept action prefixes correctly. The
+    /// removed `tm.include-remote` ID falls through to None — a
+    /// defensive check against stale menu state from a previous version.
+    /// @trace spec:tray-app
     #[test]
     fn dispatch_click_known_actions() {
         use tillandsias_core::event::MenuCommand;
@@ -800,10 +945,25 @@ mod tests {
             other => panic!("expected SelectLanguage, got {other:?}"),
         }
 
-        // Include-remote returns None — the caller resolves it from the
-        // CheckMenuItem's actual state.
-        assert!(dispatch_click(ids::INCLUDE_REMOTE).is_none());
-        // Unknown action prefix.
+        // Stale legacy ID — should not crash, returns None.
+        assert!(dispatch_click("tm.include-remote").is_none());
         assert!(dispatch_click("tm.bogus:foo").is_none());
+    }
+
+    /// Stale builds outside the 2 s flash window are not surfaced.
+    /// @trace spec:tray-app
+    #[test]
+    fn status_text_completed_builds_fade_after_2s() {
+        let mut state = empty_state();
+        let stale_completed = Instant::now()
+            .checked_sub(Duration::from_secs(5))
+            .expect("can subtract 5 s from now");
+        state.active_builds.push(BuildProgress {
+            image_name: "Forge".to_string(),
+            status: BuildStatus::Completed,
+            started_at: stale_completed,
+            completed_at: Some(stale_completed),
+        });
+        assert_eq!(status_text(&state, Stage::Authed), None);
     }
 }

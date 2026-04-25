@@ -326,19 +326,6 @@ fn main() {
                             return;
                         }
 
-                        // Include-remote toggle: read the CheckMenuItem state
-                        // and forward the resolved value to the event loop so
-                        // it can rebuild the projects submenu accordingly.
-                        if id == tray_menu::ids::INCLUDE_REMOTE {
-                            if let Some(menu) = TRAY_MENU.get() {
-                                let include = menu.include_remote_checked();
-                                if let Err(e) = menu_tx.try_send(MenuCommand::IncludeRemoteToggle { include }) {
-                                    debug!(error = %e, "include-remote toggle dispatch failed");
-                                }
-                            }
-                            return;
-                        }
-
                         handle_menu_click(id, &menu_tx);
                     }
                 })
@@ -986,24 +973,13 @@ fn current_stage(s: &TrayState) -> tray_menu::Stage {
     }
 }
 
-/// Names of images currently being built — drives the building chip text.
-fn in_progress_image_names(s: &TrayState) -> Vec<String> {
-    use tillandsias_core::state::BuildStatus;
-    s.active_builds
-        .iter()
-        .filter(|b| matches!(b.status, BuildStatus::InProgress))
-        .map(|b| b.image_name.clone())
-        .collect()
-}
-
 /// Apply the latest state to the pre-built tray menu.
 ///
-/// 1. Pick the right Stage from credential health + build progress.
-/// 2. Toggle stage-conditional items via `set_stage`.
-/// 3. Refresh the building chip text from active builds.
-/// 4. Rebuild the projects submenu (gated internally on a tuple change).
+/// Routes to the dynamic-region rebuild (status line, sign-in action,
+/// running-stack submenus, Projects ▸, Remote Projects ▸) — gated
+/// internally on a cache-key tuple to avoid pointless rebuilds.
 ///
-/// @trace spec:simplified-tray-ux
+/// @trace spec:tray-app
 fn rebuild_menu(app_handle: &tauri::AppHandle, state: &Arc<Mutex<TrayState>>) {
     let Some(menu) = TRAY_MENU.get() else {
         debug!("TRAY_MENU not yet initialised — skipping rebuild");
@@ -1011,15 +987,9 @@ fn rebuild_menu(app_handle: &tauri::AppHandle, state: &Arc<Mutex<TrayState>>) {
     };
     let s = state.lock().unwrap();
     let stage = current_stage(&s);
-    menu.set_stage(stage);
 
-    let names = in_progress_image_names(&s);
-    let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
-    menu.update_building_chip(&refs);
-
-    let include_remote = menu.include_remote_checked();
-    if let Err(e) = menu.update_projects(app_handle, &s, include_remote) {
-        debug!(error = %e, "update_projects failed (cosmetic)");
+    if let Err(e) = menu.apply_state(app_handle, stage, &s) {
+        debug!(error = %e, "apply_state failed (cosmetic)");
     }
 }
 

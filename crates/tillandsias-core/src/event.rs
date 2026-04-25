@@ -86,16 +86,11 @@ pub enum MenuCommand {
     /// concurrent sessions in a single process.
     Launch { project_path: PathBuf },
 
-    /// @trace spec:simplified-tray-ux
+    /// @trace spec:tray-app
     /// Open a host terminal running `podman exec -it` inside the project's
     /// running forge container. Multiple maintenance terminals can be open
     /// against the same forge.
     MaintenanceTerminal { project_path: PathBuf },
-
-    /// @trace spec:simplified-tray-ux
-    /// Toggle whether the Projects ▸ submenu shows remote (uncloned) GitHub
-    /// repos in addition to local on-disk projects.
-    IncludeRemoteToggle { include: bool },
 
     /// Quit the application.
     Quit,

@@ -1,35 +1,101 @@
 # Tray State Machine
 
-@trace spec:simplified-tray-ux
+@trace spec:tray-app
 
 ## Overview
 
-The tray menu is a five-stage state machine. Every stage has a fixed item layout — items are pre-built once at startup and toggled via `set_enabled` / label swap, never rebuilt. The only piece that ever rebuilds is the `Projects ▸` submenu, gated on a debounced set comparison.
+The tray menu has a stable bottom row (`Language ▸`, signature, `Quit Tillandsias`) built once at startup and never touched. Above it sits a **dynamic region** that is appended/removed via `Menu::insert` / `Menu::remove` driven by `(stage, state)` projection. There are no disabled placeholder rows — when something has nothing to say, it's hidden, not greyed out.
 
 Stage selection is deterministic: given the triple `(enclave_health, credential_health, remote_repo_fetch_status)` there is exactly one correct stage.
 
-## The five stages
+## The five stages and their dynamic-region projection
 
-| Stage      | Trigger                                                                  | Visible items (top → bottom)                                                                                                       | What the user can do                                |
-|------------|--------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------|
-| `Booting`  | One or more enclave images still building (forge / proxy / git / inference) | `Building [forge/proxy/git/inference]` / divider / `Language ▸` / version (disabled) / `— by Tlatoāni` (disabled) / `Quit Tillandsias` | Switch language. Quit. Wait.                        |
-| `Ready`    | All four enclave images report ready, before credential probe completes | `Ready` (transient ≤2s) / divider / `Language ▸` / version / `— by Tlatoāni` / `Quit Tillandsias`                                  | Switch language. Quit. (Auto-advances within 2s.)   |
-| `NoAuth`   | Credential probe returned `CredentialMissing` or `CredentialInvalid`    | `Sign in to GitHub` / divider / `Language ▸` / version / `— by Tlatoāni` / `Quit Tillandsias`                                      | Sign in. Switch language. Quit.                     |
-| `Authed`   | Credential probe returned `Authenticated` (or local-only mode)          | `Projects ▸` / divider / `Language ▸` / version / `— by Tlatoāni` / `Quit Tillandsias`                                             | Launch a project. Open maintenance terminal. Quit.  |
-| `NetIssue` | Probe returned `GithubUnreachable` and a cached project list exists      | `Sign in to GitHub` / `(GitHub unreachable, using cached projects)` / `Projects ▸` / `Language ▸` / version / `— by Tlatoāni` / `Quit Tillandsias` | Use cached projects. Retry sign-in. Quit.           |
+The dynamic region is rendered top-to-bottom in this order whenever an item is enabled:
 
-`Language ▸` and `Quit Tillandsias` are present and enabled in every stage. The version line and `— by Tlatoāni` are present in every stage and always disabled (visual signature only).
+1. **Contextual status line** — disabled, single line, only when at least one condition holds (see *Status line truth table* below).
+2. **`🔑 Sign in to GitHub`** — enabled action, only in `NoAuth` / `NetIssue`.
+3. **Running-stack submenus** — one per project with at least one container of type `Forge`, `OpenCodeWeb`, or `Maintenance` running. Sorted by lowercase project name.
+4. **`Projects ▸`** — only when `state.projects` is non-empty.
+5. **`Remote Projects ▸`** — only when at least one repo in `state.remote_repos` is not present locally.
+
+| Stage      | Trigger                                                            | Dynamic region (top → bottom)                                                                                              |
+|------------|--------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------|
+| `Booting`  | One or more enclave images still building                          | status line (`Building […]…`)                                                                                              |
+| `Ready`    | All enclave images ready, before credential probe completes        | optional status line (`<image> ready` flash within 2 s of completion)                                                      |
+| `NoAuth`   | Probe returned `CredentialMissing` or `CredentialInvalid`          | `🔑 Sign in to GitHub`                                                                                                     |
+| `Authed`   | Probe returned `Authenticated`                                     | running-stack submenus, `Projects ▸` (if any locals), `Remote Projects ▸` (if any uncloned remotes)                        |
+| `NetIssue` | Probe returned `GithubUnreachable` (cached projects available)     | `🔑 Sign in to GitHub`, status line (`GitHub unreachable — using cached list`), running stacks, `Projects ▸` (if cached)   |
+
+The static row at the bottom is ALWAYS present in every stage:
+
+```
+─────────── separator ───────────
+Language ▸
+v0.1.169.225 — by Tlatoāni     ← single combined disabled line
+Quit Tillandsias
+```
+
+`Language ▸` and `Quit Tillandsias` are enabled in every stage. The signature line is the **only** disabled item in the menu — there is no `(No projects)`, `(Building…)`, or `(GitHub unreachable…)` placeholder elsewhere.
+
+## Status line truth table
+
+The contextual status line is composed by `tray_menu::status_text(state, stage)` (pure function, unit-tested):
+
+| Condition                                         | Source                                                              | Fragment text                                  |
+|---------------------------------------------------|----------------------------------------------------------------------|------------------------------------------------|
+| Exactly one image build in progress               | `state.active_builds` with `BuildStatus::InProgress`, count = 1     | `Building <image>…`                            |
+| Multiple image builds in progress                 | `state.active_builds` with `BuildStatus::InProgress`, count > 1     | `Building <a, b, …>…`                          |
+| One or more builds completed within last 2 s       | `state.active_builds` with `BuildStatus::Completed`, completed_at < 2 s ago | `<image> ready` (one fragment per build)        |
+| Stage is `NetIssue`                               | `stage == Stage::NetIssue`                                           | `GitHub unreachable — using cached list`       |
+| None of the above                                 | (everything else)                                                    | `None` — status line omitted from the menu     |
+
+Multiple active fragments are joined with `menu.status.separator` (default ` · `):
+
+```
+Building Forge… · GitHub unreachable — using cached list
+```
+
+A `Completed` build older than 2 s is dropped from the active set entirely by `event_loop.rs::prune_completed_builds`, which keeps the cached row gone forever once faded.
+
+## Running-stack rendering
+
+For each running project, `tray_menu::running_stacks(state)` returns a `RunningStack { project_name, project_path, bloom, tool_emojis }`. The submenu label is `<project>[ <bloom>][ <tool emojis>]`:
+
+| Field         | Source                                                                      | Notes                                                                            |
+|---------------|------------------------------------------------------------------------------|----------------------------------------------------------------------------------|
+| `bloom`       | `display_emoji` of the `OpenCodeWeb` container, if one is running            | `None` when only `Forge` / `Maintenance` are alive — bloom = "live web session"  |
+| `tool_emojis` | `display_emoji` of running `Maintenance` containers, in `state.running` order | Capped at 5; no overflow indicator                                               |
+
+Children of every running-stack submenu (exactly two, in this order):
+
+| Item                  | i18n key                          | Dispatches                                       | Behavior                                                                                          |
+|-----------------------|-----------------------------------|--------------------------------------------------|---------------------------------------------------------------------------------------------------|
+| `🌱 Attach Another`    | `menu.attach_another_with_emoji`  | `MenuCommand::Launch { project_path }`           | `handle_attach_web` reattach branch — opens an additional native browser window. No new container. |
+| `🔧 Maintenance`       | `menu.maintenance`                | `MenuCommand::MaintenanceTerminal { project_path }` | Spawns a fresh terminal `podman exec`'d into the forge. Concurrent shells allowed.               |
+
+There is **no Stop item.** The only way to tear down a running stack is `Quit Tillandsias`, which calls `handlers::shutdown_all`.
+
+## Projects ▸ vs Remote Projects ▸
+
+These are sibling top-level submenus, never nested. The legacy `Include remote` `CheckMenuItem` is gone — there is no toggle, and the `MenuCommand::IncludeRemoteToggle` variant has been removed.
+
+| Submenu              | Appended when                                                                                          | Per-entry submenu       | Action                                                                                            |
+|----------------------|--------------------------------------------------------------------------------------------------------|--------------------------|---------------------------------------------------------------------------------------------------|
+| `Projects ▸`         | `state.projects` is non-empty                                                                          | `<project> ▸`            | `🌱 Attach Here` (always); `🔧 Maintenance` (only when forge is running for that project)          |
+| `Remote Projects ▸`  | At least one `state.remote_repos` entry is not in local projects AND not on disk under any watch path | `<repo-name> ▸`          | `⬇️ Clone & Launch` — dispatches `MenuCommand::CloneProject`, which clones then auto-attaches      |
+
+When a submenu would have zero entries, it is **not** appended. There is no "(no projects)" placeholder.
 
 ## CredentialHealth → stage map
 
 `src-tauri/src/github_health.rs` returns one of four variants. Each maps to exactly one stage:
 
-| `CredentialHealth`       | HTTP signal                          | Stage      | UI consequence                                            |
-|--------------------------|--------------------------------------|------------|-----------------------------------------------------------|
-| `Authenticated`          | 200 from `GET /user`                 | `Authed`   | `Projects ▸` becomes the primary action.                  |
-| `CredentialMissing`      | No token in OS keyring               | `NoAuth`   | `Sign in to GitHub` is the only action.                   |
-| `CredentialInvalid`      | 401 / 403 from GitHub                | `NoAuth`   | Same as missing — re-auth flow.                           |
-| `GithubUnreachable`      | DNS / timeout / 5xx / 429 / keyring D-Bus down | `NetIssue` | Sign-in offered, cached `Projects ▸` still works.         |
+| `CredentialHealth`       | HTTP signal                          | Stage      | Dynamic-region effect                                            |
+|--------------------------|--------------------------------------|------------|------------------------------------------------------------------|
+| `Authenticated`          | 200 from `GET /user`                 | `Authed`   | Running stacks + `Projects ▸` + `Remote Projects ▸` as applicable |
+| `CredentialMissing`      | No token in OS keyring               | `NoAuth`   | Only `🔑 Sign in to GitHub`                                      |
+| `CredentialInvalid`      | 401 / 403 from GitHub                | `NoAuth`   | Same as missing — re-auth flow                                   |
+| `GithubUnreachable`      | DNS / timeout / 5xx / 429 / keyring D-Bus down | `NetIssue` | Sign-in offered + status line + cached `Projects ▸`              |
 
 Probe budget: 10 seconds. A timeout is **always** classified as `GithubUnreachable` — never as `CredentialInvalid`. The tray must not fail closed on a slow probe.
 
@@ -39,7 +105,7 @@ Probe budget: 10 seconds. A timeout is **always** classified as `GithubUnreachab
                     ┌──────────────────────┐
    start  ─────────►│      Booting         │
                     └──────────┬───────────┘
-                               │ all 4 images ready
+                               │ all enclave images ready
                                ▼
                     ┌──────────────────────┐
                     │       Ready          │ (≤ 2s transient)
@@ -59,79 +125,80 @@ Probe budget: 10 seconds. A timeout is **always** classified as `GithubUnreachab
                   └─────────────┘
 ```
 
+## Cache key for the dynamic region
+
+`TrayMenu::apply_state` is gated on a `DynamicCacheKey`:
+
+```text
+status_text         : Option<String>
+sign_in_visible     : bool
+running_stacks      : Vec<(label, project_name)>
+local_projects      : Vec<(name, forge_running)>
+remote_only_projects: Vec<String>
+```
+
+Equality means the menu would render identically — the rebuild is skipped. This eliminates flicker on no-op state ticks. Caller side, the loop already debounces scanner events to 100 ms.
+
 ## Common debugging questions
 
 ### Why does "Sign in to GitHub" keep showing after I signed in?
 
 Run `tillandsias --log-secrets-management` and look for the most recent `GitHub credential health probe complete` event. Cross-reference its `health = ...` field against the table above:
 
-- `health = credential-missing` — the keyring write didn't land. Check for `NoStorageAccess` errors (headless Linux, locked keyring).
-- `health = credential-invalid` — the token is expired / revoked. Re-run `tillandsias --github-login`.
-- `health = unreachable (...)` — probe timed out or got a 5xx. You're in `NetIssue`, not `NoAuth`. Sign-in still appears, but `Projects ▸` is also there.
+- `health = credential-missing` — keyring write didn't land. Check for `NoStorageAccess` errors (headless Linux, locked keyring).
+- `health = credential-invalid` — token expired / revoked. Re-run `tillandsias --github-login`.
+- `health = unreachable (...)` — probe timed out or got a 5xx. You're in `NetIssue`, not `NoAuth`. Sign-in still appears, alongside cached `Projects ▸` and the `GitHub unreachable — using cached list` status line.
 
 ### How do I tell `GithubUnreachable` from `CredentialInvalid`?
 
 Look at the menu, not the logs:
 
-| You see                                             | Stage      | Probe verdict        |
-|-----------------------------------------------------|------------|----------------------|
-| `Sign in to GitHub` only                            | `NoAuth`   | Missing or Invalid   |
-| `Sign in to GitHub` + `(GitHub unreachable, …)` + `Projects ▸` | `NetIssue` | Unreachable          |
+| You see                                                                       | Stage      | Probe verdict        |
+|-------------------------------------------------------------------------------|------------|----------------------|
+| `🔑 Sign in to GitHub` only                                                    | `NoAuth`   | Missing or Invalid   |
+| `🔑 Sign in to GitHub` + `GitHub unreachable — using cached list` status line | `NetIssue` | Unreachable          |
 
-If the banner item `(GitHub unreachable, using cached projects)` is visible, the probe reached an unreachable / transient verdict. If not, the token itself is the problem. The banner is the discriminator.
+The status line is the discriminator. If you see it, the probe got a network/transient verdict.
 
-### Why is Quit slow?
+### Why doesn't a running project show at the top?
 
-Quit must service within 5 seconds even mid-image-build. The event loop uses `biased; tokio::select!` so Quit takes priority, and long-running spawns hold a `CancellationToken` the Quit handler aborts. If Quit is taking longer:
+The top-level running-stack submenus are derived from `state.running`. A project appears here only when at least one of its containers has `container_type ∈ {Forge, OpenCodeWeb, Maintenance}`. Containers like `GitService` or the bare `Web` server don't trigger a stack entry on their own.
 
-1. Confirm you're on a release that landed `simplified-tray-ux` (`tillandsias --version`).
-2. Look in the log for `shutdown_all` — it should start within 1s when idle, within 5s during a build.
-3. If you see `shutdown_all` start but the process hangs after, the bottleneck is `podman rm -f` on the enclave network or a forge container — not the tray.
+If a forge IS running but the entry is missing, check that the project name carried by `ContainerInfo::project_name` matches `state.projects[i].name`. The dispatch `project_path` is filled from `state.projects` — if the project was deleted on disk, the path falls back to `<watch_path>/<project_name>`.
 
 ### Why doesn't the menu update when an image finishes building?
 
-Stage transitions toggle `set_enabled` on pre-built items. If items are visibly stuck:
+Stage transitions cause `apply_state` to recompute the dynamic region. If items are visibly stuck:
 
-- Check the log for `Stage flip` or label-swap events — confirm they're firing.
-- Tauri 2 doesn't expose `set_visible` on every native menu platform; the tray emulates hide-by-disable + label-update. On platforms with quirky menu redraw (some GTK themes), the item may need a parent-menu re-open to repaint.
-- If `rebuild_menu()` is being called for a stage flip (it shouldn't be), that's a bug — file under `simplified-tray-ux`.
-
-### Why is the project list flickering?
-
-Projects submenu IS rebuilt — but only when `(local_set, remote_set, include_remote)` actually changes, debounced to 100ms. If you see flicker, the scanner is emitting non-idempotent events (same set, different ordering) or the debounce is bypassed.
+- Confirm the Cache key actually changed: every `BuildProgressEvent::Completed` mutates `state.active_builds`, which feeds `status_text`, which is part of the cache key.
+- The 2-second `<image> ready` flash window is bounded by `BUILD_CHIP_FADEOUT` (10 s) in `event_loop.rs` for *removal from state*, but the status line itself shows `ready` only within the 2 s window inside `status_text`. After that the row disappears even though the entry lingers in `state.active_builds` for the full 10 s.
 
 ### What if the keyring D-Bus is down on Linux?
 
 `probe_inner` catches this and returns `GithubUnreachable { reason: "keyring unavailable: ..." }` — you land in `NetIssue`, not `NoAuth`. This is intentional: a restarting Secret Service daemon should NOT force a sign-in dance.
 
-## Pre-built menu items, never rebuilt
+## Static items (built once, never rebuilt)
 
-| Item                    | Built at      | Updated by                                  |
-|-------------------------|---------------|---------------------------------------------|
-| `Building [...]` label  | `setup`       | label swap as each image reports ready      |
-| `Ready` (transient)     | `setup`       | shown for ≤2s on Ready stage, then hidden   |
-| `Sign in to GitHub`     | `setup`       | `set_enabled` toggle                        |
-| `Projects ▸` submenu    | `setup` (root) | submenu **content** rebuilt on project-set change only |
-| `(GitHub unreachable…)` | `setup`       | `set_enabled` toggle (NetIssue only)        |
-| `Language ▸`            | `setup`       | always enabled                              |
-| version line            | `setup`       | never changes during a process lifetime     |
-| `— by Tlatoāni`         | `setup`       | never changes                               |
-| `Quit Tillandsias`      | `setup`       | always enabled                              |
+| Item                          | Built at  | Updated by                                |
+|-------------------------------|-----------|-------------------------------------------|
+| `Language ▸`                  | `setup`   | `set_text` on locale change only          |
+| `v<version> — by Tlatoāni`    | `setup`   | `set_text` on locale change only          |
+| `Quit Tillandsias`            | `setup`   | `set_text` on locale change only          |
+| Top-region separator          | `setup`   | never changes                             |
 
-The static portion of the menu is never `rebuild_menu()`'d. Only the project list is, and only on a real set change.
+Everything else (status line, sign-in, running stacks, Projects, Remote Projects) is created on demand in the dynamic region and dropped when no longer needed. Item handles for the dynamic region are NOT recycled — each `apply_state` rebuild produces fresh items.
 
 ## Related
 
 **Specs:**
-- `openspec/changes/simplified-tray-ux/proposal.md` — full menu shape rationale
-- `openspec/changes/simplified-tray-ux/specs/tray-app/spec.md` — requirements + scenarios
-- Supersedes: `tray-responsiveness-and-startup-gating`
+- `openspec/specs/tray-app/spec.md` — requirements + scenarios for the menu shape
+- `openspec/specs/remote-projects/spec.md` — Remote Projects fetch / clone flow
 
 **Source files:**
+- `src-tauri/src/tray_menu.rs` — `TrayMenu`, `apply_state`, `status_text`, `running_stacks`, `dispatch_click`
 - `src-tauri/src/github_health.rs` — `CredentialHealth` enum + `probe()` (10s budget)
-- `src-tauri/src/menu.rs` — pre-built items, stage toggles
 - `src-tauri/src/event_loop.rs` — `biased; tokio::select!`, cancel tokens, Quit priority
-- `src-tauri/src/main.rs` — `update_menu_state()` calls (toggles, not rebuilds)
+- `src-tauri/src/main.rs` — `rebuild_menu` calls `apply_state`
 
 **Cheatsheets:**
 - `docs/cheatsheets/secrets-management.md` — keyring backends, headless-Linux caveat

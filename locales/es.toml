@@ -25,19 +25,20 @@ language = "Idioma"
 credit = "por Tlatoāni"
 version = "Tillandsias v{version}"
 
-# ── simplified-tray-ux state machine ────────────────────────
-building_chip = "⏳ Construyendo [{images}]"
-building_idle = "⏳ Preparando infraestructura..."
-ready_transient = "✅ Listo"
+# ── tray-app menu (no disabled placeholders) ────────────────
+# @trace spec:tray-app
 sign_in_github = "🔑 Iniciar sesión en GitHub"
-github_unreachable_banner = "⚠ GitHub inaccesible, usando proyectos en caché"
-include_remote = "Incluir remotos"
-launch = "🚀 Abrir"
-maintenance_terminal = "⛏️ Terminal de mantenimiento"
+attach_here_with_emoji = "🌱 Acoplar aquí"
+attach_another_with_emoji = "🌱 Otra ventana"
 clone_and_launch = "⬇️ Clonar y abrir"
-signature = "— por Tlatoāni"
-no_local_projects = "No hay proyectos locales"
-no_remote_projects = "No hay proyectos remotos (o ya están todos clonados)"
+signature_with_version = "v{version} — por Tlatoāni"
+
+[menu.status]
+building_one = "Construyendo {image}…"
+building_many = "Construyendo {images}…"
+ready = "{image} listo"
+github_unreachable = "GitHub inaccesible — usando caché"
+separator = " · "
 
 [menu.github]
 label = "GitHub"

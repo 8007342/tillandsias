@@ -184,14 +184,6 @@ pub async fn run(
                             }
                         }
                     }
-                    // @trace spec:simplified-tray-ux
-                    // The tray re-renders the projects submenu via TrayMenu::update_projects;
-                    // the toggle's persistent value lives in the menu CheckMenuItem itself,
-                    // so the loop simply triggers a project-list refresh callback.
-                    MenuCommand::IncludeRemoteToggle { include } => {
-                        info!(spec = "simplified-tray-ux", include, "IncludeRemoteToggle");
-                        on_state_change(&state);
-                    }
                 }
             }
 
