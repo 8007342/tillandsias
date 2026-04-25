@@ -79,37 +79,24 @@ pub async fn run(
     let mut proxy_health_interval = tokio::time::interval(Duration::from_secs(60));
     proxy_health_interval.tick().await; // consume first immediate tick
 
-    // @trace spec:tray-app, spec:podman-orchestration, knowledge:lang/rust-async
+    // @trace spec:tray-app, spec:podman-orchestration, spec:simplified-tray-ux, knowledge:lang/rust-async
     loop {
         tokio::select! {
-            // Scanner: filesystem changes
-            Some(change) = scanner_rx.recv() => {
-                handle_scanner_event(change, &mut state);
-                prune_completed_builds(&mut state);
-                on_state_change(&state);
-            }
+            // @trace spec:simplified-tray-ux
+            // `biased;` polls branches in source order. We deliberately
+            // declare `menu_rx` first below so MenuCommand::Quit is
+            // serviced within the spec's 5-second budget even when other
+            // channels (scanner / podman / build progress) are very busy.
+            //
+            // Without `biased;` tokio randomises branch poll order which
+            // is good for fairness on the hot path but bad for human-
+            // perceived responsiveness on Quit.
+            biased;
 
-            // Podman: container state changes
-            Some(event) = podman_rx.recv() => {
-                handle_podman_event(event, &mut state, &mut allocator, &mut tool_allocator);
-                prune_completed_builds(&mut state);
-                on_state_change(&state);
-            }
-
-            // Build progress: image/maintenance build state transitions
-            Some(event) = build_rx.recv() => {
-                handle_build_progress_event(event, &mut state, prune_tx.clone());
-                prune_completed_builds(&mut state);
-                on_state_change(&state);
-            }
-
-            // Prune trigger: 10s fadeout timer fired for a completed build chip
-            Some(()) = prune_rx.recv() => {
-                prune_completed_builds(&mut state);
-                on_state_change(&state);
-            }
-
-            // Menu: user actions
+            // Menu: user actions — TOP priority under `biased;` so Quit
+            // and Language are always serviced within the 5s budget
+            // regardless of how busy the other channels are.
+            // @trace spec:simplified-tray-ux
             Some(command) = menu_rx.recv() => {
                 match command {
                     MenuCommand::Quit => {
@@ -312,6 +299,33 @@ pub async fn run(
                         // TODO Phase 3: store in state, rebuild Projects submenu.
                     }
                 }
+            }
+
+            // Scanner: filesystem changes
+            Some(change) = scanner_rx.recv() => {
+                handle_scanner_event(change, &mut state);
+                prune_completed_builds(&mut state);
+                on_state_change(&state);
+            }
+
+            // Podman: container state changes
+            Some(event) = podman_rx.recv() => {
+                handle_podman_event(event, &mut state, &mut allocator, &mut tool_allocator);
+                prune_completed_builds(&mut state);
+                on_state_change(&state);
+            }
+
+            // Build progress: image/maintenance build state transitions
+            Some(event) = build_rx.recv() => {
+                handle_build_progress_event(event, &mut state, prune_tx.clone());
+                prune_completed_builds(&mut state);
+                on_state_change(&state);
+            }
+
+            // Prune trigger: 10s fadeout timer fired for a completed build chip
+            Some(()) = prune_rx.recv() => {
+                prune_completed_builds(&mut state);
+                on_state_change(&state);
             }
 
             // Timer: check if remote repos cache needs refresh
