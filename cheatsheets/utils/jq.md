@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: jq 1.7 (Fedora 43 package).
 **Use when**: querying or transforming JSON in the forge — pipelines, log triage, config introspection, agent tool plumbing.
 

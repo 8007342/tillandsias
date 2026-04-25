@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: Go 1.23+ (Fedora 43 `golang` package).
 **Use when**: building / testing / running Go code in the forge.
 

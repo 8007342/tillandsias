@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: Java 21 LTS (OpenJDK from Fedora 43 `java-21-openjdk-devel`)
 **Use when**: writing Java in the forge — modern syntax, common stdlib, patterns.
 

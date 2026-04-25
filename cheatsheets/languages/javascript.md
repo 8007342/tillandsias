@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: Node.js 22.x LTS (Fedora 43 `nodejs` package), ES2023 syntax
 **Use when**: writing modern JS in the forge — Node scripts, browser code, glue.
 

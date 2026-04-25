@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: npm 10.x bundled with Node.js 22 (Fedora 43 `nodejs` package). `yarn` and `pnpm` are also baked into the forge image.
 **Use when**: managing JavaScript / TypeScript packages — installing deps, running scripts, publishing.
 

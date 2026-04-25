@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: opencode binary baked at `/opt/agents/opencode/bin/opencode` (linked into PATH as `opencode`). The forge ships `opencode serve` for the web UI.
 **Use when**: launching OpenCode interactively or via Tillandsias' "Attach Here" web flow.
 

@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: Selenium 4.x (install per-project; not in forge image).
 **Use when**: cross-browser end-to-end web testing with broad language SDK support (Python, Java, JS/TS, C#, Ruby). Compare with Playwright (newer, single-vendor, simpler bring-up).
 

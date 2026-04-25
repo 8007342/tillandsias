@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: XML 1.0 (5th ed) — what virtually all tools target. XML 1.1 exists but is rarely used. Forge ships `xmllint` (libxml2) and `xmlstarlet`.
 **Use when**: parsing or producing XML — `pom.xml`, SVG, RSS/Atom, Android manifests, legacy SOAP/SAML, anything in the Java enterprise stack.
 

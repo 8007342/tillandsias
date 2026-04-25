@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: yarn classic 1.22.x (installed via `npm i -g` in forge image). Berry (yarn 4.x) requires opt-in via Corepack.
 **Use when**: an existing project chose yarn — otherwise npm/pnpm are usually preferred.
 

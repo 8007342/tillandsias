@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: Playwright 1.45+ (install per-project; not in forge image — but `playwright install` fetches browser binaries automatically).
 **Use when**: modern E2E browser testing — TypeScript/JavaScript primary, Python and Java also supported. Often preferred over Selenium for new projects.
 

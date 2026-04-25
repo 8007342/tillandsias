@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: rsync 3.x (Fedora 43 package; current 3.2+).
 **Use when**: copying files efficiently — local↔local or local↔remote (over ssh). Delta-transfer means only changed bytes traverse the wire.
 

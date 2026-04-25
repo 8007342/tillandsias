@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: mikefarah/yq 4.x (added to forge by `agent-source-of-truth` change).
 **Use when**: querying or updating YAML files in the forge — Kubernetes manifests, GitHub Actions workflows, Compose files, Helm values. (NOT the kislyuk Python `yq` wrapper around jq — that is a different binary with different syntax.)
 

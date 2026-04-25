@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: gRPC concepts language-agnostic. grpcurl 1.9+ added by `agent-source-of-truth` change.
 **Use when**: building service-to-service RPC with strict schemas, streaming, or bidirectional comms.
 

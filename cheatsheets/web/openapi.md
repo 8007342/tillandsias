@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: OpenAPI 3.1 (aligned with JSON Schema 2020-12). OpenAPI 3.0 still common in legacy specs and many codegen tools — call out version in every spec.
 **Use when**: defining HTTP APIs declaratively, generating clients/servers, producing browsable API docs, contract-testing across services.
 

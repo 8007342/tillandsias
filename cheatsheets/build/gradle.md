@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: Gradle 8.10 (baked at `/opt/gradle`, on `PATH` as `gradle`).
 **Use when**: Java/Kotlin builds with `build.gradle` / `build.gradle.kts` — Android excluded in forge.
 

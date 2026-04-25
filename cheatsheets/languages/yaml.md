@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: YAML 1.2 (most parsers default to 1.1 quirks; explicit `%YAML 1.2` directive recommended)
 **Use when**: writing YAML config — Kubernetes, GitHub Actions, OpenAPI, CI files.
 

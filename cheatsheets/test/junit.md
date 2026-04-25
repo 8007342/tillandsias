@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: JUnit 5.10+ (Jupiter API). Pulled via Maven/Gradle dependency, not baked into the forge image.
 **Use when**: testing Java code — unit tests through Surefire, integration tests through Failsafe.
 

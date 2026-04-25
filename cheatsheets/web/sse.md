@@ -2,6 +2,8 @@
 
 @trace spec:agent-cheatsheets
 
+> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+
 **Version baseline**: SSE — HTML Living Standard `EventSource` interface; uses HTTP/1.1 long-lived response with `text/event-stream` content-type.
 **Use when**: server pushes to browser/client, no client→server messaging needed. Simpler than WebSocket — plain HTTP, automatic reconnection, works through most proxies.
 
