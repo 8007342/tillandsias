@@ -20,6 +20,7 @@ pub mod path;
 pub mod wire;
 
 use std::io;
+use std::os::unix::net::UnixListener as StdUnixListener;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -67,8 +68,15 @@ pub enum StaleProbeOutcome {
 }
 
 /// Builder result holding the live listener and the cleanup handle.
+///
+/// The listener is held as a `std::os::unix::net::UnixListener` so that
+/// `bind()` can be called from any thread WITHOUT requiring an active
+/// Tokio runtime (Tauri's `setup` callback runs synchronously before the
+/// runtime starts). The std listener is converted to a tokio listener
+/// via `UnixListener::from_std()` inside `spawn_accept_loop`, which
+/// must be called from a Tokio runtime context.
 pub struct Server {
-    listener: Option<UnixListener>,
+    listener: Option<StdUnixListener>,
     socket_path: PathBuf,
     shutdown: Arc<Notify>,
     accept_handle: Option<JoinHandle<()>>,
@@ -162,7 +170,17 @@ impl Server {
             }
         }
 
-        let listener = UnixListener::bind(&socket_path)?;
+        // Use std::os::unix::net::UnixListener (no runtime needed) for the
+        // initial bind. Tokio's UnixListener::bind() requires an active
+        // Tokio runtime to register with the reactor, but Tauri's `setup`
+        // callback runs synchronously before any runtime is live. The std
+        // listener is converted to tokio inside `spawn_accept_loop` (which
+        // is called from a runtime context).
+        //
+        // Mark non-blocking now so that `from_std()` doesn't have to do it
+        // later — `from_std()` requires the fd to already be non-blocking.
+        let listener = StdUnixListener::bind(&socket_path)?;
+        listener.set_nonblocking(true)?;
         // Chmod between bind and accept — closes the race where another
         // user could connect during the brief default-mode window.
         chmod_0600(&socket_path)?;
@@ -199,11 +217,29 @@ impl Server {
     /// Spawn the accept loop. Returns immediately; the loop continues
     /// until `shutdown()` is called.
     ///
+    /// MUST be called from a Tokio runtime context — this is where the
+    /// std listener is converted to a tokio listener via `from_std()`,
+    /// which registers the fd with the reactor.
+    ///
     /// @trace spec:tray-host-control-socket
     pub fn spawn_accept_loop(&mut self) {
-        let Some(listener) = self.listener.take() else {
+        let Some(std_listener) = self.listener.take() else {
             warn!("Control-socket accept loop already running");
             return;
+        };
+        // Convert from std to tokio inside the runtime context. This
+        // panics if no runtime is active — caller bug, not a runtime
+        // failure.
+        let listener = match UnixListener::from_std(std_listener) {
+            Ok(l) => l,
+            Err(e) => {
+                warn!(
+                    spec = "tray-host-control-socket",
+                    error = %e,
+                    "Failed to register control-socket listener with the Tokio reactor — accept loop will not start"
+                );
+                return;
+            }
         };
         let shutdown = self.shutdown.clone();
         let semaphore = Arc::new(Semaphore::new(MAX_CONNECTIONS));

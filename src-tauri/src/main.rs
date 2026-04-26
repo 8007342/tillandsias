@@ -304,9 +304,12 @@ fn main() {
 
             // @trace spec:tray-host-control-socket
             // Bind the tray-host control socket BEFORE the tray icon
-            // becomes interactive. The bind is synchronous (uses blocking
-            // probe + UnixListener::bind); the accept loop is spawned on
-            // tauri's async runtime so it doesn't block startup.
+            // becomes interactive. The bind is synchronous and uses
+            // std::os::unix::net::UnixListener so it works without an
+            // active Tokio runtime (Tauri's `setup` callback is
+            // synchronous). The accept loop is spawned on Tauri's async
+            // runtime so the std listener gets converted to a tokio one
+            // inside a runtime context.
             //
             // Failure to bind degrades gracefully: the tray still comes up,
             // but containers that opt in via `mount_control_socket = true`
@@ -315,17 +318,23 @@ fn main() {
             // mode is "router won't start" — which surfaces in the existing
             // build/launch error path.
             match crate::control_socket::Server::bind_default() {
-                Ok(mut server) => {
-                    server.spawn_accept_loop();
-                    if CONTROL_SOCKET
-                        .set(tokio::sync::Mutex::new(server))
-                        .is_err()
-                    {
-                        warn!(
-                            spec = "tray-host-control-socket",
-                            "CONTROL_SOCKET already initialised — duplicate setup?"
-                        );
-                    }
+                Ok(server) => {
+                    // Move the server into a tauri-async-runtime task so
+                    // `spawn_accept_loop` (which calls `tokio::spawn`) runs
+                    // inside a Tokio runtime context.
+                    tauri::async_runtime::spawn(async move {
+                        let mut server = server;
+                        server.spawn_accept_loop();
+                        if CONTROL_SOCKET
+                            .set(tokio::sync::Mutex::new(server))
+                            .is_err()
+                        {
+                            warn!(
+                                spec = "tray-host-control-socket",
+                                "CONTROL_SOCKET already initialised — duplicate setup?"
+                            );
+                        }
+                    });
                 }
                 Err(e) => {
                     warn!(
@@ -342,7 +351,13 @@ fn main() {
             // Start the 1 Hz pending-OTP eviction loop. Unconsumed sessions
             // expire 60 s after they're issued; this background task is
             // what removes them. Detached — runs for the tray's lifetime.
-            let _eviction_handle = otp::spawn_eviction_task();
+            //
+            // Wrapped in tauri::async_runtime::spawn for the same reason as
+            // the control socket above: `otp::spawn_eviction_task` calls
+            // `tokio::spawn` internally, which needs a runtime context.
+            tauri::async_runtime::spawn(async {
+                let _eviction_handle = otp::spawn_eviction_task();
+            });
 
             // Spawn updater background tasks
             updater::spawn_update_tasks(&app_handle, update_state);
