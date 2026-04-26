@@ -473,7 +473,22 @@ pub async fn launch_for_project_with_session(
         BrowserKind::Chromium { bin } => {
             let profile = session_profile_dir(project_name);
             let mut cmd = Command::new(bin);
-            cmd.arg("--app=about:blank")
+            // Initial app URL: when the cookie gate is enforced, open
+            // about:blank so CDP can inject the cookie BEFORE navigation
+            // (avoiding a flash of 401 content). When the gate is OFF
+            // (the current default until CDP `Network.setCookies` lands),
+            // CDP attach is a stub that never navigates, so opening at
+            // about:blank would leave the user staring at an empty
+            // chromium new-tab. Open at the project URL directly in
+            // that case — the router serves it without a cookie.
+            //
+            // @trace spec:opencode-web-session-otp, spec:host-chromium-on-demand
+            let initial_url = if crate::handlers::ENFORCE_SESSION_COOKIE {
+                "about:blank".to_string()
+            } else {
+                url.clone()
+            };
+            cmd.arg(format!("--app={initial_url}"))
                 .arg(format!("--user-data-dir={}", profile.display()))
                 .arg(format!("--remote-debugging-port={cdp_port}"))
                 .arg("--remote-debugging-address=127.0.0.1")

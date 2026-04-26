@@ -26,6 +26,14 @@ FROM registry.fedoraproject.org/fedora-minimal:43
 # Fedora). Some packages only exist under `dnf install --allowerasing`
 # — where the need arises we call microdnf with the matching flag.
 RUN microdnf install -y \
+        # @trace spec:default-image
+        # glibc-langpack-en provides en_US.UTF-8. fedora-minimal strips
+        # all locale data by default; without this, every interactive
+        # bash/zsh emits "setlocale: LC_CTYPE: cannot change locale
+        # (en_US.UTF-8): No such file or directory" warnings on attach,
+        # and any locale-sensitive code (sort, ls, gettext-using tools)
+        # silently falls back to C/POSIX collation.
+        glibc-langpack-en \
         bash coreutils findutils grep sed gawk tar gzip xz unzip zip bzip2 zstd \
         procps-ng shadow-utils ca-certificates which file less tree \
         fish zsh \
@@ -301,7 +309,9 @@ ENTRYPOINT ["/usr/local/bin/entrypoint-forge-claude.sh"]
 # No EXPOSE — forge containers live on the enclave network only.
 # @trace spec:forge-offline, spec:enclave-network
 ENV HOME=/home/forge USER=forge \
-    TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets
+    TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets \
+    LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
 
 # @trace spec:forge-environment-discoverability
 # TILLANDSIAS_IMAGE_VERSION identifies the forge image build the agent is
