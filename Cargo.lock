@@ -5234,6 +5234,7 @@ dependencies = [
  "tauri-plugin-shell",
  "tauri-plugin-updater",
  "tempfile",
+ "tillandsias-control-wire",
  "tillandsias-core",
  "tillandsias-otp",
  "tillandsias-podman",
@@ -5249,6 +5250,14 @@ dependencies = [
  "windows-sys 0.59.0",
  "wiremock",
  "zeroize",
+]
+
+[[package]]
+name = "tillandsias-control-wire"
+version = "0.1.170"
+dependencies = [
+ "postcard",
+ "serde",
 ]
 
 [[package]]
@@ -5286,6 +5295,21 @@ dependencies = [
  "tillandsias-core",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "tillandsias-router-sidecar"
+version = "0.1.170"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "tempfile",
+ "tillandsias-control-wire",
+ "tillandsias-otp",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

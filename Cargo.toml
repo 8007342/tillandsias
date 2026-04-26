@@ -1,8 +1,10 @@
 [workspace]
 members = [
+    "crates/tillandsias-control-wire",
     "crates/tillandsias-core",
     "crates/tillandsias-otp",
     "crates/tillandsias-podman",
+    "crates/tillandsias-router-sidecar",
     "crates/tillandsias-scanner",
     "src-tauri",
 ]
@@ -29,6 +31,7 @@ dirs = "6"
 thiserror = "2"
 
 # Internal crates
+tillandsias-control-wire = { path = "crates/tillandsias-control-wire" }
 tillandsias-core = { path = "crates/tillandsias-core" }
 tillandsias-otp = { path = "crates/tillandsias-otp" }
 tillandsias-podman = { path = "crates/tillandsias-podman" }

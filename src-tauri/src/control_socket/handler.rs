@@ -74,6 +74,18 @@ pub fn dispatch(inbound_seq: u64, message: &ControlMessage) -> DispatchOutcome {
         }
         ControlMessage::IssueAck { .. } => DispatchOutcome::NoReply,
         ControlMessage::Error { .. } => DispatchOutcome::NoReply,
+        // ControlMessage is `#[non_exhaustive]`. Future variants surface
+        // here as a no-reply pass-through until a dispatch arm is added in
+        // the change that introduces them. Logging at debug because an
+        // unknown variant is interesting but not actionable.
+        other => {
+            tracing::debug!(
+                spec = "tray-host-control-socket",
+                discriminant = ?std::mem::discriminant(other),
+                "Unhandled ControlMessage variant — no-reply pass-through"
+            );
+            DispatchOutcome::NoReply
+        }
     }
 }
 

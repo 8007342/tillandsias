@@ -7,6 +7,7 @@ authors.workspace = true
 description = "System tray application for Tillandsias"
 
 [dependencies]
+tillandsias-control-wire = { workspace = true }
 tillandsias-core = { workspace = true }
 tillandsias-otp = { workspace = true }
 tillandsias-scanner = { workspace = true }
