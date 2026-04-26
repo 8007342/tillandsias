@@ -1,5 +1,5 @@
 ---
-tags: [forge, cache, ephemeral, persistent, mounts, methodology, paths]
+tags: [forge, cache, ephemeral, persistent, mounts, methodology, paths, host-chromium]
 languages: []
 since: 2026-04-25
 last_verified: 2026-04-25
@@ -100,9 +100,24 @@ cargo metadata --format-version 1 | jq .target_directory
 # expect: /home/forge/.cache/tillandsias-project/cargo/target
 ```
 
+## Host-side data: the bundled Chromium binary tree
+
+@trace spec:host-chromium-on-demand
+
+`scripts/install.sh` (and the `tillandsias --install-chromium` subcommand) install a pinned Chrome for Testing build into the user's **data** directory — NOT the cache directory. This is host-side, NOT forge-side, but it falls under the same "regenerable only by an explicit installer run, never automatically" category that the per-project cache (above) does, and the rationale is identical: caches are by spec deletable at any time but the running tray cannot regenerate the Chromium binary on its own. If the user wipes the cache directory the tray must keep working; if they wipe the data directory they explicitly opted out.
+
+| Platform | Install root | Regenerable by | Auto-cleaned? |
+|---|---|---|---|
+| Linux | `${XDG_DATA_HOME:-$HOME/.local/share}/tillandsias/chromium/` | `tillandsias --install-chromium` (or re-running the curl installer) | No |
+| macOS | `$HOME/Library/Application Support/tillandsias/chromium/` | same | No |
+| Windows | `%LOCALAPPDATA%\tillandsias\chromium\` | same | No |
+
+A `current` symlink (Unix) or directory junction (Windows) in the install root points at the active version. At most TWO version subdirectories coexist: the active one and the immediately-previous one (rollback safety net). Older versions are GC'd by the installer at the end of every successful install. See `openspec/specs/host-chromium/spec.md` for the full requirement set.
+
 ## See also
 
 - `runtime/forge-shared-cache-via-nix.md` — why nix is the right shared-cache entry
 - `runtime/forge-container.md` (DRAFT) — broader runtime contract
 - `runtime/runtime-limitations.md` (DRAFT) — how to report a missing tool / capability
 - `build/nix-flake-basics.md` — declaring shared deps via flake
+- `security/owasp-top-10-2021.md` — SHA-256-pinned-binary pattern for the bundled Chromium download

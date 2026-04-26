@@ -6,6 +6,11 @@
 mod accountability;
 mod build_lock;
 mod ca;
+// @trace spec:host-chromium-on-demand
+// Userspace Chromium resolver + lazy installer subcommand
+// (`tillandsias --install-chromium [--from-zip <path>]`). Detection
+// priority: userspace install → system PATH → hard error. No tray UI.
+mod chromium_resolve;
 mod cleanup;
 mod cli;
 // @trace spec:tray-host-control-socket
@@ -44,6 +49,12 @@ mod update_cli;
 mod update_log;
 mod updater;
 mod browser;
+// @trace spec:opencode-web-session-otp
+// Per-window session-cookie + OTP issuance for OpenCode Web. The OtpStore
+// is registered as a process-global; the IssueWebSession control-socket
+// dispatch pushes into it; the router validates against the same store.
+mod otp;
+mod cdp;
 
 use std::sync::{Arc, Mutex};
 
@@ -158,6 +169,23 @@ fn main() {
         let _log_guard = logging::init(&log_config);
         let success = runner::run_github_login();
         std::process::exit(if success { 0 } else { 1 });
+    }
+
+    // @trace spec:host-chromium-on-demand
+    // `tillandsias --install-chromium [--from-zip <path>]` — shell out
+    // to scripts/install-chromium.sh with the embedded pin. Returns
+    // success on a zero exit code from the helper.
+    if let cli::CliMode::InstallChromium { from_zip } = cli_mode {
+        let _log_guard = logging::init(&log_config);
+        let result = chromium_resolve::run_install_subcommand(from_zip.as_deref());
+        std::process::exit(if result.is_ok() {
+            0
+        } else {
+            if let Err(e) = result {
+                eprintln!("install-chromium failed: {e}");
+            }
+            1
+        });
     }
 
     // If CLI attach mode, run the container runner and exit — no tray app.
@@ -309,6 +337,12 @@ fn main() {
                     );
                 }
             }
+
+            // @trace spec:opencode-web-session-otp
+            // Start the 1 Hz pending-OTP eviction loop. Unconsumed sessions
+            // expire 60 s after they're issued; this background task is
+            // what removes them. Detached — runs for the tray's lifetime.
+            let _eviction_handle = otp::spawn_eviction_task();
 
             // Spawn updater background tasks
             updater::spawn_update_tasks(&app_handle, update_state);

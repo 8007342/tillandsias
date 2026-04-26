@@ -8,6 +8,35 @@ INSTALL_DIR="$HOME/.local/bin"
 LIB_DIR="$HOME/.local/lib/tillandsias"
 DATA_DIR="$HOME/.local/share/tillandsias"
 
+# ---------------------------------------------------------------------------
+# Chromium pin (host-chromium-on-demand)
+# ---------------------------------------------------------------------------
+# @trace spec:host-chromium-on-demand
+# @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
+#
+# These variables pin the Chrome for Testing version we ship the user.
+# They are EDITED IN PLACE by scripts/refresh-chromium-pin.sh at every
+# Tillandsias release-cut — DO NOT hand-edit the digests.
+#
+# First-ship pin (verified 2026-04-25 via
+# https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json):
+#   channels.Stable.version = 148.0.7778.56
+#
+# The SHA-256 digests below are placeholders — they MUST be replaced by
+# `scripts/refresh-chromium-pin.sh` before the first release that ships
+# this capability. Until then the install_chromium step in this script
+# will run, fail SHA-256 verify, and the curl installer will continue
+# without Chromium (the tray surfaces the missing-binary error per the
+# detection requirement). Air-gapped users can pre-populate the install
+# directory manually or wait for the pin to be authored.
+CHROMIUM_VERSION="148.0.7778.56"
+CHROMIUM_SHA256_LINUX64=""
+CHROMIUM_SHA256_MAC_ARM64=""
+CHROMIUM_SHA256_MAC_X64=""
+CHROMIUM_SHA256_WIN64=""
+export CHROMIUM_VERSION CHROMIUM_SHA256_LINUX64 CHROMIUM_SHA256_MAC_ARM64 \
+       CHROMIUM_SHA256_MAC_X64 CHROMIUM_SHA256_WIN64
+
 # Detect OS and architecture
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"
@@ -210,6 +239,60 @@ fi
 # Remove legacy uninstaller if it exists from a previous install.
 rm -f "$INSTALL_DIR/tillandsias-uninstall" 2>/dev/null || true
 
+# ---------------------------------------------------------------------------
+# Chromium download (host-chromium-on-demand)
+# ---------------------------------------------------------------------------
+# @trace spec:host-chromium-on-demand
+#
+# Source the install-chromium.sh helper and run install_chromium. The
+# helper picks up the CHROMIUM_VERSION + CHROMIUM_SHA256_* variables we
+# exported at the top of this script.
+#
+# When this script is fetched standalone via curl, scripts/install-chromium.sh
+# may not be present alongside it. We try a few discovery paths:
+#   1. Same directory as this script (release-cut tarball, dev checkout).
+#   2. $HOME/.local/share/tillandsias/install-chromium.sh (cached copy).
+#   3. Fetch from the release URL (best-effort).
+#
+# If the helper cannot be located AND SKIP_CHROMIUM_DOWNLOAD is not set,
+# we print a one-line advisory and continue — the tray binary will surface
+# the missing-binary error on first attach per the detection contract.
+INSTALL_CHROMIUM_SH=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo)"
+if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/install-chromium.sh" ]; then
+    INSTALL_CHROMIUM_SH="$SCRIPT_DIR/install-chromium.sh"
+elif [ -f "$DATA_DIR/install-chromium.sh" ]; then
+    INSTALL_CHROMIUM_SH="$DATA_DIR/install-chromium.sh"
+fi
+
+if [ -z "$INSTALL_CHROMIUM_SH" ] && [ "${SKIP_CHROMIUM_DOWNLOAD:-}" != "1" ]; then
+    # Best-effort fetch from the release that we just installed against.
+    REMOTE_HELPER_URL="https://raw.githubusercontent.com/${REPO}/main/scripts/install-chromium.sh"
+    TMP_HELPER="$(mktemp -t tillandsias-install-chromium-XXXXXX.sh 2>/dev/null || echo /tmp/tillandsias-install-chromium.sh)"
+    if curl -fsSL -o "$TMP_HELPER" "$REMOTE_HELPER_URL"; then
+        INSTALL_CHROMIUM_SH="$TMP_HELPER"
+    else
+        rm -f "$TMP_HELPER" 2>/dev/null || true
+    fi
+fi
+
+if [ -n "$INSTALL_CHROMIUM_SH" ]; then
+    # shellcheck disable=SC1090
+    if . "$INSTALL_CHROMIUM_SH" && type -t install_chromium >/dev/null 2>&1; then
+        if install_chromium ""; then
+            :
+        else
+            echo "  ! Chromium install step failed — tray will surface a clear error on first attach."
+        fi
+    fi
+elif [ "${SKIP_CHROMIUM_DOWNLOAD:-}" = "1" ]; then
+    echo "  Chromium download skipped (SKIP_CHROMIUM_DOWNLOAD=1)."
+    echo "  Run later: tillandsias --install-chromium"
+else
+    echo "  ! install-chromium.sh not found alongside install.sh — Chromium not fetched."
+    echo "    Run later: tillandsias --install-chromium"
+fi
+
 if [ "$PLATFORM" = "linux" ]; then
     echo "  ✓ Installed to $INSTALL_DIR/tillandsias"
 fi
@@ -303,6 +386,19 @@ if [ -t 0 ] && [ -x "$INSTALL_DIR/tillandsias" ] && \
     echo "  (Progress: tail -f /tmp/tillandsias-init.log)"
     echo ""
 fi
+
+# @trace spec:host-chromium-on-demand
+# Uninstall hint for the bundled Chromium binary tree (separate from
+# `tillandsias --uninstall`, per the spec's `Uninstall path is documented
+# one-liner` requirement).
+case "$PLATFORM" in
+    linux)
+        echo "  To remove the bundled Chromium: rm -rf ~/.local/share/tillandsias/chromium/"
+        ;;
+    macos)
+        echo "  To remove the bundled Chromium: rm -rf ~/Library/Application\\ Support/tillandsias/chromium/"
+        ;;
+esac
 
 echo "  Run: tillandsias"
 echo ""

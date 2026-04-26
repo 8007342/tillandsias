@@ -163,6 +163,17 @@ pub enum CliMode {
     /// `tillandsias --github-login` — run GitHub authentication flow and exit.
     GitHubLogin,
 
+    /// `tillandsias --install-chromium [--from-zip <path>]` — install or
+    /// re-install the userspace Chromium binary tree under
+    /// `<XDG_DATA_HOME>/tillandsias/chromium/`. Verifies SHA-256 against
+    /// the digest baked into the tray binary at compile time.
+    ///
+    /// `--from-zip <path>` is the air-gapped variant — verify+extract the
+    /// supplied ZIP without any network fetch.
+    ///
+    /// @trace spec:host-chromium-on-demand
+    InstallChromium { from_zip: Option<PathBuf> },
+
     /// A project path was given — launch an interactive development environment.
     Attach {
         /// Absolute path to the project directory.
@@ -188,6 +199,9 @@ USAGE:
     tillandsias <path> --claude     Attach using Claude Code
     tillandsias <path> --bash       Open maintenance terminal
     tillandsias --github-login      Authenticate with GitHub
+    tillandsias --install-chromium  Install pinned Chromium for app-mode windows
+    tillandsias --install-chromium --from-zip <path>
+                                    Install pinned Chromium from a local ZIP
     tillandsias --init              Pre-build development environments
     tillandsias --init --force      Rebuild forge image from scratch
     tillandsias --stats             Show disk usage from Tillandsias artifacts
@@ -288,6 +302,28 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
     // `tillandsias --github-login` — run GitHub auth flow.
     if args.iter().any(|a| a == "--github-login") {
         return Some((CliMode::GitHubLogin, log_config));
+    }
+
+    // @trace spec:host-chromium-on-demand
+    // `tillandsias --install-chromium [--from-zip <path>]` — install or
+    // re-install the pinned Chromium under XDG_DATA_HOME. The optional
+    // --from-zip switch covers the air-gapped install path (no network
+    // fetch).
+    if args.iter().any(|a| a == "--install-chromium") {
+        let mut from_zip: Option<PathBuf> = None;
+        let mut iter = args.iter();
+        while let Some(a) = iter.next() {
+            if a == "--from-zip" {
+                match iter.next() {
+                    Some(path) => from_zip = Some(PathBuf::from(path)),
+                    None => {
+                        eprintln!("--from-zip requires a path argument");
+                        return None;
+                    }
+                }
+            }
+        }
+        return Some((CliMode::InstallChromium { from_zip }, log_config));
     }
 
     let mut path: Option<PathBuf> = None;

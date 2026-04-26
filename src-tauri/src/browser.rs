@@ -184,8 +184,12 @@ pub fn build_subdomain_url(project_name: &str) -> String {
     format!("http://opencode.{host_label}.localhost:8080/")
 }
 
-/// Probe `$PATH` for a given executable. Returns its absolute path on first
-/// match. Pure `$PATH` iteration so we don't shell out.
+// @tombstone superseded:host-chromium-on-demand
+// `which()` and `is_executable()` here used to drive the in-module
+// detection walker. Both responsibilities moved to
+// `crate::chromium_resolve::resolve`. Removed in 0.1.169.235; safe to
+// delete after 0.1.169.238.
+#[allow(dead_code)]
 fn which(name: &str) -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
     for dir in std::env::split_paths(&path) {
@@ -197,6 +201,7 @@ fn which(name: &str) -> Option<PathBuf> {
     None
 }
 
+#[allow(dead_code)]
 fn is_executable(path: &Path) -> bool {
     #[cfg(unix)]
     {
@@ -211,62 +216,26 @@ fn is_executable(path: &Path) -> bool {
     }
 }
 
-/// Detect the user's browser. Returns the first match in the preferred order.
+/// Detect the user's browser.
 ///
-/// @trace spec:opencode-web-session
-pub fn detect_browser() -> BrowserKind {
-    // 1. Safari — macOS only.
-    #[cfg(target_os = "macos")]
-    {
-        if Path::new("/Applications/Safari.app/Contents/MacOS/Safari").exists() {
-            return BrowserKind::Safari;
-        }
-    }
-
-    // 2. Chromium family — try binaries in preferred order.
-    // Canonical Linux/path names first, then macOS bundle paths.
-    let chromium_candidates: &[&str] = &[
-        "google-chrome",
-        "google-chrome-stable",
-        "chromium",
-        "chromium-browser",
-        "chrome",
-        "microsoft-edge",
-        "microsoft-edge-stable",
-        "msedge",
-    ];
-    for c in chromium_candidates {
-        if let Some(bin) = which(c) {
-            return BrowserKind::Chromium { bin };
-        }
-    }
-    #[cfg(target_os = "macos")]
-    {
-        for path in [
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-            "/Applications/Chromium.app/Contents/MacOS/Chromium",
-            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-        ] {
-            if Path::new(path).exists() {
-                return BrowserKind::Chromium { bin: PathBuf::from(path) };
-            }
-        }
-    }
-
-    // 3. Firefox.
-    if let Some(bin) = which("firefox") {
-        return BrowserKind::Firefox { bin };
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let p = "/Applications/Firefox.app/Contents/MacOS/firefox";
-        if Path::new(p).exists() {
-            return BrowserKind::Firefox { bin: PathBuf::from(p) };
-        }
-    }
-
-    // 4. Fallback — OS default launcher.
-    BrowserKind::OsDefault
+/// Per the `host-chromium-on-demand` spec's `Detection priority — userspace
+/// first, system fallback, hard error` requirement, this delegates to
+/// [`crate::chromium_resolve::resolve`]. The userspace install at
+/// `<XDG_DATA_HOME>/tillandsias/chromium/current/...` is preferred over
+/// any system browser; a system PATH binary (chromium / google-chrome /
+/// microsoft-edge) is the graceful-degradation fallback; nothing else
+/// (Safari, Firefox, OsDefault) is ever returned by this path.
+///
+/// Returns `Err` when nothing resolves. The previous `BrowserKind::Safari`,
+/// `BrowserKind::Firefox`, and `BrowserKind::OsDefault` paths are retained
+/// in the type only so the tombstone window covers code that already
+/// matched on them; no caller of `detect_browser` will receive those
+/// variants any more.
+///
+/// @trace spec:host-chromium-on-demand, spec:opencode-web-session
+pub fn detect_browser() -> Result<BrowserKind, String> {
+    let resolved = crate::chromium_resolve::resolve()?;
+    Ok(BrowserKind::Chromium { bin: resolved.bin })
 }
 
 /// Allocate a temporary per-session profile / user-data directory under
@@ -308,13 +277,18 @@ fn session_profile_dir(project_name: &str) -> PathBuf {
 /// the port allocation that backs the legacy `-p 127.0.0.1:<port>:4096`
 /// publish; it is not embedded in the URL itself.
 ///
-/// @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-session
+/// Browser resolution goes through [`detect_browser`], which delegates to
+/// [`crate::chromium_resolve::resolve`] (per the host-chromium-on-demand
+/// detection priority). On hard error this surfaces the spec's pinned
+/// "Chromium not installed..." message all the way out.
+///
+/// @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-session, spec:host-chromium-on-demand
 pub fn launch_for_project(project_name: &str, host_port: u16) -> Result<Child, String> {
     let _ = host_port; // see doc-comment: legacy publish stays for now, URL ignores it
     let url = build_subdomain_url(project_name);
-    let kind = detect_browser();
+    let kind = detect_browser()?;
     info!(
-        spec = "subdomain-routing-via-reverse-proxy",
+        spec = "subdomain-routing-via-reverse-proxy, host-chromium-on-demand",
         project = project_name,
         browser = kind.name(),
         url = %url,
@@ -322,6 +296,13 @@ pub fn launch_for_project(project_name: &str, host_port: u16) -> Result<Child, S
     );
 
     let child = match &kind {
+        // @tombstone superseded:host-chromium-on-demand
+        // BrowserKind::Safari is no longer produced by detect_browser
+        // (resolve() returns only Chromium-family or hard error). The
+        // arm is retained as unreachable so the tombstone window covers
+        // any caller still pattern-matching against it. Removed in
+        // 0.1.169.235; safe to delete after 0.1.169.238 (three-release
+        // cadence per project tombstone convention).
         BrowserKind::Safari => Command::new("open")
             .args(["-n", "-a", "Safari", &url])
             .spawn()
@@ -424,6 +405,151 @@ pub fn launch_for_project(project_name: &str, host_port: u16) -> Result<Child, S
         }
     };
     Ok(child)
+}
+
+/// Launch the native browser for a project AND issue a fresh per-window
+/// session cookie via the OtpStore + CDP injection.
+///
+/// Strategy:
+///
+/// 1. Mint a 256-bit cookie value and push it into `crate::otp::global()`.
+/// 2. Detect the browser. If it's a Chromium-family binary, launch with
+///    `--remote-debugging-port=<random-loopback>` and `--app=about:blank`,
+///    then inject the cookie via CDP `Network.setCookies` BEFORE handing
+///    over to `Page.navigate(<project-url>)`.
+/// 3. For Safari / Firefox / OS-default fallback we omit the CDP step —
+///    those browsers either don't support CDP cookie injection without
+///    an extension (Safari) or require a different debugging-protocol
+///    (Firefox: WebDriver BiDi). The cookie is still in the OtpStore so
+///    once the browser navigates AND a future companion change wires
+///    Safari/Firefox cookie injection, the same flow lands.
+///
+/// **Audit log invariant**: the cookie value is logged ONLY as
+/// `value = "[redacted-32B]"`. Neither the bytes, their base64 form, nor
+/// any prefix/suffix/hash appear in any log entry.
+///
+/// @trace spec:opencode-web-session-otp, spec:subdomain-routing-via-reverse-proxy
+pub async fn launch_for_project_with_session(
+    project_name: &str,
+    host_port: u16,
+) -> Result<Child, String> {
+    let host_label = sanitize_hostname_label(project_name);
+    let project_label = format!("opencode.{host_label}.localhost");
+    let url = build_subdomain_url(project_name);
+
+    // Issue the per-window session BEFORE launching the browser.
+    // @trace spec:opencode-web-session-otp
+    let cookie_token = crate::otp::issue_session(&project_label);
+    let cookie_string = crate::otp::format_cookie_value(&cookie_token);
+    info!(
+        accountability = true,
+        category = "secrets",
+        spec = "opencode-web-session-otp, secrets-management",
+        cheatsheet = "web/cookie-auth-best-practices.md",
+        operation = "issue",
+        project = %project_label,
+        value = "[redacted-32B]",
+        "Per-window session cookie minted for native-browser launch"
+    );
+
+    // @trace spec:host-chromium-on-demand
+    // detect_browser now returns Result; surface the hard-error all the
+    // way out to the caller so the tray's accountability chip can show
+    // the spec-pinned "Chromium not installed..." message.
+    let kind = detect_browser()?;
+    info!(
+        spec = "opencode-web-session-otp, subdomain-routing-via-reverse-proxy, host-chromium-on-demand",
+        project = project_name,
+        browser = kind.name(),
+        url = %url,
+        "launching native browser with per-window session cookie"
+    );
+
+    // Pick a random high loopback port for CDP. The OS will reject the
+    // attempt with a visible error if the port collides.
+    let cdp_port = pick_random_high_port();
+
+    let child = match &kind {
+        BrowserKind::Chromium { bin } => {
+            let profile = session_profile_dir(project_name);
+            let mut cmd = Command::new(bin);
+            cmd.arg("--app=about:blank")
+                .arg(format!("--user-data-dir={}", profile.display()))
+                .arg(format!("--remote-debugging-port={cdp_port}"))
+                .arg("--remote-debugging-address=127.0.0.1")
+                .arg("--no-first-run")
+                .arg("--no-default-browser-check")
+                .arg("--disable-features=DesktopPWAsWithoutExtensions")
+                .arg("--force-dark-mode")
+                .arg("--enable-features=WebContentsForceDark");
+            #[cfg(all(unix, not(target_os = "macos")))]
+            {
+                cmd.env("GTK_THEME", "Adwaita:dark");
+            }
+            cmd.spawn().map_err(|e| format!("spawn {}: {e}", bin.display()))?
+        }
+        // Safari / Firefox / OsDefault: no CDP path available without
+        // additional infrastructure. Fall back to the existing launch
+        // (cookie is still in the OtpStore but won't be presented until
+        // host-chromium-on-demand lands the per-browser injection paths).
+        _ => {
+            warn!(
+                spec = "opencode-web-session-otp",
+                browser = kind.name(),
+                "Non-Chromium browser detected — CDP cookie injection skipped"
+            );
+            return launch_for_project(project_name, host_port);
+        }
+    };
+
+    // Wait for CDP and inject the cookie BEFORE the browser navigates.
+    // The browser opens about:blank first; we have a small window to
+    // attach + setCookies + navigate without showing 401-redirected
+    // content. The cookie String is moved into the call and zeroized
+    // inside `attach_and_set_cookie`.
+    if crate::cdp::wait_for_cdp_ready(cdp_port).await {
+        match crate::cdp::attach_and_set_cookie(cdp_port, &url, cookie_string).await {
+            crate::cdp::CdpOutcome::Ok => {
+                debug!(
+                    spec = "opencode-web-session-otp",
+                    cdp_port,
+                    "Cookie injected via CDP; browser proceeding to navigate"
+                );
+            }
+            other => {
+                warn!(
+                    spec = "opencode-web-session-otp",
+                    cdp_port,
+                    outcome = ?other,
+                    "CDP cookie injection did not complete cleanly — browser may receive 401"
+                );
+            }
+        }
+    } else {
+        warn!(
+            spec = "opencode-web-session-otp",
+            cdp_port,
+            "CDP endpoint did not become ready; cookie not injected"
+        );
+        // Drop the cookie string explicitly so it doesn't linger.
+        drop(cookie_string);
+    }
+
+    Ok(child)
+}
+
+/// Pick a pseudo-random high port in the dynamic/private range
+/// (49152-65535). We accept the rare collision because the OS will reject
+/// the bind with an immediately-visible error and the user can retry.
+fn pick_random_high_port() -> u16 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let seed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0)
+        ^ (std::process::id() as u64);
+    let span: u32 = 65_535 - 49_152;
+    49_152 + ((seed % span as u64) as u16)
 }
 
 /// Poll `GET http://127.0.0.1:<host_port>/` until the server responds with
