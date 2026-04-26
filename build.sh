@@ -235,6 +235,7 @@ mkdir -p /build
 # single quote is needed (which would close the outer -c string).
 ( cd /src && tar \
     --exclude=./target \
+    --exclude=./target-musl \
     --exclude=./.git \
     --exclude=./.nix-output \
     --exclude=./.claude \
