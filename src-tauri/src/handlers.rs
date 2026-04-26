@@ -1032,8 +1032,17 @@ pub(crate) async fn regenerate_router_caddyfile(state: &TrayState) -> Result<(),
                 continue;
             }
         };
+        // @trace spec:subdomain-naming-flip
+        // @cheatsheet runtime/networking.md
+        // Service-leftmost ordering — see browser::build_subdomain_url for
+        // the rationale. Future per-project services (web/dashboard/www)
+        // slot under the same `*.<project>.localhost` namespace.
+        //
+        // @tombstone superseded:subdomain-naming-flip — kept for three
+        // releases (until 0.1.169.231). Prior shape was
+        // `"{project}.opencode.localhost:80 ..."` (project-leftmost).
         snippet.push_str(&format!(
-            "{project}.opencode.localhost:80 {{\n    reverse_proxy tillandsias-{project}-forge:4096\n}}\n",
+            "opencode.{project}.localhost:80 {{\n    reverse_proxy tillandsias-{project}-forge:4096\n}}\n",
             project = project
         ));
         route_count += 1;
