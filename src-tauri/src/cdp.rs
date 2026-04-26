@@ -1,26 +1,33 @@
-//! Minimal Chrome DevTools Protocol client for pre-navigate cookie injection.
+//! Chrome DevTools Protocol client for pre-navigate cookie injection.
 //!
 //! The tray launches the user's Chromium-family browser with
 //! `--remote-debugging-port=<random-loopback-port>` and `--app=about:blank`,
 //! waits for the CDP HTTP discovery endpoint to respond, then:
 //!
-//! 1. Discovers the first browser target via `GET /json` on the CDP port.
+//! 1. Discovers the about:blank page target via `GET /json` on the CDP port.
 //! 2. Opens a WebSocket to the target's `webSocketDebuggerUrl`.
-//! 3. Sends `Network.setCookies` with the canonical attribute set
+//! 3. Sends `Network.enable` to gate the Network domain.
+//! 4. Sends `Network.setCookies` with the canonical attribute set
 //!    (Path=/, HttpOnly, SameSite=Strict, expires=now+86400, secure=false).
-//! 4. Sends `Page.navigate` to the project URL.
+//! 5. Sends `Page.navigate` to the project URL.
 //!
-//! The cookie value is wiped from memory after step 3 so a postmortem
-//! process scrape sees zeroes instead of the token bytes.
+//! The cookie value is wiped from memory after `Network.setCookies` succeeds
+//! so a postmortem process scrape sees zeroes instead of the token bytes.
+//!
+//! Plain `ws://127.0.0.1:<port>/devtools/page/<TARGET_ID>` only — no TLS,
+//! no proxy, loopback by definition. tokio-tungstenite is configured
+//! without TLS features for this reason.
 //!
 //! @trace spec:opencode-web-session-otp
 //! @cheatsheet web/cookie-auth-best-practices.md
 
 use std::time::Duration;
 
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
+use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, info, warn};
 use zeroize::Zeroize;
 
@@ -30,13 +37,14 @@ use crate::otp::{COOKIE_LEN, COOKIE_MAX_AGE_SECS, COOKIE_NAME, COOKIE_PATH};
 /// spawning the browser.
 pub const CDP_READY_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Per-CDP-call deadline. Generous because a freshly-launched Chromium can
-/// take a moment to load the about:blank target.
-pub const CDP_CALL_TIMEOUT: Duration = Duration::from_secs(3);
+/// Per-CDP-call deadline. Tillandsias-wide fast-fail idiom — if the browser
+/// is not responding to JSON-RPC inside 2s the user is better served by an
+/// unauthenticated page than a hanging tray.
+pub const CDP_CALL_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)] // url + webSocketDebuggerUrl consumed when WebSocket attach lands.
 struct CdpTarget {
+    #[allow(dead_code)] // id is the protocol-level TARGET_ID; not consumed here.
     id: String,
     #[serde(rename = "type")]
     target_type: String,
@@ -47,7 +55,6 @@ struct CdpTarget {
 
 /// Cookie payload as `Network.setCookies` expects it. Field names mirror
 /// the CDP schema exactly.
-#[allow(dead_code)] // constructed by `build_cookie_param` (test + future direct caller).
 #[derive(Debug, Serialize)]
 struct CdpCookieParam<'a> {
     name: &'a str,
@@ -62,9 +69,33 @@ struct CdpCookieParam<'a> {
     expires: i64,
 }
 
+/// JSON-RPC request envelope. CDP uses a strict subset of JSON-RPC 2.0:
+/// `{ "id": <int>, "method": "<Domain.method>", "params": {...} }`.
+#[derive(Debug, Serialize)]
+struct CdpRequest<'a> {
+    id: u64,
+    method: &'a str,
+    params: serde_json::Value,
+}
+
+/// JSON-RPC response envelope. CDP returns either `result` on success or
+/// `error: { code, message }` on failure.
+#[derive(Debug, Deserialize)]
+struct CdpResponse {
+    id: Option<u64>,
+    #[serde(default)]
+    error: Option<CdpError>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CdpError {
+    #[allow(dead_code)] // surfaced via Display formatting only.
+    code: i64,
+    message: String,
+}
+
 /// Result of [`attach_and_set_cookie`]. Mostly used for diagnostics; the
 /// caller usually discards it.
-#[allow(dead_code)] // SetCookieFailed/NavigateFailed wired when WebSocket attach lands.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CdpOutcome {
     Ok,
@@ -152,29 +183,93 @@ async fn http_get_loopback(port: u16, path: &str) -> Option<Vec<u8>> {
     Some(buf[body_start + 4..].to_vec())
 }
 
+/// Pick the page target the tray should attach to. Strategy:
+///
+/// 1. Prefer a `page` target whose `url` is exactly `about:blank` — this is
+///    the shell that `--app=about:blank` opened and is the intended attach
+///    surface.
+/// 2. Fall back to the first `page` target if no exact about:blank match
+///    (Chromium sometimes resolves `--app=` URLs through one redirect on
+///    first launch).
+fn select_page_target(targets: &[CdpTarget]) -> Option<&CdpTarget> {
+    targets
+        .iter()
+        .find(|t| t.target_type == "page" && t.url == "about:blank")
+        .or_else(|| targets.iter().find(|t| t.target_type == "page"))
+}
+
+/// Send a JSON-RPC request, then drain incoming WebSocket frames until a
+/// frame with the matching `id` arrives. Unrelated CDP events (frames
+/// without `id`) are dropped silently — they are async notifications from
+/// other domains we did not subscribe to.
+///
+/// Returns `Err` on timeout, IO error, or a CDP `error.message` field on
+/// the matching response.
+async fn cdp_call<S>(
+    ws: &mut tokio_tungstenite::WebSocketStream<S>,
+    id: u64,
+    method: &str,
+    params: serde_json::Value,
+) -> Result<(), String>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    let req = CdpRequest { id, method, params };
+    let frame = serde_json::to_string(&req).map_err(|e| format!("encode {method}: {e}"))?;
+    tokio::time::timeout(CDP_CALL_TIMEOUT, ws.send(Message::Text(frame.into())))
+        .await
+        .map_err(|_| format!("timeout sending {method}"))?
+        .map_err(|e| format!("send {method}: {e}"))?;
+
+    // Drain frames until we see our id (or timeout / error).
+    let deadline = tokio::time::Instant::now() + CDP_CALL_TIMEOUT;
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return Err(format!("timeout awaiting response to {method}"));
+        }
+        let next = tokio::time::timeout(remaining, ws.next()).await;
+        let msg = match next {
+            Ok(Some(Ok(m))) => m,
+            Ok(Some(Err(e))) => return Err(format!("ws error awaiting {method}: {e}")),
+            Ok(None) => return Err(format!("ws closed awaiting {method}")),
+            Err(_) => return Err(format!("timeout awaiting response to {method}")),
+        };
+        let text = match msg {
+            Message::Text(t) => t.to_string(),
+            Message::Binary(b) => match std::str::from_utf8(&b) {
+                Ok(s) => s.to_string(),
+                Err(_) => continue,
+            },
+            // CDP only emits text frames in normal operation; ignore pings/pongs/closes.
+            _ => continue,
+        };
+        // Parse minimally — we only care about id/error here.
+        let resp: CdpResponse = match serde_json::from_str(&text) {
+            Ok(r) => r,
+            Err(_) => continue, // malformed event — skip
+        };
+        if resp.id != Some(id) {
+            continue; // event or response to a different id — skip
+        }
+        if let Some(err) = resp.error {
+            return Err(err.message);
+        }
+        return Ok(());
+    }
+}
+
 /// Attach to the bundled / detected Chromium's CDP endpoint, set the session
 /// cookie, then navigate to `target_url`.
 ///
-/// The 32-byte `cookie_value` is wiped from `cookie_value` (passed by mut
-/// ref so the caller's local also clears) after the `Network.setCookies`
-/// response is observed.
+/// The 32-byte `cookie_value` is wiped after `Network.setCookies` is
+/// acknowledged — even on partial failure (the wipe runs in every branch
+/// before returning).
 ///
-/// Returns `CdpOutcome::Ok` on success. Any failure leaves the browser
-/// pointed at about:blank — the caller may choose to log + close, or fall
-/// back to a non-CDP launch path.
-///
-/// **Implementation note**: this is a minimal hand-rolled client. The
-/// dependency surface is `reqwest` (HTTP discovery) only; the WebSocket
-/// step is not yet wired because adding a WebSocket client (`tokio-tungstenite`)
-/// for a single producer is overkill for v1. Instead, we rely on Chromium's
-/// command-line cookie support: we write the cookie value to the URL as a
-/// `Set-Cookie`-issuing redirect handled by the project's router, so the
-/// browser's first request to the project URL sets the cookie naturally.
-///
-/// **Status**: this v1 is a stub returning `CdpOutcome::Other` so callers
-/// know to use the fallback (the cookie is registered with the OtpStore
-/// from `otp::issue_session`, but the browser does not yet present it).
-/// Full CDP wiring lands with the `host-chromium-on-demand` companion change.
+/// Returns `CdpOutcome::Ok` only when both `Network.setCookies` AND
+/// `Page.navigate` succeed. Any earlier failure leaves the browser pointed
+/// at about:blank — the caller may choose to log + close, or fall back to
+/// a non-CDP launch path.
 ///
 /// @trace spec:opencode-web-session-otp
 pub async fn attach_and_set_cookie(
@@ -182,12 +277,7 @@ pub async fn attach_and_set_cookie(
     target_url: &str,
     mut cookie_value: String,
 ) -> CdpOutcome {
-    let _ = cdp_port;
-    let _ = target_url;
-
-    // List the targets and ensure at least one is a "page" we could attach to.
-    // Discovery alone proves the CDP path is wired; the WebSocket attach lands
-    // with the host-chromium-on-demand follow-up.
+    // 1. Discover targets. /json returns an array of target descriptors.
     let body = match http_get_loopback(cdp_port, "/json").await {
         Some(b) => b,
         None => {
@@ -200,28 +290,8 @@ pub async fn attach_and_set_cookie(
             return CdpOutcome::NotReady;
         }
     };
-    match serde_json::from_slice::<Vec<CdpTarget>>(&body) {
-        Ok(targets) => {
-            let page_count = targets.iter().filter(|t| t.target_type == "page").count();
-            info!(
-                spec = "opencode-web-session-otp",
-                port = cdp_port,
-                targets = targets.len(),
-                pages = page_count,
-                "CDP discovery succeeded"
-            );
-            // Wipe the cookie value from the caller's heap before we
-            // return — this keeps the contract that the value does
-            // not outlive its single-use injection step.
-            cookie_value.zeroize();
-            // CDP wiring (Network.setCookies + Page.navigate over
-            // WebSocket) lands with host-chromium-on-demand. For now we
-            // treat presence of the discovery endpoint as success for
-            // the audit-log shape; the OTP is already in the store so
-            // the cookie merely needs to arrive on the first request
-            // (which the upcoming change handles).
-            CdpOutcome::Ok
-        }
+    let targets: Vec<CdpTarget> = match serde_json::from_slice(&body) {
+        Ok(t) => t,
         Err(e) => {
             warn!(
                 spec = "opencode-web-session-otp",
@@ -229,16 +299,109 @@ pub async fn attach_and_set_cookie(
                 "CDP /json deserialise failed"
             );
             cookie_value.zeroize();
-            CdpOutcome::Other(format!("CDP target list deserialise: {e}"))
+            return CdpOutcome::Other(format!("CDP target list deserialise: {e}"));
         }
+    };
+
+    let page = match select_page_target(&targets) {
+        Some(t) => t,
+        None => {
+            warn!(
+                spec = "opencode-web-session-otp",
+                port = cdp_port,
+                targets = targets.len(),
+                "CDP discovery returned no page target"
+            );
+            cookie_value.zeroize();
+            return CdpOutcome::Other("no page target available".to_string());
+        }
+    };
+    let ws_url = page.web_socket_debugger_url.clone();
+    info!(
+        spec = "opencode-web-session-otp",
+        port = cdp_port,
+        targets = targets.len(),
+        "CDP discovery succeeded — attaching WebSocket"
+    );
+
+    // 2. Open the WebSocket to the page target.
+    let ws_connect =
+        tokio::time::timeout(CDP_CALL_TIMEOUT, tokio_tungstenite::connect_async(&ws_url)).await;
+    let mut ws = match ws_connect {
+        Ok(Ok((stream, _resp))) => stream,
+        Ok(Err(e)) => {
+            warn!(
+                spec = "opencode-web-session-otp",
+                error = %e,
+                "CDP WebSocket connect failed"
+            );
+            cookie_value.zeroize();
+            return CdpOutcome::Other(format!("ws connect: {e}"));
+        }
+        Err(_) => {
+            warn!(
+                spec = "opencode-web-session-otp",
+                "CDP WebSocket connect timed out"
+            );
+            cookie_value.zeroize();
+            return CdpOutcome::Other("ws connect timeout".to_string());
+        }
+    };
+
+    // 3. Network.enable is required before Network.setCookies has effect.
+    if let Err(e) = cdp_call(&mut ws, 1, "Network.enable", serde_json::json!({})).await {
+        warn!(
+            spec = "opencode-web-session-otp",
+            error = %e,
+            "Network.enable failed"
+        );
+        cookie_value.zeroize();
+        return CdpOutcome::Other(format!("Network.enable: {e}"));
     }
+
+    // 4. Network.setCookies — the actual injection.
+    let expiry = cookie_expiry_unix_secs();
+    let cookie_param = build_cookie_param(&cookie_value, target_url, expiry);
+    let set_params = serde_json::json!({ "cookies": [cookie_param] });
+    let set_outcome = cdp_call(&mut ws, 2, "Network.setCookies", set_params).await;
+    // Wipe the cookie value AFTER setCookies completes (success or failure)
+    // — beyond this point the value has either landed in the browser or
+    // has been irrecoverably lost; either way we must not keep the bytes.
+    // @trace spec:opencode-web-session-otp, spec:secrets-management
+    cookie_value.zeroize();
+    if let Err(e) = set_outcome {
+        warn!(
+            spec = "opencode-web-session-otp",
+            error = %e,
+            "Network.setCookies failed"
+        );
+        return CdpOutcome::SetCookieFailed(e);
+    }
+
+    // 5. Page.navigate to the project URL.
+    let nav_params = serde_json::json!({ "url": target_url });
+    if let Err(e) = cdp_call(&mut ws, 3, "Page.navigate", nav_params).await {
+        warn!(
+            spec = "opencode-web-session-otp",
+            error = %e,
+            "Page.navigate failed"
+        );
+        return CdpOutcome::NavigateFailed(e);
+    }
+
+    // Best-effort close — we do not care if the close handshake fails.
+    let _ = ws.close(None).await;
+    debug!(
+        spec = "opencode-web-session-otp",
+        port = cdp_port,
+        "CDP cookie injection + navigate complete"
+    );
+    CdpOutcome::Ok
 }
 
-/// Build the CDP `Network.setCookies` parameter for a single cookie. Used
-/// by tests and any future direct WebSocket wiring.
+/// Build the CDP `Network.setCookies` parameter for a single cookie.
 ///
 /// @trace spec:opencode-web-session-otp
-#[allow(dead_code)]
 pub fn build_cookie_param(
     cookie_value: &str,
     target_url: &str,
@@ -261,7 +424,6 @@ pub fn build_cookie_param(
 /// `now + COOKIE_MAX_AGE_SECS`.
 ///
 /// @trace spec:opencode-web-session-otp
-#[allow(dead_code)]
 pub fn cookie_expiry_unix_secs() -> i64 {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -284,6 +446,9 @@ pub fn token_to_cookie_string(token: &[u8; COOKIE_LEN]) -> String {
 mod tests {
     use super::*;
     use crate::otp::generate_session_token;
+    use std::sync::Arc;
+    use tokio::net::TcpListener;
+    use tokio::sync::Mutex;
 
     #[test]
     fn build_cookie_param_has_canonical_attribute_set() {
@@ -323,6 +488,63 @@ mod tests {
         );
     }
 
+    #[test]
+    fn select_page_target_prefers_about_blank() {
+        let targets = vec![
+            CdpTarget {
+                id: "BG".into(),
+                target_type: "background_page".into(),
+                url: "chrome-extension://abc/".into(),
+                web_socket_debugger_url: "ws://x/1".into(),
+            },
+            CdpTarget {
+                id: "P1".into(),
+                target_type: "page".into(),
+                url: "https://example.com/".into(),
+                web_socket_debugger_url: "ws://x/2".into(),
+            },
+            CdpTarget {
+                id: "P2".into(),
+                target_type: "page".into(),
+                url: "about:blank".into(),
+                web_socket_debugger_url: "ws://x/3".into(),
+            },
+        ];
+        let pick = select_page_target(&targets).expect("page target");
+        assert_eq!(pick.id, "P2");
+    }
+
+    #[test]
+    fn select_page_target_falls_back_to_first_page() {
+        let targets = vec![
+            CdpTarget {
+                id: "BG".into(),
+                target_type: "background_page".into(),
+                url: "chrome-extension://abc/".into(),
+                web_socket_debugger_url: "ws://x/1".into(),
+            },
+            CdpTarget {
+                id: "P1".into(),
+                target_type: "page".into(),
+                url: "https://example.com/".into(),
+                web_socket_debugger_url: "ws://x/2".into(),
+            },
+        ];
+        let pick = select_page_target(&targets).expect("page target");
+        assert_eq!(pick.id, "P1");
+    }
+
+    #[test]
+    fn select_page_target_none_when_no_page() {
+        let targets = vec![CdpTarget {
+            id: "BG".into(),
+            target_type: "background_page".into(),
+            url: "chrome-extension://abc/".into(),
+            web_socket_debugger_url: "ws://x/1".into(),
+        }];
+        assert!(select_page_target(&targets).is_none());
+    }
+
     /// CDP discovery against a closed port returns NotReady (and does so
     /// quickly — no 5s hang).
     #[tokio::test]
@@ -351,6 +573,322 @@ mod tests {
         // every branch of `attach_and_set_cookie`. This test exists so
         // anyone who removes a wipe call gets a visible failure when the
         // log redaction tests below also fail.
-        // Sentinel — the bench is the existence of the tests above.
+    }
+
+    /// Captured JSON-RPC method calls observed by the mock CDP server.
+    /// The mock parses each text frame, records the `method` field, and
+    /// echoes back a success response with the same `id`.
+    #[derive(Default)]
+    struct MockCalls {
+        methods: Vec<String>,
+        cookies_payload: Option<serde_json::Value>,
+        navigate_url: Option<String>,
+    }
+
+    /// Spawn an in-process mock CDP server. Returns the bound port and
+    /// an Arc<Mutex<MockCalls>> the test can inspect after attach.
+    ///
+    /// Speaks the minimal subset:
+    /// - `GET /json/version`            → `200 OK` + tiny JSON body
+    /// - `GET /json`                    → `200 OK` + a single about:blank page target
+    /// - `WS  /devtools/page/<TARGET>`  → echoes `{id,result:{}}` for every JSON-RPC call
+    async fn spawn_mock_cdp() -> (u16, Arc<Mutex<MockCalls>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind mock");
+        let port = listener.local_addr().expect("local_addr").port();
+        let calls: Arc<Mutex<MockCalls>> = Arc::new(Mutex::new(MockCalls::default()));
+        let calls_clone = calls.clone();
+
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut sock, _)) = listener.accept().await else {
+                    return;
+                };
+                let calls = calls_clone.clone();
+                tokio::spawn(async move {
+                    // Peek the request line by reading until "\r\n\r\n".
+                    let mut buf = Vec::with_capacity(1024);
+                    let mut tmp = [0u8; 1024];
+                    loop {
+                        match tokio::time::timeout(
+                            Duration::from_millis(500),
+                            sock.read(&mut tmp),
+                        )
+                        .await
+                        {
+                            Ok(Ok(n)) if n > 0 => {
+                                buf.extend_from_slice(&tmp[..n]);
+                                if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                                    break;
+                                }
+                            }
+                            _ => return,
+                        }
+                    }
+                    let head = String::from_utf8_lossy(&buf).to_string();
+                    let first_line = head.lines().next().unwrap_or("").to_string();
+                    if first_line.starts_with("GET /json/version") {
+                        let body = b"{\"Browser\":\"mock\"}";
+                        let resp = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                            body.len()
+                        );
+                        let _ = sock.write_all(resp.as_bytes()).await;
+                        let _ = sock.write_all(body).await;
+                        return;
+                    }
+                    if first_line.starts_with("GET /json ")
+                        || first_line.starts_with("GET /json HTTP")
+                    {
+                        let local = sock.local_addr().expect("local_addr");
+                        let ws_url = format!("ws://{}/devtools/page/MOCKTARGET", local);
+                        let body = serde_json::json!([
+                            {
+                                "id": "MOCKTARGET",
+                                "type": "page",
+                                "url": "about:blank",
+                                "webSocketDebuggerUrl": ws_url,
+                            }
+                        ])
+                        .to_string();
+                        let resp = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                            body.len()
+                        );
+                        let _ = sock.write_all(resp.as_bytes()).await;
+                        let _ = sock.write_all(body.as_bytes()).await;
+                        return;
+                    }
+                    if first_line.starts_with("GET /devtools/page/") {
+                        // Hand off to tungstenite's accept side. The tungstenite
+                        // server-accept needs an unparsed stream — we already
+                        // consumed the request, so re-feed the buffered bytes by
+                        // serving the WebSocket handshake by hand. Easier: ask
+                        // tungstenite to accept on a wrapper that re-reads the
+                        // bytes we already consumed.
+                        //
+                        // Simpler approach: we already read the full HTTP head
+                        // (no body). Build the Sec-WebSocket-Accept manually
+                        // and respond, then run the framing loop.
+                        let key = head
+                            .lines()
+                            .find_map(|l| l.strip_prefix("Sec-WebSocket-Key:"))
+                            .map(|s| s.trim().to_string());
+                        let Some(key) = key else { return };
+                        let accept = ws_accept_key(&key);
+                        let resp = format!(
+                            "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n",
+                            accept
+                        );
+                        if sock.write_all(resp.as_bytes()).await.is_err() {
+                            return;
+                        }
+                        // Now run a tungstenite framing loop over the raw socket.
+                        let ws = tokio_tungstenite::WebSocketStream::from_raw_socket(
+                            sock,
+                            tokio_tungstenite::tungstenite::protocol::Role::Server,
+                            None,
+                        )
+                        .await;
+                        let mut ws = ws;
+                        while let Some(msg) = ws.next().await {
+                            let Ok(msg) = msg else { return };
+                            let text = match msg {
+                                Message::Text(t) => t.to_string(),
+                                Message::Close(_) => return,
+                                _ => continue,
+                            };
+                            // Parse {id, method, params}; record + echo result.
+                            let v: serde_json::Value = match serde_json::from_str(&text) {
+                                Ok(v) => v,
+                                Err(_) => continue,
+                            };
+                            let id = v.get("id").and_then(|x| x.as_u64()).unwrap_or(0);
+                            let method =
+                                v.get("method").and_then(|x| x.as_str()).unwrap_or("").to_string();
+                            {
+                                let mut g = calls.lock().await;
+                                g.methods.push(method.clone());
+                                if method == "Network.setCookies" {
+                                    g.cookies_payload = v.get("params").cloned();
+                                } else if method == "Page.navigate" {
+                                    g.navigate_url = v
+                                        .get("params")
+                                        .and_then(|p| p.get("url"))
+                                        .and_then(|u| u.as_str())
+                                        .map(String::from);
+                                }
+                            }
+                            let resp = serde_json::json!({"id": id, "result": {}}).to_string();
+                            if ws.send(Message::Text(resp.into())).await.is_err() {
+                                return;
+                            }
+                        }
+                    }
+                });
+            }
+        });
+
+        (port, calls)
+    }
+
+    /// RFC 6455 §1.3 — Sec-WebSocket-Accept = base64(SHA-1(key + GUID)).
+    fn ws_accept_key(key: &str) -> String {
+        let mut hasher = Sha1::new();
+        hasher.update(key.as_bytes());
+        hasher.update(b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+        base64_encode(&hasher.finalize())
+    }
+
+    /// Inline minimal SHA-1 implementation for the test mock only. Not
+    /// security-critical — the key it hashes is a public RFC 6455 challenge.
+    /// Sourced from the well-known SHA-1 reference (RFC 3174 §6.2). Kept in
+    /// the test module to avoid pulling sha-1 as a production dependency.
+    struct Sha1 {
+        state: [u32; 5],
+        buf: Vec<u8>,
+        len: u64,
+    }
+    impl Sha1 {
+        fn new() -> Self {
+            Self {
+                state: [0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0],
+                buf: Vec::with_capacity(64),
+                len: 0,
+            }
+        }
+        fn update(&mut self, data: &[u8]) {
+            self.len += data.len() as u64;
+            self.buf.extend_from_slice(data);
+            while self.buf.len() >= 64 {
+                let block: [u8; 64] = self.buf[..64].try_into().unwrap();
+                self.compress(&block);
+                self.buf.drain(..64);
+            }
+        }
+        fn finalize(mut self) -> [u8; 20] {
+            let bit_len = self.len * 8;
+            self.buf.push(0x80);
+            while self.buf.len() % 64 != 56 {
+                self.buf.push(0);
+            }
+            self.buf.extend_from_slice(&bit_len.to_be_bytes());
+            let buf = std::mem::take(&mut self.buf);
+            for chunk in buf.chunks(64) {
+                let block: [u8; 64] = chunk.try_into().unwrap();
+                self.compress(&block);
+            }
+            let mut out = [0u8; 20];
+            for (i, w) in self.state.iter().enumerate() {
+                out[i * 4..i * 4 + 4].copy_from_slice(&w.to_be_bytes());
+            }
+            out
+        }
+        fn compress(&mut self, block: &[u8; 64]) {
+            let mut w = [0u32; 80];
+            for i in 0..16 {
+                w[i] = u32::from_be_bytes(block[i * 4..i * 4 + 4].try_into().unwrap());
+            }
+            for i in 16..80 {
+                w[i] = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]).rotate_left(1);
+            }
+            let [mut a, mut b, mut c, mut d, mut e] = self.state;
+            for (i, &wi) in w.iter().enumerate() {
+                let (f, k) = match i {
+                    0..=19 => ((b & c) | ((!b) & d), 0x5A827999),
+                    20..=39 => (b ^ c ^ d, 0x6ED9EBA1),
+                    40..=59 => ((b & c) | (b & d) | (c & d), 0x8F1BBCDC),
+                    _ => (b ^ c ^ d, 0xCA62C1D6),
+                };
+                let t = a
+                    .rotate_left(5)
+                    .wrapping_add(f)
+                    .wrapping_add(e)
+                    .wrapping_add(k)
+                    .wrapping_add(wi);
+                e = d;
+                d = c;
+                c = b.rotate_left(30);
+                b = a;
+                a = t;
+            }
+            self.state[0] = self.state[0].wrapping_add(a);
+            self.state[1] = self.state[1].wrapping_add(b);
+            self.state[2] = self.state[2].wrapping_add(c);
+            self.state[3] = self.state[3].wrapping_add(d);
+            self.state[4] = self.state[4].wrapping_add(e);
+        }
+    }
+
+    /// Standard base64 encode (RFC 4648 §4) for the WS handshake response.
+    fn base64_encode(bytes: &[u8]) -> String {
+        const ALPHA: &[u8; 64] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::with_capacity(((bytes.len() + 2) / 3) * 4);
+        let mut i = 0;
+        while i + 3 <= bytes.len() {
+            let n = ((bytes[i] as u32) << 16) | ((bytes[i + 1] as u32) << 8) | bytes[i + 2] as u32;
+            out.push(ALPHA[((n >> 18) & 0x3F) as usize] as char);
+            out.push(ALPHA[((n >> 12) & 0x3F) as usize] as char);
+            out.push(ALPHA[((n >> 6) & 0x3F) as usize] as char);
+            out.push(ALPHA[(n & 0x3F) as usize] as char);
+            i += 3;
+        }
+        let rem = bytes.len() - i;
+        if rem == 1 {
+            let n = (bytes[i] as u32) << 16;
+            out.push(ALPHA[((n >> 18) & 0x3F) as usize] as char);
+            out.push(ALPHA[((n >> 12) & 0x3F) as usize] as char);
+            out.push('=');
+            out.push('=');
+        } else if rem == 2 {
+            let n = ((bytes[i] as u32) << 16) | ((bytes[i + 1] as u32) << 8);
+            out.push(ALPHA[((n >> 18) & 0x3F) as usize] as char);
+            out.push(ALPHA[((n >> 12) & 0x3F) as usize] as char);
+            out.push(ALPHA[((n >> 6) & 0x3F) as usize] as char);
+            out.push('=');
+        }
+        out
+    }
+
+    /// End-to-end happy path against the in-process mock: discover targets,
+    /// open the WS, run Network.enable / Network.setCookies / Page.navigate,
+    /// observe each method was called and the cookie+url params were as
+    /// expected.
+    /// @trace spec:opencode-web-session-otp
+    #[tokio::test]
+    async fn attach_against_mock_cdp_completes_three_step_handshake() {
+        let (port, calls) = spawn_mock_cdp().await;
+        // Mock listens immediately so wait_for_cdp_ready resolves quickly.
+        assert!(wait_for_cdp_ready(port).await);
+        let outcome = attach_and_set_cookie(
+            port,
+            "http://opencode.demo.localhost:8080/",
+            "test-cookie-value-43-chars-long-not-secret-x".to_string(),
+        )
+        .await;
+        assert_eq!(outcome, CdpOutcome::Ok, "happy path should succeed");
+        let g = calls.lock().await;
+        assert_eq!(
+            g.methods,
+            vec![
+                "Network.enable".to_string(),
+                "Network.setCookies".to_string(),
+                "Page.navigate".to_string(),
+            ],
+            "method sequence drifted: {:?}",
+            g.methods
+        );
+        let nav = g.navigate_url.as_deref().expect("navigate url recorded");
+        assert_eq!(nav, "http://opencode.demo.localhost:8080/");
+        let cookies = g.cookies_payload.as_ref().expect("setCookies payload");
+        let arr = cookies["cookies"].as_array().expect("cookies array");
+        assert_eq!(arr.len(), 1);
+        let c = &arr[0];
+        assert_eq!(c["name"], "tillandsias_session");
+        assert_eq!(c["path"], "/");
+        assert_eq!(c["httpOnly"], true);
+        assert_eq!(c["secure"], false);
+        assert_eq!(c["sameSite"], "Strict");
+        assert_eq!(c["url"], "http://opencode.demo.localhost:8080/");
     }
 }
