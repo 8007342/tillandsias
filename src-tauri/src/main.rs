@@ -297,13 +297,20 @@ fn main() {
 
                         // Blooming → Mature: any menu interaction acknowledges
                         // the "something new" state and transitions to idle.
-                        // @trace spec:tray-icon-lifecycle
-                        {
-                            let mut s = state_for_menu.lock().unwrap();
+                        // @trace spec:tray-icon-lifecycle, spec:tray-progress-and-icon-states
+                        //
+                        // try_lock instead of lock — the menu event handler
+                        // must NEVER block on the state mutex. If a build
+                        // progress event is mid-write to state, the Bloom→
+                        // Mature transition is fine to skip; we'll catch it
+                        // on the next menu interaction. What we cannot do is
+                        // block here, because that would make Quit (handled
+                        // below) feel unresponsive during builds.
+                        if let Ok(mut s) = state_for_menu.try_lock() {
                             if s.tray_icon_state == TrayIconState::Blooming {
                                 s.tray_icon_state = TrayIconState::Mature;
                                 if let Some(tray_lock) = TRAY_ICON.get()
-                                    && let Ok(tray) = tray_lock.lock()
+                                    && let Ok(tray) = tray_lock.try_lock()
                                     && let Ok(icon) = tauri::image::Image::from_bytes(
                                         icons::tray_icon_png(TrayIconState::Mature),
                                     )
@@ -313,11 +320,51 @@ fn main() {
                             }
                         }
 
-                        // @trace spec:app-lifecycle
+                        // @trace spec:app-lifecycle, spec:tray-progress-and-icon-states
                         // Quit is dispatched through the menu channel so the event loop
                         // owns the sole shutdown_all() invocation.
+                        //
+                        // CRITICAL UX: turn the tray icon to withered (Dried)
+                        // BEFORE enqueueing the Quit command, so the user gets
+                        // instant visual feedback that the click registered. The
+                        // event loop processes Quit asynchronously and
+                        // shutdown_all can take 30+ seconds during in-flight
+                        // builds — without this immediate icon swap the user
+                        // sees no acknowledgement and clicks Quit again,
+                        // generating duplicate events.
+                        //
+                        // We use try_lock on the state mutex (NOT lock) so that
+                        // even if some other task is mid-write to the state, the
+                        // user's Quit click still registers — the icon update is
+                        // best-effort. The Quit ENQUEUE itself uses
+                        // blocking_send which is unbounded against a tokio mpsc
+                        // — it won't deadlock.
+                        //
+                        // @cheatsheet runtime/forge-container.md
                         if id == tray_menu::ids::QUIT {
-                            info!("Quit requested");
+                            info!(
+                                accountability = true,
+                                category = "app-lifecycle",
+                                spec = "app-lifecycle, tray-progress-and-icon-states",
+                                "Quit requested — flipping icon to withered immediately"
+                            );
+
+                            // Best-effort: try to grab the state mutex briefly
+                            // and the tray-icon mutex briefly. If either is held
+                            // by a slow writer, skip the icon update — the Quit
+                            // dispatch is what matters.
+                            if let Ok(mut s) = state_for_menu.try_lock() {
+                                s.tray_icon_state = TrayIconState::Dried;
+                            }
+                            if let Some(tray_lock) = TRAY_ICON.get()
+                                && let Ok(tray) = tray_lock.try_lock()
+                                && let Ok(icon) = tauri::image::Image::from_bytes(
+                                    icons::tray_icon_png(TrayIconState::Dried),
+                                )
+                            {
+                                let _ = tray.set_icon(Some(icon));
+                            }
+
                             if let Err(e) = menu_tx.blocking_send(MenuCommand::Quit) {
                                 warn!(error = %e, "menu channel closed — falling back to direct exit");
                                 singleton::release();

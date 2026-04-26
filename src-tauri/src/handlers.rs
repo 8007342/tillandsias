@@ -908,8 +908,15 @@ pub(crate) async fn ensure_router_running(
     // which silently failed under rootless podman, producing the
     // ERR_CONNECTION_REFUSED reported by the user against
     // `<project>.opencode.localhost`.
+    // @trace spec:fix-router-loopback-port
+    // Both host AND container ports are 8080 — internal Caddy listener
+    // moved to :8080 (was :80) so binding doesn't need CAP_NET_BIND_SERVICE
+    // under --cap-drop=ALL. Caddy v2 image's `cap_net_bind_service=ep`
+    // file capability also conflicts with --security-opt=no-new-privileges
+    // (kernel rejects exec); the router image now strips that file cap
+    // (see images/router/Containerfile).
     run_args.insert(run_args.len() - 1, "-p".to_string());
-    run_args.insert(run_args.len() - 1, "127.0.0.1:8080:80".to_string());
+    run_args.insert(run_args.len() - 1, "127.0.0.1:8080:8080".to_string());
 
     match client.run_container(&run_args).await {
         Ok(container_id) => {
@@ -1041,8 +1048,22 @@ pub(crate) async fn regenerate_router_caddyfile(state: &TrayState) -> Result<(),
         // @tombstone superseded:subdomain-naming-flip — kept for three
         // releases (until 0.1.169.231). Prior shape was
         // `"{project}.opencode.localhost:80 ..."` (project-leftmost).
+        // @trace spec:subdomain-naming-flip, spec:fix-router-loopback-port
+        // @cheatsheet runtime/networking.md
+        // Internal Caddy listener moved from :80 to :8080 to avoid
+        // CAP_NET_BIND_SERVICE requirement under --cap-drop=ALL. Host
+        // publish stays 127.0.0.1:8080:8080 (was :8080:80).
+        //
+        // Explicit `http://` scheme is REQUIRED: Caddy treats `*.localhost`
+        // site addresses as TLS-eligible by default (RFC 6761 local-dev
+        // convention — Caddy auto-issues a localhost cert via its built-in
+        // CA). Even with `auto_https off` in the global block, the listener
+        // ends up with an empty `tls_connection_policies: [{}]`, causing
+        // plain HTTP requests to be rejected with HTTP/1.0 400 "Client
+        // sent an HTTP request to an HTTPS server." The `http://` prefix
+        // opts out of this implicit TLS expectation.
         snippet.push_str(&format!(
-            "opencode.{project}.localhost:80 {{\n    reverse_proxy tillandsias-{project}-forge:4096\n}}\n",
+            "http://opencode.{project}.localhost:8080 {{\n    reverse_proxy tillandsias-{project}-forge:4096\n}}\n",
             project = project
         ));
         route_count += 1;

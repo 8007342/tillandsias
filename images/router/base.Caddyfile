@@ -1,4 +1,4 @@
-# @trace spec:subdomain-routing-via-reverse-proxy
+# @trace spec:subdomain-routing-via-reverse-proxy, spec:fix-router-loopback-port
 # Tillandsias router — base configuration.
 #
 # This is the static portion of the Caddy config baked into the image. The
@@ -8,8 +8,8 @@
 # Trust policy:
 #   - The container only has two interfaces: enclave network (10.89.0.0/24
 #     on rootless podman by default) and the loopback port-mapping from
-#     the host (-p 127.0.0.1:80:80).
-#   - The Caddy listener at :80 sees source IPs from those two paths only.
+#     the host (-p 127.0.0.1:8080:8080).
+#   - The Caddy listener at :8080 sees source IPs from those two paths only.
 #   - The `@trusted` matcher allowlists loopback + RFC 1918 private blocks
 #     as defence-in-depth in case the container ever ends up on a different
 #     network.
@@ -33,7 +33,7 @@
 # anything that falls through here is either an unknown
 # <project>.<service> combination or a bogus Host header from a source
 # that shouldn't be talking to us.
-:80 {
+:8080 {
     # @trace spec:subdomain-routing-via-reverse-proxy
     # Defence-in-depth source-IP allowlist. The container can ONLY be
     # reached from these networks anyway (enclave + host loopback port
