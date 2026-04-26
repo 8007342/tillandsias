@@ -20,6 +20,7 @@ use std::time::{Duration, Instant};
 
 use rand::TryRngCore;
 use rand::rngs::OsRng;
+use subtle::ConstantTimeEq;
 use tracing::{debug, info};
 use zeroize::Zeroize;
 
@@ -146,22 +147,38 @@ impl OtpStore {
             );
             return false;
         };
-        for entry in list.iter_mut() {
-            if &entry.value == cookie_value {
-                if matches!(entry.state, SessionState::Pending { .. }) {
-                    entry.state = SessionState::Active;
-                }
-                info!(
-                    accountability = true,
-                    category = "router",
-                    spec = "opencode-web-session-otp",
-                    operation = "validate-success",
-                    project = %project_label,
-                    value = "[redacted-32B]",
-                    "Cookie validation succeeded"
-                );
-                return true;
+        // Constant-time comparison: walk EVERY entry and OR a single bool,
+        // so the timing of validate(label, cookie) does not leak how far
+        // into the per-project list the matching entry sits, nor where the
+        // first differing byte appears within an entry. OWASP Session
+        // Management Cheat Sheet mandates this for any session-token
+        // comparison derived from user input.
+        // @trace spec:opencode-web-session-otp
+        // @cheatsheet web/cookie-auth-best-practices.md
+        let mut matched_idx: Option<usize> = None;
+        for (i, entry) in list.iter().enumerate() {
+            // ConstantTimeEq returns 1 (Choice) on equal, 0 on differ.
+            // Materialise to bool only outside the hot loop so the
+            // branch on `matched_idx.is_none()` doesn't add detectable
+            // skew (it runs once per call, not per entry).
+            if entry.value.ct_eq(cookie_value).into() && matched_idx.is_none() {
+                matched_idx = Some(i);
             }
+        }
+        if let Some(i) = matched_idx {
+            if matches!(list[i].state, SessionState::Pending { .. }) {
+                list[i].state = SessionState::Active;
+            }
+            info!(
+                accountability = true,
+                category = "router",
+                spec = "opencode-web-session-otp",
+                operation = "validate-success",
+                project = %project_label,
+                value = "[redacted-32B]",
+                "Cookie validation succeeded"
+            );
+            return true;
         }
         info!(
             accountability = true,

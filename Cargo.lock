@@ -5279,6 +5279,7 @@ name = "tillandsias-otp"
 version = "0.1.170"
 dependencies = [
  "rand 0.9.4",
+ "subtle",
  "tokio",
  "tracing",
  "zeroize",

@@ -159,8 +159,27 @@ async fn probe_cdp_http(port: u16) -> bool {
     }
 }
 
+/// Idle gap after the response headers parse before we declare the body
+/// complete (when no Content-Length is present). Chrome's DevTools HTTP
+/// server returns its response immediately but does NOT honour
+/// `Connection: close` — it keeps the socket open until its own ~10 s
+/// internal timeout. `read_to_end` would therefore wait forever (well, the
+/// 2 s [`CDP_CALL_TIMEOUT`]) and return nothing useful. We instead read in
+/// a loop with a short per-iteration deadline AND honour Content-Length
+/// when present.
+const HTTP_BODY_IDLE_GAP: Duration = Duration::from_millis(200);
+
 /// Issue a simple HTTP/1.1 GET against `127.0.0.1:<port><path>` and return
 /// the response body bytes. Plain TCP — no TLS. Returns `None` on any error.
+///
+/// Reading strategy: parse `Content-Length` from the header block and read
+/// exactly that many body bytes; if the header is absent (or zero) fall
+/// back to a [`HTTP_BODY_IDLE_GAP`] inactivity heuristic. The overall
+/// per-call deadline is [`CDP_CALL_TIMEOUT`].
+///
+/// The `Host` header includes the port — Chrome 111+ DNS-rebinding
+/// protection on the DevTools HTTP endpoints rejects mismatched Host
+/// headers; `127.0.0.1:<port>` is always accepted.
 async fn http_get_loopback(port: u16, path: &str) -> Option<Vec<u8>> {
     let mut stream = tokio::time::timeout(
         CDP_CALL_TIMEOUT,
@@ -170,17 +189,70 @@ async fn http_get_loopback(port: u16, path: &str) -> Option<Vec<u8>> {
     .ok()?
     .ok()?;
     let req = format!(
-        "GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
+        "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\nAccept: */*\r\n\r\n"
     );
     stream.write_all(req.as_bytes()).await.ok()?;
+
     let mut buf = Vec::with_capacity(8192);
-    let read = tokio::time::timeout(CDP_CALL_TIMEOUT, stream.read_to_end(&mut buf)).await;
-    if read.ok()?.is_err() {
-        return None;
+    let mut chunk = [0u8; 4096];
+    let deadline = tokio::time::Instant::now() + CDP_CALL_TIMEOUT;
+    let mut header_end: Option<usize> = None;
+    let mut content_length: Option<usize> = None;
+
+    loop {
+        let now = tokio::time::Instant::now();
+        if now >= deadline {
+            break;
+        }
+        // Once headers are parsed, fall back to a tight idle-gap deadline
+        // so we don't sit waiting on a socket the server won't close.
+        let per_read = if header_end.is_some() {
+            std::cmp::min(deadline - now, HTTP_BODY_IDLE_GAP)
+        } else {
+            deadline - now
+        };
+        let n = match tokio::time::timeout(per_read, stream.read(&mut chunk)).await {
+            Ok(Ok(0)) => break,        // EOF (rare on Chrome's server)
+            Ok(Ok(n)) => n,
+            Ok(Err(_)) => return None, // socket error
+            Err(_) => {
+                // Idle-gap elapsed. If we already have headers, treat as
+                // body-complete; if not, the server was slow — give up.
+                if header_end.is_some() {
+                    break;
+                }
+                return None;
+            }
+        };
+        buf.extend_from_slice(&chunk[..n]);
+
+        if header_end.is_none()
+            && let Some(idx) = buf.windows(4).position(|w| w == b"\r\n\r\n")
+        {
+            header_end = Some(idx + 4);
+            // Best-effort Content-Length parse (case-insensitive header name).
+            if let Ok(header_str) = std::str::from_utf8(&buf[..idx]) {
+                for line in header_str.lines() {
+                    let lower = line.to_ascii_lowercase();
+                    if let Some(rest) = lower.strip_prefix("content-length:")
+                        && let Ok(n) = rest.trim().parse::<usize>()
+                    {
+                        content_length = Some(n);
+                        break;
+                    }
+                }
+            }
+        }
+        // If we know Content-Length and have read it all, we're done.
+        if let (Some(he), Some(cl)) = (header_end, content_length)
+            && buf.len() >= he + cl
+        {
+            break;
+        }
     }
-    // Split off the headers — find "\r\n\r\n".
-    let body_start = buf.windows(4).position(|w| w == b"\r\n\r\n")?;
-    Some(buf[body_start + 4..].to_vec())
+
+    let body_start = header_end?;
+    Some(buf[body_start..].to_vec())
 }
 
 /// Pick the page target the tray should attach to. Strategy:
@@ -543,6 +615,54 @@ mod tests {
             web_socket_debugger_url: "ws://x/1".into(),
         }];
         assert!(select_page_target(&targets).is_none());
+    }
+
+    /// Regression: the original `http_get_loopback` used `read_to_end`,
+    /// which blocked until EOF. Chrome's DevTools HTTP server does NOT
+    /// honour `Connection: close` and keeps the socket open ~10 s after
+    /// responding — so every CDP discovery call timed out at 2 s and
+    /// returned `NotReady`, leaving every browser launch unauthenticated.
+    /// This test simulates the same pathology with a mock server that
+    /// holds the connection open after sending the response, and proves
+    /// `http_get_loopback` returns the body within the per-call deadline.
+    /// @trace spec:opencode-web-session-otp
+    #[tokio::test]
+    async fn http_get_loopback_returns_body_when_server_holds_connection_open() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let Ok((mut sock, _)) = listener.accept().await else { return };
+            // Drain the request.
+            let mut req_buf = [0u8; 1024];
+            let _ = tokio::time::timeout(
+                Duration::from_millis(200),
+                sock.read(&mut req_buf),
+            )
+            .await;
+            // Send the response with explicit Content-Length, then SIT on
+            // the socket — never close. Mirrors what Chrome's CDP HTTP
+            // server actually does.
+            let body = b"[]";
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+                body.len()
+            );
+            let _ = sock.write_all(resp.as_bytes()).await;
+            let _ = sock.write_all(body).await;
+            // Hold open for longer than CDP_CALL_TIMEOUT.
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        });
+        // Yield so the listener is accepting before the call.
+        tokio::task::yield_now().await;
+        let started = tokio::time::Instant::now();
+        let body = http_get_loopback(port, "/json").await.expect("body");
+        let elapsed = started.elapsed();
+        assert_eq!(body, b"[]");
+        assert!(
+            elapsed < Duration::from_millis(800),
+            "should return promptly via Content-Length, not wait for the connection to close; took {:?}",
+            elapsed
+        );
     }
 
     /// CDP discovery against a closed port returns NotReady (and does so

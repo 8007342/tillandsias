@@ -13,6 +13,11 @@ rand = "0.9"
 # In-place wipe of cookie bytes on Drop / after issuance.
 # @trace spec:secrets-management
 zeroize = "1"
+# Constant-time byte-array comparison for cookie validation. OWASP Session
+# Management Cheat Sheet mandates constant-time comparison so an attacker
+# cannot derive position-of-first-difference timing from validate calls.
+# @cheatsheet web/cookie-auth-best-practices.md
+subtle = "2"
 tracing = { workspace = true }
 # spawn_eviction_task drives the 1Hz pending-TTL sweep; needs rt + time.
 tokio = { workspace = true }
