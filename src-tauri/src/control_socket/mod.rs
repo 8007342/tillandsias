@@ -29,7 +29,7 @@ use bytes::{Bytes, BytesMut};
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::AsyncWriteExt;
 use tokio::net::{UnixListener, UnixStream};
-use tokio::sync::{Notify, Semaphore};
+use tokio::sync::{Notify, Semaphore, broadcast};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
@@ -46,6 +46,19 @@ pub const MAX_CONNECTIONS: usize = 32;
 /// Per-connection idle timeout. Connections with no inbound bytes for
 /// longer than this are closed.
 pub const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Broadcast channel capacity for server-initiated envelopes (e.g.
+/// `IssueWebSession` fan-out to subscribed router sidecars). A subscriber
+/// that falls more than this many messages behind the producer receives
+/// `broadcast::error::RecvError::Lagged` and the connection closes — the
+/// sidecar's reconnect loop handles resync.
+///
+/// 64 is enough headroom for tray-side issuance bursts (one envelope per
+/// "Attach Here" click; humans don't click 64 times per second) without
+/// pinning much memory if a subscriber stalls.
+///
+/// @trace spec:opencode-web-session-otp
+pub const BROADCAST_CAPACITY: usize = 64;
 
 /// Probe deadlines used by the stale-socket recovery path. A live tray
 /// instance MUST respond to a `Hello` within these bounds; otherwise the
@@ -80,6 +93,11 @@ pub struct Server {
     socket_path: PathBuf,
     shutdown: Arc<Notify>,
     accept_handle: Option<JoinHandle<()>>,
+    /// Server-initiated envelope publisher. Each accepted connection
+    /// subscribes; tray code calls `publisher().send(msg)` to fan out.
+    /// Today the only producer is the OTP issuance path (chunk 6 wires
+    /// the `otp::issue_session_and_publish` call site).
+    publisher: broadcast::Sender<ControlMessage>,
 }
 
 impl Server {
@@ -196,12 +214,27 @@ impl Server {
             "Control socket bound (mode 0600, parent 0700)"
         );
 
+        let (publisher, _) = broadcast::channel(BROADCAST_CAPACITY);
+
         Ok(Self {
             listener: Some(listener),
             socket_path,
             shutdown: Arc::new(Notify::new()),
             accept_handle: None,
+            publisher,
         })
+    }
+
+    /// Clone of the broadcast publisher. Tray code calls `.send(msg)` to
+    /// fan an envelope out to every connected subscriber. Returns
+    /// `SendError` when there are zero subscribers — callers should treat
+    /// that as "no router-sidecar connected yet" and proceed (the cookie
+    /// minted in tray-local state is still valid; the next sidecar to
+    /// connect will miss this issuance until it reconnects).
+    ///
+    /// @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
+    pub fn publisher(&self) -> broadcast::Sender<ControlMessage> {
+        self.publisher.clone()
     }
 
     /// Path of the bound socket node. Used to populate the bind-mount
@@ -243,8 +276,9 @@ impl Server {
         };
         let shutdown = self.shutdown.clone();
         let semaphore = Arc::new(Semaphore::new(MAX_CONNECTIONS));
+        let publisher = self.publisher.clone();
         let handle = tokio::spawn(async move {
-            run_accept_loop(listener, shutdown, semaphore).await;
+            run_accept_loop(listener, shutdown, semaphore, publisher).await;
         });
         self.accept_handle = Some(handle);
     }
@@ -407,6 +441,7 @@ async fn run_accept_loop(
     listener: UnixListener,
     shutdown: Arc<Notify>,
     semaphore: Arc<Semaphore>,
+    publisher: broadcast::Sender<ControlMessage>,
 ) {
     loop {
         let permit = match semaphore.clone().acquire_owned().await {
@@ -431,9 +466,10 @@ async fn run_accept_loop(
                 match accepted {
                     Ok((stream, _addr)) => {
                         let conn_shutdown = shutdown.clone();
+                        let broadcast_rx = publisher.subscribe();
                         tokio::spawn(async move {
                             let _permit = permit; // released when this task exits
-                            handle_connection(stream, conn_shutdown).await;
+                            handle_connection(stream, conn_shutdown, broadcast_rx).await;
                         });
                     }
                     Err(e) => {
@@ -453,7 +489,11 @@ async fn run_accept_loop(
 /// connections continue.
 ///
 /// @trace spec:tray-host-control-socket
-async fn handle_connection(stream: UnixStream, shutdown: Arc<Notify>) {
+async fn handle_connection(
+    stream: UnixStream,
+    shutdown: Arc<Notify>,
+    mut broadcast_rx: broadcast::Receiver<ControlMessage>,
+) {
     let codec = LengthDelimitedCodec::builder()
         .length_field_length(4)
         .max_frame_length(MAX_MESSAGE_BYTES)
@@ -469,12 +509,57 @@ async fn handle_connection(stream: UnixStream, shutdown: Arc<Notify>) {
         "Control-socket connection accepted"
     );
 
+    // Per-connection counter for SERVER-initiated frames (broadcasts). Inbound
+    // frames echo the peer's seq; outbound starts at 1 and grows monotonically
+    // so subscribers can detect missed frames if they wanted to (chunk 6 may
+    // surface this in a Resync envelope).
+    let mut outbound_seq: u64 = 0;
+
     loop {
         let read = tokio::select! {
             biased;
             _ = shutdown.notified() => {
                 debug!(spec = "tray-host-control-socket", "Connection drop on shutdown");
                 break;
+            }
+            broadcast = broadcast_rx.recv() => {
+                match broadcast {
+                    Ok(msg) => {
+                        outbound_seq += 1;
+                        let env = ControlEnvelope {
+                            wire_version: WIRE_VERSION,
+                            seq: outbound_seq,
+                            body: msg,
+                        };
+                        if let Err(e) = write_envelope(&mut framed, &env).await {
+                            debug!(
+                                spec = "opencode-web-session-otp",
+                                error = %e,
+                                "Broadcast write failed; closing connection"
+                            );
+                            break;
+                        }
+                        continue;
+                    }
+                    Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                        info!(
+                            accountability = true,
+                            category = "control-socket",
+                            spec = "opencode-web-session-otp",
+                            operation = "subscriber-lagged",
+                            skipped,
+                            "Subscriber fell behind broadcast queue — closing for resync"
+                        );
+                        break;
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        debug!(
+                            spec = "tray-host-control-socket",
+                            "Broadcast channel closed — server going away"
+                        );
+                        break;
+                    }
+                }
             }
             r = timeout(IDLE_TIMEOUT, framed.next()) => r,
         };
@@ -819,6 +904,185 @@ mod tests {
             }
             other => panic!("expected HelloAck, got {:?}", other),
         }
+
+        server.shutdown().await;
+    }
+
+    /// A server-side `publisher().send()` reaches every connected
+    /// subscriber. Two clients connect, complete `Hello`, then the server
+    /// publishes one envelope and both clients read it.
+    ///
+    /// @trace spec:opencode-web-session-otp
+    #[tokio::test]
+    async fn publisher_fanout_reaches_two_connected_clients() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let tmp = TempDir::new().unwrap();
+        let resolved = resolved_in(tmp.path());
+        let mut server = Server::bind(resolved.clone()).expect("bind");
+        server.spawn_accept_loop();
+        let publisher = server.publisher();
+
+        // Helper: connect a client + complete Hello/HelloAck. Returns the
+        // open stream so the test can read the upcoming broadcast.
+        async fn handshake(socket_path: &Path) -> UnixStream {
+            let mut s = UnixStream::connect(socket_path).await.expect("connect");
+            let env = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 1,
+                body: ControlMessage::Hello {
+                    from: "fanout-test".to_string(),
+                    capabilities: vec![],
+                },
+            };
+            let payload = wire::encode(&env).unwrap();
+            s.write_all(&(payload.len() as u32).to_be_bytes())
+                .await
+                .unwrap();
+            s.write_all(&payload).await.unwrap();
+            // Drain the HelloAck so the read loop is positioned at the
+            // next inbound frame (which will be our broadcast).
+            let mut len_buf = [0u8; 4];
+            s.read_exact(&mut len_buf).await.unwrap();
+            let len = u32::from_be_bytes(len_buf) as usize;
+            let mut payload = vec![0u8; len];
+            s.read_exact(&mut payload).await.unwrap();
+            let _ack = wire::decode(&payload).unwrap();
+            s
+        }
+
+        let mut client_a = handshake(&resolved.socket_path).await;
+        let mut client_b = handshake(&resolved.socket_path).await;
+
+        // Yield so both connections are subscribed to the broadcast channel.
+        tokio::task::yield_now().await;
+
+        // Publish one IssueWebSession envelope.
+        let cookie: [u8; 32] = std::array::from_fn(|i| i as u8 ^ 0xA5);
+        publisher
+            .send(ControlMessage::IssueWebSession {
+                project_label: "opencode.fanout.localhost".to_string(),
+                cookie_value: cookie,
+            })
+            .expect("at least one subscriber");
+
+        // Both clients see it.
+        async fn read_envelope(s: &mut UnixStream) -> ControlEnvelope {
+            let mut len_buf = [0u8; 4];
+            s.read_exact(&mut len_buf).await.unwrap();
+            let len = u32::from_be_bytes(len_buf) as usize;
+            let mut payload = vec![0u8; len];
+            s.read_exact(&mut payload).await.unwrap();
+            wire::decode(&payload).unwrap()
+        }
+
+        let env_a = read_envelope(&mut client_a).await;
+        let env_b = read_envelope(&mut client_b).await;
+        for env in [&env_a, &env_b] {
+            match &env.body {
+                ControlMessage::IssueWebSession {
+                    project_label,
+                    cookie_value,
+                } => {
+                    assert_eq!(project_label, "opencode.fanout.localhost");
+                    assert_eq!(cookie_value, &cookie);
+                }
+                other => panic!("expected IssueWebSession broadcast, got {:?}", other),
+            }
+            // Outbound seq is per-connection, starts at 1 for the first
+            // server-initiated frame.
+            assert_eq!(env.seq, 1);
+        }
+
+        server.shutdown().await;
+    }
+
+    /// A subscriber that falls behind by more than `BROADCAST_CAPACITY`
+    /// frames receives `RecvError::Lagged` on its next `recv()` and the
+    /// connection closes. The sidecar's reconnect loop handles resync.
+    ///
+    /// @trace spec:opencode-web-session-otp
+    #[tokio::test]
+    async fn lagged_subscriber_is_disconnected() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let tmp = TempDir::new().unwrap();
+        let resolved = resolved_in(tmp.path());
+        let mut server = Server::bind(resolved.clone()).expect("bind");
+        server.spawn_accept_loop();
+        let publisher = server.publisher();
+
+        // Connect + Hello, then DON'T read any further — the connection is
+        // a passive subscriber so the broadcast queue fills up.
+        let mut client = UnixStream::connect(&resolved.socket_path)
+            .await
+            .expect("connect");
+        let env = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 1,
+            body: ControlMessage::Hello {
+                from: "lag-test".to_string(),
+                capabilities: vec![],
+            },
+        };
+        let payload = wire::encode(&env).unwrap();
+        client
+            .write_all(&(payload.len() as u32).to_be_bytes())
+            .await
+            .unwrap();
+        client.write_all(&payload).await.unwrap();
+        // Drain HelloAck.
+        let mut len_buf = [0u8; 4];
+        client.read_exact(&mut len_buf).await.unwrap();
+        let len = u32::from_be_bytes(len_buf) as usize;
+        let mut payload = vec![0u8; len];
+        client.read_exact(&mut payload).await.unwrap();
+
+        tokio::task::yield_now().await;
+
+        // Drown the broadcast channel: send BROADCAST_CAPACITY * 2 + 4
+        // envelopes. The handle_connection loop reads them one by one and
+        // tries to write to the framed stream; the OS buffer eventually
+        // fills, the write blocks, and the next broadcast::recv yields
+        // Lagged because the sender has lapped us.
+        let cookie = [0u8; 32];
+        for _ in 0..(BROADCAST_CAPACITY * 2 + 4) {
+            // send() returns SendError only when there are zero subscribers,
+            // which can't happen here.
+            let _ = publisher.send(ControlMessage::IssueWebSession {
+                project_label: "opencode.lag.localhost".to_string(),
+                cookie_value: cookie,
+            });
+        }
+
+        // The lagged-subscriber path closes the connection. Try to read
+        // some bytes from the client — eventually we hit EOF.
+        let mut sink = vec![0u8; 4096];
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        let mut closed = false;
+        while tokio::time::Instant::now() < deadline {
+            match tokio::time::timeout(
+                Duration::from_millis(100),
+                client.read(&mut sink),
+            )
+            .await
+            {
+                Ok(Ok(0)) => {
+                    closed = true;
+                    break;
+                }
+                Ok(Ok(_)) => continue,
+                Ok(Err(_)) => {
+                    closed = true;
+                    break;
+                }
+                Err(_) => continue,
+            }
+        }
+        assert!(
+            closed,
+            "lagged subscriber connection must close within 2s"
+        );
 
         server.shutdown().await;
     }
