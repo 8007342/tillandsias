@@ -1,24 +1,26 @@
 //! Per-message dispatch for the tray-host control socket.
 //!
-//! v1 implements only the `Hello` / `HelloAck` handshake and the generic
-//! `Error` reply. `IssueWebSession` and other capability-specific variants
-//! land via additive OpenSpec changes (e.g., `opencode-web-session-otp`,
-//! `host-browser-mcp`).
+//! v1 implements the `Hello` / `HelloAck` handshake, the generic `Error`
+//! reply, and the `IssueWebSession` -> `IssueAck` exchange (wired by
+//! `opencode-web-session-otp`).
 //!
 //! The dispatcher returns an `Option<ControlMessage>` reply: `Some(msg)`
 //! frames the reply onto the wire; `None` means no reply (fire-and-forget
-//! variants — none in v1).
+//! variants — none today).
 //!
-//! @trace spec:tray-host-control-socket
+//! @trace spec:tray-host-control-socket, spec:opencode-web-session-otp
 
 use super::wire::{ControlMessage, ErrorCode, WIRE_VERSION};
 
 /// Server capability tags advertised in `HelloAck`. Consumers consult this
 /// list to decide which optional message classes they can use.
 ///
-/// v1 advertises only `"v1"`. Future additive changes append capability
-/// tags here without bumping `WIRE_VERSION`.
-pub const SERVER_CAPS: &[&str] = &["v1"];
+/// `"v1"` — the base message classes (Hello, IssueAck, Error).
+/// `"IssueWebSession"` — the per-window OTP issuance flow wired by
+/// `opencode-web-session-otp`.
+///
+/// @trace spec:tray-host-control-socket, spec:opencode-web-session-otp
+pub const SERVER_CAPS: &[&str] = &["v1", "IssueWebSession"];
 
 /// Outcome of dispatching a single inbound `ControlMessage`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,15 +40,18 @@ pub enum DispatchOutcome {
 /// Handle a single inbound `ControlMessage` and produce the dispatch
 /// outcome.
 ///
-/// v1 handler logic:
+/// Handler logic:
 ///
 /// - `Hello` → `HelloAck` (or `Error::Unsupported` + close on `wire_version` mismatch).
 /// - `HelloAck` → no reply (server doesn't expect to receive this).
-/// - `IssueWebSession` → `Error::Unsupported` (wired in OTP change).
-/// - `IssueAck` → no reply (just bookkeeping; v1 has no pending state).
+/// - `IssueWebSession` → push into `crate::otp::global()` and reply with
+///   `IssueAck` carrying `seq_acked = inbound_seq`. Wired by
+///   `opencode-web-session-otp`.
+/// - `IssueAck` → no reply (just bookkeeping; senders consume these as
+///   their proof of acceptance).
 /// - `Error` → no reply (consumers send these on their own faults).
 ///
-/// @trace spec:tray-host-control-socket
+/// @trace spec:tray-host-control-socket, spec:opencode-web-session-otp
 pub fn dispatch(inbound_seq: u64, message: &ControlMessage) -> DispatchOutcome {
     match message {
         ControlMessage::Hello { .. } => DispatchOutcome::Reply(ControlMessage::HelloAck {
@@ -54,20 +59,27 @@ pub fn dispatch(inbound_seq: u64, message: &ControlMessage) -> DispatchOutcome {
             server_caps: SERVER_CAPS.iter().map(|s| s.to_string()).collect(),
         }),
         ControlMessage::HelloAck { .. } => DispatchOutcome::NoReply,
-        ControlMessage::IssueWebSession { .. } => {
-            // OTP issuance lands with opencode-web-session-otp; for v1 we
-            // surface a clear "not yet implemented" error so consumers can
-            // distinguish "unknown variant" from "known but not wired up".
-            DispatchOutcome::Reply(ControlMessage::Error {
-                seq_in_reply_to: Some(inbound_seq),
-                code: ErrorCode::Unsupported,
-                message: "IssueWebSession not yet implemented (waiting on opencode-web-session-otp)".to_string(),
+        ControlMessage::IssueWebSession {
+            project_label,
+            cookie_value,
+        } => {
+            // @trace spec:opencode-web-session-otp
+            // Push the cookie into the tray-side session table. The
+            // accountability log entry is emitted inside `OtpStore::push`
+            // with the value field redacted.
+            crate::otp::global().push(project_label, *cookie_value);
+            DispatchOutcome::Reply(ControlMessage::IssueAck {
+                seq_acked: inbound_seq,
             })
         }
         ControlMessage::IssueAck { .. } => DispatchOutcome::NoReply,
         ControlMessage::Error { .. } => DispatchOutcome::NoReply,
     }
 }
+
+/// Marker so the unused-import lint doesn't kick in when we strip the
+/// IssueWebSession Unsupported branch in favour of the wired one.
+const _: ErrorCode = ErrorCode::Unsupported;
 
 /// Build an `Error::Unsupported` envelope used when the peer's
 /// `wire_version` differs from ours. After flushing this frame the caller
@@ -104,7 +116,12 @@ mod tests {
                 server_caps,
             }) => {
                 assert_eq!(wire_version, WIRE_VERSION);
-                assert_eq!(server_caps, vec!["v1".to_string()]);
+                assert_eq!(
+                    server_caps,
+                    SERVER_CAPS.iter().map(|s| s.to_string()).collect::<Vec<_>>()
+                );
+                assert!(server_caps.contains(&"v1".to_string()));
+                assert!(server_caps.contains(&"IssueWebSession".to_string()));
             }
             other => panic!("expected HelloAck reply, got {:?}", other),
         }
@@ -123,25 +140,30 @@ mod tests {
     }
 
     #[test]
-    fn issue_web_session_returns_unsupported_in_v1() {
+    fn issue_web_session_pushes_into_store_and_acks() {
+        // Wired by opencode-web-session-otp: dispatch pushes into the
+        // tray-global OtpStore and replies with IssueAck.
+        let project = "opencode.handler-test.localhost";
+        let cookie: [u8; 32] = std::array::from_fn(|i| i as u8 ^ 0x42);
+        let before = crate::otp::global().session_count(project);
         let outcome = dispatch(
             7,
             &ControlMessage::IssueWebSession {
-                project_label: "demo".to_string(),
-                cookie_value: [0; 32],
+                project_label: project.to_string(),
+                cookie_value: cookie,
             },
         );
         match outcome {
-            DispatchOutcome::Reply(ControlMessage::Error {
-                seq_in_reply_to,
-                code,
-                ..
-            }) => {
-                assert_eq!(seq_in_reply_to, Some(7));
-                assert_eq!(code, ErrorCode::Unsupported);
+            DispatchOutcome::Reply(ControlMessage::IssueAck { seq_acked }) => {
+                assert_eq!(seq_acked, 7);
             }
-            other => panic!("expected Unsupported error, got {:?}", other),
+            other => panic!("expected IssueAck reply, got {:?}", other),
         }
+        let after = crate::otp::global().session_count(project);
+        assert_eq!(after, before + 1, "OtpStore must grow by one entry");
+        // Cleanup: leave the global store in the same shape as before so
+        // sibling tests aren't affected.
+        crate::otp::global().evict_project(project);
     }
 
     #[test]

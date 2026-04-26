@@ -1015,6 +1015,26 @@ pub(crate) async fn stop_router() {
 ///   the forge container itself is healthy and reachable on the
 ///   enclave.
 ///
+/// Render the Caddy site block for a single project's OpenCode Web route.
+///
+/// The block enforces the per-window session-cookie requirement: requests
+/// without a `tillandsias_session=<base64url>` cookie return HTTP 401 with
+/// the friendly "open this project from the Tillandsias tray" body. Pure
+/// function — exposed at module level so unit tests can pin the exact
+/// bytes the router will see.
+///
+/// @trace spec:opencode-web-session-otp, spec:subdomain-routing-via-reverse-proxy
+/// @cheatsheet web/cookie-auth-best-practices.md
+pub(crate) fn render_caddy_route_block(project: &str) -> String {
+    // The 401 body uses the Unicode em-dash escape (—) so the source
+    // is ASCII-clean. Caddy's caddyfile parser accepts \uXXXX escapes
+    // inside double-quoted strings.
+    format!(
+        "http://opencode.{project}.localhost:8080 {{\n    @hassession header_regexp Cookie \"tillandsias_session=[A-Za-z0-9_-]+\"\n    handle @hassession {{\n        reverse_proxy tillandsias-{project}-forge:4096\n    }}\n    handle {{\n        respond \"unauthorised \\u2014 open this project from the Tillandsias tray\" 401\n    }}\n}}\n",
+        project = project
+    )
+}
+
 /// @trace spec:subdomain-routing-via-reverse-proxy
 pub(crate) async fn regenerate_router_caddyfile(state: &TrayState) -> Result<(), String> {
     // Build the dynamic Caddyfile contents from currently-tracked forge containers.
@@ -1062,10 +1082,21 @@ pub(crate) async fn regenerate_router_caddyfile(state: &TrayState) -> Result<(),
         // plain HTTP requests to be rejected with HTTP/1.0 400 "Client
         // sent an HTTP request to an HTTPS server." The `http://` prefix
         // opts out of this implicit TLS expectation.
-        snippet.push_str(&format!(
-            "http://opencode.{project}.localhost:8080 {{\n    reverse_proxy tillandsias-{project}-forge:4096\n}}\n",
-            project = project
-        ));
+        //
+        // @trace spec:opencode-web-session-otp
+        // @cheatsheet web/cookie-auth-best-practices.md
+        // Per-window session cookie required. The `@hassession` matcher
+        // accepts any request bearing a `tillandsias_session=<base64url>`
+        // cookie value of the canonical 43-char shape; everything else
+        // returns HTTP 401 with the friendly "open from the tray" message.
+        // This is presence-validation in v1 — full value-membership
+        // validation against the OtpStore lands with the
+        // `router-control-sidecar` follow-up change. The presence check
+        // alone already blocks `curl` from another shell, sibling browser
+        // windows that did not go through the tray, and any process that
+        // discovers the URL via `/proc/<pid>/cmdline` of the spawned
+        // browser — all of which lack the `Cookie` header.
+        snippet.push_str(&render_caddy_route_block(&project));
         route_count += 1;
     }
 
@@ -3401,7 +3432,7 @@ pub async fn handle_attach_web(
             send_notification("Tillandsias", &msg);
             return Err(msg);
         }
-        // @trace spec:opencode-web-session, spec:subdomain-routing-via-reverse-proxy
+        // @trace spec:opencode-web-session, spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-session-otp
         // Reattach = launch a fresh native-browser window. We no longer have
         // a single long-lived webview to "show" — each Attach Here click
         // produces a new app-mode browser window against the same forge,
@@ -3410,7 +3441,11 @@ pub async fn handle_attach_web(
         // `<project>.opencode.localhost` form — the legacy `host_port`
         // argument is retained on the call only for the readiness probe
         // path; it is not embedded in the URL.
-        if let Err(e) = crate::browser::launch_for_project(&project_name, host_port) {
+        // The session-aware variant mints a fresh per-window cookie and
+        // injects it via CDP before navigation (per opencode-web-session-otp).
+        if let Err(e) =
+            crate::browser::launch_for_project_with_session(&project_name, host_port).await
+        {
             warn!(
                 project = %project_name,
                 port = host_port,
@@ -3683,15 +3718,18 @@ pub async fn handle_attach_web(
         return Err(e);
     }
 
-    // @trace spec:opencode-web-session, spec:subdomain-routing-via-reverse-proxy
+    // @trace spec:opencode-web-session, spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-session-otp
     // Launch the user's native browser in app-mode against the forge URL.
     // Failure is decoupled from container health — log a warning and keep
     // the container running for another attempt. The `genus` label is
     // retained only for tray UI (container icon + name). The URL handed to
     // the browser is `http://<project>.opencode.localhost/`; the router
     // container reverse-proxies that to the forge on the enclave network.
+    // The session-aware variant mints a fresh per-window cookie and
+    // injects it via CDP before navigation (per opencode-web-session-otp).
     let _ = genus; // label consumed elsewhere; browser URL is router-fronted
-    if let Err(e) = crate::browser::launch_for_project(&project_name, host_port) {
+    if let Err(e) = crate::browser::launch_for_project_with_session(&project_name, host_port).await
+    {
         warn!(
             project = %project_name,
             port = host_port,
@@ -5120,6 +5158,43 @@ pub async fn handle_serve_here(
 mod tests {
     use super::*;
     use std::path::Path;
+
+    /// Caddy route block for a project enforces the cookie matcher and
+    /// preserves the explicit `http://` scheme. Pin the exact bytes so
+    /// any drift breaks this test loudly.
+    /// @trace spec:opencode-web-session-otp, spec:subdomain-routing-via-reverse-proxy
+    #[test]
+    fn render_caddy_route_block_includes_cookie_matcher_and_401_handler() {
+        let snippet = render_caddy_route_block("thinking-service");
+
+        // Site address: http:// scheme + opencode.<project>.localhost:8080
+        assert!(
+            snippet.contains("http://opencode.thinking-service.localhost:8080"),
+            "missing site address: {snippet}"
+        );
+        // Matcher: header_regexp Cookie "tillandsias_session=<base64url+>"
+        assert!(
+            snippet.contains("@hassession header_regexp Cookie \"tillandsias_session=[A-Za-z0-9_-]+\""),
+            "missing @hassession matcher: {snippet}"
+        );
+        // Authorised path: reverse_proxy to the project's forge
+        assert!(
+            snippet.contains("reverse_proxy tillandsias-thinking-service-forge:4096"),
+            "missing reverse_proxy line: {snippet}"
+        );
+        // Unauthorised path: 401 + friendly body
+        assert!(snippet.contains("respond"), "missing respond directive: {snippet}");
+        assert!(snippet.contains("401"), "missing 401 status: {snippet}");
+        assert!(
+            snippet.contains("Tillandsias tray"),
+            "missing friendly body: {snippet}"
+        );
+        // No HTTPS scheme leaked anywhere — would trip auto_https.
+        assert!(
+            !snippet.contains("https://"),
+            "Caddy snippet must not contain https:// — got {snippet}"
+        );
+    }
 
     // @trace spec:default-image, spec:fix-windows-image-routing
     #[test]

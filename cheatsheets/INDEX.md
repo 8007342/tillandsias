@@ -118,6 +118,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## web
 
+- cookie-auth-best-practices.md    — implementing or reviewing session-cookie-based auth (attributes, transport, redaction).
 - grpc.md [DRAFT]                  — building service-to-service RPC with strict schemas, streaming, or bidirectiona…
 - http.md [DRAFT]                  — any web work — request semantics, status codes, headers, idempotency.
 - openapi.md [DRAFT]               — defining HTTP APIs declaratively, generating clients/servers, producing browsab…

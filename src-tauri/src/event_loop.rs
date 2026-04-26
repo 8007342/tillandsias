@@ -353,6 +353,27 @@ fn is_forge_build(image_name: &str) -> bool {
     image_name == "Forge" || image_name == "Updated Forge"
 }
 
+/// Sanitize a project name to the same shape `browser::sanitize_hostname_label`
+/// produces — lowercase ASCII alnum + hyphen, anything else becomes `-`.
+/// Replicated here (instead of cross-module-importing the private helper)
+/// to keep `browser::sanitize_hostname_label` private and avoid a
+/// cross-cutting dependency for a 5-line function. The two MUST agree on
+/// shape; if they ever diverge the OtpStore evict on container-stop will
+/// silently fail to find the project label.
+///
+/// @trace spec:opencode-web-session-otp
+fn sanitize_label_for_otp(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
 /// Remove build chips that have been `Completed` for longer than `BUILD_CHIP_FADEOUT`.
 ///
 /// Called before every `on_state_change` so that any stale chips are cleaned up
@@ -577,6 +598,21 @@ fn handle_podman_event(
                     && !removed.display_emoji.is_empty()
                 {
                     tool_allocator.release(&removed.project_name, &removed.display_emoji);
+                }
+
+                // @trace spec:opencode-web-session-otp
+                // OpenCode Web container stopped — drop every per-window
+                // session cookie for that project. Defence-in-depth: even
+                // though the router would already 401 every request once
+                // the upstream forge is gone, we evict the in-memory list
+                // so a future restart doesn't accidentally honour a stale
+                // cookie value if it happens to collide.
+                if removed.container_type == ContainerType::OpenCodeWeb {
+                    let project_label = format!(
+                        "opencode.{}.localhost",
+                        sanitize_label_for_otp(&removed.project_name)
+                    );
+                    crate::otp::global().evict_project(&project_label);
                 }
 
                 // Clear project genus if no more environments

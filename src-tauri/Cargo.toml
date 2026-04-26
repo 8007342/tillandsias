@@ -47,6 +47,12 @@ sha2 = "0.10"
 hex = "0.4"
 rcgen = { version = "0.13", features = ["pem", "x509-parser"] }
 time = "0.3"
+# @trace spec:opencode-web-session-otp
+# CSPRNG for per-window session-cookie / OTP minting via OsRng.
+# rand 0.9 routes through getrandom which is already in the dep tree
+# transitively (keyring + rustls). Direct dep here makes the security-critical
+# call site explicit.
+rand = "0.9"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_System_Console"] }

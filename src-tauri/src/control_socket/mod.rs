@@ -775,7 +775,11 @@ mod tests {
                 server_caps,
             } => {
                 assert_eq!(wire_version, WIRE_VERSION);
-                assert_eq!(server_caps, vec!["v1".to_string()]);
+                assert!(server_caps.contains(&"v1".to_string()));
+                assert!(
+                    server_caps.contains(&"IssueWebSession".to_string()),
+                    "HelloAck must advertise IssueWebSession capability post opencode-web-session-otp"
+                );
             }
             other => panic!("expected HelloAck, got {:?}", other),
         }
