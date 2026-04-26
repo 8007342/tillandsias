@@ -56,6 +56,14 @@ RUN microdnf install -y \
         # as "added by agent-source-of-truth"). Both available from Fedora's repos.
         # protobuf-compiler ships the `protoc` binary cheatsheets/web/protobuf.md depends on.
         ShellCheck shfmt protobuf-compiler protobuf-devel xmlstarlet libxml2 \
+        # @trace spec:forge-headless-browsers, spec:default-image
+        # @cheatsheet test/selenium.md, test/playwright.md
+        # Headless browsers + WebDriver bridges so agent-driven UI tests
+        # (Selenium, Playwright, raw WebDriver) work inside the forge
+        # without runtime installs. Full GUI variants intentionally NOT
+        # included — interactive browser windows belong to the host
+        # (host-chromium-on-demand capability).
+        chromium-headless firefox chromedriver \
     && microdnf clean all
 
 # ── Node yarn + pnpm via npm -g ────────────────────────────────
@@ -113,6 +121,21 @@ RUN curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}
     && chmod +x /usr/local/bin/grpcurl \
     && rm /tmp/grpcurl.tar.gz \
     && /usr/local/bin/grpcurl -version 2>&1 | head -1
+
+# ── geckodriver (Mozilla WebDriver for Firefox) ──────────────────
+# @trace spec:forge-headless-browsers, spec:default-image
+# @cheatsheet test/selenium.md, test/playwright.md
+# Fedora doesn't package geckodriver — pulled from the official Mozilla
+# release. chromedriver IS in Fedora's repos and was installed in the
+# microdnf layer above; geckodriver gets its own layer because it's a
+# single-binary upstream tarball.
+ENV GECKODRIVER_VERSION=0.36.0
+RUN curl -fsSL "https://github.com/mozilla/geckodriver/releases/download/v${GECKODRIVER_VERSION}/geckodriver-v${GECKODRIVER_VERSION}-linux64.tar.gz" \
+        -o /tmp/geckodriver.tar.gz \
+    && tar -xzf /tmp/geckodriver.tar.gz --no-same-owner -C /usr/local/bin geckodriver \
+    && chmod +x /usr/local/bin/geckodriver \
+    && rm /tmp/geckodriver.tar.gz \
+    && /usr/local/bin/geckodriver --version 2>&1 | head -1
 
 # ── Flutter SDK (hard-installed at /opt/flutter, pre-cached) ───
 # @trace spec:default-image
