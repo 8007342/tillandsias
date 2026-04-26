@@ -83,7 +83,7 @@ pub mod ids {
 /// is derived from `(stage, state)` together — see
 /// `docs/cheatsheets/tray-state-machine.md` for the projection.
 ///
-/// @trace spec:tray-app
+/// @trace spec:tray-app, spec:tray-progress-and-icon-states
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Stage {
     Booting,
@@ -91,6 +91,12 @@ pub enum Stage {
     NoAuth,
     Authed,
     NetIssue,
+    /// One or more infrastructure components failed in a way that
+    /// prevents normal operation. Menu collapses to a single
+    /// `🥀 Unhealthy environment` item plus signature + Quit. Detail of
+    /// what failed lives in the log, not the menu.
+    /// @trace spec:tray-progress-and-icon-states
+    Unhealthy,
 }
 
 /// Map a `CredentialHealth` probe result to a `Stage`. The mapping
@@ -273,6 +279,28 @@ impl<R: Runtime> TrayMenu<R> {
         // REVERSE so the final order is correct.
         let mut idx = 0usize;
 
+        // @trace spec:tray-progress-and-icon-states
+        // Unhealthy stage collapses the entire dynamic region to a single
+        // disabled `🥀 Unhealthy environment` row. The detail of which
+        // subsystem failed lives in the log, not the menu — single-line
+        // surface per the user's "single line, detail in logs" preference.
+        if matches!(stage, Stage::Unhealthy) {
+            let item = MenuItemBuilder::with_id(
+                ids::STATUS_LINE,
+                i18n::t("menu.unhealthy_environment"),
+            )
+            .enabled(false)
+            .build(app)?;
+            self.root.insert(&item as &dyn IsMenuItem<R>, idx)?;
+
+            // Commit the cache key and return — Unhealthy hides
+            // sign-in, running stacks, and project submenus.
+            let mut cache = self.cache.lock().unwrap();
+            *cache = key;
+            debug!(spec = "tray-progress-and-icon-states", "Dynamic region applied (Unhealthy)");
+            return Ok(());
+        }
+
         if let Some(text) = status.as_deref() {
             let item = MenuItemBuilder::with_id(ids::STATUS_LINE, text)
                 .enabled(false)
@@ -352,64 +380,177 @@ impl<R: Runtime> TrayMenu<R> {
 
 // ─── Status text — pure function ─────────────────────────────────────────────
 
-/// Compose the contextual status line. Returns `None` when no
-/// condition is active (the menu omits the row entirely in that case).
+/// Map a build chip's image_name to its subsystem emoji + sort order.
+/// Returns `None` for unrecognised names — graceful degradation when a
+/// future chip is added without updating this table.
 ///
-/// Conditions joined with `menu.status.separator`:
-/// - In-flight builds: text from `menu.status.building_one`/`_many`.
-/// - Builds completed within the 2 s flash window: `menu.status.ready`.
-/// - `Stage::NetIssue`: `menu.status.github_unreachable`.
+/// Sort order is the deterministic accumulation order in the chip:
+/// browser runtime → enclave → proxy → inference → router → git mirror → forge.
+/// Lower order = appears earlier in the chip prefix.
 ///
-/// @trace spec:tray-app
+/// Match is substring-based against the localized chip name. The localized
+/// English keys live in `locales/en.toml` `[menu.build]`. Other locales
+/// will return `None` (no emoji prefix) until they're translated; the chip
+/// still works, just without the emoji decoration.
+///
+/// @trace spec:tray-progress-and-icon-states, spec:tray-app
+/// @cheatsheet runtime/forge-container.md
+fn subsystem_emoji_and_order(image_name: &str) -> Option<(u8, &'static str)> {
+    // Match longest substrings first to avoid e.g. "Code Mirror" matching
+    // both "Code" and "Mirror" candidates. Returns (sort_order, emoji).
+    if image_name.contains("Browser runtime") {
+        Some((1, "\u{1F9ED}")) // 🧭 compass
+    } else if image_name.contains("Enclave") {
+        Some((2, "\u{1F578}\u{FE0F}")) // 🕸️ spider web
+    } else if image_name.contains("Proxy") {
+        Some((3, "\u{1F6E1}\u{FE0F}")) // 🛡️ shield
+    } else if image_name.contains("Inference") {
+        Some((4, "\u{1F9E0}")) // 🧠 brain
+    } else if image_name.contains("Router") {
+        Some((5, "\u{1F500}")) // 🔀 shuffle (routing)
+    } else if image_name.contains("Code Mirror") || image_name.contains("Git Service") {
+        Some((6, "\u{1FA9E}")) // 🪞 mirror
+    } else if image_name.contains("Development Environment")
+        || image_name.contains("Forge")
+        || image_name.contains("Updated Forge")
+    {
+        Some((7, "\u{1F528}")) // 🔨 hammer
+    } else {
+        None
+    }
+}
+
+/// Compose the additive status chip. Returns `None` when nothing is
+/// in-flight, no recent completion is in the 2-second flash window, and
+/// the stage is healthy (Authed without infra failure).
+///
+/// Chip shape (in order):
+/// 1. `✅` constant prefix — signals "this is a checklist in flight"
+/// 2. Per-completed-subsystem emoji, in stable order (compass → web →
+///    shield → brain → shuffle → mirror → hammer)
+/// 3. The latest action text: `Building <name> …` while building,
+///    `<name> OK` for the 2-second flash after completion
+/// 4. `· GitHub unreachable — using cached list` appended on `Stage::NetIssue`
+///
+/// Failure transitions the menu to `Stage::Unhealthy` whose label
+/// (`🥀 Unhealthy environment`) is rendered as a different menu item, NOT
+/// in the chip — so this function returns `None` for Unhealthy and the
+/// caller renders the alternative.
+///
+/// @trace spec:tray-progress-and-icon-states, spec:tray-app
+/// @cheatsheet runtime/forge-container.md
+///
+/// @tombstone superseded:tray-progress-and-icon-states — kept for three
+/// releases (until 0.1.169.231). Prior shape was a comma-joined fragment
+/// list (`Building Forge… · GitHub unreachable …`) without per-subsystem
+/// emoji accumulation; replaced by the additive `✅🧭🕸️…` chip.
 pub fn status_text(state: &TrayState, stage: Stage) -> Option<String> {
     use std::time::Duration;
     const READY_FLASH: Duration = Duration::from_secs(2);
 
-    let mut fragments: Vec<String> = Vec::new();
+    // Unhealthy stage doesn't use the chip — caller renders the
+    // 🥀 menu item separately.
+    if matches!(stage, Stage::Unhealthy) {
+        return None;
+    }
 
+    // Collect completed subsystems (any Completed build, regardless of
+    // age — once a subsystem is up its emoji stays in the chip prefix).
+    let mut completed_emojis: Vec<(u8, &'static str)> = state
+        .active_builds
+        .iter()
+        .filter(|b| matches!(b.status, BuildStatus::Completed))
+        .filter_map(|b| subsystem_emoji_and_order(&b.image_name))
+        .collect();
+    completed_emojis.sort_by_key(|(order, _)| *order);
+    completed_emojis.dedup_by_key(|(order, _)| *order);
+
+    // Build the constant prefix: ✅ then accumulated subsystem emojis.
+    let mut prefix = String::from("\u{2705}"); // ✅
+    for (_, emoji) in &completed_emojis {
+        prefix.push_str(emoji);
+    }
+
+    // Find the current action: latest in-progress build, OR latest
+    // completion within the 2-second flash window. Both tail the prefix.
     let in_progress: Vec<&str> = state
         .active_builds
         .iter()
         .filter(|b| matches!(b.status, BuildStatus::InProgress))
         .map(|b| b.image_name.as_str())
         .collect();
-    if in_progress.len() == 1 {
-        fragments.push(i18n::tf(
+
+    let action: Option<String> = if in_progress.len() == 1 {
+        Some(i18n::tf(
             "menu.status.building_one",
             &[("image", in_progress[0])],
-        ));
+        ))
     } else if in_progress.len() > 1 {
-        fragments.push(i18n::tf(
+        Some(i18n::tf(
             "menu.status.building_many",
             &[("images", &in_progress.join(", "))],
-        ));
-    }
-
-    let ready_recent: Vec<&str> = state
-        .active_builds
-        .iter()
-        .filter(|b| matches!(b.status, BuildStatus::Completed))
-        .filter(|b| {
-            b.completed_at
-                .map(|t| t.elapsed() < READY_FLASH)
-                .unwrap_or(false)
-        })
-        .map(|b| b.image_name.as_str())
-        .collect();
-    for name in ready_recent {
-        fragments.push(i18n::tf("menu.status.ready", &[("image", name)]));
-    }
-
-    if matches!(stage, Stage::NetIssue) {
-        fragments.push(i18n::t("menu.status.github_unreachable").to_string());
-    }
-
-    if fragments.is_empty() {
-        None
+        ))
     } else {
+        // No in-flight builds — check for a completion within the flash
+        // window so the user sees `… <X> OK` for ~2 seconds before the
+        // chip clears.
+        state
+            .active_builds
+            .iter()
+            .filter(|b| matches!(b.status, BuildStatus::Completed))
+            .filter(|b| {
+                b.completed_at
+                    .map(|t| t.elapsed() < READY_FLASH)
+                    .unwrap_or(false)
+            })
+            .last()
+            .map(|b| i18n::tf("menu.status.ready_one", &[("image", &b.image_name)]))
+    };
+
+    // Decide whether to render the chip at all.
+    // - Always render while a build is in progress.
+    // - Render during the 2 s flash window after the last completion.
+    // - Render the verifying-environment baseline if we have no completed
+    //   subsystems yet AND the stage is Booting (early init).
+    // - On NetIssue, render at minimum the GitHub-unreachable suffix.
+    let netissue = matches!(stage, Stage::NetIssue);
+
+    let mut text = match (action.as_deref(), completed_emojis.is_empty(), stage) {
+        (Some(act), _, _) => {
+            // Always show ✅ + completed-emojis + action text
+            format!("{prefix} {act}")
+        }
+        (None, true, Stage::Booting) => {
+            // Cold start, nothing built yet
+            format!("{prefix} {}", i18n::t("menu.status.verifying_environment"))
+        }
+        (None, _, _) if netissue => {
+            // Authed with cached list; only network message
+            String::new() // filled below
+        }
+        (None, true, _) => {
+            // Idle and never built anything — no chip
+            return None;
+        }
+        (None, false, _) if !netissue => {
+            // Idle and the flash window has expired — drop the chip
+            return None;
+        }
+        (None, _, _) => String::new(), // unreachable but keeps match exhaustive
+    };
+
+    if netissue {
         let sep = i18n::t("menu.status.separator").to_string();
-        Some(fragments.join(&sep))
+        let net_msg = i18n::t("menu.status.github_unreachable").to_string();
+        if text.is_empty() {
+            text = format!("{prefix} {net_msg}");
+        } else {
+            text.push_str(&sep);
+            text.push_str(&net_msg);
+        }
     }
+
+    if text.is_empty() { None } else { Some(text) }
 }
 
 // ─── Running stacks — pure function ──────────────────────────────────────────

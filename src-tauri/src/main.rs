@@ -946,18 +946,42 @@ fn main() {
         });
 }
 
-// @trace spec:simplified-tray-ux
-// Stage selection driver. Determines which of the five stages the menu
+// @trace spec:tray-app, spec:tray-progress-and-icon-states
+// Stage selection driver. Determines which of the six stages the menu
 // should display from the live `TrayState` and the cached credential
 // probe result. Pure function — no Tauri side-effects.
+//
+// Precedence (highest first):
+// 1. Unhealthy — at least one infrastructure build is in `Failed` state
+//    AND no in-progress build for the same image (in-progress retries
+//    supersede a prior failure).
+// 2. Booting — any in-progress build, or forge image not yet ready.
+// 3. NoAuth / Authed / NetIssue — derived from the credential probe.
+// 4. Ready — fallback when probe hasn't completed yet.
 fn current_stage(s: &TrayState) -> tray_menu::Stage {
     use tillandsias_core::state::BuildStatus;
 
-    // Booting: any in-progress build, or forge image not yet ready.
     let any_in_progress = s
         .active_builds
         .iter()
         .any(|b| matches!(b.status, BuildStatus::InProgress));
+
+    // @trace spec:tray-progress-and-icon-states
+    // Unhealthy: any build failed AND there is no concurrent retry of
+    // the same image. A retry's InProgress entry supersedes the prior
+    // Failed entry (per `event_loop.rs::handle_build_progress_event`,
+    // BuildProgressEvent::Started clears the prior Failed row before
+    // pushing a new InProgress one — but if the loop is still mid-tick
+    // we may briefly see both, so guard explicitly).
+    let any_failed = s
+        .active_builds
+        .iter()
+        .any(|b| matches!(b.status, BuildStatus::Failed(_)));
+    if any_failed && !any_in_progress {
+        return tray_menu::Stage::Unhealthy;
+    }
+
+    // Booting: any in-progress build, or forge image not yet ready.
     if any_in_progress || !s.forge_available {
         return tray_menu::Stage::Booting;
     }

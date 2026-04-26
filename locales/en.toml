@@ -36,18 +36,20 @@ version = "Tillandsias v{version}"
 
 # ── tray-app menu (no disabled placeholders) ────────────────
 # @trace spec:tray-app
-sign_in_github = "🔑 Sign in to GitHub"
+sign_in_github = "🔑 GitHub Login"
+unhealthy_environment = "🥀 Unhealthy environment"
 attach_here_with_emoji = "🌱 Attach Here"
 attach_another_with_emoji = "🌱 Attach Another"
 clone_and_launch = "⬇️ Clone & Launch"
 signature_with_version = "v{version} — by Tlatoāni"
 
 [menu.status]
-# Contextual status line — appended only when a relevant condition holds.
-# @trace spec:tray-app
-building_one = "Building {image}…"
-building_many = "Building {images}…"
-ready = "{image} ready"
+# Additive chip — accumulates emojis as subsystems verify.
+# @trace spec:tray-app, spec:tray-progress-and-icon-states
+verifying_environment = "Verifying environment …"
+building_one = "Building {image} …"
+building_many = "Building {images} …"
+ready_one = "{image} OK"
 github_unreachable = "GitHub unreachable — using cached list"
 separator = " · "
 
@@ -73,12 +75,15 @@ in_progress = "⏳ Building {name}..."
 maintenance_setup = "⛏️ Setting up Maintenance..."
 completed = "✅ {name} ready"
 failed = "❌ {name} build failed"
-chip_forge = "Development Environment"
-chip_enclave = "Enclave"
+chip_browser_runtime = "Browser runtime"
+chip_enclave = "Enclave network"
+chip_proxy = "Proxy"
 chip_inference_engine = "Inference Engine"
+chip_router = "Router"
 chip_code_mirror = "Code Mirror"
-chip_maintenance = "Maintenance"
 chip_git_service = "Git Service"
+chip_forge = "Development Environment"
+chip_maintenance = "Maintenance"
 chip_web_server = "Web Server"
 chip_software_layer = "Software Layer"
 
