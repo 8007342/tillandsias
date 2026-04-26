@@ -417,6 +417,63 @@ fn resolve_mount_source(source: &MountSource, ctx: &LaunchContext) -> Option<Str
             }
             Some(log_path.display().to_string())
         }
+        // @trace spec:forge-cache-architecture, spec:forge-cache-dual
+        // @cheatsheet runtime/forge-shared-cache-via-nix.md
+        // Shared cache — host-managed nix store, RO from forge perspective.
+        // Resolves to ~/.cache/tillandsias/forge-shared/nix-store/. Created
+        // on first need; populated by host-side nix processes (out of band
+        // — this code just ensures the mount target exists).
+        MountSource::SharedCache => {
+            let shared = tillandsias_core::config::cache_dir()
+                .join("forge-shared")
+                .join("nix-store");
+            if let Err(e) = std::fs::create_dir_all(&shared) {
+                tracing::warn!(
+                    error = %e,
+                    path = %shared.display(),
+                    spec = "forge-cache-architecture",
+                    "Failed to create shared cache directory — mount will fail"
+                );
+                return None;
+            }
+            Some(shared.display().to_string())
+        }
+        // @trace spec:forge-cache-architecture, spec:forge-cache-dual
+        // @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
+        // Per-project cache — RW, isolated by project name. Project A's
+        // forge container CANNOT see project B's cache because the host
+        // path differs. Persisted across container stops for the same
+        // project; never auto-GC'd (manual `rm -rf` for housekeeping).
+        MountSource::ProjectCache => {
+            if ctx.project_name.is_empty() {
+                tracing::warn!(
+                    spec = "forge-cache-architecture",
+                    "Per-project cache mount requested with empty project name — skipping"
+                );
+                return None;
+            }
+            let proj = tillandsias_core::config::cache_dir()
+                .join("forge-projects")
+                .join(&ctx.project_name);
+            if let Err(e) = std::fs::create_dir_all(&proj) {
+                tracing::warn!(
+                    error = %e,
+                    path = %proj.display(),
+                    project = %ctx.project_name,
+                    spec = "forge-cache-architecture",
+                    "Failed to create per-project cache directory — mount will fail"
+                );
+                return None;
+            }
+            // Also create the per-language subdirectories so tools that
+            // don't auto-mkdir their cache dir don't crash on first use.
+            for sub in &[
+                "cargo", "go", "maven", "gradle", "pub", "npm", "yarn", "pnpm", "uv", "pip",
+            ] {
+                let _ = std::fs::create_dir_all(proj.join(sub));
+            }
+            Some(proj.display().to_string())
+        }
     }
 }
 

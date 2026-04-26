@@ -83,6 +83,24 @@ pub enum MountSource {
     /// Each container gets its own isolated log directory mounted RW.
     /// @trace spec:podman-orchestration
     ContainerLogs,
+    /// Shared cache (read-only from forge perspective). Single host-managed
+    /// nix store, content-addressed so multiple projects sharing entries
+    /// never trample. Resolved to `~/.cache/tillandsias/forge-shared/nix-store/`.
+    /// Mount target inside container: `/nix/store/`. Mount mode is
+    /// always `:ro`.
+    /// @trace spec:forge-cache-architecture, spec:forge-cache-dual
+    /// @cheatsheet runtime/forge-shared-cache-via-nix.md
+    SharedCache,
+    /// Per-project cache (read-write, isolated per project). Holds
+    /// expensive built artifacts for THIS specific project: cargo target/,
+    /// node_modules / package caches, Maven .m2/, Gradle ~/.gradle/, etc.
+    /// Resolved to `~/.cache/tillandsias/forge-projects/<project>/` —
+    /// project name comes from the launch context. Project A's container
+    /// CANNOT see project B's cache (different bind-mount target).
+    /// Mount target inside container: `/home/forge/.cache/tillandsias-project/`.
+    /// @trace spec:forge-cache-architecture, spec:forge-cache-dual
+    /// @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
+    ProjectCache,
 }
 
 /// Mount permission mode.
@@ -652,12 +670,23 @@ pub fn git_service_profile() -> ContainerProfile {
 // ---------------------------------------------------------------------------
 
 fn common_forge_mounts() -> Vec<ProfileMount> {
-    // Code comes from git mirror service, packages through proxy.
-    // Mounts: config overlay (read-only ramdisk) + per-container log dir (RW).
+    // Four-category path model — see cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md
+    // for the full table. Forge containers see exactly four categories:
+    //   1. Project workspace      (RW)  — ProjectDir, mounted elsewhere by per-profile code
+    //   2. Per-project cache      (RW)  — ProjectCache (this function, below)
+    //   3. Shared cache           (RO)  — SharedCache (this function, below)
+    //   4. Ephemeral              (RW)  — /tmp + unmounted home (no mount needed)
+    // Plus support mounts:
+    //   - ConfigOverlay  (RO)  — opinionated config on tmpfs
+    //   - ContainerLogs  (RW)  — per-container log isolation
+    //
     // The old tools overlay was tombstoned on 2026-04-25 — agents (claude,
     // opencode, openspec) are hard-installed in the forge image under
     // /opt/agents/ with /usr/local/bin/ symlinks.
-    // @trace spec:proxy-container, spec:tombstone-tools-overlay, spec:podman-orchestration
+    //
+    // @trace spec:forge-cache-architecture, spec:forge-cache-dual,
+    //        spec:proxy-container, spec:tombstone-tools-overlay, spec:podman-orchestration
+    // @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md, runtime/forge-shared-cache-via-nix.md
     vec![
         // Opinionated configs on ramdisk — entrypoints copy into ~/.config/
         ProfileMount {
@@ -670,6 +699,23 @@ fn common_forge_mounts() -> Vec<ProfileMount> {
         ProfileMount {
             host_key: MountSource::ContainerLogs,
             container_path: "/var/log/tillandsias",
+            mode: MountMode::Rw,
+        },
+        // Shared cache (RO) — single host-managed nix store. Conflict-free
+        // because nix's content-addressed paths can't trample.
+        // @trace spec:forge-cache-architecture
+        ProfileMount {
+            host_key: MountSource::SharedCache,
+            container_path: "/nix/store",
+            mode: MountMode::Ro,
+        },
+        // Per-project cache (RW) — built artifacts for THIS project only.
+        // The host path resolves from project name; cross-project leak is
+        // impossible by mount-target separation, not by fs permissions.
+        // @trace spec:forge-cache-architecture
+        ProfileMount {
+            host_key: MountSource::ProjectCache,
+            container_path: "/home/forge/.cache/tillandsias-project",
             mode: MountMode::Rw,
         },
     ]
@@ -809,19 +855,55 @@ mod tests {
         assert_eq!(profile.image_override, Some("tillandsias-web:latest"));
     }
 
-    // @trace spec:tombstone-tools-overlay, spec:podman-orchestration
+    // @trace spec:tombstone-tools-overlay, spec:podman-orchestration, spec:forge-cache-architecture
     #[test]
     fn forge_profiles_have_no_tools_overlay_mount() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
-        // Mounts: config overlay (read-only) + container logs (RW). Tools
-        // overlay was tombstoned 2026-04-25 — agents are hard-installed.
-        assert_eq!(opencode.mounts.len(), 2);
-        assert_eq!(claude.mounts.len(), 2);
+        // Mounts under forge-cache-architecture: config overlay (RO) +
+        // container logs (RW) + shared cache (RO) + per-project cache (RW).
+        // Tools overlay was tombstoned 2026-04-25 — agents are hard-installed.
+        assert_eq!(opencode.mounts.len(), 4);
+        assert_eq!(claude.mounts.len(), 4);
         assert!(
             !opencode.mounts.iter().any(|m| m.container_path == "/home/forge/.tools"),
             "No profile should mount the tools overlay — tombstoned"
         );
+    }
+
+    /// @trace spec:forge-cache-architecture, spec:forge-cache-dual
+    /// @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
+    #[test]
+    fn forge_profiles_have_shared_and_per_project_cache_mounts() {
+        for profile in [
+            forge_opencode_profile(),
+            forge_claude_profile(),
+            terminal_profile(),
+        ] {
+            let shared = profile
+                .mounts
+                .iter()
+                .find(|m| matches!(m.host_key, MountSource::SharedCache));
+            let project = profile
+                .mounts
+                .iter()
+                .find(|m| matches!(m.host_key, MountSource::ProjectCache));
+            assert!(
+                shared.is_some(),
+                "Forge profile must mount the shared cache (RO via nix-store)"
+            );
+            assert_eq!(shared.unwrap().container_path, "/nix/store");
+            assert_eq!(shared.unwrap().mode, MountMode::Ro);
+            assert!(
+                project.is_some(),
+                "Forge profile must mount the per-project cache (RW)"
+            );
+            assert_eq!(
+                project.unwrap().container_path,
+                "/home/forge/.cache/tillandsias-project"
+            );
+            assert_eq!(project.unwrap().mode, MountMode::Rw);
+        }
     }
 
     // @trace spec:layered-tools-overlay

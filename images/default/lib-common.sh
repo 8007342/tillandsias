@@ -65,17 +65,75 @@ trace_lifecycle() {
     echo "[lifecycle] $phase | $*" >&2
 }
 
-# ── Package manager cache strategy ──────────────────────────
-# Global installs go to the persistent cache mount, surviving container
-# restarts. Project-local installs (npm install, cargo build) use the
-# project directory which is also bind-mounted.
-# @trace spec:forge-shell-tools
-export NPM_CONFIG_PREFIX="$CACHE/npm-global"
-export CARGO_HOME="$CACHE/cargo"
-export GOPATH="$CACHE/go"
-export PIP_USER=1
-export PYTHONUSERBASE="$CACHE/pip"
-export PATH="$NPM_CONFIG_PREFIX/bin:$CARGO_HOME/bin:$GOPATH/bin:$PYTHONUSERBASE/bin:$PATH"
+# ── Package manager cache strategy (dual-cache architecture) ──────
+# @trace spec:forge-cache-architecture, spec:forge-cache-dual, spec:forge-shell-tools
+# @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
+#
+# Per-project cache lives at /home/forge/.cache/tillandsias-project/
+# (RW bind-mount from the host's per-project cache directory). Built
+# artifacts that are expensive to rebuild for THIS project go here.
+# Project A's container CANNOT see project B's cache.
+#
+# Shared cache lives at /nix/store/ (RO bind-mount from the host's
+# nix store). Single entry point: nix flakes only — other tools never
+# write here. See runtime/forge-shared-cache-via-nix.md for why.
+#
+# Project workspace (/home/forge/src/<project>/) is for SOURCE only —
+# build artifacts redirect via the env vars below to the per-project
+# cache. Treat /tmp/ and unmounted ~/.<dotdirs> as ephemeral scratch.
+PROJECT_CACHE="/home/forge/.cache/tillandsias-project"
+
+# @tombstone superseded:forge-cache-architecture — kept for three releases
+# (until 0.1.169.232). Old paths pointed at $CACHE/<lang>/ which was the
+# cheatsheets-cache mount, NOT bind-mounted to the host. Every container
+# restart re-downloaded everything for every language. Verified pre-fix
+# in the planner's PLAN-from-java-audits.md cache discipline audit.
+#
+# OLD (removed in this change):
+# export NPM_CONFIG_PREFIX="$CACHE/npm-global"
+# export CARGO_HOME="$CACHE/cargo"
+# export GOPATH="$CACHE/go"
+# export PIP_USER=1
+# export PYTHONUSERBASE="$CACHE/pip"
+
+# Cargo
+export CARGO_HOME="$PROJECT_CACHE/cargo"
+export CARGO_TARGET_DIR="$PROJECT_CACHE/cargo/target"
+
+# Go
+export GOPATH="$PROJECT_CACHE/go"
+export GOMODCACHE="$PROJECT_CACHE/go/pkg/mod"
+
+# Maven (note: MAVEN_OPTS is the standard knob; -Dmaven.repo.local is the property name)
+export MAVEN_OPTS="-Dmaven.repo.local=$PROJECT_CACHE/maven ${MAVEN_OPTS:-}"
+
+# Gradle
+export GRADLE_USER_HOME="$PROJECT_CACHE/gradle"
+
+# Flutter / Dart pub cache (overrides the image-baked /opt/flutter/.pub-cache
+# which is read-only image-state for shared Flutter SDK files; per-project
+# packages flow through here instead)
+export PUB_CACHE="$PROJECT_CACHE/pub"
+
+# npm — note the unusual env var name (npm uses lowercase with underscores)
+export npm_config_cache="$PROJECT_CACHE/npm"
+export NPM_CONFIG_PREFIX="$PROJECT_CACHE/npm/global"
+
+# Yarn (classic and berry both honor this)
+export YARN_CACHE_FOLDER="$PROJECT_CACHE/yarn"
+
+# pnpm
+export PNPM_HOME="$PROJECT_CACHE/pnpm"
+
+# uv (Astral's pip replacement)
+export UV_CACHE_DIR="$PROJECT_CACHE/uv"
+
+# pip (per-project; pipx tools live in /opt/pipx, image-state)
+export PIP_CACHE_DIR="$PROJECT_CACHE/pip"
+
+# PATH augmentation for per-project binaries (cargo install, go install,
+# npm -g into PROJECT_CACHE/npm/global)
+export PATH="$NPM_CONFIG_PREFIX/bin:$CARGO_HOME/bin:$GOPATH/bin:$PNPM_HOME:$PATH"
 
 # ── Update-check rate-limiting ──────────────────────────────
 # Returns 0 (true) if the last check was more than 24 hours ago or never ran.
