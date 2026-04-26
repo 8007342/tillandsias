@@ -34,3 +34,7 @@ images/default/.cheatsheets/
 # rebuilds on every fresh clone.
 # @trace spec:opencode-web-session-otp
 images/router/tillandsias-router-sidecar
+
+# Sidecar nested-cargo target dir (avoids workspace lock deadlock).
+# @trace spec:opencode-web-session-otp
+/target-musl/

@@ -384,6 +384,18 @@ _run() {
     toolbox run -c "$TOOLBOX_NAME" "$@"
 }
 
+# @trace spec:opencode-web-session-otp
+# Stage the pre-built tillandsias-router-sidecar binary into
+# images/router/ before any build path that consumes
+# include_bytes!("../../images/router/tillandsias-router-sidecar").
+# The helper is idempotent (no-op when the staged binary is fresher
+# than every source file) so calling this on every build is cheap.
+# Runs inside the toolbox because cargo/rustup live there on Silverblue.
+_stage_sidecar() {
+    _toolbox_ensure
+    _run bash "$SCRIPT_DIR/scripts/build-sidecar.sh"
+}
+
 # Toolbox reset
 if [[ "$FLAG_TOOLBOX_RESET" == true ]]; then
     _step "Resetting toolbox '${TOOLBOX_NAME}'..."
@@ -401,6 +413,14 @@ fi
 # AppImage build (standalone — bypasses toolbox entirely)
 if [[ "$FLAG_APPIMAGE" == true ]]; then
     "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
+    # @trace spec:opencode-web-session-otp
+    # Stage the sidecar binary on the host BEFORE the podman AppImage
+    # builder runs. The container's tar-pipe copy then carries
+    # images/router/tillandsias-router-sidecar into /build, where
+    # src-tauri/build.rs's include_bytes! check finds it. Without this,
+    # the in-container build panics: "pre-built router sidecar binary
+    # missing".
+    _stage_sidecar
     build_appimage
     # If --appimage is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL" == "falsefalsefalsefalsefalse" ]]; then
@@ -412,12 +432,19 @@ fi
 if [[ "$FLAG_INSTALL" == true ]]; then
     "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
     "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
+    # @trace spec:opencode-web-session-otp
+    # Same staging step as --appimage.
+    _stage_sidecar
     install_appimage
     exit 0
 fi
 
 # Ensure toolbox exists for any build operation
 _toolbox_ensure
+# @trace spec:opencode-web-session-otp
+# Stage the sidecar binary so subsequent in-toolbox cargo invocations
+# find it via include_bytes!. Cheap idempotent no-op when up-to-date.
+_stage_sidecar
 
 # ---------------------------------------------------------------------------
 # Auto-increment build number on every build (not test/check/clean-only)

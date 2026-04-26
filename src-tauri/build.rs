@@ -22,38 +22,26 @@ fn main() {
     println!("cargo:rerun-if-changed=../VERSION");
 
     // @trace spec:opencode-web-session-otp
-    // Make sure `images/router/tillandsias-router-sidecar` is up-to-date
-    // before src-tauri compilation, so `include_bytes!` in
-    // src/embedded.rs picks up the latest binary. The helper script
-    // cross-builds with `--target x86_64-unknown-linux-musl` (no external
-    // toolchain required) and stages the stripped binary into
-    // images/router/. Skip the rebuild step if env override is set so CI
-    // / release pipelines that pre-stage the binary don't re-do work.
-    println!("cargo:rerun-if-changed=../crates/tillandsias-router-sidecar/src");
-    println!("cargo:rerun-if-changed=../crates/tillandsias-router-sidecar/Cargo.toml");
-    println!("cargo:rerun-if-changed=../crates/tillandsias-otp/src");
-    println!("cargo:rerun-if-changed=../crates/tillandsias-control-wire/src");
+    // Verify the pre-built sidecar binary is staged before src-tauri
+    // compilation — `include_bytes!` in src/embedded.rs would otherwise
+    // hard-fail at parse time with a misleading "file not found" message
+    // pointing at the include path. We give a clearer hint.
+    //
+    // We DO NOT invoke `scripts/build-sidecar.sh` from build.rs. A nested
+    // cargo invocation deadlocks on the workspace target-dir lock when
+    // build.rs runs during a parent `cargo build` / `cargo tauri build`
+    // (observed in v0.1.170.245 when the AppImage build wedged at
+    // "Compiling tray-icon"). Staging is the responsibility of the
+    // wrapper that invoked us — `build.sh`, `build-osx.sh`,
+    // `scripts/build-image.sh router`, or a manual run of the helper.
     println!("cargo:rerun-if-changed=../images/router/tillandsias-router-sidecar");
-    println!("cargo:rerun-if-changed=../scripts/build-sidecar.sh");
-    if std::env::var("TILLANDSIAS_SKIP_SIDECAR_REBUILD").is_err() {
-        let helper = Path::new("../scripts/build-sidecar.sh");
-        if helper.exists() {
-            let status = std::process::Command::new("bash")
-                .arg(helper)
-                .status()
-                .expect("failed to spawn scripts/build-sidecar.sh");
-            if !status.success() {
-                panic!(
-                    "scripts/build-sidecar.sh failed (exit {:?}); rerun manually to see output",
-                    status.code()
-                );
-            }
-        } else if !Path::new("../images/router/tillandsias-router-sidecar").exists() {
-            panic!(
-                "missing scripts/build-sidecar.sh AND images/router/tillandsias-router-sidecar — \
-                 cannot embed the router sidecar; restore the helper or pre-stage the binary"
-            );
-        }
+    let sidecar = Path::new("../images/router/tillandsias-router-sidecar");
+    if !sidecar.exists() {
+        panic!(
+            "\n\n  pre-built router sidecar binary missing at images/router/tillandsias-router-sidecar\n  \
+             stage it first by running: scripts/build-sidecar.sh\n  \
+             (host: rustup target add x86_64-unknown-linux-musl is automatic)\n\n"
+        );
     }
 
     // @trace spec:host-chromium-on-demand
