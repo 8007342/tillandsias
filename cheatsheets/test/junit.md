@@ -2,10 +2,16 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
-
 **Version baseline**: JUnit 5.10+ (Jupiter API). Pulled via Maven/Gradle dependency, not baked into the forge image.
 **Use when**: testing Java code — unit tests through Surefire, integration tests through Failsafe.
+
+## Provenance
+
+- JUnit 5 user guide (official, docs.junit.org): <https://docs.junit.org/current/user-guide/> — annotations, assertions, parameterized tests, extensions, lifecycle
+- JUnit 5 Javadoc API reference: <https://junit.org/junit5/docs/current/api/> — `org.junit.jupiter.api.*` and `org.junit.jupiter.params.*`
+- **Last updated:** 2026-04-25
+
+Verified: `@Test`, `@BeforeEach`, `@AfterEach`, `@BeforeAll`, `@AfterAll`, `@Disabled`, `@Nested`, `@Tag`, `@ParameterizedTest`, `@ValueSource`, `@CsvSource`, `@MethodSource`, `@TestFactory`, `@ExtendWith`, `@Timeout`, `@TestInstance`, `assertAll`, `assertThrows`, `assumeTrue` all documented in the JUnit 5 user guide (sections: Annotations, Assertions, Parameterized Tests, Extensions, Timeouts).
 
 ## Quick reference
 

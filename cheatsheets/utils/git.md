@@ -2,10 +2,17 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
-
 **Version baseline**: git 2.x (Fedora 43 package; current 2.45+). git-lfs and gh also baked in.
 **Use when**: any version control operation in the forge (clones go through enclave mirror, NOT github directly).
+
+## Provenance
+
+- git official documentation: <https://git-scm.com/docs> — complete command reference
+- git-switch man page: <https://git-scm.com/docs/git-switch> — confirms `-c` creates branch (added in git 2.23.0)
+- git-push man page: <https://git-scm.com/docs/git-push> — confirms `--force-with-lease`
+- **Last updated:** 2026-04-25
+
+Verified: `git switch -c` creates a new branch (introduced in 2.23.0, confirmed in man page); `--force-with-lease` is the safer alternative to `--force`; `git pull --rebase`, `git stash push -u`, `git bisect` all documented in official git reference.
 
 ## Quick reference
 

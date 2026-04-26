@@ -1,8 +1,24 @@
+---
+tags: [protobuf, proto3, serialization, schema, grpc, wire-format, codegen]
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-25
+sources:
+  - https://protobuf.dev/programming-guides/proto3/
+  - https://protobuf.dev/programming-guides/encoding/
+authority: high
+status: current
+---
+
 # Protocol Buffers (proto3)
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- Google protobuf.dev — proto3 language guide (field types, field numbers, reserved, well-known types, scalar types, enums, oneofs, maps — the canonical proto3 reference): <https://protobuf.dev/programming-guides/proto3/>
+- Google protobuf.dev — encoding reference (wire format, field number ranges 1–15 vs 16–2047, zigzag encoding, packed repeated): <https://protobuf.dev/programming-guides/encoding/>
+- **Last updated:** 2026-04-25
 
 **Version baseline**: protoc 3.x (added to forge by `agent-source-of-truth` change). proto3 syntax assumed.
 **Use when**: defining wire-format schemas; gRPC services; serialization with strong schema evolution.

@@ -2,7 +2,11 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- CommonMark specification 0.31.2 (2024-01-28): <https://spec.commonmark.org/0.31.2/> — defines ATX headings (§4.2), fenced code blocks with language hints (§4.5), lists (§5.2-5.3), blockquotes (§5.1), inline links (§6.3), images (§6.4), horizontal rules (§4.1), hard line breaks via backslash or two spaces (§6.7)
+- GitHub Flavored Markdown specification: <https://github.github.com/gfm/> — GFM extensions: strikethrough, tables, task lists, footnotes, autolinks
+- **Last updated:** 2026-04-25
 
 **Version baseline**: CommonMark 0.31 + GitHub Flavored Markdown (GFM) extensions
 **Use when**: writing READMEs, cheatsheets, OpenSpec docs, anything in this repo.

@@ -2,10 +2,16 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
-
 **Version baseline**: jq 1.7 (Fedora 43 package).
 **Use when**: querying or transforming JSON in the forge — pipelines, log triage, config introspection, agent tool plumbing.
+
+## Provenance
+
+- jq official manual (jqlang.org): <https://jqlang.org/manual/> — complete language and flag reference (jq 1.8 as of 2026-04-25)
+- jq GitHub repository: <https://github.com/jqlang/jq> — release notes and source
+- **Last updated:** 2026-04-25
+
+Verified against the official jq 1.8 manual: `select(f)` produces input unchanged when true and no output when false (confirmed); `-r` strips quotes from string results (confirmed); `-s` slurps into array (confirmed); `--arg` passes string, `--argjson` passes JSON (confirmed); `group_by`, `to_entries`/`from_entries` confirmed. Version note: Fedora 43 ships jq 1.7; the manual cited is 1.8 — all constructs listed here are present in both.
 
 ## Quick reference
 

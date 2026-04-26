@@ -2,7 +2,10 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- TOML 1.0 specification (official): <https://toml.io/en/v1.0.0> — defines key/value pairs, tables, nested tables, dotted keys, inline tables (no trailing comma), arrays (trailing comma OK), array of tables ([[...]]), multi-line strings, datetime types, integer/float literals, 64-bit signed integer range
+- **Last updated:** 2026-04-25
 
 **Version baseline**: TOML 1.0
 **Use when**: writing config the agent encounters in `Cargo.toml`, `pyproject.toml`, `tauri.conf.json`-adjacent tooling, or `~/.config/tillandsias/config.toml`.

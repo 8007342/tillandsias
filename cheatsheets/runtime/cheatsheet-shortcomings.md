@@ -4,7 +4,8 @@ languages: []
 since: 2026-04-25
 last_verified: 2026-04-25
 sources:
-  - https://www.tillandsias.dev/  # placeholder until project gets a docs site
+  - https://github.com/8007342/tillandsias/blob/main/cheatsheets/INDEX.md
+  - https://github.com/8007342/tillandsias/blob/main/cheatsheets/TEMPLATE.md
 authority: high
 status: current
 ---
@@ -16,8 +17,9 @@ status: current
 
 ## Provenance
 
-This file is project-internal observation. Authority: lived experience of writing the first 10 v2 cheatsheets. Will be cited from OpenSpec changes that address each shortcoming.
-
+This file is project-internal observation documenting gaps found during the first v2 cheatsheet sweep. Authority is the Tillandsias project and the observable limitations of the cheatsheet tooling at the time of writing.
+- Cheatsheet index (the gap in automated sync this file describes): <https://github.com/8007342/tillandsias/blob/main/cheatsheets/INDEX.md>
+- Cheatsheet template (authoring contract, granularity guidance this file critiques): <https://github.com/8007342/tillandsias/blob/main/cheatsheets/TEMPLATE.md>
 - **Last updated:** 2026-04-25
 
 ## Use when

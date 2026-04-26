@@ -1,8 +1,24 @@
+---
+tags: [openapi, api-spec, rest, swagger, codegen, json-schema, http]
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-25
+sources:
+  - https://spec.openapis.org/oas/latest.html
+  - https://spec.openapis.org/oas/v3.1.0.html
+authority: high
+status: current
+---
+
 # OpenAPI
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- OpenAPI Specification — latest (3.2.0 as of 2025-09-19; top-level keys, schema keywords, security schemes, parameter `in` values — the authoritative spec): <https://spec.openapis.org/oas/latest.html>
+- OpenAPI Specification 3.1.0 (the widely-deployed stable release; JSON Schema 2020-12 alignment, `nullable` → `type: [..., "null"]` change): <https://spec.openapis.org/oas/v3.1.0.html>
+- **Last updated:** 2026-04-25
 
 **Version baseline**: OpenAPI 3.1 (aligned with JSON Schema 2020-12). OpenAPI 3.0 still common in legacy specs and many codegen tools — call out version in every spec.
 **Use when**: defining HTTP APIs declaratively, generating clients/servers, producing browsable API docs, contract-testing across services.

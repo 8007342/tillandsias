@@ -2,7 +2,11 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- Go Modules Reference (golang.org): <https://go.dev/ref/mod> — go mod init/tidy/download/why/vendor, go get, go install with @version, go.sum, GOPROXY, vendor/ behavior, replace directives, go.work (workspace mode)
+- Go command documentation: <https://pkg.go.dev/cmd/go> — go build flags (-trimpath, -ldflags, -o), go test flags (-race, -count, -timeout), go vet, go fmt, CGO_ENABLED, build tags (//go:build)
+- **Last updated:** 2026-04-25
 
 **Version baseline**: Go 1.23+ (Fedora 43 `golang` package).
 **Use when**: building / testing / running Go code in the forge.

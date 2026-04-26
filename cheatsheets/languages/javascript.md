@@ -2,7 +2,12 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- Node.js v22 LTS documentation: <https://nodejs.org/docs/latest-v22.x/api/> — official API reference for --test runner, --watch, --env-file (20.6+), native fetch (18+), structuredClone (17+), readline, createReadStream
+- MDN JavaScript Reference: <https://developer.mozilla.org/en-US/docs/Web/JavaScript> — ES2023 language features: optional chaining, nullish coalescing, logical assignment, top-level await, dynamic import, Promise.all/allSettled, for await...of, toSorted/toReversed/with
+- ECMAScript 2023 specification: <https://tc39.es/ecma262/2023/> — normative spec for the language semantics described
+- **Last updated:** 2026-04-25
 
 **Version baseline**: Node.js 22.x LTS (Fedora 43 `nodejs` package), ES2023 syntax
 **Use when**: writing modern JS in the forge — Node scripts, browser code, glue.

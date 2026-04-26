@@ -2,7 +2,11 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- pip install documentation (pip.pypa.io): <https://pip.pypa.io/en/stable/cli/pip_install/> — install, -r, -c (constraints), -e (editable), extras [dev,test], git+https:// VCS, -U upgrade, --dry-run, --no-deps, --user, --break-system-packages / PEP 668
+- PEP 668 — Marking Python base environments as externally managed: <https://peps.python.org/pep-0668/> — externally-managed-environment error behavior
+- **Last updated:** 2026-04-25
 
 **Version baseline**: pip 24.x bundled with Python 3.13 (Fedora 43).
 **Use when**: installing Python packages — but in the forge prefer per-project venvs (PEP 668 blocks bare `pip install`).

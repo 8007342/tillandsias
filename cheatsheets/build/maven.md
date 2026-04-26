@@ -2,7 +2,12 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- Apache Maven — Introduction to the Build Lifecycle: <https://maven.apache.org/guides/introduction/introduction-to-the-lifecycle.html> — validate/compile/test/package/verify/install/deploy/clean phases; surefire (unit) vs failsafe (integration) plugin lifecycle bindings
+- Apache Maven CLI reference: <https://maven.apache.org/ref/current/maven-embedder/cli.html> — -P (profiles), -D (properties), -pl/-am/-amd (reactor), -fae/-ff, -U, -o, -T flags
+- Maven dependency:tree: <https://maven.apache.org/plugins/maven-dependency-plugin/tree-mojo.html> — "nearest wins" resolution, -Dverbose mode for version conflict diagnosis
+- **Last updated:** 2026-04-25
 
 **Version baseline**: Maven 3.9+ (Fedora 43 `maven` package).
 **Use when**: building Java projects with `pom.xml`.

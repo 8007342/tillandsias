@@ -2,10 +2,16 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
-
 **Version baseline**: fzf 0.50+ (Fedora 43).
 **Use when**: interactive fuzzy selection — files, history, branches, any newline-delimited list.
+
+## Provenance
+
+- fzf GitHub repository (junegunn/fzf) — README and flag reference: <https://github.com/junegunn/fzf> — authoritative source for all flags and shell integration
+- fzf official documentation site: <https://junegunn.github.io/fzf/> — usage, key bindings, preview window
+- **Last updated:** 2026-04-25
+
+Verified: `--multi`/`-m` enables Tab multi-select (confirmed in README); `{}` is replaced with the focused line in `--preview`; `--preview 'cat {}'` pattern confirmed. Exit code 130 on Esc/Ctrl-C and `--exit-0`/`--select-1` are documented in the man page (`fzf --man`); not replicated in the README.
 
 ## Quick reference
 

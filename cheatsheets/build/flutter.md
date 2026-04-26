@@ -2,7 +2,11 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- Flutter CLI reference (docs.flutter.dev): <https://docs.flutter.dev/reference/flutter-cli> — official command reference for flutter pub get/upgrade/add, flutter run, flutter build, flutter analyze, flutter test, flutter clean, flutter doctor, flutter devices
+- Flutter web rendering docs: <https://docs.flutter.dev/platform-integration/web/renderers> — --web-renderer canvaskit vs html options
+- **Last updated:** 2026-04-25
 
 **Version baseline**: Flutter 3.24.5 stable (baked at `/opt/flutter`, on `PATH`).
 **Use when**: building Flutter apps in the forge — web + Linux desktop only (no Android, iOS, macOS, Windows tooling in this image).

@@ -2,7 +2,12 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- GNU Bash Reference Manual (Edition 5.3): <https://www.gnu.org/software/bash/manual/bash.html> — covers all parameter expansion forms (§3.5.3), set builtin flags -e/-u/-o pipefail (§4.3.1), IFS, trap, arrays (§6.7), here-docs, [[ ]] / (( )), process substitution (§3.5.6)
+- POSIX Shell Command Language: <https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html> — POSIX baseline for portable shebang and [ ] test semantics
+- ShellCheck wiki (common pitfalls): <https://www.shellcheck.net/wiki/> — SC2086, SC2091, and other lints referenced in pitfalls section
+- **Last updated:** 2026-04-25
 
 **Version baseline**: Bash 5.x (Fedora 43 default; zsh and fish also available in the forge)
 **Use when**: writing shell scripts in the forge — entrypoints, build scripts, glue between tools.

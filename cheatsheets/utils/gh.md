@@ -2,10 +2,16 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
-
 **Version baseline**: gh 2.x (Fedora 43 package; 2.65+).
 **Use when**: GitHub-side operations from the forge — issues, PRs, workflows, API calls. (Forge has no token by default — see Forge-specific.)
+
+## Provenance
+
+- GitHub CLI manual (official): <https://cli.github.com/manual/> — complete subcommand and flag reference
+- GitHub CLI repository: <https://github.com/cli/cli> — source, release notes, and changelog
+- **Last updated:** 2026-04-25
+
+Verified from the official manual: `gh pr create`, `gh api`, `gh workflow run`, `gh run watch` subcommands confirmed; `--json`, `--jq`, `--paginate` flags documented; `{owner}/{repo}` auto-substitution in API paths confirmed.
 
 ## Quick reference
 

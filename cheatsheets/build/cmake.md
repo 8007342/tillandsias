@@ -1,8 +1,28 @@
+---
+tags: [build, cmake, c, cpp, cross-platform, generator]
+languages: [c, cpp]
+since: 2026-04-25
+last_verified: 2026-04-25
+sources:
+  - https://cmake.org/cmake/help/latest/manual/cmake.1.html
+  - https://cmake.org/cmake/help/latest/manual/cmake-commands.7.html
+  - https://cmake.org/cmake/help/latest/manual/cmake-generator-expressions.7.html
+  - https://cmake.org/cmake/help/latest/manual/cmake-policies.7.html
+authority: high
+status: current
+---
+
 # CMake
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- CMake `cmake(1)` manual: <https://cmake.org/cmake/help/latest/manual/cmake.1.html> — `-S`, `-B`, `-G`, `--build`, `--install` flags
+- CMake commands reference: <https://cmake.org/cmake/help/latest/manual/cmake-commands.7.html> — `add_executable`, `add_library`, `target_*`, `find_package`
+- Generator expressions: <https://cmake.org/cmake/help/latest/manual/cmake-generator-expressions.7.html> — `$<$<...>:...>` syntax
+- CMake policies: <https://cmake.org/cmake/help/latest/manual/cmake-policies.7.html> — `cmake_minimum_required` policy semantics
+- **Last updated:** 2026-04-25
 
 **Version baseline**: CMake 3.30+ (Fedora 43 `cmake`).
 **Use when**: cross-platform C/C++/CUDA builds; meta-build that generates Make/Ninja/MSVC project files.

@@ -2,7 +2,10 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- GNU Make manual (Edition 0.77, version 4.4.1, 2023-02-26): <https://www.gnu.org/software/make/manual/make.html> — .PHONY, -j parallel (§5.4), -n/make -B flags, automatic variables $@/$</$^/$* (§10.5.3), pattern rules (%), := vs = (§3.7), ?= +=, $(shell ...) (§8.14), include (§3.3)
+- **Last updated:** 2026-04-25
 
 **Version baseline**: GNU make 4.4 (Fedora 43).
 **Use when**: orchestrating build/test/lint commands; ad hoc task runner; legacy C/C++ projects.

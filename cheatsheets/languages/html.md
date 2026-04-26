@@ -2,7 +2,11 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- WHATWG HTML Living Standard: <https://html.spec.whatwg.org/multipage/> — normative spec for DOCTYPE (§13.1.1), all semantic elements (§4.3), form elements and input types (§4.10), dialog (§4.11.4), picture/source/img (§4.8), data-* attributes (§3.2.6.6), loading=lazy (§2.5.7), ARIA requirements (§3.2.9)
+- MDN HTML Reference: <https://developer.mozilla.org/en-US/docs/Web/HTML> — browser compatibility and usage guidance for all elements listed
+- **Last updated:** 2026-04-25
 
 **Version baseline**: HTML5 (WHATWG Living Standard)
 **Use when**: writing HTML — pages, components, email-safe markup.

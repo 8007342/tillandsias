@@ -2,10 +2,16 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
-
 **Version baseline**: rsync 3.x (Fedora 43 package; current 3.2+).
 **Use when**: copying files efficiently — local↔local or local↔remote (over ssh). Delta-transfer means only changed bytes traverse the wire.
+
+## Provenance
+
+- rsync man page (Samba project, official): <https://download.samba.org/pub/rsync/rsync.1> — complete flag reference
+- rsync documentation index: <https://rsync.samba.org/documentation.html> — links to man pages and FAQ
+- **Last updated:** 2026-04-25
+
+Verified against the official rsync man page: `-a` = `-rlptgoD` (confirmed, with note that ACLs, xattrs, hardlinks are NOT included); `--delete` removes extraneous files on the receiving side (confirmed); trailing slash on source copies contents rather than directory itself (confirmed); `--partial` keeps partially transferred files enabling potential resume.
 
 ## Quick reference
 

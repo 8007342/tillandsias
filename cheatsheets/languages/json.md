@@ -2,7 +2,11 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- RFC 8259 — The JavaScript Object Notation (JSON) Data Interchange Format: <https://www.rfc-editor.org/rfc/rfc8259> — defines syntax (no trailing commas, no comments, double quotes only, allowed escapes, NaN/Infinity forbidden, null/true/false lowercase)
+- RFC 6901 — JSON Pointer: <https://www.rfc-editor.org/rfc/rfc6901> — JSON Pointer syntax (/foo/0/bar, ~0 and ~1 escapes)
+- **Last updated:** 2026-04-25
 
 **Version baseline**: JSON per RFC 8259. JSON Lines and JSON Pointer (RFC 6901) covered briefly.
 **Use when**: producing or consuming JSON in the forge — config files, API payloads, jq targets.

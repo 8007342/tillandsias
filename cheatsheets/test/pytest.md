@@ -2,10 +2,16 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
-
 **Version baseline**: pytest 8.x (installed via pipx in forge, on PATH).
 **Use when**: testing Python — discovery, fixtures, parametrize.
+
+## Provenance
+
+- pytest official documentation (docs.pytest.org): <https://docs.pytest.org/en/stable/> — complete flag reference, fixture scopes, marks, plugins
+- pytest "How to invoke pytest": <https://docs.pytest.org/en/stable/how-to/usage.html> — `-k`, `--collect-only`, `-x`, `--lf`, `--ff`, `-s`, `--tb`
+- **Last updated:** 2026-04-25
+
+Verified against official docs: `-k` expression filtering (confirmed); `--collect-only` shows collected tests (confirmed); discovery rules (`test_*.py` / `*_test.py`, `Test*` classes, `test_*` functions) confirmed in docs. `-x` stop-on-first-failure, `--lf`/`--ff`, `-s`, `--maxfail` documented in the usage guide and full CLI reference.
 
 ## Quick reference
 

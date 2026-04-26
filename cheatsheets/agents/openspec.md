@@ -1,8 +1,25 @@
+---
+tags: [openspec, workflow, spec-driven, change-management, agent-workflow, cli]
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-25
+sources:
+  - https://github.com/8007342/tillandsias/blob/main/openspec/specs/agent-cheatsheets/spec.md
+  - https://github.com/8007342/tillandsias/blob/main/CLAUDE.md
+authority: high
+status: current
+---
+
 # OpenSpec — workflow + CLI
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+OpenSpec is Tillandsias-internal tooling; the authority is the project itself.
+- OpenSpec agent-cheatsheets spec (defines the workflow this cheatsheet describes): <https://github.com/8007342/tillandsias/blob/main/openspec/specs/agent-cheatsheets/spec.md>
+- Tillandsias CLAUDE.md (OpenSpec workflow rules, `/opsx:*` command conventions): <https://github.com/8007342/tillandsias/blob/main/CLAUDE.md>
+- **Last updated:** 2026-04-25
 
 **Version baseline**: `@fission-ai/openspec` baked at `/opt/agents/openspec/` (linked into PATH as `openspec`)
 **Use when**: starting any non-trivial change. NO exceptions for "quick fixes" — the spec trail IS the proof of work.

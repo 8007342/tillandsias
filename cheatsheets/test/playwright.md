@@ -2,10 +2,17 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
-
 **Version baseline**: Playwright 1.45+ (install per-project; not in forge image — but `playwright install` fetches browser binaries automatically).
 **Use when**: modern E2E browser testing — TypeScript/JavaScript primary, Python and Java also supported. Often preferred over Selenium for new projects.
+
+## Provenance
+
+- Playwright official documentation (Microsoft): <https://playwright.dev/docs/intro> — getting started, test runner, CLI flags
+- Playwright locators reference: <https://playwright.dev/docs/locators> — `getByRole`, `getByLabel`, `getByText`, `getByTestId` priority
+- Playwright configuration reference: <https://playwright.dev/docs/test-configuration> — `trace`, `screenshot`, `video`, `workers`, `fullyParallel`
+- **Last updated:** 2026-04-25
+
+Verified against official docs: `npx playwright test` runs tests (confirmed); `--headed` shows browser window (confirmed); `getByRole` accessibility-first locator (confirmed in locators docs); auto-waiting `expect(...).toBeVisible()` (confirmed — Playwright auto-waits on all `expect` assertions). `--debug`, `--trace on`, sharding (`--shard`), and storage state confirmed in the respective docs sections.
 
 ## Quick reference
 

@@ -2,10 +2,16 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
-
 **Version baseline**: tree 2.x (Fedora 43 package; current 2.1+).
 **Use when**: visualising directory hierarchy — quick structural overview, sharing layout in docs/PRs, auditing what's in a folder before a `rm -rf`.
+
+## Provenance
+
+- tree project homepage (Old Man Programmer): <http://mama.indstate.edu/users/ice/tree/> — the canonical upstream project page and man page source
+- tree man page (rendered): `man tree` on Fedora — documents all flags; also mirrored at <https://linux.die.net/man/1/tree>
+- **Last updated:** 2026-04-25
+
+Verified: `-L` depth limit and JSON output (`-J`) are confirmed in the upstream project (contributors page lists their addition). `-I` glob exclude, `--gitignore`, `-d` dirs-only, `-a` hidden files, `-P` include pattern with `--prune` and `--matchdirs` are documented in `man tree`. The `--gitignore` flag is upstream-confirmed.
 
 ## Quick reference
 

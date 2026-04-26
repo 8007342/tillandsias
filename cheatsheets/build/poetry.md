@@ -2,7 +2,11 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- Poetry CLI documentation (python-poetry.org): <https://python-poetry.org/docs/cli/> — all commands: init/new/install (--sync/--no-root)/add (--group dev)/remove/update/lock/run/shell/build/publish/version/env info/env list
+- Poetry configuration documentation: <https://python-poetry.org/docs/configuration/> — virtualenvs.in-project setting (puts .venv inside project dir)
+- **Last updated:** 2026-04-25
 
 **Version baseline**: Poetry 1.8+ (installed via pipx in the forge).
 **Use when**: project-style Python with strict dep management — alternative to `pip + venv` or `uv`.

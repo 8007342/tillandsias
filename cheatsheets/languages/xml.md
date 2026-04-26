@@ -2,7 +2,12 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- W3C XML 1.0 (Fifth Edition) Recommendation: <https://www.w3.org/TR/xml/> — normative spec for prolog, elements, attributes, comments, CDATA, entity references (&lt; &gt; &amp; &quot; &apos;), processing instructions, DOCTYPE (verified: 5th ed, 2008-11-26)
+- Namespaces in XML 1.0 (W3C): <https://www.w3.org/TR/xml-names/> — namespace syntax (xmlns:prefix and default namespace declarations)
+- OWASP XXE Prevention Cheat Sheet: <https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html> — basis for the XXE/DOCTYPE pitfall warning
+- **Last updated:** 2026-04-25
 
 **Version baseline**: XML 1.0 (5th ed) — what virtually all tools target. XML 1.1 exists but is rarely used. Forge ships `xmllint` (libxml2) and `xmlstarlet`.
 **Use when**: parsing or producing XML — `pom.xml`, SVG, RSS/Atom, Android manifests, legacy SOAP/SAML, anything in the Java enterprise stack.

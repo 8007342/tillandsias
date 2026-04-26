@@ -2,7 +2,11 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- pipx documentation (pipx.pypa.io): <https://pipx.pypa.io/stable/> — overview of pipx install/run/inject/upgrade workflow and PIPX_HOME/PIPX_BIN_DIR env vars
+- pipx CLI reference: <https://pipx.pypa.io/stable/reference/> — full command flags: install (--global, --suffix, --python), inject, run (--spec), upgrade/upgrade-all, reinstall-all, uninstall, list (--include-injected), ensurepath
+- **Last updated:** 2026-04-25
 
 **Version baseline**: pipx 1.7+ (Fedora 43). Forge ships `PIPX_HOME=/opt/pipx` with `PIPX_BIN_DIR=/usr/local/bin`.
 **Use when**: installing Python CLI tools globally without polluting project envs.

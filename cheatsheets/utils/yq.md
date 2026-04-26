@@ -2,10 +2,16 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
-
 **Version baseline**: mikefarah/yq 4.x (added to forge by `agent-source-of-truth` change).
 **Use when**: querying or updating YAML files in the forge — Kubernetes manifests, GitHub Actions workflows, Compose files, Helm values. (NOT the kislyuk Python `yq` wrapper around jq — that is a different binary with different syntax.)
+
+## Provenance
+
+- mikefarah/yq documentation (official GitBook): <https://mikefarah.gitbook.io/yq/> — complete operator and flag reference
+- mikefarah/yq GitHub repository: <https://github.com/mikefarah/yq> — release notes, README, version history
+- **Last updated:** 2026-04-25
+
+Verified: `-i` in-place edit confirmed in documentation with example `yq -i '.a.b[0].c = "cool"' file.yaml`; `ea` (eval-all) processes all files together (confirmed); `strenv(VAR)` reads as string while `env(VAR)` parses as YAML (Norway problem — confirmed in yq docs). `-o json` output format, `-P` pretty-print, and `select()` pipe syntax confirmed.
 
 ## Quick reference
 

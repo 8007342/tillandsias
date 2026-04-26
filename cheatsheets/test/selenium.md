@@ -2,10 +2,17 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
-
 **Version baseline**: Selenium 4.x (install per-project; not in forge image).
 **Use when**: cross-browser end-to-end web testing with broad language SDK support (Python, Java, JS/TS, C#, Ruby). Compare with Playwright (newer, single-vendor, simpler bring-up).
+
+## Provenance
+
+- Selenium official documentation (selenium.dev): <https://www.selenium.dev/documentation/webdriver/> — WebDriver API, locators, waits, browsers
+- Selenium WebDriver W3C specification: <https://w3c.github.io/webdriver/> — the underlying W3C Recommendation standard
+- Selenium Manager documentation: <https://www.selenium.dev/documentation/selenium_manager/> — automatic driver resolution (introduced in Selenium 4.6)
+- **Last updated:** 2026-04-25
+
+Verified: `WebDriverWait` with `ExpectedConditions` confirmed in official docs (Waiting with Expected Conditions section); `By.CSS_SELECTOR` confirmed in locators section; Selenium Manager auto-resolution confirmed (introduced as beta in 4.6, stable in later 4.x); `--headless=new` Chrome flag and `/dev/shm` container issues documented in the Chrome-specific section.
 
 ## Quick reference
 

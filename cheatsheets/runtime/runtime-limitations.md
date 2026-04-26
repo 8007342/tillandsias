@@ -1,8 +1,23 @@
+---
+tags: [forge, runtime-limitations, feedback-loop, agent-workflow, meta]
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-25
+sources:
+  - https://github.com/8007342/tillandsias/blob/main/openspec/specs/agent-cheatsheets/spec.md
+authority: high
+status: current
+---
+
 # RUNTIME_LIMITATIONS_NNN.md — feedback loop
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+This file documents the Tillandsias-internal feedback format for reporting forge limitations. The authority is the Tillandsias project itself.
+- OpenSpec agent-cheatsheets spec (defines the runtime-limitations reporting contract): <https://github.com/8007342/tillandsias/blob/main/openspec/specs/agent-cheatsheets/spec.md>
+- **Last updated:** 2026-04-25
 
 **Version baseline**: Tillandsias 0.1.169.x
 **Use when**: you (the agent) tried to do something the forge can't, AND working around it would be wrong. Report it. Don't hide it.

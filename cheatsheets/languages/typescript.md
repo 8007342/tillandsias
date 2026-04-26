@@ -2,7 +2,11 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- TypeScript official documentation (Microsoft): <https://www.typescriptlang.org/docs/> — handbook covering generics, conditional types, mapped types, template literal types, keyof, utility types (Pick/Omit/Partial/Required/Readonly/Record/ReturnType/Awaited/NonNullable), TSConfig reference (strict, noUncheckedIndexedAccess, exactOptionalPropertyTypes, NodeNext module resolution)
+- TypeScript 4.9 release notes (satisfies operator): <https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-9.html> — satisfies operator validation behavior
+- **Last updated:** 2026-04-25
 
 **Version baseline**: TypeScript 5.x (install per-project: `npm i -D typescript`)
 **Use when**: writing TS in the forge — type system, generics, build setup.

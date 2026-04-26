@@ -2,7 +2,10 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- YAML 1.2 specification revision 1.2.2 (2021-10-01): <https://yaml.org/spec/1.2.2/> — mappings, sequences, block scalars (|, >), block chomping (§8.1.1.2), flow collections (§7), anchors/aliases (§3.2.2.2), null/bool values, document separators, tabs-forbidden rule, type tags; also covers Norway Problem (yes/no/on/off as 1.1 booleans)
+- **Last updated:** 2026-04-25
 
 **Version baseline**: YAML 1.2 (most parsers default to 1.1 quirks; explicit `%YAML 1.2` directive recommended)
 **Use when**: writing YAML config — Kubernetes, GitHub Actions, OpenAPI, CI files.

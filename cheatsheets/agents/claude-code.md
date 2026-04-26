@@ -1,8 +1,24 @@
+---
+tags: [claude-code, anthropic, agent, cli, skills, hooks, settings]
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-25
+sources:
+  - https://code.claude.com/docs/en/overview
+  - https://code.claude.com/docs/en/cli-reference
+authority: high
+status: current
+---
+
 # Claude Code — CLI + skills + hooks
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- Claude Code official docs — overview (install, surfaces, CLAUDE.md, skills, hooks — the canonical Anthropic reference): <https://code.claude.com/docs/en/overview>
+- Claude Code CLI reference (flags `--model`, `--resume`, `--version`): <https://code.claude.com/docs/en/cli-reference>
+- **Last updated:** 2026-04-25
 
 **Version baseline**: `@anthropic-ai/claude-code` baked at `/opt/agents/claude/` (linked into PATH as `claude`)
 **Use when**: launching Claude Code from inside the forge, configuring skills/hooks, debugging session state.

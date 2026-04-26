@@ -2,10 +2,16 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
-
 **Version baseline**: curl 8.x (Fedora 43).
 **Use when**: HTTP from the shell. In the forge, curl auto-uses `HTTPS_PROXY` env var.
+
+## Provenance
+
+- curl man page (official): <https://curl.se/docs/manpage.html> — complete flag reference including `-f`, `-s`, `-S`, `-L`, `-o`, `-w`, `-H`, `--data`, `--json`, `--form`, `--resolve`
+- curl project documentation index: <https://curl.se/docs/> — feature documentation and release notes
+- **Last updated:** 2026-04-25
+
+Verified against curl 8.20.0 man page: `-f`/`--fail` exits 22 on HTTP ≥400 (confirmed); `--json` sets `Content-Type: application/json` + `Accept: application/json` and implies POST (added in 7.82.0); `-fsSL` idiom flags work as documented individually.
 
 ## Quick reference
 

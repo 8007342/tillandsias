@@ -2,7 +2,11 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- MDN CSS Reference (Mozilla): <https://developer.mozilla.org/en-US/docs/Web/CSS> — canonical reference for all CSS properties, selectors, units, flexbox, grid, custom properties, container queries, :has(), dvh/svh, oklch()
+- W3C CSS Snapshot 2023: <https://www.w3.org/TR/css-2023/> — normative spec list covering Flexbox Level 1, Grid Level 2, Custom Properties, Selectors Level 4, Containment Level 3
+- **Last updated:** 2026-04-25
 
 **Version baseline**: Modern CSS (Baseline 2024 — flexbox, grid, custom properties, container queries, `:has()`)
 **Use when**: writing styles — layout, theming, responsive design.

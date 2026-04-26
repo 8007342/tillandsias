@@ -2,7 +2,12 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- Python 3 official documentation (docs.python.org): <https://docs.python.org/3/> — language reference, stdlib, what's new per version; covers f-string = syntax (3.8+), built-in generics list[int] (3.9+), X|Y union (3.10+), match/case (3.10+), dataclasses frozen/slots, asyncio, pathlib, subprocess
+- Python language reference — dataclasses: <https://docs.python.org/3/library/dataclasses.html> — frozen, slots parameters
+- Python language reference — asyncio: <https://docs.python.org/3/library/asyncio.html> — asyncio.run(), gather(), sleep()
+- **Last updated:** 2026-04-25
 
 **Version baseline**: Python 3.13.x (Fedora 43 `python3` package)
 **Use when**: writing Python in the forge — syntax, idioms, packaging.

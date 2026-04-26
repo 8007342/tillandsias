@@ -2,10 +2,16 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
-
 **Version baseline**: OpenSSH 9.x (Fedora 43 `openssh-clients`).
 **Use when**: ssh to other machines from the forge (rare — forge typically credential-free; usually no host keys).
+
+## Provenance
+
+- OpenSSH ssh(1) man page (OpenBSD, canonical upstream): <https://man.openbsd.org/ssh> — complete option reference
+- OpenSSH project manual index: <https://www.openssh.com/manual.html> — links to all OpenSSH man pages
+- **Last updated:** 2026-04-25
+
+Verified against OpenBSD ssh(1) man page: `-J` ProxyJump (confirmed); `-A` agent forwarding (confirmed); `-L` local port forwarding (confirmed); `-N` no remote command (confirmed); `-D` SOCKS proxy — both SOCKS4 and SOCKS5 (confirmed); `-tt` forces TTY allocation (confirmed). Ed25519 recommendation sourced from ssh-keygen(1) and OpenSSH release notes.
 
 ## Quick reference
 

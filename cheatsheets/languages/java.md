@@ -2,7 +2,12 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- OpenJDK 21 API documentation: <https://docs.oracle.com/en/java/javase/21/docs/api/> — covers records (java.lang.Record), sealed interfaces, virtual threads (Executors.newVirtualThreadPerTaskExecutor, JEP 444), Stream/Collectors, CompletableFuture, java.nio.file, java.time, java.net.http.HttpClient
+- Java Language Specification (Java SE 21): <https://docs.oracle.com/javase/specs/jls/se21/html/index.html> — sealed classes (§8.1.1.2), records (§8.10), pattern-matching switch (§14.11.1), text blocks
+- JEP 444 — Virtual Threads (final, JDK 21): <https://openjdk.org/jeps/444> — virtual thread semantics and Executors.newVirtualThreadPerTaskExecutor()
+- **Last updated:** 2026-04-25
 
 **Version baseline**: Java 21 LTS (OpenJDK from Fedora 43 `java-21-openjdk-devel`)
 **Use when**: writing Java in the forge — modern syntax, common stdlib, patterns.

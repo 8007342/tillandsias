@@ -1,11 +1,24 @@
+---
+tags: [meta, cheatsheet-system, architecture, mcp, methodology]
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-25
+sources:
+  - https://github.com/8007342/tillandsias/blob/main/cheatsheets/INDEX.md
+  - https://github.com/8007342/tillandsias/blob/main/cheatsheets/TEMPLATE.md
+authority: high
+status: current
+---
+
 # Cheatsheet architecture (v2 — fine-grained, MCP-queryable)
 
 @trace spec:agent-cheatsheets, spec:cheatsheet-methodology-evolution
 
 ## Provenance
 
-- This file documents Tillandsias-internal architecture; the only authority is the project itself.
-- Cited project files: `cheatsheets/INDEX.md`, `cheatsheets/TEMPLATE.md`, `~/src/tillandsias/CLAUDE.md`, `~/src/CLAUDE.md`.
+This file documents Tillandsias-internal cheatsheet architecture. The authority is the project itself.
+- Cheatsheet index (structure source of truth): <https://github.com/8007342/tillandsias/blob/main/cheatsheets/INDEX.md>
+- Cheatsheet template (authoring contract): <https://github.com/8007342/tillandsias/blob/main/cheatsheets/TEMPLATE.md>
 - **Last updated:** 2026-04-25
 
 ## Use when

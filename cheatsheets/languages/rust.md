@@ -2,7 +2,12 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- The Rust Programming Language book (official): <https://doc.rust-lang.org/book/> — ownership, borrowing, lifetimes, Result/?, match, closures, iterators, async/await, traits, generics
+- Rust Reference: <https://doc.rust-lang.org/reference/> — normative language spec; let-else, const/static, visibility (pub/pub(crate)/pub(super)), integer overflow behavior
+- Rust std library documentation: <https://doc.rust-lang.org/std/> — Box, Arc, Rc, String, str, Iterator, Result, Option
+- **Last updated:** 2026-04-25
 
 **Version baseline**: Rust 1.83+ (Fedora 43 `rust` package), edition 2024
 **Use when**: writing Rust in the forge — syntax, ownership idioms, common stdlib.

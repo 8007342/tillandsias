@@ -1,8 +1,29 @@
+---
+tags: [build, rust, cargo, package-manager, workspaces]
+languages: [rust]
+since: 2026-04-25
+last_verified: 2026-04-25
+sources:
+  - https://doc.rust-lang.org/cargo/commands/index.html
+  - https://doc.rust-lang.org/cargo/reference/manifest.html
+  - https://doc.rust-lang.org/cargo/reference/workspaces.html
+  - https://doc.rust-lang.org/cargo/reference/profiles.html
+authority: high
+status: current
+---
+
 # Cargo
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- Cargo Commands index: <https://doc.rust-lang.org/cargo/commands/index.html> — canonical subcommand list
+- Cargo Manifest reference: <https://doc.rust-lang.org/cargo/reference/manifest.html> — `[package]`, `[features]`, `[dependencies]`
+- Cargo Workspaces reference: <https://doc.rust-lang.org/cargo/reference/workspaces.html> — `members`, `resolver`
+- Cargo Profiles reference: <https://doc.rust-lang.org/cargo/reference/profiles.html> — `[profile.*]` keys
+- `cargo check` description: <https://doc.rust-lang.org/cargo/commands/cargo-check.html> — "compile without final code-generation step"
+- **Last updated:** 2026-04-25
 
 **Version baseline**: Cargo 1.83+ (bundled with Rust 1.83+ from Fedora 43)
 **Use when**: building / testing / running Rust code in the forge.

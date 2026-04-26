@@ -2,7 +2,12 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- Yarn CLI reference (yarnpkg.com): <https://yarnpkg.com/cli> — yarn add/remove/run/exec/workspace/workspaces foreach/upgrade-interactive/set version; Berry (4.x) command set
+- Yarn classic (1.x) documentation: <https://classic.yarnpkg.com/en/docs/cli/> — yarn install --frozen-lockfile, yarn add -D/-W, yarn workspaces run, classic-only commands
+- Node.js Corepack documentation: <https://nodejs.org/api/corepack.html> — corepack enable, packageManager field in package.json, auto-version activation
+- **Last updated:** 2026-04-25
 
 **Version baseline**: yarn classic 1.22.x (installed via `npm i -g` in forge image). Berry (yarn 4.x) requires opt-in via Corepack.
 **Use when**: an existing project chose yarn — otherwise npm/pnpm are usually preferred.

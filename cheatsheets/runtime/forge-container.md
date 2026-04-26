@@ -1,8 +1,24 @@
+---
+tags: [forge, runtime, container, podman, sandbox, paths]
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-25
+sources:
+  - https://docs.podman.io/en/latest/markdown/podman-run.1.html
+  - https://github.com/8007342/tillandsias/blob/main/images/default/Containerfile
+authority: high
+status: current
+---
+
 # Forge container — runtime contract
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- Podman run reference (security flags `--cap-drop`, `--security-opt=no-new-privileges`, `--userns=keep-id`, ports, networking): <https://docs.podman.io/en/latest/markdown/podman-run.1.html>
+- Tillandsias forge Containerfile (image layout source of truth): <https://github.com/8007342/tillandsias/blob/main/images/default/Containerfile>
+- **Last updated:** 2026-04-25
 
 **Version baseline**: Fedora Minimal 43, forge image built from `images/default/Containerfile`
 **Use when**: starting any task inside the forge — this defines the rules of the sandbox you live in.

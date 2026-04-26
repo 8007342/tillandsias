@@ -2,10 +2,17 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
-
 **Version baseline**: ShellCheck 0.10.x, shfmt 3.8.x (added to forge by `agent-source-of-truth` change).
 **Use when**: linting / formatting bash scripts before committing them.
+
+## Provenance
+
+- ShellCheck wiki (official, koalaman/shellcheck): <https://www.shellcheck.net/wiki/> — per-code explanations including SC1091 (not following source)
+- ShellCheck GitHub repository: <https://github.com/koalaman/shellcheck> — flag reference (`-S`, `-e`, `-i`, `-x`, `-f`, `-P`)
+- shfmt GitHub repository (mvdan/sh): <https://github.com/mvdan/sh> — flag reference (`-i`, `-bn`, `-ci`, `-sr`, `-d`, `-l`, `-w`, `-s`); latest stable v3.13.1
+- **Last updated:** 2026-04-25
+
+Verified: SC1091 is "not following source" (confirmed in wiki); shfmt v3.13.1 is the latest stable as of 2026-04-06 (confirmed in repository); ShellCheck `-S` severity, `-e` exclude, `-x` follow sources all documented in the repository.
 
 ## Quick reference
 

@@ -1,8 +1,26 @@
+---
+tags: [forge, networking, enclave, proxy, squid, git, ollama, dns]
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-25
+sources:
+  - https://docs.podman.io/en/latest/markdown/podman-network.1.html
+  - https://www.squid-cache.org/Doc/config/
+  - https://github.com/8007342/tillandsias/blob/main/images/default/Containerfile
+authority: high
+status: current
+---
+
 # Forge networking — enclave layout
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- Podman network reference (enclave network model, container DNS by name): <https://docs.podman.io/en/latest/markdown/podman-network.1.html>
+- Squid configuration reference (proxy env vars `HTTPS_PROXY`, `NO_PROXY`, `SSL_CERT_FILE`): <https://www.squid-cache.org/Doc/config/>
+- Tillandsias forge Containerfile (entrypoint, env var exports): <https://github.com/8007342/tillandsias/blob/main/images/default/Containerfile>
+- **Last updated:** 2026-04-25
 
 **Version baseline**: Tillandsias 0.1.169.x enclave (proxy / git-service / inference / router / forge)
 **Use when**: anything that wants to make a network call from inside the forge.

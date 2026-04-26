@@ -2,7 +2,12 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- Gradle Command-Line Interface reference: <https://docs.gradle.org/current/userguide/command_line_interface.html> — gradle tasks/assemble/build/test/check/clean/run, :sub:task syntax, --rerun-tasks, --refresh-dependencies, -P/-D flags, --scan, --no-daemon, ./gradlew wrapper generation
+- Gradle dependency configurations reference: <https://docs.gradle.org/current/userguide/java_library_plugin.html> — implementation vs api vs runtimeOnly vs testImplementation scopes
+- Gradle Version Catalogs: <https://docs.gradle.org/current/userguide/platforms.html> — gradle/libs.versions.toml [versions]/[libraries]/[plugins] tables
+- **Last updated:** 2026-04-25
 
 **Version baseline**: Gradle 8.10 (baked at `/opt/gradle`, on `PATH` as `gradle`).
 **Use when**: Java/Kotlin builds with `build.gradle` / `build.gradle.kts` — Android excluded in forge.

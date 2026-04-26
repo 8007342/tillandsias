@@ -1,8 +1,26 @@
+---
+tags: [grpc, rpc, http2, streaming, protobuf, service-to-service, grpcurl]
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-25
+sources:
+  - https://grpc.io/docs/what-is-grpc/core-concepts/
+  - https://grpc.io/docs/guides/
+  - https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
+authority: high
+status: current
+---
+
 # gRPC
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- gRPC official docs — core concepts (four RPC types, metadata, deadlines, cancellation): <https://grpc.io/docs/what-is-grpc/core-concepts/>
+- gRPC guides (status codes, keepalive, message size limits, gRPC-Web): <https://grpc.io/docs/guides/>
+- gRPC status codes reference (numeric codes: OK, CANCELLED, INVALID_ARGUMENT, etc.): <https://github.com/grpc/grpc/blob/master/doc/statuscodes.md>
+- **Last updated:** 2026-04-25
 
 **Version baseline**: gRPC concepts language-agnostic. grpcurl 1.9+ added by `agent-source-of-truth` change.
 **Use when**: building service-to-service RPC with strict schemas, streaming, or bidirectional comms.

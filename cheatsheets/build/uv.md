@@ -2,7 +2,11 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- uv documentation (docs.astral.sh): <https://docs.astral.sh/uv/> — project commands (uv init/add/remove/lock/sync/run), pip interface (uv pip install/uninstall/list/freeze/compile/sync), venv management, python management (uv python install/list), --frozen flag, uv.lock format
+- uv pip interface reference: <https://docs.astral.sh/uv/pip/> — drop-in pip replacement semantics, --generate-hashes, uv pip compile (pip-tools replacement)
+- **Last updated:** 2026-04-25
 
 **Version baseline**: uv 0.4+ (installed via pipx in the forge, on `PATH` as `uv`).
 **Use when**: you want a faster `pip` replacement or a reproducible Python project workflow (lockfile, pinned interpreter, managed venv).

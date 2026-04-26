@@ -2,10 +2,17 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
-
 **Version baseline**: ripgrep 14.x (Fedora 43).
 **Use when**: searching code in the forge. Faster than grep, respects `.gitignore` by default, sane Unicode defaults.
+
+## Provenance
+
+- ripgrep user guide (BurntSushi/ripgrep): <https://github.com/BurntSushi/ripgrep/blob/master/GUIDE.md> — flags, file types, glob filtering
+- ripgrep CHANGELOG and flag reference: <https://github.com/BurntSushi/ripgrep> — `--type-list`, `--json`, `--pcre2`, flag inventory
+- Rust regex crate syntax docs: <https://docs.rs/regex/latest/regex/#syntax> — confirms the default regex engine (Rust `regex`, not PCRE)
+- **Last updated:** 2026-04-25
+
+Verified: `-t <type>` and `-g '<glob>'` confirmed in user guide; default regex engine is Rust `regex` (not PCRE — confirmed via regex crate reference in GUIDE.md); `-P` enables PCRE2; `-l` (files-with-matches), `--json` (structured output), `--no-ignore`, `--hidden` all documented in the ripgrep repository.
 
 ## Quick reference
 

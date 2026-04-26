@@ -1,8 +1,24 @@
+---
+tags: [opencode, agent, cli, web-ui, serve, tui, session, coding-agent]
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-25
+sources:
+  - https://opencode.ai/docs
+  - https://opencode.ai/docs/cli
+authority: high
+status: current
+---
+
 # OpenCode — CLI + web mode
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- OpenCode official docs — overview (what opencode is, TUI vs web mode): <https://opencode.ai/docs>
+- OpenCode CLI reference (`opencode`, `opencode serve`, `opencode web`, `--port`, `--hostname` flags): <https://opencode.ai/docs/cli>
+- **Last updated:** 2026-04-25
 
 **Version baseline**: opencode binary baked at `/opt/agents/opencode/bin/opencode` (linked into PATH as `opencode`). The forge ships `opencode serve` for the web UI.
 **Use when**: launching OpenCode interactively or via Tillandsias' "Attach Here" web flow.

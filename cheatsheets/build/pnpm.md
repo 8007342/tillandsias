@@ -2,7 +2,12 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- pnpm documentation (pnpm.io): <https://pnpm.io/cli/install> — pnpm install, pnpm add (-D/-O/-w), pnpm remove, pnpm run/exec/dlx, --filter patterns (name/path/graph selectors), -r recursive, pnpm store, pnpm why
+- pnpm workspaces: <https://pnpm.io/workspaces> — pnpm-workspace.yaml, workspace:* protocol, --workspace-concurrency
+- pnpm motivation (content-addressable store): <https://pnpm.io/motivation> — hard-link store architecture, one copy per (name, version)
+- **Last updated:** 2026-04-25
 
 **Version baseline**: pnpm 9.x (installed via `npm i -g --prefix=/usr` in forge image)
 **Use when**: monorepos / disk-efficient package management.

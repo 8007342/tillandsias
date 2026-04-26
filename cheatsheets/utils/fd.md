@@ -2,10 +2,15 @@
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
-
 **Version baseline**: fd 9.x (Fedora package `fd-find`; binary is `fd`).
 **Use when**: finding files in the forge — replacement for `find` with faster defaults.
+
+## Provenance
+
+- fd GitHub repository (sharkdp/fd) — README and flag reference: <https://github.com/sharkdp/fd> — authoritative source for all flags and default behaviours
+- **Last updated:** 2026-04-25
+
+Verified: default pattern mode is regex (not glob); `-g` switches to glob; `-H` includes hidden files; `-I` bypasses `.gitignore`; `-u` = `-HI`; placeholder tokens `{}`, `{/}`, `{//}`, `{.}`, `{/.}` confirmed for `-x`.
 
 ## Quick reference
 

@@ -1,8 +1,24 @@
+---
+tags: [sse, server-sent-events, eventsource, streaming, http, browser, push]
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-25
+sources:
+  - https://html.spec.whatwg.org/multipage/server-sent-events.html
+  - https://www.rfc-editor.org/rfc/rfc9110
+authority: high
+status: current
+---
+
 # Server-Sent Events (SSE)
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- WHATWG HTML Living Standard §9.2 "Server-sent events" (EventSource interface, `text/event-stream` format, `data:` / `event:` / `id:` / `retry:` fields, reconnection algorithm — the authoritative SSE spec): <https://html.spec.whatwg.org/multipage/server-sent-events.html>
+- RFC 9110 "HTTP Semantics" (underlying HTTP semantics for long-lived responses, `Cache-Control`, `Content-Type`): <https://www.rfc-editor.org/rfc/rfc9110>
+- **Last updated:** 2026-04-25
 
 **Version baseline**: SSE — HTML Living Standard `EventSource` interface; uses HTTP/1.1 long-lived response with `text/event-stream` content-type.
 **Use when**: server pushes to browser/client, no client→server messaging needed. Simpler than WebSocket — plain HTTP, automatic reconnection, works through most proxies.

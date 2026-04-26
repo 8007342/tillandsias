@@ -1,8 +1,24 @@
+---
+tags: [websocket, real-time, bidirectional, protocol, rfc6455, frames, browser]
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-25
+sources:
+  - https://www.rfc-editor.org/rfc/rfc6455
+  - https://websockets.spec.whatwg.org/
+authority: high
+status: current
+---
+
 # WebSockets
 
 @trace spec:agent-cheatsheets
 
-> ⚠️ **DRAFT — provenance pending.** This cheatsheet was generated before the provenance-mandatory methodology landed. Treat its content as untrusted until the `## Provenance` section below is populated and verified against authoritative sources. See `cheatsheets/runtime/runtime-limitations.md` to report errors. (Tracked under change `cheatsheet-methodology-evolution`.)
+## Provenance
+
+- RFC 6455 "The WebSocket Protocol" (handshake, frame opcodes, close codes, masking, protocol details — the definitive WebSocket spec): <https://www.rfc-editor.org/rfc/rfc6455>
+- WHATWG WebSockets Living Standard (browser JS API — `WebSocket`, `.onmessage`, `.send()`, `.close()`): <https://websockets.spec.whatwg.org/>
+- **Last updated:** 2026-04-25
 
 **Version baseline**: WebSocket protocol RFC 6455 (1.0).
 **Use when**: bidirectional persistent connection — chat, real-time games, collaborative editing, live cursors. For server→client only, prefer SSE (simpler, auto-reconnect, fits HTTP/2).
