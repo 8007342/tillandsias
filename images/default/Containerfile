@@ -122,6 +122,14 @@ RUN curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}
     && rm /tmp/grpcurl.tar.gz \
     && /usr/local/bin/grpcurl -version 2>&1 | head -1
 
+# ── chromium-headless on PATH ─────────────────────────────────
+# @trace spec:forge-headless-browsers
+# Fedora's chromium-headless package installs the binary at
+# /usr/lib64/chromium-browser/headless_shell — not on PATH. Symlink so
+# `which chromium-headless` resolves and the audit-cited usage works.
+RUN ln -sf /usr/lib64/chromium-browser/headless_shell /usr/local/bin/chromium-headless \
+    && /usr/local/bin/chromium-headless --version 2>&1 | head -1
+
 # ── geckodriver (Mozilla WebDriver for Firefox) ──────────────────
 # @trace spec:forge-headless-browsers, spec:default-image
 # @cheatsheet test/selenium.md, test/playwright.md
