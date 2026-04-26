@@ -425,12 +425,19 @@ fn subsystem_emoji_and_order(image_name: &str) -> Option<(u8, &'static str)> {
 /// the stage is healthy (Authed without infra failure).
 ///
 /// Chip shape (in order):
-/// 1. `✅` constant prefix — signals "this is a checklist in flight"
+/// 1. `📋` (clipboard / checklist) constant prefix — "this is a checklist
+///    in flight". Reserved emoji `✅` is for terminal "all complete" state
+///    only; it must never appear at the front of the chip.
 /// 2. Per-completed-subsystem emoji, in stable order (compass → web →
-///    shield → brain → shuffle → mirror → hammer)
+///    shield → brain → shuffle → mirror → hammer).
 /// 3. The latest action text: `Building <name> …` while building,
-///    `<name> OK` for the 2-second flash after completion
-/// 4. `· GitHub unreachable — using cached list` appended on `Stage::NetIssue`
+///    `<name> OK` for the 2-second flash after completion of an
+///    individual subsystem.
+/// 4. When ALL infrastructure subsystems for the current attach have
+///    completed, a final `✅ Environment ready` flash appears
+///    (`📋🧭🕸️🛡️🧠🔀 ✅ Environment ready`) for 2 seconds, then the
+///    chip is removed.
+/// 5. `· GitHub unreachable — using cached list` appended on `Stage::NetIssue`.
 ///
 /// Failure transitions the menu to `Stage::Unhealthy` whose label
 /// (`🥀 Unhealthy environment`) is rendered as a different menu item, NOT
@@ -441,9 +448,12 @@ fn subsystem_emoji_and_order(image_name: &str) -> Option<(u8, &'static str)> {
 /// @cheatsheet runtime/forge-container.md
 ///
 /// @tombstone superseded:tray-progress-and-icon-states — kept for three
-/// releases (until 0.1.169.231). Prior shape was a comma-joined fragment
-/// list (`Building Forge… · GitHub unreachable …`) without per-subsystem
-/// emoji accumulation; replaced by the additive `✅🧭🕸️…` chip.
+/// releases (until 0.1.169.232). Prior shapes were:
+///   1. Comma-joined fragment list (`Building Forge… · GitHub unreachable …`)
+///      replaced by the additive emoji chip.
+///   2. `✅` as the constant prefix — wrong: ✅ is reserved for the
+///      terminal "Environment ready" state. Replaced by `📋` (clipboard)
+///      to make in-flight vs complete visually distinct.
 pub fn status_text(state: &TrayState, stage: Stage) -> Option<String> {
     use std::time::Duration;
     const READY_FLASH: Duration = Duration::from_secs(2);
@@ -465,8 +475,10 @@ pub fn status_text(state: &TrayState, stage: Stage) -> Option<String> {
     completed_emojis.sort_by_key(|(order, _)| *order);
     completed_emojis.dedup_by_key(|(order, _)| *order);
 
-    // Build the constant prefix: ✅ then accumulated subsystem emojis.
-    let mut prefix = String::from("\u{2705}"); // ✅
+    // Build the constant prefix: 📋 then accumulated subsystem emojis.
+    // 📋 (clipboard) signals "checklist in flight". ✅ is reserved for
+    // the terminal "Environment ready" flash only.
+    let mut prefix = String::from("\u{1F4CB}"); // 📋
     for (_, emoji) in &completed_emojis {
         prefix.push_str(emoji);
     }
@@ -480,6 +492,30 @@ pub fn status_text(state: &TrayState, stage: Stage) -> Option<String> {
         .map(|b| b.image_name.as_str())
         .collect();
 
+    // The "Environment ready" terminal flash fires when the LAST piece
+    // of infrastructure (the router — sort_order 5) has completed and
+    // every other infrastructure subsystem also completed AND nothing is
+    // in flight. This produces the canonical `📋🧭🕸️🛡️🧠🔀 ✅ Environment
+    // ready` flash for 2s before the chip clears.
+    //
+    // We detect "all infrastructure ready" by: in_progress is empty AND
+    // completed_emojis contains the router emoji (sort_order 5). The
+    // forge + git-mirror are PER-attach not per-launch so they're
+    // intentionally NOT in this gate (they appear in their own per-attach
+    // chip cycle).
+    let infra_all_done_recent = in_progress.is_empty()
+        && completed_emojis.iter().any(|(o, _)| *o == 5)
+        && state
+            .active_builds
+            .iter()
+            .filter(|b| matches!(b.status, BuildStatus::Completed))
+            .filter(|b| subsystem_emoji_and_order(&b.image_name).map(|(o, _)| o == 5).unwrap_or(false))
+            .any(|b| {
+                b.completed_at
+                    .map(|t| t.elapsed() < READY_FLASH)
+                    .unwrap_or(false)
+            });
+
     let action: Option<String> = if in_progress.len() == 1 {
         Some(i18n::tf(
             "menu.status.building_one",
@@ -490,6 +526,10 @@ pub fn status_text(state: &TrayState, stage: Stage) -> Option<String> {
             "menu.status.building_many",
             &[("images", &in_progress.join(", "))],
         ))
+    } else if infra_all_done_recent {
+        // Terminal flash: replace per-subsystem "X OK" with the
+        // canonical "✅ Environment ready" for 2s before chip clears.
+        Some(i18n::t("menu.status.environment_ready").to_string())
     } else {
         // No in-flight builds — check for a completion within the flash
         // window so the user sees `… <X> OK` for ~2 seconds before the
@@ -517,7 +557,7 @@ pub fn status_text(state: &TrayState, stage: Stage) -> Option<String> {
 
     let mut text = match (action.as_deref(), completed_emojis.is_empty(), stage) {
         (Some(act), _, _) => {
-            // Always show ✅ + completed-emojis + action text
+            // Always show 📋 + completed-emojis + action text
             format!("{prefix} {act}")
         }
         (None, true, Stage::Booting) => {

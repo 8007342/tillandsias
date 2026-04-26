@@ -50,6 +50,7 @@ verifying_environment = "Verifying environment …"
 building_one = "Building {image} …"
 building_many = "Building {images} …"
 ready_one = "{image} OK"
+environment_ready = "✅ Environment ready"
 github_unreachable = "GitHub unreachable — using cached list"
 separator = " · "
 
