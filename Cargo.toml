@@ -1,8 +1,9 @@
 [workspace]
 members = [
     "crates/tillandsias-core",
-    "crates/tillandsias-scanner",
+    "crates/tillandsias-otp",
     "crates/tillandsias-podman",
+    "crates/tillandsias-scanner",
     "src-tauri",
 ]
 resolver = "3"
@@ -29,5 +30,6 @@ thiserror = "2"
 
 # Internal crates
 tillandsias-core = { path = "crates/tillandsias-core" }
-tillandsias-scanner = { path = "crates/tillandsias-scanner" }
+tillandsias-otp = { path = "crates/tillandsias-otp" }
 tillandsias-podman = { path = "crates/tillandsias-podman" }
+tillandsias-scanner = { path = "crates/tillandsias-scanner" }

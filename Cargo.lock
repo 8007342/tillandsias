@@ -5235,6 +5235,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tempfile",
  "tillandsias-core",
+ "tillandsias-otp",
  "tillandsias-podman",
  "tillandsias-scanner",
  "time",
@@ -5262,6 +5263,16 @@ dependencies = [
  "tiny-skia",
  "toml 0.8.2",
  "tracing",
+]
+
+[[package]]
+name = "tillandsias-otp"
+version = "0.1.170"
+dependencies = [
+ "rand 0.9.4",
+ "tokio",
+ "tracing",
+ "zeroize",
 ]
 
 [[package]]
