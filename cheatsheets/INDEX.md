@@ -10,9 +10,33 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## runtime
 
-- forge-container.md          — Fedora minimal 43 forge layout, immutable layers, mutable overlay rules
-- runtime-limitations.md      — RUNTIME_LIMITATIONS_NNN.md format + how to report missing tools
-- networking.md               — enclave network, proxy egress, no direct internet, mirror git, ollama inference
+- forge-container.md          — [DRAFT] Fedora minimal 43 forge layout, immutable layers, mutable overlay rules
+- runtime-limitations.md      — [DRAFT] RUNTIME_LIMITATIONS_NNN.md format + how to report missing tools
+- networking.md               — [DRAFT] enclave network, proxy egress, no direct internet, mirror git, ollama inference
+- cheatsheet-architecture-v2.md   — fine-grained per-use-case structure, frontmatter, MCP query interface
+- cheatsheet-frontmatter-spec.md  — YAML frontmatter schema (tags / sources / authority / status)
+- cheatsheet-shortcomings.md      — gap inventory after the v2 sweep (10 prioritized items)
+
+## algorithms
+
+- binary-search.md            — O(log n) on sorted arrays; iterative + lower_bound + predicate-based; pitfalls
+
+## patterns
+
+- gof-observer.md             — Observer pattern (GoF behavioural); push vs pull; pitfalls; when not to use
+
+## architecture
+
+- event-driven-basics.md      — Fowler's four flavors of EDA (Notification / Carried-State / Sourcing / CQRS)
+- reactive-streams-spec.md    — Publisher/Subscriber/Subscription/Processor + backpressure; library landscape
+
+## security
+
+- owasp-top-10-2021.md        — current Top 10 risk-ranked checklist; per-item one-line fix; concrete patterns
+
+## data
+
+- postgresql-indexing-basics.md  — B-tree / GIN / GiST / BRIN; composite ordering; partial / expression / covering / CONCURRENT
 
 ## languages
 
@@ -30,7 +54,8 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - xml.md                      — XML basics + namespaces + XPath fundamentals
 - html.md                     — HTML5 semantic tags + ARIA basics
 - css.md                      — Modern CSS: flexbox, grid, custom properties, container queries
-- markdown.md                 — CommonMark + GFM (tables, footnotes, code fences, task lists)
+- markdown.md                 — [DRAFT] CommonMark + GFM (tables, footnotes, code fences, task lists)
+- java/rxjava-event-driven.md — RxJava 3.x async/event-driven; Flowable vs Observable; debounce/combine/retry
 
 ## utils
 
@@ -63,7 +88,8 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - flutter.md                  — Flutter 3.24: pub get + run + build (web/desktop only here)
 - make.md                     — GNU make: rules + automatic vars + .PHONY + tab pitfalls
 - cmake.md                    — CMake 3.x: project + target_* + find_package + generator expr
-- ninja.md                    — Ninja: build.ninja format + when chosen vs make
+- ninja.md                    — [DRAFT] Ninja: build.ninja format + when chosen vs make
+- nix-flake-basics.md         — minimal flake; devShell; multi-system via flake-utils; direnv integration
 
 ## web
 
@@ -88,3 +114,8 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - claude-code.md              — Claude Code CLI: launching + model flags + hooks + skills + MCP
 - opencode.md                 — OpenCode CLI + web mode: serve port + session DB + theme
 - openspec.md                 — OpenSpec: proposal → design → specs → tasks → archive workflow
+
+## privacy
+
+(empty — to be populated; see `cheatsheet-shortcomings.md` priority list)
+
