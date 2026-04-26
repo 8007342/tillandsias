@@ -1018,22 +1018,27 @@ pub(crate) async fn stop_router() {
 /// Whether the Caddy router should reject opencode-web requests that lack
 /// a session cookie validated by the router-side sidecar.
 ///
-/// **Currently `false`** — the OtpStore, the IssueWebSession dispatch,
-/// the CDP cookie injection, the broadcast fanout, and the router-side
-/// sidecar are all wired (chunks 1–5 of the convergence plan). Chunk 6
-/// pivots the tray dispatch to publish over the broadcast; chunk 7 flips
-/// this constant to true. Until the flip, the Caddy block reverse-proxies
-/// everything unconditionally and the sidecar's validate endpoint runs
-/// idle.
+/// **`true` since chunk 7 of the opencode-web-session-otp convergence**.
+/// The full chain is live: tray issues a 256-bit cookie, broadcasts
+/// IssueWebSession to subscribed sidecars over the control socket,
+/// hands the cookie to Chromium via CDP `Network.setCookies` before
+/// `Page.navigate`, and Caddy's `forward_auth` directive consults the
+/// router sidecar at `127.0.0.1:9090/validate` on every request.
+/// Anything without a cookie matching an entry in the sidecar's
+/// per-project session list — `curl` from another shell, sibling
+/// browser tab, process discovering the URL via `/proc/<pid>/cmdline`,
+/// extension reading the URL of another tab — gets HTTP 401 with the
+/// friendly "open this project from the Tillandsias tray" body.
 ///
-/// **Flip to `true`** in chunk 7 once the IssueWebSession publish path
-/// reaches the sidecar reliably. The `render_caddy_route_block_*` tests
-/// cover both shapes; toggling this constant is the only source change
-/// needed.
+/// To temporarily disable enforcement (e.g. local debugging without
+/// the sidecar), flip to `false`. The Caddy block falls back to the
+/// pre-OTP unconditional reverse_proxy. The
+/// `render_caddy_route_block_*` tests cover both shapes; toggling this
+/// constant is the only source change needed.
 ///
 /// @trace spec:opencode-web-session-otp
 /// @cheatsheet web/cookie-auth-best-practices.md
-pub(crate) const ENFORCE_SESSION_COOKIE: bool = false;
+pub(crate) const ENFORCE_SESSION_COOKIE: bool = true;
 
 /// Render the Caddy site block for a single project's OpenCode Web route.
 ///
