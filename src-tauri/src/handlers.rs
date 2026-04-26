@@ -1015,24 +1015,57 @@ pub(crate) async fn stop_router() {
 ///   the forge container itself is healthy and reachable on the
 ///   enclave.
 ///
+/// Whether the Caddy router should reject opencode-web requests that lack
+/// the `tillandsias_session=<base64url>` cookie minted by the OtpStore.
+///
+/// **Currently `false`** — the OtpStore + IssueWebSession dispatch + per-
+/// launch CDP discovery are all wired, but the WebSocket
+/// `Network.setCookies` attach is a stub (see `cdp::attach_and_set_cookie`
+/// returns `CdpOutcome::Other` until host-chromium-on-demand lands the
+/// per-browser injection paths). Until that happens, the cookie is minted
+/// but never presented by the browser; gating the route on cookie presence
+/// would 401 every legitimate launch.
+///
+/// **Flip to `true`** as part of the host-chromium-on-demand follow-up
+/// commit that wires up real CDP `Network.setCookies` injection. The
+/// `render_caddy_route_block_with_cookie_matcher_and_401_handler` test
+/// covers the cookie-on shape; `render_caddy_route_block_open` covers the
+/// cookie-off shape. Toggling this constant is the only source change.
+///
+/// @trace spec:opencode-web-session-otp
+/// @cheatsheet web/cookie-auth-best-practices.md
+pub(crate) const ENFORCE_SESSION_COOKIE: bool = false;
+
 /// Render the Caddy site block for a single project's OpenCode Web route.
 ///
-/// The block enforces the per-window session-cookie requirement: requests
-/// without a `tillandsias_session=<base64url>` cookie return HTTP 401 with
-/// the friendly "open this project from the Tillandsias tray" body. Pure
-/// function — exposed at module level so unit tests can pin the exact
-/// bytes the router will see.
+/// When [`ENFORCE_SESSION_COOKIE`] is `true`, the block enforces the
+/// per-window session-cookie requirement: requests without a
+/// `tillandsias_session=<base64url>` cookie return HTTP 401 with a
+/// friendly "open this project from the Tillandsias tray" body. When
+/// `false`, the block reverse-proxies all requests unconditionally — the
+/// pre-OTP behaviour. Pure function exposed at module level so unit tests
+/// can pin both byte shapes.
 ///
 /// @trace spec:opencode-web-session-otp, spec:subdomain-routing-via-reverse-proxy
 /// @cheatsheet web/cookie-auth-best-practices.md
 pub(crate) fn render_caddy_route_block(project: &str) -> String {
-    // The 401 body uses the Unicode em-dash escape (—) so the source
-    // is ASCII-clean. Caddy's caddyfile parser accepts \uXXXX escapes
-    // inside double-quoted strings.
-    format!(
-        "http://opencode.{project}.localhost:8080 {{\n    @hassession header_regexp Cookie \"tillandsias_session=[A-Za-z0-9_-]+\"\n    handle @hassession {{\n        reverse_proxy tillandsias-{project}-forge:4096\n    }}\n    handle {{\n        respond \"unauthorised \\u2014 open this project from the Tillandsias tray\" 401\n    }}\n}}\n",
-        project = project
-    )
+    if ENFORCE_SESSION_COOKIE {
+        // The 401 body uses the Unicode em-dash escape (—) so the source
+        // is ASCII-clean. Caddy's caddyfile parser accepts \uXXXX escapes
+        // inside double-quoted strings.
+        format!(
+            "http://opencode.{project}.localhost:8080 {{\n    @hassession header_regexp Cookie \"tillandsias_session=[A-Za-z0-9_-]+\"\n    handle @hassession {{\n        reverse_proxy tillandsias-{project}-forge:4096\n    }}\n    handle {{\n        respond \"unauthorised \\u2014 open this project from the Tillandsias tray\" 401\n    }}\n}}\n",
+            project = project
+        )
+    } else {
+        // Pre-OTP shape — direct reverse_proxy, no cookie gate. Used until
+        // the CDP cookie injection path is real (see ENFORCE_SESSION_COOKIE
+        // doc-comment for the flip-the-switch instructions).
+        format!(
+            "http://opencode.{project}.localhost:8080 {{\n    reverse_proxy tillandsias-{project}-forge:4096\n}}\n",
+            project = project
+        )
+    }
 }
 
 /// @trace spec:subdomain-routing-via-reverse-proxy
@@ -5159,12 +5192,12 @@ mod tests {
     use super::*;
     use std::path::Path;
 
-    /// Caddy route block for a project enforces the cookie matcher and
-    /// preserves the explicit `http://` scheme. Pin the exact bytes so
+    /// Caddy route block for a project preserves the explicit `http://`
+    /// scheme regardless of cookie enforcement. Pin the exact bytes so
     /// any drift breaks this test loudly.
     /// @trace spec:opencode-web-session-otp, spec:subdomain-routing-via-reverse-proxy
     #[test]
-    fn render_caddy_route_block_includes_cookie_matcher_and_401_handler() {
+    fn render_caddy_route_block_preserves_http_scheme_and_routes_to_forge() {
         let snippet = render_caddy_route_block("thinking-service");
 
         // Site address: http:// scheme + opencode.<project>.localhost:8080
@@ -5172,27 +5205,61 @@ mod tests {
             snippet.contains("http://opencode.thinking-service.localhost:8080"),
             "missing site address: {snippet}"
         );
-        // Matcher: header_regexp Cookie "tillandsias_session=<base64url+>"
-        assert!(
-            snippet.contains("@hassession header_regexp Cookie \"tillandsias_session=[A-Za-z0-9_-]+\""),
-            "missing @hassession matcher: {snippet}"
-        );
-        // Authorised path: reverse_proxy to the project's forge
+        // Always reverse_proxy to the project's forge (gated on cookie
+        // when ENFORCE_SESSION_COOKIE is true, unconditional otherwise).
         assert!(
             snippet.contains("reverse_proxy tillandsias-thinking-service-forge:4096"),
             "missing reverse_proxy line: {snippet}"
         );
-        // Unauthorised path: 401 + friendly body
+        // No HTTPS scheme leaked anywhere — would trip auto_https.
+        assert!(
+            !snippet.contains("https://"),
+            "Caddy snippet must not contain https:// — got {snippet}"
+        );
+    }
+
+    /// Cookie-on shape (currently NOT the default; ENFORCE_SESSION_COOKIE
+    /// must flip to true for this to be the live shape). The assertions
+    /// only run when the constant is true so future toggles are caught.
+    /// @trace spec:opencode-web-session-otp
+    #[test]
+    fn render_caddy_route_block_cookie_matcher_when_enforced() {
+        if !ENFORCE_SESSION_COOKIE {
+            // Pre-flip: nothing to assert. The pre-OTP shape is covered
+            // by `render_caddy_route_block_pre_otp_shape_when_not_enforced`.
+            return;
+        }
+        let snippet = render_caddy_route_block("thinking-service");
+        assert!(
+            snippet.contains("@hassession header_regexp Cookie \"tillandsias_session=[A-Za-z0-9_-]+\""),
+            "missing @hassession matcher: {snippet}"
+        );
         assert!(snippet.contains("respond"), "missing respond directive: {snippet}");
         assert!(snippet.contains("401"), "missing 401 status: {snippet}");
         assert!(
             snippet.contains("Tillandsias tray"),
             "missing friendly body: {snippet}"
         );
-        // No HTTPS scheme leaked anywhere — would trip auto_https.
+    }
+
+    /// Cookie-off shape — the current pre-OTP behaviour. Asserts the route
+    /// block does NOT include the cookie matcher when
+    /// ENFORCE_SESSION_COOKIE is false. When the constant flips, this test
+    /// becomes a no-op and the matcher test above starts asserting.
+    /// @trace spec:opencode-web-session-otp
+    #[test]
+    fn render_caddy_route_block_pre_otp_shape_when_not_enforced() {
+        if ENFORCE_SESSION_COOKIE {
+            return;
+        }
+        let snippet = render_caddy_route_block("thinking-service");
         assert!(
-            !snippet.contains("https://"),
-            "Caddy snippet must not contain https:// — got {snippet}"
+            !snippet.contains("@hassession"),
+            "@hassession matcher must NOT be present when not enforced: {snippet}"
+        );
+        assert!(
+            !snippet.contains("401"),
+            "401 fallback must NOT be present when not enforced: {snippet}"
         );
     }
 
