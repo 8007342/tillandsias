@@ -285,11 +285,24 @@ if [[ "$FLAG_BACKEND" == "fedora" ]]; then
     # Pass proxy env vars as build args if available.
     # Image builds do NOT go through the proxy — SSL bump requires CA trust
     # that build containers don't have. Proxy is for runtime containers only.
-
-    "$PODMAN" build \
-        --tag "$IMAGE_TAG" \
-        -f "$CONTAINERFILE" \
-        "$IMAGE_DIR/"
+    #
+    # @trace spec:opencode-web-session-otp
+    # The router image's Containerfile is multi-stage and cross-builds the
+    # tillandsias-router-sidecar binary against musl from workspace source,
+    # so its build context MUST be the workspace root (so cargo can see
+    # crates/ + src-tauri/). Other images use their own per-image dir.
+    if [[ "$IMAGE_NAME" == "router" ]]; then
+        "$PODMAN" build \
+            --tag "$IMAGE_TAG" \
+            --ignorefile "$ROOT/images/router/.containerignore" \
+            -f "$CONTAINERFILE" \
+            "$ROOT/"
+    else
+        "$PODMAN" build \
+            --tag "$IMAGE_TAG" \
+            -f "$CONTAINERFILE" \
+            "$IMAGE_DIR/"
+    fi
 
     # Clean up the staged cheatsheets so they don't accumulate in the build context.
     if [[ "$IMAGE_NAME" == "forge" ]] || [[ "$IMAGE_NAME" == "default" ]]; then

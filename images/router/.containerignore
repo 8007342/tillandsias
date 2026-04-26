@@ -1,0 +1,37 @@
+# @trace spec:opencode-web-session-otp
+# Build context for the router image is the workspace root because the
+# multi-stage Containerfile builds tillandsias-router-sidecar from source.
+# Everything that isn't load-bearing for that build is excluded so the
+# build context upload to podman stays small (~MBs not GBs).
+
+# Build artefacts (52 GB+ on this dev machine).
+target/
+target-musl/
+.nix-output/
+
+# Git history — not needed for cargo build, large.
+.git/
+
+# Tooling caches.
+.cache/
+.claude/
+.opencode/
+node_modules/
+
+# Other image build contexts (router build doesn't need them).
+images/default/.cheatsheets/
+images/web/
+images/proxy/
+images/git/
+images/inference/
+images/default/
+
+# Bundles.
+*.AppImage
+*.dmg
+*.zip
+*.tar.gz
+
+# IDE.
+.vscode/
+.idea/

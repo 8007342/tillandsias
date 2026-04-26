@@ -1,8 +1,18 @@
-# @trace spec:subdomain-routing-via-reverse-proxy, spec:fix-router-loopback-port
+# @trace spec:subdomain-routing-via-reverse-proxy, spec:fix-router-loopback-port, spec:opencode-web-session-otp
 # Tillandsias router — Caddy 2 reverse proxy that maps
-# `<service>.<project>.localhost` to enclave containers by name + port.
+# `<service>.<project>.localhost` to enclave containers by name + port,
+# plus the tillandsias-router-sidecar binary that:
+#   - subscribes to the tray's control socket (bind-mount in the rootless
+#     namespace at /run/host/tillandsias/control.sock) for IssueWebSession
+#     envelopes and pushes them into an in-router OtpStore;
+#   - serves Caddy's `forward_auth` directive on 127.0.0.1:9090, replying
+#     204 (allow) or 401 (deny) per request based on the cookie value.
 #
-# Two access paths, both defended in depth:
+# The sidecar is cross-compiled from the workspace inside this image build
+# (multi-stage; rust:1-alpine + musl-dev) so the build is hermetic — no
+# host toolchain assumptions, no pre-staged binary in the build context.
+#
+# Two access paths to the Caddy listener, both defended in depth:
 #   1. Host loopback   — `-p 127.0.0.1:8080:8080` from the tray's podman
 #                        invocation. Host kernel restricts the listener to
 #                        127.0.0.1, so the LAN/internet can't reach it at
@@ -16,6 +26,39 @@
 # private blocks) — anything else gets a 403 before any route matches.
 # This is belt-and-suspenders on top of the binding-level loopback restriction.
 
+# ─── Stage 1: build the sidecar binary against musl ──────────────────────
+# rust:1-alpine ships musl as the libc, so any binary built here is ready
+# to drop into a vanilla alpine runtime stage with no glibc dance.
+# @trace spec:opencode-web-session-otp
+FROM docker.io/library/rust:1-alpine AS sidecar-build
+RUN apk add --no-cache musl-dev
+WORKDIR /src
+# Workspace files first — these are the cargo dependency declarations and
+# change rarely. Layer cache survives source edits.
+COPY Cargo.toml Cargo.lock ./
+COPY crates/tillandsias-control-wire/Cargo.toml crates/tillandsias-control-wire/
+COPY crates/tillandsias-otp/Cargo.toml crates/tillandsias-otp/
+COPY crates/tillandsias-router-sidecar/Cargo.toml crates/tillandsias-router-sidecar/
+# Stub the OTHER workspace members so the workspace `members = [...]`
+# resolves but cargo doesn't try to compile them. We need their
+# Cargo.toml to be present (so workspace resolution doesn't break)
+# but we won't compile them with `--bin tillandsias-router-sidecar`.
+COPY crates/tillandsias-core/Cargo.toml crates/tillandsias-core/
+COPY crates/tillandsias-podman/Cargo.toml crates/tillandsias-podman/
+COPY crates/tillandsias-scanner/Cargo.toml crates/tillandsias-scanner/
+COPY src-tauri/Cargo.toml src-tauri/
+# Now the source. The sidecar only needs control-wire + otp + itself,
+# but cargo will read all workspace member sources to satisfy the workspace
+# manifest validation, so include everything that has Cargo.toml above.
+COPY crates/ crates/
+COPY src-tauri/ src-tauri/
+# The build.rs in src-tauri references resvg etc.; cargo ignores it for
+# `--bin tillandsias-router-sidecar` because that bin lives in a different
+# crate with no build-script dependency on src-tauri.
+RUN cargo build --release --bin tillandsias-router-sidecar
+RUN strip target/release/tillandsias-router-sidecar
+
+# ─── Stage 2: final router image ────────────────────────────────────────
 FROM docker.io/library/caddy:2-alpine
 
 # Runtime deps (curl for health probes from the tray, libcap for setcap).
@@ -53,14 +96,24 @@ RUN mkdir -p /run/router \
 # Static base config — enables admin API + gives a default 404 with the
 # trusted-source allowlist baked in. The dynamic per-project routes are
 # bind-mounted at /run/router/dynamic.Caddyfile and merged at startup.
-COPY base.Caddyfile /etc/caddy/base.Caddyfile
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY router-reload.sh /usr/local/bin/router-reload.sh
+COPY images/router/base.Caddyfile /etc/caddy/base.Caddyfile
+COPY images/router/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY images/router/router-reload.sh /usr/local/bin/router-reload.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/router-reload.sh
 
-# @trace spec:fix-router-loopback-port
+# @trace spec:opencode-web-session-otp
+# The session-cookie validator. Runs on 127.0.0.1:9090 inside the
+# container; Caddy's `forward_auth` directive in base.Caddyfile reaches
+# it via that loopback. The entrypoint launches it as a supervised
+# background process before exec'ing caddy.
+COPY --from=sidecar-build /src/target/release/tillandsias-router-sidecar \
+        /usr/local/bin/tillandsias-router-sidecar
+RUN chmod +x /usr/local/bin/tillandsias-router-sidecar
+
+# @trace spec:fix-router-loopback-port, spec:opencode-web-session-otp
 # Internal listener moved from :80 to :8080 — no privileged-port binding
 # needed, so we can run with the upstream image's default USER without
-# requiring capabilities or root inside the container.
-EXPOSE 8080
+# requiring capabilities or root inside the container. 9090 is the
+# sidecar validator (container-internal only; not published to the host).
+EXPOSE 8080 9090
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
