@@ -303,69 +303,104 @@ NOT add `'unsafe-inline'` (CSP3 + OWASP both say that's the worst option).
 
 ### Requirement: Native browser launch contract
 
-Every "Attach Here" in web mode SHALL launch the user's native browser
-in app-mode (single-site window, no tabs, no URL bar) against the forge's
-URL. The tray MUST detect the browser in the following order, using the
-first match:
+Every "Attach Here" in web mode SHALL launch the bundled Chromium binary
+provided by capability `host-chromium` in app-mode (single-site window,
+no tabs, no URL bar) against the forge's URL. The tray SHALL resolve
+the Chromium binary via the detection priority defined in
+`host-chromium`'s `Detection priority — userspace first, system fallback,
+hard error` requirement (userspace install → system PATH fallback →
+hard error). The tray SHALL NOT launch Safari, Firefox, or any non-
+Chromium-family browser; the previous Safari/Firefox/OsDefault paths
+in `src-tauri/src/browser.rs` are tombstoned and removed three releases
+after this change ships per the project's `@tombstone` convention.
 
-1. Safari (`open -a Safari`) on macOS.
-2. Chrome / Chromium / Edge via the platform binary paths, in order:
-   `google-chrome`, `chromium`, `chrome`, `microsoft-edge`, `msedge`.
-3. Firefox (`firefox`).
-4. OS default browser via `xdg-open` (Linux), `open` (macOS), `start`
-   (Windows).
+The launch flags SHALL match the `Per-launch CDP and ephemeral profile
+flags` requirement in capability `host-chromium`:
+`--app=<url>`, `--user-data-dir=<ephemeral-tmpdir>`, `--incognito`,
+`--no-first-run`, `--no-default-browser-check`,
+`--remote-debugging-port=<random-loopback-port>`. The CDP port enables
+session-cookie injection by capability `opencode-web-session-otp`.
 
-For Chromium-family browsers, the launch arguments SHALL include
-`--app=<url>` (app-mode) and `--user-data-dir=<per-project-tmpdir>`
-(isolated profile). For Firefox, `--new-instance --profile <per-project-tmpdir> --no-remote <url>`.
-Safari does not support app-mode and is launched with `open -n -a Safari <url>`.
+@trace spec:opencode-web-session, spec:host-chromium-on-demand, spec:opencode-web-session-otp
 
-#### Scenario: Chrome installed — app-mode window
-- **WHEN** the user clicks Attach Here and `google-chrome` (or `chromium`,
-  `chrome`, `microsoft-edge`, `msedge`) is in `PATH`
-- **THEN** the tray spawns the browser with
-  `<bin> --app=http://<project>.localhost:<port>/<base64dir>/ --user-data-dir=<tmpdir>`
+#### Scenario: Bundled Chromium present — used in app-mode
+
+- **WHEN** the user clicks Attach Here on a project AND the userspace
+  Chromium install at
+  `~/.local/share/tillandsias/chromium/current/chrome-<platform>/chrome`
+  exists
+- **THEN** the tray spawns that exact binary with
+  `--app=http://opencode.<project>.localhost:8080/`,
+  `--user-data-dir=<tmpdir>`, `--incognito`, `--no-first-run`,
+  `--no-default-browser-check`, and `--remote-debugging-port=<random-port>`
 - **AND** a borderless single-site window opens
-- **AND** the browser process is a direct child of the tray (or of its
+- **AND** the spawned process is a direct child of the tray (or its
   launch helper), not visible as a tab in any existing browser session
 
-#### Scenario: Firefox installed, Chrome absent
-- **WHEN** `google-chrome`/`chromium`/`chrome`/`microsoft-edge`/`msedge`
-  are not in `PATH` and `firefox` is
-- **THEN** the tray spawns Firefox with
-  `--new-instance --profile <tmpdir> --no-remote <url>`
-- **AND** a fresh Firefox window opens (Site-Specific Browser mode)
+#### Scenario: Userspace install absent — system Chromium fallback
 
-#### Scenario: Only default browser available
-- **WHEN** none of Safari/Chrome/Chromium/Edge/Firefox are detected
-- **THEN** the tray falls back to the platform default launcher
-  (`xdg-open`, `open`, or `start`) with the URL
-- **AND** a regular browser window/tab opens pointing at the URL
+- **WHEN** the userspace install does not exist (e.g., user installed
+  via direct AppImage download and has not yet re-run `install.sh`)
+  AND `which chromium` resolves to `/usr/bin/chromium`
+- **THEN** the tray spawns `/usr/bin/chromium` with the same flag set
+- **AND** an info-level accountability log entry records the fallback
+  with `category = "browser-detect"`,
+  `spec = "host-chromium-on-demand"`, `using = "system-fallback"`
 
-#### Scenario: Safari on macOS — preferred
-- **WHEN** the platform is macOS
-- **THEN** Safari is tried first, via `open -n -a Safari <url>`
-- **AND** if the launch succeeds, no Chromium/Firefox branch runs
+#### Scenario: No Chromium present — hard error, no UI prompt
+
+- **WHEN** neither the userspace install nor any system Chromium-family
+  binary is available
+- **THEN** the attach fails with the message
+  `Chromium not installed. Re-run the installer or run "tillandsias --install-chromium".`
+- **AND** no dialog is shown
+- **AND** no tray menu item is added
+- **AND** no background HTTP download is triggered from the tray
+
+#### Scenario: Safari, Firefox, OsDefault paths are removed
+
+- **WHEN** auditing `src-tauri/src/browser.rs` after the three-release
+  tombstone window for this change has elapsed
+- **THEN** the `BrowserKind::Safari`, `BrowserKind::Firefox`, and
+  `BrowserKind::OsDefault` variants and their launch arms are deleted
+- **AND** during the tombstone window each removed branch carries a
+  `// @tombstone superseded:host-chromium-on-demand` comment naming
+  the release in which it was removed and the release after which it
+  is safe to delete
 
 ### Requirement: Native browser URL format uses `*.localhost` subdomains, no path segment
 
 The webview-replacement URL SHALL be
-`http://<project>.opencode.localhost/` — hostname carries the project
-identity and the service identifier, path is bare `/`. `<project>` is
-the sanitized project name (lowercase alphanumeric + hyphen).
+`http://opencode.<project>.localhost:8080/` — the service identifier
+(`opencode`) is the LEFTMOST label, followed by the project name. This
+ordering groups all services for one project under a single
+`*.<project>.localhost` namespace so that future additions like
+`web.<project>.localhost` (Flutter dev server), `dashboard.<project>.localhost`
+(agent UI), or `www.<project>.localhost` (static preview) sort visually
+together when the user has multiple projects active.
+
+The host-side router listens on TCP port `8080` because rootless podman
+cannot bind to ports below `net.ipv4.ip_unprivileged_port_start` (default
+`1024` on Fedora and most distros). `<project>` is the sanitized project
+name (lowercase alphanumeric + hyphen). The path is bare `/` — no
+base64-encoded directory segment.
 
 The legacy form `http://<project>.localhost:<host_port>/` (with an
-allocated random port) is **deprecated** and removed once the router
-container is operational. Port `80` is always implicit. The router
-container at `127.0.0.1:80` does the host-side mapping.
+allocated random port published per forge) AND the deprecated
+`http://<project>.opencode.localhost:8080/` (project-name-leftmost shape)
+are both removed. The router container fronts every project on a single
+host port. The internal Caddy listener inside the router stays on port
+`:80` (which is allowed inside the container's user namespace); only the
+host-side publish moves to `8080`.
 
-Rationale: hostnames of the form `*.localhost` are hardcoded to
-loopback in Chromium (since M64), Firefox (since 84), and
-systemd-resolved (since v245); no `/etc/hosts` entries are required.
-The `<service>` segment (`opencode`, `flutter`, `vite`, etc.)
-distinguishes multiple kinds of server per project — agent-spawned
-dev servers and tray-managed sessions can coexist on the same project
-name without port collisions.
+Rationale: hostnames of the form `*.localhost` are hardcoded to loopback
+in Chromium (since M64), Firefox (since 84), and systemd-resolved (since
+v245); no `/etc/hosts` entries are required. The depth of subdomains does
+not affect this — `opencode.java.localhost` resolves to loopback exactly
+like `java.opencode.localhost` did. The `<service>` segment (`opencode`,
+`web`, `dashboard`, `www`, etc.) distinguishes multiple kinds of server
+per project — agent-spawned dev servers and tray-managed sessions can
+coexist on the same project name without port collisions.
 
 OpenCode's `InstanceMiddleware` determines the project directory via
 `?directory=` → `x-opencode-directory` header → `process.cwd()`. The
@@ -374,19 +409,20 @@ forge entrypoint `cd`s into `$PROJECT_DIR` before launching
 absolute path. The hostname identifies the project; the SPA handles
 client-side routing from `/` onward.
 
-#### Scenario: URL is hostname-only — no encoded path, no port
+#### Scenario: URL is service-leftmost, then project, then port :8080
 - **WHEN** the tray constructs the launch URL for a project named
   `thinking-service`
 - **THEN** the URL is exactly
-  `http://thinking-service.opencode.localhost/`
-- **AND** the URL contains no port number
+  `http://opencode.thinking-service.localhost:8080/`
+- **AND** the URL has `opencode` as the leftmost label and `thinking-service` immediately to its right
+- **AND** the URL ends with `:8080/` (the rootless-port-friendly host bind)
 - **AND** the URL contains no base64-encoded path segment
 - **AND** the URL contains neither `127.0.0.1` nor a bare `localhost:`
 
 #### Scenario: Subdomain is a secure context
-- **WHEN** the browser loads `http://<project>.opencode.localhost/`
+- **WHEN** the browser loads `http://opencode.<project>.localhost:8080/`
 - **THEN** `window.isSecureContext` returns `true` (per W3C Secure
-  Contexts §3.1)
+  Contexts §3.1; loopback origins are secure regardless of port or subdomain depth)
 - **AND** Notification, WebCrypto, clipboard, and service-worker APIs
   treat the origin as secure despite plain HTTP
 
@@ -406,17 +442,37 @@ client-side routing from `/` onward.
   Silverblue / Ubuntu / macOS system
 - **THEN** no entry is added to `/etc/hosts`
 - **AND** no `sudo` is invoked
-- **AND** `.localhost` subdomains resolve via systemd-resolved /
-  glibc-myhostname / browser hardcoding
+- **AND** no host-level sysctl is changed (the `:8080` host port avoids the
+  `ip_unprivileged_port_start` restriction without requiring privilege)
+- **AND** `*.localhost` subdomains resolve via systemd-resolved /
+  glibc-myhostname / browser hardcoding regardless of subdomain depth
 
 #### Scenario: Router binds loopback only — never reachable from LAN
 - **WHEN** the tray starts the router container
-- **THEN** the router SHALL bind to `127.0.0.1:80` on the host, NOT
-  `0.0.0.0:80`
+- **THEN** the router SHALL bind to `127.0.0.1:8080` on the host, NOT
+  `0.0.0.0:8080` and NOT `127.0.0.1:80` (which rootless podman cannot bind)
 - **AND** it SHALL NOT be reachable from any other host on the LAN
 - **AND** it SHALL NOT be reachable from any external network
 - **AND** an external attempt to connect to the user's LAN IP on
-  port 80 SHALL be rejected at the host kernel level (no listener)
+  port 8080 SHALL be rejected at the host kernel level (no listener)
+
+#### Scenario: Router internal Caddy listener still binds :80
+- **WHEN** the router container starts
+- **THEN** Caddy inside the container SHALL listen on `:80` (allowed inside
+  the container's user namespace)
+- **AND** the Containerfile and `base.Caddyfile` SHALL NOT change to a
+  different internal port — only the host-side `-p 127.0.0.1:8080:80` mapping moves
+
+#### Scenario: Caddyfile route uses the new key shape
+- **WHEN** `regenerate_router_caddyfile` writes routes to `dynamic.Caddyfile`
+- **THEN** each route's site address is `opencode.<project>.localhost:80` (NOT `<project>.opencode.localhost:80`)
+- **AND** the upstream `reverse_proxy` target is unchanged (`tillandsias-<project>-forge:4096`)
+
+#### Scenario: Future services slot under the same project namespace
+- **WHEN** Tillandsias adds a future service like `web` for a Flutter dev server
+- **THEN** the URL pattern `web.<project>.localhost:8080/` SHALL be reachable via the same router
+- **AND** `*.<project>.localhost:8080` SHALL serve as the project's whole subdomain namespace
+- **AND** the browser-MCP allowlist (per the `host-browser-mcp` capability) SHALL accept `*.<project>.localhost:8080` minus `opencode.<project>.localhost:8080` (the latter is the agent's own UI, not under agent control)
 
 ### Requirement: Tray does not track or kill browser windows
 

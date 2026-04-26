@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias"
-version = "0.1.169"
+version = "0.1.170"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -43,6 +43,12 @@ keyring = { version = "3", features = ["sync-secret-service", "crypto-rust", "ap
 zeroize = "1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
+# @trace spec:opencode-web-session-otp
+# Plain WebSocket client for CDP DevTools attach. CDP devtools wraps over a
+# bare ws:// on a loopback port — no TLS — so we strictly disable any TLS
+# default-features. tokio-tungstenite without a TLS feature pulls only the
+# tungstenite codec + tokio integration.
+tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect", "handshake"] }
 sha2 = "0.10"
 hex = "0.4"
 rcgen = { version = "0.13", features = ["pem", "x509-parser"] }
