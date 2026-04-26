@@ -61,13 +61,24 @@ pub fn dispatch(inbound_seq: u64, message: &ControlMessage) -> DispatchOutcome {
         ControlMessage::HelloAck { .. } => DispatchOutcome::NoReply,
         ControlMessage::IssueWebSession {
             project_label,
-            cookie_value,
+            cookie_value: _,
         } => {
             // @trace spec:opencode-web-session-otp
-            // Push the cookie into the tray-side session table. The
-            // accountability log entry is emitted inside `OtpStore::push`
-            // with the value field redacted.
-            crate::otp::global().push(project_label, *cookie_value);
+            // Inbound IssueWebSession at the tray-side dispatch is now a
+            // defensive no-op. The production issuance path is
+            // `crate::otp::issue_and_publish`, which writes to the
+            // tray-local store and broadcasts to subscribed sidecars in
+            // one step — there is no peer that legitimately PUSHES into
+            // the tray today. Future CLI clients that want to register a
+            // session would re-enter this arm; a dispatch-side push at
+            // that point would diverge the tray's mirror from the
+            // sidecar's authoritative store. We log + ack so misbehaving
+            // clients at least see acknowledgement, but do nothing else.
+            tracing::debug!(
+                spec = "opencode-web-session-otp",
+                project = %project_label,
+                "IssueWebSession received at tray dispatch — sidecar owns the store; ignored"
+            );
             DispatchOutcome::Reply(ControlMessage::IssueAck {
                 seq_acked: inbound_seq,
             })
@@ -152,9 +163,13 @@ mod tests {
     }
 
     #[test]
-    fn issue_web_session_pushes_into_store_and_acks() {
-        // Wired by opencode-web-session-otp: dispatch pushes into the
-        // tray-global OtpStore and replies with IssueAck.
+    fn issue_web_session_at_tray_dispatch_acks_without_pushing() {
+        // Post-chunk-6: the tray-side dispatch arm is defensive — the
+        // sidecar owns the authoritative store, the tray's
+        // issue_and_publish path writes the local mirror directly. Any
+        // peer that pushes IssueWebSession at us today is unexpected; we
+        // ack so the peer sees acknowledgement, but the tray-local store
+        // does NOT grow.
         let project = "opencode.handler-test.localhost";
         let cookie: [u8; 32] = std::array::from_fn(|i| i as u8 ^ 0x42);
         let before = crate::otp::global().session_count(project);
@@ -172,10 +187,10 @@ mod tests {
             other => panic!("expected IssueAck reply, got {:?}", other),
         }
         let after = crate::otp::global().session_count(project);
-        assert_eq!(after, before + 1, "OtpStore must grow by one entry");
-        // Cleanup: leave the global store in the same shape as before so
-        // sibling tests aren't affected.
-        crate::otp::global().evict_project(project);
+        assert_eq!(
+            after, before,
+            "tray-local store must NOT grow on dispatch — sidecar owns it"
+        );
     }
 
     #[test]

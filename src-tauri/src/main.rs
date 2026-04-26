@@ -319,6 +319,18 @@ fn main() {
             // build/launch error path.
             match crate::control_socket::Server::bind_default() {
                 Ok(server) => {
+                    // @trace spec:opencode-web-session-otp
+                    // Install the broadcast publisher into the otp module's
+                    // static slot BEFORE moving the server into the
+                    // accept-loop task — this way otp::issue_and_publish
+                    // can fan envelopes out to subscribed sidecars from
+                    // any tray-side caller, no callback chains required.
+                    if !crate::otp::install_publisher(server.publisher()) {
+                        warn!(
+                            spec = "opencode-web-session-otp",
+                            "otp::install_publisher returned false — already initialised?"
+                        );
+                    }
                     // Move the server into a tauri-async-runtime task so
                     // `spawn_accept_loop` (which calls `tokio::spawn`) runs
                     // inside a Tokio runtime context.

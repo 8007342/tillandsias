@@ -91,6 +91,12 @@ pub enum ControlMessage {
         code: ErrorCode,
         message: String,
     },
+    /// Tray → consumer: evict every session entry for the given project
+    /// label. Sent when the project's container stack stops so the
+    /// router-side store doesn't keep honouring stale cookies.
+    ///
+    /// @trace spec:opencode-web-session-otp
+    EvictProject { project_label: String },
 }
 
 /// Error categories the tray emits on the control socket.
@@ -213,6 +219,18 @@ mod tests {
                 seq_in_reply_to: None,
                 code: ErrorCode::PayloadTooLarge,
                 message: "frame too large".to_string(),
+            },
+        });
+    }
+
+    /// @trace spec:opencode-web-session-otp
+    #[test]
+    fn evict_project_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 7,
+            body: ControlMessage::EvictProject {
+                project_label: "opencode.demo.localhost".to_string(),
             },
         });
     }

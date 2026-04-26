@@ -194,11 +194,19 @@ async fn connect_and_run(socket_path: &std::path::Path, store: &OtpStore) -> std
             } => {
                 store.push(&project_label, cookie_value);
             }
+            ControlMessage::EvictProject { project_label } => {
+                // @trace spec:opencode-web-session-otp
+                // Sent by the tray when a project's container stack
+                // stops. Drop every session entry for that label so the
+                // sidecar doesn't keep honouring stale cookies on a
+                // future namespace reuse.
+                store.evict_project(&project_label);
+            }
             other => {
                 debug!(
                     spec = "opencode-web-session-otp",
                     variant = ?std::mem::discriminant(&other),
-                    "Ignoring non-IssueWebSession broadcast (sidecar consumes only OTP issuances)"
+                    "Ignoring non-OTP broadcast (sidecar consumes only IssueWebSession + EvictProject)"
                 );
             }
         }

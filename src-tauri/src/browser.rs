@@ -437,9 +437,13 @@ pub async fn launch_for_project_with_session(
     let project_label = format!("opencode.{host_label}.localhost");
     let url = build_subdomain_url(project_name);
 
-    // Issue the per-window session BEFORE launching the browser.
+    // Issue the per-window session BEFORE launching the browser. The
+    // _and_publish variant fans the IssueWebSession envelope out to the
+    // router-side sidecar via the control-socket broadcast — the
+    // sidecar's OtpStore is the authority Caddy's forward_auth consults
+    // on every request.
     // @trace spec:opencode-web-session-otp
-    let cookie_token = crate::otp::issue_session(&project_label);
+    let cookie_token = crate::otp::issue_and_publish(&project_label);
     let cookie_string = crate::otp::format_cookie_value(&cookie_token);
     info!(
         accountability = true,

@@ -612,7 +612,7 @@ fn handle_podman_event(
                         "opencode.{}.localhost",
                         sanitize_label_for_otp(&removed.project_name)
                     );
-                    crate::otp::global().evict_project(&project_label);
+                    crate::otp::evict_and_publish(&project_label);
                 }
 
                 // Clear project genus if no more environments
