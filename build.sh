@@ -217,7 +217,45 @@ else
 fi
 
 echo "[appimage] Copying source to writable build directory..."
-cp -r /src /build
+# @trace spec:appimage-builder-source-slim
+# cp -r /src /build previously copied the entire workspace including
+# the host 47 GB target/ and 1.5 GB .git/ — neither read by the
+# in-container cargo build (which writes its own /build/target/ from
+# scratch under Ubuntu glibc 2.35). The streaming tar pipe below
+# excludes artefact directories so only ~17 MB of actual source moves.
+# tar is default-installed in ubuntu:22.04; rsync is not, and would
+# require an apt-get install + network fetch on every cold cache.
+#
+# NOTE: this comment block must contain NO apostrophes — the entire
+# script body lives inside a bash -c single-quoted argument, and any
+# unescaped apostrophe terminates the outer string.
+mkdir -p /build
+# No single quotes inside this bash -c string. The wildcard below is
+# escaped as ./\*.AppImage so the shell does not expand it AND no
+# single quote is needed (which would close the outer -c string).
+( cd /src && tar \
+    --exclude=./target \
+    --exclude=./.git \
+    --exclude=./.nix-output \
+    --exclude=./.claude \
+    --exclude=./.opencode \
+    --exclude=./node_modules \
+    --exclude=./\*.AppImage \
+    -cf - . ) | ( cd /build && tar -xf - )
+# Spec gate: 150 MB cap. If the copied tree is bigger, someone has
+# committed a multi-MB artefact and we want to know LOUDLY before we
+# spend minutes on cargo. 150 MB is about 10x the current 17 MB
+# footprint of the workspace minus artefact directories.
+copied_bytes=$(du -sb /build | cut -f1)
+copy_cap=157286400
+if (( copied_bytes > copy_cap )); then
+    echo "[appimage] FAIL: /build is $(numfmt --to=iec --suffix=B $copied_bytes) — exceeds 150 MB cap" >&2
+    echo "[appimage] Largest top-level dirs:" >&2
+    du -sh /build/* 2>/dev/null | sort -hr | head -3 >&2
+    echo "[appimage] See openspec/changes/appimage-builder-source-slim/" >&2
+    exit 1
+fi
+echo "[appimage] Copied $(numfmt --to=iec --suffix=B $copied_bytes) of source"
 cd /build
 
 echo "[appimage] Running cargo tauri build (AppImage target)..."
