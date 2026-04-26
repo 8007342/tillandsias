@@ -108,6 +108,11 @@ pub async fn run(
                         // shutdown_all.
                         info!(spec = "app-lifecycle", "Quit requested — running shutdown_all");
                         handlers::shutdown_all(&state).await;
+                        // @trace spec:tray-host-control-socket
+                        // Tear down the control socket AFTER container shutdown so
+                        // any final tray↔consumer messages can flush before the
+                        // listener disappears.
+                        crate::shutdown_control_socket().await;
                         info!(spec = "app-lifecycle", "shutdown_all complete — requesting Tauri exit");
                         app_handle.exit(0);
                         break;

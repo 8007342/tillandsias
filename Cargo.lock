@@ -5185,11 +5185,14 @@ dependencies = [
 name = "tillandsias"
 version = "0.1.169"
 dependencies = [
+ "bytes",
  "dirs",
+ "futures-util",
  "hex",
  "keyring",
  "libc",
  "notify",
+ "postcard",
  "rcgen",
  "reqwest",
  "rustls",
@@ -5206,6 +5209,7 @@ dependencies = [
  "tillandsias-scanner",
  "time",
  "tokio",
+ "tokio-util",
  "toml 0.8.2",
  "tracing",
  "tracing-appender",

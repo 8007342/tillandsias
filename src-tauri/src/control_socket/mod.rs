@@ -1,0 +1,785 @@
+//! Tray-host control socket.
+//!
+//! Single Unix-domain stream socket bound by the tray at startup, listened
+//! on for the entire tray lifetime, unlinked at graceful shutdown. Carries
+//! typed, postcard-framed, length-prefixed messages between the tray and
+//! bind-mounted consumer containers (router, future host-browser-mcp,
+//! future log-event ingest).
+//!
+//! v1 wires up the lifecycle (bind, permissions, stale recovery, accept
+//! loop, graceful shutdown) and the `Hello` / `HelloAck` handshake. The
+//! `IssueWebSession` variant exists in the wire schema but is not yet
+//! handled — it lands with the `opencode-web-session-otp` change.
+//!
+//! @trace spec:tray-host-control-socket
+//! @cheatsheet languages/rust.md
+//! @cheatsheet runtime/networking.md
+
+pub mod handler;
+pub mod path;
+pub mod wire;
+
+use std::io;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
+
+use bytes::{Bytes, BytesMut};
+use futures_util::{SinkExt, StreamExt};
+use tokio::io::AsyncWriteExt;
+use tokio::net::{UnixListener, UnixStream};
+use tokio::sync::{Notify, Semaphore};
+use tokio::task::JoinHandle;
+use tokio::time::timeout;
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
+use tracing::{debug, info, warn};
+
+use self::handler::{DispatchOutcome, dispatch, wire_version_mismatch};
+use self::path::{CONTAINER_SOCKET_PATH, ResolvedSocketPath, SocketPathSource};
+use self::wire::{ControlEnvelope, ControlMessage, ErrorCode, MAX_MESSAGE_BYTES, WIRE_VERSION};
+
+/// Maximum simultaneous accepted connections. Beyond this, the kernel
+/// `accept` queue holds the next connection until a permit is released.
+pub const MAX_CONNECTIONS: usize = 32;
+
+/// Per-connection idle timeout. Connections with no inbound bytes for
+/// longer than this are closed.
+pub const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Probe deadlines used by the stale-socket recovery path. A live tray
+/// instance MUST respond to a `Hello` within these bounds; otherwise the
+/// existing socket node is treated as a stale leftover.
+const PROBE_CONNECT_DEADLINE: Duration = Duration::from_millis(200);
+const PROBE_READ_DEADLINE: Duration = Duration::from_millis(500);
+
+/// Outcome of probing an existing socket node at startup.
+#[derive(Debug, PartialEq, Eq)]
+pub enum StaleProbeOutcome {
+    /// Another tray instance is alive and answered our probe — caller
+    /// SHOULD exit through the singleton-guard path.
+    LivePeer,
+    /// No path existed, or the path was a stale leftover that we've now
+    /// unlinked. Caller may proceed to bind.
+    Stale,
+    /// The path was not a socket at all (regular file, directory, …).
+    /// Caller should treat this as a startup error.
+    NotASocket,
+}
+
+/// Builder result holding the live listener and the cleanup handle.
+pub struct Server {
+    listener: Option<UnixListener>,
+    socket_path: PathBuf,
+    shutdown: Arc<Notify>,
+    accept_handle: Option<JoinHandle<()>>,
+}
+
+impl Server {
+    /// Bind the control socket using the resolved freedesktop runtime path.
+    ///
+    /// Creates the parent directory with mode `0700` if absent, recovers
+    /// any stale socket node left behind by a previous crashed instance,
+    /// binds the listener, and chmods the node to `0600` between `bind(2)`
+    /// and any `accept(2)` call.
+    ///
+    /// @trace spec:tray-host-control-socket
+    pub fn bind_default() -> io::Result<Self> {
+        let resolved = path::resolve();
+        Self::bind(resolved)
+    }
+
+    /// Bind at an explicit resolved location. Exposed for tests.
+    ///
+    /// @trace spec:tray-host-control-socket
+    pub fn bind(resolved: ResolvedSocketPath) -> io::Result<Self> {
+        let ResolvedSocketPath {
+            parent_dir,
+            socket_path,
+            source,
+        } = resolved;
+
+        if matches!(source, SocketPathSource::PerUserTmp | SocketPathSource::Tmpdir) {
+            info!(
+                accountability = true,
+                category = "control-socket",
+                spec = "tray-host-control-socket",
+                cheatsheet = "runtime/networking.md",
+                operation = "fallback-path",
+                source = ?source,
+                parent = %parent_dir.display(),
+                "XDG_RUNTIME_DIR unset; using fallback location"
+            );
+        }
+
+        ensure_parent_dir(&parent_dir)?;
+
+        // Stale-socket recovery before bind. This is best-effort; on
+        // platforms where probing isn't supported we simply attempt to
+        // unlink and retry once.
+        match probe_existing_socket(&socket_path) {
+            StaleProbeOutcome::LivePeer => {
+                warn!(
+                    accountability = true,
+                    category = "control-socket",
+                    spec = "tray-host-control-socket",
+                    operation = "live-peer",
+                    path = %socket_path.display(),
+                    "Another tray instance owns the control socket — refusing to bind"
+                );
+                return Err(io::Error::new(
+                    io::ErrorKind::AddrInUse,
+                    "another tillandsias tray owns the control socket",
+                ));
+            }
+            StaleProbeOutcome::Stale => {
+                if socket_path.exists() {
+                    info!(
+                        accountability = true,
+                        category = "control-socket",
+                        spec = "tray-host-control-socket",
+                        operation = "stale-cleanup",
+                        path = %socket_path.display(),
+                        "Removing stale control socket from a previous tray instance"
+                    );
+                    if let Err(e) = std::fs::remove_file(&socket_path) {
+                        warn!(error = %e, "Failed to unlink stale socket — bind will likely fail");
+                    }
+                }
+            }
+            StaleProbeOutcome::NotASocket => {
+                warn!(
+                    accountability = true,
+                    category = "control-socket",
+                    spec = "tray-host-control-socket",
+                    operation = "not-a-socket",
+                    path = %socket_path.display(),
+                    "Refusing to bind: existing path is not a socket"
+                );
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    "control socket path exists but is not a socket",
+                ));
+            }
+        }
+
+        let listener = UnixListener::bind(&socket_path)?;
+        // Chmod between bind and accept — closes the race where another
+        // user could connect during the brief default-mode window.
+        chmod_0600(&socket_path)?;
+
+        info!(
+            accountability = true,
+            category = "control-socket",
+            spec = "tray-host-control-socket",
+            cheatsheet = "runtime/networking.md",
+            operation = "bind",
+            path = %socket_path.display(),
+            source = ?source,
+            "Control socket bound (mode 0600, parent 0700)"
+        );
+
+        Ok(Self {
+            listener: Some(listener),
+            socket_path,
+            shutdown: Arc::new(Notify::new()),
+            accept_handle: None,
+        })
+    }
+
+    /// Path of the bound socket node. Used to populate the bind-mount
+    /// source for consumer containers.
+    ///
+    /// API surface — exposed for diagnostic CLI commands and future
+    /// `IssueWebSession` flows that may need to surface the host path.
+    #[allow(dead_code)]
+    pub fn socket_path(&self) -> &Path {
+        &self.socket_path
+    }
+
+    /// Spawn the accept loop. Returns immediately; the loop continues
+    /// until `shutdown()` is called.
+    ///
+    /// @trace spec:tray-host-control-socket
+    pub fn spawn_accept_loop(&mut self) {
+        let Some(listener) = self.listener.take() else {
+            warn!("Control-socket accept loop already running");
+            return;
+        };
+        let shutdown = self.shutdown.clone();
+        let semaphore = Arc::new(Semaphore::new(MAX_CONNECTIONS));
+        let handle = tokio::spawn(async move {
+            run_accept_loop(listener, shutdown, semaphore).await;
+        });
+        self.accept_handle = Some(handle);
+    }
+
+    /// Signal graceful shutdown. The accept loop stops accepting new
+    /// connections; in-flight tasks finish naturally. The socket node is
+    /// unlinked by `Drop`.
+    ///
+    /// @trace spec:tray-host-control-socket
+    pub async fn shutdown(&mut self) {
+        self.shutdown.notify_waiters();
+        if let Some(handle) = self.accept_handle.take() {
+            // Give the accept loop 200 ms to drain.
+            let _ = timeout(Duration::from_millis(200), handle).await;
+        }
+    }
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        // Best-effort socket unlink — may fail if another component already
+        // cleaned up. Logged at debug because graceful shutdown SHOULD have
+        // emitted an info-level entry already.
+        match std::fs::remove_file(&self.socket_path) {
+            Ok(()) => {
+                info!(
+                    accountability = true,
+                    category = "control-socket",
+                    spec = "tray-host-control-socket",
+                    operation = "unlink",
+                    path = %self.socket_path.display(),
+                    "Control socket unlinked on shutdown"
+                );
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                debug!(
+                    path = %self.socket_path.display(),
+                    "Control socket already gone at Drop time"
+                );
+            }
+            Err(e) => {
+                debug!(
+                    error = %e,
+                    path = %self.socket_path.display(),
+                    "Failed to unlink control socket on Drop"
+                );
+            }
+        }
+    }
+}
+
+/// Ensure the parent directory exists with mode `0700`.
+///
+/// If the directory already exists with a more permissive mode, we tighten
+/// it to `0700` — the freedesktop spec already mandates `0700` for
+/// `$XDG_RUNTIME_DIR`, but the fallback `/tmp` path may default looser.
+///
+/// @trace spec:tray-host-control-socket
+fn ensure_parent_dir(parent_dir: &Path) -> io::Result<()> {
+    std::fs::create_dir_all(parent_dir)?;
+    chmod_dir_0700(parent_dir)?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn chmod_dir_0700(path: &Path) -> io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let perms = std::fs::Permissions::from_mode(0o700);
+    std::fs::set_permissions(path, perms)
+}
+
+#[cfg(not(unix))]
+fn chmod_dir_0700(_path: &Path) -> io::Result<()> {
+    Ok(())
+}
+
+#[cfg(unix)]
+fn chmod_0600(path: &Path) -> io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let perms = std::fs::Permissions::from_mode(0o600);
+    std::fs::set_permissions(path, perms)
+}
+
+#[cfg(not(unix))]
+fn chmod_0600(_path: &Path) -> io::Result<()> {
+    Ok(())
+}
+
+/// Probe an existing socket node (if any) to distinguish a live tray peer
+/// from a stale leftover or a non-socket path.
+///
+/// @trace spec:tray-host-control-socket
+pub fn probe_existing_socket(path: &Path) -> StaleProbeOutcome {
+    use std::os::unix::fs::FileTypeExt;
+
+    let meta = match std::fs::metadata(path) {
+        Ok(m) => m,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return StaleProbeOutcome::Stale,
+        Err(_) => return StaleProbeOutcome::Stale,
+    };
+
+    if !meta.file_type().is_socket() {
+        return StaleProbeOutcome::NotASocket;
+    }
+
+    // Probe via a short-lived blocking connect on the std library so we
+    // don't need a tokio runtime when called from the synchronous startup
+    // path. The probe deadlines are short enough (200 ms / 500 ms) that
+    // blocking is acceptable.
+    use std::io::{Read, Write};
+    use std::os::unix::net::UnixStream as StdUnixStream;
+
+    let mut stream = match StdUnixStream::connect(path) {
+        Ok(s) => s,
+        Err(_) => return StaleProbeOutcome::Stale,
+    };
+
+    if stream.set_read_timeout(Some(PROBE_READ_DEADLINE)).is_err()
+        || stream.set_write_timeout(Some(PROBE_CONNECT_DEADLINE)).is_err()
+    {
+        return StaleProbeOutcome::Stale;
+    }
+
+    // Send a Hello envelope. If the peer is alive it should answer with a
+    // HelloAck (or at least something that decodes). We treat any response
+    // — even garbage — as "live peer", and any disconnect / timeout as
+    // "stale".
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq: 0,
+        body: ControlMessage::Hello {
+            from: "tray-probe".to_string(),
+            capabilities: vec![],
+        },
+    };
+    let payload = match wire::encode(&envelope) {
+        Ok(p) => p,
+        Err(_) => return StaleProbeOutcome::Stale,
+    };
+    let mut frame = Vec::with_capacity(4 + payload.len());
+    frame.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+    frame.extend_from_slice(&payload);
+    if stream.write_all(&frame).is_err() {
+        return StaleProbeOutcome::Stale;
+    }
+
+    let mut buf = [0u8; 4];
+    match stream.read(&mut buf) {
+        Ok(0) => StaleProbeOutcome::Stale,
+        Ok(_) => StaleProbeOutcome::LivePeer,
+        Err(_) => StaleProbeOutcome::Stale,
+    }
+}
+
+/// Top-level accept loop. Backpressures via `Semaphore` so the tray cannot
+/// be DoS'd by a flood of consumer connections.
+///
+/// @trace spec:tray-host-control-socket
+async fn run_accept_loop(
+    listener: UnixListener,
+    shutdown: Arc<Notify>,
+    semaphore: Arc<Semaphore>,
+) {
+    loop {
+        let permit = match semaphore.clone().acquire_owned().await {
+            Ok(p) => p,
+            Err(_) => {
+                debug!("Control-socket semaphore closed — exiting accept loop");
+                return;
+            }
+        };
+
+        tokio::select! {
+            biased;
+            _ = shutdown.notified() => {
+                debug!(
+                    spec = "tray-host-control-socket",
+                    "Control-socket accept loop received shutdown — exiting"
+                );
+                drop(permit);
+                return;
+            }
+            accepted = listener.accept() => {
+                match accepted {
+                    Ok((stream, _addr)) => {
+                        let conn_shutdown = shutdown.clone();
+                        tokio::spawn(async move {
+                            let _permit = permit; // released when this task exits
+                            handle_connection(stream, conn_shutdown).await;
+                        });
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "Control-socket accept failed; continuing");
+                        drop(permit);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Per-connection state machine: read frames, dispatch, write replies.
+///
+/// Enforces the per-connection idle timeout (60 s) and the per-frame size
+/// cap (64 KiB). Panics in handlers are isolated to this task — other
+/// connections continue.
+///
+/// @trace spec:tray-host-control-socket
+async fn handle_connection(stream: UnixStream, shutdown: Arc<Notify>) {
+    let codec = LengthDelimitedCodec::builder()
+        .length_field_length(4)
+        .max_frame_length(MAX_MESSAGE_BYTES)
+        .big_endian()
+        .new_codec();
+    let mut framed = Framed::new(stream, codec);
+
+    info!(
+        accountability = true,
+        category = "control-socket",
+        spec = "tray-host-control-socket",
+        operation = "accept",
+        "Control-socket connection accepted"
+    );
+
+    loop {
+        let read = tokio::select! {
+            biased;
+            _ = shutdown.notified() => {
+                debug!(spec = "tray-host-control-socket", "Connection drop on shutdown");
+                break;
+            }
+            r = timeout(IDLE_TIMEOUT, framed.next()) => r,
+        };
+
+        let frame = match read {
+            Ok(Some(Ok(bytes))) => bytes,
+            Ok(Some(Err(e))) => {
+                // Codec error — likely oversized frame.
+                let kind = e.kind();
+                if kind == io::ErrorKind::InvalidData {
+                    let env = ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: 0,
+                        body: ControlMessage::Error {
+                            seq_in_reply_to: None,
+                            code: ErrorCode::PayloadTooLarge,
+                            message: "frame exceeded MAX_MESSAGE_BYTES".to_string(),
+                        },
+                    };
+                    let _ = write_envelope(&mut framed, &env).await;
+                }
+                debug!(error = %e, "Control-socket frame read failed; closing");
+                break;
+            }
+            Ok(None) => {
+                debug!("Control-socket peer closed");
+                break;
+            }
+            Err(_) => {
+                info!(
+                    accountability = true,
+                    category = "control-socket",
+                    spec = "tray-host-control-socket",
+                    operation = "idle-timeout",
+                    "Control-socket connection idle for {:?} — closing",
+                    IDLE_TIMEOUT
+                );
+                break;
+            }
+        };
+
+        let envelope = match wire::decode(&frame) {
+            Ok(e) => e,
+            Err(decode_err) => {
+                warn!(
+                    accountability = true,
+                    category = "control-socket",
+                    spec = "tray-host-control-socket",
+                    operation = "decode-failed",
+                    error = %decode_err,
+                    "Control-socket envelope decode failed"
+                );
+                let env = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 0,
+                    body: ControlMessage::Error {
+                        seq_in_reply_to: None,
+                        code: ErrorCode::UnknownVariant,
+                        message: format!("decode failed: {decode_err}"),
+                    },
+                };
+                let _ = write_envelope(&mut framed, &env).await;
+                continue;
+            }
+        };
+
+        if envelope.wire_version != WIRE_VERSION {
+            warn!(
+                accountability = true,
+                category = "control-socket",
+                spec = "tray-host-control-socket",
+                operation = "wire-version-mismatch",
+                peer_version = envelope.wire_version,
+                server_version = WIRE_VERSION,
+                "Control-socket wire-version mismatch — closing"
+            );
+            let reply = wire_version_mismatch(envelope.seq, envelope.wire_version);
+            let env = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: envelope.seq,
+                body: reply,
+            };
+            let _ = write_envelope(&mut framed, &env).await;
+            break;
+        }
+
+        // Capture an instance of `from` for the Hello logging path before
+        // the borrow on `body` ends.
+        if let ControlMessage::Hello {
+            from, capabilities, ..
+        } = &envelope.body
+        {
+            info!(
+                accountability = true,
+                category = "control-socket",
+                spec = "tray-host-control-socket",
+                operation = "hello",
+                from = %from,
+                caps = capabilities.len(),
+                "Control-socket peer handshake"
+            );
+        }
+
+        let outcome = dispatch(envelope.seq, &envelope.body);
+        match outcome {
+            DispatchOutcome::Reply(reply) => {
+                let env = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: envelope.seq,
+                    body: reply,
+                };
+                if let Err(e) = write_envelope(&mut framed, &env).await {
+                    debug!(error = %e, "Failed to write reply — closing");
+                    break;
+                }
+            }
+            DispatchOutcome::ReplyAndClose(reply) => {
+                let env = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: envelope.seq,
+                    body: reply,
+                };
+                let _ = write_envelope(&mut framed, &env).await;
+                break;
+            }
+            DispatchOutcome::NoReply => {}
+        }
+    }
+
+    // Flush before drop so any final reply lands.
+    let mut stream = framed.into_inner();
+    let _ = stream.shutdown().await;
+    debug!(
+        spec = "tray-host-control-socket",
+        "Control-socket connection closed"
+    );
+}
+
+/// Frame an envelope onto the wire.
+///
+/// Encoding errors are mapped to an `io::Error` so callers can decide
+/// whether to close the connection.
+///
+/// @trace spec:tray-host-control-socket
+async fn write_envelope(
+    framed: &mut Framed<UnixStream, LengthDelimitedCodec>,
+    envelope: &ControlEnvelope,
+) -> io::Result<()> {
+    let bytes = wire::encode(envelope)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+    let buf: Bytes = BytesMut::from(&bytes[..]).freeze();
+    framed
+        .send(buf)
+        .await
+        .map_err(|e| io::Error::other(e.to_string()))
+}
+
+/// Fixed in-container path consumers connect to. Re-exported from the
+/// `path` module for callers that need it without importing the whole
+/// module.
+///
+/// API surface — used by future client-library code in consumer crates.
+#[allow(dead_code)]
+pub fn container_socket_path() -> &'static str {
+    CONTAINER_SOCKET_PATH
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::TempDir;
+
+    fn resolved_in(dir: &Path) -> ResolvedSocketPath {
+        let parent_dir = dir.join("tillandsias");
+        let socket_path = parent_dir.join("control.sock");
+        ResolvedSocketPath {
+            parent_dir,
+            socket_path,
+            source: SocketPathSource::XdgRuntimeDir,
+        }
+    }
+
+    #[tokio::test]
+    async fn bind_creates_socket_with_owner_only_perms() {
+        let tmp = TempDir::new().unwrap();
+        let resolved = resolved_in(tmp.path());
+
+        let server = Server::bind(resolved.clone()).expect("bind succeeds");
+
+        // Parent dir 0700.
+        let parent_meta = std::fs::metadata(&resolved.parent_dir).unwrap();
+        let parent_mode = parent_meta.permissions().mode() & 0o7777;
+        assert_eq!(parent_mode, 0o700, "parent dir must be 0700");
+
+        // Socket node 0600.
+        let sock_meta = std::fs::metadata(&resolved.socket_path).unwrap();
+        let sock_mode = sock_meta.permissions().mode() & 0o7777;
+        assert_eq!(sock_mode, 0o600, "socket node must be 0600");
+
+        drop(server);
+
+        // Drop unlinks.
+        assert!(
+            !resolved.socket_path.exists(),
+            "socket should be unlinked on drop"
+        );
+    }
+
+    #[test]
+    fn probe_returns_stale_when_path_missing() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("missing.sock");
+        assert_eq!(probe_existing_socket(&path), StaleProbeOutcome::Stale);
+    }
+
+    #[test]
+    fn probe_returns_not_a_socket_for_regular_file() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("regular.sock");
+        std::fs::write(&path, b"not a socket").unwrap();
+        assert_eq!(probe_existing_socket(&path), StaleProbeOutcome::NotASocket);
+    }
+
+    #[test]
+    fn second_bind_at_same_path_fails_with_live_peer() {
+        let tmp = TempDir::new().unwrap();
+        let resolved = resolved_in(tmp.path());
+
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        let mut server = rt.block_on(async {
+            let mut s = Server::bind(resolved.clone()).expect("first bind succeeds");
+            s.spawn_accept_loop();
+            // Yield so the accept loop is actively listening before the probe.
+            tokio::task::yield_now().await;
+            s
+        });
+
+        // Second bind must detect the live peer and refuse.
+        let result = Server::bind(resolved);
+        assert!(
+            matches!(&result, Err(e) if e.kind() == io::ErrorKind::AddrInUse),
+            "expected AddrInUse, got {:?}",
+            result.as_ref().err()
+        );
+
+        rt.block_on(async {
+            server.shutdown().await;
+        });
+    }
+
+    #[tokio::test]
+    async fn stale_socket_is_recovered() {
+        let tmp = TempDir::new().unwrap();
+        let resolved = resolved_in(tmp.path());
+
+        // First bind, then drop the listener WITHOUT going through Server's
+        // graceful shutdown path. We simulate a crashed prior instance by
+        // binding via std and letting it be destroyed without unlink.
+        std::fs::create_dir_all(&resolved.parent_dir).unwrap();
+        {
+            use std::os::unix::net::UnixListener as StdUnixListener;
+            let _listener = StdUnixListener::bind(&resolved.socket_path).unwrap();
+            // Drop without unlink — std doesn't auto-unlink on drop, so the
+            // socket node persists. The listener's process-side state is
+            // gone though, so any new connect should fail with ECONNREFUSED.
+        }
+
+        assert!(
+            resolved.socket_path.exists(),
+            "stale socket should still be on disk"
+        );
+        assert_eq!(
+            probe_existing_socket(&resolved.socket_path),
+            StaleProbeOutcome::Stale,
+            "stale node must probe as Stale"
+        );
+
+        // Server::bind should detect the stale node, unlink it, and bind.
+        let server = Server::bind(resolved.clone()).expect("stale recovery succeeds");
+        assert!(resolved.socket_path.exists());
+        drop(server);
+    }
+
+    #[tokio::test]
+    async fn hello_handshake_round_trips_across_socket() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let tmp = TempDir::new().unwrap();
+        let resolved = resolved_in(tmp.path());
+        let mut server = Server::bind(resolved.clone()).expect("bind");
+        server.spawn_accept_loop();
+
+        // Give the accept loop a tick to be fully ready.
+        tokio::task::yield_now().await;
+
+        let mut client = UnixStream::connect(&resolved.socket_path)
+            .await
+            .expect("client connect");
+
+        let envelope = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 1,
+            body: ControlMessage::Hello {
+                from: "test-client".to_string(),
+                capabilities: vec![],
+            },
+        };
+        let payload = wire::encode(&envelope).unwrap();
+        client
+            .write_all(&(payload.len() as u32).to_be_bytes())
+            .await
+            .unwrap();
+        client.write_all(&payload).await.unwrap();
+        client.flush().await.unwrap();
+
+        // Read reply: 4-byte length + payload.
+        let mut len_buf = [0u8; 4];
+        client.read_exact(&mut len_buf).await.unwrap();
+        let len = u32::from_be_bytes(len_buf) as usize;
+        assert!(len <= MAX_MESSAGE_BYTES);
+        let mut payload = vec![0u8; len];
+        client.read_exact(&mut payload).await.unwrap();
+        let reply = wire::decode(&payload).unwrap();
+
+        assert_eq!(reply.seq, 1);
+        match reply.body {
+            ControlMessage::HelloAck {
+                wire_version,
+                server_caps,
+            } => {
+                assert_eq!(wire_version, WIRE_VERSION);
+                assert_eq!(server_caps, vec!["v1".to_string()]);
+            }
+            other => panic!("expected HelloAck, got {:?}", other),
+        }
+
+        server.shutdown().await;
+    }
+}

@@ -300,6 +300,35 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     }
 
     // -----------------------------------------------------------------------
+    // Control-socket bind mount (opt-in per profile)
+    //
+    // The tray binds a Unix-domain socket at startup at
+    // `$XDG_RUNTIME_DIR/tillandsias/control.sock` (or the per-user /tmp
+    // fallback). Profiles that opt in via `mount_control_socket = true`
+    // receive a bind mount of that node at the canonical in-container path
+    // and an env var pointing client libraries at it. Profiles that do NOT
+    // opt in receive neither — the secrets-management delta enforces this
+    // default-deny posture so a compromised forge cannot reach the tray's
+    // control plane.
+    // @trace spec:tray-host-control-socket, spec:secrets-management
+    // @cheatsheet runtime/forge-container.md
+    // -----------------------------------------------------------------------
+    if profile.mount_control_socket {
+        let resolved = crate::control_socket::path::resolve();
+        args.push("-v".into());
+        args.push(format!(
+            "{}:{}:rw",
+            resolved.socket_path.display(),
+            crate::control_socket::path::CONTAINER_SOCKET_PATH
+        ));
+        args.push("-e".into());
+        args.push(format!(
+            "TILLANDSIAS_CONTROL_SOCKET={}",
+            crate::control_socket::path::CONTAINER_SOCKET_PATH
+        ));
+    }
+
+    // -----------------------------------------------------------------------
     // Custom mounts from project config (appended after profile mounts)
     // -----------------------------------------------------------------------
     for mount in &ctx.custom_mounts {
@@ -1307,5 +1336,76 @@ mod tests {
                 && !joined.ends_with("TILLANDSIAS_AGENT=opencode"),
             "AgentName must NOT resolve to plain `opencode` for the web entrypoint, got: {joined}"
         );
+    }
+
+    // @trace spec:tray-host-control-socket, spec:secrets-management
+    #[test]
+    fn control_socket_mount_added_when_profile_opts_in() {
+        // The router profile sets `mount_control_socket = true`. The launch
+        // path should append a `-v <host>:/run/host/tillandsias/control.sock:rw`
+        // mount and a `TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias/control.sock`
+        // env var.
+        let profile = container_profile::router_profile();
+        assert!(
+            profile.mount_control_socket,
+            "router profile must opt in to control socket"
+        );
+        let args = build_podman_args(&profile, &test_context());
+        let joined = args.join(" ");
+        assert!(
+            joined.contains(":/run/host/tillandsias/control.sock:rw"),
+            "router must receive control-socket bind mount; got: {joined}"
+        );
+        assert!(
+            joined.contains("TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias/control.sock"),
+            "router must receive TILLANDSIAS_CONTROL_SOCKET env; got: {joined}"
+        );
+        // Security flags MUST remain on the command line — control-socket
+        // mount does not relax them.
+        assert!(
+            joined.contains("--cap-drop=ALL"),
+            "control-socket mount must not relax cap-drop"
+        );
+        assert!(
+            joined.contains("--security-opt=no-new-privileges"),
+            "control-socket mount must not relax no-new-privileges"
+        );
+        assert!(
+            joined.contains("--userns=keep-id"),
+            "control-socket mount must not relax userns=keep-id"
+        );
+    }
+
+    // @trace spec:tray-host-control-socket, spec:secrets-management
+    #[test]
+    fn control_socket_mount_absent_when_profile_does_not_opt_in() {
+        // Forge profiles default-deny the control socket per the
+        // secrets-management delta. A compromised forge MUST NOT see the
+        // control plane.
+        for profile in [
+            container_profile::forge_opencode_profile(),
+            container_profile::forge_claude_profile(),
+            container_profile::forge_opencode_web_profile(),
+            container_profile::terminal_profile(),
+            container_profile::proxy_profile(),
+            container_profile::inference_profile(),
+            container_profile::git_service_profile(),
+            container_profile::web_profile(),
+        ] {
+            assert!(
+                !profile.mount_control_socket,
+                "non-router profiles must default-deny the control socket"
+            );
+            let args = build_podman_args(&profile, &test_context());
+            let joined = args.join(" ");
+            assert!(
+                !joined.contains("/run/host/tillandsias/control.sock"),
+                "non-router profile must NOT receive control-socket mount; got: {joined}"
+            );
+            assert!(
+                !joined.contains("TILLANDSIAS_CONTROL_SOCKET="),
+                "non-router profile must NOT receive TILLANDSIAS_CONTROL_SOCKET; got: {joined}"
+            );
+        }
     }
 }

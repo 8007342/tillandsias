@@ -51,6 +51,20 @@ pub struct ContainerProfile {
     /// Each entry is a container path (e.g., "/tmp", "/var/run/squid").
     /// @trace spec:podman-orchestration
     pub tmpfs_mounts: Vec<&'static str>,
+
+    /// Bind-mount the host control socket into the container at the
+    /// canonical path `/run/host/tillandsias/control.sock` and set the
+    /// `TILLANDSIAS_CONTROL_SOCKET` env var so client libraries inside
+    /// the container can find it without per-launch configuration.
+    ///
+    /// Default: `false`. Forge containers MUST keep this `false` —
+    /// per `secrets-management`, the default-deny posture prevents a
+    /// compromised forge from sending control-plane messages. Only
+    /// containers that explicitly opt in (e.g., the router) receive
+    /// the bind mount.
+    ///
+    /// @trace spec:tray-host-control-socket, spec:secrets-management
+    pub mount_control_socket: bool,
 }
 
 /// A volume mount with a logical host key resolved at launch time.
@@ -276,6 +290,11 @@ pub fn forge_opencode_profile() -> ContainerProfile {
         pids_limit: 512,      // Compilers, language servers, AI tools
         read_only: false,      // Forge needs mutable workspace
         tmpfs_mounts: vec![],
+        // @trace spec:tray-host-control-socket, spec:secrets-management
+        // Forge containers default-deny the control socket — see the
+        // secrets-management delta. A compromised forge MUST NOT be able
+        // to reach the tray's control plane.
+        mount_control_socket: false,
     }
 }
 
@@ -292,6 +311,8 @@ pub fn forge_claude_profile() -> ContainerProfile {
         pids_limit: 512,      // Compilers, language servers, AI tools
         read_only: false,      // Forge needs mutable workspace
         tmpfs_mounts: vec![],
+        // @trace spec:tray-host-control-socket, spec:secrets-management
+        mount_control_socket: false,
     }
 }
 
@@ -311,6 +332,10 @@ pub fn forge_opencode_web_profile() -> ContainerProfile {
         pids_limit: 512,
         read_only: false,
         tmpfs_mounts: vec![],
+        // @trace spec:tray-host-control-socket, spec:secrets-management
+        // OpenCode Web forge does not need the control socket — the router
+        // (which fronts the web session) is the consumer.
+        mount_control_socket: false,
     }
 }
 
@@ -405,6 +430,8 @@ pub fn terminal_profile() -> ContainerProfile {
         ],
         secrets: vec![],
         image_override: None,
+        // @trace spec:tray-host-control-socket, spec:secrets-management
+        mount_control_socket: false,
     }
 }
 
@@ -432,6 +459,8 @@ pub fn web_profile() -> ContainerProfile {
         pids_limit: 32,        // Only httpd
         read_only: true,       // Static file server — no writes needed
         tmpfs_mounts: vec!["/tmp", "/var/run"],
+        // @trace spec:tray-host-control-socket, spec:secrets-management
+        mount_control_socket: false,
     }
 }
 
@@ -477,6 +506,13 @@ pub fn router_profile() -> ContainerProfile {
         // a single-purpose container with no shell access.
         read_only: false,
         tmpfs_mounts: vec![],
+        // @trace spec:tray-host-control-socket
+        // The router consumes the control socket: it receives
+        // `IssueWebSession` envelopes from the tray (carrying per-window
+        // session cookies) and replies with `IssueAck`. v1 of the socket
+        // ships the bind-mount plumbing; the cookie issuance flow lands
+        // with the `opencode-web-session-otp` change.
+        mount_control_socket: true,
     }
 }
 
@@ -519,6 +555,8 @@ pub fn proxy_profile() -> ContainerProfile {
         // Security comes from cap-drop, pids-limit, and enclave isolation.
         read_only: false,
         tmpfs_mounts: vec![],
+        // @trace spec:tray-host-control-socket, spec:secrets-management
+        mount_control_socket: false,
     }
 }
 
@@ -586,6 +624,8 @@ pub fn inference_profile() -> ContainerProfile {
         // tmpfs ownership issue as squid (UID 1000 can't write root-owned tmpfs).
         read_only: false,
         tmpfs_mounts: vec![],
+        // @trace spec:tray-host-control-socket, spec:secrets-management
+        mount_control_socket: false,
     }
 }
 
@@ -662,6 +702,8 @@ pub fn git_service_profile() -> ContainerProfile {
         pids_limit: 64,        // Only git-daemon + git processes
         read_only: true,       // Service container — immutable root FS
         tmpfs_mounts: vec!["/tmp"],
+        // @trace spec:tray-host-control-socket, spec:secrets-management
+        mount_control_socket: false,
     }
 }
 
@@ -1156,6 +1198,64 @@ mod tests {
         // squid runs as UID 1000 via --userns=keep-id → permission denied.
         let profile = proxy_profile();
         assert!(!profile.read_only, "Proxy must NOT be read-only (squid needs writable runtime dirs)");
+    }
+
+    // @trace spec:tray-host-control-socket, spec:secrets-management
+    #[test]
+    fn forge_profiles_default_to_no_control_socket() {
+        // Per the secrets-management delta, forge containers MUST default-deny
+        // the control-socket bind mount so a compromised forge cannot reach
+        // the tray's control plane.
+        assert!(
+            !forge_opencode_profile().mount_control_socket,
+            "forge_opencode must default-deny control socket"
+        );
+        assert!(
+            !forge_claude_profile().mount_control_socket,
+            "forge_claude must default-deny control socket"
+        );
+        assert!(
+            !forge_opencode_web_profile().mount_control_socket,
+            "forge_opencode_web must default-deny control socket"
+        );
+        assert!(
+            !terminal_profile().mount_control_socket,
+            "terminal must default-deny control socket"
+        );
+    }
+
+    // @trace spec:tray-host-control-socket
+    #[test]
+    fn router_opts_in_to_control_socket() {
+        // Router consumes IssueWebSession envelopes from the tray; it MUST
+        // receive the bind mount.
+        assert!(
+            router_profile().mount_control_socket,
+            "router must opt in to control socket"
+        );
+    }
+
+    // @trace spec:tray-host-control-socket, spec:secrets-management
+    #[test]
+    fn service_containers_default_to_no_control_socket() {
+        // Proxy, inference, git_service, web have no control-plane reason
+        // to talk to the tray; they keep the default-deny posture.
+        assert!(
+            !proxy_profile().mount_control_socket,
+            "proxy must default-deny control socket"
+        );
+        assert!(
+            !inference_profile().mount_control_socket,
+            "inference must default-deny control socket"
+        );
+        assert!(
+            !git_service_profile().mount_control_socket,
+            "git_service must default-deny control socket"
+        );
+        assert!(
+            !web_profile().mount_control_socket,
+            "web must default-deny control socket"
+        );
     }
 
     // @trace spec:podman-orchestration

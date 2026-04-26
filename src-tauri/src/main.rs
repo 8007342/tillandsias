@@ -8,6 +8,12 @@ mod build_lock;
 mod ca;
 mod cleanup;
 mod cli;
+// @trace spec:tray-host-control-socket
+// Tray-host control socket — Unix-domain stream listener for typed,
+// postcard-framed messages between the tray and bind-mounted consumer
+// containers (router today, host-browser-mcp / future log-event ingest
+// next). v1 implements the lifecycle + Hello/HelloAck handshake.
+mod control_socket;
 #[cfg(target_os = "linux")]
 mod desktop;
 mod desktop_env;
@@ -80,6 +86,15 @@ static CREDENTIAL_HEALTH: std::sync::OnceLock<
 ///
 /// @trace spec:simplified-tray-ux
 static TRAY_STATE_HANDLE: std::sync::OnceLock<Arc<Mutex<TrayState>>> = std::sync::OnceLock::new();
+
+/// Tray-host control-socket server. Bound once during setup and shut
+/// down on app exit. Wrapped in `tokio::sync::Mutex` because shutdown
+/// is async (it awaits the accept-loop join handle).
+///
+/// @trace spec:tray-host-control-socket
+static CONTROL_SOCKET: std::sync::OnceLock<
+    tokio::sync::Mutex<crate::control_socket::Server>,
+> = std::sync::OnceLock::new();
 
 fn main() {
     // On Windows, hide the console window for tray-only mode (no args).
@@ -258,6 +273,42 @@ fn main() {
             // OpenCode Web sessions now launch in the user's native browser
             // (see src-tauri/src/browser.rs). Tauri no longer hosts a
             // WebviewWindow for them — no AppHandle registration needed.
+
+            // @trace spec:tray-host-control-socket
+            // Bind the tray-host control socket BEFORE the tray icon
+            // becomes interactive. The bind is synchronous (uses blocking
+            // probe + UnixListener::bind); the accept loop is spawned on
+            // tauri's async runtime so it doesn't block startup.
+            //
+            // Failure to bind degrades gracefully: the tray still comes up,
+            // but containers that opt in via `mount_control_socket = true`
+            // will fail to launch (their bind-mount source is missing).
+            // The router is the only v1 consumer, so the visible failure
+            // mode is "router won't start" — which surfaces in the existing
+            // build/launch error path.
+            match crate::control_socket::Server::bind_default() {
+                Ok(mut server) => {
+                    server.spawn_accept_loop();
+                    if CONTROL_SOCKET
+                        .set(tokio::sync::Mutex::new(server))
+                        .is_err()
+                    {
+                        warn!(
+                            spec = "tray-host-control-socket",
+                            "CONTROL_SOCKET already initialised — duplicate setup?"
+                        );
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        accountability = true,
+                        category = "control-socket",
+                        spec = "tray-host-control-socket",
+                        error = %e,
+                        "Failed to bind tray-host control socket — control-plane consumers will degrade"
+                    );
+                }
+            }
 
             // Spawn updater background tasks
             updater::spawn_update_tasks(&app_handle, update_state);
@@ -1089,6 +1140,17 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>) {
 pub(crate) fn refresh_menu_labels() {
     if let Some(menu) = TRAY_MENU.get() {
         menu.refresh_static_labels();
+    }
+}
+
+/// Shut down the tray-host control socket. Called by the event loop's
+/// Quit arm after `shutdown_all` so any final tray↔consumer messages can
+/// flush before the listener disappears.
+///
+/// @trace spec:tray-host-control-socket
+pub(crate) async fn shutdown_control_socket() {
+    if let Some(socket) = CONTROL_SOCKET.get() {
+        socket.lock().await.shutdown().await;
     }
 }
 
