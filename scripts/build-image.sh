@@ -287,22 +287,24 @@ if [[ "$FLAG_BACKEND" == "fedora" ]]; then
     # that build containers don't have. Proxy is for runtime containers only.
     #
     # @trace spec:opencode-web-session-otp
-    # The router image's Containerfile is multi-stage and cross-builds the
-    # tillandsias-router-sidecar binary against musl from workspace source,
-    # so its build context MUST be the workspace root (so cargo can see
-    # crates/ + src-tauri/). Other images use their own per-image dir.
-    if [[ "$IMAGE_NAME" == "router" ]]; then
-        "$PODMAN" build \
-            --tag "$IMAGE_TAG" \
-            --ignorefile "$ROOT/images/router/.containerignore" \
-            -f "$CONTAINERFILE" \
-            "$ROOT/"
-    else
-        "$PODMAN" build \
-            --tag "$IMAGE_TAG" \
-            -f "$CONTAINERFILE" \
-            "$IMAGE_DIR/"
+    # The router image's Containerfile expects a pre-built sidecar binary
+    # at `images/router/tillandsias-router-sidecar`. When running from the
+    # workspace, refresh it via `scripts/build-sidecar.sh` first; the
+    # script is idempotent (cargo skips when up-to-date). When running
+    # from the embedded extraction at runtime the binary is already
+    # present (extracted from the tray's include_bytes!), so the helper
+    # call is a no-op or skipped via an env-flag check.
+    if [[ "$IMAGE_NAME" == "router" ]] && [[ -z "${TILLANDSIAS_SKIP_SIDECAR_REBUILD:-}" ]]; then
+        if [[ -x "$ROOT/scripts/build-sidecar.sh" ]]; then
+            _step "Refreshing tillandsias-router-sidecar binary..."
+            "$ROOT/scripts/build-sidecar.sh"
+        fi
     fi
+
+    "$PODMAN" build \
+        --tag "$IMAGE_TAG" \
+        -f "$CONTAINERFILE" \
+        "$IMAGE_DIR/"
 
     # Clean up the staged cheatsheets so they don't accumulate in the build context.
     if [[ "$IMAGE_NAME" == "forge" ]] || [[ "$IMAGE_NAME" == "default" ]]; then

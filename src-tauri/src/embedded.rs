@@ -108,6 +108,14 @@ pub const ROUTER_CONTAINERFILE: &str = include_str!("../../images/router/Contain
 pub const ROUTER_BASE_CADDYFILE: &str = include_str!("../../images/router/base.Caddyfile");
 pub const ROUTER_ENTRYPOINT: &str = include_str!("../../images/router/entrypoint.sh");
 pub const ROUTER_RELOAD_SCRIPT: &str = include_str!("../../images/router/router-reload.sh");
+// @trace spec:opencode-web-session-otp
+// Pre-built static-musl binary (~2.5 MB stripped). Built by
+// `scripts/build-sidecar.sh`, kicked off automatically by
+// `src-tauri/build.rs` so a plain `cargo build` of the tray Just Works.
+// The binary ships embedded so deployed tray instances can rebuild the
+// router image without the workspace source on disk.
+pub const ROUTER_SIDECAR_BINARY: &[u8] =
+    include_bytes!("../../images/router/tillandsias-router-sidecar");
 
 // ---------------------------------------------------------------------------
 // Image sources — forge (default) image
@@ -574,7 +582,7 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     }
 
     // -- images/router/ --
-    // @trace spec:subdomain-routing-via-reverse-proxy
+    // @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-session-otp
     let router_dir = dir.join("images").join("router");
     fs::create_dir_all(&router_dir).map_err(|e| format!("images/router dir: {e}"))?;
     write_lf(&router_dir.join("Containerfile"), ROUTER_CONTAINERFILE)
@@ -585,9 +593,16 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("router entrypoint: {e}"))?;
     write_lf(&router_dir.join("router-reload.sh"), ROUTER_RELOAD_SCRIPT)
         .map_err(|e| format!("router-reload.sh: {e}"))?;
+    // @trace spec:opencode-web-session-otp
+    // Sidecar binary (binary blob, not LF-normalised text — write raw).
+    fs::write(
+        router_dir.join("tillandsias-router-sidecar"),
+        ROUTER_SIDECAR_BINARY,
+    )
+    .map_err(|e| format!("router sidecar binary: {e}"))?;
     #[cfg(unix)]
     {
-        for name in ["entrypoint.sh", "router-reload.sh"] {
+        for name in ["entrypoint.sh", "router-reload.sh", "tillandsias-router-sidecar"] {
             let path = router_dir.join(name);
             if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
                 warn!(
@@ -888,6 +903,71 @@ mod tests {
         }
 
         // Cleanup
+        let _ = std::fs::remove_dir_all(&extracted);
+    }
+
+    /// Sibling audit for `images/router/`: every file on disk must land in
+    /// the extracted tree. Catches the v0.1.170.244 bug where chunk 4 of
+    /// the OTP convergence shipped a multi-stage Containerfile + a
+    /// `.containerignore` but neither was registered in `embedded.rs`,
+    /// causing deployed binaries to fail at podman build time with
+    /// "unable to parse ignore file".
+    ///
+    /// @trace spec:opencode-web-session-otp, spec:embedded-scripts
+    #[test]
+    fn every_router_image_source_is_embedded_and_extracted() {
+        let images_router = PathBuf::from("../images/router");
+        assert!(
+            images_router.is_dir(),
+            "expected workspace-relative {:?} to exist",
+            images_router
+        );
+
+        let expected: std::collections::HashSet<String> = std::fs::read_dir(&images_router)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|name| !name.starts_with(".") && name != "README.md")
+            .collect();
+
+        let extracted = write_image_sources().expect("write_image_sources should succeed");
+        let extracted_router = extracted.join("images/router");
+
+        let actual: std::collections::HashSet<String> = std::fs::read_dir(&extracted_router)
+            .expect("extracted images/router should exist")
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+
+        let missing: Vec<_> = expected.difference(&actual).collect();
+        assert!(
+            missing.is_empty(),
+            "images/router/ files present on disk but not embedded/extracted: {:?}\n\
+             Add them to `src-tauri/src/embedded.rs` (include_str!/include_bytes! const + \
+             write call in write_image_sources(); if executable, also to the \
+             chmod loop).",
+            missing
+        );
+
+        // The sidecar binary must be present and executable on Unix.
+        let sidecar = extracted_router.join("tillandsias-router-sidecar");
+        assert!(
+            sidecar.is_file(),
+            "tillandsias-router-sidecar must be extracted"
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&sidecar).unwrap().permissions().mode();
+            assert!(
+                mode & 0o111 != 0,
+                "tillandsias-router-sidecar must be executable; got mode {:o}",
+                mode
+            );
+        }
+
         let _ = std::fs::remove_dir_all(&extracted);
     }
 }

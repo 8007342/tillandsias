@@ -22,7 +22,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [src-tauri/src/embedded.rs#L690](../../../src-tauri/src/embedded.rs#L690)
 - [src-tauri/src/embedded.rs#L716](../../../src-tauri/src/embedded.rs#L716)
 - [src-tauri/src/gpu.rs#L137](../../../src-tauri/src/gpu.rs#L137)
-- [src-tauri/src/handlers.rs#L2256](../../../src-tauri/src/handlers.rs#L2256)
+- [src-tauri/src/handlers.rs#L2265](../../../src-tauri/src/handlers.rs#L2265)
 - [src-tauri/src/launch.rs#L412](../../../src-tauri/src/launch.rs#L412)
 - [src-tauri/src/launch.rs#L417](../../../src-tauri/src/launch.rs#L417)
 - [src-tauri/src/launch.rs#L906](../../../src-tauri/src/launch.rs#L906)

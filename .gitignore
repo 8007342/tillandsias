@@ -26,3 +26,11 @@ vendor/debug/
 
 # Staged by scripts/build-image.sh — agent-cheatsheets
 images/default/.cheatsheets/
+
+
+# Pre-built tillandsias-router-sidecar (musl static-pie binary).
+# Built by scripts/build-sidecar.sh; embedded into tray binary via
+# include_bytes! in src-tauri/src/embedded.rs. Not source-controlled —
+# rebuilds on every fresh clone.
+# @trace spec:opencode-web-session-otp
+images/router/tillandsias-router-sidecar
