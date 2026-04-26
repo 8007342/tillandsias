@@ -250,12 +250,27 @@ COPY opencode.json /home/forge/.config/opencode/config.json
 COPY config-overlay/opencode/tui.json /home/forge/.config/opencode/tui.json
 
 # ── Shell configs ──────────────────────────────────────────────
+# /etc/skel is populated AFTER `useradd -m` ran above, so the forge user's
+# home was created from an empty /etc/skel — its ~/.bashrc and ~/.zshrc do
+# NOT exist by default. We have to copy the shell configs DIRECTLY to
+# /home/forge as well (and chown them in the chown -R below).
+#
+# .bash_profile sources .bashrc so `bash -l` (used by the Maintenance
+# terminal) picks up our PATH, prompt, aliases, and welcome banner. Without
+# this, login bash reads only /etc/profile and the user gets a vanilla
+# distro prompt with no project context.
+#
+# @trace spec:default-image, spec:forge-environment-discoverability
 RUN mkdir -p /etc/skel/.config/fish
 COPY shell/bashrc /etc/skel/.bashrc
 COPY shell/zshrc /etc/skel/.zshrc
 COPY shell/config.fish /etc/skel/.config/fish/config.fish
 RUN mkdir -p /home/forge/.config/fish/conf.d
 COPY shell/config.fish /home/forge/.config/fish/conf.d/tillandsias.fish
+COPY shell/bashrc /home/forge/.bashrc
+COPY shell/zshrc /home/forge/.zshrc
+RUN printf '# Login bash sources .bashrc so PATH + welcome + prompt apply.\n[ -f ~/.bashrc ] && . ~/.bashrc\n' \
+        > /home/forge/.bash_profile
 
 # ── Welcome script ─────────────────────────────────────────────
 RUN mkdir -p /usr/local/share/tillandsias
