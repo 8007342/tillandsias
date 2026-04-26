@@ -1016,21 +1016,20 @@ pub(crate) async fn stop_router() {
 ///   enclave.
 ///
 /// Whether the Caddy router should reject opencode-web requests that lack
-/// the `tillandsias_session=<base64url>` cookie minted by the OtpStore.
+/// a session cookie validated by the router-side sidecar.
 ///
-/// **Currently `false`** — the OtpStore + IssueWebSession dispatch + per-
-/// launch CDP discovery are all wired, but the WebSocket
-/// `Network.setCookies` attach is a stub (see `cdp::attach_and_set_cookie`
-/// returns `CdpOutcome::Other` until host-chromium-on-demand lands the
-/// per-browser injection paths). Until that happens, the cookie is minted
-/// but never presented by the browser; gating the route on cookie presence
-/// would 401 every legitimate launch.
+/// **Currently `false`** — the OtpStore, the IssueWebSession dispatch,
+/// the CDP cookie injection, the broadcast fanout, and the router-side
+/// sidecar are all wired (chunks 1–5 of the convergence plan). Chunk 6
+/// pivots the tray dispatch to publish over the broadcast; chunk 7 flips
+/// this constant to true. Until the flip, the Caddy block reverse-proxies
+/// everything unconditionally and the sidecar's validate endpoint runs
+/// idle.
 ///
-/// **Flip to `true`** as part of the host-chromium-on-demand follow-up
-/// commit that wires up real CDP `Network.setCookies` injection. The
-/// `render_caddy_route_block_with_cookie_matcher_and_401_handler` test
-/// covers the cookie-on shape; `render_caddy_route_block_open` covers the
-/// cookie-off shape. Toggling this constant is the only source change.
+/// **Flip to `true`** in chunk 7 once the IssueWebSession publish path
+/// reaches the sidecar reliably. The `render_caddy_route_block_*` tests
+/// cover both shapes; toggling this constant is the only source change
+/// needed.
 ///
 /// @trace spec:opencode-web-session-otp
 /// @cheatsheet web/cookie-auth-best-practices.md
@@ -1038,29 +1037,36 @@ pub(crate) const ENFORCE_SESSION_COOKIE: bool = false;
 
 /// Render the Caddy site block for a single project's OpenCode Web route.
 ///
-/// When [`ENFORCE_SESSION_COOKIE`] is `true`, the block enforces the
-/// per-window session-cookie requirement: requests without a
-/// `tillandsias_session=<base64url>` cookie return HTTP 401 with a
-/// friendly "open this project from the Tillandsias tray" body. When
-/// `false`, the block reverse-proxies all requests unconditionally — the
-/// pre-OTP behaviour. Pure function exposed at module level so unit tests
-/// can pin both byte shapes.
+/// When [`ENFORCE_SESSION_COOKIE`] is `true`, the block delegates auth to
+/// the router-side sidecar via Caddy's built-in `forward_auth` directive:
+/// every request triggers `GET /validate?project=<host-label>` against
+/// `127.0.0.1:9090` (in-container loopback to the sidecar). The sidecar
+/// inspects the forwarded `Cookie:` header, decodes the
+/// `tillandsias_session=<base64url>` value, looks it up in the per-project
+/// session list, and replies `204` (allow) or `401` (deny). Caddy
+/// continues the request on 204 and returns the sidecar's 401 body
+/// (friendly "open from the tray" message) on deny.
+///
+/// When `false`, the block reverse-proxies all requests unconditionally —
+/// the pre-OTP behaviour. Pure function exposed at module level so unit
+/// tests can pin both byte shapes.
 ///
 /// @trace spec:opencode-web-session-otp, spec:subdomain-routing-via-reverse-proxy
 /// @cheatsheet web/cookie-auth-best-practices.md
 pub(crate) fn render_caddy_route_block(project: &str) -> String {
     if ENFORCE_SESSION_COOKIE {
-        // The 401 body uses the Unicode em-dash escape (—) so the source
-        // is ASCII-clean. Caddy's caddyfile parser accepts \uXXXX escapes
-        // inside double-quoted strings.
+        // forward_auth: Caddy fires GET /validate against the sidecar with
+        // the original Cookie header copied over. On non-2xx the sidecar's
+        // response (status + body) is returned to the client unchanged —
+        // we don't need a separate `respond 401` directive here.
         format!(
-            "http://opencode.{project}.localhost:8080 {{\n    @hassession header_regexp Cookie \"tillandsias_session=[A-Za-z0-9_-]+\"\n    handle @hassession {{\n        reverse_proxy tillandsias-{project}-forge:4096\n    }}\n    handle {{\n        respond \"unauthorised \\u2014 open this project from the Tillandsias tray\" 401\n    }}\n}}\n",
+            "http://opencode.{project}.localhost:8080 {{\n    forward_auth 127.0.0.1:9090 {{\n        uri /validate?project=opencode.{project}.localhost\n        copy_headers Cookie\n    }}\n    reverse_proxy tillandsias-{project}-forge:4096\n}}\n",
             project = project
         )
     } else {
         // Pre-OTP shape — direct reverse_proxy, no cookie gate. Used until
-        // the CDP cookie injection path is real (see ENFORCE_SESSION_COOKIE
-        // doc-comment for the flip-the-switch instructions).
+        // ENFORCE_SESSION_COOKIE flips (see the doc-comment for the
+        // flip-the-switch instructions).
         format!(
             "http://opencode.{project}.localhost:8080 {{\n    reverse_proxy tillandsias-{project}-forge:4096\n}}\n",
             project = project
@@ -1118,17 +1124,15 @@ pub(crate) async fn regenerate_router_caddyfile(state: &TrayState) -> Result<(),
         //
         // @trace spec:opencode-web-session-otp
         // @cheatsheet web/cookie-auth-best-practices.md
-        // Per-window session cookie required. The `@hassession` matcher
-        // accepts any request bearing a `tillandsias_session=<base64url>`
-        // cookie value of the canonical 43-char shape; everything else
-        // returns HTTP 401 with the friendly "open from the tray" message.
-        // This is presence-validation in v1 — full value-membership
-        // validation against the OtpStore lands with the
-        // `router-control-sidecar` follow-up change. The presence check
-        // alone already blocks `curl` from another shell, sibling browser
-        // windows that did not go through the tray, and any process that
-        // discovers the URL via `/proc/<pid>/cmdline` of the spawned
-        // browser — all of which lack the `Cookie` header.
+        // Per-window session cookie required when ENFORCE_SESSION_COOKIE
+        // is true. Caddy's `forward_auth` directive consults the router
+        // sidecar at 127.0.0.1:9090 on every request; the sidecar decodes
+        // the cookie value and checks membership in the per-project session
+        // list. Any request whose cookie value is NOT in the list — `curl`
+        // from another shell, sibling browser windows that did not go
+        // through the tray, processes that discovered the URL via
+        // `/proc/<pid>/cmdline` of the spawned browser — gets HTTP 401
+        // with the friendly "open from the tray" body.
         snippet.push_str(&render_caddy_route_block(&project));
         route_count += 1;
     }
@@ -5219,33 +5223,52 @@ mod tests {
     }
 
     /// Cookie-on shape (currently NOT the default; ENFORCE_SESSION_COOKIE
-    /// must flip to true for this to be the live shape). The assertions
-    /// only run when the constant is true so future toggles are caught.
+    /// must flip to true in chunk 7 for this to be the live shape). The
+    /// assertions only run when the constant is true so future toggles
+    /// are caught.
     /// @trace spec:opencode-web-session-otp
     #[test]
-    fn render_caddy_route_block_cookie_matcher_when_enforced() {
+    fn render_caddy_route_block_forward_auth_when_enforced() {
         if !ENFORCE_SESSION_COOKIE {
             // Pre-flip: nothing to assert. The pre-OTP shape is covered
             // by `render_caddy_route_block_pre_otp_shape_when_not_enforced`.
             return;
         }
         let snippet = render_caddy_route_block("thinking-service");
+        // Caddy directive that delegates auth to the sidecar.
         assert!(
-            snippet.contains("@hassession header_regexp Cookie \"tillandsias_session=[A-Za-z0-9_-]+\""),
-            "missing @hassession matcher: {snippet}"
+            snippet.contains("forward_auth 127.0.0.1:9090"),
+            "missing forward_auth directive targeting sidecar: {snippet}"
         );
-        assert!(snippet.contains("respond"), "missing respond directive: {snippet}");
-        assert!(snippet.contains("401"), "missing 401 status: {snippet}");
+        // The validate URI carries the project's host label so the sidecar
+        // can look it up in the per-project session list.
         assert!(
-            snippet.contains("Tillandsias tray"),
-            "missing friendly body: {snippet}"
+            snippet
+                .contains("uri /validate?project=opencode.thinking-service.localhost"),
+            "missing validate URI: {snippet}"
+        );
+        // The original Cookie header must be forwarded so the sidecar
+        // sees what the browser actually sent.
+        assert!(
+            snippet.contains("copy_headers Cookie"),
+            "missing copy_headers Cookie: {snippet}"
+        );
+        // Reverse proxy still on the success path.
+        assert!(
+            snippet.contains("reverse_proxy tillandsias-thinking-service-forge:4096"),
+            "missing reverse_proxy: {snippet}"
+        );
+        // No legacy presence-regex matcher.
+        assert!(
+            !snippet.contains("@hassession"),
+            "@hassession matcher must be gone — sidecar does value validation now: {snippet}"
         );
     }
 
     /// Cookie-off shape — the current pre-OTP behaviour. Asserts the route
-    /// block does NOT include the cookie matcher when
-    /// ENFORCE_SESSION_COOKIE is false. When the constant flips, this test
-    /// becomes a no-op and the matcher test above starts asserting.
+    /// block does NOT include the auth gate when ENFORCE_SESSION_COOKIE
+    /// is false. When the constant flips, this test becomes a no-op and
+    /// the forward_auth test above starts asserting.
     /// @trace spec:opencode-web-session-otp
     #[test]
     fn render_caddy_route_block_pre_otp_shape_when_not_enforced() {
@@ -5254,12 +5277,12 @@ mod tests {
         }
         let snippet = render_caddy_route_block("thinking-service");
         assert!(
-            !snippet.contains("@hassession"),
-            "@hassession matcher must NOT be present when not enforced: {snippet}"
+            !snippet.contains("forward_auth"),
+            "forward_auth must NOT be present when not enforced: {snippet}"
         );
         assert!(
-            !snippet.contains("401"),
-            "401 fallback must NOT be present when not enforced: {snippet}"
+            !snippet.contains("@hassession"),
+            "@hassession matcher must NOT be present when not enforced: {snippet}"
         );
     }
 

@@ -176,12 +176,30 @@ fn parse_session_cookie(header: &str) -> Option<&str> {
 }
 
 async fn write_status(sock: &mut TcpStream, code: u16) -> std::io::Result<()> {
-    let reason = match code {
-        204 => "No Content",
-        401 => "Unauthorized",
-        _ => "OK",
+    // Caddy's `forward_auth` directive returns the upstream's response
+    // (status + body) to the client unchanged on non-2xx. So the friendly
+    // 401 body lives HERE — putting it in the Caddyfile would require
+    // `handle_errors` plumbing for no benefit.
+    //
+    // 204 has no body by definition (RFC 7230 §3.3.2 — "A 204 response
+    // MUST NOT include a message body"); Caddy continues the request and
+    // the user never sees this anyway.
+    //
+    // The em-dash is UTF-8 (E2 80 94, 3 bytes); .len() of the formatted
+    // body gives the correct Content-Length.
+    let (reason, body) = match code {
+        204 => ("No Content", String::new()),
+        401 => (
+            "Unauthorized",
+            "unauthorised \u{2014} open this project from the Tillandsias tray\n".to_string(),
+        ),
+        _ => ("OK", String::new()),
     };
-    let resp = format!("HTTP/1.1 {code} {reason}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+    let mut resp = format!(
+        "HTTP/1.1 {code} {reason}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    resp.push_str(&body);
     sock.write_all(resp.as_bytes()).await
 }
 
