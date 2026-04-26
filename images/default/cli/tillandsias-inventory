@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# tillandsias-inventory — list every dev-runtime + version baked into the
+# forge image. Default plain-text columns; --json for machine consumption.
+# Tools that aren't present are silently skipped (the inventory shows what
+# is THERE). To request a missing tool, file a RUNTIME_LIMITATIONS_NNN.md.
+#
+# Usage: tillandsias-inventory [--json]
+#
+# @trace spec:forge-environment-discoverability
+# @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
+
+set -euo pipefail
+
+JSON=0
+case "${1:-}" in
+    --json) JSON=1 ;;
+    -h|--help) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    "") ;;
+    *) echo "tillandsias-inventory: unknown arg '$1'" >&2
+       echo "usage: tillandsias-inventory [--json]" >&2; exit 2 ;;
+esac
+
+# Category catalogue — declaration order = display order.
+# Format: "Category|tool tool tool ..."
+CATEGORIES=(
+    "Languages|java javac python3 node go cargo rustc dart flutter"
+    "Build|mvn gradle npm yarn pnpm pipx uv poetry make cmake ninja nix"
+    "Test|pytest junit chromium-headless firefox chromedriver geckodriver"
+    "Utils|jq yq protoc grpcurl shellcheck shfmt rg fd fzf curl wget git gh xmlstarlet direnv"
+    "Agents|claude opencode openspec"
+    "Web/API|curl wget grpcurl gh"
+)
+
+# First line of `<tool> --version` (merged stderr; java prints to stderr).
+short_version() {
+    local raw
+    raw="$("$1" --version 2>&1 </dev/null | head -1 || true)"
+    raw="$(printf '%s' "${raw//$'\t'/ }" | tr -s ' ')"
+    raw="${raw#"${raw%%[![:space:]]*}"}"
+    raw="${raw%"${raw##*[![:space:]]}"}"
+    printf '%s' "${raw:-(unknown)}"
+}
+
+emit_text() {
+    printf 'Tillandsias forge inventory — image v%s\n\n' "${TILLANDSIAS_IMAGE_VERSION:-unset}"
+    local entry category tools tool ver path
+    for entry in "${CATEGORIES[@]}"; do
+        category="${entry%%|*}"; tools="${entry#*|}"
+        local rows=()
+        for tool in $tools; do
+            path="$(command -v "$tool" 2>/dev/null || true)"
+            [ -n "$path" ] || continue
+            ver="$(short_version "$tool")"
+            rows+=("$(printf '  %-22s %-40s %s' "$tool" "$ver" "$path")")
+        done
+        [ ${#rows[@]} -eq 0 ] && continue
+        printf '%s\n' "$category"
+        printf '%s\n' "${rows[@]}"
+        printf '\n'
+    done
+}
+
+emit_json() {
+    local entry category tools tool ver path key tsv first=1
+    printf '{"image_version":%s' \
+        "$(printf '%s' "${TILLANDSIAS_IMAGE_VERSION:-unset}" | jq -Rs .)"
+    for entry in "${CATEGORIES[@]}"; do
+        category="${entry%%|*}"; tools="${entry#*|}"
+        key="$(printf '%s' "$category" | tr '[:upper:] /' '[:lower:]__')"
+        tsv=""
+        for tool in $tools; do
+            path="$(command -v "$tool" 2>/dev/null || true)"
+            [ -n "$path" ] || continue
+            ver="$(short_version "$tool")"
+            tsv+="${tool}"$'\t'"${ver}"$'\t'"${path}"$'\n'
+        done
+        local rows_json="[]"
+        [ -n "$tsv" ] && rows_json="$(printf '%s' "$tsv" | jq -Rs 'split("\n")
+            | map(select(length>0)) | map(split("\t")
+            | {tool: .[0], version: .[1], path: .[2]})')"
+        printf ',"%s":%s' "$key" "$rows_json"
+        first=0
+    done
+    printf '}\n'
+}
+
+if [ $JSON -eq 1 ]; then emit_json; else emit_text; fi

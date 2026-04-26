@@ -133,6 +133,16 @@ pub const FORGE_WELCOME: &str = include_str!("../../images/default/forge-welcome
 pub const FORGE_CONTAINERFILE: &str = include_str!("../../images/default/Containerfile");
 pub const FORGE_OPENCODE_JSON: &str = include_str!("../../images/default/opencode.json");
 
+// @trace spec:forge-environment-discoverability
+// Three discoverability CLIs the agent invokes on first turn to learn what
+// the forge ships. COPY'd into /opt/agents/tillandsias-cli/bin in the image
+// build (see images/default/Containerfile) and symlinked into /usr/local/bin.
+pub const FORGE_CLI_INVENTORY: &str =
+    include_str!("../../images/default/cli/tillandsias-inventory");
+pub const FORGE_CLI_SERVICES: &str =
+    include_str!("../../images/default/cli/tillandsias-services");
+pub const FORGE_CLI_MODELS: &str = include_str!("../../images/default/cli/tillandsias-models");
+
 // No forge GIT_ASKPASS const — the forge-side askpass was tombstoned.
 // Forge containers have ZERO credentials; only the git-service container
 // receives the ephemeral token (see images/git/git-askpass-tillandsias.sh
@@ -368,6 +378,17 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("Containerfile: {e}"))?;
     write_lf(&default_dir.join("opencode.json"), FORGE_OPENCODE_JSON)
         .map_err(|e| format!("opencode.json: {e}"))?;
+
+    // @trace spec:forge-environment-discoverability
+    let cli_dir = default_dir.join("cli");
+    fs::create_dir_all(&cli_dir).map_err(|e| format!("cli dir: {e}"))?;
+    write_lf(&cli_dir.join("tillandsias-inventory"), FORGE_CLI_INVENTORY)
+        .map_err(|e| format!("cli/tillandsias-inventory: {e}"))?;
+    write_lf(&cli_dir.join("tillandsias-services"), FORGE_CLI_SERVICES)
+        .map_err(|e| format!("cli/tillandsias-services: {e}"))?;
+    write_lf(&cli_dir.join("tillandsias-models"), FORGE_CLI_MODELS)
+        .map_err(|e| format!("cli/tillandsias-models: {e}"))?;
+
     // No forge GIT_ASKPASS — tombstoned.
     // @trace spec:secrets-management
     #[cfg(unix)]
@@ -388,6 +409,23 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
                     file = %path.display(),
                     error = %e,
                     "Failed to set executable permission — container entrypoint may fail"
+                );
+            }
+        }
+        // @trace spec:forge-environment-discoverability
+        // Discoverability CLIs live under cli/; chmod separately because
+        // the loop above only handles default-dir scripts.
+        for name in [
+            "tillandsias-inventory",
+            "tillandsias-services",
+            "tillandsias-models",
+        ] {
+            let path = cli_dir.join(name);
+            if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
+                warn!(
+                    file = %path.display(),
+                    error = %e,
+                    "Failed to set executable permission — discoverability CLI will not run"
                 );
             }
         }

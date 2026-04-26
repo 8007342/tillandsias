@@ -259,6 +259,24 @@ RUN chmod +x /usr/local/share/tillandsias/forge-welcome.sh || true
 RUN mkdir -p /etc/tillandsias/locales
 COPY locales/ /etc/tillandsias/locales/
 
+# ── Discoverability CLI tools ─────────────────────────────
+# @trace spec:forge-environment-discoverability
+# Three image-baked bash commands the agent can run on first turn to learn
+# what the forge ships: `tillandsias-inventory` (every dev runtime + version),
+# `tillandsias-services` (enclave services + ports + status), and
+# `tillandsias-models` (loaded ollama models + planner tier). All three
+# accept --json for machine consumption. Tools live under
+# /opt/agents/tillandsias-cli/bin/ to mirror the other agent installs and
+# are symlinked into /usr/local/bin/ for PATH discovery.
+RUN mkdir -p /opt/agents/tillandsias-cli/bin
+COPY cli/tillandsias-inventory /opt/agents/tillandsias-cli/bin/tillandsias-inventory
+COPY cli/tillandsias-services /opt/agents/tillandsias-cli/bin/tillandsias-services
+COPY cli/tillandsias-models /opt/agents/tillandsias-cli/bin/tillandsias-models
+RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
+    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-inventory /usr/local/bin/tillandsias-inventory \
+    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-services /usr/local/bin/tillandsias-services \
+    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-models /usr/local/bin/tillandsias-models
+
 # ── Agent cheatsheets ─────────────────────────────────────────
 # @trace spec:agent-cheatsheets, spec:default-image
 # `cheatsheets/` lives at the project root as the source of truth.
@@ -284,3 +302,14 @@ ENTRYPOINT ["/usr/local/bin/entrypoint-forge-claude.sh"]
 # @trace spec:forge-offline, spec:enclave-network
 ENV HOME=/home/forge USER=forge \
     TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets
+
+# @trace spec:forge-environment-discoverability
+# TILLANDSIAS_IMAGE_VERSION identifies the forge image build the agent is
+# attached to. Default placeholder until the image build pipeline injects a
+# real version (Cargo VERSION + git SHA). Override at podman run -e if needed.
+# TILLANDSIAS_CAPABILITIES is a comma-separated capability vector the agent
+# can read without invoking any binary — declarative discovery layer alongside
+# `tillandsias-inventory`. cheatsheets-mcp is declared ahead of its landing
+# change so agents can probe the intended capability surface today.
+ENV TILLANDSIAS_IMAGE_VERSION="forge-baseline" \
+    TILLANDSIAS_CAPABILITIES="rust,go,java-21,maven,gradle,flutter,nix,headless-chromium,headless-firefox,protoc,grpcurl,opencode,claude,openspec,cheatsheets-mcp"

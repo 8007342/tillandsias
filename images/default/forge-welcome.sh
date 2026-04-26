@@ -149,6 +149,15 @@ printf "    ${B_GREEN}%-38s${RST} ${A} ${DIM}%-26s${RST} ${B_GREEN}rw${RST}\n" \
 echo ""
 printf "  ${B_YELLOW}→${RST} Project at ${B_WHITE}/home/forge/src/%s${RST}\n" "$PROJECT"
 echo ""
+# @trace spec:forge-environment-discoverability — at-a-glance summary of the
+# loaded runtimes by category. The full enumeration lives in
+# `tillandsias-inventory`; the welcome banner is the discovery hint.
+printf "  ${B_WHITE}Languages${RST}    ${DIM}rust, go, java 21, python 3.13, node 22, dart 3 (flutter)${RST}\n"
+printf "  ${B_WHITE}Build${RST}        ${DIM}cargo, maven, gradle, npm/yarn/pnpm, nix, make, cmake, ninja${RST}\n"
+printf "  ${B_WHITE}Test${RST}         ${DIM}pytest, junit, cargo-test, chromium-headless, firefox, drivers${RST}\n"
+printf "  ${B_WHITE}Inventory${RST}    ${DIM}run ${B_CYAN}tillandsias-inventory${RST}${DIM} for the full list${RST}\n"
+echo ""
+
 # @trace spec:agent-cheatsheets — surface the cheatsheets path on every attach
 # so agents and humans both see it before guessing tool flags.
 if [ -d "${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets}" ]; then
