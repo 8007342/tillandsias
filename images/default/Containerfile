@@ -249,6 +249,15 @@ COPY opencode.json /home/forge/.config/opencode/config.json
 # at the user-config layer when applications resolve XDG paths).
 COPY config-overlay/opencode/tui.json /home/forge/.config/opencode/tui.json
 
+# ── Project bootstrap skills ───────────────────────────────────
+# @trace spec:project-bootstrap-readme
+# Four OpenCode agent/command files for /startup routing and README management.
+# Copied into ~/.config-overlay/opencode/agent/ so they're discoverable
+# before project-local overrides (if any).
+RUN mkdir -p /home/forge/.config-overlay/opencode/agent
+COPY config-overlay/opencode/agent/*.md /home/forge/.config-overlay/opencode/agent/
+RUN chmod 644 /home/forge/.config-overlay/opencode/agent/*.md
+
 # ── Shell configs ──────────────────────────────────────────────
 # /etc/skel is populated AFTER `useradd -m` ran above, so the forge user's
 # home was created from an empty /etc/skel — its ~/.bashrc and ~/.zshrc do
@@ -314,6 +323,33 @@ RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-services /usr/local/bin/tillandsias-services \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-models /usr/local/bin/tillandsias-models \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-logs /usr/local/bin/tillandsias-logs
+
+# ── README dispatcher + validator + summarizers ────────────────
+# @trace spec:project-summarizers, spec:project-bootstrap-readme
+# Six language-specific summarizers for detecting tech stack from manifests.
+# Dispatcher orchestrates them and renders README.md atomically.
+# Validator checks README structure and enforces discipline.
+RUN mkdir -p /opt/summarizers
+COPY scripts/summarize-cargo.sh /opt/summarizers/summarize-cargo.sh
+COPY scripts/summarize-nix.sh /opt/summarizers/summarize-nix.sh
+COPY scripts/summarize-package-json.sh /opt/summarizers/summarize-package-json.sh
+COPY scripts/summarize-pubspec.sh /opt/summarizers/summarize-pubspec.sh
+COPY scripts/summarize-go-mod.sh /opt/summarizers/summarize-go-mod.sh
+COPY scripts/summarize-pyproject.sh /opt/summarizers/summarize-pyproject.sh
+RUN chmod +x /opt/summarizers/*.sh
+
+# Dispatcher + validator into /usr/local/bin for direct invocation
+COPY scripts/regenerate-readme.sh /usr/local/bin/regenerate-readme.sh
+COPY scripts/check-readme-discipline.sh /usr/local/bin/check-readme-discipline.sh
+RUN chmod +x /usr/local/bin/regenerate-readme.sh /usr/local/bin/check-readme-discipline.sh
+
+# Symlinks for convenience (optional, since /opt/summarizers is not on PATH)
+RUN ln -sf /opt/summarizers/summarize-cargo.sh /usr/local/bin/summarize-cargo.sh \
+    && ln -sf /opt/summarizers/summarize-nix.sh /usr/local/bin/summarize-nix.sh \
+    && ln -sf /opt/summarizers/summarize-package-json.sh /usr/local/bin/summarize-package-json.sh \
+    && ln -sf /opt/summarizers/summarize-pubspec.sh /usr/local/bin/summarize-pubspec.sh \
+    && ln -sf /opt/summarizers/summarize-go-mod.sh /usr/local/bin/summarize-go-mod.sh \
+    && ln -sf /opt/summarizers/summarize-pyproject.sh /usr/local/bin/summarize-pyproject.sh
 
 # ── Agent cheatsheets ─────────────────────────────────────────
 # @trace spec:agent-cheatsheets, spec:default-image, spec:forge-hot-cold-split

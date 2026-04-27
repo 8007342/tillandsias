@@ -126,6 +126,18 @@ fi
 # ── Banner ──────────────────────────────────────────────────
 show_banner "opencode"
 
+# ── Synthetic first prompt (startup skill) ─────────────────
+# @trace spec:project-bootstrap-readme
+# Write a synthetic first message to OpenCode's init-prompt path so the
+# routing decision (/startup) is taken inside the OpenCode session.
+# This survives OpenCode upgrades and is idempotent across container restarts.
+OPENCODE_INIT_PROMPT="/tmp/opencode-init-prompt.txt"
+if [ -w "$(dirname "$OPENCODE_INIT_PROMPT")" ]; then
+    echo "run /startup" > "$OPENCODE_INIT_PROMPT"
+    export OPENCODE_INIT_PROMPT_FILE="$OPENCODE_INIT_PROMPT"
+    trace_lifecycle "startup" "synthetic first prompt written to $OPENCODE_INIT_PROMPT"
+fi
+
 # ── Launch OpenCode ─────────────────────────────────────────
 trace_lifecycle "entrypoint" "opencode launching"
 trace_lifecycle "exec" "launching opencode ($OC_BIN)"
