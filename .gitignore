@@ -38,3 +38,8 @@ images/router/tillandsias-router-sidecar
 # Sidecar nested-cargo target dir (avoids workspace lock deadlock).
 # @trace spec:opencode-web-session-otp
 /target-musl/
+
+# cheatsheet-sources: verbatim files whose license forbids redistribution.
+# The .meta.yaml sidecar IS tracked so a fresh clone can re-fetch the content.
+# @trace spec:cheatsheet-source-layer
+cheatsheet-sources/**/*.norepublish

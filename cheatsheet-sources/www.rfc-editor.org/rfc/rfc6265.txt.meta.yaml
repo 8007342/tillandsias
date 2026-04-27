@@ -1,0 +1,19 @@
+url: https://www.rfc-editor.org/rfc/rfc6265.txt
+fetch_url: https://www.rfc-editor.org/rfc/rfc6265.txt
+final_redirect: https://www.rfc-editor.org/rfc/rfc6265.txt
+fetched: 2026-04-27T01:51:47Z
+fetcher_version: 1
+content_sha256: dc4177094813e85a44a7897b892b76bc09160b3a03aea44f0f511f3a98f91933
+content_length: 79724
+content_type: text/plain; charset=utf-8
+http_status: 200
+publisher: IETF / RFC Editor
+license: ietf-trust-legal-provisions
+license_url: https://trustee.ietf.org/license-info/
+redistribution: bundled
+allowlist_match: www.rfc-editor.org
+render: static
+local_path: cheatsheet-sources/www.rfc-editor.org/rfc/rfc6265.txt
+cited_by:
+  - cheatsheets/web/cookie-auth-best-practices.md
+notes: ""

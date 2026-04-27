@@ -20,6 +20,7 @@ status: current
 - MDN "HTTP cookies" — definitive cross-browser reference for `Set-Cookie`, attributes, and ecosystem behaviour: <https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies>
 - RFC 6265bis "Cookies: HTTP State Management Mechanism" (in-progress IETF revision; modern attribute semantics including `SameSite`): <https://datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis/>
 - RFC 6265 "HTTP State Management Mechanism" (the original published RFC; superseded by 6265bis but still the canonical text for many implementations): <https://www.rfc-editor.org/rfc/rfc6265>
+  local: `cheatsheet-sources/www.rfc-editor.org/rfc/rfc6265.txt`
 - **Last updated:** 2026-04-25
 
 **Version baseline**: RFC 6265bis-draft (current as of 2026); supported by all modern browsers (Chrome 80+, Firefox 96+, Safari 13+).

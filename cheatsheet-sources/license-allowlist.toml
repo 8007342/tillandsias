@@ -1,0 +1,288 @@
+# cheatsheet-sources/license-allowlist.toml
+#
+# Known-good source domains for the verbatim cheatsheet-source layer.
+# Each domain entry declares:
+#   publisher        — human-readable name
+#   license          — short license identifier
+#   license_url      — canonical URL for the license text (optional)
+#   redistribution   — bundled | attribute-only | do-not-bundle
+#
+# "bundled"        — verbatim file is committed to git (LFS-tracked)
+# "attribute-only" — verbatim file committed only if cheatsheet includes
+#                    attribution as required by the license
+# "do-not-bundle"  — verbatim file is .gitignore-d; sidecar (.meta.yaml)
+#                    IS tracked so any clone can re-fetch via the fetcher
+#
+# Domains not in this file trip the --manual-review gate in fetch-cheatsheet-source.sh.
+#
+# @trace spec:cheatsheet-source-layer
+
+# ---------------------------------------------------------------------------
+# Standards bodies — freely redistributable
+# ---------------------------------------------------------------------------
+
+[domains."rfc-editor.org"]
+publisher = "IETF / RFC Editor"
+license = "ietf-trust-legal-provisions"
+license_url = "https://trustee.ietf.org/license-info/"
+redistribution = "bundled"
+
+[domains."www.rfc-editor.org"]
+publisher = "IETF / RFC Editor"
+license = "ietf-trust-legal-provisions"
+license_url = "https://trustee.ietf.org/license-info/"
+redistribution = "bundled"
+
+[domains."datatracker.ietf.org"]
+publisher = "IETF"
+license = "ietf-trust-legal-provisions"
+license_url = "https://trustee.ietf.org/license-info/"
+redistribution = "bundled"
+
+[domains."www.w3.org"]
+publisher = "W3C"
+license = "w3c-document-license-2015"
+license_url = "https://www.w3.org/Consortium/Legal/2015/doc-license"
+redistribution = "bundled"
+
+[domains."html.spec.whatwg.org"]
+publisher = "WHATWG"
+license = "cc-by-4.0"
+license_url = "https://creativecommons.org/licenses/by/4.0/"
+redistribution = "bundled"
+
+[domains."fetch.spec.whatwg.org"]
+publisher = "WHATWG"
+license = "cc-by-4.0"
+license_url = "https://creativecommons.org/licenses/by/4.0/"
+redistribution = "bundled"
+
+[domains."streams.spec.whatwg.org"]
+publisher = "WHATWG"
+license = "cc-by-4.0"
+license_url = "https://creativecommons.org/licenses/by/4.0/"
+redistribution = "bundled"
+
+[domains."url.spec.whatwg.org"]
+publisher = "WHATWG"
+license = "cc-by-4.0"
+license_url = "https://creativecommons.org/licenses/by/4.0/"
+redistribution = "bundled"
+
+[domains."encoding.spec.whatwg.org"]
+publisher = "WHATWG"
+license = "cc-by-4.0"
+license_url = "https://creativecommons.org/licenses/by/4.0/"
+redistribution = "bundled"
+
+[domains."infra.spec.whatwg.org"]
+publisher = "WHATWG"
+license = "cc-by-4.0"
+license_url = "https://creativecommons.org/licenses/by/4.0/"
+redistribution = "bundled"
+
+# ---------------------------------------------------------------------------
+# MDN Web Docs — CC-BY-SA 2.5 for pre-2020 content; newer under CC-BY-SA 2.5
+# ---------------------------------------------------------------------------
+
+[domains."developer.mozilla.org"]
+publisher = "MDN contributors"
+license = "cc-by-sa-2.5"
+license_url = "https://creativecommons.org/licenses/by-sa/2.5/"
+redistribution = "bundled"
+
+# ---------------------------------------------------------------------------
+# OWASP — CC-BY-SA 4.0
+# ---------------------------------------------------------------------------
+
+[domains."owasp.org"]
+publisher = "OWASP"
+license = "cc-by-sa-4.0"
+license_url = "https://creativecommons.org/licenses/by-sa/4.0/"
+redistribution = "bundled"
+
+[domains."cheatsheetseries.owasp.org"]
+publisher = "OWASP"
+license = "cc-by-sa-4.0"
+license_url = "https://creativecommons.org/licenses/by-sa/4.0/"
+redistribution = "bundled"
+
+# ---------------------------------------------------------------------------
+# Linux kernel docs — GPL-2.0+
+# ---------------------------------------------------------------------------
+
+[domains."www.kernel.org"]
+publisher = "kernel.org"
+license = "gpl-2.0+"
+license_url = "https://www.kernel.org/doc/html/latest/process/license-rules.html"
+redistribution = "bundled"
+
+[domains."kernel.org"]
+publisher = "kernel.org"
+license = "gpl-2.0+"
+license_url = "https://www.kernel.org/doc/html/latest/process/license-rules.html"
+redistribution = "bundled"
+
+# ---------------------------------------------------------------------------
+# Python Software Foundation — PSF License
+# ---------------------------------------------------------------------------
+
+[domains."docs.python.org"]
+publisher = "Python Software Foundation"
+license = "psf"
+license_url = "https://docs.python.org/3/license.html"
+redistribution = "bundled"
+
+# ---------------------------------------------------------------------------
+# Rust — MIT or Apache-2.0
+# ---------------------------------------------------------------------------
+
+[domains."doc.rust-lang.org"]
+publisher = "The Rust Project Developers"
+license = "mit-or-apache-2.0"
+license_url = "https://www.rust-lang.org/policies/licenses"
+redistribution = "bundled"
+
+[domains."docs.rs"]
+publisher = "The Rust Project / crate authors"
+license = "mit-or-apache-2.0"
+license_url = "https://docs.rs"
+redistribution = "bundled"
+
+# ---------------------------------------------------------------------------
+# GitHub raw — MIT (Ollama project).
+# NOTE: Only the Ollama subdomain-path is "bundled". Other raw.githubusercontent.com
+# paths default to "attribute-only" since licenses vary per repo.
+# ---------------------------------------------------------------------------
+
+[domains."raw.githubusercontent.com/ollama/ollama"]
+publisher = "Ollama project"
+license = "mit"
+license_url = "https://github.com/ollama/ollama/blob/main/LICENSE"
+redistribution = "bundled"
+
+[domains."raw.githubusercontent.com"]
+publisher = "Various (GitHub raw content)"
+license = "repo-specific"
+license_url = ""
+redistribution = "attribute-only"
+
+# ---------------------------------------------------------------------------
+# PostgreSQL — PostgreSQL License (BSD-like)
+# ---------------------------------------------------------------------------
+
+[domains."www.postgresql.org"]
+publisher = "PostgreSQL Global Development Group"
+license = "postgresql"
+license_url = "https://www.postgresql.org/about/licence/"
+redistribution = "bundled"
+
+[domains."postgresql.org"]
+publisher = "PostgreSQL Global Development Group"
+license = "postgresql"
+license_url = "https://www.postgresql.org/about/licence/"
+redistribution = "bundled"
+
+# ---------------------------------------------------------------------------
+# SQLite — Public Domain
+# ---------------------------------------------------------------------------
+
+[domains."www.sqlite.org"]
+publisher = "SQLite consortium"
+license = "public-domain"
+license_url = "https://www.sqlite.org/copyright.html"
+redistribution = "bundled"
+
+[domains."sqlite.org"]
+publisher = "SQLite consortium"
+license = "public-domain"
+license_url = "https://www.sqlite.org/copyright.html"
+redistribution = "bundled"
+
+# ---------------------------------------------------------------------------
+# Nginx — BSD-like (open source docs)
+# ---------------------------------------------------------------------------
+
+[domains."nginx.org"]
+publisher = "NGINX, Inc."
+license = "bsd-2-clause"
+license_url = "https://nginx.org/LICENSE"
+redistribution = "bundled"
+
+# ---------------------------------------------------------------------------
+# Go language docs — BSD 3-Clause
+# ---------------------------------------------------------------------------
+
+[domains."go.dev"]
+publisher = "The Go Authors"
+license = "bsd-3-clause"
+license_url = "https://go.dev/LICENSE"
+redistribution = "bundled"
+
+[domains."pkg.go.dev"]
+publisher = "The Go Authors"
+license = "bsd-3-clause"
+license_url = "https://go.dev/LICENSE"
+redistribution = "bundled"
+
+# ---------------------------------------------------------------------------
+# Node.js / npm docs — MIT
+# ---------------------------------------------------------------------------
+
+[domains."nodejs.org"]
+publisher = "Node.js contributors"
+license = "mit"
+license_url = "https://github.com/nodejs/node/blob/main/LICENSE"
+redistribution = "bundled"
+
+[domains."docs.npmjs.com"]
+publisher = "npm, Inc."
+license = "mit"
+license_url = "https://docs.npmjs.com/"
+redistribution = "bundled"
+
+# ---------------------------------------------------------------------------
+# Vendor docs — do-not-bundle (link only; fetched copy .gitignore-d)
+# ---------------------------------------------------------------------------
+
+[domains."docs.aws.amazon.com"]
+publisher = "Amazon Web Services"
+license = "aws-customer-agreement"
+license_url = "https://aws.amazon.com/agreement/"
+redistribution = "do-not-bundle"
+
+[domains."docs.microsoft.com"]
+publisher = "Microsoft"
+license = "microsoft-content-use"
+license_url = "https://learn.microsoft.com/en-us/legal/termsofuse"
+redistribution = "do-not-bundle"
+
+[domains."learn.microsoft.com"]
+publisher = "Microsoft"
+license = "microsoft-content-use"
+license_url = "https://learn.microsoft.com/en-us/legal/termsofuse"
+redistribution = "do-not-bundle"
+
+[domains."cloud.google.com"]
+publisher = "Google LLC"
+license = "google-tos"
+license_url = "https://cloud.google.com/terms"
+redistribution = "do-not-bundle"
+
+[domains."developers.google.com"]
+publisher = "Google LLC"
+license = "cc-by-4.0"
+license_url = "https://creativecommons.org/licenses/by/4.0/"
+redistribution = "attribute-only"
+
+[domains."azure.microsoft.com"]
+publisher = "Microsoft"
+license = "microsoft-content-use"
+license_url = "https://learn.microsoft.com/en-us/legal/termsofuse"
+redistribution = "do-not-bundle"
+
+[domains."docs.docker.com"]
+publisher = "Docker, Inc."
+license = "apache-2.0"
+license_url = "https://docs.docker.com/"
+redistribution = "attribute-only"
