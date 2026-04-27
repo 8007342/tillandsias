@@ -2023,14 +2023,17 @@ mod tests {
     // @trace spec:external-logs-layer
     #[test]
     fn no_external_logs_mount_when_both_fields_false() {
-        // Profiles that have neither external_logs_role nor external_logs_consumer
-        // (the chunk-1 default for all profiles) must emit no external-logs mount.
+        // Profiles that still have neither external_logs_role nor external_logs_consumer
+        // (e.g. proxy) must emit no external-logs mount.
+        // Note: forge_opencode_profile() is now a consumer (chunk 3) and
+        // git_service_profile() is now a producer (chunk 2), so they are no
+        // longer valid examples here.
         for profile in [
-            container_profile::forge_opencode_profile(),
-            container_profile::git_service_profile(),
             container_profile::proxy_profile(),
+            container_profile::router_profile(),
+            container_profile::inference_profile(),
         ] {
-            // Confirm defaults
+            // Confirm still-default fields
             assert!(profile.external_logs_role.is_none());
             assert!(!profile.external_logs_consumer);
 
@@ -2040,9 +2043,79 @@ mod tests {
 
             assert!(
                 !joined.contains("/var/log/tillandsias/external"),
-                "Profile {} must not emit external-logs mount in chunk 1; got: {joined}",
+                "Profile {} must not emit external-logs mount (not yet wired); got: {joined}",
                 profile.entrypoint
             );
         }
+    }
+
+    // @trace spec:external-logs-layer
+    #[test]
+    fn forge_profile_emits_external_logs_consumer_mount() {
+        // Chunk 3: any forge/maintenance profile with external_logs_consumer=true
+        // must produce -v <host>/external-logs:/var/log/tillandsias/external:ro,Z.
+        for profile in [
+            container_profile::forge_opencode_profile(),
+            container_profile::forge_claude_profile(),
+            container_profile::forge_opencode_web_profile(),
+            container_profile::terminal_profile(),
+        ] {
+            assert!(profile.external_logs_consumer, "precondition: consumer flag must be true");
+
+            let ctx = test_context();
+            let args = build_podman_args(&profile, &ctx);
+            let joined = args.join(" ");
+
+            // Must have a RO mount ending at /var/log/tillandsias/external
+            assert!(
+                joined.contains(":/var/log/tillandsias/external:ro,Z"),
+                "Forge consumer must mount external-logs root RO; profile entrypoint={}, got: {joined}",
+                profile.entrypoint
+            );
+
+            // The host path must be the parent external-logs/ dir (not a role subdir)
+            let mount_args: Vec<&str> = args
+                .iter()
+                .zip(args.iter().skip(1))
+                .filter_map(|(a, b)| if a == "-v" { Some(b.as_str()) } else { None })
+                .collect();
+            let ext_mount = mount_args
+                .iter()
+                .find(|m| m.contains("/var/log/tillandsias/external"))
+                .unwrap_or_else(|| panic!("No external-logs mount found for {}", profile.entrypoint));
+            let host_part = ext_mount.split(':').next().unwrap_or("");
+            assert!(
+                host_part.ends_with("external-logs"),
+                "Consumer host path must end with 'external-logs' (root dir, no role suffix); got: {ext_mount}"
+            );
+        }
+    }
+
+    // @trace spec:external-logs-layer
+    #[test]
+    fn git_service_profile_emits_external_logs_producer_mount() {
+        // Chunk 2: git_service_profile with external_logs_role=Some("git-service")
+        // must produce -v <host>/external-logs/git-service:/var/log/tillandsias/external:rw,Z.
+        let profile = container_profile::git_service_profile();
+        assert_eq!(profile.external_logs_role, Some("git-service"), "precondition: producer role set");
+
+        let ctx = test_context();
+        let args = build_podman_args(&profile, &ctx);
+        let joined = args.join(" ");
+
+        // Must have a RW mount at /var/log/tillandsias/external with role-scoped host path
+        assert!(
+            joined.contains("external-logs/git-service"),
+            "Producer must bind-mount the role-scoped dir; got: {joined}"
+        );
+        assert!(
+            joined.contains(":/var/log/tillandsias/external:rw,Z"),
+            "Producer must mount RW at /var/log/tillandsias/external; got: {joined}"
+        );
+        // Must NOT use the consumer RO mount
+        assert!(
+            !joined.contains(":/var/log/tillandsias/external:ro"),
+            "Producer must NOT use RO consumer mount; got: {joined}"
+        );
     }
 }

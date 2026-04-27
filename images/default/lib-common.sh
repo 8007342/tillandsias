@@ -53,6 +53,17 @@ mkdir -p "$HOME/.config/fish"
 CACHE="$HOME/.cache/tillandsias"
 export PATH="$CACHE/openspec/bin:$HOME/.local/bin:$PATH"
 
+# ── External-logs consumer path ─────────────────────────────
+# @trace spec:external-logs-layer
+# Canonical path where external logs from enclave service containers are
+# mounted RO inside forge/maintenance containers. Tools (tillandsias-logs,
+# agent scripts) that want the path without shelling out to the CLI can
+# reference this env var directly.
+# Producer containers see their own role subdir here (RW); consumers see
+# the full parent dir (RO). The var is always exported for consistency —
+# on non-consumer containers the directory may not be mounted.
+export TILLANDSIAS_EXTERNAL_LOGS="/var/log/tillandsias/external"
+
 # ── Lifecycle tracing ───────────────────────────────────────
 # Structured trace output for --log-environment-lifecycle troubleshooting.
 # Format: [lifecycle] <phase> | <detail>

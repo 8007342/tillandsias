@@ -385,10 +385,12 @@ pub fn forge_opencode_profile() -> ContainerProfile {
         // to reach the tray's control plane.
         mount_control_socket: false,
         // @trace spec:external-logs-layer
-        // Chunk 1: defaults only. Chunk 3 sets external_logs_consumer: true
-        // for all forge/terminal profiles.
+        // Chunk 3: forge containers are external-logs consumers. A RO
+        // bind-mount of ~/.local/state/tillandsias/external-logs/ lands at
+        // /var/log/tillandsias/external/ so agents can read git-push.log
+        // (and future sibling producers) via `tillandsias-logs ls`.
         external_logs_role: None,
-        external_logs_consumer: false,
+        external_logs_consumer: true,
     }
 }
 
@@ -409,9 +411,10 @@ pub fn forge_claude_profile() -> ContainerProfile {
         tmpfs_mounts: common_forge_tmpfs_mounts(),
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
-        // @trace spec:external-logs-layer — chunk 1 defaults
+        // @trace spec:external-logs-layer
+        // Chunk 3: forge consumer — see forge_opencode_profile() note.
         external_logs_role: None,
-        external_logs_consumer: false,
+        external_logs_consumer: true,
     }
 }
 
@@ -437,9 +440,10 @@ pub fn forge_opencode_web_profile() -> ContainerProfile {
         // OpenCode Web forge does not need the control socket — the router
         // (which fronts the web session) is the consumer.
         mount_control_socket: false,
-        // @trace spec:external-logs-layer — chunk 1 defaults
+        // @trace spec:external-logs-layer
+        // Chunk 3: forge consumer — see forge_opencode_profile() note.
         external_logs_role: None,
-        external_logs_consumer: false,
+        external_logs_consumer: true,
     }
 }
 
@@ -538,9 +542,11 @@ pub fn terminal_profile() -> ContainerProfile {
         image_override: None,
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
-        // @trace spec:external-logs-layer — chunk 1 defaults
+        // @trace spec:external-logs-layer
+        // Chunk 3: maintenance terminal is also a consumer — maintainers
+        // inspecting enclave state benefit from `tillandsias-logs ls`.
         external_logs_role: None,
-        external_logs_consumer: false,
+        external_logs_consumer: true,
     }
 }
 
@@ -842,9 +848,12 @@ pub fn git_service_profile() -> ContainerProfile {
         ],
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
-        // @trace spec:external-logs-layer — chunk 1 defaults
-        // Chunk 2 sets external_logs_role: Some("git-service") here.
-        external_logs_role: None,
+        // @trace spec:external-logs-layer
+        // Chunk 2: git-service is the first producer. The bind-mount shadow
+        // routes the post-receive hook's /var/log/tillandsias/git-push.log
+        // write to ~/.local/state/tillandsias/external-logs/git-service/
+        // on the host — no hook code change required.
+        external_logs_role: Some("git-service"),
         external_logs_consumer: false,
     }
 }
@@ -1613,30 +1622,89 @@ mod tests {
 
     // @trace spec:external-logs-layer
     #[test]
-    fn default_profile_fields_preserve_existing_behaviour() {
-        // Chunk 1 invariant: ALL profiles default to None / false for the two
-        // new external-logs fields. No behaviour change until chunk 2/3 land.
+    fn service_profiles_neither_producer_nor_consumer() {
+        // Service profiles that are not yet wired as producers or consumers
+        // (web, router, proxy, inference) retain None/false defaults.
+        // git_service is now a producer (chunk 2); forge/terminal are consumers (chunk 3).
         let profiles: Vec<(&str, ContainerProfile)> = vec![
-            ("forge_opencode", forge_opencode_profile()),
-            ("forge_claude", forge_claude_profile()),
-            ("forge_opencode_web", forge_opencode_web_profile()),
-            ("terminal", terminal_profile()),
             ("web", web_profile()),
             ("router", router_profile()),
             ("proxy", proxy_profile()),
             ("inference", inference_profile()),
-            ("git_service", git_service_profile()),
         ];
         for (name, profile) in &profiles {
             assert!(
                 profile.external_logs_role.is_none(),
-                "Profile {name}: external_logs_role must default to None in chunk 1"
+                "Profile {name}: external_logs_role should be None (not yet wired as producer)"
             );
             assert!(
                 !profile.external_logs_consumer,
-                "Profile {name}: external_logs_consumer must default to false in chunk 1"
+                "Profile {name}: external_logs_consumer should be false (not yet wired as consumer)"
             );
         }
+    }
+
+    // @trace spec:external-logs-layer
+    #[test]
+    fn forge_profiles_are_external_logs_consumers() {
+        // Chunk 3: all four forge/maintenance profiles are consumers.
+        // A RO bind-mount of the external-logs root lands at
+        // /var/log/tillandsias/external/ inside each container.
+        for (name, profile) in [
+            ("forge_opencode", forge_opencode_profile()),
+            ("forge_claude", forge_claude_profile()),
+            ("forge_opencode_web", forge_opencode_web_profile()),
+            ("terminal", terminal_profile()),
+        ] {
+            assert!(
+                profile.external_logs_consumer,
+                "Profile {name} must be an external-logs consumer (chunk 3)"
+            );
+            assert!(
+                profile.external_logs_role.is_none(),
+                "Profile {name} must NOT be a producer — consumers and producers are mutually exclusive"
+            );
+        }
+    }
+
+    // @trace spec:external-logs-layer
+    #[test]
+    fn service_profiles_are_not_external_logs_consumers() {
+        // Service containers (git_service, proxy, router, inference, web)
+        // are not consumers — they write to external logs (as producers)
+        // or have no external-log relationship at all. None should have
+        // external_logs_consumer: true.
+        for (name, profile) in [
+            ("git_service", git_service_profile()),
+            ("proxy", proxy_profile()),
+            ("router", router_profile()),
+            ("inference", inference_profile()),
+            ("web", web_profile()),
+        ] {
+            assert!(
+                !profile.external_logs_consumer,
+                "Service profile {name} must NOT be an external-logs consumer"
+            );
+        }
+    }
+
+    // @trace spec:external-logs-layer
+    #[test]
+    fn git_service_is_external_logs_producer_with_role_git_service() {
+        // Chunk 2: git_service is the first producer. Its external_logs_role
+        // must be exactly "git-service" so the launcher creates
+        // ~/.local/state/tillandsias/external-logs/git-service/ and
+        // bind-mounts it RW at /var/log/tillandsias/external/ in-container.
+        let profile = git_service_profile();
+        assert_eq!(
+            profile.external_logs_role,
+            Some("git-service"),
+            "git_service_profile must declare role 'git-service'"
+        );
+        assert!(
+            !profile.external_logs_consumer,
+            "git_service_profile must NOT be a consumer — mutually exclusive with producer"
+        );
     }
 
     // @trace spec:external-logs-layer

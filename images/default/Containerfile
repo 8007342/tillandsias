@@ -295,10 +295,14 @@ RUN mkdir -p /opt/agents/tillandsias-cli/bin
 COPY cli/tillandsias-inventory /opt/agents/tillandsias-cli/bin/tillandsias-inventory
 COPY cli/tillandsias-services /opt/agents/tillandsias-cli/bin/tillandsias-services
 COPY cli/tillandsias-models /opt/agents/tillandsias-cli/bin/tillandsias-models
+# @trace spec:external-logs-layer
+# tillandsias-logs: ls / tail / combine subcommands for the external-logs layer.
+COPY cli/tillandsias-logs /opt/agents/tillandsias-cli/bin/tillandsias-logs
 RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-inventory /usr/local/bin/tillandsias-inventory \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-services /usr/local/bin/tillandsias-services \
-    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-models /usr/local/bin/tillandsias-models
+    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-models /usr/local/bin/tillandsias-models \
+    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-logs /usr/local/bin/tillandsias-logs
 
 # ── Agent cheatsheets ─────────────────────────────────────────
 # @trace spec:agent-cheatsheets, spec:default-image, spec:forge-hot-cold-split

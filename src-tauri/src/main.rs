@@ -265,6 +265,12 @@ fn main() {
         rt.block_on(handlers::pre_ui_cleanup_stale_containers());
     }
 
+    // @trace spec:external-logs-layer
+    // One-shot migration: moves git-push.log from the old internal log dir
+    // to the new external-logs producer directory. Idempotent; errors are
+    // logged but never abort startup.
+    handlers::ensure_external_logs_dir().ok();
+
     // Detect platform
     let platform = PlatformInfo {
         os: Os::detect(),
