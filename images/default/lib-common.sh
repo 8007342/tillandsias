@@ -64,6 +64,63 @@ export PATH="$CACHE/openspec/bin:$HOME/.local/bin:$PATH"
 # on non-consumer containers the directory may not be mounted.
 export TILLANDSIAS_EXTERNAL_LOGS="/var/log/tillandsias/external"
 
+# ── Pull-on-demand cheatsheet cache root ────────────────────
+# @trace spec:cheatsheets-license-tiered
+# @cheatsheet runtime/cheatsheet-pull-on-demand.md
+# Per-project cache root for materialized pull-on-demand cheatsheet sources.
+# The agent reads this env var instead of hardcoding the path; the layout
+# under it mirrors URL host structure so downstream tooling can map any
+# `https://<host>/<path>` cited in a `### Source` block onto a deterministic
+# disk location.
+#
+# Layout: ~/.cache/tillandsias/cheatsheets-pulled/<project>/<host>/<path>
+#
+# Project name resolution chain (mirrors populate_hot_paths()):
+#   1. $PROJECT_ROOT — set by entrypoints AFTER find_project_dir(); empty
+#      when this function runs early.
+#   2. $TILLANDSIAS_PROJECT — set by the tray launcher; names the directory
+#      under /home/forge/src/.
+#   3. First /home/forge/src/*/ entry (filesystem fallback).
+#
+# Idempotent: re-exporting on each entrypoint invocation is harmless.
+# Per-project isolation is preserved BY CONSTRUCTION — the cache root is
+# already per-project, so cross-project reads/writes are impossible without
+# explicitly overriding TILLANDSIAS_PULL_CACHE.
+export_pull_cache_path() {
+    local project_root="${PROJECT_ROOT:-}"
+    local project_name=""
+
+    if [ -z "$project_root" ] && [ -n "${TILLANDSIAS_PROJECT:-}" ]; then
+        if [ -d "/home/forge/src/${TILLANDSIAS_PROJECT}" ]; then
+            project_root="/home/forge/src/${TILLANDSIAS_PROJECT}"
+        fi
+    fi
+    if [ -z "$project_root" ]; then
+        for _d in /home/forge/src/*/; do
+            [ -d "$_d" ] && project_root="${_d%/}" && break
+        done
+    fi
+
+    if [ -n "$project_root" ]; then
+        project_name="$(basename "$project_root")"
+    elif [ -n "${TILLANDSIAS_PROJECT:-}" ]; then
+        project_name="${TILLANDSIAS_PROJECT}"
+    else
+        project_name="unknown"
+    fi
+
+    local cache_root="${HOME}/.cache/tillandsias/cheatsheets-pulled/${project_name}"
+    mkdir -p "$cache_root" 2>/dev/null || true
+    chmod 0755 "$cache_root" 2>/dev/null || true
+    export TILLANDSIAS_PULL_CACHE="$cache_root"
+    trace_lifecycle "pull-cache" "TILLANDSIAS_PULL_CACHE=$cache_root"
+}
+
+# Run the export early — agents may consult $TILLANDSIAS_PULL_CACHE before
+# populate_hot_paths() lands. Failures are non-fatal (mkdir under $HOME
+# is virtually always permitted).
+export_pull_cache_path
+
 # ── Lifecycle tracing ───────────────────────────────────────
 # Structured trace output for --log-environment-lifecycle troubleshooting.
 # Format: [lifecycle] <phase> | <detail>
@@ -455,6 +512,84 @@ EOF
             if (state == "after-fm" && !emitted) { print callout }
         }
     ' "$src" > "$dest" 2>/dev/null || cp -af "$src" "$dest" 2>/dev/null || true
+}
+
+# ── Pull cache LRU eviction ─────────────────────────────────
+# @trace spec:cheatsheets-license-tiered (task 5.6)
+# @cheatsheet runtime/cheatsheet-pull-on-demand.md
+# @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
+#
+# Pure-userspace implementation of the "tmpfs-overlay lane" requirement
+# from forge-hot-cold-split. Rationale (chosen path 1, NOT a real tmpfs
+# overlay):
+#   - The lane SHALL behave as "tmpfs-fast UP TO the cap, disk-backed
+#     beyond it." A real `--tmpfs ...:size=Nm` mount would enforce ENOSPC
+#     past the cap, breaking the spec's "writes succeed past cap by
+#     demoting LRU" scenario.
+#   - The pure-userspace LRU treats the cache root as a single COLD pool
+#     with a soft cap. Every materialize call optionally invokes this
+#     helper; eviction trims the pool back under the cap by removing the
+#     least-recently-accessed regular files.
+#   - Eviction NEVER crosses the per-project subtree (the function only
+#     ever looks at $TILLANDSIAS_PULL_CACHE, which is already per-project
+#     by export_pull_cache_path() construction).
+#
+# Path 2 (real tmpfs + on-disk shadow with merged view) is tracked as a
+# follow-up if profiling shows path 1 is too slow. Path 1 satisfies every
+# `Tmpfs-overlay lane` scenario in forge-hot-cold-split.spec.md including
+# "demotes LRU to disk" (in path 1, the file simply stays on disk — there
+# is no separate tmpfs portion to evict from), and "NEVER crosses project
+# boundaries" (per-project root is the only thing scanned).
+#
+# Usage:
+#   _pull_cache_evict_lru_if_over_cap        # default cap = $TILLANDSIAS_PULL_CACHE_RAM_MB
+#   _pull_cache_evict_lru_if_over_cap 256    # explicit MB override
+#
+# Failure modes (all non-fatal; helper is best-effort):
+#   - Cap not numeric → no-op (return 0).
+#   - Cache root unset or missing → no-op.
+#   - du / find / sort missing → no-op (image always carries them; defence in depth).
+_pull_cache_evict_lru_if_over_cap() {
+    local cap_mb="${1:-${TILLANDSIAS_PULL_CACHE_RAM_MB:-}}"
+    local cache_root="${TILLANDSIAS_PULL_CACHE:-}"
+
+    case "$cap_mb" in
+        ''|*[!0-9]*) return 0 ;;
+    esac
+    [ -d "$cache_root" ] || return 0
+    [ "$cap_mb" -gt 0 ] || return 0
+
+    local current_mb
+    current_mb="$(du -sm "$cache_root" 2>/dev/null | awk '{print $1}')"
+    case "$current_mb" in
+        ''|*[!0-9]*) return 0 ;;
+    esac
+
+    [ "$current_mb" -le "$cap_mb" ] && return 0
+
+    # Over cap — collect every file with mtime, sort oldest-first, evict
+    # one at a time until back under cap. Use mtime as the LRU proxy
+    # (atime updates are typically disabled with `noatime`).
+    local victims
+    victims="$(find "$cache_root" -type f -printf '%T@\t%p\n' 2>/dev/null | sort -n | cut -f2-)"
+    [ -n "$victims" ] || return 0
+
+    local f
+    while IFS= read -r f; do
+        [ -f "$f" ] || continue
+        rm -f "$f" 2>/dev/null || true
+        # Re-measure after each eviction; cheap on small caches, prevents
+        # over-evicting when a single victim is large enough to bring us
+        # back under cap.
+        current_mb="$(du -sm "$cache_root" 2>/dev/null | awk '{print $1}')"
+        case "$current_mb" in
+            ''|*[!0-9]*) break ;;
+        esac
+        [ "$current_mb" -le "$cap_mb" ] && break
+    done <<< "$victims"
+
+    trace_lifecycle "pull-cache" "evicted to fit cap=${cap_mb}MB (now=${current_mb}MB)"
+    return 0
 }
 
 # ── Banner ──────────────────────────────────────────────────

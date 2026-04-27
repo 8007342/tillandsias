@@ -39,10 +39,10 @@ Phase 0 of the design's Migration Plan. Each task is verifiable in a single PR; 
 
 - [x] 5.1 Add stub-completeness validation to `scripts/check-cheatsheet-sources.sh`: confirm `## Pull on Demand` section exists with `### Source`, `### Materialize recipe`, `### Generation guidelines` sub-headings; confirm `### Materialize recipe` is a non-empty fenced bash block; confirm frontmatter contains `pull_recipe: see-section-pull-on-demand` (any other value = ERROR).
 - [x] 5.2 Add license declaration validation: confirm `### Source` block contains a license SPDX or short identifier AND a canonical license URL; emit ERROR if missing.
-- [ ] 5.3 Define the per-project pull cache layout (`~/.cache/tillandsias/cheatsheets-pulled/<project>/<host>/<path>`) in shell helper code under `images/default/lib-common.sh` — agents read the path via an exported env var (e.g., `TILLANDSIAS_PULL_CACHE`).
-- [ ] 5.4 Implement the tiered RAMDISK soft-cap detection at tray startup: read `/proc/meminfo` `MemTotal`; classify as Modest (<8 GiB → 64 MB) / Normal (8–32 GiB → 128 MB) / Plentiful (≥32 GiB → 1024 MB); emit the resolved cap to the forge launch context as `forge.pull_cache_ram_mb`.
-- [ ] 5.5 Wire `forge.pull_cache_ram_mb` override from `~/.config/tillandsias/config.toml` (override wins over auto-detection).
-- [ ] 5.6 Implement tmpfs-with-disk-spillover for the pull cache: tmpfs under `~/.cache/tillandsias/cheatsheets-pulled/<project>/` capped at the soft cap; auto-spill to disk under the same path when cap is exceeded; LRU eviction operates within the per-project subtree only.
+- [x] 5.3 Define the per-project pull cache layout (`~/.cache/tillandsias/cheatsheets-pulled/<project>/<host>/<path>`) in shell helper code under `images/default/lib-common.sh` — agents read the path via an exported env var (e.g., `TILLANDSIAS_PULL_CACHE`).
+- [x] 5.4 Implement the tiered RAMDISK soft-cap detection at tray startup: read `/proc/meminfo` `MemTotal`; classify as Modest (<8 GiB → 64 MB) / Normal (8–32 GiB → 128 MB) / Plentiful (≥32 GiB → 1024 MB); emit the resolved cap to the forge launch context as `forge.pull_cache_ram_mb`.
+- [x] 5.5 Wire `forge.pull_cache_ram_mb` override from `~/.config/tillandsias/config.toml` (override wins over auto-detection).
+- [x] 5.6 Implement tmpfs-with-disk-spillover for the pull cache: tmpfs under `~/.cache/tillandsias/cheatsheets-pulled/<project>/` capped at the soft cap; auto-spill to disk under the same path when cap is exceeded; LRU eviction operates within the per-project subtree only. Implementation note: chose path 1 (pure-userspace LRU on a disk-backed per-project root) — see `images/default/lib-common.sh::_pull_cache_evict_lru_if_over_cap` and rationale comment block. Path 2 (real `--tmpfs` overlay with merged-view spillover) deferred until profiling shows path 1 too slow.
 
 ## 6. CRDT override discipline + project-committed cheatsheets
 

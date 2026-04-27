@@ -288,6 +288,29 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     }
 
     // -----------------------------------------------------------------------
+    // Pull-on-demand cheatsheet cache RAM cap
+    //
+    // Forge profiles (the cheatsheet-system-aware profile family — every
+    // profile that produces `cheatsheet-telemetry` events) receive the
+    // resolved RAMDISK soft-cap as an env var. The in-forge agent reads
+    // it instead of re-probing /proc/meminfo (the tray already did the
+    // tier classification once at startup, with the user's config-file
+    // override applied).
+    //
+    // The cap is a SOFT cap — the in-forge LRU helper (in lib-common.sh)
+    // evicts the least-recently-accessed files when the per-project pull
+    // cache exceeds the cap. See _pull_cache_evict_lru_if_over_cap.
+    //
+    // @trace spec:cheatsheets-license-tiered, spec:forge-hot-cold-split
+    // @cheatsheet runtime/cheatsheet-pull-on-demand.md
+    // -----------------------------------------------------------------------
+    if profile.external_logs_role == Some("cheatsheet-telemetry") {
+        let cap_mb = crate::pull_cache_budget::resolved_cap_mb();
+        args.push("-e".into());
+        args.push(format!("TILLANDSIAS_PULL_CACHE_RAM_MB={cap_mb}"));
+    }
+
+    // -----------------------------------------------------------------------
     // Host aliases for podman machine (Windows/macOS)
     // @trace spec:enclave-network, spec:cross-platform, spec:fix-podman-machine-host-aliases
     //

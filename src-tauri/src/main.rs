@@ -59,6 +59,12 @@ mod cdp;
 // Pre-flight RAM check: refuses forge launches when host cannot satisfy
 // the /home/forge/src tmpfs budget × 1.25 headroom factor.
 mod preflight;
+// @trace spec:cheatsheets-license-tiered
+// Tiered RAMDISK soft-cap detection for the pull-on-demand cheatsheet
+// cache. Reads MemTotal once at tray startup, classifies into Modest /
+// Normal / Plentiful, and caches the resolved cap (in MB) which is then
+// passed into every forge container as TILLANDSIAS_PULL_CACHE_RAM_MB.
+mod pull_cache_budget;
 
 use std::sync::{Arc, Mutex};
 

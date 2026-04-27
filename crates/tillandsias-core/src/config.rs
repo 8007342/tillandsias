@@ -100,7 +100,7 @@ fn default_language() -> String {
 /// Controls how per-launch tmpfs budgets are computed and bounded for the
 /// project-source hot path (`/home/forge/src`).
 ///
-/// @trace spec:forge-hot-cold-split
+/// @trace spec:forge-hot-cold-split, spec:cheatsheets-license-tiered
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ForgeConfig {
     /// Maximum size (MB) for the per-launch `/home/forge/src` tmpfs.
@@ -115,6 +115,22 @@ pub struct ForgeConfig {
     /// Default: 4.
     #[serde(default = "default_hot_path_inflation")]
     pub hot_path_inflation: u32,
+
+    /// User override (in MB) for the pull-on-demand cheatsheet cache RAM
+    /// soft-cap. When `Some`, the override wins over auto-detection from
+    /// `MemTotal`; when `None`, the host RAM tier (Modest/Normal/Plentiful)
+    /// is auto-resolved at tray startup. The resolved cap is exported into
+    /// every forge container as `TILLANDSIAS_PULL_CACHE_RAM_MB`.
+    ///
+    /// Tier table (auto-detection):
+    ///   - `MemTotal < 8 GiB`   → 64 MB
+    ///   - `8 GiB ≤ MemTotal < 32 GiB` → 128 MB
+    ///   - `MemTotal ≥ 32 GiB`  → 1024 MB
+    ///
+    /// Default: `None` (use auto-detection).
+    /// @trace spec:cheatsheets-license-tiered
+    #[serde(default)]
+    pub pull_cache_ram_mb: Option<u32>,
 }
 
 impl Default for ForgeConfig {
@@ -122,6 +138,7 @@ impl Default for ForgeConfig {
         Self {
             hot_path_max_mb: default_hot_path_max_mb(),
             hot_path_inflation: default_hot_path_inflation(),
+            pull_cache_ram_mb: None,
         }
     }
 }
