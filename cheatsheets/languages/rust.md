@@ -5,8 +5,11 @@
 ## Provenance
 
 - The Rust Programming Language book (official): <https://doc.rust-lang.org/book/> — ownership, borrowing, lifetimes, Result/?, match, closures, iterators, async/await, traits, generics
+  local: `cheatsheet-sources/doc.rust-lang.org/book`
 - Rust Reference: <https://doc.rust-lang.org/reference/> — normative language spec; let-else, const/static, visibility (pub/pub(crate)/pub(super)), integer overflow behavior
+  local: `cheatsheet-sources/doc.rust-lang.org/reference/index.html`
 - Rust std library documentation: <https://doc.rust-lang.org/std/> — Box, Arc, Rc, String, str, Iterator, Result, Option
+  local: `cheatsheet-sources/doc.rust-lang.org/std`
 - **Last updated:** 2026-04-25
 
 **Version baseline**: Rust 1.83+ (Fedora 43 `rust` package), edition 2024

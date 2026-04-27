@@ -5,6 +5,7 @@
 ## Provenance
 
 - Go Modules Reference (golang.org): <https://go.dev/ref/mod> — go mod init/tidy/download/why/vendor, go get, go install with @version, go.sum, GOPROXY, vendor/ behavior, replace directives, go.work (workspace mode)
+  local: `cheatsheet-sources/go.dev/ref/mod`
 - Go command documentation: <https://pkg.go.dev/cmd/go> — go build flags (-trimpath, -ldflags, -o), go test flags (-race, -count, -timeout), go vet, go fmt, CGO_ENABLED, build tags (//go:build)
 - **Last updated:** 2026-04-25
 

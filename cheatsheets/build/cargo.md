@@ -2,7 +2,7 @@
 tags: [build, rust, cargo, package-manager, workspaces]
 languages: [rust]
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://doc.rust-lang.org/cargo/commands/index.html
   - https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -19,10 +19,15 @@ status: current
 ## Provenance
 
 - Cargo Commands index: <https://doc.rust-lang.org/cargo/commands/index.html> — canonical subcommand list
+  local: `cheatsheet-sources/doc.rust-lang.org/cargo/commands/index.html`
 - Cargo Manifest reference: <https://doc.rust-lang.org/cargo/reference/manifest.html> — `[package]`, `[features]`, `[dependencies]`
+  local: `cheatsheet-sources/doc.rust-lang.org/cargo/reference/manifest.html`
 - Cargo Workspaces reference: <https://doc.rust-lang.org/cargo/reference/workspaces.html> — `members`, `resolver`
+  local: `cheatsheet-sources/doc.rust-lang.org/cargo/reference/workspaces.html`
 - Cargo Profiles reference: <https://doc.rust-lang.org/cargo/reference/profiles.html> — `[profile.*]` keys
+  local: `cheatsheet-sources/doc.rust-lang.org/cargo/reference/profiles.html`
 - `cargo check` description: <https://doc.rust-lang.org/cargo/commands/cargo-check.html> — "compile without final code-generation step"
+  local: `cheatsheet-sources/doc.rust-lang.org/cargo/commands/cargo-check.html`
 - **Last updated:** 2026-04-25
 
 **Version baseline**: Cargo 1.83+ (bundled with Rust 1.83+ from Fedora 43)

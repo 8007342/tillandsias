@@ -242,6 +242,23 @@ see that the verbatim source exists, without seeing the bytes themselves.
   a PR see the missing files, but the sidecar (committed) tells them how
   to reproduce locally. Documented in the cheatsheet for the validator.
 
+### Decision 9 (Q9) — openspec validate integration
+
+**Choice**: `scripts/check-cheatsheet-sources.sh` is wired as a non-blocking
+check inside `scripts/hooks/pre-commit-openspec.sh` (the existing pre-commit
+hook that all OpenSpec checks run through). No separate `openspec validate`
+binary exists in this project.
+
+**Why non-blocking**: consistent with the project-wide CRDT-convergence
+philosophy ("warnings nudge, never block"). During migration, 139 UNFETCHED
+warnings are expected (off-allowlist URLs); making them blocking would
+prevent any commit until every URL is reviewed — which defeats the purpose
+of incremental convergence.
+
+**Why pre-commit rather than CI**: the commit-time feedback loop is fastest.
+The check runs `--no-sha` in the hook (fast) and can be run with full SHA
+verification manually: `scripts/check-cheatsheet-sources.sh`.
+
 ## Sources of Truth
 
 - `docs/strategy/cheatsheet-source-layer-plan.md` — the Opus design memo

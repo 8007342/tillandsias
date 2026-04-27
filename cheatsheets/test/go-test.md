@@ -8,7 +8,9 @@
 ## Provenance
 
 - Go `testing` package documentation (pkg.go.dev): <https://pkg.go.dev/testing> — `t.Helper()`, `t.Cleanup()`, `t.Run()`, `t.Parallel()`, `b.N`, `b.ResetTimer()`, `f.Fuzz()` all documented
+  local: `cheatsheet-sources/pkg.go.dev/testing`
 - Go `go test` command reference: <https://pkg.go.dev/cmd/go#hdr-Test_packages> — `-count`, `-race`, `-bench`, `-cover`, `-fuzz`, `-timeout` flags
+  local: `cheatsheet-sources/pkg.go.dev/cmd/go`
 - **Last updated:** 2026-04-25
 
 Verified against pkg.go.dev: `t.Helper()` marks caller location for failures (confirmed); `t.Cleanup()` runs LIFO after test (confirmed); `t.Run()` creates subtests (confirmed); `t.Parallel()` signals parallel execution (confirmed). `go test ./...` recursive pattern, `-count=1` defeating cache, `-race` race detector all documented in the `cmd/go` reference.

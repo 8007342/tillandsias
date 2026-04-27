@@ -2,7 +2,7 @@
 tags: [postgresql, database, indexing, btree, query-performance]
 languages: [sql]
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://www.postgresql.org/docs/current/indexes.html
   - https://www.postgresql.org/docs/current/indexes-types.html
@@ -18,7 +18,9 @@ status: current
 ## Provenance
 
 - PostgreSQL official docs (current version), "Indexes": <https://www.postgresql.org/docs/current/indexes.html>
+  local: `cheatsheet-sources/www.postgresql.org/docs/current/indexes.html`
 - PostgreSQL official docs, "Index Types": <https://www.postgresql.org/docs/current/indexes-types.html>
+  local: `cheatsheet-sources/www.postgresql.org/docs/current/indexes-types.html`
 - Markus Winand, "Use The Index, Luke!" — vendor-neutral but PG-aware: <https://use-the-index-luke.com/> (free online edition)
 - **Last updated:** 2026-04-25
 

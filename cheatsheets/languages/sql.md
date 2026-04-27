@@ -5,7 +5,9 @@
 ## Provenance
 
 - SQLite SQL language reference (sqlite.org): <https://www.sqlite.org/lang.html> — SELECT, WITH/recursive CTE, window functions, UPSERT/ON CONFLICT, transactions, EXPLAIN QUERY PLAN, PRAGMA, RETURNING clause, ROWID, type affinity
+  local: `cheatsheet-sources/www.sqlite.org/lang.html`
 - PostgreSQL documentation: <https://www.postgresql.org/docs/current/sql.html> — SQL commands reference for Postgres-specific features: ILIKE, JSONB, SERIAL/BIGSERIAL, GENERATED ALWAYS AS IDENTITY, MVCC, ISOLATION LEVEL
+  local: `cheatsheet-sources/www.postgresql.org/docs/current/sql.html`
 - **Last updated:** 2026-04-25
 
 **Version baseline**: SQL standard, with Postgres + SQLite divergences. Forge ships `sqlite3` and `psql` clients (no servers).

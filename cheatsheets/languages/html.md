@@ -5,7 +5,9 @@
 ## Provenance
 
 - WHATWG HTML Living Standard: <https://html.spec.whatwg.org/multipage/> — normative spec for DOCTYPE (§13.1.1), all semantic elements (§4.3), form elements and input types (§4.10), dialog (§4.11.4), picture/source/img (§4.8), data-* attributes (§3.2.6.6), loading=lazy (§2.5.7), ARIA requirements (§3.2.9)
+  local: `cheatsheet-sources/html.spec.whatwg.org/multipage/index.html`
 - MDN HTML Reference: <https://developer.mozilla.org/en-US/docs/Web/HTML> — browser compatibility and usage guidance for all elements listed
+  local: `cheatsheet-sources/developer.mozilla.org/en-US/docs/Web/HTML`
 - **Last updated:** 2026-04-25
 
 **Version baseline**: HTML5 (WHATWG Living Standard)

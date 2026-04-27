@@ -2,7 +2,7 @@
 tags: [http, http1.1, http2, web, protocol, headers, status-codes, caching, cors]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://www.rfc-editor.org/rfc/rfc9110
   - https://www.rfc-editor.org/rfc/rfc9112
@@ -18,8 +18,11 @@ status: current
 ## Provenance
 
 - RFC 9110 "HTTP Semantics" (methods, status codes, headers, caching, content negotiation, CORS — the canonical HTTP semantics reference, supersedes RFC 7231): <https://www.rfc-editor.org/rfc/rfc9110>
+  local: `cheatsheet-sources/www.rfc-editor.org/rfc/rfc9110`
 - RFC 9112 "HTTP/1.1" (message framing, Transfer-Encoding, chunked encoding, request smuggling vectors): <https://www.rfc-editor.org/rfc/rfc9112>
+  local: `cheatsheet-sources/www.rfc-editor.org/rfc/rfc9112`
 - RFC 7540 "HTTP/2" (binary framing, no Transfer-Encoding at HTTP/2 layer, multiplexing): <https://www.rfc-editor.org/rfc/rfc7540>
+  local: `cheatsheet-sources/www.rfc-editor.org/rfc/rfc7540`
 - **Last updated:** 2026-04-25
 
 **Version baseline**: HTTP/1.1 + HTTP/2 mainstream; HTTP/3 (QUIC) emerging.

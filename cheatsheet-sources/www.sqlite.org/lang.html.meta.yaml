@@ -15,5 +15,6 @@ allowlist_match: www.sqlite.org
 render: static
 local_path: cheatsheet-sources/www.sqlite.org/lang.html
 cited_by:
+  - cheatsheets/languages/sql.md
   []
 notes: ""

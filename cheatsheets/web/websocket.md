@@ -2,7 +2,7 @@
 tags: [websocket, real-time, bidirectional, protocol, rfc6455, frames, browser]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://www.rfc-editor.org/rfc/rfc6455
   - https://websockets.spec.whatwg.org/
@@ -17,6 +17,7 @@ status: current
 ## Provenance
 
 - RFC 6455 "The WebSocket Protocol" (handshake, frame opcodes, close codes, masking, protocol details — the definitive WebSocket spec): <https://www.rfc-editor.org/rfc/rfc6455>
+  local: `cheatsheet-sources/www.rfc-editor.org/rfc/rfc6455`
 - WHATWG WebSockets Living Standard (browser JS API — `WebSocket`, `.onmessage`, `.send()`, `.close()`): <https://websockets.spec.whatwg.org/>
 - **Last updated:** 2026-04-25
 

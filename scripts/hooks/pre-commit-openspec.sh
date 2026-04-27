@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pre-commit-openspec.sh — Non-blocking OpenSpec trace warnings
-# @trace spec:spec-traceability
+# @trace spec:spec-traceability, spec:cheatsheet-source-layer
 #
 # PHILOSOPHY: This hook ALWAYS exits 0. It NEVER blocks a commit.
 #
@@ -13,6 +13,9 @@
 #   1. Ghost traces — @trace referencing non-existent specs
 #   2. Zero-trace specs — specs with no @trace annotations in the codebase
 #   3. Stale changes — active changes older than 7 days
+#   4. Cheatsheet source binding — INDEX.json ↔ local: path ↔ file consistency
+#      (via scripts/check-cheatsheet-sources.sh --no-sha)
+#      ERRORS from the binding check are printed as warnings (never blocking).
 #
 # Usage:
 #   Installed as .git/hooks/pre-commit (via scripts/install-hooks.sh)
@@ -133,6 +136,30 @@ staleness_check() {
     done
 }
 
+# --- 4. Cheatsheet source binding check ------------------------------------
+# Run check-cheatsheet-sources.sh --no-sha (fast mode for pre-commit).
+# Errors from the checker are printed as OpenSpec warnings — never blocking.
+
+cheatsheet_source_check() {
+    local checker="${REPO_ROOT}/scripts/check-cheatsheet-sources.sh"
+    [[ -f "${checker}" ]] || return 0
+    [[ -f "${REPO_ROOT}/cheatsheet-sources/INDEX.json" ]] || return 0
+
+    local output exit_code
+    output="$(bash "${checker}" --no-sha 2>&1)" || exit_code=$?
+    exit_code="${exit_code:-0}"
+
+    if [[ "${exit_code}" -ne 0 ]]; then
+        # Errors from the binding checker — surface as pre-commit warnings.
+        echo "  ⚠ cheatsheet-sources: binding errors (non-blocking):" >&2
+        while IFS= read -r line; do
+            echo "    ${line}" >&2
+        done <<< "${output}"
+        warnings=$((warnings + 1))
+    fi
+    # Warnings (UNFETCHED) are suppressed here — they appear on manual runs.
+}
+
 # --- Run all checks ---------------------------------------------------------
 
 echo "" >&2  # Visual separator from git's own output
@@ -140,6 +167,7 @@ echo "" >&2  # Visual separator from git's own output
 ghost_check
 zero_trace_check
 staleness_check
+cheatsheet_source_check
 
 if [[ "$warnings" -gt 0 ]]; then
     echo "" >&2

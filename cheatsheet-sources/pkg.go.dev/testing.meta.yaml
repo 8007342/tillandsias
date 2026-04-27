@@ -15,5 +15,6 @@ allowlist_match: pkg.go.dev
 render: static
 local_path: cheatsheet-sources/pkg.go.dev/testing
 cited_by:
+  - cheatsheets/test/go-test.md
   []
 notes: ""

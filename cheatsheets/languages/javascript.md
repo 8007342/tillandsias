@@ -5,7 +5,9 @@
 ## Provenance
 
 - Node.js v22 LTS documentation: <https://nodejs.org/docs/latest-v22.x/api/> — official API reference for --test runner, --watch, --env-file (20.6+), native fetch (18+), structuredClone (17+), readline, createReadStream
+  local: `cheatsheet-sources/nodejs.org/docs/latest-v22.x/api`
 - MDN JavaScript Reference: <https://developer.mozilla.org/en-US/docs/Web/JavaScript> — ES2023 language features: optional chaining, nullish coalescing, logical assignment, top-level await, dynamic import, Promise.all/allSettled, for await...of, toSorted/toReversed/with
+  local: `cheatsheet-sources/developer.mozilla.org/en-US/docs/Web/JavaScript`
 - ECMAScript 2023 specification: <https://tc39.es/ecma262/2023/> — normative spec for the language semantics described
 - **Last updated:** 2026-04-25
 

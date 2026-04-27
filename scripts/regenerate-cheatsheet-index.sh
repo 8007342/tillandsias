@@ -18,12 +18,19 @@
 #   status: deprecated  -> hidden from the default index
 #   no frontmatter      -> "<path> — [DRAFT] <desc>"  (legacy files)
 #
+# Verified markers (appended when cheatsheet-sources/INDEX.json exists):
+#   All Provenance URLs in INDEX.json + all have local: paths ->
+#     "[verified: <sha256-prefix>]" (sha256 prefix of the first local file)
+#   At least one URL in INDEX.json but some unfetched ->
+#     "[partial-verify]"
+#   No Provenance URLs in INDEX.json at all -> no marker
+#
 # WARNING: do not hand-edit cheatsheets/INDEX.md after this script lands —
 # every run rewrites the file from scratch from the per-file frontmatter.
 # Manual edits will be silently overwritten on the next pre-commit run.
 #
 # OpenSpec change: cheatsheet-tooling-and-mcp
-# @trace spec:cheatsheet-tooling
+# @trace spec:cheatsheet-tooling, spec:cheatsheet-source-layer
 
 set -euo pipefail
 
@@ -51,6 +58,121 @@ elif [[ -n "${1:-}" ]]; then
     echo "error: unknown argument: ${1}" >&2
     echo "usage: $(basename "$0") [--check]" >&2
     exit 2
+fi
+
+# ---------------------------------------------------------------------------
+# Build verified-marker lookup table from cheatsheet-sources/INDEX.json.
+# Output: a temp file with lines "<rel-cheatsheet-path>\t<marker>"
+# where marker is "verified:<sha8>" or "partial-verify" or "" (no marker).
+# ---------------------------------------------------------------------------
+
+SOURCES_INDEX="${REPO_ROOT}/cheatsheet-sources/INDEX.json"
+VERIFY_LOOKUP="$(mktemp)"
+
+if [[ -f "${SOURCES_INDEX}" ]]; then
+    python3 - "${REPO_ROOT}" "${CHEATSHEETS_DIR}" "${SOURCES_INDEX}" "${VERIFY_LOOKUP}" <<'VERIFY_PYEOF'
+import sys
+import os
+import json
+import re
+import glob
+
+repo_root = sys.argv[1]
+cheatsheets_dir = sys.argv[2]
+sources_index = sys.argv[3]
+verify_lookup = sys.argv[4]
+
+# Load INDEX.json
+with open(sources_index) as f:
+    index = json.load(f)
+
+entries = index.get("entries", [])
+
+# Build: url -> entry (supporting url, fetch_url, final_redirect)
+url_to_entry = {}
+for entry in entries:
+    for key in ("url", "fetch_url", "final_redirect"):
+        u = entry.get(key, "")
+        if u and u not in url_to_entry:
+            url_to_entry[u] = entry
+
+def extract_provenance_info(filepath):
+    """
+    Returns (urls: list[str], local_paths: list[str]) from ## Provenance section.
+    """
+    urls = []
+    local_paths = []
+    in_provenance = False
+    with open(filepath) as f:
+        lines = f.readlines()
+    for line in lines:
+        stripped = line.strip()
+        if re.match(r'^##\s+Provenance', stripped):
+            in_provenance = True
+            continue
+        if in_provenance and re.match(r'^##\s+', stripped):
+            in_provenance = False
+            continue
+        if not in_provenance:
+            continue
+        # Extract URLs
+        for m in re.finditer(r'<(https://[^>]+)>', stripped):
+            urls.append(m.group(1))
+        for m in re.finditer(r'(?<![<`])(https://\S+?)(?:[,\s>)]|$)', stripped):
+            u = m.group(1).rstrip('.,)')
+            if u not in urls:
+                urls.append(u)
+        # local: paths
+        m = re.search(r'local:\s*`([^`]+)`', stripped)
+        if m:
+            local_paths.append(m.group(1))
+    return urls, local_paths
+
+cheatsheet_files = sorted(glob.glob(
+    os.path.join(cheatsheets_dir, '**', '*.md'), recursive=True
+))
+cheatsheet_files = [
+    f for f in cheatsheet_files
+    if os.path.basename(f) not in ('INDEX.md', 'TEMPLATE.md')
+]
+
+lookup_lines = []
+for cs_file in cheatsheet_files:
+    rel = os.path.relpath(cs_file, repo_root)
+    urls, local_paths = extract_provenance_info(cs_file)
+
+    if not urls:
+        # No Provenance URLs — no marker
+        lookup_lines.append(f"{rel}\t")
+        continue
+
+    fetched_entries = [url_to_entry[u] for u in urls if u in url_to_entry]
+    unfetched_count = sum(1 for u in urls if u not in url_to_entry)
+
+    if not fetched_entries:
+        # Nothing fetched for this cheatsheet
+        lookup_lines.append(f"{rel}\t")
+        continue
+
+    if unfetched_count > 0:
+        # Some fetched, some not
+        lookup_lines.append(f"{rel}\tpartial-verify")
+    else:
+        # All URLs fetched — compute sha prefix from first local file
+        sha_prefix = ""
+        for entry in fetched_entries:
+            sha = entry.get("content_sha256", "")
+            if sha:
+                sha_prefix = sha[:8]
+                break
+        if sha_prefix:
+            lookup_lines.append(f"{rel}\tverified:{sha_prefix}")
+        else:
+            lookup_lines.append(f"{rel}\tpartial-verify")
+
+with open(verify_lookup, 'w') as f:
+    f.write('\n'.join(lookup_lines) + '\n')
+VERIFY_PYEOF
 fi
 
 # ---------------------------------------------------------------------------
@@ -161,12 +283,12 @@ truncate_desc() {
 }
 
 # ---------------------------------------------------------------------------
-# process_file — emits "<rel-path>\t<marker>\t<desc>" for one cheatsheet.
+# process_file — emits "<rel-path>\x1f<marker>\x1f<desc>" for one cheatsheet.
 # ---------------------------------------------------------------------------
 
 process_file() {
     local file="$1" sub="$2"
-    local fname rel parsed status title description marker desc
+    local fname rel parsed status title description marker verify_marker desc category_rel
 
     fname="$(basename "$file")"
     if [[ -n "$sub" ]]; then
@@ -192,12 +314,40 @@ process_file() {
         draft|none|*) marker="[DRAFT]" ;;
     esac
 
+    # Look up verify marker in the lookup table generated from INDEX.json.
+    # Lookup key: cheatsheets/<category>/[sub/]<filename>
+    # category is the current category loop variable (from caller context).
+    local category_path
+    category_path="$(basename "$(dirname "$file")")"
+    if [[ -n "$sub" ]]; then
+        category_rel="cheatsheets/${category_path}/${sub}/${fname}"
+    else
+        category_rel="cheatsheets/${category_path}/${fname}"
+    fi
+
+    verify_marker=""
+    if [[ -f "${VERIFY_LOOKUP}" ]]; then
+        local raw_verify
+        raw_verify="$(grep -F "${category_rel}" "${VERIFY_LOOKUP}" | awk -F'\t' '{print $2}' | head -1)" || true
+        case "${raw_verify}" in
+            verified:*)
+                verify_marker=" [verified: ${raw_verify#verified:}]"
+                ;;
+            partial-verify)
+                verify_marker=" [partial-verify]"
+                ;;
+            *)
+                verify_marker=""
+                ;;
+        esac
+    fi
+
     if [[ -z "$description" ]]; then
         description="$title"
     fi
     desc="$(truncate_desc "$description" 80)"
 
-    printf '%s\x1f%s\x1f%s\n' "$rel" "$marker" "$desc"
+    printf '%s\x1f%s\x1f%s%s\n' "$rel" "$marker" "$desc" "$verify_marker"
 }
 
 # ---------------------------------------------------------------------------
@@ -207,7 +357,8 @@ process_file() {
 TMP_OUT="$(mktemp)"
 TMP_ROWS="$(mktemp)"
 TMP_FINAL="$(mktemp)"
-trap 'rm -f "${TMP_OUT}" "${TMP_ROWS}" "${TMP_FINAL}"' EXIT
+# VERIFY_LOOKUP already set above; extend the cleanup trap to include all temps.
+trap 'rm -f "${TMP_OUT}" "${TMP_ROWS}" "${TMP_FINAL}" "${VERIFY_LOOKUP}"' EXIT
 
 # Fixed header — replaces whatever was in the file before.
 cat >"${TMP_OUT}" <<'HEADER_EOF'

@@ -5,8 +5,11 @@
 ## Provenance
 
 - Python 3 official documentation (docs.python.org): <https://docs.python.org/3/> — language reference, stdlib, what's new per version; covers f-string = syntax (3.8+), built-in generics list[int] (3.9+), X|Y union (3.10+), match/case (3.10+), dataclasses frozen/slots, asyncio, pathlib, subprocess
+  local: `cheatsheet-sources/docs.python.org/3/index.html`
 - Python language reference — dataclasses: <https://docs.python.org/3/library/dataclasses.html> — frozen, slots parameters
+  local: `cheatsheet-sources/docs.python.org/3/library/dataclasses.html`
 - Python language reference — asyncio: <https://docs.python.org/3/library/asyncio.html> — asyncio.run(), gather(), sleep()
+  local: `cheatsheet-sources/docs.python.org/3/library/asyncio.html`
 - **Last updated:** 2026-04-25
 
 **Version baseline**: Python 3.13.x (Fedora 43 `python3` package)

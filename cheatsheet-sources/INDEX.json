@@ -21,7 +21,9 @@
       "redistribution": "bundled",
       "allowlist_match": "cheatsheetseries.owasp.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/xml.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -43,7 +45,9 @@
       "redistribution": "bundled",
       "allowlist_match": "datatracker.ietf.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/web/cookie-auth-best-practices.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -65,7 +69,9 @@
       "redistribution": "bundled",
       "allowlist_match": "developer.mozilla.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/css.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -87,7 +93,9 @@
       "redistribution": "bundled",
       "allowlist_match": "developer.mozilla.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/html.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -109,7 +117,9 @@
       "redistribution": "bundled",
       "allowlist_match": "developer.mozilla.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/web/cookie-auth-best-practices.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -131,7 +141,9 @@
       "redistribution": "bundled",
       "allowlist_match": "developer.mozilla.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/javascript.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -153,7 +165,9 @@
       "redistribution": "bundled",
       "allowlist_match": "doc.rust-lang.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/rust.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -175,7 +189,9 @@
       "redistribution": "bundled",
       "allowlist_match": "doc.rust-lang.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/build/cargo.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -197,7 +213,9 @@
       "redistribution": "bundled",
       "allowlist_match": "doc.rust-lang.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/test/cargo-test.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -219,7 +237,9 @@
       "redistribution": "bundled",
       "allowlist_match": "doc.rust-lang.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/build/cargo.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -241,7 +261,9 @@
       "redistribution": "bundled",
       "allowlist_match": "doc.rust-lang.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/build/cargo.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -263,7 +285,9 @@
       "redistribution": "bundled",
       "allowlist_match": "doc.rust-lang.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/build/cargo.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -285,7 +309,9 @@
       "redistribution": "bundled",
       "allowlist_match": "doc.rust-lang.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/build/cargo.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -307,7 +333,9 @@
       "redistribution": "bundled",
       "allowlist_match": "doc.rust-lang.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/test/cargo-test.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -329,7 +357,9 @@
       "redistribution": "bundled",
       "allowlist_match": "doc.rust-lang.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/rust.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -351,7 +381,9 @@
       "redistribution": "bundled",
       "allowlist_match": "doc.rust-lang.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/rust.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -373,7 +405,9 @@
       "redistribution": "bundled",
       "allowlist_match": "docs.npmjs.com",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/build/npm.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -395,7 +429,9 @@
       "redistribution": "bundled",
       "allowlist_match": "docs.npmjs.com",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/build/npm.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -417,7 +453,9 @@
       "redistribution": "bundled",
       "allowlist_match": "docs.python.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/python.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -439,7 +477,9 @@
       "redistribution": "bundled",
       "allowlist_match": "docs.python.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/python.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -461,7 +501,9 @@
       "redistribution": "bundled",
       "allowlist_match": "docs.python.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/python.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -483,7 +525,9 @@
       "redistribution": "bundled",
       "allowlist_match": "docs.rs",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/utils/ripgrep.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -505,7 +549,9 @@
       "redistribution": "bundled",
       "allowlist_match": "go.dev",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/build/go.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -527,7 +573,9 @@
       "redistribution": "bundled",
       "allowlist_match": "html.spec.whatwg.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/html.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -549,7 +597,9 @@
       "redistribution": "bundled",
       "allowlist_match": "html.spec.whatwg.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/web/sse.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -571,7 +621,9 @@
       "redistribution": "bundled",
       "allowlist_match": "nodejs.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/build/yarn.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -593,7 +645,9 @@
       "redistribution": "bundled",
       "allowlist_match": "nodejs.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/javascript.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -615,7 +669,7 @@
       "redistribution": "bundled",
       "allowlist_match": "owasp.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": "[]",
       "notes": "",
       "file_present": true
     },
@@ -637,7 +691,7 @@
       "redistribution": "bundled",
       "allowlist_match": "owasp.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": "[]",
       "notes": "",
       "file_present": true
     },
@@ -659,7 +713,9 @@
       "redistribution": "bundled",
       "allowlist_match": "owasp.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/security/owasp-top-10-2021.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -681,7 +737,9 @@
       "redistribution": "bundled",
       "allowlist_match": "owasp.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/security/owasp-top-10-2021.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -703,7 +761,9 @@
       "redistribution": "bundled",
       "allowlist_match": "pkg.go.dev",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/test/go-test.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -725,7 +785,9 @@
       "redistribution": "bundled",
       "allowlist_match": "pkg.go.dev",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/test/go-test.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -747,7 +809,9 @@
       "redistribution": "bundled",
       "allowlist_match": "www.postgresql.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/data/postgresql-indexing-basics.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -769,7 +833,9 @@
       "redistribution": "bundled",
       "allowlist_match": "www.postgresql.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/data/postgresql-indexing-basics.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -791,7 +857,9 @@
       "redistribution": "bundled",
       "allowlist_match": "www.postgresql.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/sql.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -813,7 +881,7 @@
       "redistribution": "bundled",
       "allowlist_match": "www.rfc-editor.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": "[]",
       "notes": "",
       "file_present": true
     },
@@ -859,7 +927,9 @@
       "redistribution": "bundled",
       "allowlist_match": "www.rfc-editor.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/web/websocket.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -881,7 +951,9 @@
       "redistribution": "bundled",
       "allowlist_match": "www.rfc-editor.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/json.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -903,7 +975,9 @@
       "redistribution": "bundled",
       "allowlist_match": "www.rfc-editor.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/web/http.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -925,7 +999,9 @@
       "redistribution": "bundled",
       "allowlist_match": "www.rfc-editor.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/json.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -947,7 +1023,10 @@
       "redistribution": "bundled",
       "allowlist_match": "www.rfc-editor.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/web/http.md",
+        "cheatsheets/web/sse.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -969,7 +1048,9 @@
       "redistribution": "bundled",
       "allowlist_match": "www.rfc-editor.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/web/http.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -991,7 +1072,9 @@
       "redistribution": "bundled",
       "allowlist_match": "www.sqlite.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/sql.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -1013,7 +1096,9 @@
       "redistribution": "bundled",
       "allowlist_match": "www.w3.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/css.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -1035,7 +1120,9 @@
       "redistribution": "bundled",
       "allowlist_match": "www.w3.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/xml.md"
+      ],
       "notes": "",
       "file_present": true
     },
@@ -1057,7 +1144,9 @@
       "redistribution": "bundled",
       "allowlist_match": "www.w3.org",
       "render": "static",
-      "cited_by": [],
+      "cited_by": [
+        "cheatsheets/languages/xml.md"
+      ],
       "notes": "",
       "file_present": true
     }

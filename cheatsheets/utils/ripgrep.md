@@ -10,6 +10,7 @@
 - ripgrep user guide (BurntSushi/ripgrep): <https://github.com/BurntSushi/ripgrep/blob/master/GUIDE.md> — flags, file types, glob filtering
 - ripgrep CHANGELOG and flag reference: <https://github.com/BurntSushi/ripgrep> — `--type-list`, `--json`, `--pcre2`, flag inventory
 - Rust regex crate syntax docs: <https://docs.rs/regex/latest/regex/#syntax> — confirms the default regex engine (Rust `regex`, not PCRE)
+  local: `cheatsheet-sources/docs.rs/regex/latest/regex`
 - **Last updated:** 2026-04-25
 
 Verified: `-t <type>` and `-g '<glob>'` confirmed in user guide; default regex engine is Rust `regex` (not PCRE — confirmed via regex crate reference in GUIDE.md); `-P` enables PCRE2; `-l` (files-with-matches), `--json` (structured output), `--no-ignore`, `--hidden` all documented in the ripgrep repository.

@@ -5,7 +5,9 @@
 ## Provenance
 
 - RFC 8259 — The JavaScript Object Notation (JSON) Data Interchange Format: <https://www.rfc-editor.org/rfc/rfc8259> — defines syntax (no trailing commas, no comments, double quotes only, allowed escapes, NaN/Infinity forbidden, null/true/false lowercase)
+  local: `cheatsheet-sources/www.rfc-editor.org/rfc/rfc8259`
 - RFC 6901 — JSON Pointer: <https://www.rfc-editor.org/rfc/rfc6901> — JSON Pointer syntax (/foo/0/bar, ~0 and ~1 escapes)
+  local: `cheatsheet-sources/www.rfc-editor.org/rfc/rfc6901`
 - **Last updated:** 2026-04-25
 
 **Version baseline**: JSON per RFC 8259. JSON Lines and JSON Pointer (RFC 6901) covered briefly.

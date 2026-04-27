@@ -8,7 +8,9 @@
 ## Provenance
 
 - Cargo book — `cargo test` command reference: <https://doc.rust-lang.org/cargo/commands/cargo-test.html> — all flags including `--workspace`, `--doc`, `--no-run`, `--lib`, `--bins`
+  local: `cheatsheet-sources/doc.rust-lang.org/cargo/commands/cargo-test.html`
 - Rust reference — `#[test]` and test attributes: <https://doc.rust-lang.org/reference/attributes/testing.html> — `#[test]`, `#[should_panic]`, `#[ignore]`, `#[cfg(test)]`
+  local: `cheatsheet-sources/doc.rust-lang.org/reference/attributes/testing.html`
 - **Last updated:** 2026-04-25
 
 Verified against Cargo book: `--workspace`, `--doc`, `--no-run` confirmed; `-- --no-capture` (note: Cargo book uses `--no-capture`, not `--nocapture`; both accepted by libtest) and `-- --test-threads=N` confirmed. `#[tokio::test]` requires `tokio` with `macros` feature.

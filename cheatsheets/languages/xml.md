@@ -5,8 +5,11 @@
 ## Provenance
 
 - W3C XML 1.0 (Fifth Edition) Recommendation: <https://www.w3.org/TR/xml/> — normative spec for prolog, elements, attributes, comments, CDATA, entity references (&lt; &gt; &amp; &quot; &apos;), processing instructions, DOCTYPE (verified: 5th ed, 2008-11-26)
+  local: `cheatsheet-sources/www.w3.org/TR/xml`
 - Namespaces in XML 1.0 (W3C): <https://www.w3.org/TR/xml-names/> — namespace syntax (xmlns:prefix and default namespace declarations)
+  local: `cheatsheet-sources/www.w3.org/TR/xml-names`
 - OWASP XXE Prevention Cheat Sheet: <https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html> — basis for the XXE/DOCTYPE pitfall warning
+  local: `cheatsheet-sources/cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html`
 - **Last updated:** 2026-04-25
 
 **Version baseline**: XML 1.0 (5th ed) — what virtually all tools target. XML 1.1 exists but is rarely used. Forge ships `xmllint` (libxml2) and `xmlstarlet`.

@@ -15,5 +15,6 @@ allowlist_match: owasp.org
 render: static
 local_path: cheatsheet-sources/owasp.org/www-project-top-ten
 cited_by:
+  - cheatsheets/security/owasp-top-10-2021.md
   []
 notes: ""

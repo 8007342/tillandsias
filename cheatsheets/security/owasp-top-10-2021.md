@@ -2,7 +2,7 @@
 tags: [security, owasp, web-security, threat-modeling, vulnerabilities]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://owasp.org/Top10/
   - https://owasp.org/www-project-top-ten/
@@ -17,7 +17,9 @@ status: current
 ## Provenance
 
 - OWASP Top 10 official landing: <https://owasp.org/Top10/>
+  local: `cheatsheet-sources/owasp.org/Top10/index.html`
 - OWASP Top Ten project page: <https://owasp.org/www-project-top-ten/>
+  local: `cheatsheet-sources/owasp.org/www-project-top-ten`
 - License: CC-BY-SA 4.0 (per OWASP project pages)
 - **Last updated:** 2026-04-25 (next OWASP refresh announced for 2025; verify before 2026-Q3)
 
