@@ -13,6 +13,27 @@
 - [x] Confirm Hyper-V firewall (`firewall=true`) is inbound-LAN only,
       not per-distro outbound — ruled out as forge-offline mechanism.
 
+## Status snapshot (2026-04-27 10:20 — TRAY LAUNCHES CLEAN POST-INIT)
+
+Final E2E loop verification on this Windows host:
+
+1. `./build-local.sh` → debug binary at `%LOCALAPPDATA%\Tillandsias\tillandsias.exe`.
+2. `tillandsias.exe --init` → imports all six WSL distros; reports
+   `Ready. Run: tillandsias`.
+3. `tillandsias.exe` (no args) → tray launches, hits `All images
+   present at launch — skipping builds`, transitions through
+   credential probe to `Mature` (Ready) state. Zero ERROR-level
+   log lines. The image_exists patch on PodmanClient routes through
+   `wsl --list --quiet` on Windows.
+
+Additional cleanup landed in this loop:
+- `rustls::crypto::ring::default_provider().install_default()` at
+  the top of `main()` so Tauri-updater + reqwest TLS handshakes
+  don't panic with "No provider set".
+- `fetch_repos()` returns `Ok(Vec::new())` on Windows pending the
+  Runtime trait migration (was generating noisy podman-pull errors
+  trying to reach a docker.io image that doesn't exist).
+
 ## Status snapshot (2026-04-27 10:08 — E2E SMOKE PASSED)
 
 `scripts/wsl-build/verify-smoke.sh` reports ALL SMOKE TESTS PASSED on
