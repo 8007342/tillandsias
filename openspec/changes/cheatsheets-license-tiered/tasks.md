@@ -53,11 +53,11 @@ Phase 0 of the design's Migration Plan. Each task is verifiable in a single PR; 
 
 ## 7. cheatsheet-telemetry EXTERNAL log producer
 
-- [ ] 7.1 Author `images/default/external-logs.yaml` declaring `role: cheatsheet-telemetry` with `lookups.jsonl` (format `jsonl`, `rotate_at_mb: 10`, `written_by: forge-agent (claude / opencode / opsx)`).
-- [ ] 7.2 Update `images/default/Containerfile` (and/or `flake.nix`) to bake `external-logs.yaml` at `/etc/tillandsias/external-logs.yaml` per the `external-logs-layer` contract.
-- [ ] 7.3 Update the forge `ContainerProfile` in `src-tauri/src/profile.rs` (or wherever profile types live) to set `external_logs_role: Some("cheatsheet-telemetry")`.
-- [ ] 7.4 Update the launcher (`src-tauri/src/handlers.rs` or `runner.rs`) to bind-mount `~/.local/state/tillandsias/external-logs/cheatsheet-telemetry/` RW at `/var/log/tillandsias/external/cheatsheet-telemetry/` inside every forge container (preserves the existing producer-mount pattern from `git-service`).
-- [ ] 7.5 Extend `cheatsheets/runtime/external-logs.md` with the `cheatsheet-telemetry` role's JSONL schema (every field documented with type and meaning); add an example event for each `resolved_via` value.
+- [x] 7.1 Author `images/default/external-logs.yaml` declaring `role: cheatsheet-telemetry` with `lookups.jsonl` (format `jsonl`, `rotate_at_mb: 10`, `written_by: forge-agent (claude / opencode / opsx)`).
+- [x] 7.2 Update `images/default/Containerfile` (and/or `flake.nix`) to bake `external-logs.yaml` at `/etc/tillandsias/external-logs.yaml` per the `external-logs-layer` contract.
+- [x] 7.3 Update the forge `ContainerProfile` in `src-tauri/src/profile.rs` (or wherever profile types live) to set `external_logs_role: Some("cheatsheet-telemetry")`.
+- [x] 7.4 Update the launcher (`src-tauri/src/handlers.rs` or `runner.rs`) to bind-mount `~/.local/state/tillandsias/external-logs/cheatsheet-telemetry/` RW at `/var/log/tillandsias/external/cheatsheet-telemetry/` inside every forge container (preserves the existing producer-mount pattern from `git-service`).
+- [x] 7.5 Extend `cheatsheets/runtime/external-logs.md` with the `cheatsheet-telemetry` role's JSONL schema (every field documented with type and meaning); add an example event for each `resolved_via` value.
 - [ ] 7.6 Document the agent-side write contract (where in opencode/claude/opsx instructions to land the "emit a JSONL line for every cheatsheet consultation" guidance) — add to `cheatsheets/agents/opencode.md` and `cheatsheets/agents/claude-code.md` under a new "Telemetry obligations" section.
 
 ## 8. Tier-aware INDEX regeneration

@@ -367,20 +367,27 @@ impl ContainerProfile {
     /// Returns `Err` if the profile violates a spec invariant that must be
     /// caught before launching the container. Currently checked:
     ///
-    /// - A profile MUST NOT have BOTH `external_logs_role: Some(_)` AND
-    ///   `external_logs_consumer: true`. The two roles are mutually exclusive:
-    ///   a producer owns its role directory RW and a consumer mounts the
-    ///   parent RO. Setting both on one profile is a profile-construction bug.
+    /// - A profile MAY be a producer (`external_logs_role: Some(_)`), a
+    ///   consumer (`external_logs_consumer: true`), or BOTH. The dual
+    ///   role is the load-bearing case for `cheatsheet-telemetry`: forge
+    ///   containers are consumers (they read every other role's logs RO
+    ///   to surface them in `tillandsias-logs`) AND producers of their
+    ///   own role's `lookups.jsonl`. The launcher composes the two mounts
+    ///   so the parent RO mount lands first and the role-scoped RW mount
+    ///   overlays the producer's own subdirectory — no path collision,
+    ///   no leakage across roles.
     ///
-    /// @trace spec:external-logs-layer
+    ///   The original `external-logs-layer` v1 reverse-breach refusal
+    ///   forbade dual roles; `cheatsheets-license-tiered` relaxes that
+    ///   constraint because the "shadowing" concern (a consumer mount
+    ///   masking a producer's own writes) does not arise when the
+    ///   producer mount is strictly under the consumer mount's tree.
+    ///
+    /// @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
     pub fn validate(&self) -> Result<(), String> {
-        if self.external_logs_role.is_some() && self.external_logs_consumer {
-            return Err(format!(
-                "profile is BOTH an external-logs producer (role={:?}) AND a consumer — \
-                 spec:external-logs-layer forbids this combination; profiles must be one or the other",
-                self.external_logs_role.unwrap_or("<unknown>")
-            ));
-        }
+        // Dual producer + consumer is now permitted (cheatsheets-license-tiered).
+        // The launcher's mount composition keeps the role-scoped RW mount
+        // strictly under the parent RO mount, so neither shadows the other.
         Ok(())
     }
 }
@@ -412,12 +419,17 @@ pub fn forge_opencode_profile() -> ContainerProfile {
         // secrets-management delta. A compromised forge MUST NOT be able
         // to reach the tray's control plane.
         mount_control_socket: false,
-        // @trace spec:external-logs-layer
-        // Chunk 3: forge containers are external-logs consumers. A RO
-        // bind-mount of ~/.local/state/tillandsias/external-logs/ lands at
-        // /var/log/tillandsias/external/ so agents can read git-push.log
-        // (and future sibling producers) via `tillandsias-logs ls`.
-        external_logs_role: None,
+        // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
+        // @cheatsheet runtime/external-logs.md
+        // Forge containers are BOTH external-logs producers AND consumers:
+        //   - producer of `cheatsheet-telemetry/lookups.jsonl` — in-forge
+        //     agents emit one JSONL event per cheatsheet consultation.
+        //   - consumer of every other role's logs (RO) — `tillandsias-logs`
+        //     surfaces git-push.log, proxy access logs, etc.
+        // The launcher composes the two mounts: parent RO first, then the
+        // role-scoped RW subdir on top. See validate() for the relaxed
+        // mutual-exclusion rationale.
+        external_logs_role: Some("cheatsheet-telemetry"),
         external_logs_consumer: true,
     }
 }
@@ -439,9 +451,10 @@ pub fn forge_claude_profile() -> ContainerProfile {
         tmpfs_mounts: common_forge_tmpfs_mounts(),
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
-        // @trace spec:external-logs-layer
-        // Chunk 3: forge consumer — see forge_opencode_profile() note.
-        external_logs_role: None,
+        // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
+        // Forge dual-role: producer of cheatsheet-telemetry + consumer of
+        // every other role's logs. See forge_opencode_profile() note.
+        external_logs_role: Some("cheatsheet-telemetry"),
         external_logs_consumer: true,
     }
 }
@@ -468,9 +481,10 @@ pub fn forge_opencode_web_profile() -> ContainerProfile {
         // OpenCode Web forge does not need the control socket — the router
         // (which fronts the web session) is the consumer.
         mount_control_socket: false,
-        // @trace spec:external-logs-layer
-        // Chunk 3: forge consumer — see forge_opencode_profile() note.
-        external_logs_role: None,
+        // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
+        // Forge dual-role: producer of cheatsheet-telemetry + consumer of
+        // every other role's logs. See forge_opencode_profile() note.
+        external_logs_role: Some("cheatsheet-telemetry"),
         external_logs_consumer: true,
     }
 }
@@ -570,10 +584,12 @@ pub fn terminal_profile() -> ContainerProfile {
         image_override: None,
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
-        // @trace spec:external-logs-layer
-        // Chunk 3: maintenance terminal is also a consumer — maintainers
-        // inspecting enclave state benefit from `tillandsias-logs ls`.
-        external_logs_role: None,
+        // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
+        // Maintenance terminal is dual-role: an interactive maintainer can
+        // also `cat $TILLANDSIAS_CHEATSHEETS/...` and the same telemetry
+        // contract applies. The producer mount lands at the role-scoped
+        // subdir; the consumer mount surfaces every other role.
+        external_logs_role: Some("cheatsheet-telemetry"),
         external_logs_consumer: true,
     }
 }
@@ -1711,12 +1727,12 @@ mod tests {
         }
     }
 
-    // @trace spec:external-logs-layer
+    // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
     #[test]
     fn forge_profiles_are_external_logs_consumers() {
-        // Chunk 3: all four forge/maintenance profiles are consumers.
-        // A RO bind-mount of the external-logs root lands at
-        // /var/log/tillandsias/external/ inside each container.
+        // All four forge/maintenance profiles are external-logs consumers
+        // AND producers of the cheatsheet-telemetry role. The launcher
+        // composes parent RO + role-scoped RW so neither shadows the other.
         for (name, profile) in [
             ("forge_opencode", forge_opencode_profile()),
             ("forge_claude", forge_claude_profile()),
@@ -1725,11 +1741,18 @@ mod tests {
         ] {
             assert!(
                 profile.external_logs_consumer,
-                "Profile {name} must be an external-logs consumer (chunk 3)"
+                "Profile {name} must be an external-logs consumer"
             );
+            assert_eq!(
+                profile.external_logs_role,
+                Some("cheatsheet-telemetry"),
+                "Profile {name} must also be the cheatsheet-telemetry producer (cheatsheets-license-tiered)"
+            );
+            // validate() must accept the dual role — the v1 reverse-breach
+            // refusal was relaxed in cheatsheets-license-tiered.
             assert!(
-                profile.external_logs_role.is_none(),
-                "Profile {name} must NOT be a producer — consumers and producers are mutually exclusive"
+                profile.validate().is_ok(),
+                "Profile {name} must pass validate() despite being dual-role"
             );
         }
     }
@@ -1774,60 +1797,72 @@ mod tests {
         );
     }
 
-    // @trace spec:external-logs-layer
+    // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
     #[test]
-    fn profile_cannot_be_both_producer_and_consumer() {
-        // Spec invariant: at most ONE of {external_logs_role: Some(_),
-        // external_logs_consumer: true} may be set on any profile.
-        // This test walks every current profile constructor; chunk 2 and 3
-        // must keep this invariant when they flip the fields.
-        let profiles: Vec<(&str, ContainerProfile)> = vec![
-            ("forge_opencode", forge_opencode_profile()),
-            ("forge_claude", forge_claude_profile()),
-            ("forge_opencode_web", forge_opencode_web_profile()),
-            ("terminal", terminal_profile()),
-            ("web", web_profile()),
-            ("router", router_profile()),
-            ("proxy", proxy_profile()),
-            ("inference", inference_profile()),
+    fn service_profiles_remain_single_role() {
+        // Service containers (proxy, router, inference, git-service) MUST
+        // remain producer-ONLY — they never read other roles. The dual-role
+        // pattern is reserved for forge/terminal containers under
+        // cheatsheets-license-tiered.
+        for (name, profile) in [
             ("git_service", git_service_profile()),
-        ];
-        for (name, profile) in &profiles {
-            let is_producer = profile.external_logs_role.is_some();
-            let is_consumer = profile.external_logs_consumer;
+            ("proxy", proxy_profile()),
+            ("router", router_profile()),
+            ("inference", inference_profile()),
+        ] {
             assert!(
-                !(is_producer && is_consumer),
-                "Profile {name} MUST NOT be both producer (role={:?}) and consumer — \
-                 spec:external-logs-layer forbids the combination",
-                profile.external_logs_role
+                !profile.external_logs_consumer,
+                "Service profile {name} MUST NOT be a consumer — only forge/terminal are dual-role"
+            );
+            assert!(
+                profile.external_logs_role.is_some(),
+                "Service profile {name} must declare a producer role"
             );
         }
     }
 
-    // @trace spec:external-logs-layer
+    // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
     #[test]
-    fn validate_profile_refuses_both_producer_and_consumer() {
-        // ContainerProfile::validate() must return Err when BOTH
-        // external_logs_role: Some(_) AND external_logs_consumer: true are set.
-        // This is the per-profile enforcement point called at launch time.
-        let mut bad_profile = git_service_profile();
-        // git_service is a producer (external_logs_role = Some("git-service")).
-        // Force consumer flag on too — this is the forbidden combination.
-        bad_profile.external_logs_consumer = true;
+    fn forge_profiles_are_dual_role_producer_and_consumer() {
+        // Under cheatsheets-license-tiered, forge and terminal profiles are
+        // BOTH producers (cheatsheet-telemetry role) AND consumers (RO view
+        // of every other role). The launcher composes parent-RO + role-RW
+        // mounts so neither shadows the other. validate() accepts the combo.
+        for (name, profile) in [
+            ("forge_opencode", forge_opencode_profile()),
+            ("forge_claude", forge_claude_profile()),
+            ("forge_opencode_web", forge_opencode_web_profile()),
+            ("terminal", terminal_profile()),
+        ] {
+            assert_eq!(
+                profile.external_logs_role,
+                Some("cheatsheet-telemetry"),
+                "Profile {name} must declare cheatsheet-telemetry producer role"
+            );
+            assert!(
+                profile.external_logs_consumer,
+                "Profile {name} must remain a consumer (preserves tillandsias-logs RO view)"
+            );
+            assert!(
+                profile.validate().is_ok(),
+                "Profile {name} dual-role must pass validate()"
+            );
+        }
+    }
 
-        let result = bad_profile.validate();
+    // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
+    #[test]
+    fn validate_profile_accepts_dual_producer_and_consumer() {
+        // The v1 reverse-breach refusal forbade dual roles; cheatsheets-
+        // license-tiered relaxes that constraint because the launcher's
+        // mount composition keeps the role-scoped RW mount strictly under
+        // the parent RO mount, so neither shadows the other.
+        let profile = forge_opencode_profile();
+        assert_eq!(profile.external_logs_role, Some("cheatsheet-telemetry"));
+        assert!(profile.external_logs_consumer);
         assert!(
-            result.is_err(),
-            "validate() must reject a profile with BOTH external_logs_role and external_logs_consumer"
-        );
-        let err_msg = result.unwrap_err();
-        assert!(
-            err_msg.contains("git-service"),
-            "error message must name the role; got: {err_msg}"
-        );
-        assert!(
-            err_msg.contains("spec:external-logs-layer"),
-            "error message must cite the spec; got: {err_msg}"
+            profile.validate().is_ok(),
+            "validate() must accept the forge dual-role profile"
         );
     }
 
@@ -1845,12 +1880,16 @@ mod tests {
         );
     }
 
-    // @trace spec:external-logs-layer
+    // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
     #[test]
     fn validate_profile_accepts_consumer_only() {
-        // A consumer-only profile (external_logs_role: None, consumer true)
-        // must pass validate().
-        let profile = forge_opencode_profile();
+        // A synthetic consumer-only profile (no built-in profile is consumer-
+        // only any more — forge profiles are dual-role since cheatsheets-
+        // license-tiered, and service profiles are producer-only) must still
+        // pass validate(). This guards the fallback path for any future
+        // profile that opts into consumer access without producing logs.
+        let mut profile = forge_opencode_profile();
+        profile.external_logs_role = None;
         assert!(profile.external_logs_role.is_none());
         assert!(profile.external_logs_consumer);
         assert!(

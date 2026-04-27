@@ -1,0 +1,27 @@
+# @trace spec:cheatsheets-license-tiered, spec:external-logs-layer
+# @cheatsheet runtime/external-logs.md
+# Manifest of curated external log files published by the forge container.
+# The tray-side auditor reads this manifest every 60 s and flags any file in
+# ~/.local/state/tillandsias/external-logs/cheatsheet-telemetry/ that is NOT
+# listed here with a WARN+accountability "[external-logs] LEAK: ..." event.
+#
+# Format: see images/git/external-logs.yaml for the canonical schema.
+#   role        — must match the profile's external_logs_role field exactly.
+#   files[]     — each entry declares one permitted file in the role dir.
+#     name        — filename relative to the role's external-logs directory.
+#     purpose     — one paragraph; consumers read this to understand intent.
+#     format      — text | jsonl (binary formats are not permitted).
+#     rotate_at_mb — hard cap enforced by the tray auditor (default 10 MB).
+#     written_by  — describe which entrypoint code emits this file.
+role: cheatsheet-telemetry
+files:
+  - name: lookups.jsonl
+    purpose: |
+      One event per cheatsheet consultation by an in-forge agent (claude,
+      opencode, opsx). Each line is a single JSON object with at minimum
+      ts, project, cheatsheet, query, resolved_via, accountability, spec.
+      Host-side analytics (deferred to the cheatsheet-telemetry-analytics
+      change) aggregate these events to drive cheatsheet refresh priority.
+    format: jsonl
+    rotate_at_mb: 10
+    written_by: forge-agent (claude / opencode / opsx)

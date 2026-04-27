@@ -332,40 +332,26 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     }
 
     // -----------------------------------------------------------------------
-    // External-logs mounts — producer (RW) and consumer (RO)
+    // External-logs mounts — producer (RW), consumer (RO), or BOTH
     //
     // These mounts are driven by profile fields rather than profile.mounts
     // so the path resolution and mode are unconditional and consistent:
-    //   - Producer: role-scoped host dir RW at /var/log/tillandsias/external/
-    //   - Consumer: parent host dir RO at /var/log/tillandsias/external/
+    //   - Producer-only: role-scoped host dir RW at /var/log/tillandsias/external/
+    //   - Consumer-only: parent host dir RO at /var/log/tillandsias/external/
+    //   - Dual (forge cheatsheet-telemetry): parent RO at /var/log/tillandsias/
+    //     external/, then role-scoped RW overlaid at /var/log/tillandsias/
+    //     external/<role>/. Mount order matters: the parent RO mount lands
+    //     first so the sub-path RW mount overlays cleanly, exposing every
+    //     OTHER producer role RO while keeping the forge's own role RW.
     //
-    // The two are mutually exclusive by spec — any profile setting BOTH is
-    // a bug caught at review time (test `profile_cannot_be_both_producer_and_consumer`).
-    //
-    // @trace spec:external-logs-layer
+    // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
+    // @cheatsheet runtime/external-logs.md
     // -----------------------------------------------------------------------
-    if let Some(role) = profile.external_logs_role {
-        // Refuse the pathological case: a profile cannot be both producer and consumer.
-        // Log loudly but do not crash — the producer mount takes precedence.
-        if profile.external_logs_consumer {
-            tracing::error!(
-                role = role,
-                container = %ctx.container_name,
-                spec = "external-logs-layer",
-                accountability = true,
-                "Profile sets BOTH external_logs_role AND external_logs_consumer — this is a spec violation; producer mount takes precedence. Fix the profile."
-            );
-        }
-        let source = MountSource::ExternalLogsProducer { role };
-        if let Some(host_path) = resolve_mount_source(&source, ctx) {
-            args.push("-v".into());
-            // Producer: RW mount at the in-container external log path, SELinux relabeled.
-            args.push(format!(
-                "{}:/var/log/tillandsias/external:rw,Z",
-                host_path
-            ));
-        }
-    } else if profile.external_logs_consumer {
+    let is_dual_role = profile.external_logs_role.is_some() && profile.external_logs_consumer;
+
+    if profile.external_logs_consumer {
+        // Mount the parent RO first. For dual-role profiles this is the
+        // base layer that the producer RW mount overlays on top of.
         let source = MountSource::ExternalLogsConsumerRoot;
         if let Some(host_path) = resolve_mount_source(&source, ctx) {
             args.push("-v".into());
@@ -374,6 +360,30 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
                 "{}:/var/log/tillandsias/external:ro,Z",
                 host_path
             ));
+        }
+    }
+
+    if let Some(role) = profile.external_logs_role {
+        let source = MountSource::ExternalLogsProducer { role };
+        if let Some(host_path) = resolve_mount_source(&source, ctx) {
+            args.push("-v".into());
+            if is_dual_role {
+                // Dual-role: overlay the role-scoped RW mount on top of the
+                // parent RO mount (which already landed above). The forge
+                // sees its own role RW at the deeper path and every other
+                // role RO at sibling paths under /var/log/tillandsias/external/.
+                args.push(format!(
+                    "{}:/var/log/tillandsias/external/{}:rw,Z",
+                    host_path, role
+                ));
+            } else {
+                // Producer-only (service container): RW mount at the entire
+                // external-log path; the producer sees ONLY its own role.
+                args.push(format!(
+                    "{}:/var/log/tillandsias/external:rw,Z",
+                    host_path
+                ));
+            }
         }
     }
 

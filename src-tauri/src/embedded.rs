@@ -143,6 +143,13 @@ pub const FORGE_SSE_KEEPALIVE_PROXY: &str =
 pub const FORGE_WELCOME: &str = include_str!("../../images/default/forge-welcome.sh");
 pub const FORGE_CONTAINERFILE: &str = include_str!("../../images/default/Containerfile");
 pub const FORGE_OPENCODE_JSON: &str = include_str!("../../images/default/opencode.json");
+// @trace spec:cheatsheets-license-tiered, spec:external-logs-layer
+// Forge container's external-logs producer manifest — declares the
+// cheatsheet-telemetry role's lookups.jsonl as the only permitted file in
+// /var/log/tillandsias/external/cheatsheet-telemetry/. Baked at
+// /etc/tillandsias/external-logs.yaml; consumed by the tray-side auditor.
+pub const FORGE_EXTERNAL_LOGS_MANIFEST: &str =
+    include_str!("../../images/default/external-logs.yaml");
 
 // @trace spec:forge-environment-discoverability
 // Three discoverability CLIs the agent invokes on first turn to learn what
@@ -398,6 +405,12 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("Containerfile: {e}"))?;
     write_lf(&default_dir.join("opencode.json"), FORGE_OPENCODE_JSON)
         .map_err(|e| format!("opencode.json: {e}"))?;
+    // @trace spec:cheatsheets-license-tiered, spec:external-logs-layer
+    write_lf(
+        &default_dir.join("external-logs.yaml"),
+        FORGE_EXTERNAL_LOGS_MANIFEST,
+    )
+    .map_err(|e| format!("forge external-logs.yaml: {e}"))?;
 
     // @trace spec:forge-environment-discoverability
     let cli_dir = default_dir.join("cli");

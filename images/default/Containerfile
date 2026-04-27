@@ -282,6 +282,17 @@ RUN chmod +x /usr/local/share/tillandsias/forge-welcome.sh || true
 RUN mkdir -p /etc/tillandsias/locales
 COPY locales/ /etc/tillandsias/locales/
 
+# ── External-logs producer manifest ────────────────────────────
+# @trace spec:cheatsheets-license-tiered, spec:external-logs-layer
+# @cheatsheet runtime/external-logs.md
+# Forge containers are EXTERNAL-tier producers of cheatsheet-telemetry —
+# in-forge agents (claude / opencode / opsx) emit one JSONL event per
+# cheatsheet consultation to lookups.jsonl. The tray-side auditor reads
+# this manifest at /etc/tillandsias/external-logs.yaml every 60 s and
+# flags any unlisted file in the role dir as a LEAK event.
+RUN mkdir -p /etc/tillandsias
+COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
+
 # ── Discoverability CLI tools ─────────────────────────────
 # @trace spec:forge-environment-discoverability
 # Three image-baked bash commands the agent can run on first turn to learn
