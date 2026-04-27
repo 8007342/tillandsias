@@ -30,6 +30,29 @@ use std::time::{Duration, Instant};
 use notify::{EventKind, RecursiveMode, Watcher};
 use tracing::{debug, info, warn};
 
+/// Build a `Command` for the host `git` binary with AppImage shadowing
+/// stripped from the environment.
+///
+/// Without this wrapper, every git invocation from a tray running inside
+/// the AppImage inherits `LD_LIBRARY_PATH` pointing at
+/// `/tmp/.mount_<random>/usr/lib/`, where the AppImage's bundled
+/// `libpcre2-8.so.0` shadows the system one. The system git refuses to
+/// run because the bundled lib is incompatible:
+/// `git: /tmp/.mount_*/usr/lib/libpcre2-8.so.0: no version information
+/// available (required by git)`. Verified in user logs 2026-04-26.
+///
+/// Same fix as handlers.rs sites that shell out to `git` and `podman`.
+///
+/// @trace spec:git-mirror-service
+fn git_command() -> Command {
+    let mut cmd = Command::new("git");
+    cmd.env_remove("LD_LIBRARY_PATH")
+        .env_remove("LD_PRELOAD")
+        .env_remove("GIT_EXEC_PATH")
+        .env_remove("APPDIR");
+    cmd
+}
+
 /// Outcome of a single project's sync attempt.
 ///
 /// @trace spec:git-mirror-service
@@ -83,7 +106,7 @@ pub fn sync_project(project_name: &str, mirror_dir: &PathBuf, host_working_copy:
     }
 
     // Probe current branch. `symbolic-ref --short HEAD` fails on detached HEAD.
-    let branch_cmd = Command::new("git")
+    let branch_cmd = git_command()
         .arg("-C")
         .arg(host_working_copy)
         .args(["symbolic-ref", "--short", "HEAD"])
@@ -101,7 +124,7 @@ pub fn sync_project(project_name: &str, mirror_dir: &PathBuf, host_working_copy:
     };
 
     // Dirty-tree check — `status --porcelain` is empty iff clean.
-    match Command::new("git")
+    match git_command()
         .arg("-C")
         .arg(host_working_copy)
         .args(["status", "--porcelain"])
@@ -128,7 +151,7 @@ pub fn sync_project(project_name: &str, mirror_dir: &PathBuf, host_working_copy:
     }
 
     // Capture current HEAD SHA.
-    let before_sha = match Command::new("git")
+    let before_sha = match git_command()
         .arg("-C")
         .arg(host_working_copy)
         .args(["rev-parse", "HEAD"])
@@ -139,7 +162,7 @@ pub fn sync_project(project_name: &str, mirror_dir: &PathBuf, host_working_copy:
     };
 
     // Look up the mirror's tip for our branch: `git -C <mirror> rev-parse refs/heads/<branch>`.
-    let mirror_tip = match Command::new("git")
+    let mirror_tip = match git_command()
         .arg("-C")
         .arg(mirror_dir)
         .args(["rev-parse", &format!("refs/heads/{branch}")])
@@ -163,7 +186,7 @@ pub fn sync_project(project_name: &str, mirror_dir: &PathBuf, host_working_copy:
 
     // Fetch only the one branch we care about. `<mirror_dir>` as a path URL
     // works for fetch without needing to add a named remote.
-    let fetch_out = Command::new("git")
+    let fetch_out = git_command()
         .arg("-C")
         .arg(host_working_copy)
         .arg("fetch")
@@ -194,7 +217,7 @@ pub fn sync_project(project_name: &str, mirror_dir: &PathBuf, host_working_copy:
     }
 
     // merge --ff-only: succeeds only if host branch is strict ancestor.
-    let merge_out = Command::new("git")
+    let merge_out = git_command()
         .arg("-C")
         .arg(host_working_copy)
         .args(["merge", "--ff-only", "--quiet"])
@@ -414,7 +437,7 @@ mod tests {
     use std::process::Command;
 
     fn run_git(dir: &PathBuf, args: &[&str]) {
-        let out = Command::new("git")
+        let out = git_command()
             .arg("-C")
             .arg(dir)
             .args(args)
@@ -444,14 +467,14 @@ mod tests {
         run_git(&seed, &["commit", "-m", "init"]);
 
         // Mirror = bare clone.
-        Command::new("git")
+        git_command()
             .args(["clone", "--mirror"])
             .arg(&seed)
             .arg(&mirror)
             .output()
             .unwrap();
         // Host = normal clone from seed.
-        Command::new("git")
+        git_command()
             .args(["clone"])
             .arg(&seed)
             .arg(&host)
@@ -477,7 +500,7 @@ mod tests {
         let (_tmp, mirror, host) = make_fixture();
         // Advance the mirror by committing directly.
         let work = _tmp.path().join("work-for-mirror");
-        Command::new("git").args(["clone"]).arg(&mirror).arg(&work).output().unwrap();
+        git_command().args(["clone"]).arg(&mirror).arg(&work).output().unwrap();
         run_git(&work, &["config", "user.email", "t@e.com"]);
         run_git(&work, &["config", "user.name", "t"]);
         fs::write(work.join("new.txt"), "hi").unwrap();
@@ -508,7 +531,7 @@ mod tests {
         let (_tmp, mirror, host) = make_fixture();
         // Advance mirror with one commit.
         let work = _tmp.path().join("work");
-        Command::new("git").args(["clone"]).arg(&mirror).arg(&work).output().unwrap();
+        git_command().args(["clone"]).arg(&mirror).arg(&work).output().unwrap();
         run_git(&work, &["config", "user.email", "t@e.com"]);
         run_git(&work, &["config", "user.name", "t"]);
         fs::write(work.join("a.txt"), "a").unwrap();
@@ -539,5 +562,42 @@ mod tests {
         let host = tmp.path().join("host");
         fs::create_dir_all(&host).unwrap();
         assert_eq!(sync_project("x", &mirror, &host), SyncResult::MirrorAbsent);
+    }
+
+    /// Regression: `git_command()` MUST clear the AppImage's library
+    /// shadowing env vars. Without this, every git invocation from a
+    /// tray running inside the AppImage failed with
+    /// `git: /tmp/.mount_*/usr/lib/libpcre2-8.so.0: no version
+    /// information available`, and mirror→host sync silently never
+    /// happened. Verified in user logs 2026-04-26.
+    /// @trace spec:git-mirror-service
+    #[test]
+    fn git_command_strips_appimage_env_vars() {
+        unsafe {
+            std::env::set_var("LD_LIBRARY_PATH", "/tmp/.mount_fake/usr/lib");
+            std::env::set_var("LD_PRELOAD", "/tmp/.mount_fake/preload.so");
+            std::env::set_var("APPDIR", "/tmp/.mount_fake");
+        }
+        let cmd = git_command();
+        // Command::get_envs returns Some(None) for explicitly-removed
+        // vars and Some(Some(_)) for explicitly-set ones. We assert all
+        // three are explicitly removed.
+        let envs: std::collections::HashMap<_, _> = cmd
+            .get_envs()
+            .map(|(k, v)| (k.to_string_lossy().into_owned(), v))
+            .collect();
+        for var in ["LD_LIBRARY_PATH", "LD_PRELOAD", "APPDIR", "GIT_EXEC_PATH"] {
+            assert!(
+                matches!(envs.get(var), Some(None)),
+                "git_command() must explicitly remove {var}; envs={:?}",
+                envs.keys().collect::<Vec<_>>()
+            );
+        }
+        // Cleanup so other tests aren't affected.
+        unsafe {
+            std::env::remove_var("LD_LIBRARY_PATH");
+            std::env::remove_var("LD_PRELOAD");
+            std::env::remove_var("APPDIR");
+        }
     }
 }
