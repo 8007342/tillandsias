@@ -23,6 +23,7 @@ jobs:
         with:
           toolchain: stable
           components: clippy, rustfmt
+          targets: x86_64-unknown-linux-musl
 
       - name: Rust cache
         uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
@@ -35,6 +36,9 @@ jobs:
             libappindicator3-dev \
             librsvg2-dev \
             patchelf
+
+      - name: Build router sidecar (required by src-tauri/build.rs)
+        run: scripts/build-sidecar.sh
 
       - name: Check formatting
         run: cargo fmt --check --all

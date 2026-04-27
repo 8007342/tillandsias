@@ -18,9 +18,49 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # Build the static-musl router sidecar ONCE on Linux, then share with every
+  # platform via artifact. This binary is embedded into the tray via
+  # src-tauri/build.rs include_bytes!() and runs inside a Linux container at
+  # tray runtime, so it must be Linux x86_64 musl regardless of the host OS
+  # building the tray. Cross-compiling musl from macOS/Windows runners is
+  # possible but fragile; building once on Linux is the reliable path.
+  # @trace spec:opencode-web-session-otp
+  # ---------------------------------------------------------------------------
+  build-sidecar:
+    name: Build router sidecar (static musl)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install Rust stable with musl target
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
+        with:
+          toolchain: stable
+          targets: x86_64-unknown-linux-musl
+
+      - name: Rust cache (sidecar target dir)
+        uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
+        with:
+          workspaces: ". -> target-musl"
+          key: sidecar-musl
+
+      - name: Build sidecar
+        run: scripts/build-sidecar.sh
+
+      - name: Upload sidecar artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: router-sidecar-musl
+          path: images/router/tillandsias-router-sidecar
+          if-no-files-found: error
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
   # Build platform-specific Tauri bundles
   # ---------------------------------------------------------------------------
   build:
+    needs: build-sidecar
     strategy:
       fail-fast: false
       matrix:
@@ -88,6 +128,17 @@ jobs:
 
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2"
+
+      - name: Download router sidecar
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: router-sidecar-musl
+          path: images/router/
+
+      - name: Mark sidecar executable (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: chmod 0755 images/router/tillandsias-router-sidecar
 
       - name: Build Tauri (signed)
         run: cargo tauri build --target ${{ matrix.target }}
