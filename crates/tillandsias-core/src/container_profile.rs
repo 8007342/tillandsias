@@ -826,12 +826,18 @@ fn common_forge_mounts() -> Vec<ProfileMount> {
     ]
 }
 
-/// Tmpfs mounts shared by all four forge/maintenance profiles (chunk 2+).
+/// Tmpfs mounts shared by all four forge/maintenance profiles (chunks 2+).
 ///
-/// Hot path: /opt/cheatsheets on a kernel-capped tmpfs so every agent
-/// cheatsheet lookup is RAM-served. The image lower layer
-/// (/opt/cheatsheets-image/) is populated at entrypoint start by
-/// populate_hot_paths() in lib-common.sh.
+/// HOT path mounts (RAM-backed, kernel-capped):
+///   /opt/cheatsheets  — agent knowledge bank; copied from /opt/cheatsheets-image/
+///                       at entrypoint start by populate_hot_paths() in lib-common.sh.
+///   /home/forge/src   — per-launch project source (size from hot_path_budget_mb,
+///                       chunk 3); capped at 4GB, default 1GB.
+///
+/// COLD-but-bounded mounts (tmpfs to cap worst-case, not to RAM-serve):
+///   /tmp              — 256MB cap; prevents accidental `dd` OOM on host.
+///                       Default uncapped tmpfs = 50% host RAM (tmpfs(5)).
+///   /run/user/1000    — 64MB cap; XDG_RUNTIME_DIR, dbus socket, systemd user session.
 ///
 /// @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
 fn common_forge_tmpfs_mounts() -> Vec<TmpfsMount> {
@@ -839,6 +845,14 @@ fn common_forge_tmpfs_mounts() -> Vec<TmpfsMount> {
         // Chunk 2: agent cheatsheets on RAM — 8MB cap (~13× current size).
         // ENV TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets is unchanged.
         TmpfsMount { path: "/opt/cheatsheets", size_mb: 8, mode: 0o755 },
+        // Chunk 4: /tmp with explicit 256MB cap.
+        // Without a cap, the kernel default is 50% of host RAM (tmpfs(5) §size option).
+        // An agent doing `dd if=/dev/zero of=/tmp/x bs=1M` could fill half of host
+        // RAM before getting ENOSPC. The cap bounds the worst case.
+        TmpfsMount { path: "/tmp", size_mb: 256, mode: 0o1777 },
+        // Chunk 4: XDG_RUNTIME_DIR / D-Bus socket / systemd user session files.
+        // 64MB is well above what fish + D-Bus stubs need.
+        TmpfsMount { path: "/run/user/1000", size_mb: 64, mode: 0o0700 },
     ]
 }
 
@@ -1315,6 +1329,55 @@ mod tests {
             git.tmpfs_mounts.iter().any(|m| m.path == "/tmp"),
             "git_service profile must keep /tmp tmpfs mount"
         );
+    }
+
+    // @trace spec:forge-hot-cold-split
+    #[test]
+    fn forge_profile_caps_tmp_and_run_user() {
+        // Chunk 4: all four forge/maintenance profiles now carry three tmpfs entries:
+        //   [0] /opt/cheatsheets  — 8MB, mode 0755  (chunk 2)
+        //   [1] /tmp              — 256MB, mode 1777 (chunk 4)
+        //   [2] /run/user/1000   — 64MB,  mode 0700  (chunk 4)
+        for (name, profile) in [
+            ("forge_opencode", forge_opencode_profile()),
+            ("forge_claude", forge_claude_profile()),
+            ("forge_opencode_web", forge_opencode_web_profile()),
+            ("terminal", terminal_profile()),
+        ] {
+            assert_eq!(
+                profile.tmpfs_mounts.len(),
+                3,
+                "Profile {name} must have exactly 3 tmpfs entries after chunk 4"
+            );
+
+            let tmp = profile
+                .tmpfs_mounts
+                .iter()
+                .find(|m| m.path == "/tmp")
+                .unwrap_or_else(|| panic!("Profile {name} must have /tmp tmpfs mount"));
+            assert_eq!(
+                tmp.size_mb, 256,
+                "Profile {name}: /tmp tmpfs must be 256MB cap"
+            );
+            assert_eq!(
+                tmp.mode, 0o1777,
+                "Profile {name}: /tmp tmpfs must be mode 0o1777"
+            );
+
+            let run_user = profile
+                .tmpfs_mounts
+                .iter()
+                .find(|m| m.path == "/run/user/1000")
+                .unwrap_or_else(|| panic!("Profile {name} must have /run/user/1000 tmpfs mount"));
+            assert_eq!(
+                run_user.size_mb, 64,
+                "Profile {name}: /run/user/1000 tmpfs must be 64MB cap"
+            );
+            assert_eq!(
+                run_user.mode, 0o0700,
+                "Profile {name}: /run/user/1000 tmpfs must be mode 0o0700"
+            );
+        }
     }
 
     // @trace spec:forge-hot-cold-split, spec:agent-cheatsheets

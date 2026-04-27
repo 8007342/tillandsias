@@ -1798,19 +1798,24 @@ mod tests {
     // @trace spec:forge-hot-cold-split
     #[test]
     fn forge_src_tmpfs_included_in_memory_ceiling() {
-        // Memory ceiling must include the /home/forge/src budget.
-        // With test_context: budget=1024MB + cheatsheets=8MB + baseline=256 = 1288.
+        // Memory ceiling must include ALL tmpfs caps + the /home/forge/src budget.
+        // Chunk 4 added /tmp (256MB) and /run/user/1000 (64MB) to forge profiles.
+        // With test_context: budget=1024MB.
+        // Profile tmpfs: 8 (cheatsheets) + 256 (/tmp) + 64 (/run/user/1000) = 328.
+        // Per-launch src: 1024.
+        // Baseline: 256.
+        // Total: 328 + 1024 + 256 = 1608.
         let profile = container_profile::forge_opencode_profile();
-        let ctx = test_context(); // hot_path_budget_mb=1024, cheatsheets=8MB static
+        let ctx = test_context(); // hot_path_budget_mb=1024
         let args = build_podman_args(&profile, &ctx);
-        // 8 (cheatsheets) + 1024 (src) + 256 (baseline) = 1288
+        // 8 (cheatsheets) + 256 (/tmp) + 64 (/run/user/1000) + 1024 (src) + 256 (baseline) = 1608
         assert!(
-            args.iter().any(|a| *a == "--memory=1288m"),
-            "Expected --memory=1288m (8+1024+256); got: {args:?}"
+            args.iter().any(|a| *a == "--memory=1608m"),
+            "Expected --memory=1608m (8+256+64+1024+256); got: {args:?}"
         );
         assert!(
-            args.iter().any(|a| *a == "--memory-swap=1288m"),
-            "Expected --memory-swap=1288m; got: {args:?}"
+            args.iter().any(|a| *a == "--memory-swap=1608m"),
+            "Expected --memory-swap=1608m; got: {args:?}"
         );
     }
 }

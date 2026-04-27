@@ -1,8 +1,8 @@
 ---
-tags: [forge, cache, ephemeral, persistent, mounts, methodology, paths, host-chromium]
+tags: [forge, cache, ephemeral, persistent, mounts, methodology, paths, host-chromium, hot-path, tmpfs]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://github.com/8007342/tillandsias/blob/main/openspec/changes/forge-cache-architecture/proposal.md
   - https://github.com/8007342/tillandsias/blob/main/crates/tillandsias-core/src/container_profile.rs
@@ -26,16 +26,34 @@ This is project-internal architecture; the authority is the Tillandsias spec + s
 
 ## Use when
 
-You're an agent (or human) writing files inside the forge container and need to know **what survives**, **what's gone on next attach**, and **what would leak across projects**. Read this BEFORE doing any I/O the first time you attach.
+You're an agent (or human) writing files inside the forge container and need to know **what survives**, **what's gone on next attach**, **what would leak across projects**, and **what is RAM-backed vs disk-backed**. Read this BEFORE doing any I/O the first time you attach.
+
+## Hot vs Cold
+
+@trace spec:forge-hot-cold-split
+
+**HOT = RAM-backed tmpfs.** EXTREMELY EXPENSIVE resource, EXTREMELY FINELY CURATED. Default decision is COLD. A path is HOT only if agents read it repeatedly per prompt — every read is a RAM hit, zero disk I/O.
+
+| HOT mount | Size cap | Why HOT |
+|---|---|---|
+| `/opt/cheatsheets/` | 8 MB | Agent reads every cheatsheet multiple times per prompt |
+| `/home/forge/src/<project>/` | ~1 GB (dynamic) | Agent reads source on every context window build |
+| `/tmp/` | 256 MB | Bounded scratch — cap prevents OOM, not a performance hotpath |
+| `/run/user/1000/` | 64 MB | XDG runtime / D-Bus sockets |
+
+**COLD = disk-backed (overlayfs or host bind-mount).** Everything else. Build artefacts, package caches, shared nix store, logs, container overlayfs upper-dir. "Write once, read once" files are always COLD.
+
+Rule: "maybe a hot path" = HARD NO. If you're unsure, it's COLD.
 
 ## The four categories — at a glance
 
-| Category | Forge path | Survives container stop? | Visible to OTHER projects? | Read/Write |
-|---|---|---|---|---|
-| **Shared cache** | `/nix/store/` | Yes (host-managed) | Yes (all projects share) | **R only** |
-| **Per-project cache** | `/home/forge/.cache/tillandsias-project/` | Yes (per-project) | **No** — isolated | RW |
-| **Project workspace** | `/home/forge/src/<project>/` | Yes (your git repo) | **No** — isolated | RW |
-| **Ephemeral** | `/tmp/`, unmounted home dirs, anything not in the above three | **NO** — gone on stop | n/a | RW |
+| Category | Forge path | Survives container stop? | Visible to OTHER projects? | Read/Write | Backing store |
+|---|---|---|---|---|---|
+| **Shared cache** | `/nix/store/` | Yes (host-managed) | Yes (all projects share) | **R only** | Disk |
+| **Per-project cache** | `/home/forge/.cache/tillandsias-project/` | Yes (per-project) | **No** — isolated | RW | Disk |
+| **Project workspace** | `/home/forge/src/<project>/` | Yes (your git repo) | **No** — isolated | RW | **RAM** (tmpfs) |
+| **Ephemeral** | `/tmp/`, `/run/user/1000/`, unmounted home dirs | **NO** — gone on stop | n/a | RW | **RAM** (tmpfs, capped) |
+| **Knowledge bank** | `/opt/cheatsheets/` | **NO** — repopulated at start | n/a | RW (inside container) | **RAM** (tmpfs, 8MB cap) |
 
 ## Where to write what
 

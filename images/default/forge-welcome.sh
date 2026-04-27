@@ -147,6 +147,21 @@ printf "  ${B_WHITE}%s${RST}\n" "$L_WELCOME_MOUNTS"
 printf "    ${B_GREEN}%-38s${RST} ${A} ${DIM}%-26s${RST} ${B_GREEN}rw${RST}\n" \
     "/home/forge/.cache/tillandsias"      "~/.cache/tillandsias"
 echo ""
+# @trace spec:forge-hot-cold-split — RAM mounts summary: surfaces hot-path
+# tmpfs caps so agents and humans immediately see what is RAM-backed and what
+# the worst-case footprint per mount is. Lost on container stop.
+printf "  ${B_WHITE}RAM mounts${RST}  ${DIM}(HOT path — RAM-backed tmpfs; lost on container stop)${RST}\n"
+printf "    ${B_MAGENTA}%-38s${RST} ${DIM}%s${RST}\n" "/opt/cheatsheets"    "8 MB   ← knowledge bank (agent reads)"
+if [ -n "${TILLANDSIAS_HOT_PATH_MB:-}" ]; then
+    printf "    ${B_MAGENTA}%-38s${RST} ${DIM}%s${RST}\n" \
+        "/home/forge/src/${PROJECT}" "${TILLANDSIAS_HOT_PATH_MB} MB  ← project source"
+else
+    printf "    ${B_MAGENTA}%-38s${RST} ${DIM}%s${RST}\n" \
+        "/home/forge/src/${PROJECT}" "~1024 MB  ← project source"
+fi
+printf "    ${B_MAGENTA}%-38s${RST} ${DIM}%s${RST}\n" "/tmp"                "256 MB ← scratch (capped, lost on stop)"
+printf "    ${B_MAGENTA}%-38s${RST} ${DIM}%s${RST}\n" "/run/user/1000"      " 64 MB ← XDG runtime / D-Bus"
+echo ""
 printf "  ${B_YELLOW}→${RST} Project at ${B_WHITE}/home/forge/src/%s${RST}\n" "$PROJECT"
 echo ""
 # @trace spec:forge-environment-discoverability — at-a-glance summary of the
