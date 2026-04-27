@@ -65,14 +65,41 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     // -----------------------------------------------------------------------
     // Read-only root filesystem — service containers (git, proxy, inference,
     // web) run with immutable root FS. Runtime dirs get explicit tmpfs mounts.
-    // Forge/terminal containers need mutable workspace and skip this.
+    // Forge/terminal containers need mutable workspace and skip this flag.
     // @trace spec:podman-orchestration
     // -----------------------------------------------------------------------
     if profile.read_only {
         args.push("--read-only".into());
-        for tmpfs_path in &profile.tmpfs_mounts {
-            args.push(format!("--tmpfs={tmpfs_path}"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Tmpfs mounts — emitted unconditionally (regardless of read_only).
+    //
+    // Each mount carries a kernel-enforced size cap: `--tmpfs=<path>:size=<N>m,mode=<oct>`.
+    // This prevents any tmpfs from expanding to the default 50% of host RAM.
+    //
+    // When any tmpfs is present we also add:
+    //   --memory=<total>m --memory-swap=<total>m
+    // where total = sum of all tmpfs caps + 256 MB working-set baseline.
+    // Setting memory-swap equal to memory disables swap for the container,
+    // preserving the RAM-only guarantee (no swap escape).
+    //
+    // @trace spec:podman-orchestration, spec:forge-hot-cold-split
+    // -----------------------------------------------------------------------
+    if !profile.tmpfs_mounts.is_empty() {
+        for mount in &profile.tmpfs_mounts {
+            args.push(format!(
+                "--tmpfs={}:size={}m,mode={:o}",
+                mount.path, mount.size_mb, mount.mode
+            ));
         }
+        // Memory ceiling: sum of all tmpfs caps + 256 MB baseline for the container's
+        // working set (stack, heap, mapped libraries). --memory-swap equal to --memory
+        // disables swap — no spilling the RAM-only guarantee to disk.
+        let tmpfs_total_mb: u32 = profile.tmpfs_mounts.iter().map(|m| m.size_mb).sum();
+        let memory_mb = tmpfs_total_mb + 256;
+        args.push(format!("--memory={memory_mb}m"));
+        args.push(format!("--memory-swap={memory_mb}m"));
     }
 
     // -----------------------------------------------------------------------
@@ -1016,7 +1043,7 @@ mod tests {
         }
     }
 
-    // @trace spec:podman-orchestration
+    // @trace spec:podman-orchestration, spec:forge-hot-cold-split
     #[test]
     fn service_containers_have_read_only_fs() {
         // Proxy and inference are NOT read-only — they need writable runtime dirs.
@@ -1037,10 +1064,92 @@ mod tests {
                 "Service container {} should have --read-only",
                 profile.entrypoint
             );
-            // All read-only containers must have at least /tmp as tmpfs
+            // All read-only containers must have at least /tmp as tmpfs,
+            // now emitted with size cap: --tmpfs=/tmp:size=64m,mode=1777
             assert!(
-                args.contains(&"--tmpfs=/tmp".to_string()),
-                "Read-only container {} should have --tmpfs=/tmp",
+                args.iter().any(|a| a.starts_with("--tmpfs=/tmp:")),
+                "Read-only container {} should have a sized --tmpfs=/tmp:... arg",
+                profile.entrypoint
+            );
+        }
+    }
+
+    // @trace spec:podman-orchestration, spec:forge-hot-cold-split
+    #[test]
+    fn tmpfs_emits_sized_flag_with_mode() {
+        // The web profile has two tmpfs mounts (/tmp and /var/run) with size and mode.
+        // Check that build_podman_args emits them with the expected format.
+        let profile = container_profile::web_profile();
+        let ctx = test_context();
+        let args = build_podman_args(&profile, &ctx);
+
+        // /tmp: size=64m, mode=1777
+        assert!(
+            args.iter().any(|a| *a == "--tmpfs=/tmp:size=64m,mode=1777"),
+            "Expected --tmpfs=/tmp:size=64m,mode=1777; got: {args:?}"
+        );
+        // /var/run: size=64m, mode=755
+        assert!(
+            args.iter().any(|a| *a == "--tmpfs=/var/run:size=64m,mode=755"),
+            "Expected --tmpfs=/var/run:size=64m,mode=755; got: {args:?}"
+        );
+    }
+
+    // @trace spec:podman-orchestration, spec:forge-hot-cold-split
+    #[test]
+    fn tmpfs_pairs_with_memory_ceiling() {
+        // web profile: two 64 MB mounts → total = 128 MB + 256 MB baseline = 384 MB.
+        let profile = container_profile::web_profile();
+        let ctx = test_context();
+        let args = build_podman_args(&profile, &ctx);
+
+        assert!(
+            args.iter().any(|a| *a == "--memory=384m"),
+            "Expected --memory=384m (128MB tmpfs + 256MB baseline); got: {args:?}"
+        );
+        assert!(
+            args.iter().any(|a| *a == "--memory-swap=384m"),
+            "Expected --memory-swap=384m (disables swap); got: {args:?}"
+        );
+
+        // git_service: one 64 MB mount → 64 + 256 = 320 MB.
+        let profile = container_profile::git_service_profile();
+        let args = build_podman_args(&profile, &ctx);
+        assert!(
+            args.iter().any(|a| *a == "--memory=320m"),
+            "Expected --memory=320m for git_service (64MB + 256MB); got: {args:?}"
+        );
+        assert!(
+            args.iter().any(|a| *a == "--memory-swap=320m"),
+            "Expected --memory-swap=320m for git_service; got: {args:?}"
+        );
+    }
+
+    // @trace spec:podman-orchestration, spec:forge-hot-cold-split
+    #[test]
+    fn forge_profiles_no_tmpfs_yet_no_memory_ceiling() {
+        // Chunk 1: forge profiles have no tmpfs mounts, so no --memory flag either.
+        for profile in [
+            container_profile::forge_opencode_profile(),
+            container_profile::forge_claude_profile(),
+            container_profile::forge_opencode_web_profile(),
+            container_profile::terminal_profile(),
+        ] {
+            let ctx = test_context();
+            let args = build_podman_args(&profile, &ctx);
+            assert!(
+                !args.iter().any(|a| a.starts_with("--memory=")),
+                "Forge profile {} must have no --memory ceiling in chunk 1; got: {args:?}",
+                profile.entrypoint
+            );
+            assert!(
+                !args.iter().any(|a| a.starts_with("--memory-swap=")),
+                "Forge profile {} must have no --memory-swap in chunk 1; got: {args:?}",
+                profile.entrypoint
+            );
+            assert!(
+                !args.iter().any(|a| a.starts_with("--tmpfs=")),
+                "Forge profile {} must have no --tmpfs in chunk 1; got: {args:?}",
                 profile.entrypoint
             );
         }

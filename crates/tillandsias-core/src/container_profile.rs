@@ -47,10 +47,17 @@ pub struct ContainerProfile {
     /// @trace spec:podman-orchestration
     pub read_only: bool,
 
-    /// Tmpfs mounts for runtime directories when `read_only` is true.
-    /// Each entry is a container path (e.g., "/tmp", "/var/run/squid").
-    /// @trace spec:podman-orchestration
-    pub tmpfs_mounts: Vec<&'static str>,
+    /// Tmpfs mounts for runtime directories.
+    ///
+    /// Emitted unconditionally (regardless of `read_only`). Each mount carries
+    /// a kernel-enforced size cap (`size_mb`) and an octal permission mode.
+    /// When any entry is present, `build_podman_args` also emits
+    /// `--memory=<total>m --memory-swap=<total>m` where `total` = sum of all
+    /// caps + 256 MB baseline, preventing swap escape from the RAM-only
+    /// guarantee.
+    ///
+    /// @trace spec:podman-orchestration, spec:forge-hot-cold-split
+    pub tmpfs_mounts: Vec<TmpfsMount>,
 
     /// Bind-mount the host control socket into the container at the
     /// canonical path `/run/host/tillandsias/control.sock` and set the
@@ -115,6 +122,24 @@ pub enum MountSource {
     /// @trace spec:forge-cache-architecture, spec:forge-cache-dual
     /// @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
     ProjectCache,
+}
+
+/// A tmpfs mount with a kernel-enforced size cap and permission mode.
+///
+/// Podman emits this as `--tmpfs=<path>:size=<N>m,mode=<oct>`. The kernel
+/// enforces the cap: writes beyond `size_mb` megabytes get `ENOSPC` rather
+/// than spilling to the host's swap, preserving the RAM-only guarantee.
+///
+/// @trace spec:podman-orchestration, spec:forge-hot-cold-split
+#[derive(Debug, Clone)]
+pub struct TmpfsMount {
+    /// Absolute path inside the container (e.g., "/tmp").
+    pub path: &'static str,
+    /// Maximum size in mebibytes, enforced by the kernel via the `size=` option.
+    /// Must be > 0.
+    pub size_mb: u32,
+    /// Octal permission mode (e.g., `0o1777` for `/tmp`, `0o755` for read dirs).
+    pub mode: u32,
 }
 
 /// Mount permission mode.
@@ -289,6 +314,9 @@ pub fn forge_opencode_profile() -> ContainerProfile {
         image_override: None,
         pids_limit: 512,      // Compilers, language servers, AI tools
         read_only: false,      // Forge needs mutable workspace
+        // @trace spec:forge-hot-cold-split
+        // Chunk 1: forge profiles start with no tmpfs mounts. Hot paths
+        // (/opt/cheatsheets, /home/forge/src) are added in chunks 2 and 3.
         tmpfs_mounts: vec![],
         // @trace spec:tray-host-control-socket, spec:secrets-management
         // Forge containers default-deny the control socket — see the
@@ -310,6 +338,8 @@ pub fn forge_claude_profile() -> ContainerProfile {
         image_override: None,
         pids_limit: 512,      // Compilers, language servers, AI tools
         read_only: false,      // Forge needs mutable workspace
+        // @trace spec:forge-hot-cold-split
+        // Chunk 1: no tmpfs mounts yet; chunks 2–3 add hot paths.
         tmpfs_mounts: vec![],
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
@@ -331,6 +361,8 @@ pub fn forge_opencode_web_profile() -> ContainerProfile {
         image_override: None,
         pids_limit: 512,
         read_only: false,
+        // @trace spec:forge-hot-cold-split
+        // Chunk 1: no tmpfs mounts yet; chunks 2–3 add hot paths.
         tmpfs_mounts: vec![],
         // @trace spec:tray-host-control-socket, spec:secrets-management
         // OpenCode Web forge does not need the control socket — the router
@@ -349,6 +381,8 @@ pub fn terminal_profile() -> ContainerProfile {
         mounts: common_forge_mounts(),
         pids_limit: 512,      // Same as forge (maintenance shell)
         read_only: false,      // Terminal needs mutable workspace
+        // @trace spec:forge-hot-cold-split
+        // Chunk 1: no tmpfs mounts yet; chunks 2–3 add hot paths.
         tmpfs_mounts: vec![],
         env_vars: vec![
             ProfileEnvVar {
@@ -458,7 +492,13 @@ pub fn web_profile() -> ContainerProfile {
         image_override: Some("tillandsias-web:latest"),
         pids_limit: 32,        // Only httpd
         read_only: true,       // Static file server — no writes needed
-        tmpfs_mounts: vec!["/tmp", "/var/run"],
+        // @trace spec:podman-orchestration, spec:forge-hot-cold-split
+        // /tmp: httpd temp files; /var/run: PID and socket files.
+        // 64 MB each is well above what a static file server needs.
+        tmpfs_mounts: vec![
+            TmpfsMount { path: "/tmp", size_mb: 64, mode: 0o1777 },
+            TmpfsMount { path: "/var/run", size_mb: 64, mode: 0o755 },
+        ],
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
     }
@@ -505,6 +545,8 @@ pub fn router_profile() -> ContainerProfile {
         // Caddyfile and /tmp/caddy-storage. Writable root is fine in
         // a single-purpose container with no shell access.
         read_only: false,
+        // Router does not need hot-path tmpfs — no cheatsheets or source code.
+        // @trace spec:forge-hot-cold-split
         tmpfs_mounts: vec![],
         // @trace spec:tray-host-control-socket
         // The router consumes the control socket: it receives
@@ -554,6 +596,8 @@ pub fn proxy_profile() -> ContainerProfile {
         // runs as UID 1000 (proxy) via --userns=keep-id → permission denied.
         // Security comes from cap-drop, pids-limit, and enclave isolation.
         read_only: false,
+        // Proxy is a service container — no hot-path tmpfs needed.
+        // @trace spec:forge-hot-cold-split
         tmpfs_mounts: vec![],
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
@@ -623,6 +667,8 @@ pub fn inference_profile() -> ContainerProfile {
         // model downloads, and temporary files. Same --userns=keep-id
         // tmpfs ownership issue as squid (UID 1000 can't write root-owned tmpfs).
         read_only: false,
+        // Inference is a service container — no hot-path tmpfs needed.
+        // @trace spec:forge-hot-cold-split
         tmpfs_mounts: vec![],
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
@@ -701,7 +747,12 @@ pub fn git_service_profile() -> ContainerProfile {
         image_override: None,
         pids_limit: 64,        // Only git-daemon + git processes
         read_only: true,       // Service container — immutable root FS
-        tmpfs_mounts: vec!["/tmp"],
+        // @trace spec:podman-orchestration, spec:forge-hot-cold-split
+        // /tmp: git operations write pack files and temp refs here.
+        // 64 MB is generous for a bare mirror service.
+        tmpfs_mounts: vec![
+            TmpfsMount { path: "/tmp", size_mb: 64, mode: 0o1777 },
+        ],
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
     }
@@ -1168,7 +1219,7 @@ mod tests {
         assert!(!terminal_profile().read_only, "Terminal must NOT be read-only");
     }
 
-    // @trace spec:podman-orchestration
+    // @trace spec:podman-orchestration, spec:forge-hot-cold-split
     #[test]
     fn read_only_containers_have_tmpfs_mounts() {
         // Only git_service and web are read-only.
@@ -1184,8 +1235,75 @@ mod tests {
                 "Profile {name} should be read-only"
             );
             assert!(
-                profile.tmpfs_mounts.contains(&"/tmp"),
+                profile.tmpfs_mounts.iter().any(|m| m.path == "/tmp"),
                 "Read-only profile {name} must have /tmp as tmpfs"
+            );
+        }
+    }
+
+    // @trace spec:forge-hot-cold-split
+    #[test]
+    fn every_profile_with_tmpfs_emits_size_cap() {
+        let profiles: &[(&str, ContainerProfile)] = &[
+            ("forge_opencode", forge_opencode_profile()),
+            ("forge_claude", forge_claude_profile()),
+            ("forge_opencode_web", forge_opencode_web_profile()),
+            ("terminal", terminal_profile()),
+            ("web", web_profile()),
+            ("proxy", proxy_profile()),
+            ("inference", inference_profile()),
+            ("git_service", git_service_profile()),
+        ];
+
+        for (name, profile) in profiles {
+            for mount in &profile.tmpfs_mounts {
+                assert!(
+                    mount.size_mb > 0,
+                    "Profile {name}: tmpfs mount '{}' must have size_mb > 0",
+                    mount.path
+                );
+            }
+        }
+    }
+
+    // @trace spec:forge-hot-cold-split
+    #[test]
+    fn web_and_git_service_keep_their_existing_tmpfs_paths() {
+        // Backward-compatibility: the two service profiles that had
+        // tmpfs_mounts as bare strings now carry typed TmpfsMount entries
+        // for the same paths.
+        let web = web_profile();
+        assert!(
+            web.tmpfs_mounts.iter().any(|m| m.path == "/tmp"),
+            "web profile must keep /tmp tmpfs mount"
+        );
+        assert!(
+            web.tmpfs_mounts.iter().any(|m| m.path == "/var/run"),
+            "web profile must keep /var/run tmpfs mount"
+        );
+
+        let git = git_service_profile();
+        assert!(
+            git.tmpfs_mounts.iter().any(|m| m.path == "/tmp"),
+            "git_service profile must keep /tmp tmpfs mount"
+        );
+    }
+
+    // @trace spec:forge-hot-cold-split
+    #[test]
+    fn forge_profiles_no_tmpfs_yet() {
+        // Chunk 1: forge and terminal profiles do not add tmpfs mounts.
+        // Hot paths (/opt/cheatsheets, /home/forge/src) are added in
+        // chunks 2 and 3.
+        for (name, profile) in [
+            ("forge_opencode", forge_opencode_profile()),
+            ("forge_claude", forge_claude_profile()),
+            ("forge_opencode_web", forge_opencode_web_profile()),
+            ("terminal", terminal_profile()),
+        ] {
+            assert!(
+                profile.tmpfs_mounts.is_empty(),
+                "Profile {name} should have no tmpfs mounts in chunk 1"
             );
         }
     }
