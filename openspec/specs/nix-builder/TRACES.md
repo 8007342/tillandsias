@@ -5,7 +5,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [scripts/build-image.sh#L17](../../../scripts/build-image.sh#L17)
-- [scripts/build-image.sh#L168](../../../scripts/build-image.sh#L168)
-- [scripts/build-image.sh#L190](../../../scripts/build-image.sh#L190)
-- [scripts/build-image.sh#L316](../../../scripts/build-image.sh#L316)
+- [scripts/build-image.sh#L32](../../../scripts/build-image.sh#L32)
+- [scripts/build-image.sh#L206](../../../scripts/build-image.sh#L206)
+- [scripts/build-image.sh#L228](../../../scripts/build-image.sh#L228)
+- [scripts/build-image.sh#L657](../../../scripts/build-image.sh#L657)

@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias"
-version = "0.1.176"
+version = "0.1.177"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
