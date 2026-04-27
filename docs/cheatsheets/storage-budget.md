@@ -1,6 +1,24 @@
+---
+tags: [storage, podman, images, budget, disk-usage, prune]
+languages: []
+since: 2026-04-26
+last_verified: 2026-04-27
+sources:
+  - https://docs.podman.io/en/stable/markdown/podman-system-df.1.html
+  - https://docs.podman.io/en/stable/markdown/podman-system-prune.1.html
+authority: high
+status: current
+---
+
 # Storage Budget
 
 @trace spec:default-image, spec:inference-container, spec:proxy-container, spec:enclave-network
+
+## Provenance
+
+- https://docs.podman.io/en/stable/markdown/podman-system-df.1.html — official podman docs; covers `podman system df` output columns (TYPE, TOTAL, ACTIVE, SIZE, RECLAIMABLE), `--verbose` / `--format` flags, and the caveat that RECLAIMABLE can be overstated when images share layers. Fetched 2026-04-27.
+- https://docs.podman.io/en/stable/markdown/podman-system-prune.1.html — official podman docs; covers `podman system prune` flags (`--all`, `--volumes`, `--external`, `--filter`, `--force`) and what each removes (stopped containers, unused networks, dangling images/build cache). Fetched 2026-04-27.
+- **Last updated:** 2026-04-27
 
 Target storage footprint for the full Tillandsias enclave stack. Goal: fit comfortably on 100GB drives.
 
@@ -38,6 +56,13 @@ Default is 20GB. The enclave stack totals <2.5GB, so 10GB provides ample headroo
 ## Verification
 
 ```bash
+# Disk usage summary — TYPE/TOTAL/ACTIVE/SIZE/RECLAIMABLE columns
+# Note: RECLAIMABLE may be overstated when images share layers (podman docs caveat)
+podman system df
+
+# Verbose breakdown per image/container/volume
+podman system df --verbose
+
 # Check image sizes
 podman images --format "table {{.Repository}} {{.Tag}} {{.Size}}" | grep tillandsias
 
@@ -49,4 +74,13 @@ du -sh ~/.local/share/tillandsias/models/
 
 # Check podman machine disk (macOS/Windows)
 podman machine inspect --format '{{.Resources.DiskSize}}'
+
+# Reclaim space — remove stopped containers, unused networks, dangling images
+podman system prune
+
+# Reclaim space including unused volumes
+podman system prune --volumes
+
+# Reclaim space from orphaned layers left by unclean shutdowns
+podman system prune --external
 ```

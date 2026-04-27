@@ -1,6 +1,24 @@
+---
+tags: [fedora, fedora-minimal, containers, microdnf, rpm, packages]
+languages: []
+since: 2026-04-26
+last_verified: 2026-04-27
+sources:
+  - https://github.com/rpm-software-management/microdnf
+authority: high
+status: current
+---
+
 # Fedora Minimal Container Cheatsheet
 
 @trace spec:default-image, spec:inference-container
+
+## Provenance
+
+- https://github.com/rpm-software-management/microdnf — upstream source repository for microdnf; confirms it is "a minimal dnf for (mostly) Docker containers that uses libdnf and hence doesn't require Python," written in C, GPL-2.0. Fetched 2026-04-27.
+- **Last updated:** 2026-04-27
+
+**Note on Fedora release notes URL:** `https://docs.fedoraproject.org/en-US/fedora/latest/release-notes/` returned an Anubis bot-protection page (no content accessible). The microdnf GitHub repo above is the authoritative source for package manager behavior.
 
 Quick reference for Fedora Minimal (fedora-minimal:43) behavior in Tillandsias containers. Minimal images use microdnf, have ~120 packages (vs ~400 standard), and lack many tools you might assume exist.
 

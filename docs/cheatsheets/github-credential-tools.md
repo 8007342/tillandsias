@@ -1,8 +1,28 @@
+---
+tags: [github, credentials, keyring, secret-service, gh-cli, git-credential-manager, macos-keychain]
+languages: []
+since: 2026-04-26
+last_verified: 2026-04-27
+sources:
+  - https://cli.github.com/manual/
+  - https://cli.github.com/manual/gh_auth_login
+  - https://cli.github.com/manual/gh_auth_token
+authority: high
+status: current
+---
+
 # GitHub Credential Tools
 
 How popular GitHub tools store credentials and how Tillandsias can consume them.
 
 @trace spec:native-secrets-store, spec:secrets-management
+
+## Provenance
+
+- https://cli.github.com/manual/ — official GitHub CLI manual index; lists all `gh auth` subcommands (login, logout, refresh, setup-git, status, switch, token). Fetched 2026-04-27.
+- https://cli.github.com/manual/gh_auth_login — official docs for `gh auth login`; confirms "an authentication token will be stored securely in the system credential store" with plaintext fallback when no credential store is found; documents `--insecure-storage` flag. Fetched 2026-04-27.
+- https://cli.github.com/manual/gh_auth_token — official docs for `gh auth token`; confirms `-h`/`--hostname` and `-u`/`--user` flags; outputs the active token to stdout. Fetched 2026-04-27.
+- **Last updated:** 2026-04-27
 
 ## Tool Credential Storage
 
@@ -18,10 +38,11 @@ How popular GitHub tools store credentials and how Tillandsias can consume them.
 
 **Token format in keyring:** base64-encoded with prefix `go-keyring-base64:`
 
-**Read token programmatically:**
+**Read token programmatically** (flags confirmed from fetched manual):
 ```bash
 gh auth token                              # Print active token to stdout
-gh auth token --user 8007342               # Print specific account's token
+gh auth token --hostname github.com        # Specify host (-h / --hostname)
+gh auth token --user 8007342               # Print specific account's token (-u / --user)
 gh auth status                             # Shows "(keyring)" if secure storage active
 ```
 

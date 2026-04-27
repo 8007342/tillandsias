@@ -1,6 +1,24 @@
+---
+tags: [alpine, containers, apk, busybox, musl, shell, packages]
+languages: []
+since: 2026-04-26
+last_verified: 2026-04-27
+sources:
+  - https://wiki.alpinelinux.org/wiki/Alpine_Linux_package_management
+  - https://pkgs.alpinelinux.org/packages
+authority: high
+status: current
+---
+
 # Alpine Container Cheatsheet
 
 @trace spec:proxy-container, spec:git-mirror-service
+
+## Provenance
+
+- https://wiki.alpinelinux.org/wiki/Alpine_Linux_package_management — official Alpine wiki; authoritative reference for apk commands, flags, cache behavior, and WORLD file semantics. Fetched 2026-04-27.
+- https://pkgs.alpinelinux.org/packages — official Alpine package search index; confirms available branches (edge, v3.23, v3.22, v3.21, v3.20 …) and repos (main, community, testing). Fetched 2026-04-27.
+- **Last updated:** 2026-04-27
 
 Quick reference for Alpine-specific behavior in Tillandsias containers. Alpine uses busybox, musl libc, and apk -- most assumptions from Fedora/Debian break here.
 
@@ -92,6 +110,11 @@ useradd -u 1000 -m -s /bin/bash forge
 ```
 
 ### 4. Package caching
+
+`apk add --no-cache` skips writing to `/var/cache/apk/`, keeping image layers lean.
+`apk cache clean` removes older cached package versions; `apk cache sync` downloads
+missing packages and removes stale ones in a single pass (source: Alpine wiki).
+
 ```sh
 # Alpine: --no-cache prevents /var/cache/apk/ bloat
 apk add --no-cache squid openssl

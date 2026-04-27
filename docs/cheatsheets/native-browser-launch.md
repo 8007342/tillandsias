@@ -1,6 +1,26 @@
+---
+tags: [browser, xdg-open, xdg-utils, open-crate, native-browser, chromium, firefox, safari]
+languages: [rust]
+since: 2026-04-26
+last_verified: 2026-04-27
+sources:
+  - https://docs.rs/open/latest/open/
+  - https://wiki.freedesktop.org/www/Software/xdg-utils/
+authority: high
+status: current
+---
+
 # Native Browser Launch — Cheatsheet
 
 @trace spec:opencode-web-session
+
+## Provenance
+
+- https://docs.rs/open/latest/open/ — official docs.rs documentation for the `open` crate; confirms `that()`, `with()`, `commands()`, `that_detached()`, `that_in_background()` API surface; documents that on UNIX the crate tries `xdg-open` first then other openers, and on WSL tries `wslview` first. Fetched 2026-04-27.
+- https://wiki.freedesktop.org/www/Software/xdg-utils/ — freedesktop.org project page for xdg-utils; confirms `xdg-open` opens "a URL in the user's preferred application that handles the respective URL or file type," and lists the full xdg-utils tool set (xdg-open, xdg-mime, xdg-settings, etc.). Fetched 2026-04-27.
+- **Last updated:** 2026-04-27
+
+**Note on open crate platform commands:** the `open` crate docs confirm `xdg-open` on Linux/UNIX. The macOS and Windows underlying commands (`open` and `start` respectively) are implementation details not surfaced in the public docs but are conventional knowledge and reflected accurately in the cheatsheet below.
 
 Tillandsias launches the user's native browser (not an embedded webview) for every OpenCode Web session. This cheatsheet covers detection order, per-browser flags, debugging tips, and the URL/proxy contract the browser sees.
 
