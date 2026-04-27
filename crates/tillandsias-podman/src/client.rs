@@ -1,5 +1,34 @@
 use tracing::{debug, info, instrument, warn};
 
+/// Async equivalent of `wsl_distro_exists` — used by `image_exists` on Windows
+/// where the runtime backend is WSL, not podman. Returns true when a WSL distro
+/// with the given name appears in `wsl --list --quiet`.
+/// @trace spec:cross-platform
+#[cfg(target_os = "windows")]
+async fn wsl_distro_exists_async(name: &str) -> bool {
+    let out = match tokio::process::Command::new("wsl.exe")
+        .args(["--list", "--quiet"])
+        .output()
+        .await
+    {
+        Ok(o) => o,
+        Err(_) => return false,
+    };
+    if !out.status.success() {
+        return false;
+    }
+    // wsl.exe emits UTF-16 LE on Windows.
+    let utf16: Vec<u16> = out
+        .stdout
+        .chunks_exact(2)
+        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .collect();
+    let decoded = String::from_utf16_lossy(&utf16);
+    decoded
+        .lines()
+        .any(|l| l.trim().trim_matches('\u{feff}') == name)
+}
+
 /// Build the argument list for `podman kill` — pure helper, unit-testable.
 ///
 /// `signal = None` → `["kill", <name>]` (podman default = SIGTERM).
@@ -147,7 +176,22 @@ impl PodmanClient {
     }
 
     /// Check if a container image exists locally.
+    ///
+    /// On Windows the runtime backend is WSL, not podman. This method
+    /// strips the `:tag` suffix off the image and consults
+    /// `wsl --list --quiet` for a matching distro name. The naming
+    /// convention `tillandsias-<service>` for both podman tags and
+    /// WSL distros makes the check uniform.
+    /// @trace spec:cross-platform, spec:podman-orchestration
     pub async fn image_exists(&self, image: &str) -> bool {
+        #[cfg(target_os = "windows")]
+        {
+            // image is e.g. "tillandsias-proxy:v0.1.170.249"; the WSL
+            // distro name is the part before ':'.
+            let distro = image.split(':').next().unwrap_or(image);
+            return wsl_distro_exists_async(distro).await;
+        }
+        #[cfg(not(target_os = "windows"))]
         crate::podman_cmd()
             .args(["image", "exists", image])
             .output()
