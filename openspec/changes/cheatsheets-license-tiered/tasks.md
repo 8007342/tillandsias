@@ -4,12 +4,12 @@ Phase 0 of the design's Migration Plan. Each task is verifiable in a single PR; 
 
 ## 1. Frontmatter schema v2 (the contract everything else depends on)
 
-- [ ] 1.1 Update `cheatsheets/runtime/cheatsheet-frontmatter-spec.md` to v2: add `tier`, `summary_generated_by`, `bundled_into_image`, `image_baked_sha256`, `structural_drift_fingerprint`, `local`, `package`, `pull_recipe`, `committed_for_project`, `shadows_forge_default`, `override_reason`, `override_consequences`, `override_fallback` to the schema; document the tier-conditional matrix (which fields are required/forbidden per tier); bump `last_verified` and add provenance entry for the v2 schema.
-- [ ] 1.2 Update `cheatsheets/TEMPLATE.md` to reflect the v2 frontmatter (default tier left blank for inference; commented placeholder fields for each tier-conditional field).
-- [ ] 1.3 Author `cheatsheets/runtime/cheatsheet-tier-system.md` describing the three tiers, their contracts, and worked examples for each (with full provenance per the cheatsheet provenance rule).
-- [ ] 1.4 Author `cheatsheets/runtime/cheatsheet-pull-on-demand.md` documenting the stub format (`### Source`, `### Materialize recipe`, `### Generation guidelines`); include a worked recipe for `docs.oracle.com` JDK API as the canonical example.
-- [ ] 1.5 Author `cheatsheets/runtime/cheatsheet-crdt-overrides.md` documenting the project-committed shadow flow, the four required override fields, and the runtime banner contract.
-- [ ] 1.6 Author `cheatsheets/runtime/cheatsheet-lifecycle.md` rendering the AUTHORED → BUNDLED-BAKED → LOADED → HIT/MISS → PULLED → REFINED → PROMOTED → RE-VERIFIED loop diagram; cite the `cheatsheets-license-tiered` spec.
+- [x] 1.1 Update `cheatsheets/runtime/cheatsheet-frontmatter-spec.md` to v2: add `tier`, `summary_generated_by`, `bundled_into_image`, `image_baked_sha256`, `structural_drift_fingerprint`, `local`, `package`, `pull_recipe`, `committed_for_project`, `shadows_forge_default`, `override_reason`, `override_consequences`, `override_fallback` to the schema; document the tier-conditional matrix (which fields are required/forbidden per tier); bump `last_verified` and add provenance entry for the v2 schema.
+- [x] 1.2 Update `cheatsheets/TEMPLATE.md` to reflect the v2 frontmatter (default tier left blank for inference; commented placeholder fields for each tier-conditional field).
+- [x] 1.3 Author `cheatsheets/runtime/cheatsheet-tier-system.md` describing the three tiers, their contracts, and worked examples for each (with full provenance per the cheatsheet provenance rule).
+- [x] 1.4 Author `cheatsheets/runtime/cheatsheet-pull-on-demand.md` documenting the stub format (`### Source`, `### Materialize recipe`, `### Generation guidelines`); include a worked recipe for `docs.oracle.com` JDK API as the canonical example.
+- [x] 1.5 Author `cheatsheets/runtime/cheatsheet-crdt-overrides.md` documenting the project-committed shadow flow, the four required override fields, and the runtime banner contract.
+- [x] 1.6 Author `cheatsheets/runtime/cheatsheet-lifecycle.md` rendering the AUTHORED → BUNDLED-BAKED → LOADED → HIT/MISS → PULLED → REFINED → PROMOTED → RE-VERIFIED loop diagram; cite the `cheatsheets-license-tiered` spec.
 
 ## 2. Allowlist relocation and CRDT repurpose
 
