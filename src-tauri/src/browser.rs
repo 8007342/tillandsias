@@ -477,22 +477,26 @@ pub async fn launch_for_project_with_session(
         BrowserKind::Chromium { bin } => {
             let profile = session_profile_dir(project_name);
             let mut cmd = Command::new(bin);
-            // Initial app URL: when the cookie gate is enforced, open
-            // about:blank so CDP can inject the cookie BEFORE navigation
-            // (avoiding a flash of 401 content). When the gate is OFF
-            // (the current default until CDP `Network.setCookies` lands),
-            // CDP attach is a stub that never navigates, so opening at
-            // about:blank would leave the user staring at an empty
-            // chromium new-tab. Open at the project URL directly in
-            // that case — the router serves it without a cookie.
+            // ALWAYS launch with the real project URL via `--app=URL`.
+            // Chromium pins the window to that origin's app-mode (no URL
+            // bar, no tabs, no menu). The earlier
+            // `--app=about:blank` + CDP-Page.navigate trick broke
+            // app-mode: chromium replaces `about:blank` with
+            // `chrome://newtab/` and the Page.navigate then runs as a
+            // normal cross-origin browser navigation, which falls out of
+            // app-mode and shows the omnibox. Verified empirically with
+            // `Browser.getWindowForTarget` 2026-04-26.
+            //
+            // The cookie injection still happens via CDP, but we use
+            // `Page.reload` after `Network.setCookies` to repeat the
+            // initial request (which 401'd because the cookie wasn't
+            // set yet). The user sees a brief (~200-500 ms) flash of the
+            // sidecar's friendly "unauthorised" body before the
+            // authenticated page loads — acceptable; the alternative
+            // (visible URL bar forever) is worse.
             //
             // @trace spec:opencode-web-session-otp, spec:host-chromium-on-demand
-            let initial_url = if crate::handlers::ENFORCE_SESSION_COOKIE {
-                "about:blank".to_string()
-            } else {
-                url.clone()
-            };
-            cmd.arg(format!("--app={initial_url}"))
+            cmd.arg(format!("--app={url}"))
                 .arg(format!("--user-data-dir={}", profile.display()))
                 .arg(format!("--remote-debugging-port={cdp_port}"))
                 .arg("--remote-debugging-address=127.0.0.1")

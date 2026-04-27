@@ -4,12 +4,18 @@
 //! `--remote-debugging-port=<random-loopback-port>` and `--app=about:blank`,
 //! waits for the CDP HTTP discovery endpoint to respond, then:
 //!
-//! 1. Discovers the about:blank page target via `GET /json` on the CDP port.
+//! 1. Discovers the project-URL page target via `GET /json` on the CDP port.
+//!    (Chromium is launched with `--app=URL`, so its initial target is the
+//!    project URL — NOT about:blank — to keep the window in app-mode
+//!    without an omnibox.)
 //! 2. Opens a WebSocket to the target's `webSocketDebuggerUrl`.
 //! 3. Sends `Network.enable` to gate the Network domain.
 //! 4. Sends `Network.setCookies` with the canonical attribute set
 //!    (Path=/, HttpOnly, SameSite=Strict, expires=now+86400, secure=false).
-//! 5. Sends `Page.navigate` to the project URL.
+//! 5. Sends `Page.reload` (with `ignoreCache: true`) to retry the
+//!    initial request now that the cookie is in the jar — the first GET
+//!    that chromium fired on launch 401'd because the cookie wasn't yet
+//!    set.
 //!
 //! The cookie value is wiped from memory after `Network.setCookies` succeeds
 //! so a postmortem process scrape sees zeroes instead of the token bytes.
@@ -450,13 +456,18 @@ pub async fn attach_and_set_cookie(
         return CdpOutcome::SetCookieFailed(e);
     }
 
-    // 5. Page.navigate to the project URL.
-    let nav_params = serde_json::json!({ "url": target_url });
-    if let Err(e) = cdp_call(&mut ws, 3, "Page.navigate", nav_params).await {
+    // 5. Page.reload — chromium was already navigating to target_url
+    // (we launch with `--app=URL`, not `--app=about:blank`, to keep the
+    // window in app-mode without an omnibox). The first request 401'd
+    // because the cookie wasn't yet set; the reload retries with the
+    // cookie now present in the jar. `ignoreCache=true` so the reload
+    // doesn't pick up any cached 401 body.
+    let reload_params = serde_json::json!({ "ignoreCache": true });
+    if let Err(e) = cdp_call(&mut ws, 3, "Page.reload", reload_params).await {
         warn!(
             spec = "opencode-web-session-otp",
             error = %e,
-            "Page.navigate failed"
+            "Page.reload failed"
         );
         return CdpOutcome::NavigateFailed(e);
     }
@@ -466,7 +477,7 @@ pub async fn attach_and_set_cookie(
     debug!(
         spec = "opencode-web-session-otp",
         port = cdp_port,
-        "CDP cookie injection + navigate complete"
+        "CDP cookie injection + reload complete"
     );
     CdpOutcome::Ok
 }
@@ -830,7 +841,7 @@ mod tests {
                                 g.methods.push(method.clone());
                                 if method == "Network.setCookies" {
                                     g.cookies_payload = v.get("params").cloned();
-                                } else if method == "Page.navigate" {
+                                } else if method == "Page.navigate" || method == "Page.reload" {
                                     g.navigate_url = v
                                         .get("params")
                                         .and_then(|p| p.get("url"))
@@ -971,9 +982,11 @@ mod tests {
     }
 
     /// End-to-end happy path against the in-process mock: discover targets,
-    /// open the WS, run Network.enable / Network.setCookies / Page.navigate,
+    /// open the WS, run Network.enable / Network.setCookies / Page.reload,
     /// observe each method was called and the cookie+url params were as
-    /// expected.
+    /// expected. (Page.reload, not Page.navigate — chromium is launched
+    /// with `--app=URL` so it's already on the target URL; reload just
+    /// retries the request now that the cookie is in the jar.)
     /// @trace spec:opencode-web-session-otp
     #[tokio::test]
     async fn attach_against_mock_cdp_completes_three_step_handshake() {
@@ -993,13 +1006,11 @@ mod tests {
             vec![
                 "Network.enable".to_string(),
                 "Network.setCookies".to_string(),
-                "Page.navigate".to_string(),
+                "Page.reload".to_string(),
             ],
             "method sequence drifted: {:?}",
             g.methods
         );
-        let nav = g.navigate_url.as_deref().expect("navigate url recorded");
-        assert_eq!(nav, "http://opencode.demo.localhost:8080/");
         let cookies = g.cookies_payload.as_ref().expect("setCookies payload");
         let arr = cookies["cookies"].as_array().expect("cookies array");
         assert_eq!(arr.len(), 1);
