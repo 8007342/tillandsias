@@ -105,6 +105,37 @@ scripts/build-image.sh git        # Git mirror service
 scripts/build-image.sh inference  # Local LLM inference
 ```
 
+### Inference Container — Lazy Model Pulling
+
+The inference container (ollama-based) supports both baked and lazy-pulled models:
+
+- **Baked (always present)**: T0/T1 models baked into image at build time
+  - T0: `qwen2.5:0.5b`
+  - T1: `llama3.2:3b`
+
+- **Lazy-pulled (background task)**: T2-T5 models pulled host-side after inference startup
+  - Triggered automatically after inference health check passes
+  - GPU VRAM tier determines which models pull: `gpu::detect_gpu_tier()`
+  - Pull via host-side `ollama` binary (bypasses proxy entirely)
+  - Models land in `~/.cache/tillandsias/models/` (bind-mounted RW)
+  - Fully automatic, no UX, no user interaction
+
+**Model Tier Mapping** (`@trace spec:inference-host-side-pull`):
+
+| Tier | VRAM | Models to Pull |
+|------|------|---|
+| None | 0GB | (none — T0/T1 sufficient) |
+| Low | ≤4GB | (none — T0/T1 sufficient) |
+| Mid | 4-8GB | qwen2.5-coder:7b |
+| High | 8-12GB | qwen2.5-coder:7b, qwen2.5-coder:14b |
+| Ultra | ≥12GB | qwen2.5-coder:7b, qwen2.5-coder:14b, qwen2.5-coder:32b |
+
+**Why host-side pull?** Per `project_squid_ollama_eof.md`: Squid 6.x manifests EOF hard on large ollama pull streams. Pulling host-side via the native `ollama` binary avoids the proxy entirely and achieves 100% success rate.
+
+**Cache-aware**: Before pulling, checks if `~/.ollama/models/manifests/registry.ollama.ai/library/<name>/<tag>` exists locally. Skips if already cached.
+
+**If ollama missing**: Logs `DEGRADED: host-side ollama not found`, skips all pulls. T0/T1 baked models are still available.
+
 ## CI/CD — Conservative Cloud Usage
 
 Both CI and Release workflows are **manual trigger only** (`workflow_dispatch`). They NEVER run automatically on push or PR. This is intentional — cloud minutes are expensive.
