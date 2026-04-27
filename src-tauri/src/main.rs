@@ -1001,8 +1001,11 @@ fn main() {
                 let state_for_rebuild = state_for_loop.clone();
                 let app_for_rebuild = app_handle_for_loop.clone();
 
+                // Use Arc so handlers can clone it cheaply for mid-pipeline
+                // state notifications (progressive chip updates during attach).
+                // @trace spec:tray-app
                 let on_state_change: event_loop::MenuRebuildFn =
-                    Box::new(move |new_state: &TrayState| {
+                    std::sync::Arc::new(move |new_state: &TrayState| {
                         // Compute new icon state before acquiring the lock
                         let new_icon_state = new_state.compute_icon_state();
 

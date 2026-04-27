@@ -3115,12 +3115,17 @@ async fn cleanup_stale_containers(state: &TrayState) {
 
 /// Handle the "Attach Here" action: build image if needed, open terminal
 /// with an interactive container.
-#[instrument(skip(state, allocator, build_tx), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "attach", spec = "podman-orchestration, default-image"))]
+#[instrument(skip(state, allocator, build_tx, notify), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "attach", spec = "podman-orchestration, default-image"))]
+// `notify` — progressive menu-rebuild callback, called immediately after the
+// placeholder is pushed to `state.running` so the tray chip flips to
+// "Starting / Building" before the long forge-build + enclave-setup pipeline.
+// @trace spec:tray-app
 pub async fn handle_attach_here(
     project_path: PathBuf,
     state: &mut TrayState,
     allocator: &mut GenusAllocator,
     build_tx: mpsc::Sender<BuildProgressEvent>,
+    notify: crate::event_loop::MenuRebuildFn,
 ) -> Result<AppEvent, String> {
     let start = std::time::Instant::now();
     let project_name = project_path
@@ -3147,7 +3152,7 @@ pub async fn handle_attach_here(
     // The terminal flow below remains for opt-in `opencode` / `claude` users.
     let global_config = load_global_config();
     if global_config.agent.selected.is_web() {
-        return handle_attach_web(project_path, state, allocator, build_tx).await;
+        return handle_attach_web(project_path, state, allocator, build_tx, notify).await;
     }
 
     // Don't-relaunch guard: if a forge container for this project is already running,
@@ -3210,6 +3215,12 @@ pub async fn handle_attach_here(
         display_emoji: display_emoji.clone(),
     };
     state.running.push(placeholder);
+    // @trace spec:tray-app
+    // Notify the event loop immediately so the tray chip flips to
+    // "Starting" before the long forge-build + enclave pipeline begins.
+    // Without this call the chip stays on the previous value until the
+    // entire handler returns (the select! loop is blocked on this await).
+    notify(state);
     info!(container = %container_name, "Preparing environment... (bud state)");
 
     // Ensure forge image is up to date — always invoke the build script
@@ -3406,18 +3417,23 @@ pub async fn handle_attach_here(
 ///
 /// @trace spec:opencode-web-session
 #[instrument(
-    skip(state, allocator, build_tx),
+    skip(state, allocator, build_tx, notify),
     fields(
         project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()),
         operation = "attach-web",
         spec = "opencode-web-session, podman-orchestration, default-image"
     )
 )]
+// `notify` — progressive menu-rebuild callback, called immediately after the
+// placeholder is pushed to `state.running` so the tray chip flips to
+// "Starting" before the long forge-build + enclave-setup pipeline begins.
+// @trace spec:tray-app
 pub async fn handle_attach_web(
     project_path: PathBuf,
     state: &mut TrayState,
     allocator: &mut GenusAllocator,
     build_tx: mpsc::Sender<BuildProgressEvent>,
+    notify: crate::event_loop::MenuRebuildFn,
 ) -> Result<AppEvent, String> {
     let start = std::time::Instant::now();
     let project_name = project_path
@@ -3560,6 +3576,12 @@ pub async fn handle_attach_web(
         display_emoji: display_emoji.clone(),
     };
     state.running.push(placeholder);
+    // @trace spec:tray-app
+    // Notify the event loop immediately so the tray chip flips to
+    // "Starting" before the long forge-build + enclave pipeline begins.
+    // Without this call the chip stays on the previous value until the
+    // entire handler returns (the select! loop is blocked on this await).
+    notify(state);
     info!(container = %container_name, "Preparing web environment... (bud state)");
 
     // @trace spec:default-image

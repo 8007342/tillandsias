@@ -24,8 +24,16 @@ use crate::{github, handlers};
 /// Duration a completed build chip remains visible in the menu before being pruned.
 const BUILD_CHIP_FADEOUT: Duration = Duration::from_secs(10);
 
-/// Callback for menu rebuilds after state changes.
-pub type MenuRebuildFn = Box<dyn Fn(&TrayState) + Send + Sync>;
+/// Cheaply-clonable callback for menu rebuilds after state changes.
+///
+/// Using `Arc` (rather than `Box`) so handlers that run long async pipelines
+/// can call the rebuild function mid-pipeline without lifetime issues — the
+/// Arc is cloned into the handler once and the handler calls it at key
+/// milestones (placeholder pushed, build started) to update the menu before
+/// the slow forge-build + enclave-setup pipeline completes.
+///
+/// @trace spec:tray-app
+pub type MenuRebuildFn = std::sync::Arc<dyn Fn(&TrayState) + Send + Sync>;
 
 /// Run the main event loop. This drives the entire application.
 ///
@@ -120,7 +128,11 @@ pub async fn run(
                     MenuCommand::AttachHere { project_path } => {
                         // CLI-only: `tillandsias <path>` still drives this. The tray
                         // never emits AttachHere — it emits Launch instead.
-                        match handlers::handle_attach_here(project_path, &mut state, &mut allocator, build_tx.clone()).await {
+                        // @trace spec:tray-app
+                        // Clone the MenuRebuildFn Arc into the handler so it can
+                        // update the menu immediately when the placeholder is pushed,
+                        // before the long forge-build + enclave-setup pipeline begins.
+                        match handlers::handle_attach_here(project_path, &mut state, &mut allocator, build_tx.clone(), on_state_change.clone()).await {
                             Ok(_event) => {
                                 prune_completed_builds(&mut state);
                                 on_state_change(&state);
@@ -170,7 +182,11 @@ pub async fn run(
                         info!(spec = "simplified-tray-ux", project = ?project_path, "Launch — routing to opencode-web forge");
                         // Tray Launch is opencode-web only (per spec). Reuses the
                         // existing forge if running; spawns one otherwise.
-                        match handlers::handle_attach_web(project_path, &mut state, &mut allocator, build_tx.clone()).await {
+                        // @trace spec:tray-app
+                        // Clone the MenuRebuildFn Arc into the handler so it flips
+                        // the chip to "Building / Starting" the moment the placeholder
+                        // is pushed — before the forge-build + enclave-setup pipeline.
+                        match handlers::handle_attach_web(project_path, &mut state, &mut allocator, build_tx.clone(), on_state_change.clone()).await {
                             Ok(_event) => {
                                 prune_completed_builds(&mut state);
                                 on_state_change(&state);
@@ -502,7 +518,8 @@ async fn handle_clone_project(
 
             // Auto-launch the forge for the newly cloned project.
             // Errors are logged but do not affect clone success.
-            match handlers::handle_attach_here(target_dir, state, allocator, build_tx).await {
+            // Clone the Arc so the handler can notify mid-pipeline.
+            match handlers::handle_attach_here(target_dir, state, allocator, build_tx, on_state_change.clone()).await {
                 Ok(_) => {
                     info!(project = %name, "Forge auto-launched after clone");
                 }

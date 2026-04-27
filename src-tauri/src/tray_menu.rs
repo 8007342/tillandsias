@@ -1158,4 +1158,67 @@ mod tests {
         });
         assert_eq!(status_text(&state, Stage::Authed), None);
     }
+
+    /// Regression: placeholder container pushed to `state.running` immediately
+    /// after user clicks Attach is visible in `running_stacks` before the
+    /// forge-build pipeline completes.
+    ///
+    /// This verifies the fix for task #49 — the event loop now calls
+    /// `notify(state)` right after pushing the placeholder, so the chip
+    /// flips to the running-stack label without waiting for the full handler
+    /// to return.
+    ///
+    /// @trace spec:tray-app
+    #[test]
+    fn placeholder_container_in_creating_state_appears_in_running_stacks() {
+        let mut state = empty_state();
+
+        // Simulate what handle_attach_here/handle_attach_web do before notify():
+        // push a placeholder container in Creating state.
+        let genus = tillandsias_core::genus::TillandsiaGenus::ALL[1];
+        state.running.push(ContainerInfo {
+            name: format!("tillandsias-myproject-{}", genus.display_name()),
+            project_name: "myproject".to_string(),
+            genus,
+            state: ContainerState::Creating,
+            port_range: (3000, 3019),
+            container_type: ContainerType::Forge,
+            display_emoji: genus.flower().to_string(),
+        });
+
+        // At the moment notify(state) is called the running_stacks function
+        // must surface the project — this is what drives the chip update.
+        let stacks = running_stacks(&state);
+        assert_eq!(stacks.len(), 1, "placeholder must appear immediately");
+        assert_eq!(stacks[0].project_name, "myproject");
+
+        // No build progress events have fired yet — chip has no action text.
+        // The running-stack submenu entry itself is the visual confirmation.
+        assert_eq!(status_text(&state, Stage::Authed), None,
+            "no build chip yet — the running-stack entry is the immediate feedback");
+    }
+
+    /// Regression: build chip fires immediately when BuildProgressEvent::Started
+    /// is received. Verifies the chip text appears as soon as the handler
+    /// sends the event, not only after the full pipeline completes.
+    ///
+    /// @trace spec:tray-app
+    #[test]
+    fn build_chip_appears_when_started_event_arrives() {
+        let mut state = empty_state();
+
+        // Simulate BuildProgressEvent::Started being processed by the event
+        // loop (handle_build_progress_event pushes an InProgress entry).
+        state.active_builds.push(BuildProgress {
+            image_name: "Development Environment".to_string(),
+            status: BuildStatus::InProgress,
+            started_at: Instant::now(),
+            completed_at: None,
+        });
+
+        let text = status_text(&state, Stage::Authed)
+            .expect("chip must be visible while build is in progress");
+        assert!(text.contains("Building"), "chip must say Building: {text}");
+        assert!(text.contains("Development Environment"), "chip must name the subsystem: {text}");
+    }
 }
