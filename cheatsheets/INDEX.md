@@ -34,7 +34,14 @@ All cheatsheets are curated references for tools and languages available in the 
 
 ## utils
 
-[Will be populated by Wave C sub-agents]
+- `git-workflows.md` — Git: cloning, committing, branching, rebasing, pushing (via enclave mirror)
+- `gh-cli.md` — GitHub CLI: PRs, issues, workflows, auth (read-only outside forge)
+- `jq-yq-json.md` — jq and yq: JSON/YAML querying, filtering, transformation
+- `curl-http.md` — curl and wget: HTTP requests, downloads, API testing, proxies
+- `rg-fd-search.md` — ripgrep and fd: fast code search and file finding
+- `fzf-picker.md` — fzf: interactive fuzzy selection from piped input
+- `podman-containers.md` — Podman: running, building, pushing containers and images
+- `ssh-remote.md` — SSH and rsync: remote connections, secure file transfer, port forwarding
 
 ## build
 
