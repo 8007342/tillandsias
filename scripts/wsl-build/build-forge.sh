@@ -221,10 +221,12 @@ for f in $locale_files; do
     wsl_copy_into "$DISTRO_TMP" "$f" "/etc/tillandsias/locales/$rel"
 done
 
-# Cheatsheets — recursive copy.
+# Cheatsheets — recursive copy via tar pipe.
+# Stage the tarball under TILL_WSL_OUT (workspace target/wsl/) so its
+# path is always Windows-mappable through /mnt/c/...; mktemp /tmp on
+# Git Bash returns a virtual path that wsl_copy_into can't translate.
 log "copying staged cheatsheets to /opt/cheatsheets-image/"
-# Use a tar-piped approach for speed (many small files).
-tar_path=$(mktemp /tmp/cheatsheets-XXXXXX.tar)
+tar_path="${TILL_WSL_OUT}/.cheatsheets-staging.tar"
 tar -cf "$tar_path" -C "$STAGED_CHEATS" .
 wsl_copy_into "$DISTRO_TMP" "$tar_path" "/tmp/cheatsheets.tar"
 wsl_run_in "$DISTRO_TMP" 'tar -xf /tmp/cheatsheets.tar -C /opt/cheatsheets-image && rm -f /tmp/cheatsheets.tar'
