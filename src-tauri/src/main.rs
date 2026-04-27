@@ -28,6 +28,11 @@ mod github;
 mod github_health;
 mod gpu;
 mod handlers;
+// @trace spec:inference-host-side-pull
+// Host-side lazy model pulling for inference container. Spawned after
+// inference-ready, pulls higher-tier models based on VRAM detection,
+// bypasses proxy, fully automatic (no UX).
+mod inference_lazy_pull;
 mod i18n;
 mod init;
 mod launch;

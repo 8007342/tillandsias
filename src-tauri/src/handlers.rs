@@ -352,6 +352,12 @@ pub(crate) async fn ensure_inference_running(
                     .await;
                 if check.map(|s| s.success()).unwrap_or(false) {
                     info!(spec = "inference-container", attempt, "Inference health check passed");
+
+                    // @trace spec:inference-host-side-pull
+                    // Spawn background task to pull higher-tier models based on GPU tier
+                    let gpu_tier = crate::gpu::detect_gpu_tier();
+                    crate::inference_lazy_pull::spawn_model_pull_task(gpu_tier);
+
                     break;
                 }
                 if attempt < max_attempts - 1 {
