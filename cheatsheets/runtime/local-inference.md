@@ -2,11 +2,9 @@
 tags: [inference, ollama, local-models, runtime, gpu]
 languages: []
 since: 2026-04-26
-last_verified: 2026-04-26
+last_verified: 2026-04-27
 sources:
   - https://github.com/ollama/ollama/blob/main/docs/api.md
-  - https://github.com/ollama/ollama/blob/main/docs/modelfile.md
-  - https://huggingface.co/docs/transformers/main/en/llm_tutorial
 authority: high
 status: current
 ---
@@ -18,11 +16,9 @@ status: current
 
 ## Provenance
 
-- Ollama API reference (canonical for the `/api/*` endpoints we consume): <https://github.com/ollama/ollama/blob/main/docs/api.md>
-- Ollama Modelfile reference (model naming + tag conventions): <https://github.com/ollama/ollama/blob/main/docs/modelfile.md>
-- HuggingFace LLM tutorial (background on quantisation + tier sizing): <https://huggingface.co/docs/transformers/main/en/llm_tutorial>
-- Tillandsias model tier definitions: `images/default/config-overlay/ollama/models.json` (canonical tier list, baked into every forge image)
-- **Last updated**: 2026-04-26
+- Ollama API reference: <https://github.com/ollama/ollama/blob/main/docs/api.md> — fetched 2026-04-27, used to verify `/api/version`, `/api/tags`, `/api/generate`, `/api/chat`, `/api/pull`, `/api/embed` (the current endpoint; `/api/embeddings` is superseded), `/api/ps`. Streaming response shape (newline-delimited JSON, last chunk carries `done:true` + timing) confirmed against the doc.
+- Tillandsias model tier definitions: `images/default/config-overlay/ollama/models.json` (canonical tier list, baked into every forge image).
+- **Last updated**: 2026-04-27
 
 **Version baseline**: ollama 0.5.x (forge image's pinned version), API revision dated above.
 **Use when**: an agent inside the forge needs to call a local LLM — for triggers, summarisation, code generation, or as a routing layer between a fast classifier and a heavyweight model.
@@ -108,13 +104,18 @@ curl -N "$OLLAMA_HOST/api/generate" \
 ### Pattern 4 — embeddings (for semantic search)
 
 ```bash
-curl -fsS "$OLLAMA_HOST/api/embeddings" \
-    -d '{"model":"nomic-embed-text","prompt":"the quick brown fox"}' \
-  | jq -c '.embedding | length'   # → 768 (vector dimension)
+# Use /api/embed (NOT the deprecated /api/embeddings — superseded per
+# upstream docs). `input` accepts a string OR a list of strings; the
+# response field is `embeddings` (plural, array of arrays).
+curl -fsS "$OLLAMA_HOST/api/embed" \
+    -d '{"model":"<embedding-model>","input":"the quick brown fox"}' \
+  | jq -c '.embeddings[0] | length'
 ```
 
-`nomic-embed-text` is not in the default tier list — pull it explicitly
-if you need embeddings: `curl $OLLAMA_HOST/api/pull -d '{"name":"nomic-embed-text"}'`.
+The default tier list ships text-completion models (qwen, phi, llama)
+— there's no embedding model in T0–T4. Pull one explicitly if needed,
+then poll `/api/tags` until the manifest shows up before the first
+`/api/embed` call (per the "pulling at runtime" pitfall below).
 
 ### Pattern 5 — verify the inference container is reachable BEFORE the agent loop
 
@@ -140,8 +141,8 @@ services and their reachability status — see `cheatsheets/agents/`.
 - **GPU silently CPU-fallback** — if the host has no GPU OR the inference container didn't get the GPU passthrough flags, T2+ models load slowly. Check with: `curl $OLLAMA_HOST/api/ps | jq '.models[].size_vram'`. Zero `size_vram` means CPU-only inference; you probably want a smaller tier.
 - **Long context = slow responses** — even small models slow down dramatically beyond ~2k tokens. For chat applications, summarise the history into a sliding window rather than feeding the whole transcript every turn.
 - **`format=json` doesn't validate against a schema** — it just constrains the output to valid JSON. The structure is still up to the model. Use `--data-raw` with explicit schema instructions in the prompt for reliable shapes.
-- **Concurrent generate requests serialize** — by default ollama serves requests one at a time per model. Set `OLLAMA_NUM_PARALLEL=N` on the inference container if you need parallelism (Tillandsias defaults to N=1; raise via the `inference.parallel` config key in `~/.config/tillandsias/config.toml`).
 - **No retry on cold start** — the inference container takes 1-3s to load a model into VRAM the first time. The first request after a long idle can return slowly OR time out if your client uses a tight deadline. Use a 30s timeout on first call, 5s on subsequent calls.
+- **Streaming default is `stream: true`** — `/api/generate` and `/api/chat` stream by default; pass `"stream": false` if you want one consolidated JSON response. Forgetting this causes "why is curl returning a chunked stream of JSON lines instead of a single object?".
 
 ## See also
 
