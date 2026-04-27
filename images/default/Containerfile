@@ -301,19 +301,22 @@ RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-models /usr/local/bin/tillandsias-models
 
 # ── Agent cheatsheets ─────────────────────────────────────────
-# @trace spec:agent-cheatsheets, spec:default-image
+# @trace spec:agent-cheatsheets, spec:default-image, spec:forge-hot-cold-split
 # `cheatsheets/` lives at the project root as the source of truth.
 # `scripts/build-image.sh` stages it into `images/default/.cheatsheets/`
 # right before podman build, so the COPY here resolves inside the build
 # context. The staged dir is removed after build completes.
 #
-# Owned root:root, world-readable, NOT writable by forge user — cheatsheets
-# are image-state. To suggest changes, agents write a
-# RUNTIME_LIMITATIONS_NNN.md in the project workspace (see
-# /opt/cheatsheets/runtime/runtime-limitations.md).
-RUN mkdir -p /opt/cheatsheets
-COPY .cheatsheets/ /opt/cheatsheets/
-RUN chmod -R a+rX /opt/cheatsheets && chmod -R go-w /opt/cheatsheets
+# Baked into /opt/cheatsheets-image/ (RO image lower layer). At container
+# start, populate_hot_paths() in lib-common.sh copies these into
+# /opt/cheatsheets/ (tmpfs hot mount, 8MB cap) so every agent read is
+# RAM-served. TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets is UNCHANGED —
+# agents see the same path; only the backing store changes.
+# /opt/cheatsheets/ is NOT created here — podman --tmpfs creates the mount
+# point at launch time; the entrypoint populates it via populate_hot_paths().
+RUN mkdir -p /opt/cheatsheets-image
+COPY .cheatsheets/ /opt/cheatsheets-image/
+RUN chmod -R a+rX /opt/cheatsheets-image && chmod -R go-w /opt/cheatsheets-image
 
 # ── Fix ownership ──────────────────────────────────────────────
 RUN chown -R 1000:1000 /home/forge

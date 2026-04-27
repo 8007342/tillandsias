@@ -1125,10 +1125,12 @@ mod tests {
         );
     }
 
-    // @trace spec:podman-orchestration, spec:forge-hot-cold-split
+    // @trace spec:podman-orchestration, spec:forge-hot-cold-split, spec:agent-cheatsheets
     #[test]
-    fn forge_profiles_no_tmpfs_yet_no_memory_ceiling() {
-        // Chunk 1: forge profiles have no tmpfs mounts, so no --memory flag either.
+    fn forge_profiles_emit_cheatsheets_tmpfs_and_memory_ceiling() {
+        // Chunk 2: forge and terminal profiles include the /opt/cheatsheets tmpfs
+        // mount (8MB cap, mode 755). build_podman_args must emit the sized --tmpfs
+        // flag and the paired --memory / --memory-swap ceiling.
         for profile in [
             container_profile::forge_opencode_profile(),
             container_profile::forge_claude_profile(),
@@ -1138,18 +1140,18 @@ mod tests {
             let ctx = test_context();
             let args = build_podman_args(&profile, &ctx);
             assert!(
-                !args.iter().any(|a| a.starts_with("--memory=")),
-                "Forge profile {} must have no --memory ceiling in chunk 1; got: {args:?}",
+                args.iter().any(|a| a == "--tmpfs=/opt/cheatsheets:size=8m,mode=755"),
+                "Forge profile {} must emit --tmpfs=/opt/cheatsheets:size=8m,mode=755; got: {args:?}",
                 profile.entrypoint
             );
             assert!(
-                !args.iter().any(|a| a.starts_with("--memory-swap=")),
-                "Forge profile {} must have no --memory-swap in chunk 1; got: {args:?}",
+                args.iter().any(|a| a.starts_with("--memory=")),
+                "Forge profile {} must emit --memory ceiling when tmpfs present; got: {args:?}",
                 profile.entrypoint
             );
             assert!(
-                !args.iter().any(|a| a.starts_with("--tmpfs=")),
-                "Forge profile {} must have no --tmpfs in chunk 1; got: {args:?}",
+                args.iter().any(|a| a.starts_with("--memory-swap=")),
+                "Forge profile {} must emit --memory-swap when tmpfs present; got: {args:?}",
                 profile.entrypoint
             );
         }

@@ -314,10 +314,12 @@ pub fn forge_opencode_profile() -> ContainerProfile {
         image_override: None,
         pids_limit: 512,      // Compilers, language servers, AI tools
         read_only: false,      // Forge needs mutable workspace
-        // @trace spec:forge-hot-cold-split
-        // Chunk 1: forge profiles start with no tmpfs mounts. Hot paths
-        // (/opt/cheatsheets, /home/forge/src) are added in chunks 2 and 3.
-        tmpfs_mounts: vec![],
+        // @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
+        // Chunk 2: /opt/cheatsheets on tmpfs (8MB cap). The entrypoint's
+        // populate_hot_paths() copies from /opt/cheatsheets-image/ (image
+        // lower layer) into this mount so every agent cheatsheet read is
+        // RAM-served. /home/forge/src tmpfs added in chunk 3.
+        tmpfs_mounts: common_forge_tmpfs_mounts(),
         // @trace spec:tray-host-control-socket, spec:secrets-management
         // Forge containers default-deny the control socket — see the
         // secrets-management delta. A compromised forge MUST NOT be able
@@ -338,9 +340,9 @@ pub fn forge_claude_profile() -> ContainerProfile {
         image_override: None,
         pids_limit: 512,      // Compilers, language servers, AI tools
         read_only: false,      // Forge needs mutable workspace
-        // @trace spec:forge-hot-cold-split
-        // Chunk 1: no tmpfs mounts yet; chunks 2–3 add hot paths.
-        tmpfs_mounts: vec![],
+        // @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
+        // Chunk 2: /opt/cheatsheets on tmpfs. See forge_opencode_profile().
+        tmpfs_mounts: common_forge_tmpfs_mounts(),
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
     }
@@ -361,9 +363,9 @@ pub fn forge_opencode_web_profile() -> ContainerProfile {
         image_override: None,
         pids_limit: 512,
         read_only: false,
-        // @trace spec:forge-hot-cold-split
-        // Chunk 1: no tmpfs mounts yet; chunks 2–3 add hot paths.
-        tmpfs_mounts: vec![],
+        // @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
+        // Chunk 2: /opt/cheatsheets on tmpfs. See forge_opencode_profile().
+        tmpfs_mounts: common_forge_tmpfs_mounts(),
         // @trace spec:tray-host-control-socket, spec:secrets-management
         // OpenCode Web forge does not need the control socket — the router
         // (which fronts the web session) is the consumer.
@@ -381,9 +383,9 @@ pub fn terminal_profile() -> ContainerProfile {
         mounts: common_forge_mounts(),
         pids_limit: 512,      // Same as forge (maintenance shell)
         read_only: false,      // Terminal needs mutable workspace
-        // @trace spec:forge-hot-cold-split
-        // Chunk 1: no tmpfs mounts yet; chunks 2–3 add hot paths.
-        tmpfs_mounts: vec![],
+        // @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
+        // Chunk 2: /opt/cheatsheets on tmpfs. See forge_opencode_profile().
+        tmpfs_mounts: common_forge_tmpfs_mounts(),
         env_vars: vec![
             ProfileEnvVar {
                 name: "TILLANDSIAS_PROJECT",
@@ -811,6 +813,22 @@ fn common_forge_mounts() -> Vec<ProfileMount> {
             container_path: "/home/forge/.cache/tillandsias-project",
             mode: MountMode::Rw,
         },
+    ]
+}
+
+/// Tmpfs mounts shared by all four forge/maintenance profiles (chunk 2+).
+///
+/// Hot path: /opt/cheatsheets on a kernel-capped tmpfs so every agent
+/// cheatsheet lookup is RAM-served. The image lower layer
+/// (/opt/cheatsheets-image/) is populated at entrypoint start by
+/// populate_hot_paths() in lib-common.sh.
+///
+/// @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
+fn common_forge_tmpfs_mounts() -> Vec<TmpfsMount> {
+    vec![
+        // Chunk 2: agent cheatsheets on RAM — 8MB cap (~13× current size).
+        // ENV TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets is unchanged.
+        TmpfsMount { path: "/opt/cheatsheets", size_mb: 8, mode: 0o755 },
     ]
 }
 
@@ -1289,21 +1307,60 @@ mod tests {
         );
     }
 
-    // @trace spec:forge-hot-cold-split
+    // @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
     #[test]
-    fn forge_profiles_no_tmpfs_yet() {
-        // Chunk 1: forge and terminal profiles do not add tmpfs mounts.
-        // Hot paths (/opt/cheatsheets, /home/forge/src) are added in
-        // chunks 2 and 3.
+    fn forge_profile_includes_cheatsheets_tmpfs_mount() {
+        // Chunk 2: /opt/cheatsheets is a tmpfs hot mount on all four
+        // forge/maintenance profiles. populate_hot_paths() copies from the
+        // image lower layer (/opt/cheatsheets-image/) into this mount at
+        // container start so every agent cheatsheet read is RAM-served.
         for (name, profile) in [
             ("forge_opencode", forge_opencode_profile()),
             ("forge_claude", forge_claude_profile()),
             ("forge_opencode_web", forge_opencode_web_profile()),
             ("terminal", terminal_profile()),
         ] {
+            let mount = profile
+                .tmpfs_mounts
+                .iter()
+                .find(|m| m.path == "/opt/cheatsheets");
             assert!(
-                profile.tmpfs_mounts.is_empty(),
-                "Profile {name} should have no tmpfs mounts in chunk 1"
+                mount.is_some(),
+                "Profile {name} must have /opt/cheatsheets tmpfs mount"
+            );
+            assert_eq!(
+                mount.unwrap().size_mb,
+                8,
+                "Profile {name}: /opt/cheatsheets tmpfs must be 8MB cap"
+            );
+            assert_eq!(
+                mount.unwrap().mode,
+                0o755,
+                "Profile {name}: /opt/cheatsheets tmpfs must be mode 0o755"
+            );
+        }
+    }
+
+    // @trace spec:forge-hot-cold-split
+    #[test]
+    fn service_profiles_do_not_have_cheatsheets_tmpfs() {
+        // Service containers (router, proxy, inference, git_service, web)
+        // do NOT mount /opt/cheatsheets — they are not coding agents and
+        // don't read cheatsheets. This is a sanity guard against accidental
+        // inclusion in common helpers.
+        for (name, profile) in [
+            ("router", router_profile()),
+            ("proxy", proxy_profile()),
+            ("inference", inference_profile()),
+            ("git_service", git_service_profile()),
+            ("web", web_profile()),
+        ] {
+            assert!(
+                !profile
+                    .tmpfs_mounts
+                    .iter()
+                    .any(|m| m.path == "/opt/cheatsheets"),
+                "Service profile {name} must NOT have /opt/cheatsheets tmpfs mount"
             );
         }
     }

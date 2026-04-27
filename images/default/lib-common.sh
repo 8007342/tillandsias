@@ -248,6 +248,26 @@ apply_opencode_config_overlay() {
     fi
 }
 
+# ── Hot-path population ─────────────────────────────────────
+# @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
+# Called once at container start, AFTER the podman --tmpfs mounts are in
+# place (those are established by the kernel before the entrypoint runs).
+# Copies /opt/cheatsheets-image/ (RO image lower layer baked at build time)
+# into /opt/cheatsheets/ (tmpfs hot mount, 8MB cap) so every agent read is
+# RAM-served rather than overlayfs-backed.
+#
+# Idempotent: re-running on an already-populated tmpfs is harmless.
+# Silent failure: 2>/dev/null || true means a missing source or mount point
+# doesn't abort the entrypoint.
+populate_hot_paths() {
+    if [ -d /opt/cheatsheets-image ] && [ -d /opt/cheatsheets ]; then
+        cp -a /opt/cheatsheets-image/. /opt/cheatsheets/ 2>/dev/null || true
+        trace_lifecycle "hot-paths" "cheatsheets copied to tmpfs (/opt/cheatsheets)"
+    else
+        trace_lifecycle "hot-paths" "skipped: /opt/cheatsheets-image or /opt/cheatsheets not found"
+    fi
+}
+
 # ── Banner ──────────────────────────────────────────────────
 show_banner() {
     local agent_name="${1:-terminal}"

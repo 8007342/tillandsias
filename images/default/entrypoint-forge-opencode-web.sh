@@ -13,6 +13,11 @@
 
 source /usr/local/lib/tillandsias/lib-common.sh
 
+# @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
+# Populate tmpfs hot mount (/opt/cheatsheets) from image-baked lower layer.
+# The --tmpfs mount is already in place (podman establishes it before exec).
+populate_hot_paths
+
 # @trace spec:proxy-container
 # Trust the Tillandsias enclave CA chain for HTTPS proxy caching.
 # System trust store updates require root (denied under --cap-drop=ALL).
