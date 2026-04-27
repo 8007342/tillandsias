@@ -80,6 +80,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## runtime
 
+- agent-startup-skills.md                — Understanding how the four startup skills (`/startup`, `/bootstrap-readme-and-p… [bundled, partial-verify]
 - cheatsheet-architecture-v2.md          — You're writing, splitting, or querying cheatsheets — or designing the MCP serve… [pull-on-demand: stub]
 - cheatsheet-crdt-overrides.md           — You're committing a project-specific cheatsheet under `<project>/.tillandsias/c… [bundled, partial-verify]
 - cheatsheet-frontmatter-spec.md         — Authoring or refreshing a cheatsheet — this defines the YAML block at the top o… [pull-on-demand: stub]
@@ -134,4 +135,9 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - protobuf.md                      — defining wire-format schemas; gRPC services; serialization with strong schema e… [pull-on-demand: stub]
 - sse.md                           — server pushes to browser/client, no client→server messaging needed. Simpler tha… [bundled, partial-verify]
 - websocket.md                     — bidirectional persistent connection — chat, real-time games, collaborative edit… [bundled, partial-verify]
+
+## welcome
+
+- readme-discipline.md             — Understanding how Tillandsias-managed projects structure and auto-regenerate th… [bundled, partial-verify]
+- sample-prompts.md                — Helping users understand what an in-forge agent + Flutter/Nix/Flame defaults ca… [bundled, partial-verify]
 
