@@ -64,7 +64,7 @@ Phase 0 of the design's Migration Plan. Each task is verifiable in a single PR; 
 
 - [x] 8.1 Update `scripts/regenerate-cheatsheet-index.sh` to read each cheatsheet's frontmatter `tier` and validation state and append the correct badge: `[bundled, verified: <sha8>]`, `[bundled, partial-verify]`, `[distro-packaged: <package>]`, `[distro-packaged: MISSING]`, `[pull-on-demand: stub]`, `[pull-on-demand: project-committed]`.
 - [ ] 8.2 Add a stripped-down shell version of the index regeneration to `populate_hot_paths()` (or call a small in-image helper) so `/opt/cheatsheets/INDEX.md` is re-rendered post-merge with project-committed entries and pulled-materialization `[pulled]` lines.
-- [ ] 8.3 Update `cheatsheets/INDEX.md` (the host-tracked file) once after the new badges land so the diff is one focused commit.
+- [x] 8.3 Update `cheatsheets/INDEX.md` (the host-tracked file) once after the new badges land so the diff is one focused commit.
 
 ## 9. Migration of existing cheatsheets to v2
 
@@ -99,14 +99,14 @@ Phase 0 of the design's Migration Plan. Each task is verifiable in a single PR; 
 
 ## 13. Trace annotations and commit hygiene
 
-- [ ] 13.1 Add `# @trace spec:cheatsheets-license-tiered` to every shell file modified by this change (`scripts/build-image.sh`, `scripts/fetch-cheatsheet-source.sh`, `scripts/check-cheatsheet-sources.sh`, `scripts/regenerate-cheatsheet-index.sh`, `images/default/lib-common.sh`).
-- [ ] 13.2 Add `// @trace spec:cheatsheets-license-tiered` to every Rust function modified by this change (`src-tauri/src/handlers.rs` external-logs role wiring, profile changes, `populate_hot_paths()` invocation if any).
-- [ ] 13.3 Add `# @cheatsheet runtime/cheatsheet-tier-system.md` (and the other new cheatsheets) to the same files where they informed implementation.
-- [ ] 13.4 Confirm `git grep '@trace spec:cheatsheets-license-tiered'` returns hits in shell, Rust, and markdown; commit message includes the GitHub search URL `https://github.com/8007342/tillandsias/search?q=%40trace+spec%3Acheatsheets-license-tiered&type=code` per the project commit convention.
+- [x] 13.1 Add `# @trace spec:cheatsheets-license-tiered` to every shell file modified by this change (`scripts/build-image.sh`, `scripts/fetch-cheatsheet-source.sh`, `scripts/check-cheatsheet-sources.sh`, `scripts/regenerate-cheatsheet-index.sh`, `images/default/lib-common.sh`).
+- [x] 13.2 Add `// @trace spec:cheatsheets-license-tiered` to every Rust function modified by this change (`src-tauri/src/handlers.rs` external-logs role wiring, profile changes, `populate_hot_paths()` invocation if any).
+- [x] 13.3 Add `# @cheatsheet runtime/cheatsheet-tier-system.md` (and the other new cheatsheets) to the same files where they informed implementation.
+- [x] 13.4 Confirm `git grep '@trace spec:cheatsheets-license-tiered'` returns hits in shell, Rust, and markdown; commit message includes the GitHub search URL `https://github.com/8007342/tillandsias/search?q=%40trace+spec%3Acheatsheets-license-tiered&type=code` per the project commit convention.
 
 ## 14. Verify and archive prep
 
-- [ ] 14.1 Run `openspec validate cheatsheets-license-tiered --strict`; fix every reported issue.
+- [x] 14.1 Run `openspec validate cheatsheets-license-tiered --strict`; fix every reported issue.
 - [ ] 14.2 Run `/opsx:verify cheatsheets-license-tiered` and address gaps; confirm spec, design, tasks, and implementation converge.
-- [ ] 14.3 Run `cargo test --workspace` and `./build.sh --test` to confirm no regression in the existing test suite.
+- [x] 14.3 Run `cargo test --workspace` and `./build.sh --test` to confirm no regression in the existing test suite.
 - [ ] 14.4 Build the forge image one final time, run a smoke test (launch forge, `cat /opt/cheatsheets/INDEX.md`, materialize one pull-on-demand recipe, confirm `lookups.jsonl` records the events), then archive via `/opsx:archive cheatsheets-license-tiered` and run `./scripts/bump-version.sh --bump-changes`.
