@@ -1,19 +1,11 @@
 # external-logs-layer Specification
 
-@trace spec:external-logs-layer
-
 ## Purpose
-
-Defines the two-tier log observability model for the Tillandsias enclave:
-
-- **INTERNAL tier**: per-container, RW at owner, never visible to siblings (existing behaviour, now explicit).
-- **EXTERNAL tier**: hand-curated files declared in a per-producer `external-logs.yaml` manifest. Mounted RW at the producer and RO (via the parent directory) at every consumer in the same enclave.
-
-This layer enforces an architectural contract: what a service writes externally is part of its versioned public interface, enforced by a tray-side auditor.
-
+TBD - created by archiving change external-logs-layer. Update Purpose after archive.
 ## Requirements
-
 ### Requirement: Two-tier observability model
+
+Tillandsias SHALL distinguish two log tiers per container — INTERNAL (per-container `ContainerLogs` mount, never visible to siblings) and EXTERNAL (manifest-curated files mounted RW at producer and RO at consumers). The two tiers are mutually exclusive in mount semantics: INTERNAL is owner-only RW, EXTERNAL crosses the enclave through a parent-directory bind-mount.
 
 #### Scenario: INTERNAL tier — per-container isolation
 - **WHEN** a container is launched
@@ -28,6 +20,8 @@ This layer enforces an architectural contract: what a service writes externally 
 - **AND** consumers see one subdirectory per active producer role
 
 ### Requirement: Producer mount + manifest contract
+
+A producer container SHALL declare every file it writes externally in `/etc/tillandsias/external-logs.yaml` baked into its image. The launcher SHALL bind-mount the per-role host directory RW into the producer at `/var/log/tillandsias/external/`. The manifest is the producer's versioned public log API; any file written outside the manifest is a contract violation flagged by the tray auditor.
 
 #### Scenario: Producer writes only to declared files
 - **WHEN** a producer container writes files to `/var/log/tillandsias/external/`
@@ -47,6 +41,8 @@ This layer enforces an architectural contract: what a service writes externally 
 
 ### Requirement: Consumer mount
 
+A consumer container (forge, maintenance terminal) SHALL receive a RO bind-mount of the parent `~/.local/state/tillandsias/external-logs/` directory at `/var/log/tillandsias/external/`. The parent-directory mount semantics ensures new producers appearing after the consumer starts become visible without restart.
+
 #### Scenario: Forge and terminal containers receive RO parent mount
 - **WHEN** a container with `external_logs_consumer: true` is launched
 - **THEN** `~/.local/state/tillandsias/external-logs/` is bind-mounted RO at `/var/log/tillandsias/external/`
@@ -57,6 +53,8 @@ This layer enforces an architectural contract: what a service writes externally 
 - **THEN** the consumer SHALL see the new producer's role directory without restart (parent-dir RO mount semantics)
 
 ### Requirement: Auditor invariants
+
+The tray-side auditor SHALL run every 60 s alongside existing health checks and enforce three invariants on every external-log file: (1) the file is declared in its producer's manifest, (2) the file's size is below `rotate_at_mb`, (3) the file's growth rate is below 1 MB/min sustained. Violations emit accountability-tagged events with `category = "external-logs"` and `spec = "external-logs-layer"`.
 
 #### Scenario: Manifest match check — LEAK alarm
 - **WHEN** the tray auditor runs its 60 s tick
@@ -82,12 +80,16 @@ This layer enforces an architectural contract: what a service writes externally 
 
 ### Requirement: Reverse-breach refusal
 
+A `ContainerProfile` MUST NOT be both a producer (`external_logs_role: Some(_)`) AND a consumer (`external_logs_consumer: true`). Allowing both would break the producer's manifest contract by letting consumer-tier writes shadow producer-tier files. `ContainerProfile::validate()` SHALL refuse such profiles and the launcher SHALL assert the invariant.
+
 #### Scenario: Profile validation at launch time
 - **WHEN** a container profile has BOTH `external_logs_role: Some(_)` AND `external_logs_consumer: true` set
 - **THEN** `ContainerProfile::validate()` SHALL return `Err` with a message citing `spec:external-logs-layer`
 - **AND** `build_podman_args()` SHALL assert this invariant and emit an `accountability = true` WARN if violated
 
 ### Requirement: Migration of git-push.log
+
+The pre-existing `git-push.log` file under `~/.local/state/tillandsias/containers/tillandsias-git/logs/` SHALL be migrated to the new EXTERNAL-tier location (`~/.local/state/tillandsias/external-logs/git-service/git-push.log`) on first tray startup after this layer ships. The migration SHALL be atomic, idempotent, and require no entrypoint code change in the git-service image.
 
 #### Scenario: One-shot migration at tray startup
 - **WHEN** the tray starts and `~/.local/state/tillandsias/containers/tillandsias-git/logs/git-push.log` exists
@@ -102,17 +104,3 @@ This layer enforces an architectural contract: what a service writes externally 
 - **AND** the bind-mount shadows this to `~/.local/state/tillandsias/external-logs/git-service/git-push.log` on the host
 - **AND** NO entrypoint code change is required in the git-service image
 
-## REMOVED Requirements
-
-None — this is a new capability. The external-logs layer is purely additive; the INTERNAL tier's existing invariants are unchanged.
-
-## Sources of Truth
-
-- `cheatsheets/runtime/external-logs.md` — agent-facing how-to with full Provenance
-- `cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md` — host-side path taxonomy; external-logs/ is the fifth row (Disk, NEVER tmpfs)
-- `images/git/external-logs.yaml` — canonical manifest example
-- `images/proxy/external-logs.yaml` — proxy role manifest
-- `images/router/external-logs.yaml` — router role manifest
-- `images/inference/external-logs.yaml` — inference role manifest
-- `docs/strategy/external-logs-observability-plan.md` — strategy memo this spec implements
-- `openspec/changes/external-logs-layer/design.md` — design decisions (especially the mount choreography choices)

@@ -5,36 +5,42 @@ TBD - created by archiving change forge-cache-architecture. Update Purpose after
 ## Requirements
 ### Requirement: Forge containers see exactly four path categories
 
-Every path the agent can read or write inside a forge container SHALL fall into exactly one of four categories. There is no fifth. Cheatsheets, methodology, and code SHALL refer to these categories by name.
+The "Ephemeral" category SHALL carry kernel-enforced size caps on `/tmp` (256 MB)
+and `/run/user/1000` (64 MB). These paths were previously unbounded (defaulting
+to 50% of host RAM under `tmpfs(5)` semantics); after this change they are
+bounded and fail with ENOSPC on overflow.
 
-| Category | Forge path | Mount | Lifetime |
-|---|---|---|---|
-| **Shared cache** | `/nix/store/` | `~/.cache/tillandsias/forge-shared/nix-store/` (host) → forge `:ro` | Host-lifetime, manually GC'd |
-| **Per-project cache** | `/home/forge/.cache/tillandsias-project/` | `~/.cache/tillandsias/forge-projects/<project>/` (host) → forge `:rw` | Per-project, persists across container stops |
-| **Project workspace** | `/home/forge/src/<project>/` | `<watch_path>/<project>/` (host) → forge `:rw` | Persists with the user's git repo |
-| **Ephemeral** | `/tmp/`, all unmounted home dirs, anything else | (none — container's own writable layer) | Lost on container stop |
+> Delta: the "Ephemeral" row in the path-category table gains explicit kernel-enforced size
+> caps on `/tmp` and `/run/user/1000`. These paths were previously unbounded (defaulting
+> to 50% of host RAM under `tmpfs(5)` semantics). After this change they are bounded.
 
-#### Scenario: Shared cache is read-only
-- **WHEN** the forge user (UID 1000) attempts to write under `/nix/store/`
-- **THEN** the operation SHALL fail with EROFS or EACCES (the mount is `:ro`)
-- **AND** nix store entries are added by host-side nix processes only — never by the forge
+| Ephemeral path | Mount type | Size cap |
+|---|---|---|
+| `/tmp` | tmpfs | **256 MB** (0o1777) |
+| `/run/user/1000` | tmpfs | **64 MB** (0o0700) |
+| All other unmounted home dirs / overlay | container's own writable layer | (none) |
 
-#### Scenario: Per-project cache survives container stop
-- **WHEN** a forge container for project `foo` writes a file under `/home/forge/.cache/tillandsias-project/cargo/target/release/foo`
-- **AND** the container is stopped
-- **AND** a new forge container for the SAME project starts
-- **THEN** the file SHALL still be readable at the same path
+The `/tmp` and `/run/user/1000` caps are kernel-enforced via `--tmpfs=<path>:size=<N>m,mode=<oct>`.
+Writes beyond the cap fail with ENOSPC inside the container.
 
-#### Scenario: Per-project cache is isolated from other projects
-- **WHEN** project A's forge container is running
-- **AND** project A writes secrets / cache / artifacts under `/home/forge/.cache/tillandsias-project/`
-- **AND** project B's forge container starts later
-- **THEN** project B SHALL NOT see project A's files anywhere — its `/home/forge/.cache/tillandsias-project/` mount resolves to a different host directory (`~/.cache/tillandsias/forge-projects/B/`)
+#### Scenario: /tmp is capped at 256 MB
 
-#### Scenario: Ephemeral path is lost on container stop
-- **WHEN** the forge writes to `/tmp/scratch.bin`
-- **AND** the container is stopped (regardless of next-launch)
-- **THEN** `/tmp/scratch.bin` SHALL NOT exist on any subsequent forge launch — `/tmp/` is the container's own writable layer with no bind-mount
+- **WHEN** a forge container starts
+- **THEN** `df --output=size /tmp` reports ≈ 256 MB
+- **AND** writing more than 256 MB to `/tmp/` fails with ENOSPC — not silently spilling to disk
+
+#### Scenario: /run/user/1000 is capped at 64 MB
+
+- **WHEN** a forge container starts
+- **THEN** `df --output=size /run/user/1000` reports ≈ 64 MB
+- **AND** the cap prevents runaway socket or log files from consuming unbounded RAM
+
+#### Scenario: Unbounded overlay still covers non-tmpfs ephemeral paths
+
+- **WHEN** an agent writes to a path that is neither `/tmp` nor `/run/user/1000` nor a
+  bind-mounted cache (e.g., `/home/forge/.bashrc`)
+- **THEN** the write lands in the container's overlayfs upper-dir on the host storage
+  driver — subject to host disk quota, not RAM quota
 
 ### Requirement: Per-language env vars resolve into the per-project cache
 

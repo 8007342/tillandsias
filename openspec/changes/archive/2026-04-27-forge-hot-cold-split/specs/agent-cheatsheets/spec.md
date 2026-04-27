@@ -1,6 +1,6 @@
 ## MODIFIED Requirements
 
-### Requirement: Forge image bakes cheatsheets (delta: two-layer model)
+### Requirement: Forge image bakes cheatsheets
 
 The forge image SHALL maintain TWO views of the cheatsheets — an image-baked
 canonical at `/opt/cheatsheets-image/` and a runtime tmpfs view at

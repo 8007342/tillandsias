@@ -4,61 +4,52 @@
 
 This delta extends `openspec/specs/podman-orchestration/spec.md` with two new profile fields and the corresponding launcher argument resolution. All existing podman-orchestration requirements remain unchanged.
 
-## NEW Requirement: external_logs_role profile field
+## ADDED Requirements
 
-### Scenario: Producer profile declares its role
+### Requirement: external_logs_role profile field
+
+The `ContainerProfile` struct SHALL carry an `external_logs_role: Option<&'static str>` field. When `Some(role)`, the launcher SHALL bind-mount the host's per-role external-logs directory RW into the container at `/var/log/tillandsias/external/`.
+
+#### Scenario: Producer profile declares its role
 - **WHEN** a `ContainerProfile` has `external_logs_role: Some("git-service")` (or another role name)
 - **THEN** the launcher SHALL resolve `MountSource::ExternalLogsProducer { role }` to `~/.local/state/tillandsias/external-logs/<role>/`
 - **AND** create the directory if absent before `podman run`
 - **AND** pass `-v <host_role_dir>:/var/log/tillandsias/external:rw,Z` to podman
 
-### Scenario: Default is None (no producer)
+#### Scenario: Default is None (no producer)
 - **WHEN** a profile has `external_logs_role: None`
 - **THEN** no `ExternalLogsProducer` mount is added to the podman args
 - **AND** the profile's existing mounts are unaffected
 
-## NEW Requirement: external_logs_consumer profile field
+### Requirement: external_logs_consumer profile field
 
-### Scenario: Consumer profile receives RO parent mount
+The `ContainerProfile` struct SHALL carry an `external_logs_consumer: bool` field. When `true`, the launcher SHALL bind-mount the parent external-logs directory RO into the container at `/var/log/tillandsias/external/`, exposing every producer's curated logs to the consumer.
+
+#### Scenario: Consumer profile receives RO parent mount
 - **WHEN** a `ContainerProfile` has `external_logs_consumer: true`
 - **THEN** the launcher SHALL resolve `MountSource::ExternalLogsConsumerRoot` to `~/.local/state/tillandsias/external-logs/`
 - **AND** pass `-v <host_external_logs_dir>:/var/log/tillandsias/external:ro,Z` to podman
 
-### Scenario: Default is false (no consumer)
+#### Scenario: Default is false (no consumer)
 - **WHEN** a profile has `external_logs_consumer: false`
 - **THEN** no `ExternalLogsConsumerRoot` mount is added
 
-## NEW Requirement: Reverse-breach refusal at launch
+### Requirement: Reverse-breach refusal at launch
 
-### Scenario: Both fields set — refused
+A `ContainerProfile` MUST NOT be both a producer (`external_logs_role: Some(_)`) AND a consumer (`external_logs_consumer: true`). The `validate()` method on `ContainerProfile` SHALL refuse such profiles, and `build_podman_args()` SHALL assert this invariant.
+
+#### Scenario: Both fields set — refused
 - **WHEN** a profile has BOTH `external_logs_role: Some(_)` AND `external_logs_consumer: true`
 - **THEN** `ContainerProfile::validate()` SHALL return `Err` citing `spec:external-logs-layer`
 - **AND** `build_podman_args()` SHALL assert this invariant via `debug_assert!` (panic in debug builds) and emit an accountability WARN in release builds
-- **AND** no container with this profile configuration SHALL be considered correctly launched
 
-### Scenario: Valid producer profiles
+#### Scenario: Valid producer profiles
 - **WHEN** a profile has `external_logs_role: Some(_)` AND `external_logs_consumer: false`
 - **THEN** `ContainerProfile::validate()` returns `Ok(())`
 
-### Scenario: Valid consumer profiles
+#### Scenario: Valid consumer profiles
 - **WHEN** a profile has `external_logs_role: None` AND `external_logs_consumer: true`
 - **THEN** `ContainerProfile::validate()` returns `Ok(())`
-
-## Profile assignments (as of this change)
-
-| Profile | `external_logs_role` | `external_logs_consumer` |
-|---|---|---|
-| `forge_opencode` | None | true |
-| `forge_claude` | None | true |
-| `forge_opencode_web` | None | true |
-| `terminal` | None | true |
-| `git_service` | `Some("git-service")` | false |
-| `proxy` | `Some("proxy")` | false |
-| `router` | `Some("router")` | false |
-| `inference` | `Some("inference")` | false |
-| `web` | None | false |
-
-`web` remains unwired (not yet a producer) for v1.
 
 ## Sources of Truth
 

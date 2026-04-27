@@ -43,20 +43,44 @@ The cheatsheets directory SHALL contain `cheatsheets/INDEX.md` listing every che
 
 ### Requirement: Forge image bakes cheatsheets
 
-The forge image (`images/default/Containerfile`) SHALL `COPY cheatsheets/ /opt/cheatsheets/` at image-build time and SHALL export `TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets` as a container environment variable. The directory inside the container SHALL be world-readable and read-only (no agent writes to `/opt/cheatsheets/`).
+The forge image SHALL maintain TWO views of the cheatsheets — an image-baked
+canonical at `/opt/cheatsheets-image/` and a runtime tmpfs view at
+`/opt/cheatsheets/` (8 MB cap). The agent-facing env var
+`TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets` is unchanged — agents observe no
+behavioral difference.
 
-#### Scenario: Cheatsheets are present in the running forge
-- **WHEN** the forge container starts
-- **THEN** `ls /opt/cheatsheets/INDEX.md` succeeds inside the container
-- **AND** every subdirectory under `cheatsheets/` in the source tree is present under `/opt/cheatsheets/` inside the container
+> Delta: the single `/opt/cheatsheets` bake is replaced by a two-layer model.
+> The image-build COPY lands at `/opt/cheatsheets-image/` (immutable lower layer).
+> At container start, `populate_hot_paths()` copies the canonical content into
+> `/opt/cheatsheets/` (runtime tmpfs, 8 MB cap).
 
-#### Scenario: Environment variable is set
+| View | Path | Backing store | Populated by |
+|------|------|---------------|--------------|
+| Image-baked canonical | `/opt/cheatsheets-image/` | Image overlayfs lower layer (disk) | `COPY cheatsheets/ /opt/cheatsheets-image/` at build time |
+| Runtime tmpfs view | `/opt/cheatsheets/` | Kernel tmpfs (RAM), 8 MB cap | `populate_hot_paths()` in every forge entrypoint |
+
+#### Scenario: /opt/cheatsheets/ is the tmpfs view; /opt/cheatsheets-image/ is the immutable lower-layer copy
+
+- **WHEN** a forge container starts and `populate_hot_paths()` completes
+- **THEN** `findmnt /opt/cheatsheets -no FSTYPE` returns `tmpfs`
+- **AND** `diff -r /opt/cheatsheets-image /opt/cheatsheets` returns exit 0
+  (content is identical; the tmpfs is a complete copy of the image-baked layer)
+- **AND** `/opt/cheatsheets-image/` is NOT a tmpfs — it is read-only overlayfs
+  (image state)
+
+#### Scenario: Environment variable is set to the tmpfs view (unchanged)
+
 - **WHEN** an agent runs `echo $TILLANDSIAS_CHEATSHEETS` inside the forge
-- **THEN** the output is `/opt/cheatsheets`
+- **THEN** the output is `/opt/cheatsheets` — the RAM-backed view
+- **AND** no agent code or cheatsheet reference requires updating
 
-#### Scenario: Cheatsheets are read-only
-- **WHEN** the forge user runs `touch /opt/cheatsheets/test.md`
-- **THEN** the operation fails with permission denied — `/opt/cheatsheets/` is image-state, not user-state
+#### Scenario: Agent writes to /opt/cheatsheets are lost on container stop
+
+- **WHEN** an agent writes to `/opt/cheatsheets/` (tmpfs is rw by default inside
+  the container, though the 8 MB cap limits abuse)
+- **THEN** the write is NOT visible in `/opt/cheatsheets-image/` and NOT
+  persisted after container stop (tmpfs is ephemeral)
+- **AND** the next forge container starts fresh from the image-baked canonical
 
 ### Requirement: RUNTIME_LIMITATIONS feedback channel
 
@@ -156,4 +180,41 @@ The refresh action SHALL re-fetch every cited URL and confirm the cheatsheet con
 - **AND** the content still matches (or has been corrected to match)
 - **THEN** the `**Last updated:** YYYY-MM-DD` line SHALL be bumped to today's date in the same commit
 - **AND** the date SHALL NOT be bumped without re-verification
+
+### Requirement: Provenance section — `local:` field per cited URL
+
+Every URL citation in a cheatsheet's `## Provenance` section SHALL be accompanied
+by a `local:` sub-field on the line immediately after the URL, once the URL has
+been fetched and stored in `cheatsheet-sources/`. URLs that have NOT been
+fetched (off-allowlist domains, pending manual review) SHALL be left as bare
+URL lines with no `local:` field.
+
+This extends the existing Requirement "Cheatsheet template" in the main
+`agent-cheatsheets` spec. The template scenario "Provenance section SHALL
+contain at least one URL and a `**Last updated:**` line" is unchanged; this
+delta adds the `local:` sub-requirement.
+
+#### Scenario: local: field present after fetch
+- **GIVEN** a cheatsheet cites `https://doc.rust-lang.org/book/` in `## Provenance`
+- **AND** `scripts/fetch-cheatsheet-source.sh` has fetched it
+- **THEN** the Provenance entry looks like:
+  ```
+  - The Rust Programming Language (official): <https://doc.rust-lang.org/book/>
+    local: `cheatsheet-sources/doc.rust-lang.org/book`
+  ```
+
+#### Scenario: bare URL remains for off-allowlist source
+- **GIVEN** a cheatsheet cites `https://docs.oracle.com/...` in `## Provenance`
+- **AND** that domain is off-allowlist (do-not-bundle)
+- **THEN** the Provenance entry has NO `local:` field
+- **AND** the cheatsheet MAY add a comment `# [unfetched: off-allowlist]` after the URL
+
+#### Scenario: INDEX.md shows verify state
+- **GIVEN** all of a cheatsheet's Provenance URLs have been fetched
+- **WHEN** `scripts/regenerate-cheatsheet-index.sh` runs
+- **THEN** the cheatsheet's line in `cheatsheets/INDEX.md` ends with
+  `[verified: <sha8>]` where `<sha8>` is the first 8 hex chars of the
+  first fetched source's SHA-256
+- **GIVEN** only SOME Provenance URLs have been fetched
+- **THEN** the line ends with `[partial-verify]`
 

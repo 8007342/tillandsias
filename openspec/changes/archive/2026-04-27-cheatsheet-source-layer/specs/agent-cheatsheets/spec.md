@@ -11,9 +11,9 @@ every cited URL in a cheatsheet's `## Provenance` section MUST include a
 been fetched into `cheatsheet-sources/`. This change is additive — existing
 requirements are unchanged.
 
-## CHANGED Requirements
+## ADDED Requirements
 
-### Requirement: Provenance section — `local:` field per cited URL (NEW)
+### Requirement: Provenance section — `local:` field per cited URL
 
 Every URL citation in a cheatsheet's `## Provenance` section SHALL be accompanied
 by a `local:` sub-field on the line immediately after the URL, once the URL has

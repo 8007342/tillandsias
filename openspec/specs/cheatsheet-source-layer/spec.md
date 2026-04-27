@@ -1,19 +1,8 @@
 # cheatsheet-source-layer Specification
 
-@trace spec:cheatsheet-source-layer
-
 ## Purpose
-
-Guarantee that every URL cited in a cheatsheet's `## Provenance` section was
-actually fetched and is physically verifiable on host disk. The failure mode
-this spec closes: a cheatsheet author writes a plausible URL into `## Provenance`
-WITHOUT fetching it, leaving claims unverifiable (e.g., `cheatsheets/runtime/local-inference.md`
-cited `/api/embeddings` after Ollama had switched to `/api/embed`). This spec
-introduces a verbatim cold-path source layer at `cheatsheet-sources/` that CI
-validates on every commit.
-
+TBD - created by archiving change cheatsheet-source-layer. Update Purpose after archive.
 ## Requirements
-
 ### Requirement: Verbatim source storage
 
 Every cited URL SHALL have a deterministic on-disk path derived from the URL.
@@ -144,8 +133,10 @@ at ERROR level cause `exit 1`. WARN-level violations print but exit 0.
 
 ### Requirement: Hot/cold separation
 
-`cheatsheet-sources/` is COLD storage — host disk only, never baked into any
-container image, never bind-mounted into forge containers by default.
+`cheatsheet-sources/` SHALL be COLD storage — host disk only. It MUST NOT be
+baked into any container image and MUST NOT be bind-mounted into forge
+containers by default. Agents inside the forge see only `[verified: <sha8>]`
+markers in `INDEX.md`, never the verbatim source bytes.
 
 #### Scenario: cheatsheet-sources is not included in forge image
 - **WHEN** the forge image is built (`scripts/build-image.sh forge`)
@@ -165,8 +156,10 @@ container image, never bind-mounted into forge containers by default.
 
 ### Requirement: Refresh behaviour
 
-Fetched sources can drift (vendor changes their docs HTML). The refresh script
-detects and surfaces drift for human triage.
+`scripts/refresh-cheatsheet-sources.sh` SHALL re-fetch stored sources and
+surface drift (SHA mismatch) or removal (HTTP 404) by updating the sidecar's
+`staleness` field. It MUST never delete the last known good bytes — drift is
+human-triaged, not auto-resolved.
 
 #### Scenario: Drift detection on re-fetch
 - **WHEN** `scripts/refresh-cheatsheet-sources.sh` runs and re-fetches a URL
@@ -183,12 +176,3 @@ detects and surfaces drift for human triage.
 - **WHEN** `scripts/refresh-cheatsheet-sources.sh --max-age-days 90` runs
 - **THEN** only sources with `fetched` date older than 90 days are re-fetched
 
-## REMOVED Requirements
-
-None — this is a new capability.
-
-## Sources of Truth
-
-- `docs/strategy/cheatsheet-source-layer-plan.md` — Opus design memo; authoritative rationale for all six requirement families
-- `cheatsheets/runtime/forge-hot-cold-split.md` — defines COLD path taxonomy that pins `cheatsheet-sources/` to host-only storage
-- `cheatsheets/runtime/cheatsheet-frontmatter-spec.md` — frontmatter contract that this spec extends with the `local:` field

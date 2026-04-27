@@ -1,5 +1,12 @@
-## MODIFIED Requirements
+## Purpose
 
+Tillandsias launches every container via the podman CLI with a strict
+non-negotiable hardening contract: read-only root filesystems where
+possible, capability drops by default, no-new-privileges, label-disabled
+SELinux, and userns mapping. This capability defines the orchestration
+contract — how profiles are constructed, how launch arguments are emitted,
+and which security flags MUST always be present.
+## Requirements
 ### Requirement: Security-hardened container defaults
 Every container launched by Tillandsias SHALL include non-negotiable security flags that MUST NOT be weakened by configuration. Additional restrictions MAY be added.
 
@@ -68,7 +75,6 @@ Container volume mounts SHALL follow a secure, minimal strategy with configurabl
 - **WHEN** a volume is mounted into a container
 - **THEN** no `:z` or `:Z` suffix is needed because `--security-opt=label=disable` disables SELinux confinement for the container process, making relabeling unnecessary
 
-
 ### Requirement: Detached web-mode launch profile
 
 The orchestration layer SHALL provide a launch profile that runs web-mode containers detached (`-d`), without `-i`, `-t`, or `--rm`, so that the container survives its originating click. All other hardening flags (`--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`, read-only root) remain applied.
@@ -98,3 +104,110 @@ The orchestration layer SHALL name persistent OpenCode Web containers exactly `t
 - **THEN** the `--name` flag is `tillandsias-my-app-forge`
 - **AND** the genus still appears in the `ContainerInfo` record for UI/iconography purposes
 - **AND** the name never collides with a concurrently-running `tillandsias-my-app-web` static-httpd container
+
+### Requirement: Typed TmpfsMount with size_mb cap
+
+`build_podman_args()` SHALL emit `--tmpfs=<path>:size=<N>m,mode=<oct>` for every
+`TmpfsMount` in the profile, using the typed `TmpfsMount { path, size_mb, mode }`
+struct rather than bare strings. The `if profile.read_only` gate that previously
+suppressed tmpfs emission SHALL be removed — tmpfs mounts are emitted regardless
+of root-FS mode.
+
+> Delta: `tmpfs_mounts` in `ContainerProfile` changes from `Vec<&'static str>` (bare
+> paths, no quota) to `Vec<TmpfsMount>` where each mount carries a `path`, a
+> `size_mb` kernel-enforced cap, and an octal `mode`. The `if profile.read_only`
+> gate that previously suppressed tmpfs emission is removed — tmpfs mounts are
+> emitted regardless of root-FS mode.
+`TmpfsMount` in the profile, where:
+- `<path>` is the absolute container path
+- `<N>` is `TmpfsMount.size_mb` in MiB
+- `<oct>` is `TmpfsMount.mode` formatted as a 4-digit octal integer (e.g., `01777`)
+
+The `mode=` field SHALL always be present. The `size=` field SHALL always be present
+and SHALL be non-zero.
+
+#### Scenario: TmpfsMount with size_mb cap emits size=<N>m in podman argv
+
+- **WHEN** `build_podman_args()` processes a profile with `TmpfsMount { path: "/tmp", size_mb: 256, mode: 0o1777 }`
+- **THEN** the resulting argv contains `--tmpfs=/tmp:size=256m,mode=01777`
+- **AND** NOT `--tmpfs=/tmp` (bare path without size cap is forbidden)
+
+#### Scenario: Service profiles (web, git, inference) carry 64 MB tmpfs caps on their existing mounts
+
+- **WHEN** `build_podman_args()` processes the `web` or `git_service` profiles
+- **THEN** every existing tmpfs mount is emitted with `size=64m`
+
+---
+
+### Requirement: --memory pairing whenever any tmpfs mount is present
+
+When `tmpfs_mounts` is non-empty, `build_podman_args()` SHALL append both
+`--memory=<ceiling>m` and `--memory-swap=<ceiling>m` where the ceiling is
+`sum(tmpfs.size_mb) + 256` (256 MB working-set baseline). This ensures zero net
+swap allocation from the container.
+
+> Delta: when `tmpfs_mounts` is non-empty, `build_podman_args()` appends
+> `--memory=<ceiling>m` and `--memory-swap=<ceiling>m` to cap the container's
+> aggregate RAM consumption. The ceiling is `sum(tmpfs.size_mb) + 256` (256 MB
+> working-set baseline).
+
+`--memory-swap` SHALL equal `--memory` exactly, ensuring zero net swap allocation.
+This is the "no swap escape from the RAM-only guarantee" rule.
+
+#### Scenario: --memory and --memory-swap appended when tmpfs is non-empty
+
+- **WHEN** a profile has one or more tmpfs mounts
+- **THEN** the podman argv contains both `--memory=<N>m` and `--memory-swap=<N>m`
+  where N = sum of all tmpfs size_mb caps + 256
+
+#### Scenario: Profiles with no tmpfs mounts emit no --memory flag
+
+- **WHEN** a profile has an empty `tmpfs_mounts` list
+- **THEN** the podman argv does NOT contain `--memory` or `--memory-swap`
+- **AND** host RAM is the only ceiling (existing behaviour preserved)
+
+### Requirement: external_logs_role profile field
+
+The `ContainerProfile` struct SHALL carry an `external_logs_role: Option<&'static str>` field. When `Some(role)`, the launcher SHALL bind-mount the host's per-role external-logs directory RW into the container at `/var/log/tillandsias/external/`.
+
+#### Scenario: Producer profile declares its role
+- **WHEN** a `ContainerProfile` has `external_logs_role: Some("git-service")` (or another role name)
+- **THEN** the launcher SHALL resolve `MountSource::ExternalLogsProducer { role }` to `~/.local/state/tillandsias/external-logs/<role>/`
+- **AND** create the directory if absent before `podman run`
+- **AND** pass `-v <host_role_dir>:/var/log/tillandsias/external:rw,Z` to podman
+
+#### Scenario: Default is None (no producer)
+- **WHEN** a profile has `external_logs_role: None`
+- **THEN** no `ExternalLogsProducer` mount is added to the podman args
+- **AND** the profile's existing mounts are unaffected
+
+### Requirement: external_logs_consumer profile field
+
+The `ContainerProfile` struct SHALL carry an `external_logs_consumer: bool` field. When `true`, the launcher SHALL bind-mount the parent external-logs directory RO into the container at `/var/log/tillandsias/external/`, exposing every producer's curated logs to the consumer.
+
+#### Scenario: Consumer profile receives RO parent mount
+- **WHEN** a `ContainerProfile` has `external_logs_consumer: true`
+- **THEN** the launcher SHALL resolve `MountSource::ExternalLogsConsumerRoot` to `~/.local/state/tillandsias/external-logs/`
+- **AND** pass `-v <host_external_logs_dir>:/var/log/tillandsias/external:ro,Z` to podman
+
+#### Scenario: Default is false (no consumer)
+- **WHEN** a profile has `external_logs_consumer: false`
+- **THEN** no `ExternalLogsConsumerRoot` mount is added
+
+### Requirement: Reverse-breach refusal at launch
+
+A `ContainerProfile` MUST NOT be both a producer (`external_logs_role: Some(_)`) AND a consumer (`external_logs_consumer: true`). The `validate()` method on `ContainerProfile` SHALL refuse such profiles, and `build_podman_args()` SHALL assert this invariant.
+
+#### Scenario: Both fields set — refused
+- **WHEN** a profile has BOTH `external_logs_role: Some(_)` AND `external_logs_consumer: true`
+- **THEN** `ContainerProfile::validate()` SHALL return `Err` citing `spec:external-logs-layer`
+- **AND** `build_podman_args()` SHALL assert this invariant via `debug_assert!` (panic in debug builds) and emit an accountability WARN in release builds
+
+#### Scenario: Valid producer profiles
+- **WHEN** a profile has `external_logs_role: Some(_)` AND `external_logs_consumer: false`
+- **THEN** `ContainerProfile::validate()` returns `Ok(())`
+
+#### Scenario: Valid consumer profiles
+- **WHEN** a profile has `external_logs_role: None` AND `external_logs_consumer: true`
+- **THEN** `ContainerProfile::validate()` returns `Ok(())`
+
