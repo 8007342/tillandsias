@@ -13,10 +13,10 @@ Phase 0 of the design's Migration Plan. Each task is verifiable in a single PR; 
 
 ## 2. Allowlist relocation and CRDT repurpose
 
-- [ ] 2.1 `git mv cheatsheet-sources/license-allowlist.toml cheatsheets/license-allowlist.toml` (preserves history).
-- [ ] 2.2 Add `default_tier`, `last_evaluated`, `evaluated_by` fields to every existing `[domains."..."]` entry in the relocated TOML; default the inference for currently-allowlisted bundleable domains to `default_tier = "bundled"`; default off-allowlist or do-not-bundle entries to `default_tier = "pull-on-demand"`.
-- [ ] 2.3 Add new `[domains."docs.oracle.com"]` entry with `default_tier = "pull-on-demand"`, `evaluated_by = "hand-curated"`, `license = "oracle-ftc"`, `redistribution = "do-not-bundle"`.
-- [ ] 2.4 Update header comment in the TOML to document the CRDT semantics (`evaluated_by`, `last_evaluated`, telemetry `license_drift` events).
+- [x] 2.1 `git mv cheatsheet-sources/license-allowlist.toml cheatsheets/license-allowlist.toml` (preserves history).
+- [x] 2.2 Add `default_tier`, `last_evaluated`, `evaluated_by` fields to every existing `[domains."..."]` entry in the relocated TOML; default the inference for currently-allowlisted bundleable domains to `default_tier = "bundled"`; default off-allowlist or do-not-bundle entries to `default_tier = "pull-on-demand"`.
+- [x] 2.3 Add new `[domains."docs.oracle.com"]` entry with `default_tier = "pull-on-demand"`, `evaluated_by = "hand-curated"`, `license = "oracle-ftc"`, `redistribution = "do-not-bundle"`.
+- [x] 2.4 Update header comment in the TOML to document the CRDT semantics (`evaluated_by`, `last_evaluated`, telemetry `license_drift` events).
 
 ## 3. Bundled-tier infrastructure
 
