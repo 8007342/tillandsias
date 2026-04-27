@@ -107,6 +107,6 @@ Phase 0 of the design's Migration Plan. Each task is verifiable in a single PR; 
 ## 14. Verify and archive prep
 
 - [x] 14.1 Run `openspec validate cheatsheets-license-tiered --strict`; fix every reported issue.
-- [ ] 14.2 Run `/opsx:verify cheatsheets-license-tiered` and address gaps; confirm spec, design, tasks, and implementation converge.
+- [x] 14.2 Run `/opsx:verify cheatsheets-license-tiered` and address gaps; confirm spec, design, tasks, and implementation converge.
 - [x] 14.3 Run `cargo test --workspace` and `./build.sh --test` to confirm no regression in the existing test suite.
 - [ ] 14.4 Build the forge image one final time, run a smoke test (launch forge, `cat /opt/cheatsheets/INDEX.md`, materialize one pull-on-demand recipe, confirm `lookups.jsonl` records the events), then archive via `/opsx:archive cheatsheets-license-tiered` and run `./scripts/bump-version.sh --bump-changes`.
