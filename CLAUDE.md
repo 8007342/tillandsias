@@ -251,6 +251,25 @@ Code, log events, telemetry, and specs that derive their behaviour from a cheats
 
 This makes the cheatsheet → code → spec graph queryable by `git grep '@cheatsheet'` exactly like `@trace spec:`.
 
+### Cheatsheet refresh cadence and staleness detection
+
+Cheatsheets are living documents. Each cheatsheet's `**Last updated:** YYYY-MM-DD` line indicates when it was last verified against the cited authoritative sources. A soft staleness check runs periodically:
+
+**Refresh workflow:**
+1. Run `scripts/check-cheatsheet-staleness.sh` to identify cheatsheets older than 90 days (default threshold)
+2. For each flagged cheatsheet:
+   - Re-fetch the cited URLs and confirm the cheatsheet content still matches the upstream source
+   - Correct any divergences in the cheatsheet content
+   - Update the `**Last updated:**` date to today ONLY after re-verification (never blindly)
+3. Commit with message like: `chore(cheatsheets): refresh stale entries — verified against upstream sources`
+
+**Automation:**
+- Manual cadence: run `scripts/check-cheatsheet-staleness.sh --days 90` every 3 months (or as part of release prep)
+- Future enhancement: CI workflow can run this check on schedule or on-demand (`workflow_dispatch`)
+- The check is informational (non-blocking) — staleness does not fail builds. It surfaces in RUNTIME_LIMITATIONS logs and host-side monitoring
+
+**No blind bumps:** The `**Last updated:**` line is a promise that the cheatsheet was actually re-verified. Never bump the date without re-checking the cited URLs.
+
 ## @tombstone — never silently delete
 
 Dead code, deprecated specs, and removed features get a `@tombstone superseded:<new>` (replacement exists) or `@tombstone obsolete:<old>` (no replacement) annotation. The block is commented out, NOT deleted, for **three releases** (since Tillandsias has a release cadence — VERSION track) before final deletion. The tombstone records the version it landed in so reviewers know when it's safe to delete.
