@@ -85,6 +85,27 @@ fn write_lf(path: &std::path::Path, content: &str) -> std::io::Result<()> {
 // Executable scripts
 // ---------------------------------------------------------------------------
 pub const BUILD_IMAGE: &str = include_str!("../../scripts/build-image.sh");
+
+// ---------------------------------------------------------------------------
+// WSL-native image build pipeline (Windows path; replaces podman build).
+// @trace spec:cross-platform, spec:podman-orchestration
+// ---------------------------------------------------------------------------
+pub const WSL_BUILD_LIB_COMMON: &str =
+    include_str!("../../scripts/wsl-build/lib-common.sh");
+pub const WSL_BUILD_BASES: &str =
+    include_str!("../../scripts/wsl-build/bases.sh");
+pub const WSL_BUILD_PROXY: &str =
+    include_str!("../../scripts/wsl-build/build-proxy.sh");
+pub const WSL_BUILD_GIT: &str =
+    include_str!("../../scripts/wsl-build/build-git.sh");
+pub const WSL_BUILD_ROUTER: &str =
+    include_str!("../../scripts/wsl-build/build-router.sh");
+pub const WSL_BUILD_INFERENCE: &str =
+    include_str!("../../scripts/wsl-build/build-inference.sh");
+pub const WSL_BUILD_FORGE: &str =
+    include_str!("../../scripts/wsl-build/build-forge.sh");
+pub const WSL_BUILD_ENCLAVE_INIT: &str =
+    include_str!("../../scripts/wsl-build/build-enclave-init.sh");
 // build-tools-overlay.sh tombstoned 2026-04-25 — agents are hard-installed in
 // the forge image; no runtime overlay build required.
 // @trace spec:tombstone-tools-overlay
@@ -361,6 +382,32 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
                 file = %path.display(),
                 error = %e,
                 "Failed to set executable permission — container entrypoint may fail"
+            );
+        }
+    }
+
+    // -- scripts/wsl-build/ — Windows-native image build pipeline. --
+    // @trace spec:cross-platform, spec:podman-orchestration
+    let wsl_build_dir = scripts_dir.join("wsl-build");
+    fs::create_dir_all(&wsl_build_dir).map_err(|e| format!("wsl-build dir: {e}"))?;
+    let wsl_scripts: &[(&str, &str)] = &[
+        ("lib-common.sh", WSL_BUILD_LIB_COMMON),
+        ("bases.sh", WSL_BUILD_BASES),
+        ("build-proxy.sh", WSL_BUILD_PROXY),
+        ("build-git.sh", WSL_BUILD_GIT),
+        ("build-router.sh", WSL_BUILD_ROUTER),
+        ("build-inference.sh", WSL_BUILD_INFERENCE),
+        ("build-forge.sh", WSL_BUILD_FORGE),
+        ("build-enclave-init.sh", WSL_BUILD_ENCLAVE_INIT),
+    ];
+    for (name, content) in wsl_scripts {
+        write_lf(&wsl_build_dir.join(name), content)
+            .map_err(|e| format!("wsl-build/{name}: {e}"))?;
+        #[cfg(unix)]
+        {
+            let _ = fs::set_permissions(
+                wsl_build_dir.join(name),
+                fs::Permissions::from_mode(0o755),
             );
         }
     }

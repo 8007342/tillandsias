@@ -23,11 +23,30 @@ const IMAGE_TYPES: &[(&str, fn() -> String)] = &[
 ];
 
 /// Run the init command. When `force` is true, rebuild even if images exist.
+///
+/// Dispatches by target OS:
+/// - **Windows**: WSL-native path — `scripts/wsl-build/build-<service>.sh`
+///   for each enclave service, then `wsl --import` each tarball.
+///   No podman, no podman-machine. @trace spec:cross-platform
+/// - **Linux / macOS**: existing podman path.
 pub fn run_with_force(force: bool) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        run_with_force_wsl(force)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        run_with_force_podman(force)
+    }
+}
+
+/// Linux/macOS implementation: builds enclave images via podman.
+#[cfg(not(target_os = "windows"))]
+fn run_with_force_podman(force: bool) -> bool {
     println!("{}", i18n::t("init.preparing"));
     println!();
 
-    // On macOS/Windows, podman requires a VM (podman machine).
+    // On macOS, podman requires a VM (podman machine).
     // Init and start it before any image builds.
     // @trace spec:podman-orchestration
     if tillandsias_core::state::Os::detect().needs_podman_machine() {
@@ -251,6 +270,214 @@ pub fn run_with_force(force: bool) -> bool {
 #[allow(dead_code)] // CLI entry point — called from main when --init has no --force flag
 pub fn run() -> bool {
     run_with_force(false)
+}
+
+/// Windows implementation: WSL-native build pipeline.
+///
+/// For each enclave service, run `scripts/wsl-build/build-<service>.sh`
+/// to produce `target/wsl/tillandsias-<service>.tar`, then `wsl --import`
+/// the tarball as `tillandsias-<service>` under
+/// `%LOCALAPPDATA%\Tillandsias\WSL\<service>`.
+///
+/// The build scripts are extracted from `embedded.rs` into a per-process
+/// dir under `runtime_dir()`, so deployed binaries work without the
+/// workspace source on disk. Bash is required (`C:\Program Files\Git\usr\bin\bash.exe`
+/// or any `bash.exe` on PATH); we exit early with a clear message otherwise.
+///
+/// @trace spec:cross-platform, spec:podman-orchestration
+#[cfg(target_os = "windows")]
+fn run_with_force_wsl(force: bool) -> bool {
+    println!("{}", i18n::t("init.preparing"));
+    println!();
+
+    // Locate bash.exe — required to drive the wsl-build scripts.
+    let bash = match find_bash_exe() {
+        Some(p) => p,
+        None => {
+            eprintln!("  \u{2717} bash.exe not found on PATH.");
+            eprintln!("    Install Git for Windows (https://git-scm.com/download/win) and try again.");
+            return false;
+        }
+    };
+    println!("  using bash: {}", bash.display());
+
+    // Extract embedded image sources (scripts/wsl-build/, images/, etc.).
+    let source_dir = match embedded::write_image_sources() {
+        Ok(dir) => dir,
+        Err(e) => {
+            eprintln!("  [internal] Failed to extract embedded image sources: {e}");
+            return false;
+        }
+    };
+
+    let wsl_build_dir = source_dir.join("scripts").join("wsl-build");
+    let target_wsl_dir = source_dir.join("target").join("wsl");
+    let _ = std::fs::create_dir_all(&target_wsl_dir);
+
+    // Each enclave service maps to a build script + a runtime distro name.
+    // enclave-init runs first because forge-offline egress rules apply at
+    // VM cold-boot via [boot] command in its wsl.conf.
+    // proxy first (foundation), then forge (heaviest), then git/inference/router.
+    let services: &[(&str, &str)] = &[
+        ("enclave-init", "build-enclave-init.sh"),
+        ("proxy", "build-proxy.sh"),
+        ("forge", "build-forge.sh"),
+        ("git", "build-git.sh"),
+        ("inference", "build-inference.sh"),
+        ("router", "build-router.sh"),
+    ];
+
+    let mut all_success = true;
+    for (service, script) in services {
+        let distro = format!("tillandsias-{service}");
+
+        if force {
+            // wsl --unregister wipes the existing distro + VHDX.
+            let _ = std::process::Command::new("wsl.exe")
+                .args(["--unregister", &distro])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+        } else if wsl_distro_exists(&distro) {
+            println!("  \u{2713} {distro} already imported (skipping)");
+            continue;
+        }
+
+        // Run the build script.
+        let script_path = wsl_build_dir.join(script);
+        println!("  \u{1f527} building {service} via {}", script.to_string());
+        let build_status = std::process::Command::new(&bash)
+            .arg(&script_path)
+            .current_dir(&source_dir)
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status();
+        match build_status {
+            Ok(s) if s.success() => {}
+            Ok(s) => {
+                eprintln!("  \u{2717} {service} build failed (exit {})", s.code().unwrap_or(-1));
+                all_success = false;
+                continue;
+            }
+            Err(e) => {
+                eprintln!("  \u{2717} {service} build error: {e}");
+                all_success = false;
+                continue;
+            }
+        }
+
+        // Locate the produced tarball — the build script puts it in
+        // <repo_or_source_root>/target/wsl/. embedded.rs writes scripts
+        // under source_dir, and lib-common.sh derives TILL_REPO_ROOT
+        // relative to the script's location, so the tarball ends up in
+        // source_dir/target/wsl/.
+        let tarball = target_wsl_dir.join(format!("tillandsias-{service}.tar"));
+        if !tarball.exists() {
+            eprintln!("  \u{2717} expected tarball missing: {}", tarball.display());
+            all_success = false;
+            continue;
+        }
+
+        // wsl --import. Install location is %LOCALAPPDATA%\Tillandsias\WSL\<service>.
+        let local_appdata = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| {
+            std::env::var("USERPROFILE")
+                .map(|p| format!("{p}\\AppData\\Local"))
+                .unwrap_or_default()
+        });
+        let install_dir = std::path::PathBuf::from(local_appdata)
+            .join("Tillandsias")
+            .join("WSL")
+            .join(service);
+        let _ = std::fs::create_dir_all(&install_dir);
+
+        println!("  \u{2192} wsl --import {distro}");
+        let import_status = std::process::Command::new("wsl.exe")
+            .args(["--import"])
+            .arg(&distro)
+            .arg(&install_dir)
+            .arg(&tarball)
+            .args(["--version", "2"])
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status();
+        match import_status {
+            Ok(s) if s.success() => {
+                println!("  \u{2713} {distro} ready");
+            }
+            Ok(s) => {
+                eprintln!(
+                    "  \u{2717} wsl --import {distro} failed (exit {})",
+                    s.code().unwrap_or(-1)
+                );
+                all_success = false;
+            }
+            Err(e) => {
+                eprintln!("  \u{2717} wsl --import {distro} error: {e}");
+                all_success = false;
+            }
+        }
+    }
+
+    embedded::cleanup_image_sources();
+
+    println!();
+    if all_success {
+        println!("{}", i18n::t("init.ready_run"));
+    } else {
+        eprintln!("  {}", i18n::t("init.build.some_failed"));
+    }
+    all_success
+}
+
+/// Locate bash.exe on Windows. Tries common Git for Windows install paths
+/// then falls back to PATH lookup via `where`.
+#[cfg(target_os = "windows")]
+fn find_bash_exe() -> Option<std::path::PathBuf> {
+    static CANDIDATES: &[&str] = &[
+        r"C:\Program Files\Git\usr\bin\bash.exe",
+        r"C:\Program Files\Git\bin\bash.exe",
+        r"C:\Program Files (x86)\Git\usr\bin\bash.exe",
+    ];
+    for p in CANDIDATES {
+        if std::path::Path::new(p).exists() {
+            return Some(std::path::PathBuf::from(p));
+        }
+    }
+    // Fallback: ask the shell.
+    let out = std::process::Command::new("where").arg("bash").output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&out.stdout);
+    s.lines().next().map(|l| std::path::PathBuf::from(l.trim()))
+}
+
+/// Check if a WSL distro is registered. Robust against UTF-16 LE output
+/// of `wsl --list --quiet`.
+#[cfg(target_os = "windows")]
+fn wsl_distro_exists(name: &str) -> bool {
+    let out = match std::process::Command::new("wsl.exe")
+        .args(["--list", "--quiet"])
+        .output()
+    {
+        Ok(o) => o,
+        Err(_) => return false,
+    };
+    if !out.status.success() {
+        return false;
+    }
+    // wsl.exe emits UTF-16 LE on Windows. Decode via String::from_utf16.
+    let bytes = out.stdout;
+    let utf16: Vec<u16> = bytes
+        .chunks_exact(2)
+        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .collect();
+    let decoded = String::from_utf16_lossy(&utf16);
+    decoded
+        .lines()
+        .any(|l| l.trim().trim_matches('\u{feff}') == name)
 }
 
 /// Build the forge image without the init banner/flow.
