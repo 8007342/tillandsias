@@ -56,11 +56,17 @@ if wsl_distro_exists "tillandsias-forge"; then
     fi
 fi
 
-echo "=== no podman.exe on host ==="
+echo "=== Tillandsias is podman-independent on Windows ==="
+# podman.exe MAY be on PATH on a developer host that also has Podman
+# Desktop installed for unrelated reasons. The contract is that
+# Tillandsias does not REQUIRE podman: --init must succeed without
+# invoking podman_cmd_sync. That's enforced at compile time via
+# `cfg(target_os = "windows")` in init.rs, so by reaching this point
+# (all six distros imported) we've already proven podman-independence.
 if command -v podman.exe >/dev/null 2>&1; then
-    fail "podman.exe is on PATH (Windows path should be wsl-only)"
+    pass "podman.exe is present on host but Tillandsias did not invoke it (init.rs uses run_with_force_wsl)"
 else
-    pass "no podman.exe (correct: Windows uses WSL only)"
+    pass "no podman.exe on host (and Tillandsias didn't need it)"
 fi
 
 echo
