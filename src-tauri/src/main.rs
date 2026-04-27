@@ -118,6 +118,15 @@ static CONTROL_SOCKET: std::sync::OnceLock<
 > = std::sync::OnceLock::new();
 
 fn main() {
+    // @trace spec:cross-platform
+    // Install the rustls default crypto provider once at process start.
+    // reqwest is configured with `rustls-no-provider`, so anything that
+    // creates a reqwest client (Tauri updater, github_health probes,
+    // self-update flows) will panic with "No provider set" if we don't
+    // install one. Idempotent — `install_default()` returns Err when
+    // a provider is already installed and we discard the error.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     // On Windows, hide the console window for tray-only mode (no args).
     // CLI mode keeps the console so output is visible in any terminal.
     #[cfg(target_os = "windows")]
