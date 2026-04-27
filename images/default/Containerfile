@@ -153,6 +153,25 @@ RUN curl -fsSL "https://github.com/mozilla/geckodriver/releases/download/v${GECK
     && rm /tmp/geckodriver.tar.gz \
     && /usr/local/bin/geckodriver --version 2>&1 | head -1
 
+# ── Nix + direnv + nix-direnv (single-user, flakes enabled) ─────────
+# @trace spec:forge-nix-toolchain, spec:default-image
+# Nix installed in single-user mode (no daemon needed for ephemeral forge).
+# Direnv + nix-direnv for .envrc auto-activation and flake evaluation caching.
+# Experimental features (nix-command, flakes) are enabled system-wide.
+RUN curl -fsSL https://nixos.org/nix/install | sh -s -- --no-daemon \
+    && . /root/.nix-profile/etc/profile.d/nix.sh \
+    && nix --version \
+    && microdnf install -y direnv \
+    && nix-env -i nix-direnv \
+    && microdnf clean all
+
+# ── Nix configuration ──────────────────────────────────────────────
+# @trace spec:forge-nix-toolchain, spec:default-image
+# Enable experimental features (nix-command, flakes) system-wide.
+RUN mkdir -p /etc/nix \
+    && echo "experimental-features = nix-command flakes" > /etc/nix/nix.conf \
+    && chmod 644 /etc/nix/nix.conf
+
 # ── Flutter SDK (hard-installed at /opt/flutter, pre-cached) ───
 # @trace spec:default-image
 # Flutter is a heavyweight SDK (~1GB after precache) so it gets its own
@@ -400,7 +419,9 @@ ENTRYPOINT ["/usr/local/bin/entrypoint-forge-claude.sh"]
 ENV HOME=/home/forge USER=forge \
     TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets \
     LANG=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8
+    LC_ALL=en_US.UTF-8 \
+    NIX_CONFIG=/etc/nix/nix.conf \
+    NIX_PATH=nixpkgs=flake:nixpkgs
 
 # @trace spec:forge-environment-discoverability
 # TILLANDSIAS_IMAGE_VERSION identifies the forge image build the agent is
@@ -411,4 +432,4 @@ ENV HOME=/home/forge USER=forge \
 # `tillandsias-inventory`. cheatsheets-mcp is declared ahead of its landing
 # change so agents can probe the intended capability surface today.
 ENV TILLANDSIAS_IMAGE_VERSION="forge-baseline" \
-    TILLANDSIAS_CAPABILITIES="rust,go,java-21,maven,gradle,flutter,nix,headless-chromium,headless-firefox,protoc,grpcurl,opencode,claude,openspec,cheatsheets-mcp"
+    TILLANDSIAS_CAPABILITIES="rust,go,java-21,maven,gradle,flutter,nix,direnv,nix-direnv,headless-chromium,headless-firefox,protoc,grpcurl,opencode,claude,openspec,cheatsheets-mcp"

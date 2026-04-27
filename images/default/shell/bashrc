@@ -45,6 +45,12 @@ if command -v zoxide &>/dev/null; then
     eval "$(zoxide init bash)"
 fi
 
+# ── direnv (auto-activate .envrc on cd) ────────────────
+# @trace spec:forge-nix-toolchain, spec:forge-shell-tools
+if command -v direnv &>/dev/null; then
+    eval "$(direnv hook bash)"
+fi
+
 # ── Welcome banner (mirrors fish + zsh; idempotent across re-execs) ─
 # @trace spec:default-image, spec:forge-environment-discoverability
 if [[ -z "${TILLANDSIAS_WELCOME_SHOWN:-}" \
