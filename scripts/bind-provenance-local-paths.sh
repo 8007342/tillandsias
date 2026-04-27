@@ -1,4 +1,17 @@
 #!/usr/bin/env bash
+
+# @tombstone obsolete:cheatsheet-source-layer
+# @trace spec:cheatsheets-license-tiered, spec:cheatsheet-source-layer
+#
+# This script is RETIRED. superseded by build-time meta side-channel injection in build-image.sh.
+# The legacy body below is preserved for traceability through the three-release
+# retention window (final removal in 0.1.<N+3>.x per CLAUDE.md @tombstone discipline).
+# Calling this script now exits early with a notice — it does NOT execute the legacy logic.
+echo "[$(basename "$0")] @tombstone obsolete:cheatsheet-source-layer — script is retired." >&2
+echo "  Reason: superseded by build-time meta side-channel injection in build-image.sh" >&2
+echo "  See openspec/changes/cheatsheets-license-tiered/ for the replacement." >&2
+exit 0
+
 # bind-provenance-local-paths.sh — Inject `local:` fields into cheatsheet
 # Provenance sections for every URL that has an INDEX.json entry.
 #

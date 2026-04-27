@@ -1,4 +1,17 @@
 #!/usr/bin/env bash
+
+# @tombstone obsolete:cheatsheet-source-layer
+# @trace spec:cheatsheets-license-tiered, spec:cheatsheet-source-layer
+#
+# This script is RETIRED. superseded; refresh moves to build-time --refresh-sources for bundled tier and agent-driven materialization for pull-on-demand.
+# The legacy body below is preserved for traceability through the three-release
+# retention window (final removal in 0.1.<N+3>.x per CLAUDE.md @tombstone discipline).
+# Calling this script now exits early with a notice — it does NOT execute the legacy logic.
+echo "[$(basename "$0")] @tombstone obsolete:cheatsheet-source-layer — script is retired." >&2
+echo "  Reason: superseded; refresh moves to build-time --refresh-sources for bundled tier and agent-driven materialization for pull-on-demand" >&2
+echo "  See openspec/changes/cheatsheets-license-tiered/ for the replacement." >&2
+exit 0
+
 # refresh-cheatsheet-sources.sh — drift detection for the cheatsheet-source layer.
 #
 # Usage:

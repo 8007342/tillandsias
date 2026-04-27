@@ -76,12 +76,12 @@ Phase 0 of the design's Migration Plan. Each task is verifiable in a single PR; 
 
 ## 10. Tombstones for superseded behaviour
 
-- [ ] 10.1 Empty the host repo's `cheatsheet-sources/` directory: `git rm -r cheatsheet-sources/*` excluding `.gitkeep-tombstone`; commit `cheatsheet-sources/.gitkeep-tombstone` with header `@tombstone superseded:cheatsheets-license-tiered — the verbatim host-bundled source layer is replaced by image-baked /opt/cheatsheet-sources/ for the bundled tier and per-project pull cache for the pull-on-demand tier. Kept for traceability through 0.1.<N+3>.x. Final removal in 0.1.<N+3>.x per the three-release retention rule.`
-- [ ] 10.2 Add `cheatsheet-sources/` to `.gitignore` (covers any local cache pollution).
-- [ ] 10.3 Add `@tombstone obsolete:cheatsheet-source-layer — superseded by build-time fetch-and-bake in scripts/build-image.sh forge. Safe to delete after 0.1.<N+3>.x.` to `scripts/regenerate-source-index.sh`; comment out the script body but keep the file for three releases.
-- [ ] 10.4 Add `@tombstone obsolete:cheatsheet-source-layer — superseded by build-time meta side-channel injection in build-image.sh. Safe to delete after 0.1.<N+3>.x.` to `scripts/bind-provenance-local-paths.sh`; comment out the body but keep the file.
-- [ ] 10.5 Add `@tombstone obsolete:cheatsheet-source-layer — refresh moves to build-time --refresh-sources for bundled tier and agent-driven materialization for pull-on-demand. Safe to delete after 0.1.<N+3>.x.` to `scripts/refresh-cheatsheet-sources.sh`; comment out the body.
-- [ ] 10.6 Audit `src-tauri/src/handlers.rs` and any other Rust code for references to a `forge.mount_source_layer` config option (the legacy host-mount opt-in); add `// @tombstone obsolete:cheatsheet-source-layer` markers and remove the option's effect (parsing it WARNs and ignores).
+- [x] 10.1 Empty the host repo's `cheatsheet-sources/` directory: `git rm -r cheatsheet-sources/*` excluding `.gitkeep-tombstone`; commit `cheatsheet-sources/.gitkeep-tombstone` with header `@tombstone superseded:cheatsheets-license-tiered — the verbatim host-bundled source layer is replaced by image-baked /opt/cheatsheet-sources/ for the bundled tier and per-project pull cache for the pull-on-demand tier. Kept for traceability through 0.1.<N+3>.x. Final removal in 0.1.<N+3>.x per the three-release retention rule.`
+- [x] 10.2 Add `cheatsheet-sources/` to `.gitignore` (covers any local cache pollution).
+- [x] 10.3 Add `@tombstone obsolete:cheatsheet-source-layer — superseded by build-time fetch-and-bake in scripts/build-image.sh forge. Safe to delete after 0.1.<N+3>.x.` to `scripts/regenerate-source-index.sh`; comment out the script body but keep the file for three releases.
+- [x] 10.4 Add `@tombstone obsolete:cheatsheet-source-layer — superseded by build-time meta side-channel injection in build-image.sh. Safe to delete after 0.1.<N+3>.x.` to `scripts/bind-provenance-local-paths.sh`; comment out the body but keep the file.
+- [x] 10.5 Add `@tombstone obsolete:cheatsheet-source-layer — refresh moves to build-time --refresh-sources for bundled tier and agent-driven materialization for pull-on-demand. Safe to delete after 0.1.<N+3>.x.` to `scripts/refresh-cheatsheet-sources.sh`; comment out the body.
+- [x] 10.6 Audit `src-tauri/src/handlers.rs` and any other Rust code for references to a `forge.mount_source_layer` config option (the legacy host-mount opt-in); add `// @tombstone obsolete:cheatsheet-source-layer` markers and remove the option's effect (parsing it WARNs and ignores).
 
 ## 11. Forge image build validation
 
