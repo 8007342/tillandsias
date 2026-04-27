@@ -93,9 +93,9 @@ Phase 0 of the design's Migration Plan. Each task is verifiable in a single PR; 
 
 ## 12. Pre-commit hook + validator integration
 
-- [ ] 12.1 Update `scripts/hooks/pre-commit-openspec.sh` (or the cheatsheet-specific hook) to run `scripts/check-cheatsheet-sources.sh --no-sha` and surface ERRORs as non-blocking warnings.
-- [ ] 12.2 Confirm the hook still exits 0 even when ERRORs are present (CRDT-convergence philosophy preserved).
-- [ ] 12.3 Add a CI job (or extend an existing one) that runs `scripts/check-cheatsheet-sources.sh` (with SHA check enabled) and FAILS on ERROR; this is the gating check for releases.
+- [x] 12.1 Update `scripts/hooks/pre-commit-openspec.sh` (or the cheatsheet-specific hook) to run `scripts/check-cheatsheet-sources.sh --no-sha` and surface ERRORs as non-blocking warnings.
+- [x] 12.2 Confirm the hook still exits 0 even when ERRORs are present (CRDT-convergence philosophy preserved).
+- [x] 12.3 Add a CI job (or extend an existing one) that runs `scripts/check-cheatsheet-sources.sh` (with SHA check enabled) and FAILS on ERROR; this is the gating check for releases.
 
 ## 13. Trace annotations and commit hygiene
 

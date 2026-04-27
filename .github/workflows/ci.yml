@@ -48,3 +48,11 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace
+
+      # @trace spec:cheatsheets-license-tiered
+      # Gating tier-aware cheatsheet validator. Unlike the pre-commit hook
+      # (non-blocking, CRDT-convergence philosophy), CI fails on validation
+      # ERRORs so a release cannot ship a cheatsheet whose pull-on-demand
+      # stub is malformed or whose CRDT override discipline is broken.
+      - name: Validate cheatsheet tier discipline
+        run: scripts/check-cheatsheet-tiers.sh

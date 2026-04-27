@@ -137,8 +137,10 @@ staleness_check() {
 }
 
 # --- 4. Cheatsheet source binding check ------------------------------------
-# Run check-cheatsheet-sources.sh --no-sha (fast mode for pre-commit).
-# Errors from the checker are printed as OpenSpec warnings — never blocking.
+# Legacy verbatim source layer check — kept for the three-release retention
+# window per @tombstone discipline. The new tier validator (check 4b) is
+# the canonical replacement.
+# @trace spec:cheatsheet-source-layer
 
 cheatsheet_source_check() {
     local checker="${REPO_ROOT}/scripts/check-cheatsheet-sources.sh"
@@ -160,6 +162,30 @@ cheatsheet_source_check() {
     # Warnings (UNFETCHED) are suppressed here — they appear on manual runs.
 }
 
+# --- 4b. Cheatsheet tier-aware validator (cheatsheets-license-tiered) ------
+# Runs scripts/check-cheatsheet-tiers.sh in --quiet mode. ERRORs surface as
+# non-blocking OpenSpec warnings (CRDT-convergence philosophy). The validator
+# itself is non-fatal: it exits 0 unless tier-conditional fields are missing
+# or CRDT override discipline is violated.
+# @trace spec:cheatsheets-license-tiered
+
+cheatsheet_tier_check() {
+    local checker="${REPO_ROOT}/scripts/check-cheatsheet-tiers.sh"
+    [[ -f "${checker}" ]] || return 0
+
+    local output exit_code
+    output="$(bash "${checker}" --quiet 2>&1)" || exit_code=$?
+    exit_code="${exit_code:-0}"
+
+    if [[ "${exit_code}" -ne 0 ]]; then
+        echo "  ⚠ cheatsheet-tiers: validation ERRORs (non-blocking):" >&2
+        while IFS= read -r line; do
+            echo "    ${line}" >&2
+        done <<< "${output}"
+        warnings=$((warnings + 1))
+    fi
+}
+
 # --- Run all checks ---------------------------------------------------------
 
 echo "" >&2  # Visual separator from git's own output
@@ -168,6 +194,7 @@ ghost_check
 zero_trace_check
 staleness_check
 cheatsheet_source_check
+cheatsheet_tier_check
 
 if [[ "$warnings" -gt 0 ]]; then
     echo "" >&2
