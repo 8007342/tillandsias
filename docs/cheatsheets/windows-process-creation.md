@@ -1,3 +1,14 @@
+---
+tags: [windows, process, createprocess, rust, tray]
+languages: [rust]
+since: 2024-01-01
+last_verified: 2026-04-27
+sources:
+  - https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags
+authority: high
+status: current
+---
+
 # Windows Process Creation Flags — Cheatsheet
 
 @trace spec:podman-orchestration
@@ -14,12 +25,20 @@ Rust's stdlib sets `STARTF_USESTDHANDLES` in the `STARTUPINFO` struct when spawn
 
 ## Creation Flag Reference
 
+The following flags are used by `CreateProcess`, `CreateProcessAsUser`, `CreateProcessWithLogonW`, and `CreateProcessWithTokenW`. They apply to Windows XP / Server 2003 and later.
+
 | Flag | Value | Behavior (parent has console) | Behavior (parent consoleless) |
 |------|-------|-------------------------------|-------------------------------|
 | (none) | 0 | Child inherits parent console | **Visible console window flashes** |
 | `CREATE_NO_WINDOW` | 0x08000000 | Child gets hidden console | Child gets hidden console (correct) |
 | `DETACHED_PROCESS` | 0x00000008 | Child has no console at all | Child has no console (stdout=NULL) |
 | `CREATE_NEW_CONSOLE` | 0x00000010 | **Visible console window** | **Visible console window** |
+
+`CREATE_NO_WINDOW`: "The process is a console application that is being run without a console window. Therefore, the console handle for the application is not set. This flag is ignored if the application is not a console application, or if it is used with either CREATE_NEW_CONSOLE or DETACHED_PROCESS."
+
+`DETACHED_PROCESS`: "For console processes, the new process does not inherit its parent's console (the default). The new process can call the AllocConsole function at a later time to create a console." Cannot be combined with `CREATE_NEW_CONSOLE`.
+
+`CREATE_NEW_CONSOLE`: "The new process has a new console, instead of inheriting its parent's console (the default). This flag cannot be used with DETACHED_PROCESS."
 
 ## Correct Pattern for Tray Apps
 
@@ -50,3 +69,8 @@ Callers that need interactive stdio (e.g., `podman run -it`) **override** with `
 - [rprichard/win32-console-docs](https://github.com/rprichard/win32-console-docs) — empirical CreateProcess flag testing
 - [Rust #101645](https://github.com/rust-lang/rust/issues/101645) — STARTF_USESTDHANDLES with invalid handles
 - [MS Docs: Process Creation Flags](https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags)
+
+## Provenance
+
+- https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags — Windows SDK `WinBase.h` process creation flags; `CREATE_NO_WINDOW` (0x08000000) hides console window; `DETACHED_PROCESS` (0x00000008) detaches from parent console; `CREATE_NEW_CONSOLE` (0x00000010) opens new visible console; all used by `CreateProcess` family
+- **Last updated:** 2026-04-27

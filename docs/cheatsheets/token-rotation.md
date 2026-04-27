@@ -1,3 +1,14 @@
+---
+tags: [tokens, rotation, secrets, github, security]
+languages: [rust]
+since: 2024-01-01
+last_verified: 2026-04-27
+sources:
+  - https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app
+authority: high
+status: current
+---
+
 # Token Rotation
 
 ## Overview
@@ -121,7 +132,7 @@ The refresh task is a `tokio::spawn`ed task using `tokio::time::interval(Duratio
 
 For current OAuth tokens (which do not expire), this rewrites the same token — effectively a no-op in terms of value, but a real write in terms of mechanism. The infrastructure (interval, atomic write, error handling, accountability logging) is identical to what Phase 3 of `fine-grained-pat-rotation` needs. When that change lands, only the token source changes (`retrieve_github_token()` becomes `mint_installation_token()`). The delivery path stays the same.
 
-The 55-minute interval is chosen to provide a 5-minute safety margin for the 1-hour expiry of future App installation tokens. In-flight git operations started before the rotation window have 5 minutes to complete with the old token.
+The 55-minute interval is chosen to provide a 5-minute safety margin for the 1-hour expiry of future App installation tokens (GitHub App installation access tokens expire after 1 hour). In-flight git operations started before the rotation window have 5 minutes to complete with the old token.
 
 ### Three-layer cleanup
 
@@ -217,3 +228,8 @@ When Phase 2 is implemented, the only change to the delivery path is: replace `r
 **Cheatsheets:**
 - `docs/cheatsheets/secrets-management.md` — full secrets lifecycle, all secret types
 - `docs/cheatsheets/logging-levels.md` — how to use `--log-secrets-management`
+
+## Provenance
+
+- https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app — GitHub App installation access tokens expire after 1 hour; tokens can be scoped to specific repositories and permissions; generated via POST to `/app/installations/{installation_id}/access_tokens`
+- **Last updated:** 2026-04-27

@@ -1,3 +1,14 @@
+---
+tags: [forge, launch, critical-path, proxy, ca, tools-overlay, enclave]
+languages: [rust, bash]
+since: 2024-01-01
+last_verified: 2026-04-27
+sources:
+  - https://docs.podman.io/en/stable/
+authority: high
+status: current
+---
+
 # Forge Launch Critical Path
 
 @trace spec:layered-tools-overlay, spec:proxy-container, spec:enclave-network
@@ -195,3 +206,8 @@ Numbers from a clean-install verification run (podman machine wiped + reinitiali
 - `docs/cheatsheets/enclave-architecture.md` — Network topology and container roles
 - `openspec/specs/proxy-container/spec.md` — Proxy container spec
 - `openspec/specs/layered-tools-overlay/spec.md` — Tools overlay spec
+
+## Provenance
+
+- https://docs.podman.io/en/stable/ — Podman overview: daemonless OCI-compliant container engine, rootless operation, Docker-compatible CLI, `podman run`/`podman exec`/`podman build` commands that underpin every step in the launch sequence
+- **Last updated:** 2026-04-27

@@ -1,3 +1,14 @@
+---
+tags: [tray, state-machine, tauri, menu, ux]
+languages: [rust]
+since: 2024-01-01
+last_verified: 2026-04-27
+sources:
+  - https://tauri.app/learn/system-tray/
+authority: high
+status: current
+---
+
 # Tray State Machine
 
 @trace spec:tray-app
@@ -204,3 +215,8 @@ Everything else (status line, sign-in, running stacks, Projects, Remote Projects
 - `docs/cheatsheets/secrets-management.md` — keyring backends, headless-Linux caveat
 - `docs/cheatsheets/token-rotation.md` — what happens after `Authed`
 - `docs/cheatsheets/logging-levels.md` — `--log-secrets-management` and friends
+
+## Provenance
+
+- https://tauri.app/learn/system-tray/ — Tauri system tray guide; TrayIcon, TrayIconBuilder, menu attachment, `on_tray_icon_event()`, `on_menu_event()`, tray events (Click, DoubleClick, Enter, Move, Leave), `features = ["tray-icon"]` in Cargo.toml
+- **Last updated:** 2026-04-27

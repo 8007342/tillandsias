@@ -1,3 +1,14 @@
+---
+tags: [windows, credentials, wincred, dpapi, security]
+languages: [rust]
+since: 2024-01-01
+last_verified: 2026-04-27
+sources:
+  - https://learn.microsoft.com/en-us/windows/win32/api/wincred/
+authority: high
+status: current
+---
+
 # Windows Credential Manager
 
 How Tillandsias stores the GitHub OAuth token on Windows. The token lives exclusively in the per-user Credential Manager vault; the host filesystem never holds a `hosts.yml` or any other plaintext copy.
@@ -51,7 +62,7 @@ Persistence chosen: `CRED_PERSIST_ENTERPRISE` is the `keyring` crate default. On
 
 ## `keyring` crate mapping
 
-The crate v3 with the `windows-native` feature maps `Entry::new(service, username)` into Wincred as follows.
+The crate v4 with the `windows-native` feature maps `Entry::new(service, username)` into Wincred as follows.
 
 | Rust call | Windows translation |
 |-----------|---------------------|
@@ -198,3 +209,8 @@ The OS keyring is the single source of truth for the token on every platform; th
 - [cmdkey — Microsoft Learn](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/cmdkey)
 - [keyring-rs — crates.io](https://crates.io/crates/keyring)
 - [keyring::windows — docs.rs](https://docs.rs/keyring/latest/x86_64-pc-windows-msvc/keyring/windows/index.html)
+
+## Provenance
+
+- https://learn.microsoft.com/en-us/windows/win32/api/wincred/ — wincred.h API reference; `CredWriteW`, `CredReadW`, `CredDeleteW`, `CredEnumerateW` functions; `CREDENTIAL` and `CREDENTIALW` structures; DPAPI-backed per-user credential vault
+- **Last updated:** 2026-04-27

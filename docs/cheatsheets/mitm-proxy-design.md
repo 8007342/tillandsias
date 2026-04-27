@@ -1,3 +1,15 @@
+---
+tags: [proxy, mitm, squid, ssl-bump, ca, certificates, enclave]
+languages: [rust, bash, dockerfile]
+since: 2024-01-01
+last_verified: 2026-04-27
+sources:
+  - https://raw.githubusercontent.com/mitmproxy/mitmproxy/main/docs/src/content/concepts/certificates.md
+  - https://wiki.squid-cache.org/Features/SslBump
+authority: high
+status: current
+---
+
 # MITM Proxy Design — Ephemeral CA Certificates for the Tillandsias Enclave
 
 @trace spec:proxy-container
@@ -958,3 +970,9 @@ The host Tillandsias binary generates certificates using `rcgen` (compiled in). 
 **Cheatsheets:**
 - `docs/cheatsheets/enclave-architecture.md` -- full enclave design
 - `docs/cheatsheets/secrets-management.md` -- credential lifecycle
+
+## Provenance
+
+- https://raw.githubusercontent.com/mitmproxy/mitmproxy/main/docs/src/content/concepts/certificates.md — mitmproxy CA lifecycle reference (fetched via raw GitHub; rendered docs at `docs.mitmproxy.org` are JS-rendered and returned empty): CA generated at `~/.mitmproxy/` on first run, unique per installation, 4 cert files (`mitmproxy-ca.pem`, `mitmproxy-ca-cert.pem`, `mitmproxy-ca-cert.p12`, `mitmproxy-ca-cert.cer`), upstream cert sniffing for per-domain fake certs, `ignore_hosts` for certificate-pinned apps
+- https://wiki.squid-cache.org/Features/SslBump — Squid SSL Bump feature: `ssl_bump peek/stare/bump/splice` steps, `security_file_certgen` helper, `dynamic_cert_mem_cache_size`, selective bump vs splice strategy
+- **Last updated:** 2026-04-27

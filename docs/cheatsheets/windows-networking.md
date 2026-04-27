@@ -1,3 +1,15 @@
+---
+tags: [windows, macos, networking, enclave, podman-machine, nat, hyper-v]
+languages: [powershell, rust]
+since: 2024-01-01
+last_verified: 2026-04-27
+sources:
+  - https://learn.microsoft.com/en-us/virtualization/hyper-v-on-windows/user-guide/setup-nat-network
+  - https://docs.podman.io/en/stable/
+authority: high
+status: current
+---
+
 # Windows/macOS Enclave Networking
 
 @trace spec:enclave-network
@@ -85,3 +97,9 @@ Key files:
 | `src-tauri/src/launch.rs` | `rewrite_enclave_env()` for env var rewriting |
 | `src-tauri/src/runner.rs` | CLI mode port mapping support |
 | `scripts/build-tools-overlay.sh` | `TILLANDSIAS_PORT_MAPPING=1` env var |
+
+## Provenance
+
+- https://learn.microsoft.com/en-us/virtualization/hyper-v-on-windows/user-guide/setup-nat-network — Hyper-V NAT setup: `New-VMSwitch -SwitchType Internal`, `New-NetIPAddress` for NAT gateway, `New-NetNat` for NAT network; only one NAT network (WinNAT) supported per host; Windows 10 Anniversary Update or later
+- https://docs.podman.io/en/stable/ — Podman overview: daemonless, rootless, OCI-compliant; `podman machine` provides the Linux VM on Windows/macOS; network aliasing via gvproxy is why enclave DNS does not work on podman machine (port mapping is required instead)
+- **Last updated:** 2026-04-27
