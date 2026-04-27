@@ -7,6 +7,10 @@
   "small_model": "opencode/gpt-5-nano",
   "instructions": [
     "/home/forge/.config-overlay/opencode/instructions/methodology.md",
+    "/home/forge/.config-overlay/opencode/instructions/forge-discovery.md",
+    "/home/forge/.config-overlay/opencode/instructions/cache-discipline.md",
+    "/home/forge/.config-overlay/opencode/instructions/nix-first.md",
+    "/home/forge/.config-overlay/opencode/instructions/openspec-workflow.md",
     "/home/forge/.config-overlay/opencode/instructions/flutter.md",
     "/home/forge/.config-overlay/opencode/instructions/model-routing.md",
     "/home/forge/.config-overlay/opencode/instructions/web-services.md"
