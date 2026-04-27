@@ -16,7 +16,21 @@ All cheatsheets are curated references for tools and languages available in the 
 
 ## languages
 
-[Will be populated by Wave A/B sub-agents]
+- `python.md` — Python 3: syntax, types, dataclasses, asyncio, stdlib
+- `rust.md` — Rust: ownership, borrowing, async, cargo
+- `java.md` — Java 21 LTS: records, sealed classes, pattern matching, streams
+- `typescript.md` — TypeScript: type inference, generics, utility types, tsconfig
+- `javascript.md` — Modern JavaScript: ES2023 syntax, async/await, arrays, modules
+- `bash.md` — Bash: strict mode, parameter expansion, quoting, control flow
+- `dart.md` — Dart 3: null safety, classes, mixins, async, streams
+- `sql.md` — SQL: SELECT, JOINs, window functions, CTEs, transactions
+- `json.md` — JSON: syntax, pitfalls, JSON Lines, JSON Pointer
+- `yaml.md` — YAML 1.2: indentation, anchors, multi-line strings, common pitfalls
+- `toml.md` — TOML 1.0: tables, arrays-of-tables, dotted keys, vs JSON/YAML
+- `html.md` — HTML5: semantic tags, ARIA, forms, block vs inline
+- `css.md` — Modern CSS: flexbox, grid, custom properties, specificity
+- `markdown.md` — CommonMark + GFM: syntax, tables, code blocks, GitHub extensions
+- `xml.md` — XML: namespaces, XPath basics, when to use vs JSON/YAML
 
 ## utils
 
