@@ -56,23 +56,23 @@ Phased so each task is verifiable in a single PR. Order is dependency-driven (ch
 
 ## 8. Telemetry hooks (cheatsheet-telemetry extensions)
 
-- [ ] 8.1 Extend the cheatsheet-telemetry event schema to support new `event_type` values: `startup_routing` (which branch was taken), `readme_regen` (which summarizers ran), `readme_requires_pull` (which required cheatsheet was materialized).
-- [ ] 8.2 Add the new event types to `cheatsheets/runtime/external-logs.md`'s schema documentation.
-- [ ] 8.3 The four skills emit telemetry at routing decision points and after dispatcher runs.
+- [x] 8.1 Extend the cheatsheet-telemetry event schema to support new `event_type` values: `startup_routing` (which branch was taken), `readme_regen` (which summarizers ran), `readme_requires_pull` (which required cheatsheet was materialized).
+- [x] 8.2 Add the new event types to `cheatsheets/runtime/external-logs.md`'s schema documentation.
+- [x] 8.3 The four skills emit telemetry at routing decision points and after dispatcher runs.
 
 ## 9. README requires_cheatsheets consumer
 
-- [ ] 9.1 `/startup` parses the requires_cheatsheets YAML block from the project's README (after running `bootstrap-readme` if README is bad).
-- [ ] 9.2 For each required cheatsheet, look up via cheatsheets-license-tiered tier classifier: bundled → already on disk; distro-packaged → already on disk; pull-on-demand → materialize via the recipe; missing-and-off-allowlist → emit WARN.
-- [ ] 9.3 Materialization emits a `readme_requires_pull` telemetry event with `triggered_by: readme-requires`.
+- [x] 9.1 `/startup` parses the requires_cheatsheets YAML block from the project's README (after running `bootstrap-readme` if README is bad).
+- [x] 9.2 For each required cheatsheet, look up via cheatsheets-license-tiered tier classifier: bundled → already on disk; distro-packaged → already on disk; pull-on-demand → materialize via the recipe; missing-and-off-allowlist → emit WARN.
+- [x] 9.3 Materialization emits a `readme_requires_pull` telemetry event with `triggered_by: readme-requires`.
 
 ## 10. Migration of existing projects
 
-- [ ] 10.1 Run `/bootstrap-readme` against Tillandsias itself; commit the generated README.
-- [ ] 10.2 Verify the generated README round-trips through `check-readme-discipline.sh` with no errors.
-- [ ] 10.3 Install the pre-push hook in Tillandsias; verify a `git push` produces a `chore(readme): regenerate at <ts>` commit.
+- [x] 10.1 Run `/bootstrap-readme` against Tillandsias itself; commit the generated README.
+- [x] 10.2 Verify the generated README round-trips through `check-readme-discipline.sh` with no errors.
+- [x] 10.3 Install the pre-push hook in Tillandsias; verify a `git push` produces a `chore(readme): regenerate at <ts>` commit.
 
 ## 11. Documentation + CLAUDE.md
 
-- [ ] 11.1 Add a "Project README discipline" section to `CLAUDE.md` pointing at `cheatsheets/welcome/readme-discipline.md` and naming the four skills.
-- [ ] 11.2 Update `docs/cheatsheets/` (host-side maintainer cheatsheets) with a new entry on the README discipline if a maintainer-relevant gotcha emerges during apply.
+- [x] 11.1 Add a "Project README discipline" section to `CLAUDE.md` pointing at `cheatsheets/welcome/readme-discipline.md` and naming the four skills.
+- [x] 11.2 Update `docs/cheatsheets/` (host-side maintainer cheatsheets) with a new entry on the README discipline if a maintainer-relevant gotcha emerges during apply.

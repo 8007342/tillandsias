@@ -171,7 +171,7 @@ podman cp tillandsias-git-myproject:/etc/tillandsias/external-logs.yaml -
 
 ## Producer: cheatsheet-telemetry
 
-@trace spec:cheatsheets-license-tiered
+@trace spec:cheatsheets-license-tiered, spec:project-bootstrap-readme
 
 `/var/log/tillandsias/external/cheatsheet-telemetry/lookups.jsonl` — one event per cheatsheet consultation by an in-forge agent (claude / opencode / opsx). The forge container is the producer; the host-side analytics in `cheatsheet-telemetry-analytics` (v2) consume the events to drive cheatsheet refresh priority.
 
@@ -186,8 +186,8 @@ podman cp tillandsias-git-myproject:/etc/tillandsias/external-logs.yaml -
 | `resolved_via` | enum | `bundled` / `distro-packaged` / `pulled` / `live-api` / `miss` |
 | `pulled_url` | string \| null | Upstream URL pulled (only for `pulled` and `live-api`) |
 | `chars_consumed` | int | Bytes of content the agent consumed |
-| `event` | enum | optional — `lookup` (default), `structural_drift`, `license_drift` |
-| `spec` | string | Always `"cheatsheets-license-tiered"` |
+| `event_type` | enum | `lookup` (default), `startup_routing`, `readme_regen`, `readme_requires_pull`, `structural_drift`, `license_drift` |
+| `spec` | string | Always `"cheatsheets-license-tiered"` or `"project-bootstrap-readme"` depending on event_type |
 | `accountability` | bool | Always `true` |
 
 Example events, one per `resolved_via` value:

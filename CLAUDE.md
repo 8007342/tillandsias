@@ -268,6 +268,31 @@ This complements OpenSpec's `## REMOVED Requirements` section (which carries `**
 
 Current: `logging-levels.md`, `secrets-management.md`, `token-rotation.md`, `terminal-tools.md`.
 
+## Project README Discipline
+
+@trace spec:project-bootstrap-readme
+
+Every Tillandsias-managed project's README.md follows a two-section contract, auto-generated from authoritative sources (manifests, git history, agent observations). See `cheatsheets/welcome/readme-discipline.md` for the complete specification.
+
+**Four bootstrap skills**:
+- `/startup` — Entrypoint. Detects project state and routes to empty-project, repair, or ready flow
+- `/bootstrap-readme-and-project` — Empty-project welcome with sample prompts and capability summary
+- `/bootstrap-readme` — Regenerate and validate README from source manifests
+- `/status` — Show project state (recent commits, OpenSpec items, readme.traces tail)
+
+**Key files**:
+- `scripts/regenerate-readme.sh` — Dispatcher: walks manifests, invokes summarizers, renders FOR HUMANS + FOR ROBOTS sections
+- `scripts/check-readme-discipline.sh` — Validator: confirms structure, headers, timestamp freshness, YAML well-formedness
+- `scripts/install-readme-pre-push-hook.sh` — Pre-push hook: auto-regenerates README on every git push
+- `.tillandsias/readme.traces` — Append-only JSONL ledger of agent observations (committed to git, cross-machine)
+
+**Telemetry events**:
+- `startup_routing` — Which branch was taken (empty / bootstrap-readme / status)
+- `readme_regen` — README regenerated; which summarizers ran
+- `readme_requires_pull` — Cheatsheet materialized from requires_cheatsheets YAML block
+
+Mandatory maintainer TODO: Migrate Tillandsias' own README.md to the FOR HUMANS / FOR ROBOTS structure (task 10 of this change).
+
 ## Plugins & Skills
 
 Invoke installed skills proactively when their trigger fires. Order below is by expected frequency in this project.
