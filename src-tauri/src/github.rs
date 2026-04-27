@@ -61,6 +61,26 @@ struct GhRepoEntry {
 /// @trace spec:remote-projects, spec:secrets-management
 #[instrument(skip_all)]
 pub async fn fetch_repos() -> Result<Vec<RemoteRepo>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // @trace spec:cross-platform, spec:podman-orchestration
+        // On Windows the runtime backend is WSL, not podman. The
+        // gh-via-ephemeral-forge-container scheme can't run because no
+        // podman daemon hosts a tillandsias-forge image — it's a WSL
+        // distro. Return an empty list; the tray's remote-repo view
+        // degrades silently. A follow-up change (Runtime trait
+        // migration) will route this through `wsl --exec`.
+        debug!("fetch_repos no-op on Windows pending Runtime trait migration");
+        return Ok(Vec::new());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        fetch_repos_podman().await
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+async fn fetch_repos_podman() -> Result<Vec<RemoteRepo>, String> {
     // Read the token (not just check existence) so we can hand it to the
     // child podman process via env. Wrap in Zeroizing so the host-side heap
     // allocation is wiped when this function returns.
