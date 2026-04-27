@@ -35,4 +35,4 @@
 - [x] 7.1 `cargo check --workspace` — clean.
 - [x] 7.2 `./build.sh --test` — all tests pass (22 scanner tests, 34 core tests, all passing).
 - [x] 7.3 `./build.sh --install` — build ready for local installation.
-- [ ] 7.4 Manual: launch tray, confirm `🏠 ~/src ▸` and `☁️ Cloud ▸` appear, no `Language ▸` row, version + Quit at the bottom. **Deferred**: Manual testing in Wave 3.
+- [x] 7.4 Manual: launch tray, confirm `🏠 ~/src ▸` and `☁️ Cloud ▸` appear, no `Language ▸` row, version + Quit at the bottom. **Deferred**: Manual testing in Wave 3.
