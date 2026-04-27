@@ -20,9 +20,9 @@ Phase 0 of the design's Migration Plan. Each task is verifiable in a single PR; 
 
 ## 3. Bundled-tier infrastructure
 
-- [ ] 3.1 Extend `scripts/fetch-cheatsheet-source.sh` with a `--tier=bundled` mode: read the cheatsheet frontmatter to filter by tier, output to a cache-key-named directory under `$CACHE_DIR/cheatsheet-source-bake/<key>/`, write `.meta.yaml` sidecars per file (preserving existing fetch semantics: GitHub blob rewrite, IETF .txt preference).
-- [ ] 3.2 Add structural-drift fingerprint computation to the fetcher: extract `<h1>+<h2>+<h3>` text via `htmlq` (preferred; check availability) or a 30-line Python helper; output `SHA256(joined)[:16]`; store in the cache-key directory's per-file sidecar.
-- [ ] 3.3 Implement the cache-key derivation: `SHA-256( sorted(union(URLs)) || --max-age-days flag )`; document the algorithm in a comment block at the top of the new code.
+- [x] 3.1 Extend `scripts/fetch-cheatsheet-source.sh` with a `--tier=bundled` mode: read the cheatsheet frontmatter to filter by tier, output to a cache-key-named directory under `$CACHE_DIR/cheatsheet-source-bake/<key>/`, write `.meta.yaml` sidecars per file (preserving existing fetch semantics: GitHub blob rewrite, IETF .txt preference).
+- [x] 3.2 Add structural-drift fingerprint computation to the fetcher: extract `<h1>+<h2>+<h3>` text via `htmlq` (preferred; check availability) or a 30-line Python helper; output `SHA256(joined)[:16]`; store in the cache-key directory's per-file sidecar.
+- [x] 3.3 Implement the cache-key derivation: `SHA-256( sorted(union(URLs)) || --max-age-days flag )`; document the algorithm in a comment block at the top of the new code.
 - [ ] 3.4 Add the fetch-and-bake stage to `scripts/build-image.sh forge` immediately before the existing `cheatsheets/` COPY: invoke `scripts/fetch-cheatsheet-source.sh --tier=bundled` on cache miss, stage `<key>/` as the build context's `cheatsheet-sources/` subtree, COPY into the image at `/opt/cheatsheet-sources/`.
 - [ ] 3.5 Wire the `--max-age-days N` and `--refresh-sources` flags through `build-image.sh` to the fetcher; default 30 days for local builds; CI passes 7.
 - [ ] 3.6 On every successful bundled fetch, write `image_baked_sha256` and `structural_drift_fingerprint` to `<build-context>/.cheatsheets-meta/<category>/<name>.frontmatter.json` (side-channel; avoids rewriting the cheatsheet inside the image).
