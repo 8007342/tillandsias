@@ -25,6 +25,26 @@ use tillandsias_core::container_profile::{
 ///
 /// Security flags are unconditionally prepended — profiles cannot disable them.
 pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec<String> {
+    // @trace spec:external-logs-layer
+    // Reverse-breach refusal: a profile MUST NOT be both a producer and a
+    // consumer. validate() returns Err for this case; treat it as a
+    // non-recoverable profile-construction bug (panic in debug, hard log+skip
+    // the combined mount in release to avoid an incorrect podman invocation).
+    if let Err(e) = profile.validate() {
+        // Panic in debug so CI catches this immediately.
+        // In release, log loudly and continue — the per-field logic below
+        // already handles the precedence (producer wins).
+        debug_assert!(false, "build_podman_args: invalid profile — {e}");
+        tracing::error!(
+            spec = "external-logs-layer",
+            accountability = true,
+            category = "external-logs",
+            error = %e,
+            container = %ctx.container_name,
+            "[external-logs] Profile validation failed — refusing to launch with broken profile"
+        );
+    }
+
     let mut args = Vec::with_capacity(48);
 
     // -----------------------------------------------------------------------
@@ -2023,15 +2043,14 @@ mod tests {
     // @trace spec:external-logs-layer
     #[test]
     fn no_external_logs_mount_when_both_fields_false() {
-        // Profiles that still have neither external_logs_role nor external_logs_consumer
-        // (e.g. proxy) must emit no external-logs mount.
-        // Note: forge_opencode_profile() is now a consumer (chunk 3) and
-        // git_service_profile() is now a producer (chunk 2), so they are no
-        // longer valid examples here.
+        // Only profiles that still have neither external_logs_role nor
+        // external_logs_consumer must emit no external-logs mount.
+        // Note: forge_opencode_profile() is now a consumer (chunk 3),
+        // git_service_profile() is a producer (chunk 2), and
+        // proxy/router/inference are now producers (chunk 5).
+        // Only web_profile() remains unwired.
         for profile in [
-            container_profile::proxy_profile(),
-            container_profile::router_profile(),
-            container_profile::inference_profile(),
+            container_profile::web_profile(),
         ] {
             // Confirm still-default fields
             assert!(profile.external_logs_role.is_none());
@@ -2045,6 +2064,36 @@ mod tests {
                 !joined.contains("/var/log/tillandsias/external"),
                 "Profile {} must not emit external-logs mount (not yet wired); got: {joined}",
                 profile.entrypoint
+            );
+        }
+    }
+
+    // @trace spec:external-logs-layer
+    #[test]
+    fn infrastructure_service_profiles_emit_external_logs_producer_mount() {
+        // Chunk 5: proxy, router, inference are now external-logs producers.
+        // Each must emit -v <host>/external-logs/<role>:/var/log/tillandsias/external:rw,Z.
+        for (profile, expected_role) in [
+            (container_profile::proxy_profile(), "proxy"),
+            (container_profile::router_profile(), "router"),
+            (container_profile::inference_profile(), "inference"),
+        ] {
+            assert_eq!(
+                profile.external_logs_role,
+                Some(expected_role),
+                "precondition: producer role must be Some(\"{expected_role}\")"
+            );
+            let ctx = test_context();
+            let args = build_podman_args(&profile, &ctx);
+            let joined = args.join(" ");
+
+            assert!(
+                joined.contains("/var/log/tillandsias/external:rw,Z"),
+                "Profile for role={expected_role} must emit RW external-logs producer mount; got: {joined}"
+            );
+            assert!(
+                joined.contains(&format!("/external-logs/{expected_role}")),
+                "Producer mount must use role-scoped host path (external-logs/{expected_role}); got: {joined}"
             );
         }
     }

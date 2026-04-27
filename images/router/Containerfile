@@ -84,6 +84,13 @@ RUN chmod +x /usr/local/bin/entrypoint.sh \
              /usr/local/bin/router-reload.sh \
              /usr/local/bin/tillandsias-router-sidecar
 
+# @trace spec:external-logs-layer
+# Manifest of curated external log files published by this image.
+# The tray-side auditor reads this at /etc/tillandsias/external-logs.yaml
+# every 60 s and flags unlisted files in the role dir as LEAK events.
+RUN mkdir -p /etc/tillandsias
+COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
+
 # @trace spec:fix-router-loopback-port, spec:opencode-web-session-otp
 # Internal listener moved from :80 to :8080 — no privileged-port binding
 # needed, so we can run with the upstream image's default USER without

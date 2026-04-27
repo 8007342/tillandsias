@@ -103,8 +103,23 @@ If you need a system-wide tool that isn't here, **don't workaround** — write a
 - **Trying to bind to ports < 1024** — the forge user is not root and rootless containers can't bind privileged ports. The forge's exposed range is `3000-3099/tcp`; use those for HTTP servers.
 - **Network calls to GitHub** — go through the enclave git mirror (`git://git-service/<project>`) for clones/pushes, not directly to `github.com`. Authenticated calls to the GitHub REST API (e.g., `gh api`) are not available because the forge has no token. Anything credential-bearing belongs to the host — write a RUNTIME_LIMITATIONS report if you need to call it from inside the forge.
 
+## External logs
+
+@trace spec:external-logs-layer
+
+Service containers (git-service, proxy, router, inference) publish curated log files that the forge can read without seeing internal noise. Inside the forge:
+
+```bash
+tillandsias-logs ls                         # discover what's available
+tillandsias-logs tail git-service git-push.log   # follow live
+echo $TILLANDSIAS_EXTERNAL_LOGS             # resolves to /var/log/tillandsias/external
+```
+
+See `runtime/external-logs.md` for the full reference: two-tier model, host layout, manifest format, auditor invariants, and pitfalls.
+
 ## See also
 
 - `runtime/runtime-limitations.md` — how to report missing tools
 - `runtime/networking.md` — enclave network details (proxy, git mirror, inference)
 - `agents/openspec.md` — the workflow for proposing changes (including new image tools)
+- `runtime/external-logs.md` — cross-container observability via curated external log files

@@ -1,0 +1,36 @@
+# @trace spec:external-logs-layer
+# Manifest of curated external log files published by the proxy container.
+# The tray-side auditor reads this manifest every 60 s and flags any file in
+# ~/.local/state/tillandsias/external-logs/proxy/ that is NOT listed here
+# with a WARN+accountability "[external-logs] LEAK: ..." event.
+#
+# v1: manifest declared; producer code writing these files comes in a later
+# change. The mount being in place enables the observability contract now;
+# the actual file content is what the producer earns.
+role: proxy
+files:
+  - name: access.log
+    purpose: |
+      Curated subset of Squid's access log — one line per request that
+      transits the caching proxy. Only non-CONNECT (HTTP) and successful
+      CONNECT (HTTPS tunnel established) entries are written here; failed
+      authentications and DENIED requests are omitted (those go to denied.log).
+      Format: "<timestamp> <elapsed_ms> <client_ip> <result>/<status> <bytes>
+      <method> <url> <hierarchy>/<peer> <content-type>".
+      CONSUMERS may parse this to correlate agent HTTP activity with proxy
+      cache hits/misses or to debug allowlist rejections.
+    format: text
+    rotate_at_mb: 10
+    written_by: squid access_log directive (producer code change pending)
+  - name: denied.log
+    purpose: |
+      One line per request rejected by the proxy's domain allowlist. Entries
+      include the destination host so consumers can distinguish "forge tried
+      to reach a blocked domain" from network failures. Each line is prefixed
+      with an ISO-8601 UTC timestamp.
+      Format: "<timestamp> DENIED <method> <url> <client_ip>".
+      CONSUMERS may parse this to detect allowlist policy violations or forge
+      code that tries to call home.
+    format: text
+    rotate_at_mb: 10
+    written_by: squid deny_info + access_log directive (producer code change pending)

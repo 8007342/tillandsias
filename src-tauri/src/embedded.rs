@@ -108,6 +108,9 @@ pub const ROUTER_CONTAINERFILE: &str = include_str!("../../images/router/Contain
 pub const ROUTER_BASE_CADDYFILE: &str = include_str!("../../images/router/base.Caddyfile");
 pub const ROUTER_ENTRYPOINT: &str = include_str!("../../images/router/entrypoint.sh");
 pub const ROUTER_RELOAD_SCRIPT: &str = include_str!("../../images/router/router-reload.sh");
+// @trace spec:external-logs-layer
+pub const ROUTER_EXTERNAL_LOGS_MANIFEST: &str =
+    include_str!("../../images/router/external-logs.yaml");
 // @trace spec:opencode-web-session-otp
 // Pre-built static-musl binary (~2.5 MB stripped). Built by
 // `scripts/build-sidecar.sh`, kicked off automatically by
@@ -222,6 +225,9 @@ pub const PROXY_ENTRYPOINT: &str = include_str!("../../images/proxy/entrypoint.s
 pub const PROXY_CONTAINERFILE: &str = include_str!("../../images/proxy/Containerfile");
 pub const PROXY_SQUID_CONF: &str = include_str!("../../images/proxy/squid.conf");
 pub const PROXY_ALLOWLIST: &str = include_str!("../../images/proxy/allowlist.txt");
+// @trace spec:external-logs-layer
+pub const PROXY_EXTERNAL_LOGS_MANIFEST: &str =
+    include_str!("../../images/proxy/external-logs.yaml");
 
 // ---------------------------------------------------------------------------
 // Image sources — git service image
@@ -233,6 +239,9 @@ pub const POST_RECEIVE_HOOK: &str = include_str!("../../images/git/post-receive-
 // @trace spec:secrets-management, spec:git-mirror-service
 pub const GIT_ASKPASS_TILLANDSIAS: &str =
     include_str!("../../images/git/git-askpass-tillandsias.sh");
+// @trace spec:external-logs-layer
+pub const GIT_EXTERNAL_LOGS_MANIFEST: &str =
+    include_str!("../../images/git/external-logs.yaml");
 
 // ---------------------------------------------------------------------------
 // Image sources — inference image
@@ -240,6 +249,9 @@ pub const GIT_ASKPASS_TILLANDSIAS: &str =
 // ---------------------------------------------------------------------------
 pub const INFERENCE_ENTRYPOINT: &str = include_str!("../../images/inference/entrypoint.sh");
 pub const INFERENCE_CONTAINERFILE: &str = include_str!("../../images/inference/Containerfile");
+// @trace spec:external-logs-layer
+pub const INFERENCE_EXTERNAL_LOGS_MANIFEST: &str =
+    include_str!("../../images/inference/external-logs.yaml");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -569,6 +581,9 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("proxy squid.conf: {e}"))?;
     write_lf(&proxy_dir.join("allowlist.txt"), PROXY_ALLOWLIST)
         .map_err(|e| format!("proxy allowlist: {e}"))?;
+    // @trace spec:external-logs-layer
+    write_lf(&proxy_dir.join("external-logs.yaml"), PROXY_EXTERNAL_LOGS_MANIFEST)
+        .map_err(|e| format!("proxy external-logs.yaml: {e}"))?;
     #[cfg(unix)]
     {
         let path = proxy_dir.join("entrypoint.sh");
@@ -593,6 +608,9 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("router entrypoint: {e}"))?;
     write_lf(&router_dir.join("router-reload.sh"), ROUTER_RELOAD_SCRIPT)
         .map_err(|e| format!("router-reload.sh: {e}"))?;
+    // @trace spec:external-logs-layer
+    write_lf(&router_dir.join("external-logs.yaml"), ROUTER_EXTERNAL_LOGS_MANIFEST)
+        .map_err(|e| format!("router external-logs.yaml: {e}"))?;
     // @trace spec:opencode-web-session-otp
     // Sidecar binary (binary blob, not LF-normalised text — write raw).
     fs::write(
@@ -627,6 +645,9 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     // @trace spec:secrets-management, spec:git-mirror-service
     write_lf(&git_dir.join("git-askpass-tillandsias.sh"), GIT_ASKPASS_TILLANDSIAS)
         .map_err(|e| format!("git askpass script: {e}"))?;
+    // @trace spec:external-logs-layer
+    write_lf(&git_dir.join("external-logs.yaml"), GIT_EXTERNAL_LOGS_MANIFEST)
+        .map_err(|e| format!("git external-logs.yaml: {e}"))?;
     #[cfg(unix)]
     {
         for name in ["entrypoint.sh", "post-receive-hook.sh", "git-askpass-tillandsias.sh"] {
@@ -649,6 +670,9 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("inference entrypoint: {e}"))?;
     write_lf(&inference_dir.join("Containerfile"), INFERENCE_CONTAINERFILE)
         .map_err(|e| format!("inference Containerfile: {e}"))?;
+    // @trace spec:external-logs-layer
+    write_lf(&inference_dir.join("external-logs.yaml"), INFERENCE_EXTERNAL_LOGS_MANIFEST)
+        .map_err(|e| format!("inference external-logs.yaml: {e}"))?;
     #[cfg(unix)]
     {
         let path = inference_dir.join("entrypoint.sh");

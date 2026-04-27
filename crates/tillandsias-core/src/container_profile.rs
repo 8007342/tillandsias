@@ -358,6 +358,34 @@ pub struct LaunchContext {
 }
 
 // ---------------------------------------------------------------------------
+// ContainerProfile validation
+// ---------------------------------------------------------------------------
+
+impl ContainerProfile {
+    /// Validate profile-level invariants.
+    ///
+    /// Returns `Err` if the profile violates a spec invariant that must be
+    /// caught before launching the container. Currently checked:
+    ///
+    /// - A profile MUST NOT have BOTH `external_logs_role: Some(_)` AND
+    ///   `external_logs_consumer: true`. The two roles are mutually exclusive:
+    ///   a producer owns its role directory RW and a consumer mounts the
+    ///   parent RO. Setting both on one profile is a profile-construction bug.
+    ///
+    /// @trace spec:external-logs-layer
+    pub fn validate(&self) -> Result<(), String> {
+        if self.external_logs_role.is_some() && self.external_logs_consumer {
+            return Err(format!(
+                "profile is BOTH an external-logs producer (role={:?}) AND a consumer — \
+                 spec:external-logs-layer forbids this combination; profiles must be one or the other",
+                self.external_logs_role.unwrap_or("<unknown>")
+            ));
+        }
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Built-in profiles
 // ---------------------------------------------------------------------------
 
@@ -639,8 +667,13 @@ pub fn router_profile() -> ContainerProfile {
         // ships the bind-mount plumbing; the cookie issuance flow lands
         // with the `opencode-web-session-otp` change.
         mount_control_socket: true,
-        // @trace spec:external-logs-layer — chunk 1 defaults
-        external_logs_role: None,
+        // @trace spec:external-logs-layer
+        // Chunk 5: router is an external-logs producer. The manifest at
+        // /etc/tillandsias/external-logs.yaml (baked into the image) declares
+        // caddy-access.log. Producer code (Caddyfile log directive) comes in
+        // a later change; the mount being in place enables the observability
+        // contract now.
+        external_logs_role: Some("router"),
         external_logs_consumer: false,
     }
 }
@@ -688,8 +721,13 @@ pub fn proxy_profile() -> ContainerProfile {
         tmpfs_mounts: vec![],
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
-        // @trace spec:external-logs-layer — chunk 1 defaults
-        external_logs_role: None,
+        // @trace spec:external-logs-layer
+        // Chunk 5: proxy is an external-logs producer. The manifest at
+        // /etc/tillandsias/external-logs.yaml (baked into the image) declares
+        // access.log and denied.log. Producer code (Squid access_log directive)
+        // comes in a later change; the mount being in place enables the
+        // observability contract now.
+        external_logs_role: Some("proxy"),
         external_logs_consumer: false,
     }
 }
@@ -762,8 +800,12 @@ pub fn inference_profile() -> ContainerProfile {
         tmpfs_mounts: vec![],
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
-        // @trace spec:external-logs-layer — chunk 1 defaults
-        external_logs_role: None,
+        // @trace spec:external-logs-layer
+        // Chunk 5: inference is an external-logs producer. The manifest at
+        // /etc/tillandsias/external-logs.yaml (baked into the image) declares
+        // model-load.log. Producer code (entrypoint telemetry) comes in a later
+        // change; the mount being in place enables the observability contract now.
+        external_logs_role: Some("inference"),
         external_logs_consumer: false,
     }
 }
@@ -1623,14 +1665,11 @@ mod tests {
     // @trace spec:external-logs-layer
     #[test]
     fn service_profiles_neither_producer_nor_consumer() {
-        // Service profiles that are not yet wired as producers or consumers
-        // (web, router, proxy, inference) retain None/false defaults.
-        // git_service is now a producer (chunk 2); forge/terminal are consumers (chunk 3).
+        // Only the web profile is still unwired as a producer or consumer.
+        // git_service, proxy, router, inference are now producers (chunks 2 + 5).
+        // forge/terminal are consumers (chunk 3).
         let profiles: Vec<(&str, ContainerProfile)> = vec![
             ("web", web_profile()),
-            ("router", router_profile()),
-            ("proxy", proxy_profile()),
-            ("inference", inference_profile()),
         ];
         for (name, profile) in &profiles {
             assert!(
@@ -1640,6 +1679,34 @@ mod tests {
             assert!(
                 !profile.external_logs_consumer,
                 "Profile {name}: external_logs_consumer should be false (not yet wired as consumer)"
+            );
+        }
+    }
+
+    // @trace spec:external-logs-layer
+    #[test]
+    fn infrastructure_service_profiles_are_external_logs_producers() {
+        // Chunk 5: proxy, router, inference join git-service as external-logs
+        // producers. Each must declare its role name (matching the manifest)
+        // and must NOT be a consumer.
+        for (name, profile, expected_role) in [
+            ("proxy", proxy_profile(), "proxy"),
+            ("router", router_profile(), "router"),
+            ("inference", inference_profile(), "inference"),
+        ] {
+            assert_eq!(
+                profile.external_logs_role,
+                Some(expected_role),
+                "Profile {name} must declare external_logs_role = Some(\"{expected_role}\")"
+            );
+            assert!(
+                !profile.external_logs_consumer,
+                "Profile {name} must NOT be a consumer — producers and consumers are mutually exclusive"
+            );
+            // validate() must accept this combination.
+            assert!(
+                profile.validate().is_ok(),
+                "Profile {name} must pass validate()"
             );
         }
     }
@@ -1735,5 +1802,60 @@ mod tests {
                 profile.external_logs_role
             );
         }
+    }
+
+    // @trace spec:external-logs-layer
+    #[test]
+    fn validate_profile_refuses_both_producer_and_consumer() {
+        // ContainerProfile::validate() must return Err when BOTH
+        // external_logs_role: Some(_) AND external_logs_consumer: true are set.
+        // This is the per-profile enforcement point called at launch time.
+        let mut bad_profile = git_service_profile();
+        // git_service is a producer (external_logs_role = Some("git-service")).
+        // Force consumer flag on too — this is the forbidden combination.
+        bad_profile.external_logs_consumer = true;
+
+        let result = bad_profile.validate();
+        assert!(
+            result.is_err(),
+            "validate() must reject a profile with BOTH external_logs_role and external_logs_consumer"
+        );
+        let err_msg = result.unwrap_err();
+        assert!(
+            err_msg.contains("git-service"),
+            "error message must name the role; got: {err_msg}"
+        );
+        assert!(
+            err_msg.contains("spec:external-logs-layer"),
+            "error message must cite the spec; got: {err_msg}"
+        );
+    }
+
+    // @trace spec:external-logs-layer
+    #[test]
+    fn validate_profile_accepts_producer_only() {
+        // A producer-only profile (external_logs_role: Some(_), consumer false)
+        // must pass validate().
+        let profile = git_service_profile();
+        assert_eq!(profile.external_logs_role, Some("git-service"));
+        assert!(!profile.external_logs_consumer);
+        assert!(
+            profile.validate().is_ok(),
+            "validate() must accept a producer-only profile"
+        );
+    }
+
+    // @trace spec:external-logs-layer
+    #[test]
+    fn validate_profile_accepts_consumer_only() {
+        // A consumer-only profile (external_logs_role: None, consumer true)
+        // must pass validate().
+        let profile = forge_opencode_profile();
+        assert!(profile.external_logs_role.is_none());
+        assert!(profile.external_logs_consumer);
+        assert!(
+            profile.validate().is_ok(),
+            "validate() must accept a consumer-only profile"
+        );
     }
 }

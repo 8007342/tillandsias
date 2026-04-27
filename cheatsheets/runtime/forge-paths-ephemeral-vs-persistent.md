@@ -54,6 +54,7 @@ Rule: "maybe a hot path" = HARD NO. If you're unsure, it's COLD.
 | **Project workspace** | `/home/forge/src/<project>/` | Yes (your git repo) | **No** — isolated | RW | **RAM** (tmpfs) |
 | **Ephemeral** | `/tmp/`, `/run/user/1000/`, unmounted home dirs | **NO** — gone on stop | n/a | RW | **RAM** (tmpfs, capped) |
 | **Knowledge bank** | `/opt/cheatsheets/` | **NO** — repopulated at start | n/a | RW (inside container) | **RAM** (tmpfs, 8MB cap) |
+| **External logs (curated)** | `/var/log/tillandsias/external/` | Yes (role-scoped, persists across container stop) | **No** — isolated per role | RO (consumer), RW (producer) | **Disk** (NEVER tmpfs) |
 
 ## Where to write what
 

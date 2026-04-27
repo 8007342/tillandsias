@@ -87,6 +87,13 @@ pub async fn run(
     let mut proxy_health_interval = tokio::time::interval(Duration::from_secs(60));
     proxy_health_interval.tick().await; // consume first immediate tick
 
+    // External-logs auditor timer — checks manifest compliance, size caps,
+    // and growth-rate alarms for every running producer container.
+    // @trace spec:external-logs-layer
+    let mut external_logs_audit_interval = tokio::time::interval(Duration::from_secs(60));
+    external_logs_audit_interval.tick().await; // consume first immediate tick
+    let mut external_logs_growth_cache = handlers::ExternalLogsGrowthCache::new();
+
     // @trace spec:tray-app, spec:podman-orchestration, spec:simplified-tray-ux, knowledge:lang/rust-async
     loop {
         tokio::select! {
@@ -284,6 +291,13 @@ pub async fn run(
                         }
                     }
                 }
+            }
+
+            // External-logs auditor: manifest compliance + size cap + growth alarm.
+            // Runs every 60 s alongside the proxy health check.
+            // @trace spec:external-logs-layer
+            _ = external_logs_audit_interval.tick() => {
+                handlers::external_logs_audit_tick(&state, &mut external_logs_growth_cache).await;
             }
 
             // All channels closed — nothing left to do

@@ -24,6 +24,12 @@ RUN apk add --no-cache squid openssl bash ca-certificates \
 COPY squid.conf /etc/squid/squid.conf
 COPY allowlist.txt /etc/squid/allowlist.txt
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+# @trace spec:external-logs-layer
+# Manifest of curated external log files published by this image.
+# The tray-side auditor reads this at /etc/tillandsias/external-logs.yaml
+# every 60 s and flags unlisted files in the role dir as LEAK events.
+RUN mkdir -p /etc/tillandsias
+COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 USER proxy

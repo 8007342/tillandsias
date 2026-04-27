@@ -23,6 +23,12 @@ COPY post-receive-hook.sh /usr/local/share/git-service/post-receive-hook.sh
 # (bind-mounted :ro by the host tray) and feeds it to git's HTTPS auth prompt.
 # @trace spec:secrets-management, spec:git-mirror-service
 COPY git-askpass-tillandsias.sh /usr/local/bin/git-askpass-tillandsias.sh
+# @trace spec:external-logs-layer
+# Manifest of curated external log files published by this image.
+# The tray-side auditor reads this at /etc/tillandsias/external-logs.yaml
+# every 60 s and flags unlisted files in the role dir as LEAK events.
+RUN mkdir -p /etc/tillandsias
+COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
 RUN chmod +x /usr/local/bin/entrypoint.sh \
               /usr/local/share/git-service/post-receive-hook.sh \
               /usr/local/bin/git-askpass-tillandsias.sh
