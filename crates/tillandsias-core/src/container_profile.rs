@@ -72,6 +72,35 @@ pub struct ContainerProfile {
     ///
     /// @trace spec:tray-host-control-socket, spec:secrets-management
     pub mount_control_socket: bool,
+
+    /// External-logs role — set to `Some("role-name")` for producer containers.
+    ///
+    /// When `Some`, the launcher creates
+    /// `~/.local/state/tillandsias/external-logs/<role>/` if absent and
+    /// bind-mounts it RW at `/var/log/tillandsias/external/` inside the
+    /// container. The producer can ONLY see its own role's files.
+    ///
+    /// Mutually exclusive with `external_logs_consumer: true`. Chunk 2 wires
+    /// git-service as the first producer; chunk 3 wires forge profiles as
+    /// consumers. Chunk 1 adds the type scaffolding only — all profiles
+    /// default to `None` until their respective chunks land.
+    ///
+    /// @trace spec:external-logs-layer
+    pub external_logs_role: Option<&'static str>,
+
+    /// External-logs consumer flag — set to `true` for containers that should
+    /// receive a read-only view of ALL producers' external logs.
+    ///
+    /// When `true`, the launcher bind-mounts the parent
+    /// `~/.local/state/tillandsias/external-logs/` directory RO at
+    /// `/var/log/tillandsias/external/` inside the container. Consumers see
+    /// one subdirectory per active producer role.
+    ///
+    /// Mutually exclusive with `external_logs_role: Some(_)`. Chunk 3 wires
+    /// forge/terminal profiles as consumers. Defaults to `false`.
+    ///
+    /// @trace spec:external-logs-layer
+    pub external_logs_consumer: bool,
 }
 
 /// A volume mount with a logical host key resolved at launch time.
@@ -122,6 +151,26 @@ pub enum MountSource {
     /// @trace spec:forge-cache-architecture, spec:forge-cache-dual
     /// @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
     ProjectCache,
+    /// External-logs producer mount: bind-mount the role-specific host
+    /// directory RW at `/var/log/tillandsias/external/` inside the container.
+    ///
+    /// Resolved to `~/.local/state/tillandsias/external-logs/<role>/`.
+    /// The launcher creates the directory on first launch if absent.
+    /// The producer can ONLY see its own role's files — cross-producer
+    /// scribbling is impossible because the host path is role-scoped.
+    ///
+    /// @trace spec:external-logs-layer
+    ExternalLogsProducer { role: &'static str },
+    /// External-logs consumer mount: bind-mount the parent external-logs/
+    /// directory RO at `/var/log/tillandsias/external/` inside the container.
+    ///
+    /// Consumers see one subdirectory per producer role. The parent-dir RO
+    /// mount means a long-running forge picks up new sibling producers
+    /// without restart, and an empty enclave still mounts a valid (empty)
+    /// directory.
+    ///
+    /// @trace spec:external-logs-layer
+    ExternalLogsConsumerRoot,
 }
 
 /// A tmpfs mount with a kernel-enforced size cap and permission mode.
@@ -335,6 +384,11 @@ pub fn forge_opencode_profile() -> ContainerProfile {
         // secrets-management delta. A compromised forge MUST NOT be able
         // to reach the tray's control plane.
         mount_control_socket: false,
+        // @trace spec:external-logs-layer
+        // Chunk 1: defaults only. Chunk 3 sets external_logs_consumer: true
+        // for all forge/terminal profiles.
+        external_logs_role: None,
+        external_logs_consumer: false,
     }
 }
 
@@ -355,6 +409,9 @@ pub fn forge_claude_profile() -> ContainerProfile {
         tmpfs_mounts: common_forge_tmpfs_mounts(),
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
+        // @trace spec:external-logs-layer — chunk 1 defaults
+        external_logs_role: None,
+        external_logs_consumer: false,
     }
 }
 
@@ -380,6 +437,9 @@ pub fn forge_opencode_web_profile() -> ContainerProfile {
         // OpenCode Web forge does not need the control socket — the router
         // (which fronts the web session) is the consumer.
         mount_control_socket: false,
+        // @trace spec:external-logs-layer — chunk 1 defaults
+        external_logs_role: None,
+        external_logs_consumer: false,
     }
 }
 
@@ -478,6 +538,9 @@ pub fn terminal_profile() -> ContainerProfile {
         image_override: None,
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
+        // @trace spec:external-logs-layer — chunk 1 defaults
+        external_logs_role: None,
+        external_logs_consumer: false,
     }
 }
 
@@ -513,6 +576,9 @@ pub fn web_profile() -> ContainerProfile {
         ],
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
+        // @trace spec:external-logs-layer — chunk 1 defaults
+        external_logs_role: None,
+        external_logs_consumer: false,
     }
 }
 
@@ -567,6 +633,9 @@ pub fn router_profile() -> ContainerProfile {
         // ships the bind-mount plumbing; the cookie issuance flow lands
         // with the `opencode-web-session-otp` change.
         mount_control_socket: true,
+        // @trace spec:external-logs-layer — chunk 1 defaults
+        external_logs_role: None,
+        external_logs_consumer: false,
     }
 }
 
@@ -613,6 +682,9 @@ pub fn proxy_profile() -> ContainerProfile {
         tmpfs_mounts: vec![],
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
+        // @trace spec:external-logs-layer — chunk 1 defaults
+        external_logs_role: None,
+        external_logs_consumer: false,
     }
 }
 
@@ -684,6 +756,9 @@ pub fn inference_profile() -> ContainerProfile {
         tmpfs_mounts: vec![],
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
+        // @trace spec:external-logs-layer — chunk 1 defaults
+        external_logs_role: None,
+        external_logs_consumer: false,
     }
 }
 
@@ -767,6 +842,10 @@ pub fn git_service_profile() -> ContainerProfile {
         ],
         // @trace spec:tray-host-control-socket, spec:secrets-management
         mount_control_socket: false,
+        // @trace spec:external-logs-layer — chunk 1 defaults
+        // Chunk 2 sets external_logs_role: Some("git-service") here.
+        external_logs_role: None,
+        external_logs_consumer: false,
     }
 }
 
@@ -1528,6 +1607,64 @@ mod tests {
             assert!(
                 has_log_mount,
                 "Profile {name} must have a ContainerLogs mount at /var/log/tillandsias (RW)"
+            );
+        }
+    }
+
+    // @trace spec:external-logs-layer
+    #[test]
+    fn default_profile_fields_preserve_existing_behaviour() {
+        // Chunk 1 invariant: ALL profiles default to None / false for the two
+        // new external-logs fields. No behaviour change until chunk 2/3 land.
+        let profiles: Vec<(&str, ContainerProfile)> = vec![
+            ("forge_opencode", forge_opencode_profile()),
+            ("forge_claude", forge_claude_profile()),
+            ("forge_opencode_web", forge_opencode_web_profile()),
+            ("terminal", terminal_profile()),
+            ("web", web_profile()),
+            ("router", router_profile()),
+            ("proxy", proxy_profile()),
+            ("inference", inference_profile()),
+            ("git_service", git_service_profile()),
+        ];
+        for (name, profile) in &profiles {
+            assert!(
+                profile.external_logs_role.is_none(),
+                "Profile {name}: external_logs_role must default to None in chunk 1"
+            );
+            assert!(
+                !profile.external_logs_consumer,
+                "Profile {name}: external_logs_consumer must default to false in chunk 1"
+            );
+        }
+    }
+
+    // @trace spec:external-logs-layer
+    #[test]
+    fn profile_cannot_be_both_producer_and_consumer() {
+        // Spec invariant: at most ONE of {external_logs_role: Some(_),
+        // external_logs_consumer: true} may be set on any profile.
+        // This test walks every current profile constructor; chunk 2 and 3
+        // must keep this invariant when they flip the fields.
+        let profiles: Vec<(&str, ContainerProfile)> = vec![
+            ("forge_opencode", forge_opencode_profile()),
+            ("forge_claude", forge_claude_profile()),
+            ("forge_opencode_web", forge_opencode_web_profile()),
+            ("terminal", terminal_profile()),
+            ("web", web_profile()),
+            ("router", router_profile()),
+            ("proxy", proxy_profile()),
+            ("inference", inference_profile()),
+            ("git_service", git_service_profile()),
+        ];
+        for (name, profile) in &profiles {
+            let is_producer = profile.external_logs_role.is_some();
+            let is_consumer = profile.external_logs_consumer;
+            assert!(
+                !(is_producer && is_consumer),
+                "Profile {name} MUST NOT be both producer (role={:?}) and consumer — \
+                 spec:external-logs-layer forbids the combination",
+                profile.external_logs_role
             );
         }
     }

@@ -392,6 +392,45 @@ pub fn log_dir() -> PathBuf {
     }
 }
 
+/// Platform-aware state directory root for Tillandsias.
+///
+/// This is the same root that `log_dir()` builds on:
+/// - Linux: `~/.local/state/tillandsias/`
+/// - macOS: `~/Library/Logs/tillandsias/`
+/// - Windows: `%LOCALAPPDATA%/tillandsias/logs/`
+///
+/// Exposed separately so that `external_logs_dir()` and future sibling
+/// paths can be computed without coupling to the `log` concept.
+pub fn state_dir() -> PathBuf {
+    log_dir()
+}
+
+/// Host directory for EXTERNAL logs across all producer roles.
+///
+/// Returns `<state_dir>/external-logs/` — a sibling of the
+/// `containers/<container>/logs/` INTERNAL directories.
+///
+/// The launcher bind-mounts this directory RO at
+/// `/var/log/tillandsias/external/` inside consumer containers so they
+/// see one subdirectory per active producer role.
+///
+/// @trace spec:external-logs-layer
+pub fn external_logs_dir() -> PathBuf {
+    state_dir().join("external-logs")
+}
+
+/// Host directory for a specific producer's EXTERNAL logs.
+///
+/// Returns `<state_dir>/external-logs/<role>/`.
+/// The launcher creates this directory on first launch if absent and
+/// bind-mounts it RW at `/var/log/tillandsias/external/` inside the
+/// producer container. The producer can ONLY see its own role's files.
+///
+/// @trace spec:external-logs-layer
+pub fn external_logs_role_dir(role: &str) -> PathBuf {
+    external_logs_dir().join(role)
+}
+
 /// Per-container log directory under the platform-aware log root.
 ///
 /// Returns `<log_dir>/containers/<container_name>/logs/`.
