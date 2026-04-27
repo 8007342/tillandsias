@@ -107,8 +107,32 @@ Hooks are shell commands the harness runs around prompts/tool calls. Permissions
 - **Trying to run Claude Code from a non-project directory** — many features (CLAUDE.md, project memory, project-scoped hooks) need the CWD to be inside a project tree. `cd $HOME/src/<project>` before launching.
 - **Forgetting to commit `.claude/settings.json` changes** — project-scoped settings only take effect when the file is checked in. Local-only edits silently apply to your machine but not to other contributors.
 
+## Telemetry obligations — cheatsheet-telemetry
+
+@trace spec:cheatsheets-license-tiered
+
+Every cheatsheet consultation by Claude Code SHOULD emit one JSONL line to
+`/var/log/tillandsias/external/cheatsheet-telemetry/lookups.jsonl`. Schema
++ examples in `runtime/external-logs.md` ("Producer: cheatsheet-telemetry").
+Path is RW for forge containers; append-only; auditor caps at 10 MB rotate.
+
+The load-bearing event is `resolved_via: miss` — emit it whenever you read
+a cheatsheet but had to pull deeper context (live-api, pull-on-demand
+recipe, web search). Misses tell the host which cheatsheets need refresh.
+
+```bash
+jq -cn --arg ts "$(date -u -Iseconds)" --arg cs "languages/python.md" \
+       --arg q "asyncio cancellation" --arg via "miss" \
+  '{ts: $ts, project: $TILLANDSIAS_PROJECT, cheatsheet: $cs, query: $q,
+    resolved_via: $via, pulled_url: null, chars_consumed: 0,
+    spec: "cheatsheets-license-tiered", accountability: true}' \
+  >> /var/log/tillandsias/external/cheatsheet-telemetry/lookups.jsonl
+```
+
 ## See also
 
 - `agents/opencode.md` — alternative agent runtime, also baked in `/opt/agents/`
 - `agents/openspec.md` — the workflow Claude Code is expected to follow on this project
 - `runtime/forge-container.md` — the sandbox Claude Code lives in
+- `runtime/external-logs.md` — full cheatsheet-telemetry schema + auditor invariants
+- `runtime/cheatsheet-tier-system.md` — the tier system the telemetry events surface

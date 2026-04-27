@@ -58,7 +58,7 @@ Phase 0 of the design's Migration Plan. Each task is verifiable in a single PR; 
 - [x] 7.3 Update the forge `ContainerProfile` in `src-tauri/src/profile.rs` (or wherever profile types live) to set `external_logs_role: Some("cheatsheet-telemetry")`.
 - [x] 7.4 Update the launcher (`src-tauri/src/handlers.rs` or `runner.rs`) to bind-mount `~/.local/state/tillandsias/external-logs/cheatsheet-telemetry/` RW at `/var/log/tillandsias/external/cheatsheet-telemetry/` inside every forge container (preserves the existing producer-mount pattern from `git-service`).
 - [x] 7.5 Extend `cheatsheets/runtime/external-logs.md` with the `cheatsheet-telemetry` role's JSONL schema (every field documented with type and meaning); add an example event for each `resolved_via` value.
-- [ ] 7.6 Document the agent-side write contract (where in opencode/claude/opsx instructions to land the "emit a JSONL line for every cheatsheet consultation" guidance) — add to `cheatsheets/agents/opencode.md` and `cheatsheets/agents/claude-code.md` under a new "Telemetry obligations" section.
+- [x] 7.6 Document the agent-side write contract (where in opencode/claude/opsx instructions to land the "emit a JSONL line for every cheatsheet consultation" guidance) — add to `cheatsheets/agents/opencode.md` and `cheatsheets/agents/claude-code.md` under a new "Telemetry obligations" section.
 
 ## 8. Tier-aware INDEX regeneration
 
