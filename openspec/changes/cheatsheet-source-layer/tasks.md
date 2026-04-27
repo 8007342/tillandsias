@@ -13,14 +13,18 @@
 
 Landed in commit 6d7f235.
 
-## 2. Initial bulk fetch (chunk 2)
+## 2. Initial bulk fetch (chunk 2) — DONE (commit e858873)
 
-- [ ] 2.1 Run `scripts/audit-cheatsheet-sources.sh > /tmp/audit.csv` to triage all ~80 cheatsheets' Provenance URLs.
-- [ ] 2.2 Bulk-fetch allowlisted-domain URLs: `scripts/fetch-cheatsheet-source.sh <URL>` for each (no `--cite` — just populate the verbatim layer).
-- [ ] 2.3 Off-allowlist URLs: surface for maintainer review (manual `--manual-review` per file OR add domain to allowlist if the license clears).
-- [ ] 2.4 Bad URLs (404 on first fetch): flag the cheatsheet DRAFT and either replace the URL with a working alternative (re-fetch) or remove it.
-- [ ] 2.5 Verify INDEX.json has an entry for every fetched source.
-- [ ] 2.6 Generate `cheatsheet-sources/ATTRIBUTION.md` (alphabetical per-publisher).
+- [x] 2.1 Run `scripts/audit-cheatsheet-sources.sh > /tmp/audit.csv` to triage all ~80 cheatsheets' Provenance URLs.
+       185 total URLs, 47 allowlisted (46 unique), 138 off-allowlist.
+- [x] 2.2 Bulk-fetch allowlisted-domain URLs: `scripts/fetch-cheatsheet-source.sh <URL>` for each (no `--cite` — just populate the verbatim layer).
+       47 fetched. Fixed script bug: compute_dest_path() strip order (fragment before trailing slash).
+- [x] 2.3 Off-allowlist URLs: surface for maintainer review — triage in /tmp/off-allowlist-triage.md.
+       Top allowlist candidates: docs.podman.io, cmake.org, www.gnu.org, maven.apache.org, pnpm.io, playwright.dev, docs.gradle.org, git-scm.com.
+       Do-not-bundle confirmed: docs.oracle.com, code.claude.com, opencode.ai.
+- [x] 2.4 No 404s on initial fetch. One URL returned only 326-byte meta-refresh stub (owasp.org/Top10/) — chased redirect to real content at owasp.org/Top10/2025/.
+- [x] 2.5 INDEX.json has 48 entries (47 new + 1 from chunk 1). Valid JSON.
+- [x] 2.6 `cheatsheet-sources/ATTRIBUTION.md` generated (16 publishers, alphabetical).
 
 ## 3. Cheatsheet rewrite (chunk 3)
 
