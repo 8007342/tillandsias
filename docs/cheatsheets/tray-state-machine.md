@@ -15,7 +15,9 @@ status: current
 
 ## Overview
 
-The tray menu has a stable bottom row (`Language ▸`, signature, `Quit Tillandsias`) built once at startup and never touched. Above it sits a **dynamic region** that is appended/removed via `Menu::insert` / `Menu::remove` driven by `(stage, state)` projection. There are no disabled placeholder rows — when something has nothing to say, it's hidden, not greyed out.
+The tray menu has a stable bottom row (signature, `Quit Tillandsias`) built once at startup and never touched. Above it sits a **dynamic region** that is appended/removed via `Menu::insert` / `Menu::remove` driven by `(stage, state)` projection. There are no disabled placeholder rows — when something has nothing to say, it's hidden, not greyed out.
+
+**Note:** The `Language ▸` submenu was removed in 0.1.169.227 — i18n is hard-defaulted to English until the translation pipeline catches up.
 
 Stage selection is deterministic: given the triple `(enclave_health, credential_health, remote_repo_fetch_status)` there is exactly one correct stage.
 
@@ -26,27 +28,26 @@ The dynamic region is rendered top-to-bottom in this order whenever an item is e
 1. **Contextual status line** — disabled, single line, only when at least one condition holds (see *Status line truth table* below).
 2. **`🔑 Sign in to GitHub`** — enabled action, only in `NoAuth` / `NetIssue`.
 3. **Running-stack submenus** — one per project with at least one container of type `Forge`, `OpenCodeWeb`, or `Maintenance` running. Sorted by lowercase project name.
-4. **`Projects ▸`** — only when `state.projects` is non-empty.
-5. **`Remote Projects ▸`** — only when at least one repo in `state.remote_repos` is not present locally.
+4. **`🏠 ~/src ▸`** — only when `state.projects` is non-empty.
+5. **`☁️ Cloud ▸`** — only when at least one repo in `state.remote_repos` is not present locally.
 
 | Stage      | Trigger                                                            | Dynamic region (top → bottom)                                                                                              |
 |------------|--------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------|
 | `Booting`  | One or more enclave images still building                          | status line (`Building […]…`)                                                                                              |
 | `Ready`    | All enclave images ready, before credential probe completes        | optional status line (`<image> ready` flash within 2 s of completion)                                                      |
 | `NoAuth`   | Probe returned `CredentialMissing` or `CredentialInvalid`          | `🔑 Sign in to GitHub`                                                                                                     |
-| `Authed`   | Probe returned `Authenticated`                                     | running-stack submenus, `Projects ▸` (if any locals), `Remote Projects ▸` (if any uncloned remotes)                        |
-| `NetIssue` | Probe returned `GithubUnreachable` (cached projects available)     | `🔑 Sign in to GitHub`, status line (`GitHub unreachable — using cached list`), running stacks, `Projects ▸` (if cached)   |
+| `Authed`   | Probe returned `Authenticated`                                     | running-stack submenus, `🏠 ~/src ▸` (if any locals), `☁️ Cloud ▸` (if any uncloned remotes)                              |
+| `NetIssue` | Probe returned `GithubUnreachable` (cached projects available)     | `🔑 Sign in to GitHub`, status line (`GitHub unreachable — using cached list`), running stacks, `🏠 ~/src ▸` (if cached)   |
 
 The static row at the bottom is ALWAYS present in every stage:
 
 ```
 ─────────── separator ───────────
-Language ▸
-v0.1.169.225 — by Tlatoāni     ← single combined disabled line
+v0.1.169.227 — by Tlatoāni     ← single combined disabled line
 Quit Tillandsias
 ```
 
-`Language ▸` and `Quit Tillandsias` are enabled in every stage. The signature line is the **only** disabled item in the menu — there is no `(No projects)`, `(Building…)`, or `(GitHub unreachable…)` placeholder elsewhere.
+`Quit Tillandsias` is enabled in every stage. The signature line is the **only** disabled item in the menu — there is no `(No projects)`, `(Building…)`, or `(GitHub unreachable…)` placeholder elsewhere.
 
 ## Status line truth table
 
@@ -79,9 +80,9 @@ For each running project, `tray_menu::running_stacks(state)` returns a `RunningS
 
 Children of every running-stack submenu (exactly two, in this order):
 
-| Item                  | i18n key                          | Dispatches                                       | Behavior                                                                                          |
-|-----------------------|-----------------------------------|--------------------------------------------------|---------------------------------------------------------------------------------------------------|
-| `🌱 Attach Another`    | `menu.attach_another_with_emoji`  | `MenuCommand::Launch { project_path }`           | `handle_attach_web` reattach branch — opens an additional native browser window. No new container. |
+| Item                  | i18n key                          | Dispatches                                         | Behavior                                                                                          |
+|-----------------------|-----------------------------------|----------------------------------------------------|---------------------------------------------------------------------------------------------------|
+| `🌱 Attach Another`    | `menu.attach_another_with_emoji`  | `MenuCommand::Launch { project_path }`            | `handle_attach_web` reattach branch — opens an additional native browser window. No new container. |
 | `🔧 Maintenance`       | `menu.maintenance`                | `MenuCommand::MaintenanceTerminal { project_path }` | Spawns a fresh terminal `podman exec`'d into the forge. Concurrent shells allowed.               |
 
 There is **no Stop item.** The only way to tear down a running stack is `Quit Tillandsias`, which calls `handlers::shutdown_all`.
@@ -92,8 +93,8 @@ These are sibling top-level submenus, never nested. The legacy `Include remote` 
 
 | Submenu              | Appended when                                                                                          | Per-entry submenu       | Action                                                                                            |
 |----------------------|--------------------------------------------------------------------------------------------------------|--------------------------|---------------------------------------------------------------------------------------------------|
-| `Projects ▸`         | `state.projects` is non-empty                                                                          | `<project> ▸`            | `🌱 Attach Here` (always); `🔧 Maintenance` (only when forge is running for that project)          |
-| `Remote Projects ▸`  | At least one `state.remote_repos` entry is not in local projects AND not on disk under any watch path | `<repo-name> ▸`          | `⬇️ Clone & Launch` — dispatches `MenuCommand::CloneProject`, which clones then auto-attaches      |
+| `🏠 ~/src ▸`         | `state.projects` is non-empty                                                                          | `<project> ▸`            | `🌱 Attach Here` (always); `🔧 Maintenance` (only when forge is running for that project)          |
+| `☁️ Cloud ▸`         | At least one `state.remote_repos` entry is not in local projects AND not on disk under any watch path | `<repo-name> ▸`          | `⬇️ Clone & Launch` — dispatches `MenuCommand::CloneProject`, which clones then auto-attaches      |
 
 When a submenu would have zero entries, it is **not** appended. There is no "(no projects)" placeholder.
 
@@ -192,7 +193,6 @@ Stage transitions cause `apply_state` to recompute the dynamic region. If items 
 
 | Item                          | Built at  | Updated by                                |
 |-------------------------------|-----------|-------------------------------------------|
-| `Language ▸`                  | `setup`   | `set_text` on locale change only          |
 | `v<version> — by Tlatoāni`    | `setup`   | `set_text` on locale change only          |
 | `Quit Tillandsias`            | `setup`   | `set_text` on locale change only          |
 | Top-region separator          | `setup`   | never changes                             |
