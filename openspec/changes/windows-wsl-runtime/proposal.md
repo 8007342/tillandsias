@@ -113,13 +113,14 @@ fetched 2026-04-26, ms.date 2021-09-27, updated 2025-08-06):
 
 Per-service base, mirroring today's Containerfile `FROM` lines:
 
-| Service   | Upstream base               | Source                                                      |
-|-----------|-----------------------------|-------------------------------------------------------------|
-| forge     | `fedora:43` container image | `registry.fedoraproject.org/fedora:43` via skopeo           |
-| proxy     | Alpine minirootfs           | `dl-cdn.alpinelinux.org/.../alpine-minirootfs-x.y.z-x86_64.tar.gz` (direct download) |
-| git       | Alpine minirootfs           | direct download                                             |
-| inference | Alpine minirootfs + ollama  | direct download + ollama install                            |
-| router    | Alpine minirootfs + caddy   | direct download + caddy install                             |
+| Service       | Upstream base                       | Source                                                      |
+|---------------|-------------------------------------|-------------------------------------------------------------|
+| forge         | `fedora-minimal:43` container image | `registry.fedoraproject.org/fedora-minimal:43` via skopeo  |
+| proxy         | Alpine minirootfs                   | `dl-cdn.alpinelinux.org/.../alpine-minirootfs-x.y.z-x86_64.tar.gz` (direct download) |
+| git           | Alpine minirootfs                   | direct download                                             |
+| inference     | `fedora-minimal:43` + ollama        | skopeo + ollama install (matches Linux/macOS Containerfile)|
+| router        | Alpine minirootfs + caddy           | direct download + `apk add caddy`                           |
+| enclave-init  | Alpine minirootfs + iptables        | direct download + `apk add iptables`                        |
 
 **No podman, no docker, no buildah on the Windows host.** Tarball
 acquisition uses:

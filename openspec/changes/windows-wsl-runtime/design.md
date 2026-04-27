@@ -67,14 +67,14 @@ distro.
 
 Per-service base — same upstream container image as Linux/macOS:
 
-| Service   | Upstream base               | Acquisition                                                    |
-|-----------|-----------------------------|----------------------------------------------------------------|
-| forge     | `fedora:43` container image | `skopeo copy docker://registry.fedoraproject.org/fedora:43 oci:./fedora-43` then layer-flatten |
-| proxy     | Alpine minirootfs           | direct download from `dl-cdn.alpinelinux.org/alpine/v<x.y>/releases/x86_64/alpine-minirootfs-<x.y.z>-x86_64.tar.gz`, SHA-256 verified |
-| git       | Alpine minirootfs           | direct download (same source)                                  |
-| inference | Alpine minirootfs + ollama  | direct download + `apk add curl` + ollama install              |
-| router    | Alpine minirootfs + caddy   | direct download + `apk add caddy`                              |
-| enclave-init | Alpine minirootfs        | direct download + `apk add iptables`                           |
+| Service       | Upstream base                       | Acquisition                                                    |
+|---------------|-------------------------------------|----------------------------------------------------------------|
+| forge         | `fedora-minimal:43` container image | `skopeo copy docker://registry.fedoraproject.org/fedora-minimal:43` then layer-flatten |
+| proxy         | Alpine minirootfs                   | direct download from `dl-cdn.alpinelinux.org/alpine/v<x.y>/releases/x86_64/alpine-minirootfs-<x.y.z>-x86_64.tar.gz`, SHA-256 verified |
+| git           | Alpine minirootfs                   | direct download (same source)                                  |
+| inference     | `fedora-minimal:43` + ollama        | skopeo (matches Linux/macOS Containerfile) + ollama tarball install |
+| router        | Alpine minirootfs + caddy           | direct download + `apk add caddy`                              |
+| enclave-init  | Alpine minirootfs                   | direct download + `apk add iptables`                           |
 
 skopeo runs without a daemon, ships as a single ~25 MB Windows binary,
 and is the canonical tool for pulling OCI images into a flat
