@@ -1,0 +1,19 @@
+url: https://nodejs.org/docs/latest-v22.x/api/
+fetch_url: https://nodejs.org/docs/latest-v22.x/api/
+final_redirect: https://nodejs.org/docs/latest-v22.x/api/
+fetched: 2026-04-27T03:18:42Z
+fetcher_version: 1
+content_sha256: b300c7d9219ec3adbbbb38d216dc9c2672872239a8b4b801866ba327c01eca83
+content_length: 14230
+content_type: text/html; charset=utf-8
+http_status: 200
+publisher: Node.js contributors
+license: mit
+license_url: https://github.com/nodejs/node/blob/main/LICENSE
+redistribution: bundled
+allowlist_match: nodejs.org
+render: static
+local_path: cheatsheet-sources/nodejs.org/docs/latest-v22.x/api
+cited_by:
+  []
+notes: ""

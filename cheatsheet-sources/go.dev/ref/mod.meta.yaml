@@ -1,0 +1,19 @@
+url: https://go.dev/ref/mod
+fetch_url: https://go.dev/ref/mod
+final_redirect: https://go.dev/ref/mod
+fetched: 2026-04-27T03:18:13Z
+fetcher_version: 1
+content_sha256: 62f472af1df72297e8b5588bf293d2cb0eb0edbd9a88393b62fb75661d44e72f
+content_length: 282999
+content_type: text/html; charset=utf-8
+http_status: 200
+publisher: The Go Authors
+license: bsd-3-clause
+license_url: https://go.dev/LICENSE
+redistribution: bundled
+allowlist_match: go.dev
+render: static
+local_path: cheatsheet-sources/go.dev/ref/mod
+cited_by:
+  []
+notes: ""

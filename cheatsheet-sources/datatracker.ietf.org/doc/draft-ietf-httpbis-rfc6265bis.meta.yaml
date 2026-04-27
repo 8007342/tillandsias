@@ -1,0 +1,19 @@
+url: https://datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis/
+fetch_url: https://datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis/
+final_redirect: https://datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis/
+fetched: 2026-04-27T03:18:51Z
+fetcher_version: 1
+content_sha256: 7104b6e79573e36e508e354d6b37d6a85a14a277c62bab897853efbbb8caf72c
+content_length: 199912
+content_type: text/html; charset=utf-8
+http_status: 200
+publisher: IETF
+license: ietf-trust-legal-provisions
+license_url: https://trustee.ietf.org/license-info/
+redistribution: bundled
+allowlist_match: datatracker.ietf.org
+render: static
+local_path: cheatsheet-sources/datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis
+cited_by:
+  []
+notes: ""

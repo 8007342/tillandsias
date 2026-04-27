@@ -1,0 +1,19 @@
+url: https://www.rfc-editor.org/rfc/rfc6265
+fetch_url: https://www.rfc-editor.org/rfc/rfc6265
+final_redirect: https://www.rfc-editor.org/rfc/rfc6265
+fetched: 2026-04-27T03:18:51Z
+fetcher_version: 1
+content_sha256: 7176651a83451c0abccb54335654712938088307b4d632586e9c84f458d6140f
+content_length: 106822
+content_type: text/html; charset=UTF-8
+http_status: 200
+publisher: IETF / RFC Editor
+license: ietf-trust-legal-provisions
+license_url: https://trustee.ietf.org/license-info/
+redistribution: bundled
+allowlist_match: www.rfc-editor.org
+render: static
+local_path: cheatsheet-sources/www.rfc-editor.org/rfc/rfc6265
+cited_by:
+  []
+notes: ""

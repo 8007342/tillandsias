@@ -1,0 +1,19 @@
+url: https://doc.rust-lang.org/cargo/reference/workspaces.html
+fetch_url: https://doc.rust-lang.org/cargo/reference/workspaces.html
+final_redirect: https://doc.rust-lang.org/cargo/reference/workspaces.html
+fetched: 2026-04-27T03:18:12Z
+fetcher_version: 1
+content_sha256: f47610ad5fee61ffbda923b3b66d81cbbe72666f87a6d564c61fb38eb39ed14f
+content_length: 37306
+content_type: text/html
+http_status: 200
+publisher: The Rust Project Developers
+license: mit-or-apache-2.0
+license_url: https://www.rust-lang.org/policies/licenses
+redistribution: bundled
+allowlist_match: doc.rust-lang.org
+render: static
+local_path: cheatsheet-sources/doc.rust-lang.org/cargo/reference/workspaces.html
+cited_by:
+  []
+notes: ""

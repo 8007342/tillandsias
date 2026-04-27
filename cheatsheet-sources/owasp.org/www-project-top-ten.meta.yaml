@@ -1,0 +1,19 @@
+url: https://owasp.org/www-project-top-ten/
+fetch_url: https://owasp.org/www-project-top-ten/
+final_redirect: https://owasp.org/www-project-top-ten/
+fetched: 2026-04-27T03:18:48Z
+fetcher_version: 1
+content_sha256: 3df0055e4b0e8f60787a3b025026e2bd58628e773728aa3bfee327c761243b04
+content_length: 71432
+content_type: text/html; charset=utf-8
+http_status: 200
+publisher: OWASP
+license: cc-by-sa-4.0
+license_url: https://creativecommons.org/licenses/by-sa/4.0/
+redistribution: bundled
+allowlist_match: owasp.org
+render: static
+local_path: cheatsheet-sources/owasp.org/www-project-top-ten
+cited_by:
+  []
+notes: ""

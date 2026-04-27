@@ -1,0 +1,19 @@
+url: https://docs.rs/regex/latest/regex/#syntax
+fetch_url: https://docs.rs/regex/latest/regex/#syntax
+final_redirect: https://docs.rs/regex/latest/regex/#syntax
+fetched: 2026-04-27T03:21:04Z
+fetcher_version: 1
+content_sha256: a5ed704193295306789b6cb9c54be443aed26c2b3e13c44b8243493d2728a6d7
+content_length: 111442
+content_type: text/html; charset=utf-8
+http_status: 200
+publisher: The Rust Project / crate authors
+license: mit-or-apache-2.0
+license_url: https://docs.rs
+redistribution: bundled
+allowlist_match: docs.rs
+render: static
+local_path: cheatsheet-sources/docs.rs/regex/latest/regex
+cited_by:
+  []
+notes: ""

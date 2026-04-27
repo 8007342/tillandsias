@@ -1,0 +1,19 @@
+url: https://doc.rust-lang.org/cargo/commands/index.html
+fetch_url: https://doc.rust-lang.org/cargo/commands/index.html
+final_redirect: https://doc.rust-lang.org/cargo/commands/index.html
+fetched: 2026-04-27T03:18:12Z
+fetcher_version: 1
+content_sha256: 91f4ec7aba576476f6e3c49c60808d00be51881b62af5885cd9f3d0ebc952bfb
+content_length: 23917
+content_type: text/html
+http_status: 200
+publisher: The Rust Project Developers
+license: mit-or-apache-2.0
+license_url: https://www.rust-lang.org/policies/licenses
+redistribution: bundled
+allowlist_match: doc.rust-lang.org
+render: static
+local_path: cheatsheet-sources/doc.rust-lang.org/cargo/commands/index.html
+cited_by:
+  []
+notes: ""

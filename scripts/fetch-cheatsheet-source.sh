@@ -379,12 +379,14 @@ compute_dest_path() {
     local host="${u_no_scheme%%/*}"
     local path="${u_no_scheme#${host}}"
 
-    # Remove trailing slash.
-    path="${path%/}"
     # Remove query string for path computation.
     path="${path%\?*}"
-    # Remove fragment.
+    # Remove fragment (do this before trailing-slash strip so that
+    # URLs like /foo/bar/#section → /foo/bar/ → /foo/bar are handled correctly).
     path="${path%#*}"
+    # Remove trailing slash (after fragment strip, a fragment-anchored URL like
+    # /regex/latest/regex/#syntax leaves /regex/latest/regex/ after fragment removal).
+    path="${path%/}"
 
     if [[ -z "${path}" || "${path}" == "/" ]]; then
         path="/index.html"

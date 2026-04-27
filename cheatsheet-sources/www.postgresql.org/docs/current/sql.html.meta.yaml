@@ -1,0 +1,19 @@
+url: https://www.postgresql.org/docs/current/sql.html
+fetch_url: https://www.postgresql.org/docs/current/sql.html
+final_redirect: https://www.postgresql.org/docs/current/sql.html
+fetched: 2026-04-27T03:18:47Z
+fetcher_version: 1
+content_sha256: e79d3ba0a7babcad6f4dbe56f553cc64201a74802f5090a145050b529da3bcd0
+content_length: 31740
+content_type: text/html; charset=utf-8
+http_status: 200
+publisher: PostgreSQL Global Development Group
+license: postgresql
+license_url: https://www.postgresql.org/about/licence/
+redistribution: bundled
+allowlist_match: www.postgresql.org
+render: static
+local_path: cheatsheet-sources/www.postgresql.org/docs/current/sql.html
+cited_by:
+  []
+notes: ""

@@ -1,0 +1,19 @@
+url: https://doc.rust-lang.org/reference/
+fetch_url: https://doc.rust-lang.org/reference/
+final_redirect: https://doc.rust-lang.org/reference/
+fetched: 2026-04-27T03:18:45Z
+fetcher_version: 1
+content_sha256: 8b7dd0ab36034cd12a38dbfb1f7380b1d961bb20e40ec2370865534d8a33597b
+content_length: 33350
+content_type: text/html
+http_status: 200
+publisher: The Rust Project Developers
+license: mit-or-apache-2.0
+license_url: https://www.rust-lang.org/policies/licenses
+redistribution: bundled
+allowlist_match: doc.rust-lang.org
+render: static
+local_path: cheatsheet-sources/doc.rust-lang.org/reference/index.html
+cited_by:
+  []
+notes: ""

@@ -1,0 +1,19 @@
+url: https://doc.rust-lang.org/cargo/reference/manifest.html
+fetch_url: https://doc.rust-lang.org/cargo/reference/manifest.html
+final_redirect: https://doc.rust-lang.org/cargo/reference/manifest.html
+fetched: 2026-04-27T03:18:12Z
+fetcher_version: 1
+content_sha256: 55c4ff02c8a0985db4b041eda966bd3da2268703cff4df697cd39ce72a9a91c6
+content_length: 59633
+content_type: text/html
+http_status: 200
+publisher: The Rust Project Developers
+license: mit-or-apache-2.0
+license_url: https://www.rust-lang.org/policies/licenses
+redistribution: bundled
+allowlist_match: doc.rust-lang.org
+render: static
+local_path: cheatsheet-sources/doc.rust-lang.org/cargo/reference/manifest.html
+cited_by:
+  []
+notes: ""

@@ -1,0 +1,19 @@
+url: https://owasp.org/Top10/
+fetch_url: https://owasp.org/Top10/
+final_redirect: https://owasp.org/Top10/
+fetched: 2026-04-27T03:18:48Z
+fetcher_version: 1
+content_sha256: cf318bf6e49239cd034bdfcdf41ca87eab4036c34f8991be2d2a24e52647a12b
+content_length: 326
+content_type: text/html; charset=utf-8
+http_status: 200
+publisher: OWASP
+license: cc-by-sa-4.0
+license_url: https://creativecommons.org/licenses/by-sa/4.0/
+redistribution: bundled
+allowlist_match: owasp.org
+render: static
+local_path: cheatsheet-sources/owasp.org/Top10/index.html
+cited_by:
+  []
+notes: ""
