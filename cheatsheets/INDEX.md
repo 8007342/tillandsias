@@ -67,3 +67,94 @@ All cheatsheets are curated references for tools and languages available in the 
 
 - `pytest.md` — pytest: discovery, fixtures, parametrize, conftest, markers
 - `junit.md` — JUnit 5 Jupiter: @Test, @BeforeEach, parametrized tests, assertions
+- `cargo-test.md` — Rust test discovery, integration tests, doctests, benchmarks
+- `go-test.md` — Go testing: -run flag, table-driven tests, helpers, benchmarks
+- `selenium.md` — Selenium WebDriver: browser automation, waits, best practices
+- `playwright.md` — Playwright: cross-browser testing, auto-install, fixtures
+
+## architecture
+
+- `event-driven-basics.md` — Event-driven patterns, async message passing, reactor model
+- `reactive-streams-spec.md` — Reactive Streams: publishers, subscribers, backpressure
+
+## build (continued)
+
+- `gradle.md` — Gradle 8.x: tasks, dependencies, wrapper, Kotlin DSL basics
+- `maven.md` — Maven: lifecycle phases, plugins, dependency management, profiles
+- `go.md` — Go modules: init, tidy, get; build/test/run; GOPATH vs module mode
+- `flutter.md` — Flutter 3.24: pub get, run --device-id, build (web/desktop only)
+- `make.md` — GNU make: rules, variables, .PHONY, recipes, common pitfalls
+- `cmake.md` — CMake 3.x: project setup, target definitions, find_package, generators
+- `ninja.md` — Ninja build system: build.ninja format, when to use vs make
+- `nix-flake-basics.md` — Nix flakes: inputs, outputs, derivations for reproducible builds
+- `distro-packaged-cheatsheets.md` — Distribution-specific packaging (Fedora rpms, Debian debs)
+
+## languages (continued)
+
+- `java.md` — Java 21 LTS (in `java/` subdirectory)
+  - `java/rxjava-event-driven.md` — RxJava reactive streams: observables, operators, threading
+
+## data
+
+- `postgresql-indexing-basics.md` — PostgreSQL indexes: B-tree, BRIN, GiST, partial indexes
+
+## security
+
+- `owasp-top-10-2021.md` — OWASP Top 10 vulnerabilities: injection, auth, XSS, crypto
+
+## privacy
+
+- `data-minimization-gdpr.md` — GDPR compliance: data minimization, consent, retention
+
+## algorithms
+
+- `binary-search.md` — Binary search: sorted array lookup, boundary conditions, variations
+
+## patterns
+
+- `gof-observer.md` — Gang of Four Observer pattern: subjects, observers, notifications
+
+## runtime (continued)
+
+- `cheatsheet-architecture-v2.md` — Cheatsheet versioning, curation layers, tiered access
+- `cheatsheet-tier-system.md` — Three-tier cheatsheet access: CORE (always available), HOSTED (curated), EXTERNAL (agent-reported)
+- `cheatsheet-frontmatter-spec.md` — Frontmatter format: metadata, provenance, last-updated, cost indicators
+- `cheatsheet-lifecycle.md` — Cheatsheet refresh cadence, staleness checks, deprecation signals
+- `cheatsheet-pull-on-demand.md` — Runtime cheatsheet fetching: network fallback, cache policy
+- `cheatsheet-crdt-overrides.md` — CRDT-inspired cheatsheet merging: no silent shadowing, reason fields
+- `cheatsheet-shortcomings.md` — RUNTIME_LIMITATIONS_NNN.md format for agent-reported gaps
+- `agent-startup-skills.md` — Startup skills for agents: project detection, environment setup
+- `external-logs.md` — External logs producer: JSONL event format, cheatsheet-telemetry
+- `forge-hot-cold-split.md` — Hot path (tmpfs) vs cold path (image RO): /opt/cheatsheets vs /opt/cheatsheets-image
+- `forge-paths-ephemeral-vs-persistent.md` — Container paths: ephemeral (lost on stop), persistent (project src), config (writable)
+- `forge-shared-cache-via-nix.md` — Nix-managed shared cache: RO to containers, no network pulls at runtime
+- `local-inference.md` — Ollama local inference: model selection, performance tuning, VRAM constraints
+
+## utils (continued)
+
+- `curl.md` — curl: HTTP methods, headers, data forms, proxies, redirects, resolve
+- `fd.md` — fd-find: find replacement, type filters, --exec, --hidden
+- `gh.md` — GitHub CLI: pr/issue/repo/workflow/api, JSON output, scripting patterns
+- `jq.md` — jq: JSON filtering, pipes, slurp, joins, transformations
+- `ripgrep.md` — ripgrep (rg): patterns, types, multiline, context, JSON output
+- `rsync.md` — rsync: -avz, --delete, --exclude, --dry-run, SSH transport
+- `ssh.md` — SSH: config, agent forwarding, port forwarding, ProxyJump
+- `tree.md` — tree: -L depth, -I exclude patterns, --gitignore, --du
+- `tar.md` — tar: compression (gz/bz2/xz/zst), exclude patterns, listing contents
+- `shellcheck-shfmt.md` — ShellCheck linting rules and shfmt formatting for shell scripts
+- `yq.md` — mikefarah/yq 4.x: YAML/JSON query/update, multi-doc, eval forms
+
+## web (continued)
+
+- `grpc.md` — gRPC: unary/streaming services, gRPC-Web, grpcurl invocation
+- `protobuf.md` — Protocol Buffers: proto3 syntax, field numbers, well-known types, codegen
+- `openapi.md` — OpenAPI 3.x: spec structure, schemas, security, codegen tools
+- `http.md` — HTTP/1.1 and HTTP/2: methods, status codes, headers, idempotency
+- `websocket.md` — WebSocket protocol: frames, handshake, subprotocols, common libraries
+- `sse.md` — Server-Sent Events: format, reconnection, vs WebSocket
+- `cookie-auth-best-practices.md` — Cookie-based auth: secure flags, SameSite, CSRF protection
+
+## welcome
+
+- `readme-discipline.md` — README.md best practices: structure, examples, getting started
+- `sample-prompts.md` — Example prompts for agent interaction and project discovery
