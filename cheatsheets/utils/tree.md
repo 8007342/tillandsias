@@ -1,3 +1,21 @@
+---
+tags: []  # TODO: add 3-8 kebab-case tags on next refresh
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-27
+sources:
+  - http://mama.indstate.edu/users/ice/tree/
+  - https://linux.die.net/man/1/tree
+authority: high
+status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
+---
 # tree
 
 @trace spec:agent-cheatsheets
@@ -67,6 +85,51 @@ tree -du -h --sort=size -L 2
 - **`--noreport` hides the count**: handy in docs, but you lose the "X directories, Y files" sanity check — easy to miss a missing `-L` and dump 50k lines.
 - **Symlink loops without `-l` cap**: `tree -l` follows symlinks but detects cycles; `tree` without `-l` skips them. A bare `find -L` would loop forever — tree won't, but the output explodes.
 - **Charset on minimal containers**: forge images set UTF-8, but piping into a log file viewed on a non-UTF8 terminal renders garbage. Use `--charset ascii` when the consumer is unknown.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://linux.die.net/man/1/tree`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/linux.die.net/man/1/tree`
+- **License:** see-license-allowlist
+- **License URL:** https://linux.die.net/man/1/tree
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/linux.die.net/man/1/tree"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://linux.die.net/man/1/tree" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/utils/tree.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

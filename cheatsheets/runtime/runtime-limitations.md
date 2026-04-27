@@ -2,11 +2,18 @@
 tags: [forge, runtime-limitations, feedback-loop, agent-workflow, meta]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://github.com/8007342/tillandsias/blob/main/openspec/specs/agent-cheatsheets/spec.md
 authority: high
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # RUNTIME_LIMITATIONS_NNN.md — feedback loop
@@ -106,6 +113,51 @@ happens on the host before forge attach.
 - **Vague `attempted` / `suggested_install`** — a report of "tool X is missing" is useless. The host needs to know exactly what you tried so they can reproduce, and exactly what install command would have worked elsewhere.
 - **NNN collisions** — two parallel agents in the same project might both write `008`. The mirror-sync de-conflicts by file content; agents SHOULD `ls` immediately before writing to minimise the window. If a collision happens, the host can rename one report manually — minor pain, not a data loss.
 - **Reporting the same gap twice** — `rg <tool>` against existing reports before writing a new one. If a report already exists, augment its body with a new `## Encountered again on <date>` section instead of creating a duplicate.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://github.com/8007342/tillandsias/blob/main/openspec/specs/agent-cheatsheets/spec.md`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/github.com/8007342/tillandsias/blob/main/openspec/specs/agent-cheatsheets/spec.md`
+- **License:** see-license-allowlist
+- **License URL:** https://github.com/8007342/tillandsias/blob/main/openspec/specs/agent-cheatsheets/spec.md
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/github.com/8007342/tillandsias/blob/main/openspec/specs/agent-cheatsheets/spec.md"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://github.com/8007342/tillandsias/blob/main/openspec/specs/agent-cheatsheets/spec.md" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/runtime/runtime-limitations.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

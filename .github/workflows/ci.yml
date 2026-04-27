@@ -23,6 +23,7 @@ jobs:
         with:
           toolchain: stable
           components: clippy, rustfmt
+          targets: x86_64-unknown-linux-musl
 
       - name: Rust cache
         uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
@@ -36,6 +37,9 @@ jobs:
             librsvg2-dev \
             patchelf
 
+      - name: Build router sidecar (required by src-tauri/build.rs)
+        run: scripts/build-sidecar.sh
+
       - name: Check formatting
         run: cargo fmt --check --all
 
@@ -44,3 +48,11 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace
+
+      # @trace spec:cheatsheets-license-tiered
+      # Gating tier-aware cheatsheet validator. Unlike the pre-commit hook
+      # (non-blocking, CRDT-convergence philosophy), CI fails on validation
+      # ERRORs so a release cannot ship a cheatsheet whose pull-on-demand
+      # stub is malformed or whose CRDT override discipline is broken.
+      - name: Validate cheatsheet tier discipline
+        run: scripts/check-cheatsheet-tiers.sh

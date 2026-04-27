@@ -1,3 +1,21 @@
+---
+tags: []  # TODO: add 3-8 kebab-case tags on next refresh
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-27
+sources:
+  - https://download.samba.org/pub/rsync/rsync.1
+  - https://rsync.samba.org/documentation.html
+authority: high
+status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
+---
 # rsync
 
 @trace spec:agent-cheatsheets
@@ -67,6 +85,51 @@ rsync -avz --delete --backup --backup-dir="../backup-$(date +%F)" src/ dst/
 - **Not atomic**: rsync writes files in place (or via `.~tmp~` then rename per-file). A killed transfer leaves dst in a half-state. Use `--partial-dir=.rsync-partial` plus a separate "publish" step (e.g. atomic symlink swap) for production deploys.
 - **Bandwidth blast on shared links**: rsync will saturate available bandwidth. Cap with `--bwlimit=10M` (10 MB/s) when running over a metered or shared connection.
 - **`-z` over ssh double-compresses**: ssh already compresses if `Compression yes` is set in `ssh_config`. Pick one — rsync's `-z` is usually better tuned for the data.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://download.samba.org/pub/rsync/rsync.1`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/download.samba.org/pub/rsync/rsync.1`
+- **License:** see-license-allowlist
+- **License URL:** https://download.samba.org/pub/rsync/rsync.1
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/download.samba.org/pub/rsync/rsync.1"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://download.samba.org/pub/rsync/rsync.1" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/utils/rsync.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

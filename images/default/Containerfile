@@ -282,6 +282,17 @@ RUN chmod +x /usr/local/share/tillandsias/forge-welcome.sh || true
 RUN mkdir -p /etc/tillandsias/locales
 COPY locales/ /etc/tillandsias/locales/
 
+# ── External-logs producer manifest ────────────────────────────
+# @trace spec:cheatsheets-license-tiered, spec:external-logs-layer
+# @cheatsheet runtime/external-logs.md
+# Forge containers are EXTERNAL-tier producers of cheatsheet-telemetry —
+# in-forge agents (claude / opencode / opsx) emit one JSONL event per
+# cheatsheet consultation to lookups.jsonl. The tray-side auditor reads
+# this manifest at /etc/tillandsias/external-logs.yaml every 60 s and
+# flags any unlisted file in the role dir as a LEAK event.
+RUN mkdir -p /etc/tillandsias
+COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
+
 # ── Discoverability CLI tools ─────────────────────────────
 # @trace spec:forge-environment-discoverability
 # Three image-baked bash commands the agent can run on first turn to learn
@@ -321,6 +332,26 @@ RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
 RUN mkdir -p /opt/cheatsheets-image
 COPY .cheatsheets/ /opt/cheatsheets-image/
 RUN chmod -R a+rX /opt/cheatsheets-image && chmod -R go-w /opt/cheatsheets-image
+
+# ── Bundled-tier cheatsheet sources + meta side-channel ────────
+# @trace spec:cheatsheets-license-tiered
+# @cheatsheet runtime/cheatsheet-tier-system.md
+# `.cheatsheet-sources/` is staged by `scripts/build-image.sh` from the
+# bundled-tier fetcher's cache-key directory (per Decision 7 of the
+# cheatsheets-license-tiered design). On network failure with no prior
+# cache, the directory contains a single `UNAVAILABLE.md` placeholder so
+# the COPY still succeeds (graceful degradation; agents see no
+# /opt/cheatsheet-sources/ entries and fall back to pull-on-demand).
+#
+# `.cheatsheets-meta/` carries `<category>/<name>.frontmatter.json` with
+# image_baked_sha256, structural_drift_fingerprint, fetched_at, and url.
+# populate_hot_paths() reads these at forge launch to inject the SHA into
+# INDEX.md without rewriting the cheatsheet inside the image.
+RUN mkdir -p /opt/cheatsheet-sources /opt/cheatsheets-meta
+COPY .cheatsheet-sources/ /opt/cheatsheet-sources/
+COPY .cheatsheets-meta/ /opt/cheatsheets-meta/
+RUN chmod -R a+rX /opt/cheatsheet-sources /opt/cheatsheets-meta \
+    && chmod -R go-w /opt/cheatsheet-sources /opt/cheatsheets-meta
 
 # ── Fix ownership ──────────────────────────────────────────────
 RUN chown -R 1000:1000 /home/forge

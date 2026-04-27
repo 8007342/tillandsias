@@ -184,6 +184,10 @@ fi
 
 parse_cheatsheet() {
     local file="$1"
+    # @trace spec:cheatsheets-license-tiered
+    # Emits 7 \x1f-separated fields: status, title, description, tier,
+    # image_baked_sha256, package, committed_for_project. The last 4 are
+    # for tier-aware badge rendering (cheatsheets-license-tiered v2 schema).
     awk '
         BEGIN {
             in_fm = 0
@@ -196,6 +200,10 @@ parse_cheatsheet() {
             use_when_next = 0
             nonempty_body_count = 0
             line_no = 0
+            tier = ""
+            image_baked_sha256 = ""
+            package = ""
+            committed_for_project = ""
         }
         {
             line_no++
@@ -215,6 +223,19 @@ parse_cheatsheet() {
             if (in_fm) {
                 if (match($0, /^status:[[:space:]]*([A-Za-z]+)/, m)) {
                     status = tolower(m[1])
+                }
+                # @trace spec:cheatsheets-license-tiered (v2 fields)
+                if (match($0, /^tier:[[:space:]]*([A-Za-z-]+)/, m)) {
+                    tier = m[1]
+                }
+                if (match($0, /^image_baked_sha256:[[:space:]]*([A-Fa-f0-9]+)/, m)) {
+                    image_baked_sha256 = m[1]
+                }
+                if (match($0, /^package:[[:space:]]*([A-Za-z0-9_-]+)/, m)) {
+                    package = m[1]
+                }
+                if (match($0, /^committed_for_project:[[:space:]]*(true|false)/, m)) {
+                    committed_for_project = m[1]
                 }
                 next
             }
@@ -260,7 +281,8 @@ parse_cheatsheet() {
             if (saw_fm_open && !saw_fm_close) { status = "none" }
             if (!saw_fm_open) { status = "none" }
 
-            printf "%s\x1f%s\x1f%s\n", status, title, description
+            printf "%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\n", \
+                status, title, description, tier, image_baked_sha256, package, committed_for_project
         }
     ' "$file"
 }
@@ -303,6 +325,12 @@ process_file() {
     status="$(printf '%s' "$parsed" | awk -F$'\x1f' '{print $1}')"
     title="$(printf '%s' "$parsed" | awk -F$'\x1f' '{print $2}')"
     description="$(printf '%s' "$parsed" | awk -F$'\x1f' '{print $3}')"
+    # @trace spec:cheatsheets-license-tiered — v2 tier-aware fields
+    local tier image_baked_sha256 package committed_for_project tier_marker
+    tier="$(printf '%s' "$parsed" | awk -F$'\x1f' '{print $4}')"
+    image_baked_sha256="$(printf '%s' "$parsed" | awk -F$'\x1f' '{print $5}')"
+    package="$(printf '%s' "$parsed" | awk -F$'\x1f' '{print $6}')"
+    committed_for_project="$(printf '%s' "$parsed" | awk -F$'\x1f' '{print $7}')"
 
     if [[ "$status" == "deprecated" ]]; then
         return 0
@@ -340,6 +368,45 @@ process_file() {
                 verify_marker=""
                 ;;
         esac
+    fi
+
+    # @trace spec:cheatsheets-license-tiered — v2 tier badges (task 8.1)
+    # Tier-aware badges supersede the legacy verify_marker for cheatsheets
+    # whose frontmatter declares a tier. If tier is set, build the badge
+    # from frontmatter; otherwise fall back to the legacy verify_marker.
+    tier_marker=""
+    case "${tier}" in
+        bundled)
+            if [[ -n "${image_baked_sha256}" ]]; then
+                tier_marker=" [bundled, verified: ${image_baked_sha256:0:8}]"
+            else
+                tier_marker=" [bundled, partial-verify]"
+            fi
+            ;;
+        distro-packaged)
+            if [[ -n "${package}" ]]; then
+                tier_marker=" [distro-packaged: ${package}]"
+            else
+                tier_marker=" [distro-packaged: MISSING]"
+            fi
+            ;;
+        pull-on-demand)
+            if [[ "${committed_for_project}" == "true" ]]; then
+                tier_marker=" [pull-on-demand: project-committed]"
+            else
+                tier_marker=" [pull-on-demand: stub]"
+            fi
+            ;;
+        *)
+            # tier unset — keep the legacy verify_marker
+            tier_marker=""
+            ;;
+    esac
+
+    # Prefer the tier_marker when present (v2 cheatsheet); fall back to legacy
+    # verify_marker for cheatsheets without tier in frontmatter.
+    if [[ -n "${tier_marker}" ]]; then
+        verify_marker="${tier_marker}"
     fi
 
     if [[ -z "$description" ]]; then

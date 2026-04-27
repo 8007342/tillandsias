@@ -2,12 +2,19 @@
 tags: [opencode, agent, cli, web-ui, serve, tui, session, coding-agent]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://opencode.ai/docs
   - https://opencode.ai/docs/cli
 authority: high
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # OpenCode — CLI + web mode
@@ -91,8 +98,83 @@ Same agent, different surface. The TUI runs in the same forge container; if you 
 - **Assuming OpenCode auto-loads CLAUDE.md** — OpenCode reads its own config + project AGENTS.md (if present), NOT Claude Code's CLAUDE.md. If you want both agents to share rules, mirror them in both files.
 - **Trying to install agent extensions at runtime** — the forge image is the toolbox. Adding plugins/extensions means a forge image change (per `spec:default-image`), not a runtime install.
 
+## Telemetry obligations — cheatsheet-telemetry
+
+@trace spec:cheatsheets-license-tiered
+
+Every cheatsheet consultation by opencode SHOULD emit one JSONL line to
+`/var/log/tillandsias/external/cheatsheet-telemetry/lookups.jsonl` so the
+host-side analytics (deferred to a follow-up change) can drive cheatsheet
+refresh prioritization. Schema and example events are documented in
+`runtime/external-logs.md` under "Producer: cheatsheet-telemetry".
+
+The path is RW for forge containers (per `spec:cheatsheets-license-tiered`'s
+relaxation of the original Reverse-breach refusal). Append-only — never
+rewrite earlier lines. The tray auditor enforces a 10 MB rotate cap.
+
+The most load-bearing event is `resolved_via: miss` — emit it whenever
+you read a cheatsheet but had to pull deeper context (live-api,
+pull-on-demand recipe, or web search). The miss log is what tells the
+host which cheatsheets need refresh.
+
+```bash
+jq -cn --arg ts "$(date -u -Iseconds)" --arg cs "languages/python.md" \
+       --arg q "asyncio cancellation" --arg via "miss" \
+  '{ts: $ts, project: $TILLANDSIAS_PROJECT, cheatsheet: $cs, query: $q,
+    resolved_via: $via, pulled_url: null, chars_consumed: 0,
+    spec: "cheatsheets-license-tiered", accountability: true}' \
+  >> /var/log/tillandsias/external/cheatsheet-telemetry/lookups.jsonl
+```
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://opencode.ai/docs`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/opencode.ai/docs`
+- **License:** see-license-allowlist
+- **License URL:** https://opencode.ai/docs
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/opencode.ai/docs"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://opencode.ai/docs" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/agents/opencode.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
+
 ## See also
 
 - `agents/claude-code.md` — alternative agent, baked alongside opencode
 - `agents/openspec.md` — change workflow opencode invokes via `/opsx:*` slash commands
 - `runtime/networking.md` — why the credential-free / proxy-mediated network shape
+- `runtime/external-logs.md` — full cheatsheet-telemetry schema + auditor invariants
+- `runtime/cheatsheet-tier-system.md` — the tier system the telemetry events surface

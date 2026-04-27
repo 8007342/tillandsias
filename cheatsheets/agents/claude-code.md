@@ -2,12 +2,19 @@
 tags: [claude-code, anthropic, agent, cli, skills, hooks, settings]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://code.claude.com/docs/en/overview
   - https://code.claude.com/docs/en/cli-reference
 authority: high
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # Claude Code — CLI + skills + hooks
@@ -107,8 +114,77 @@ Hooks are shell commands the harness runs around prompts/tool calls. Permissions
 - **Trying to run Claude Code from a non-project directory** — many features (CLAUDE.md, project memory, project-scoped hooks) need the CWD to be inside a project tree. `cd $HOME/src/<project>` before launching.
 - **Forgetting to commit `.claude/settings.json` changes** — project-scoped settings only take effect when the file is checked in. Local-only edits silently apply to your machine but not to other contributors.
 
+## Telemetry obligations — cheatsheet-telemetry
+
+@trace spec:cheatsheets-license-tiered
+
+Every cheatsheet consultation by Claude Code SHOULD emit one JSONL line to
+`/var/log/tillandsias/external/cheatsheet-telemetry/lookups.jsonl`. Schema
++ examples in `runtime/external-logs.md` ("Producer: cheatsheet-telemetry").
+Path is RW for forge containers; append-only; auditor caps at 10 MB rotate.
+
+The load-bearing event is `resolved_via: miss` — emit it whenever you read
+a cheatsheet but had to pull deeper context (live-api, pull-on-demand
+recipe, web search). Misses tell the host which cheatsheets need refresh.
+
+```bash
+jq -cn --arg ts "$(date -u -Iseconds)" --arg cs "languages/python.md" \
+       --arg q "asyncio cancellation" --arg via "miss" \
+  '{ts: $ts, project: $TILLANDSIAS_PROJECT, cheatsheet: $cs, query: $q,
+    resolved_via: $via, pulled_url: null, chars_consumed: 0,
+    spec: "cheatsheets-license-tiered", accountability: true}' \
+  >> /var/log/tillandsias/external/cheatsheet-telemetry/lookups.jsonl
+```
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://code.claude.com/docs/en/overview`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/code.claude.com/docs/en/overview`
+- **License:** see-license-allowlist
+- **License URL:** https://code.claude.com/docs/en/overview
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/code.claude.com/docs/en/overview"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://code.claude.com/docs/en/overview" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/agents/claude-code.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
+
 ## See also
 
 - `agents/opencode.md` — alternative agent runtime, also baked in `/opt/agents/`
 - `agents/openspec.md` — the workflow Claude Code is expected to follow on this project
 - `runtime/forge-container.md` — the sandbox Claude Code lives in
+- `runtime/external-logs.md` — full cheatsheet-telemetry schema + auditor invariants
+- `runtime/cheatsheet-tier-system.md` — the tier system the telemetry events surface

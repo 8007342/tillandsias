@@ -2,7 +2,7 @@
 tags: [external-logs, observability, logs, forge, runtime, producers, consumers]
 languages: []
 since: 2026-04-26
-last_verified: 2026-04-26
+last_verified: 2026-04-27
 sources:
   - https://docs.podman.io/en/stable/markdown/podman-cp.1.html
   - https://docs.podman.io/en/stable/markdown/podman-run.1.html
@@ -21,7 +21,7 @@ status: current
 
 - Podman cp reference (streaming container files to stdout as tar, used by the tray-side auditor): <https://docs.podman.io/en/stable/markdown/podman-cp.1.html>
 - Podman run reference (bind-mount semantics: `:rw`/`:ro`, the mount modes that make producer vs consumer roles possible): <https://docs.podman.io/en/stable/markdown/podman-run.1.html>
-- **Last updated:** 2026-04-26
+- **Last updated:** 2026-04-27
 
 ## The two log tiers
 
@@ -137,7 +137,7 @@ podman cp tillandsias-git-myproject:/etc/tillandsias/external-logs.yaml -
 | **Manifest match** | File in role dir NOT listed in `external-logs.yaml` | WARN + accountability `[external-logs] LEAK: <role> wrote <file>` |
 | **Size cap** | File > `rotate_at_mb` MB (default 10 MB) | Truncate oldest 50% in place; INFO accountability event |
 | **Growth-rate** | > 1 MB/min sustained for 5 min (5 ticks) | WARN accountability `[external-logs] WARN: <role> <file> growing X MB/min` |
-| **Reverse-breach** | Profile has BOTH `external_logs_role` AND `external_logs_consumer: true` | Refused at launch — profile validation error |
+| **Reverse-breach** | Profile has BOTH `external_logs_role` AND `external_logs_consumer: true` | RELAXED by `cheatsheets-license-tiered`: dual-role permitted because the role-scoped RW mount sits strictly under the consumer's parent RO mount — no shadowing. Forge containers exercise this dual role (consumer of every role + producer of `cheatsheet-telemetry`). |
 
 ## Extending a producer — add a new external file
 
@@ -169,8 +169,43 @@ podman cp tillandsias-git-myproject:/etc/tillandsias/external-logs.yaml -
 - `runtime/local-inference.md` — inference service details
 - `runtime/networking.md` — enclave network topology (proxy, git, inference)
 
+## Producer: cheatsheet-telemetry
+
+@trace spec:cheatsheets-license-tiered
+
+`/var/log/tillandsias/external/cheatsheet-telemetry/lookups.jsonl` — one event per cheatsheet consultation by an in-forge agent (claude / opencode / opsx). The forge container is the producer; the host-side analytics in `cheatsheet-telemetry-analytics` (v2) consume the events to drive cheatsheet refresh priority.
+
+**Forge containers are dual-role**: producer of `cheatsheet-telemetry` AND consumer of every other role. The launcher composes the two mounts so the parent RO mount lands first and the role-scoped RW mount overlays the producer's own subdirectory — the forge sees its own role at `/var/log/tillandsias/external/cheatsheet-telemetry/` RW and every other role RO at sibling paths under `/var/log/tillandsias/external/`.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `ts` | ISO 8601 string | Event timestamp (UTC) |
+| `project` | string | Project name (matches the forge container's project) |
+| `cheatsheet` | string | Relative path under `/opt/cheatsheets/` (e.g., `languages/python.md`) |
+| `query` | string | What the agent looked for |
+| `resolved_via` | enum | `bundled` / `distro-packaged` / `pulled` / `live-api` / `miss` |
+| `pulled_url` | string \| null | Upstream URL pulled (only for `pulled` and `live-api`) |
+| `chars_consumed` | int | Bytes of content the agent consumed |
+| `event` | enum | optional — `lookup` (default), `structural_drift`, `license_drift` |
+| `spec` | string | Always `"cheatsheets-license-tiered"` |
+| `accountability` | bool | Always `true` |
+
+Example events, one per `resolved_via` value:
+
+```json
+{"ts":"2026-04-27T16:23:11Z","project":"my-app","cheatsheet":"languages/python.md","query":"asyncio cancellation semantics","resolved_via":"bundled","pulled_url":null,"chars_consumed":4823,"spec":"cheatsheets-license-tiered","accountability":true}
+{"ts":"2026-04-27T16:24:02Z","project":"my-app","cheatsheet":"languages/jdk-api.md","query":"VirtualThread join","resolved_via":"distro-packaged","pulled_url":null,"chars_consumed":1280,"spec":"cheatsheets-license-tiered","accountability":true}
+{"ts":"2026-04-27T16:25:18Z","project":"my-app","cheatsheet":"web/nginx.md","query":"reverse-proxy WS upgrade","resolved_via":"pulled","pulled_url":"https://nginx.org/en/docs/http/websocket.html","chars_consumed":12480,"spec":"cheatsheets-license-tiered","accountability":true}
+{"ts":"2026-04-27T16:26:00Z","project":"my-app","cheatsheet":"runtime/llm-agent-protocols.md","query":"current MCP transport","resolved_via":"live-api","pulled_url":"https://modelcontextprotocol.io/spec","chars_consumed":3050,"spec":"cheatsheets-license-tiered","accountability":true}
+{"ts":"2026-04-27T16:27:33Z","project":"my-app","cheatsheet":"languages/python.md","query":"asyncio.TaskGroup exception aggregation","resolved_via":"miss","pulled_url":null,"chars_consumed":4823,"spec":"cheatsheets-license-tiered","accountability":true}
+```
+
+`resolved_via = miss` is the load-bearing case: it means the agent looked at the cheatsheet, did not find what it needed, and either pulled a deeper source or queried a live API. v1 emits these events; v2 (`cheatsheet-telemetry-analytics`) aggregates them by `(cheatsheet, query)` to surface top-N misses per cheatsheet for refresh prioritisation.
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md` — host-side path taxonomy
 - `images/git/external-logs.yaml` — canonical manifest example (git-service)
+- `images/default/external-logs.yaml` — forge cheatsheet-telemetry manifest
 - `openspec/changes/external-logs-layer/specs/external-logs-layer/spec.md` — capability spec
+- `openspec/changes/cheatsheets-license-tiered/specs/cheatsheets-license-tiered/spec.md` — cheatsheet-telemetry producer requirement

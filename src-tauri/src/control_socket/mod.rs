@@ -11,16 +11,7 @@
 //! `IssueWebSession` variant exists in the wire schema but is not yet
 //! handled — it lands with the `opencode-web-session-otp` change.
 //!
-//! Windows host: this module compiles to a no-op shell. Unix-domain
-//! sockets aren't the right primitive on Windows (we'll wire Named Pipes
-//! later), and `tillandsias --init` doesn't need the control plane at all
-//! — it only builds container images. The tray code in `main.rs` gates
-//! its `Server::bind_default()` call on `#[cfg(unix)]`, so this stub
-//! keeps the path/handler/wire submodules reachable from launch.rs while
-//! refusing to expose a `Server` type on Windows. See `cross-platform`
-//! spec, REQ-WIN-CONTROL-SOCKET-STUB.
-//!
-//! @trace spec:tray-host-control-socket, spec:cross-platform
+//! @trace spec:tray-host-control-socket
 //! @cheatsheet languages/rust.md
 //! @cheatsheet runtime/networking.md
 
@@ -28,58 +19,78 @@ pub mod handler;
 pub mod path;
 pub mod wire;
 
-#[cfg(not(unix))]
-pub use stub::*;
-
-#[cfg(not(unix))]
-mod stub {
-    //! Windows stub. The Server type is intentionally absent — main.rs
-    //! gates its bind on `#[cfg(unix)]` so no Windows code path constructs
-    //! one. Keeping this module empty (rather than providing a fake
-    //! Server) makes the absence loud at compile time if a non-gated
-    //! caller is added later.
-
-    use std::time::Duration;
-
-    pub const MAX_CONNECTIONS: usize = 32;
-    pub const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
-    pub const BROADCAST_CAPACITY: usize = 64;
-}
+// ============================================================================
+// @windows-migration:control-socket
+//
+// The entire Server implementation below depends on Unix-domain sockets
+// (`std::os::unix::net::UnixListener`, `tokio::net::{UnixListener, UnixStream}`).
+// Windows has named pipes (`tokio::net::windows::named_pipe`) but the wire
+// protocol, path discovery, accept loop, stale-recovery probe, and
+// bind-mount-into-container handoff are all Unix-shaped today.
+//
+// Until the Windows port lands (the windows-next branch is migrating from
+// podman to WSL on a separate box; that work will replace the entire
+// host↔container channel for Windows), this module is gated `#[cfg(unix)]`.
+// On non-Unix targets we provide stub types that satisfy the public API
+// surface so the tray crate compiles, but every constructor returns
+// `ErrorKind::Unsupported` — the tray's existing error path treats this as
+// "router won't start" which is the same visible behavior we'd get from a
+// missing socket node anyway.
+//
+// When the windows-migration agents pick this up, search for the literal
+// `@windows-migration:control-socket` to find every gated/stubbed block.
+// The full Unix implementation below the cfg gate is the reference for
+// what semantics need to be replicated on the new transport.
+// ============================================================================
 
 #[cfg(unix)]
-pub use unix_impl::*;
-
-#[cfg(unix)]
-mod unix_impl {
-
 use std::io;
+#[cfg(unix)]
 use std::os::unix::net::UnixListener as StdUnixListener;
+#[cfg(unix)]
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
 use std::sync::Arc;
+#[cfg(unix)]
 use std::time::Duration;
 
+#[cfg(unix)]
 use bytes::{Bytes, BytesMut};
+#[cfg(unix)]
 use futures_util::{SinkExt, StreamExt};
+#[cfg(unix)]
 use tokio::io::AsyncWriteExt;
+#[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
+#[cfg(unix)]
 use tokio::sync::{Notify, Semaphore, broadcast};
+#[cfg(unix)]
 use tokio::task::JoinHandle;
+#[cfg(unix)]
 use tokio::time::timeout;
+#[cfg(unix)]
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
+#[cfg(unix)]
 use tracing::{debug, info, warn};
 
-use super::handler::{DispatchOutcome, dispatch, wire_version_mismatch};
-use super::path::{self, CONTAINER_SOCKET_PATH, ResolvedSocketPath, SocketPathSource};
-use super::wire::{ControlEnvelope, ControlMessage, ErrorCode, MAX_MESSAGE_BYTES, WIRE_VERSION};
+#[cfg(unix)]
+use self::handler::{DispatchOutcome, dispatch, wire_version_mismatch};
+#[cfg(unix)]
+use self::path::{CONTAINER_SOCKET_PATH, ResolvedSocketPath, SocketPathSource};
+#[cfg(unix)]
+use self::wire::{ControlEnvelope, ControlMessage, ErrorCode, MAX_MESSAGE_BYTES, WIRE_VERSION};
 
+#[cfg(unix)]
 /// Maximum simultaneous accepted connections. Beyond this, the kernel
 /// `accept` queue holds the next connection until a permit is released.
 pub const MAX_CONNECTIONS: usize = 32;
 
+#[cfg(unix)]
 /// Per-connection idle timeout. Connections with no inbound bytes for
 /// longer than this are closed.
 pub const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
+#[cfg(unix)]
 /// Broadcast channel capacity for server-initiated envelopes (e.g.
 /// `IssueWebSession` fan-out to subscribed router sidecars). A subscriber
 /// that falls more than this many messages behind the producer receives
@@ -93,12 +104,15 @@ pub const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 /// @trace spec:opencode-web-session-otp
 pub const BROADCAST_CAPACITY: usize = 64;
 
+#[cfg(unix)]
 /// Probe deadlines used by the stale-socket recovery path. A live tray
 /// instance MUST respond to a `Hello` within these bounds; otherwise the
 /// existing socket node is treated as a stale leftover.
 const PROBE_CONNECT_DEADLINE: Duration = Duration::from_millis(200);
+#[cfg(unix)]
 const PROBE_READ_DEADLINE: Duration = Duration::from_millis(500);
 
+#[cfg(unix)]
 /// Outcome of probing an existing socket node at startup.
 #[derive(Debug, PartialEq, Eq)]
 pub enum StaleProbeOutcome {
@@ -113,6 +127,7 @@ pub enum StaleProbeOutcome {
     NotASocket,
 }
 
+#[cfg(unix)]
 /// Builder result holding the live listener and the cleanup handle.
 ///
 /// The listener is held as a `std::os::unix::net::UnixListener` so that
@@ -133,6 +148,7 @@ pub struct Server {
     publisher: broadcast::Sender<ControlMessage>,
 }
 
+#[cfg(unix)]
 impl Server {
     /// Bind the control socket using the resolved freedesktop runtime path.
     ///
@@ -330,6 +346,7 @@ impl Server {
     }
 }
 
+#[cfg(unix)]
 impl Drop for Server {
     fn drop(&mut self) {
         // Best-effort socket unlink — may fail if another component already
@@ -363,6 +380,7 @@ impl Drop for Server {
     }
 }
 
+#[cfg(unix)]
 /// Ensure the parent directory exists with mode `0700`.
 ///
 /// If the directory already exists with a more permissive mode, we tighten
@@ -383,10 +401,12 @@ fn chmod_dir_0700(path: &Path) -> io::Result<()> {
     std::fs::set_permissions(path, perms)
 }
 
-#[cfg(not(unix))]
-fn chmod_dir_0700(_path: &Path) -> io::Result<()> {
-    Ok(())
-}
+// @windows-migration:control-socket
+// Pre-existing #[cfg(not(unix))] stubs for chmod_dir_0700 / chmod_0600 were
+// removed when the whole control_socket impl was gated on #[cfg(unix)].
+// They referenced `Path` and `io::Result` which are now unix-only imports.
+// They are dead code on Windows: the only callers (ensure_parent_dir and
+// Server::bind) are themselves #[cfg(unix)] and unreachable on Windows.
 
 #[cfg(unix)]
 fn chmod_0600(path: &Path) -> io::Result<()> {
@@ -395,11 +415,7 @@ fn chmod_0600(path: &Path) -> io::Result<()> {
     std::fs::set_permissions(path, perms)
 }
 
-#[cfg(not(unix))]
-fn chmod_0600(_path: &Path) -> io::Result<()> {
-    Ok(())
-}
-
+#[cfg(unix)]
 /// Probe an existing socket node (if any) to distinguish a live tray peer
 /// from a stale leftover or a non-socket path.
 ///
@@ -466,6 +482,7 @@ pub fn probe_existing_socket(path: &Path) -> StaleProbeOutcome {
     }
 }
 
+#[cfg(unix)]
 /// Top-level accept loop. Backpressures via `Semaphore` so the tray cannot
 /// be DoS'd by a flood of consumer connections.
 ///
@@ -515,6 +532,7 @@ async fn run_accept_loop(
     }
 }
 
+#[cfg(unix)]
 /// Per-connection state machine: read frames, dispatch, write replies.
 ///
 /// Enforces the per-connection idle timeout (60 s) and the per-frame size
@@ -731,6 +749,7 @@ async fn handle_connection(
     );
 }
 
+#[cfg(unix)]
 /// Frame an envelope onto the wire.
 ///
 /// Encoding errors are mapped to an `io::Error` so callers can decide
@@ -750,6 +769,7 @@ async fn write_envelope(
         .map_err(|e| io::Error::other(e.to_string()))
 }
 
+#[cfg(unix)]
 /// Fixed in-container path consumers connect to. Re-exported from the
 /// `path` module for callers that need it without importing the whole
 /// module.
@@ -760,7 +780,78 @@ pub fn container_socket_path() -> &'static str {
     CONTAINER_SOCKET_PATH
 }
 
-#[cfg(test)]
+// ============================================================================
+// @windows-migration:control-socket
+//
+// Windows stubs. The unix Server above does not compile on Windows because
+// it depends on Unix-domain sockets; everything below is the minimal
+// satisfaction of the public API surface used by `src-tauri/src/main.rs` and
+// `src-tauri/src/event_loop.rs` so the tray crate compiles for the
+// `x86_64-pc-windows-msvc` target.
+//
+// At runtime, `Server::bind_default()` returns `ErrorKind::Unsupported` and
+// the existing tray error path treats that the same way it treats a missing
+// socket node on Unix: log a warning, continue running the tray, accept
+// that any container that opts in via `mount_control_socket = true` (today,
+// the router) will fail to launch. There are no router builds on Windows in
+// v1, so this is an acceptable degradation.
+//
+// **Windows-migration agents**: when you reimplement the host↔container
+// channel for Windows (likely on top of WSL named pipes or HTTP-over-loopback
+// since the windows-next branch is migrating off podman), replace these
+// stubs with real implementations. The Unix Server above is the reference
+// for required semantics: bind / stale-recovery probe / accept loop with a
+// per-connection idle timeout / graceful shutdown / `Hello`-`HelloAck`
+// handshake / `IssueWebSession` broadcast fan-out to subscribed sidecars.
+//
+// All stub methods are documented as "unreachable on Windows" because the
+// `Ok(server)` arm of `match Server::bind_default()` in main.rs is never
+// taken on Windows (bind_default always returns Err). They exist only so
+// the type-checker can verify the Ok arm.
+// ============================================================================
+
+#[cfg(not(unix))]
+pub struct Server {
+    _phantom: std::marker::PhantomData<()>,
+}
+
+#[cfg(not(unix))]
+impl Server {
+    /// Windows stub: always returns `ErrorKind::Unsupported`. The tray's
+    /// existing error path logs and continues without the control socket.
+    /// @windows-migration:control-socket
+    pub fn bind_default() -> std::io::Result<Self> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "control_socket::Server is not implemented on Windows; \
+             tracked by windows-migration:control-socket — the windows-next \
+             branch will replace this with a WSL/named-pipe transport",
+        ))
+    }
+
+    /// Windows stub: unreachable (Server is never constructed on Windows
+    /// because `bind_default` returns Err). Returns a fresh broadcast
+    /// sender whose receiver is dropped immediately — `send()` calls will
+    /// fail with `SendError` (no subscribers), which the OTP path already
+    /// tolerates as "no router-sidecar connected yet".
+    /// @windows-migration:control-socket
+    pub fn publisher(
+        &self,
+    ) -> tokio::sync::broadcast::Sender<tillandsias_control_wire::ControlMessage> {
+        let (tx, _rx) = tokio::sync::broadcast::channel(1);
+        tx
+    }
+
+    /// Windows stub: unreachable. No-op.
+    /// @windows-migration:control-socket
+    pub fn spawn_accept_loop(&mut self) {}
+
+    /// Windows stub: unreachable. No-op.
+    /// @windows-migration:control-socket
+    pub async fn shutdown(&mut self) {}
+}
+
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
@@ -1120,4 +1211,3 @@ mod tests {
         server.shutdown().await;
     }
 }
-} // end mod unix_impl

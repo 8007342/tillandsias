@@ -26,6 +26,10 @@ vendor/debug/
 
 # Staged by scripts/build-image.sh — agent-cheatsheets
 images/default/.cheatsheets/
+# Staged by scripts/build-image.sh — cheatsheets-license-tiered (bundled-tier bake + meta side-channel)
+# @trace spec:cheatsheets-license-tiered
+images/default/.cheatsheet-sources/
+images/default/.cheatsheets-meta/
 
 
 # Pre-built tillandsias-router-sidecar (musl static-pie binary).
@@ -39,7 +43,12 @@ images/router/tillandsias-router-sidecar
 # @trace spec:opencode-web-session-otp
 /target-musl/
 
-# cheatsheet-sources: verbatim files whose license forbids redistribution.
-# The .meta.yaml sidecar IS tracked so a fresh clone can re-fetch the content.
-# @trace spec:cheatsheet-source-layer
-cheatsheet-sources/**/*.norepublish
+# cheatsheet-sources: TOMBSTONED by cheatsheets-license-tiered (replaced by
+# image-baked /opt/cheatsheet-sources/ + per-project pull cache). The whole
+# directory is now gitignored to guard against any local cache pollution that
+# the legacy fetcher might emit during the retention window.
+# Keep cheatsheet-sources/.gitkeep-tombstone tracked (negation) so the
+# tombstone marker survives the gitignore.
+# @trace spec:cheatsheets-license-tiered, spec:cheatsheet-source-layer
+cheatsheet-sources/
+!cheatsheet-sources/.gitkeep-tombstone

@@ -1,3 +1,22 @@
+---
+tags: []  # TODO: add 3-8 kebab-case tags on next refresh
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-27
+sources:
+  - https://docs.oracle.com/en/java/javase/21/docs/api/
+  - https://docs.oracle.com/javase/specs/jls/se21/html/index.html
+  - https://openjdk.org/jeps/444
+authority: high
+status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
+---
 # Java
 
 @trace spec:agent-cheatsheets
@@ -122,6 +141,51 @@ Use `Optional` ONLY as a return type for "may be absent" results. Never as a fie
 - **Forgetting try-with-resources** — leaking file handles, sockets, JDBC connections. Anything implementing `AutoCloseable` belongs in `try (var x = …)`.
 - **Mixing `java.util.Date` with `java.time`** — `Date` is mutable, timezone-confused, and deprecated in spirit. Use `Instant` for timestamps, `LocalDate`/`LocalDateTime` for wall-clock, `ZonedDateTime` only when zones matter.
 - **Checked exceptions in lambdas** — `stream().map(p -> Files.readString(p))` won't compile. Wrap in a helper that converts to `UncheckedIOException`, or use a try/catch inside the lambda.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://docs.oracle.com/en/java/javase/21/docs/api/`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/docs.oracle.com/en/java/javase/21/docs/api/`
+- **License:** see-license-allowlist
+- **License URL:** https://docs.oracle.com/en/java/javase/21/docs/api/
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/docs.oracle.com/en/java/javase/21/docs/api/"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://docs.oracle.com/en/java/javase/21/docs/api/" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/languages/java.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

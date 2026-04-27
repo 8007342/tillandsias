@@ -2,12 +2,19 @@
 tags: [protobuf, proto3, serialization, schema, grpc, wire-format, codegen]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://protobuf.dev/programming-guides/proto3/
   - https://protobuf.dev/programming-guides/encoding/
 authority: high
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # Protocol Buffers (proto3)
@@ -140,6 +147,51 @@ Prefer well-known types over hand-rolled equivalents — every language plugin m
 - **`Any` requires `type_url` resolution** — packing with `Any.Pack(msg)` writes a URL like `type.googleapis.com/my.pkg.Foo`; unpacking needs the descriptor registered. Plain JSON marshalling will fail without a type registry.
 - **`bytes` vs `string`** — `string` validates UTF-8 and rejects malformed input at decode time. Use `bytes` for any non-text payload (hashes, encrypted blobs, file contents) — even if it "looks like text".
 - **`json_name` option ≠ JSON field name in all langs** — proto3 JSON mapping uses lowerCamelCase by default; `[json_name = "snake_case"]` overrides it, but some older plugins ignore the hint. Test round-trip with `protoc --decode_raw` or `buf convert`.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://protobuf.dev/programming-guides/proto3/`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/protobuf.dev/programming-guides/proto3/`
+- **License:** see-license-allowlist
+- **License URL:** https://protobuf.dev/programming-guides/proto3/
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/protobuf.dev/programming-guides/proto3/"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://protobuf.dev/programming-guides/proto3/" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/web/protobuf.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

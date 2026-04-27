@@ -22,6 +22,8 @@
         forgeShellConfigs = ./images/default/shell;
         forgeWelcome = ./images/default/forge-welcome.sh;
         forgeLocales = ./images/default/locales;
+        # @trace spec:cheatsheets-license-tiered, spec:external-logs-layer
+        forgeExternalLogsManifest = ./images/default/external-logs.yaml;
         webEntrypoint = ./images/web/entrypoint.sh;
 
       in {
@@ -146,6 +148,15 @@
               cp ${forgeLocales}/en.sh ./etc/tillandsias/locales/en.sh
               cp ${forgeLocales}/es.sh ./etc/tillandsias/locales/es.sh
               chmod +r ./etc/tillandsias/locales/en.sh ./etc/tillandsias/locales/es.sh
+
+              # @trace spec:cheatsheets-license-tiered, spec:external-logs-layer
+              # External-logs producer manifest — forge agents emit cheatsheet
+              # telemetry to /var/log/tillandsias/external/cheatsheet-telemetry/
+              # lookups.jsonl. The tray auditor reads this manifest via
+              # `podman cp <container>:/etc/tillandsias/external-logs.yaml -`.
+              mkdir -p ./etc/tillandsias
+              cp ${forgeExternalLogsManifest} ./etc/tillandsias/external-logs.yaml
+              chmod +r ./etc/tillandsias/external-logs.yaml
 
               # Fish config in the user's config dir — fish reads from
               # $__fish_config_dir/conf.d/ which is ~/.config/fish/conf.d/

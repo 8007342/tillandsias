@@ -64,6 +64,63 @@ export PATH="$CACHE/openspec/bin:$HOME/.local/bin:$PATH"
 # on non-consumer containers the directory may not be mounted.
 export TILLANDSIAS_EXTERNAL_LOGS="/var/log/tillandsias/external"
 
+# ── Pull-on-demand cheatsheet cache root ────────────────────
+# @trace spec:cheatsheets-license-tiered
+# @cheatsheet runtime/cheatsheet-pull-on-demand.md
+# Per-project cache root for materialized pull-on-demand cheatsheet sources.
+# The agent reads this env var instead of hardcoding the path; the layout
+# under it mirrors URL host structure so downstream tooling can map any
+# `https://<host>/<path>` cited in a `### Source` block onto a deterministic
+# disk location.
+#
+# Layout: ~/.cache/tillandsias/cheatsheets-pulled/<project>/<host>/<path>
+#
+# Project name resolution chain (mirrors populate_hot_paths()):
+#   1. $PROJECT_ROOT — set by entrypoints AFTER find_project_dir(); empty
+#      when this function runs early.
+#   2. $TILLANDSIAS_PROJECT — set by the tray launcher; names the directory
+#      under /home/forge/src/.
+#   3. First /home/forge/src/*/ entry (filesystem fallback).
+#
+# Idempotent: re-exporting on each entrypoint invocation is harmless.
+# Per-project isolation is preserved BY CONSTRUCTION — the cache root is
+# already per-project, so cross-project reads/writes are impossible without
+# explicitly overriding TILLANDSIAS_PULL_CACHE.
+export_pull_cache_path() {
+    local project_root="${PROJECT_ROOT:-}"
+    local project_name=""
+
+    if [ -z "$project_root" ] && [ -n "${TILLANDSIAS_PROJECT:-}" ]; then
+        if [ -d "/home/forge/src/${TILLANDSIAS_PROJECT}" ]; then
+            project_root="/home/forge/src/${TILLANDSIAS_PROJECT}"
+        fi
+    fi
+    if [ -z "$project_root" ]; then
+        for _d in /home/forge/src/*/; do
+            [ -d "$_d" ] && project_root="${_d%/}" && break
+        done
+    fi
+
+    if [ -n "$project_root" ]; then
+        project_name="$(basename "$project_root")"
+    elif [ -n "${TILLANDSIAS_PROJECT:-}" ]; then
+        project_name="${TILLANDSIAS_PROJECT}"
+    else
+        project_name="unknown"
+    fi
+
+    local cache_root="${HOME}/.cache/tillandsias/cheatsheets-pulled/${project_name}"
+    mkdir -p "$cache_root" 2>/dev/null || true
+    chmod 0755 "$cache_root" 2>/dev/null || true
+    export TILLANDSIAS_PULL_CACHE="$cache_root"
+    trace_lifecycle "pull-cache" "TILLANDSIAS_PULL_CACHE=$cache_root"
+}
+
+# Run the export early — agents may consult $TILLANDSIAS_PULL_CACHE before
+# populate_hot_paths() lands. Failures are non-fatal (mkdir under $HOME
+# is virtually always permitted).
+export_pull_cache_path
+
 # ── Lifecycle tracing ───────────────────────────────────────
 # Structured trace output for --log-environment-lifecycle troubleshooting.
 # Format: [lifecycle] <phase> | <detail>
@@ -260,12 +317,18 @@ apply_opencode_config_overlay() {
 }
 
 # ── Hot-path population ─────────────────────────────────────
-# @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
+# @trace spec:forge-hot-cold-split, spec:agent-cheatsheets, spec:cheatsheets-license-tiered
+# @cheatsheet runtime/cheatsheet-crdt-overrides.md
 # Called once at container start, AFTER the podman --tmpfs mounts are in
 # place (those are established by the kernel before the entrypoint runs).
 # Copies /opt/cheatsheets-image/ (RO image lower layer baked at build time)
 # into /opt/cheatsheets/ (tmpfs hot mount, 8MB cap) so every agent read is
 # RAM-served rather than overlayfs-backed.
+#
+# Then merges <project>/.tillandsias/cheatsheets/ on top — project-committed
+# cheatsheets shadow forge defaults at the same relative path. Each shadow
+# emits a banner line and the renderer injects a `> [!OVERRIDE]` callout
+# block at the top of the body so the override is reasoned, never silent.
 #
 # Idempotent: re-running on an already-populated tmpfs is harmless.
 # Silent failure: 2>/dev/null || true means a missing source or mount point
@@ -276,7 +339,384 @@ populate_hot_paths() {
         trace_lifecycle "hot-paths" "cheatsheets copied to tmpfs (/opt/cheatsheets)"
     else
         trace_lifecycle "hot-paths" "skipped: /opt/cheatsheets-image or /opt/cheatsheets not found"
+        return 0
     fi
+
+    # @trace spec:cheatsheets-license-tiered (task 6.1, 6.2, 6.4)
+    # Resolve project root. The entrypoint runs BEFORE find_project_dir(),
+    # so PROJECT_ROOT may not be set; prefer the env hint from the tray
+    # (TILLANDSIAS_PROJECT names the dir under /home/forge/src/), fall back
+    # to scanning /home/forge/src/ for the first directory.
+    local project_root="${PROJECT_ROOT:-}"
+    if [ -z "$project_root" ] && [ -n "${TILLANDSIAS_PROJECT:-}" ]; then
+        if [ -d "/home/forge/src/${TILLANDSIAS_PROJECT}" ]; then
+            project_root="/home/forge/src/${TILLANDSIAS_PROJECT}"
+        fi
+    fi
+    if [ -z "$project_root" ]; then
+        for _d in /home/forge/src/*/; do
+            [ -d "$_d" ] && project_root="${_d%/}" && break
+        done
+    fi
+
+    local project_cs="${project_root}/.tillandsias/cheatsheets"
+    if [ -z "$project_root" ] || [ ! -d "$project_cs" ]; then
+        trace_lifecycle "hot-paths" "no project-committed cheatsheets to merge (project_root=${project_root:-<none>})"
+        return 0
+    fi
+
+    # Walk every project-committed cheatsheet. For each .md:
+    #  1. Detect shadow (same relative path exists under /opt/cheatsheets-image/).
+    #  2. Validate shadows_forge_default frontmatter consistency (WARN on mismatch).
+    #  3. Either merge plain (no shadow) or render with [!OVERRIDE] callout (shadow).
+    #  4. Emit one banner line per shadow.
+    local rel src_path img_path dest_path shadows reason
+    while IFS= read -r -d '' src_path; do
+        rel="${src_path#${project_cs}/}"
+        dest_path="/opt/cheatsheets/${rel}"
+        img_path="/opt/cheatsheets-image/${rel}"
+        mkdir -p "$(dirname "$dest_path")" 2>/dev/null || true
+
+        # Parse the shadows_forge_default field from frontmatter (may be empty).
+        shadows="$(_read_frontmatter_field "$src_path" shadows_forge_default)"
+
+        if [ -f "$img_path" ]; then
+            # Same relative path exists in forge baked layer -> SHADOW.
+            reason="$(_read_frontmatter_field "$src_path" override_reason | head -n1)"
+            echo "[cheatsheet override] ${rel} → project version (reason: ${reason:-<no override_reason set>})"
+            if [ -n "$shadows" ]; then
+                _inject_override_callout "$src_path" "$dest_path"
+            else
+                # Project file shadows by path but did not declare it. Validator
+                # WARNs separately (task 6.3); merge plainly here.
+                cp -af "$src_path" "$dest_path" 2>/dev/null || true
+            fi
+        else
+            if [ -n "$shadows" ]; then
+                # Declared shadow but no forge default at that path -> config error.
+                echo "[cheatsheet override] WARN: ${rel} declares shadows_forge_default but no forge default exists at that path"
+                _inject_override_callout "$src_path" "$dest_path"
+            else
+                # Net-new project cheatsheet — just merge.
+                cp -af "$src_path" "$dest_path" 2>/dev/null || true
+            fi
+        fi
+    done < <(find "$project_cs" -type f -name '*.md' -print0 2>/dev/null)
+
+    trace_lifecycle "hot-paths" "project-committed cheatsheets merged from ${project_cs}"
+
+    # Re-render /opt/cheatsheets/INDEX.md to include project-committed entries
+    # and any pulled materializations under $TILLANDSIAS_PULL_CACHE. The image-
+    # baked INDEX.md reflects only host repo state at build time; the agent's
+    # discovery surface needs the runtime-merged view.
+    _regen_runtime_index
+}
+
+# @trace spec:cheatsheets-license-tiered (task 8.2)
+# @cheatsheet runtime/cheatsheet-pull-on-demand.md
+# @cheatsheet runtime/cheatsheet-crdt-overrides.md
+#
+# Append entries to /opt/cheatsheets/INDEX.md for any cheatsheet present at
+# runtime that is NOT already listed in the image-baked INDEX. Two sources:
+#   1. /opt/cheatsheets/**/*.md   — includes project-committed merges done by
+#      populate_hot_paths() above (badge: [bundled, project-committed] when
+#      shadows_forge_default is set, else [pull-on-demand: project-committed]).
+#   2. ${TILLANDSIAS_PULL_CACHE}/**/*.md — agent-materialized pulls under the
+#      per-project cache (badge: [pulled]).
+#
+# Append-only: never rewrites existing lines. Keeps the runtime index aligned
+# with the host-side regenerator's line format ("- <path> — <desc> [marker]")
+# but uses minimal markers since per-file frontmatter parsing is best-effort
+# inside the entrypoint hot path.
+#
+# Performance budget: O(total cheatsheets); single find + awk pass per source.
+# Best-effort throughout — silent failure on a missing index does not abort
+# the entrypoint.
+_regen_runtime_index() {
+    local index="/opt/cheatsheets/INDEX.md"
+    [ -f "$index" ] || return 0
+
+    local pull_cache="${TILLANDSIAS_PULL_CACHE:-}"
+    local section_header_pulled="## pulled"
+    local appended=0
+
+    # Pass 1: project-committed and other runtime-merged entries under
+    # /opt/cheatsheets/. Skip files whose relative path is already listed in
+    # the index; the image-baked entries are present from the cp -a above.
+    # The host-side renderer drops the category prefix on lines under a
+    # `## <category>` section (the section header carries the category), so a
+    # path like `languages/python.md` shows up in the index as `- python.md`
+    # under `## languages`. We dedup against EITHER the relative path (for
+    # one-level-deeper subdirs like `languages/java/rxjava-event-driven.md`,
+    # which renders as `- java/rxjava-event-driven.md`) OR the bare basename.
+    local f rel base no_cat badge desc tier shadows committed
+    while IFS= read -r -d '' f; do
+        rel="${f#/opt/cheatsheets/}"
+        case "$rel" in
+            INDEX.md|TEMPLATE.md|*/INDEX.md) continue ;;
+        esac
+        base="$(basename "$rel")"
+        # The host renderer drops the category prefix: `languages/python.md`
+        # under `## languages` shows as `- python.md`, and one-level-deeper
+        # `languages/java/rxjava-event-driven.md` shows as `- java/rxjava-...md`.
+        # Dedup by trying the full rel, the first-component-stripped form,
+        # and the bare basename.
+        no_cat="${rel#*/}"
+        if grep -qE -- "^- ${rel}([[:space:]]|$)" "$index" 2>/dev/null \
+           || grep -qE -- "^- ${no_cat}([[:space:]]|$)" "$index" 2>/dev/null \
+           || grep -qE -- "^- ${base}([[:space:]]|$)" "$index" 2>/dev/null; then
+            continue
+        fi
+
+        tier="$(_read_frontmatter_field "$f" tier | head -n1)"
+        shadows="$(_read_frontmatter_field "$f" shadows_forge_default | head -n1)"
+        committed="$(_read_frontmatter_field "$f" committed_for_project | head -n1)"
+
+        if [ -n "$shadows" ]; then
+            badge="[bundled, project-committed]"
+        elif [ "$committed" = "true" ] || [ "$tier" = "pull-on-demand" ]; then
+            badge="[pull-on-demand: project-committed]"
+        else
+            badge="[project-committed]"
+        fi
+
+        # Best-effort description: first body line matching `**Use when**:` or
+        # the title H1 fallback. Empty description is acceptable — agent can
+        # cat the file for content; INDEX is for discovery.
+        desc="$(awk '
+            /^---$/ { in_fm = !in_fm; next }
+            in_fm { next }
+            /^\*\*Use when\*\*:/ {
+                sub(/^\*\*Use when\*\*:[[:space:]]*/, "")
+                print
+                exit
+            }
+        ' "$f" 2>/dev/null | head -n1)"
+        [ -z "$desc" ] && desc="$(awk '/^# / { sub(/^# /, ""); print; exit }' "$f" 2>/dev/null)"
+
+        if [ -n "$desc" ]; then
+            printf -- '- %s %s — %s\n' "$rel" "$badge" "$desc" >> "$index"
+        else
+            printf -- '- %s %s\n' "$rel" "$badge" >> "$index"
+        fi
+        appended=1
+    done < <(find /opt/cheatsheets -type f -name '*.md' -print0 2>/dev/null)
+
+    # Pass 2: pulled materializations under the per-project pull cache. These
+    # mirror URL-host structure (<host>/<path>) and have no frontmatter — emit
+    # the bare path with [pulled] under a dedicated `## pulled` section.
+    if [ -n "$pull_cache" ] && [ -d "$pull_cache" ]; then
+        local pull_rows
+        pull_rows="$(find "$pull_cache" -type f -name '*.md' 2>/dev/null \
+                     | sort 2>/dev/null)"
+        if [ -n "$pull_rows" ]; then
+            # Add the section header once if not already present.
+            if ! grep -qF -- "$section_header_pulled" "$index" 2>/dev/null; then
+                printf '\n%s\n\n' "$section_header_pulled" >> "$index"
+            fi
+            local p rel_pull
+            while IFS= read -r p; do
+                [ -f "$p" ] || continue
+                rel_pull="${p#${pull_cache}/}"
+                if grep -qF -- "- ${rel_pull} " "$index" 2>/dev/null; then
+                    continue
+                fi
+                printf -- '- %s [pulled]\n' "$rel_pull" >> "$index"
+                appended=1
+            done <<< "$pull_rows"
+        fi
+    fi
+
+    if [ "$appended" = "1" ]; then
+        trace_lifecycle "hot-paths" "runtime INDEX.md augmented with project-committed/pulled entries"
+    fi
+    return 0
+}
+
+# @trace spec:cheatsheets-license-tiered (task 6.2 helper)
+# Read a single scalar (or first line of a `|` block scalar) from YAML
+# frontmatter at the head of FILE. Echoes empty string on miss. Bash-only
+# parser; mirrors the discipline in scripts/check-cheatsheet-tiers.sh but
+# narrower (single-key lookup, no full document parse).
+_read_frontmatter_field() {
+    local file="$1" key="$2"
+    [ -f "$file" ] || { echo ""; return 0; }
+    awk -v key="$key" '
+        BEGIN { in_fm = 0; depth = 0; cur_key = ""; multiline = 0 }
+        NR == 1 {
+            if ($0 == "---") { in_fm = 1; next }
+            else { exit }
+        }
+        in_fm && $0 == "---" { exit }
+        in_fm {
+            if (multiline) {
+                # Collect indented continuation lines for the matched key.
+                if (match($0, /^[ \t]+/)) {
+                    line = $0
+                    sub(/^[ \t]+/, "", line)
+                    print line
+                    next
+                } else {
+                    exit
+                }
+            }
+            # Match top-level "key: value" (no indent).
+            if (match($0, /^[A-Za-z_][A-Za-z0-9_]*[ \t]*:/)) {
+                k = $0
+                sub(/[ \t]*:.*$/, "", k)
+                if (k == key) {
+                    v = $0
+                    sub(/^[^:]*:[ \t]*/, "", v)
+                    if (v == "|" || v == ">" || v == "|-" || v == "|+" || v == ">-" || v == ">+") {
+                        multiline = 1
+                        next
+                    }
+                    print v
+                    exit
+                }
+            }
+        }
+    ' "$file" 2>/dev/null
+}
+
+# @trace spec:cheatsheets-license-tiered (task 6.4)
+# @cheatsheet runtime/cheatsheet-crdt-overrides.md
+# Render a project-committed cheatsheet with a `> [!OVERRIDE]` callout block
+# prepended to its body. The callout surfaces shadows_forge_default,
+# override_reason, override_consequences, override_fallback so the agent
+# reads the deviation contract BEFORE the cheatsheet body. The callout sits
+# AFTER the YAML frontmatter (if present), BEFORE the first content line.
+_inject_override_callout() {
+    local src="$1" dest="$2"
+    local sh re co fb
+    sh="$(_read_frontmatter_field "$src" shadows_forge_default)"
+    re="$(_read_frontmatter_field "$src" override_reason)"
+    co="$(_read_frontmatter_field "$src" override_consequences)"
+    fb="$(_read_frontmatter_field "$src" override_fallback)"
+
+    # Build the callout. Multi-line scalars get folded into single lines for
+    # quote-block readability (the cheatsheet body still has the full text).
+    local callout
+    callout="$(cat <<EOF
+> [!OVERRIDE]
+> **shadows_forge_default**: ${sh}
+>
+> **override_reason**: $(printf '%s' "$re" | tr '\n' ' ' | sed 's/[[:space:]]\+$//')
+> **override_consequences**: $(printf '%s' "$co" | tr '\n' ' ' | sed 's/[[:space:]]\+$//')
+> **override_fallback**: $(printf '%s' "$fb" | tr '\n' ' ' | sed 's/[[:space:]]\+$//')
+
+EOF
+)"
+
+    # Split the source: frontmatter (---\n...\n---\n) + body. If no frontmatter
+    # is present, prepend the callout directly. Use awk for a single pass.
+    awk -v callout="$callout" '
+        BEGIN { state = "pre"; emitted = 0 }
+        state == "pre" {
+            if (NR == 1 && $0 == "---") { print; state = "fm"; next }
+            # No frontmatter — emit callout first, then everything.
+            print callout
+            print
+            state = "body"
+            emitted = 1
+            next
+        }
+        state == "fm" {
+            print
+            if ($0 == "---") { state = "after-fm" }
+            next
+        }
+        state == "after-fm" {
+            print callout
+            print
+            state = "body"
+            emitted = 1
+            next
+        }
+        state == "body" { print }
+        END {
+            # If the file was just frontmatter with no body, still emit callout.
+            if (state == "after-fm" && !emitted) { print callout }
+        }
+    ' "$src" > "$dest" 2>/dev/null || cp -af "$src" "$dest" 2>/dev/null || true
+}
+
+# ── Pull cache LRU eviction ─────────────────────────────────
+# @trace spec:cheatsheets-license-tiered (task 5.6)
+# @cheatsheet runtime/cheatsheet-pull-on-demand.md
+# @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
+#
+# Pure-userspace implementation of the "tmpfs-overlay lane" requirement
+# from forge-hot-cold-split. Rationale (chosen path 1, NOT a real tmpfs
+# overlay):
+#   - The lane SHALL behave as "tmpfs-fast UP TO the cap, disk-backed
+#     beyond it." A real `--tmpfs ...:size=Nm` mount would enforce ENOSPC
+#     past the cap, breaking the spec's "writes succeed past cap by
+#     demoting LRU" scenario.
+#   - The pure-userspace LRU treats the cache root as a single COLD pool
+#     with a soft cap. Every materialize call optionally invokes this
+#     helper; eviction trims the pool back under the cap by removing the
+#     least-recently-accessed regular files.
+#   - Eviction NEVER crosses the per-project subtree (the function only
+#     ever looks at $TILLANDSIAS_PULL_CACHE, which is already per-project
+#     by export_pull_cache_path() construction).
+#
+# Path 2 (real tmpfs + on-disk shadow with merged view) is tracked as a
+# follow-up if profiling shows path 1 is too slow. Path 1 satisfies every
+# `Tmpfs-overlay lane` scenario in forge-hot-cold-split.spec.md including
+# "demotes LRU to disk" (in path 1, the file simply stays on disk — there
+# is no separate tmpfs portion to evict from), and "NEVER crosses project
+# boundaries" (per-project root is the only thing scanned).
+#
+# Usage:
+#   _pull_cache_evict_lru_if_over_cap        # default cap = $TILLANDSIAS_PULL_CACHE_RAM_MB
+#   _pull_cache_evict_lru_if_over_cap 256    # explicit MB override
+#
+# Failure modes (all non-fatal; helper is best-effort):
+#   - Cap not numeric → no-op (return 0).
+#   - Cache root unset or missing → no-op.
+#   - du / find / sort missing → no-op (image always carries them; defence in depth).
+_pull_cache_evict_lru_if_over_cap() {
+    local cap_mb="${1:-${TILLANDSIAS_PULL_CACHE_RAM_MB:-}}"
+    local cache_root="${TILLANDSIAS_PULL_CACHE:-}"
+
+    case "$cap_mb" in
+        ''|*[!0-9]*) return 0 ;;
+    esac
+    [ -d "$cache_root" ] || return 0
+    [ "$cap_mb" -gt 0 ] || return 0
+
+    local current_mb
+    current_mb="$(du -sm "$cache_root" 2>/dev/null | awk '{print $1}')"
+    case "$current_mb" in
+        ''|*[!0-9]*) return 0 ;;
+    esac
+
+    [ "$current_mb" -le "$cap_mb" ] && return 0
+
+    # Over cap — collect every file with mtime, sort oldest-first, evict
+    # one at a time until back under cap. Use mtime as the LRU proxy
+    # (atime updates are typically disabled with `noatime`).
+    local victims
+    victims="$(find "$cache_root" -type f -printf '%T@\t%p\n' 2>/dev/null | sort -n | cut -f2-)"
+    [ -n "$victims" ] || return 0
+
+    local f
+    while IFS= read -r f; do
+        [ -f "$f" ] || continue
+        rm -f "$f" 2>/dev/null || true
+        # Re-measure after each eviction; cheap on small caches, prevents
+        # over-evicting when a single victim is large enough to bring us
+        # back under cap.
+        current_mb="$(du -sm "$cache_root" 2>/dev/null | awk '{print $1}')"
+        case "$current_mb" in
+            ''|*[!0-9]*) break ;;
+        esac
+        [ "$current_mb" -le "$cap_mb" ] && break
+    done <<< "$victims"
+
+    trace_lifecycle "pull-cache" "evicted to fit cap=${cap_mb}MB (now=${current_mb}MB)"
+    return 0
 }
 
 # ── Banner ──────────────────────────────────────────────────

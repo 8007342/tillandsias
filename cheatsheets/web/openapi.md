@@ -2,12 +2,19 @@
 tags: [openapi, api-spec, rest, swagger, codegen, json-schema, http]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://spec.openapis.org/oas/latest.html
   - https://spec.openapis.org/oas/v3.1.0.html
 authority: high
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # OpenAPI
@@ -164,6 +171,51 @@ Single error shape across the API — clients write one error handler, not one p
 - **Examples don't validate** — `example` / `examples` are not type-checked against the schema by most tools. Run `redocly lint` or `spectral lint` in CI to catch drift.
 - **Servers with variables hide environment** — `servers: [{ url: "https://{env}.example.com" }]` reads cleanly but means clients must know which env to inject. For internal APIs prefer one entry per environment with explicit URLs.
 - **Security on the wrong level** — top-level `security` applies to every operation including health checks and OAuth callbacks. Use per-operation `security: []` to mark public endpoints, or your auth middleware will reject probes.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://spec.openapis.org/oas/latest.html`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/spec.openapis.org/oas/latest.html`
+- **License:** see-license-allowlist
+- **License URL:** https://spec.openapis.org/oas/latest.html
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/spec.openapis.org/oas/latest.html"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://spec.openapis.org/oas/latest.html" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/web/openapi.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

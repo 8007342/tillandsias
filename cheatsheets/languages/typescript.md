@@ -1,3 +1,21 @@
+---
+tags: []  # TODO: add 3-8 kebab-case tags on next refresh
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-27
+sources:
+  - https://www.typescriptlang.org/docs/
+  - https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-9.html
+authority: high
+status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
+---
 # TypeScript
 
 @trace spec:agent-cheatsheets
@@ -110,6 +128,51 @@ User-defined type guards (`x is T`) narrow `unknown`. The `never` assignment for
 - **Enums (especially numeric)** — numeric enums are bidirectional, leak runtime objects, and don't tree-shake well. Prefer `const enum` (inlined), or just a literal union (`type Status = "open" | "closed"`) with `as const` objects.
 - **`tsc` does not bundle** — `tsc` only emits `.js` per `.ts` file. For browser bundles use vite/esbuild/rollup; for Node use `tsx` (dev) or compile + `node` (prod). Don't expect `tsc` to resolve aliases at runtime — `paths` in tsconfig is type-only.
 - **`@types/*` version drift** — `@types/node` major must roughly match the Node runtime; mismatched DOM lib targets (`"lib": ["ES2022"]` without `"DOM"`) make `fetch`/`URL` vanish. Pin both.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://www.typescriptlang.org/docs/`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/www.typescriptlang.org/docs/`
+- **License:** see-license-allowlist
+- **License URL:** https://www.typescriptlang.org/docs/
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/www.typescriptlang.org/docs/"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://www.typescriptlang.org/docs/" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/languages/typescript.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

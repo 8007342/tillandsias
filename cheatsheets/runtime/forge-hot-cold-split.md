@@ -6,6 +6,7 @@ last_verified: 2026-04-27
 sources:
   - https://man7.org/linux/man-pages/man5/tmpfs.5.html
   - https://docs.podman.io/en/stable/markdown/podman-run.1.html
+  - https://lwn.net/Articles/930829/
 authority: high
 status: current
 ---
@@ -20,6 +21,7 @@ status: current
 
 - <https://man7.org/linux/man-pages/man5/tmpfs.5.html> — tmpfs(5) man page: `size=` option semantics, `mode=` option, default 50%-of-RAM behavior when no size is specified
 - <https://docs.podman.io/en/stable/markdown/podman-run.1.html> — podman-run(1): `--tmpfs` flag syntax, mount options (size=, mode=), example `--tmpfs /tmp:rw,size=787448k,mode=1777`
+- <https://lwn.net/Articles/930829/> — LWN: tmpfs as a write-through cache layer over disk-backed storage (informs the tmpfs-overlay-lane third pattern)
 - **Last updated:** 2026-04-27
 
 ## Quick reference — canonical HOT mount list
@@ -37,6 +39,33 @@ COLD paths (disk-backed):
 - `/nix/store/` — shared cache (RO), content-addressed, host-managed
 - `/home/forge/.cache/tillandsias-project/` — per-project build artifact cache
 - `/var/log/tillandsias/` — container logs
+
+## Third pattern: tmpfs-overlay lane
+
+@trace spec:forge-hot-cold-split-tmpfs-lane
+
+A third storage pattern sits BETWEEN HOT (hard cap, ENOSPC on overflow) and COLD (disk, no cap). It is a tmpfs view rooted on top of a COLD per-project cache directory, with LRU eviction across the tmpfs/disk boundary as a single per-project pool. **It is NOT a fifth HOT root** — the four HOT roots above remain unchanged.
+
+| Mount path | Tmpfs cap | Spillover | Used by |
+|---|---|---|---|
+| `~/.cache/tillandsias/cheatsheets-pulled/<project>/` | 64 MB modest / 128 MB normal / 1024 MB plentiful | Auto, to disk under same project | `cheatsheets-license-tiered` pull-on-demand cache |
+
+**Tier auto-detection** at tray startup: `MemTotal < 8 GiB` → modest; `8–32 GiB` → normal; `≥ 32 GiB` → plentiful. The resolved cap is passed into the forge container via env var `TILLANDSIAS_PULL_CACHE_RAM_MB`. Override with `forge.pull_cache_ram_mb` in `~/.config/tillandsias/config.toml`.
+
+**Eviction** is per-project only — project A's tmpfs-overlay never touches project B's bytes (`forge-cache-dual` invariant). When the tmpfs portion is full and a new write would exceed the cap, the LRU file in the same project's tmpfs portion is `mv`'d to the disk portion of the same project's pull cache. The new write succeeds without ENOSPC.
+
+**Why it's not HOT**: HOT roots have ENOSPC on overflow (writes fail). Tmpfs-overlay lane has graceful spillover (writes succeed). Different overflow semantics → different tier.
+
+**Why it's not pure COLD**: COLD has no spec-level size hint and no acceleration. Tmpfs-overlay lane has both — fast first-read for recently-pulled content, with the disk underneath as the persistent layer.
+
+```bash
+# Verify the env var is set inside the forge
+printenv TILLANDSIAS_PULL_CACHE_RAM_MB
+# expect: 64, 128, or 1024 (or your override)
+
+# Inspect the pull cache subtree
+du -sh ~/.cache/tillandsias/cheatsheets-pulled/<project>/ 2>/dev/null
+```
 
 ## Common patterns
 
@@ -104,3 +133,4 @@ df -ht tmpfs
 - `runtime/forge-paths-ephemeral-vs-persistent.md` — full path taxonomy (shared cache, per-project cache, workspace, ephemeral), Hot vs Cold section
 - `runtime/forge-container.md` — broader runtime contract, security flags, enclave network
 - `runtime/forge-shared-cache-via-nix.md` — why the shared (COLD) nix store is the right place for shared deps
+- `openspec/changes/cheatsheets-license-tiered/design.md` Decision 3 — origin of the tmpfs-overlay lane and the tiered RAMDISK budget

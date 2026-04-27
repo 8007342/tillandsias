@@ -2,7 +2,7 @@
 tags: [build, cmake, c, cpp, cross-platform, generator]
 languages: [c, cpp]
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://cmake.org/cmake/help/latest/manual/cmake.1.html
   - https://cmake.org/cmake/help/latest/manual/cmake-commands.7.html
@@ -10,6 +10,13 @@ sources:
   - https://cmake.org/cmake/help/latest/manual/cmake-policies.7.html
 authority: high
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # CMake
@@ -125,6 +132,51 @@ target_compile_options(app PRIVATE
 - Build trees live under `/home/forge/src/<project>/build*/` — ephemeral on container stop. Treat `build/` as throwaway; `CMakeCache.txt` is cheap to regenerate.
 - System `find_package` finds only forge-image packages. Vendored deps live in your repo (e.g. `third_party/`) and are wired via `add_subdirectory()` or `FetchContent`.
 - `FetchContent_Declare(... GIT_REPOSITORY ...)` reaches GitHub through the enclave proxy. Use `URL https://...` over `GIT_REPOSITORY` when the proxy strips git-protocol headers.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://cmake.org/cmake/help/latest/manual/cmake.1.html`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/cmake.org/cmake/help/latest/manual/cmake.1.html`
+- **License:** see-license-allowlist
+- **License URL:** https://cmake.org/cmake/help/latest/manual/cmake.1.html
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/cmake.org/cmake/help/latest/manual/cmake.1.html"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://cmake.org/cmake/help/latest/manual/cmake.1.html" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/build/cmake.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

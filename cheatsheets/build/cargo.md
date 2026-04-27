@@ -10,6 +10,12 @@ sources:
   - https://doc.rust-lang.org/cargo/reference/profiles.html
 authority: high
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
 ---
 
 # Cargo

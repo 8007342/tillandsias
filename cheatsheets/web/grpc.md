@@ -2,13 +2,20 @@
 tags: [grpc, rpc, http2, streaming, protobuf, service-to-service, grpcurl]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://grpc.io/docs/what-is-grpc/core-concepts/
   - https://grpc.io/docs/guides/
   - https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
 authority: high
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # gRPC
@@ -106,6 +113,51 @@ grpcurl -plaintext \
 - **Reflection is often disabled in production** — `grpcurl list` will return `UNIMPLEMENTED`. Keep the `.proto` files handy and use `-import-path . -proto svc.proto` to invoke without reflection.
 - **Keepalives needed across NATs / load balancers** — idle gRPC connections get silently dropped after a few minutes by most middleboxes. Configure client keepalive (`KEEPALIVE_TIME_MS`) or expect `UNAVAILABLE` errors on the first call after an idle period.
 - **Large messages need explicit limits** — default max message size is 4 MiB on most clients. Streaming many small messages is almost always better than one large one; if you must, raise `MaxRecvMsgSize` / `max_receive_message_length` on both ends.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://grpc.io/docs/what-is-grpc/core-concepts/`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/grpc.io/docs/what-is-grpc/core-concepts/`
+- **License:** see-license-allowlist
+- **License URL:** https://grpc.io/docs/what-is-grpc/core-concepts/
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/grpc.io/docs/what-is-grpc/core-concepts/"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://grpc.io/docs/what-is-grpc/core-concepts/" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/web/grpc.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

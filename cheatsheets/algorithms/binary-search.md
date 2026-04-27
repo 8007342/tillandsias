@@ -2,12 +2,19 @@
 tags: [algorithm, search, divide-and-conquer, sorted-arrays, complexity]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://en.wikipedia.org/wiki/Binary_search
   - https://www.cs.usfca.edu/~galles/visualization/Search.html
 authority: community
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # Binary search
@@ -95,6 +102,51 @@ Works on integers, floats (with epsilon), or any monotonic search space — not 
 - Go: `sort.Search`
 
 Always prefer stdlib unless you have a specific reason — the edge cases (overflow, duplicates, NaN) are already handled.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://en.wikipedia.org/wiki/Binary_search`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/en.wikipedia.org/wiki/Binary_search`
+- **License:** see-license-allowlist
+- **License URL:** https://en.wikipedia.org/wiki/Binary_search
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/en.wikipedia.org/wiki/Binary_search"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://en.wikipedia.org/wiki/Binary_search" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/algorithms/binary-search.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 
