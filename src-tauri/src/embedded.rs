@@ -153,6 +153,13 @@ pub const FORGE_CLI_INVENTORY: &str =
 pub const FORGE_CLI_SERVICES: &str =
     include_str!("../../images/default/cli/tillandsias-services");
 pub const FORGE_CLI_MODELS: &str = include_str!("../../images/default/cli/tillandsias-models");
+// @trace spec:external-logs-layer
+// `tillandsias-logs ls|tail|combine` is the forge-side reader for the
+// external-logs layer. The Containerfile COPYs it into
+// /opt/agents/tillandsias-cli/bin/, so the embedded extraction must
+// stage it under cli/ alongside the other discoverability binaries
+// (otherwise `--init` fails at the COPY step on a clean checkout).
+pub const FORGE_CLI_LOGS: &str = include_str!("../../images/default/cli/tillandsias-logs");
 
 // No forge GIT_ASKPASS const — the forge-side askpass was tombstoned.
 // Forge containers have ZERO credentials; only the git-service container
@@ -408,6 +415,9 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("cli/tillandsias-services: {e}"))?;
     write_lf(&cli_dir.join("tillandsias-models"), FORGE_CLI_MODELS)
         .map_err(|e| format!("cli/tillandsias-models: {e}"))?;
+    // @trace spec:external-logs-layer
+    write_lf(&cli_dir.join("tillandsias-logs"), FORGE_CLI_LOGS)
+        .map_err(|e| format!("cli/tillandsias-logs: {e}"))?;
 
     // No forge GIT_ASKPASS — tombstoned.
     // @trace spec:secrets-management
@@ -439,6 +449,8 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
             "tillandsias-inventory",
             "tillandsias-services",
             "tillandsias-models",
+            // @trace spec:external-logs-layer
+            "tillandsias-logs",
         ] {
             let path = cli_dir.join(name);
             if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {

@@ -11,13 +11,46 @@
 //! `IssueWebSession` variant exists in the wire schema but is not yet
 //! handled — it lands with the `opencode-web-session-otp` change.
 //!
-//! @trace spec:tray-host-control-socket
+//! Windows host: this module compiles to a no-op shell. Unix-domain
+//! sockets aren't the right primitive on Windows (we'll wire Named Pipes
+//! later), and `tillandsias --init` doesn't need the control plane at all
+//! — it only builds container images. The tray code in `main.rs` gates
+//! its `Server::bind_default()` call on `#[cfg(unix)]`, so this stub
+//! keeps the path/handler/wire submodules reachable from launch.rs while
+//! refusing to expose a `Server` type on Windows. See `cross-platform`
+//! spec, REQ-WIN-CONTROL-SOCKET-STUB.
+//!
+//! @trace spec:tray-host-control-socket, spec:cross-platform
 //! @cheatsheet languages/rust.md
 //! @cheatsheet runtime/networking.md
 
 pub mod handler;
 pub mod path;
 pub mod wire;
+
+#[cfg(not(unix))]
+pub use stub::*;
+
+#[cfg(not(unix))]
+mod stub {
+    //! Windows stub. The Server type is intentionally absent — main.rs
+    //! gates its bind on `#[cfg(unix)]` so no Windows code path constructs
+    //! one. Keeping this module empty (rather than providing a fake
+    //! Server) makes the absence loud at compile time if a non-gated
+    //! caller is added later.
+
+    use std::time::Duration;
+
+    pub const MAX_CONNECTIONS: usize = 32;
+    pub const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+    pub const BROADCAST_CAPACITY: usize = 64;
+}
+
+#[cfg(unix)]
+pub use unix_impl::*;
+
+#[cfg(unix)]
+mod unix_impl {
 
 use std::io;
 use std::os::unix::net::UnixListener as StdUnixListener;
@@ -35,9 +68,9 @@ use tokio::time::timeout;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 use tracing::{debug, info, warn};
 
-use self::handler::{DispatchOutcome, dispatch, wire_version_mismatch};
-use self::path::{CONTAINER_SOCKET_PATH, ResolvedSocketPath, SocketPathSource};
-use self::wire::{ControlEnvelope, ControlMessage, ErrorCode, MAX_MESSAGE_BYTES, WIRE_VERSION};
+use super::handler::{DispatchOutcome, dispatch, wire_version_mismatch};
+use super::path::{self, CONTAINER_SOCKET_PATH, ResolvedSocketPath, SocketPathSource};
+use super::wire::{ControlEnvelope, ControlMessage, ErrorCode, MAX_MESSAGE_BYTES, WIRE_VERSION};
 
 /// Maximum simultaneous accepted connections. Beyond this, the kernel
 /// `accept` queue holds the next connection until a permit is released.
@@ -1087,3 +1120,4 @@ mod tests {
         server.shutdown().await;
     }
 }
+} // end mod unix_impl

@@ -50,6 +50,16 @@ Builds directly on macOS using Xcode CLT + Rust — no toolbox needed. Supports 
 
 Uses `cargo-xwin` in a dedicated `tillandsias-windows` toolbox. Artifacts are unsigned — for local testing only. See `docs/cross-platform-builds.md` for details and macOS build strategy.
 
+### Windows Native Build
+
+```bash
+./build-local.sh                    # Debug build, install to %LOCALAPPDATA%\Tillandsias
+./build-local.sh --release          # Release build (still installs to %LOCALAPPDATA%)
+./build-local.ps1                   # PowerShell-native variant
+```
+
+Run from a Windows host with rustup, podman 5.x, and WSL2 (podman-machine). Both scripts stage the router sidecar via `scripts/build-sidecar.sh` (cross-compiled to `x86_64-unknown-linux-musl` using `rust-lld` — no external `cc` needed) before `cargo build`. The installed binary lands at `%LOCALAPPDATA%\Tillandsias\tillandsias.exe`; that directory should be on `PATH`. After install, `tillandsias --init` builds proxy + forge + git + inference images. Set `TILLANDSIAS_WORKSPACE` to your repo path so `--init` can stage `cheatsheets/` into the forge build context (otherwise the layer is replaced with a `MISSING.md` placeholder). The Windows control plane (router profile) is currently stubbed — Named Pipes wiring lives in a follow-up change. @trace spec:cross-platform
+
 ### Manual Commands (without build.sh)
 
 ```bash

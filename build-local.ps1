@@ -13,6 +13,25 @@ $installDir = "$env:LOCALAPPDATA\Tillandsias"
 Stop-Process -Name tillandsias -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1
 
+# @trace spec:opencode-web-session-otp, spec:cross-platform
+# Stage the pre-built tillandsias-router-sidecar so src-tauri/build.rs's
+# include_bytes!("../../images/router/tillandsias-router-sidecar") finds
+# it before cargo enters the tray crate. The helper is idempotent — fast
+# no-op when the binary is fresher than every source file. Without this
+# step, cargo panics on Windows just like it does on Linux/macOS.
+$scriptDir = $PSScriptRoot
+Write-Host "Staging router sidecar..." -ForegroundColor Cyan
+$bashExe = Get-Command bash -ErrorAction SilentlyContinue
+if (-not $bashExe) {
+    Write-Host "bash not found in PATH — install Git for Windows or run scripts/build-sidecar.sh under WSL." -ForegroundColor Red
+    exit 1
+}
+& bash "$scriptDir\scripts\build-sidecar.sh"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "build-sidecar.sh failed." -ForegroundColor Red
+    exit 1
+}
+
 # Build
 if ($Release) {
     Write-Host "Building release..." -ForegroundColor Cyan

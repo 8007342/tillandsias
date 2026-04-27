@@ -133,6 +133,45 @@ pub fn run_with_force(force: bool) -> bool {
                 .join("Containerfile");
             let context_dir = source_dir.join("images").join(image_dir);
 
+            // @trace spec:agent-cheatsheets, spec:cross-platform
+            // Stage `.cheatsheets/` into the forge build context. Linux/macOS
+            // do this inside scripts/build-image.sh (lines 273-283), but the
+            // Windows init path bypasses the shell script and calls podman
+            // directly — so we replicate the same staging logic here.
+            //
+            // Source order: (1) $TILLANDSIAS_WORKSPACE/cheatsheets when set
+            // (covers `cargo run` from a checkout), (2) MISSING.md placeholder
+            // matching the Linux fallback. The Containerfile's `COPY
+            // .cheatsheets/ /opt/cheatsheets-image/` resolves either way.
+            if image_dir == "default" {
+                let staged = context_dir.join(".cheatsheets");
+                let _ = std::fs::remove_dir_all(&staged);
+                let mut copied_from_workspace = false;
+                if let Ok(workspace) = std::env::var("TILLANDSIAS_WORKSPACE") {
+                    let src = std::path::PathBuf::from(workspace).join("cheatsheets");
+                    if src.is_dir() {
+                        if let Err(e) = copy_dir_recursive(&src, &staged) {
+                            eprintln!(
+                                "  [internal] cheatsheets staging from {} failed: {e}",
+                                src.display()
+                            );
+                        } else {
+                            copied_from_workspace = true;
+                        }
+                    }
+                }
+                if !copied_from_workspace {
+                    if let Err(e) = std::fs::create_dir_all(&staged) {
+                        eprintln!("  [internal] cheatsheets placeholder mkdir failed: {e}");
+                    } else if let Err(e) = std::fs::write(
+                        staged.join("MISSING.md"),
+                        "Cheatsheets directory missing at build time\n",
+                    ) {
+                        eprintln!("  [internal] cheatsheets MISSING.md write failed: {e}");
+                    }
+                }
+            }
+
             tillandsias_podman::podman_cmd_sync()
                 .args(["build", "--tag", &tag, "-f"])
                 .arg(&containerfile)
@@ -246,6 +285,26 @@ pub fn run_build_only() -> Result<(), String> {
     let status = {
         let containerfile = source_dir.join("images").join("default").join("Containerfile");
         let context_dir = source_dir.join("images").join("default");
+        // @trace spec:agent-cheatsheets, spec:cross-platform
+        // Stage `.cheatsheets/` (mirrors the run_with_force Windows path).
+        // Without this, the forge Containerfile's `COPY .cheatsheets/`
+        // step fails with "no such file or directory".
+        let staged = context_dir.join(".cheatsheets");
+        let _ = std::fs::remove_dir_all(&staged);
+        let mut copied_from_workspace = false;
+        if let Ok(workspace) = std::env::var("TILLANDSIAS_WORKSPACE") {
+            let src = std::path::PathBuf::from(workspace).join("cheatsheets");
+            if src.is_dir() && copy_dir_recursive(&src, &staged).is_ok() {
+                copied_from_workspace = true;
+            }
+        }
+        if !copied_from_workspace {
+            let _ = std::fs::create_dir_all(&staged);
+            let _ = std::fs::write(
+                staged.join("MISSING.md"),
+                "Cheatsheets directory missing at build time\n",
+            );
+        }
         tillandsias_podman::podman_cmd_sync()
             .args(["build", "--tag", &tag, "-f"])
             .arg(&containerfile)
@@ -278,4 +337,26 @@ fn image_exists(tag: &str) -> bool {
         .stderr(std::process::Stdio::null())
         .status()
         .is_ok_and(|s| s.success())
+}
+
+/// Recursively copy `src` into `dst`. Used by the Windows --init path to
+/// stage `.cheatsheets/` into the forge build context (see comment near
+/// the COPY in images/default/Containerfile).
+///
+/// @trace spec:agent-cheatsheets, spec:cross-platform
+#[cfg(target_os = "windows")]
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        let ft = entry.file_type()?;
+        if ft.is_dir() {
+            copy_dir_recursive(&from, &to)?;
+        } else if ft.is_file() {
+            std::fs::copy(&from, &to)?;
+        }
+    }
+    Ok(())
 }

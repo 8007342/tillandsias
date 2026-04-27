@@ -19,6 +19,16 @@ fi
 powershell.exe -Command "Stop-Process -Name tillandsias -Force -ErrorAction SilentlyContinue" 2>/dev/null || true
 sleep 1
 
+# @trace spec:opencode-web-session-otp, spec:cross-platform
+# Stage the pre-built tillandsias-router-sidecar so src-tauri/build.rs's
+# include_bytes!("../../images/router/tillandsias-router-sidecar") finds
+# it before cargo enters the tray crate. The helper is idempotent — fast
+# no-op when the binary is fresher than every source file. Without this
+# step, cargo panics on Windows just like it does on Linux/macOS.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+echo "Staging router sidecar..."
+"$SCRIPT_DIR/scripts/build-sidecar.sh"
+
 # Build. The only produced binary is `tillandsias` (package + binary name
 # both per src-tauri/Cargo.toml).
 if $RELEASE; then
