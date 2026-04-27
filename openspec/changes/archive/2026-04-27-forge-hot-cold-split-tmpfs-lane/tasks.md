@@ -5,7 +5,7 @@
 
 ## 2. Cheatsheet alignment
 
-- [ ] 2.1 Update `cheatsheets/runtime/forge-hot-cold-split.md` to document the tmpfs-overlay lane as the third pattern (alongside HOT and COLD); refresh provenance + `Last updated:` date
+- [x] 2.1 Update `cheatsheets/runtime/forge-hot-cold-split.md` to document the tmpfs-overlay lane as the third pattern (alongside HOT and COLD); refresh provenance + `Last updated:` date
 
 ## 3. Apply-time hooks (deferred to cheatsheets-license-tiered)
 
