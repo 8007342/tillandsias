@@ -260,12 +260,18 @@ apply_opencode_config_overlay() {
 }
 
 # ── Hot-path population ─────────────────────────────────────
-# @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
+# @trace spec:forge-hot-cold-split, spec:agent-cheatsheets, spec:cheatsheets-license-tiered
+# @cheatsheet runtime/cheatsheet-crdt-overrides.md
 # Called once at container start, AFTER the podman --tmpfs mounts are in
 # place (those are established by the kernel before the entrypoint runs).
 # Copies /opt/cheatsheets-image/ (RO image lower layer baked at build time)
 # into /opt/cheatsheets/ (tmpfs hot mount, 8MB cap) so every agent read is
 # RAM-served rather than overlayfs-backed.
+#
+# Then merges <project>/.tillandsias/cheatsheets/ on top — project-committed
+# cheatsheets shadow forge defaults at the same relative path. Each shadow
+# emits a banner line and the renderer injects a `> [!OVERRIDE]` callout
+# block at the top of the body so the override is reasoned, never silent.
 #
 # Idempotent: re-running on an already-populated tmpfs is harmless.
 # Silent failure: 2>/dev/null || true means a missing source or mount point
@@ -276,7 +282,179 @@ populate_hot_paths() {
         trace_lifecycle "hot-paths" "cheatsheets copied to tmpfs (/opt/cheatsheets)"
     else
         trace_lifecycle "hot-paths" "skipped: /opt/cheatsheets-image or /opt/cheatsheets not found"
+        return 0
     fi
+
+    # @trace spec:cheatsheets-license-tiered (task 6.1, 6.2, 6.4)
+    # Resolve project root. The entrypoint runs BEFORE find_project_dir(),
+    # so PROJECT_ROOT may not be set; prefer the env hint from the tray
+    # (TILLANDSIAS_PROJECT names the dir under /home/forge/src/), fall back
+    # to scanning /home/forge/src/ for the first directory.
+    local project_root="${PROJECT_ROOT:-}"
+    if [ -z "$project_root" ] && [ -n "${TILLANDSIAS_PROJECT:-}" ]; then
+        if [ -d "/home/forge/src/${TILLANDSIAS_PROJECT}" ]; then
+            project_root="/home/forge/src/${TILLANDSIAS_PROJECT}"
+        fi
+    fi
+    if [ -z "$project_root" ]; then
+        for _d in /home/forge/src/*/; do
+            [ -d "$_d" ] && project_root="${_d%/}" && break
+        done
+    fi
+
+    local project_cs="${project_root}/.tillandsias/cheatsheets"
+    if [ -z "$project_root" ] || [ ! -d "$project_cs" ]; then
+        trace_lifecycle "hot-paths" "no project-committed cheatsheets to merge (project_root=${project_root:-<none>})"
+        return 0
+    fi
+
+    # Walk every project-committed cheatsheet. For each .md:
+    #  1. Detect shadow (same relative path exists under /opt/cheatsheets-image/).
+    #  2. Validate shadows_forge_default frontmatter consistency (WARN on mismatch).
+    #  3. Either merge plain (no shadow) or render with [!OVERRIDE] callout (shadow).
+    #  4. Emit one banner line per shadow.
+    local rel src_path img_path dest_path shadows reason
+    while IFS= read -r -d '' src_path; do
+        rel="${src_path#${project_cs}/}"
+        dest_path="/opt/cheatsheets/${rel}"
+        img_path="/opt/cheatsheets-image/${rel}"
+        mkdir -p "$(dirname "$dest_path")" 2>/dev/null || true
+
+        # Parse the shadows_forge_default field from frontmatter (may be empty).
+        shadows="$(_read_frontmatter_field "$src_path" shadows_forge_default)"
+
+        if [ -f "$img_path" ]; then
+            # Same relative path exists in forge baked layer -> SHADOW.
+            reason="$(_read_frontmatter_field "$src_path" override_reason | head -n1)"
+            echo "[cheatsheet override] ${rel} → project version (reason: ${reason:-<no override_reason set>})"
+            if [ -n "$shadows" ]; then
+                _inject_override_callout "$src_path" "$dest_path"
+            else
+                # Project file shadows by path but did not declare it. Validator
+                # WARNs separately (task 6.3); merge plainly here.
+                cp -af "$src_path" "$dest_path" 2>/dev/null || true
+            fi
+        else
+            if [ -n "$shadows" ]; then
+                # Declared shadow but no forge default at that path -> config error.
+                echo "[cheatsheet override] WARN: ${rel} declares shadows_forge_default but no forge default exists at that path"
+                _inject_override_callout "$src_path" "$dest_path"
+            else
+                # Net-new project cheatsheet — just merge.
+                cp -af "$src_path" "$dest_path" 2>/dev/null || true
+            fi
+        fi
+    done < <(find "$project_cs" -type f -name '*.md' -print0 2>/dev/null)
+
+    trace_lifecycle "hot-paths" "project-committed cheatsheets merged from ${project_cs}"
+}
+
+# @trace spec:cheatsheets-license-tiered (task 6.2 helper)
+# Read a single scalar (or first line of a `|` block scalar) from YAML
+# frontmatter at the head of FILE. Echoes empty string on miss. Bash-only
+# parser; mirrors the discipline in scripts/check-cheatsheet-tiers.sh but
+# narrower (single-key lookup, no full document parse).
+_read_frontmatter_field() {
+    local file="$1" key="$2"
+    [ -f "$file" ] || { echo ""; return 0; }
+    awk -v key="$key" '
+        BEGIN { in_fm = 0; depth = 0; cur_key = ""; multiline = 0 }
+        NR == 1 {
+            if ($0 == "---") { in_fm = 1; next }
+            else { exit }
+        }
+        in_fm && $0 == "---" { exit }
+        in_fm {
+            if (multiline) {
+                # Collect indented continuation lines for the matched key.
+                if (match($0, /^[ \t]+/)) {
+                    line = $0
+                    sub(/^[ \t]+/, "", line)
+                    print line
+                    next
+                } else {
+                    exit
+                }
+            }
+            # Match top-level "key: value" (no indent).
+            if (match($0, /^[A-Za-z_][A-Za-z0-9_]*[ \t]*:/)) {
+                k = $0
+                sub(/[ \t]*:.*$/, "", k)
+                if (k == key) {
+                    v = $0
+                    sub(/^[^:]*:[ \t]*/, "", v)
+                    if (v == "|" || v == ">" || v == "|-" || v == "|+" || v == ">-" || v == ">+") {
+                        multiline = 1
+                        next
+                    }
+                    print v
+                    exit
+                }
+            }
+        }
+    ' "$file" 2>/dev/null
+}
+
+# @trace spec:cheatsheets-license-tiered (task 6.4)
+# @cheatsheet runtime/cheatsheet-crdt-overrides.md
+# Render a project-committed cheatsheet with a `> [!OVERRIDE]` callout block
+# prepended to its body. The callout surfaces shadows_forge_default,
+# override_reason, override_consequences, override_fallback so the agent
+# reads the deviation contract BEFORE the cheatsheet body. The callout sits
+# AFTER the YAML frontmatter (if present), BEFORE the first content line.
+_inject_override_callout() {
+    local src="$1" dest="$2"
+    local sh re co fb
+    sh="$(_read_frontmatter_field "$src" shadows_forge_default)"
+    re="$(_read_frontmatter_field "$src" override_reason)"
+    co="$(_read_frontmatter_field "$src" override_consequences)"
+    fb="$(_read_frontmatter_field "$src" override_fallback)"
+
+    # Build the callout. Multi-line scalars get folded into single lines for
+    # quote-block readability (the cheatsheet body still has the full text).
+    local callout
+    callout="$(cat <<EOF
+> [!OVERRIDE]
+> **shadows_forge_default**: ${sh}
+>
+> **override_reason**: $(printf '%s' "$re" | tr '\n' ' ' | sed 's/[[:space:]]\+$//')
+> **override_consequences**: $(printf '%s' "$co" | tr '\n' ' ' | sed 's/[[:space:]]\+$//')
+> **override_fallback**: $(printf '%s' "$fb" | tr '\n' ' ' | sed 's/[[:space:]]\+$//')
+
+EOF
+)"
+
+    # Split the source: frontmatter (---\n...\n---\n) + body. If no frontmatter
+    # is present, prepend the callout directly. Use awk for a single pass.
+    awk -v callout="$callout" '
+        BEGIN { state = "pre"; emitted = 0 }
+        state == "pre" {
+            if (NR == 1 && $0 == "---") { print; state = "fm"; next }
+            # No frontmatter — emit callout first, then everything.
+            print callout
+            print
+            state = "body"
+            emitted = 1
+            next
+        }
+        state == "fm" {
+            print
+            if ($0 == "---") { state = "after-fm" }
+            next
+        }
+        state == "after-fm" {
+            print callout
+            print
+            state = "body"
+            emitted = 1
+            next
+        }
+        state == "body" { print }
+        END {
+            # If the file was just frontmatter with no body, still emit callout.
+            if (state == "after-fm" && !emitted) { print callout }
+        }
+    ' "$src" > "$dest" 2>/dev/null || cp -af "$src" "$dest" 2>/dev/null || true
 }
 
 # ── Banner ──────────────────────────────────────────────────

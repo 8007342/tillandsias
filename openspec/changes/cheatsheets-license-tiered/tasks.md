@@ -46,10 +46,10 @@ Phase 0 of the design's Migration Plan. Each task is verifiable in a single PR; 
 
 ## 6. CRDT override discipline + project-committed cheatsheets
 
-- [ ] 6.1 Extend `populate_hot_paths()` in `images/default/lib-common.sh` to merge `<project>/.tillandsias/cheatsheets/` into `/opt/cheatsheets/` AFTER copying `/opt/cheatsheets-image/`; project-committed files at the same path overwrite forge defaults.
-- [ ] 6.2 Add shadow detection to `populate_hot_paths()`: for each project-committed file, check if a same-pathed file exists in `/opt/cheatsheets-image/`; if yes, parse the project frontmatter and emit one banner line per shadow: `[cheatsheet override] <path> → project version (reason: <first line of override_reason>)`.
-- [ ] 6.3 Add shadow validation to `scripts/check-cheatsheet-sources.sh`: for each cheatsheet under `<project>/.tillandsias/cheatsheets/` (or `cheatsheets/`-relative paths in project artifacts), check `shadows_forge_default` presence; if set, ERROR if any of `override_reason`, `override_consequences`, `override_fallback` is missing or empty.
-- [ ] 6.4 Add a runtime renderer (in `populate_hot_paths()` or a small helper) that surfaces `override_reason`, `override_consequences`, `override_fallback` as a header block at the top of every shadowed cheatsheet's body inside `/opt/cheatsheets/<path>` (e.g., as a fenced `> [!OVERRIDE]` callout block before `## Quick reference`).
+- [x] 6.1 Extend `populate_hot_paths()` in `images/default/lib-common.sh` to merge `<project>/.tillandsias/cheatsheets/` into `/opt/cheatsheets/` AFTER copying `/opt/cheatsheets-image/`; project-committed files at the same path overwrite forge defaults.
+- [x] 6.2 Add shadow detection to `populate_hot_paths()`: for each project-committed file, check if a same-pathed file exists in `/opt/cheatsheets-image/`; if yes, parse the project frontmatter and emit one banner line per shadow: `[cheatsheet override] <path> → project version (reason: <first line of override_reason>)`.
+- [x] 6.3 Add shadow validation to `scripts/check-cheatsheet-sources.sh`: for each cheatsheet under `<project>/.tillandsias/cheatsheets/` (or `cheatsheets/`-relative paths in project artifacts), check `shadows_forge_default` presence; if set, ERROR if any of `override_reason`, `override_consequences`, `override_fallback` is missing or empty.
+- [x] 6.4 Add a runtime renderer (in `populate_hot_paths()` or a small helper) that surfaces `override_reason`, `override_consequences`, `override_fallback` as a header block at the top of every shadowed cheatsheet's body inside `/opt/cheatsheets/<path>` (e.g., as a fenced `> [!OVERRIDE]` callout block before `## Quick reference`).
 
 ## 7. cheatsheet-telemetry EXTERNAL log producer
 
