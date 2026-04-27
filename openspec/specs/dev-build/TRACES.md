@@ -6,4 +6,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [build.sh#L24](../../../build.sh#L24)
-- [build.sh#L300](../../../build.sh#L300)
+- [build.sh#L301](../../../build.sh#L301)
