@@ -1,16 +1,31 @@
 #!/usr/bin/env bash
 # Build container images using Nix inside an ephemeral podman container.
 # Usage: scripts/build-image.sh [forge|web|proxy|git|inference|router] [--force]
+#                               [--max-age-days N] [--refresh-sources]
 #
 # This script:
 #   1. Checks if sources have changed since last build (staleness detection)
-#   2. Runs `nix build` inside an ephemeral `nixos/nix:latest` container
-#   3. Loads the resulting tarball into podman and tags the image
+#   2. (forge only) Runs the bundled-tier cheatsheet-source bake:
+#      - Invokes scripts/fetch-cheatsheet-source.sh --tier=bundled
+#      - Stages the cache-key directory as cheatsheet-sources/ in the build context
+#      - Writes per-cheatsheet meta side-channel under .cheatsheets-meta/
+#      - On network failure, reuses the previous cache key (graceful degradation)
+#   3. Runs `nix build` (or `podman build`) to produce the image
+#   4. Loads the resulting tarball into podman and tags the image
 #
 # No toolbox dependency — works on any system with podman.
 #
+# Bundled-tier flags (forge only):
+#   --max-age-days N      Pass-through to fetcher; flips the cache key when changed.
+#                         Default: 30 (local builds). CI passes 7.
+#   --refresh-sources     Force re-fetch even if the cache-key directory exists
+#                         (blows away the directory before re-running the fetcher).
+#
 # Environment:
 #   TILLANDSIAS_BUILD_VERBOSE=1   Show nix build output
+#
+# @trace spec:cheatsheets-license-tiered
+# @cheatsheet runtime/cheatsheet-tier-system.md
 
 set -euo pipefail
 
@@ -79,6 +94,9 @@ IMAGE_NAME="forge"
 FLAG_FORCE=false
 FLAG_TAG=""
 FLAG_BACKEND="fedora"  # Default: Fedora minimal. Use --backend nix for Nix image.
+# @trace spec:cheatsheets-license-tiered
+FLAG_MAX_AGE_DAYS="30"        # Default for local builds; CI passes 7.
+FLAG_REFRESH_SOURCES=false    # --refresh-sources forces re-fetch on cache hit.
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -96,8 +114,26 @@ while [[ $# -gt 0 ]]; do
             shift
             FLAG_BACKEND="$1"
             ;;
+        --max-age-days)
+            # @trace spec:cheatsheets-license-tiered
+            shift
+            FLAG_MAX_AGE_DAYS="${1:-}"
+            if [[ -z "${FLAG_MAX_AGE_DAYS}" ]]; then
+                _error "--max-age-days requires a numeric argument"
+                exit 1
+            fi
+            ;;
+        --max-age-days=*)
+            # @trace spec:cheatsheets-license-tiered
+            FLAG_MAX_AGE_DAYS="${1#--max-age-days=}"
+            ;;
+        --refresh-sources)
+            # @trace spec:cheatsheets-license-tiered
+            FLAG_REFRESH_SOURCES=true
+            ;;
         --help|-h)
             echo "Usage: scripts/build-image.sh [forge|web|proxy|git|inference|router] [--force] [--tag <tag>] [--backend fedora|nix]"
+            echo "                              [--max-age-days N] [--refresh-sources]"
             echo ""
             echo "Build a container image."
             echo ""
@@ -110,6 +146,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --force            Rebuild even if sources haven't changed"
             echo "  --tag <tag>        Override the image tag (default: tillandsias-<name>:latest)"
             echo "  --backend <type>   Build backend: fedora (default) or nix"
+            echo "  --max-age-days N   Bundled-tier cheatsheet-source freshness (default: 30; CI uses 7)"
+            echo "  --refresh-sources  Force re-fetch of bundled cheatsheet sources even on cache hit"
             exit 0
             ;;
         *)
@@ -264,6 +302,306 @@ if [[ "$FLAG_BACKEND" == "fedora" ]]; then
         exit 1
     fi
 
+    # @trace spec:cheatsheets-license-tiered
+    # @cheatsheet runtime/cheatsheet-tier-system.md
+    # ── Bundled-tier cheatsheet-source bake (forge only) ────────
+    # Walks cheatsheets/**/*.md, filters tier: bundled, fetches the union of
+    # source_urls into a cache-key-named directory under
+    # $XDG_CACHE_HOME/tillandsias/cheatsheet-source-bake/<key>/, then stages
+    # that directory into the build context as `.cheatsheet-sources/`. The
+    # Containerfile COPYs it into /opt/cheatsheet-sources/ inside the image.
+    #
+    # Network failures are non-fatal — if the fetcher fails AND a previous
+    # cache key directory exists, the most recent one is reused with a WARN.
+    # If no previous cache exists, the build proceeds with an empty
+    # cheatsheet-sources/ subtree (graceful degradation).
+    #
+    # See Decision 7 in openspec/changes/cheatsheets-license-tiered/design.md.
+    if [[ "$IMAGE_NAME" == "forge" ]] || [[ "$IMAGE_NAME" == "default" ]]; then
+        _bundled_tier_bake() {
+            local fetcher="$ROOT/scripts/fetch-cheatsheet-source.sh"
+            if [[ ! -x "$fetcher" ]]; then
+                _warn "fetch-cheatsheet-source.sh not found or not executable; skipping bundled-tier bake"
+                return 0
+            fi
+
+            # Match the fetcher's CACHE_DIR computation so we can both run the
+            # fetcher and inspect/reuse its output directories on failure.
+            local bundled_cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/cheatsheet-source-bake"
+            mkdir -p "$bundled_cache_root"
+
+            _step "Bundled-tier cheatsheet-source bake (max-age-days=${FLAG_MAX_AGE_DAYS}${FLAG_REFRESH_SOURCES:+, refresh})..."
+
+            # Run the fetcher; capture stdout. The contract is that the LAST
+            # TWO lines of stdout are `key=<16hex>` and `dir=<absolute-path>`.
+            local fetcher_out
+            local fetcher_rc=0
+            local fetcher_log
+            fetcher_log="$(mktemp)"
+            fetcher_out="$("$fetcher" --tier=bundled --max-age-days "$FLAG_MAX_AGE_DAYS" 2>"$fetcher_log")" || fetcher_rc=$?
+
+            # Parse last two stdout lines for key=… and dir=… (contract per
+            # bundled_tier_main in fetch-cheatsheet-source.sh).
+            local key="" dir=""
+            if [[ "$fetcher_rc" -eq 0 ]] && [[ -n "$fetcher_out" ]]; then
+                key="$(printf '%s\n' "$fetcher_out" | awk -F= '/^key=/ {k=$2} END {print k}')"
+                dir="$(printf '%s\n' "$fetcher_out" | awk -F= '/^dir=/ {sub(/^dir=/,""); d=$0} END {print d}')"
+            fi
+
+            if [[ "$fetcher_rc" -ne 0 ]]; then
+                _warn "[build-image] WARN: bundled-tier fetch failed (exit $fetcher_rc)"
+                # Fall back to the most-recent prior cache-key directory.
+                local prev_dir prev_mtime
+                prev_dir=""
+                prev_mtime=0
+                if [[ -d "$bundled_cache_root" ]]; then
+                    while IFS= read -r -d '' candidate; do
+                        local m
+                        m="$(stat -c '%Y' "$candidate" 2>/dev/null || stat -f '%m' "$candidate" 2>/dev/null || echo 0)"
+                        if [[ "$m" -gt "$prev_mtime" ]]; then
+                            prev_mtime="$m"
+                            prev_dir="$candidate"
+                        fi
+                    done < <(find "$bundled_cache_root" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+                fi
+                if [[ -n "$prev_dir" ]]; then
+                    local prev_key
+                    prev_key="$(basename "$prev_dir")"
+                    local prev_date
+                    prev_date="$(date -u -d "@$prev_mtime" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null \
+                                 || date -u -r "$prev_mtime" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null \
+                                 || echo unknown)"
+                    _warn "[build-image] WARN: reusing previous cache key ${prev_key} from ${prev_date}"
+                    dir="$prev_dir"
+                    key="$prev_key"
+                else
+                    _warn "[build-image] WARN: no previous cache key directory available; staging EMPTY cheatsheet-sources/ subtree (graceful degradation)"
+                    dir=""
+                    key=""
+                fi
+            fi
+
+            # Optional --refresh-sources: blow away the resolved cache-key
+            # directory so the next invocation re-fetches. We do this AFTER
+            # the initial run so the meta side-channel still has fresh data.
+            # On --refresh-sources we re-invoke the fetcher to repopulate.
+            if [[ "$FLAG_REFRESH_SOURCES" == "true" ]] && [[ "$fetcher_rc" -eq 0 ]] && [[ -n "$dir" ]] && [[ -d "$dir" ]]; then
+                _step "--refresh-sources: blowing away ${dir} and re-fetching..."
+                rm -rf "$dir"
+                fetcher_rc=0
+                fetcher_out="$("$fetcher" --tier=bundled --max-age-days "$FLAG_MAX_AGE_DAYS" 2>"$fetcher_log")" || fetcher_rc=$?
+                if [[ "$fetcher_rc" -eq 0 ]] && [[ -n "$fetcher_out" ]]; then
+                    key="$(printf '%s\n' "$fetcher_out" | awk -F= '/^key=/ {k=$2} END {print k}')"
+                    dir="$(printf '%s\n' "$fetcher_out" | awk -F= '/^dir=/ {sub(/^dir=/,""); d=$0} END {print d}')"
+                else
+                    _warn "[build-image] WARN: --refresh-sources fetch failed (exit $fetcher_rc); cache directory was removed and could not be re-populated"
+                fi
+            fi
+
+            # Surface fetcher stderr only when verbose or on failure (signal-to-noise).
+            if [[ "${TILLANDSIAS_BUILD_VERBOSE:-0}" == "1" ]] || [[ "$fetcher_rc" -ne 0 ]]; then
+                if [[ -s "$fetcher_log" ]]; then
+                    while IFS= read -r line; do
+                        _info "  $line"
+                    done < "$fetcher_log"
+                fi
+            fi
+            rm -f "$fetcher_log"
+
+            # Stage the cache-key directory as the build context's
+            # `.cheatsheet-sources/` subtree. cp -aL would dereference; we want
+            # the verbatim file tree (no symlinks expected anyway). Use rsync
+            # if available for incremental copies; fall back to cp -a.
+            rm -rf "$IMAGE_DIR/.cheatsheet-sources"
+            mkdir -p "$IMAGE_DIR/.cheatsheet-sources"
+            if [[ -n "$dir" ]] && [[ -d "$dir" ]]; then
+                if command -v rsync >/dev/null 2>&1; then
+                    rsync -a --delete "$dir/" "$IMAGE_DIR/.cheatsheet-sources/"
+                else
+                    rm -rf "$IMAGE_DIR/.cheatsheet-sources"
+                    cp -a "$dir" "$IMAGE_DIR/.cheatsheet-sources"
+                fi
+                _info "Staged cheatsheet-sources from cache key ${key:-unknown}"
+            elif [[ "$fetcher_rc" -eq 0 ]]; then
+                # Fetcher succeeded but produced no key/dir — means there are
+                # currently zero tier: bundled cheatsheets to bake. This is
+                # benign during migration. Marker file documents the state.
+                echo "No tier: bundled cheatsheets configured at build time." \
+                    > "$IMAGE_DIR/.cheatsheet-sources/EMPTY.md"
+                _info "Staged EMPTY cheatsheet-sources subtree (no bundled cheatsheets)"
+            else
+                # Network failure AND no prior cache — graceful degradation.
+                echo "Bundled cheatsheet sources unavailable at build time (network failure, no prior cache)." \
+                    > "$IMAGE_DIR/.cheatsheet-sources/UNAVAILABLE.md"
+                _info "Staged EMPTY cheatsheet-sources subtree (no prior cache to fall back on)"
+            fi
+
+            # Build the per-cheatsheet meta side-channel under
+            # `.cheatsheets-meta/<category>/<name>.frontmatter.json`. For each
+            # bundled cheatsheet, look up source_urls[0]'s sidecar (.meta.yaml)
+            # in the staged cheatsheet-sources tree, then write a JSON object
+            # with image_baked_sha256, structural_drift_fingerprint, fetched_at,
+            # and url. populate_hot_paths() reads these at forge launch to
+            # inject the SHA into INDEX.md without rewriting the cheatsheet.
+            rm -rf "$IMAGE_DIR/.cheatsheets-meta"
+            mkdir -p "$IMAGE_DIR/.cheatsheets-meta"
+            if [[ -d "$ROOT/cheatsheets" ]] && [[ -d "$IMAGE_DIR/.cheatsheet-sources" ]]; then
+                # @trace spec:cheatsheets-license-tiered
+                # @cheatsheet runtime/cheatsheet-tier-system.md
+                # Inline Python: walk cheatsheets/**/*.md, find tier: bundled
+                # entries, look up the first source_url's sidecar, emit JSON.
+                python3 - "$ROOT/cheatsheets" "$IMAGE_DIR/.cheatsheet-sources" "$IMAGE_DIR/.cheatsheets-meta" <<'PYMETAEOF' || _warn "meta side-channel injection failed (non-fatal)"
+import json
+import os
+import re
+import sys
+from urllib.parse import urlsplit
+
+cheatsheets_root = sys.argv[1]
+sources_root = sys.argv[2]
+meta_root = sys.argv[3]
+
+
+def parse_frontmatter(path):
+    with open(path, encoding='utf-8', errors='replace') as f:
+        text = f.read()
+    m = re.match(r'^---\n(.*?)\n---\n', text, re.DOTALL)
+    if not m:
+        return {}
+    fm = m.group(1)
+    out = {}
+    cur_list = None
+    for line in fm.splitlines():
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        m2 = re.match(r'^\s+-\s+(.*)$', line)
+        if m2 and cur_list is not None:
+            item = m2.group(1).strip().strip('"').strip("'")
+            out.setdefault(cur_list, []).append(item)
+            continue
+        m3 = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$', line)
+        if m3:
+            k = m3.group(1)
+            v = m3.group(2).strip()
+            if v in ('', '|', '>'):
+                cur_list = k
+                out.setdefault(k, [])
+            else:
+                cur_list = None
+                out[k] = v.strip('"').strip("'")
+    return out
+
+
+def parse_sidecar(path):
+    """Tiny YAML scalar parser — keys are simple `key: value` lines."""
+    out = {}
+    try:
+        with open(path, encoding='utf-8', errors='replace') as f:
+            for line in f:
+                m = re.match(r'^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$', line)
+                if m:
+                    out[m.group(1)] = m.group(2).strip()
+    except OSError:
+        pass
+    return out
+
+
+def url_to_relpath(url):
+    """Mirror compute_dest_path() in fetch-cheatsheet-source.sh."""
+    if not url.startswith('https://'):
+        return None
+    parts = urlsplit(url)
+    host = parts.netloc
+    path = parts.path
+    # GitHub blob → raw rewrite produces raw.githubusercontent.com paths.
+    if host == 'github.com' and '/blob/' in path:
+        path = path.replace('/blob/', '/', 1)
+        host = 'raw.githubusercontent.com'
+    # Strip trailing /
+    if path.endswith('/'):
+        path = path[:-1]
+    if not path or path == '/':
+        path = '/index.html'
+    return f"{host}{path}"
+
+
+written = 0
+skipped = 0
+for dirpath, _, files in os.walk(cheatsheets_root):
+    for name in files:
+        if not name.endswith('.md'):
+            continue
+        md_path = os.path.join(dirpath, name)
+        fm = parse_frontmatter(md_path)
+        if fm.get('tier') != 'bundled':
+            continue
+        urls = fm.get('source_urls') or fm.get('sources') or []
+        if isinstance(urls, str):
+            urls = [urls]
+        canonical = None
+        for u in urls:
+            if u.startswith('https://'):
+                canonical = u
+                break
+        if not canonical:
+            skipped += 1
+            continue
+        relpath = url_to_relpath(canonical)
+        if not relpath:
+            skipped += 1
+            continue
+        # Try several candidate sidecar locations (matches fetcher behaviour).
+        sidecar = None
+        produced = None
+        for cand in (
+            os.path.join(sources_root, relpath + '.meta.yaml'),
+            os.path.join(sources_root, relpath + '.norepublish.meta.yaml'),
+        ):
+            if os.path.isfile(cand):
+                sidecar = cand
+                # Strip the .meta.yaml suffix to get the produced file path.
+                produced = cand[:-len('.meta.yaml')]
+                break
+        if not sidecar:
+            # Try .txt variant (IETF rewrite).
+            for ext in ('.txt', '.html'):
+                alt = relpath + ext
+                cand = os.path.join(sources_root, alt + '.meta.yaml')
+                if os.path.isfile(cand):
+                    sidecar = cand
+                    produced = cand[:-len('.meta.yaml')]
+                    break
+        if not sidecar:
+            skipped += 1
+            continue
+        meta = parse_sidecar(sidecar)
+        rel_md = os.path.relpath(md_path, cheatsheets_root)
+        category, basename = os.path.split(rel_md)
+        out_dir = os.path.join(meta_root, category)
+        os.makedirs(out_dir, exist_ok=True)
+        out_name = basename[:-3] + '.frontmatter.json'  # strip .md
+        # image_baked_sha256: short prefix of content_sha256 (16 hex per spec design).
+        sha = meta.get('content_sha256', '')
+        image_baked_sha256 = sha[:16] if sha else ''
+        payload = {
+            'image_baked_sha256': image_baked_sha256,
+            'structural_drift_fingerprint': meta.get('structural_drift_fingerprint', 'n/a'),
+            'fetched_at': meta.get('fetched', ''),
+            'url': meta.get('url', canonical),
+        }
+        with open(os.path.join(out_dir, out_name), 'w', encoding='utf-8') as f:
+            json.dump(payload, f, indent=2, sort_keys=True)
+            f.write('\n')
+        written += 1
+
+print(f"  meta side-channel: wrote {written} entries, skipped {skipped}")
+PYMETAEOF
+                _info "Wrote .cheatsheets-meta/ side-channel for bundled cheatsheets"
+            fi
+        }
+        _bundled_tier_bake
+    fi
+
     # @trace spec:agent-cheatsheets, spec:default-image
     # Stage the project-root `cheatsheets/` directory into the forge image's
     # build context as `.cheatsheets/` so the Containerfile can `COPY` it.
@@ -307,8 +645,11 @@ if [[ "$FLAG_BACKEND" == "fedora" ]]; then
         "$IMAGE_DIR/"
 
     # Clean up the staged cheatsheets so they don't accumulate in the build context.
+    # @trace spec:cheatsheets-license-tiered
     if [[ "$IMAGE_NAME" == "forge" ]] || [[ "$IMAGE_NAME" == "default" ]]; then
         rm -rf "$IMAGE_DIR/.cheatsheets"
+        rm -rf "$IMAGE_DIR/.cheatsheet-sources"
+        rm -rf "$IMAGE_DIR/.cheatsheets-meta"
     fi
 
 else

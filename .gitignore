@@ -26,6 +26,10 @@ vendor/debug/
 
 # Staged by scripts/build-image.sh — agent-cheatsheets
 images/default/.cheatsheets/
+# Staged by scripts/build-image.sh — cheatsheets-license-tiered (bundled-tier bake + meta side-channel)
+# @trace spec:cheatsheets-license-tiered
+images/default/.cheatsheet-sources/
+images/default/.cheatsheets-meta/
 
 
 # Pre-built tillandsias-router-sidecar (musl static-pie binary).
