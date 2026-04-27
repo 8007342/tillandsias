@@ -56,8 +56,14 @@ All cheatsheets are curated references for tools and languages available in the 
 
 ## web
 
-[Will be populated by Wave E sub-agents]
+- `protobuf.md` — Protocol Buffers: proto3 syntax, field numbers, well-known types, codegen
+- `grpc.md` — gRPC: services, unary/streaming RPCs, gRPC-Web, client invocation
+- `openapi.md` — OpenAPI 3.x: spec structure, schemas, security schemes, codegen
+- `http.md` — HTTP/1.1 and HTTP/2: methods, status codes, headers, idempotency
+- `websocket.md` — WebSocket protocol: framing, handshake, common libraries by language
+- `sse.md` — Server-Sent Events: format, reconnection, text/event-stream, vs WebSocket
 
 ## test
 
-[Will be populated by Wave E sub-agents]
+- `pytest.md` — pytest: discovery, fixtures, parametrize, conftest, markers
+- `junit.md` — JUnit 5 Jupiter: @Test, @BeforeEach, parametrized tests, assertions
