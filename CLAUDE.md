@@ -379,6 +379,57 @@ Format — replace `SPECNAME` with the actual spec name (e.g., `forge-launch`):
 https://github.com/8007342/tillandsias/search?q=%40trace+spec%3ASPECNAME&type=code
 ```
 
+## @tombstone — Never Silently Delete
+
+Dead code, deprecated specs, and removed features get a `@tombstone superseded:<new>` (replacement exists) or `@tombstone obsolete:<old>` (no replacement) annotation. The block is commented out, NOT deleted, for **three releases** (since Tillandsias has a release cadence — VERSION track) before final deletion. The tombstone records the version it landed in so reviewers know when it's safe to delete.
+
+**Rust example:**
+```rust
+// @tombstone superseded:tray-no-disabled-items
+// Old projection — removed in 0.1.169.226. Safe to delete after 0.1.169.229.
+// @trace spec:old-tray-menu-state
+//
+// fn set_stage(&self, stage: Stage) { ... }
+```
+
+**Shell example:**
+```bash
+# @tombstone obsolete:legacy-forge-init
+# Superseded by direct podman pull path in 0.1.37.45. Safe to delete after 0.1.37.48.
+#
+# init_forge_image() { ... }
+```
+
+**Markdown example (in CLAUDE.md or specs):**
+```markdown
+<!-- @tombstone superseded:agent-cheatsheets-v1 — kept for three releases -->
+<!-- Replaced by agent-cheatsheets-v2 in 0.1.100.1. Safe to delete after 0.1.100.4. -->
+```
+
+**Required fields:**
+- `superseded:<new-spec-name>` — replacement capability exists
+- OR `obsolete:<old-spec-name>` — entire feature gone, no replacement
+- Version landed in and safe-to-delete version (based on current VERSION file)
+- 1–3 lines of rationale
+- Optional: `@trace spec:<name>` linking to removed spec
+
+**Retention window:**
+- **Cadence-based projects** (Tillandsias — 4-part VERSION track): three releases on the same Major.Minor track
+- Example: removed in v0.1.169.226, safe to delete after v0.1.169.229
+
+**What this enables:**
+- `git log -G '@tombstone'` reveals every behavioural transition
+- Log events with `tombstone = "<name>"` field create runtime cross-references
+- Refactor history is observable without deep `git blame` spelunking
+- Reviewers know exactly when orphaned code becomes deletable
+
+**What it does NOT mean:**
+- Tombstones are not for keeping dead code forever. After the retention window the tombstoned block is deleted in a normal commit.
+- A function with no callers and no spec relationship does NOT need a tombstone — it gets deleted normally
+- Tombstones mark **transitions**, not orphans
+
+This complements OpenSpec's `## REMOVED Requirements` section (which carries `**Reason**:` and `**Migration**:` — the spec-level tombstone). Together they form a complete audit of behavioural transitions.
+
 ## Conventions
 
 - User-facing text MUST NOT contain: "container", "pod", "image", "runtime"
