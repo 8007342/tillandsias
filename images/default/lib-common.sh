@@ -116,14 +116,10 @@ export_pull_cache_path() {
     trace_lifecycle "pull-cache" "TILLANDSIAS_PULL_CACHE=$cache_root"
 }
 
-# Run the export early — agents may consult $TILLANDSIAS_PULL_CACHE before
-# populate_hot_paths() lands. Failures are non-fatal (mkdir under $HOME
-# is virtually always permitted).
-export_pull_cache_path
-
 # ── Lifecycle tracing ───────────────────────────────────────
 # Structured trace output for --log-environment-lifecycle troubleshooting.
 # Format: [lifecycle] <phase> | <detail>
+# MUST be defined before export_pull_cache_path() is called.
 trace_lifecycle() {
     # Only emit lifecycle traces when TILLANDSIAS_DEBUG is set.
     # In production, these clutter the terminal (stderr shares the display).
@@ -132,6 +128,11 @@ trace_lifecycle() {
     shift
     echo "[lifecycle] $phase | $*" >&2
 }
+
+# Run the export early — agents may consult $TILLANDSIAS_PULL_CACHE before
+# populate_hot_paths() lands. Failures are non-fatal (mkdir under $HOME
+# is virtually always permitted).
+export_pull_cache_path
 
 # ── Package manager cache strategy (dual-cache architecture) ──────
 # @trace spec:forge-cache-architecture, spec:forge-cache-dual, spec:forge-shell-tools
