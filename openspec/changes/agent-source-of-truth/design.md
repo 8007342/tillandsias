@@ -129,6 +129,8 @@ NNN is a sequential number — the agent globs the directory, finds the highest 
 
 **Why**: CLAUDE.md is the canonical methodology document Claude reads at session start. OpenSpec's instruction templates are what `openspec instructions <artifact>` returns, which is what shapes new spec writing. Changing both is sufficient — no need for a `lint-spec-has-sources.sh` enforcement script in this change (could come later, but soft adoption first per `feedback_convergence_philosophy: warnings not errors`).
 
+**Note on OpenSpec instruction template**: The spec instruction template that `openspec instructions specs` returns lives in the OpenSpec CLI tool, outside this repository. Task 2.3 requires propagating a sentence to that template indicating `## Sources of Truth` is expected in new specs. This is an out-of-band change: the OpenSpec project owner must update their template instructions after this change is archived. The CLAUDE.md files in tillandsias and ~/src/ already document the requirement, so local adoption can begin immediately.
+
 ### Decision 8: Initial cheatsheet writing is delegated to sub-agents in waves
 
 **Choice**: This change provides the directory structure, the template, the INDEX skeleton, the runtime cheatsheet, and the agent cheatsheets (claude, opencode, openspec). It also seeds 3–4 high-priority cheatsheets (python, rust, bash, jq) as exemplars of the template. Everything else is written by sub-agents spawned in parallel waves AFTER this change's structure is in place.
