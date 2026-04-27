@@ -404,6 +404,133 @@ populate_hot_paths() {
     done < <(find "$project_cs" -type f -name '*.md' -print0 2>/dev/null)
 
     trace_lifecycle "hot-paths" "project-committed cheatsheets merged from ${project_cs}"
+
+    # Re-render /opt/cheatsheets/INDEX.md to include project-committed entries
+    # and any pulled materializations under $TILLANDSIAS_PULL_CACHE. The image-
+    # baked INDEX.md reflects only host repo state at build time; the agent's
+    # discovery surface needs the runtime-merged view.
+    _regen_runtime_index
+}
+
+# @trace spec:cheatsheets-license-tiered (task 8.2)
+# @cheatsheet runtime/cheatsheet-pull-on-demand.md
+# @cheatsheet runtime/cheatsheet-crdt-overrides.md
+#
+# Append entries to /opt/cheatsheets/INDEX.md for any cheatsheet present at
+# runtime that is NOT already listed in the image-baked INDEX. Two sources:
+#   1. /opt/cheatsheets/**/*.md   — includes project-committed merges done by
+#      populate_hot_paths() above (badge: [bundled, project-committed] when
+#      shadows_forge_default is set, else [pull-on-demand: project-committed]).
+#   2. ${TILLANDSIAS_PULL_CACHE}/**/*.md — agent-materialized pulls under the
+#      per-project cache (badge: [pulled]).
+#
+# Append-only: never rewrites existing lines. Keeps the runtime index aligned
+# with the host-side regenerator's line format ("- <path> — <desc> [marker]")
+# but uses minimal markers since per-file frontmatter parsing is best-effort
+# inside the entrypoint hot path.
+#
+# Performance budget: O(total cheatsheets); single find + awk pass per source.
+# Best-effort throughout — silent failure on a missing index does not abort
+# the entrypoint.
+_regen_runtime_index() {
+    local index="/opt/cheatsheets/INDEX.md"
+    [ -f "$index" ] || return 0
+
+    local pull_cache="${TILLANDSIAS_PULL_CACHE:-}"
+    local section_header_pulled="## pulled"
+    local appended=0
+
+    # Pass 1: project-committed and other runtime-merged entries under
+    # /opt/cheatsheets/. Skip files whose relative path is already listed in
+    # the index; the image-baked entries are present from the cp -a above.
+    # The host-side renderer drops the category prefix on lines under a
+    # `## <category>` section (the section header carries the category), so a
+    # path like `languages/python.md` shows up in the index as `- python.md`
+    # under `## languages`. We dedup against EITHER the relative path (for
+    # one-level-deeper subdirs like `languages/java/rxjava-event-driven.md`,
+    # which renders as `- java/rxjava-event-driven.md`) OR the bare basename.
+    local f rel base no_cat badge desc tier shadows committed
+    while IFS= read -r -d '' f; do
+        rel="${f#/opt/cheatsheets/}"
+        case "$rel" in
+            INDEX.md|TEMPLATE.md|*/INDEX.md) continue ;;
+        esac
+        base="$(basename "$rel")"
+        # The host renderer drops the category prefix: `languages/python.md`
+        # under `## languages` shows as `- python.md`, and one-level-deeper
+        # `languages/java/rxjava-event-driven.md` shows as `- java/rxjava-...md`.
+        # Dedup by trying the full rel, the first-component-stripped form,
+        # and the bare basename.
+        no_cat="${rel#*/}"
+        if grep -qE -- "^- ${rel}([[:space:]]|$)" "$index" 2>/dev/null \
+           || grep -qE -- "^- ${no_cat}([[:space:]]|$)" "$index" 2>/dev/null \
+           || grep -qE -- "^- ${base}([[:space:]]|$)" "$index" 2>/dev/null; then
+            continue
+        fi
+
+        tier="$(_read_frontmatter_field "$f" tier | head -n1)"
+        shadows="$(_read_frontmatter_field "$f" shadows_forge_default | head -n1)"
+        committed="$(_read_frontmatter_field "$f" committed_for_project | head -n1)"
+
+        if [ -n "$shadows" ]; then
+            badge="[bundled, project-committed]"
+        elif [ "$committed" = "true" ] || [ "$tier" = "pull-on-demand" ]; then
+            badge="[pull-on-demand: project-committed]"
+        else
+            badge="[project-committed]"
+        fi
+
+        # Best-effort description: first body line matching `**Use when**:` or
+        # the title H1 fallback. Empty description is acceptable — agent can
+        # cat the file for content; INDEX is for discovery.
+        desc="$(awk '
+            /^---$/ { in_fm = !in_fm; next }
+            in_fm { next }
+            /^\*\*Use when\*\*:/ {
+                sub(/^\*\*Use when\*\*:[[:space:]]*/, "")
+                print
+                exit
+            }
+        ' "$f" 2>/dev/null | head -n1)"
+        [ -z "$desc" ] && desc="$(awk '/^# / { sub(/^# /, ""); print; exit }' "$f" 2>/dev/null)"
+
+        if [ -n "$desc" ]; then
+            printf -- '- %s %s — %s\n' "$rel" "$badge" "$desc" >> "$index"
+        else
+            printf -- '- %s %s\n' "$rel" "$badge" >> "$index"
+        fi
+        appended=1
+    done < <(find /opt/cheatsheets -type f -name '*.md' -print0 2>/dev/null)
+
+    # Pass 2: pulled materializations under the per-project pull cache. These
+    # mirror URL-host structure (<host>/<path>) and have no frontmatter — emit
+    # the bare path with [pulled] under a dedicated `## pulled` section.
+    if [ -n "$pull_cache" ] && [ -d "$pull_cache" ]; then
+        local pull_rows
+        pull_rows="$(find "$pull_cache" -type f -name '*.md' 2>/dev/null \
+                     | sort 2>/dev/null)"
+        if [ -n "$pull_rows" ]; then
+            # Add the section header once if not already present.
+            if ! grep -qF -- "$section_header_pulled" "$index" 2>/dev/null; then
+                printf '\n%s\n\n' "$section_header_pulled" >> "$index"
+            fi
+            local p rel_pull
+            while IFS= read -r p; do
+                [ -f "$p" ] || continue
+                rel_pull="${p#${pull_cache}/}"
+                if grep -qF -- "- ${rel_pull} " "$index" 2>/dev/null; then
+                    continue
+                fi
+                printf -- '- %s [pulled]\n' "$rel_pull" >> "$index"
+                appended=1
+            done <<< "$pull_rows"
+        fi
+    fi
+
+    if [ "$appended" = "1" ]; then
+        trace_lifecycle "hot-paths" "runtime INDEX.md augmented with project-committed/pulled entries"
+    fi
+    return 0
 }
 
 # @trace spec:cheatsheets-license-tiered (task 6.2 helper)

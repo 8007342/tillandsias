@@ -63,7 +63,7 @@ Phase 0 of the design's Migration Plan. Each task is verifiable in a single PR; 
 ## 8. Tier-aware INDEX regeneration
 
 - [x] 8.1 Update `scripts/regenerate-cheatsheet-index.sh` to read each cheatsheet's frontmatter `tier` and validation state and append the correct badge: `[bundled, verified: <sha8>]`, `[bundled, partial-verify]`, `[distro-packaged: <package>]`, `[distro-packaged: MISSING]`, `[pull-on-demand: stub]`, `[pull-on-demand: project-committed]`.
-- [ ] 8.2 Add a stripped-down shell version of the index regeneration to `populate_hot_paths()` (or call a small in-image helper) so `/opt/cheatsheets/INDEX.md` is re-rendered post-merge with project-committed entries and pulled-materialization `[pulled]` lines.
+- [x] 8.2 Add a stripped-down shell version of the index regeneration to `populate_hot_paths()` (or call a small in-image helper) so `/opt/cheatsheets/INDEX.md` is re-rendered post-merge with project-committed entries and pulled-materialization `[pulled]` lines.
 - [x] 8.3 Update `cheatsheets/INDEX.md` (the host-tracked file) once after the new badges land so the diff is one focused commit.
 
 ## 9. Migration of existing cheatsheets to v2
