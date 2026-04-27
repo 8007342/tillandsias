@@ -172,6 +172,52 @@ Build cache is stored in `.nix-output/` (gitignored).
 - The primary build path is always through `flake.nix` via `build-image.sh`
 - Rust code (`handlers.rs`, `runner.rs`) calls `build-image.sh` as a subprocess
 
+## Nix Inside the Forge
+
+The forge includes **Nix, direnv, and nix-direnv** baked into the image for reproducible development environments.
+
+### Quick Start — Using Flakes
+
+Inside a forge container, create a `flake.nix` and `.envrc` in your project:
+
+```bash
+# Create a flake for Rust development
+nix flake init -t github:NixOS/templates#rust
+
+# Create .envrc to auto-load the environment on cd
+echo 'use flake' > .envrc
+direnv allow
+```
+
+Now every time you `cd` into that directory, direnv automatically loads the flake environment.
+
+### Available Commands
+
+```bash
+nix --version           # Check Nix version (2.24.14+)
+nix flake show          # Show flake outputs
+nix flake check         # Validate flake.nix
+nix develop             # Enter dev environment (or via .envrc auto-activation)
+nix build               # Build outputs
+direnv --version        # Check direnv version (2.35.0+)
+```
+
+### Configuration
+
+- **Experimental features**: `nix-command` and `flakes` are pre-enabled in `/home/forge/.config/nix/nix.conf`
+- **NIX_PATH**: Set to `nixpkgs=flake:nixpkgs` so `nix shell nixpkgs#hello` works without `flake.lock`
+- **direnv auto-activation**: `.envrc` files activate automatically via shell hooks in bash, zsh, and fish
+
+### Performance — nix-direnv Caching
+
+nix-direnv caches flake evaluations and only re-evaluates when `flake.nix` or `flake.lock` changes. This prevents the 5-10 second delay on every `cd` that would occur with full flake re-evaluation.
+
+### Use Cases
+
+- **Multi-language projects**: Combine Rust, Python, Node, etc. in a single `flake.nix` with automatic environment isolation
+- **Pinned dependencies**: Lock tool versions in `flake.lock` — every developer uses identical versions
+- **Container-agnostic**: The same `flake.nix` works inside the forge and on your host machine
+
 ## Related Projects
 
 - `../forge` — Container images (Macuahuitl forge). Tillandsias uses these as default container images.

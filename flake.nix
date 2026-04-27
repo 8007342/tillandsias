@@ -18,7 +18,6 @@
         forgeEntrypointClaude = ./images/default/entrypoint-forge-claude.sh;
         forgeEntrypointTerminal = ./images/default/entrypoint-terminal.sh;
         forgeOpencode = ./images/default/opencode.json;
-        forgeGitAskpass = ./images/default/git-askpass-tillandsias.sh;
         forgeShellConfigs = ./images/default/shell;
         forgeWelcome = ./images/default/forge-welcome.sh;
         forgeLocales = ./images/default/locales;
@@ -85,6 +84,10 @@
               # The binary is cached in ~/.cache/tillandsias/opencode/
               # Nix itself (for nix develop inside container)
               nix
+              # @trace spec:forge-nix-toolchain
+              # direnv + nix-direnv for .envrc auto-activation with flake support
+              direnv
+              nix-direnv
               # TLS certificates
               cacert
               # Make /usr/bin/env and /bin/sh work
@@ -123,11 +126,6 @@
               # Copy legacy entrypoint (backward compat redirect)
               cp ${forgeEntrypoint} ./usr/local/bin/tillandsias-entrypoint.sh
               chmod +x ./usr/local/bin/tillandsias-entrypoint.sh
-
-              # GIT_ASKPASS helper for token file credential delivery
-              # @trace spec:secret-rotation
-              cp ${forgeGitAskpass} ./usr/local/bin/git-askpass-tillandsias.sh
-              chmod 0755 ./usr/local/bin/git-askpass-tillandsias.sh
 
               # Copy opencode config
               cp ${forgeOpencode} ./home/forge/.config/opencode/config.json

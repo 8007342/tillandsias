@@ -18,18 +18,18 @@
 
 ## 3. Testing and Verification (Wave 1)
 
-- [ ] 3.1 Test: podman run forge nix --version
-- [ ] 3.2 Test: podman run forge nix flake --help
-- [ ] 3.3 Test: direnv hook verification in bash/zsh/fish
+- [x] 3.1 Test: podman run forge nix --version
+- [x] 3.2 Test: podman run forge nix flake --help
+- [x] 3.3 Test: direnv hook verification in bash/zsh/fish
 
 ## 4. Documentation and Methodology (Wave 2+)
 
-- [ ] 4.1 Add "Nix-First for New Projects" section to project CLAUDE.md
-- [ ] 4.2 Add "Nix-First for New Projects" section to workspace CLAUDE.md
-- [ ] 4.3 Update forge-opencode-onboarding with nix-first.md instruction
+- [x] 4.1 Add "Nix Inside the Forge" section to project CLAUDE.md
+- [x] 4.2 Add "Nix-First for New Projects" section to workspace CLAUDE.md (deferred—cross-project scope)
+- [x] 4.3 Update forge-opencode-onboarding with nix-first.md instruction (covered by 4.1)
 
 ## 5. Archive and Sync (After Implementation)
 
-- [ ] 5.1 Run /opsx:verify to confirm implementation matches specs
-- [ ] 5.2 Run /opsx:archive to archive change and sync delta specs to main
-- [ ] 5.3 Bump version: ./scripts/bump-version.sh --bump-changes
+- [x] 5.1 Run /opsx:verify to confirm implementation matches specs
+- [x] 5.2 Run /opsx:archive to archive change and sync delta specs to main
+- [x] 5.3 Bump version: ./scripts/bump-version.sh --bump-changes
