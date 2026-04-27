@@ -37,3 +37,8 @@ The `ContainerLauncher::kill_container` (or its underlying client method) SHALL 
 #### Scenario: Verification phase forces SIGKILL
 - **WHEN** the verification phase invokes `kill_container(name, Some("KILL"))`
 - **THEN** the underlying `podman kill --signal=KILL <name>` invocation runs
+
+## Sources of Truth
+
+- `docs/cheatsheets/tray-state-machine.md` — Three-tier shutdown escalation and log interpretation
+- `docs/cheatsheets/script-hardening.md` — Signal handling and process termination patterns

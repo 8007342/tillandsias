@@ -33,3 +33,8 @@ The conmon SIGTERM SHALL be SIGTERM specifically, not SIGKILL, so conmon has the
 - **WHEN** the verification phase runs on Windows
 - **THEN** the conmon SIGTERM step is skipped (no-op)
 - **AND** the SIGKILL escalation is the terminal escalation step on Windows
+
+## Sources of Truth
+
+- `docs/cheatsheets/script-hardening.md` — SIGTERM vs SIGKILL tradeoffs, signal handling best practices
+- `docs/cheatsheets/tray-state-machine.md` — Three-tier shutdown escalation reference

@@ -199,6 +199,20 @@ Stage transitions cause `apply_state` to recompute the dynamic region. If items 
 
 Everything else (status line, sign-in, running stacks, Projects, Remote Projects) is created on demand in the dynamic region and dropped when no longer needed. Item handles for the dynamic region are NOT recycled — each `apply_state` rebuild produces fresh items.
 
+## Shutdown Escalation
+
+When `Quit Tillandsias` is clicked, `handlers::shutdown_all` executes a three-tier escalation to ensure all containers stop cleanly:
+
+1. **Graceful Phase** (0–2s) — `podman stop` followed by `podman rm`. Containers receive SIGTERM and have up to 10s to exit cleanly.
+2. **SIGKILL Phase** (2–3s) — Any lingering containers receive SIGKILL via `podman kill --signal KILL`, then `podman rm -f`. Forces immediate termination.
+3. **Conmon SIGTERM Phase** (3–4.5s) — Last resort: `pkill -TERM -f 'conmon.*--name tillandsias-'` (Unix only). Terminates the container runtime process itself so it can flush exit status. Windows uses HCS and has no conmon analogue (no-op here).
+
+Each phase re-polls `podman ps --filter name=tillandsias-` to confirm stragglers are gone. If any container survives all three phases within the 5-second budget, an error log fires per survivor (`reason = "survived_all_escalation"`). These logs are the first lines in the next session — a signal that the host has a kernel/podman bug that needs attention.
+
+**Reading shutdown logs**: Search for `category = "enclave"` and `spec = "app-lifecycle"` in tray logs after a Quit to see which escalation tier fired.
+
+@trace spec:app-lifecycle, spec:podman-orchestration
+
 ## Related
 
 **Specs:**
