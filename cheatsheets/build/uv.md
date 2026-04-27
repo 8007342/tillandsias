@@ -1,3 +1,21 @@
+---
+tags: []  # TODO: add 3-8 kebab-case tags on next refresh
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-27
+sources:
+  - https://docs.astral.sh/uv/
+  - https://docs.astral.sh/uv/pip/
+authority: high
+status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
+---
 # uv
 
 @trace spec:agent-cheatsheets
@@ -103,6 +121,51 @@ Faster than `pip-tools`, same input/output format.
 - **`.venv/` is project-local by default** — created in cwd, not in `~/.cache`. In the forge this means the venv lives under `/home/forge/src/<project>/.venv/` and is **ephemeral on container stop** unless the project dir is mounted. Re-`uv sync` is fast (cache hits), so this is usually fine; just don't be surprised when `python` is "missing" after a fresh attach.
 - **`uv sync` removes packages not in the lockfile** — running it after a manual `uv pip install <pkg>` will silently uninstall that package. Add it via `uv add` instead, or accept the wipe.
 - **Network egress goes through the enclave proxy** — `uv` honours `HTTPS_PROXY` / `SSL_CERT_FILE`; both are set in the forge. A "self-signed certificate in chain" error means the proxy CA isn't trusted — see `cheatsheets/utils/` proxy notes, not a `uv` bug.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://docs.astral.sh/uv/`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/docs.astral.sh/uv/`
+- **License:** see-license-allowlist
+- **License URL:** https://docs.astral.sh/uv/
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/docs.astral.sh/uv/"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://docs.astral.sh/uv/" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/build/uv.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

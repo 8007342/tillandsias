@@ -2,13 +2,20 @@
 tags: [forge, networking, enclave, proxy, squid, git, ollama, dns]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://docs.podman.io/en/latest/markdown/podman-network.1.html
   - https://www.squid-cache.org/Doc/config/
   - https://github.com/8007342/tillandsias/blob/main/images/default/Containerfile
 authority: high
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # Forge networking — enclave layout
@@ -109,6 +116,51 @@ echo "GET / HTTP/1.0\r\n\r\n" | nc proxy 3128  # poke the proxy directly
 - **`pip install` from PyPI failing** — usually a missing `--proxy` env var picked up. Verify: `env | rg -i proxy`. If the proxy is reachable but PyPI is denied, the proxy's domain allowlist rejected it — write a `RUNTIME_LIMITATIONS_NNN.md` asking for the domain to be allowlisted.
 - **Calling `localhost:<port>` from another forge** — different forge containers share the enclave network but each has its own loopback. Use `<container-name>:<port>` instead.
 - **Trying to use SSH to push to GitHub** — you don't have an SSH key in the forge. The git push path is the mirror, not your account's SSH access. If you need a one-off direct GitHub push (e.g., admin task), it has to happen on the host.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://docs.podman.io/en/latest/markdown/podman-network.1.html`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/docs.podman.io/en/latest/markdown/podman-network.1.html`
+- **License:** see-license-allowlist
+- **License URL:** https://docs.podman.io/en/latest/markdown/podman-network.1.html
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/docs.podman.io/en/latest/markdown/podman-network.1.html"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://docs.podman.io/en/latest/markdown/podman-network.1.html" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/runtime/networking.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

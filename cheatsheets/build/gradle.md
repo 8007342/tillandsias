@@ -1,3 +1,22 @@
+---
+tags: []  # TODO: add 3-8 kebab-case tags on next refresh
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-27
+sources:
+  - https://docs.gradle.org/current/userguide/command_line_interface.html
+  - https://docs.gradle.org/current/userguide/java_library_plugin.html
+  - https://docs.gradle.org/current/userguide/platforms.html
+authority: high
+status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
+---
 # Gradle
 
 @trace spec:agent-cheatsheets
@@ -128,6 +147,51 @@ Single source of truth across multi-project builds; no more drifting version lit
 - `~/.gradle/caches` is gone on container stop — first build is slow; subsequent builds in the same session are fast.
 - Daemon mode (default) does not help short-lived forges; use `--no-daemon` or set `org.gradle.daemon=false` for one-shot work.
 - Dependency resolution flows through `tillandsias-proxy`. A "Could not GET" against Maven Central usually means the host is not on the proxy allowlist, not a network outage.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://docs.gradle.org/current/userguide/command_line_interface.html`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/docs.gradle.org/current/userguide/command_line_interface.html`
+- **License:** see-license-allowlist
+- **License URL:** https://docs.gradle.org/current/userguide/command_line_interface.html
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/docs.gradle.org/current/userguide/command_line_interface.html"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://docs.gradle.org/current/userguide/command_line_interface.html" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/build/gradle.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

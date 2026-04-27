@@ -2,12 +2,19 @@
 tags: [meta, cheatsheet-system, technical-debt, mcp]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://github.com/8007342/tillandsias/blob/main/cheatsheets/INDEX.md
   - https://github.com/8007342/tillandsias/blob/main/cheatsheets/TEMPLATE.md
 authority: high
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # Cheatsheet system — shortcomings noticed during the v2 sweep
@@ -110,6 +117,51 @@ Despite all the above, the v2 sweep delivered something that didn't exist 30 min
 - This **honest gap inventory** so future work is targeted, not speculative.
 
 The 60 legacy DRAFT cheatsheets remain DRAFT — their retrofit is its own scoped sweep (`cheatsheet-methodology-evolution`'s tasks.md §3-9) and ships independently. The new v2 ones ship `status: current` because they were written under the new methodology.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://github.com/8007342/tillandsias/blob/main/cheatsheets/INDEX.md`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/github.com/8007342/tillandsias/blob/main/cheatsheets/INDEX.md`
+- **License:** see-license-allowlist
+- **License URL:** https://github.com/8007342/tillandsias/blob/main/cheatsheets/INDEX.md
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/github.com/8007342/tillandsias/blob/main/cheatsheets/INDEX.md"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://github.com/8007342/tillandsias/blob/main/cheatsheets/INDEX.md" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/runtime/cheatsheet-shortcomings.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

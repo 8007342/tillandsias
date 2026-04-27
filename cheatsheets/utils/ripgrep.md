@@ -1,3 +1,21 @@
+---
+tags: []  # TODO: add 3-8 kebab-case tags on next refresh
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-27
+sources:
+  - https://github.com/BurntSushi/ripgrep/blob/master/GUIDE.md
+  - https://github.com/BurntSushi/ripgrep
+  - https://docs.rs/regex/latest/regex/#syntax
+authority: high
+status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # ripgrep (rg)
 
 @trace spec:agent-cheatsheets

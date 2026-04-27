@@ -9,6 +9,13 @@ sources:
   - https://spdx.org/licenses/
 authority: high
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # Cheatsheet frontmatter spec (v2)
@@ -131,6 +138,51 @@ When a project-committed cheatsheet shadows a forge-bundled cheatsheet at the sa
 | `override_fallback` | multi-line string | What to do if the override conditions don't apply — the *recovery* |
 
 This is the **CRDT override discipline** — meaning converges across replicas through structured discipline, not silent shadowing. See `runtime/cheatsheet-crdt-overrides.md` for the full pattern and the runtime banner contract.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://yaml.org/spec/1.2.2/`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/yaml.org/spec/1.2.2/`
+- **License:** see-license-allowlist
+- **License URL:** https://yaml.org/spec/1.2.2/
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/yaml.org/spec/1.2.2/"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://yaml.org/spec/1.2.2/" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/runtime/cheatsheet-frontmatter-spec.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

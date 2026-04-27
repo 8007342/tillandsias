@@ -1,3 +1,22 @@
+---
+tags: []  # TODO: add 3-8 kebab-case tags on next refresh
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-27
+sources:
+  - https://www.selenium.dev/documentation/webdriver/
+  - https://w3c.github.io/webdriver/
+  - https://www.selenium.dev/documentation/selenium_manager/
+authority: high
+status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
+---
 # Selenium WebDriver
 
 @trace spec:agent-cheatsheets
@@ -129,6 +148,51 @@ Three options inside the forge:
 - **Switch to Playwright** — `npx playwright install` fetches matched Chromium/Firefox/WebKit per project on demand; no driver-mismatch class of bug. See `test/playwright.md`.
 
 If browser deps genuinely need to ship in the forge image, write a `RUNTIME_LIMITATIONS_NNN.md` per `runtime/runtime-limitations.md` — that's the channel for promoting a missing-tool report into an image change.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://www.selenium.dev/documentation/webdriver/`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/www.selenium.dev/documentation/webdriver/`
+- **License:** see-license-allowlist
+- **License URL:** https://www.selenium.dev/documentation/webdriver/
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/www.selenium.dev/documentation/webdriver/"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://www.selenium.dev/documentation/webdriver/" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/test/selenium.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

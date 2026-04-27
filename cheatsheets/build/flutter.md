@@ -1,3 +1,21 @@
+---
+tags: []  # TODO: add 3-8 kebab-case tags on next refresh
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-27
+sources:
+  - https://docs.flutter.dev/reference/flutter-cli
+  - https://docs.flutter.dev/platform-integration/web/renderers
+authority: high
+status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
+---
 # Flutter
 
 @trace spec:agent-cheatsheets
@@ -100,6 +118,51 @@ flutter test --coverage
 - Web + Linux desktop targets only. Mobile (Android/iOS) and other-OS desktop (macOS/Windows) need a different forge image.
 - Pub registry pulls go through `tillandsias-proxy`. A "Could not resolve host: pub.dev" error means the proxy allowlist is missing pub.dev / storage.googleapis.com.
 - `build/` and `.dart_tool/` live on the ephemeral overlay — lost on container stop. Commit early or rebuild on next attach.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://docs.flutter.dev/reference/flutter-cli`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/docs.flutter.dev/reference/flutter-cli`
+- **License:** see-license-allowlist
+- **License URL:** https://docs.flutter.dev/reference/flutter-cli
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/docs.flutter.dev/reference/flutter-cli"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://docs.flutter.dev/reference/flutter-cli" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/build/flutter.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

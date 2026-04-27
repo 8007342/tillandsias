@@ -1,3 +1,21 @@
+---
+tags: []  # TODO: add 3-8 kebab-case tags on next refresh
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-27
+sources:
+  - https://man.openbsd.org/ssh
+  - https://www.openssh.com/manual.html
+authority: high
+status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
+---
 # ssh
 
 @trace spec:agent-cheatsheets
@@ -92,6 +110,51 @@ Host work-db
 - The forge has no SSH keys by default. Push/pull to the project mirror is over `git://`, not ssh.
 - No ssh-agent forwarding from host into forge — the host/forge boundary is a hard credential break (see Enclave Architecture in CLAUDE.md).
 - ssh egress to github.com is blocked by the proxy allowlist anyway; even with a key, `git push git@github.com:...` would fail.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://man.openbsd.org/ssh`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/man.openbsd.org/ssh`
+- **License:** see-license-allowlist
+- **License URL:** https://man.openbsd.org/ssh
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/man.openbsd.org/ssh"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://man.openbsd.org/ssh" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/utils/ssh.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

@@ -2,13 +2,20 @@
 tags: [reactive-streams, backpressure, async, event-driven, jvm, jdk-flow]
 languages: [java, kotlin, scala]
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://www.reactive-streams.org/
   - https://github.com/reactive-streams/reactive-streams-jvm
   - https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Flow.html
 authority: high
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # Reactive Streams (the spec)
@@ -91,6 +98,51 @@ For Kotlin: prefer `kotlinx.coroutines.flow.Flow` — same shape, idiomatic Kotl
 - **Dropping items silently** — when demand is 0, the producer MUST buffer or drop with `onError`. Silent drop is a common bug — backpressure-violation in `Flowable` will throw `MissingBackpressureException`.
 - **Cold vs hot publishers** — `Flowable.fromIterable(...)` is cold (re-emits on each subscribe). `Subject` / `Processor` is hot (shared, one-shot per emission). Mixing them confuses tests.
 - **Mixed sync/async scheduling** — `subscribeOn` vs `observeOn` in RxJava have opposite directions. The Reactor equivalent (`publishOn` vs `subscribeOn`) is similarly easy to mis-thread.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://www.reactive-streams.org/`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/www.reactive-streams.org/index.html`
+- **License:** see-license-allowlist
+- **License URL:** https://www.reactive-streams.org/
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/www.reactive-streams.org/index.html"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://www.reactive-streams.org/" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/architecture/reactive-streams-spec.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

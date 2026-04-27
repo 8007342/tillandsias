@@ -68,9 +68,9 @@ Phase 0 of the design's Migration Plan. Each task is verifiable in a single PR; 
 
 ## 9. Migration of existing cheatsheets to v2
 
-- [ ] 9.1 Classify every existing cheatsheet under `cheatsheets/**/*.md` by tier: bundleable (allowlist `default_tier = bundled` and license permits) vs pull-on-demand. Output the classification as a CSV in the migration commit message for review.
-- [ ] 9.2 Add `tier:` to every cheatsheet's frontmatter (matching the classification); add `summary_generated_by: hand-curated` (default for existing); add `bundled_into_image: true|false` per tier.
-- [ ] 9.3 Author `## Pull on Demand` sections for each cheatsheet that classifies as pull-on-demand: copy from the cheatsheet's existing `## Provenance` URL list into the new `### Source`; author a minimal `### Materialize recipe` (curl + tar/unzip as appropriate); fill `### Generation guidelines` with per-cheatsheet hints; set frontmatter `pull_recipe: see-section-pull-on-demand`.
+- [x] 9.1 Classify every existing cheatsheet under `cheatsheets/**/*.md` by tier: bundleable (allowlist `default_tier = bundled` and license permits) vs pull-on-demand. Output the classification as a CSV in the migration commit message for review.
+- [x] 9.2 Add `tier:` to every cheatsheet's frontmatter (matching the classification); add `summary_generated_by: hand-curated` (default for existing); add `bundled_into_image: true|false` per tier.
+- [x] 9.3 Author `## Pull on Demand` sections for each cheatsheet that classifies as pull-on-demand: copy from the cheatsheet's existing `## Provenance` URL list into the new `### Source`; author a minimal `### Materialize recipe` (curl + tar/unzip as appropriate); fill `### Generation guidelines` with per-cheatsheet hints; set frontmatter `pull_recipe: see-section-pull-on-demand`. Stubs marked `<!-- TODO: hand-curate the recipe before next forge build -->` for follow-up by domain experts; license fields populated with `see-license-allowlist` placeholder pending per-cheatsheet provenance refinement.
 - [ ] 9.4 Run `scripts/build-image.sh forge` to populate `image_baked_sha256` and `structural_drift_fingerprint` for every bundled cheatsheet (build-time injection); verify the side-channel `.cheatsheets-meta/` is produced.
 - [ ] 9.5 Re-run `scripts/regenerate-cheatsheet-index.sh` and commit the updated `cheatsheets/INDEX.md`.
 

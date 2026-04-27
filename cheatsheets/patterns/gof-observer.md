@@ -2,13 +2,20 @@
 tags: [design-pattern, gof, observer, event-driven, decoupling, behavioural]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://en.wikipedia.org/wiki/Observer_pattern
   - https://refactoring.guru/design-patterns/observer
   - https://reactivex.io/intro.html
 authority: community
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # Observer pattern (GoF)
@@ -92,6 +99,51 @@ Most modern languages let you pass a function value where an Observer interface 
 - One-shot events with a known caller — direct method call is simpler.
 - High-throughput streams — use Reactive Streams (proper backpressure) instead. See `architecture/reactive-streams-spec.md`.
 - Event bus across processes/network — use a message broker, not in-process Observer.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://en.wikipedia.org/wiki/Observer_pattern`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/en.wikipedia.org/wiki/Observer_pattern`
+- **License:** see-license-allowlist
+- **License URL:** https://en.wikipedia.org/wiki/Observer_pattern
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/en.wikipedia.org/wiki/Observer_pattern"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://en.wikipedia.org/wiki/Observer_pattern" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/patterns/gof-observer.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

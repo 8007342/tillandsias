@@ -1,3 +1,20 @@
+---
+tags: []  # TODO: add 3-8 kebab-case tags on next refresh
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-27
+sources:
+  - https://yaml.org/spec/1.2.2/
+authority: high
+status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
+---
 # YAML
 
 @trace spec:agent-cheatsheets
@@ -116,6 +133,51 @@ country: "NO"          # without quotes -> false (Norway problem)
 - **Anchors cross document boundaries** — `*alias` from doc 1 cannot be referenced in doc 2. Each `---` starts a fresh anchor scope.
 - **`null` vs empty string** — `key:` (no value) is `null`; `key: ""` is empty string. Templating systems that check truthiness behave differently for each.
 - **Merge keys (`<<:`) are non-standard** — formally a 1.1 extension; some 1.2 parsers (notably go-yaml v3) drop them. Check your loader's behavior before relying on `<<:`.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://yaml.org/spec/1.2.2/`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/yaml.org/spec/1.2.2/`
+- **License:** see-license-allowlist
+- **License URL:** https://yaml.org/spec/1.2.2/
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/yaml.org/spec/1.2.2/"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://yaml.org/spec/1.2.2/" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/languages/yaml.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

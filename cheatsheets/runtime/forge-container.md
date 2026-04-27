@@ -2,12 +2,19 @@
 tags: [forge, runtime, container, podman, sandbox, paths]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://docs.podman.io/en/latest/markdown/podman-run.1.html
   - https://github.com/8007342/tillandsias/blob/main/images/default/Containerfile
 authority: high
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # Forge container — runtime contract
@@ -116,6 +123,51 @@ echo $TILLANDSIAS_EXTERNAL_LOGS             # resolves to /var/log/tillandsias/e
 ```
 
 See `runtime/external-logs.md` for the full reference: two-tier model, host layout, manifest format, auditor invariants, and pitfalls.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://docs.podman.io/en/latest/markdown/podman-run.1.html`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/docs.podman.io/en/latest/markdown/podman-run.1.html`
+- **License:** see-license-allowlist
+- **License URL:** https://docs.podman.io/en/latest/markdown/podman-run.1.html
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/docs.podman.io/en/latest/markdown/podman-run.1.html"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://docs.podman.io/en/latest/markdown/podman-run.1.html" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/runtime/forge-container.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

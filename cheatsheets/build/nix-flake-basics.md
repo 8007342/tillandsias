@@ -2,13 +2,20 @@
 tags: [nix, flake, reproducible-builds, dev-shell, direnv]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://nix.dev/concepts/flakes
   - https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake.html
   - https://github.com/nix-community/nix-direnv
 authority: high
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # Nix flakes — basics
@@ -124,6 +131,51 @@ outputs = { self, nixpkgs, flake-utils }: flake-utils.lib.eachDefaultSystem (sys
 - **`use_flake` vs `use flake`** — direnv accepts both, but `use flake` is canonical for nix-direnv (>= 2.x). If `use_flake` doesn't activate, check the integration version.
 - **Mixing `nix-shell` (legacy) and `nix develop` (flakes)** — different code paths, different caches. Stick with flakes for new projects.
 - **Single-user vs multi-user nix** — Tillandsias forge uses single-user (no daemon, no root). Most flakes work either way; some advanced features (e.g., remote builders) need the daemon.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://nix.dev/concepts/flakes`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/nix.dev/concepts/flakes`
+- **License:** see-license-allowlist
+- **License URL:** https://nix.dev/concepts/flakes
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/nix.dev/concepts/flakes"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://nix.dev/concepts/flakes" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/build/nix-flake-basics.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

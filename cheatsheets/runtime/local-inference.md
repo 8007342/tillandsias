@@ -7,6 +7,13 @@ sources:
   - https://github.com/ollama/ollama/blob/main/docs/api.md
 authority: high
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # Local inference inside the forge
@@ -143,6 +150,51 @@ services and their reachability status — see `cheatsheets/agents/`.
 - **`format=json` doesn't validate against a schema** — it just constrains the output to valid JSON. The structure is still up to the model. Use `--data-raw` with explicit schema instructions in the prompt for reliable shapes.
 - **No retry on cold start** — the inference container takes 1-3s to load a model into VRAM the first time. The first request after a long idle can return slowly OR time out if your client uses a tight deadline. Use a 30s timeout on first call, 5s on subsequent calls.
 - **Streaming default is `stream: true`** — `/api/generate` and `/api/chat` stream by default; pass `"stream": false` if you want one consolidated JSON response. Forgetting this causes "why is curl returning a chunked stream of JSON lines instead of a single object?".
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://github.com/ollama/ollama/blob/main/docs/api.md`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/github.com/ollama/ollama/blob/main/docs/api.md`
+- **License:** see-license-allowlist
+- **License URL:** https://github.com/ollama/ollama/blob/main/docs/api.md
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/github.com/ollama/ollama/blob/main/docs/api.md"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://github.com/ollama/ollama/blob/main/docs/api.md" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/runtime/local-inference.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

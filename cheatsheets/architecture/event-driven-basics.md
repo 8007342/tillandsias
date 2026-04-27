@@ -2,13 +2,20 @@
 tags: [event-driven, architecture, async, decoupling, message-bus, eda]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://martinfowler.com/articles/201701-event-driven.html
   - https://martinfowler.com/eaaDev/EventCollaboration.html
   - https://en.wikipedia.org/wiki/Event-driven_architecture
 authority: medium
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # Event-driven architecture (the basics)
@@ -87,6 +94,51 @@ Brokers (rough trade-off table):
 - **"Eventual consistency" without measurement** — eventual ≠ never. Add lag metrics, alert when consumers fall behind.
 - **Cascading failures** — one slow consumer blocks broker disk → producer back-pressures → upstream stalls. Design DLQ (dead-letter queue) and consumer-side circuit breakers.
 - **Mixing event-carried state with event sourcing** — they're orthogonal but often conflated. Event sourcing means events are the source of truth; ECST means events carry state. Pick what you actually need.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://martinfowler.com/articles/201701-event-driven.html`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/martinfowler.com/articles/201701-event-driven.html`
+- **License:** see-license-allowlist
+- **License URL:** https://martinfowler.com/articles/201701-event-driven.html
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/martinfowler.com/articles/201701-event-driven.html"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://martinfowler.com/articles/201701-event-driven.html" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/architecture/event-driven-basics.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

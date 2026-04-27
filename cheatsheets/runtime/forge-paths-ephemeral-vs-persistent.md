@@ -9,6 +9,13 @@ sources:
   - https://github.com/8007342/tillandsias/blob/main/images/default/lib-common.sh
 authority: high
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # Forge paths — ephemeral vs persistent
@@ -132,6 +139,51 @@ cargo metadata --format-version 1 | jq .target_directory
 | Windows | `%LOCALAPPDATA%\tillandsias\chromium\` | same | No |
 
 A `current` symlink (Unix) or directory junction (Windows) in the install root points at the active version. At most TWO version subdirectories coexist: the active one and the immediately-previous one (rollback safety net). Older versions are GC'd by the installer at the end of every successful install. See `openspec/specs/host-chromium/spec.md` for the full requirement set.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://github.com/8007342/tillandsias/blob/main/openspec/changes/forge-cache-architecture/proposal.md`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/github.com/8007342/tillandsias/blob/main/openspec/changes/forge-cache-architecture/proposal.md`
+- **License:** see-license-allowlist
+- **License URL:** https://github.com/8007342/tillandsias/blob/main/openspec/changes/forge-cache-architecture/proposal.md
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/github.com/8007342/tillandsias/blob/main/openspec/changes/forge-cache-architecture/proposal.md"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://github.com/8007342/tillandsias/blob/main/openspec/changes/forge-cache-architecture/proposal.md" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

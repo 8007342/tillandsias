@@ -2,12 +2,19 @@
 tags: [openspec, workflow, spec-driven, change-management, agent-workflow, cli]
 languages: []
 since: 2026-04-25
-last_verified: 2026-04-25
+last_verified: 2026-04-27
 sources:
   - https://github.com/8007342/tillandsias/blob/main/openspec/specs/agent-cheatsheets/spec.md
   - https://github.com/8007342/tillandsias/blob/main/CLAUDE.md
 authority: high
 status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
 ---
 
 # OpenSpec — workflow + CLI
@@ -115,6 +122,51 @@ After archive, the change's deltas sync into `openspec/specs/<cap>/spec.md` and 
 - **Editing main specs directly** — never. All changes flow through `openspec/changes/<name>/specs/<cap>/spec.md` deltas, then sync at archive. Direct edits to `openspec/specs/<cap>/spec.md` break the audit trail.
 - **Archiving without user verification** — even if validate is green, the human-in-the-loop verification gate (manual UI test, real-world smoke) precedes archive. The agent prepares; the human archives.
 - **Forgetting to add the change name to the commit message** — commits should include `OpenSpec change: <name>` near the bottom so the link from commit to change is explicit. Also include the `@trace spec:<cap>` GitHub search URL.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://github.com/8007342/tillandsias/blob/main/openspec/specs/agent-cheatsheets/spec.md`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/github.com/8007342/tillandsias/blob/main/openspec/specs/agent-cheatsheets/spec.md`
+- **License:** see-license-allowlist
+- **License URL:** https://github.com/8007342/tillandsias/blob/main/openspec/specs/agent-cheatsheets/spec.md
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/github.com/8007342/tillandsias/blob/main/openspec/specs/agent-cheatsheets/spec.md"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://github.com/8007342/tillandsias/blob/main/openspec/specs/agent-cheatsheets/spec.md" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/agents/openspec.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

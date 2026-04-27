@@ -1,3 +1,21 @@
+---
+tags: []  # TODO: add 3-8 kebab-case tags on next refresh
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-27
+sources:
+  - https://mikefarah.gitbook.io/yq/
+  - https://github.com/mikefarah/yq
+authority: high
+status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: pull-on-demand
+summary_generated_by: hand-curated
+bundled_into_image: false
+committed_for_project: false
+pull_recipe: see-section-pull-on-demand
+---
 # yq — mikefarah/yq
 
 @trace spec:agent-cheatsheets
@@ -93,6 +111,51 @@ yq -o json -I 0 '.' values.yaml | jq '.image'         # pipe to jq compact
 - **`-r` is not the default** — string scalars print with no surrounding quotes by default (unlike jq), but complex output may still include YAML quoting. Use `-r` (or output as JSON and pipe to `jq -r`) when feeding shells.
 - **Update vs assign** — `.x = 1` always sets; `.x |= . + 1` updates in place using the current value. Forgetting `|=` and writing `.x = .x + 1` fails when `.x` is null on first run.
 - **Style flags affect diffs, not semantics** — `-P` (pretty), `-I N` (indent), `--no-colors` change output formatting only. Pin them in scripts that produce committed files so reviewers see semantic diffs only.
+
+## Pull on Demand
+
+> This cheatsheet's underlying source is NOT bundled into the forge image.
+> Reason: upstream license redistribution status not granted (or off-allowlist).
+> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
+>
+> When you need depth beyond the summary above, materialize the source into
+> the per-project pull cache by following the recipe below. The proxy
+> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
+> required.
+
+<!-- TODO: hand-curate the recipe before next forge build -->
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://mikefarah.gitbook.io/yq/`
+- **Archive type:** `single-html`
+- **Expected size:** `~1 MB extracted`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/mikefarah.gitbook.io/yq/`
+- **License:** see-license-allowlist
+- **License URL:** https://mikefarah.gitbook.io/yq/
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/mikefarah.gitbook.io/yq/"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://mikefarah.gitbook.io/yq/" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled file for the structure relevant to your project.
+2. If the project leans on this tool/topic heavily, generate a project-contextual
+   cheatsheet at `<project>/.tillandsias/cheatsheets/utils/yq.md` using
+   `cheatsheets/TEMPLATE.md` as the skeleton.
+3. The generated cheatsheet MUST set frontmatter:
+   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
+   `committed_for_project: true`.
+4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
 
 ## See also
 

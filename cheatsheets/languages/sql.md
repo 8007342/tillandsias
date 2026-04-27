@@ -1,3 +1,20 @@
+---
+tags: []  # TODO: add 3-8 kebab-case tags on next refresh
+languages: []
+since: 2026-04-25
+last_verified: 2026-04-27
+sources:
+  - https://www.sqlite.org/lang.html
+  - https://www.postgresql.org/docs/current/sql.html
+authority: high
+status: current
+
+# v2 — tier classification (cheatsheets-license-tiered)
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # SQL
 
 @trace spec:agent-cheatsheets
