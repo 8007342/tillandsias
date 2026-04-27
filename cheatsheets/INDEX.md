@@ -45,7 +45,14 @@ All cheatsheets are curated references for tools and languages available in the 
 
 ## build
 
-[Will be populated by Wave D sub-agents]
+- `cargo.md` — Cargo: build/test/check/clippy/fmt, workspaces, features, profiles
+- `npm.md` — npm: install/run/publish scripts, package.json, workspaces
+- `pnpm.md` — pnpm: install/run, workspaces, filtering, storage efficiency
+- `yarn.md` — Yarn: classic vs berry, install/run, workspaces, resolutions
+- `pip.md` — pip: install, requirements.txt, constraints, editable installs
+- `pipx.md` — pipx: isolated tool installation, inject, --python versions
+- `uv.md` — uv: fast pip replacement, lockfiles, project mode
+- `poetry.md` — Poetry: init/add/build/publish, vs pip+venv, lock files
 
 ## web
 
