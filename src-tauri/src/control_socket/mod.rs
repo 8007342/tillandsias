@@ -401,21 +401,18 @@ fn chmod_dir_0700(path: &Path) -> io::Result<()> {
     std::fs::set_permissions(path, perms)
 }
 
-#[cfg(not(unix))]
-fn chmod_dir_0700(_path: &Path) -> io::Result<()> {
-    Ok(())
-}
+// @windows-migration:control-socket
+// Pre-existing #[cfg(not(unix))] stubs for chmod_dir_0700 / chmod_0600 were
+// removed when the whole control_socket impl was gated on #[cfg(unix)].
+// They referenced `Path` and `io::Result` which are now unix-only imports.
+// They are dead code on Windows: the only callers (ensure_parent_dir and
+// Server::bind) are themselves #[cfg(unix)] and unreachable on Windows.
 
 #[cfg(unix)]
 fn chmod_0600(path: &Path) -> io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let perms = std::fs::Permissions::from_mode(0o600);
     std::fs::set_permissions(path, perms)
-}
-
-#[cfg(not(unix))]
-fn chmod_0600(_path: &Path) -> io::Result<()> {
-    Ok(())
 }
 
 #[cfg(unix)]
