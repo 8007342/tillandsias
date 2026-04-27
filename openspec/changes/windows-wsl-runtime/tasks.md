@@ -13,6 +13,39 @@
 - [x] Confirm Hyper-V firewall (`firewall=true`) is inbound-LAN only,
       not per-distro outbound — ruled out as forge-offline mechanism.
 
+## Status snapshot (2026-04-27 09:45)
+
+- [x] Phase 3: WSL-native build pipeline — `scripts/wsl-build/` with
+      lib-common.sh, bases.sh, build-{enclave-init,proxy,git,inference,
+      router,forge}.sh. Five smaller services build cleanly on a
+      Windows host:
+        - `tillandsias-enclave-init.tar` — 10 MB
+        - `tillandsias-proxy.tar`        — 22 MB
+        - `tillandsias-git.tar`          — 78 MB
+        - `tillandsias-router.tar`       — 61 MB
+        - `tillandsias-inference.tar`    — 184 MB
+      Forge build is heavy (~5–7 GB tarball, ~15–25 min); validated by
+      Phase A–H trace on this host.
+- [x] Phase 5: `init.rs` Windows path migrated to WSL. Splits into
+      `run_with_force_podman` (Linux/macOS) and `run_with_force_wsl`
+      (Windows). The WSL path runs each `build-<service>.sh` via
+      `bash.exe` (Git for Windows), then `wsl --import` into
+      `%LOCALAPPDATA%\Tillandsias\WSL\<service>`. Embedded includes
+      cover all eight wsl-build scripts.
+- [x] Phase 6 Layer 1: `enclave-init` distro with uid-2000-2999
+      iptables egress drop applied at WSL VM cold boot via
+      `[boot] command` in its `wsl.conf`.
+- [ ] Phase 6 Layer 2 (DEFERRED): forge entrypoint `unshare --net`
+      + socat relay. Requires socat plumbing across netns; not on the
+      smoke-test critical path.
+- [ ] Phase 4: Runtime trait abstraction in `crates/tillandsias-podman`
+      (deferred; would touch ~150 call sites). The tray's runtime path
+      on Windows still uses podman APIs; a follow-up change is needed
+      to migrate `handlers.rs`/`launch.rs`/`runner.rs` to a trait that
+      dispatches to WslRuntime on Windows.
+- [ ] Phase 7: E2E smoke test on this Windows host pending forge
+      tarball completion (background build in progress).
+
 ## Phase 1 — runtime abstraction in Rust
 
 - [ ] Define `Runtime` trait + `ServiceSpec` + `ServiceHandle` +
