@@ -30,8 +30,8 @@ Phase 0 of the design's Migration Plan. Each task is verifiable in a single PR; 
 
 ## 4. Distro-packaged tier infrastructure
 
-- [ ] 4.1 Add package-manifest discovery to `scripts/check-cheatsheet-sources.sh`: try `flake.nix` `contents` parsing first, then `images/default/Containerfile` `dnf install` lines, then `images/default/distro-packages.txt`; accept the first source that succeeds.
-- [ ] 4.2 Add `package:` validation: for each `tier: distro-packaged` cheatsheet, confirm the declared package is in the discovered manifest; emit ERROR if missing with `ERROR: distro-packaged cheatsheet references missing package: <name>`.
+- [x] 4.1 Add package-manifest discovery to `scripts/check-cheatsheet-sources.sh`: try `flake.nix` `contents` parsing first, then `images/default/Containerfile` `dnf install` lines, then `images/default/distro-packages.txt`; accept the first source that succeeds.
+- [x] 4.2 Add `package:` validation: for each `tier: distro-packaged` cheatsheet, confirm the declared package is in the discovered manifest; emit ERROR if missing with `ERROR: distro-packaged cheatsheet references missing package: <name>`.
 - [ ] 4.3 Add post-build in-image validation: confirm the `local:` path (e.g., `/usr/share/javadoc/...`) exists inside the built forge image; emit ERROR if missing.
 - [x] 4.4 Author `cheatsheets/build/distro-packaged-cheatsheets.md` (with full provenance) describing how to add a new distro-packaged cheatsheet (pick a doc package, add to forge image manifest, author cheatsheet with `tier: distro-packaged`).
 

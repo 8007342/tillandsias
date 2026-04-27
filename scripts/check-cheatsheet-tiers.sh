@@ -45,6 +45,8 @@ if ! REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"; then
 fi
 
 CHEATSHEETS_DIR="${REPO_ROOT}/cheatsheets"
+FLAKE_NIX="${REPO_ROOT}/flake.nix"
+CONTAINERFILE="${REPO_ROOT}/images/default/Containerfile"
 
 if [[ ! -d "${CHEATSHEETS_DIR}" ]]; then
     echo "ERROR: cheatsheets/ directory not found at ${CHEATSHEETS_DIR}" >&2
@@ -52,7 +54,8 @@ if [[ ! -d "${CHEATSHEETS_DIR}" ]]; then
 fi
 
 # @trace spec:cheatsheets-license-tiered
-QUIET="${QUIET}" python3 - "${CHEATSHEETS_DIR}" << 'PYEOF'
+QUIET="${QUIET}" FLAKE_NIX="${FLAKE_NIX}" CONTAINERFILE="${CONTAINERFILE}" \
+python3 - "${CHEATSHEETS_DIR}" << 'PYEOF'
 import os
 import re
 import sys
@@ -60,9 +63,55 @@ from pathlib import Path
 
 cheatsheets_dir = Path(sys.argv[1])
 quiet = os.environ.get("QUIET") == "1"
+flake_path = Path(os.environ.get("FLAKE_NIX", ""))
+containerfile_path = Path(os.environ.get("CONTAINERFILE", ""))
 
 ALLOWED_TIERS = {"bundled", "distro-packaged", "pull-on-demand"}
 SHADOW_FIELDS = ("override_reason", "override_consequences", "override_fallback")
+
+# @trace spec:cheatsheets-license-tiered
+# Task 4.1 — Discover the forge image's package manifest. Try flake.nix
+# `contents = with pkgs; [ ... ]` blocks first; fall back to dnf install
+# lines in images/default/Containerfile. Returns the union of identifier
+# tokens (a permissive heuristic — the validator emits a WARN if a
+# distro-packaged cheatsheet's `package:` value isn't found, not an ERROR,
+# because Nix expression names don't always match dnf package names 1:1).
+def discover_image_packages():
+    pkgs = set()
+    if flake_path.exists():
+        text = flake_path.read_text(encoding="utf-8", errors="replace")
+        # Find every `contents = with pkgs; [ ... ];` block and extract
+        # bare identifiers (one per line is the convention used in
+        # Tillandsias' flake).
+        in_block = False
+        for line in text.split("\n"):
+            stripped = line.strip()
+            if "contents = with pkgs;" in stripped:
+                in_block = True
+                continue
+            if in_block:
+                if stripped.startswith("];") or stripped == "]":
+                    in_block = False
+                    continue
+                # Strip trailing comments
+                ident = stripped.split("#", 1)[0].strip().rstrip(";")
+                # Take the leading identifier (before any . or whitespace)
+                m = re.match(r"^([A-Za-z_][A-Za-z0-9_-]*)", ident)
+                if m:
+                    pkgs.add(m.group(1))
+    if containerfile_path.exists():
+        text = containerfile_path.read_text(encoding="utf-8", errors="replace")
+        # Extract dnf install lines: split on whitespace, drop the verb
+        for line in text.split("\n"):
+            ls = line.lower().strip()
+            if "dnf" in ls and ("install" in ls or "in " in ls):
+                tokens = re.findall(r"[a-zA-Z][a-zA-Z0-9_-]*", line)
+                for t in tokens:
+                    if t.lower() not in {"dnf", "install", "y", "yes", "noconfirm", "run"}:
+                        pkgs.add(t)
+    return pkgs
+
+IMAGE_PACKAGES = discover_image_packages()
 
 errors = []
 warnings = []
@@ -154,8 +203,19 @@ for path in sorted(cheatsheets_dir.rglob("*.md")):
 
     # Tier-conditional checks
     if tier == "distro-packaged":
-        if not fm.get("package"):
+        pkg = fm.get("package", "").strip()
+        if not pkg:
             errors.append(f"{rel}: tier=distro-packaged requires 'package:' field")
+        elif IMAGE_PACKAGES and pkg not in IMAGE_PACKAGES:
+            # @trace spec:cheatsheets-license-tiered (task 4.2)
+            # WARN not ERROR: Nix expression names and dnf package names
+            # don't always match 1:1 (e.g., openjdk21 vs java-21-openjdk),
+            # so a literal mismatch is a hint, not a guarantee of breakage.
+            warnings.append(
+                f"{rel}: tier=distro-packaged references package '{pkg}' "
+                f"not found in flake.nix/Containerfile (might be a name-mapping "
+                f"discrepancy; verify the package is actually installed)"
+            )
         if not fm.get("local"):
             errors.append(f"{rel}: tier=distro-packaged requires 'local:' field")
     elif tier == "pull-on-demand":
