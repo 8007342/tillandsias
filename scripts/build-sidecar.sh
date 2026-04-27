@@ -83,9 +83,9 @@ case "${OSTYPE:-}" in
         ;;
 esac
 
-echo "[build-sidecar] cargo build --release --target ${TARGET} --bin tillandsias-router-sidecar"
+echo "[build-sidecar] cargo build --release --target ${TARGET} --bin tillandsias-router-sidecar --features unix-only"
 ( cd "$ROOT" && CARGO_TARGET_DIR="${SIDECAR_TARGET_DIR}" \
-    cargo build --release --target "${TARGET}" --bin tillandsias-router-sidecar )
+    cargo build --release --target "${TARGET}" --bin tillandsias-router-sidecar --features unix-only )
 
 SRC="${SIDECAR_TARGET_DIR}/${TARGET}/release/tillandsias-router-sidecar"
 if [[ ! -f "$SRC" ]]; then
