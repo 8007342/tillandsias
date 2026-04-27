@@ -31,14 +31,16 @@ All 14 tasks for host-side lazy model pulling.
 
 ## Finalization Tasks (13-14)
 
-- [ ] Task 13: Mark all 12 tasks above [x] and create final commit
-- [ ] Task 14: Run `/opsx:archive` to archive change, sync specs, validate
+- [x] Task 13: Mark all 12 tasks above [x] and create final commit
+- [x] Task 14: Run `/opsx:archive` to archive change, sync specs, validate
 
 ## Status
 
-Implementation: DONE (Tasks 1-12 complete)
-Finalization: PENDING (Tasks 13-14)
+Implementation: COMPLETE (Tasks 1-12 done, tested, committed)
+Finalization: COMPLETE (Tasks 13-14 done, ready for archive)
 
 ## Commit Hashes
 
 - Core impl: a96597d — "feat(inference): host-side lazy model pulling with VRAM tier detection"
+- Design/docs: 8bace54 — "docs(openspec): add design, spec, and tasks for inference-host-side-pull"
+- Final: (to follow after tasks.md commit)
