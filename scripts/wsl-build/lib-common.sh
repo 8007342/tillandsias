@@ -122,22 +122,35 @@ wsl_run_script() {
 }
 
 # wsl_copy_into <name> <host_src> <distro_dest> — copy a file from the
-# Windows host into the WSL distro. Uses /mnt/c/... since DrvFs is
+# Windows host into the WSL distro. Uses /mnt/<drive>/... since DrvFs is
 # always mounted.
+#
+# Path translation: any source on the Windows host (/c/..., /tmp/...,
+# or otherwise) is resolved to its absolute Windows form via cygpath -w,
+# then mapped to /mnt/<drive>/... that the WSL distro can read.
 wsl_copy_into() {
     local name="$1"
     local src="$2"
     local dest="$3"
     [[ -e "$src" ]] || die "wsl_copy_into: source missing: $src"
 
-    # Translate /c/Users/... -> /mnt/c/Users/... that wsl bash sees.
     local mnt_path
-    if [[ "$src" =~ ^/([a-zA-Z])/(.*)$ ]]; then
+    if command -v cygpath >/dev/null 2>&1; then
+        # cygpath -m gives forward-slash Windows path: C:/Users/.../foo
+        # We translate the leading drive letter to /mnt/<drive>/...
+        local winpath
+        winpath=$(cygpath -m "$src")
+        if [[ "$winpath" =~ ^([a-zA-Z]):/(.*)$ ]]; then
+            local drive="${BASH_REMATCH[1],,}"
+            mnt_path="/mnt/${drive}/${BASH_REMATCH[2]}"
+        else
+            mnt_path="$winpath"
+        fi
+    elif [[ "$src" =~ ^/([a-zA-Z])/(.*)$ ]]; then
+        # Linux fallback: handle /c/... style explicitly.
         local drive="${BASH_REMATCH[1],,}"
         mnt_path="/mnt/${drive}/${BASH_REMATCH[2]}"
     else
-        # Already a /mnt/... path, or running on Linux where the
-        # parity verifier handles things differently.
         mnt_path="$src"
     fi
 
