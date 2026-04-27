@@ -13,6 +13,24 @@
 - [x] Confirm Hyper-V firewall (`firewall=true`) is inbound-LAN only,
       not per-distro outbound — ruled out as forge-offline mechanism.
 
+## Status snapshot (2026-04-27 10:08 — E2E SMOKE PASSED)
+
+`scripts/wsl-build/verify-smoke.sh` reports ALL SMOKE TESTS PASSED on
+this Windows host:
+- 6/6 WSL distros imported (`enclave-init`, `proxy`, `forge`, `git`,
+  `inference`, `router`).
+- Layer 1 forge-offline iptables egress drop is live in the shared
+  WSL2 netns — verified by inspecting `iptables -L OUTPUT -v` from
+  `tillandsias-proxy` and seeing the `TILLANDSIAS_FORGE_EGRESS`
+  chain (uid 2000-2999 → loopback ACCEPT, others DROP).
+- `tillandsias-forge` runs the `forge` user (uid 1000 image-baked;
+  tray will pick a uid in 2000-2999 per attach).
+- Tillandsias is podman-independent at the init level
+  (`run_with_force_wsl` never calls `podman_cmd_sync`).
+
+The forge tarball is 6.5 GB; build time on a fresh host is ~15 min
+(after caches warm).
+
 ## Status snapshot (2026-04-27 09:45)
 
 - [x] Phase 3: WSL-native build pipeline — `scripts/wsl-build/` with
