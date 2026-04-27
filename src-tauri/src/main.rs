@@ -55,6 +55,10 @@ mod browser;
 // dispatch pushes into it; the router validates against the same store.
 mod otp;
 mod cdp;
+// @trace spec:forge-hot-cold-split
+// Pre-flight RAM check: refuses forge launches when host cannot satisfy
+// the /home/forge/src tmpfs budget × 1.25 headroom factor.
+mod preflight;
 
 use std::sync::{Arc, Mutex};
 

@@ -95,6 +95,45 @@ fn default_language() -> String {
     "en".to_string()
 }
 
+/// Forge container runtime configuration.
+///
+/// Controls how per-launch tmpfs budgets are computed and bounded for the
+/// project-source hot path (`/home/forge/src`).
+///
+/// @trace spec:forge-hot-cold-split
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ForgeConfig {
+    /// Maximum size (MB) for the per-launch `/home/forge/src` tmpfs.
+    /// The compute_hot_budget helper clamps its result to this ceiling.
+    /// Default: 4096 (4 GB).
+    #[serde(default = "default_hot_path_max_mb")]
+    pub hot_path_max_mb: u32,
+
+    /// Inflation multiplier applied to the git mirror's pack size when
+    /// computing the `/home/forge/src` tmpfs budget. A working tree is
+    /// typically 2–5× the pack size; 4× is a safe conservative default.
+    /// Default: 4.
+    #[serde(default = "default_hot_path_inflation")]
+    pub hot_path_inflation: u32,
+}
+
+impl Default for ForgeConfig {
+    fn default() -> Self {
+        Self {
+            hot_path_max_mb: default_hot_path_max_mb(),
+            hot_path_inflation: default_hot_path_inflation(),
+        }
+    }
+}
+
+fn default_hot_path_max_mb() -> u32 {
+    4096
+}
+
+fn default_hot_path_inflation() -> u32 {
+    4
+}
+
 /// Global configuration loaded from `~/.config/tillandsias/config.toml`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GlobalConfig {
@@ -115,6 +154,11 @@ pub struct GlobalConfig {
 
     #[serde(default)]
     pub i18n: I18nConfig,
+
+    /// Forge-container runtime tuning (tmpfs budget for hot paths).
+    /// @trace spec:forge-hot-cold-split
+    #[serde(default)]
+    pub forge: ForgeConfig,
 }
 
 /// Scanner settings.
@@ -226,6 +270,7 @@ impl Default for GlobalConfig {
             updates: UpdatesConfig::default(),
             agent: AgentConfig::default(),
             i18n: I18nConfig::default(),
+            forge: ForgeConfig::default(),
         }
     }
 }
@@ -664,6 +709,31 @@ mod tests {
         assert!(config.security.no_new_privileges);
         assert!(config.security.userns_keep_id);
         assert_eq!(config.scanner.debounce_ms, 2000);
+    }
+
+    // @trace spec:forge-hot-cold-split
+    #[test]
+    fn forge_config_defaults_round_trip_through_toml() {
+        // Default ForgeConfig values round-trip through TOML correctly.
+        let config = GlobalConfig::default();
+        assert_eq!(config.forge.hot_path_max_mb, 4096);
+        assert_eq!(config.forge.hot_path_inflation, 4);
+
+        // Serialize and deserialize back.
+        let toml_str = toml::to_string(&config).unwrap();
+        let parsed: GlobalConfig = toml::from_str(&toml_str).unwrap();
+        assert_eq!(parsed.forge.hot_path_max_mb, config.forge.hot_path_max_mb);
+        assert_eq!(parsed.forge.hot_path_inflation, config.forge.hot_path_inflation);
+
+        // Verify custom values are preserved.
+        let custom = r#"
+[forge]
+hot_path_max_mb = 2048
+hot_path_inflation = 6
+"#;
+        let parsed_custom: GlobalConfig = toml::from_str(custom).unwrap();
+        assert_eq!(parsed_custom.forge.hot_path_max_mb, 2048);
+        assert_eq!(parsed_custom.forge.hot_path_inflation, 6);
     }
 
     #[test]

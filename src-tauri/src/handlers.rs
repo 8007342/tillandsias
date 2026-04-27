@@ -272,6 +272,7 @@ pub(crate) async fn ensure_inference_running(
         // @trace spec:opencode-web-session
         persistent: false,
         web_host_port: None,
+        hot_path_budget_mb: 0, // @trace spec:forge-hot-cold-split — service container
     };
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
@@ -616,6 +617,7 @@ pub(crate) async fn ensure_proxy_running(
         // @trace spec:opencode-web-session
         persistent: false,
         web_host_port: None,
+        hot_path_budget_mb: 0, // @trace spec:forge-hot-cold-split — service container
     };
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
@@ -879,6 +881,7 @@ pub(crate) async fn ensure_router_running(
         use_port_mapping: port_mapping,
         persistent: false,
         web_host_port: None,
+        hot_path_budget_mb: 0, // @trace spec:forge-hot-cold-split — service container
     };
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
@@ -2004,6 +2007,7 @@ pub(crate) async fn ensure_git_service_running(
         // @trace spec:opencode-web-session
         persistent: false,
         web_host_port: None,
+        hot_path_budget_mb: 0, // @trace spec:forge-hot-cold-split — service container
     };
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
@@ -2988,6 +2992,19 @@ fn build_launch_context(
     // Custom mounts from project config
     let project_config = tillandsias_core::config::load_project_config(project_path);
 
+    // @trace spec:forge-hot-cold-split
+    // Compute the per-launch tmpfs budget for /home/forge/src from the bare
+    // git mirror's pack size. The budget is passed through LaunchContext so
+    // build_podman_args() can emit --tmpfs=/home/forge/src:size=<N>m for
+    // forge-shaped profiles without touching service container args.
+    let global_forge_cfg = tillandsias_core::config::load_global_config();
+    let hot_path_budget_mb = crate::launch::compute_hot_budget_with_limits(
+        project_name,
+        cache,
+        global_forge_cfg.forge.hot_path_inflation,
+        global_forge_cfg.forge.hot_path_max_mb,
+    );
+
     tillandsias_core::container_profile::LaunchContext {
         container_name: container_name.to_string(),
         project_path: project_path.to_path_buf(),
@@ -2999,7 +3016,7 @@ fn build_launch_context(
         is_watch_root,
         custom_mounts: project_config.mounts,
         image_tag: image_tag.to_string(),
-        selected_language: tillandsias_core::config::load_global_config().i18n.language.clone(),
+        selected_language: global_forge_cfg.i18n.language.clone(),
         // @trace spec:enclave-network
         // On Linux: forge and terminal containers join the enclave network so
         // they route through the proxy. The proxy itself gets dual-homed separately.
@@ -3017,6 +3034,8 @@ fn build_launch_context(
         // @trace spec:opencode-web-session
         persistent: false,
         web_host_port: None,
+        // @trace spec:forge-hot-cold-split
+        hot_path_budget_mb,
     }
 }
 
@@ -3342,6 +3361,61 @@ pub async fn handle_attach_here(
         is_watch_root,
         &tag,
     );
+
+    // @trace spec:forge-hot-cold-split
+    // Pre-flight RAM check: refuse to launch if the host cannot satisfy the
+    // /home/forge/src tmpfs budget (project source) plus static tmpfs caps
+    // (cheatsheets 8MB) with a 1.25× headroom factor.
+    let preflight_required_mb = ctx.hot_path_budget_mb.saturating_add(80);
+    match crate::preflight::check_host_ram(preflight_required_mb) {
+        Ok(ram_check) => {
+            info!(
+                accountability = true,
+                category = "forge-launch",
+                spec = "forge-hot-cold-split",
+                project = %project_name,
+                host_mem_available_mb = ram_check.mem_available_mb,
+                budget_mb = ctx.hot_path_budget_mb,
+                decision = "launch",
+                "RAM preflight passed — launching forge"
+            );
+        }
+        Err(crate::preflight::PreflightError::InsufficientRam { available_mb, required_mb, .. }) => {
+            let msg = format!(
+                "Project source on RAM: required {required_mb}MB exceeds the configured limit \
+                ({available_mb}MB available). Either commit & prune unreachable refs in the \
+                mirror, or raise forge.hot_path_max_mb in ~/.config/tillandsias/config.toml."
+            );
+            warn!(
+                accountability = true,
+                category = "forge-launch",
+                spec = "forge-hot-cold-split",
+                project = %project_name,
+                host_mem_available_mb = available_mb,
+                budget_mb = ctx.hot_path_budget_mb,
+                decision = "refuse",
+                "RAM preflight failed — refusing forge launch"
+            );
+            state.running.retain(|c| c.name != container_name);
+            allocator.release(&project_name, genus);
+            send_notification("Tillandsias", &msg);
+            return Err(msg);
+        }
+        Err(crate::preflight::PreflightError::Probe(probe_err)) => {
+            // Cannot probe RAM — be permissive and warn rather than blocking.
+            warn!(
+                accountability = true,
+                category = "forge-launch",
+                spec = "forge-hot-cold-split",
+                project = %project_name,
+                budget_mb = ctx.hot_path_budget_mb,
+                decision = "launch",
+                error = %probe_err,
+                "RAM probe unavailable — proceeding without preflight"
+            );
+        }
+    }
+
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
     // @trace spec:proxy-container
     inject_ca_chain_mounts(&mut run_args);
@@ -3716,6 +3790,57 @@ pub async fn handle_attach_web(
     );
     ctx.persistent = true;
     ctx.web_host_port = Some(host_port);
+
+    // @trace spec:forge-hot-cold-split
+    // Pre-flight RAM check before launching the detached web forge container.
+    let preflight_required_mb = ctx.hot_path_budget_mb.saturating_add(80);
+    match crate::preflight::check_host_ram(preflight_required_mb) {
+        Ok(ram_check) => {
+            info!(
+                accountability = true,
+                category = "forge-launch",
+                spec = "forge-hot-cold-split",
+                project = %project_name,
+                host_mem_available_mb = ram_check.mem_available_mb,
+                budget_mb = ctx.hot_path_budget_mb,
+                decision = "launch",
+                "RAM preflight passed — launching web forge"
+            );
+        }
+        Err(crate::preflight::PreflightError::InsufficientRam { available_mb, required_mb, .. }) => {
+            let msg = format!(
+                "Project source on RAM: required {required_mb}MB exceeds the configured limit \
+                ({available_mb}MB available). Either commit & prune unreachable refs in the \
+                mirror, or raise forge.hot_path_max_mb in ~/.config/tillandsias/config.toml."
+            );
+            warn!(
+                accountability = true,
+                category = "forge-launch",
+                spec = "forge-hot-cold-split",
+                project = %project_name,
+                host_mem_available_mb = available_mb,
+                budget_mb = ctx.hot_path_budget_mb,
+                decision = "refuse",
+                "RAM preflight failed — refusing web forge launch"
+            );
+            state.running.retain(|c| c.name != container_name);
+            allocator.release(&project_name, genus);
+            send_notification("Tillandsias", &msg);
+            return Err(msg);
+        }
+        Err(crate::preflight::PreflightError::Probe(probe_err)) => {
+            warn!(
+                accountability = true,
+                category = "forge-launch",
+                spec = "forge-hot-cold-split",
+                project = %project_name,
+                budget_mb = ctx.hot_path_budget_mb,
+                decision = "launch",
+                error = %probe_err,
+                "RAM probe unavailable — proceeding without preflight (web mode)"
+            );
+        }
+    }
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
     // @trace spec:proxy-container
@@ -4837,6 +4962,58 @@ pub async fn handle_root_terminal(
         true,  // watch root — mount at /home/forge/src directly
         &tag,
     );
+
+    // @trace spec:forge-hot-cold-split
+    // Pre-flight RAM check for root terminal (same forge profile, same tmpfs).
+    let preflight_required_mb = ctx.hot_path_budget_mb.saturating_add(80);
+    match crate::preflight::check_host_ram(preflight_required_mb) {
+        Ok(ram_check) => {
+            info!(
+                accountability = true,
+                category = "forge-launch",
+                spec = "forge-hot-cold-split",
+                project = "(all projects)",
+                host_mem_available_mb = ram_check.mem_available_mb,
+                budget_mb = ctx.hot_path_budget_mb,
+                decision = "launch",
+                "RAM preflight passed — launching root terminal"
+            );
+        }
+        Err(crate::preflight::PreflightError::InsufficientRam { available_mb, required_mb, .. }) => {
+            let msg = format!(
+                "Project source on RAM: required {required_mb}MB exceeds the configured limit \
+                ({available_mb}MB available). Either commit & prune unreachable refs in the \
+                mirror, or raise forge.hot_path_max_mb in ~/.config/tillandsias/config.toml."
+            );
+            warn!(
+                accountability = true,
+                category = "forge-launch",
+                spec = "forge-hot-cold-split",
+                project = "(all projects)",
+                host_mem_available_mb = available_mb,
+                budget_mb = ctx.hot_path_budget_mb,
+                decision = "refuse",
+                "RAM preflight failed — refusing root terminal launch"
+            );
+            state.running.retain(|c| c.name != container_name);
+            allocator.release(&project_name, genus);
+            send_notification("Tillandsias", &msg);
+            return Err(msg);
+        }
+        Err(crate::preflight::PreflightError::Probe(probe_err)) => {
+            warn!(
+                accountability = true,
+                category = "forge-launch",
+                spec = "forge-hot-cold-split",
+                project = "(all projects)",
+                budget_mb = ctx.hot_path_budget_mb,
+                decision = "launch",
+                error = %probe_err,
+                "RAM probe unavailable — proceeding without preflight (root terminal)"
+            );
+        }
+    }
+
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
     // @trace spec:proxy-container
     inject_ca_chain_mounts(&mut run_args);

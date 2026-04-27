@@ -78,6 +78,11 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     // Each mount carries a kernel-enforced size cap: `--tmpfs=<path>:size=<N>m,mode=<oct>`.
     // This prevents any tmpfs from expanding to the default 50% of host RAM.
     //
+    // For forge-shaped profiles (entrypoint contains "entrypoint-forge-" or
+    // "entrypoint-terminal"), an additional per-launch tmpfs is emitted for
+    // `/home/forge/src` using `ctx.hot_path_budget_mb`. This is separate
+    // from the profile's static tmpfs_mounts so the budget can vary per launch.
+    //
     // When any tmpfs is present we also add:
     //   --memory=<total>m --memory-swap=<total>m
     // where total = sum of all tmpfs caps + 256 MB working-set baseline.
@@ -86,18 +91,39 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     //
     // @trace spec:podman-orchestration, spec:forge-hot-cold-split
     // -----------------------------------------------------------------------
-    if !profile.tmpfs_mounts.is_empty() {
+    // Detect forge-shaped profiles by entrypoint. These receive the per-launch
+    // /home/forge/src tmpfs with the computed hot-path budget.
+    let is_forge_profile = profile.entrypoint.contains("entrypoint-forge-")
+        || profile.entrypoint.contains("entrypoint-terminal");
+
+    // Collect all tmpfs mounts including the per-launch src mount for forge profiles.
+    let profile_tmpfs_total_mb: u32 = profile.tmpfs_mounts.iter().map(|m| m.size_mb).sum();
+    let has_any_tmpfs = !profile.tmpfs_mounts.is_empty()
+        || (is_forge_profile && ctx.hot_path_budget_mb > 0);
+
+    if has_any_tmpfs {
         for mount in &profile.tmpfs_mounts {
             args.push(format!(
                 "--tmpfs={}:size={}m,mode={:o}",
                 mount.path, mount.size_mb, mount.mode
             ));
         }
+        // @trace spec:forge-hot-cold-split
+        // Per-launch /home/forge/src tmpfs — chunk 3. The budget is computed
+        // by compute_hot_budget() at the forge launch site and stored in
+        // ctx.hot_path_budget_mb. Service containers (git, proxy, inference,
+        // web) are not forge-shaped and do NOT get this mount.
+        if is_forge_profile && ctx.hot_path_budget_mb > 0 {
+            args.push(format!(
+                "--tmpfs=/home/forge/src:size={}m,mode=755",
+                ctx.hot_path_budget_mb
+            ));
+        }
         // Memory ceiling: sum of all tmpfs caps + 256 MB baseline for the container's
         // working set (stack, heap, mapped libraries). --memory-swap equal to --memory
         // disables swap — no spilling the RAM-only guarantee to disk.
-        let tmpfs_total_mb: u32 = profile.tmpfs_mounts.iter().map(|m| m.size_mb).sum();
-        let memory_mb = tmpfs_total_mb + 256;
+        let src_budget = if is_forge_profile { ctx.hot_path_budget_mb } else { 0 };
+        let memory_mb = profile_tmpfs_total_mb + src_budget + 256;
         args.push(format!("--memory={memory_mb}m"));
         args.push(format!("--memory-swap={memory_mb}m"));
     }
@@ -552,6 +578,156 @@ fn resolve_container_path(
     }
 }
 
+/// Compute the per-launch tmpfs budget (MB) for `/home/forge/src`.
+///
+/// Reads the bare git mirror's pack size via `git count-objects -v -H`,
+/// multiplies by `inflation` (default `forge.hot_path_inflation` = 4), and
+/// clamps to `[256, max_mb]` (default `forge.hot_path_max_mb` = 4096).
+///
+/// Returns 256 (the floor) when:
+/// - The mirror directory does not exist (empty / new project)
+/// - `git count-objects` fails or its output cannot be parsed
+///
+/// The multiplication accounts for the fact that a working tree checked out
+/// from a pack file typically expands 2–5× due to loose objects, git metadata,
+/// and the checked-out files themselves.
+///
+/// @trace spec:forge-hot-cold-split
+pub fn compute_hot_budget(project_name: &str, cache_dir: &Path) -> u32 {
+    compute_hot_budget_with_limits(project_name, cache_dir, 4, 4096)
+}
+
+/// Internal: compute hot budget with explicit inflation and max (testable).
+///
+/// @trace spec:forge-hot-cold-split
+pub fn compute_hot_budget_with_limits(
+    project_name: &str,
+    cache_dir: &Path,
+    inflation: u32,
+    max_mb: u32,
+) -> u32 {
+    const FLOOR_MB: u32 = 256;
+    let mirror_dir = cache_dir
+        .join("forge-projects")
+        .join(project_name)
+        .join("git-mirror");
+
+    if !mirror_dir.exists() {
+        tracing::debug!(
+            project = project_name,
+            mirror = %mirror_dir.display(),
+            spec = "forge-hot-cold-split",
+            "Git mirror does not exist — returning floor budget"
+        );
+        return FLOOR_MB;
+    }
+
+    // Run: git -C <mirror> count-objects -v -H
+    // Output sample:
+    //   count: 0
+    //   size: 0 bytes
+    //   in-pack: 1234
+    //   packs: 1
+    //   size-pack: 5.12 MiB     ← parse this line
+    //   prune-packable: 0
+    //   garbage: 0
+    //   size-garbage: 0 bytes
+    let output = match std::process::Command::new("git")
+        .args(["-C", &mirror_dir.to_string_lossy(), "count-objects", "-v", "-H"])
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => {
+            tracing::warn!(
+                project = project_name,
+                error = %e,
+                spec = "forge-hot-cold-split",
+                "git count-objects failed — returning floor budget"
+            );
+            return FLOOR_MB;
+        }
+    };
+
+    if !output.status.success() {
+        tracing::warn!(
+            project = project_name,
+            exit_code = ?output.status.code(),
+            spec = "forge-hot-cold-split",
+            "git count-objects returned non-zero — returning floor budget"
+        );
+        return FLOOR_MB;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let pack_size_mb = parse_size_pack_mb(&stdout);
+
+    let raw = pack_size_mb.saturating_mul(inflation);
+    let clamped = raw.clamp(FLOOR_MB, max_mb);
+
+    tracing::debug!(
+        project = project_name,
+        pack_size_mb,
+        inflation,
+        raw_budget_mb = raw,
+        budget_mb = clamped,
+        spec = "forge-hot-cold-split",
+        "Hot-path budget computed from git mirror pack size"
+    );
+
+    clamped
+}
+
+/// Parse the `size-pack` line from `git count-objects -v -H` output.
+///
+/// Returns 0 when the line is missing or the value cannot be parsed.
+/// The human-readable suffix is converted to MB:
+/// - No suffix / bytes → ÷ (1024 * 1024) rounded up
+/// - KiB → ÷ 1024 rounded up
+/// - MiB → round up
+/// - GiB → × 1024
+///
+/// @trace spec:forge-hot-cold-split
+pub(crate) fn parse_size_pack_mb(output: &str) -> u32 {
+    for line in output.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("size-pack:") {
+            let value = rest.trim();
+            return parse_human_size_to_mb(value);
+        }
+    }
+    0
+}
+
+/// Convert a human-readable size string (from `git count-objects -H`) to MB.
+///
+/// Examples: "0 bytes", "1.23 KiB", "5.12 MiB", "2.00 GiB", "512"
+/// Returns 0 for unrecognised formats; rounds fractional MiB up to 1.
+///
+/// @trace spec:forge-hot-cold-split
+fn parse_human_size_to_mb(s: &str) -> u32 {
+    // Split on first whitespace to separate number from unit.
+    let mut parts = s.splitn(2, char::is_whitespace);
+    let num_str = parts.next().unwrap_or("0");
+    let unit = parts.next().unwrap_or("").trim().to_lowercase();
+
+    let num: f64 = num_str.replace(',', "").parse().unwrap_or(0.0);
+
+    let mb = match unit.as_str() {
+        "gib" | "gb" => num * 1024.0,
+        "mib" | "mb" => num,
+        "kib" | "kb" => num / 1024.0,
+        "bytes" | "byte" | "" => num / (1024.0 * 1024.0),
+        _ => 0.0,
+    };
+
+    // Round up to at least 1 MB if there's any data, otherwise 0.
+    if mb > 0.0 {
+        mb.ceil() as u32
+    } else {
+        0
+    }
+}
+
 /// Read git author name and email.
 ///
 /// Precedence:
@@ -695,6 +871,7 @@ mod tests {
             use_port_mapping: false,
             persistent: false,
             web_host_port: None,
+            hot_path_budget_mb: 1024,
         }
     }
 
@@ -819,14 +996,30 @@ mod tests {
         assert!(joined.contains("/home/user/src/myproject:/var/www/html:ro"));
     }
 
+    // @trace spec:forge-hot-cold-split
     #[test]
-    fn forge_has_no_project_dir_mount() {
+    fn forge_has_no_project_dir_bind_mount_but_has_tmpfs() {
+        // Forge profiles no longer bind-mount the project directory (code comes from git mirror).
+        // Instead, /home/forge/src is a per-launch tmpfs (chunk 3).
         let profile = container_profile::forge_opencode_profile();
         let ctx = test_context();
         let args = build_podman_args(&profile, &ctx);
         let joined = args.join(" ");
-        // Forge profiles no longer mount the project directory (code comes from git mirror)
-        assert!(!joined.contains("/home/forge/src"), "Forge should not have project dir mount");
+        // The src tmpfs should be present (chunk 3 hot path)
+        assert!(
+            joined.contains("--tmpfs=/home/forge/src"),
+            "Forge should have /home/forge/src as tmpfs (hot path); got: {joined}"
+        );
+        // But there must be NO volume bind-mount (-v) for /home/forge/src
+        let bind_mounts: Vec<&str> = args
+            .iter()
+            .zip(args.iter().skip(1))
+            .filter_map(|(a, b)| if a == "-v" { Some(b.as_str()) } else { None })
+            .collect();
+        assert!(
+            !bind_mounts.iter().any(|m| m.contains("/home/forge/src")),
+            "Forge should NOT have a -v bind-mount for /home/forge/src; got: {bind_mounts:?}"
+        );
     }
 
     #[test]
@@ -1518,5 +1711,106 @@ mod tests {
                 "non-router profile must NOT receive TILLANDSIAS_CONTROL_SOCKET; got: {joined}"
             );
         }
+    }
+
+    // @trace spec:forge-hot-cold-split
+    #[test]
+    fn forge_profile_emits_project_source_tmpfs_with_budget() {
+        // Forge profiles must emit --tmpfs=/home/forge/src:size=<budget>m,mode=755.
+        // The budget comes from ctx.hot_path_budget_mb (1024 in test_context).
+        for profile in [
+            container_profile::forge_opencode_profile(),
+            container_profile::forge_claude_profile(),
+            container_profile::forge_opencode_web_profile(),
+            container_profile::terminal_profile(),
+        ] {
+            let ctx = test_context(); // hot_path_budget_mb = 1024
+            let args = build_podman_args(&profile, &ctx);
+            let expected = "--tmpfs=/home/forge/src:size=1024m,mode=755";
+            assert!(
+                args.iter().any(|a| a == expected),
+                "Forge profile {} must emit {}; got: {args:?}",
+                profile.entrypoint,
+                expected
+            );
+        }
+    }
+
+    // @trace spec:forge-hot-cold-split
+    #[test]
+    fn service_profiles_do_not_get_project_source_tmpfs() {
+        // Service containers (proxy, git, inference, web) must NOT receive the
+        // /home/forge/src tmpfs — they don't use project source code.
+        let mut ctx = test_context();
+        ctx.hot_path_budget_mb = 0;
+
+        for profile in [
+            container_profile::proxy_profile(),
+            container_profile::git_service_profile(),
+            container_profile::inference_profile(),
+            container_profile::web_profile(),
+        ] {
+            let args = build_podman_args(&profile, &ctx);
+            assert!(
+                !args.iter().any(|a| a.contains("/home/forge/src")),
+                "Service profile {} must NOT emit /home/forge/src tmpfs; got: {args:?}",
+                profile.entrypoint
+            );
+        }
+    }
+
+    // @trace spec:forge-hot-cold-split
+    #[test]
+    fn compute_hot_budget_returns_floor_for_empty_mirror() {
+        // When the mirror directory doesn't exist, we get the 256MB floor.
+        let cache = PathBuf::from("/nonexistent/tillandsias-cache");
+        let budget = super::compute_hot_budget_with_limits("myproject", &cache, 4, 4096);
+        assert_eq!(budget, 256, "Floor is 256MB when mirror is absent");
+    }
+
+    // @trace spec:forge-hot-cold-split
+    #[test]
+    fn compute_hot_budget_clamps_at_ceiling() {
+        // With a 1 MB pack size, inflation=4 → 4 MB, but if max_mb=3 then clamp to 3.
+        // We test the clamping logic via the parse helpers.
+        // parse_size_pack_mb("size-pack: 100 MiB") = 100
+        // 100 * 4 = 400; clamp([256, 300]) = 300
+        let raw_size_mb = super::parse_size_pack_mb("size-pack: 100 MiB\n");
+        let inflated = raw_size_mb.saturating_mul(4);
+        let clamped = inflated.clamp(256, 300);
+        assert_eq!(clamped, 300, "Ceiling clamp applied");
+    }
+
+    // @trace spec:forge-hot-cold-split
+    #[test]
+    fn compute_hot_budget_scales_with_pack_size() {
+        // "size-pack: 50 MiB" → 50 * 4 = 200 → clamped to floor 256.
+        let size_mb = super::parse_size_pack_mb("size-pack: 50 MiB\n");
+        let budget = (size_mb * 4).clamp(256, 4096);
+        assert_eq!(budget, 256, "50×4=200 < floor → budget is 256");
+
+        // "size-pack: 100 MiB" → 100 * 4 = 400 → within [256, 4096].
+        let size_mb = super::parse_size_pack_mb("size-pack: 100 MiB\n");
+        let budget = (size_mb * 4).clamp(256, 4096);
+        assert_eq!(budget, 400, "100×4=400 within range");
+    }
+
+    // @trace spec:forge-hot-cold-split
+    #[test]
+    fn forge_src_tmpfs_included_in_memory_ceiling() {
+        // Memory ceiling must include the /home/forge/src budget.
+        // With test_context: budget=1024MB + cheatsheets=8MB + baseline=256 = 1288.
+        let profile = container_profile::forge_opencode_profile();
+        let ctx = test_context(); // hot_path_budget_mb=1024, cheatsheets=8MB static
+        let args = build_podman_args(&profile, &ctx);
+        // 8 (cheatsheets) + 1024 (src) + 256 (baseline) = 1288
+        assert!(
+            args.iter().any(|a| *a == "--memory=1288m"),
+            "Expected --memory=1288m (8+1024+256); got: {args:?}"
+        );
+        assert!(
+            args.iter().any(|a| *a == "--memory-swap=1288m"),
+            "Expected --memory-swap=1288m; got: {args:?}"
+        );
     }
 }

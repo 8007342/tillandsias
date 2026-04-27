@@ -296,6 +296,16 @@ pub struct LaunchContext {
     /// the enclave-only port-skip logic. Mutually exclusive with the legacy
     /// port_range publish — when Some, port_range is ignored.
     pub web_host_port: Option<u16>,
+
+    /// Per-launch tmpfs size (MB) for `/home/forge/src`.
+    ///
+    /// Set at launch time by `compute_hot_budget()` from the bare git mirror's
+    /// pack size × `forge.hot_path_inflation`, clamped to `[256, forge.hot_path_max_mb]`.
+    /// Default: 1024 MB (1 GB). Used by `build_podman_args()` to emit
+    /// `--tmpfs=/home/forge/src:size=<N>m,mode=0755` for forge profiles.
+    ///
+    /// @trace spec:forge-hot-cold-split
+    pub hot_path_budget_mb: u32,
 }
 
 // ---------------------------------------------------------------------------

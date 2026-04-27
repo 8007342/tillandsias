@@ -286,6 +286,17 @@ fn build_cli_launch_context(
 
     let port_mapping = tillandsias_core::state::Os::detect().needs_podman_machine();
 
+    // @trace spec:forge-hot-cold-split
+    // Compute the per-launch tmpfs budget for /home/forge/src from the bare
+    // git mirror's pack size (same logic as the tray handler path).
+    let global_cfg = tillandsias_core::config::load_global_config();
+    let hot_path_budget_mb = crate::launch::compute_hot_budget_with_limits(
+        project_name,
+        cache,
+        global_cfg.forge.hot_path_inflation,
+        global_cfg.forge.hot_path_max_mb,
+    );
+
     tillandsias_core::container_profile::LaunchContext {
         container_name: container_name.to_string(),
         project_path: project_path.to_path_buf(),
@@ -297,7 +308,7 @@ fn build_cli_launch_context(
         is_watch_root: false,
         custom_mounts: project_config.mounts,
         image_tag: image_tag.to_string(),
-        selected_language: tillandsias_core::config::load_global_config().i18n.language.clone(),
+        selected_language: global_cfg.i18n.language.clone(),
         // @trace spec:enclave-network
         // On Linux: CLI-mode forge containers join the enclave network.
         // On podman machine: no network flag (default), localhost port mapping.
@@ -313,6 +324,8 @@ fn build_cli_launch_context(
         // @trace spec:opencode-web-session
         persistent: false,
         web_host_port: None,
+        // @trace spec:forge-hot-cold-split
+        hot_path_budget_mb,
     }
 }
 
