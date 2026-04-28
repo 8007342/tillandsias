@@ -453,7 +453,16 @@ pub fn run(
         return false;
     }
 
-    // On macOS/Windows, ensure podman machine is initialized and running
+    // @trace spec:cross-platform, spec:windows-wsl-runtime, spec:podman-orchestration
+    // On macOS, ensure podman machine is initialized and running. On Windows
+    // we DO NOT need podman machine — Tillandsias runs against WSL2 distros
+    // directly (tillandsias-forge, tillandsias-git, tillandsias-proxy,
+    // tillandsias-router, tillandsias-inference) imported by `--init`. The
+    // podman-machine-default WSL distro that Podman Desktop creates is
+    // unrelated and irrelevant; querying it via the podman REST API can
+    // transiently report "not running" even when it is, blocking attach
+    // unnecessarily. Linux uses native podman without a machine.
+    #[cfg(target_os = "macos")]
     if tillandsias_core::state::Os::detect().needs_podman_machine() {
         if !rt.block_on(client.has_machine()) {
             if debug {
