@@ -2907,23 +2907,9 @@ fn get_proxy_ip() -> Result<String, String> {
 ///
 /// @trace spec:default-image, spec:fix-windows-image-routing
 #[allow(dead_code)] // Used on Windows; non-Windows path shells out to build-image.sh
-fn image_build_paths(source_dir: &std::path::Path, image_name: &str) -> (PathBuf, PathBuf) {
-    let subdir = match image_name {
-        "proxy" => "proxy",
-        "git" => "git",
-        "inference" => "inference",
-        "web" => "web",
-        "router" => "router",
-        // forge / default / unknown all build the forge image. Keeping this
-        // permissive matches build-image.sh's behavior; the image_name
-        // validation lives at the call sites that compute the tag.
-        _ => "default",
-    };
-    let dir = source_dir.join("images").join(subdir);
-    (dir.join("Containerfile"), dir)
-}
-
-/// Run `build-image.sh` from the embedded binary scripts.
+/// Run image build via direct podman invocation.
+///
+/// @trace spec:direct-podman-calls, spec:default-image
 ///
 /// Extracts image sources + build scripts to temp, executes, cleans up.
 /// No filesystem scripts are trusted — everything comes from the signed binary.
@@ -2951,9 +2937,8 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
         strings::SETUP_ERROR
     })?;
 
-    let script = source_dir.join("scripts").join("build-image.sh");
     // Use the correct versioned tag for each image type.
-    // @trace spec:default-image, spec:proxy-container, spec:git-mirror-service, spec:inference-container
+    // @trace spec:direct-podman-calls, spec:default-image, spec:proxy-container, spec:git-mirror-service, spec:inference-container
     let tag = match image_name {
         "proxy" => proxy_image_tag(),
         "git" => git_image_tag(),
@@ -2961,124 +2946,63 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
         "router" => router_image_tag(),
         _ => forge_image_tag(),
     };
-    info!(script = %script.display(), image = image_name, tag = %tag, spec = "default-image, nix-builder", "Running embedded build-image.sh");
 
-    // On Windows, call podman build directly instead of going through bash.
-    // Git Bash's MSYS2 doesn't initialize properly from native Windows processes.
-    #[cfg(target_os = "windows")]
-    {
-        // @trace spec:default-image, spec:fix-windows-image-routing
-        // Route Containerfile + context by image_name. Mirrors the `case` in
-        // scripts/build-image.sh so Windows builds the right image instead of
-        // tagging the forge image with proxy/git/inference names.
-        let (containerfile, context_dir) = image_build_paths(&source_dir, image_name);
-        info!(
-            image = image_name,
-            tag = %tag,
-            containerfile = %containerfile.display(),
-            spec = "default-image, fix-windows-image-routing",
-            "Running podman build directly (Windows)"
-        );
+    // Build the image using the direct podman ImageBuilder (all platforms unified).
+    // @trace spec:direct-podman-calls, spec:default-image
+    let builder = crate::image_builder::ImageBuilder::new(
+        source_dir.clone(),
+        image_name.to_string(),
+        tag.clone(),
+    );
 
-        let output = tillandsias_podman::podman_cmd_sync()
-            .args(["build", "--tag", &tag, "-f"])
-            .arg(&containerfile)
-            .arg(&context_dir)
-            .output()
-            .map_err(|e| {
-                error!(image = image_name, error = %e, "Failed to launch podman build");
-                strings::SETUP_ERROR
-            })?;
+    info!(
+        image = image_name,
+        tag = %tag,
+        spec = "direct-podman-calls, default-image",
+        "Starting image build via direct podman invocation"
+    );
 
-        crate::embedded::cleanup_image_sources();
+    // Attempt build
+    match builder.build_image() {
+        Ok(()) => {
+            crate::embedded::cleanup_image_sources();
 
-        // Clean up any leftover buildah containers from builds
-        // @trace spec:default-image
-        let _ = std::process::Command::new("buildah")
-            .args(["rm", "--all"])
-            .env_remove("LD_LIBRARY_PATH")
-            .env_remove("LD_PRELOAD")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
+            // Clean up any leftover buildah containers from builds
+            // @trace spec:default-image
+            let _ = std::process::Command::new("buildah")
+                .args(["rm", "--all"])
+                .env_remove("LD_LIBRARY_PATH")
+                .env_remove("LD_PRELOAD")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
 
-        crate::build_lock::release(image_name);
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
+            crate::build_lock::release(image_name);
+            prune_old_images();
+            Ok(())
+        }
+        Err(e) => {
             error!(
                 image = image_name,
-                exit_code = output.status.code().unwrap_or(-1),
-                stdout = %stdout,
-                stderr = %stderr,
-                "podman build failed"
+                tag = %tag,
+                error = %e,
+                spec = "direct-podman-calls",
+                "Image build failed"
             );
-            return Err(strings::SETUP_ERROR.into());
+            crate::embedded::cleanup_image_sources();
+
+            // Clean up any leftover buildah containers
+            let _ = std::process::Command::new("buildah")
+                .args(["rm", "--all"])
+                .env_remove("LD_LIBRARY_PATH")
+                .env_remove("LD_PRELOAD")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+
+            crate::build_lock::release(image_name);
+            Err(e)
         }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        debug!(output = %stdout, "podman build completed");
-        prune_old_images();
-        return Ok(());
-    }
-
-    // On Unix, use the build-image.sh script (handles nix + fedora backends).
-    #[cfg(not(target_os = "windows"))]
-    {
-        let mut cmd = std::process::Command::new(&script);
-        cmd.arg(image_name)
-            .args(["--tag", &tag, "--backend", "fedora"])
-            .current_dir(&source_dir)
-            .env_remove("LD_LIBRARY_PATH")
-            .env_remove("LD_PRELOAD")
-            .env("PODMAN_PATH", tillandsias_podman::find_podman_path());
-
-        // Image builds do NOT go through the proxy. SSL bump on port 3129
-        // intercepts HTTPS, but build containers don't have our CA cert
-        // installed — they'd reject the MITM'd certificate. Runtime containers
-        // have the CA chain injected via bind-mount + update-ca-trust.
-        // @trace spec:proxy-container
-
-        let output = cmd.output()
-            .map_err(|e| {
-                error!(script = %script.display(), image = image_name, error = %e, "Failed to launch image build script");
-                strings::SETUP_ERROR
-            })?;
-
-        crate::embedded::cleanup_image_sources();
-
-        // Clean up any leftover buildah containers from builds
-        // @trace spec:default-image
-        let _ = std::process::Command::new("buildah")
-            .args(["rm", "--all"])
-            .env_remove("LD_LIBRARY_PATH")
-            .env_remove("LD_PRELOAD")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
-
-        crate::build_lock::release(image_name);
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            error!(
-                image = image_name,
-                exit_code = output.status.code().unwrap_or(-1),
-                stdout = %stdout,
-                stderr = %stderr,
-                spec = "default-image, nix-builder",
-                "Image build script failed"
-            );
-            return Err(strings::SETUP_ERROR.into());
-        }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        debug!(output = %stdout, "build-image.sh completed");
-        prune_old_images();
-
-        Ok(())
     }
 }
 
@@ -5965,34 +5889,8 @@ mod tests {
         }
     }
 
-    // @trace spec:default-image, spec:fix-windows-image-routing
-    #[test]
-    fn image_build_paths_routes_each_image_to_its_own_subdir() {
-        let root = Path::new("/tmp/sources");
-
-        let cases = [
-            ("forge", "default"),
-            ("proxy", "proxy"),
-            ("git", "git"),
-            ("inference", "inference"),
-            ("web", "web"),
-            ("definitely-not-real", "default"),
-        ];
-
-        for (image_name, expected_subdir) in cases {
-            let (containerfile, context) = image_build_paths(root, image_name);
-            let expected_dir = root.join("images").join(expected_subdir);
-            assert_eq!(
-                context, expected_dir,
-                "context for {image_name} should be {expected_dir:?}"
-            );
-            assert_eq!(
-                containerfile,
-                expected_dir.join("Containerfile"),
-                "Containerfile for {image_name} should live in {expected_dir:?}"
-            );
-        }
-    }
+    // @trace spec:direct-podman-calls, spec:default-image
+    // Image routing is now tested in image_builder.rs module tests.
 
     // @trace spec:external-logs-layer
     #[test]

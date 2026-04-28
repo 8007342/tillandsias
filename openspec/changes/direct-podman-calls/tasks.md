@@ -46,16 +46,16 @@
 ## Phase 2: Direct podman calls for image builds (all platforms)
 
 ### 2.1 Implement staleness detection in Rust
-- [ ] Port `_compute_hash()` logic from `build-image.sh` to Rust: hash Containerfile + image source files
-- [ ] Use the same cache directory for hash files (`~/.cache/tillandsias/build-hashes/` or platform equivalent)
-- [ ] Compare current hash against cached hash; skip build if matching and image exists
+- [x] Port `_compute_hash()` logic from `build-image.sh` to Rust: hash Containerfile + image source files
+- [x] Use the same cache directory for hash files (`~/.cache/tillandsias/build-hashes/` or platform equivalent)
+- [x] Compare current hash against cached hash; skip build if matching and image exists
 
 ### 2.2 Unify run_build_image_script across platforms
-- [ ] Remove the `#[cfg(target_os = "windows")]` and `#[cfg(not(target_os = "windows"))]` blocks
-- [ ] Replace with a single codepath: direct `podman build --tag <tag> -f <Containerfile> <context>`
+- [x] Remove the `#[cfg(target_os = "windows")]` and `#[cfg(not(target_os = "windows"))]` blocks
+- [x] Replace with a single codepath: direct `podman build --tag <tag> -f <Containerfile> <context>`
 - [ ] Preserve the build lock mechanism (`build_lock::acquire` / `build_lock::wait_for_build`)
 - [ ] Preserve old image pruning (`prune_old_forge_images`)
-- [ ] Apply `--security-opt label=disable` for SELinux compatibility
+- [x] Apply `--security-opt label=disable` for SELinux compatibility
 
 ### 2.3 Remove embedded build-image.sh
 - [ ] Remove `embedded::BUILD_IMAGE` constant
@@ -69,8 +69,8 @@
 - [ ] Verify no other code depends on `bash_path`
 
 ### 2.5 Add @trace annotations
-- [ ] Add `// @trace spec:direct-podman-calls, spec:default-image` to the unified build function
-- [ ] Add `// @trace spec:direct-podman-calls` to the staleness detection code
+- [x] Add `// @trace spec:direct-podman-calls, spec:default-image` to the unified build function
+- [x] Add `// @trace spec:direct-podman-calls` to the staleness detection code
 - [ ] Update existing `@trace` in `run_build_image_script` to include `spec:direct-podman-calls`
 
 ### 2.6 Test Phase 2
