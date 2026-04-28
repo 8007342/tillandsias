@@ -325,18 +325,19 @@ install_appimage() {
     ln -sf "$app_path" "$INSTALL_BIN"
     _info "Symlink: $INSTALL_BIN -> $app_path"
 
-    # Build the forge container image with versioned tag (handles staleness detection)
-    if [[ -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
-        local full_version
-        full_version="$(cat "$SCRIPT_DIR/VERSION" | tr -d '[:space:]')"
-        _step "Building forge container image..."
-        "$SCRIPT_DIR/scripts/build-image.sh" forge --tag "tillandsias-forge:v${full_version}"
-        _info "Forge image built and loaded"
-    else
-        _warn "scripts/build-image.sh not found, skipping image build"
-    fi
+    # Image builds are now deferred to runtime (tillandsias --init or first launch).
+    # This speeds up local dev builds and ensures the built binary can smoke-test
+    # its own image builds without rebuilding images twice.
+    # Uncomment below to pre-build images during install (only useful for packaging).
+    # if [[ -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
+    #     local full_version
+    #     full_version="$(cat "$SCRIPT_DIR/VERSION" | tr -d '[:space:]')"
+    #     _step "Building forge container image..."
+    #     "$SCRIPT_DIR/scripts/build-image.sh" forge --tag "tillandsias-forge:v${full_version}"
+    #     _info "Forge image built and loaded"
+    # fi
 
-    _info "Installed. Run 'tillandsias' or launch from your desktop."
+    _info "Installed. Run 'tillandsias --init' to build container images, or launch 'tillandsias' to auto-build on startup."
     _info "Desktop integration (icons, launcher) is set up on first run."
 }
 

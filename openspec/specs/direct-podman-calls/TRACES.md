@@ -6,7 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [scripts/build-image.sh#L32](../../../scripts/build-image.sh#L32)
-- [src-tauri/src/embedded.rs#L346](../../../src-tauri/src/embedded.rs#L346)
+- [src-tauri/src/embedded.rs#L351](../../../src-tauri/src/embedded.rs#L351)
 - [src-tauri/src/handlers.rs#L87](../../../src-tauri/src/handlers.rs#L87)
 - [src-tauri/src/handlers.rs#L2991](../../../src-tauri/src/handlers.rs#L2991)
 - [src-tauri/src/handlers.rs#L3020](../../../src-tauri/src/handlers.rs#L3020)
@@ -21,5 +21,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [src-tauri/src/image_builder.rs#L180](../../../src-tauri/src/image_builder.rs#L180)
 - [src-tauri/src/image_builder.rs#L237](../../../src-tauri/src/image_builder.rs#L237)
 - [src-tauri/src/init.rs#L73](../../../src-tauri/src/init.rs#L73)
-- [src-tauri/src/init.rs#L106](../../../src-tauri/src/init.rs#L106)
-- [src-tauri/src/init.rs#L183](../../../src-tauri/src/init.rs#L183)
+- [src-tauri/src/init.rs#L108](../../../src-tauri/src/init.rs#L108)
+- [src-tauri/src/init.rs#L190](../../../src-tauri/src/init.rs#L190)
