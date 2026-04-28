@@ -113,6 +113,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - wsl-daemon-patterns.md                 — running long-lived background services (daemons, proxies, routers) inside WSL2;… [pull-on-demand: stub]
 - wsl-mount-points.md                    — writing code that crosses the Windows↔Linux filesystem boundary in WSL2 — a… [pull-on-demand: stub]
 - wsl-on-windows.md [DRAFT]              — working on Tillandsias for Windows. The Windows path uses WSL2 distros directly…
+- wsl2-isolation-boundary.md             — deciding whether the WSL2 layer is providing a security boundary for a given co… [pull-on-demand: project-committed]
 
 ## security
 
