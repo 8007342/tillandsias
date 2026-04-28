@@ -163,6 +163,16 @@ pub enum CliMode {
     /// `tillandsias --github-login` — run GitHub authentication flow and exit.
     GitHubLogin,
 
+    /// `tillandsias <path> --diagnostics [--prompt "text"]` — stream logs from all running containers
+    /// for this project. Optional prompt is passed to agent if containers are already running.
+    /// Observation-only if no prompt, or agent-assisted if prompt provided.
+    ///
+    /// @trace spec:runtime-diagnostics
+    Diagnostics {
+        path: PathBuf,
+        prompt: Option<String>,
+    },
+
     /// `tillandsias --install-chromium [--from-zip <path>]` — install or
     /// re-install the userspace Chromium binary tree under
     /// `<XDG_DATA_HOME>/tillandsias/chromium/`. Verifies SHA-256 against
@@ -192,6 +202,8 @@ pub enum CliMode {
         bash: bool,
         /// Override the configured agent for this session.
         agent_override: Option<SelectedAgent>,
+        /// Optional prompt to pass to the agent.
+        prompt: Option<String>,
     },
 }
 
@@ -204,7 +216,7 @@ USAGE:
     tillandsias <path> --opencode   Attach using OpenCode
     tillandsias <path> --claude     Attach using Claude Code
     tillandsias <path> --bash       Open maintenance terminal
-    tillandsias <path> --diagnostics Stream every WSL distro's logs (superset of --debug)
+    tillandsias <path> --diagnostics Stream logs from every WSL distro / container (superset of --debug)
     tillandsias --github-login      Authenticate with GitHub
     tillandsias --install-chromium  Install pinned Chromium for app-mode windows
     tillandsias --install-chromium --from-zip <path>
@@ -234,6 +246,7 @@ OPTIONS:
   --opencode                 Use OpenCode for this session
   --claude                   Use Claude Code for this session
   --bash                     Open maintenance terminal
+  --diagnostics              Stream /strategic/service.log from all containers
   --github-login             Run GitHub authentication flow
   --version                  Show version and exit
   --help                     Show this help
@@ -338,6 +351,8 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
     let mut debug = false;
     let mut diagnostics = false;
     let mut bash = false;
+    let mut diagnostics = false;
+    let mut prompt: Option<String> = None;
     let mut agent_override: Option<SelectedAgent> = None;
     let mut i = 0;
 
@@ -380,6 +395,18 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
             "--claude" => {
                 agent_override = Some(SelectedAgent::Claude);
             }
+            "--diagnostics" => {
+                diagnostics = true;
+            }
+            "--prompt" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("--prompt requires a value");
+                    print!("{USAGE}");
+                    return None;
+                }
+                prompt = Some(args[i].clone());
+            }
             // Log flags — already parsed by parse_log_flags(), skip here.
             "--log-secrets-management" | "--log-image-management" | "--log-update-cycle"
             | "--log-proxy" | "--log-enclave" | "--log-git" => {}
@@ -399,6 +426,10 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
     }
 
     match path {
+        Some(p) if diagnostics => Some((
+            CliMode::Diagnostics { path: p, prompt },
+            log_config,
+        )),
         Some(p) => Some((
             CliMode::Attach {
                 path: p,
@@ -407,6 +438,7 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
                 diagnostics,
                 bash,
                 agent_override,
+                prompt,
             },
             log_config,
         )),

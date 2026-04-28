@@ -11,6 +11,7 @@ use crate::handlers::{
     forge_image_tag, git_image_tag, inference_image_tag, proxy_image_tag, prune_old_images,
 };
 use crate::i18n;
+use crate::image_builder::ImageBuilder;
 use crate::strings;
 
 /// All image types to build, in order.
@@ -87,13 +88,11 @@ fn run_with_force_podman(force: bool) -> bool {
         }
     };
 
-    let script = source_dir.join("scripts").join("build-image.sh");
-    if !script.exists() {
-        eprintln!("  [internal] Script not found at: {}", script.display());
-        return false;
-    }
+    // Image builds are driven directly from Rust via ImageBuilder
+    // @trace spec:direct-podman-calls
 
     let mut all_success = true;
+    let mut failed_images: Vec<(String, String)> = Vec::new();
 
     for (image_name, tag_fn) in IMAGE_TYPES {
         let tag = tag_fn();
@@ -113,6 +112,7 @@ fn run_with_force_podman(force: bool) -> bool {
             if let Err(e) = build_lock::wait_for_build(image_name) {
                 eprintln!("    [internal] Wait timed out: {e}");
                 all_success = false;
+                failed_images.push((image_name.to_string(), format!("Wait timed out: {e}")));
                 continue;
             }
             if image_exists(&tag) {
@@ -123,106 +123,64 @@ fn run_with_force_podman(force: bool) -> bool {
 
         let _ = build_lock::acquire(image_name);
 
-        // Build with inherited stdio so the user sees progress
-        // @trace spec:init-command
-        #[cfg(not(target_os = "windows"))]
-        let status = std::process::Command::new(&script)
-            .arg(*image_name)
-            .args(["--tag", &tag, "--backend", "fedora"])
-            .current_dir(&source_dir)
-            .env_remove("LD_LIBRARY_PATH")
-            .env_remove("LD_PRELOAD")
-            .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
-            .stdin(std::process::Stdio::inherit())
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .status();
-
-        #[cfg(target_os = "windows")]
-        let status = {
-            let image_dir = match *image_name {
-                "proxy" => "proxy",
-                "git" => "git",
-                "inference" => "inference",
-                _ => "default",
-            };
-            let containerfile = source_dir
-                .join("images")
-                .join(image_dir)
-                .join("Containerfile");
-            let context_dir = source_dir.join("images").join(image_dir);
-
-            // @trace spec:agent-cheatsheets, spec:cross-platform
-            // Stage `.cheatsheets/` into the forge build context. Linux/macOS
-            // do this inside scripts/build-image.sh (lines 273-283), but the
-            // Windows init path bypasses the shell script and calls podman
-            // directly — so we replicate the same staging logic here.
-            //
-            // Source order: (1) $TILLANDSIAS_WORKSPACE/cheatsheets when set
-            // (covers `cargo run` from a checkout), (2) MISSING.md placeholder
-            // matching the Linux fallback. The Containerfile's `COPY
-            // .cheatsheets/ /opt/cheatsheets-image/` resolves either way.
-            if image_dir == "default" {
-                let staged = context_dir.join(".cheatsheets");
-                let _ = std::fs::remove_dir_all(&staged);
-                let mut copied_from_workspace = false;
-                if let Ok(workspace) = std::env::var("TILLANDSIAS_WORKSPACE") {
-                    let src = std::path::PathBuf::from(workspace).join("cheatsheets");
-                    if src.is_dir() {
-                        if let Err(e) = copy_dir_recursive(&src, &staged) {
-                            eprintln!(
-                                "  [internal] cheatsheets staging from {} failed: {e}",
-                                src.display()
-                            );
-                        } else {
-                            copied_from_workspace = true;
-                        }
-                    }
-                }
-                if !copied_from_workspace {
-                    if let Err(e) = std::fs::create_dir_all(&staged) {
-                        eprintln!("  [internal] cheatsheets placeholder mkdir failed: {e}");
-                    } else if let Err(e) = std::fs::write(
-                        staged.join("MISSING.md"),
-                        "Cheatsheets directory missing at build time\n",
-                    ) {
-                        eprintln!("  [internal] cheatsheets MISSING.md write failed: {e}");
+        // @trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime
+        // The direct-podman / ImageBuilder path doesn't run
+        // scripts/build-image.sh, so it doesn't get the shell script's
+        // `.cheatsheets/` staging step. Replicate it here when building the
+        // forge ("default") image so `COPY .cheatsheets/ /opt/cheatsheets-image/`
+        // in the Containerfile resolves.
+        //
+        // Source order: (1) `$TILLANDSIAS_WORKSPACE/cheatsheets` when set
+        // (covers `cargo run` from a checkout), (2) MISSING.md placeholder
+        // matching the legacy Linux fallback.
+        if *image_name == "forge" {
+            let context_dir = source_dir.join("images").join("default");
+            let staged = context_dir.join(".cheatsheets");
+            let _ = std::fs::remove_dir_all(&staged);
+            let mut copied_from_workspace = false;
+            if let Ok(workspace) = std::env::var("TILLANDSIAS_WORKSPACE") {
+                let src = std::path::PathBuf::from(workspace).join("cheatsheets");
+                if src.is_dir() {
+                    if let Err(e) = copy_dir_recursive(&src, &staged) {
+                        eprintln!(
+                            "  [internal] cheatsheets staging from {} failed: {e}",
+                            src.display()
+                        );
+                    } else {
+                        copied_from_workspace = true;
                     }
                 }
             }
+            if !copied_from_workspace {
+                if let Err(e) = std::fs::create_dir_all(&staged) {
+                    eprintln!("  [internal] cheatsheets placeholder mkdir failed: {e}");
+                } else if let Err(e) = std::fs::write(
+                    staged.join("MISSING.md"),
+                    "Cheatsheets directory missing at build time\n",
+                ) {
+                    eprintln!("  [internal] cheatsheets MISSING.md write failed: {e}");
+                }
+            }
+        }
 
-            tillandsias_podman::podman_cmd_sync()
-                .args(["build", "--tag", &tag, "-f"])
-                .arg(&containerfile)
-                .arg(&context_dir)
-                .stdin(std::process::Stdio::inherit())
-                .stdout(std::process::Stdio::inherit())
-                .stderr(std::process::Stdio::inherit())
-                .status()
-        };
+        // Build using ImageBuilder (direct podman, no bash script intermediary).
+        // @trace spec:direct-podman-calls, spec:default-image
+        let builder = ImageBuilder::new(source_dir.clone(), image_name.to_string(), tag.clone());
+        let build_result = builder.build_image();
 
         build_lock::release(image_name);
 
-        match status {
-            Ok(s) if s.success() => {
+        match build_result {
+            Ok(()) => {
                 println!("  {}", i18n::tf("init.build.build_success", &[("name", image_name), ("tag", &tag)]));
-            }
-            Ok(s) => {
-                eprintln!(
-                    "  {}",
-                    i18n::tf("init.build.build_failed", &[
-                        ("name", image_name),
-                        ("code", &s.code().unwrap_or(-1).to_string()),
-                    ])
-                );
-                all_success = false;
             }
             Err(e) => {
                 eprintln!(
                     "  {}",
-                    i18n::tf("init.build.build_error", &[("name", image_name), ("error", &e.to_string())])
+                    i18n::tf("init.build.build_error", &[("name", image_name), ("error", &e)])
                 );
                 all_success = false;
+                failed_images.push((image_name.to_string(), e.clone()));
             }
         }
     }
@@ -261,7 +219,11 @@ fn run_with_force_podman(force: bool) -> bool {
     if all_success {
         println!("{}", i18n::t("init.ready_run"));
     } else {
-        eprintln!("  {}", i18n::t("init.build.some_failed"));
+        eprintln!();
+        eprintln!("  Image builds failed:");
+        for (image, error) in failed_images {
+            eprintln!("    • {} — {}", image, error);
+        }
     }
     all_success
 }
@@ -520,33 +482,14 @@ pub fn run_build_only() -> Result<(), String> {
         strings::SETUP_ERROR
     })?;
 
-    let script = source_dir.join("scripts").join("build-image.sh");
     let tag = forge_image_tag();
 
-    #[cfg(not(target_os = "windows"))]
-    let status = std::process::Command::new(&script)
-        .arg("forge")
-        .args(["--tag", &tag, "--backend", "fedora"])
-        .current_dir(&source_dir)
-        .env_remove("LD_LIBRARY_PATH")
-        .env_remove("LD_PRELOAD")
-        .stdin(std::process::Stdio::inherit())
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .map_err(|e| {
-            eprintln!("  [internal] Failed to launch build script: {e}");
-            strings::SETUP_ERROR
-        })?;
-
-    #[cfg(target_os = "windows")]
-    let status = {
-        let containerfile = source_dir.join("images").join("default").join("Containerfile");
+    // @trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime
+    // Stage `.cheatsheets/` into the forge build context. Mirrors the staging
+    // step inside scripts/build-image.sh so the direct-podman/ImageBuilder
+    // path also resolves the Containerfile's `COPY .cheatsheets/` instruction.
+    {
         let context_dir = source_dir.join("images").join("default");
-        // @trace spec:agent-cheatsheets, spec:cross-platform
-        // Stage `.cheatsheets/` (mirrors the run_with_force Windows path).
-        // Without this, the forge Containerfile's `COPY .cheatsheets/`
-        // step fails with "no such file or directory".
         let staged = context_dir.join(".cheatsheets");
         let _ = std::fs::remove_dir_all(&staged);
         let mut copied_from_workspace = false;
@@ -563,28 +506,16 @@ pub fn run_build_only() -> Result<(), String> {
                 "Cheatsheets directory missing at build time\n",
             );
         }
-        tillandsias_podman::podman_cmd_sync()
-            .args(["build", "--tag", &tag, "-f"])
-            .arg(&containerfile)
-            .arg(&context_dir)
-            .stdin(std::process::Stdio::inherit())
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .status()
-            .map_err(|e| {
-                eprintln!("  [internal] Failed to launch podman build: {e}");
-                strings::SETUP_ERROR
-            })?
-    };
+    }
+
+    // Build using ImageBuilder (direct podman, no bash script intermediary).
+    // @trace spec:direct-podman-calls, spec:init-command, spec:default-image
+    let builder = ImageBuilder::new(source_dir.clone(), "forge".to_string(), tag);
+    builder.build_image()?;
 
     embedded::cleanup_image_sources();
-
-    if status.success() {
-        prune_old_images();
-        Ok(())
-    } else {
-        Err(strings::SETUP_ERROR.into())
-    }
+    prune_old_images();
+    Ok(())
 }
 
 /// Check if a podman image exists.

@@ -7,6 +7,10 @@ set -e
 # DISTRO: Alpine 3.20 — bash installed explicitly via apk add bash.
 #         Uses POSIX-compatible constructs only (no [[ ]], no arrays).
 
+# @trace spec:runtime-diagnostics
+SLOG=/strategic/service.log
+echo "$(date -Is) [git-service] starting git daemon on port 9418" >> "$SLOG" 2>/dev/null || SLOG=/dev/null
+
 echo "========================================"
 echo "  tillandsias git service"
 echo "  listening on :9418"
@@ -43,6 +47,8 @@ for mirror in /srv/git/*; do
         retry_msg "[git-mirror] Startup retry-push FAILED: $OUTPUT"
     fi
 done
+
+echo "$(date -Is) [git-service] daemon ready" >> "$SLOG"
 
 # Run git daemon as PID 1 so it receives signals properly.
 exec git daemon \

@@ -403,7 +403,7 @@ mod tests {
     async fn handle_mcp_frame_oversized() {
         let handle = BrowserMcpHandle::new(16);
         let huge_payload = vec![0u8; MAX_MCP_FRAME_BYTES + 1];
-        let result = handle.handle_mcp_frame(1, huge_payload).await;
+        let result = handle.handle_mcp_frame(1, huge_payload, "test").await;
         assert!(result.is_err());
     }
 
@@ -411,7 +411,7 @@ mod tests {
     async fn handle_mcp_frame_invalid_utf8() {
         let handle = BrowserMcpHandle::new(16);
         let invalid_utf8 = vec![0xFF, 0xFE, 0xFD]; // Not valid UTF-8
-        let result = handle.handle_mcp_frame(1, invalid_utf8).await;
+        let result = handle.handle_mcp_frame(1, invalid_utf8, "test").await;
         assert!(result.is_err());
     }
 
@@ -419,7 +419,7 @@ mod tests {
     async fn handle_mcp_frame_valid() {
         let handle = BrowserMcpHandle::new(16);
         let payload = br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#.to_vec();
-        let result = handle.handle_mcp_frame(1, payload).await;
+        let result = handle.handle_mcp_frame(1, payload, "test").await;
         assert!(result.is_ok());
     }
 }

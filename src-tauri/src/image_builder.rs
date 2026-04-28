@@ -6,7 +6,7 @@
 //! @trace spec:direct-podman-calls
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use sha2::{Sha256, Digest};
 use tracing::{debug, error, info, warn};
 
@@ -233,6 +233,7 @@ impl ImageBuilder {
     ///
     /// Returns `Ok(())` on success, `Err(String)` on failure.
     ///
+    /// Inherits stdio so users see build progress in real-time.
     /// @trace spec:direct-podman-calls, spec:default-image
     pub fn build_image(&self) -> Result<(), String> {
         let (containerfile, context_dir) = self.image_build_paths();
@@ -246,8 +247,8 @@ impl ImageBuilder {
             "Starting direct podman build"
         );
 
-        // Build the podman command
-        let output = Command::new(tillandsias_podman::find_podman_path())
+        // Build the podman command, inheriting stdio so users see progress
+        let status = Command::new(tillandsias_podman::find_podman_path())
             .args(&["build", "--tag", &self.tag])
             .arg("-f")
             .arg(&containerfile)
@@ -255,7 +256,10 @@ impl ImageBuilder {
             .arg(&context_dir)
             .env_remove("LD_LIBRARY_PATH")
             .env_remove("LD_PRELOAD")
-            .output()
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
             .map_err(|e| {
                 error!(
                     image = %self.image_name,
@@ -267,26 +271,20 @@ impl ImageBuilder {
             })?;
 
         // Check exit status
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
+        if !status.success() {
             error!(
                 image = %self.image_name,
                 tag = %self.tag,
-                exit_code = output.status.code().unwrap_or(-1),
-                stdout = %stdout,
-                stderr = %stderr,
+                exit_code = status.code().unwrap_or(-1),
                 spec = "direct-podman-calls",
                 "podman build failed"
             );
             return Err(strings::SETUP_ERROR.into());
         }
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
         info!(
             image = %self.image_name,
             tag = %self.tag,
-            output = %stdout,
             spec = "direct-podman-calls",
             "podman build completed successfully"
         );

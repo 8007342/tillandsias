@@ -325,18 +325,19 @@ install_appimage() {
     ln -sf "$app_path" "$INSTALL_BIN"
     _info "Symlink: $INSTALL_BIN -> $app_path"
 
-    # Build the forge container image with versioned tag (handles staleness detection)
-    if [[ -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
-        local full_version
-        full_version="$(cat "$SCRIPT_DIR/VERSION" | tr -d '[:space:]')"
-        _step "Building forge container image..."
-        "$SCRIPT_DIR/scripts/build-image.sh" forge --tag "tillandsias-forge:v${full_version}"
-        _info "Forge image built and loaded"
-    else
-        _warn "scripts/build-image.sh not found, skipping image build"
-    fi
+    # Image builds are now deferred to runtime (tillandsias --init or first launch).
+    # This speeds up local dev builds and ensures the built binary can smoke-test
+    # its own image builds without rebuilding images twice.
+    # Uncomment below to pre-build images during install (only useful for packaging).
+    # if [[ -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
+    #     local full_version
+    #     full_version="$(cat "$SCRIPT_DIR/VERSION" | tr -d '[:space:]')"
+    #     _step "Building forge container image..."
+    #     "$SCRIPT_DIR/scripts/build-image.sh" forge --tag "tillandsias-forge:v${full_version}"
+    #     _info "Forge image built and loaded"
+    # fi
 
-    _info "Installed. Run 'tillandsias' or launch from your desktop."
+    _info "Installed. Run 'tillandsias --init' to build container images, or launch 'tillandsias' to auto-build on startup."
     _info "Desktop integration (icons, launcher) is set up on first run."
 }
 
@@ -487,19 +488,22 @@ if [[ "$FLAG_RELEASE" == true ]]; then
     # Skip AppImage in toolbox — linuxdeploy needs FUSE which isn't available.
     # AppImage bundling works in CI (ubuntu with FUSE) and via --appimage.
     # Linux only distributes via AppImage; no deb/rpm bundles.
-    BUNDLES="none"
+    # On macOS, build dmg bundle. On Linux, skip bundles (FUSE not available in toolbox).
+    BUNDLE_FLAG=""
     if [[ "$(uname -s)" == "Darwin" ]]; then
-        BUNDLES="dmg"
+        BUNDLE_FLAG="--bundles dmg"
+        _step "Building release with dmg bundle..."
+    else
+        _step "Building release (no bundles — AppImage built in CI)..."
     fi
-
-    _step "Building release (bundles: ${BUNDLES})..."
 
     # Clean old bundles to avoid listing stale versions
     rm -rf "$SCRIPT_DIR/target/release/bundle"
 
-    # Single build: --bundles skips AppImage (needs FUSE, CI handles it).
+    # Build: cargo tauri build handles platform-specific bundles.
     # The updater error is expected in toolbox — ignore it.
-    _run bash -c "cd '$SCRIPT_DIR' && cargo tauri build --bundles ${BUNDLES}" 2>&1 || {
+    # @trace spec:dev-build
+    _run bash -c "cd '$SCRIPT_DIR' && cargo tauri build ${BUNDLE_FLAG}" 2>&1 || {
         # Check if the binary was built despite the bundle error
         if [[ -f "$SCRIPT_DIR/target/release/tillandsias" ]]; then
             _warn "Some bundles failed (updater needs AppImage — CI handles that)"

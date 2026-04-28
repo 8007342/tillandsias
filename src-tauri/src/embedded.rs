@@ -173,7 +173,7 @@ pub const FORGE_EXTERNAL_LOGS_MANIFEST: &str =
     include_str!("../../images/default/external-logs.yaml");
 
 // @trace spec:forge-environment-discoverability
-// Three discoverability CLIs the agent invokes on first turn to learn what
+// Four discoverability CLIs the agent invokes on first turn to learn what
 // the forge ships. COPY'd into /opt/agents/tillandsias-cli/bin in the image
 // build (see images/default/Containerfile) and symlinked into /usr/local/bin.
 pub const FORGE_CLI_INVENTORY: &str =
@@ -214,6 +214,31 @@ pub const CONFIG_OVERLAY_INSTRUCTIONS_MODEL_ROUTING: &str =
     include_str!("../../images/default/config-overlay/opencode/instructions/model-routing.md");
 pub const CONFIG_OVERLAY_INSTRUCTIONS_WEB_SERVICES: &str =
     include_str!("../../images/default/config-overlay/opencode/instructions/web-services.md");
+
+// Summarizer scripts for project analysis
+// @trace spec:project-bootstrap-readme, spec:default-image
+pub const SCRIPT_SUMMARIZE_CARGO: &str = include_str!("../../scripts/summarize-cargo.sh");
+pub const SCRIPT_SUMMARIZE_NIX: &str = include_str!("../../scripts/summarize-nix.sh");
+pub const SCRIPT_SUMMARIZE_PACKAGE_JSON: &str = include_str!("../../scripts/summarize-package-json.sh");
+pub const SCRIPT_SUMMARIZE_PUBSPEC: &str = include_str!("../../scripts/summarize-pubspec.sh");
+pub const SCRIPT_SUMMARIZE_GO_MOD: &str = include_str!("../../scripts/summarize-go-mod.sh");
+pub const SCRIPT_SUMMARIZE_PYPROJECT: &str = include_str!("../../scripts/summarize-pyproject.sh");
+
+// README dispatcher and validator
+// @trace spec:project-bootstrap-readme, spec:default-image
+pub const SCRIPT_REGENERATE_README: &str = include_str!("../../scripts/regenerate-readme.sh");
+pub const SCRIPT_CHECK_README_DISCIPLINE: &str = include_str!("../../scripts/check-readme-discipline.sh");
+
+// Config overlay — agent skills and workflows
+// @trace spec:project-bootstrap-readme, spec:default-image
+pub const CONFIG_OVERLAY_AGENT_STARTUP: &str =
+    include_str!("../../images/default/config-overlay/opencode/agent/startup.md");
+pub const CONFIG_OVERLAY_AGENT_STATUS: &str =
+    include_str!("../../images/default/config-overlay/opencode/agent/status.md");
+pub const CONFIG_OVERLAY_AGENT_BOOTSTRAP_README: &str =
+    include_str!("../../images/default/config-overlay/opencode/agent/bootstrap-readme.md");
+pub const CONFIG_OVERLAY_AGENT_BOOTSTRAP_README_AND_PROJECT: &str =
+    include_str!("../../images/default/config-overlay/opencode/agent/bootstrap-readme-and-project.md");
 
 // MCP servers — lightweight tool scripts for forge containers
 // @trace spec:layered-tools-overlay, spec:git-mirror-service
@@ -419,6 +444,26 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         }
     }
 
+    // -- scripts/ (summarizers for project analysis) --
+    let scripts_dir = dir.join("scripts");
+    fs::create_dir_all(&scripts_dir).map_err(|e| format!("scripts dir: {e}"))?;
+    write_lf(&scripts_dir.join("summarize-cargo.sh"), SCRIPT_SUMMARIZE_CARGO)
+        .map_err(|e| format!("scripts/summarize-cargo.sh: {e}"))?;
+    write_lf(&scripts_dir.join("summarize-nix.sh"), SCRIPT_SUMMARIZE_NIX)
+        .map_err(|e| format!("scripts/summarize-nix.sh: {e}"))?;
+    write_lf(&scripts_dir.join("summarize-package-json.sh"), SCRIPT_SUMMARIZE_PACKAGE_JSON)
+        .map_err(|e| format!("scripts/summarize-package-json.sh: {e}"))?;
+    write_lf(&scripts_dir.join("summarize-pubspec.sh"), SCRIPT_SUMMARIZE_PUBSPEC)
+        .map_err(|e| format!("scripts/summarize-pubspec.sh: {e}"))?;
+    write_lf(&scripts_dir.join("summarize-go-mod.sh"), SCRIPT_SUMMARIZE_GO_MOD)
+        .map_err(|e| format!("scripts/summarize-go-mod.sh: {e}"))?;
+    write_lf(&scripts_dir.join("summarize-pyproject.sh"), SCRIPT_SUMMARIZE_PYPROJECT)
+        .map_err(|e| format!("scripts/summarize-pyproject.sh: {e}"))?;
+    write_lf(&scripts_dir.join("regenerate-readme.sh"), SCRIPT_REGENERATE_README)
+        .map_err(|e| format!("scripts/regenerate-readme.sh: {e}"))?;
+    write_lf(&scripts_dir.join("check-readme-discipline.sh"), SCRIPT_CHECK_README_DISCIPLINE)
+        .map_err(|e| format!("scripts/check-readme-discipline.sh: {e}"))?;
+
     // -- images/default/ --
     let default_dir = dir.join("images").join("default");
     fs::create_dir_all(&default_dir).map_err(|e| format!("images/default dir: {e}"))?;
@@ -483,6 +528,26 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     // @trace spec:secrets-management
     #[cfg(unix)]
     {
+        // Scripts in scripts/ directory
+        for name in [
+            "summarize-cargo.sh",
+            "summarize-nix.sh",
+            "summarize-package-json.sh",
+            "summarize-pubspec.sh",
+            "summarize-go-mod.sh",
+            "summarize-pyproject.sh",
+        ] {
+            let path = scripts_dir.join(name);
+            if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
+                warn!(
+                    file = %path.display(),
+                    error = %e,
+                    "Failed to set executable permission — summarizer scripts may not run"
+                );
+            }
+        }
+
+        // Entrypoints and utilities in images/default/
         for name in [
             "entrypoint.sh",
             "entrypoint-forge-opencode.sh",
@@ -573,6 +638,32 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         CONFIG_OVERLAY_INSTRUCTIONS_WEB_SERVICES,
     )
     .map_err(|e| format!("config-overlay/opencode/instructions/web-services.md: {e}"))?;
+
+    // Config overlay — agent skills and workflows
+    // @trace spec:project-bootstrap-readme, spec:default-image
+    let agent_dir = config_overlay_dir.join("agent");
+    fs::create_dir_all(&agent_dir)
+        .map_err(|e| format!("config-overlay/opencode/agent dir: {e}"))?;
+    write_lf(
+        &agent_dir.join("startup.md"),
+        CONFIG_OVERLAY_AGENT_STARTUP,
+    )
+    .map_err(|e| format!("config-overlay/opencode/agent/startup.md: {e}"))?;
+    write_lf(
+        &agent_dir.join("status.md"),
+        CONFIG_OVERLAY_AGENT_STATUS,
+    )
+    .map_err(|e| format!("config-overlay/opencode/agent/status.md: {e}"))?;
+    write_lf(
+        &agent_dir.join("bootstrap-readme.md"),
+        CONFIG_OVERLAY_AGENT_BOOTSTRAP_README,
+    )
+    .map_err(|e| format!("config-overlay/opencode/agent/bootstrap-readme.md: {e}"))?;
+    write_lf(
+        &agent_dir.join("bootstrap-readme-and-project.md"),
+        CONFIG_OVERLAY_AGENT_BOOTSTRAP_README_AND_PROJECT,
+    )
+    .map_err(|e| format!("config-overlay/opencode/agent/bootstrap-readme-and-project.md: {e}"))?;
 
     // Config overlay — MCP servers
     // @trace spec:layered-tools-overlay
