@@ -624,6 +624,17 @@ PYMETAEOF
             mkdir -p "$IMAGE_DIR/.cheatsheets"
             echo "Cheatsheets directory missing at build time" > "$IMAGE_DIR/.cheatsheets/MISSING.md"
         fi
+
+        # Stage scripts/ for COPY commands in Containerfile (summarize-*.sh, regenerate-readme.sh, etc.)
+        if [[ -d "$ROOT/scripts" ]]; then
+            _step "Staging scripts/ into forge build context..."
+            rm -rf "$IMAGE_DIR/scripts"
+            mkdir -p "$IMAGE_DIR/scripts"
+            # Copy only the scripts that are COPY'd in Containerfile
+            for script in summarize-cargo.sh summarize-nix.sh summarize-package-json.sh summarize-pubspec.sh summarize-go-mod.sh summarize-pyproject.sh regenerate-readme.sh check-readme-discipline.sh; do
+                [[ -f "$ROOT/scripts/$script" ]] && cp "$ROOT/scripts/$script" "$IMAGE_DIR/scripts/$script"
+            done
+        fi
     fi
 
     # Pass proxy env vars as build args if available.
@@ -650,12 +661,13 @@ PYMETAEOF
         -f "$CONTAINERFILE" \
         "$IMAGE_DIR/"
 
-    # Clean up the staged cheatsheets so they don't accumulate in the build context.
+    # Clean up the staged cheatsheets and scripts so they don't accumulate in the build context.
     # @trace spec:cheatsheets-license-tiered
     if [[ "$IMAGE_NAME" == "forge" ]] || [[ "$IMAGE_NAME" == "default" ]]; then
         rm -rf "$IMAGE_DIR/.cheatsheets"
         rm -rf "$IMAGE_DIR/.cheatsheet-sources"
         rm -rf "$IMAGE_DIR/.cheatsheets-meta"
+        rm -rf "$IMAGE_DIR/scripts"
     fi
 
 else

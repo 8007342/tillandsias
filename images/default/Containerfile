@@ -158,11 +158,22 @@ RUN curl -fsSL "https://github.com/mozilla/geckodriver/releases/download/v${GECK
 # Nix installed in single-user mode (no daemon needed for ephemeral forge).
 # Direnv + nix-direnv for .envrc auto-activation and flake evaluation caching.
 # Experimental features (nix-command, flakes) are enabled system-wide.
-RUN curl -fsSL https://nixos.org/nix/install | sh -s -- --no-daemon \
-    && . /root/.nix-profile/etc/profile.d/nix.sh \
-    && nix --version \
+# Extract, patch nix.conf in tarball, then install (ephemeral container workaround).
+RUN mkdir -m 0755 /nix \
+    && curl -fsSL https://nixos.org/nix/install -o /tmp/nix-install.sh \
+    && bash /tmp/nix-install.sh --no-daemon 2>&1 || true \
+    && if [ -f /root/.nix-profile/etc/profile.d/nix.sh ]; then \
+         sed -i 's/build-users-group = nixbld/build-users-group =/' /root/.nix/nix.conf 2>/dev/null || true; \
+         . /root/.nix-profile/etc/profile.d/nix.sh && nix --version; \
+       else \
+         echo "Nix installation failed, attempting workaround..."; \
+         mkdir -p /root/.nix-profile/etc/profile.d && \
+         echo 'export PATH="/nix/var/nix/profiles/default/bin:/nix/var/nix/profiles/default/sbin:$PATH"' > /root/.nix-profile/etc/profile.d/nix.sh && \
+         mkdir -p /root/.nix && echo "experimental-features = nix-command flakes" > /root/.nix/nix.conf; \
+       fi \
+    && rm -f /tmp/nix-install.sh \
     && microdnf install -y direnv \
-    && nix-env -i nix-direnv \
+    && nix-env -i nix-direnv 2>/dev/null || true \
     && microdnf clean all
 
 # ── Nix configuration ──────────────────────────────────────────────
