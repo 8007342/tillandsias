@@ -124,7 +124,7 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         let containerfile = source_dir.join("images").join("default").join("Containerfile");
-        // Build context is source_dir so COPY commands can access scripts/ and images/
+        // Use source_dir as context so all COPY commands work (scripts/, images/default/, config-overlay/, etc)
         let context_dir = &source_dir;
 
         if debug {
@@ -183,7 +183,7 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
     #[cfg(not(target_os = "windows"))]
     {
         let containerfile = source_dir.join("images").join("default").join("Containerfile");
-        // Build context is source_dir so COPY commands can access scripts/ and images/
+        // Use source_dir as context so all COPY commands work (scripts/, images/default/, config-overlay/, etc)
         let context_dir = &source_dir;
 
         if debug {

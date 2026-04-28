@@ -245,19 +245,19 @@ RUN mkdir -p /home/forge/src \
 
 # ── Shared library ─────────────────────────────────────────────
 RUN mkdir -p /usr/local/lib/tillandsias
-COPY lib-common.sh /usr/local/lib/tillandsias/lib-common.sh
+COPY images/default/lib-common.sh /usr/local/lib/tillandsias/lib-common.sh
 
 # ── Entrypoints ────────────────────────────────────────────────
-COPY entrypoint.sh /usr/local/bin/tillandsias-entrypoint.sh
-COPY entrypoint-forge-opencode.sh /usr/local/bin/entrypoint-forge-opencode.sh
-COPY entrypoint-forge-opencode-web.sh /usr/local/bin/entrypoint-forge-opencode-web.sh
-COPY entrypoint-forge-claude.sh /usr/local/bin/entrypoint-forge-claude.sh
-COPY entrypoint-terminal.sh /usr/local/bin/entrypoint-terminal.sh
+COPY images/default/entrypoint.sh /usr/local/bin/tillandsias-entrypoint.sh
+COPY images/default/entrypoint-forge-opencode.sh /usr/local/bin/entrypoint-forge-opencode.sh
+COPY images/default/entrypoint-forge-opencode-web.sh /usr/local/bin/entrypoint-forge-opencode-web.sh
+COPY images/default/entrypoint-forge-claude.sh /usr/local/bin/entrypoint-forge-claude.sh
+COPY images/default/entrypoint-terminal.sh /usr/local/bin/entrypoint-terminal.sh
 # @trace spec:opencode-web-session
 # Tiny Node.js HTTP proxy that injects SSE keepalive comments so Bun's default
 # 10s idleTimeout doesn't drop /event and /global/event streams when the
 # session is idle. Fronts opencode serve on port 4096 → 4097.
-COPY sse-keepalive-proxy.js /usr/local/bin/sse-keepalive-proxy.js
+COPY images/default/sse-keepalive-proxy.js /usr/local/bin/sse-keepalive-proxy.js
 RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/entrypoint-forge-opencode.sh \
              /usr/local/bin/entrypoint-forge-opencode-web.sh \
@@ -273,13 +273,13 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
 # @trace spec:secrets-management, spec:forge-offline, spec:native-secrets-store
 
 # ── OpenCode config ────────────────────────────────────────────
-COPY opencode.json /home/forge/.config/opencode/config.json
+COPY images/default/opencode.json /home/forge/.config/opencode/config.json
 # @trace spec:opencode-web-session, spec:default-image
 # Default UI theme (tokyonight) — applies to both `opencode` TUI and
 # `opencode serve` web UI. Overrideable per-project by mounting a different
 # tui.json into ~/.config/opencode/ (project workspace bind takes precedence
 # at the user-config layer when applications resolve XDG paths).
-COPY config-overlay/opencode/tui.json /home/forge/.config/opencode/tui.json
+COPY images/default/config-overlay/opencode/tui.json /home/forge/.config/opencode/tui.json
 
 # ── Project bootstrap skills ───────────────────────────────────
 # @trace spec:project-bootstrap-readme
@@ -287,7 +287,7 @@ COPY config-overlay/opencode/tui.json /home/forge/.config/opencode/tui.json
 # Copied into ~/.config-overlay/opencode/agent/ so they're discoverable
 # before project-local overrides (if any).
 RUN mkdir -p /home/forge/.config-overlay/opencode/agent
-COPY config-overlay/opencode/agent/*.md /home/forge/.config-overlay/opencode/agent/
+COPY images/default/config-overlay/opencode/agent/*.md /home/forge/.config-overlay/opencode/agent/
 RUN chmod 644 /home/forge/.config-overlay/opencode/agent/*.md
 
 # ── Shell configs ──────────────────────────────────────────────
@@ -303,25 +303,25 @@ RUN chmod 644 /home/forge/.config-overlay/opencode/agent/*.md
 #
 # @trace spec:default-image, spec:forge-environment-discoverability
 RUN mkdir -p /etc/skel/.config/fish
-COPY shell/bashrc /etc/skel/.bashrc
-COPY shell/zshrc /etc/skel/.zshrc
-COPY shell/config.fish /etc/skel/.config/fish/config.fish
+COPY images/default/shell/bashrc /etc/skel/.bashrc
+COPY images/default/shell/zshrc /etc/skel/.zshrc
+COPY images/default/shell/config.fish /etc/skel/.config/fish/config.fish
 RUN mkdir -p /home/forge/.config/fish/conf.d
-COPY shell/config.fish /home/forge/.config/fish/conf.d/tillandsias.fish
-COPY shell/bashrc /home/forge/.bashrc
-COPY shell/zshrc /home/forge/.zshrc
+COPY images/default/shell/config.fish /home/forge/.config/fish/conf.d/tillandsias.fish
+COPY images/default/shell/bashrc /home/forge/.bashrc
+COPY images/default/shell/zshrc /home/forge/.zshrc
 RUN printf '# Login bash sources .bashrc so PATH + welcome + prompt apply.\n[ -f ~/.bashrc ] && . ~/.bashrc\n' \
         > /home/forge/.bash_profile
 
 # ── Welcome script ─────────────────────────────────────────────
 RUN mkdir -p /usr/local/share/tillandsias
-COPY forge-welcome.sh /usr/local/share/tillandsias/forge-welcome.sh
+COPY images/default/forge-welcome.sh /usr/local/share/tillandsias/forge-welcome.sh
 RUN chmod +x /usr/local/share/tillandsias/forge-welcome.sh || true
 
 # ── Locale files ───────────────────────────────────────────────
 # @trace spec:environment-runtime
 RUN mkdir -p /etc/tillandsias/locales
-COPY locales/ /etc/tillandsias/locales/
+COPY images/default/locales/ /etc/tillandsias/locales/
 
 # ── External-logs producer manifest ────────────────────────────
 # @trace spec:cheatsheets-license-tiered, spec:external-logs-layer
@@ -332,7 +332,7 @@ COPY locales/ /etc/tillandsias/locales/
 # this manifest at /etc/tillandsias/external-logs.yaml every 60 s and
 # flags any unlisted file in the role dir as a LEAK event.
 RUN mkdir -p /etc/tillandsias
-COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
+COPY images/default/external-logs.yaml /etc/tillandsias/external-logs.yaml
 
 # ── Discoverability CLI tools ─────────────────────────────
 # @trace spec:forge-environment-discoverability
