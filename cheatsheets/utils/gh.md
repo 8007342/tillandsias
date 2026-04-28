@@ -26,8 +26,12 @@ pull_recipe: see-section-pull-on-demand
 ## Provenance
 
 - GitHub CLI manual (official): <https://cli.github.com/manual/> — complete subcommand and flag reference
+- `gh auth setup-git` reference: <https://cli.github.com/manual/gh_auth_setup-git> — credential-helper integration with Git
+- Git Credential Manager configuration: <https://github.com/git-ecosystem/git-credential-manager/blob/main/docs/configuration.md> — `credential.interactive` / `GCM_INTERACTIVE`, store backends, namespaces
+- Git credentials reference: <https://git-scm.com/docs/gitcredentials> — helper chain rules, per-URL `credential.<url>.*` overrides
+- Windows `cmdkey` reference: <https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/cmdkey> — inspect Windows Credential Manager from the shell
 - GitHub CLI repository: <https://github.com/cli/cli> — source, release notes, and changelog
-- **Last updated:** 2026-04-25
+- **Last updated:** 2026-04-28
 
 Verified from the official manual: `gh pr create`, `gh api`, `gh workflow run`, `gh run watch` subcommands confirmed; `--json`, `--jq`, `--paginate` flags documented; `{owner}/{repo}` auto-substitution in API paths confirmed.
 
@@ -118,6 +122,56 @@ gh api -X GET /repos/{owner}/{repo}/issues \
 - **Rate limits hit silently** — unauthenticated REST is 60 req/h by IP; authenticated is 5000/h. `gh api /rate_limit --jq '.resources.core'` to inspect. Errors look like 403 with `X-RateLimit-Remaining: 0`.
 - **`gh repo set-default` is per-repo state** — without it, `gh pr list` in a fresh clone with multiple remotes prompts interactively. CI/agent runs need it preconfigured (or use `--repo owner/name` on every call).
 - **`gh run watch` exits non-zero when the run fails** — useful in scripts (`gh workflow run ... && gh run watch || exit 1`), but be aware that `set -e` will catch it.
+
+## Windows host: stop the GCM "select account" prompt on `git push`
+
+This applies on the **Windows host**, not the forge. Symptom: every `git push` to github.com over HTTPS pops a Git Credential Manager UI dialog asking which Microsoft / GitHub account to use, even after `gh auth login`. Cause: `gh auth login` writes a token to the OS keyring (where `gh` reads it), but Git for Windows ships with `credential.helper=manager` at system scope (`/etc/gitconfig` of the Git for Windows installation), and Git's credential helper chain never asks `gh` — it asks GCM, which prompts.
+
+**Fix:** make `gh` Git's helper for github.com only.
+
+```sh
+gh auth setup-git                      # configures all hosts gh is logged into
+gh auth setup-git --hostname github.com   # restrict to github.com
+```
+
+`gh auth setup-git` writes a per-host helper to `~/.gitconfig`:
+
+```ini
+[credential "https://github.com"]
+    helper = !"C:/Program Files/GitHub CLI/gh.exe" auth git-credential
+```
+
+Per-URL helpers take precedence over the system-scope `credential.helper` per <https://git-scm.com/docs/gitcredentials>:
+
+> "Helpers are first listed under the topmost matching `credential.helper` configuration. … Per-URL configuration `credential.<url>.helper` takes precedence over the unscoped value."
+
+Verify:
+
+```sh
+git config --get-all credential.helper                              # system-level GCM (unchanged)
+git config --get-all credential.https://github.com.helper           # the gh helper (added)
+gh auth status                                                       # token present in keyring
+```
+
+After this, the next `git push` to github.com runs `gh auth git-credential get`, which reads the keyring token and writes `username=…\npassword=…` to stdout — Git accepts that and never invokes GCM. Other hosts still go through GCM as before.
+
+### When `gh auth setup-git` isn't an option
+
+Direct GCM tuning, per <https://github.com/git-ecosystem/git-credential-manager/blob/main/docs/configuration.md>:
+
+| Symptom | Config | Effect |
+|---|---|---|
+| Headless / CI: refuse all UI | `git config --global credential.interactive false` or env `GCM_INTERACTIVE=Never` | GCM errors instead of prompting |
+| Multiple GitHub accounts shown | `git config --global credential.https://github.com.username <login>` | GCM prefers that account on retrieve |
+| Don't store on this host | `git config --global credential.https://github.com.credentialStore none` | GCM forwards but doesn't persist |
+
+### Inspect Windows Credential Manager from the shell
+
+`cmdkey /list` enumerates Generic Credentials stored by GCM (per <https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/cmdkey>). GCM stores under target names like `git:https://github.com`. Note `cmdkey` won't display passwords — only target names — so it's a discovery tool, not an audit tool. For the GUI: Control Panel → User Accounts → Credential Manager → Windows Credentials.
+
+### What `gh auth login` actually stores
+
+`gh` puts the OAuth token in the Windows Credential Manager via `wincred` under target `gh:github.com`. `gh auth status` reads it; `gh auth token` prints it; `cmdkey /list:gh:github.com` shows the target exists. Removing the entry there is equivalent to `gh auth logout`.
 
 ## Forge-specific
 
