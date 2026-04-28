@@ -66,6 +66,9 @@ pub fn build_mutex_lock() -> std::sync::MutexGuard<'static, ()> {
     })
 }
 
+use std::sync::Arc;
+
+use serde_json;
 use tillandsias_core::config::{GlobalConfig, cache_dir, load_global_config, load_project_config};
 use tillandsias_core::event::{AppEvent, BuildProgressEvent, ContainerState};
 use tillandsias_core::genus::GenusAllocator;
@@ -74,6 +77,7 @@ use tillandsias_core::tools::ToolAllocator;
 use tillandsias_podman::PodmanClient;
 use tillandsias_podman::launch::{ContainerLauncher, allocate_port_range};
 use tillandsias_podman::query_occupied_ports;
+use tillandsias_podman::runtime::{Runtime, default_runtime};
 
 /// Find the `gh` CLI binary on the host.
 ///
@@ -205,6 +209,19 @@ pub(crate) async fn ensure_inference_running(
     state: &TrayState,
     build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<(), String> {
+    // @trace spec:cross-platform, spec:windows-wsl-runtime
+    // Windows: inference (ollama) Phase 2 — distro exists but daemon-launch
+    // via wsl.exe isn't wired yet. No-op on Windows so the async spawn doesn't
+    // produce spurious podman errors; opencode degrades gracefully when
+    // OLLAMA_HOST is unreachable.
+    #[cfg(target_os = "windows")]
+    {
+        let _ = (state, build_tx);
+        debug!(spec = "cross-platform, windows-wsl-runtime", "Inference no-op on Windows (Phase 2)");
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "windows"))]
     // Check if already running (in our state or via podman inspect)
     if state.running.iter().any(|c| c.name == INFERENCE_CONTAINER_NAME) {
         debug!(spec = "inference-container", "Inference container already tracked in state");
@@ -468,10 +485,9 @@ pub(crate) async fn ensure_inference_running(
 
 /// Stop the inference container if running. Best-effort, errors are logged.
 /// @trace spec:inference-container
-pub(crate) async fn stop_inference() {
-    let client = PodmanClient::new();
-    let launcher = tillandsias_podman::launch::ContainerLauncher::new(client);
-    match launcher.stop(INFERENCE_CONTAINER_NAME).await {
+pub(crate) async fn stop_inference(runtime: Arc<dyn Runtime>) {
+    // @trace spec:cross-platform, spec:podman-orchestration
+    match runtime.container_stop(INFERENCE_CONTAINER_NAME, 10).await {
         Ok(()) => info!(
             accountability = true,
             category = "inference",
@@ -545,9 +561,10 @@ const PROXY_CONTAINER_NAME: &str = "tillandsias-proxy";
 /// builds the proxy image if needed and starts a detached proxy container
 /// on the enclave network (dual-homed with bridge for external access).
 ///
-/// @trace spec:proxy-container, spec:enclave-network
+/// @trace spec:proxy-container, spec:enclave-network, spec:cross-platform, spec:podman-orchestration
 pub(crate) async fn ensure_proxy_running(
     state: &TrayState,
+    runtime: Arc<dyn Runtime>,
     build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<(), String> {
     // Check if already running (in our state or via podman inspect)
@@ -556,11 +573,10 @@ pub(crate) async fn ensure_proxy_running(
         return Ok(());
     }
 
-    let client = PodmanClient::new();
-
     // Check if it's running outside our state (e.g., surviving a restart).
     // If running but with a stale image version, stop it and rebuild.
-    if let Ok(inspect) = client.inspect_container(PROXY_CONTAINER_NAME).await
+    // @trace spec:cross-platform, spec:podman-orchestration
+    if let Ok(inspect) = runtime.container_inspect(PROXY_CONTAINER_NAME).await
         && inspect.state == "running" {
             let expected_tag = proxy_image_tag();
             if inspect.image.contains(&expected_tag) {
@@ -574,7 +590,8 @@ pub(crate) async fn ensure_proxy_running(
                 expected = %expected_tag,
                 "Proxy container running stale version — restarting"
             );
-            if let Err(e) = client.stop_container(PROXY_CONTAINER_NAME, 5).await {
+            // @trace spec:cross-platform, spec:podman-orchestration
+            if let Err(e) = runtime.container_stop(PROXY_CONTAINER_NAME, 5).await {
                 warn!(container = PROXY_CONTAINER_NAME, error = %e, "Failed to stop stale proxy container");
             }
             // Wait briefly for cleanup
@@ -587,6 +604,11 @@ pub(crate) async fn ensure_proxy_running(
         spec = "proxy-container",
         "Starting proxy container"
     );
+
+    // For image/container operations, use PodmanClient directly (container_run and image_exists
+    // not yet migrated to Runtime trait). Inspect/stop calls above use the Runtime trait.
+    // @trace spec:cross-platform, spec:podman-orchestration
+    let client = PodmanClient::new();
 
     // Ensure proxy image is up to date — always invoke the build script
     // (it handles staleness internally via hash check and exits fast when current).
@@ -1061,10 +1083,9 @@ pub(crate) async fn ensure_router_running(
 
 /// Stop the router container if running. Best-effort, errors are logged.
 /// @trace spec:subdomain-routing-via-reverse-proxy
-pub(crate) async fn stop_router() {
-    let client = PodmanClient::new();
-    let launcher = tillandsias_podman::launch::ContainerLauncher::new(client);
-    match launcher.stop(ROUTER_CONTAINER_NAME).await {
+pub(crate) async fn stop_router(runtime: Arc<dyn Runtime>) {
+    // @trace spec:cross-platform, spec:podman-orchestration
+    match runtime.container_stop(ROUTER_CONTAINER_NAME, 10).await {
         Ok(()) => info!(
             accountability = true,
             category = "router",
@@ -1326,10 +1347,9 @@ pub(crate) async fn regenerate_router_caddyfile(state: &TrayState) -> Result<(),
 
 /// Stop the proxy container if running. Best-effort, errors are logged.
 /// @trace spec:proxy-container
-pub(crate) async fn stop_proxy() {
-    let client = PodmanClient::new();
-    let launcher = tillandsias_podman::launch::ContainerLauncher::new(client);
-    match launcher.stop(PROXY_CONTAINER_NAME).await {
+pub(crate) async fn stop_proxy(runtime: Arc<dyn Runtime>) {
+    // @trace spec:cross-platform, spec:podman-orchestration
+    match runtime.container_stop(PROXY_CONTAINER_NAME, 10).await {
         Ok(()) => info!(
             accountability = true,
             category = "proxy",
@@ -1387,34 +1407,29 @@ pub(crate) async fn cleanup_enclave_network() {
 /// inherited from `--stop-timeout=10`.
 ///
 /// @trace spec:podman-orchestration, spec:secrets-management
-pub(crate) async fn sweep_orphan_containers() {
-    // @trace spec:simplified-tray-ux
-    // `-a` so we also see stopped/exited containers — a crashed prior
-    // session may have left an `exited` forge that hasn't been gc'd by
-    // podman yet. Recreating with the same name (`tillandsias-<project>-forge`)
-    // would otherwise fail with "container with same name already exists".
-    let output = tillandsias_podman::podman_cmd()
-        .args(["ps", "-a", "--filter", "name=tillandsias-", "--format", "{{.Names}}"])
-        .output()
-        .await;
-    let names = match output {
-        Ok(o) if o.status.success() => {
-            String::from_utf8_lossy(&o.stdout)
-                .lines()
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-                .collect::<Vec<_>>()
-        }
-        Ok(o) => {
-            debug!(
-                exit_code = o.status.code().unwrap_or(-1),
-                "podman ps exited non-zero during orphan sweep — skipping"
-            );
-            return;
+pub(crate) async fn sweep_orphan_containers(runtime: Arc<dyn Runtime>) {
+    // @trace spec:simplified-tray-ux, spec:cross-platform, spec:podman-orchestration
+    // Get list of all containers with "tillandsias-" in name
+    let names = match runtime.container_list().await {
+        Ok(json_output) => {
+            if let Ok(containers) = serde_json::from_str::<Vec<serde_json::Value>>(&json_output) {
+                containers
+                    .iter()
+                    .filter_map(|c| {
+                        c.get("Names")
+                            .and_then(|n| n.as_array())
+                            .and_then(|a| a.first())
+                            .and_then(|name| name.as_str())
+                            .map(|s| s.to_string())
+                    })
+                    .filter(|name| name.contains("tillandsias-"))
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            }
         }
         Err(e) => {
-            debug!(error = %e, "podman ps failed during orphan sweep — skipping");
+            debug!(error = %e, "container_list failed during orphan sweep — skipping");
             return;
         }
     };
@@ -1429,19 +1444,15 @@ pub(crate) async fn sweep_orphan_containers() {
         orphan_count = names.len(),
         "Orphan sweep: stopping containers left over from a prior session"
     );
-    let client = PodmanClient::new();
-    let launcher = tillandsias_podman::launch::ContainerLauncher::new(client);
     for name in &names {
-        if let Err(e) = launcher.stop(name).await {
+        if let Err(e) = runtime.container_stop(name, 10).await {
             debug!(container = %name, error = %e, "Orphan container stop returned error (may have exited already)");
         }
         // Belt-and-suspenders: our runtime always uses `--rm`, so stop also
         // deletes. But older installations or hand-built containers might
         // not; force-remove here so the orphan is fully gone either way.
-        let _ = tillandsias_podman::podman_cmd()
-            .args(["rm", "-f", name])
-            .output()
-            .await;
+        let client = PodmanClient::new();
+        let _ = client.remove_container(name).await;
         // Also wipe any residual token file for this container.
         crate::secrets::cleanup_token_file(name);
     }
@@ -1462,7 +1473,8 @@ pub(crate) async fn sweep_orphan_containers() {
 ///
 /// @trace spec:simplified-tray-ux, spec:podman-orchestration
 pub async fn pre_ui_cleanup_stale_containers() {
-    sweep_orphan_containers().await;
+    let runtime = default_runtime();
+    sweep_orphan_containers(runtime).await;
 }
 
 // ---------------------------------------------------------------------------
@@ -1882,7 +1894,91 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
         );
 
         let mirror_ref = if has_git { mp.as_str() } else { container_mirror.as_str() };
-        match run_git(&["-C", mirror_ref, "fetch", "--all"], &mounts) {
+
+        // @trace spec:git-mirror-service, spec:cross-platform, spec:windows-wsl-runtime
+        // Refresh hook + origin URL on every attach so that:
+        //  - The post-receive hook is up to date (multi-path log fallback,
+        //    stderr emission for --diagnostics).
+        //  - The mirror's origin URL has the LATEST token from the keyring.
+        //    Token rotation by the user immediately propagates without
+        //    needing to delete + reclone the mirror.
+        let hooks_dir = mirror_path.join("hooks");
+        if let Err(e) = std::fs::create_dir_all(&hooks_dir) {
+            warn!(spec = "git-mirror-service", error = %e, "Cannot create hooks dir");
+        }
+        let hook_path = hooks_dir.join("post-receive");
+        if let Err(e) = std::fs::write(&hook_path, crate::embedded::POST_RECEIVE_HOOK) {
+            warn!(spec = "git-mirror-service", error = %e, "Cannot refresh post-receive hook");
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&hook_path, std::fs::Permissions::from_mode(0o755));
+        }
+
+        // @trace spec:git-mirror-service, spec:secrets-management
+        // Strip any tokens that prior INTERIM versions of Tillandsias may
+        // have injected into the mirror URL. Going forward the URL is the
+        // clean GitHub URL only — auth is handled by the git-daemon's env
+        // (Windows) or the git-service container's tmpfs file (Linux).
+        #[cfg(target_os = "windows")]
+        if let Ok(o) = run_git(&["-C", mirror_ref, "remote", "get-url", "origin"], &mounts)
+            && o.status.success()
+        {
+            let current = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if let Some(rest) = current.strip_prefix("https://")
+                && let Some((_, host_path)) = rest.split_once('@')
+            {
+                let canonical = format!("https://{host_path}");
+                let _ = run_git(
+                    &["-C", mirror_ref, "remote", "set-url", "origin", &canonical],
+                    &mounts,
+                );
+                info!(
+                    spec = "git-mirror-service, secrets-management",
+                    project = %project_name,
+                    "Cleaned legacy token-in-URL from mirror config"
+                );
+            }
+        }
+
+        // @trace spec:git-mirror-service, spec:secrets-management, spec:windows-wsl-runtime, spec:windows-git-mirror-cred-isolation
+        // @cheatsheet runtime/secrets-management.md
+        // Host-side fetch on Windows must bypass Git Credential Manager (which
+        // pops a GUI prompt and blocks the tray's startup) AND must NOT touch
+        // the user's keyring twice. We inject a shell credential-helper that
+        // reads a process-scoped env var. The token is never written to disk
+        // and never appears in the command line. We empty the existing helper
+        // list first (`credential.helper=`) so GCM is disabled for this call,
+        // then append our env-reader. GIT_TERMINAL_PROMPT=0 prevents any TTY
+        // fallback. On Linux this code is gated out — Linux uses the git-
+        // service container which has its own credential plumbing.
+        #[cfg(target_os = "windows")]
+        let fetch_result = {
+            let token = match crate::secrets::retrieve_github_token() {
+                Ok(Some(t)) => Some(t),
+                _ => None,
+            };
+            let mut cmd = std::process::Command::new("git");
+            cmd.env_remove("LD_LIBRARY_PATH").env_remove("LD_PRELOAD");
+            cmd.env("GIT_TERMINAL_PROMPT", "0");
+            cmd.env("GCM_INTERACTIVE", "Never");
+            if let Some(ref t) = token {
+                cmd.env("TILLANDSIAS_FETCH_TOKEN", t);
+                cmd.args([
+                    "-c", "credential.helper=",
+                    "-c", "credential.helper=!f() { echo username=oauth2; echo \"password=$TILLANDSIAS_FETCH_TOKEN\"; }; f",
+                ]);
+            } else {
+                cmd.args(["-c", "credential.helper="]);
+            }
+            cmd.args(["-C", mirror_ref, "fetch", "--all"]);
+            cmd.output().map_err(|e| format!("git failed: {e}"))
+        };
+        #[cfg(not(target_os = "windows"))]
+        let fetch_result = run_git(&["-C", mirror_ref, "fetch", "--all"], &mounts);
+
+        match fetch_result {
             Ok(o) if o.status.success() => {
                 debug!(spec = "git-mirror-service", project = %project_name, "Mirror fetch succeeded");
             }
@@ -1997,21 +2093,40 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
     // Fix mirror origin URL: `git clone --mirror` sets origin to the local
     // path we cloned from. If the project has a real remote (e.g., github.com),
     // update the mirror's origin to that URL. This way the post-receive hook
-    // pushes to the real remote (through the git service's D-Bus keyring access)
-    // instead of trying to push to an inaccessible local path.
-    // @trace spec:git-mirror-service
+    // pushes to the real remote (through the git service's D-Bus keyring access
+    // on Linux, or token-in-URL on Windows) instead of trying to push to an
+    // inaccessible local path.
+    //
+    // @trace spec:git-mirror-service, spec:cross-platform, spec:windows-wsl-runtime, spec:secrets-management
+    // On Windows, the post-receive hook runs in the FORGE distro's process
+    // context (since the forge invokes git push to the bare mirror via
+    // filesystem). The forge has zero credentials. To make `git push` truly
+    // automatic and transparent (the spec's ZERO OVERHEAD UX requirement),
+    // we embed the GitHub token directly in the mirror's origin URL. The
+    // token lives only in /mnt/c/.../mirrors/<project>/config — a host file
+    // that's not visible to other forge sessions or processes outside the
+    // attached forge. This is the simplest path to honour the spec on
+    // Windows without separate per-container credential isolation.
     if let GitProjectState::RemoteRepo { ref remote_url } = state {
         let mirror_ref = if has_git { mp.as_str() } else { container_mirror.as_str() };
+        // @trace spec:git-mirror-service, spec:secrets-management
+        // Mirror's origin URL is the CLEAN GitHub URL (no token embedded).
+        // The token never lands in any file the forge can read. On Linux the
+        // git-service container runs the daemon and reads token from
+        // /run/secrets/github_token (tmpfs bind-mount). On Windows the daemon
+        // runs in tillandsias-git distro with GH_TOKEN injected via env at
+        // spawn time; the post-receive hook reads $GH_TOKEN at push time and
+        // constructs an ephemeral auth URL — token is never persisted to disk.
         match run_git(
             &["-C", mirror_ref, "remote", "set-url", "origin", remote_url],
             &mounts,
         ) {
             Ok(o) if o.status.success() => {
                 info!(
-                    spec = "git-mirror-service",
+                    spec = "git-mirror-service, secrets-management",
                     project = %project_name,
                     remote_url = %remote_url,
-                    "Mirror origin set to project's remote URL"
+                    "Mirror origin set (clean URL; auth via daemon env / hook)"
                 );
             }
             Ok(o) => {
@@ -2052,13 +2167,244 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
     Ok(mirror_path)
 }
 
+// @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service
+// WSL-native git-daemon launcher. Idempotent — checks if a git-daemon is
+// already listening on 127.0.0.1:9418 inside tillandsias-git, and starts one
+// if not. The daemon's --base-path points at the host's mirrors dir mapped
+// through /mnt/c/... so distros and host share one source of truth.
+//
+// Why localhost: WSL2 runs all distros in one VM with one network namespace.
+// Distro A binding 127.0.0.1:9418 is reachable from distro B as
+// 127.0.0.1:9418. From the Windows host, WSL2 also auto-forwards localhost
+// (so the user could `git clone git://localhost:9418/<project>` natively if
+// they wanted). The git daemon is NOT exposed beyond localhost.
+#[cfg(target_os = "windows")]
+async fn ensure_git_service_running_wsl(
+    project_name: &str,
+) -> Result<(), String> {
+    use tokio::process::Command;
+
+    // Resolve mirrors dir (parent of any specific mirror) → /mnt/c/...
+    let mirrors_dir = cache_dir().join("mirrors");
+    let mirrors_mnt = windows_path_to_wsl_mnt(&mirrors_dir)?;
+
+    // Read GH_TOKEN once; passed via env to the daemon if present.
+    // @trace spec:secrets-management, spec:git-mirror-service
+    let gh_token: Option<String> = match crate::secrets::retrieve_github_token() {
+        Ok(Some(t)) => Some(t),
+        _ => None,
+    };
+    if gh_token.is_none() {
+        warn!(
+            spec = "git-mirror-service, secrets-management",
+            project = %project_name,
+            "No GitHub token in keyring — git daemon will start but post-receive push will fail. Run `tillandsias --github-login` first."
+        );
+    }
+
+    // @cheatsheet runtime/wsl-on-windows.md
+    // Probe via `ss -tln` — works in busybox (Alpine /bin/sh has no /dev/tcp;
+    // earlier we tried `echo > /dev/tcp/...` and it always failed silently
+    // because busybox sh lacks that bash feature). `ss` ships in Alpine's
+    // iproute2 package which is pulled in by tillandsias-git's apk install.
+    // If `ss` is missing, fall back to `netstat`.
+    let probe_cmd = "ss -tln 2>/dev/null | grep -qE '127\\.0\\.0\\.1:9418\\b' && echo UP || \
+                     (netstat -tln 2>/dev/null | grep -qE '127\\.0\\.0\\.1:9418\\b' && echo UP || echo DOWN)";
+
+    let probe = { let mut __c = Command::new("wsl.exe"); tillandsias_podman::no_window_async(&mut __c); __c }
+        .args([
+            "-d", "tillandsias-git", "--user", "git", "--exec",
+            "/bin/sh", "-c", probe_cmd,
+        ])
+        .output()
+        .await
+        .map_err(|e| format!("wsl probe failed: {e}"))?;
+    if String::from_utf8_lossy(&probe.stdout).contains("UP") {
+        info!(
+            spec = "git-mirror-service, cross-platform, windows-wsl-runtime",
+            project = %project_name,
+            "git-daemon already listening on 127.0.0.1:9418 (re-using)"
+        );
+        return Ok(());
+    }
+
+    info!(
+        accountability = true,
+        category = "git",
+        spec = "git-mirror-service, cross-platform, windows-wsl-runtime",
+        project = %project_name,
+        mirrors = %mirrors_mnt,
+        "Starting git-daemon in tillandsias-git distro (base-path={})", mirrors_mnt
+    );
+
+    // @trace spec:git-mirror-service, spec:windows-wsl-runtime, spec:windows-git-mirror-cred-isolation
+    // @cheatsheet runtime/wsl-mount-points.md
+    // Bootstrap system-wide safe.directory in /etc/gitconfig so the `git`
+    // user (uid=1000, runs the daemon) can read mirrors owned by root on
+    // drvfs (/mnt/c is always reported as owned by root regardless of NTFS
+    // ACL — see Microsoft's WSL filesystems doc). Without this, git refuses
+    // with "fatal: detected dubious ownership". --system gitconfig requires
+    // root, hence we run this WITHOUT --user git. We use `safe.directory=*`
+    // because mirror paths are dynamic (one per project) and the parent
+    // directory is the controlled boundary.
+    let bootstrap = { let mut __c = Command::new("wsl.exe"); tillandsias_podman::no_window_async(&mut __c); __c }
+        .args([
+            "-d", "tillandsias-git", "--exec",
+            "/bin/sh", "-c",
+            "git config --system --get-all safe.directory 2>/dev/null | grep -qx '*' || \
+             git config --system --add safe.directory '*'",
+        ])
+        .output()
+        .await
+        .map_err(|e| format!("wsl bootstrap safe.directory failed: {e}"))?;
+    if !bootstrap.status.success() {
+        warn!(
+            spec = "git-mirror-service, windows-wsl-runtime",
+            stderr = %String::from_utf8_lossy(&bootstrap.stderr),
+            "Failed to bootstrap system-wide safe.directory in tillandsias-git (continuing)"
+        );
+    }
+
+    // Use git's built-in --detach so we don't need nohup/setsid wrapping. git
+    // daemon will fork itself into the background and return 0 immediately
+    // (or non-zero if the bind fails). Logs would go to syslog by default;
+    // we redirect to /tmp/git-daemon.log for diagnostics.
+    let start_script = format!(
+        "git daemon --reuseaddr --export-all --enable=receive-pack \
+         --base-path='{mirrors_mnt}' --listen=127.0.0.1 --port=9418 \
+         --detach --pid-file=/tmp/git-daemon.pid \
+         --log-destination=stderr 2>>/tmp/git-daemon.log",
+    );
+
+    // @trace spec:secrets-management, spec:git-mirror-service
+    // GH_TOKEN forwarded via WSLENV so wsl.exe propagates it from the host
+    // process into the distro shell. The token therefore exists only in the
+    // wsl.exe process env (host side) and the daemon's process tree (distro
+    // side). Never written to disk; never visible to the forge distro.
+    // Reference: https://learn.microsoft.com/en-us/windows/wsl/filesystems#share-environment-variables-between-windows-and-wsl
+    let mut start_cmd = Command::new("wsl.exe");
+    tillandsias_podman::no_window_async(&mut start_cmd);
+    start_cmd.args([
+        "-d", "tillandsias-git", "--user", "git", "--exec",
+        "/bin/sh", "-c", &start_script,
+    ]);
+    if let Some(ref tok) = gh_token {
+        start_cmd.env("WSLENV", "GH_TOKEN/u");
+        start_cmd.env("GH_TOKEN", tok);
+    }
+    let start = start_cmd
+        .output()
+        .await
+        .map_err(|e| format!("wsl spawn git-daemon failed: {e}"))?;
+
+    if !start.status.success() {
+        let stderr = String::from_utf8_lossy(&start.stderr);
+        // Also pull the daemon log for diagnosis.
+        let log = { let mut __c = Command::new("wsl.exe"); tillandsias_podman::no_window_async(&mut __c); __c }
+            .args(["-d", "tillandsias-git", "--user", "git", "--exec",
+                   "/bin/sh", "-c", "tail -20 /tmp/git-daemon.log 2>/dev/null"])
+            .output()
+            .await
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+            .unwrap_or_default();
+        return Err(format!(
+            "git-daemon spawn failed: exit={:?} stderr={} log={}",
+            start.status.code(), stderr.trim(), log.trim()
+        ));
+    }
+
+    // Wait for the daemon to actually bind (--detach returns before bind
+    // completes occasionally).
+    for attempt in 0..25 {
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        let probe = { let mut __c = Command::new("wsl.exe"); tillandsias_podman::no_window_async(&mut __c); __c }
+            .args([
+                "-d", "tillandsias-git", "--user", "git", "--exec",
+                "/bin/sh", "-c", probe_cmd,
+            ])
+            .output()
+            .await
+            .map_err(|e| format!("wsl probe failed: {e}"))?;
+        if String::from_utf8_lossy(&probe.stdout).contains("UP") {
+            info!(
+                spec = "git-mirror-service, cross-platform, windows-wsl-runtime",
+                project = %project_name,
+                attempt = attempt + 1,
+                "git-daemon bound on 127.0.0.1:9418"
+            );
+            return Ok(());
+        }
+    }
+    // Last-resort diagnosis: pull the daemon log
+    let log = { let mut __c = Command::new("wsl.exe"); tillandsias_podman::no_window_async(&mut __c); __c }
+        .args(["-d", "tillandsias-git", "--user", "git", "--exec",
+               "/bin/sh", "-c", "tail -30 /tmp/git-daemon.log 2>/dev/null; echo ---; ss -tln 2>/dev/null | head"])
+        .output()
+        .await
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+        .unwrap_or_default();
+    Err(format!(
+        "git-daemon failed to bind 127.0.0.1:9418 after 5s. Diagnostics:\n{}",
+        log
+    ))
+}
+
+/// Embed a GitHub PAT/OAuth token in an HTTPS clone URL.
+/// Format: `https://USER:TOKEN@github.com/owner/repo.git` per Git docs.
+/// We use `oauth2` as the literal username (recommended for tokens).
+/// Documented at: https://git-scm.com/book/en/v2/Git-on-the-Server-Smart-HTTP
+/// @trace spec:secrets-management, spec:git-mirror-service, spec:cross-platform
+fn embed_github_token_in_url(url: &str, token: &str) -> String {
+    if let Some(rest) = url.strip_prefix("https://") {
+        // Strip any existing user:pass component if present (rare but defensive).
+        let after_at = rest.split_once('@').map(|(_, host)| host).unwrap_or(rest);
+        format!("https://oauth2:{token}@{after_at}")
+    } else {
+        // Non-HTTPS URLs (ssh://, git://, etc.) — leave alone; ssh has its own auth.
+        url.to_string()
+    }
+}
+
+/// Mask the token in `https://oauth2:TOKEN@github.com/...` so it's safe to log.
+/// @trace spec:secrets-management
+fn redact_url_for_log(url: &str) -> String {
+    if let Some(rest) = url.strip_prefix("https://") {
+        if let Some((_user_pass, host_path)) = rest.split_once('@') {
+            return format!("https://***@{host_path}");
+        }
+    }
+    url.to_string()
+}
+
+/// Translate `C:\path\to\dir` → `/mnt/c/path/to/dir` for WSL access.
+/// @trace spec:cross-platform, spec:windows-wsl-runtime
+#[cfg(target_os = "windows")]
+fn windows_path_to_wsl_mnt(p: &Path) -> Result<String, String> {
+    let s = p.to_string_lossy();
+    let bytes = s.as_bytes();
+    if bytes.len() >= 3 && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/') {
+        let drive = (bytes[0] as char).to_ascii_lowercase();
+        let rest = s[2..].replace('\\', "/");
+        Ok(format!("/mnt/{drive}{rest}"))
+    } else {
+        Err(format!("Path is not a Windows drive path: {}", s))
+    }
+}
+
 /// Ensure the git service container is running for a project.
 ///
 /// Checks if `tillandsias-git-<project>` is already running. If not,
 /// builds the git image if needed and starts a detached git service
 /// container on the enclave network with the mirror mounted.
 ///
-/// @trace spec:git-mirror-service
+/// @trace spec:git-mirror-service, spec:cross-platform, spec:windows-wsl-runtime
+// On Windows, the function takes the early-return path into
+// `ensure_git_service_running_wsl` and the Unix podman-driven path is
+// unreachable. The compiler can't see across the cfg gate, so allow
+// unreachable_code for the Unix-only suffix.
+#[allow(unreachable_code)]
 pub(crate) async fn ensure_git_service_running(
     project_name: &str,
     mirror_path: &Path,
@@ -2067,6 +2413,24 @@ pub(crate) async fn ensure_git_service_running(
 ) -> Result<(), String> {
     let container_name = tillandsias_core::state::ContainerInfo::git_service_container_name(project_name);
 
+    // @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service, spec:secrets-management
+    // Windows: spawn git-daemon in tillandsias-git distro with GH_TOKEN env.
+    // Requires WSL2 mirrored networking (configured in ~/.wslconfig at init
+    // time). Daemon listens on 127.0.0.1:9418; forge connects via
+    // git://localhost:9418/<project> matching the Linux DNS-via-podman flow
+    // (TILLANDSIAS_GIT_SERVICE=localhost on Windows; git-service on Linux).
+    //
+    // Token isolation: GH_TOKEN lives only in the git daemon process env
+    // and child hook processes. The forge has zero filesystem path to it
+    // (different distro, different /run/secrets, different /tmp). Matches
+    // the Linux container-isolation property.
+    #[cfg(target_os = "windows")]
+    {
+        let _ = (state, build_tx, container_name, mirror_path);
+        return ensure_git_service_running_wsl(project_name).await;
+    }
+
+    #[cfg(not(target_os = "windows"))]
     // Check if already running (in our state or via podman inspect)
     if state.running.iter().any(|c| c.name == container_name) {
         debug!(spec = "git-mirror-service", project = %project_name, "Git service already tracked in state");
@@ -2382,6 +2746,19 @@ pub async fn ensure_enclave_ready(
     state: &TrayState,
     build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<EnclaveContext, String> {
+    // @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service
+    // On Windows the enclave is decomposed: the git mirror service IS load-
+    // bearing (provides the isolation + lifecycle separation between host
+    // source, long-lived bare mirror, and ephemeral forge working tree) and
+    // MUST run; the proxy/router/inference services are Phase 2 work and are
+    // skipped (`ensure_infrastructure_ready` returns early). The git daemon
+    // runs in the tillandsias-git WSL distro listening on localhost:9418
+    // because all WSL2 distros share a single network namespace — the forge
+    // distro reaches it as `git://localhost:9418/<project>` (matching the
+    // Linux/podman semantics that use `git://git-service:9418/<project>`
+    // via podman DNS). The forge entrypoint env-substitutes the host so
+    // `TILLANDSIAS_GIT_SERVICE=localhost` makes both paths use the same
+    // entrypoint code.
     // Step 1+2: Infrastructure services (network + proxy) — hard requirement
     ensure_infrastructure_ready(state, build_tx.clone()).await?;
 
@@ -2487,40 +2864,69 @@ pub async fn ensure_enclave_ready(
 /// enclave network and proxy but not git mirror/service (e.g., root terminal,
 /// serve-here).
 ///
-/// @trace spec:enclave-network, spec:proxy-container
+/// @trace spec:enclave-network, spec:proxy-container, spec:cross-platform, spec:podman-orchestration
 pub async fn ensure_infrastructure_ready(
     state: &TrayState,
     build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<(), String> {
-    // @trace spec:layered-tools-overlay
-    // Extract config overlay to tmpfs before containers launch.
-    // Non-fatal — containers will use defaults if extraction fails.
-    if let Err(e) = crate::embedded::extract_config_overlay() {
-        warn!(error = %e, spec = "layered-tools-overlay", "Config overlay extraction failed — containers will use default configs");
+    // @trace spec:cross-platform, spec:windows-wsl-runtime
+    // On Windows, the supporting services (proxy/router/git-service/inference)
+    // are not yet ported to WSL; running them through podman violates the
+    // WSL-only directive and produces zombie containers ("name in use" on
+    // restart) plus image-not-found errors when their tags don't exist in any
+    // local registry. Skip the entire infrastructure-setup phase: the forge
+    // distro on Windows uses host /mnt/c/... paths directly and does not need
+    // the proxy / git mirror / inference at attach time. Phase 2 will land
+    // WSL-native equivalents.
+    #[cfg(target_os = "windows")]
+    {
+        let _ = state;
+        let _ = build_tx;
+        if let Err(e) = crate::embedded::extract_config_overlay() {
+            warn!(error = %e, spec = "layered-tools-overlay", "Config overlay extraction failed");
+        }
+        info!(
+            spec = "cross-platform, windows-wsl-runtime",
+            "Infrastructure step skipped on Windows (WSL backend; supporting services not yet ported)"
+        );
+        return Ok(());
     }
 
-    ensure_enclave_network().await?;
-    ensure_proxy_running(state, build_tx.clone()).await?;
+    #[cfg(not(target_os = "windows"))]
+    {
+        // @trace spec:layered-tools-overlay
+        // Extract config overlay to tmpfs before containers launch.
+        // Non-fatal — containers will use defaults if extraction fails.
+        if let Err(e) = crate::embedded::extract_config_overlay() {
+            warn!(error = %e, spec = "layered-tools-overlay", "Config overlay extraction failed — containers will use default configs");
+        }
 
-    // @trace spec:subdomain-routing-via-reverse-proxy, spec:enclave-network
-    // Router (Caddy) — must come up after the proxy because Squid forwards
-    // *.localhost requests to it via cache_peer. If router fails, the rest
-    // of the enclave stays usable; agents just can't reach
-    // <project>.<service>.localhost URLs.
-    if let Err(e) = ensure_router_running(state, build_tx).await {
-        warn!(error = %e, spec = "subdomain-routing-via-reverse-proxy", "Router failed to start — *.localhost subdomain routing unavailable");
+        // @trace spec:cross-platform, spec:podman-orchestration
+        let runtime = default_runtime();
+
+        ensure_enclave_network().await?;
+        ensure_proxy_running(state, runtime, build_tx.clone()).await?;
+
+        // @trace spec:subdomain-routing-via-reverse-proxy, spec:enclave-network
+        // Router (Caddy) — must come up after the proxy because Squid forwards
+        // *.localhost requests to it via cache_peer. If router fails, the rest
+        // of the enclave stays usable; agents just can't reach
+        // <project>.<service>.localhost URLs.
+        if let Err(e) = ensure_router_running(state, build_tx).await {
+            warn!(error = %e, spec = "subdomain-routing-via-reverse-proxy", "Router failed to start — *.localhost subdomain routing unavailable");
+        }
+
+        // @trace spec:enclave-network, spec:proxy-container
+        info!(
+            accountability = true,
+            category = "enclave",
+            spec = "enclave-network",
+            proxy = PROXY_CONTAINER_NAME,
+            "Infrastructure ready — proxy (strict:3128, permissive:3129)"
+        );
+
+        Ok(())
     }
-
-    // @trace spec:enclave-network, spec:proxy-container
-    info!(
-        accountability = true,
-        category = "enclave",
-        spec = "enclave-network",
-        proxy = PROXY_CONTAINER_NAME,
-        "Infrastructure ready — proxy (strict:3128, permissive:3129)"
-    );
-
-    Ok(())
 }
 
 /// Public wrapper around `ensure_enclave_network` for use from `main.rs`
@@ -2563,11 +2969,10 @@ pub fn ensure_enclave_ready_cli(
 /// Stop the git service container for a project. Best-effort, errors are logged.
 /// Also unlinks the ephemeral GitHub token file materialised at launch.
 /// @trace spec:git-mirror-service, spec:secrets-management
-pub(crate) async fn stop_git_service(project_name: &str) {
+pub(crate) async fn stop_git_service(project_name: &str, runtime: Arc<dyn Runtime>) {
     let name = tillandsias_core::state::ContainerInfo::git_service_container_name(project_name);
-    let client = PodmanClient::new();
-    let launcher = tillandsias_podman::launch::ContainerLauncher::new(client);
-    match launcher.stop(&name).await {
+    // @trace spec:cross-platform, spec:podman-orchestration
+    match runtime.container_stop(&name, 10).await {
         Ok(()) => info!(
             accountability = true,
             category = "git",
@@ -3026,61 +3431,99 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
         _ => forge_image_tag(),
     };
 
-    // Build the image using the direct podman ImageBuilder (all platforms unified).
-    // @trace spec:direct-podman-calls, spec:default-image
-    let builder = crate::image_builder::ImageBuilder::new(
-        source_dir.clone(),
-        image_name.to_string(),
-        tag.clone(),
-    );
-
-    info!(
-        image = image_name,
-        tag = %tag,
-        spec = "direct-podman-calls, default-image",
-        "Starting image build via direct podman invocation"
-    );
-
-    // Attempt build
-    match builder.build_image() {
-        Ok(()) => {
-            crate::embedded::cleanup_image_sources();
-
-            // Clean up any leftover buildah containers from builds
-            // @trace spec:default-image
-            let _ = std::process::Command::new("buildah")
-                .args(["rm", "--all"])
-                .env_remove("LD_LIBRARY_PATH")
-                .env_remove("LD_PRELOAD")
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status();
-
-            crate::build_lock::release(image_name);
-            prune_old_images();
-            Ok(())
+    // @trace spec:cross-platform, spec:windows-wsl-runtime
+    // Windows path is WSL-native: no podman, no bash wrapper. The image is
+    // already an imported WSL distro `tillandsias-<name>` produced by --init.
+    // Verify presence; if missing, instruct user to run --init.
+    #[cfg(target_os = "windows")]
+    {
+        let _ = source_dir;
+        let _ = tag;
+        let distro = format!("tillandsias-{}", image_name);
+        let mut __listing_cmd = std::process::Command::new("wsl.exe");
+        tillandsias_podman::no_window_sync(&mut __listing_cmd);
+        let listing = __listing_cmd
+            .args(["--list", "--quiet"])
+            .output()
+            .map_err(|e| {
+                error!(image = image_name, error = %e, "Cannot query WSL");
+                strings::SETUP_ERROR
+            })?;
+        let text: String = listing
+            .stdout
+            .iter()
+            .filter(|&&b| b != 0 && b != b'\r')
+            .map(|&b| b as char)
+            .collect();
+        let exists = text.lines().any(|l| l.trim() == distro);
+        crate::embedded::cleanup_image_sources();
+        crate::build_lock::release(image_name);
+        if exists {
+            info!(image = image_name, distro = %distro, spec = "cross-platform, windows-wsl-runtime", "WSL distro present — skipping build (Windows uses WSL runtime)");
+            return Ok(());
         }
-        Err(e) => {
-            error!(
-                image = image_name,
-                tag = %tag,
-                error = %e,
-                spec = "direct-podman-calls",
-                "Image build failed"
-            );
-            crate::embedded::cleanup_image_sources();
+        error!(image = image_name, distro = %distro, "WSL distro not imported — user must run tillandsias --init");
+        return Err(strings::SETUP_ERROR.into());
+    }
 
-            // Clean up any leftover buildah containers
-            let _ = std::process::Command::new("buildah")
-                .args(["rm", "--all"])
-                .env_remove("LD_LIBRARY_PATH")
-                .env_remove("LD_PRELOAD")
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status();
+    // On Unix, build the image using the direct podman ImageBuilder.
+    // @trace spec:direct-podman-calls, spec:default-image
+    #[cfg(not(target_os = "windows"))]
+    {
+        let builder = crate::image_builder::ImageBuilder::new(
+            source_dir.clone(),
+            image_name.to_string(),
+            tag.clone(),
+        );
 
-            crate::build_lock::release(image_name);
-            Err(e)
+        info!(
+            image = image_name,
+            tag = %tag,
+            spec = "direct-podman-calls, default-image",
+            "Starting image build via direct podman invocation"
+        );
+
+        // Attempt build
+        match builder.build_image() {
+            Ok(()) => {
+                crate::embedded::cleanup_image_sources();
+
+                // Clean up any leftover buildah containers from builds
+                // @trace spec:default-image
+                let _ = std::process::Command::new("buildah")
+                    .args(["rm", "--all"])
+                    .env_remove("LD_LIBRARY_PATH")
+                    .env_remove("LD_PRELOAD")
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status();
+
+                crate::build_lock::release(image_name);
+                prune_old_images();
+                Ok(())
+            }
+            Err(e) => {
+                error!(
+                    image = image_name,
+                    tag = %tag,
+                    error = %e,
+                    spec = "direct-podman-calls",
+                    "Image build failed"
+                );
+                crate::embedded::cleanup_image_sources();
+
+                // Clean up any leftover buildah containers
+                let _ = std::process::Command::new("buildah")
+                    .args(["rm", "--all"])
+                    .env_remove("LD_LIBRARY_PATH")
+                    .env_remove("LD_PRELOAD")
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status();
+
+                crate::build_lock::release(image_name);
+                Err(e)
+            }
         }
     }
 }
@@ -4409,15 +4852,19 @@ pub async fn shutdown_all(state: &TrayState) {
     // The generic stop-by-name loop above already handles every ContainerType,
     // including OpenCodeWeb — no special casing required. The orphan sweep below
     // matches `tillandsias-*-forge` via the existing `tillandsias-` prefix filter.
+    // Get default runtime for cross-platform operations
+    // @trace spec:cross-platform
+    let runtime = default_runtime();
+
     // Stop git service containers for every project that had one tracked.
     // @trace spec:git-mirror-service, spec:persistent-git-service, spec:opencode-web-session
     for project_name in &git_service_projects {
-        stop_git_service(project_name).await;
+        stop_git_service(project_name, runtime.clone()).await;
     }
 
     // Stop the inference container
     // @trace spec:inference-container
-    stop_inference().await;
+    stop_inference(runtime.clone()).await;
 
     // @trace spec:subdomain-routing-via-reverse-proxy
     // Regenerate the dynamic Caddyfile from current `state.running` before
@@ -4431,11 +4878,11 @@ pub async fn shutdown_all(state: &TrayState) {
 
     // Stop the router (must come before proxy since Squid forwards to it).
     // @trace spec:subdomain-routing-via-reverse-proxy
-    stop_router().await;
+    stop_router(runtime.clone()).await;
 
     // Stop the proxy
     // @trace spec:proxy-container
-    stop_proxy().await;
+    stop_proxy(runtime.clone()).await;
 
     // Catch-all: stop any remaining tillandsias-* containers that may be orphaned
     // from previous sessions or not tracked in state. The `tillandsias-` prefix
@@ -4485,25 +4932,28 @@ pub async fn shutdown_all(state: &TrayState) {
 /// an empty vec — verification continues with what it can see.
 ///
 /// @trace spec:app-lifecycle, spec:podman-orchestration
-pub(crate) async fn list_running_tillandsias_containers() -> Vec<String> {
-    let output = tillandsias_podman::podman_cmd()
-        .args([
-            "ps",
-            "--filter",
-            "name=tillandsias-",
-            "--format",
-            "{{.Names}}",
-        ])
-        .output()
-        .await;
-
-    match output {
-        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout)
-            .lines()
-            .map(|l| l.trim().to_string())
-            .filter(|l| !l.is_empty())
-            .collect(),
-        _ => Vec::new(),
+pub(crate) async fn list_running_tillandsias_containers(runtime: Arc<dyn Runtime>) -> Vec<String> {
+    // @trace spec:cross-platform, spec:podman-orchestration
+    match runtime.container_list().await {
+        Ok(json_output) => {
+            // Parse JSON output to extract container names starting with "tillandsias-"
+            if let Ok(containers) = serde_json::from_str::<Vec<serde_json::Value>>(&json_output) {
+                containers
+                    .iter()
+                    .filter_map(|c| {
+                        c.get("Names")
+                            .and_then(|n| n.as_array())
+                            .and_then(|a| a.first())
+                            .and_then(|name| name.as_str())
+                            .map(|s| s.to_string())
+                    })
+                    .filter(|name| name.contains("tillandsias-"))
+                    .collect()
+            } else {
+                Vec::new()
+            }
+        }
+        Err(_) => Vec::new(),
     }
 }
 
@@ -4511,7 +4961,7 @@ pub(crate) async fn list_running_tillandsias_containers() -> Vec<String> {
 /// post-shutdown verification phase — never on the routine teardown path.
 ///
 /// @trace spec:app-lifecycle, spec:podman-orchestration
-pub(crate) async fn kill_and_remove(name: &str) {
+pub(crate) async fn kill_and_remove(name: &str, runtime: Arc<dyn Runtime>) {
     info!(
         accountability = true,
         category = "enclave",
@@ -4520,16 +4970,18 @@ pub(crate) async fn kill_and_remove(name: &str) {
         escalation = "sigkill",
         "verify_shutdown_clean: escalating to SIGKILL + rm -f"
     );
-    let client = PodmanClient::new();
-    if let Err(e) = client.kill_container(name, Some("KILL")).await {
+    // @trace spec:cross-platform, spec:podman-orchestration
+    if let Err(e) = runtime.container_kill(name, Some("KILL")).await {
         warn!(
             container = %name,
             error = %e,
             spec = "app-lifecycle",
-            "kill_container(KILL) returned error (continuing)"
+            "container_kill(KILL) returned error (continuing)"
         );
     }
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    // Note: Runtime trait does not expose container remove; use PodmanClient for belt-and-suspenders
+    let client = PodmanClient::new();
     if let Err(e) = client.remove_container(name).await {
         debug!(
             container = %name,
@@ -4593,12 +5045,13 @@ pub(crate) async fn verify_shutdown_clean() {
     const POLL_INTERVAL: Duration = Duration::from_millis(200);
     const TOTAL_BUDGET: Duration = Duration::from_secs(5);
 
+    let runtime = default_runtime();
     let start = Instant::now();
 
     // Phase 1: poll until empty or ~half the budget elapses.
     let phase_one_budget = Duration::from_secs(2);
     while start.elapsed() < phase_one_budget {
-        let stragglers = list_running_tillandsias_containers().await;
+        let stragglers = list_running_tillandsias_containers(runtime.clone()).await;
         if stragglers.is_empty() {
             info!(
                 accountability = true,
@@ -4612,7 +5065,7 @@ pub(crate) async fn verify_shutdown_clean() {
     }
 
     // Phase 2: SIGKILL escalation for whatever's still listed.
-    let stragglers = list_running_tillandsias_containers().await;
+    let stragglers = list_running_tillandsias_containers(runtime.clone()).await;
     if stragglers.is_empty() {
         info!(
             accountability = true,
@@ -4631,12 +5084,12 @@ pub(crate) async fn verify_shutdown_clean() {
         "verify_shutdown_clean: stragglers detected — escalating to SIGKILL"
     );
     for name in &stragglers {
-        kill_and_remove(name).await;
+        kill_and_remove(name, runtime.clone()).await;
     }
 
     // Re-check after SIGKILL.
     tokio::time::sleep(POLL_INTERVAL).await;
-    let stragglers = list_running_tillandsias_containers().await;
+    let stragglers = list_running_tillandsias_containers(runtime.clone()).await;
     if stragglers.is_empty() {
         info!(
             accountability = true,
@@ -4659,7 +5112,7 @@ pub(crate) async fn verify_shutdown_clean() {
     );
     pkill_orphan_conmon();
     tokio::time::sleep(Duration::from_millis(500)).await;
-    let stragglers = list_running_tillandsias_containers().await;
+    let stragglers = list_running_tillandsias_containers(runtime.clone()).await;
     if stragglers.is_empty() {
         info!(
             accountability = true,

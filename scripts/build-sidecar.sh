@@ -70,9 +70,22 @@ if ! rustup target list --installed | grep -q "^${TARGET}\$"; then
     rustup target add "${TARGET}"
 fi
 
-echo "[build-sidecar] cargo build --release --target ${TARGET} --bin tillandsias-router-sidecar"
+# @trace spec:cross-platform
+# Windows host (Git Bash / MSYS) has no `cc` in PATH, so the default
+# linker probe for the musl target fails with "linker `cc` not found".
+# Pin rust-lld + link-self-contained=yes so the cross-link to ELF musl
+# works without an external toolchain. Linux/macOS hosts skip this and
+# keep using the system cc resolution they have always used.
+case "${OSTYPE:-}" in
+    msys*|cygwin*|win32*)
+        export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER="rust-lld"
+        export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS="-C link-self-contained=yes"
+        ;;
+esac
+
+echo "[build-sidecar] cargo build --release --target ${TARGET} --bin tillandsias-router-sidecar --features unix-only"
 ( cd "$ROOT" && CARGO_TARGET_DIR="${SIDECAR_TARGET_DIR}" \
-    cargo build --release --target "${TARGET}" --bin tillandsias-router-sidecar )
+    cargo build --release --target "${TARGET}" --bin tillandsias-router-sidecar --features unix-only )
 
 SRC="${SIDECAR_TARGET_DIR}/${TARGET}/release/tillandsias-router-sidecar"
 if [[ ! -f "$SRC" ]]; then

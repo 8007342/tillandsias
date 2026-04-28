@@ -41,47 +41,13 @@ fi
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "opencode starting"
 
-# @trace spec:git-mirror-service, spec:forge-offline
-# Clone project from git mirror (Phase 3: mirror-only, no direct mount)
-if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]]; then
-    trace_lifecycle "git-mirror" "cloning from ${TILLANDSIAS_GIT_SERVICE}"
-    MAX_RETRIES=5
-    CLONE_SUCCESS=false
-    CLONE_DIR="/home/forge/src/${TILLANDSIAS_PROJECT}"
-    for i in $(seq 1 $MAX_RETRIES); do
-        if git clone "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" "$CLONE_DIR" 2>&1; then
-            trace_lifecycle "git-mirror" "clone successful"
-            CLONE_SUCCESS=true
-            cd "$CLONE_DIR"
-            # Configure push back to mirror
-            # @trace spec:git-mirror-service
-            if ! git remote set-url --push origin "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" 2>/dev/null; then
-                echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
-            fi
-            # Set git identity from host config
-            # @trace spec:forge-offline
-            if [[ -n "${GIT_AUTHOR_NAME:-}" ]]; then
-                git config user.name "$GIT_AUTHOR_NAME"
-            fi
-            if [[ -n "${GIT_AUTHOR_EMAIL:-}" ]]; then
-                git config user.email "$GIT_AUTHOR_EMAIL"
-            fi
-            break
-        fi
-        if [[ $i -lt $MAX_RETRIES ]]; then
-            trace_lifecycle "git-mirror" "git service not ready, retrying ($i/$MAX_RETRIES)..."
-            sleep 1
-        else
-            trace_lifecycle "git-mirror" "clone failed after $MAX_RETRIES attempts"
-        fi
-    done
-    if [[ "$CLONE_SUCCESS" != "true" ]]; then
-        echo "[forge] FATAL: git clone failed from git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" >&2
-        echo "[forge] The git mirror service is unreachable or has not finished initialising." >&2
-        exit 1
-    fi
-    echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
-fi
+# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:windows-wsl-runtime
+# Clone via the shared lib-common::clone_project_from_mirror — supports both
+# filesystem (Windows/WSL) and git daemon (Linux/podman) transports with
+# wipe-before-clone for re-attach idempotency.
+clone_project_from_mirror
+
+# (Inline clone block removed — shared function above replaces it.)
 
 # ── OpenCode + OpenSpec (hard-installed) ───────────────────
 # @trace spec:default-image, spec:forge-shell-tools

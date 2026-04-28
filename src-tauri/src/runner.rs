@@ -52,15 +52,17 @@ impl Drop for EnclaveCleanupGuard {
             .build()
         {
             rt.block_on(async {
-                crate::handlers::stop_git_service(&self.project_name).await;
-                crate::handlers::stop_inference().await;
-                crate::handlers::stop_proxy().await;
+                let runtime = default_runtime();
+                crate::handlers::stop_git_service(&self.project_name, runtime.clone()).await;
+                crate::handlers::stop_inference(runtime.clone()).await;
+                crate::handlers::stop_proxy(runtime).await;
                 crate::handlers::cleanup_enclave_network().await;
             });
         }
     }
 }
 use tillandsias_podman::PodmanClient;
+use tillandsias_podman::runtime::default_runtime;
 
 use crate::i18n;
 use crate::strings;
@@ -128,60 +130,42 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         );
     }
 
-    // On Windows, call podman build directly instead of going through bash.
-    // Git Bash's MSYS2 doesn't initialize properly from native Windows processes.
+    // @trace spec:cross-platform, spec:windows-wsl-runtime
+    // On Windows, the runtime backend is WSL (no podman). The forge image is
+    // already an imported WSL distro (tillandsias-forge) created by `--init`.
+    // We do NOT call podman build here — that would launch a non-existent
+    // process and cascade-fail attach. Instead: verify the distro exists.
+    // If missing, surface a clear error directing the user to `--init`.
     #[cfg(target_os = "windows")]
     {
-        let containerfile = source_dir.join("images").join("default").join("Containerfile");
-        let context_dir = source_dir.join("images").join("default");
-
-        if debug {
-            println!(
-                "  [debug] Running podman build --tag {} -f {}",
-                tag,
-                containerfile.display()
-            );
-        }
-
-        let status = tillandsias_podman::podman_cmd_sync()
-            .args(["build", "--tag", &tag, "-f"])
-            .arg(&containerfile)
-            .arg(&context_dir)
-            .stdin(std::process::Stdio::inherit())
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .status()
+        let _ = source_dir; // unused on Windows path
+        let _ = script;     // ditto
+        let distro = format!("tillandsias-{}", image_name);
+        let mut listing_cmd = std::process::Command::new("wsl.exe");
+        tillandsias_podman::no_window_sync(&mut listing_cmd);
+        let listing = listing_cmd
+            .args(["--list", "--quiet"])
+            .output()
             .map_err(|e| {
-                eprintln!("  [debug] Failed to launch podman build: {e}");
+                eprintln!("  [error] Cannot query WSL: {e}");
                 strings::SETUP_ERROR
             })?;
-
-        crate::embedded::cleanup_image_sources();
-
-        // Clean up any leftover buildah containers from builds
-        // @trace spec:default-image
-        let _ = std::process::Command::new("buildah")
-            .args(["rm", "--all"])
-            .env_remove("LD_LIBRARY_PATH")
-            .env_remove("LD_PRELOAD")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
-
+        let raw = listing.stdout;
+        // wsl --list --quiet emits UTF-16 LE; strip nulls/CRs to scan ASCII.
+        let text: String = raw.iter().filter(|&&b| b != 0 && b != b'\r').map(|&b| b as char).collect();
+        let exists = text.lines().any(|line| line.trim() == distro);
         crate::build_lock::release(image_name);
-
-        if status.success() {
-            crate::handlers::prune_old_images();
-            return Ok(());
-        } else {
+        if exists {
             if debug {
-                eprintln!(
-                    "  [debug] podman build exited with code {}",
-                    status.code().unwrap_or(-1)
-                );
+                eprintln!("  [debug] WSL distro {} present — skipping build (Windows uses WSL runtime, not podman)", distro);
             }
-            return Err(strings::SETUP_ERROR.into());
+            return Ok(());
         }
+        eprintln!(
+            "  [error] WSL distro '{}' not imported. Run: tillandsias --init",
+            distro
+        );
+        return Err(strings::SETUP_ERROR.into());
     }
 
     // On Unix, use the build-image.sh script (handles nix + fedora backends).
@@ -342,6 +326,7 @@ pub fn run(
     path: PathBuf,
     image_name: &str,
     debug: bool,
+    diagnostics: bool,
     bash: bool,
     agent_override: Option<SelectedAgent>,
 ) -> bool {
@@ -379,6 +364,16 @@ pub fn run(
 
     // Print the welcome banner before any other output — only in interactive mode.
     crate::cli::print_welcome_banner(debug);
+
+    // @trace spec:runtime-diagnostics-stream, spec:cross-platform
+    // Start diagnostics streaming AS EARLY AS POSSIBLE so the tails see the
+    // git-daemon spawn, forge entrypoint, etc., from frame 1. The handle is
+    // held until this function returns (Drop kills the children).
+    let _diag_handle = if diagnostics {
+        Some(crate::diagnostics::start())
+    } else {
+        None
+    };
 
     println!();
     println!("{}", i18n::tf("cli.attaching", &[("name", &project_name)]));
@@ -440,9 +435,10 @@ pub fn run(
             }
 
             // Headless: this CLI is the sole owner. Tear down the enclave.
-            crate::handlers::stop_git_service(&project_for_cleanup).await;
-            crate::handlers::stop_inference().await;
-            crate::handlers::stop_proxy().await;
+            let runtime = default_runtime();
+            crate::handlers::stop_git_service(&project_for_cleanup, runtime.clone()).await;
+            crate::handlers::stop_inference(runtime.clone()).await;
+            crate::handlers::stop_proxy(runtime).await;
             crate::handlers::cleanup_enclave_network().await;
             std::process::exit(0);
         });
@@ -627,14 +623,82 @@ pub fn run(
     println!("{}", i18n::t("cli.launching"));
     println!();
 
-    // Execute podman with inherited stdio — terminal passes through.
-    // On Windows, use raw Command to avoid CREATE_NO_WINDOW from
-    // podman_cmd_sync() — it kills the interactive TTY that `-it` needs.
+    // @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service
+    // Windows: launch forge via wsl.exe directly. Drop the podman run_args
+    // (mounts, --userns, --cap-drop, etc.) — those are podman-specific.
+    //
+    // Architecture preserved from Linux/podman:
+    //  - Forge clones the project from git://localhost:9418/<project> at
+    //    entrypoint startup (NOT bind-mounted). All WSL2 distros share one
+    //    netns; the git daemon in tillandsias-git binds 127.0.0.1:9418 and
+    //    is reachable from the forge distro at the same address.
+    //  - Working tree lives in the forge distro (ephemeral; lost on stop).
+    //  - Mirror lives on host at %LOCALAPPDATA%/tillandsias/mirrors/<project>
+    //    (long-lived). Bare repo there is the bridge to GitHub.
+    //
+    // We pass TILLANDSIAS_GIT_SERVICE=localhost so the entrypoint's
+    // `git clone git://${TILLANDSIAS_GIT_SERVICE}:9418/...` resolves correctly.
+    // Bash mode skips the entrypoint and goes straight to /bin/bash in the
+    // distro's home (no project clone — bash mode is for diagnostics).
     #[cfg(target_os = "windows")]
-    let status = std::process::Command::new(tillandsias_podman::find_podman_path())
-        .arg("run")
-        .args(&run_args)
-        .status();
+    let status = {
+        let _ = &run_args; // unused on Windows path
+        let distro = "tillandsias-forge";
+        let mut cmd = std::process::Command::new("wsl.exe");
+        cmd.arg("-d").arg(distro)
+            .arg("--user").arg("forge");
+
+        // For bash mode: cd to a project working dir on /mnt/c/... so the
+        // user can poke at the source on the host. For opencode/claude:
+        // start in /home/forge so the entrypoint's clone lands in
+        // /home/forge/src/<project> (matching Linux semantics).
+        if bash {
+            let cwd_arg: String = {
+                let p = project_path.to_string_lossy();
+                let bytes = p.as_bytes();
+                if bytes.len() >= 3 && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/') {
+                    let drive = (bytes[0] as char).to_ascii_lowercase();
+                    let rest = p[2..].replace('\\', "/");
+                    format!("/mnt/{drive}{rest}")
+                } else {
+                    p.into_owned()
+                }
+            };
+            cmd.arg("--cd").arg(&cwd_arg).arg("--").arg("/bin/bash").arg("-l");
+        } else {
+            // Pass env vars for the entrypoint via wsl.exe -e prefix:
+            // wsl.exe doesn't have --env so we wrap the entrypoint in env(1).
+            let entry = match selected_agent {
+                SelectedAgent::OpenCode => "/usr/local/bin/entrypoint-forge-opencode.sh",
+                SelectedAgent::Claude => "/usr/local/bin/entrypoint-forge-claude.sh",
+                SelectedAgent::OpenCodeWeb => "/usr/local/bin/entrypoint-forge-opencode-web.sh",
+            };
+            // @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service
+            // Match Linux flow: forge clones from git://localhost:9418/<project>.
+            // Requires WSL2 mirrored networking (configured in ~/.wslconfig).
+            // The git daemon runs in tillandsias-git distro (started by
+            // ensure_git_service_running_wsl) and shares localhost with this
+            // forge distro under mirrored mode.
+            cmd.arg("--cd").arg("/home/forge").arg("--exec").arg("env")
+                .arg(format!("TILLANDSIAS_PROJECT={}", project_name))
+                .arg("TILLANDSIAS_GIT_SERVICE=localhost:9418")
+                .arg("TILLANDSIAS_AGENT=opencode")
+                .arg("LANG=en_US.UTF-8")
+                .arg("LANGUAGE=en_US.UTF-8")
+                .arg(format!("GIT_AUTHOR_NAME={}", ctx.git_author_name))
+                .arg(format!("GIT_AUTHOR_EMAIL={}", ctx.git_author_email))
+                .arg(format!("GIT_COMMITTER_NAME={}", ctx.git_author_name))
+                .arg(format!("GIT_COMMITTER_EMAIL={}", ctx.git_author_email));
+            // @trace spec:runtime-diagnostics-stream
+            // --diagnostics implies TILLANDSIAS_DEBUG=1 so the entrypoint's
+            // trace_lifecycle calls actually emit (stderr + log file).
+            if diagnostics {
+                cmd.arg("TILLANDSIAS_DEBUG=1");
+            }
+            cmd.arg(entry);
+        }
+        cmd.status()
+    };
 
     #[cfg(not(target_os = "windows"))]
     let status = tillandsias_podman::podman_cmd_sync()

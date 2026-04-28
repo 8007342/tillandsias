@@ -9,6 +9,8 @@ description = "In-router process holding the per-project session table; subscrib
 [[bin]]
 name = "tillandsias-router-sidecar"
 path = "src/main.rs"
+# Unix-only: runs inside Linux containers
+required-features = ["unix-only"]
 
 [dependencies]
 tillandsias-control-wire = { workspace = true }
@@ -20,6 +22,11 @@ futures-util = { workspace = true }
 bytes = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+[features]
+# Unix-only feature required to build the binary.
+# On Windows, the binary is skipped; only lib tests run.
+unix-only = []
 
 [dev-dependencies]
 tempfile = "3"

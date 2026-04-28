@@ -5,10 +5,11 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [flake.nix#L36](../../../flake.nix#L36)
-- [images/default/entrypoint-forge-claude.sh#L92](../../../images/default/entrypoint-forge-claude.sh#L92)
-- [images/default/entrypoint-forge-opencode.sh#L87](../../../images/default/entrypoint-forge-opencode.sh#L87)
-- [images/default/entrypoint-forge-opencode-web.sh#L89](../../../images/default/entrypoint-forge-opencode-web.sh#L89)
-- [images/default/entrypoint-terminal.sh#L87](../../../images/default/entrypoint-terminal.sh#L87)
-- [images/default/lib-common.sh#L138](../../../images/default/lib-common.sh#L138)
+- [flake.nix#L35](../../../flake.nix#L35)
+- [images/default/entrypoint-forge-claude.sh#L55](../../../images/default/entrypoint-forge-claude.sh#L55)
+- [images/default/entrypoint-forge-opencode-web.sh#L54](../../../images/default/entrypoint-forge-opencode-web.sh#L54)
+- [images/default/entrypoint-forge-opencode.sh#L53](../../../images/default/entrypoint-forge-opencode.sh#L53)
+- [images/default/entrypoint-terminal.sh#L50](../../../images/default/entrypoint-terminal.sh#L50)
+- [images/default/lib-common.sh#L53](../../../images/default/lib-common.sh#L53)
 - [images/default/lib-common.sh#L266](../../../images/default/lib-common.sh#L266)
+- [images/default/lib-common.sh#L407](../../../images/default/lib-common.sh#L407)

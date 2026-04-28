@@ -52,3 +52,15 @@ images/router/tillandsias-router-sidecar
 # @trace spec:cheatsheets-license-tiered, spec:cheatsheet-source-layer
 cheatsheet-sources/
 !cheatsheet-sources/.gitkeep-tombstone
+
+# Local diagnostic capture artifacts produced by manual --diagnostics smoke
+# runs (stdout/stderr redirects). Ephemeral debugging state — never source-
+# controlled. Patterns cover diag*.log/err, smoke*.log/err, err*.log,
+# out*.log when written at the workspace root.
+# @trace spec:runtime-diagnostics-stream
+/diag*.log
+/diag*.err
+/smoke*.log
+/smoke*.err
+/err*.log
+/out*.log

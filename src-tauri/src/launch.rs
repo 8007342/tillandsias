@@ -465,6 +465,13 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     // @trace spec:tray-host-control-socket, spec:secrets-management
     // @cheatsheet runtime/forge-container.md
     // -----------------------------------------------------------------------
+    // Windows: gated out — Unix-domain socket bind-mounts don't translate
+    // to Named Pipes inside podman-machine containers. The router profile
+    // is the only v1 consumer; on Windows it'll need a Named Pipe path
+    // when that work lands. Until then, mount_control_socket is silently
+    // ignored on non-Unix hosts and the router can't validate sessions.
+    // @trace spec:cross-platform
+    #[cfg(unix)]
     if profile.mount_control_socket {
         let resolved = crate::control_socket::path::resolve();
         args.push("-v".into());

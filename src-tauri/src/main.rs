@@ -16,6 +16,7 @@ mod ca;
 // (`tillandsias --install-chromium [--from-zip <path>]`). Detection
 // priority: userspace install → system PATH → hard error. No tray UI.
 mod chromium_resolve;
+mod diagnostics;
 mod cleanup;
 mod cli;
 // @trace spec:tray-host-control-socket
@@ -128,12 +129,27 @@ static TRAY_STATE_HANDLE: std::sync::OnceLock<Arc<Mutex<TrayState>>> = std::sync
 /// down on app exit. Wrapped in `tokio::sync::Mutex` because shutdown
 /// is async (it awaits the accept-loop join handle).
 ///
-/// @trace spec:tray-host-control-socket
+/// Windows: this slot is unused — the control_socket module compiles to
+/// a no-op shell on non-Unix targets. `tillandsias --init` doesn't need
+/// the control plane (it only builds container images), and the future
+/// Windows control plane will be a Named Pipe, not a Unix socket.
+///
+/// @trace spec:tray-host-control-socket, spec:cross-platform
+#[cfg(unix)]
 static CONTROL_SOCKET: std::sync::OnceLock<
     tokio::sync::Mutex<crate::control_socket::Server>,
 > = std::sync::OnceLock::new();
 
 fn main() {
+    // @trace spec:cross-platform
+    // Install the rustls default crypto provider once at process start.
+    // reqwest is configured with `rustls-no-provider`, so anything that
+    // creates a reqwest client (Tauri updater, github_health probes,
+    // self-update flows) will panic with "No provider set" if we don't
+    // install one. Idempotent — `install_default()` returns Err when
+    // a provider is already installed and we discard the error.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     // On Windows, hide the console window for tray-only mode (no args).
     // CLI mode keeps the console so output is visible in any terminal.
     #[cfg(target_os = "windows")]
@@ -219,6 +235,7 @@ fn main() {
         path,
         image,
         debug,
+        diagnostics,
         bash,
         agent_override,
     } = cli_mode
@@ -241,7 +258,7 @@ fn main() {
             }
         }
 
-        let success = runner::run(path, &image, debug, bash, agent_override);
+        let success = runner::run(path, &image, debug, diagnostics, bash, agent_override);
         std::process::exit(if success { 0 } else { 1 });
     }
 
@@ -334,7 +351,7 @@ fn main() {
             // (see src-tauri/src/browser.rs). Tauri no longer hosts a
             // WebviewWindow for them — no AppHandle registration needed.
 
-            // @trace spec:tray-host-control-socket
+            // @trace spec:tray-host-control-socket, spec:cross-platform
             // Bind the tray-host control socket BEFORE the tray icon
             // becomes interactive. The bind is synchronous and uses
             // std::os::unix::net::UnixListener so it works without an
@@ -343,12 +360,19 @@ fn main() {
             // runtime so the std listener gets converted to a tokio one
             // inside a runtime context.
             //
+            // Windows: gated out. Unix-domain sockets aren't the right
+            // primitive on Windows; the future Windows control plane will
+            // be a Named Pipe. `tillandsias --init` doesn't need the
+            // control plane (it only builds container images), and tray
+            // consumers degrade gracefully when no publisher is installed.
+            //
             // Failure to bind degrades gracefully: the tray still comes up,
             // but containers that opt in via `mount_control_socket = true`
             // will fail to launch (their bind-mount source is missing).
             // The router is the only v1 consumer, so the visible failure
             // mode is "router won't start" — which surfaces in the existing
             // build/launch error path.
+            #[cfg(unix)]
             match crate::control_socket::Server::bind_default() {
                 Ok(server) => {
                     // @trace spec:opencode-web-session-otp
@@ -1243,12 +1267,21 @@ pub(crate) fn refresh_menu_labels() {
 /// Quit arm after `shutdown_all` so any final tray↔consumer messages can
 /// flush before the listener disappears.
 ///
-/// @trace spec:tray-host-control-socket
+/// On Windows: no-op — the control socket isn't bound on non-Unix targets
+/// (see `static CONTROL_SOCKET` doc-comment). The event loop's call site
+/// is `cfg(unix)`-gated, but we keep a stub here so any future caller
+/// added without a gate fails closed instead of refusing to compile.
+///
+/// @trace spec:tray-host-control-socket, spec:cross-platform
+#[cfg(unix)]
 pub(crate) async fn shutdown_control_socket() {
     if let Some(socket) = CONTROL_SOCKET.get() {
         socket.lock().await.shutdown().await;
     }
 }
+
+#[cfg(not(unix))]
+pub(crate) async fn shutdown_control_socket() {}
 
 /// Convenience wrapper for callers that already initialised
 /// `TRAY_STATE_HANDLE` (i.e. anything after tray setup). Accepts only

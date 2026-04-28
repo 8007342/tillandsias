@@ -5,4 +5,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [images/default/lib-common.sh#L243](../../../images/default/lib-common.sh#L243)
+- [images/default/lib-common.sh#L384](../../../images/default/lib-common.sh#L384)

@@ -34,9 +34,29 @@ fn random_cdp_port() -> u16 {
 }
 
 /// Generates an ephemeral user-data directory for the window.
+///
+/// @trace spec:host-browser-mcp, spec:cross-platform
+/// On Linux, prefers XDG_RUNTIME_DIR (tmpfs-backed, per-user, auto-cleaned by
+/// systemd at logout) per the XDG Base Directory Spec. Falls back to
+/// `/run/user/$UID` only when the env var is missing — that fallback path is
+/// Linux-specific (systemd-logind creates it). On Windows/macOS the runtime
+/// dir concept does not exist, so use `std::env::temp_dir()` which resolves
+/// to `%TEMP%`/`$TMPDIR` respectively.
+/// Reference: <https://specifications.freedesktop.org/basedir-spec/latest/>
 fn ephemeral_user_data_dir(window_id: &str) -> Result<PathBuf, String> {
-    let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
-        .unwrap_or_else(|_| format!("/run/user/{}", unsafe { libc::getuid() }));
+    let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
+        #[cfg(target_os = "linux")]
+        {
+            // SAFETY: getuid() always succeeds and returns the real uid; no
+            // pointer dereferences, no allocations. The unsafe block is a
+            // libc convention requirement, not a real safety hazard.
+            format!("/run/user/{}", unsafe { libc::getuid() })
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            std::env::temp_dir().to_string_lossy().into_owned()
+        }
+    });
 
     let path = PathBuf::from(runtime_dir)
         .join("tillandsias")

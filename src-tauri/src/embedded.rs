@@ -47,12 +47,29 @@ pub fn simplify_path(path: &std::path::Path) -> PathBuf {
     path.to_path_buf()
 }
 
-// @tombstone obsolete:bash-path-helper
-// Removed 2026-04-27 in v0.1.170. Safe to delete after v0.1.170.250.
-// MSYS2 path conversion is no longer needed — bash scripts have been
-// replaced with direct podman/gh CLI calls from Rust on all platforms.
-// The helper was only used for the `build-image.sh` and `gh-auth-login.sh`
-// workarounds on Windows.
+/// Convert a path to MSYS2 format suitable for Git Bash.
+///
+/// On Windows, `C:\Users\foo` must become `/c/Users/foo` — not just `C:/Users/foo`.
+/// Git Bash's virtual filesystem doesn't understand drive letters as path prefixes.
+/// When bash.exe is launched from a native Windows process (no MSYS2 layer),
+/// there's no automatic path translation, so we must do it explicitly.
+///
+/// On non-Windows, returns the path as-is.
+#[allow(dead_code)] // Cross-platform utility — used on Windows launch paths
+pub fn bash_path(path: &std::path::Path) -> String {
+    let s = path.to_string_lossy().replace('\\', "/");
+    if cfg!(target_os = "windows") {
+        // Convert "C:/foo" to "/c/foo" (MSYS2 mount format)
+        if s.len() >= 2 && s.as_bytes()[1] == b':' {
+            let drive = s.as_bytes()[0].to_ascii_lowercase() as char;
+            format!("/{drive}{}", &s[2..])
+        } else {
+            s
+        }
+    } else {
+        s
+    }
+}
 
 /// Write content to a file, stripping \r so scripts work inside Linux
 /// containers even when compiled on Windows with core.autocrlf=true.
@@ -67,12 +84,28 @@ fn write_lf(path: &std::path::Path, content: &str) -> std::io::Result<()> {
 // ---------------------------------------------------------------------------
 // Executable scripts
 // ---------------------------------------------------------------------------
-// @tombstone obsolete:embedded-build-image-script
-// Removed 2026-04-27 in v0.1.170. Safe to delete after v0.1.170.250.
-// Image builds are now driven directly from Rust via ImageBuilder::run(),
-// which calls `podman build` directly. The bash script is kept in the repo
-// for manual developer use but is no longer embedded or extracted at runtime.
+pub const BUILD_IMAGE: &str = include_str!("../../scripts/build-image.sh");
 
+// ---------------------------------------------------------------------------
+// WSL-native image build pipeline (Windows path; replaces podman build).
+// @trace spec:cross-platform, spec:podman-orchestration
+// ---------------------------------------------------------------------------
+pub const WSL_BUILD_LIB_COMMON: &str =
+    include_str!("../../scripts/wsl-build/lib-common.sh");
+pub const WSL_BUILD_BASES: &str =
+    include_str!("../../scripts/wsl-build/bases.sh");
+pub const WSL_BUILD_PROXY: &str =
+    include_str!("../../scripts/wsl-build/build-proxy.sh");
+pub const WSL_BUILD_GIT: &str =
+    include_str!("../../scripts/wsl-build/build-git.sh");
+pub const WSL_BUILD_ROUTER: &str =
+    include_str!("../../scripts/wsl-build/build-router.sh");
+pub const WSL_BUILD_INFERENCE: &str =
+    include_str!("../../scripts/wsl-build/build-inference.sh");
+pub const WSL_BUILD_FORGE: &str =
+    include_str!("../../scripts/wsl-build/build-forge.sh");
+pub const WSL_BUILD_ENCLAVE_INIT: &str =
+    include_str!("../../scripts/wsl-build/build-enclave-init.sh");
 // build-tools-overlay.sh tombstoned 2026-04-25 — agents are hard-installed in
 // the forge image; no runtime overlay build required.
 // @trace spec:tombstone-tools-overlay
@@ -148,6 +181,13 @@ pub const FORGE_CLI_INVENTORY: &str =
 pub const FORGE_CLI_SERVICES: &str =
     include_str!("../../images/default/cli/tillandsias-services");
 pub const FORGE_CLI_MODELS: &str = include_str!("../../images/default/cli/tillandsias-models");
+// @trace spec:external-logs-layer
+// `tillandsias-logs ls|tail|combine` is the forge-side reader for the
+// external-logs layer. The Containerfile COPYs it into
+// /opt/agents/tillandsias-cli/bin/, so the embedded extraction must
+// stage it under cli/ alongside the other discoverability binaries
+// (otherwise `--init` fails at the COPY step on a clean checkout).
+pub const FORGE_CLI_LOGS: &str = include_str!("../../images/default/cli/tillandsias-logs");
 
 // No forge GIT_ASKPASS const — the forge-side askpass was tombstoned.
 // Forge containers have ZERO credentials; only the git-service container
@@ -176,13 +216,11 @@ pub const CONFIG_OVERLAY_INSTRUCTIONS_WEB_SERVICES: &str =
     include_str!("../../images/default/config-overlay/opencode/instructions/web-services.md");
 
 // MCP servers — lightweight tool scripts for forge containers
-// @trace spec:layered-tools-overlay, spec:git-mirror-service, spec:host-browser-mcp
+// @trace spec:layered-tools-overlay, spec:git-mirror-service
 pub const CONFIG_OVERLAY_MCP_GIT_TOOLS: &str =
     include_str!("../../images/default/config-overlay/mcp/git-tools.sh");
 pub const CONFIG_OVERLAY_MCP_PROJECT_INFO: &str =
     include_str!("../../images/default/config-overlay/mcp/project-info.sh");
-pub const CONFIG_OVERLAY_MCP_HOST_BROWSER: &str =
-    include_str!("../../images/default/config-overlay/mcp/host-browser.sh");
 
 // Shell configs
 pub const SHELL_BASHRC: &str = include_str!("../../images/default/shell/bashrc");
@@ -287,13 +325,15 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 
 /// Write the full image source tree to a temp directory.
 ///
-/// Recreates the directory layout that `nix build` and direct `podman build`
-/// commands expect:
+/// Recreates the directory layout that `build-image.sh` and `nix build`
+/// expect:
 ///
 /// ```text
 /// <dir>/
 ///   flake.nix
 ///   flake.lock
+///   scripts/
+///     build-image.sh
 ///   images/
 ///     default/
 ///       entrypoint.sh
@@ -316,13 +356,10 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 ///       Containerfile
 /// ```
 ///
-/// Note: `scripts/build-image.sh` is no longer extracted. Image builds are
-/// driven directly from Rust via `ImageBuilder::run()` which calls `podman build`.
-///
 /// Returns the root temp directory path. The caller should clean up via
 /// [`cleanup_image_sources`] after the build completes (or rely on
 /// session cleanup of `$XDG_RUNTIME_DIR`).
-// @trace spec:embedded-scripts/image-source-extraction, spec:direct-podman-calls
+// @trace spec:embedded-scripts/image-source-extraction
 pub fn write_image_sources() -> Result<PathBuf, String> {
     // Use a per-process directory to avoid collisions between the tray app's
     // background build and concurrent CLI invocations.
@@ -338,10 +375,49 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     write_lf(&dir.join("flake.lock"), FLAKE_LOCK).map_err(|e| format!("flake.lock: {e}"))?;
 
     // -- Scripts --
-    // @tombstone obsolete:embedded-build-image-script
-    // build-image.sh is no longer extracted. Image builds are driven from Rust.
+    let scripts_dir = dir.join("scripts");
+    fs::create_dir_all(&scripts_dir).map_err(|e| format!("scripts dir: {e}"))?;
+    write_lf(&scripts_dir.join("build-image.sh"), BUILD_IMAGE)
+        .map_err(|e| format!("build-image.sh: {e}"))?;
     // build-tools-overlay.sh not emitted — tombstoned 2026-04-25.
     // @trace spec:tombstone-tools-overlay
+    #[cfg(unix)]
+    {
+        let path = scripts_dir.join("build-image.sh");
+        if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o700)) {
+            warn!(
+                file = %path.display(),
+                error = %e,
+                "Failed to set executable permission — container entrypoint may fail"
+            );
+        }
+    }
+
+    // -- scripts/wsl-build/ — Windows-native image build pipeline. --
+    // @trace spec:cross-platform, spec:podman-orchestration
+    let wsl_build_dir = scripts_dir.join("wsl-build");
+    fs::create_dir_all(&wsl_build_dir).map_err(|e| format!("wsl-build dir: {e}"))?;
+    let wsl_scripts: &[(&str, &str)] = &[
+        ("lib-common.sh", WSL_BUILD_LIB_COMMON),
+        ("bases.sh", WSL_BUILD_BASES),
+        ("build-proxy.sh", WSL_BUILD_PROXY),
+        ("build-git.sh", WSL_BUILD_GIT),
+        ("build-router.sh", WSL_BUILD_ROUTER),
+        ("build-inference.sh", WSL_BUILD_INFERENCE),
+        ("build-forge.sh", WSL_BUILD_FORGE),
+        ("build-enclave-init.sh", WSL_BUILD_ENCLAVE_INIT),
+    ];
+    for (name, content) in wsl_scripts {
+        write_lf(&wsl_build_dir.join(name), content)
+            .map_err(|e| format!("wsl-build/{name}: {e}"))?;
+        #[cfg(unix)]
+        {
+            let _ = fs::set_permissions(
+                wsl_build_dir.join(name),
+                fs::Permissions::from_mode(0o755),
+            );
+        }
+    }
 
     // -- images/default/ --
     let default_dir = dir.join("images").join("default");
@@ -399,6 +475,9 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("cli/tillandsias-services: {e}"))?;
     write_lf(&cli_dir.join("tillandsias-models"), FORGE_CLI_MODELS)
         .map_err(|e| format!("cli/tillandsias-models: {e}"))?;
+    // @trace spec:external-logs-layer
+    write_lf(&cli_dir.join("tillandsias-logs"), FORGE_CLI_LOGS)
+        .map_err(|e| format!("cli/tillandsias-logs: {e}"))?;
 
     // No forge GIT_ASKPASS — tombstoned.
     // @trace spec:secrets-management
@@ -430,6 +509,8 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
             "tillandsias-inventory",
             "tillandsias-services",
             "tillandsias-models",
+            // @trace spec:external-logs-layer
+            "tillandsias-logs",
         ] {
             let path = cli_dir.join(name);
             if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
@@ -494,7 +575,7 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     .map_err(|e| format!("config-overlay/opencode/instructions/web-services.md: {e}"))?;
 
     // Config overlay — MCP servers
-    // @trace spec:layered-tools-overlay, spec:host-browser-mcp
+    // @trace spec:layered-tools-overlay
     let mcp_dir = default_dir.join("config-overlay").join("mcp");
     fs::create_dir_all(&mcp_dir).map_err(|e| format!("config-overlay/mcp dir: {e}"))?;
     write_lf(&mcp_dir.join("git-tools.sh"), CONFIG_OVERLAY_MCP_GIT_TOOLS)
@@ -504,14 +585,9 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         CONFIG_OVERLAY_MCP_PROJECT_INFO,
     )
     .map_err(|e| format!("config-overlay/mcp/project-info.sh: {e}"))?;
-    write_lf(
-        &mcp_dir.join("host-browser.sh"),
-        CONFIG_OVERLAY_MCP_HOST_BROWSER,
-    )
-    .map_err(|e| format!("config-overlay/mcp/host-browser.sh: {e}"))?;
     #[cfg(unix)]
     {
-        for name in ["git-tools.sh", "project-info.sh", "host-browser.sh"] {
+        for name in ["git-tools.sh", "project-info.sh"] {
             let path = mcp_dir.join(name);
             if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
                 warn!(
@@ -748,7 +824,7 @@ pub fn extract_config_overlay() -> Result<PathBuf, String> {
     .map_err(|e| format!("config-overlay/opencode/instructions/web-services.md: {e}"))?;
 
     // -- mcp/ -- MCP server scripts (must be executable)
-    // @trace spec:layered-tools-overlay, spec:host-browser-mcp
+    // @trace spec:layered-tools-overlay
     let mcp_dir = dir.join("mcp");
     fs::create_dir_all(&mcp_dir)
         .map_err(|e| format!("Cannot create config-overlay/mcp dir: {e}"))?;
@@ -762,14 +838,9 @@ pub fn extract_config_overlay() -> Result<PathBuf, String> {
         CONFIG_OVERLAY_MCP_PROJECT_INFO,
     )
     .map_err(|e| format!("config-overlay/mcp/project-info.sh: {e}"))?;
-    write_lf(
-        &mcp_dir.join("host-browser.sh"),
-        CONFIG_OVERLAY_MCP_HOST_BROWSER,
-    )
-    .map_err(|e| format!("config-overlay/mcp/host-browser.sh: {e}"))?;
     #[cfg(unix)]
     {
-        for name in ["git-tools.sh", "project-info.sh", "host-browser.sh"] {
+        for name in ["git-tools.sh", "project-info.sh"] {
             let path = mcp_dir.join(name);
             if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
                 warn!(
