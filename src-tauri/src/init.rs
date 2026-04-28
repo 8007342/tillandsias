@@ -532,8 +532,13 @@ fn image_exists(tag: &str) -> bool {
 /// stage `.cheatsheets/` into the forge build context (see comment near
 /// the COPY in images/default/Containerfile).
 ///
-/// @trace spec:agent-cheatsheets, spec:cross-platform
-#[cfg(target_os = "windows")]
+/// @trace spec:agent-cheatsheets, spec:cross-platform, spec:direct-podman-calls
+/// Cross-platform: cheatsheet staging now runs on the
+/// direct-podman/ImageBuilder path on Linux/macOS as well as Windows
+/// (the bash build-image.sh used to handle it on Unix; the merged
+/// ImageBuilder doesn't, so init.rs replicates the staging step
+/// platform-agnostically). The function therefore can no longer be
+/// cfg(target_os = "windows")-gated.
 fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dst)?;
     for entry in std::fs::read_dir(src)? {
