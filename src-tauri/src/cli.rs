@@ -182,6 +182,12 @@ pub enum CliMode {
         image: String,
         /// Show verbose debug output.
         debug: bool,
+        /// Diagnostics: superset of --debug. Streams every WSL distro's
+        /// stderr/stdout AND log files to the calling terminal, prefixed
+        /// with `[<distro>/<source>]` so users can grep observability
+        /// without attaching debuggers. Implies --debug.
+        /// @trace spec:runtime-diagnostics-stream, spec:cross-platform
+        diagnostics: bool,
         /// Drop into fish shell instead of default entrypoint (troubleshooting).
         bash: bool,
         /// Override the configured agent for this session.
@@ -198,6 +204,7 @@ USAGE:
     tillandsias <path> --opencode   Attach using OpenCode
     tillandsias <path> --claude     Attach using Claude Code
     tillandsias <path> --bash       Open maintenance terminal
+    tillandsias <path> --diagnostics Stream every WSL distro's logs (superset of --debug)
     tillandsias --github-login      Authenticate with GitHub
     tillandsias --install-chromium  Install pinned Chromium for app-mode windows
     tillandsias --install-chromium --from-zip <path>
@@ -329,6 +336,7 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
     let mut path: Option<PathBuf> = None;
     let mut image = "forge".to_string();
     let mut debug = false;
+    let mut diagnostics = false;
     let mut bash = false;
     let mut agent_override: Option<SelectedAgent> = None;
     let mut i = 0;
@@ -357,6 +365,11 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
             }
             "--debug" => {
                 debug = true;
+            }
+            // @trace spec:runtime-diagnostics-stream, spec:cross-platform
+            "--diagnostics" => {
+                diagnostics = true;
+                debug = true; // diagnostics is a superset of debug
             }
             "--bash" => {
                 bash = true;
@@ -391,6 +404,7 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
                 path: p,
                 image,
                 debug,
+                diagnostics,
                 bash,
                 agent_override,
             },

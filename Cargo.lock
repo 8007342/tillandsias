@@ -5289,6 +5289,7 @@ dependencies = [
 name = "tillandsias-podman"
 version = "0.1.174"
 dependencies = [
+ "async-trait",
  "libc",
  "serde",
  "serde_json",

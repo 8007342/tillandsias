@@ -214,12 +214,25 @@ for cli in tillandsias-inventory tillandsias-services tillandsias-models tilland
 done
 
 # Locales — recursive copy.
+# @trace spec:cross-platform, spec:windows-wsl-runtime
+# @cheatsheet languages/bash.md  (find -print0/while read pattern)
+# Robustness: use NUL-delimited find + while-read to survive paths with
+# spaces or special characters. The original word-splitting `for f in $list`
+# pattern would silently mangle space-bearing paths and either die mid-copy
+# or skip entries. With Git Bash / MSYS2 on Windows, where every path may
+# include a drive letter or transformed prefix, this matters more.
 log "copying locales/ recursively"
-locale_files=$(find "${IMG}/locales" -type f 2>/dev/null)
-for f in $locale_files; do
-    rel="${f#${IMG}/locales/}"
-    wsl_copy_into "$DISTRO_TMP" "$f" "/etc/tillandsias/locales/$rel"
-done
+if [[ ! -d "${IMG}/locales" ]]; then
+    log "WARNING: ${IMG}/locales not present; skipping locale copy"
+else
+    locale_count=0
+    while IFS= read -r -d '' f; do
+        rel="${f#${IMG}/locales/}"
+        wsl_copy_into "$DISTRO_TMP" "$f" "/etc/tillandsias/locales/$rel"
+        locale_count=$((locale_count + 1))
+    done < <(find "${IMG}/locales" -type f -print0 2>/dev/null)
+    log "  copied ${locale_count} locale file(s)"
+fi
 
 # Cheatsheets — recursive copy via tar pipe.
 # Stage the tarball under TILL_WSL_OUT (workspace target/wsl/) so its

@@ -45,45 +45,10 @@ fi
 # @trace spec:opencode-web-session
 trace_lifecycle "entrypoint" "opencode web starting"
 
-# @trace spec:git-mirror-service, spec:forge-offline
-# Clone project from git mirror. No TTY fallback — fatal on failure, same as CLI forge.
-if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]]; then
-    trace_lifecycle "git-mirror" "cloning from ${TILLANDSIAS_GIT_SERVICE}"
-    MAX_RETRIES=5
-    CLONE_SUCCESS=false
-    CLONE_DIR="/home/forge/src/${TILLANDSIAS_PROJECT}"
-    for i in $(seq 1 $MAX_RETRIES); do
-        if git clone "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" "$CLONE_DIR" 2>&1; then
-            trace_lifecycle "git-mirror" "clone successful"
-            CLONE_SUCCESS=true
-            cd "$CLONE_DIR"
-            # @trace spec:git-mirror-service
-            if ! git remote set-url --push origin "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" 2>/dev/null; then
-                echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
-            fi
-            # @trace spec:forge-offline
-            if [[ -n "${GIT_AUTHOR_NAME:-}" ]]; then
-                git config user.name "$GIT_AUTHOR_NAME"
-            fi
-            if [[ -n "${GIT_AUTHOR_EMAIL:-}" ]]; then
-                git config user.email "$GIT_AUTHOR_EMAIL"
-            fi
-            break
-        fi
-        if [[ $i -lt $MAX_RETRIES ]]; then
-            trace_lifecycle "git-mirror" "git service not ready, retrying ($i/$MAX_RETRIES)..."
-            sleep 1
-        else
-            trace_lifecycle "git-mirror" "clone failed after $MAX_RETRIES attempts"
-        fi
-    done
-    if [[ "$CLONE_SUCCESS" != "true" ]]; then
-        echo "[forge] FATAL: git clone failed from git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" >&2
-        echo "[forge] The git mirror service is unreachable or has not finished initialising." >&2
-        exit 1
-    fi
-    echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
-fi
+# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:windows-wsl-runtime
+# Shared dual-transport clone — supports filesystem (Windows/WSL) and git
+# daemon (Linux/podman). See lib-common.sh::clone_project_from_mirror.
+clone_project_from_mirror
 
 # ── OpenCode + OpenSpec (hard-installed) ───────────────────
 # @trace spec:default-image, spec:forge-shell-tools, spec:opencode-web-session
@@ -155,8 +120,13 @@ trace_lifecycle "opencode-state" "cleared opencode share/state/cache (per-contai
 # CWD is $PROJECT_DIR (set above). opencode uses cwd to pick which project
 # the first request lands in, so this pins the container to the mounted
 # project and prevents a "global" pseudo-project from dominating.
-OC_INTERNAL_PORT=4097
-OC_EXPOSED_PORT=4096
+# @trace spec:cross-platform, spec:windows-wsl-runtime, spec:opencode-web-session
+# OC_EXPOSED_PORT can be overridden via env so the host can pin the bind port
+# to the dynamic host_port the tray allocated. On Linux/podman this is 4096
+# (mapped via `-p <host_port>:4096`); on Windows/WSL we bind <host_port>
+# directly because WSL2 forwards loopback binds verbatim to the Windows host.
+OC_INTERNAL_PORT="${OC_INTERNAL_PORT:-4097}"
+OC_EXPOSED_PORT="${OC_EXPOSED_PORT:-4096}"
 
 trace_lifecycle "entrypoint" "opencode web serving on 127.0.0.1:$OC_INTERNAL_PORT (internal)"
 "$OC_BIN" serve --hostname 127.0.0.1 --port "$OC_INTERNAL_PORT" &

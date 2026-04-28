@@ -499,7 +499,12 @@ pub fn generate_verbose_config(config: &GlobalConfig) -> String {
         .scanner
         .watch_paths
         .iter()
-        .map(|p| format!("\"{}\"", p.display()))
+        .map(|p| {
+            let path_str = p.display().to_string();
+            // Escape backslashes for TOML
+            let escaped = path_str.replace('\\', "\\\\");
+            format!("\"{}\"", escaped)
+        })
         .collect();
     let watch_paths_str = watch_paths.join(", ");
 

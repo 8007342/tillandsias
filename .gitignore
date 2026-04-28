@@ -55,7 +55,12 @@ cheatsheet-sources/
 
 # Local diagnostic capture artifacts produced by manual --diagnostics smoke
 # runs (stdout/stderr redirects). Ephemeral debugging state — never source-
-# controlled. Pattern matches diag.log, diag2.err, diag10.log, etc.
+# controlled. Patterns cover diag*.log/err, smoke*.log/err, err*.log,
+# out*.log when written at the workspace root.
 # @trace spec:runtime-diagnostics-stream
 /diag*.log
 /diag*.err
+/smoke*.log
+/smoke*.err
+/err*.log
+/out*.log

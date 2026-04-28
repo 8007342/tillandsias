@@ -184,6 +184,31 @@ pub fn build_subdomain_url(project_name: &str) -> String {
     format!("http://opencode.{host_label}.localhost:8080/")
 }
 
+/// Build the URL the browser actually opens for an OpenCode Web session.
+///
+/// @trace spec:cross-platform, spec:windows-wsl-runtime, spec:opencode-web-session
+/// On Linux/macOS (podman backend), the router container bridges
+/// `opencode.<project>.localhost:8080` → forge's bound port. On Windows the
+/// router isn't running yet (Phase 2), so the browser must connect directly
+/// to the WSL2-forwarded localhost port. WSL2 auto-forwards loopback binds
+/// from any distro to the Windows host, so `http://127.0.0.1:<host_port>/`
+/// reaches the forge running in tillandsias-forge with no extra plumbing.
+///
+/// When the WSL router is wired in Phase 2, this fork can collapse back to
+/// the subdomain form on both platforms.
+pub fn build_session_url(project_name: &str, host_port: u16) -> String {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = project_name; // future: subdomain when router lands
+        format!("http://127.0.0.1:{host_port}/")
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = host_port;
+        build_subdomain_url(project_name)
+    }
+}
+
 // @tombstone superseded:host-chromium-on-demand
 // `which()` and `is_executable()` here used to drive the in-module
 // detection walker. Both responsibilities moved to
@@ -284,8 +309,10 @@ fn session_profile_dir(project_name: &str) -> PathBuf {
 ///
 /// @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-session, spec:host-chromium-on-demand
 pub fn launch_for_project(project_name: &str, host_port: u16) -> Result<Child, String> {
-    let _ = host_port; // see doc-comment: legacy publish stays for now, URL ignores it
-    let url = build_subdomain_url(project_name);
+    // @trace spec:cross-platform, spec:opencode-web-session
+    // Windows: direct 127.0.0.1:<host_port> via WSL2 localhost forwarding.
+    // Linux/macOS: router-fronted opencode.<project>.localhost:8080.
+    let url = build_session_url(project_name, host_port);
     let kind = detect_browser()?;
     info!(
         spec = "subdomain-routing-via-reverse-proxy, host-chromium-on-demand",
@@ -435,7 +462,10 @@ pub async fn launch_for_project_with_session(
 ) -> Result<Child, String> {
     let host_label = sanitize_hostname_label(project_name);
     let project_label = format!("opencode.{host_label}.localhost");
-    let url = build_subdomain_url(project_name);
+    // @trace spec:cross-platform, spec:opencode-web-session
+    // On Windows the router doesn't run yet — direct loopback via WSL2.
+    // On Linux/macOS the router-fronted subdomain stays.
+    let url = build_session_url(project_name, host_port);
 
     // Issue the per-window session BEFORE launching the browser. The
     // _and_publish variant fans the IssueWebSession envelope out to the

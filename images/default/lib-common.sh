@@ -50,8 +50,16 @@ mkdir -p "$HOME/.config/fish"
     cp "/etc/skel/.config/fish/config.fish" "$HOME/.config/fish/config.fish" 2>/dev/null || true
 
 # ── Common PATH setup ───────────────────────────────────────
+# @trace spec:cross-platform, spec:windows-wsl-runtime, spec:forge-shell-tools
+# Pin /usr/bin and /usr/sbin at the front so rustc/cargo/git/python are
+# discoverable even when child processes (opencode, agent CLIs, build tools)
+# inherit a sanitized $PATH that drops standard system dirs. On Fedora-based
+# forges, rustc lives at /usr/bin/rustc and cargo at /usr/bin/cargo — both
+# packaged by `microdnf install rust cargo`. WSL2 inherits a long Windows
+# $PATH by default (every C:\ tool); without explicit prefixing, $PATH walk
+# order can land on a Windows tool of the same name first.
 CACHE="$HOME/.cache/tillandsias"
-export PATH="$CACHE/openspec/bin:$HOME/.local/bin:$PATH"
+export PATH="$CACHE/openspec/bin:$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
 # ── External-logs consumer path ─────────────────────────────
 # @trace spec:external-logs-layer
@@ -86,6 +94,30 @@ export TILLANDSIAS_EXTERNAL_LOGS="/var/log/tillandsias/external"
 # Per-project isolation is preserved BY CONSTRUCTION — the cache root is
 # already per-project, so cross-project reads/writes are impossible without
 # explicitly overriding TILLANDSIAS_PULL_CACHE.
+
+# ── Lifecycle tracing (forward declaration) ─────────────────────
+# trace_lifecycle MUST be defined before export_pull_cache_path() runs
+# because the latter calls it. With `set -euo pipefail` at the top of
+# this file, an undefined-function call exits with code 127 — observed
+# on Windows/WSL where the entrypoint died with:
+#   "lib-common.sh: line 116: trace_lifecycle: command not found"
+# (Linux/podman tolerated it before because of slightly different sourcing
+# order; WSL exec surfaces the dispatch-time bug.)
+# Format: [lifecycle] <phase> | <detail>
+# Mirrors output to /tmp/forge-lifecycle.log so the host's --diagnostics
+# tail can stream lifecycle events back to the calling terminal.
+# @trace spec:cross-platform, spec:windows-wsl-runtime, spec:runtime-diagnostics-stream
+trace_lifecycle() {
+    # Only emit lifecycle traces when TILLANDSIAS_DEBUG is set.
+    # In production, these clutter the terminal (stderr shares the display).
+    [ -n "${TILLANDSIAS_DEBUG:-}" ] || return 0
+    local phase="$1"
+    shift
+    local line="[lifecycle] $phase | $*"
+    echo "$line" >&2
+    echo "$line" >> /tmp/forge-lifecycle.log 2>/dev/null || true
+}
+
 export_pull_cache_path() {
     local project_root="${PROJECT_ROOT:-}"
     local project_name=""
@@ -121,16 +153,113 @@ export_pull_cache_path() {
 # is virtually always permitted).
 export_pull_cache_path
 
-# ── Lifecycle tracing ───────────────────────────────────────
-# Structured trace output for --log-environment-lifecycle troubleshooting.
-# Format: [lifecycle] <phase> | <detail>
-trace_lifecycle() {
-    # Only emit lifecycle traces when TILLANDSIAS_DEBUG is set.
-    # In production, these clutter the terminal (stderr shares the display).
-    [ -n "${TILLANDSIAS_DEBUG:-}" ] || return 0
-    local phase="$1"
-    shift
-    echo "[lifecycle] $phase | $*" >&2
+# Lifecycle tracing — function defined earlier in this file. See the forward
+# declaration block above.
+
+# @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service, spec:forge-offline
+# Shared clone-from-mirror routine for ALL forge entrypoints (opencode,
+# claude, opencode-web, terminal). Two transports:
+#   - filesystem  : TILLANDSIAS_GIT_MIRROR_PATH=/path/to/bare/mirror (Windows/WSL)
+#   - git daemon  : TILLANDSIAS_GIT_SERVICE=host:port (Linux/podman)
+#
+# Idempotent: if /home/forge/src/<project> already exists with a valid clone,
+# wipe it first so re-attaches don't fail with "destination already exists".
+# This matches the ephemeral-working-tree contract — on Linux/podman the dir
+# is tmpfs and wiped per launch; on WSL the distro fs persists, so we wipe
+# explicitly here.
+#
+# Returns 0 on successful clone, exits 1 on hard failure.
+clone_project_from_mirror() {
+    local clone_dir
+    if [[ -z "${TILLANDSIAS_PROJECT:-}" ]]; then
+        return 0  # nothing to clone — non-project session
+    fi
+    clone_dir="/home/forge/src/${TILLANDSIAS_PROJECT}"
+
+    # Wipe stale working tree (ephemeral-tree contract).
+    if [[ -d "$clone_dir" ]]; then
+        trace_lifecycle "git-mirror" "wiping stale working tree ${clone_dir}"
+        rm -rf "$clone_dir"
+    fi
+
+    # Filesystem transport (Windows/WSL).
+    if [[ -n "${TILLANDSIAS_GIT_MIRROR_PATH:-}" ]]; then
+        local src="${TILLANDSIAS_GIT_MIRROR_PATH}"
+        trace_lifecycle "git-mirror" "cloning from filesystem ${src}"
+        # /mnt/c/... reports root ownership via 9p; whitelist this specific
+        # path so git won't refuse with "dubious ownership".
+        git config --global --add safe.directory "${src}" 2>/dev/null || true
+        if git clone "${src}" "$clone_dir" 2>&1; then
+            trace_lifecycle "git-mirror" "clone successful (filesystem)"
+            cd "$clone_dir" || return 1
+            # @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service
+            # UX-friendly remote alignment: present the GitHub URL as `origin`
+            # so `git remote -v` shows what users expect, while operations
+            # still flow through the credential-isolated local mirror.
+            #
+            #   - read GitHub URL from the bare mirror (it has the token-in-URL)
+            #   - strip the token before exposing it inside the forge
+            #   - set forge's origin to the clean GitHub URL (cosmetic)
+            #   - use git config `url.<local>.insteadOf <github>` so any push
+            #     or fetch the user runs against the GitHub URL silently
+            #     redirects to the local bare mirror (which has the token
+            #     and runs the post-receive hook to GitHub).
+            #
+            # Forge therefore stays credential-free (no token in its env or
+            # config) and the user sees the canonical GitHub remote.
+            local mirror_origin
+            mirror_origin="$(GIT_DIR="${src}" git config remote.origin.url 2>/dev/null || true)"
+            local github_url=""
+            if [[ -n "$mirror_origin" ]]; then
+                # Strip user[:password]@ prefix if present.
+                github_url="$(echo "$mirror_origin" | sed -E 's#https://[^@/]+@#https://#')"
+            fi
+            if [[ -n "$github_url" ]] && [[ "$github_url" != "$src" ]]; then
+                git remote set-url origin "$github_url" 2>/dev/null || true
+                git config --local "url.${src}.insteadOf" "$github_url" 2>/dev/null || true
+                trace_lifecycle "git-mirror" "origin presented as ${github_url}; routes to ${src}"
+            else
+                # No real GitHub remote on the mirror — keep the local path.
+                git remote set-url --push origin "${src}" 2>/dev/null || true
+            fi
+            [[ -n "${GIT_AUTHOR_NAME:-}" ]] && git config user.name "$GIT_AUTHOR_NAME"
+            [[ -n "${GIT_AUTHOR_EMAIL:-}" ]] && git config user.email "$GIT_AUTHOR_EMAIL"
+            echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
+            return 0
+        else
+            echo "[forge] FATAL: filesystem clone failed from ${src}" >&2
+            echo "[forge] Mirror path not visible inside distro? Check /mnt/c/... mount." >&2
+            exit 1
+        fi
+    fi
+
+    # Network transport (Linux/podman).
+    if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]]; then
+        trace_lifecycle "git-mirror" "cloning from ${TILLANDSIAS_GIT_SERVICE}"
+        local max_retries=5
+        for i in $(seq 1 $max_retries); do
+            if git clone "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" "$clone_dir" 2>&1; then
+                trace_lifecycle "git-mirror" "clone successful"
+                cd "$clone_dir" || return 1
+                git remote set-url --push origin "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" 2>/dev/null || \
+                    echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
+                [[ -n "${GIT_AUTHOR_NAME:-}" ]] && git config user.name "$GIT_AUTHOR_NAME"
+                [[ -n "${GIT_AUTHOR_EMAIL:-}" ]] && git config user.email "$GIT_AUTHOR_EMAIL"
+                echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
+                return 0
+            fi
+            if [[ $i -lt $max_retries ]]; then
+                trace_lifecycle "git-mirror" "git service not ready, retrying ($i/$max_retries)..."
+                sleep 1
+            else
+                trace_lifecycle "git-mirror" "clone failed after $max_retries attempts"
+            fi
+        done
+        echo "[forge] FATAL: git clone failed from git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" >&2
+        echo "[forge] The git mirror service is unreachable or has not finished initialising." >&2
+        exit 1
+    fi
+    return 0
 }
 
 # ── Package manager cache strategy (dual-cache architecture) ──────
@@ -229,6 +358,19 @@ record_update_check() {
 # Entrypoints can cd into it after sourcing this library.
 find_project_dir() {
     PROJECT_DIR=""
+    # @trace spec:cross-platform, spec:windows-wsl-runtime
+    # Priority: $TILLANDSIAS_PROJECT match wins. On Linux/podman this loop
+    # only ever sees one entry (the freshly-cloned project — tmpfs is
+    # wiped per launch). On Windows/WSL the distro fs persists between
+    # attaches, so leftover working-tree dirs from prior projects can
+    # exist alongside the current one. Without this preference, the for
+    # loop picks alphabetically (e.g. test1 wins over visual-chess) and
+    # the entrypoint logs/operates on the WRONG project.
+    if [ -n "${TILLANDSIAS_PROJECT:-}" ] \
+        && [ -d "$HOME/src/${TILLANDSIAS_PROJECT}" ]; then
+        PROJECT_DIR="$HOME/src/${TILLANDSIAS_PROJECT}/"
+        return 0
+    fi
     for dir in "$HOME/src"/*/; do
         [ -d "$dir" ] && PROJECT_DIR="$dir" && break
     done

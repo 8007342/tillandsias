@@ -11,6 +11,7 @@ mod ca;
 // (`tillandsias --install-chromium [--from-zip <path>]`). Detection
 // priority: userspace install → system PATH → hard error. No tray UI.
 mod chromium_resolve;
+mod diagnostics;
 mod cleanup;
 mod cli;
 // @trace spec:tray-host-control-socket
@@ -218,6 +219,7 @@ fn main() {
         path,
         image,
         debug,
+        diagnostics,
         bash,
         agent_override,
     } = cli_mode
@@ -240,7 +242,7 @@ fn main() {
             }
         }
 
-        let success = runner::run(path, &image, debug, bash, agent_override);
+        let success = runner::run(path, &image, debug, diagnostics, bash, agent_override);
         std::process::exit(if success { 0 } else { 1 });
     }
 
