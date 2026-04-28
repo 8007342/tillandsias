@@ -124,7 +124,8 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         let containerfile = source_dir.join("images").join("default").join("Containerfile");
-        let context_dir = source_dir.join("images").join("default");
+        // Build context is source_dir so COPY commands can access scripts/ and images/
+        let context_dir = &source_dir;
 
         if debug {
             println!(
@@ -137,7 +138,7 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         let status = tillandsias_podman::podman_cmd_sync()
             .args(["build", "--tag", &tag, "-f"])
             .arg(&containerfile)
-            .arg(&context_dir)
+            .arg(context_dir)
             .stdin(std::process::Stdio::inherit())
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit())
@@ -182,7 +183,8 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
     #[cfg(not(target_os = "windows"))]
     {
         let containerfile = source_dir.join("images").join("default").join("Containerfile");
-        let context_dir = source_dir.join("images").join("default");
+        // Build context is source_dir so COPY commands can access scripts/ and images/
+        let context_dir = &source_dir;
 
         if debug {
             println!(
@@ -195,7 +197,7 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         let status = tillandsias_podman::podman_cmd_sync()
             .args(["build", "--tag", &tag, "-f"])
             .arg(&containerfile)
-            .arg(&context_dir)
+            .arg(context_dir)
             .stdin(std::process::Stdio::inherit())
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit())
