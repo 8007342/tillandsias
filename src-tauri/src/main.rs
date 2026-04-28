@@ -39,6 +39,11 @@ mod launch;
 mod log_format;
 mod mirror_sync;
 mod logging;
+#[cfg(target_os = "windows")]
+// @trace spec:windows-event-logging
+// Windows Event Log layer — writes errors/warnings/accountability events to Event Viewer.
+// Event source "Tillandsias" must be registered in the registry (installer or PowerShell).
+mod windows_eventlog;
 mod menu;
 mod runner;
 mod tray_menu;

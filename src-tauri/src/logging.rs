@@ -10,7 +10,7 @@
 //! Accountability windows (`--log-secrets-management`, etc.) are composable
 //! with `--log` and add a curated stderr layer for sensitive operations.
 //!
-//! @trace spec:logging-accountability
+//! @trace spec:logging-accountability, spec:windows-event-logging
 
 use std::io::IsTerminal;
 
@@ -144,13 +144,15 @@ fn build_env_filter() -> EnvFilter {
 // ---------------------------------------------------------------------------
 
 /// Initialize the tracing subscriber with file logging, optional stderr output,
-/// and optional accountability layer.
+/// optional Windows Event Log layer, and optional accountability layer.
 ///
 /// Accepts a `LogConfig` parsed from CLI arguments. If the config is default
 /// (no flags), behavior is identical to the previous `init()`.
 ///
 /// Returns a [`WorkerGuard`] that **must** be held for the lifetime of the
 /// application so the non-blocking file writer flushes on shutdown.
+///
+/// @trace spec:windows-event-logging
 pub fn init(config: &LogConfig) -> WorkerGuard {
     let log_path = log_dir();
 
@@ -183,11 +185,28 @@ pub fn init(config: &LogConfig) -> WorkerGuard {
         None
     };
 
-    tracing_subscriber::registry()
-        .with(filter)
-        .with(file_layer)
-        .with(stderr_layer)
-        .init();
+    // @trace spec:windows-event-logging
+    // Windows-only Event Log layer. Returns None if event source registration fails;
+    // logging continues via file+stderr only.
+    #[cfg(target_os = "windows")]
+    {
+        let eventlog_layer = crate::windows_eventlog::try_init();
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(file_layer)
+            .with(stderr_layer)
+            .with(eventlog_layer)
+            .init();
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(file_layer)
+            .with(stderr_layer)
+            .init();
+    }
 
     guard
 }

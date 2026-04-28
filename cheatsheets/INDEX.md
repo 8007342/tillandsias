@@ -7,6 +7,8 @@ All cheatsheets are curated references for tools and languages available in the 
 - `forge-container.md` — Forge container runtime: Fedora 43, mutable/immutable boundaries, console scripts, overlays
 - `runtime-limitations.md` — RUNTIME_LIMITATIONS_NNN.md format: reporting missing tools back to the host
 - `networking.md` — Enclave network isolation: proxy, git mirror, inference service (ollama)
+- `logging-levels.md` — Log levels (TRACE/DEBUG/INFO/WARN/ERROR), CLI flags, environment variables, accountability windows
+- `windows-event-viewer.md` — Windows Event Log integration: viewing events, PowerShell queries, manual registration
 
 ## agents
 
