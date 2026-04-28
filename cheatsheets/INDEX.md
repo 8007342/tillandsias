@@ -107,6 +107,8 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - windows-event-viewer.md [DRAFT]        — Diagnosing errors and warnings on Windows systems, or accessing Tillandsias app…
 - windows-native-dev-build.md            — developing Tillandsias on a Windows host (not
 - windows-process-creation.md            — spawning native exes (`wsl.exe`, `podman.exe`, `cmd.exe`, anything that allocat… [pull-on-demand: stub]
+- windows-sandbox.md                     — hosting an isolated, ephemeral Windows process tree (e.g., the Chromium framewo… [pull-on-demand: project-committed]
+- wsl-browser-isolation.md               — hosting a hardened Chromium browser as a sibling WSL distro alongside `tillands… [pull-on-demand: project-committed]
 - wsl-daemon-patterns.md                 — running long-lived background services (daemons, proxies, routers) inside WSL2;… [pull-on-demand: stub]
 - wsl-mount-points.md                    — writing code that crosses the Windows↔Linux filesystem boundary in WSL2 — a… [pull-on-demand: stub]
 - wsl-on-windows.md [DRAFT]              — working on Tillandsias for Windows. The Windows path uses WSL2 distros directly…
