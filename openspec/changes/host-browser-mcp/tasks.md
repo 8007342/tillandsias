@@ -101,7 +101,7 @@
   - `struct WindowRegistry { windows: parking_lot::Mutex<HashMap<WindowId, WindowEntry>> }`
   - `WindowEntry { pid: u32, cdp_port: u16, target_id: String, project: ProjectLabel, user_data_dir: PathBuf, opened_url: String }`
   - `insert / get / remove / list_for_project / drain_all`
-- [ ] 5.2 Implement `browser_mcp/launcher.rs` reusing the bundled-Chromium
+- [x] 5.2 Implement `browser_mcp/launcher.rs` reusing the bundled-Chromium
   resolution logic from `host-chromium-on-demand`:
   - `launch(url: &Url, project: &ProjectLabel) -> Result<WindowEntry>`
   - Random ephemeral high port (49152..=65535) for `--remote-debugging-port`.
@@ -110,7 +110,7 @@
   - Mandatory flags: `--app=<url>`, `--user-data-dir=<path>`,
     `--incognito`, `--no-first-run`, `--no-default-browser-check`,
     `--remote-debugging-port=<port>`.
-- [ ] 5.3 CDP attach: 2 s timeout; reuse the CDP client introduced by
+- [x] 5.3 CDP attach: 2 s timeout; reuse the CDP client introduced by
   `opencode-web-session-otp` (`src-tauri/src/cdp.rs`); `Target.getTargets`
   → `Target.attachToTarget` → record `target_id`.
 - [ ] 5.4 Spawn a watcher task per launched chromium PID — when the PID
@@ -121,7 +121,7 @@
 - [ ] 5.6 Unit tests with mocked `Command` + mock CDP socket: launch
   produces correct flag set; CDP attach captures `target_id`; PID exit
   cleans the registry; `drain_all` reaps stragglers.
-- [ ] 5.7 `@trace spec:host-browser-mcp, spec:host-chromium-on-demand`;
+- [x] 5.7 `@trace spec:host-browser-mcp, spec:host-chromium-on-demand`;
   `// @cheatsheet web/cdp.md` near the CDP attach code.
 
 ## 6. Allowlist enforcement
@@ -134,35 +134,35 @@
 - [ ] 6.2 Unit tests covering each rule's reject path AND the accept
   path with several positive examples (`web.<project>.localhost:8080/`,
   `api.<project>.localhost:8080/foo?q=1`).
-- [ ] 6.3 Wire allowlist into `browser.open` BEFORE any chromium spawn
+- [x] 6.3 Wire allowlist into `browser.open` BEFORE any chromium spawn
   attempt; on deny return MCP tool error with `URL_NOT_ALLOWED: <reason>`
   and emit accountability log.
 - [ ] 6.4 Property test (proptest or quickcheck): for any random URL
   and any random project label, exactly one of `accept` / `reject`
   outcomes is produced (no panics, no ambiguity).
-- [ ] 6.5 `@trace spec:host-browser-mcp, spec:opencode-web-session`;
+- [x] 6.5 `@trace spec:host-browser-mcp, spec:opencode-web-session`;
   `// @cheatsheet web/http.md` near URL parsing.
 
 ## 7. Per-(project,host) debounce
 
 - [ ] 7.1 Add
   `struct DebounceTable(parking_lot::Mutex<HashMap<(ProjectLabel, String), (Instant, WindowId)>>)`.
-- [ ] 7.2 In `browser.open` after allowlist passes: lookup
+- [x] 7.2 In `browser.open` after allowlist passes: lookup
   `(project, host)`. If `now - last_open < 1000 ms` AND the
   recorded `WindowId` is still in `WindowRegistry`, return the
   existing window id and `debounced: true` without spawning.
 - [ ] 7.3 Unit tests: rapid duplicate returns existing; after 1000 ms
   spawns new; closed window invalidates the debounce entry; different
   hosts in the same project do not debounce each other.
-- [ ] 7.4 `@trace spec:host-browser-mcp`.
+- [x] 7.4 `@trace spec:host-browser-mcp`.
 
 ## 8. Per-tool implementation
 
-- [ ] 8.1 `browser.open` — covered by sections 5–7.
-- [ ] 8.2 `browser.list_windows` — `WindowRegistry.list_for_project`,
+- [x] 8.1 `browser.open` — covered by sections 5–7.
+- [x] 8.2 `browser.list_windows` — `WindowRegistry.list_for_project`,
   fetch live URL/title for each via
   `Page.getNavigationHistory` (parallel `tokio::join!`).
-- [ ] 8.3 `browser.read_url` — single `Page.getNavigationHistory`
+- [x] 8.3 `browser.read_url` — single `Page.getNavigationHistory`
   call against the window's CDP target.
 - [ ] 8.4 `browser.screenshot` — `Page.captureScreenshot` with
   `format: "png"`, optional `captureBeyondViewport: true` when
