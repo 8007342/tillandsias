@@ -117,16 +117,7 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         strings::SETUP_ERROR
     })?;
 
-    let script = source_dir.join("scripts").join("build-image.sh");
     let tag = crate::handlers::forge_image_tag();
-
-    if debug {
-        println!(
-            "  [debug] Running embedded: {} --tag {}",
-            script.display(),
-            tag
-        );
-    }
 
     // On Windows, call podman build directly instead of going through bash.
     // Git Bash's MSYS2 doesn't initialize properly from native Windows processes.
@@ -184,32 +175,35 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         }
     }
 
-    // On Unix, use the build-image.sh script (handles nix + fedora backends).
-    #[cfg(not(target_os = "windows"))]
-    {
-    let mut cmd = std::process::Command::new(&script);
-
-    cmd.arg(image_name)
-        .args(["--tag", &tag, "--backend", "fedora"])
-        .current_dir(&source_dir)
-        .env_remove("LD_LIBRARY_PATH")
-        .env_remove("LD_PRELOAD")
-        // Pass the resolved podman path so build-image.sh can find podman
-        // even when launched from Finder (which has a minimal PATH).
-        .env("PODMAN_PATH", tillandsias_podman::find_podman_path());
-
+    // On Unix and Windows, call podman build directly.
     // Image builds do NOT go through the proxy — SSL bump requires CA trust
     // that build containers don't have. See handlers.rs for full rationale.
+    // @trace spec:direct-podman-calls
+    #[cfg(not(target_os = "windows"))]
+    {
+        let containerfile = source_dir.join("images").join("default").join("Containerfile");
+        let context_dir = source_dir.join("images").join("default");
 
-    let status = cmd
-        .stdin(std::process::Stdio::inherit())
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .map_err(|e| {
-            eprintln!("  [debug] Failed to launch build script: {e}");
-            strings::SETUP_ERROR
-        })?;
+        if debug {
+            println!(
+                "  [debug] Running podman build --tag {} -f {}",
+                tag,
+                containerfile.display()
+            );
+        }
+
+        let status = tillandsias_podman::podman_cmd_sync()
+            .args(["build", "--tag", &tag, "-f"])
+            .arg(&containerfile)
+            .arg(&context_dir)
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status()
+            .map_err(|e| {
+                eprintln!("  [debug] Failed to launch podman build: {e}");
+                strings::SETUP_ERROR
+            })?;
 
     crate::embedded::cleanup_image_sources();
 
@@ -225,19 +219,19 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
 
     crate::build_lock::release(image_name);
 
-    if status.success() {
-        // Prune older versioned forge images to reclaim disk space
-        crate::handlers::prune_old_images();
-        Ok(())
-    } else {
-        if debug {
-            eprintln!(
-                "  [debug] Build script exited with code {}",
-                status.code().unwrap_or(-1)
-            );
+        if status.success() {
+            // Prune older versioned forge images to reclaim disk space
+            crate::handlers::prune_old_images();
+            return Ok(());
+        } else {
+            if debug {
+                eprintln!(
+                    "  [debug] podman build exited with code {}",
+                    status.code().unwrap_or(-1)
+                );
+            }
+            return Err(strings::SETUP_ERROR.into());
         }
-        Err(strings::SETUP_ERROR.into())
-    }
     } // #[cfg(not(target_os = "windows"))]
 }
 

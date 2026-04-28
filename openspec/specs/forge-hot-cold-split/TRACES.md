@@ -71,5 +71,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [src-tauri/src/preflight.rs#L312](../../../src-tauri/src/preflight.rs#L312)
 - [src-tauri/src/preflight.rs#L323](../../../src-tauri/src/preflight.rs#L323)
 - [src-tauri/src/pull_cache_budget.rs#L14](../../../src-tauri/src/pull_cache_budget.rs#L14)
-- [src-tauri/src/runner.rs#L289](../../../src-tauri/src/runner.rs#L289)
-- [src-tauri/src/runner.rs#L327](../../../src-tauri/src/runner.rs#L327)
+- [src-tauri/src/runner.rs#L283](../../../src-tauri/src/runner.rs#L283)
+- [src-tauri/src/runner.rs#L321](../../../src-tauri/src/runner.rs#L321)
