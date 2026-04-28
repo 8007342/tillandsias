@@ -47,29 +47,12 @@ pub fn simplify_path(path: &std::path::Path) -> PathBuf {
     path.to_path_buf()
 }
 
-/// Convert a path to MSYS2 format suitable for Git Bash.
-///
-/// On Windows, `C:\Users\foo` must become `/c/Users/foo` — not just `C:/Users/foo`.
-/// Git Bash's virtual filesystem doesn't understand drive letters as path prefixes.
-/// When bash.exe is launched from a native Windows process (no MSYS2 layer),
-/// there's no automatic path translation, so we must do it explicitly.
-///
-/// On non-Windows, returns the path as-is.
-#[allow(dead_code)] // Cross-platform utility — used on Windows launch paths
-pub fn bash_path(path: &std::path::Path) -> String {
-    let s = path.to_string_lossy().replace('\\', "/");
-    if cfg!(target_os = "windows") {
-        // Convert "C:/foo" to "/c/foo" (MSYS2 mount format)
-        if s.len() >= 2 && s.as_bytes()[1] == b':' {
-            let drive = s.as_bytes()[0].to_ascii_lowercase() as char;
-            format!("/{drive}{}", &s[2..])
-        } else {
-            s
-        }
-    } else {
-        s
-    }
-}
+// @tombstone obsolete:bash-path-helper
+// Removed 2026-04-27 in v0.1.170. Safe to delete after v0.1.170.250.
+// MSYS2 path conversion is no longer needed — bash scripts have been
+// replaced with direct podman/gh CLI calls from Rust on all platforms.
+// The helper was only used for the `build-image.sh` and `gh-auth-login.sh`
+// workarounds on Windows.
 
 /// Write content to a file, stripping \r so scripts work inside Linux
 /// containers even when compiled on Windows with core.autocrlf=true.
@@ -84,7 +67,12 @@ fn write_lf(path: &std::path::Path, content: &str) -> std::io::Result<()> {
 // ---------------------------------------------------------------------------
 // Executable scripts
 // ---------------------------------------------------------------------------
-pub const BUILD_IMAGE: &str = include_str!("../../scripts/build-image.sh");
+// @tombstone obsolete:embedded-build-image-script
+// Removed 2026-04-27 in v0.1.170. Safe to delete after v0.1.170.250.
+// Image builds are now driven directly from Rust via ImageBuilder::run(),
+// which calls `podman build` directly. The bash script is kept in the repo
+// for manual developer use but is no longer embedded or extracted at runtime.
+
 // build-tools-overlay.sh tombstoned 2026-04-25 — agents are hard-installed in
 // the forge image; no runtime overlay build required.
 // @trace spec:tombstone-tools-overlay
@@ -297,15 +285,13 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 
 /// Write the full image source tree to a temp directory.
 ///
-/// Recreates the directory layout that `build-image.sh` and `nix build`
-/// expect:
+/// Recreates the directory layout that `nix build` and direct `podman build`
+/// commands expect:
 ///
 /// ```text
 /// <dir>/
 ///   flake.nix
 ///   flake.lock
-///   scripts/
-///     build-image.sh
 ///   images/
 ///     default/
 ///       entrypoint.sh
@@ -328,10 +314,13 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 ///       Containerfile
 /// ```
 ///
+/// Note: `scripts/build-image.sh` is no longer extracted. Image builds are
+/// driven directly from Rust via `ImageBuilder::run()` which calls `podman build`.
+///
 /// Returns the root temp directory path. The caller should clean up via
 /// [`cleanup_image_sources`] after the build completes (or rely on
 /// session cleanup of `$XDG_RUNTIME_DIR`).
-// @trace spec:embedded-scripts/image-source-extraction
+// @trace spec:embedded-scripts/image-source-extraction, spec:direct-podman-calls
 pub fn write_image_sources() -> Result<PathBuf, String> {
     // Use a per-process directory to avoid collisions between the tray app's
     // background build and concurrent CLI invocations.
@@ -347,23 +336,10 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     write_lf(&dir.join("flake.lock"), FLAKE_LOCK).map_err(|e| format!("flake.lock: {e}"))?;
 
     // -- Scripts --
-    let scripts_dir = dir.join("scripts");
-    fs::create_dir_all(&scripts_dir).map_err(|e| format!("scripts dir: {e}"))?;
-    write_lf(&scripts_dir.join("build-image.sh"), BUILD_IMAGE)
-        .map_err(|e| format!("build-image.sh: {e}"))?;
+    // @tombstone obsolete:embedded-build-image-script
+    // build-image.sh is no longer extracted. Image builds are driven from Rust.
     // build-tools-overlay.sh not emitted — tombstoned 2026-04-25.
     // @trace spec:tombstone-tools-overlay
-    #[cfg(unix)]
-    {
-        let path = scripts_dir.join("build-image.sh");
-        if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o700)) {
-            warn!(
-                file = %path.display(),
-                error = %e,
-                "Failed to set executable permission — container entrypoint may fail"
-            );
-        }
-    }
 
     // -- images/default/ --
     let default_dir = dir.join("images").join("default");

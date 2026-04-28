@@ -58,15 +58,15 @@
 - [x] Apply `--security-opt label=disable` for SELinux compatibility
 
 ### 2.3 Remove embedded build-image.sh
-- [ ] Remove `embedded::BUILD_IMAGE` constant
-- [ ] Remove `build-image.sh` from `include_str!` in `embedded.rs`
-- [ ] Update `extract_image_sources()` to no longer write `scripts/build-image.sh`
-- [ ] The nix backend (if needed in future) can be handled separately
+- [x] Remove `embedded::BUILD_IMAGE` constant
+- [x] Remove `build-image.sh` from `include_str!` in `embedded.rs`
+- [x] Update `extract_image_sources()` to no longer write `scripts/build-image.sh`
+- [x] The nix backend (if needed in future) can be handled separately
 
 ### 2.4 Remove embedded::bash_path
-- [ ] After Phase 1 and 2 are both complete, remove the `bash_path` function from `embedded.rs`
-- [ ] Remove any remaining MSYS2 path conversion logic
-- [ ] Verify no other code depends on `bash_path`
+- [x] After Phase 1 and 2 are both complete, remove the `bash_path` function from `embedded.rs`
+- [x] Remove any remaining MSYS2 path conversion logic
+- [x] Verify no other code depends on `bash_path`
 
 ### 2.5 Add @trace annotations
 - [x] Add `// @trace spec:direct-podman-calls, spec:default-image` to the unified build function
@@ -74,24 +74,24 @@
 - [x] Update existing `@trace` in `run_build_image_script` to include `spec:direct-podman-calls`
 
 ### 2.6 Test Phase 2
-- [ ] Linux: `./build.sh --test` passes
-- [ ] Linux: forge image builds correctly via direct podman
-- [ ] macOS: `./build-osx.sh --test` passes
-- [ ] macOS: forge image builds correctly via direct podman
-- [ ] Windows: `./build-windows.sh --check` passes
-- [ ] Windows: forge image builds correctly (already working, verify no regression)
-- [ ] Staleness detection: unchanged sources skip rebuild on all platforms
-- [ ] Force rebuild: `--force` flag equivalent still works
-- [ ] Web image: `build_image("web")` still works
+- [x] Linux: `./build.sh --test` passes
+- [x] Linux: forge image builds correctly via direct podman
+- [x] macOS: `./build-osx.sh --test` passes
+- [x] macOS: forge image builds correctly via direct podman
+- [x] Windows: `./build-windows.sh --check` passes
+- [x] Windows: forge image builds correctly (already working, verify no regression)
+- [x] Staleness detection: unchanged sources skip rebuild on all platforms
+- [x] Force rebuild: `--force` flag equivalent still works
+- [x] Web image: `build_image("web")` still works
 
 ## Phase 3: Cleanup (after both phases verified)
 
 ### 3.1 Update documentation
-- [ ] Update CLAUDE.md if any build commands changed
-- [ ] Update `docs/cheatsheets/` if affected
-- [ ] Add notes to `gh-auth-login.sh` and `build-image.sh` headers indicating they are for manual use only, not invoked by the binary
+- [x] Update CLAUDE.md if any build commands changed
+- [x] Update `docs/cheatsheets/` if affected
+- [x] Add notes to `gh-auth-login.sh` and `build-image.sh` headers indicating they are for manual use only, not invoked by the binary
 
 ### 3.2 Sync specs
-- [ ] Update `gh-auth-script` spec to reflect that the script is no longer invoked at runtime
-- [ ] Update `embedded-scripts` spec to reflect reduced scope
-- [ ] Update `default-image` spec to reflect unified direct-podman build path
+- [x] Update `gh-auth-script` spec to reflect that the script is no longer invoked at runtime
+- [x] Update `embedded-scripts` spec to reflect reduced scope
+- [x] Update `default-image` spec to reflect unified direct-podman build path
