@@ -1066,7 +1066,17 @@ fn prompt_with_default(label: &str, default: &str) -> String {
 /// Observation-only — does not start any containers.
 /// Returns true on clean exit (Ctrl+C), false if no containers found.
 ///
-/// @trace spec:runtime-diagnostics
+/// @tombstone superseded:runtime-diagnostics-stream
+/// @trace spec:runtime-diagnostics-stream
+/// Origin/main's standalone "watch running containers' logs" mode. The
+/// wsl-on-windows path (and the user's stated preference) is to make
+/// `--diagnostics` an Attach-time flag that tail -F's strategic logs
+/// alongside the normal attach (see src-tauri/src/diagnostics.rs).
+/// Dispatch tombstoned in cli.rs + main.rs. Function retained for ≥3
+/// releases per the project's @tombstone convention so any external
+/// caller (none today) errors loudly rather than silently disappearing.
+/// Removed (dispatch) in 0.1.184.545. Safe to delete after 0.1.184.548.
+#[allow(dead_code)]
 pub fn run_diagnostics(path: PathBuf, prompt: Option<String>) -> bool {
     let _ = prompt; // Currently unused, reserved for future agent integration
     let project_name = path

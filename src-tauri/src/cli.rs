@@ -422,10 +422,22 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
     }
 
     match path {
-        Some(p) if diagnostics => Some((
-            CliMode::Diagnostics { path: p, prompt },
-            log_config,
-        )),
+        // @tombstone superseded:runtime-diagnostics-stream
+        // The standalone CliMode::Diagnostics dispatch was origin/main's
+        // parallel implementation (a "watch the running containers' logs"
+        // standalone mode). We prefer the wsl-on-windows implementation
+        // where `--diagnostics` is an Attach-time flag that tail -F's
+        // strategic logs and spills them into the calling terminal alongside
+        // the normal attach (see src-tauri/src/diagnostics.rs).
+        // Removed in 0.1.184.545. Safe to delete after 0.1.184.548.
+        // The CliMode::Diagnostics enum variant + main.rs handler + runner::
+        // run_diagnostics are tombstoned alongside this dispatch — see those
+        // files for matching tombstones.
+        // @trace spec:runtime-diagnostics-stream
+        // Some(p) if diagnostics => Some((
+        //     CliMode::Diagnostics { path: p, prompt },
+        //     log_config,
+        // )),
         Some(p) => Some((
             CliMode::Attach {
                 path: p,

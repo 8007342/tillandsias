@@ -230,12 +230,19 @@ fn main() {
         });
     }
 
-    // @trace spec:runtime-diagnostics
-    if let cli::CliMode::Diagnostics { path, prompt } = &cli_mode {
-        let _log_guard = logging::init(&log_config);
-        let success = runner::run_diagnostics(path.clone(), prompt.clone());
-        std::process::exit(if success { 0 } else { 1 });
-    }
+    // @tombstone superseded:runtime-diagnostics-stream
+    // @trace spec:runtime-diagnostics-stream
+    // The standalone CliMode::Diagnostics handler was origin/main's parallel
+    // implementation. Superseded by the wsl-on-windows path where
+    // `--diagnostics` is an Attach-time flag (handled below in the
+    // CliMode::Attach branch via runner::run(..., diagnostics, ...)).
+    // See cli.rs for the dispatch tombstone.
+    // Removed in 0.1.184.545. Safe to delete after 0.1.184.548.
+    // if let cli::CliMode::Diagnostics { path, prompt } = &cli_mode {
+    //     let _log_guard = logging::init(&log_config);
+    //     let success = runner::run_diagnostics(path.clone(), prompt.clone());
+    //     std::process::exit(if success { 0 } else { 1 });
+    // }
 
     // If CLI attach mode, run the container runner and exit — no tray app.
     if let cli::CliMode::Attach {
