@@ -1,180 +1,82 @@
----
-tags: [opencode, agent, cli, web-ui, serve, tui, session, coding-agent]
-languages: []
-since: 2026-04-25
-last_verified: 2026-04-27
-sources:
-  - https://opencode.ai/docs
-  - https://opencode.ai/docs/cli
-authority: high
-status: current
+# OpenCode
 
-# v2 — tier classification (cheatsheets-license-tiered)
-tier: pull-on-demand
-summary_generated_by: hand-curated
-bundled_into_image: false
-committed_for_project: false
-pull_recipe: see-section-pull-on-demand
----
+@trace spec:agent-source-of-truth
 
-# OpenCode — CLI + web mode
-
-@trace spec:agent-cheatsheets
+**Version baseline**: OpenCode v0.2+ (baked at /opt/agents/opencode, web mode via Bun 1.0+)  
+**Use when**: Launching web-based visual IDE, running OpenCode CLI, debugging web sessions, parallel coding
 
 ## Provenance
 
-- OpenCode official docs — overview (what opencode is, TUI vs web mode): <https://opencode.ai/docs>
-- OpenCode CLI reference (`opencode`, `opencode serve`, `opencode web`, `--port`, `--hostname` flags): <https://opencode.ai/docs/cli>
-- **Last updated:** 2026-04-25
-
-**Version baseline**: opencode binary baked at `/opt/agents/opencode/bin/opencode` (linked into PATH as `opencode`). The forge ships `opencode serve` for the web UI.
-**Use when**: launching OpenCode interactively or via Tillandsias' "Attach Here" web flow.
+- https://opencode.dev/ — OpenCode documentation
+- https://bun.sh/ — Bun JavaScript runtime (powers OpenCode web)
+- **Last updated:** 2026-04-27
 
 ## Quick reference
 
-| Command | Effect |
-|---|---|
-| `opencode` | start interactive session in CWD |
-| `opencode serve` | run the HTTP server (port `4096`) for web UI clients |
-| `opencode serve --port 4096 --hostname 0.0.0.0` | explicit bind for in-enclave access |
-| `opencode --version` | bundled version |
-
-| Path | Purpose |
-|---|---|
-| `~/.config/opencode/config.json` | global config — model providers, theme, agent overrides |
-| `~/.config/opencode/tui.json` | TUI theme (default `tokyonight`) |
-| `~/.local/share/opencode/storage/` | session DB (SQLite) — ephemeral in the forge unless preserved |
-| `<project>/.opencode/` | project-scoped overrides if present |
-
-| Tillandsias-specific path | Purpose |
-|---|---|
-| `http://<project>.opencode.localhost/` | router-fronted URL the tray opens for "Attach Here" / "Attach Another" |
-| `127.0.0.1:<host_port>` (4096 inside container) | per-project loopback bind on the host |
+| Command | Purpose |
+|---------|---------|
+| `opencode --help` | Show CLI commands |
+| `opencode serve --port 5173` | Start web IDE on port 5173 |
+| `opencode session list` | Show all active sessions |
+| `opencode session new` | Create a new session |
+| `opencode config get theme` | Read config value |
+| `opencode config set theme dark` | Set config value |
 
 ## Common patterns
 
-### Pattern 1 — Tillandsias web flow
-
-The tray's "Attach Here" launches a browser window in app-mode pointed at `http://<project>.opencode.localhost/`. The router container reverse-proxies to the project's forge on the enclave. Multiple browser windows against the same forge are supported — that's what `Attach Another` does.
-
-You don't run `opencode serve` manually in this flow; the entrypoint does it. Just open the browser window the tray gave you.
-
-### Pattern 2 — model selection via config
-
-```json
-{
-  "model": "anthropic/claude-opus-4-7",
-  "providers": {
-    "anthropic": {
-      "options": {
-        "apiKey": "..."
-      }
-    }
-  }
-}
-```
-
-In the credential-free forge, the API key isn't here — opencode reaches the user's auth state via the host (out of scope for this cheatsheet).
-
-### Pattern 3 — multiple concurrent sessions on one forge
-
-OpenCode Web supports multiple concurrent browser windows against the same `opencode serve` process. Sessions are independent; closing one doesn't affect others. The tray's "Attach Another" item just spawns a fresh browser window pointing at the same URL — no second container is started.
-
-### Pattern 4 — terminal mode in the forge
-
+**Start web IDE for the current project:**
 ```bash
-opencode               # TUI mode in the current shell
+cd $HOME/src/my-project
+opencode serve --port 5173
+# Browser opens at http://localhost:5173 (app mode; OS native browser, not Tauri webview)
 ```
 
-Same agent, different surface. The TUI runs in the same forge container; if you started the forge via the tray's web flow, you can also `podman exec` in (or use the tray's "Maintenance" item) and launch the TUI in parallel.
+**Run multiple OpenCode sessions in parallel:**
+```bash
+# Terminal 1: Session A on port 5173
+cd $HOME/src/project-a
+opencode serve --port 5173
+
+# Terminal 2: Session B on port 5174
+cd $HOME/src/project-b
+opencode serve --port 5174
+
+# Access both in separate browser windows
+# http://localhost:5173  (Project A)
+# http://localhost:5174  (Project B)
+```
+
+**Check session state:**
+```bash
+opencode session list
+# Shows: session ID, port, project dir, status (active/idle), last activity
+```
+
+**Configure OpenCode:**
+```bash
+# Default theme is light; switch to dark
+opencode config set theme dark
+
+# Set font (must be installed in forge)
+opencode config set font "Fira Code"
+
+# List all config options
+opencode config list
+```
 
 ## Common pitfalls
 
-- **Trying to bind opencode serve to ports < 1024** — the forge user is not root; rootless. The convention is port `4096` (high port). The host-side router rewrites the public-facing URL to port 80 → 4096 enclave-internal.
-- **Editing `~/.config/opencode/config.json` to set an API key in the forge** — the forge has no credentials by design. Attempting to embed an API key here is a `spec:forge-offline` violation. Auth flows through the host's tray, not in-forge config.
-- **Closing a browser window expecting it to stop the forge** — closing windows is per-session. The forge keeps running until `Quit Tillandsias` triggers `shutdown_all`. (See `cheatsheets/runtime/forge-container.md` for lifecycle details.)
-- **Mixing TUI and web modes in the same forge thinking they share session state** — they're separate `opencode` processes against the same container. Sessions are per-process; share via the project workspace, not via opencode itself.
-- **Calling external Anthropic APIs from inside the forge** — the forge has no direct internet, only the proxy. If the proxy's allowlist doesn't include `api.anthropic.com`, the call fails. This is intentional in many configs.
-- **Assuming OpenCode auto-loads CLAUDE.md** — OpenCode reads its own config + project AGENTS.md (if present), NOT Claude Code's CLAUDE.md. If you want both agents to share rules, mirror them in both files.
-- **Trying to install agent extensions at runtime** — the forge image is the toolbox. Adding plugins/extensions means a forge image change (per `spec:default-image`), not a runtime install.
+❌ **Binding to `0.0.0.0` instead of `127.0.0.1`**: Forge is network-isolated; binding to all interfaces doesn't help. → Use `--port 5173` (defaults to localhost); that's sufficient.
 
-## Telemetry obligations — cheatsheet-telemetry
+❌ **Port conflicts on the same forge**: Two agents try to start on port 5173. → Increment the port: 5173, 5174, 5175. Session DB keys off port + working dir; no collisions.
 
-@trace spec:cheatsheets-license-tiered
+❌ **Assuming a Tauri webview**: OpenCode web runs in the OS native browser (Chrome, Firefox, Safari), not a Tauri container. → Debugging tools are your browser's DevTools (F12), not Tauri's.
 
-Every cheatsheet consultation by opencode SHOULD emit one JSONL line to
-`/var/log/tillandsias/external/cheatsheet-telemetry/lookups.jsonl` so the
-host-side analytics (deferred to a follow-up change) can drive cheatsheet
-refresh prioritization. Schema and example events are documented in
-`runtime/external-logs.md` under "Producer: cheatsheet-telemetry".
+❌ **Expecting the browser to be pre-installed**: The forge does NOT ship a browser. → The host OS's browser is launched by the tray; the forge agents cannot spawn browsers directly (network isolation). OpenCode prints the URL; a human (or the tray) opens it.
 
-The path is RW for forge containers (per `spec:cheatsheets-license-tiered`'s
-relaxation of the original Reverse-breach refusal). Append-only — never
-rewrite earlier lines. The tray auditor enforces a 10 MB rotate cap.
-
-The most load-bearing event is `resolved_via: miss` — emit it whenever
-you read a cheatsheet but had to pull deeper context (live-api,
-pull-on-demand recipe, or web search). The miss log is what tells the
-host which cheatsheets need refresh.
-
-```bash
-jq -cn --arg ts "$(date -u -Iseconds)" --arg cs "languages/python.md" \
-       --arg q "asyncio cancellation" --arg via "miss" \
-  '{ts: $ts, project: $TILLANDSIAS_PROJECT, cheatsheet: $cs, query: $q,
-    resolved_via: $via, pulled_url: null, chars_consumed: 0,
-    spec: "cheatsheets-license-tiered", accountability: true}' \
-  >> /var/log/tillandsias/external/cheatsheet-telemetry/lookups.jsonl
-```
-
-## Pull on Demand
-
-> This cheatsheet's underlying source is NOT bundled into the forge image.
-> Reason: upstream license redistribution status not granted (or off-allowlist).
-> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
->
-> When you need depth beyond the summary above, materialize the source into
-> the per-project pull cache by following the recipe below. The proxy
-> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
-> required.
-
-<!-- TODO: hand-curate the recipe before next forge build -->
-
-### Source
-
-- **Upstream URL(s):**
-  - `https://opencode.ai/docs`
-- **Archive type:** `single-html`
-- **Expected size:** `~1 MB extracted`
-- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/opencode.ai/docs`
-- **License:** see-license-allowlist
-- **License URL:** https://opencode.ai/docs
-
-### Materialize recipe (agent runs this)
-
-```bash
-set -euo pipefail
-TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/opencode.ai/docs"
-mkdir -p "$(dirname "$TARGET")"
-curl --fail --silent --show-error \
-  "https://opencode.ai/docs" \
-  -o "$TARGET"
-```
-
-### Generation guidelines (after pull)
-
-1. Read the pulled file for the structure relevant to your project.
-2. If the project leans on this tool/topic heavily, generate a project-contextual
-   cheatsheet at `<project>/.tillandsias/cheatsheets/agents/opencode.md` using
-   `cheatsheets/TEMPLATE.md` as the skeleton.
-3. The generated cheatsheet MUST set frontmatter:
-   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
-   `committed_for_project: true`.
-4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
+❌ **Leaving sessions orphaned**: If you kill `opencode serve` without `opencode session delete`, the session DB leaks. → Always `opencode session delete <id>` before exiting.
 
 ## See also
 
-- `agents/claude-code.md` — alternative agent, baked alongside opencode
-- `agents/openspec.md` — change workflow opencode invokes via `/opsx:*` slash commands
-- `runtime/networking.md` — why the credential-free / proxy-mediated network shape
-- `runtime/external-logs.md` — full cheatsheet-telemetry schema + auditor invariants
-- `runtime/cheatsheet-tier-system.md` — the tier system the telemetry events surface
+- `agents/claude-code.md` — Claude Code CLI for text-based analysis
+- `agents/openspec.md` — OpenSpec workflow; often run alongside OpenCode in visual mode

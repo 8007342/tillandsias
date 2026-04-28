@@ -5212,7 +5212,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias"
-version = "0.1.174"
+version = "0.1.183"
 dependencies = [
  "bytes",
  "dirs",
@@ -5221,6 +5221,7 @@ dependencies = [
  "keyring",
  "libc",
  "notify",
+ "parking_lot",
  "postcard",
  "rand 0.9.4",
  "rcgen",
@@ -5234,6 +5235,7 @@ dependencies = [
  "tauri-plugin-shell",
  "tauri-plugin-updater",
  "tempfile",
+ "tillandsias-browser-mcp",
  "tillandsias-control-wire",
  "tillandsias-core",
  "tillandsias-otp",
@@ -5246,10 +5248,33 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
  "tracing-appender",
+ "tracing-layer-win-eventlog",
  "tracing-subscriber",
+ "url",
+ "uuid",
  "windows-sys 0.59.0",
  "wiremock",
  "zeroize",
+]
+
+[[package]]
+name = "tillandsias-browser-mcp"
+version = "0.1.170"
+dependencies = [
+ "futures-util",
+ "parking_lot",
+ "postcard",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tillandsias-control-wire",
+ "tillandsias-core",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "url",
+ "uuid",
 ]
 
 [[package]]
@@ -5262,7 +5287,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-core"
-version = "0.1.174"
+version = "0.1.183"
 dependencies = [
  "dirs",
  "postcard",
@@ -5287,10 +5312,11 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-podman"
-version = "0.1.174"
+version = "0.1.183"
 dependencies = [
  "async-trait",
  "libc",
+ "parking_lot",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -5316,7 +5342,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-scanner"
-version = "0.1.174"
+version = "0.1.183"
 dependencies = [
  "dirs",
  "notify",
@@ -5663,6 +5689,17 @@ checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
  "valuable",
+]
+
+[[package]]
+name = "tracing-layer-win-eventlog"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac15bb2428f5daaf5a94d2a28b72daa21f0a85d8d997cfaf5fb1a61069fc564d"
+dependencies = [
+ "tracing",
+ "tracing-subscriber",
+ "winapi",
 ]
 
 [[package]]

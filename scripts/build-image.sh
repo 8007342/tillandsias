@@ -3,6 +3,11 @@
 # Usage: scripts/build-image.sh [forge|web|proxy|git|inference|router] [--force]
 #                               [--max-age-days N] [--refresh-sources]
 #
+# DEPRECATED: This script is for manual developer use and documentation only.
+# The Tillandsias binary (tray app) invokes image builds directly from Rust
+# via ImageBuilder::run(), which calls `podman build` directly without bash.
+# See: src-tauri/src/image_builder.rs
+#
 # This script:
 #   1. Checks if sources have changed since last build (staleness detection)
 #   2. (forge only) Runs the bundled-tier cheatsheet-source bake:
@@ -24,8 +29,9 @@
 # Environment:
 #   TILLANDSIAS_BUILD_VERBOSE=1   Show nix build output
 #
-# @trace spec:cheatsheets-license-tiered
+# @trace spec:cheatsheets-license-tiered, spec:direct-podman-calls
 # @cheatsheet runtime/cheatsheet-tier-system.md
+# @tombstone obsolete:embedded-build-image-script
 
 set -euo pipefail
 

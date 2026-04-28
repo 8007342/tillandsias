@@ -14,7 +14,7 @@ use tracing::{debug, info, warn};
 /// Detected GPU capability tier for model selection.
 ///
 /// @trace spec:inference-container
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GpuTier {
     /// No GPU detected — CPU inference only (T0-T1)
     None,

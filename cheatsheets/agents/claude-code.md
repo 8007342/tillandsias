@@ -1,190 +1,80 @@
----
-tags: [claude-code, anthropic, agent, cli, skills, hooks, settings]
-languages: []
-since: 2026-04-25
-last_verified: 2026-04-27
-sources:
-  - https://code.claude.com/docs/en/overview
-  - https://code.claude.com/docs/en/cli-reference
-authority: high
-status: current
+# Claude Code
 
-# v2 — tier classification (cheatsheets-license-tiered)
-tier: pull-on-demand
-summary_generated_by: hand-curated
-bundled_into_image: false
-committed_for_project: false
-pull_recipe: see-section-pull-on-demand
----
+@trace spec:agent-source-of-truth
 
-# Claude Code — CLI + skills + hooks
-
-@trace spec:agent-cheatsheets
+**Version baseline**: Claude Code v0.2+ (baked at /opt/agents/claude)  
+**Use when**: Running Claude Code inside the forge, understanding its CLI, passing model flags, reading task output
 
 ## Provenance
 
-- Claude Code official docs — overview (install, surfaces, CLAUDE.md, skills, hooks — the canonical Anthropic reference): <https://code.claude.com/docs/en/overview>
-- Claude Code CLI reference (flags `--model`, `--resume`, `--version`): <https://code.claude.com/docs/en/cli-reference>
-- **Last updated:** 2026-04-25
-
-**Version baseline**: `@anthropic-ai/claude-code` baked at `/opt/agents/claude/` (linked into PATH as `claude`)
-**Use when**: launching Claude Code from inside the forge, configuring skills/hooks, debugging session state.
+- https://claude.ai/code — Claude Code documentation
+- https://github.com/anthropic-ai/claude-code — Source repository
+- https://docs.anthropic.com/claude/reference/getting-started-with-the-api — Claude models and API
+- **Last updated:** 2026-04-27
 
 ## Quick reference
 
-| Command | Effect |
-|---|---|
-| `claude` | start an interactive session in the current directory |
-| `claude --version` | show the bundled CLI version |
-| `claude --model <id>` | override the default model for this session |
-| `claude --resume <id>` | resume a previous session by ID |
-
-| Path | Purpose |
-|---|---|
-| `~/.claude/CLAUDE.md` | host-wide instructions (currently kept empty per host-portability convention) |
-| `<project>/CLAUDE.md` | project-specific instructions (auto-loaded when CWD is in the project tree) |
-| `~/.claude/settings.json` | hook config, permission allowlists, env vars |
-| `<project>/.claude/settings.json` | project-scoped overrides (hooks, allowlists) |
-| `~/.claude/projects/<encoded-cwd>/memory/MEMORY.md` | auto-memory index; loaded into every session in that project |
+| Command | Purpose |
+|---------|---------|
+| `claude help` | Show all subcommands |
+| `claude read <path>` | Read a file (batch mode, non-interactive) |
+| `claude /analyze <prompt>` | Analyze code/files (slash command in REPL) |
+| `claude /loop <interval> <prompt>` | Run prompt on repeat (e.g., every 5 minutes) |
+| `claude /bash <command>` | Execute bash command (trusted, inline) |
+| `--model claude-opus` | Use Opus model (slowest, most capable) |
+| `--model claude-sonnet` | Use Sonnet model (balanced) |
+| `--model claude-haiku` | Use Haiku model (fastest, forge default) |
 
 ## Common patterns
 
-### Pattern 1 — launch with explicit model
-
+**Interactive analysis from the CLI:**
 ```bash
-claude --model claude-opus-4-7
-claude --model claude-sonnet-4-6
-claude --model claude-haiku-4-5
+claude /analyze "explain the error in this stack trace"
+# Claude reads context (working dir, git state) and responds
 ```
 
-Default model per session is whatever `~/.claude/settings.json` specifies. Override per session with `--model`.
-
-### Pattern 2 — read the project's CLAUDE.md before starting work
-
+**Batch file read (non-interactive):**
 ```bash
-cat ./CLAUDE.md           # project-local conventions (build, test, OpenSpec rules, etc.)
-ls .claude/settings.json  # project-scoped hooks/allowlists if any
+claude read src/main.rs  # Returns file contents
+# Useful in scripts: `claude read file.rs | grep -A5 "fn main"`
 ```
 
-CLAUDE.md is the project's contract with the agent. Read it first.
+**Running with a specific model:**
+```bash
+# Default (Haiku, fast, suitable for forge work)
+claude /bash "cargo build"
 
-### Pattern 3 — use the auto-memory system
-
-Memory entries live in `~/.claude/projects/<encoded-cwd>/memory/MEMORY.md` plus per-topic markdown files. Each entry has frontmatter:
-
-```markdown
----
-name: <short title>
-description: <one-line description>
-type: user | feedback | project | reference
----
-
-<body>
+# Switch to Sonnet for complex reasoning
+CLAUDE_MODEL=claude-sonnet claude /analyze "refactor this module"
 ```
 
-`MEMORY.md` is an index — keep it ≤ 200 lines because lines after that get truncated. Put content in dedicated files, link from the index.
-
-### Pattern 4 — invoke a skill (slash command)
-
-In a session: `/skill-name [args]`. From the CLI side, skills are configured globally or per-project in `settings.json`. The session lists available skills in `<system-reminder>` blocks at startup.
-
-### Pattern 5 — configure hooks via settings.json
-
-```json
-{
-  "hooks": {
-    "user-prompt-submit-hook": "echo 'prompt received' >> ~/log",
-    "tool-use-hook": "..."
-  },
-  "permissions": {
-    "allow": ["Bash(npm test*)", "Read(./src/**)"]
-  }
-}
+**Looping a task (polling, monitoring):**
+```bash
+# Check build status every 30 seconds until it passes
+claude /loop 30s /bash "cargo build --workspace"
 ```
 
-Hooks are shell commands the harness runs around prompts/tool calls. Permissions allowlist tools so they don't prompt the user.
+**Slash command discovery:**
+```bash
+# List all available skills/commands inside REPL
+/help
+/skills
+/memory
+```
 
 ## Common pitfalls
 
-- **Editing CLAUDE.md mid-session** — the file is read at session start. Mid-session edits don't affect the current session; restart for changes to apply.
-- **Skipping the project CLAUDE.md** — the agent rule of thumb is "read CLAUDE.md before any non-trivial action". Skipping it means walking past hard requirements like "all changes go through OpenSpec".
-- **Putting workflow rules in `~/.claude/CLAUDE.md`** — that file is host-local and gets wiped if the host is wiped. Workflow lives in project CLAUDE.md (checked into git). The host file is just an index.
-- **Using `--model` with a deprecated model ID** — Claude Code rejects retired model IDs. The current Claude family is 4.x: `claude-opus-4-7`, `claude-sonnet-4-6`, `claude-haiku-4-5`. Knowledge cutoff for the assistant is January 2026.
-- **Misunderstanding the difference between user-invocable skills and auto-loaded skills** — user-invocable skills appear in the slash-command list. Auto-loaded skills run on triggers (e.g., file-extension match). Both are configured via the agent SDK / settings.
-- **Trying to run Claude Code from a non-project directory** — many features (CLAUDE.md, project memory, project-scoped hooks) need the CWD to be inside a project tree. `cd $HOME/src/<project>` before launching.
-- **Forgetting to commit `.claude/settings.json` changes** — project-scoped settings only take effect when the file is checked in. Local-only edits silently apply to your machine but not to other contributors.
+❌ **Assuming Opus is the default**: The forge uses Haiku by default (fast, constrained tokens). Opus is slow inside containers. → Use `--model claude-sonnet` for complex reasoning without adding much latency.
 
-## Telemetry obligations — cheatsheet-telemetry
+❌ **Running large file reads without context**: `claude read huge-codebase/src/` might timeout. → Use `find` + filtering: `find . -name '*.rs' -type f | head -20 | xargs -I {} claude read {}`.
 
-@trace spec:cheatsheets-license-tiered
+❌ **Forgetting to git-add before analysis**: Claude sees only committed files (or working tree if staged). → `git add .` before running `/analyze`.
 
-Every cheatsheet consultation by Claude Code SHOULD emit one JSONL line to
-`/var/log/tillandsias/external/cheatsheet-telemetry/lookups.jsonl`. Schema
-+ examples in `runtime/external-logs.md` ("Producer: cheatsheet-telemetry").
-Path is RW for forge containers; append-only; auditor caps at 10 MB rotate.
+❌ **Using `/loop` for long-running tasks without output**: The loop runs your prompt repeatedly. → Use `/bash "cargo build"` directly; `/loop` is for polling short checks (build finished? test passed?).
 
-The load-bearing event is `resolved_via: miss` — emit it whenever you read
-a cheatsheet but had to pull deeper context (live-api, pull-on-demand
-recipe, web search). Misses tell the host which cheatsheets need refresh.
-
-```bash
-jq -cn --arg ts "$(date -u -Iseconds)" --arg cs "languages/python.md" \
-       --arg q "asyncio cancellation" --arg via "miss" \
-  '{ts: $ts, project: $TILLANDSIAS_PROJECT, cheatsheet: $cs, query: $q,
-    resolved_via: $via, pulled_url: null, chars_consumed: 0,
-    spec: "cheatsheets-license-tiered", accountability: true}' \
-  >> /var/log/tillandsias/external/cheatsheet-telemetry/lookups.jsonl
-```
-
-## Pull on Demand
-
-> This cheatsheet's underlying source is NOT bundled into the forge image.
-> Reason: upstream license redistribution status not granted (or off-allowlist).
-> See `cheatsheets/license-allowlist.toml` for the per-domain authority.
->
-> When you need depth beyond the summary above, materialize the source into
-> the per-project pull cache by following the recipe below. The proxy
-> (HTTP_PROXY=http://proxy:3128) handles fetch transparently — no credentials
-> required.
-
-<!-- TODO: hand-curate the recipe before next forge build -->
-
-### Source
-
-- **Upstream URL(s):**
-  - `https://code.claude.com/docs/en/overview`
-- **Archive type:** `single-html`
-- **Expected size:** `~1 MB extracted`
-- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/code.claude.com/docs/en/overview`
-- **License:** see-license-allowlist
-- **License URL:** https://code.claude.com/docs/en/overview
-
-### Materialize recipe (agent runs this)
-
-```bash
-set -euo pipefail
-TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/code.claude.com/docs/en/overview"
-mkdir -p "$(dirname "$TARGET")"
-curl --fail --silent --show-error \
-  "https://code.claude.com/docs/en/overview" \
-  -o "$TARGET"
-```
-
-### Generation guidelines (after pull)
-
-1. Read the pulled file for the structure relevant to your project.
-2. If the project leans on this tool/topic heavily, generate a project-contextual
-   cheatsheet at `<project>/.tillandsias/cheatsheets/agents/claude-code.md` using
-   `cheatsheets/TEMPLATE.md` as the skeleton.
-3. The generated cheatsheet MUST set frontmatter:
-   `tier: pull-on-demand`, `summary_generated_by: agent-generated-at-runtime`,
-   `committed_for_project: true`.
-4. Cite the pulled source under `## Provenance` with `local: <cache target above>`.
+❌ **Forgetting to set TILLANDSIAS_CHEATSHEETS**: Claude's system prompt doesn't know where the cheatsheets are unless the env var is set. → The forge entrypoint sets this; but if you're in a nested shell, echo `$TILLANDSIAS_CHEATSHEETS` to verify.
 
 ## See also
 
-- `agents/opencode.md` — alternative agent runtime, also baked in `/opt/agents/`
-- `agents/openspec.md` — the workflow Claude Code is expected to follow on this project
-- `runtime/forge-container.md` — the sandbox Claude Code lives in
-- `runtime/external-logs.md` — full cheatsheet-telemetry schema + auditor invariants
-- `runtime/cheatsheet-tier-system.md` — the tier system the telemetry events surface
+- `agents/openspec.md` — OpenSpec workflow for structured changes
+- `agents/opencode.md` — OpenCode CLI for web/visual development

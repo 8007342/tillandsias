@@ -60,14 +60,13 @@ correct stage.
 
 | Stage      | Trigger                                                          | Visible items |
 |------------|------------------------------------------------------------------|---------------|
-| `Booting`  | Tray just started; one or more enclave images still building     | contextual status line (`Building […]…`), divider, `Language ▸`, `v<version> — by Tlatoāni` (disabled), `Quit Tillandsias` |
-| `Ready`    | All enclave images ready; before the credential probe completes  | optional contextual status line (`<image> ready`, only within 2s flash window), divider, `Language ▸`, `v<version> — by Tlatoāni` (disabled), `Quit Tillandsias` |
-| `NoAuth`   | Credential probe returned `CredentialMissing` or `CredentialInvalid` | `🔑 Sign in to GitHub` (enabled action), divider, `Language ▸`, `v<version> — by Tlatoāni` (disabled), `Quit Tillandsias` |
-| `Authed`   | Credential probe returned `Authenticated` and remote-repo fetch succeeded (or local-only) | running-stack submenus (zero or more), `Projects ▸` (only if non-empty), `Remote Projects ▸` (only if non-empty), divider, `Language ▸`, `v<version> — by Tlatoāni` (disabled), `Quit Tillandsias` |
-| `NetIssue` | Credential probe returned `GithubUnreachable` (or remote fetch failed transiently) | `🔑 Sign in to GitHub` (enabled action), contextual status line (`GitHub unreachable — using cached list`), running-stack submenus, `Projects ▸` (only if non-empty), divider, `Language ▸`, `v<version> — by Tlatoāni` (disabled), `Quit Tillandsias` |
+| `Booting`  | Tray just started; one or more enclave images still building     | contextual status line (`Building […]…`), divider, `v<version> — by Tlatoāni` (disabled), `Quit Tillandsias` |
+| `Ready`    | All enclave images ready; before the credential probe completes  | optional contextual status line (`<image> ready`, only within 2s flash window), divider, `v<version> — by Tlatoāni` (disabled), `Quit Tillandsias` |
+| `NoAuth`   | Credential probe returned `CredentialMissing` or `CredentialInvalid` | `🔑 Sign in to GitHub` (enabled action), divider, `v<version> — by Tlatoāni` (disabled), `Quit Tillandsias` |
+| `Authed`   | Credential probe returned `Authenticated` and remote-repo fetch succeeded (or local-only) | running-stack submenus (zero or more), `🏠 ~/src ▸` (only if non-empty), `☁️ Cloud ▸` (only if non-empty), divider, `v<version> — by Tlatoāni` (disabled), `Quit Tillandsias` |
+| `NetIssue` | Credential probe returned `GithubUnreachable` (or remote fetch failed transiently) | `🔑 Sign in to GitHub` (enabled action), contextual status line (`GitHub unreachable — using cached list`), running-stack submenus, `🏠 ~/src ▸` (only if non-empty), divider, `v<version> — by Tlatoāni` (disabled), `Quit Tillandsias` |
 
-`Language ▸` and `Quit Tillandsias` SHALL appear in every stage and SHALL
-always be enabled. The single combined `v<version> — by Tlatoāni` line SHALL appear in every stage immediately above `Quit Tillandsias` and SHALL always be disabled (visual signature only — clicking does nothing). No other disabled item SHALL appear in any stage except the contextual status line described above, which SHALL appear only when a relevant condition holds.
+`Quit Tillandsias` SHALL appear in every stage and SHALL always be enabled. The single combined `v<version> — by Tlatoāni` line SHALL appear in every stage immediately above `Quit Tillandsias` and SHALL always be disabled (visual signature only). The `Language ▸` submenu SHALL NOT appear in any stage; the locale defaults to `en` until i18n is re-enabled in a future change. No other disabled item SHALL appear in any stage except the contextual status line described above.
 
 #### Scenario: Version + signature persist across all stages
 - **WHEN** the tray transitions between any two stages (e.g.,
@@ -87,22 +86,27 @@ always be enabled. The single combined `v<version> — by Tlatoāni` line SHALL 
 - **WHEN** the credential probe returns `CredentialMissing` or
   `CredentialInvalid`
 - **THEN** any transient status line is removed and `🔑 Sign in to GitHub` is appended as an enabled action
-- **AND** no `Projects ▸` or `Remote Projects ▸` submenu is appended
+- **AND** no `🏠 ~/src ▸` or `☁️ Cloud ▸` submenu is appended
 
 #### Scenario: Ready → Authed transition
 - **WHEN** the credential probe returns `Authenticated`
 - **AND** the remote-repo fetch succeeds (or the user has chosen
   local-only)
 - **THEN** any running-stack submenus are appended at the top
-- **AND** `Projects ▸` is appended if `state.projects` is non-empty
-- **AND** `Remote Projects ▸` is appended if any remote repo is not yet cloned locally
+- **AND** `🏠 ~/src ▸` is appended if `state.projects` is non-empty
+- **AND** `☁️ Cloud ▸` is appended if any remote repo is not yet cloned locally
 
 #### Scenario: NetIssue offers cached projects
 - **WHEN** the host has previously fetched a remote project list and
   the latest probe returned `GithubUnreachable`
-- **THEN** `Projects ▸` SHALL still populate from the on-disk cache
+- **THEN** `🏠 ~/src ▸` SHALL still populate from the on-disk cache
 - **AND** the contextual status line SHALL include `GitHub unreachable — using cached list`
 - **AND** the `🔑 Sign in to GitHub` action SHALL be present (enabled) so the user can retry
+
+#### Scenario: Language submenu is hidden in all stages
+- **WHEN** the menu is open in any of the five stages
+- **THEN** the menu SHALL NOT contain a `Language ▸` submenu
+- **AND** the static row at the bottom is exactly `[separator] [v<version> — by Tlatoāni] [Quit Tillandsias]`
 
 ### Requirement: Menu items are pre-built and toggled, never rebuilt on stage change
 
@@ -583,29 +587,32 @@ When the credential probe reports `CredentialMissing`, `CredentialInvalid`, or `
 
 ### Requirement: Projects and Remote Projects render as sibling top-level submenus
 
-When the credential probe is `Authenticated` (or `NetIssue` with cached projects available), local and remote projects SHALL render as two sibling top-level submenus, `Projects ▸` and `Remote Projects ▸`. Each submenu is appended to the menu only when it would have at least one entry — empty submenus SHALL NOT appear.
+When the credential probe is `Authenticated` (or `NetIssue` with cached projects available), local and remote projects SHALL render as two sibling top-level submenus. Their labels SHALL be `🏠 ~/src ▸` (local watch-path projects) and `☁️ Cloud ▸` (uncloned GitHub repos). The labels MUST carry the emoji prefix so users can visually distinguish "what's on disk" from "what's in the cloud" at a glance.
+
+Each submenu is appended to the menu only when it would have at least one entry — empty submenus SHALL NOT appear.
 
 The previous `Include remote` `CheckMenuItem` inside `Projects ▸` SHALL NOT exist. Its event variant `MenuCommand::IncludeRemoteToggle` SHALL be removed.
 
 #### Scenario: Both submenus appear when both have entries
 - **WHEN** `state.projects` is non-empty AND `state.remote_repos` contains at least one repo not present locally
-- **THEN** the menu SHALL contain `Projects ▸` and `Remote Projects ▸` as sibling top-level submenus
+- **THEN** the menu SHALL contain `🏠 ~/src ▸` and `☁️ Cloud ▸` as sibling top-level submenus
 - **AND** clicking inside either submenu SHALL NOT cause the other to rebuild or flicker
 
-#### Scenario: Only Projects appears when no uncloned remotes
+#### Scenario: Only local submenu appears when no uncloned remotes
 - **WHEN** `state.projects` is non-empty AND every repo in `state.remote_repos` is already cloned locally
-- **THEN** the menu SHALL contain `Projects ▸`
-- **AND** the menu SHALL NOT contain `Remote Projects ▸` (not even as a disabled or empty row)
+- **THEN** the menu SHALL contain `🏠 ~/src ▸`
+- **AND** the menu SHALL NOT contain `☁️ Cloud ▸` (not even as a disabled or empty row)
 
-#### Scenario: Only Remote Projects appears when no local projects
+#### Scenario: Only cloud submenu appears when no local projects
 - **WHEN** `state.projects` is empty AND `state.remote_repos` contains at least one repo
-- **THEN** the menu SHALL contain `Remote Projects ▸`
-- **AND** the menu SHALL NOT contain `Projects ▸` (not even as a disabled or empty row)
+- **THEN** the menu SHALL contain `☁️ Cloud ▸`
+- **AND** the menu SHALL NOT contain `🏠 ~/src ▸` (not even as a disabled or empty row)
 
-#### Scenario: Clicking a remote project clones and launches
-- **WHEN** the user clicks a repo under `Remote Projects ▸ → <repo-name>`
+#### Scenario: Clicking a cloud project clones and launches
+- **WHEN** the user clicks a repo under `☁️ Cloud ▸ → <repo-name>`
 - **THEN** the tray dispatches `MenuCommand::CloneProject { full_name, name }`
 - **AND** the existing `handle_clone_project` flow runs — clone into the watch path, pre-insert the project into `state.projects`, then call `handle_attach_here` to launch the forge
+- **AND** the project subsequently appears under `🏠 ~/src ▸` (no longer in `☁️ Cloud ▸`)
 
 ### Requirement: Running per-project stacks render as top-level submenus
 
@@ -644,4 +651,158 @@ The submenu SHALL NOT contain a Stop item. The only way to tear down a running s
 - **WHEN** any running stacks are present in the menu
 - **THEN** the menu SHALL NOT contain any per-stack Stop or Close action
 - **AND** the only menu interaction that tears down running stacks SHALL be `Quit Tillandsias`, which invokes `handlers::shutdown_all`
+
+### Requirement: Locale defaults to en until i18n is re-enabled
+
+The `i18n::initialize` (or equivalent locale-selection function) SHALL hard-code the active locale to `"en"` regardless of `LANG`, `LC_ALL`, OS settings, or saved user preference. The locale-loading pipeline (embedded `.toml` files, `i18n::t` / `i18n::tf` lookups, `STRINGS` table) SHALL remain functional so a one-line change in `initialize` re-enables locale selection later. The `MenuCommand::SelectLanguage` event variant SHALL remain in the enum (the dispatch path stays valid; only the menu item that emits it is removed).
+
+#### Scenario: Locale is en regardless of OS settings
+- **WHEN** the tray starts on a host with `LANG=fr_FR.UTF-8`
+- **THEN** `i18n::current_language()` returns `"en"`
+- **AND** `i18n::t("menu.quit")` returns the English value `"Quit Tillandsias"`
+
+#### Scenario: i18n pipeline still functional
+- **WHEN** code calls `i18n::tf("menu.signature_with_version", &[("version", "0.1.169.227")])`
+- **THEN** the result is a non-empty string with the version interpolated
+- **AND** the call does not panic or return an error
+
+#### Scenario: Re-enabling is a one-line change
+- **WHEN** a future contributor wants to bring the Language submenu back
+- **THEN** they SHALL only need to (a) revert the `initialize` hard-code to call the OS-detection helper that is preserved as a tombstoned function, and (b) un-tombstone the `.item(&self.language)` line in `apply_state`
+- **AND** no other code change is required to restore the previous behaviour
+
+### Requirement: Tray hosts the browser MCP server in-process
+
+The tray binary SHALL embed the `tillandsias-browser-mcp` MCP server as
+an in-process module spawned at tray startup. The module SHALL register
+a handler for the `ControlMessage::McpFrame { session_id, payload }`
+variant on the existing host control socket and SHALL run for the full
+tray lifetime, terminated only at graceful shutdown.
+
+The server SHALL hold its `WindowRegistry` and per-session state in
+process memory only — no file-on-disk persistence, no database. On
+tray Quit the registry SHALL be drained: every chromium PID SHALL be
+sent SIGTERM, then SIGKILL after a 5 s grace, and every ephemeral
+`--user-data-dir` SHALL be removed before the tray process exits.
+
+@trace spec:tray-app, spec:host-browser-mcp
+
+#### Scenario: MCP module starts with the tray
+
+- **WHEN** the tray binary starts and reaches its post-init phase
+- **THEN** the in-process MCP module is registered as the dispatcher for
+  the `McpFrame` variant on the control socket
+- **AND** `WindowRegistry` is initialised empty
+- **AND** the dispatcher accepts and processes a probe-frame round-trip
+  in a startup self-test
+
+#### Scenario: Tray Quit reaps every MCP-launched window
+
+- **WHEN** the tray has launched N chromium windows via MCP and the user
+  invokes Quit
+- **THEN** every chromium PID receives SIGTERM
+- **AND** any process still alive 5 s later receives SIGKILL
+- **AND** every ephemeral `--user-data-dir` directory is removed
+- **AND** the tray exits with status 0
+
+### Requirement: ControlMessage adds an McpFrame variant
+
+The `ControlMessage` enum defined under `tray-host-control-socket` SHALL
+be extended with exactly one new variant `McpFrame { session_id: u64,
+payload: Vec<u8> }` so the host control socket can carry MCP JSON-RPC
+frames between the forge stub and the in-tray MCP module. The new
+variant SHALL appear last in the enum to preserve the postcard variant
+indices of all pre-existing variants.
+
+```rust
+ControlMessage::McpFrame {
+    session_id: u64,
+    payload: Vec<u8>,
+}
+```
+
+The variant SHALL be appended at the end of the enum to preserve the
+postcard variant indices of existing variants (per the additive-evolution
+rule in `tray-host-control-socket`). The forge stub SHALL receive its
+`session_id` in the first server-side response frame and SHALL echo the
+same id on every subsequent frame from the same connection.
+
+@trace spec:tray-app, spec:tray-host-control-socket, spec:host-browser-mcp
+
+#### Scenario: McpFrame deserialises round-trip
+
+- **WHEN** a forge stub writes a postcard-encoded
+  `ControlMessage::McpFrame { session_id: 7, payload: vec![...] }`
+- **THEN** the tray reader deserialises the variant correctly
+- **AND** dispatches the `payload` to the MCP module for the same
+  `session_id`
+- **AND** writes the response back wrapped in another `McpFrame` with
+  the same `session_id`
+
+#### Scenario: Existing variants still deserialise after addition
+
+- **WHEN** an `IssueWebSession` envelope is sent on the control socket
+  AFTER the `McpFrame` variant has been added
+- **THEN** the existing `IssueWebSession` handler still receives the
+  variant correctly
+- **AND** no postcard variant-index reshuffling has occurred
+
+### Requirement: Tray maintains the PeerPid → ProjectLabel table
+
+The tray SHALL maintain an in-memory
+`HashMap<u32, ProjectLabel>` mapping every container PID it spawned
+to the project label the container was spawned for. The map SHALL be
+updated synchronously at three points:
+
+1. On forge container spawn: insert `(child_pid, project_label)`.
+2. On forge container exit (any cause): remove the entry.
+3. On tray graceful shutdown: clear the entire table.
+
+The MCP module SHALL look up the connecting peer's PID via
+`SO_PEERCRED` (Linux) or the platform-equivalent peer-credential API
+on every fresh control-socket connection that carries an `McpFrame`.
+A PID not present in the table SHALL cause the connection to be closed
+with `Error { code: UnauthorisedPeer }`.
+
+@trace spec:tray-app, spec:host-browser-mcp, spec:podman-orchestration
+
+#### Scenario: Forge spawn populates the table
+
+- **WHEN** the tray spawns a forge container for project `acme`
+- **THEN** `child.id()` is read into the table with value `"acme"`
+- **AND** the insertion happens before the container's stdio is
+  released for normal use (so a forge stub cannot connect with a PID
+  the tray has not yet recorded)
+
+#### Scenario: Forge exit removes the entry
+
+- **WHEN** a forge container exits (clean stop OR crash OR Quit)
+- **THEN** the `(pid, project_label)` entry is removed from the table
+- **AND** subsequent MCP connections from a process that inherited
+  the PID (PID reuse) are rejected as unknown peer
+
+### Requirement: Tray emits the control-socket bind-mount for forge containers
+
+For every forge container the tray spawns, the podman command SHALL
+include `-v <host-control-socket-path>:/run/host/tillandsias/control.sock`
+and SHALL set `TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias/control.sock`
+in the container environment. This mirrors the existing
+`tray-host-control-socket` requirement for declared consumers; this
+delta promotes forge containers to the consumer set so the in-container
+MCP stub can reach the socket.
+
+The bind mount SHALL be added without relaxing
+`--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`,
+or `--rm`.
+
+@trace spec:tray-app, spec:host-browser-mcp, spec:enclave-network
+
+#### Scenario: Forge container gets the control-socket mount
+
+- **WHEN** the tray spawns a forge container for any project
+- **THEN** the podman command line contains
+  `-v <abs-path-to-control.sock>:/run/host/tillandsias/control.sock`
+- **AND** the environment carries
+  `TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias/control.sock`
+- **AND** all four required security flags remain in effect
 

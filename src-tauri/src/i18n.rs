@@ -469,4 +469,13 @@ completed = "{name} ready"
             "detect_locale() returned unsupported locale: {locale}"
         );
     }
+
+    #[test]
+    fn detect_locale_hard_defaults_to_en() {
+        // i18n is hard-defaulted to "en" until the translation pipeline catches up.
+        // This test verifies the hard-coded behavior regardless of LANG environment.
+        // @trace spec:tray-projects-rename
+        let locale = detect_locale();
+        assert_eq!(locale, "en", "detect_locale() must return hard-coded 'en'");
+    }
 }

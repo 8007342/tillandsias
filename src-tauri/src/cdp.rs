@@ -525,6 +525,154 @@ pub fn token_to_cookie_string(token: &[u8; COOKIE_LEN]) -> String {
     crate::otp::format_cookie_value(token)
 }
 
+/// Call `Page.captureScreenshot` to grab a PNG screenshot.
+///
+/// Returns (base64_data, width, height) or error.
+///
+/// @trace spec:host-browser-mcp
+pub async fn page_capture_screenshot(
+    port: u16,
+    target_id: &str,
+    full_page: bool,
+) -> Result<(String, u32, u32), String> {
+    let ws_url = format!("ws://127.0.0.1:{}/devtools/page/{}", port, target_id);
+    let (ws_stream, _) = tokio_tungstenite::connect_async(&ws_url)
+        .await
+        .map_err(|e| format!("connect for screenshot: {e}"))?;
+    let (mut write, mut read) = ws_stream.split();
+
+    let params = serde_json::json!({
+        "format": "png",
+        "captureBeyondViewport": full_page,
+        "omitDeviceEmulationParams": false
+    });
+    let req = serde_json::json!({
+        "id": 9001_u64,
+        "method": "Page.captureScreenshot",
+        "params": params
+    });
+    let frame = serde_json::to_string(&req).map_err(|e| format!("encode screenshot: {e}"))?;
+    tokio::time::timeout(CDP_CALL_TIMEOUT, write.send(Message::Text(frame.into())))
+        .await
+        .map_err(|_| "timeout sending Page.captureScreenshot".to_string())?
+        .map_err(|e| format!("send screenshot: {e}"))?;
+
+    let deadline = tokio::time::Instant::now() + CDP_CALL_TIMEOUT;
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return Err("timeout awaiting screenshot".to_string());
+        }
+        let next = tokio::time::timeout(remaining, read.next()).await;
+        let msg = match next {
+            Ok(Some(Ok(m))) => m,
+            Ok(Some(Err(e))) => return Err(format!("ws error: {e}")),
+            Ok(None) => return Err("ws closed".to_string()),
+            Err(_) => return Err("timeout".to_string()),
+        };
+        let text = match msg {
+            Message::Text(t) => t,
+            _ => continue,
+        };
+        let resp: serde_json::Value = match serde_json::from_str(&text) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        if resp.get("id").and_then(|id| id.as_u64()) != Some(9001) {
+            continue;
+        }
+        if let Some(err) = resp.get("error") {
+            return Err(err
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("unknown error")
+                .to_string());
+        }
+        let result = resp
+            .get("result")
+            .ok_or_else(|| "no result in screenshot response".to_string())?;
+        let data = result["data"]
+            .as_str()
+            .ok_or_else(|| "missing data field".to_string())?
+            .to_string();
+        let width = result["width"]
+            .as_u64()
+            .ok_or_else(|| "missing width".to_string())? as u32;
+        let height = result["height"]
+            .as_u64()
+            .ok_or_else(|| "missing height".to_string())? as u32;
+        return Ok((data, width, height));
+    }
+}
+
+/// Call `Runtime.evaluate` with the given expression (JavaScript code).
+///
+/// Returns the expression result or error.
+///
+/// @trace spec:host-browser-mcp
+pub async fn runtime_evaluate(
+    port: u16,
+    target_id: &str,
+    expression: &str,
+) -> Result<serde_json::Value, String> {
+    let ws_url = format!("ws://127.0.0.1:{}/devtools/page/{}", port, target_id);
+    let (ws_stream, _) = tokio_tungstenite::connect_async(&ws_url)
+        .await
+        .map_err(|e| format!("connect for eval: {e}"))?;
+    let (mut write, mut read) = ws_stream.split();
+
+    let params = serde_json::json!({
+        "expression": expression
+    });
+    let req = serde_json::json!({
+        "id": 9002_u64,
+        "method": "Runtime.evaluate",
+        "params": params
+    });
+    let frame = serde_json::to_string(&req).map_err(|e| format!("encode eval: {e}"))?;
+    tokio::time::timeout(CDP_CALL_TIMEOUT, write.send(Message::Text(frame.into())))
+        .await
+        .map_err(|_| "timeout sending Runtime.evaluate".to_string())?
+        .map_err(|e| format!("send eval: {e}"))?;
+
+    let deadline = tokio::time::Instant::now() + CDP_CALL_TIMEOUT;
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return Err("timeout awaiting eval result".to_string());
+        }
+        let next = tokio::time::timeout(remaining, read.next()).await;
+        let msg = match next {
+            Ok(Some(Ok(m))) => m,
+            Ok(Some(Err(e))) => return Err(format!("ws error: {e}")),
+            Ok(None) => return Err("ws closed".to_string()),
+            Err(_) => return Err("timeout".to_string()),
+        };
+        let text = match msg {
+            Message::Text(t) => t,
+            _ => continue,
+        };
+        let resp: serde_json::Value = match serde_json::from_str(&text) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        if resp.get("id").and_then(|id| id.as_u64()) != Some(9002) {
+            continue;
+        }
+        if let Some(err) = resp.get("error") {
+            return Err(err
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("unknown error")
+                .to_string());
+        }
+        let result = resp
+            .get("result")
+            .ok_or_else(|| "no result in eval response".to_string())?;
+        return Ok(result.clone());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

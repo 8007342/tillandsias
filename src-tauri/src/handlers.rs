@@ -79,6 +79,85 @@ use tillandsias_podman::launch::{ContainerLauncher, allocate_port_range};
 use tillandsias_podman::query_occupied_ports;
 use tillandsias_podman::runtime::{Runtime, default_runtime};
 
+/// Find the `gh` CLI binary on the host.
+///
+/// Checks common installation locations before falling back to PATH.
+/// Returns `Some(path)` if gh is found, `None` if it should use container fallback.
+///
+/// # Locations checked:
+/// - Windows: `C:\Program Files\GitHub CLI\gh.exe`, common `winget` paths
+/// - Linux/macOS: `/usr/bin/gh`, `/usr/local/bin/gh`, `~/.local/bin/gh`, etc.
+///
+/// @trace spec:direct-podman-calls
+fn find_gh_path() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        // Windows: check common install locations before PATH fallback.
+        static WIN_PATHS: &[&str] = &[
+            r"C:\Program Files\GitHub CLI\gh.exe",
+            r"C:\Program Files (x86)\GitHub CLI\gh.exe",
+            r"C:\ProgramData\Chocolatey\bin\gh.exe",
+        ];
+
+        for path in WIN_PATHS {
+            let p = PathBuf::from(path);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+
+        // Try which or standard PATH
+        if let Ok(output) = std::process::Command::new("where")
+            .arg("gh")
+            .output()
+        {
+            if output.status.success() {
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                return Some(PathBuf::from(path));
+            }
+        }
+        None
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Unix: check standard locations first
+        static PATHS: &[&str] = &[
+            "/usr/bin/gh",
+            "/usr/local/bin/gh",
+            "/opt/homebrew/bin/gh", // Homebrew on Apple Silicon
+            "/opt/local/bin/gh",    // MacPorts
+        ];
+
+        for path in PATHS {
+            let p = PathBuf::from(path);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+
+        // Try ~/.local/bin/gh (user install)
+        if let Ok(home) = std::env::var("HOME") {
+            let user_bin = PathBuf::from(&home).join(".local/bin/gh");
+            if user_bin.exists() {
+                return Some(user_bin);
+            }
+        }
+
+        // Try which
+        if let Ok(output) = std::process::Command::new("which")
+            .arg("gh")
+            .output()
+        {
+            if output.status.success() {
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                return Some(PathBuf::from(path));
+            }
+        }
+        None
+    }
+}
+
 /// Derive the forge image tag from the full 4-part version.
 ///
 /// Uses `TILLANDSIAS_FULL_VERSION` (set by build.rs from the VERSION file)
@@ -369,6 +448,12 @@ pub(crate) async fn ensure_inference_running(
                     .await;
                 if check.map(|s| s.success()).unwrap_or(false) {
                     info!(spec = "inference-container", attempt, "Inference health check passed");
+
+                    // @trace spec:inference-host-side-pull
+                    // Spawn background task to pull higher-tier models based on GPU tier
+                    let gpu_tier = crate::gpu::detect_gpu_tier();
+                    crate::inference_lazy_pull::spawn_model_pull_task(gpu_tier);
+
                     break;
                 }
                 if attempt < max_attempts - 1 {
@@ -3301,23 +3386,9 @@ fn get_proxy_ip() -> Result<String, String> {
 ///
 /// @trace spec:default-image, spec:fix-windows-image-routing
 #[allow(dead_code)] // Used on Windows; non-Windows path shells out to build-image.sh
-fn image_build_paths(source_dir: &std::path::Path, image_name: &str) -> (PathBuf, PathBuf) {
-    let subdir = match image_name {
-        "proxy" => "proxy",
-        "git" => "git",
-        "inference" => "inference",
-        "web" => "web",
-        "router" => "router",
-        // forge / default / unknown all build the forge image. Keeping this
-        // permissive matches build-image.sh's behavior; the image_name
-        // validation lives at the call sites that compute the tag.
-        _ => "default",
-    };
-    let dir = source_dir.join("images").join(subdir);
-    (dir.join("Containerfile"), dir)
-}
-
-/// Run `build-image.sh` from the embedded binary scripts.
+/// Run image build via direct podman invocation.
+///
+/// @trace spec:direct-podman-calls, spec:default-image
 ///
 /// Extracts image sources + build scripts to temp, executes, cleans up.
 /// No filesystem scripts are trusted — everything comes from the signed binary.
@@ -3345,9 +3416,8 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
         strings::SETUP_ERROR
     })?;
 
-    let script = source_dir.join("scripts").join("build-image.sh");
     // Use the correct versioned tag for each image type.
-    // @trace spec:default-image, spec:proxy-container, spec:git-mirror-service, spec:inference-container
+    // @trace spec:direct-podman-calls, spec:default-image, spec:proxy-container, spec:git-mirror-service, spec:inference-container
     let tag = match image_name {
         "proxy" => proxy_image_tag(),
         "git" => git_image_tag(),
@@ -3355,7 +3425,6 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
         "router" => router_image_tag(),
         _ => forge_image_tag(),
     };
-    info!(script = %script.display(), image = image_name, tag = %tag, spec = "default-image, nix-builder", "Running embedded build-image.sh");
 
     // @trace spec:cross-platform, spec:windows-wsl-runtime
     // Windows path is WSL-native: no podman, no bash wrapper. The image is
@@ -3363,7 +3432,8 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
     // Verify presence; if missing, instruct user to run --init.
     #[cfg(target_os = "windows")]
     {
-        let _ = script;
+        let _ = source_dir;
+        let _ = tag;
         let distro = format!("tillandsias-{}", image_name);
         let mut __listing_cmd = std::process::Command::new("wsl.exe");
         tillandsias_podman::no_window_sync(&mut __listing_cmd);
@@ -3391,62 +3461,65 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
         return Err(strings::SETUP_ERROR.into());
     }
 
-    // On Unix, use the build-image.sh script (handles nix + fedora backends).
+    // On Unix, build the image using the direct podman ImageBuilder.
+    // @trace spec:direct-podman-calls, spec:default-image
     #[cfg(not(target_os = "windows"))]
     {
-        let mut cmd = std::process::Command::new(&script);
-        cmd.arg(image_name)
-            .args(["--tag", &tag, "--backend", "fedora"])
-            .current_dir(&source_dir)
-            .env_remove("LD_LIBRARY_PATH")
-            .env_remove("LD_PRELOAD")
-            .env("PODMAN_PATH", tillandsias_podman::find_podman_path());
+        let builder = crate::image_builder::ImageBuilder::new(
+            source_dir.clone(),
+            image_name.to_string(),
+            tag.clone(),
+        );
 
-        // Image builds do NOT go through the proxy. SSL bump on port 3129
-        // intercepts HTTPS, but build containers don't have our CA cert
-        // installed — they'd reject the MITM'd certificate. Runtime containers
-        // have the CA chain injected via bind-mount + update-ca-trust.
-        // @trace spec:proxy-container
+        info!(
+            image = image_name,
+            tag = %tag,
+            spec = "direct-podman-calls, default-image",
+            "Starting image build via direct podman invocation"
+        );
 
-        let output = cmd.output()
-            .map_err(|e| {
-                error!(script = %script.display(), image = image_name, error = %e, "Failed to launch image build script");
-                strings::SETUP_ERROR
-            })?;
+        // Attempt build
+        match builder.build_image() {
+            Ok(()) => {
+                crate::embedded::cleanup_image_sources();
 
-        crate::embedded::cleanup_image_sources();
+                // Clean up any leftover buildah containers from builds
+                // @trace spec:default-image
+                let _ = std::process::Command::new("buildah")
+                    .args(["rm", "--all"])
+                    .env_remove("LD_LIBRARY_PATH")
+                    .env_remove("LD_PRELOAD")
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status();
 
-        // Clean up any leftover buildah containers from builds
-        // @trace spec:default-image
-        let _ = std::process::Command::new("buildah")
-            .args(["rm", "--all"])
-            .env_remove("LD_LIBRARY_PATH")
-            .env_remove("LD_PRELOAD")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
+                crate::build_lock::release(image_name);
+                prune_old_images();
+                Ok(())
+            }
+            Err(e) => {
+                error!(
+                    image = image_name,
+                    tag = %tag,
+                    error = %e,
+                    spec = "direct-podman-calls",
+                    "Image build failed"
+                );
+                crate::embedded::cleanup_image_sources();
 
-        crate::build_lock::release(image_name);
+                // Clean up any leftover buildah containers
+                let _ = std::process::Command::new("buildah")
+                    .args(["rm", "--all"])
+                    .env_remove("LD_LIBRARY_PATH")
+                    .env_remove("LD_PRELOAD")
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status();
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            error!(
-                image = image_name,
-                exit_code = output.status.code().unwrap_or(-1),
-                stdout = %stdout,
-                stderr = %stderr,
-                spec = "default-image, nix-builder",
-                "Image build script failed"
-            );
-            return Err(strings::SETUP_ERROR.into());
+                crate::build_lock::release(image_name);
+                Err(e)
+            }
         }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        debug!(output = %stdout, "build-image.sh completed");
-        prune_old_images();
-
-        Ok(())
     }
 }
 
@@ -5618,26 +5691,75 @@ pub async fn handle_root_terminal(
 /// Tray and CLI must stay identical.
 ///
 /// @trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
+/// Handle GitHub login via direct `gh` CLI or container fallback.
+///
+/// # Strategy
+/// 1. Try to find `gh` on the host (checked first, preferred)
+/// 2. If found: spawn terminal with `gh auth login --git-protocol https`
+/// 3. If not found: spawn terminal with `podman run -it ... gh auth login --git-protocol https`
+///
+/// All paths use the `open_terminal` function which is platform-aware and handles
+/// terminal spawning (ptyxis/gnome-terminal on Linux, Terminal.app on macOS, wt.exe on Windows).
+///
+/// # Credentials
+/// - Token stored in OS keyring after auth completes (native gh auth behavior)
+/// - No ephemeral credentials needed since gh handles the login interactively
+///
+/// @trace spec:direct-podman-calls, spec:secrets-management
 pub async fn handle_github_login(
     _state: &TrayState,
     _build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<(), String> {
-    info!("GitHub Login: spawning `tillandsias --github-login` in a terminal");
+    // Try host gh first (preferred — token goes to OS keyring)
+    if let Some(gh_path) = find_gh_path() {
+        info!(gh_path = ?gh_path, "GitHub Login: using host gh");
+        let gh_str = gh_path.to_string_lossy();
+        let cmd = format!("{} auth login --git-protocol https", gh_str);
+        return open_terminal(&cmd, "GitHub Login")
+            .map_err(|e| format!("Failed to open terminal for host gh: {e}"));
+    }
 
-    let exe = std::env::current_exe()
-        .map_err(|e| format!("Cannot locate own executable: {e}"))?;
+    // Fallback: gh inside forge container with D-Bus forwarding (Linux) or ephemeral mode
+    info!("GitHub Login: using container gh (no host gh found)");
 
-    // open_terminal takes a command string it hands to the OS's shell.
-    // Quote the executable path so spaces (Program Files, username etc.) work.
-    let exe_str = exe.to_string_lossy();
-    let cmd = if exe_str.contains(' ') {
-        format!("\"{exe_str}\" --github-login")
-    } else {
-        format!("{exe_str} --github-login")
+    let forge_image = forge_image_tag();
+
+    // Build podman run command with security flags
+    #[cfg(target_os = "linux")]
+    let cmd = {
+        // On Linux, forward D-Bus so the container can write to the host keyring
+        format!(
+            "podman run -it --rm --cap-drop=ALL --security-opt=no-new-privileges \
+             --userns=keep-id --security-opt=label=disable \
+             -v /run/user/$(id -u)/bus:/run/user/1000/bus:ro \
+             --entrypoint gh {} auth login --git-protocol https",
+            forge_image
+        )
+    };
+
+    #[cfg(target_os = "macos")]
+    let cmd = {
+        // On macOS, no D-Bus available; token stored in container's ephemeral keychain.
+        // User will need to manually push/pull with gh auth setup or export token.
+        format!(
+            "podman run -it --rm --cap-drop=ALL --security-opt=no-new-privileges \
+             --userns=keep-id --entrypoint gh {} auth login --git-protocol https",
+            forge_image
+        )
+    };
+
+    #[cfg(target_os = "windows")]
+    let cmd = {
+        // On Windows, no D-Bus; ephemeral container. Token stored in container's hosts.yml.
+        format!(
+            "podman run -it --rm --cap-drop=ALL --security-opt=no-new-privileges \
+             --entrypoint gh {} auth login --git-protocol https",
+            forge_image
+        )
     };
 
     open_terminal(&cmd, "GitHub Login")
-        .map_err(|e| format!("Failed to open terminal: {e}"))
+        .map_err(|e| format!("Failed to open terminal for container gh: {e}"))
 }
 
 /// Handle "Claude Reset Credentials" — remove `~/.claude/` contents so next
@@ -6343,34 +6465,8 @@ mod tests {
         }
     }
 
-    // @trace spec:default-image, spec:fix-windows-image-routing
-    #[test]
-    fn image_build_paths_routes_each_image_to_its_own_subdir() {
-        let root = Path::new("/tmp/sources");
-
-        let cases = [
-            ("forge", "default"),
-            ("proxy", "proxy"),
-            ("git", "git"),
-            ("inference", "inference"),
-            ("web", "web"),
-            ("definitely-not-real", "default"),
-        ];
-
-        for (image_name, expected_subdir) in cases {
-            let (containerfile, context) = image_build_paths(root, image_name);
-            let expected_dir = root.join("images").join(expected_subdir);
-            assert_eq!(
-                context, expected_dir,
-                "context for {image_name} should be {expected_dir:?}"
-            );
-            assert_eq!(
-                containerfile,
-                expected_dir.join("Containerfile"),
-                "Containerfile for {image_name} should live in {expected_dir:?}"
-            );
-        }
-    }
+    // @trace spec:direct-podman-calls, spec:default-image
+    // Image routing is now tested in image_builder.rs module tests.
 
     // @trace spec:external-logs-layer
     #[test]

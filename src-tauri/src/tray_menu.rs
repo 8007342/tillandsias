@@ -1131,6 +1131,10 @@ mod tests {
             other => panic!("expected CloneProject, got {other:?}"),
         }
 
+        // SelectLanguage variant is dormant until i18n is re-enabled.
+        // The Language ▸ menu item is no longer appended, but the dispatch variant
+        // remains in the enum for future re-enablement.
+        // @trace spec:tray-projects-rename
         let id = ids::select_lang("ja");
         match dispatch_click(&id) {
             Some(MenuCommand::SelectLanguage { language }) => assert_eq!(language, "ja"),

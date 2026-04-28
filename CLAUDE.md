@@ -115,6 +115,37 @@ scripts/build-image.sh git        # Git mirror service
 scripts/build-image.sh inference  # Local LLM inference
 ```
 
+### Inference Container — Lazy Model Pulling
+
+The inference container (ollama-based) supports both baked and lazy-pulled models:
+
+- **Baked (always present)**: T0/T1 models baked into image at build time
+  - T0: `qwen2.5:0.5b`
+  - T1: `llama3.2:3b`
+
+- **Lazy-pulled (background task)**: T2-T5 models pulled host-side after inference startup
+  - Triggered automatically after inference health check passes
+  - GPU VRAM tier determines which models pull: `gpu::detect_gpu_tier()`
+  - Pull via host-side `ollama` binary (bypasses proxy entirely)
+  - Models land in `~/.cache/tillandsias/models/` (bind-mounted RW)
+  - Fully automatic, no UX, no user interaction
+
+**Model Tier Mapping** (`@trace spec:inference-host-side-pull`):
+
+| Tier | VRAM | Models to Pull |
+|------|------|---|
+| None | 0GB | (none — T0/T1 sufficient) |
+| Low | ≤4GB | (none — T0/T1 sufficient) |
+| Mid | 4-8GB | qwen2.5-coder:7b |
+| High | 8-12GB | qwen2.5-coder:7b, qwen2.5-coder:14b |
+| Ultra | ≥12GB | qwen2.5-coder:7b, qwen2.5-coder:14b, qwen2.5-coder:32b |
+
+**Why host-side pull?** Per `project_squid_ollama_eof.md`: Squid 6.x manifests EOF hard on large ollama pull streams. Pulling host-side via the native `ollama` binary avoids the proxy entirely and achieves 100% success rate.
+
+**Cache-aware**: Before pulling, checks if `~/.ollama/models/manifests/registry.ollama.ai/library/<name>/<tag>` exists locally. Skips if already cached.
+
+**If ollama missing**: Logs `DEGRADED: host-side ollama not found`, skips all pulls. T0/T1 baked models are still available.
+
 ## CI/CD — Conservative Cloud Usage
 
 Both CI and Release workflows are **manual trigger only** (`workflow_dispatch`). They NEVER run automatically on push or PR. This is intentional — cloud minutes are expensive.
@@ -181,6 +212,52 @@ Build cache is stored in `.nix-output/` (gitignored).
 - `images/default/Containerfile` and `images/web/Containerfile` are kept as reference documentation
 - The primary build path is always through `flake.nix` via `build-image.sh`
 - Rust code (`handlers.rs`, `runner.rs`) calls `build-image.sh` as a subprocess
+
+## Nix Inside the Forge
+
+The forge includes **Nix, direnv, and nix-direnv** baked into the image for reproducible development environments.
+
+### Quick Start — Using Flakes
+
+Inside a forge container, create a `flake.nix` and `.envrc` in your project:
+
+```bash
+# Create a flake for Rust development
+nix flake init -t github:NixOS/templates#rust
+
+# Create .envrc to auto-load the environment on cd
+echo 'use flake' > .envrc
+direnv allow
+```
+
+Now every time you `cd` into that directory, direnv automatically loads the flake environment.
+
+### Available Commands
+
+```bash
+nix --version           # Check Nix version (2.24.14+)
+nix flake show          # Show flake outputs
+nix flake check         # Validate flake.nix
+nix develop             # Enter dev environment (or via .envrc auto-activation)
+nix build               # Build outputs
+direnv --version        # Check direnv version (2.35.0+)
+```
+
+### Configuration
+
+- **Experimental features**: `nix-command` and `flakes` are pre-enabled in `/home/forge/.config/nix/nix.conf`
+- **NIX_PATH**: Set to `nixpkgs=flake:nixpkgs` so `nix shell nixpkgs#hello` works without `flake.lock`
+- **direnv auto-activation**: `.envrc` files activate automatically via shell hooks in bash, zsh, and fish
+
+### Performance — nix-direnv Caching
+
+nix-direnv caches flake evaluations and only re-evaluates when `flake.nix` or `flake.lock` changes. This prevents the 5-10 second delay on every `cd` that would occur with full flake re-evaluation.
+
+### Use Cases
+
+- **Multi-language projects**: Combine Rust, Python, Node, etc. in a single `flake.nix` with automatic environment isolation
+- **Pinned dependencies**: Lock tool versions in `flake.lock` — every developer uses identical versions
+- **Container-agnostic**: The same `flake.nix` works inside the forge and on your host machine
 
 ## Related Projects
 
@@ -261,6 +338,25 @@ Code, log events, telemetry, and specs that derive their behaviour from a cheats
 
 This makes the cheatsheet → code → spec graph queryable by `git grep '@cheatsheet'` exactly like `@trace spec:`.
 
+### Cheatsheet refresh cadence and staleness detection
+
+Cheatsheets are living documents. Each cheatsheet's `**Last updated:** YYYY-MM-DD` line indicates when it was last verified against the cited authoritative sources. A soft staleness check runs periodically:
+
+**Refresh workflow:**
+1. Run `scripts/check-cheatsheet-staleness.sh` to identify cheatsheets older than 90 days (default threshold)
+2. For each flagged cheatsheet:
+   - Re-fetch the cited URLs and confirm the cheatsheet content still matches the upstream source
+   - Correct any divergences in the cheatsheet content
+   - Update the `**Last updated:**` date to today ONLY after re-verification (never blindly)
+3. Commit with message like: `chore(cheatsheets): refresh stale entries — verified against upstream sources`
+
+**Automation:**
+- Manual cadence: run `scripts/check-cheatsheet-staleness.sh --days 90` every 3 months (or as part of release prep)
+- Future enhancement: CI workflow can run this check on schedule or on-demand (`workflow_dispatch`)
+- The check is informational (non-blocking) — staleness does not fail builds. It surfaces in RUNTIME_LIMITATIONS logs and host-side monitoring
+
+**No blind bumps:** The `**Last updated:**` line is a promise that the cheatsheet was actually re-verified. Never bump the date without re-checking the cited URLs.
+
 ## @tombstone — never silently delete
 
 Dead code, deprecated specs, and removed features get a `@tombstone superseded:<new>` (replacement exists) or `@tombstone obsolete:<old>` (no replacement) annotation. The block is commented out, NOT deleted, for **three releases** (since Tillandsias has a release cadence — VERSION track) before final deletion. The tombstone records the version it landed in so reviewers know when it's safe to delete.
@@ -277,6 +373,31 @@ This complements OpenSpec's `## REMOVED Requirements` section (which carries `**
 `git log -G '@tombstone'` reveals every transition; `cheatsheet = ...` and `tombstone = ...` log fields make runtime behaviour cross-reference removed code paths.
 
 Current: `logging-levels.md`, `secrets-management.md`, `token-rotation.md`, `terminal-tools.md`.
+
+## Project README Discipline
+
+@trace spec:project-bootstrap-readme
+
+Every Tillandsias-managed project's README.md follows a two-section contract, auto-generated from authoritative sources (manifests, git history, agent observations). See `cheatsheets/welcome/readme-discipline.md` for the complete specification.
+
+**Four bootstrap skills**:
+- `/startup` — Entrypoint. Detects project state and routes to empty-project, repair, or ready flow
+- `/bootstrap-readme-and-project` — Empty-project welcome with sample prompts and capability summary
+- `/bootstrap-readme` — Regenerate and validate README from source manifests
+- `/status` — Show project state (recent commits, OpenSpec items, readme.traces tail)
+
+**Key files**:
+- `scripts/regenerate-readme.sh` — Dispatcher: walks manifests, invokes summarizers, renders FOR HUMANS + FOR ROBOTS sections
+- `scripts/check-readme-discipline.sh` — Validator: confirms structure, headers, timestamp freshness, YAML well-formedness
+- `scripts/install-readme-pre-push-hook.sh` — Pre-push hook: auto-regenerates README on every git push
+- `.tillandsias/readme.traces` — Append-only JSONL ledger of agent observations (committed to git, cross-machine)
+
+**Telemetry events**:
+- `startup_routing` — Which branch was taken (empty / bootstrap-readme / status)
+- `readme_regen` — README regenerated; which summarizers ran
+- `readme_requires_pull` — Cheatsheet materialized from requires_cheatsheets YAML block
+
+Mandatory maintainer TODO: Migrate Tillandsias' own README.md to the FOR HUMANS / FOR ROBOTS structure (task 10 of this change).
 
 ## Plugins & Skills
 
@@ -363,6 +484,57 @@ Format — replace `SPECNAME` with the actual spec name (e.g., `forge-launch`):
 ```
 https://github.com/8007342/tillandsias/search?q=%40trace+spec%3ASPECNAME&type=code
 ```
+
+## @tombstone — Never Silently Delete
+
+Dead code, deprecated specs, and removed features get a `@tombstone superseded:<new>` (replacement exists) or `@tombstone obsolete:<old>` (no replacement) annotation. The block is commented out, NOT deleted, for **three releases** (since Tillandsias has a release cadence — VERSION track) before final deletion. The tombstone records the version it landed in so reviewers know when it's safe to delete.
+
+**Rust example:**
+```rust
+// @tombstone superseded:tray-no-disabled-items
+// Old projection — removed in 0.1.169.226. Safe to delete after 0.1.169.229.
+// @trace spec:old-tray-menu-state
+//
+// fn set_stage(&self, stage: Stage) { ... }
+```
+
+**Shell example:**
+```bash
+# @tombstone obsolete:legacy-forge-init
+# Superseded by direct podman pull path in 0.1.37.45. Safe to delete after 0.1.37.48.
+#
+# init_forge_image() { ... }
+```
+
+**Markdown example (in CLAUDE.md or specs):**
+```markdown
+<!-- @tombstone superseded:agent-cheatsheets-v1 — kept for three releases -->
+<!-- Replaced by agent-cheatsheets-v2 in 0.1.100.1. Safe to delete after 0.1.100.4. -->
+```
+
+**Required fields:**
+- `superseded:<new-spec-name>` — replacement capability exists
+- OR `obsolete:<old-spec-name>` — entire feature gone, no replacement
+- Version landed in and safe-to-delete version (based on current VERSION file)
+- 1–3 lines of rationale
+- Optional: `@trace spec:<name>` linking to removed spec
+
+**Retention window:**
+- **Cadence-based projects** (Tillandsias — 4-part VERSION track): three releases on the same Major.Minor track
+- Example: removed in v0.1.169.226, safe to delete after v0.1.169.229
+
+**What this enables:**
+- `git log -G '@tombstone'` reveals every behavioural transition
+- Log events with `tombstone = "<name>"` field create runtime cross-references
+- Refactor history is observable without deep `git blame` spelunking
+- Reviewers know exactly when orphaned code becomes deletable
+
+**What it does NOT mean:**
+- Tombstones are not for keeping dead code forever. After the retention window the tombstoned block is deleted in a normal commit.
+- A function with no callers and no spec relationship does NOT need a tombstone — it gets deleted normally
+- Tombstones mark **transitions**, not orphans
+
+This complements OpenSpec's `## REMOVED Requirements` section (which carries `**Reason**:` and `**Migration**:` — the spec-level tombstone). Together they form a complete audit of behavioural transitions.
 
 ## Conventions
 

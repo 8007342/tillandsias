@@ -4,6 +4,11 @@
 // On non-Windows, the attribute is irrelevant.
 
 mod accountability;
+// @trace spec:host-browser-mcp
+// In-process MCP server for browser automation. Accepts JSON-RPC frames from
+// forges via the host control socket, dispatches through the MCP layer,
+// and manages browser windows via CDP.
+mod browser_mcp;
 mod build_lock;
 mod ca;
 // @trace spec:host-chromium-on-demand
@@ -29,12 +34,23 @@ mod github;
 mod github_health;
 mod gpu;
 mod handlers;
+mod image_builder;
+// @trace spec:inference-host-side-pull
+// Host-side lazy model pulling for inference container. Spawned after
+// inference-ready, pulls higher-tier models based on VRAM detection,
+// bypasses proxy, fully automatic (no UX).
+mod inference_lazy_pull;
 mod i18n;
 mod init;
 mod launch;
 mod log_format;
 mod mirror_sync;
 mod logging;
+#[cfg(target_os = "windows")]
+// @trace spec:windows-event-logging
+// Windows Event Log layer — writes errors/warnings/accountability events to Event Viewer.
+// Event source "Tillandsias" must be registered in the registry (installer or PowerShell).
+mod windows_eventlog;
 mod menu;
 mod runner;
 mod tray_menu;

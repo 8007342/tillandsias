@@ -33,7 +33,17 @@ pub const WIRE_VERSION: u16 = 1;
 /// Maximum permitted single-message length on the wire. Length prefixes
 /// greater than this trigger an `Error::PayloadTooLarge` response and the
 /// connection is closed.
+///
+/// Note: `ControlMessage::McpFrame` payloads may reach 4 MiB for large tool
+/// responses (e.g., PNG screenshots). The per-variant cap is enforced by the
+/// framing layer; see design.md Q-OPEN (size-cap reconciliation).
 pub const MAX_MESSAGE_BYTES: usize = 65_536;
+
+/// Maximum permitted MCP frame payload size (for McpFrame variant only).
+/// Screenshots and large tool responses may require multi-MB capacity.
+///
+/// @trace spec:host-browser-mcp, spec:tray-host-control-socket
+pub const MAX_MCP_FRAME_BYTES: usize = 4 * 1024 * 1024; // 4 MiB
 
 /// Versioned envelope carrying every control-plane frame.
 ///
@@ -97,6 +107,16 @@ pub enum ControlMessage {
     ///
     /// @trace spec:opencode-web-session-otp
     EvictProject { project_label: String },
+    /// Forge → tray: encapsulated MCP JSON-RPC frame for browser control.
+    /// Payload is a raw JSON-RPC message (newline-delimited, serialised as UTF-8).
+    /// The tray's browser MCP module decodes, processes, and responds to the
+    /// encapsulated RPC call.
+    ///
+    /// @trace spec:host-browser-mcp, spec:tray-host-control-socket
+    McpFrame {
+        session_id: u64,
+        payload: Vec<u8>,
+    },
 }
 
 /// Error categories the tray emits on the control socket.
@@ -245,6 +265,49 @@ mod tests {
     #[test]
     fn max_message_bytes_is_64_kib() {
         assert_eq!(MAX_MESSAGE_BYTES, 64 * 1024);
+    }
+
+    #[test]
+    fn mcp_frame_empty_roundtrip() {
+        // @trace spec:host-browser-mcp
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 8,
+            body: ControlMessage::McpFrame {
+                session_id: 1,
+                payload: vec![],
+            },
+        });
+    }
+
+    #[test]
+    fn mcp_frame_small_roundtrip() {
+        // @trace spec:host-browser-mcp
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 9,
+            body: ControlMessage::McpFrame {
+                session_id: 2,
+                payload: b"hello".to_vec(),
+            },
+        });
+    }
+
+    #[test]
+    fn mcp_frame_large_roundtrip() {
+        // @trace spec:host-browser-mcp
+        // Note: this test verifies McpFrame can carry large payloads.
+        // Actual framing-layer enforcement of MAX_MCP_FRAME_BYTES happens
+        // in src-tauri/src/browser_mcp/mod.rs.
+        let large_payload = vec![0xFFu8; 1024 * 1024]; // 1 MiB
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 10,
+            body: ControlMessage::McpFrame {
+                session_id: 3,
+                payload: large_payload,
+            },
+        });
     }
 
     #[test]

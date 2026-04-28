@@ -6,4 +6,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [scripts/bump-version.sh#L16](../../../scripts/bump-version.sh#L16)
-- [src-tauri/src/handlers.rs#L83](../../../src-tauri/src/handlers.rs#L83)
+- [src-tauri/src/handlers.rs#L166](../../../src-tauri/src/handlers.rs#L166)

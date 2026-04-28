@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/tillandsias-browser-mcp",
     "crates/tillandsias-control-wire",
     "crates/tillandsias-core",
     "crates/tillandsias-otp",
@@ -30,8 +31,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dirs = "6"
 thiserror = "2"
 async-trait = "0.1"
+parking_lot = "0.12"
 
 # Internal crates
+tillandsias-browser-mcp = { path = "crates/tillandsias-browser-mcp" }
 tillandsias-control-wire = { path = "crates/tillandsias-control-wire" }
 tillandsias-core = { path = "crates/tillandsias-core" }
 tillandsias-otp = { path = "crates/tillandsias-otp" }

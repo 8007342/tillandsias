@@ -153,6 +153,25 @@ RUN curl -fsSL "https://github.com/mozilla/geckodriver/releases/download/v${GECK
     && rm /tmp/geckodriver.tar.gz \
     && /usr/local/bin/geckodriver --version 2>&1 | head -1
 
+# ── Nix + direnv + nix-direnv (single-user, flakes enabled) ─────────
+# @trace spec:forge-nix-toolchain, spec:default-image
+# Nix installed in single-user mode (no daemon needed for ephemeral forge).
+# Direnv + nix-direnv for .envrc auto-activation and flake evaluation caching.
+# Experimental features (nix-command, flakes) are enabled system-wide.
+RUN curl -fsSL https://nixos.org/nix/install | sh -s -- --no-daemon \
+    && . /root/.nix-profile/etc/profile.d/nix.sh \
+    && nix --version \
+    && microdnf install -y direnv \
+    && nix-env -i nix-direnv \
+    && microdnf clean all
+
+# ── Nix configuration ──────────────────────────────────────────────
+# @trace spec:forge-nix-toolchain, spec:default-image
+# Enable experimental features (nix-command, flakes) system-wide.
+RUN mkdir -p /etc/nix \
+    && echo "experimental-features = nix-command flakes" > /etc/nix/nix.conf \
+    && chmod 644 /etc/nix/nix.conf
+
 # ── Flutter SDK (hard-installed at /opt/flutter, pre-cached) ───
 # @trace spec:default-image
 # Flutter is a heavyweight SDK (~1GB after precache) so it gets its own
@@ -249,6 +268,15 @@ COPY opencode.json /home/forge/.config/opencode/config.json
 # at the user-config layer when applications resolve XDG paths).
 COPY config-overlay/opencode/tui.json /home/forge/.config/opencode/tui.json
 
+# ── Project bootstrap skills ───────────────────────────────────
+# @trace spec:project-bootstrap-readme
+# Four OpenCode agent/command files for /startup routing and README management.
+# Copied into ~/.config-overlay/opencode/agent/ so they're discoverable
+# before project-local overrides (if any).
+RUN mkdir -p /home/forge/.config-overlay/opencode/agent
+COPY config-overlay/opencode/agent/*.md /home/forge/.config-overlay/opencode/agent/
+RUN chmod 644 /home/forge/.config-overlay/opencode/agent/*.md
+
 # ── Shell configs ──────────────────────────────────────────────
 # /etc/skel is populated AFTER `useradd -m` ran above, so the forge user's
 # home was created from an empty /etc/skel — its ~/.bashrc and ~/.zshrc do
@@ -315,6 +343,33 @@ RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-models /usr/local/bin/tillandsias-models \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-logs /usr/local/bin/tillandsias-logs
 
+# ── README dispatcher + validator + summarizers ────────────────
+# @trace spec:project-summarizers, spec:project-bootstrap-readme
+# Six language-specific summarizers for detecting tech stack from manifests.
+# Dispatcher orchestrates them and renders README.md atomically.
+# Validator checks README structure and enforces discipline.
+RUN mkdir -p /opt/summarizers
+COPY scripts/summarize-cargo.sh /opt/summarizers/summarize-cargo.sh
+COPY scripts/summarize-nix.sh /opt/summarizers/summarize-nix.sh
+COPY scripts/summarize-package-json.sh /opt/summarizers/summarize-package-json.sh
+COPY scripts/summarize-pubspec.sh /opt/summarizers/summarize-pubspec.sh
+COPY scripts/summarize-go-mod.sh /opt/summarizers/summarize-go-mod.sh
+COPY scripts/summarize-pyproject.sh /opt/summarizers/summarize-pyproject.sh
+RUN chmod +x /opt/summarizers/*.sh
+
+# Dispatcher + validator into /usr/local/bin for direct invocation
+COPY scripts/regenerate-readme.sh /usr/local/bin/regenerate-readme.sh
+COPY scripts/check-readme-discipline.sh /usr/local/bin/check-readme-discipline.sh
+RUN chmod +x /usr/local/bin/regenerate-readme.sh /usr/local/bin/check-readme-discipline.sh
+
+# Symlinks for convenience (optional, since /opt/summarizers is not on PATH)
+RUN ln -sf /opt/summarizers/summarize-cargo.sh /usr/local/bin/summarize-cargo.sh \
+    && ln -sf /opt/summarizers/summarize-nix.sh /usr/local/bin/summarize-nix.sh \
+    && ln -sf /opt/summarizers/summarize-package-json.sh /usr/local/bin/summarize-package-json.sh \
+    && ln -sf /opt/summarizers/summarize-pubspec.sh /usr/local/bin/summarize-pubspec.sh \
+    && ln -sf /opt/summarizers/summarize-go-mod.sh /usr/local/bin/summarize-go-mod.sh \
+    && ln -sf /opt/summarizers/summarize-pyproject.sh /usr/local/bin/summarize-pyproject.sh
+
 # ── Agent cheatsheets ─────────────────────────────────────────
 # @trace spec:agent-cheatsheets, spec:default-image, spec:forge-hot-cold-split
 # `cheatsheets/` lives at the project root as the source of truth.
@@ -364,7 +419,9 @@ ENTRYPOINT ["/usr/local/bin/entrypoint-forge-claude.sh"]
 ENV HOME=/home/forge USER=forge \
     TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets \
     LANG=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8
+    LC_ALL=en_US.UTF-8 \
+    NIX_CONFIG=/etc/nix/nix.conf \
+    NIX_PATH=nixpkgs=flake:nixpkgs
 
 # @trace spec:forge-environment-discoverability
 # TILLANDSIAS_IMAGE_VERSION identifies the forge image build the agent is
@@ -375,4 +432,4 @@ ENV HOME=/home/forge USER=forge \
 # `tillandsias-inventory`. cheatsheets-mcp is declared ahead of its landing
 # change so agents can probe the intended capability surface today.
 ENV TILLANDSIAS_IMAGE_VERSION="forge-baseline" \
-    TILLANDSIAS_CAPABILITIES="rust,go,java-21,maven,gradle,flutter,nix,headless-chromium,headless-firefox,protoc,grpcurl,opencode,claude,openspec,cheatsheets-mcp"
+    TILLANDSIAS_CAPABILITIES="rust,go,java-21,maven,gradle,flutter,nix,direnv,nix-direnv,headless-chromium,headless-firefox,protoc,grpcurl,opencode,claude,openspec,cheatsheets-mcp"

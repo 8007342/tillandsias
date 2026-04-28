@@ -23,6 +23,12 @@ fish_add_path -g "$NPM_CONFIG_PREFIX/bin" "$CARGO_HOME/bin" "$GOPATH/bin" "$PYTH
 # Suppress fish's default "Welcome to fish" greeting
 set -g fish_greeting ""
 
+# ── direnv (auto-activate .envrc on cd) ────────────────
+# @trace spec:forge-nix-toolchain, spec:forge-shell-tools
+if command -v direnv &>/dev/null
+    direnv hook fish | source
+end
+
 # Welcome message on interactive login
 if status is-interactive
     and not set -q TILLANDSIAS_WELCOME_SHOWN

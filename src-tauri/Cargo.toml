@@ -1,12 +1,13 @@
 [package]
 name = "tillandsias"
-version = "0.1.174"
+version = "0.1.183"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "System tray application for Tillandsias"
 
 [dependencies]
+tillandsias-browser-mcp = { workspace = true }
 tillandsias-control-wire = { workspace = true }
 tillandsias-core = { workspace = true }
 tillandsias-otp = { workspace = true }
@@ -61,9 +62,16 @@ time = "0.3"
 # transitively (keyring + rustls). Direct dep here makes the security-critical
 # call site explicit.
 rand = "0.9"
+parking_lot = { workspace = true }
+url = "2"
+uuid = { version = "1", features = ["v4"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_System_Console", "Win32_System_SystemInformation"] }
+# @trace spec:windows-event-logging
+# ETW Event Log integration — writes errors/warnings/accountability events to Windows Event Viewer.
+# Requires event source registered in registry (installer or PowerShell: New-EventLog -LogName Application -Source Tillandsias).
+tracing-layer-win-eventlog = "0.1"
 
 # Unix: setsid() in tray_spawn::spawn_detached_tray() to detach the child
 # from the parent's process group / controlling terminal.
