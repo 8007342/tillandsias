@@ -73,6 +73,7 @@ pub fn run_with_force(force: bool) -> bool {
     // @trace spec:direct-podman-calls
 
     let mut all_success = true;
+    let mut failed_images: Vec<(String, String)> = Vec::new();
 
     for (image_name, tag_fn) in IMAGE_TYPES {
         let tag = tag_fn();
@@ -92,6 +93,7 @@ pub fn run_with_force(force: bool) -> bool {
             if let Err(e) = build_lock::wait_for_build(image_name) {
                 eprintln!("    [internal] Wait timed out: {e}");
                 all_success = false;
+                failed_images.push((image_name.to_string(), format!("Wait timed out: {e}")));
                 continue;
             }
             if image_exists(&tag) {
@@ -119,6 +121,7 @@ pub fn run_with_force(force: bool) -> bool {
                     i18n::tf("init.build.build_error", &[("name", image_name), ("error", &e)])
                 );
                 all_success = false;
+                failed_images.push((image_name.to_string(), e.clone()));
             }
         }
     }
@@ -157,7 +160,11 @@ pub fn run_with_force(force: bool) -> bool {
     if all_success {
         println!("{}", i18n::t("init.ready_run"));
     } else {
-        eprintln!("  {}", i18n::t("init.build.some_failed"));
+        eprintln!();
+        eprintln!("  Image builds failed:");
+        for (image, error) in failed_images {
+            eprintln!("    • {} — {}", image, error);
+        }
     }
     all_success
 }

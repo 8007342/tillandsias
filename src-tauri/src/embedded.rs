@@ -185,6 +185,11 @@ pub const SCRIPT_SUMMARIZE_PUBSPEC: &str = include_str!("../../scripts/summarize
 pub const SCRIPT_SUMMARIZE_GO_MOD: &str = include_str!("../../scripts/summarize-go-mod.sh");
 pub const SCRIPT_SUMMARIZE_PYPROJECT: &str = include_str!("../../scripts/summarize-pyproject.sh");
 
+// README dispatcher and validator
+// @trace spec:project-bootstrap-readme, spec:default-image
+pub const SCRIPT_REGENERATE_README: &str = include_str!("../../scripts/regenerate-readme.sh");
+pub const SCRIPT_CHECK_README_DISCIPLINE: &str = include_str!("../../scripts/check-readme-discipline.sh");
+
 // Config overlay — agent skills and workflows
 // @trace spec:project-bootstrap-readme, spec:default-image
 pub const CONFIG_OVERLAY_AGENT_STARTUP: &str =
@@ -379,6 +384,10 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("scripts/summarize-go-mod.sh: {e}"))?;
     write_lf(&scripts_dir.join("summarize-pyproject.sh"), SCRIPT_SUMMARIZE_PYPROJECT)
         .map_err(|e| format!("scripts/summarize-pyproject.sh: {e}"))?;
+    write_lf(&scripts_dir.join("regenerate-readme.sh"), SCRIPT_REGENERATE_README)
+        .map_err(|e| format!("scripts/regenerate-readme.sh: {e}"))?;
+    write_lf(&scripts_dir.join("check-readme-discipline.sh"), SCRIPT_CHECK_README_DISCIPLINE)
+        .map_err(|e| format!("scripts/check-readme-discipline.sh: {e}"))?;
 
     // -- images/default/ --
     let default_dir = dir.join("images").join("default");
