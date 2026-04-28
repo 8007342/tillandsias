@@ -344,12 +344,12 @@ COPY images/default/external-logs.yaml /etc/tillandsias/external-logs.yaml
 # /opt/agents/tillandsias-cli/bin/ to mirror the other agent installs and
 # are symlinked into /usr/local/bin/ for PATH discovery.
 RUN mkdir -p /opt/agents/tillandsias-cli/bin
-COPY cli/tillandsias-inventory /opt/agents/tillandsias-cli/bin/tillandsias-inventory
-COPY cli/tillandsias-services /opt/agents/tillandsias-cli/bin/tillandsias-services
-COPY cli/tillandsias-models /opt/agents/tillandsias-cli/bin/tillandsias-models
+COPY images/default/cli/tillandsias-inventory /opt/agents/tillandsias-cli/bin/tillandsias-inventory
+COPY images/default/cli/tillandsias-services /opt/agents/tillandsias-cli/bin/tillandsias-services
+COPY images/default/cli/tillandsias-models /opt/agents/tillandsias-cli/bin/tillandsias-models
 # @trace spec:external-logs-layer
 # tillandsias-logs: ls / tail / combine subcommands for the external-logs layer.
-COPY cli/tillandsias-logs /opt/agents/tillandsias-cli/bin/tillandsias-logs
+COPY images/default/cli/tillandsias-logs /opt/agents/tillandsias-cli/bin/tillandsias-logs
 RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-inventory /usr/local/bin/tillandsias-inventory \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-services /usr/local/bin/tillandsias-services \
@@ -398,7 +398,7 @@ RUN ln -sf /opt/summarizers/summarize-cargo.sh /usr/local/bin/summarize-cargo.sh
 # /opt/cheatsheets/ is NOT created here — podman --tmpfs creates the mount
 # point at launch time; the entrypoint populates it via populate_hot_paths().
 RUN mkdir -p /opt/cheatsheets-image
-COPY .cheatsheets/ /opt/cheatsheets-image/
+COPY cheatsheets/ /opt/cheatsheets-image/
 RUN chmod -R a+rX /opt/cheatsheets-image && chmod -R go-w /opt/cheatsheets-image
 
 # ── Bundled-tier cheatsheet sources + meta side-channel ────────
@@ -416,10 +416,11 @@ RUN chmod -R a+rX /opt/cheatsheets-image && chmod -R go-w /opt/cheatsheets-image
 # populate_hot_paths() reads these at forge launch to inject the SHA into
 # INDEX.md without rewriting the cheatsheet inside the image.
 RUN mkdir -p /opt/cheatsheet-sources /opt/cheatsheets-meta
-COPY .cheatsheet-sources/ /opt/cheatsheet-sources/
-COPY .cheatsheets-meta/ /opt/cheatsheets-meta/
-RUN chmod -R a+rX /opt/cheatsheet-sources /opt/cheatsheets-meta \
-    && chmod -R go-w /opt/cheatsheet-sources /opt/cheatsheets-meta
+COPY cheatsheet-sources/ /opt/cheatsheet-sources/
+# @tombstone missing-cheatsheets-meta — .cheatsheets-meta/ does not exist; disabled in v0.1.183.290
+# COPY .cheatsheets-meta/ /opt/cheatsheets-meta/
+RUN chmod -R a+rX /opt/cheatsheet-sources \
+    && chmod -R go-w /opt/cheatsheet-sources
 
 # ── Fix ownership ──────────────────────────────────────────────
 # @trace spec:runtime-diagnostics
