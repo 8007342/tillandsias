@@ -11,6 +11,7 @@ use crate::handlers::{
     forge_image_tag, git_image_tag, inference_image_tag, proxy_image_tag, prune_old_images,
 };
 use crate::i18n;
+use crate::image_builder::ImageBuilder;
 use crate::strings;
 
 /// All image types to build, in order.
@@ -68,11 +69,8 @@ pub fn run_with_force(force: bool) -> bool {
         }
     };
 
-    let script = source_dir.join("scripts").join("build-image.sh");
-    if !script.exists() {
-        eprintln!("  [internal] Script not found at: {}", script.display());
-        return false;
-    }
+    // Image builds are driven directly from Rust via ImageBuilder
+    // @trace spec:direct-podman-calls
 
     let mut all_success = true;
 
@@ -104,65 +102,21 @@ pub fn run_with_force(force: bool) -> bool {
 
         let _ = build_lock::acquire(image_name);
 
-        // Build with inherited stdio so the user sees progress
-        // @trace spec:init-command
-        #[cfg(not(target_os = "windows"))]
-        let status = std::process::Command::new(&script)
-            .arg(*image_name)
-            .args(["--tag", &tag, "--backend", "fedora"])
-            .current_dir(&source_dir)
-            .env_remove("LD_LIBRARY_PATH")
-            .env_remove("LD_PRELOAD")
-            .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
-            .stdin(std::process::Stdio::inherit())
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .status();
-
-        #[cfg(target_os = "windows")]
-        let status = {
-            let image_dir = match *image_name {
-                "proxy" => "proxy",
-                "git" => "git",
-                "inference" => "inference",
-                _ => "default",
-            };
-            let containerfile = source_dir
-                .join("images")
-                .join(image_dir)
-                .join("Containerfile");
-            let context_dir = source_dir.join("images").join(image_dir);
-
-            tillandsias_podman::podman_cmd_sync()
-                .args(["build", "--tag", &tag, "-f"])
-                .arg(&containerfile)
-                .arg(&context_dir)
-                .stdin(std::process::Stdio::inherit())
-                .stdout(std::process::Stdio::inherit())
-                .stderr(std::process::Stdio::inherit())
-                .status()
-        };
+        // Build using ImageBuilder (direct podman, no bash script intermediary)
+        // @trace spec:direct-podman-calls
+        let builder = ImageBuilder::new(source_dir.clone(), image_name.to_string(), tag.clone());
+        let build_result = builder.build_image();
 
         build_lock::release(image_name);
 
-        match status {
-            Ok(s) if s.success() => {
+        match build_result {
+            Ok(()) => {
                 println!("  {}", i18n::tf("init.build.build_success", &[("name", image_name), ("tag", &tag)]));
-            }
-            Ok(s) => {
-                eprintln!(
-                    "  {}",
-                    i18n::tf("init.build.build_failed", &[
-                        ("name", image_name),
-                        ("code", &s.code().unwrap_or(-1).to_string()),
-                    ])
-                );
-                all_success = false;
             }
             Err(e) => {
                 eprintln!(
                     "  {}",
-                    i18n::tf("init.build.build_error", &[("name", image_name), ("error", &e.to_string())])
+                    i18n::tf("init.build.build_error", &[("name", image_name), ("error", &e)])
                 );
                 all_success = false;
             }
@@ -223,51 +177,16 @@ pub fn run_build_only() -> Result<(), String> {
         strings::SETUP_ERROR
     })?;
 
-    let script = source_dir.join("scripts").join("build-image.sh");
     let tag = forge_image_tag();
 
-    #[cfg(not(target_os = "windows"))]
-    let status = std::process::Command::new(&script)
-        .arg("forge")
-        .args(["--tag", &tag, "--backend", "fedora"])
-        .current_dir(&source_dir)
-        .env_remove("LD_LIBRARY_PATH")
-        .env_remove("LD_PRELOAD")
-        .stdin(std::process::Stdio::inherit())
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .map_err(|e| {
-            eprintln!("  [internal] Failed to launch build script: {e}");
-            strings::SETUP_ERROR
-        })?;
-
-    #[cfg(target_os = "windows")]
-    let status = {
-        let containerfile = source_dir.join("images").join("default").join("Containerfile");
-        let context_dir = source_dir.join("images").join("default");
-        tillandsias_podman::podman_cmd_sync()
-            .args(["build", "--tag", &tag, "-f"])
-            .arg(&containerfile)
-            .arg(&context_dir)
-            .stdin(std::process::Stdio::inherit())
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .status()
-            .map_err(|e| {
-                eprintln!("  [internal] Failed to launch podman build: {e}");
-                strings::SETUP_ERROR
-            })?
-    };
+    // Build using ImageBuilder (direct podman, no bash script intermediary)
+    // @trace spec:direct-podman-calls, spec:init-command
+    let builder = ImageBuilder::new(source_dir.clone(), "forge".to_string(), tag);
+    builder.build_image()?;
 
     embedded::cleanup_image_sources();
-
-    if status.success() {
-        prune_old_images();
-        Ok(())
-    } else {
-        Err(strings::SETUP_ERROR.into())
-    }
+    prune_old_images();
+    Ok(())
 }
 
 /// Check if a podman image exists.
