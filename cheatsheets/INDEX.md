@@ -105,6 +105,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - systemd-socket-activation.md           — building a daemon (like tillandsias-router) that systemd should supervise; coor… [pull-on-demand: stub]
 - unix-socket-ipc.md                     — building high-performance inter-process communication (IPC) between a daemon an… [pull-on-demand: stub]
 - windows-event-viewer.md [DRAFT]        — Diagnosing errors and warnings on Windows systems, or accessing Tillandsias app…
+- windows-installer-prereqs.md           — implementing the one-line `install.ps1` / `install.sh` curl installer's prerequ… [pull-on-demand: project-committed]
 - windows-native-dev-build.md            — developing Tillandsias on a Windows host (not
 - windows-process-creation.md            — spawning native exes (`wsl.exe`, `podman.exe`, `cmd.exe`, anything that allocat… [pull-on-demand: stub]
 - windows-sandbox.md                     — hosting an isolated, ephemeral Windows process tree (e.g., the Chromium framewo… [pull-on-demand: project-committed]
