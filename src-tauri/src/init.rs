@@ -391,6 +391,37 @@ fn run_with_force_wsl(force: bool) -> bool {
             .join(service);
         let _ = std::fs::create_dir_all(&install_dir);
 
+        // @trace spec:windows-wsl-runtime, spec:cross-platform
+        // @cheatsheet runtime/wsl-on-windows.md
+        // Remove any stale ext4.vhdx left behind by a prior import. WSL's
+        // `--unregister` is supposed to delete the vhdx atomically, but
+        // there are documented cases where the file remains:
+        //   - the distro was still mounted by another wsl.exe process at
+        //     unregister time (file lock survives, vhdx orphaned),
+        //   - the user terminated wsl.exe mid-shutdown,
+        //   - antivirus software held the file briefly while scanning.
+        // When the vhdx exists, `wsl --import` fails with
+        //   Wsl/Service/RegisterDistro/ERROR_FILE_EXISTS
+        // Documented at:
+        //   https://learn.microsoft.com/en-us/windows/wsl/use-custom-distro
+        // We pre-delete the vhdx so import can proceed cleanly. Failing to
+        // delete (file still locked) is logged but does not block the
+        // attempt — wsl --import will surface the same error if relevant.
+        let stale_vhdx = install_dir.join("ext4.vhdx");
+        if stale_vhdx.exists() {
+            match std::fs::remove_file(&stale_vhdx) {
+                Ok(()) => println!(
+                    "  \u{2192} removed stale {} from prior import",
+                    stale_vhdx.display()
+                ),
+                Err(e) => eprintln!(
+                    "  \u{2717} could not remove stale {}: {e} \
+                     (wsl --import may now fail with ERROR_FILE_EXISTS)",
+                    stale_vhdx.display()
+                ),
+            }
+        }
+
         println!("  \u{2192} wsl --import {distro}");
         let import_status = std::process::Command::new("wsl.exe")
             .args(["--import"])

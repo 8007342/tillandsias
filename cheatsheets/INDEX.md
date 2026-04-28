@@ -14,9 +14,9 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## agents
 
-- claude-code.md                   — launching Claude Code from inside the forge, configuring skills/hooks, debuggin… [pull-on-demand: stub]
-- opencode.md                      — launching OpenCode interactively or via Tillandsias' "Attach Here" web flow. [pull-on-demand: stub]
-- openspec.md                      — starting any non-trivial change. NO exceptions for "quick fixes" — the spec t… [pull-on-demand: stub]
+- claude-code.md [DRAFT]           — Running Claude Code inside the forge, understanding its CLI, passing model flag…
+- opencode.md [DRAFT]              — Launching web-based visual IDE, running OpenCode CLI, debugging web sessions, p…
+- openspec.md [DRAFT]              — Creating/applying/archiving OpenSpec changes, understanding the artifact lifecy…
 
 ## algorithms
 
@@ -81,6 +81,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 ## runtime
 
 - admin-console.md                       — a Windows operation fails with "access denied" or [pull-on-demand: stub]
+- agent-startup-skills.md                — Understanding how the four startup skills (`/startup`, `/bootstrap-readme-and-p… [bundled, partial-verify]
 - cheatsheet-architecture-v2.md          — You're writing, splitting, or querying cheatsheets — or designing the MCP ser… [pull-on-demand: stub]
 - cheatsheet-crdt-overrides.md           — You're committing a project-specific cheatsheet under `<project>/.tillandsias/c… [bundled, partial-verify]
 - cheatsheet-frontmatter-spec.md         — Authoring or refreshing a cheatsheet — this defines the YAML block at the top… [pull-on-demand: stub]
@@ -92,18 +93,22 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - container-health-checks.md             — implementing liveness or readiness probes in container images (Dockerfile HEALT… [pull-on-demand: stub]
 - event-driven-monitoring.md             — building observable systems that react to container lifecycle events, service s… [pull-on-demand: stub]
 - external-logs.md                       — you are an agent (or operator) inside a forge container and need to inspect cur…
-- forge-container.md                     — starting any task inside the forge — this defines the rules of the sandbox yo… [pull-on-demand: stub]
+- forge-container.md [DRAFT]             — Understanding what the forge container can do, where files live, how to avoid c…
 - forge-hot-cold-split.md                — You need to understand which forge paths are RAM-backed, what the size caps are…
 - forge-paths-ephemeral-vs-persistent.md — You're an agent (or human) writing files inside the forge container and need to… [pull-on-demand: stub]
 - forge-shared-cache-via-nix.md          — You're trying to share a library across projects without paying the download co… [pull-on-demand: stub]
 - local-inference.md                     — an agent inside the forge needs to call a local LLM — for triggers, summarisa… [pull-on-demand: stub]
-- networking.md                          — anything that wants to make a network call from inside the forge. [pull-on-demand: stub]
+- logging-levels.md [DRAFT]              — Configuring log verbosity, enabling accountability windows, or troubleshooting …
+- networking.md [DRAFT]                  — Understanding how the forge accesses external services, what's blocked, what's …
 - powershell.md                          — writing or invoking `*.ps1` scripts on a Windows host (e.g. `build-local.ps1`),… [pull-on-demand: stub]
-- runtime-limitations.md                 — you (the agent) tried to do something the forge can't, AND working around it wo… [pull-on-demand: stub]
+- runtime-limitations.md [DRAFT]         — The forge lacks a tool you need, or a baked tool behaves unexpectedly due to th…
 - systemd-socket-activation.md           — building a daemon (like tillandsias-router) that systemd should supervise; coor… [pull-on-demand: stub]
 - unix-socket-ipc.md                     — building high-performance inter-process communication (IPC) between a daemon an… [pull-on-demand: stub]
+- windows-event-viewer.md [DRAFT]        — Diagnosing errors and warnings on Windows systems, or accessing Tillandsias app…
 - windows-native-dev-build.md            — developing Tillandsias on a Windows host (not
+- windows-process-creation.md            — spawning native exes (`wsl.exe`, `podman.exe`, `cmd.exe`, anything that allocat… [pull-on-demand: stub]
 - wsl-daemon-patterns.md                 — running long-lived background services (daemons, proxies, routers) inside WSL2;… [pull-on-demand: stub]
+- wsl-mount-points.md                    — writing code that crosses the Windows↔Linux filesystem boundary in WSL2 — a… [pull-on-demand: stub]
 - wsl-on-windows.md [DRAFT]              — working on Tillandsias for Windows. The Windows path uses WSL2 distros directly…
 
 ## security
@@ -121,15 +126,21 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## utils
 
+- curl-http.md [DRAFT]             — Downloading files, making HTTP requests, testing APIs, or working through proxi…
 - curl.md                          — HTTP from the shell. In the forge, curl auto-uses `HTTPS_PROXY` env var. [pull-on-demand: stub]
 - fd.md                            — finding files in the forge — replacement for `find` with faster defaults. [pull-on-demand: stub]
-- fzf.md                           — interactive fuzzy selection — files, history, branches, any newline-delimited… [pull-on-demand: stub]
+- fzf-picker.md [DRAFT]            — Interactively selecting files, commands, or search results from piped input
+- gh-cli.md [DRAFT]                — Creating/reviewing pull requests, managing issues, checking CI status, or authe…
 - gh.md                            — GitHub-side operations from the forge — issues, PRs, workflows, API calls. (F… [pull-on-demand: stub]
-- git.md                           — any version control operation in the forge (clones go through enclave mirror, N… [pull-on-demand: stub]
+- git-workflows.md [DRAFT]         — Cloning, committing, branching, rebasing, pushing (clones via enclave mirror, n…
+- jq-yq-json.md [DRAFT]            — Querying, filtering, or transforming JSON (jq) or YAML (yq) from command line o…
 - jq.md                            — querying or transforming JSON in the forge — pipelines, log triage, config in… [pull-on-demand: stub]
+- podman-containers.md [DRAFT]     — Managing containers, images, and enclaves; building images with Containerfile
+- rg-fd-search.md [DRAFT]          — Searching code/files (ripgrep) or finding files by name/pattern (fd)
 - ripgrep.md                       — searching code in the forge. Faster than grep, respects `.gitignore` by default… [bundled, partial-verify]
 - rsync.md                         — copying files efficiently — local↔local or local↔remote (over ssh). Delta… [pull-on-demand: stub]
 - shellcheck-shfmt.md              — linting / formatting bash scripts before committing them. [pull-on-demand: stub]
+- ssh-remote.md [DRAFT]            — Connecting to remote systems, transferring files securely, or synchronizing dir…
 - ssh.md                           — ssh to other machines from the forge (rare — forge typically credential-free;… [pull-on-demand: stub]
 - tar.md                           — archiving / extracting / streaming files; in particular, [pull-on-demand: stub]
 - tree.md                          — visualising directory hierarchy — quick structural overview, sharing layout i… [pull-on-demand: stub]
@@ -137,11 +148,18 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## web
 
+- cdp.md [DRAFT]                   — Building browser automation, remote debugging, or headless browser control via …
 - cookie-auth-best-practices.md    — implementing or reviewing session-cookie-based auth — picking attributes, cho… [bundled, partial-verify]
 - grpc.md                          — building service-to-service RPC with strict schemas, streaming, or bidirectiona… [pull-on-demand: stub]
 - http.md                          — any web work — request semantics, status codes, headers, idempotency. [bundled, partial-verify]
+- mcp.md [DRAFT]                   — Implementing MCP servers, debugging MCP client/server communication, or extendi…
 - openapi.md                       — defining HTTP APIs declaratively, generating clients/servers, producing browsab… [pull-on-demand: stub]
 - protobuf.md                      — defining wire-format schemas; gRPC services; serialization with strong schema e… [pull-on-demand: stub]
 - sse.md                           — server pushes to browser/client, no client→server messaging needed. Simpler t… [bundled, partial-verify]
 - websocket.md                     — bidirectional persistent connection — chat, real-time games, collaborative ed… [bundled, partial-verify]
+
+## welcome
+
+- readme-discipline.md             — Understanding how Tillandsias-managed projects structure and auto-regenerate th… [bundled, partial-verify]
+- sample-prompts.md                — Helping users understand what an in-forge agent + Flutter/Nix/Flame defaults ca… [bundled, partial-verify]
 

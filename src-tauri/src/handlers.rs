@@ -2399,7 +2399,12 @@ fn windows_path_to_wsl_mnt(p: &Path) -> Result<String, String> {
 /// builds the git image if needed and starts a detached git service
 /// container on the enclave network with the mirror mounted.
 ///
-/// @trace spec:git-mirror-service
+/// @trace spec:git-mirror-service, spec:cross-platform, spec:windows-wsl-runtime
+// On Windows, the function takes the early-return path into
+// `ensure_git_service_running_wsl` and the Unix podman-driven path is
+// unreachable. The compiler can't see across the cfg gate, so allow
+// unreachable_code for the Unix-only suffix.
+#[allow(unreachable_code)]
 pub(crate) async fn ensure_git_service_running(
     project_name: &str,
     mirror_path: &Path,

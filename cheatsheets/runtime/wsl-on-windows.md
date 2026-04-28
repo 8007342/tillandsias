@@ -194,6 +194,28 @@ MSYS_NO_PATHCONV=1 wsl.exe --import tillandsias-proxy "$INSTALL_DIR_WIN" "$TARBA
 
 The `--terminate` before `--unregister` is mandatory — `--unregister` of a running distro fails with a non-obvious "Element not found" error.
 
+### `ERROR_FILE_EXISTS` on `wsl --import` — orphaned `ext4.vhdx`
+
+A second failure mode is `Wsl/Service/RegisterDistro/ERROR_FILE_EXISTS`. It looks like:
+
+```
+The supplied install location is already in use.
+Error code: Wsl/Service/RegisterDistro/ERROR_FILE_EXISTS
+```
+
+Trigger: the install directory still contains an `ext4.vhdx` from a prior import even though `wsl --unregister <distro>` was called. `--unregister` is supposed to delete the vhdx atomically, but it can leave the file behind when:
+
+- the distro was still mounted by another `wsl.exe` process at unregister time (the file lock survives the unregister, the vhdx is orphaned),
+- the user terminated `wsl.exe` mid-shutdown (kill -9, taskkill /F),
+- antivirus held the file briefly while scanning (real-time AV is the most common cause on consumer Windows installs),
+- a previous import was interrupted before the vhdx was registered to a distro name.
+
+**Fix**: `Remove-Item -Force "$installDir\ext4.vhdx"` (or `rm -f` in bash) **before** retrying `--import`. This is what Tillandsias' `init.rs` does as a defensive pre-step on every import. If the file is still locked, the remove will fail and you have a runaway WSL process — `wsl --shutdown` is the hammer.
+
+References:
+- <https://learn.microsoft.com/en-us/windows/wsl/use-custom-distro> — `wsl --import` semantics, install-location requirements
+- <https://learn.microsoft.com/en-us/windows/wsl/basic-commands#unregister-or-uninstall-a-linux-distribution> — what `--unregister` is supposed to do (and the implicit caveat that it can fail silently)
+
 ### Clean-up sequence — terminate, then unregister
 
 ```bash
