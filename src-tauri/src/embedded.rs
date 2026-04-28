@@ -175,6 +175,17 @@ pub const CONFIG_OVERLAY_INSTRUCTIONS_MODEL_ROUTING: &str =
 pub const CONFIG_OVERLAY_INSTRUCTIONS_WEB_SERVICES: &str =
     include_str!("../../images/default/config-overlay/opencode/instructions/web-services.md");
 
+// Config overlay — agent skills and workflows
+// @trace spec:project-bootstrap-readme, spec:default-image
+pub const CONFIG_OVERLAY_AGENT_STARTUP: &str =
+    include_str!("../../images/default/config-overlay/opencode/agent/startup.md");
+pub const CONFIG_OVERLAY_AGENT_STATUS: &str =
+    include_str!("../../images/default/config-overlay/opencode/agent/status.md");
+pub const CONFIG_OVERLAY_AGENT_BOOTSTRAP_README: &str =
+    include_str!("../../images/default/config-overlay/opencode/agent/bootstrap-readme.md");
+pub const CONFIG_OVERLAY_AGENT_BOOTSTRAP_README_AND_PROJECT: &str =
+    include_str!("../../images/default/config-overlay/opencode/agent/bootstrap-readme-and-project.md");
+
 // MCP servers — lightweight tool scripts for forge containers
 // @trace spec:layered-tools-overlay, spec:git-mirror-service, spec:host-browser-mcp
 pub const CONFIG_OVERLAY_MCP_GIT_TOOLS: &str =
@@ -492,6 +503,32 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         CONFIG_OVERLAY_INSTRUCTIONS_WEB_SERVICES,
     )
     .map_err(|e| format!("config-overlay/opencode/instructions/web-services.md: {e}"))?;
+
+    // Config overlay — agent skills and workflows
+    // @trace spec:project-bootstrap-readme, spec:default-image
+    let agent_dir = config_overlay_dir.join("agent");
+    fs::create_dir_all(&agent_dir)
+        .map_err(|e| format!("config-overlay/opencode/agent dir: {e}"))?;
+    write_lf(
+        &agent_dir.join("startup.md"),
+        CONFIG_OVERLAY_AGENT_STARTUP,
+    )
+    .map_err(|e| format!("config-overlay/opencode/agent/startup.md: {e}"))?;
+    write_lf(
+        &agent_dir.join("status.md"),
+        CONFIG_OVERLAY_AGENT_STATUS,
+    )
+    .map_err(|e| format!("config-overlay/opencode/agent/status.md: {e}"))?;
+    write_lf(
+        &agent_dir.join("bootstrap-readme.md"),
+        CONFIG_OVERLAY_AGENT_BOOTSTRAP_README,
+    )
+    .map_err(|e| format!("config-overlay/opencode/agent/bootstrap-readme.md: {e}"))?;
+    write_lf(
+        &agent_dir.join("bootstrap-readme-and-project.md"),
+        CONFIG_OVERLAY_AGENT_BOOTSTRAP_README_AND_PROJECT,
+    )
+    .map_err(|e| format!("config-overlay/opencode/agent/bootstrap-readme-and-project.md: {e}"))?;
 
     // Config overlay — MCP servers
     // @trace spec:layered-tools-overlay, spec:host-browser-mcp
