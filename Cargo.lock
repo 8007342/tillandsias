@@ -5254,6 +5254,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "tillandsias-browser-mcp"
+version = "0.1.170"
+dependencies = [
+ "futures-util",
+ "parking_lot",
+ "postcard",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tillandsias-control-wire",
+ "tillandsias-core",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "tillandsias-control-wire"
 version = "0.1.170"
 dependencies = [
@@ -5291,6 +5311,7 @@ name = "tillandsias-podman"
 version = "0.1.182"
 dependencies = [
  "libc",
+ "parking_lot",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

@@ -155,6 +155,8 @@ All cheatsheets are curated references for tools and languages available in the 
 - `websocket.md` — WebSocket protocol: frames, handshake, subprotocols, common libraries
 - `sse.md` — Server-Sent Events: format, reconnection, vs WebSocket
 - `cookie-auth-best-practices.md` — Cookie-based auth: secure flags, SameSite, CSRF protection
+- `cdp.md` — Chrome DevTools Protocol: target discovery, session-based calls, timeouts, bundled Chromium
+- `mcp.md` — Model Context Protocol: JSON-RPC 2.0 framing, tool definition, error codes, initialization
 
 ## welcome
 

@@ -4,6 +4,7 @@ mod client;
 pub mod events;
 mod gpu;
 pub mod launch;
+pub mod peer_table;
 
 pub use client::network_exists_sync;
 pub use client::PodmanClient;
@@ -11,6 +12,7 @@ pub use events::PodmanEventStream;
 pub use gpu::detect_gpu_devices;
 pub use launch::ContainerLauncher;
 pub use launch::query_occupied_ports;
+pub use peer_table::{PeerTable, ProjectLabel};
 
 /// The internal podman network name for the Tillandsias enclave.
 /// @trace spec:enclave-network
