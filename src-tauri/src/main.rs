@@ -214,6 +214,13 @@ fn main() {
         });
     }
 
+    // @trace spec:runtime-diagnostics
+    if let cli::CliMode::Diagnostics { path } = &cli_mode {
+        let _log_guard = logging::init(&log_config);
+        let success = runner::run_diagnostics(path.clone());
+        std::process::exit(if success { 0 } else { 1 });
+    }
+
     // If CLI attach mode, run the container runner and exit — no tray app.
     if let cli::CliMode::Attach {
         path,

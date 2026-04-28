@@ -236,9 +236,11 @@ RUN mkdir -p /opt/agents/claude /opt/agents/openspec /opt/agents/opencode/bin \
 RUN useradd -u 1000 -m -s /bin/bash forge
 
 # ── Directory structure ────────────────────────────────────────
+# @trace spec:runtime-diagnostics
 RUN mkdir -p /home/forge/src \
     && mkdir -p /home/forge/.cache/tillandsias \
     && mkdir -p /home/forge/.config/opencode \
+    && mkdir -p /strategic \
     && mkdir -p /tmp && chmod 1777 /tmp
 
 # ── Shared library ─────────────────────────────────────────────
@@ -420,7 +422,8 @@ RUN chmod -R a+rX /opt/cheatsheet-sources /opt/cheatsheets-meta \
     && chmod -R go-w /opt/cheatsheet-sources /opt/cheatsheets-meta
 
 # ── Fix ownership ──────────────────────────────────────────────
-RUN chown -R 1000:1000 /home/forge
+# @trace spec:runtime-diagnostics
+RUN chown -R 1000:1000 /home/forge /strategic
 
 USER 1000:1000
 WORKDIR /home/forge/src

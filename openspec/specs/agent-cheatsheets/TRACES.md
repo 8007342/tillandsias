@@ -17,6 +17,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-terminal.sh#L11](../../../images/default/entrypoint-terminal.sh#L11)
 - [images/default/forge-welcome.sh#L176](../../../images/default/forge-welcome.sh#L176)
 - [images/default/lib-common.sh#L321](../../../images/default/lib-common.sh#L321)
-- [scripts/build-image.sh#L605](../../../scripts/build-image.sh#L605)
+- [scripts/build-image.sh#L611](../../../scripts/build-image.sh#L611)
 - [scripts/regenerate-cheatsheet-index.sh#L434](../../../scripts/regenerate-cheatsheet-index.sh#L434)
 - [src-tauri/src/launch.rs#L1467](../../../src-tauri/src/launch.rs#L1467)

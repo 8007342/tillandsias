@@ -14,4 +14,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-terminal.sh#L44](../../../images/default/entrypoint-terminal.sh#L44)
 - [images/default/entrypoint-terminal.sh#L62](../../../images/default/entrypoint-terminal.sh#L62)
 - [images/default/forge-welcome.sh#L132](../../../images/default/forge-welcome.sh#L132)
-- [src-tauri/src/embedded.rs#L168](../../../src-tauri/src/embedded.rs#L168)
+- [src-tauri/src/embedded.rs#L157](../../../src-tauri/src/embedded.rs#L157)

@@ -974,3 +974,144 @@ fn prompt_with_default(label: &str, default: &str) -> String {
         trimmed.to_string()
     }
 }
+
+/// Stream /strategic/service.log from all running containers for a project.
+/// Observation-only — does not start any containers.
+/// Returns true on clean exit (Ctrl+C), false if no containers found.
+///
+/// @trace spec:runtime-diagnostics
+pub fn run_diagnostics(path: PathBuf) -> bool {
+    let project_name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "project".to_string());
+
+    println!();
+    println!("  Diagnostics — streaming logs for '{project_name}'");
+    println!("  (Ctrl+C to exit)");
+    println!();
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("tokio runtime");
+
+    rt.block_on(async move {
+        use tokio::io::{AsyncBufReadExt, BufReader};
+
+        #[cfg(unix)]
+        let mut ctrl_c = match tokio::signal::unix::signal(
+            tokio::signal::unix::SignalKind::interrupt(),
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("  [diagnostics] Cannot install signal handler: {e}");
+                return false;
+            }
+        };
+
+        let mut known: std::collections::HashSet<String> = Default::default();
+        let mut exit_requested = false;
+
+        loop {
+            // Check for Ctrl+C
+            #[cfg(unix)]
+            if known.len() > 0 {
+                tokio::select! {
+                    _ = ctrl_c.recv() => {
+                        exit_requested = true;
+                    }
+                    _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {}
+                }
+            }
+
+            #[cfg(windows)]
+            {
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {
+                        exit_requested = true;
+                    }
+                    _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {}
+                }
+            }
+
+            if exit_requested {
+                println!();
+                println!("  Diagnostics session ended.");
+                return true;
+            }
+
+            // Discover running containers for this project.
+            let output = match tokio::process::Command::new("podman")
+                .args(["ps", "--format", "{{.Names}}", "--filter", "status=running"])
+                .output()
+                .await
+            {
+                Ok(o) => o,
+                Err(_) => {
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    continue;
+                }
+            };
+
+            let names: Vec<String> = String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .map(str::trim)
+                .filter(|n| {
+                    n.contains(&format!("tillandsias-{project_name}-"))
+                        || *n == format!("tillandsias-git-{project_name}")
+                })
+                .map(str::to_string)
+                .collect();
+
+            if known.is_empty() && names.is_empty() {
+                println!("  No running containers found for project '{project_name}'.");
+                return false;
+            }
+
+            for name in &names {
+                if known.contains(name) {
+                    continue;
+                }
+                known.insert(name.clone());
+
+                let service = diagnostics_service_name(&name, &project_name);
+                println!("  [{service}] attaching...");
+
+                let child = tokio::process::Command::new("podman")
+                    .args(["exec", &name, "tail", "-f", "/strategic/service.log"])
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::null())
+                    .spawn();
+
+                match child {
+                    Ok(mut c) => {
+                        if let Some(stdout) = c.stdout.take() {
+                            let svc = service.clone();
+                            tokio::spawn(async move {
+                                let mut lines = BufReader::new(stdout).lines();
+                                while let Ok(Some(line)) = lines.next_line().await {
+                                    println!("[{svc}] {line}");
+                                }
+                                println!("[{svc}] [offline]");
+                            });
+                        }
+                    }
+                    Err(_) => println!("[{service}] [offline]"),
+                }
+            }
+
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
+    })
+}
+
+fn diagnostics_service_name(container_name: &str, project_name: &str) -> String {
+    if container_name == &format!("tillandsias-git-{project_name}") {
+        return "git".to_string();
+    }
+    if let Some(rest) = container_name.strip_prefix(&format!("tillandsias-{project_name}-")) {
+        return rest.to_string();
+    }
+    container_name.to_string()
+}

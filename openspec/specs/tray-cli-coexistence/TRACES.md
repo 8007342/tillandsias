@@ -5,13 +5,13 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [src-tauri/Cargo.toml#L70](../../../src-tauri/Cargo.toml#L70)
+- [src-tauri/Cargo.toml#L78](../../../src-tauri/Cargo.toml#L78)
 - [src-tauri/src/desktop_env.rs#L1](../../../src-tauri/src/desktop_env.rs#L1)
 - [src-tauri/src/desktop_env.rs#L22](../../../src-tauri/src/desktop_env.rs#L22)
-- [src-tauri/src/logging.rs#L175](../../../src-tauri/src/logging.rs#L175)
-- [src-tauri/src/logging.rs#L202](../../../src-tauri/src/logging.rs#L202)
-- [src-tauri/src/logging.rs#L224](../../../src-tauri/src/logging.rs#L224)
-- [src-tauri/src/main.rs#L213](../../../src-tauri/src/main.rs#L213)
+- [src-tauri/src/logging.rs#L177](../../../src-tauri/src/logging.rs#L177)
+- [src-tauri/src/logging.rs#L221](../../../src-tauri/src/logging.rs#L221)
+- [src-tauri/src/logging.rs#L243](../../../src-tauri/src/logging.rs#L243)
+- [src-tauri/src/main.rs#L229](../../../src-tauri/src/main.rs#L229)
 - [src-tauri/src/runner.rs#L25](../../../src-tauri/src/runner.rs#L25)
 - [src-tauri/src/runner.rs#L37](../../../src-tauri/src/runner.rs#L37)
 - [src-tauri/src/runner.rs#L436](../../../src-tauri/src/runner.rs#L436)

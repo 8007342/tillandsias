@@ -9,5 +9,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-core/build.rs#L221](../../../crates/tillandsias-core/build.rs#L221)
 - [crates/tillandsias-core/src/genus.rs#L237](../../../crates/tillandsias-core/src/genus.rs#L237)
 - [crates/tillandsias-core/src/state.rs#L290](../../../crates/tillandsias-core/src/state.rs#L290)
-- [src-tauri/src/main.rs#L407](../../../src-tauri/src/main.rs#L407)
-- [src-tauri/src/main.rs#L428](../../../src-tauri/src/main.rs#L428)
+- [src-tauri/src/main.rs#L423](../../../src-tauri/src/main.rs#L423)
+- [src-tauri/src/main.rs#L444](../../../src-tauri/src/main.rs#L444)

@@ -135,7 +135,7 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
         // web) are not forge-shaped and do NOT get this mount.
         if is_forge_profile && ctx.hot_path_budget_mb > 0 {
             args.push(format!(
-                "--tmpfs=/home/forge/src:size={}m,mode=755",
+                "--tmpfs=/home/forge/src:size={}m,mode=755,uid=1000,gid=1000",
                 ctx.hot_path_budget_mb
             ));
         }

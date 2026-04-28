@@ -8,6 +8,10 @@
 
 source /usr/local/lib/tillandsias/lib-common.sh
 
+# @trace spec:runtime-diagnostics
+SLOG=/strategic/service.log
+echo "$(date -Is) [forge] entrypoint started (agent=${TILLANDSIAS_AGENT:-claude})" >> "$SLOG" 2>/dev/null || SLOG=/dev/null
+
 # @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
 # Populate tmpfs hot mount (/opt/cheatsheets) from image-baked lower layer.
 # The --tmpfs mount is already in place (podman establishes it before exec).
@@ -45,12 +49,14 @@ trace_lifecycle "entrypoint" "claude-code starting"
 # Clone project from git mirror (Phase 3: mirror-only, no direct mount)
 if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]]; then
     trace_lifecycle "git-mirror" "cloning from ${TILLANDSIAS_GIT_SERVICE}"
+    echo "$(date -Is) [forge] cloning $TILLANDSIAS_PROJECT from git://$TILLANDSIAS_GIT_SERVICE" >> "$SLOG"
     MAX_RETRIES=5
     CLONE_SUCCESS=false
     CLONE_DIR="/home/forge/src/${TILLANDSIAS_PROJECT}"
     for i in $(seq 1 $MAX_RETRIES); do
         if git clone "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" "$CLONE_DIR" 2>&1; then
             trace_lifecycle "git-mirror" "clone successful"
+            echo "$(date -Is) [forge] clone succeeded, launching agent" >> "$SLOG"
             CLONE_SUCCESS=true
             cd "$CLONE_DIR"
             # Configure push back to mirror
@@ -70,12 +76,14 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
         fi
         if [[ $i -lt $MAX_RETRIES ]]; then
             trace_lifecycle "git-mirror" "git service not ready, retrying ($i/$MAX_RETRIES)..."
+            echo "$(date -Is) [forge] clone attempt $i failed" >> "$SLOG"
             sleep 1
         else
             trace_lifecycle "git-mirror" "clone failed after $MAX_RETRIES attempts"
         fi
     done
     if [[ "$CLONE_SUCCESS" != "true" ]]; then
+        echo "$(date -Is) [forge] FATAL: git clone failed" >> "$SLOG"
         echo "[forge] FATAL: git clone failed from git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" >&2
         echo "[forge] The git mirror service is unreachable or has not finished initialising." >&2
         exit 1
