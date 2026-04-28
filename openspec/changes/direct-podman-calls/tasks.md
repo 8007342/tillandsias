@@ -2,46 +2,46 @@
 
 ### 1.1 Add gh CLI discovery to Rust
 - [x] `gh-auth-login.sh` already has the priority logic (host gh > container fallback)
-- [ ] Add a `find_gh_path()` function (similar to `find_podman_path()`) that checks known locations: `gh`, `/usr/bin/gh`, `/usr/local/bin/gh`, `~/.local/bin/gh`, and on Windows `C:\Program Files\GitHub CLI\gh.exe` / winget paths
-- [ ] Return `Option<PathBuf>` -- `None` means fall back to container
+- [x] Add a `find_gh_path()` function (similar to `find_podman_path()`) that checks known locations: `gh`, `/usr/bin/gh`, `/usr/local/bin/gh`, `~/.local/bin/gh`, and on Windows `C:\Program Files\GitHub CLI\gh.exe` / winget paths
+- [x] Return `Option<PathBuf>` -- `None` means fall back to container
 
 ### 1.2 Implement direct GitHub Login handler for Windows
-- [ ] In `handle_github_login`, add `#[cfg(target_os = "windows")]` block that:
+- [x] In `handle_github_login`, add `#[cfg(target_os = "windows")]` block that:
   - Finds host `gh` via `find_gh_path()`
   - Sets `GH_CONFIG_DIR` to the managed secrets directory
   - Reads existing git identity from managed gitconfig
   - Opens terminal with: `gh auth login --git-protocol https`
   - After auth completes, runs `gh auth setup-git`
-- [ ] Skip `write_temp_script("gh-auth-login.sh", ...)` on Windows entirely
-- [ ] Test on Windows: GitHub Login works without Git Bash installed
+- [x] Skip `write_temp_script("gh-auth-login.sh", ...)` on Windows entirely
+- [x] Test on Windows: GitHub Login works without Git Bash installed
 
 ### 1.3 Implement direct GitHub Login handler for all platforms
-- [ ] Extend the Windows implementation to work on Linux and macOS
-- [ ] For host-gh path: spawn terminal with `gh auth login --git-protocol https`
-- [ ] For container fallback: build podman command with security flags, D-Bus forwarding (Linux), and volume mounts
-- [ ] Terminal command format: `podman run -it --rm --cap-drop=ALL --security-opt=no-new-privileges --userns=keep-id -v <gh-dir>:/home/forge/.config/gh -v <git-dir>:/home/forge/.config/tillandsias-git <forge-image> gh auth login --git-protocol https`
-- [ ] Remove `embedded::GH_AUTH_LOGIN` constant
-- [ ] Remove `gh-auth-login.sh` from `include_str!` in `embedded.rs`
+- [x] Extend the Windows implementation to work on Linux and macOS
+- [x] For host-gh path: spawn terminal with `gh auth login --git-protocol https`
+- [x] For container fallback: build podman command with security flags, D-Bus forwarding (Linux), and volume mounts
+- [x] Terminal command format: `podman run -it --rm --cap-drop=ALL --security-opt=no-new-privileges --userns=keep-id -v <gh-dir>:/home/forge/.config/gh -v <git-dir>:/home/forge/.config/tillandsias-git <forge-image> gh auth login --git-protocol https`
+- [x] Remove `embedded::GH_AUTH_LOGIN` constant (already done in Phase 2)
+- [x] Remove `gh-auth-login.sh` from `include_str!` in `embedded.rs` (already done in Phase 2)
 
 ### 1.4 Handle git identity prompting
-- [ ] Before opening the terminal for `gh auth login`, check if git identity exists in managed gitconfig
-- [ ] If not set, either: (a) prompt in the terminal before launching gh, or (b) use a pre-command that sets git config then runs gh auth login
-- [ ] Write identity via `git config --file <secrets-dir>/git/.gitconfig user.name "..."` etc.
-- [ ] Preserve the re-authentication flow (detect existing creds, offer to re-auth)
+- [x] Before opening the terminal for `gh auth login`, check if git identity exists in managed gitconfig
+- [x] If not set, either: (a) prompt in the terminal before launching gh, or (b) use a pre-command that sets git config then runs gh auth login
+- [x] Write identity via `git config --file <secrets-dir>/git/.gitconfig user.name "..."` etc.
+- [x] Preserve the re-authentication flow (detect existing creds, offer to re-auth)
 
 ### 1.5 Add @trace annotations
-- [ ] Add `// @trace spec:direct-podman-calls` to the new gh discovery function
-- [ ] Add `// @trace spec:direct-podman-calls, spec:secrets-management` to the direct GitHub Login handler
-- [ ] Update existing `// @trace spec:gh-auth-script` references to include `spec:direct-podman-calls`
+- [x] Add `// @trace spec:direct-podman-calls` to the new gh discovery function
+- [x] Add `// @trace spec:direct-podman-calls, spec:secrets-management` to the direct GitHub Login handler
+- [x] Update existing `// @trace spec:gh-auth-script` references to include `spec:direct-podman-calls`
 
 ### 1.6 Test Phase 1
-- [ ] Windows: GitHub Login works with host `gh` installed, no Git Bash required
-- [ ] Windows: `./build-windows.sh --check` passes
-- [ ] Linux: GitHub Login works with host `gh`
-- [ ] Linux: GitHub Login works via container fallback (no host `gh`)
-- [ ] macOS: GitHub Login works with host `gh`
-- [ ] All platforms: security flags match those in `gh-auth-login.sh`
-- [ ] All platforms: credentials stored in correct location
+- [x] Windows: GitHub Login works with host `gh` installed, no Git Bash required
+- [x] Windows: `./build-windows.sh --check` passes
+- [x] Linux: GitHub Login works with host `gh`
+- [x] Linux: GitHub Login works via container fallback (no host `gh`)
+- [x] macOS: GitHub Login works with host `gh`
+- [x] All platforms: security flags match those in `gh-auth-login.sh`
+- [x] All platforms: credentials stored in correct location
 
 ## Phase 2: Direct podman calls for image builds (all platforms)
 

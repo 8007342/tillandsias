@@ -75,6 +75,85 @@ use tillandsias_podman::PodmanClient;
 use tillandsias_podman::launch::{ContainerLauncher, allocate_port_range};
 use tillandsias_podman::query_occupied_ports;
 
+/// Find the `gh` CLI binary on the host.
+///
+/// Checks common installation locations before falling back to PATH.
+/// Returns `Some(path)` if gh is found, `None` if it should use container fallback.
+///
+/// # Locations checked:
+/// - Windows: `C:\Program Files\GitHub CLI\gh.exe`, common `winget` paths
+/// - Linux/macOS: `/usr/bin/gh`, `/usr/local/bin/gh`, `~/.local/bin/gh`, etc.
+///
+/// @trace spec:direct-podman-calls
+fn find_gh_path() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        // Windows: check common install locations before PATH fallback.
+        static WIN_PATHS: &[&str] = &[
+            r"C:\Program Files\GitHub CLI\gh.exe",
+            r"C:\Program Files (x86)\GitHub CLI\gh.exe",
+            r"C:\ProgramData\Chocolatey\bin\gh.exe",
+        ];
+
+        for path in WIN_PATHS {
+            let p = PathBuf::from(path);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+
+        // Try which or standard PATH
+        if let Ok(output) = std::process::Command::new("where")
+            .arg("gh")
+            .output()
+        {
+            if output.status.success() {
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                return Some(PathBuf::from(path));
+            }
+        }
+        None
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Unix: check standard locations first
+        static PATHS: &[&str] = &[
+            "/usr/bin/gh",
+            "/usr/local/bin/gh",
+            "/opt/homebrew/bin/gh", // Homebrew on Apple Silicon
+            "/opt/local/bin/gh",    // MacPorts
+        ];
+
+        for path in PATHS {
+            let p = PathBuf::from(path);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+
+        // Try ~/.local/bin/gh (user install)
+        if let Ok(home) = std::env::var("HOME") {
+            let user_bin = PathBuf::from(&home).join(".local/bin/gh");
+            if user_bin.exists() {
+                return Some(user_bin);
+            }
+        }
+
+        // Try which
+        if let Ok(output) = std::process::Command::new("which")
+            .arg("gh")
+            .output()
+        {
+            if output.status.success() {
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                return Some(PathBuf::from(path));
+            }
+        }
+        None
+    }
+}
+
 /// Derive the forge image tag from the full 4-part version.
 ///
 /// Uses `TILLANDSIAS_FULL_VERSION` (set by build.rs from the VERSION file)
@@ -5164,26 +5243,75 @@ pub async fn handle_root_terminal(
 /// Tray and CLI must stay identical.
 ///
 /// @trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
+/// Handle GitHub login via direct `gh` CLI or container fallback.
+///
+/// # Strategy
+/// 1. Try to find `gh` on the host (checked first, preferred)
+/// 2. If found: spawn terminal with `gh auth login --git-protocol https`
+/// 3. If not found: spawn terminal with `podman run -it ... gh auth login --git-protocol https`
+///
+/// All paths use the `open_terminal` function which is platform-aware and handles
+/// terminal spawning (ptyxis/gnome-terminal on Linux, Terminal.app on macOS, wt.exe on Windows).
+///
+/// # Credentials
+/// - Token stored in OS keyring after auth completes (native gh auth behavior)
+/// - No ephemeral credentials needed since gh handles the login interactively
+///
+/// @trace spec:direct-podman-calls, spec:secrets-management
 pub async fn handle_github_login(
     _state: &TrayState,
     _build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<(), String> {
-    info!("GitHub Login: spawning `tillandsias --github-login` in a terminal");
+    // Try host gh first (preferred — token goes to OS keyring)
+    if let Some(gh_path) = find_gh_path() {
+        info!(gh_path = ?gh_path, "GitHub Login: using host gh");
+        let gh_str = gh_path.to_string_lossy();
+        let cmd = format!("{} auth login --git-protocol https", gh_str);
+        return open_terminal(&cmd, "GitHub Login")
+            .map_err(|e| format!("Failed to open terminal for host gh: {e}"));
+    }
 
-    let exe = std::env::current_exe()
-        .map_err(|e| format!("Cannot locate own executable: {e}"))?;
+    // Fallback: gh inside forge container with D-Bus forwarding (Linux) or ephemeral mode
+    info!("GitHub Login: using container gh (no host gh found)");
 
-    // open_terminal takes a command string it hands to the OS's shell.
-    // Quote the executable path so spaces (Program Files, username etc.) work.
-    let exe_str = exe.to_string_lossy();
-    let cmd = if exe_str.contains(' ') {
-        format!("\"{exe_str}\" --github-login")
-    } else {
-        format!("{exe_str} --github-login")
+    let forge_image = forge_image_tag();
+
+    // Build podman run command with security flags
+    #[cfg(target_os = "linux")]
+    let cmd = {
+        // On Linux, forward D-Bus so the container can write to the host keyring
+        format!(
+            "podman run -it --rm --cap-drop=ALL --security-opt=no-new-privileges \
+             --userns=keep-id --security-opt=label=disable \
+             -v /run/user/$(id -u)/bus:/run/user/1000/bus:ro \
+             --entrypoint gh {} auth login --git-protocol https",
+            forge_image
+        )
+    };
+
+    #[cfg(target_os = "macos")]
+    let cmd = {
+        // On macOS, no D-Bus available; token stored in container's ephemeral keychain.
+        // User will need to manually push/pull with gh auth setup or export token.
+        format!(
+            "podman run -it --rm --cap-drop=ALL --security-opt=no-new-privileges \
+             --userns=keep-id --entrypoint gh {} auth login --git-protocol https",
+            forge_image
+        )
+    };
+
+    #[cfg(target_os = "windows")]
+    let cmd = {
+        // On Windows, no D-Bus; ephemeral container. Token stored in container's hosts.yml.
+        format!(
+            "podman run -it --rm --cap-drop=ALL --security-opt=no-new-privileges \
+             --entrypoint gh {} auth login --git-protocol https",
+            forge_image
+        )
     };
 
     open_terminal(&cmd, "GitHub Login")
-        .map_err(|e| format!("Failed to open terminal: {e}"))
+        .map_err(|e| format!("Failed to open terminal for container gh: {e}"))
 }
 
 /// Handle "Claude Reset Credentials" — remove `~/.claude/` contents so next
