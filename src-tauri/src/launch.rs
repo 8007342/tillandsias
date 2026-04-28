@@ -133,9 +133,16 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
         // by compute_hot_budget() at the forge launch site and stored in
         // ctx.hot_path_budget_mb. Service containers (git, proxy, inference,
         // web) are not forge-shaped and do NOT get this mount.
+        // @trace spec:forge-hot-cold-split, spec:runtime-diagnostics
+        // Mode 0777 (world-writable): tmpfs is created by the podman daemon
+        // (running as root in the container) before USER changes take effect.
+        // The forge user (uid 1000) needs write access to clone git repos and
+        // create project directories. 0777 ensures this works regardless of
+        // namespace mapping. Ownership is enforced at the git-service and
+        // in-container entrypoint level, not at the mount level.
         if is_forge_profile && ctx.hot_path_budget_mb > 0 {
             args.push(format!(
-                "--tmpfs=/home/forge/src:size={}m,mode=755,uid=1000,gid=1000",
+                "--tmpfs=/home/forge/src:size={}m,mode=0777",
                 ctx.hot_path_budget_mb
             ));
         }
