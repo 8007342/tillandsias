@@ -117,6 +117,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - wsl-on-windows.md [DRAFT]              — working on Tillandsias for Windows. The Windows path uses WSL2 distros directly…
 - wsl2-disk-elasticity.md                — sizing the tillandsias WSL distro's vhdx for podman image storage + ollama mode… [pull-on-demand: project-committed]
 - wsl2-isolation-boundary.md             — deciding whether the WSL2 layer is providing a security boundary for a given co… [pull-on-demand: project-committed]
+- wsl2-network-mirrored-mode.md          — deciding the WSL networking mode under the `WindowsHost > tray + ONE WSL distro… [pull-on-demand: project-committed]
 
 ## security
 
