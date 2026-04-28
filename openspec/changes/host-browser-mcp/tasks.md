@@ -164,31 +164,31 @@
   `Page.getNavigationHistory` (parallel `tokio::join!`).
 - [x] 8.3 `browser.read_url` — single `Page.getNavigationHistory`
   call against the window's CDP target.
-- [ ] 8.4 `browser.screenshot` — `Page.captureScreenshot` with
+- [x] 8.4 `browser.screenshot` — `Page.captureScreenshot` with
   `format: "png"`, optional `captureBeyondViewport: true` when
   `full_page == true`. Base64-encoded PNG plus width/height.
-- [ ] 8.5 `browser.click` — `Runtime.evaluate` against expression
+- [x] 8.5 `browser.click` — `Runtime.evaluate` against expression
   ``document.querySelector(selector).click()`` with proper escape
   of `selector`. Return `{ ok: bool }`.
-- [ ] 8.6 `browser.type` — `Runtime.evaluate` to set `.value` and
+- [x] 8.6 `browser.type` — `Runtime.evaluate` to set `.value` and
   dispatch `input` event on the matched element. Return `{ ok: bool }`.
   No raw key dispatch in v1 (per design.md Decision 7).
-- [ ] 8.7 `browser.eval` — gated: ALWAYS return
+- [x] 8.7 `browser.eval` — gated: ALWAYS return
   `EVAL_DISABLED` in v1. Function body for the gated CDP call exists
   behind a `#[cfg(feature = "browser-eval-enabled")]` guard so the
   follow-up change can flip the flag without duplicating logic.
-- [ ] 8.8 `browser.close` — terminate chromium PID (SIGTERM, 5 s,
+- [x] 8.8 `browser.close` — terminate chromium PID (SIGTERM, 5 s,
   SIGKILL), remove from `WindowRegistry`, delete user_data_dir.
   Return `{ ok: true }`.
-- [ ] 8.9 `@trace spec:host-browser-mcp` on every tool;
+- [x] 8.9 `@trace spec:host-browser-mcp` on every tool;
   `// @cheatsheet web/cdp.md` on every CDP-using tool.
 
 ## 9. Forge-side stub script
 
-- [ ] 9.1 Verify `socat` is present in the forge image
+- [x] 9.1 Verify `socat` is present in the forge image
   (`tillandsias-forge`) — write a small probe script in CI that fails
   the build if absent. (Resolves design.md `TODO: verify` for socat.)
-- [ ] 9.2 Create `images/default/config-overlay/mcp/host-browser.sh`:
+- [x] 9.2 Create `images/default/config-overlay/mcp/host-browser.sh`:
   - Header: `#!/usr/bin/env bash`, `set -euo pipefail`,
     `# @trace spec:host-browser-mcp, spec:default-image`,
     `# @cheatsheet web/mcp.md, runtime/networking.md`.
@@ -199,11 +199,11 @@
     duplex bridge; framing wrapper handled by an inline awk/python
     helper that prepends 4-byte big-endian length and the `McpFrame`
     discriminator.
-- [ ] 9.3 Add `host-browser.sh` to the embedded image-source list in
+- [x] 9.3 Add `host-browser.sh` to the embedded image-source list in
   `src-tauri/src/embedded.rs` (per
   `feedback_embedded_image_sources` memory note — release builds break
   if this is forgotten).
-- [ ] 9.4 Update `images/default/config-overlay/opencode/config.json`:
+- [x] 9.4 Update `images/default/config-overlay/opencode/config.json`:
   add the `host-browser` `mcp` entry per the spec.
 - [ ] 9.5 Add the equivalent registration to the Claude Code config
   baked into the forge image (path: `.config-overlay/claude/config.json`
@@ -218,26 +218,26 @@
 
 ## 10. Accountability logging
 
-- [ ] 10.1 In every tool handler, emit exactly one
+- [x] 10.1 In every tool handler, emit exactly one
   `tracing::info!(accountability = true, category = "browser-mcp",
    spec = "host-browser-mcp", cheatsheet = "web/cdp.md", ...)` log
   line per `tools/call`, with the field set required by the
   spec's accountability requirement.
-- [ ] 10.2 Audit-log payload redaction:
+- [x] 10.2 Audit-log payload redaction:
   - `browser.open` → log `host` only, never path/query.
   - `browser.eval` → log `expression_sha256`, never the expression.
   - `browser.type` → log `selector` and `text_len`, never the text.
   - `browser.screenshot` → never log the PNG bytes.
-- [ ] 10.3 Test: capture structured log output during a full mocked
+- [x] 10.3 Test: capture structured log output during a full mocked
   tool-call sequence, assert no field contains a known-secret literal
   (e.g. `hunter2`, `secret=xyz`, base64 PNG prefix `iVBORw`).
-- [ ] 10.4 `@trace spec:host-browser-mcp, spec:logging-accountability`.
+- [x] 10.4 `@trace spec:host-browser-mcp, spec:logging-accountability`.
 
 ## 11. Tests
 
-- [ ] 11.1 Unit tests: covered above per module (allowlist, debounce,
+- [x] 11.1 Unit tests: covered above per module (allowlist, debounce,
   registry, framing, tool handlers).
-- [ ] 11.2 Integration test (host-side, requires podman):
+- [x] 11.2 Integration test (host-side, requires podman):
   - 11.2.1 Spawn forge container; via the stub, send `tools/list` →
     expect eight tools.
   - 11.2.2 `browser.open` an allowed URL → expect chromium PID +
@@ -253,17 +253,17 @@
   - 11.2.7 Forge container exit while window open → window persists
     30 s later.
   - 11.2.8 Tray Quit while windows open → all PIDs reaped within 10 s.
-- [ ] 11.3 Audit-log integration test: full session cycle,
+- [x] 11.3 Audit-log integration test: full session cycle,
   `grep -v` for secret patterns produces zero hits.
-- [ ] 11.4 Concurrency test: 16 in-flight `tools/call` succeed; 17th
+- [x] 11.4 Concurrency test: 16 in-flight `tools/call` succeed; 17th
   is rejected with `ConcurrentCallLimit`.
 
 ## 12. Documentation: docs/cheatsheets/ host-side updates
 
-- [ ] 12.1 Update `docs/cheatsheets/secrets-management.md` to note
+- [x] 12.1 Update `docs/cheatsheets/secrets-management.md` to note
   the MCP-launched windows reuse the OTP cookie pipeline; add a row in
   the secret-types table pointing at this change.
-- [ ] 12.2 Add a new `docs/cheatsheets/host-browser-mcp.md` (operator
+- [x] 12.2 Add a new `docs/cheatsheets/host-browser-mcp.md` (operator
   doc, not agent-facing) covering: the eight tools, the allowlist
   rules, the eight-tool-surface rationale, troubleshooting
   (`BROWSER_UNAVAILABLE`, `URL_NOT_ALLOWED`, `EVAL_DISABLED`,
@@ -271,7 +271,7 @@
 
 ## 13. Versioning
 
-- [ ] 13.1 After `/opsx:archive`, run
+- [x] 13.1 After `/opsx:archive`, run
   `./scripts/bump-version.sh --bump-changes`.
-- [ ] 13.2 Commit each cohesive batch with the trace URL footer per the
+- [x] 13.2 Commit each cohesive batch with the trace URL footer per the
   project convention.

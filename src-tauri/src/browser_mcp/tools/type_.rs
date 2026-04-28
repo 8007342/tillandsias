@@ -39,14 +39,17 @@ pub async fn handle_type(
         .ok_or("Missing or invalid 'text' parameter")?;
 
     // Look up window
-    let _window = registry
+    let window = registry
         .get(window_id)
         .ok_or_else(|| format!("Window {} not found", window_id))?;
 
-    // TODO: Call CDP Runtime.evaluate with expression:
-    // `let el = document.querySelector(selector);
-    //  el.value = text;
-    //  el.dispatchEvent(new Event('input', { bubbles: true }))`
+    // Call CDP Runtime.evaluate with type expression
+    let expr = format!(
+        r#"(function() {{ let el = document.querySelector({:?}); el.value = {:?}; el.dispatchEvent(new Event('input', {{ bubbles: true }})); }})()"#,
+        selector, text
+    );
+    crate::cdp::runtime_evaluate(window.cdp_port, &window.target_id, &expr)
+        .await?;
 
     let text_len = text.len();
     info!(
@@ -57,7 +60,7 @@ pub async fn handle_type(
         window_id = %window_id,
         selector = %selector,
         text_len = text_len,
-        "Type requested (CDP call pending)"
+        "Text typed successfully"
     );
 
     Ok(json!({

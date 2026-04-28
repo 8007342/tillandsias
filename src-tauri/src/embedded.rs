@@ -176,11 +176,13 @@ pub const CONFIG_OVERLAY_INSTRUCTIONS_WEB_SERVICES: &str =
     include_str!("../../images/default/config-overlay/opencode/instructions/web-services.md");
 
 // MCP servers — lightweight tool scripts for forge containers
-// @trace spec:layered-tools-overlay, spec:git-mirror-service
+// @trace spec:layered-tools-overlay, spec:git-mirror-service, spec:host-browser-mcp
 pub const CONFIG_OVERLAY_MCP_GIT_TOOLS: &str =
     include_str!("../../images/default/config-overlay/mcp/git-tools.sh");
 pub const CONFIG_OVERLAY_MCP_PROJECT_INFO: &str =
     include_str!("../../images/default/config-overlay/mcp/project-info.sh");
+pub const CONFIG_OVERLAY_MCP_HOST_BROWSER: &str =
+    include_str!("../../images/default/config-overlay/mcp/host-browser.sh");
 
 // Shell configs
 pub const SHELL_BASHRC: &str = include_str!("../../images/default/shell/bashrc");
@@ -492,7 +494,7 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     .map_err(|e| format!("config-overlay/opencode/instructions/web-services.md: {e}"))?;
 
     // Config overlay — MCP servers
-    // @trace spec:layered-tools-overlay
+    // @trace spec:layered-tools-overlay, spec:host-browser-mcp
     let mcp_dir = default_dir.join("config-overlay").join("mcp");
     fs::create_dir_all(&mcp_dir).map_err(|e| format!("config-overlay/mcp dir: {e}"))?;
     write_lf(&mcp_dir.join("git-tools.sh"), CONFIG_OVERLAY_MCP_GIT_TOOLS)
@@ -502,9 +504,14 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         CONFIG_OVERLAY_MCP_PROJECT_INFO,
     )
     .map_err(|e| format!("config-overlay/mcp/project-info.sh: {e}"))?;
+    write_lf(
+        &mcp_dir.join("host-browser.sh"),
+        CONFIG_OVERLAY_MCP_HOST_BROWSER,
+    )
+    .map_err(|e| format!("config-overlay/mcp/host-browser.sh: {e}"))?;
     #[cfg(unix)]
     {
-        for name in ["git-tools.sh", "project-info.sh"] {
+        for name in ["git-tools.sh", "project-info.sh", "host-browser.sh"] {
             let path = mcp_dir.join(name);
             if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
                 warn!(
@@ -741,7 +748,7 @@ pub fn extract_config_overlay() -> Result<PathBuf, String> {
     .map_err(|e| format!("config-overlay/opencode/instructions/web-services.md: {e}"))?;
 
     // -- mcp/ -- MCP server scripts (must be executable)
-    // @trace spec:layered-tools-overlay
+    // @trace spec:layered-tools-overlay, spec:host-browser-mcp
     let mcp_dir = dir.join("mcp");
     fs::create_dir_all(&mcp_dir)
         .map_err(|e| format!("Cannot create config-overlay/mcp dir: {e}"))?;
@@ -755,9 +762,14 @@ pub fn extract_config_overlay() -> Result<PathBuf, String> {
         CONFIG_OVERLAY_MCP_PROJECT_INFO,
     )
     .map_err(|e| format!("config-overlay/mcp/project-info.sh: {e}"))?;
+    write_lf(
+        &mcp_dir.join("host-browser.sh"),
+        CONFIG_OVERLAY_MCP_HOST_BROWSER,
+    )
+    .map_err(|e| format!("config-overlay/mcp/host-browser.sh: {e}"))?;
     #[cfg(unix)]
     {
-        for name in ["git-tools.sh", "project-info.sh"] {
+        for name in ["git-tools.sh", "project-info.sh", "host-browser.sh"] {
             let path = mcp_dir.join(name);
             if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
                 warn!(

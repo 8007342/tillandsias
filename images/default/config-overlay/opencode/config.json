@@ -46,6 +46,11 @@
       "type": "local",
       "command": ["/home/forge/.config-overlay/mcp/project-info.sh"],
       "enabled": true
+    },
+    "host-browser": {
+      "type": "local",
+      "command": ["/home/forge/.config-overlay/mcp/host-browser.sh"],
+      "enabled": true
     }
   }
 }

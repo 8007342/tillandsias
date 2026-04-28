@@ -8,7 +8,7 @@
 use serde_json::{json, Value};
 use tracing::info;
 
-use crate::browser_mcp::window_registry::WindowRegistry;
+use crate::{browser_mcp::window_registry::WindowRegistry, cdp};
 
 /// Handle browser.screenshot tool call.
 pub async fn handle_screenshot(
@@ -38,8 +38,10 @@ pub async fn handle_screenshot(
         .get(window_id)
         .ok_or_else(|| format!("Window {} not found", window_id))?;
 
-    // TODO: Call CDP Page.captureScreenshot via CDPClient
-    // For now, return a stub
+    // Call CDP Page.captureScreenshot
+    let (data, width, height) = cdp::page_capture_screenshot(window.cdp_port, &window.target_id, full_page)
+        .await?;
+
     info!(
         accountability = true,
         category = "browser-mcp",
@@ -47,17 +49,18 @@ pub async fn handle_screenshot(
         cheatsheet = "web/cdp.md",
         window_id = %window_id,
         full_page = full_page,
-        "Screenshot requested (CDP call pending)"
+        width = width,
+        height = height,
+        "Screenshot captured successfully"
     );
 
-    // Stub response (base64 would be the PNG data)
     Ok(json!({
         "jsonrpc": "2.0",
         "id": request.get("id"),
         "result": {
-            "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-            "width": 1024,
-            "height": 768,
+            "data": data,
+            "width": width,
+            "height": height,
             "format": "png"
         }
     }))

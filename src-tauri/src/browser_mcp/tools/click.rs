@@ -8,7 +8,7 @@
 use serde_json::{json, Value};
 use tracing::info;
 
-use crate::browser_mcp::window_registry::WindowRegistry;
+use crate::browser_mcp::window_registry::WindowRegistry; // @trace spec:host-browser-mcp
 
 /// Handle browser.click tool call.
 pub async fn handle_click(
@@ -34,12 +34,15 @@ pub async fn handle_click(
         .ok_or("Missing or invalid 'selector' parameter")?;
 
     // Look up window
-    let _window = registry
+    let window = registry
         .get(window_id)
         .ok_or_else(|| format!("Window {} not found", window_id))?;
 
-    // TODO: Call CDP Runtime.evaluate with expression:
-    // `document.querySelector(selector).click()`
+    // Call CDP Runtime.evaluate with click expression
+    let expr = format!("document.querySelector({:?}).click()", selector);
+    crate::cdp::runtime_evaluate(window.cdp_port, &window.target_id, &expr)
+        .await?;
+
     info!(
         accountability = true,
         category = "browser-mcp",
@@ -47,7 +50,7 @@ pub async fn handle_click(
         cheatsheet = "web/cdp.md",
         window_id = %window_id,
         selector = %selector,
-        "Click requested (CDP call pending)"
+        "Click executed successfully"
     );
 
     Ok(json!({
