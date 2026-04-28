@@ -5,6 +5,21 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [.claude/worktrees/design-chromium-browser-isolation/crates/tillandsias-core/src/container_profile.rs#L411](../../../.claude/worktrees/design-chromium-browser-isolation/crates/tillandsias-core/src/container_profile.rs#L411)
+- [.claude/worktrees/design-chromium-browser-isolation/crates/tillandsias-core/src/container_profile.rs#L449](../../../.claude/worktrees/design-chromium-browser-isolation/crates/tillandsias-core/src/container_profile.rs#L449)
+- [.claude/worktrees/design-chromium-browser-isolation/crates/tillandsias-core/src/container_profile.rs#L477](../../../.claude/worktrees/design-chromium-browser-isolation/crates/tillandsias-core/src/container_profile.rs#L477)
+- [.claude/worktrees/design-chromium-browser-isolation/crates/tillandsias-core/src/container_profile.rs#L502](../../../.claude/worktrees/design-chromium-browser-isolation/crates/tillandsias-core/src/container_profile.rs#L502)
+- [.claude/worktrees/design-chromium-browser-isolation/crates/tillandsias-core/src/container_profile.rs#L988](../../../.claude/worktrees/design-chromium-browser-isolation/crates/tillandsias-core/src/container_profile.rs#L988)
+- [.claude/worktrees/design-chromium-browser-isolation/crates/tillandsias-core/src/container_profile.rs#L1529](../../../.claude/worktrees/design-chromium-browser-isolation/crates/tillandsias-core/src/container_profile.rs#L1529)
+- [.claude/worktrees/design-chromium-browser-isolation/images/default/entrypoint-forge-claude.sh#L11](../../../.claude/worktrees/design-chromium-browser-isolation/images/default/entrypoint-forge-claude.sh#L11)
+- [.claude/worktrees/design-chromium-browser-isolation/images/default/entrypoint-forge-opencode.sh#L11](../../../.claude/worktrees/design-chromium-browser-isolation/images/default/entrypoint-forge-opencode.sh#L11)
+- [.claude/worktrees/design-chromium-browser-isolation/images/default/entrypoint-forge-opencode-web.sh#L16](../../../.claude/worktrees/design-chromium-browser-isolation/images/default/entrypoint-forge-opencode-web.sh#L16)
+- [.claude/worktrees/design-chromium-browser-isolation/images/default/entrypoint-terminal.sh#L11](../../../.claude/worktrees/design-chromium-browser-isolation/images/default/entrypoint-terminal.sh#L11)
+- [.claude/worktrees/design-chromium-browser-isolation/images/default/forge-welcome.sh#L176](../../../.claude/worktrees/design-chromium-browser-isolation/images/default/forge-welcome.sh#L176)
+- [.claude/worktrees/design-chromium-browser-isolation/images/default/lib-common.sh#L321](../../../.claude/worktrees/design-chromium-browser-isolation/images/default/lib-common.sh#L321)
+- [.claude/worktrees/design-chromium-browser-isolation/scripts/build-image.sh#L611](../../../.claude/worktrees/design-chromium-browser-isolation/scripts/build-image.sh#L611)
+- [.claude/worktrees/design-chromium-browser-isolation/scripts/regenerate-cheatsheet-index.sh#L434](../../../.claude/worktrees/design-chromium-browser-isolation/scripts/regenerate-cheatsheet-index.sh#L434)
+- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/launch.rs#L1467](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/launch.rs#L1467)
 - [crates/tillandsias-core/src/container_profile.rs#L411](../../../crates/tillandsias-core/src/container_profile.rs#L411)
 - [crates/tillandsias-core/src/container_profile.rs#L449](../../../crates/tillandsias-core/src/container_profile.rs#L449)
 - [crates/tillandsias-core/src/container_profile.rs#L477](../../../crates/tillandsias-core/src/container_profile.rs#L477)

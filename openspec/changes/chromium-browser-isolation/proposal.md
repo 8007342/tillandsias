@@ -44,4 +44,3 @@ This solves three problems: (1) browser compromise cannot leak host credentials 
 - **GPU drivers**: Requires GPU passthrough support on host for acceleration (optional; falls back to software rendering)
 - **Configuration**: Project config gains optional `browser.session-timeout`, `browser.enable-gpu`, `browser.sandbox-level` keys
 - **CLI**: `tillandsias <project> --browser` to launch browser-only mode (no coding environment)
-

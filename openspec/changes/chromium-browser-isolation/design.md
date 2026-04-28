@@ -256,3 +256,4 @@ RUN npm install -g playwright@1.40.0 && \
 - `cheatsheets/runtime/chromium-seccomp.md` — Chromium-compatible seccomp profile
 - `cheatsheets/runtime/proxy-container.md` — Squid allowlist patterns and HTTP_PROXY environment handling
 
+## @trace spec:browser-core-image, spec:browser-framework-image, spec:browser-process-isolation, spec:browser-url-injection, spec:browser-enclave-networking, spec:browser-filesystem-isolation, spec:browser-gpu-acceleration, spec:browser-seccomp-hardening, spec:browser-playwright-integration, spec:tray-cli-coexistence
