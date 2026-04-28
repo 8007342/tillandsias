@@ -2358,7 +2358,19 @@ async fn ensure_git_service_running_wsl(
 /// Format: `https://USER:TOKEN@github.com/owner/repo.git` per Git docs.
 /// We use `oauth2` as the literal username (recommended for tokens).
 /// Documented at: https://git-scm.com/book/en/v2/Git-on-the-Server-Smart-HTTP
-/// @trace spec:secrets-management, spec:git-mirror-service, spec:cross-platform
+///
+/// @tombstone superseded:windows-git-mirror-cred-isolation
+/// @trace spec:secrets-management, spec:git-mirror-service, spec:cross-platform, spec:windows-git-mirror-cred-isolation
+/// Token-in-URL was the INTERIM auth path before the
+/// windows-git-mirror-cred-isolation change replaced it with env-only
+/// credentials (GH_TOKEN forwarded to the daemon process via WSLENV;
+/// post-receive hook constructs the auth URL ephemerally in process
+/// memory without ever persisting it). The mirror's stored origin URL
+/// is now the clean `https://github.com/owner/repo.git` form. Function
+/// retained behind `#[allow(dead_code)]` for ≥3 releases per the
+/// project's @tombstone convention.
+/// Removed (call sites) in 0.1.184.545. Safe to delete after 0.1.184.548.
+#[allow(dead_code)]
 fn embed_github_token_in_url(url: &str, token: &str) -> String {
     if let Some(rest) = url.strip_prefix("https://") {
         // Strip any existing user:pass component if present (rare but defensive).
@@ -2371,7 +2383,15 @@ fn embed_github_token_in_url(url: &str, token: &str) -> String {
 }
 
 /// Mask the token in `https://oauth2:TOKEN@github.com/...` so it's safe to log.
-/// @trace spec:secrets-management
+///
+/// @tombstone superseded:windows-git-mirror-cred-isolation
+/// @trace spec:secrets-management, spec:windows-git-mirror-cred-isolation
+/// Companion to `embed_github_token_in_url`: only useful when URLs
+/// CARRY tokens. Since that pattern is now superseded by env-only
+/// credentials, this redactor has no live callers either. Retained
+/// alongside its companion for the same retention window.
+/// Removed (call sites) in 0.1.184.545. Safe to delete after 0.1.184.548.
+#[allow(dead_code)]
 fn redact_url_for_log(url: &str) -> String {
     if let Some(rest) = url.strip_prefix("https://") {
         if let Some((_user_pass, host_path)) = rest.split_once('@') {
