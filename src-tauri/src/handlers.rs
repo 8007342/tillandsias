@@ -204,7 +204,10 @@ const INFERENCE_CONTAINER_NAME: &str = "tillandsias-inference";
 /// The model cache is mounted from `~/.cache/tillandsias/models/` to
 /// `/home/ollama/.ollama/models/` so downloaded models persist across restarts.
 ///
-/// @trace spec:inference-container
+/// @trace spec:inference-container, spec:cross-platform, spec:windows-wsl-runtime
+// Windows arm returns early into a no-op; the cfg-gated Unix podman path
+// below is unreachable on Windows builds. The compiler can't see across cfg.
+#[allow(unreachable_code)]
 pub(crate) async fn ensure_inference_running(
     state: &TrayState,
     build_tx: mpsc::Sender<BuildProgressEvent>,

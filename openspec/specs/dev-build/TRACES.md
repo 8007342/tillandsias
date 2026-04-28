@@ -8,5 +8,3 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [build.sh#L24](../../../build.sh#L24)
 - [build.sh#L301](../../../build.sh#L301)
 - [build.sh#L505](../../../build.sh#L505)
-- [.claude/worktrees/design-chromium-browser-isolation/build.sh#L24](../../../.claude/worktrees/design-chromium-browser-isolation/build.sh#L24)
-- [.claude/worktrees/design-chromium-browser-isolation/build.sh#L301](../../../.claude/worktrees/design-chromium-browser-isolation/build.sh#L301)

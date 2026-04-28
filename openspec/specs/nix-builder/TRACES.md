@@ -8,4 +8,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [scripts/build-image.sh#L38](../../../scripts/build-image.sh#L38)
 - [scripts/build-image.sh#L212](../../../scripts/build-image.sh#L212)
 - [scripts/build-image.sh#L234](../../../scripts/build-image.sh#L234)
-- [scripts/build-image.sh#L663](../../../scripts/build-image.sh#L663)
+- [scripts/build-image.sh#L675](../../../scripts/build-image.sh#L675)

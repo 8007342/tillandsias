@@ -394,9 +394,6 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
             "--claude" => {
                 agent_override = Some(SelectedAgent::Claude);
             }
-            "--diagnostics" => {
-                diagnostics = true;
-            }
             "--prompt" => {
                 i += 1;
                 if i >= args.len() {

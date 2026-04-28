@@ -24,6 +24,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [src-tauri/src/browser_mcp/allowlist.rs#L11](../../../src-tauri/src/browser_mcp/allowlist.rs#L11)
 - [src-tauri/src/browser_mcp/debounce.rs#L6](../../../src-tauri/src/browser_mcp/debounce.rs#L6)
 - [src-tauri/src/browser_mcp/launcher.rs#L6](../../../src-tauri/src/browser_mcp/launcher.rs#L6)
+- [src-tauri/src/browser_mcp/launcher.rs#L38](../../../src-tauri/src/browser_mcp/launcher.rs#L38)
 - [src-tauri/src/browser_mcp/mod.rs#L6](../../../src-tauri/src/browser_mcp/mod.rs#L6)
 - [src-tauri/src/browser_mcp/mod.rs#L56](../../../src-tauri/src/browser_mcp/mod.rs#L56)
 - [src-tauri/src/browser_mcp/tools/click.rs#L5](../../../src-tauri/src/browser_mcp/tools/click.rs#L5)

@@ -10,5 +10,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-core/src/container_profile.rs#L938](../../../crates/tillandsias-core/src/container_profile.rs#L938)
 - [crates/tillandsias-core/src/container_profile.rs#L1155](../../../crates/tillandsias-core/src/container_profile.rs#L1155)
 - [images/default/lib-common.sh#L266](../../../images/default/lib-common.sh#L266)
-- [src-tauri/src/launch.rs#L608](../../../src-tauri/src/launch.rs#L608)
-- [src-tauri/src/launch.rs#L629](../../../src-tauri/src/launch.rs#L629)
+- [src-tauri/src/launch.rs#L615](../../../src-tauri/src/launch.rs#L615)
+- [src-tauri/src/launch.rs#L636](../../../src-tauri/src/launch.rs#L636)
