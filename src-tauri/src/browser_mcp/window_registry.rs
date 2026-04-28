@@ -8,7 +8,6 @@
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use uuid::Uuid;
 
 /// Stable window identifier (UUID).
 pub type WindowId = String;
