@@ -351,7 +351,6 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
     let mut debug = false;
     let mut diagnostics = false;
     let mut bash = false;
-    let mut diagnostics = false;
     let mut prompt: Option<String> = None;
     let mut agent_override: Option<SelectedAgent> = None;
     let mut i = 0;
