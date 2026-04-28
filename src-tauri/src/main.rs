@@ -4,6 +4,11 @@
 // On non-Windows, the attribute is irrelevant.
 
 mod accountability;
+// @trace spec:host-browser-mcp
+// In-process MCP server for browser automation. Accepts JSON-RPC frames from
+// forges via the host control socket, dispatches through the MCP layer,
+// and manages browser windows via CDP.
+mod browser_mcp;
 mod build_lock;
 mod ca;
 // @trace spec:host-chromium-on-demand
