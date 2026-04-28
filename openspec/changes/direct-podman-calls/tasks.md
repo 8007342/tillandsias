@@ -53,8 +53,8 @@
 ### 2.2 Unify run_build_image_script across platforms
 - [x] Remove the `#[cfg(target_os = "windows")]` and `#[cfg(not(target_os = "windows"))]` blocks
 - [x] Replace with a single codepath: direct `podman build --tag <tag> -f <Containerfile> <context>`
-- [ ] Preserve the build lock mechanism (`build_lock::acquire` / `build_lock::wait_for_build`)
-- [ ] Preserve old image pruning (`prune_old_forge_images`)
+- [x] Preserve the build lock mechanism (`build_lock::acquire` / `build_lock::wait_for_build`)
+- [x] Preserve old image pruning (`prune_old_forge_images`)
 - [x] Apply `--security-opt label=disable` for SELinux compatibility
 
 ### 2.3 Remove embedded build-image.sh
@@ -71,7 +71,7 @@
 ### 2.5 Add @trace annotations
 - [x] Add `// @trace spec:direct-podman-calls, spec:default-image` to the unified build function
 - [x] Add `// @trace spec:direct-podman-calls` to the staleness detection code
-- [ ] Update existing `@trace` in `run_build_image_script` to include `spec:direct-podman-calls`
+- [x] Update existing `@trace` in `run_build_image_script` to include `spec:direct-podman-calls`
 
 ### 2.6 Test Phase 2
 - [ ] Linux: `./build.sh --test` passes
