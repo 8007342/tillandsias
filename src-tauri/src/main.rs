@@ -215,9 +215,9 @@ fn main() {
     }
 
     // @trace spec:runtime-diagnostics
-    if let cli::CliMode::Diagnostics { path } = &cli_mode {
+    if let cli::CliMode::Diagnostics { path, prompt } = &cli_mode {
         let _log_guard = logging::init(&log_config);
-        let success = runner::run_diagnostics(path.clone());
+        let success = runner::run_diagnostics(path.clone(), prompt.clone());
         std::process::exit(if success { 0 } else { 1 });
     }
 
@@ -228,6 +228,7 @@ fn main() {
         debug,
         bash,
         agent_override,
+        prompt,
     } = cli_mode
     {
         // Initialize tracing for file logging (CLI output uses println!)
@@ -248,7 +249,7 @@ fn main() {
             }
         }
 
-        let success = runner::run(path, &image, debug, bash, agent_override);
+        let success = runner::run(path, &image, debug, bash, agent_override, prompt);
         std::process::exit(if success { 0 } else { 1 });
     }
 

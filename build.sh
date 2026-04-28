@@ -488,19 +488,22 @@ if [[ "$FLAG_RELEASE" == true ]]; then
     # Skip AppImage in toolbox — linuxdeploy needs FUSE which isn't available.
     # AppImage bundling works in CI (ubuntu with FUSE) and via --appimage.
     # Linux only distributes via AppImage; no deb/rpm bundles.
-    BUNDLES="none"
+    # On macOS, build dmg bundle. On Linux, skip bundles (FUSE not available in toolbox).
+    BUNDLE_FLAG=""
     if [[ "$(uname -s)" == "Darwin" ]]; then
-        BUNDLES="dmg"
+        BUNDLE_FLAG="--bundles dmg"
+        _step "Building release with dmg bundle..."
+    else
+        _step "Building release (no bundles — AppImage built in CI)..."
     fi
-
-    _step "Building release (bundles: ${BUNDLES})..."
 
     # Clean old bundles to avoid listing stale versions
     rm -rf "$SCRIPT_DIR/target/release/bundle"
 
-    # Single build: --bundles skips AppImage (needs FUSE, CI handles it).
+    # Build: cargo tauri build handles platform-specific bundles.
     # The updater error is expected in toolbox — ignore it.
-    _run bash -c "cd '$SCRIPT_DIR' && cargo tauri build --bundles ${BUNDLES}" 2>&1 || {
+    # @trace spec:dev-build
+    _run bash -c "cd '$SCRIPT_DIR' && cargo tauri build ${BUNDLE_FLAG}" 2>&1 || {
         # Check if the binary was built despite the bundle error
         if [[ -f "$SCRIPT_DIR/target/release/tillandsias" ]]; then
             _warn "Some bundles failed (updater needs AppImage — CI handles that)"

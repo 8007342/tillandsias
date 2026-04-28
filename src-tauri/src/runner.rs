@@ -344,6 +344,7 @@ pub fn run(
     debug: bool,
     bash: bool,
     agent_override: Option<SelectedAgent>,
+    prompt: Option<String>,
 ) -> bool {
     // Resolve and validate the project path.
     // AppImage changes CWD to its FUSE mount — resolve relative paths against
@@ -576,6 +577,13 @@ pub fn run(
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
     // @trace spec:proxy-container
     crate::handlers::inject_ca_chain_mounts_pub(&mut run_args);
+
+    // @trace spec:runtime-diagnostics
+    // Pass user-provided prompt to the agent via environment variable
+    if let Some(prompt_text) = prompt {
+        run_args.push("--env".to_string());
+        run_args.push(format!("TILLANDSIAS_PROMPT={}", prompt_text));
+    }
 
     println!();
     if bash {
@@ -979,8 +987,13 @@ fn prompt_with_default(label: &str, default: &str) -> String {
 /// Observation-only — does not start any containers.
 /// Returns true on clean exit (Ctrl+C), false if no containers found.
 ///
+/// Stream /strategic/service.log from all running containers for a project.
+/// Observation-only — does not start any containers.
+/// Returns true on clean exit (Ctrl+C), false if no containers found.
+///
 /// @trace spec:runtime-diagnostics
-pub fn run_diagnostics(path: PathBuf) -> bool {
+pub fn run_diagnostics(path: PathBuf, prompt: Option<String>) -> bool {
+    let _ = prompt; // Currently unused, reserved for future agent integration
     let project_name = path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -1042,6 +1055,7 @@ pub fn run_diagnostics(path: PathBuf) -> bool {
             }
 
             // Discover running containers for this project.
+            // @trace spec:runtime-diagnostics
             let output = match tokio::process::Command::new("podman")
                 .args(["ps", "--format", "{{.Names}}", "--filter", "status=running"])
                 .output()
@@ -1054,6 +1068,8 @@ pub fn run_diagnostics(path: PathBuf) -> bool {
                 }
             };
 
+            // Filter containers matching pattern: tillandsias-<project>-<genus> or tillandsias-git-<project>
+            // @trace spec:runtime-diagnostics
             let names: Vec<String> = String::from_utf8_lossy(&output.stdout)
                 .lines()
                 .map(str::trim)
@@ -1075,9 +1091,13 @@ pub fn run_diagnostics(path: PathBuf) -> bool {
                 }
                 known.insert(name.clone());
 
+                // Parse container name to service identifier (e.g., tillandsias-java-aeranthos → aeranthos)
+                // @trace spec:runtime-diagnostics
                 let service = diagnostics_service_name(&name, &project_name);
                 println!("  [{service}] attaching...");
 
+                // Stream /strategic/service.log from container via podman exec tail -f
+                // @trace spec:runtime-diagnostics
                 let child = tokio::process::Command::new("podman")
                     .args(["exec", &name, "tail", "-f", "/strategic/service.log"])
                     .stdout(std::process::Stdio::piped())
@@ -1088,6 +1108,8 @@ pub fn run_diagnostics(path: PathBuf) -> bool {
                     Ok(mut c) => {
                         if let Some(stdout) = c.stdout.take() {
                             let svc = service.clone();
+                            // Spawn async task to read and print log lines
+                            // @trace spec:runtime-diagnostics
                             tokio::spawn(async move {
                                 let mut lines = BufReader::new(stdout).lines();
                                 while let Ok(Some(line)) = lines.next_line().await {
@@ -1106,6 +1128,9 @@ pub fn run_diagnostics(path: PathBuf) -> bool {
     })
 }
 
+/// Extract service name from container name.
+/// Examples: tillandsias-java-aeranthos → aeranthos, tillandsias-git-java → git
+/// @trace spec:runtime-diagnostics
 fn diagnostics_service_name(container_name: &str, project_name: &str) -> String {
     if container_name == &format!("tillandsias-git-{project_name}") {
         return "git".to_string();

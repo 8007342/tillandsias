@@ -54,7 +54,8 @@
       "Bash(mkdir -p \"/c/Users/bullo/.claude/projects/C--Users-bullo-src-tillandsias/memory\")",
       "Bash(mv memory/* \"/c/Users/bullo/.claude/projects/C--Users-bullo-src-tillandsias/memory/\")",
       "Read(//c/Users/bullo/.claude/projects/C--Users-bullo-src-tillandsias/memory//**)",
-      "Bash(grep --line-buffered -E '\\(^STEP [0-9]+/15:|Successfully tagged|Error: building|exit status|^success$|writing manifest|verifying sha\\)')"
+      "Bash(grep --line-buffered -E '\\(^STEP [0-9]+/15:|Successfully tagged|Error: building|exit status|^success$|writing manifest|verifying sha\\)')",
+      "Bash(kill -0 1446751)"
     ],
     "defaultMode": "bypassPermissions"
   }

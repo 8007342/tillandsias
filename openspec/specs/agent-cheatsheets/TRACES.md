@@ -19,4 +19,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/lib-common.sh#L321](../../../images/default/lib-common.sh#L321)
 - [scripts/build-image.sh#L611](../../../scripts/build-image.sh#L611)
 - [scripts/regenerate-cheatsheet-index.sh#L434](../../../scripts/regenerate-cheatsheet-index.sh#L434)
-- [src-tauri/src/launch.rs#L1467](../../../src-tauri/src/launch.rs#L1467)
+- [src-tauri/src/launch.rs#L1474](../../../src-tauri/src/launch.rs#L1474)

@@ -163,11 +163,15 @@ pub enum CliMode {
     /// `tillandsias --github-login` — run GitHub authentication flow and exit.
     GitHubLogin,
 
-    /// `tillandsias <path> --diagnostics` — stream logs from all running containers
-    /// for this project. Observation-only, does not start any containers.
+    /// `tillandsias <path> --diagnostics [--prompt "text"]` — stream logs from all running containers
+    /// for this project. Optional prompt is passed to agent if containers are already running.
+    /// Observation-only if no prompt, or agent-assisted if prompt provided.
     ///
     /// @trace spec:runtime-diagnostics
-    Diagnostics { path: PathBuf },
+    Diagnostics {
+        path: PathBuf,
+        prompt: Option<String>,
+    },
 
     /// `tillandsias --install-chromium [--from-zip <path>]` — install or
     /// re-install the userspace Chromium binary tree under
@@ -192,6 +196,8 @@ pub enum CliMode {
         bash: bool,
         /// Override the configured agent for this session.
         agent_override: Option<SelectedAgent>,
+        /// Optional prompt to pass to the agent.
+        prompt: Option<String>,
     },
 }
 
@@ -339,6 +345,7 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
     let mut debug = false;
     let mut bash = false;
     let mut diagnostics = false;
+    let mut prompt: Option<String> = None;
     let mut agent_override: Option<SelectedAgent> = None;
     let mut i = 0;
 
@@ -379,6 +386,15 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
             "--diagnostics" => {
                 diagnostics = true;
             }
+            "--prompt" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("--prompt requires a value");
+                    print!("{USAGE}");
+                    return None;
+                }
+                prompt = Some(args[i].clone());
+            }
             // Log flags — already parsed by parse_log_flags(), skip here.
             "--log-secrets-management" | "--log-image-management" | "--log-update-cycle"
             | "--log-proxy" | "--log-enclave" | "--log-git" => {}
@@ -399,7 +415,7 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
 
     match path {
         Some(p) if diagnostics => Some((
-            CliMode::Diagnostics { path: p },
+            CliMode::Diagnostics { path: p, prompt },
             log_config,
         )),
         Some(p) => Some((
@@ -409,6 +425,7 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
                 debug,
                 bash,
                 agent_override,
+                prompt,
             },
             log_config,
         )),
