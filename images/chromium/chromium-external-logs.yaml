@@ -1,0 +1,43 @@
+# @trace spec:browser-isolation-telemetry
+# External telemetry manifest for Chromium containers.
+# Logs CDP (Chrome DevTools Protocol) interactions and page load metrics.
+# Reference: openspec/changes/chromium-browser-isolation/design.md
+
+role: chromium-telemetry
+description: "Chromium headless renderer telemetry — CDP console logs, page events, rendering metrics"
+
+files:
+  - name: service.log
+    purpose: |
+      Chrome DevTools Protocol (CDP) interactions, page load events, rendering metrics.
+      One structured event per line: timestamp, event type (CDP_COMMAND | PAGE_LOAD | RENDER_METRIC),
+      URL, duration_ms, result (success | error | timeout).
+      Format: JSON lines (JSONL).
+    format: jsonl
+    rotate_at_mb: 50
+    retention_days: 7
+    written_by: chromium-browser (via devtools-frontend) + entrypoint wrapper
+    sample_event: |
+      {"timestamp":"2026-04-28T10:23:45.123Z","event":"PAGE_LOAD","url":"https://example.localhost","duration_ms":234,"status":"success","user_agent":"Chromium/125.0.0.0"}
+      {"timestamp":"2026-04-28T10:24:01.456Z","event":"CDP_COMMAND","method":"Runtime.evaluate","url":"https://example.localhost","duration_ms":12,"status":"success"}
+
+  - name: accessibility.log
+    purpose: |
+      Accessibility tree dumps and AXTree snapshots (if agents request a11y data).
+      Used for debugging page structure, ARIA labels, semantic HTML.
+      Format: JSON lines.
+    format: jsonl
+    rotate_at_mb: 10
+    retention_days: 3
+    written_by: accessibility-audit scripts (optional, agents-triggered)
+
+  - name: performance.log
+    purpose: |
+      Performance metrics: FCP (First Contentful Paint), LCP (Largest Contentful Paint),
+      CLS (Cumulative Layout Shift), TTI (Time To Interactive).
+      Used to detect rendering slowdowns, GPU errors, memory spikes.
+      Format: JSON lines.
+    format: jsonl
+    rotate_at_mb: 10
+    retention_days: 3
+    written_by: performance-observer (optional)

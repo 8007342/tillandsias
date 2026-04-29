@@ -1,0 +1,223 @@
+{
+  "defaultAction": "SCMP_ACT_ERRNO",
+  "defaultErrnoRet": 1,
+  "archMap": [
+    {
+      "architecture": "SCMP_ARCH_X86_64",
+      "subArchitectures": ["SCMP_ARCH_X86", "SCMP_ARCH_X32"]
+    }
+  ],
+  "syscalls": [
+    {
+      "names": [
+        "mmap",
+        "mprotect",
+        "madvise",
+        "munmap",
+        "brk",
+        "mremap"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "names": ["mprotect"],
+      "action": "SCMP_ACT_ALLOW",
+      "args": [
+        {
+          "index": 2,
+          "value": 0,
+          "op": "SCMP_CMP_MASKED_EQ",
+          "valueTwo": 4
+        }
+      ]
+    },
+    {
+      "names": [
+        "clone",
+        "futex",
+        "futex2",
+        "epoll_create",
+        "epoll_create1",
+        "epoll_ctl",
+        "epoll_wait",
+        "epoll_pwait",
+        "poll",
+        "select",
+        "pselect6"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "names": [
+        "rt_sigaction",
+        "rt_sigprocmask",
+        "sigaltstack",
+        "rt_sigpending",
+        "rt_sigtimedwait",
+        "rt_sigqueueinfo"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "names": [
+        "exit",
+        "exit_group",
+        "wait4",
+        "waitpid",
+        "getpid",
+        "gettid",
+        "getuid",
+        "getgid",
+        "geteuid",
+        "getegid",
+        "getgroups",
+        "getresuid",
+        "getresgid"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "names": ["prctl"],
+      "action": "SCMP_ACT_ALLOW",
+      "args": [
+        {
+          "index": 0,
+          "value": 15,
+          "op": "SCMP_CMP_NE"
+        }
+      ]
+    },
+    {
+      "names": [
+        "getrlimit",
+        "setrlimit",
+        "prlimit64"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "names": [
+        "open",
+        "openat",
+        "openat2",
+        "read",
+        "readv",
+        "pread64",
+        "preadv",
+        "write",
+        "writev",
+        "pwrite64",
+        "pwritev",
+        "close",
+        "fstat",
+        "lstat",
+        "stat",
+        "statx",
+        "fcntl",
+        "lseek",
+        "fadvise64",
+        "fallocate",
+        "ftruncate"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "names": [
+        "socket",
+        "connect",
+        "bind",
+        "listen",
+        "accept",
+        "accept4",
+        "sendto",
+        "recvfrom",
+        "sendmsg",
+        "recvmsg",
+        "shutdown",
+        "setsockopt",
+        "getsockopt",
+        "getsockname",
+        "getpeername"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "names": ["socket"],
+      "action": "SCMP_ACT_ALLOW",
+      "args": [
+        {
+          "index": 0,
+          "value": 1,
+          "op": "SCMP_CMP_EQ"
+        }
+      ]
+    },
+    {
+      "names": [
+        "ioctl",
+        "clock_gettime",
+        "clock_gettime64",
+        "gettimeofday",
+        "nanosleep",
+        "clock_nanosleep",
+        "getcwd",
+        "arch_prctl"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "names": [
+        "pipe",
+        "pipe2",
+        "dup",
+        "dup2",
+        "dup3"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "names": [
+        "access",
+        "faccessat",
+        "faccessat2"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "names": [
+        "mlock",
+        "munlock",
+        "mlockall",
+        "munlockall"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "names": [
+        "set_tid_address",
+        "set_robust_list",
+        "get_robust_list"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "names": [
+        "ptrace",
+        "process_vm_readv",
+        "process_vm_writev",
+        "bpf",
+        "module_load",
+        "module_unload",
+        "keyctl",
+        "mount",
+        "umount2",
+        "pivot_root",
+        "unshare",
+        "seccomp",
+        "capset"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1
+    }
+  ]
+}

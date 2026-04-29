@@ -1,0 +1,41 @@
+# @trace spec:browser-isolation-core
+# Minimal Chromium container for isolated, headless rendering.
+# Reference: openspec/changes/chromium-browser-isolation/design.md
+# Security model: read-only root, no external network, no credentials, reduced capabilities
+
+FROM registry.fedoraproject.org/fedora-minimal:43
+
+# System packages (minimal set for headless rendering + locale support)
+# chromium-headless brings most dependencies; add only necessary extras
+RUN microdnf install -y \
+    glibc-langpack-en \
+    chromium-headless \
+    mesa-dri-drivers \
+    libglvnd \
+    libXext \
+    && microdnf clean all
+
+# Non-root user (matches forge UID for --userns=keep-id compatibility)
+RUN useradd -u 1000 -m chromium
+
+# Directories for cache and configuration (user-writable, will be tmpfs or mounted at runtime)
+RUN mkdir -p /home/chromium/.cache /home/chromium/.config
+RUN chown chromium:chromium /home/chromium/.cache /home/chromium/.config
+
+# Directory for shared memory (will be mounted as tmpfs at runtime)
+RUN mkdir -p /dev/shm && chmod 1777 /dev/shm
+
+# Directory for telemetry logs (external-logs.yaml to follow)
+RUN mkdir -p /etc/tillandsias
+RUN mkdir -p /strategic
+
+# Seccomp profile and telemetry manifest will be managed at runtime by the tray.
+# The tray passes --security-opt seccomp=<profile-path> when spawning containers.
+# For now, these directories exist so the container won't fail if mounted.
+
+# Switch to non-root user
+USER chromium
+
+# Set headless entry point
+ENTRYPOINT ["chromium-browser", "--headless=new"]
+CMD []
