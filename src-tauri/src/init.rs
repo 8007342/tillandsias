@@ -4,6 +4,17 @@
 //! before the user opens the tray. Uses the build lock to coordinate.
 //!
 //! @trace spec:init-command, spec:proxy-container, spec:git-mirror-service, spec:inference-container
+//!
+//! ## Sources of Truth
+//!
+//! - `cheatsheets/runtime/podman.md` — Podman image build commands and troubleshooting
+//! - `cheatsheets/runtime/wsl-on-windows.md` — WSL import and distro management
+//! - `docs/cross-platform-builds.md` — Cross-platform build strategy
+//! - `openspec/specs/init-command/spec.md` — Init command specification
+
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::time::Instant;
 
 use crate::build_lock;
 use crate::embedded;
@@ -13,15 +24,105 @@ use crate::handlers::{
 use crate::i18n;
 use crate::image_builder::ImageBuilder;
 use crate::strings;
+use tillandsias_core::config::cache_dir;
+
+/// Progress state for `--init` command.
+///
+/// Persists successfully built images so that if the process is interrupted
+/// or some images fail, the completed work is saved and can be resumed.
+///
+/// @trace spec:init-command
+/// ## Sources of Truth
+/// - `cheatsheets/runtime/podman.md` — Podman commands for image management
+/// - `openspec/specs/init-command/spec.md` — Init command specification
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+struct InitProgress {
+    /// Map of image_name -> (tag, timestamp_iso8601)
+    completed: HashMap<String, (String, String)>,
+    /// List of images that failed with their error messages
+    failed: Vec<(String, String, String)>,
+}
+
+impl InitProgress {
+    /// Path to the progress cache file.
+    fn cache_path() -> PathBuf {
+        cache_dir().join("init-progress.json")
+    }
+
+    /// Load progress from disk. Returns empty progress if file doesn't exist or is invalid.
+    fn load() -> Self {
+        let path = Self::cache_path();
+        if !path.exists() {
+            return Self::default();
+        }
+        match std::fs::read_to_string(&path) {
+            Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+            Err(_) => Self::default(),
+        }
+    }
+
+    /// Save progress to disk.
+    fn save(&self) {
+        let path = Self::cache_path();
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(json) = serde_json::to_string_pretty(self) {
+            let _ = std::fs::write(&path, json);
+        }
+    }
+
+    /// Mark an image as completed.
+    fn mark_completed(&mut self, image_name: &str, tag: &str) {
+        let _timestamp = chrono::Utc::now().to_rfc3339();
+        self.completed
+            .insert(image_name.to_string(), (tag.to_string(), _timestamp));
+        // Remove from failed list if it was there
+        self.failed.retain(|(name, _, _)| name != image_name);
+        self.save();
+    }
+
+    /// Mark an image as failed.
+    fn mark_failed(&mut self, image_name: &str, tag: &str, error: &str) {
+        let _timestamp = chrono::Utc::now().to_rfc3339();
+        self.failed
+            .push((image_name.to_string(), tag.to_string(), error.to_string()));
+        self.save();
+    }
+
+    /// Check if an image has been completed with the same tag.
+    fn is_completed(&self, image_name: &str, tag: &str) -> bool {
+        self.completed
+            .get(image_name)
+            .map(|(t, _)| t == tag)
+            .unwrap_or(false)
+    }
+
+    /// Clear progress (for --force flag).
+    fn clear(&mut self) {
+        self.completed.clear();
+        self.failed.clear();
+        self.save();
+    }
+}
 
 /// All image types to build, in order.
 /// Proxy first (foundation), then forge (main), then git + inference.
+/// @trace spec:init-command
+/// ## Sources of Truth
+/// - `cheatsheets/runtime/podman.md` — Podman image build commands
+/// - `openspec/specs/init-command/spec.md` — Init command specification
 const IMAGE_TYPES: &[(&str, fn() -> String)] = &[
     ("proxy", proxy_image_tag),
     ("forge", forge_image_tag),
     ("git", git_image_tag),
     ("inference", inference_image_tag),
 ];
+
+/// Check if an image name is valid for individual build.
+fn is_valid_image(name: &str) -> bool {
+    IMAGE_TYPES.iter().any(|(n, _)| *n == name)
+}
 
 /// Run the init command. When `force` is true, rebuild even if images exist.
 ///
@@ -30,22 +131,55 @@ const IMAGE_TYPES: &[(&str, fn() -> String)] = &[
 ///   for each enclave service, then `wsl --import` each tarball.
 ///   No podman, no podman-machine. @trace spec:cross-platform
 /// - **Linux / macOS**: existing podman path.
-pub fn run_with_force(force: bool) -> bool {
+pub fn run_with_force(force: bool, image: Option<&str>, debug: bool) -> bool {
     #[cfg(target_os = "windows")]
     {
-        run_with_force_wsl(force)
+        // Windows doesn't support --image flag yet (builds all services)
+        if image.is_some() {
+            eprintln!("  [Windows] --image flag not yet supported, building all services");
+        }
+        run_with_force_wsl(force, image, debug)
     }
     #[cfg(not(target_os = "windows"))]
     {
-        run_with_force_podman(force)
+        run_with_force_podman(force, image, debug)
     }
 }
 
 /// Linux/macOS implementation: builds enclave images via podman.
 #[cfg(not(target_os = "windows"))]
-fn run_with_force_podman(force: bool) -> bool {
+fn run_with_force_podman(force: bool, image: Option<&str>, debug: bool) -> bool {
+    let start_time = Instant::now();
     println!("{}", i18n::t("init.preparing"));
+    if debug {
+        println!("  [debug] Debug mode enabled");
+        // Show podman system info for debugging
+        if let Ok(output) = std::process::Command::new("podman").args(["system", "info"]).output() {
+            if output.status.success() {
+                println!("  [debug] Podman system info:");
+                let info = String::from_utf8_lossy(&output.stdout);
+                for line in info.lines().take(10) {
+                    println!("    {line}");
+                }
+            }
+        }
+    }
+    if let Some(img) = image {
+        println!("  [debug] Building only image: {img}");
+    }
     println!();
+
+    // Load or initialize progress tracking
+    let mut progress = InitProgress::load();
+    if force {
+        progress.clear();
+        println!("  [progress] Cleared previous progress (--force specified)");
+    } else {
+        let completed_count = progress.completed.len();
+        if completed_count > 0 {
+            println!("  [progress] Found {completed_count} previously completed image(s) in cache");
+        }
+    }
 
     // On macOS, podman requires a VM (podman machine).
     // Init and start it before any image builds.
@@ -91,11 +225,39 @@ fn run_with_force_podman(force: bool) -> bool {
     // Image builds are driven directly from Rust via ImageBuilder
     // @trace spec:direct-podman-calls
 
-    let mut all_success = true;
-    let mut failed_images: Vec<(String, String)> = Vec::new();
+    let mut failed_images: Vec<(String, String, String)> = Vec::new();
 
-    for (image_name, tag_fn) in IMAGE_TYPES {
+    // Filter images if specific image requested
+    let images_to_build: Vec<(&str, fn() -> String)> = if let Some(img) = image {
+        if IMAGE_TYPES.iter().any(|(n, _)| *n == img) {
+            vec![(img, IMAGE_TYPES.iter().find(|(n, _)| *n == img).unwrap().1)]
+        } else {
+            eprintln!("  [error] Invalid image name: {img}");
+            eprintln!("  Valid images: proxy, forge, git, inference");
+            return false;
+        }
+    } else {
+        IMAGE_TYPES.to_vec()
+    };
+
+    let total_images = images_to_build.len();
+    let mut completed_count = 0;
+
+    for (index, (image_name, tag_fn)) in images_to_build.iter().enumerate() {
         let tag = tag_fn();
+        let position = index + 1;
+
+        // Skip if already completed with same tag (unless force)
+        if !force && progress.is_completed(image_name, &tag) {
+            println!("  [{position}/{total_images}] {image_name}: Already completed (tag: {tag})");
+            completed_count += 1;
+            continue;
+        }
+
+        println!("  [{position}/{total_images}] Building {image_name}...");
+        if debug {
+            println!("  [debug] Image: {image_name}, Tag: {tag}");
+        }
 
         // Remove existing image if force-rebuilding
         if force && image_exists(&tag) {
@@ -104,19 +266,20 @@ fn run_with_force_podman(force: bool) -> bool {
                 .output();
         }
 
-        println!("  {}", i18n::tf("init.build.building", &[("name", image_name)]));
-
         // Acquire build lock for this image type
         if build_lock::is_running(image_name) {
             println!("    {}", i18n::t("init.build.waiting_for_build"));
             if let Err(e) = build_lock::wait_for_build(image_name) {
-                eprintln!("    [internal] Wait timed out: {e}");
-                all_success = false;
-                failed_images.push((image_name.to_string(), format!("Wait timed out: {e}")));
+                let error_msg = format!("Wait timed out: {e}");
+                eprintln!("    [internal] {error_msg}");
+                failed_images.push((image_name.to_string(), tag.clone(), error_msg.clone()));
+                progress.mark_failed(image_name, &tag, &error_msg);
                 continue;
             }
             if image_exists(&tag) {
-                println!("  {}", i18n::tf("init.build.image_ready", &[("name", image_name), ("tag", &tag)]));
+                println!("  [{position}/{total_images}] {image_name}: Image ready (tag: {tag})");
+                progress.mark_completed(image_name, &tag);
+                completed_count += 1;
                 continue;
             }
         }
@@ -172,15 +335,70 @@ fn run_with_force_podman(force: bool) -> bool {
 
         match build_result {
             Ok(()) => {
-                println!("  {}", i18n::tf("init.build.build_success", &[("name", image_name), ("tag", &tag)]));
+                println!("  [{position}/{total_images}] {image_name}: Build successful (tag: {tag})");
+
+                // Tag image with 'latest' for easier reference
+                let latest_tag = format!("tillandsias-{}:latest", image_name);
+                let tag_result = tillandsias_podman::podman_cmd_sync()
+                    .args(["tag", &tag, &latest_tag])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::piped())
+                    .output();
+
+                match tag_result {
+                    Ok(output) if output.status.success() => {
+                        println!("    Tagged as: {latest_tag}");
+                        if debug {
+                            println!("  [debug] Tag command: podman tag {tag} {latest_tag}");
+                        }
+                    }
+                    Ok(output) => {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        eprintln!("    Warning: failed to tag as latest: {stderr}");
+                    }
+                    Err(e) => {
+                        eprintln!("    Warning: failed to tag as latest: {e}");
+                    }
+                }
+
+                progress.mark_completed(image_name, &tag);
+                completed_count += 1;
             }
             Err(e) => {
                 eprintln!(
-                    "  {}",
-                    i18n::tf("init.build.build_error", &[("name", image_name), ("error", &e)])
+                    "  [{position}/{total_images}] {image_name}: Build failed: {e}"
                 );
-                all_success = false;
-                failed_images.push((image_name.to_string(), e.clone()));
+
+                // Debug output: provide actionable commands
+                if debug {
+                    eprintln!("  [debug] Troubleshooting commands (copy/paste):");
+                    // Get container ID if available
+                    if let Ok(output) = std::process::Command::new("podman")
+                        .args(["ps", "--format", "{{.ID}} {{.Image}}"])
+                        .output()
+                    {
+                        if output.status.success() {
+                            let ps_output = String::from_utf8_lossy(&output.stdout);
+                            for line in ps_output.lines() {
+                                let parts: Vec<&str> = line.split_whitespace().collect();
+                                if parts.len() >= 2 && parts[1].contains(image_name) {
+                                    let container_id = parts[0];
+                                    eprintln!("    podman logs {container_id}  # View build log");
+                                    eprintln!("    podman run --rm {tag} tail -10 /var/log/tillandsias/*.log  # View container logs");
+                                }
+                            }
+                        }
+                    }
+                    // Generic commands if container not found
+                    eprintln!("    podman ps  # Find container ID");
+                    eprintln!("    podman logs <container_id>  # View build log");
+                    eprintln!("    podman run --rm {tag} tail -10 /var/log/tillandsias/*.log");
+                }
+
+                failed_images.push((image_name.to_string(), tag.clone(), e.clone()));
+                progress.mark_failed(image_name, &tag, &e);
+                // Continue to next image instead of stopping
+                eprintln!("  Continuing with remaining images...");
             }
         }
     }
@@ -200,38 +418,75 @@ fn run_with_force_podman(force: bool) -> bool {
     // Prune old images after building new ones
     prune_old_images();
 
+    // Print summary report
+    let elapsed = start_time.elapsed();
+    println!();
+    println!("═════════════════════════════════════════");
+    println!("  Init Summary Report");
+    println!("═════════════════════════════════════════");
+    println!("  Total images: {total_images}");
+    println!("  Completed:    {completed_count}");
+    println!("  Failed:       {}", failed_images.len());
+    println!("  Time elapsed: {:.1}s", elapsed.as_secs_f32());
+    println!();
+
+    if !failed_images.is_empty() {
+        eprintln!("  Failed images:");
+        for (image, tag, error) in &failed_images {
+            eprintln!("    • {image} (tag: {tag})");
+            eprintln!("      Error: {error}");
+        }
+        eprintln!();
+        eprintln!("  Troubleshooting:");
+        eprintln!("    • Check podman is running: podman ps");
+        // Get actual container IDs for troubleshooting
+        if let Ok(output) = std::process::Command::new("podman")
+            .args(["ps", "--format", "{{.ID}} {{.Names}} {{.Image}}"])
+            .output()
+        {
+            if output.status.success() {
+                let ps_output = String::from_utf8_lossy(&output.stdout);
+                eprintln!("    • View image build logs (copy/paste commands):");
+                for line in ps_output.lines() {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 1 {
+                        let container_id = parts[0];
+                        eprintln!("      podman logs {container_id}");
+                    }
+                }
+            }
+        } else {
+            eprintln!("    • View image build logs: podman ps (then: podman logs <container_id>)");
+        }
+        eprintln!("    • Retry only failed: tillandsias --init");
+        eprintln!("    • Force rebuild all: tillandsias --init --force");
+        eprintln!("    • Progress is saved — retry will skip completed images");
+    }
+
     // Tools overlay tombstoned — agents (claude, opencode, openspec) are
     // hard-installed in the forge image at /usr/local/bin/. No overlay build
     // required during --init.
     // @trace spec:tombstone-tools-overlay, spec:init-command
 
     // @trace spec:enclave-network, spec:init-command
-    if all_success {
-        println!();
+    if failed_images.is_empty() {
         println!("  {}", i18n::t("init.build.enclave_title"));
         println!("  {}", i18n::t("init.build.proxy_desc"));
         println!("  {}", i18n::t("init.build.forge_desc"));
         println!("  {}", i18n::t("init.build.git_desc"));
         println!("  {}", i18n::t("init.build.inference_desc"));
-    }
-
-    println!();
-    if all_success {
+        println!();
         println!("{}", i18n::t("init.ready_run"));
+        true
     } else {
-        eprintln!();
-        eprintln!("  Image builds failed:");
-        for (image, error) in failed_images {
-            eprintln!("    • {} — {}", image, error);
-        }
+        false
     }
-    all_success
 }
 
 /// Entry point for `tillandsias --init` (no --force).
 #[allow(dead_code)] // CLI entry point — called from main when --init has no --force flag
 pub fn run() -> bool {
-    run_with_force(false)
+    run_with_force(false, None, false)
 }
 
 /// Windows implementation: WSL-native build pipeline.
@@ -248,9 +503,22 @@ pub fn run() -> bool {
 ///
 /// @trace spec:cross-platform, spec:podman-orchestration
 #[cfg(target_os = "windows")]
-fn run_with_force_wsl(force: bool) -> bool {
+fn run_with_force_wsl(force: bool, _image: Option<&str>, debug: bool) -> bool {
+    let start_time = Instant::now();
     println!("{}", i18n::t("init.preparing"));
     println!();
+
+    // Load or initialize progress tracking
+    let mut progress = InitProgress::load();
+    if force {
+        progress.clear();
+        println!("  [progress] Cleared previous progress (--force specified)");
+    } else {
+        let completed_count = progress.completed.len();
+        if completed_count > 0 {
+            println!("  [progress] Found {completed_count} previously completed service(s) in cache");
+        }
+    }
 
     // Locate bash.exe — required to drive the wsl-build scripts.
     let bash = match find_bash_exe() {
@@ -289,9 +557,20 @@ fn run_with_force_wsl(force: bool) -> bool {
         ("router", "build-router.sh"),
     ];
 
-    let mut all_success = true;
-    for (service, script) in services {
+    let total_services = services.len();
+    let mut completed_count = 0;
+    let mut failed_services: Vec<(String, String)> = Vec::new();
+
+    for (index, (service, script)) in services.iter().enumerate() {
+        let position = index + 1;
         let distro = format!("tillandsias-{service}");
+
+        // Skip if already completed (unless force)
+        if !force && progress.completed.contains_key(*service) {
+            println!("  [{position}/{total_services}] {service}: Already completed");
+            completed_count += 1;
+            continue;
+        }
 
         if force {
             // wsl --unregister wipes the existing distro + VHDX.
@@ -301,13 +580,15 @@ fn run_with_force_wsl(force: bool) -> bool {
                 .stderr(std::process::Stdio::null())
                 .status();
         } else if wsl_distro_exists(&distro) {
-            println!("  \u{2713} {distro} already imported (skipping)");
+            println!("  [{position}/{total_services}] {service}: Already imported (skipping)");
+            progress.mark_completed(*service, "imported");
+            completed_count += 1;
             continue;
         }
 
         // Run the build script.
         let script_path = wsl_build_dir.join(script);
-        println!("  \u{1f527} building {service} via {}", script.to_string());
+        println!("  [{position}/{total_services}] Building {service} via {}", script.to_string());
         let build_status = std::process::Command::new(&bash)
             .arg(&script_path)
             .current_dir(&source_dir)
@@ -315,18 +596,29 @@ fn run_with_force_wsl(force: bool) -> bool {
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit())
             .status();
-        match build_status {
-            Ok(s) if s.success() => {}
+
+        let build_succeeded = match build_status {
+            Ok(s) if s.success() => true,
             Ok(s) => {
-                eprintln!("  \u{2717} {service} build failed (exit {})", s.code().unwrap_or(-1));
-                all_success = false;
-                continue;
+                let error = format!("Build failed (exit {})", s.code().unwrap_or(-1));
+                eprintln!("  \u{2717} {service}: {error}");
+                failed_services.push((service.to_string(), error.clone()));
+                progress.mark_failed(*service, "build", &error);
+                eprintln!("  Continuing with remaining services...");
+                false
             }
             Err(e) => {
-                eprintln!("  \u{2717} {service} build error: {e}");
-                all_success = false;
-                continue;
+                let error = format!("Build error: {e}");
+                eprintln!("  \u{2717} {service}: {error}");
+                failed_services.push((service.to_string(), error.clone()));
+                progress.mark_failed(*service, "build", &error);
+                eprintln!("  Continuing with remaining services...");
+                false
             }
+        };
+
+        if !build_succeeded {
+            continue;
         }
 
         // Locate the produced tarball — the build script puts it in
@@ -336,8 +628,11 @@ fn run_with_force_wsl(force: bool) -> bool {
         // source_dir/target/wsl/.
         let tarball = target_wsl_dir.join(format!("tillandsias-{service}.tar"));
         if !tarball.exists() {
-            eprintln!("  \u{2717} expected tarball missing: {}", tarball.display());
-            all_success = false;
+            let error = format!("Expected tarball missing: {}", tarball.display());
+            eprintln!("  \u{2717} {service}: {error}");
+            failed_services.push((service.to_string(), error));
+            progress.mark_failed(*service, "tarball", "Missing tarball");
+            eprintln!("  Continuing with remaining services...");
             continue;
         }
 
@@ -395,33 +690,68 @@ fn run_with_force_wsl(force: bool) -> bool {
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit())
             .status();
+
         match import_status {
             Ok(s) if s.success() => {
-                println!("  \u{2713} {distro} ready");
+                println!("  [{position}/{total_services}] {service}: Import successful");
+                progress.mark_completed(*service, "imported");
+                completed_count += 1;
             }
             Ok(s) => {
-                eprintln!(
-                    "  \u{2717} wsl --import {distro} failed (exit {})",
-                    s.code().unwrap_or(-1)
-                );
-                all_success = false;
+                let error = format!("wsl --import failed (exit {})", s.code().unwrap_or(-1));
+                eprintln!("  \u{2717} {service}: {error}");
+                failed_services.push((service.to_string(), error.clone()));
+                progress.mark_failed(*service, "import", &error);
+                eprintln!("  Continuing with remaining services...");
             }
             Err(e) => {
-                eprintln!("  \u{2717} wsl --import {distro} error: {e}");
-                all_success = false;
+                let error = format!("wsl --import error: {e}");
+                eprintln!("  \u{2717} {service}: {error}");
+                failed_services.push((service.to_string(), error.clone()));
+                progress.mark_failed(*service, "import", &error);
+                eprintln!("  Continuing with remaining services...");
             }
         }
     }
 
     embedded::cleanup_image_sources();
 
+    // Print summary report
+    let elapsed = start_time.elapsed();
     println!();
-    if all_success {
+    println!("═══════════════════════════════════════");
+    println!("  Init Summary Report (Windows/WSL)");
+    println!("═══════════════════════════════════════");
+    println!("  Total services: {total_services}");
+    println!("  Completed:     {completed_count}");
+    println!("  Failed:        {}", failed_services.len());
+    println!("  Time elapsed:  {:.1}s", elapsed.as_secs_f32());
+    println!();
+
+    if !failed_services.is_empty() {
+        eprintln!("  Failed services:");
+        for (service, error) in &failed_services {
+            eprintln!("    • {service}");
+            eprintln!("      Error: {error}");
+        }
+        eprintln!();
+        eprintln!("  Troubleshooting:");
+        eprintln!("    • Check WSL is running: wsl --list --verbose");
+        eprintln!("    • Check available disk space: wsl df -h");
+        eprintln!("    • View build logs: check the bash script output above");
+        eprintln!("    • Retry only failed: tillandsias --init");
+        eprintln!("    • Force rebuild all: tillandsias --init --force");
+        eprintln!("    • Progress is saved — retry will skip completed services");
+    }
+
+    println!();
+    if failed_services.is_empty() {
         println!("{}", i18n::t("init.ready_run"));
+        true
     } else {
         eprintln!("  {}", i18n::t("init.build.some_failed"));
+        false
     }
-    all_success
 }
 
 /// Locate bash.exe on Windows. Tries common Git for Windows install paths

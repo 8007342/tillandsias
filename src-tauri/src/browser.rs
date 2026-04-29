@@ -781,3 +781,153 @@ mod tests {
         assert_eq!(BrowserKind::OsDefault.name(), "OS default");
     }
 }
+
+// ============================================================================
+// Chromium Window Control (MCP-based)
+// ============================================================================
+
+use std::collections::HashMap;
+use std::sync::Mutex;
+
+/// Window request from MCP server (via Unix socket IPC).
+///
+/// @trace spec:browser-mcp-server
+#[derive(Debug, Clone)]
+pub struct WindowRequest {
+    pub action: String, // "open_safe_window" or "open_debug_window"
+    pub url: String,
+    pub project: String,
+}
+
+/// Per-project window debouncing state.
+/// Tracks the last time a window was opened for each project.
+/// Prevents window spam (enforces 10-second minimum between windows per project).
+///
+/// @trace spec:browser-window-rate-limiting
+pub struct WindowDebounce {
+    last_window_time: HashMap<String, Instant>,
+    debounce_secs: u64,
+}
+
+impl WindowDebounce {
+    pub fn new() -> Self {
+        WindowDebounce {
+            last_window_time: HashMap::new(),
+            debounce_secs: 10,
+        }
+    }
+
+    /// Check if a window open is allowed for this project.
+    /// Returns true if enough time has passed since the last window.
+    /// Updates the timestamp on success.
+    pub fn is_allowed(&mut self, project: &str) -> bool {
+        let now = Instant::now();
+        if let Some(last) = self.last_window_time.get(project) {
+            let elapsed = now.duration_since(*last);
+            if elapsed.as_secs() < self.debounce_secs {
+                return false;
+            }
+        }
+        self.last_window_time.insert(project.to_string(), now);
+        true
+    }
+}
+
+lazy_static::lazy_static! {
+    static ref WINDOW_DEBOUNCE: Mutex<WindowDebounce> = Mutex::new(WindowDebounce::new());
+}
+
+/// Validate that a URL matches the allowed pattern for safe/debug windows.
+/// Safe windows: <service>.<project>.localhost or dashboard.localhost
+/// Debug windows: <service>.<same-project>.localhost only (no dashboard, no external)
+///
+/// @trace spec:browser-mcp-server
+fn is_safe_url(url: &str, project: &str) -> bool {
+    // Allow dashboard.localhost for safe windows (checked separately by caller)
+    if url == "dashboard.localhost" {
+        return true;
+    }
+
+    // Allow <service>.<project>.localhost
+    if url.ends_with(&format!(".{project}.localhost")) && url.contains('.') {
+        return true;
+    }
+
+    false
+}
+
+fn is_debug_url(url: &str, project: &str) -> bool {
+    // Debug windows: only <service>.<project>.localhost (not dashboard, not external)
+    if url == "dashboard.localhost" {
+        return false;
+    }
+    if url.ends_with(&format!(".{project}.localhost")) && url.contains('.') {
+        return true;
+    }
+    false
+}
+
+/// Handle a window request from the MCP server.
+/// Validates URL, checks rate limit, and spawns the chromium container.
+///
+/// @trace spec:browser-mcp-server, spec:browser-window-rate-limiting
+pub async fn handle_window_request(req: WindowRequest) -> Result<String, String> {
+    let WindowRequest { action, url, project } = req;
+
+    // Validate URL based on action type
+    match action.as_str() {
+        "open_safe_window" => {
+            if !is_safe_url(&url, &project) {
+                return Err(format!(
+                    "Invalid URL for safe window: {}. Expected <service>.{}.localhost or dashboard.localhost",
+                    url, project
+                ));
+            }
+        }
+        "open_debug_window" => {
+            if !is_debug_url(&url, &project) {
+                return Err(format!(
+                    "Invalid URL for debug window: {}. Expected <service>.{}.localhost only",
+                    url, project
+                ));
+            }
+        }
+        _ => return Err(format!("Unknown action: {}", action)),
+    }
+
+    // Check rate limit (10-second debounce per project)
+    {
+        let mut debounce = WINDOW_DEBOUNCE.lock().unwrap();
+        if !debounce.is_allowed(&project) {
+            return Err(format!(
+                "Window open rate-limited for project '{}'. Try again in 10 seconds.",
+                project
+            ));
+        }
+    }
+
+    // Spawn the chromium container
+    spawn_chromium_window(&project, &url, &action).await
+}
+
+/// Spawn a chromium container with the appropriate isolation level.
+/// Safe windows: dark theme, hidden URL bar, no dev tools.
+/// Debug windows: full inspector on localhost:9222.
+///
+/// @trace spec:browser-isolation-core
+async fn spawn_chromium_window(project: &str, url: &str, window_type: &str) -> Result<String, String> {
+    // TODO: Call launch-chromium.sh or podman directly
+    // For now, return a placeholder that indicates what would be spawned.
+    info!(
+        spec = "browser-mcp-server",
+        project = project,
+        url = url,
+        window_type = window_type,
+        "would spawn chromium container"
+    );
+
+    Ok(format!(
+        "Spawning {} chromium window for '{}' at {}",
+        window_type, project, url
+    ))
+}

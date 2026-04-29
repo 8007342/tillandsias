@@ -177,8 +177,12 @@ fn main() {
     }
 
     // Init mode — pre-build images and exit.
-    if let cli::CliMode::Init { force } = cli_mode {
-        let success = init::run_with_force(force);
+    if let cli::CliMode::Init { force, image, debug } = cli_mode {
+        // @trace spec:init-command
+        // ## Sources of Truth
+        // - `cheatsheets/runtime/podman.md` — Podman commands for image management
+        // - `openspec/specs/init-command/spec.md` — Init command specification
+        let success = init::run_with_force(force, image.as_deref(), debug);
         std::process::exit(if success { 0 } else { 1 });
     }
 

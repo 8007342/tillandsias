@@ -5,7 +5,11 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/embedded.rs#L11](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/embedded.rs#L11)
+- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/embedded.rs#L325](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/embedded.rs#L325)
+- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/embedded.rs#L847](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/embedded.rs#L847)
+- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/embedded.rs#L941](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/embedded.rs#L941)
 - [src-tauri/src/embedded.rs#L11](../../../src-tauri/src/embedded.rs#L11)
 - [src-tauri/src/embedded.rs#L387](../../../src-tauri/src/embedded.rs#L387)
-- [src-tauri/src/embedded.rs#L1009](../../../src-tauri/src/embedded.rs#L1009)
-- [src-tauri/src/embedded.rs#L1103](../../../src-tauri/src/embedded.rs#L1103)
+- [src-tauri/src/embedded.rs#L1047](../../../src-tauri/src/embedded.rs#L1047)
+- [src-tauri/src/embedded.rs#L1141](../../../src-tauri/src/embedded.rs#L1141)

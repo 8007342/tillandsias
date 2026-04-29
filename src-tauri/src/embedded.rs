@@ -381,15 +381,14 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 ///       Containerfile
 /// ```
 ///
-/// Returns the root temp directory path. The caller should clean up via
+/// Returns the root cache directory path. The caller should clean up via
 /// [`cleanup_image_sources`] after the build completes (or rely on
 /// session cleanup of `$XDG_RUNTIME_DIR`).
 // @trace spec:embedded-scripts/image-source-extraction
 pub fn write_image_sources() -> Result<PathBuf, String> {
-    // Use a per-process directory to avoid collisions between the tray app's
-    // background build and concurrent CLI invocations.
-    let pid = std::process::id();
-    let dir = runtime_dir().join(format!("image-sources-{pid}"));
+    // Use a fixed cache directory — multiple invocations share the same
+    // extracted sources so we don't have to re-extract on every --init.
+    let dir = runtime_dir().join("tillandsias-image-sources");
 
     // Recreate fresh each time
     let _ = fs::remove_dir_all(&dir);
@@ -445,24 +444,28 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     }
 
     // -- scripts/ (summarizers for project analysis) --
-    let scripts_dir = dir.join("scripts");
-    fs::create_dir_all(&scripts_dir).map_err(|e| format!("scripts dir: {e}"))?;
-    write_lf(&scripts_dir.join("summarize-cargo.sh"), SCRIPT_SUMMARIZE_CARGO)
-        .map_err(|e| format!("scripts/summarize-cargo.sh: {e}"))?;
-    write_lf(&scripts_dir.join("summarize-nix.sh"), SCRIPT_SUMMARIZE_NIX)
-        .map_err(|e| format!("scripts/summarize-nix.sh: {e}"))?;
-    write_lf(&scripts_dir.join("summarize-package-json.sh"), SCRIPT_SUMMARIZE_PACKAGE_JSON)
-        .map_err(|e| format!("scripts/summarize-package-json.sh: {e}"))?;
-    write_lf(&scripts_dir.join("summarize-pubspec.sh"), SCRIPT_SUMMARIZE_PUBSPEC)
-        .map_err(|e| format!("scripts/summarize-pubspec.sh: {e}"))?;
-    write_lf(&scripts_dir.join("summarize-go-mod.sh"), SCRIPT_SUMMARIZE_GO_MOD)
-        .map_err(|e| format!("scripts/summarize-go-mod.sh: {e}"))?;
-    write_lf(&scripts_dir.join("summarize-pyproject.sh"), SCRIPT_SUMMARIZE_PYPROJECT)
-        .map_err(|e| format!("scripts/summarize-pyproject.sh: {e}"))?;
-    write_lf(&scripts_dir.join("regenerate-readme.sh"), SCRIPT_REGENERATE_README)
-        .map_err(|e| format!("scripts/regenerate-readme.sh: {e}"))?;
-    write_lf(&scripts_dir.join("check-readme-discipline.sh"), SCRIPT_CHECK_README_DISCIPLINE)
-        .map_err(|e| format!("scripts/check-readme-discipline.sh: {e}"))?;
+    // @trace spec:project-bootstrap-readme, spec:default-image
+    // These must be in images/default/scripts/ so the Containerfile's
+    // COPY scripts/summarize-*.sh /opt/summarizers/ can find them.
+    // The build context is images/default/, so scripts/ is relative to that.
+    let default_scripts_dir = dir.join("images").join("default").join("scripts");
+    fs::create_dir_all(&default_scripts_dir).map_err(|e| format!("images/default/scripts dir: {e}"))?;
+    write_lf(&default_scripts_dir.join("summarize-cargo.sh"), SCRIPT_SUMMARIZE_CARGO)
+        .map_err(|e| format!("images/default/scripts/summarize-cargo.sh: {e}"))?;
+    write_lf(&default_scripts_dir.join("summarize-nix.sh"), SCRIPT_SUMMARIZE_NIX)
+        .map_err(|e| format!("images/default/scripts/summarize-nix.sh: {e}"))?;
+    write_lf(&default_scripts_dir.join("summarize-package-json.sh"), SCRIPT_SUMMARIZE_PACKAGE_JSON)
+        .map_err(|e| format!("images/default/scripts/summarize-package-json.sh: {e}"))?;
+    write_lf(&default_scripts_dir.join("summarize-pubspec.sh"), SCRIPT_SUMMARIZE_PUBSPEC)
+        .map_err(|e| format!("images/default/scripts/summarize-pubspec.sh: {e}"))?;
+    write_lf(&default_scripts_dir.join("summarize-go-mod.sh"), SCRIPT_SUMMARIZE_GO_MOD)
+        .map_err(|e| format!("images/default/scripts/summarize-go-mod.sh: {e}"))?;
+    write_lf(&default_scripts_dir.join("summarize-pyproject.sh"), SCRIPT_SUMMARIZE_PYPROJECT)
+        .map_err(|e| format!("images/default/scripts/summarize-pyproject.sh: {e}"))?;
+    write_lf(&default_scripts_dir.join("regenerate-readme.sh"), SCRIPT_REGENERATE_README)
+        .map_err(|e| format!("images/default/scripts/regenerate-readme.sh: {e}"))?;
+    write_lf(&default_scripts_dir.join("check-readme-discipline.sh"), SCRIPT_CHECK_README_DISCIPLINE)
+        .map_err(|e| format!("images/default/scripts/check-readme-discipline.sh: {e}"))?;
 
     // -- images/default/ --
     let default_dir = dir.join("images").join("default");
@@ -511,7 +514,31 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     )
     .map_err(|e| format!("forge external-logs.yaml: {e}"))?;
 
-    // @trace spec:forge-environment-discoverability
+    // @trace spec:cheatsheet-source-layer, spec:default-image
+    // .cheatsheet-sources/ is expected by Containerfile STEP 72.
+    // If the fetcher hasn't run, create it with UNAVAILABLE.md placeholder
+    // so the COPY doesn't fail (graceful degradation per spec).
+    let cheatsheet_sources_dir = default_dir.join(".cheatsheet-sources");
+    fs::create_dir_all(&cheatsheet_sources_dir)
+        .map_err(|e| format!(".cheatsheet-sources dir: {e}"))?;
+    write_lf(
+        &cheatsheet_sources_dir.join("UNAVAILABLE.md"),
+        "# Cheatsheet sources unavailable\n\
+         \n\
+         The cheatsheet-source fetcher has not been run.\n\
+         Agents will fall back to pull-on-demand.\n\
+         \n\
+         To populate: tillandsias --fetch-cheatsheet-sources\n",
+    )
+     .map_err(|e| format!(".cheatsheet-sources/UNAVAILABLE.md: {e}"))?;
+
+    // @trace spec:agent-cheatsheets, spec:default-image
+    // .cheatsheets/ is expected by Containerfile STEP 69.
+    // Create empty dir — full cheatsheets are fetched by the fetcher.
+    // The entrypoint populates /opt/cheatsheets-image/ from this at build time.
+    let cheatsheets_dir = default_dir.join(".cheatsheets");
+    fs::create_dir_all(&cheatsheets_dir)
+        .map_err(|e| format!(".cheatsheets dir: {e}"))?;
     let cli_dir = default_dir.join("cli");
     fs::create_dir_all(&cli_dir).map_err(|e| format!("cli dir: {e}"))?;
     write_lf(&cli_dir.join("tillandsias-inventory"), FORGE_CLI_INVENTORY)
@@ -528,7 +555,10 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     // @trace spec:secrets-management
     #[cfg(unix)]
     {
-        // Scripts in scripts/ directory
+        // @trace spec:project-bootstrap-readme, spec:default-image
+        // Scripts in images/default/scripts/ directory — must match the
+        // COPY targets in images/default/Containerfile lines 365-370.
+        // Source of truth: images/default/Containerfile + cheatsheets/project/readme-discipline.md
         for name in [
             "summarize-cargo.sh",
             "summarize-nix.sh",
@@ -537,7 +567,7 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
             "summarize-go-mod.sh",
             "summarize-pyproject.sh",
         ] {
-            let path = scripts_dir.join(name);
+            let path = default_scripts_dir.join(name);
             if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
                 warn!(
                     file = %path.display(),
@@ -947,20 +977,28 @@ pub fn extract_config_overlay() -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// Remove the extracted image sources temp directory.
+/// Remove the extracted image sources cache directory.
 pub fn cleanup_image_sources() {
-    let pid = std::process::id();
-    let dir = runtime_dir().join(format!("image-sources-{pid}"));
+    let dir = runtime_dir().join("tillandsias-image-sources");
     if dir.exists() {
         if let Err(e) = fs::remove_dir_all(&dir) {
-            debug!(error = %e, "Failed to clean up image sources temp dir");
+            debug!(error = %e, "Failed to clean up image sources cache dir");
         } else {
-            debug!("Cleaned up image sources temp dir");
+            debug!("Cleaned up image sources cache dir");
         }
     }
-    // Also clean up legacy shared dir if it exists
-    let legacy = runtime_dir().join("image-sources");
-    let _ = fs::remove_dir_all(&legacy);
+    // Also clean up legacy PID-based dirs if they exist
+    let runtime = runtime_dir();
+    if let Ok(entries) = fs::read_dir(&runtime) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if name.starts_with("image-sources-") {
+                    let _ = fs::remove_dir_all(&path);
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]

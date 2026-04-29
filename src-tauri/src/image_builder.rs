@@ -247,8 +247,8 @@ impl ImageBuilder {
             "Starting direct podman build"
         );
 
-        // Build the podman command, inheriting stdio so users see progress
-        let status = Command::new(tillandsias_podman::find_podman_path())
+        // Build the podman command, capturing output for error reporting
+        let output = Command::new(tillandsias_podman::find_podman_path())
             .args(&["build", "--tag", &self.tag])
             .arg("-f")
             .arg(&containerfile)
@@ -258,8 +258,8 @@ impl ImageBuilder {
             .env_remove("LD_PRELOAD")
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .status()
+            .stderr(Stdio::piped())
+            .output()
             .map_err(|e| {
                 error!(
                     image = %self.image_name,
@@ -270,16 +270,26 @@ impl ImageBuilder {
                 strings::SETUP_ERROR.to_string()
             })?;
 
-        // Check exit status
-        if !status.success() {
+        // Check exit status and capture error details
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            let error_msg = if stderr.is_empty() {
+                format!(
+                    "podman build failed with exit code {}",
+                    output.status.code().unwrap_or(-1)
+                )
+            } else {
+                stderr
+            };
             error!(
                 image = %self.image_name,
                 tag = %self.tag,
-                exit_code = status.code().unwrap_or(-1),
+                exit_code = output.status.code().unwrap_or(-1),
+                stderr = %error_msg,
                 spec = "direct-podman-calls",
                 "podman build failed"
             );
-            return Err(strings::SETUP_ERROR.into());
+            return Err(error_msg);
         }
 
         info!(

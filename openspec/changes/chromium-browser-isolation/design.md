@@ -193,6 +193,156 @@ RUN npm install -g playwright@1.40.0 && \
 ```
 - @trace spec:browser-playwright-integration
 
+### 8. MCP Server for Window Control: open_safe_window / open_debug_window
+
+**Decision**: Forge containers expose MCP tool functions `open_safe_window(url)` and `open_debug_window(url)` that forward to tray via shared socket.
+
+**Rationale**: 
+- Agents (Claude, OpenCode) and users (via tray) need to launch isolated browser windows with preset configurations (dark theme, hidden address bar, custom titles)
+- Tray owns the browser process lifecycle and understands which project context we're in
+- MCP servers run inside forge containers; they have no direct container spawning capability → forward to tray via IPC
+- Window opening is rate-limited (10-second debounce) to prevent spam
+
+**Constraints**:
+- Agents can only open windows for their own project: `open_safe|debug_window("<service>.<same-project>.localhost")`
+- Exception: any agent can open `open_safe_window("dashboard.localhost")` (future user dashboard, no debug variant)
+- No debug windows for external origins (e.g., no `open_debug_window("external.com")`)
+- Tray enforces rate limit: no two windows for the same project within 10 seconds
+
+**Window types**:
+1. **open_safe_window(url)** — User-facing, safe defaults:
+   - Dark theme (Tokyonight)
+   - Hidden address bar (no URL exposed)
+   - Custom window title (`<project>: <service>`)
+   - No dev tools visible
+   - Read-only isolation (no external network)
+   - Available to agents + tray + users
+
+2. **open_debug_window(url)** — Developer-facing, full controls:
+   - Same isolation as safe window
+   - Chrome DevTools enabled on localhost:9222
+   - Address bar visible (debugging aid)
+   - Inspector console available
+   - Available to agents only (not tray, not users)
+
+**Implementation**:
+
+*Forge MCP server* (`images/default/mcp-server-browser.js`):
+```javascript
+// @trace spec:browser-mcp-server
+// MCP server running inside forge containers
+import Anthropic from "@anthropic-ai/sdk";
+
+const client = new Anthropic();
+
+export const tools = [
+  {
+    name: "open_safe_window",
+    description: "Open a URL in an isolated safe browser window (dark theme, hidden URL, no devtools)",
+    input_schema: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "URL to open (must be <service>.<project>.localhost or dashboard.localhost)" }
+      },
+      required: ["url"]
+    }
+  },
+  {
+    name: "open_debug_window",
+    description: "Open a URL in an isolated debug browser window (devtools enabled, inspector visible)",
+    input_schema: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "URL to open (must be <service>.<same-project>.localhost)" }
+      },
+      required: ["url"]
+    }
+  }
+];
+
+export async function processTool(name, input) {
+  if (name === "open_safe_window" || name === "open_debug_window") {
+    // Forward to tray via shared socket (/run/tillandsias/tray.sock)
+    const response = await fetch("unix:///run/tillandsias/tray.sock/browser/window", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: name,
+        url: input.url,
+        project: process.env.TILLANDSIAS_PROJECT,
+        timestamp: Date.now()
+      })
+    });
+    return await response.json();
+  }
+}
+```
+
+*Tray handler* (`src-tauri/src/browser.rs`):
+```rust
+// @trace spec:browser-mcp-server
+// Socket server listening for MCP window requests from forge containers
+
+pub struct WindowRequest {
+    pub action: String,  // "open_safe_window" or "open_debug_window"
+    pub url: String,
+    pub project: String,
+}
+
+pub struct WindowDebounce {
+    last_window_time: HashMap<String, Instant>,
+    debounce_secs: u64,  // 10 seconds
+}
+
+impl WindowDebounce {
+    pub fn is_allowed(&mut self, project: &str) -> bool {
+        let now = Instant::now();
+        if let Some(last_time) = self.last_window_time.get(project) {
+            if now.duration_since(*last_time).as_secs() < self.debounce_secs {
+                return false;  // Too soon, debounce
+            }
+        }
+        self.last_window_time.insert(project.to_string(), now);
+        true
+    }
+}
+
+pub async fn handle_window_request(req: WindowRequest) -> Result<()> {
+    // Validation
+    if !is_safe_url(&req.url, &req.project) {
+        return Err("URL not allowed for this project".into());
+    }
+    
+    // Rate limit
+    if !WINDOW_DEBOUNCE.lock().is_allowed(&req.project) {
+        return Err("Window opening rate limited (10 seconds between windows)".into());
+    }
+    
+    // Spawn container (same logic as user-initiated window opening)
+    spawn_chromium_window(
+        &req.project,
+        &req.url,
+        req.action == "open_debug_window"
+    ).await?;
+    
+    Ok(())
+}
+
+fn is_safe_url(url: &str, project: &str) -> bool {
+    // Allow: <service>.<project>.localhost for agent's own project
+    if url.contains(".localhost") && url.contains(project) {
+        return true;
+    }
+    // Allow: dashboard.localhost for anyone
+    if url == "dashboard.localhost" {
+        return true;
+    }
+    false
+}
+```
+
+- @trace spec:browser-mcp-server
+
 ## Risks / Trade-offs
 
 | Risk | Mitigation |

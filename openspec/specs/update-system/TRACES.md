@@ -5,6 +5,13 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/update_cli.rs#L8](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/update_cli.rs#L8)
+- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/update_cli.rs#L96](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/update_cli.rs#L96)
+- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/update_cli.rs#L391](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/update_cli.rs#L391)
+- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/update_cli.rs#L473](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/update_cli.rs#L473)
+- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/updater.rs#L8](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/updater.rs#L8)
+- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/updater.rs#L47](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/updater.rs#L47)
+- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/updater.rs#L144](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/updater.rs#L144)
 - [src-tauri/src/update_cli.rs#L8](../../../src-tauri/src/update_cli.rs#L8)
 - [src-tauri/src/update_cli.rs#L96](../../../src-tauri/src/update_cli.rs#L96)
 - [src-tauri/src/update_cli.rs#L391](../../../src-tauri/src/update_cli.rs#L391)

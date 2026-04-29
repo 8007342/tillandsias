@@ -1,0 +1,42 @@
+# @trace spec:browser-isolation-framework
+# Extended Chromium container with SDK tools, automation libraries, and fonts.
+# Extends tillandsias-chromium-core with:
+#   - Playwright for browser automation
+#   - Node.js for agent scripting
+#   - Fonts and locales for rendering
+
+FROM tillandsias-chromium-core:latest
+
+# Switch to root for package installation
+USER root
+
+# Node.js for MCP client integration and agent scripting
+RUN microdnf install -y \
+    nodejs npm \
+    && microdnf clean all
+
+# System fonts for text rendering (minimal set)
+# Most fonts are optional — chromium has fallbacks
+# For now, skip fonts to keep the image minimal
+# TODO: add font packages when needed for specific renderings
+
+# Browser automation frameworks
+RUN npm install -g --prefix=/usr \
+    playwright \
+    && npm cache clean --force
+
+# Locale setup (en_US.UTF-8 for non-ASCII content support)
+RUN echo "en_US.UTF-8 UTF-8" >> /etc/locale.conf
+ENV LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
+
+# Optional: WebGL/GPU debugging tools (lightweight)
+RUN microdnf install -y \
+    mesa-vulkan-drivers \
+    && microdnf clean all
+
+# Return to non-root user
+USER chromium
+
+ENTRYPOINT ["chromium-browser", "--headless=new"]
+CMD []

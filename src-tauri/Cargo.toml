@@ -63,8 +63,10 @@ time = "0.3"
 # call site explicit.
 rand = "0.9"
 parking_lot = { workspace = true }
+lazy_static = "1.4"
 url = "2"
 uuid = { version = "1", features = ["v4"] }
+chrono = "0.4"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_System_Console", "Win32_System_SystemInformation"] }

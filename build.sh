@@ -159,6 +159,24 @@ build_appimage() {
 
     _info "Output dir:  $output_dir"
     _info "Cache dir:   $cache_base"
+
+    # Pre-build diagnostics
+    _info "Checking prerequisites..."
+    if ! command -v podman &>/dev/null; then
+        _error "podman not found. Install: sudo dnf install podman"
+        exit 1
+    fi
+    if ! podman info &>/dev/null; then
+        _error "podman not running or misconfigured. Check: podman system info"
+        exit 1
+    fi
+    local available_space_kb
+    available_space_kb=$(df -k "$SCRIPT_DIR" | awk 'NR==2 {print $4}')
+    local available_gb=$((available_space_kb / 1024 / 1024))
+    if [[ $available_gb -lt 5 ]]; then
+        _warn "Low disk space: ${available_gb}GB available (recommend 5GB+)"
+    fi
+
     _step "Starting Ubuntu 22.04 podman container for AppImage build..."
     if [[ -f "$cache_base/rustup/settings.toml" ]]; then
         _info "Cached toolchain found — skipping install (~1-2 min build)"
@@ -309,6 +327,11 @@ install_appimage() {
     appimage_src="$(find "$appimage_output_dir" -name "*.AppImage" -type f 2>/dev/null | head -1)"
     if [[ -z "$appimage_src" ]]; then
         _error "AppImage build failed — no .AppImage found"
+        _error "Troubleshooting:"
+        _error "  • Check podman is running: podman ps"
+        _error "  • Check available disk space: df -h"
+        _error "  • View build logs: ls -la $appimage_output_dir/"
+        _error "  • Try manual build: cd $SCRIPT_DIR && cargo tauri build --bundles appimage"
         exit 1
     fi
 
@@ -325,19 +348,29 @@ install_appimage() {
     ln -sf "$app_path" "$INSTALL_BIN"
     _info "Symlink: $INSTALL_BIN -> $app_path"
 
+    # Verify the installation works
+    _step "Verifying installation..."
+    if [[ -x "$app_path" ]]; then
+        _info "AppImage is executable"
+        # Quick smoke test - just check if it can show version
+        if timeout 5 "$app_path" --version &>/dev/null; then
+            _info "Installation verified successfully"
+        else
+            _warn "Could not verify AppImage (may need first-run setup)"
+        fi
+    else
+        _error "AppImage is not executable after install"
+    fi
+
     # Image builds are now deferred to runtime (tillandsias --init or first launch).
     # This speeds up local dev builds and ensures the built binary can smoke-test
     # its own image builds without rebuilding images twice.
-    # Uncomment below to pre-build images during install (only useful for packaging).
-    # if [[ -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
-    #     local full_version
-    #     full_version="$(cat "$SCRIPT_DIR/VERSION" | tr -d '[:space:]')"
-    #     _step "Building forge container image..."
-    #     "$SCRIPT_DIR/scripts/build-image.sh" forge --tag "tillandsias-forge:v${full_version}"
-    #     _info "Forge image built and loaded"
-    # fi
-
-    _info "Installed. Run 'tillandsias --init' to build container images, or launch 'tillandsias' to auto-build on startup."
+    _info ""
+    _info "Next steps:"
+    _info "  1. Run 'tillandsias --init --debug' to build container images"
+    _info "  2. Launch 'tillandsias' to start the system tray application"
+    _info "  3. If --init fails, check: podman system info"
+    _info ""
     _info "Desktop integration (icons, launcher) is set up on first run."
 }
 

@@ -144,7 +144,9 @@ pub enum CliMode {
 
     /// `tillandsias --init` — pre-build all container images (proxy, forge, git, inference).
     /// `tillandsias --init --force` — rebuild all from scratch.
-    Init { force: bool },
+    /// `tillandsias --init --image <name>` — build only the specified image.
+    /// `tillandsias --init --debug` — show detailed debug output with actionable commands.
+    Init { force: bool, image: Option<String>, debug: bool },
 
     /// `tillandsias --stats` — print disk usage report and exit.
     Stats,
@@ -291,9 +293,22 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
 
     // `tillandsias --init` — pre-build images.
     // `tillandsias --init --force` — rebuild even if already built.
+    // `tillandsias --init --image <name>` — build only the specified image.
+    // `tillandsias --init --debug` — show detailed debug output with actionable commands.
     if args.iter().any(|a| a == "--init") {
         let force = args.iter().any(|a| a == "--force");
-        return Some((CliMode::Init { force }, log_config));
+        let debug = args.iter().any(|a| a == "--debug");
+        let image = if let Some(pos) = args.iter().position(|a| a == "--image") {
+            if pos + 1 < args.len() {
+                Some(args[pos + 1].clone())
+            } else {
+                eprintln!("Error: --image requires an argument (proxy|forge|git|inference)");
+                return None;
+            }
+        } else {
+            None
+        };
+        return Some((CliMode::Init { force, image, debug }, log_config));
     }
 
     // `tillandsias --stats` — disk usage report.
