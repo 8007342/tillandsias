@@ -5101,7 +5101,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias"
-version = "0.1.159"
+version = "0.1.160"
 dependencies = [
  "dirs",
  "hex",
@@ -5133,7 +5133,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-core"
-version = "0.1.159"
+version = "0.1.160"
 dependencies = [
  "dirs",
  "postcard",
@@ -5147,7 +5147,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-podman"
-version = "0.1.159"
+version = "0.1.160"
 dependencies = [
  "libc",
  "serde",
@@ -5160,7 +5160,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-scanner"
-version = "0.1.159"
+version = "0.1.160"
 dependencies = [
  "dirs",
  "notify",

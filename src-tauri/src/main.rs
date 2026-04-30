@@ -34,6 +34,14 @@ mod update_log;
 mod updater;
 mod webview;
 
+/// Chromium launcher for browser isolation.
+#[cfg(target_os = "linux")]
+mod chromium_launcher;
+
+/// MCP server for browser window control (Unix only).
+#[cfg(target_os = "linux")]
+mod mcp_browser;
+
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -205,6 +213,10 @@ fn main() {
     // Channel for menu commands → event loop
     let (menu_tx, menu_rx) = mpsc::channel::<MenuCommand>(64);
     let (shutdown_tx, _shutdown_rx) = mpsc::channel::<()>(1);
+
+    // Channel for browser window requests from MCP server → event loop
+    // @trace spec:browser-mcp-server
+    let (browser_tx, browser_rx) = mpsc::channel::<MenuCommand>(64);
 
     // Channel for build progress events (handlers → event loop)
     let (build_tx, build_rx) = mpsc::channel::<BuildProgressEvent>(64);
@@ -795,6 +807,18 @@ fn main() {
                     );
                 }
 
+                // Start Unix socket listener for MCP browser server
+                // @trace spec:browser-mcp-server
+                #[cfg(target_os = "linux")]
+                {
+                    let browser_tx_clone = browser_tx.clone();
+                    let _socket_task = tauri::async_runtime::spawn(async move {
+                        if let Err(e) = listen_browser_socket(browser_tx_clone).await {
+                            error!(error = %e, "Browser socket listener failed");
+                        }
+                    });
+                }
+
                 // Run main event loop
                 let loop_state = { state_for_loop.lock().unwrap().clone() };
 
@@ -859,6 +883,7 @@ fn main() {
                     scanner_rx,
                     podman_rx,
                     menu_rx,
+                    browser_rx,
                     build_rx,
                     build_tx,
                     on_state_change,
@@ -1075,4 +1100,113 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
             debug!("Menu command channel full/closed — action may be dropped");
         }
     }
+}
+
+/// Listen on Unix socket for browser window requests from MCP server.
+///
+/// The MCP server (running in forge containers) connects to this socket
+/// and sends JSON-RPC requests to open browser windows.
+///
+/// @trace spec:browser-mcp-server
+#[cfg(target_os = "linux")]
+async fn listen_browser_socket(tx: mpsc::Sender<MenuCommand>) -> Result<(), String> {
+    use std::os::unix::net::{UnixListener, UnixStream};
+    use std::io::{BufRead, BufReader};
+    use std::path::Path;
+
+    let socket_path = "/run/tillandsias/tray.sock";
+
+    // Remove stale socket if it exists
+    if Path::new(socket_path).exists() {
+        std::fs::remove_file(socket_path)
+            .map_err(|e| format!("Failed to remove stale socket: {}", e))?;
+    }
+
+    let listener = UnixListener::bind(socket_path)
+        .map_err(|e| format!("Failed to bind Unix socket '{}': {}", socket_path, e))?;
+
+    // Set permissions so forge containers can connect
+    std::fs::set_permissions(socket_path, std::os::unix::fs::PermissionsExt::from_mode(0o666))
+        .map_err(|e| format!("Failed to set socket permissions: {}", e))?;
+
+    info!(
+        spec = "browser-mcp-server",
+        socket = socket_path,
+        "Browser socket listener started"
+    );
+
+    for stream in listener.incoming() {
+        match stream {
+            Ok(stream) => {
+                let tx = tx.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = handle_browser_socket_connection(stream, tx).await {
+                        debug!(error = %e, "Browser socket connection failed");
+                    }
+                });
+            }
+            Err(e) => {
+                error!(error = %e, "Browser socket accept failed");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Handle a single browser socket connection from MCP server.
+#[cfg(target_os = "linux")]
+async fn handle_browser_socket_connection(
+    stream: std::os::unix::net::UnixStream,
+    tx: mpsc::Sender<MenuCommand>,
+) -> Result<(), String> {
+    use std::io::{BufRead, BufReader};
+
+    let reader = BufReader::new(&stream);
+    let mut lines = reader.lines();
+
+    while let Some(line_result) = lines.next() {
+        let line = line_result.map_err(|e| e.to_string())?;
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        match serde_json::from_str::<serde_json::Value>(&line) {
+            Ok(request) => {
+                let method = request.get("method").and_then(|m| m.as_str());
+                let params = request.get("params");
+
+                match method {
+                    Some("open_browser_window") => {
+                        if let Some(params) = params {
+                            let project = params.get("project").and_then(|p| p.as_str());
+                            let url = params.get("url").and_then(|u| u.as_str());
+                            let window_type = params.get("window_type").and_then(|w| w.as_str());
+
+                            if let (Some(project), Some(url), Some(window_type)) = (project, url, window_type) {
+                                let cmd = MenuCommand::OpenBrowserWindow {
+                                    project: project.to_string(),
+                                    url: url.to_string(),
+                                    window_type: window_type.to_string(),
+                                };
+                                if tx.send(cmd).await.is_err() {
+                                    error!("Browser command channel closed");
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        debug!(method = ?method, "Unknown browser socket method");
+                    }
+                }
+            }
+            Err(e) => {
+                debug!(error = %e, "Failed to parse browser socket request");
+            }
+        }
+    }
+
+    Ok(())
 }

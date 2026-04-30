@@ -6,9 +6,10 @@
 
 set -euo pipefail
 
-PROJECT="${1:?'Usage: launch-chromium.sh <project> <url> [port]'}"
-URL="${2:?'Usage: launch-chromium.sh <project> <url> [port]'}"
+PROJECT="${1:?'Usage: launch-chromium.sh <project> <url> [port] [window_type]'}"
+URL="${2:?'Usage: launch-chromium.sh <project> <url> [port] [window_type]'}"
 PORT="${3:-9222}"
+WINDOW_TYPE="${4:-open_safe_window}"
 
 # Detect GPU availability
 detect_gpu() {
@@ -32,12 +33,23 @@ CMD=(
     "--network=enclave-bridge"
     "--security-opt=seccomp=/etc/seccomp.json"
     "--tmpfs=/tmp:size=256m"
-    "--tmpfs=/dev/shm:size=256m"
     "--tmpfs=/home/chromium/.cache:size=512m"
+    "--tmpfs=/dev/shm:size=256m"
     "--read-only"
-    "--remote-debugging-port=9222"
-    "--remote-debugging-address=127.0.0.1"
 )
+
+# Add window-type specific flags
+if [[ "$WINDOW_TYPE" == "open_safe_window" ]]; then
+    # Safe window: headless mode, no dev tools
+    CMD+=("--headless=new")
+elif [[ "$WINDOW_TYPE" == "open_debug_window" ]]; then
+    # Debug window: remote debugging enabled
+    CMD+=("--remote-debugging-port=${PORT}")
+    CMD+=("--remote-debugging-address=127.0.0.1")
+else
+    # Default: safe window
+    CMD+=("--headless=new")
+fi
 
 # Add GPU devices if available
 if [[ "$GPU_TIER" == "nvidia" ]]; then
@@ -47,7 +59,11 @@ elif [[ "$GPU_TIER" == "amd_intel" ]]; then
 fi
 
 # Add image and URL
-CMD+=("tillandsias-chromium-core:latest" "$URL")
+if [[ "$WINDOW_TYPE" == "open_debug_window" ]]; then
+    CMD+=("tillandsias-chromium-framework:latest" "$URL")
+else
+    CMD+=("tillandsias-chromium-core:latest" "$URL")
+fi
 
 # Spawn container and output container ID
 output=$(exec "${CMD[@]}")

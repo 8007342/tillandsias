@@ -4357,6 +4357,70 @@ pub async fn handle_serve_here(
     }
 }
 
+/// Handle a browser window request from the MCP server.
+///
+/// Validates the request, then spawns a Chromium window using the
+/// `chromium_launcher` module.
+///
+/// # Arguments
+///
+/// * `project` - The project name
+/// * `url` - The URL to open
+/// * `window_type` - Either "open_safe_window" or "open_debug_window"
+///
+/// @trace spec:browser-mcp-server, spec:browser-isolation-core
+#[cfg(target_os = "linux")]
+pub async fn handle_open_browser_window(
+    project: &str,
+    url: &str,
+    window_type: &str,
+) -> Result<(), String> {
+    use crate::chromium_launcher;
+
+    info!(
+        spec = "browser-mcp-server",
+        project = %project,
+        url = %url,
+        window_type = %window_type,
+        "Handling browser window request"
+    );
+
+    // Validate window type
+    match window_type {
+        "open_safe_window" | "open_debug_window" => {}
+        _ => {
+            return Err(format!(
+                "Invalid window_type: '{}'. Expected 'open_safe_window' or 'open_debug_window'",
+                window_type
+            ));
+        }
+    }
+
+    // Validate URL
+    if window_type == "open_safe_window" {
+        if !url.contains(&format!(".{}.localhost", project))
+            && !url.contains("dashboard.localhost")
+        {
+            return Err(format!(
+                "Invalid URL for safe window: '{}'. Expected <service>.<project>.localhost or dashboard.localhost",
+                url
+            ));
+        }
+    } else if window_type == "open_debug_window" {
+        if !url.contains(&format!(".{}.localhost", project)) {
+            return Err(format!(
+                "Invalid URL for debug window: '{}'. Expected <service>.<project>.localhost",
+                url
+            ));
+        }
+    }
+
+    // Spawn the Chromium window
+    chromium_launcher::spawn_chromium_window(project, url, window_type)?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

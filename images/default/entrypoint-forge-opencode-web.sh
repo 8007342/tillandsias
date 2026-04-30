@@ -137,3 +137,16 @@ fi
 trace_lifecycle "entrypoint" "opencode web serving on 0.0.0.0:4096"
 trace_lifecycle "exec" "launching opencode serve ($OC_BIN)"
 exec "$OC_BIN" serve --hostname 0.0.0.0 --port 4096
+
+# ── Launch MCP Browser Server ──────────────────────────
+# @trace spec:browser-mcp-server
+# Runs in background, listening on stdin/stdout for MCP protocol.
+# Sets TILLANDSIAS_PROJECT so the server knows its project context.
+export TILLANDSIAS_PROJECT="${PROJECT_NAME:-unknown}"
+if [ -x /usr/local/bin/tillandsias-mcp-browser ]; then
+    trace_lifecycle "entrypoint" "starting MCP browser server"
+    /usr/local/bin/tillandsias-mcp-browser &
+    MCP_PID=$!
+else
+    trace_lifecycle "entrypoint" "WARNING: tillandsias-mcp-browser not found, skipping MCP server"
+fi

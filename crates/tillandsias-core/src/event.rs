@@ -109,6 +109,14 @@ pub enum MenuCommand {
     /// Open settings
     Settings,
 
+    /// Open a browser window (from MCP server in forge container)
+    /// @trace spec:browser-mcp-server
+    OpenBrowserWindow {
+        project: String,
+        url: String,
+        window_type: String, // "open_safe_window" or "open_debug_window"
+    },
+
     /// Quit the application
     Quit,
 }

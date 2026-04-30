@@ -1,0 +1,27 @@
+# @tombstone superseded:cheatsheets-license-tiered
+#
+# The verbatim host-bundled source layer (cheatsheet-sources/<host>/<path>
+# with .meta.yaml sidecars + INDEX.json) is replaced by:
+#   - image-baked /opt/cheatsheet-sources/ for the bundled tier
+#     (build-time fetch via scripts/fetch-cheatsheet-source.sh --tier=bundled,
+#      staged in images/default/.cheatsheet-sources/ during build, COPYed
+#      into the forge image)
+#   - per-project pull cache for the pull-on-demand tier
+#     (~/.cache/tillandsias/cheatsheets-pulled/<project>/<host>/<path>,
+#      tmpfs-overlay lane with disk spillover, materialized at runtime by
+#      the in-forge agent through the proxy)
+#
+# Kept for traceability through 0.1.<N+3>.x. Final removal in 0.1.<N+3>.x
+# per the three-release retention rule (CLAUDE.md @tombstone discipline).
+#
+# Key files retired:
+#   - cheatsheet-sources/<host>/<path>/...     (98 files; deleted in this commit)
+#   - cheatsheet-sources/INDEX.json            (legacy lookup table)
+#   - cheatsheet-sources/license-allowlist.toml (relocated to cheatsheets/)
+#   - cheatsheet-sources/ATTRIBUTION.md        (deleted; provenance now per-cheatsheet)
+#
+# Replacement specs:
+#   - openspec/changes/cheatsheets-license-tiered/specs/cheatsheets-license-tiered/spec.md
+#   - openspec/specs/cheatsheet-source-layer/spec.md (mostly superseded)
+#
+# @trace spec:cheatsheets-license-tiered, spec:cheatsheet-source-layer

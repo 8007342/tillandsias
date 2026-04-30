@@ -33,6 +33,7 @@ pub type MenuRebuildFn = Box<dyn Fn(&TrayState) + Send + Sync>;
 /// - Scanner: filesystem changes (project discovered/updated/removed)
 /// - Podman events: container state changes
 /// - Menu actions: user clicks in the tray menu
+/// - Browser socket: requests from MCP server to open browser windows
 /// - Build progress: image/maintenance build state transitions
 /// - Shutdown signal: SIGTERM/SIGINT
 ///
@@ -43,6 +44,7 @@ pub async fn run(
     mut scanner_rx: mpsc::Receiver<ProjectChange>,
     mut podman_rx: mpsc::Receiver<tillandsias_podman::events::PodmanEvent>,
     mut menu_rx: mpsc::Receiver<MenuCommand>,
+    mut browser_rx: mpsc::Receiver<MenuCommand>,
     mut build_rx: mpsc::Receiver<BuildProgressEvent>,
     build_tx: mpsc::Sender<BuildProgressEvent>,
     on_state_change: MenuRebuildFn,
@@ -89,6 +91,33 @@ pub async fn run(
                 handle_podman_event(event, &mut state, &mut allocator, &mut tool_allocator);
                 prune_completed_builds(&mut state);
                 on_state_change(&state);
+            }
+
+            // Browser socket: requests from MCP server
+            // @trace spec:browser-mcp-server
+            Some(command) = browser_rx.recv() => {
+                match command {
+                    MenuCommand::OpenBrowserWindow { project, url, window_type } => {
+                        info!(
+                            spec = "browser-mcp-server",
+                            project = %project,
+                            url = %url,
+                            window_type = %window_type,
+                            "Browser window request from MCP server"
+                        );
+                        match handlers::handle_open_browser_window(&project, &url, &window_type).await {
+                            Ok(_) => {
+                                info!(url = %url, "Browser window opened successfully");
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Failed to open browser window");
+                            }
+                        }
+                    }
+                    _ => {
+                        debug!("Unexpected command on browser channel");
+                    }
+                }
             }
 
             // Build progress: image/maintenance build state transitions
@@ -268,6 +297,23 @@ pub async fn run(
                         // Settings is a Submenu now — this event won't fire from menu clicks.
                         // Kept for forward compatibility if Settings ever becomes actionable.
                         debug!("Settings command received");
+                    }
+                    MenuCommand::OpenBrowserWindow { project, url, window_type } => {
+                        info!(
+                            spec = "browser-mcp-server",
+                            project = %project,
+                            url = %url,
+                            window_type = %window_type,
+                            "Browser window request from MCP server (menu channel)"
+                        );
+                        match handlers::handle_open_browser_window(&project, &url, &window_type).await {
+                            Ok(_) => {
+                                info!(url = %url, "Browser window opened successfully");
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Failed to open browser window");
+                            }
+                        }
                     }
                 }
             }
