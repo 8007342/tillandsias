@@ -2559,6 +2559,7 @@ pub fn inject_ca_chain_mounts_pub(run_args: &mut Vec<String>) {
 /// Queries podman for all containers matching `tillandsias-*`, then removes
 /// any that are not present in our in-memory state. Skips infrastructure
 /// toolboxes (builder, windows, etc.).
+// @trace spec:tray-minimal-ux
 async fn cleanup_stale_containers(state: &TrayState) {
     let output = tillandsias_podman::podman_cmd_sync()
         .args([
