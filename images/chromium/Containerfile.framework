@@ -38,5 +38,6 @@ RUN microdnf install -y \
 # Return to non-root user
 USER chromium
 
-ENTRYPOINT ["chromium-browser", "--headless=new"]
+# Set headless entry point (inherits from core)
+ENTRYPOINT ["/usr/lib64/chromium-browser/headless_shell", "--headless=new"]
 CMD []

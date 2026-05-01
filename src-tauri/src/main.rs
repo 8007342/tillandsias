@@ -4,86 +4,46 @@
 // On non-Windows, the attribute is irrelevant.
 
 mod accountability;
-// @trace spec:host-browser-mcp
-// In-process MCP server for browser automation. Accepts JSON-RPC frames from
-// forges via the host control socket, dispatches through the MCP layer,
-// and manages browser windows via CDP.
-mod browser_mcp;
 mod build_lock;
 mod ca;
-// @trace spec:host-chromium-on-demand
-// Userspace Chromium resolver + lazy installer subcommand
-// (`tillandsias --install-chromium [--from-zip <path>]`). Detection
-// priority: userspace install → system PATH → hard error. No tray UI.
-mod chromium_resolve;
-mod diagnostics;
 mod cleanup;
 mod cli;
-// @trace spec:tray-host-control-socket
-// Tray-host control socket — Unix-domain stream listener for typed,
-// postcard-framed messages between the tray and bind-mounted consumer
-// containers (router today, host-browser-mcp / future log-event ingest
-// next). v1 implements the lifecycle + Hello/HelloAck handshake.
-mod control_socket;
 #[cfg(target_os = "linux")]
 mod desktop;
 mod desktop_env;
 mod embedded;
 mod event_loop;
 mod github;
-mod github_health;
 mod gpu;
 mod handlers;
-mod image_builder;
-// @trace spec:inference-host-side-pull
-// Host-side lazy model pulling for inference container. Spawned after
-// inference-ready, pulls higher-tier models based on VRAM detection,
-// bypasses proxy, fully automatic (no UX).
-mod inference_lazy_pull;
 mod i18n;
 mod init;
 mod launch;
 mod log_format;
-mod mirror_sync;
 mod logging;
-#[cfg(target_os = "windows")]
-// @trace spec:windows-event-logging
-// Windows Event Log layer — writes errors/warnings/accountability events to Event Viewer.
-// Event source "Tillandsias" must be registered in the registry (installer or PowerShell).
-mod windows_eventlog;
 mod menu;
 mod runner;
-mod tray_menu;
 mod secrets;
 mod singleton;
 mod strings;
-// Tools-overlay module tombstoned 2026-04-25 — agent binaries (claude,
-// openspec, opencode) are now hard-installed in the forge image at
-// /usr/local/bin/. See openspec/changes/archive/2026-04-25-tombstone-tools-overlay/.
+mod tools_overlay;
 mod tray_spawn;
 mod uninstall;
 mod update_cli;
 mod update_log;
 mod updater;
-mod browser;
-// @trace spec:opencode-web-session-otp
-// Per-window session-cookie + OTP issuance for OpenCode Web. The OtpStore
-// is registered as a process-global; the IssueWebSession control-socket
-// dispatch pushes into it; the router validates against the same store.
-mod otp;
-mod cdp;
-// @trace spec:forge-hot-cold-split
-// Pre-flight RAM check: refuses forge launches when host cannot satisfy
-// the /home/forge/src tmpfs budget × 1.25 headroom factor.
-mod preflight;
-// @trace spec:cheatsheets-license-tiered
-// Tiered RAMDISK soft-cap detection for the pull-on-demand cheatsheet
-// cache. Reads MemTotal once at tray startup, classifies into Modest /
-// Normal / Plentiful, and caches the resolved cap (in MB) which is then
-// passed into every forge container as TILLANDSIAS_PULL_CACHE_RAM_MB.
-mod pull_cache_budget;
+mod webview;
+
+/// Chromium launcher for browser isolation.
+#[cfg(target_os = "linux")]
+mod chromium_launcher;
+
+/// MCP server for browser window control (Unix only).
+#[cfg(target_os = "linux")]
+mod mcp_browser;
 
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use tauri::tray::TrayIconBuilder;
 use tokio::sync::mpsc;
@@ -103,53 +63,7 @@ use updater::UpdateState;
 /// Set once during setup, never replaced.
 static TRAY_ICON: std::sync::OnceLock<Mutex<tauri::tray::TrayIcon>> = std::sync::OnceLock::new();
 
-/// Global pre-built tray menu. Stage transitions and projects-submenu
-/// rebuilds drive this handle directly. Set once during setup.
-///
-/// @trace spec:simplified-tray-ux
-static TRAY_MENU: std::sync::OnceLock<tray_menu::TrayMenu<tauri::Wry>> =
-    std::sync::OnceLock::new();
-
-/// Latest credential probe result. Cached for the process lifetime; only
-/// re-runs on user-initiated sign-in / sign-out actions per the spec.
-///
-/// @trace spec:simplified-tray-ux
-static CREDENTIAL_HEALTH: std::sync::OnceLock<
-    Mutex<Option<crate::github_health::CredentialHealth>>,
-> = std::sync::OnceLock::new();
-
-/// Shared TrayState handle, used by background tasks (credential probe,
-/// menu rebuilds from outside the event loop) without threading Arcs
-/// through every signature.
-///
-/// @trace spec:simplified-tray-ux
-static TRAY_STATE_HANDLE: std::sync::OnceLock<Arc<Mutex<TrayState>>> = std::sync::OnceLock::new();
-
-/// Tray-host control-socket server. Bound once during setup and shut
-/// down on app exit. Wrapped in `tokio::sync::Mutex` because shutdown
-/// is async (it awaits the accept-loop join handle).
-///
-/// Windows: this slot is unused — the control_socket module compiles to
-/// a no-op shell on non-Unix targets. `tillandsias --init` doesn't need
-/// the control plane (it only builds container images), and the future
-/// Windows control plane will be a Named Pipe, not a Unix socket.
-///
-/// @trace spec:tray-host-control-socket, spec:cross-platform
-#[cfg(unix)]
-static CONTROL_SOCKET: std::sync::OnceLock<
-    tokio::sync::Mutex<crate::control_socket::Server>,
-> = std::sync::OnceLock::new();
-
 fn main() {
-    // @trace spec:cross-platform
-    // Install the rustls default crypto provider once at process start.
-    // reqwest is configured with `rustls-no-provider`, so anything that
-    // creates a reqwest client (Tauri updater, github_health probes,
-    // self-update flows) will panic with "No provider set" if we don't
-    // install one. Idempotent — `install_default()` returns Err when
-    // a provider is already installed and we discard the error.
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     // On Windows, hide the console window for tray-only mode (no args).
     // CLI mode keeps the console so output is visible in any terminal.
     #[cfg(target_os = "windows")]
@@ -177,12 +91,8 @@ fn main() {
     }
 
     // Init mode — pre-build images and exit.
-    if let cli::CliMode::Init { force, image, debug } = cli_mode {
-        // @trace spec:init-command
-        // ## Sources of Truth
-        // - `cheatsheets/runtime/podman.md` — Podman commands for image management
-        // - `openspec/specs/init-command/spec.md` — Init command specification
-        let success = init::run_with_force(force, image.as_deref(), debug);
+    if let cli::CliMode::Init { force } = cli_mode {
+        let success = init::run_with_force(force);
         std::process::exit(if success { 0 } else { 1 });
     }
 
@@ -217,46 +127,13 @@ fn main() {
         std::process::exit(if success { 0 } else { 1 });
     }
 
-    // @trace spec:host-chromium-on-demand
-    // `tillandsias --install-chromium [--from-zip <path>]` — shell out
-    // to scripts/install-chromium.sh with the embedded pin. Returns
-    // success on a zero exit code from the helper.
-    if let cli::CliMode::InstallChromium { from_zip } = cli_mode {
-        let _log_guard = logging::init(&log_config);
-        let result = chromium_resolve::run_install_subcommand(from_zip.as_deref());
-        std::process::exit(if result.is_ok() {
-            0
-        } else {
-            if let Err(e) = result {
-                eprintln!("install-chromium failed: {e}");
-            }
-            1
-        });
-    }
-
-    // @tombstone superseded:runtime-diagnostics-stream
-    // @trace spec:runtime-diagnostics-stream
-    // The standalone CliMode::Diagnostics handler was origin/main's parallel
-    // implementation. Superseded by the wsl-on-windows path where
-    // `--diagnostics` is an Attach-time flag (handled below in the
-    // CliMode::Attach branch via runner::run(..., diagnostics, ...)).
-    // See cli.rs for the dispatch tombstone.
-    // Removed in 0.1.184.545. Safe to delete after 0.1.184.548.
-    // if let cli::CliMode::Diagnostics { path, prompt } = &cli_mode {
-    //     let _log_guard = logging::init(&log_config);
-    //     let success = runner::run_diagnostics(path.clone(), prompt.clone());
-    //     std::process::exit(if success { 0 } else { 1 });
-    // }
-
     // If CLI attach mode, run the container runner and exit — no tray app.
     if let cli::CliMode::Attach {
         path,
         image,
         debug,
-        diagnostics,
         bash,
         agent_override,
-        prompt,
     } = cli_mode
     {
         // Initialize tracing for file logging (CLI output uses println!)
@@ -277,7 +154,7 @@ fn main() {
             }
         }
 
-        let success = runner::run(path, &image, debug, diagnostics, bash, agent_override, prompt);
+        let success = runner::run(path, &image, debug, bash, agent_override);
         std::process::exit(if success { 0 } else { 1 });
     }
 
@@ -316,18 +193,8 @@ fn main() {
         .enable_all()
         .build()
     {
-        // @trace spec:simplified-tray-ux
-        // Pre-UI sweep: removes orphaned tillandsias-* containers
-        // (running OR stopped) and force-removes the enclave network
-        // before the event loop accepts user input.
-        rt.block_on(handlers::pre_ui_cleanup_stale_containers());
+        rt.block_on(handlers::sweep_orphan_containers());
     }
-
-    // @trace spec:external-logs-layer
-    // One-shot migration: moves git-push.log from the old internal log dir
-    // to the new external-logs producer directory. Idempotent; errors are
-    // logged but never abort startup.
-    handlers::ensure_external_logs_dir().ok();
 
     // Detect platform
     let platform = PlatformInfo {
@@ -342,14 +209,14 @@ fn main() {
 
     let initial_state = TrayState::new(platform);
     let state = Arc::new(Mutex::new(initial_state));
-    // @trace spec:simplified-tray-ux
-    // Make the shared state accessible to background tasks without
-    // threading Arcs through every event_loop signature.
-    let _ = TRAY_STATE_HANDLE.set(state.clone());
 
     // Channel for menu commands → event loop
     let (menu_tx, menu_rx) = mpsc::channel::<MenuCommand>(64);
     let (shutdown_tx, _shutdown_rx) = mpsc::channel::<()>(1);
+
+    // Channel for browser window requests from MCP server → event loop
+    // @trace spec:browser-mcp-server
+    let (browser_tx, browser_rx) = mpsc::channel::<MenuCommand>(64);
 
     // Channel for build progress events (handlers → event loop)
     let (build_tx, build_rx) = mpsc::channel::<BuildProgressEvent>(64);
@@ -365,101 +232,21 @@ fn main() {
         .setup(move |app| {
             let app_handle = app.handle().clone();
 
+            // Register the global AppHandle used by the opencode-web webview
+            // module to spawn and close WebviewWindows from non-Tauri contexts
+            // (menu command dispatch, shutdown_all). Must run before any
+            // "Attach Here" click can reach the web-session flow.
             // @trace spec:opencode-web-session
-            // OpenCode Web sessions now launch in the user's native browser
-            // (see src-tauri/src/browser.rs). Tauri no longer hosts a
-            // WebviewWindow for them — no AppHandle registration needed.
-
-            // @trace spec:tray-host-control-socket, spec:cross-platform
-            // Bind the tray-host control socket BEFORE the tray icon
-            // becomes interactive. The bind is synchronous and uses
-            // std::os::unix::net::UnixListener so it works without an
-            // active Tokio runtime (Tauri's `setup` callback is
-            // synchronous). The accept loop is spawned on Tauri's async
-            // runtime so the std listener gets converted to a tokio one
-            // inside a runtime context.
-            //
-            // Windows: gated out. Unix-domain sockets aren't the right
-            // primitive on Windows; the future Windows control plane will
-            // be a Named Pipe. `tillandsias --init` doesn't need the
-            // control plane (it only builds container images), and tray
-            // consumers degrade gracefully when no publisher is installed.
-            //
-            // Failure to bind degrades gracefully: the tray still comes up,
-            // but containers that opt in via `mount_control_socket = true`
-            // will fail to launch (their bind-mount source is missing).
-            // The router is the only v1 consumer, so the visible failure
-            // mode is "router won't start" — which surfaces in the existing
-            // build/launch error path.
-            #[cfg(unix)]
-            match crate::control_socket::Server::bind_default() {
-                Ok(server) => {
-                    // @trace spec:opencode-web-session-otp
-                    // Install the broadcast publisher into the otp module's
-                    // static slot BEFORE moving the server into the
-                    // accept-loop task — this way otp::issue_and_publish
-                    // can fan envelopes out to subscribed sidecars from
-                    // any tray-side caller, no callback chains required.
-                    if !crate::otp::install_publisher(server.publisher()) {
-                        warn!(
-                            spec = "opencode-web-session-otp",
-                            "otp::install_publisher returned false — already initialised?"
-                        );
-                    }
-                    // Move the server into a tauri-async-runtime task so
-                    // `spawn_accept_loop` (which calls `tokio::spawn`) runs
-                    // inside a Tokio runtime context.
-                    tauri::async_runtime::spawn(async move {
-                        let mut server = server;
-                        server.spawn_accept_loop();
-                        if CONTROL_SOCKET
-                            .set(tokio::sync::Mutex::new(server))
-                            .is_err()
-                        {
-                            warn!(
-                                spec = "tray-host-control-socket",
-                                "CONTROL_SOCKET already initialised — duplicate setup?"
-                            );
-                        }
-                    });
-                }
-                Err(e) => {
-                    warn!(
-                        accountability = true,
-                        category = "control-socket",
-                        spec = "tray-host-control-socket",
-                        error = %e,
-                        "Failed to bind tray-host control socket — control-plane consumers will degrade"
-                    );
-                }
-            }
-
-            // @trace spec:opencode-web-session-otp
-            // Start the 1 Hz pending-OTP eviction loop. Unconsumed sessions
-            // expire 60 s after they're issued; this background task is
-            // what removes them. Detached — runs for the tray's lifetime.
-            //
-            // Wrapped in tauri::async_runtime::spawn for the same reason as
-            // the control socket above: `otp::spawn_eviction_task` calls
-            // `tokio::spawn` internally, which needs a runtime context.
-            tauri::async_runtime::spawn(async {
-                let _eviction_handle = otp::spawn_eviction_task();
-            });
+            crate::webview::set_app_handle(app_handle.clone());
 
             // Spawn updater background tasks
             updater::spawn_update_tasks(&app_handle, update_state);
 
-            // @trace spec:simplified-tray-ux
-            // Pre-build the static tray menu once. Stage transitions toggle
-            // set_enabled on individual handles instead of rebuilding the
-            // tree (the legacy `menu::build_tray_menu` path is gone).
-            let tm = tray_menu::TrayMenu::<tauri::Wry>::new(&app_handle)?;
-            let menu_root = tm.root.clone();
-            // Store the pre-built menu globally so the event loop can drive it.
-            // Subsequent .new() calls would conflict; OnceLock prevents that.
-            if TRAY_MENU.set(tm).is_err() {
-                warn!("TRAY_MENU already initialised — duplicate setup?");
-            }
+            // Build initial tray menu
+            let tray_menu = {
+                let s = state_for_setup.lock().unwrap();
+                menu::build_tray_menu(&app_handle, &s)?
+            };
 
             // Build tray icon — store handle so it persists and callbacks remain active
             // Icon bytes come from the SVG→PNG build pipeline (Ionantha pup = startup state)
@@ -470,97 +257,45 @@ fn main() {
             let tray = TrayIconBuilder::new()
                 .icon(icon)
                 .tooltip("Tillandsias")
-                .menu(&menu_root)
+                .menu(&tray_menu)
                 .on_menu_event({
                     let menu_tx = menu_tx.clone();
+                    let app_handle = app_handle.clone();
                     let state_for_menu = state_for_setup.clone();
                     move |_app, event| {
-                        // @trace spec:simplified-tray-ux
-                        // Stable IDs, no generation suffix. The new TrayMenu
-                        // reuses item handles forever, so libappindicator's
-                        // blank-label cache bug does not apply.
-                        let id = event.id().as_ref();
+                        let raw_id = event.id().as_ref();
+                        let id = menu::ids::strip_gen(raw_id);
                         debug!(menu_id = %id, "Menu event received");
 
                         // Blooming → Mature: any menu interaction acknowledges
                         // the "something new" state and transitions to idle.
-                        // @trace spec:tray-icon-lifecycle, spec:tray-progress-and-icon-states
-                        //
-                        // try_lock instead of lock — the menu event handler
-                        // must NEVER block on the state mutex. If a build
-                        // progress event is mid-write to state, the Bloom→
-                        // Mature transition is fine to skip; we'll catch it
-                        // on the next menu interaction. What we cannot do is
-                        // block here, because that would make Quit (handled
-                        // below) feel unresponsive during builds.
-                        if let Ok(mut s) = state_for_menu.try_lock() {
+                        // @trace spec:tray-icon-lifecycle
+                        {
+                            let mut s = state_for_menu.lock().unwrap();
                             if s.tray_icon_state == TrayIconState::Blooming {
                                 s.tray_icon_state = TrayIconState::Mature;
                                 if let Some(tray_lock) = TRAY_ICON.get()
-                                    && let Ok(tray) = tray_lock.try_lock()
-                                    && let Ok(icon) = tauri::image::Image::from_bytes(
+                                    && let Ok(tray) = tray_lock.lock()
+                                {
+                                    if let Ok(icon) = tauri::image::Image::from_bytes(
                                         icons::tray_icon_png(TrayIconState::Mature),
-                                    )
-                                        && let Err(e) = tray.set_icon(Some(icon)) {
+                                    ) {
+                                        if let Err(e) = tray.set_icon(Some(icon)) {
                                             debug!(error = %e, "Tray icon update failed (cosmetic)");
                                         }
+                                    }
+                                }
                             }
                         }
 
-                        // @trace spec:app-lifecycle, spec:tray-progress-and-icon-states
-                        // Quit is dispatched through the menu channel so the event loop
-                        // owns the sole shutdown_all() invocation.
-                        //
-                        // CRITICAL UX: turn the tray icon to withered (Dried)
-                        // BEFORE enqueueing the Quit command, so the user gets
-                        // instant visual feedback that the click registered. The
-                        // event loop processes Quit asynchronously and
-                        // shutdown_all can take 30+ seconds during in-flight
-                        // builds — without this immediate icon swap the user
-                        // sees no acknowledgement and clicks Quit again,
-                        // generating duplicate events.
-                        //
-                        // We use try_lock on the state mutex (NOT lock) so that
-                        // even if some other task is mid-write to the state, the
-                        // user's Quit click still registers — the icon update is
-                        // best-effort. The Quit ENQUEUE itself uses
-                        // blocking_send which is unbounded against a tokio mpsc
-                        // — it won't deadlock.
-                        //
-                        // @cheatsheet runtime/forge-container.md
-                        if id == tray_menu::ids::QUIT {
-                            info!(
-                                accountability = true,
-                                category = "app-lifecycle",
-                                spec = "app-lifecycle, tray-progress-and-icon-states",
-                                "Quit requested — flipping icon to withered immediately"
-                            );
-
-                            // Best-effort: try to grab the state mutex briefly
-                            // and the tray-icon mutex briefly. If either is held
-                            // by a slow writer, skip the icon update — the Quit
-                            // dispatch is what matters.
-                            if let Ok(mut s) = state_for_menu.try_lock() {
-                                s.tray_icon_state = TrayIconState::Dried;
-                            }
-                            if let Some(tray_lock) = TRAY_ICON.get()
-                                && let Ok(tray) = tray_lock.try_lock()
-                                && let Ok(icon) = tauri::image::Image::from_bytes(
-                                    icons::tray_icon_png(TrayIconState::Dried),
-                                )
-                            {
-                                let _ = tray.set_icon(Some(icon));
-                            }
-
-                            if let Err(e) = menu_tx.blocking_send(MenuCommand::Quit) {
-                                warn!(error = %e, "menu channel closed — falling back to direct exit");
-                                singleton::release();
-                                std::process::exit(0);
-                            }
-                            return;
+                        // Quit fast-path — exit immediately, no channel round-trip
+                        if id == menu::ids::QUIT {
+                            info!("Quit requested");
+                            singleton::release();
+                            std::process::exit(0);
                         }
 
-                        handle_menu_click(id, &menu_tx);
+                        handle_menu_click(id, &menu_tx, &app_handle);
                     }
                 })
                 .build(app)?;
@@ -652,12 +387,15 @@ fn main() {
                     // Set Dried icon immediately
                     if let Some(tray_lock) = TRAY_ICON.get()
                         && let Ok(tray) = tray_lock.lock()
-                        && let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                    {
+                        if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
                             TrayIconState::Dried,
-                        ))
-                            && let Err(e) = tray.set_icon(Some(icon)) {
+                        )) {
+                            if let Err(e) = tray.set_icon(Some(icon)) {
                                 debug!(error = %e, "Tray icon update failed (cosmetic)");
                             }
+                        }
+                    }
                     // Rebuild menu to show Dried state
                     rebuild_menu(&app_handle_for_loop, &state_for_loop);
                 }
@@ -769,11 +507,22 @@ fn main() {
                         // All images already present — go straight to ready state.
                         info!("All images present at launch — skipping builds");
 
-                        // @trace spec:tombstone-tools-overlay
-                        // Tools overlay tombstoned — agents are hard-installed in
-                        // the forge image at /usr/local/bin/ (see Containerfile).
-                        // Forge is available as soon as its image is present.
-                        let overlay_ok = true;
+                        // @trace spec:layered-tools-overlay
+                        // Build tools overlay. Hard failure — no per-container
+                        // fallback. Forge stays unavailable so the real error
+                        // (missing forge image, WSL broken, etc.) is visible.
+                        let overlay_build_tx = build_tx.clone();
+                        let overlay_ok = match crate::tools_overlay::ensure_tools_overlay(overlay_build_tx).await {
+                            Ok(()) => true,
+                            Err(e) => {
+                                error!(
+                                    spec = "layered-tools-overlay",
+                                    error = %e,
+                                    "Tools overlay build failed — forge unavailable",
+                                );
+                                false
+                            }
+                        };
 
                         if overlay_ok {
                             {
@@ -783,12 +532,15 @@ fn main() {
                             }
                             if let Some(tray_lock) = TRAY_ICON.get()
                                 && let Ok(tray) = tray_lock.lock()
-                                && let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                            {
+                                if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
                                     TrayIconState::Mature,
-                                ))
-                                    && let Err(e) = tray.set_icon(Some(icon)) {
+                                )) {
+                                    if let Err(e) = tray.set_icon(Some(icon)) {
                                         debug!(error = %e, "Tray icon update failed (cosmetic)");
                                     }
+                                }
+                            }
                         } else {
                             {
                                 let mut s = state_for_loop.lock().unwrap();
@@ -796,22 +548,21 @@ fn main() {
                             }
                             if let Some(tray_lock) = TRAY_ICON.get()
                                 && let Ok(tray) = tray_lock.lock()
-                                && let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                            {
+                                if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
                                     TrayIconState::Dried,
-                                ))
-                                    && let Err(e) = tray.set_icon(Some(icon)) {
+                                )) {
+                                    if let Err(e) = tray.set_icon(Some(icon)) {
                                         debug!(error = %e, "Tray icon update failed (cosmetic)");
                                     }
+                                }
+                            }
                             handlers::send_notification(
                                 "Tillandsias",
                                 i18n::t("notifications.infrastructure_failed"),
                             );
                         }
                         rebuild_menu(&app_handle_for_loop, &state_for_loop);
-                        // @trace spec:simplified-tray-ux
-                        // All images already present — fire credential probe so we
-                        // can transition Ready → Authed/NoAuth/NetIssue.
-                        spawn_credential_probe(app_handle_for_loop.clone(), state_for_loop.clone());
                     } else {
                         // Step 3: Build missing images sequentially with per-component chips.
                         // Set icon to Building and keep forge_available = false.
@@ -821,12 +572,15 @@ fn main() {
                         }
                         if let Some(tray_lock) = TRAY_ICON.get()
                             && let Ok(tray) = tray_lock.lock()
-                            && let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                        {
+                            if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
                                 TrayIconState::Building,
-                            ))
-                                && let Err(e) = tray.set_icon(Some(icon)) {
+                            )) {
+                                if let Err(e) = tray.set_icon(Some(icon)) {
                                     debug!(error = %e, "Tray icon update failed (cosmetic)");
                                 }
+                            }
+                        }
                         rebuild_menu(&app_handle_for_loop, &state_for_loop);
 
                         let mut proxy_ok = true;  // assume ok unless proxy is in needs_build and fails
@@ -932,13 +686,29 @@ fn main() {
                             }
                         }
 
-                        // Step 4 tombstoned: tools overlay removed — agents are
-                        // hard-installed in the forge image (/usr/local/bin/).
-                        // @trace spec:tombstone-tools-overlay
-
-                        // Step 5: Set forge_available only if proxy + forge built.
-                        // forge_available gates menu items.
+                        // Step 4: Build tools overlay now that forge image is ready.
+                        // Hard failure — no per-container fallback. Overlay
+                        // failure keeps forge_available=false so the menu
+                        // reflects the real state.
+                        // @trace spec:layered-tools-overlay
+                        let mut overlay_ok = false;
                         if proxy_ok && forge_ok {
+                            let overlay_build_tx = build_tx.clone();
+                            match crate::tools_overlay::ensure_tools_overlay(overlay_build_tx).await {
+                                Ok(()) => overlay_ok = true,
+                                Err(e) => {
+                                    error!(
+                                        spec = "layered-tools-overlay",
+                                        error = %e,
+                                        "Tools overlay build failed — forge unavailable",
+                                    );
+                                }
+                            }
+                        }
+
+                        // Step 5: Set forge_available only if proxy + forge built AND
+                        // tools overlay succeeded. forge_available gates menu items.
+                        if proxy_ok && forge_ok && overlay_ok {
                             {
                                 let mut s = state_for_loop.lock().unwrap();
                                 s.forge_available = true;
@@ -946,12 +716,15 @@ fn main() {
                             }
                             if let Some(tray_lock) = TRAY_ICON.get()
                                 && let Ok(tray) = tray_lock.lock()
-                                && let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                            {
+                                if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
                                     TrayIconState::Mature,
-                                ))
-                                    && let Err(e) = tray.set_icon(Some(icon)) {
+                                )) {
+                                    if let Err(e) = tray.set_icon(Some(icon)) {
                                         debug!(error = %e, "Tray icon update failed (cosmetic)");
                                     }
+                                }
+                            }
                             // @trace spec:tray-app
                             // Desktop notification so the user knows the system is ready,
                             // even if they're not watching the tray menu.
@@ -963,7 +736,8 @@ fn main() {
                             warn!(
                                 proxy_ok,
                                 forge_ok,
-                                "Setup incomplete — menus remain disabled"
+                                overlay_ok,
+                                "Setup incomplete (images or tools overlay) — menus remain disabled"
                             );
                             {
                                 let mut s = state_for_loop.lock().unwrap();
@@ -971,27 +745,21 @@ fn main() {
                             }
                             if let Some(tray_lock) = TRAY_ICON.get()
                                 && let Ok(tray) = tray_lock.lock()
-                                && let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                            {
+                                if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
                                     TrayIconState::Dried,
-                                ))
-                                    && let Err(e) = tray.set_icon(Some(icon)) {
+                                )) {
+                                    if let Err(e) = tray.set_icon(Some(icon)) {
                                         debug!(error = %e, "Tray icon update failed (cosmetic)");
                                     }
+                                }
+                            }
                             handlers::send_notification(
                                 "Tillandsias",
                                 i18n::t("notifications.infrastructure_failed"),
                             );
                         }
                         rebuild_menu(&app_handle_for_loop, &state_for_loop);
-                        // @trace spec:simplified-tray-ux
-                        // Builds finished (success or partial failure). Fire the
-                        // credential probe so the tray transitions out of Ready.
-                        if proxy_ok && forge_ok {
-                            spawn_credential_probe(
-                                app_handle_for_loop.clone(),
-                                state_for_loop.clone(),
-                            );
-                        }
                     }
                 }
 
@@ -1013,37 +781,6 @@ fn main() {
                         }
                     }
                     info!(count = s.projects.len(), "Initial project scan complete");
-                }
-
-                // @trace spec:git-mirror-service
-                // Startup mirror -> host sync: catch up any stranded commits
-                // from a previous session (e.g. tray crash between mirror
-                // receiving a push and the host working copy learning about
-                // it). Fast-forward only, skips dirty / diverged / detached
-                // hosts; see `src-tauri/src/mirror_sync.rs`.
-                //
-                // After the startup sweep, arm a filesystem watcher on the
-                // mirrors root. Every subsequent ref update in any project's
-                // mirror (from forge post-receive, startup retry-push, or
-                // manual push) triggers an event-driven sync for just that
-                // project. No polling; driven by inotify / FSEvents.
-                {
-                    let cfg = tillandsias_core::config::load_global_config();
-                    let mirrors_root = tillandsias_core::config::cache_dir().join("mirrors");
-                    crate::mirror_sync::sync_all_projects(
-                        &mirrors_root,
-                        &cfg.scanner.watch_paths,
-                    );
-                    if let Err(e) = crate::mirror_sync::spawn_watcher(
-                        mirrors_root.clone(),
-                        cfg.scanner.watch_paths.clone(),
-                    ) {
-                        warn!(
-                            spec = "git-mirror-service",
-                            error = %e,
-                            "failed to arm mirror watcher — falls back to per-container-stop sync only"
-                        );
-                    }
                 }
 
                 // Rebuild menu after initial scan
@@ -1070,17 +807,26 @@ fn main() {
                     );
                 }
 
+                // Start Unix socket listener for MCP browser server
+                // @trace spec:browser-mcp-server
+                #[cfg(target_os = "linux")]
+                {
+                    let browser_tx_clone = browser_tx.clone();
+                    let _socket_task = tauri::async_runtime::spawn(async move {
+                        if let Err(e) = listen_browser_socket(browser_tx_clone).await {
+                            error!(error = %e, "Browser socket listener failed");
+                        }
+                    });
+                }
+
                 // Run main event loop
                 let loop_state = { state_for_loop.lock().unwrap().clone() };
 
                 let state_for_rebuild = state_for_loop.clone();
                 let app_for_rebuild = app_handle_for_loop.clone();
 
-                // Use Arc so handlers can clone it cheaply for mid-pipeline
-                // state notifications (progressive chip updates during attach).
-                // @trace spec:tray-app
                 let on_state_change: event_loop::MenuRebuildFn =
-                    std::sync::Arc::new(move |new_state: &TrayState| {
+                    Box::new(move |new_state: &TrayState| {
                         // Compute new icon state before acquiring the lock
                         let new_icon_state = new_state.compute_icon_state();
 
@@ -1104,8 +850,8 @@ fn main() {
                         };
 
                         // Update tray icon if state changed
-                        if new_icon_state != old_icon_state
-                            && let Some(tray_lock) = TRAY_ICON.get()
+                        if new_icon_state != old_icon_state {
+                            if let Some(tray_lock) = TRAY_ICON.get()
                                 && let Ok(tray) = tray_lock.lock()
                             {
                                 match tauri::image::Image::from_bytes(icons::tray_icon_png(
@@ -1126,6 +872,7 @@ fn main() {
                                     }
                                 }
                             }
+                        }
 
                         // Rebuild tray menu
                         rebuild_menu(&app_for_rebuild, &state_for_rebuild);
@@ -1136,14 +883,10 @@ fn main() {
                     scanner_rx,
                     podman_rx,
                     menu_rx,
+                    browser_rx,
                     build_rx,
                     build_tx,
                     on_state_change,
-                    // @trace spec:app-lifecycle
-                    // Hand the event loop an AppHandle so its Quit arm can call
-                    // app.exit(0) after shutdown_all() — the only explicit exit
-                    // path in the app.
-                    app_handle_for_loop.clone(),
                 )
                 .await;
             });
@@ -1153,190 +896,317 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building tillandsias")
         .run(move |_app, event| {
-            // @trace spec:app-lifecycle
-            // Tauri no longer hosts any webview windows (OpenCode Web opens
-            // in the user's native browser). The only window event we could
-            // ever receive is defensive; RunEvent::ExitRequested handling
-            // below keeps the tray alive against spurious auto-exits.
-
-            // @trace spec:app-lifecycle
-            // ExitRequested discriminates on `code`:
-            //   code = None  -> Tauri auto-exit (last window closed). Prevent it —
-            //                   the tray icon is the app's identity, not any window.
-            //   code = Some  -> Explicit exit initiated by us (event_loop calls
-            //                   app.exit(0) after shutdown_all). Finalize and let
-            //                   Tauri exit. shutdown_all() already ran; we do NOT
-            //                   re-run it here.
-            if let tauri::RunEvent::ExitRequested { api, code, .. } = &event {
-                if code.is_none() {
+            // @trace spec:opencode-web-session, spec:app-lifecycle
+            // Closing a webview window must not exit the tray. Tauri's default
+            // behaviour treats the last closed window as "app done", but our
+            // tray icon is not a window. Filter `web-*` close events early so
+            // they never propagate to RunEvent::ExitRequested.
+            if let tauri::RunEvent::WindowEvent {
+                label,
+                event: tauri::WindowEvent::CloseRequested { .. },
+                ..
+            } = &event
+            {
+                if label.starts_with("web-") {
                     tracing::debug!(
-                        spec = "app-lifecycle",
-                        "ExitRequested(None) — auto-exit prevented (tray persists)"
+                        spec = "opencode-web-session",
+                        label = %label,
+                        "webview close intercepted — tray remains"
                     );
-                    api.prevent_exit();
                     return;
                 }
-                info!(code = ?code, "Exit requested — finalizing");
+            }
+
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                info!("Exit requested");
+
+                // @trace spec:proxy-container, spec:enclave-network
+                // Stop the proxy container and remove the enclave network on exit.
+                // Uses a blocking runtime since we are in the sync RunEvent handler.
+                if let Ok(rt) = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    rt.block_on(async {
+                        handlers::stop_inference().await;
+                        handlers::stop_proxy().await;
+                        handlers::cleanup_enclave_network().await;
+                    });
+                }
+
                 singleton::release();
                 let _ = shutdown_tx.blocking_send(());
             }
         });
 }
 
-// @trace spec:tray-app, spec:tray-progress-and-icon-states
-// Stage selection driver. Determines which of the six stages the menu
-// should display from the live `TrayState` and the cached credential
-// probe result. Pure function — no Tauri side-effects.
-//
-// Precedence (highest first):
-// 1. Unhealthy — at least one infrastructure build is in `Failed` state
-//    AND no in-progress build for the same image (in-progress retries
-//    supersede a prior failure).
-// 2. Booting — any in-progress build, or forge image not yet ready.
-// 3. NoAuth / Authed / NetIssue — derived from the credential probe.
-// 4. Ready — fallback when probe hasn't completed yet.
-fn current_stage(s: &TrayState) -> tray_menu::Stage {
-    use tillandsias_core::state::BuildStatus;
+/// Fingerprint of the last menu rebuild — avoids redundant `set_menu` calls
+/// that can steal window focus on Windows and AppImage.
+static LAST_MENU_FINGERPRINT: AtomicU64 = AtomicU64::new(0);
 
-    let any_in_progress = s
-        .active_builds
-        .iter()
-        .any(|b| matches!(b.status, BuildStatus::InProgress));
-
-    // @trace spec:tray-progress-and-icon-states
-    // Unhealthy: any build failed AND there is no concurrent retry of
-    // the same image. A retry's InProgress entry supersedes the prior
-    // Failed entry (per `event_loop.rs::handle_build_progress_event`,
-    // BuildProgressEvent::Started clears the prior Failed row before
-    // pushing a new InProgress one — but if the loop is still mid-tick
-    // we may briefly see both, so guard explicitly).
-    let any_failed = s
-        .active_builds
-        .iter()
-        .any(|b| matches!(b.status, BuildStatus::Failed(_)));
-    if any_failed && !any_in_progress {
-        return tray_menu::Stage::Unhealthy;
+/// Compute a cheap fingerprint of menu-relevant state.
+/// Only structural changes (project count, running count, build chips, forge status)
+/// warrant a full menu rebuild.
+fn menu_fingerprint(s: &TrayState) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    // Include i18n generation so language changes force a rebuild
+    i18n::generation().hash(&mut h);
+    s.projects.len().hash(&mut h);
+    s.running.len().hash(&mut h);
+    s.active_builds.len().hash(&mut h);
+    s.forge_available.hash(&mut h);
+    s.has_podman.hash(&mut h);
+    s.tray_icon_state.hash(&mut h);
+    s.remote_repos_loading.hash(&mut h);
+    s.cloning_project.hash(&mut h);
+    // Hash project names to detect additions/removals
+    for p in &s.projects {
+        p.name.hash(&mut h);
     }
-
-    // Booting: any in-progress build, or forge image not yet ready.
-    if any_in_progress || !s.forge_available {
-        return tray_menu::Stage::Booting;
+    // Hash running container names
+    for r in &s.running {
+        r.name.hash(&mut h);
     }
-
-    // Once images are ready, fall back to the cached credential probe.
-    // If the probe hasn't completed yet, show Ready (transient).
-    let health = CREDENTIAL_HEALTH
-        .get()
-        .and_then(|m| m.lock().ok().and_then(|g| g.clone()));
-    match health {
-        Some(h) => tray_menu::stage_from_health(&h),
-        None => tray_menu::Stage::Ready,
+    // Hash build chip names + status
+    for b in &s.active_builds {
+        b.image_name.hash(&mut h);
+        std::mem::discriminant(&b.status).hash(&mut h);
     }
+    h.finish()
 }
 
-/// Apply the latest state to the pre-built tray menu.
-///
-/// Routes to the dynamic-region rebuild (status line, sign-in action,
-/// running-stack submenus, Projects ▸, Remote Projects ▸) — gated
-/// internally on a cache-key tuple to avoid pointless rebuilds.
-///
-/// @trace spec:tray-app
+/// Rebuild the tray menu from current state and apply it to the tray icon.
+/// Skips the rebuild if the menu-relevant state hasn't changed, avoiding
+/// focus-stealing on Windows and AppImage.
 fn rebuild_menu(app_handle: &tauri::AppHandle, state: &Arc<Mutex<TrayState>>) {
-    let Some(menu) = TRAY_MENU.get() else {
-        debug!("TRAY_MENU not yet initialised — skipping rebuild");
-        return;
-    };
     let s = state.lock().unwrap();
-    let stage = current_stage(&s);
 
-    if let Err(e) = menu.apply_state(app_handle, stage, &s) {
-        debug!(error = %e, "apply_state failed (cosmetic)");
+    // Skip rebuild if menu content hasn't changed
+    let fp = menu_fingerprint(&s);
+    let prev = LAST_MENU_FINGERPRINT.swap(fp, Ordering::Relaxed);
+    if fp == prev {
+        return;
+    }
+
+    match menu::build_tray_menu(app_handle, &s) {
+        Ok(new_menu) => {
+            if let Some(tray_lock) = TRAY_ICON.get()
+                && let Ok(tray) = tray_lock.lock()
+            {
+                if let Err(e) = tray.set_menu(Some(new_menu)) {
+                    debug!(error = %e, "Tray menu update failed (cosmetic)");
+                }
+                debug!(
+                    projects = s.projects.len(),
+                    running = s.running.len(),
+                    "Tray menu rebuilt"
+                );
+            }
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to rebuild tray menu");
+        }
     }
 }
 
-/// Dispatch a menu click ID to the appropriate `MenuCommand`. Returns
-/// `None` for IDs handled out-of-band (Quit, IncludeRemote — those are
-/// resolved at the call site in `on_menu_event`).
-fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>) {
-    if let Some(cmd) = tray_menu::dispatch_click(id)
-        && tx.try_send(cmd).is_err() {
+/// Dispatch a menu click ID to the appropriate `MenuCommand`.
+fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::AppHandle) {
+    // Strip the generation suffix (e.g., "quit#5" -> "quit") added to avoid
+    // libappindicator's menu ID caching bug that causes blank labels.
+    let id = menu::ids::strip_gen(id);
+
+    let command = match id {
+        menu::ids::QUIT => None, // Handled via fast-path above
+        menu::ids::GITHUB_LOGIN => Some(MenuCommand::GitHubLogin),
+        menu::ids::CLAUDE_RESET_CREDENTIALS => Some(MenuCommand::ClaudeResetCredentials),
+        menu::ids::SETTINGS => Some(MenuCommand::Settings),
+        menu::ids::REFRESH_REMOTE_PROJECTS => Some(MenuCommand::RefreshRemoteProjects),
+        "root-terminal" => Some(MenuCommand::RootTerminal),
+        _ => {
+            if let Some((action, payload)) = menu::ids::parse(id) {
+                match action {
+                    "attach" => Some(MenuCommand::AttachHere {
+                        project_path: payload.into(),
+                    }),
+                    "terminal" => Some(MenuCommand::Terminal {
+                        project_path: payload.into(),
+                    }),
+                    "serve" => Some(MenuCommand::ServeHere {
+                        project_path: payload.into(),
+                    }),
+                    // "start" ID no longer emitted from menu but kept
+                    // for safety in case external callers use it.
+                    "start" => Some(MenuCommand::Start {
+                        project_path: payload.into(),
+                    }),
+                    "stop" => {
+                        if let Some((_, genus)) = ContainerInfo::parse_container_name(payload) {
+                            Some(MenuCommand::Stop {
+                                container_name: payload.to_string(),
+                                genus,
+                            })
+                        } else {
+                            warn!(id, "Cannot parse container name from stop action");
+                            None
+                        }
+                    }
+                    // @trace spec:opencode-web-session, spec:tray-app
+                    "stop-project" => Some(MenuCommand::StopProject {
+                        project_path: payload.into(),
+                    }),
+                    "destroy" => {
+                        if let Some((_, genus)) = ContainerInfo::parse_container_name(payload) {
+                            Some(MenuCommand::Destroy {
+                                container_name: payload.to_string(),
+                                genus,
+                            })
+                        } else {
+                            warn!(id, "Cannot parse container name from destroy action");
+                            None
+                        }
+                    }
+                    "clone" => {
+                        // Payload format: "<full_name>\t<name>"
+                        if let Some((full_name, name)) = payload.split_once('\t') {
+                            Some(MenuCommand::CloneProject {
+                                full_name: full_name.to_string(),
+                                name: name.to_string(),
+                            })
+                        } else {
+                            warn!(id, "Cannot parse clone project from menu ID");
+                            None
+                        }
+                    }
+                    "select-agent" => Some(MenuCommand::SelectAgent {
+                        agent: payload.to_string(),
+                    }),
+                    "select-lang" => Some(MenuCommand::SelectLanguage {
+                        language: payload.to_string(),
+                    }),
+                    _ => {
+                        debug!(action, "Unknown menu action");
+                        None
+                    }
+                }
+            } else {
+                None
+            }
+        }
+    };
+
+    if let Some(cmd) = command {
+        if tx.try_send(cmd).is_err() {
             debug!("Menu command channel full/closed — action may be dropped");
         }
-}
-
-/// Run the GitHub credential health probe in a background task and store
-/// the result in `CREDENTIAL_HEALTH`. After the probe completes the menu
-/// is rebuilt so the stage transitions to Authed / NoAuth / NetIssue.
-///
-/// Cached for the process lifetime; only re-runs on user-initiated
-/// sign-in / sign-out actions per the spec.
-///
-/// @trace spec:simplified-tray-ux
-/// Refresh the pre-built menu's static labels (called after a language
-/// change so the new strings take effect without rebuilding the tree).
-///
-/// @trace spec:simplified-tray-ux
-pub(crate) fn refresh_menu_labels() {
-    if let Some(menu) = TRAY_MENU.get() {
-        menu.refresh_static_labels();
     }
 }
 
-/// Shut down the tray-host control socket. Called by the event loop's
-/// Quit arm after `shutdown_all` so any final tray↔consumer messages can
-/// flush before the listener disappears.
+/// Listen on Unix socket for browser window requests from MCP server.
 ///
-/// On Windows: no-op — the control socket isn't bound on non-Unix targets
-/// (see `static CONTROL_SOCKET` doc-comment). The event loop's call site
-/// is `cfg(unix)`-gated, but we keep a stub here so any future caller
-/// added without a gate fails closed instead of refusing to compile.
+/// The MCP server (running in forge containers) connects to this socket
+/// and sends JSON-RPC requests to open browser windows.
 ///
-/// @trace spec:tray-host-control-socket, spec:cross-platform
-#[cfg(unix)]
-pub(crate) async fn shutdown_control_socket() {
-    if let Some(socket) = CONTROL_SOCKET.get() {
-        socket.lock().await.shutdown().await;
-    }
-}
+/// @trace spec:browser-mcp-server
+#[cfg(target_os = "linux")]
+async fn listen_browser_socket(tx: mpsc::Sender<MenuCommand>) -> Result<(), String> {
+    use std::os::unix::net::{UnixListener, UnixStream};
+    use std::io::{BufRead, BufReader};
+    use std::path::Path;
 
-#[cfg(not(unix))]
-pub(crate) async fn shutdown_control_socket() {}
+    let socket_path = "/run/tillandsias/tray.sock";
 
-/// Convenience wrapper for callers that already initialised
-/// `TRAY_STATE_HANDLE` (i.e. anything after tray setup). Accepts only
-/// the app handle; pulls the state Arc from the global slot.
-///
-/// @trace spec:simplified-tray-ux
-pub(crate) fn reprobe_credentials(app_handle: tauri::AppHandle) {
-    if let Some(state) = TRAY_STATE_HANDLE.get() {
-        spawn_credential_probe(app_handle, state.clone());
-    } else {
-        debug!("TRAY_STATE_HANDLE not set — cannot re-probe credentials");
+    // Remove stale socket if it exists
+    if Path::new(socket_path).exists() {
+        std::fs::remove_file(socket_path)
+            .map_err(|e| format!("Failed to remove stale socket: {}", e))?;
     }
-}
 
-pub(crate) fn spawn_credential_probe(
-    app_handle: tauri::AppHandle,
-    state: Arc<Mutex<TrayState>>,
-) {
-    // Initialise the slot if missing; clear it so the next read sees None
-    // (Ready transient) until the new probe completes.
-    let slot = CREDENTIAL_HEALTH.get_or_init(|| Mutex::new(None));
-    if let Ok(mut g) = slot.lock() {
-        *g = None;
-    }
-    tauri::async_runtime::spawn(async move {
-        let health = crate::github_health::probe().await;
-        info!(
-            spec = "simplified-tray-ux",
-            health = %health,
-            "Credential probe complete — applying stage"
-        );
-        if let Some(slot) = CREDENTIAL_HEALTH.get()
-            && let Ok(mut g) = slot.lock()
-        {
-            *g = Some(health);
+    let listener = UnixListener::bind(socket_path)
+        .map_err(|e| format!("Failed to bind Unix socket '{}': {}", socket_path, e))?;
+
+    // Set permissions so forge containers can connect
+    std::fs::set_permissions(socket_path, std::os::unix::fs::PermissionsExt::from_mode(0o666))
+        .map_err(|e| format!("Failed to set socket permissions: {}", e))?;
+
+    info!(
+        spec = "browser-mcp-server",
+        socket = socket_path,
+        "Browser socket listener started"
+    );
+
+    for stream in listener.incoming() {
+        match stream {
+            Ok(stream) => {
+                let tx = tx.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = handle_browser_socket_connection(stream, tx).await {
+                        debug!(error = %e, "Browser socket connection failed");
+                    }
+                });
+            }
+            Err(e) => {
+                error!(error = %e, "Browser socket accept failed");
+            }
         }
-        rebuild_menu(&app_handle, &state);
-    });
+    }
+
+    Ok(())
+}
+
+/// Handle a single browser socket connection from MCP server.
+#[cfg(target_os = "linux")]
+async fn handle_browser_socket_connection(
+    stream: std::os::unix::net::UnixStream,
+    tx: mpsc::Sender<MenuCommand>,
+) -> Result<(), String> {
+    use std::io::{BufRead, BufReader};
+
+    let reader = BufReader::new(&stream);
+    let mut lines = reader.lines();
+
+    while let Some(line_result) = lines.next() {
+        let line = line_result.map_err(|e| e.to_string())?;
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        match serde_json::from_str::<serde_json::Value>(&line) {
+            Ok(request) => {
+                let method = request.get("method").and_then(|m| m.as_str());
+                let params = request.get("params");
+
+                match method {
+                    Some("open_browser_window") => {
+                        if let Some(params) = params {
+                            let project = params.get("project").and_then(|p| p.as_str());
+                            let url = params.get("url").and_then(|u| u.as_str());
+                            let window_type = params.get("window_type").and_then(|w| w.as_str());
+
+                            if let (Some(project), Some(url), Some(window_type)) = (project, url, window_type) {
+                                let cmd = MenuCommand::OpenBrowserWindow {
+                                    project: project.to_string(),
+                                    url: url.to_string(),
+                                    window_type: window_type.to_string(),
+                                };
+                                if tx.send(cmd).await.is_err() {
+                                    error!("Browser command channel closed");
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        debug!(method = ?method, "Unknown browser socket method");
+                    }
+                }
+            }
+            Err(e) => {
+                debug!(error = %e, "Failed to parse browser socket request");
+            }
+        }
+    }
+
+    Ok(())
 }

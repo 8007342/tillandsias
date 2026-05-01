@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-use tillandsias_core::config::{load_global_config, save_selected_language};
+use tillandsias_core::config::{SelectedAgent, load_global_config, save_selected_agent, save_selected_language};
 use tillandsias_core::event::{BuildProgressEvent, ContainerState, MenuCommand};
 use tillandsias_core::genus::GenusAllocator;
 use tillandsias_core::project::{ArtifactStatus, Project, ProjectChange, ProjectType};
@@ -24,16 +24,8 @@ use crate::{github, handlers};
 /// Duration a completed build chip remains visible in the menu before being pruned.
 const BUILD_CHIP_FADEOUT: Duration = Duration::from_secs(10);
 
-/// Cheaply-clonable callback for menu rebuilds after state changes.
-///
-/// Using `Arc` (rather than `Box`) so handlers that run long async pipelines
-/// can call the rebuild function mid-pipeline without lifetime issues — the
-/// Arc is cloned into the handler once and the handler calls it at key
-/// milestones (placeholder pushed, build started) to update the menu before
-/// the slow forge-build + enclave-setup pipeline completes.
-///
-/// @trace spec:tray-app
-pub type MenuRebuildFn = std::sync::Arc<dyn Fn(&TrayState) + Send + Sync>;
+/// Callback for menu rebuilds after state changes.
+pub type MenuRebuildFn = Box<dyn Fn(&TrayState) + Send + Sync>;
 
 /// Run the main event loop. This drives the entire application.
 ///
@@ -41,6 +33,7 @@ pub type MenuRebuildFn = std::sync::Arc<dyn Fn(&TrayState) + Send + Sync>;
 /// - Scanner: filesystem changes (project discovered/updated/removed)
 /// - Podman events: container state changes
 /// - Menu actions: user clicks in the tray menu
+/// - Browser socket: requests from MCP server to open browser windows
 /// - Build progress: image/maintenance build state transitions
 /// - Shutdown signal: SIGTERM/SIGINT
 ///
@@ -51,14 +44,10 @@ pub async fn run(
     mut scanner_rx: mpsc::Receiver<ProjectChange>,
     mut podman_rx: mpsc::Receiver<tillandsias_podman::events::PodmanEvent>,
     mut menu_rx: mpsc::Receiver<MenuCommand>,
+    mut browser_rx: mpsc::Receiver<MenuCommand>,
     mut build_rx: mpsc::Receiver<BuildProgressEvent>,
     build_tx: mpsc::Sender<BuildProgressEvent>,
     on_state_change: MenuRebuildFn,
-    // @trace spec:app-lifecycle
-    // AppHandle is required so MenuCommand::Quit can call app_handle.exit(0)
-    // after shutdown_all(), triggering RunEvent::ExitRequested { code: Some(0) }
-    // which the main.rs handler recognises as an explicit exit.
-    app_handle: tauri::AppHandle<tauri::Wry>,
 ) {
     let mut allocator = GenusAllocator::new();
     let mut tool_allocator = ToolAllocator::new();
@@ -87,134 +76,9 @@ pub async fn run(
     let mut proxy_health_interval = tokio::time::interval(Duration::from_secs(60));
     proxy_health_interval.tick().await; // consume first immediate tick
 
-    // External-logs auditor timer — checks manifest compliance, size caps,
-    // and growth-rate alarms for every running producer container.
-    // @trace spec:external-logs-layer
-    let mut external_logs_audit_interval = tokio::time::interval(Duration::from_secs(60));
-    external_logs_audit_interval.tick().await; // consume first immediate tick
-    let mut external_logs_growth_cache = handlers::ExternalLogsGrowthCache::new();
-
-    // @trace spec:tray-app, spec:podman-orchestration, spec:simplified-tray-ux, knowledge:lang/rust-async
+    // @trace spec:tray-app, spec:podman-orchestration, knowledge:lang/rust-async
     loop {
         tokio::select! {
-            // @trace spec:simplified-tray-ux
-            // `biased;` polls branches in source order. We deliberately
-            // declare `menu_rx` first below so MenuCommand::Quit is
-            // serviced within the spec's 5-second budget even when other
-            // channels (scanner / podman / build progress) are very busy.
-            //
-            // Without `biased;` tokio randomises branch poll order which
-            // is good for fairness on the hot path but bad for human-
-            // perceived responsiveness on Quit.
-            biased;
-
-            // Menu: user actions — TOP priority under `biased;` so Quit
-            // and Language are always serviced within the 5s budget
-            // regardless of how busy the other channels are.
-            // @trace spec:simplified-tray-ux
-            Some(command) = menu_rx.recv() => {
-                match command {
-                    MenuCommand::Quit => {
-                        // @trace spec:app-lifecycle, spec:opencode-web-session
-                        // Single owner of cleanup: stop every container, tear down
-                        // the enclave network, close every webview, then ask Tauri
-                        // to exit. The RunEvent::ExitRequested handler in main.rs
-                        // sees code=Some(0) and finalises without re-running
-                        // shutdown_all.
-                        info!(spec = "app-lifecycle", "Quit requested — running shutdown_all");
-                        handlers::shutdown_all(&state).await;
-                        // @trace spec:tray-host-control-socket
-                        // Tear down the control socket AFTER container shutdown so
-                        // any final tray↔consumer messages can flush before the
-                        // listener disappears.
-                        crate::shutdown_control_socket().await;
-                        info!(spec = "app-lifecycle", "shutdown_all complete — requesting Tauri exit");
-                        app_handle.exit(0);
-                        break;
-                    }
-                    MenuCommand::AttachHere { project_path } => {
-                        // CLI-only: `tillandsias <path>` still drives this. The tray
-                        // never emits AttachHere — it emits Launch instead.
-                        // @trace spec:tray-app
-                        // Clone the MenuRebuildFn Arc into the handler so it can
-                        // update the menu immediately when the placeholder is pushed,
-                        // before the long forge-build + enclave-setup pipeline begins.
-                        match handlers::handle_attach_here(project_path, &mut state, &mut allocator, build_tx.clone(), on_state_change.clone()).await {
-                            Ok(_event) => {
-                                prune_completed_builds(&mut state);
-                                on_state_change(&state);
-                            }
-                            Err(e) => {
-                                error!(error = %e, "Attach Here failed");
-                            }
-                        }
-                    }
-                    MenuCommand::GitHubLogin => {
-                        info!("GitHub Login requested");
-                        if let Err(e) = handlers::handle_github_login(&state, build_tx.clone()).await {
-                            error!(error = %e, "GitHub Login failed");
-                        } else {
-                            // Invalidate remote repos cache so it refreshes
-                            // on next menu open after auth completes.
-                            state.invalidate_remote_repos_cache();
-                            prune_completed_builds(&mut state);
-                            // @trace spec:simplified-tray-ux
-                            // Re-probe credentials so the stage transitions out
-                            // of NoAuth / NetIssue once the new token lands.
-                            crate::reprobe_credentials(app_handle.clone());
-                            on_state_change(&state);
-                        }
-                    }
-                    MenuCommand::RefreshRemoteProjects => {
-                        info!("Remote projects refresh requested");
-                        fetch_remote_repos(&mut state, &on_state_change).await;
-                    }
-                    MenuCommand::CloneProject { full_name, name } => {
-                        info!(repo = %full_name, "Clone project requested");
-                        handle_clone_project(&full_name, &name, &mut state, &mut allocator, build_tx.clone(), &on_state_change).await;
-                    }
-                    MenuCommand::SelectLanguage { language } => {
-                        info!(language = %language, "Language selection changed");
-                        save_selected_language(&language);
-                        // Reload i18n strings for the new locale and rebuild menu.
-                        crate::i18n::reload(&language);
-                        // @trace spec:simplified-tray-ux
-                        // Refresh the static label set on the pre-built menu so
-                        // the new locale takes effect without a full rebuild.
-                        crate::refresh_menu_labels();
-                        on_state_change(&state);
-                    }
-                    // @trace spec:simplified-tray-ux
-                    MenuCommand::Launch { project_path } => {
-                        info!(spec = "simplified-tray-ux", project = ?project_path, "Launch — routing to opencode-web forge");
-                        // Tray Launch is opencode-web only (per spec). Reuses the
-                        // existing forge if running; spawns one otherwise.
-                        // @trace spec:tray-app
-                        // Clone the MenuRebuildFn Arc into the handler so it flips
-                        // the chip to "Building / Starting" the moment the placeholder
-                        // is pushed — before the forge-build + enclave-setup pipeline.
-                        match handlers::handle_attach_web(project_path, &mut state, &mut allocator, build_tx.clone(), on_state_change.clone()).await {
-                            Ok(_event) => {
-                                prune_completed_builds(&mut state);
-                                on_state_change(&state);
-                            }
-                            Err(e) => warn!(error = %e, "Launch failed"),
-                        }
-                    }
-                    // @trace spec:simplified-tray-ux
-                    MenuCommand::MaintenanceTerminal { project_path } => {
-                        info!(spec = "simplified-tray-ux", project = ?project_path, "MaintenanceTerminal — exec into running forge");
-                        match handlers::handle_maintenance_terminal(project_path).await {
-                            Ok(()) => debug!("Maintenance terminal launched"),
-                            Err(e) => {
-                                warn!(error = %e, "Maintenance terminal failed");
-                                handlers::send_notification("Tillandsias", &e);
-                            }
-                        }
-                    }
-                }
-            }
-
             // Scanner: filesystem changes
             Some(change) = scanner_rx.recv() => {
                 handle_scanner_event(change, &mut state);
@@ -229,6 +93,33 @@ pub async fn run(
                 on_state_change(&state);
             }
 
+            // Browser socket: requests from MCP server
+            // @trace spec:browser-mcp-server
+            Some(command) = browser_rx.recv() => {
+                match command {
+                    MenuCommand::OpenBrowserWindow { project, url, window_type } => {
+                        info!(
+                            spec = "browser-mcp-server",
+                            project = %project,
+                            url = %url,
+                            window_type = %window_type,
+                            "Browser window request from MCP server"
+                        );
+                        match handlers::handle_open_browser_window(&project, &url, &window_type).await {
+                            Ok(_) => {
+                                info!(url = %url, "Browser window opened successfully");
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Failed to open browser window");
+                            }
+                        }
+                    }
+                    _ => {
+                        debug!("Unexpected command on browser channel");
+                    }
+                }
+            }
+
             // Build progress: image/maintenance build state transitions
             Some(event) = build_rx.recv() => {
                 handle_build_progress_event(event, &mut state, prune_tx.clone());
@@ -240,6 +131,191 @@ pub async fn run(
             Some(()) = prune_rx.recv() => {
                 prune_completed_builds(&mut state);
                 on_state_change(&state);
+            }
+
+            // Menu: user actions
+            Some(command) = menu_rx.recv() => {
+                match command {
+                    MenuCommand::Quit => {
+                        info!(spec = "tray-app", "Quit requested from menu");
+                        handlers::shutdown_all(&state).await;
+                        break;
+                    }
+                    MenuCommand::AttachHere { project_path } => {
+                        match handlers::handle_attach_here(project_path, &mut state, &mut allocator, build_tx.clone()).await {
+                            Ok(_event) => {
+
+                                prune_completed_builds(&mut state);
+                                on_state_change(&state);
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Attach Here failed");
+                            }
+                        }
+                    }
+                    MenuCommand::Start { .. } => {
+                        // Start variant kept for backwards compatibility but
+                        // removed from the menu (was a duplicate of Attach Here).
+                        debug!("Start command received but no longer shown in menu");
+                    }
+                    MenuCommand::Stop { container_name, genus: _ } => {
+                        match handlers::handle_stop(container_name, &mut state, &mut allocator).await {
+                            Ok(_event) => {
+
+                                prune_completed_builds(&mut state);
+                                on_state_change(&state);
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Stop failed");
+                            }
+                        }
+                    }
+                    // @trace spec:opencode-web-session, spec:tray-app
+                    MenuCommand::StopProject { project_path } => {
+                        info!(project = ?project_path, "Stop project requested");
+                        match handlers::handle_stop_project(project_path, &mut state).await {
+                            Ok(()) => {
+                                prune_completed_builds(&mut state);
+                                on_state_change(&state);
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Stop project failed");
+                            }
+                        }
+                    }
+                    MenuCommand::Destroy { container_name, genus: _ } => {
+                        match handlers::handle_destroy(container_name, &mut state, &mut allocator).await {
+                            Ok(_event) => {
+
+                                prune_completed_builds(&mut state);
+                                on_state_change(&state);
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Destroy failed");
+                            }
+                        }
+                    }
+                    MenuCommand::Terminal { project_path } => {
+                        info!(project = ?project_path, "Terminal requested");
+                        match handlers::handle_terminal(project_path, &mut state, &mut allocator, &mut tool_allocator, build_tx.clone()).await {
+                            Ok(()) => {
+
+                                prune_completed_builds(&mut state);
+                                on_state_change(&state);
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Terminal failed");
+                            }
+                        }
+                    }
+                    MenuCommand::ServeHere { project_path } => {
+                        info!(project = ?project_path, "Serve Here requested");
+                        match handlers::handle_serve_here(project_path, &mut state, build_tx.clone()).await {
+                            Ok(()) => {
+                                prune_completed_builds(&mut state);
+                                on_state_change(&state);
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Serve Here failed");
+                            }
+                        }
+                    }
+                    MenuCommand::RootTerminal => {
+                        info!("Root terminal requested");
+                        let watch_path = {
+                            let global_config = load_global_config();
+                            global_config
+                                .scanner
+                                .watch_paths
+                                .first()
+                                .cloned()
+                                .unwrap_or_else(|| {
+                                    std::path::PathBuf::from(
+                                        std::env::var("HOME").unwrap_or_else(|_| "/root".to_string()),
+                                    )
+                                    .join("src")
+                                })
+                        };
+                        match handlers::handle_root_terminal(watch_path, &mut state, &mut allocator, &mut tool_allocator, build_tx.clone()).await {
+                            Ok(()) => {
+
+                                prune_completed_builds(&mut state);
+                                on_state_change(&state);
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Root terminal failed");
+                            }
+                        }
+                    }
+                    MenuCommand::GitHubLogin => {
+                        info!("GitHub Login requested");
+                        if let Err(e) = handlers::handle_github_login(&state, build_tx.clone()).await {
+                            error!(error = %e, "GitHub Login failed");
+                        } else {
+                            // Invalidate remote repos cache so it refreshes
+                            // on next menu open after auth completes.
+                            state.invalidate_remote_repos_cache();
+                            prune_completed_builds(&mut state);
+                            on_state_change(&state);
+                        }
+                    }
+                    MenuCommand::RefreshRemoteProjects => {
+                        info!("Remote projects refresh requested");
+                        fetch_remote_repos(&mut state, &on_state_change).await;
+                    }
+                    MenuCommand::CloneProject { full_name, name } => {
+                        info!(repo = %full_name, "Clone project requested");
+                        handle_clone_project(&full_name, &name, &mut state, &mut allocator, build_tx.clone(), &on_state_change).await;
+                    }
+                    MenuCommand::ClaudeResetCredentials => {
+                        info!("Claude Reset Credentials requested");
+                        if let Err(e) = handlers::handle_claude_reset_credentials() {
+                            error!(error = %e, "Claude Reset Credentials failed");
+                        } else {
+                            // Rebuild menu to reflect cleared auth state
+                            on_state_change(&state);
+                        }
+                    }
+                    MenuCommand::SelectAgent { agent } => {
+                        if let Some(selected) = SelectedAgent::from_str_opt(&agent) {
+                            info!(agent = %agent, "Agent selection changed");
+                            save_selected_agent(selected);
+                            // Rebuild menu to update pin emoji
+                            on_state_change(&state);
+                        } else {
+                            debug!(agent = %agent, "Unknown agent in SelectAgent command");
+                        }
+                    }
+                    MenuCommand::SelectLanguage { language } => {
+                        info!(language = %language, "Language selection changed");
+                        save_selected_language(&language);
+                        // Reload i18n strings for the new locale and rebuild menu.
+                        crate::i18n::reload(&language);
+                        on_state_change(&state);
+                    }
+                    MenuCommand::Settings => {
+                        // Settings is a Submenu now — this event won't fire from menu clicks.
+                        // Kept for forward compatibility if Settings ever becomes actionable.
+                        debug!("Settings command received");
+                    }
+                    MenuCommand::OpenBrowserWindow { project, url, window_type } => {
+                        info!(
+                            spec = "browser-mcp-server",
+                            project = %project,
+                            url = %url,
+                            window_type = %window_type,
+                            "Browser window request from MCP server (menu channel)"
+                        );
+                        match handlers::handle_open_browser_window(&project, &url, &window_type).await {
+                            Ok(_) => {
+                                info!(url = %url, "Browser window opened successfully");
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Failed to open browser window");
+                            }
+                        }
+                    }
+                }
             }
 
             // Timer: check if remote repos cache needs refresh
@@ -291,13 +367,6 @@ pub async fn run(
                         }
                     }
                 }
-            }
-
-            // External-logs auditor: manifest compliance + size cap + growth alarm.
-            // Runs every 60 s alongside the proxy health check.
-            // @trace spec:external-logs-layer
-            _ = external_logs_audit_interval.tick() => {
-                handlers::external_logs_audit_tick(&state, &mut external_logs_growth_cache).await;
             }
 
             // All channels closed — nothing left to do
@@ -381,27 +450,6 @@ fn handle_build_progress_event(
 /// suffixes) are still recognised.
 fn is_forge_build(image_name: &str) -> bool {
     image_name == "Forge" || image_name == "Updated Forge"
-}
-
-/// Sanitize a project name to the same shape `browser::sanitize_hostname_label`
-/// produces — lowercase ASCII alnum + hyphen, anything else becomes `-`.
-/// Replicated here (instead of cross-module-importing the private helper)
-/// to keep `browser::sanitize_hostname_label` private and avoid a
-/// cross-cutting dependency for a 5-line function. The two MUST agree on
-/// shape; if they ever diverge the OtpStore evict on container-stop will
-/// silently fail to find the project label.
-///
-/// @trace spec:opencode-web-session-otp
-fn sanitize_label_for_otp(name: &str) -> String {
-    name.chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '-' {
-                c.to_ascii_lowercase()
-            } else {
-                '-'
-            }
-        })
-        .collect()
 }
 
 /// Remove build chips that have been `Completed` for longer than `BUILD_CHIP_FADEOUT`.
@@ -532,8 +580,7 @@ async fn handle_clone_project(
 
             // Auto-launch the forge for the newly cloned project.
             // Errors are logged but do not affect clone success.
-            // Clone the Arc so the handler can notify mid-pipeline.
-            match handlers::handle_attach_here(target_dir, state, allocator, build_tx, on_state_change.clone()).await {
+            match handlers::handle_attach_here(target_dir, state, allocator, build_tx).await {
                 Ok(_) => {
                     info!(project = %name, "Forge auto-launched after clone");
                 }
@@ -584,43 +631,6 @@ fn handle_podman_event(
         ) {
             let name = event.container_name.clone();
 
-            // @trace spec:git-mirror-service
-            // When a forge (or opencode-web) container stops, its last push
-            // to the enclave mirror has landed. Fast-forward the host
-            // working copy at <watch_path>/<project> so what the user sees
-            // on disk matches what's on GitHub. Skips gracefully when the
-            // host is dirty, diverged, or absent — never clobbers user work.
-            if let Some(c) = state.running.iter().find(|c| c.name == name)
-                && matches!(
-                    c.container_type,
-                    ContainerType::Forge
-                        | ContainerType::OpenCodeWeb
-                        | ContainerType::Maintenance
-                ) {
-                    let project_name = c.project_name.clone();
-                    let mirror_root = tillandsias_core::config::cache_dir().join("mirrors");
-                    let mirror_dir = mirror_root.join(&project_name);
-                    let global_config = load_global_config();
-                    for watch_path in &global_config.scanner.watch_paths {
-                        let host = watch_path.join(&project_name);
-                        if host.exists() {
-                            let result = crate::mirror_sync::sync_project(
-                                &project_name,
-                                &mirror_dir,
-                                &host,
-                            );
-                            debug!(
-                                spec = "git-mirror-service",
-                                project = %project_name,
-                                host = %host.display(),
-                                outcome = ?result,
-                                "mirror -> host sync on forge stop"
-                            );
-                            break;
-                        }
-                    }
-                }
-
             if let Some(pos) = state.running.iter().position(|c| c.name == name) {
                 let removed = state.running.remove(pos);
                 allocator.release(&removed.project_name, removed.genus);
@@ -629,21 +639,6 @@ fn handle_podman_event(
                     && !removed.display_emoji.is_empty()
                 {
                     tool_allocator.release(&removed.project_name, &removed.display_emoji);
-                }
-
-                // @trace spec:opencode-web-session-otp
-                // OpenCode Web container stopped — drop every per-window
-                // session cookie for that project. Defence-in-depth: even
-                // though the router would already 401 every request once
-                // the upstream forge is gone, we evict the in-memory list
-                // so a future restart doesn't accidentally honour a stale
-                // cookie value if it happens to collide.
-                if removed.container_type == ContainerType::OpenCodeWeb {
-                    let project_label = format!(
-                        "opencode.{}.localhost",
-                        sanitize_label_for_otp(&removed.project_name)
-                    );
-                    crate::otp::evict_and_publish(&project_label);
                 }
 
                 // Clear project genus if no more environments
@@ -657,8 +652,8 @@ fn handle_podman_event(
                                 ContainerType::Forge | ContainerType::Maintenance
                             )
                     });
-                if !still_has_forge
-                    && let Some(project) = state
+                if !still_has_forge {
+                    if let Some(project) = state
                         .projects
                         .iter_mut()
                         .find(|p| p.name == removed.project_name)
@@ -684,6 +679,7 @@ fn handle_podman_event(
                     //     git-service on `tillandsias <project>` exit since
                     //     CLI mode is one-shot and has no tray to host the
                     //     persistent service.
+                }
             }
         }
     } else if event.new_state == ContainerState::Running

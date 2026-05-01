@@ -40,10 +40,11 @@ pub fn simplify_path(path: &std::path::Path) -> PathBuf {
     let s = path.to_string_lossy();
     // Strip `\\?\` if followed by a drive letter (e.g. `\\?\C:\foo`).
     // Leave `\\?\UNC\server\share` alone — UNC paths cannot be simplified.
-    if let Some(rest) = s.strip_prefix(r"\\?\")
-        && !rest.starts_with("UNC\\") && rest.len() >= 2 && rest.as_bytes()[1] == b':' {
+    if let Some(rest) = s.strip_prefix(r"\\?\") {
+        if !rest.starts_with("UNC\\") && rest.len() >= 2 && rest.as_bytes()[1] == b':' {
             return PathBuf::from(rest);
         }
+    }
     path.to_path_buf()
 }
 
@@ -85,30 +86,7 @@ fn write_lf(path: &std::path::Path, content: &str) -> std::io::Result<()> {
 // Executable scripts
 // ---------------------------------------------------------------------------
 pub const BUILD_IMAGE: &str = include_str!("../../scripts/build-image.sh");
-
-// ---------------------------------------------------------------------------
-// WSL-native image build pipeline (Windows path; replaces podman build).
-// @trace spec:cross-platform, spec:podman-orchestration
-// ---------------------------------------------------------------------------
-pub const WSL_BUILD_LIB_COMMON: &str =
-    include_str!("../../scripts/wsl-build/lib-common.sh");
-pub const WSL_BUILD_BASES: &str =
-    include_str!("../../scripts/wsl-build/bases.sh");
-pub const WSL_BUILD_PROXY: &str =
-    include_str!("../../scripts/wsl-build/build-proxy.sh");
-pub const WSL_BUILD_GIT: &str =
-    include_str!("../../scripts/wsl-build/build-git.sh");
-pub const WSL_BUILD_ROUTER: &str =
-    include_str!("../../scripts/wsl-build/build-router.sh");
-pub const WSL_BUILD_INFERENCE: &str =
-    include_str!("../../scripts/wsl-build/build-inference.sh");
-pub const WSL_BUILD_FORGE: &str =
-    include_str!("../../scripts/wsl-build/build-forge.sh");
-pub const WSL_BUILD_ENCLAVE_INIT: &str =
-    include_str!("../../scripts/wsl-build/build-enclave-init.sh");
-// build-tools-overlay.sh tombstoned 2026-04-25 — agents are hard-installed in
-// the forge image; no runtime overlay build required.
-// @trace spec:tombstone-tools-overlay
+pub const BUILD_TOOLS_OVERLAY: &str = include_str!("../../scripts/build-tools-overlay.sh");
 // @trace spec:native-secrets-store
 // GitHub login is driven from Rust (`runner::run_github_login`): `gh auth
 // login` runs via `podman exec` against a keep-alive git-service container,
@@ -120,26 +98,6 @@ pub const WSL_BUILD_ENCLAVE_INIT: &str =
 // ---------------------------------------------------------------------------
 pub const FLAKE_NIX: &str = include_str!("../../flake.nix");
 pub const FLAKE_LOCK: &str = include_str!("../../flake.lock");
-
-// ---------------------------------------------------------------------------
-// Image sources — router (Caddy reverse proxy)
-// @trace spec:subdomain-routing-via-reverse-proxy
-// ---------------------------------------------------------------------------
-pub const ROUTER_CONTAINERFILE: &str = include_str!("../../images/router/Containerfile");
-pub const ROUTER_BASE_CADDYFILE: &str = include_str!("../../images/router/base.Caddyfile");
-pub const ROUTER_ENTRYPOINT: &str = include_str!("../../images/router/entrypoint.sh");
-pub const ROUTER_RELOAD_SCRIPT: &str = include_str!("../../images/router/router-reload.sh");
-// @trace spec:external-logs-layer
-pub const ROUTER_EXTERNAL_LOGS_MANIFEST: &str =
-    include_str!("../../images/router/external-logs.yaml");
-// @trace spec:opencode-web-session-otp
-// Pre-built static-musl binary (~2.5 MB stripped). Built by
-// `scripts/build-sidecar.sh`, kicked off automatically by
-// `src-tauri/build.rs` so a plain `cargo build` of the tray Just Works.
-// The binary ships embedded so deployed tray instances can rebuild the
-// router image without the workspace source on disk.
-pub const ROUTER_SIDECAR_BINARY: &[u8] =
-    include_bytes!("../../images/router/tillandsias-router-sidecar");
 
 // ---------------------------------------------------------------------------
 // Image sources — forge (default) image
@@ -155,39 +113,11 @@ pub const FORGE_ENTRYPOINT_CLAUDE: &str =
     include_str!("../../images/default/entrypoint-forge-claude.sh");
 pub const FORGE_ENTRYPOINT_TERMINAL: &str =
     include_str!("../../images/default/entrypoint-terminal.sh");
-// @trace spec:opencode-web-session
-// Node.js SSE keepalive proxy — fronts `opencode serve` so Bun's default
-// 10s HTTP idleTimeout doesn't drop `/event` / `/global/event` streams
-// when the session goes idle.
-pub const FORGE_SSE_KEEPALIVE_PROXY: &str =
-    include_str!("../../images/default/sse-keepalive-proxy.js");
 pub const FORGE_WELCOME: &str = include_str!("../../images/default/forge-welcome.sh");
 pub const FORGE_CONTAINERFILE: &str = include_str!("../../images/default/Containerfile");
 pub const FORGE_OPENCODE_JSON: &str = include_str!("../../images/default/opencode.json");
-// @trace spec:cheatsheets-license-tiered, spec:external-logs-layer
-// Forge container's external-logs producer manifest — declares the
-// cheatsheet-telemetry role's lookups.jsonl as the only permitted file in
-// /var/log/tillandsias/external/cheatsheet-telemetry/. Baked at
-// /etc/tillandsias/external-logs.yaml; consumed by the tray-side auditor.
-pub const FORGE_EXTERNAL_LOGS_MANIFEST: &str =
-    include_str!("../../images/default/external-logs.yaml");
-
-// @trace spec:forge-environment-discoverability
-// Four discoverability CLIs the agent invokes on first turn to learn what
-// the forge ships. COPY'd into /opt/agents/tillandsias-cli/bin in the image
-// build (see images/default/Containerfile) and symlinked into /usr/local/bin.
-pub const FORGE_CLI_INVENTORY: &str =
-    include_str!("../../images/default/cli/tillandsias-inventory");
-pub const FORGE_CLI_SERVICES: &str =
-    include_str!("../../images/default/cli/tillandsias-services");
-pub const FORGE_CLI_MODELS: &str = include_str!("../../images/default/cli/tillandsias-models");
-// @trace spec:external-logs-layer
-// `tillandsias-logs ls|tail|combine` is the forge-side reader for the
-// external-logs layer. The Containerfile COPYs it into
-// /opt/agents/tillandsias-cli/bin/, so the embedded extraction must
-// stage it under cli/ alongside the other discoverability binaries
-// (otherwise `--init` fails at the COPY step on a clean checkout).
-pub const FORGE_CLI_LOGS: &str = include_str!("../../images/default/cli/tillandsias-logs");
+// @trace spec:init-incremental-builds
+pub const FORGE_BROWSER_TOOL: &[u8] = include_bytes!("../../target/debug/tillandsias-browser-tool");
 
 // No forge GIT_ASKPASS const — the forge-side askpass was tombstoned.
 // Forge containers have ZERO credentials; only the git-service container
@@ -210,35 +140,6 @@ pub const CONFIG_OVERLAY_INSTRUCTIONS_METHODOLOGY: &str =
     include_str!("../../images/default/config-overlay/opencode/instructions/methodology.md");
 pub const CONFIG_OVERLAY_INSTRUCTIONS_FLUTTER: &str =
     include_str!("../../images/default/config-overlay/opencode/instructions/flutter.md");
-pub const CONFIG_OVERLAY_INSTRUCTIONS_MODEL_ROUTING: &str =
-    include_str!("../../images/default/config-overlay/opencode/instructions/model-routing.md");
-pub const CONFIG_OVERLAY_INSTRUCTIONS_WEB_SERVICES: &str =
-    include_str!("../../images/default/config-overlay/opencode/instructions/web-services.md");
-
-// Summarizer scripts for project analysis
-// @trace spec:project-bootstrap-readme, spec:default-image
-pub const SCRIPT_SUMMARIZE_CARGO: &str = include_str!("../../scripts/summarize-cargo.sh");
-pub const SCRIPT_SUMMARIZE_NIX: &str = include_str!("../../scripts/summarize-nix.sh");
-pub const SCRIPT_SUMMARIZE_PACKAGE_JSON: &str = include_str!("../../scripts/summarize-package-json.sh");
-pub const SCRIPT_SUMMARIZE_PUBSPEC: &str = include_str!("../../scripts/summarize-pubspec.sh");
-pub const SCRIPT_SUMMARIZE_GO_MOD: &str = include_str!("../../scripts/summarize-go-mod.sh");
-pub const SCRIPT_SUMMARIZE_PYPROJECT: &str = include_str!("../../scripts/summarize-pyproject.sh");
-
-// README dispatcher and validator
-// @trace spec:project-bootstrap-readme, spec:default-image
-pub const SCRIPT_REGENERATE_README: &str = include_str!("../../scripts/regenerate-readme.sh");
-pub const SCRIPT_CHECK_README_DISCIPLINE: &str = include_str!("../../scripts/check-readme-discipline.sh");
-
-// Config overlay — agent skills and workflows
-// @trace spec:project-bootstrap-readme, spec:default-image
-pub const CONFIG_OVERLAY_AGENT_STARTUP: &str =
-    include_str!("../../images/default/config-overlay/opencode/agent/startup.md");
-pub const CONFIG_OVERLAY_AGENT_STATUS: &str =
-    include_str!("../../images/default/config-overlay/opencode/agent/status.md");
-pub const CONFIG_OVERLAY_AGENT_BOOTSTRAP_README: &str =
-    include_str!("../../images/default/config-overlay/opencode/agent/bootstrap-readme.md");
-pub const CONFIG_OVERLAY_AGENT_BOOTSTRAP_README_AND_PROJECT: &str =
-    include_str!("../../images/default/config-overlay/opencode/agent/bootstrap-readme-and-project.md");
 
 // MCP servers — lightweight tool scripts for forge containers
 // @trace spec:layered-tools-overlay, spec:git-mirror-service
@@ -285,9 +186,6 @@ pub const PROXY_ENTRYPOINT: &str = include_str!("../../images/proxy/entrypoint.s
 pub const PROXY_CONTAINERFILE: &str = include_str!("../../images/proxy/Containerfile");
 pub const PROXY_SQUID_CONF: &str = include_str!("../../images/proxy/squid.conf");
 pub const PROXY_ALLOWLIST: &str = include_str!("../../images/proxy/allowlist.txt");
-// @trace spec:external-logs-layer
-pub const PROXY_EXTERNAL_LOGS_MANIFEST: &str =
-    include_str!("../../images/proxy/external-logs.yaml");
 
 // ---------------------------------------------------------------------------
 // Image sources — git service image
@@ -299,20 +197,22 @@ pub const POST_RECEIVE_HOOK: &str = include_str!("../../images/git/post-receive-
 // @trace spec:secrets-management, spec:git-mirror-service
 pub const GIT_ASKPASS_TILLANDSIAS: &str =
     include_str!("../../images/git/git-askpass-tillandsias.sh");
-// @trace spec:external-logs-layer
-pub const GIT_EXTERNAL_LOGS_MANIFEST: &str =
-    include_str!("../../images/git/external-logs.yaml");
 
 // ---------------------------------------------------------------------------
 // Image sources — inference image
 // @trace spec:inference-container
-// ---------------------------------------------------------------------------
 pub const INFERENCE_ENTRYPOINT: &str = include_str!("../../images/inference/entrypoint.sh");
 pub const INFERENCE_CONTAINERFILE: &str = include_str!("../../images/inference/Containerfile");
-// @trace spec:external-logs-layer
-pub const INFERENCE_EXTERNAL_LOGS_MANIFEST: &str =
-    include_str!("../../images/inference/external-logs.yaml");
 
+// ---------------------------------------------------------------------------
+// Image sources — chromium browser containers
+// @trace spec:browser-isolation-core, spec:browser-isolation-framework
+// ---------------------------------------------------------------------------
+pub const CHROMIUM_CORE_CONTAINERFILE: &str = include_str!("../../images/chromium/Containerfile.core");
+pub const CHROMIUM_FRAMEWORK_CONTAINERFILE: &str = include_str!("../../images/chromium/Containerfile.framework");
+
+// ---------------------------------------------------------------------------
+// Helpers
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -359,6 +259,7 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 ///   flake.lock
 ///   scripts/
 ///     build-image.sh
+///     build-tools-overlay.sh
 ///   images/
 ///     default/
 ///       entrypoint.sh
@@ -381,14 +282,15 @@ pub fn write_temp_script(name: &str, content: &str) -> Result<PathBuf, String> {
 ///       Containerfile
 /// ```
 ///
-/// Returns the root cache directory path. The caller should clean up via
+/// Returns the root temp directory path. The caller should clean up via
 /// [`cleanup_image_sources`] after the build completes (or rely on
 /// session cleanup of `$XDG_RUNTIME_DIR`).
 // @trace spec:embedded-scripts/image-source-extraction
 pub fn write_image_sources() -> Result<PathBuf, String> {
-    // Use a fixed cache directory — multiple invocations share the same
-    // extracted sources so we don't have to re-extract on every --init.
-    let dir = runtime_dir().join("tillandsias-image-sources");
+    // Use a per-process directory to avoid collisions between the tray app's
+    // background build and concurrent CLI invocations.
+    let pid = std::process::id();
+    let dir = runtime_dir().join(format!("image-sources-{pid}"));
 
     // Recreate fresh each time
     let _ = fs::remove_dir_all(&dir);
@@ -403,8 +305,11 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     fs::create_dir_all(&scripts_dir).map_err(|e| format!("scripts dir: {e}"))?;
     write_lf(&scripts_dir.join("build-image.sh"), BUILD_IMAGE)
         .map_err(|e| format!("build-image.sh: {e}"))?;
-    // build-tools-overlay.sh not emitted — tombstoned 2026-04-25.
-    // @trace spec:tombstone-tools-overlay
+    write_lf(
+        &scripts_dir.join("build-tools-overlay.sh"),
+        BUILD_TOOLS_OVERLAY,
+    )
+    .map_err(|e| format!("build-tools-overlay.sh: {e}"))?;
     #[cfg(unix)]
     {
         let path = scripts_dir.join("build-image.sh");
@@ -415,57 +320,15 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
                 "Failed to set executable permission — container entrypoint may fail"
             );
         }
-    }
-
-    // -- scripts/wsl-build/ — Windows-native image build pipeline. --
-    // @trace spec:cross-platform, spec:podman-orchestration
-    let wsl_build_dir = scripts_dir.join("wsl-build");
-    fs::create_dir_all(&wsl_build_dir).map_err(|e| format!("wsl-build dir: {e}"))?;
-    let wsl_scripts: &[(&str, &str)] = &[
-        ("lib-common.sh", WSL_BUILD_LIB_COMMON),
-        ("bases.sh", WSL_BUILD_BASES),
-        ("build-proxy.sh", WSL_BUILD_PROXY),
-        ("build-git.sh", WSL_BUILD_GIT),
-        ("build-router.sh", WSL_BUILD_ROUTER),
-        ("build-inference.sh", WSL_BUILD_INFERENCE),
-        ("build-forge.sh", WSL_BUILD_FORGE),
-        ("build-enclave-init.sh", WSL_BUILD_ENCLAVE_INIT),
-    ];
-    for (name, content) in wsl_scripts {
-        write_lf(&wsl_build_dir.join(name), content)
-            .map_err(|e| format!("wsl-build/{name}: {e}"))?;
-        #[cfg(unix)]
-        {
-            let _ = fs::set_permissions(
-                wsl_build_dir.join(name),
-                fs::Permissions::from_mode(0o755),
+        let path = scripts_dir.join("build-tools-overlay.sh");
+        if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o700)) {
+            warn!(
+                file = %path.display(),
+                error = %e,
+                "Failed to set executable permission — container entrypoint may fail"
             );
         }
     }
-
-    // -- scripts/ (summarizers for project analysis) --
-    // @trace spec:project-bootstrap-readme, spec:default-image
-    // These must be in images/default/scripts/ so the Containerfile's
-    // COPY scripts/summarize-*.sh /opt/summarizers/ can find them.
-    // The build context is images/default/, so scripts/ is relative to that.
-    let default_scripts_dir = dir.join("images").join("default").join("scripts");
-    fs::create_dir_all(&default_scripts_dir).map_err(|e| format!("images/default/scripts dir: {e}"))?;
-    write_lf(&default_scripts_dir.join("summarize-cargo.sh"), SCRIPT_SUMMARIZE_CARGO)
-        .map_err(|e| format!("images/default/scripts/summarize-cargo.sh: {e}"))?;
-    write_lf(&default_scripts_dir.join("summarize-nix.sh"), SCRIPT_SUMMARIZE_NIX)
-        .map_err(|e| format!("images/default/scripts/summarize-nix.sh: {e}"))?;
-    write_lf(&default_scripts_dir.join("summarize-package-json.sh"), SCRIPT_SUMMARIZE_PACKAGE_JSON)
-        .map_err(|e| format!("images/default/scripts/summarize-package-json.sh: {e}"))?;
-    write_lf(&default_scripts_dir.join("summarize-pubspec.sh"), SCRIPT_SUMMARIZE_PUBSPEC)
-        .map_err(|e| format!("images/default/scripts/summarize-pubspec.sh: {e}"))?;
-    write_lf(&default_scripts_dir.join("summarize-go-mod.sh"), SCRIPT_SUMMARIZE_GO_MOD)
-        .map_err(|e| format!("images/default/scripts/summarize-go-mod.sh: {e}"))?;
-    write_lf(&default_scripts_dir.join("summarize-pyproject.sh"), SCRIPT_SUMMARIZE_PYPROJECT)
-        .map_err(|e| format!("images/default/scripts/summarize-pyproject.sh: {e}"))?;
-    write_lf(&default_scripts_dir.join("regenerate-readme.sh"), SCRIPT_REGENERATE_README)
-        .map_err(|e| format!("images/default/scripts/regenerate-readme.sh: {e}"))?;
-    write_lf(&default_scripts_dir.join("check-readme-discipline.sh"), SCRIPT_CHECK_README_DISCIPLINE)
-        .map_err(|e| format!("images/default/scripts/check-readme-discipline.sh: {e}"))?;
 
     // -- images/default/ --
     let default_dir = dir.join("images").join("default");
@@ -495,89 +358,31 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         FORGE_ENTRYPOINT_TERMINAL,
     )
     .map_err(|e| format!("entrypoint-terminal.sh: {e}"))?;
-    // @trace spec:opencode-web-session
-    write_lf(
-        &default_dir.join("sse-keepalive-proxy.js"),
-        FORGE_SSE_KEEPALIVE_PROXY,
-    )
-    .map_err(|e| format!("sse-keepalive-proxy.js: {e}"))?;
     write_lf(&default_dir.join("forge-welcome.sh"), FORGE_WELCOME)
         .map_err(|e| format!("forge-welcome.sh: {e}"))?;
     write_lf(&default_dir.join("Containerfile"), FORGE_CONTAINERFILE)
         .map_err(|e| format!("Containerfile: {e}"))?;
     write_lf(&default_dir.join("opencode.json"), FORGE_OPENCODE_JSON)
         .map_err(|e| format!("opencode.json: {e}"))?;
-    // @trace spec:cheatsheets-license-tiered, spec:external-logs-layer
-    write_lf(
-        &default_dir.join("external-logs.yaml"),
-        FORGE_EXTERNAL_LOGS_MANIFEST,
-    )
-    .map_err(|e| format!("forge external-logs.yaml: {e}"))?;
-
-    // @trace spec:cheatsheet-source-layer, spec:default-image
-    // .cheatsheet-sources/ is expected by Containerfile STEP 72.
-    // If the fetcher hasn't run, create it with UNAVAILABLE.md placeholder
-    // so the COPY doesn't fail (graceful degradation per spec).
-    let cheatsheet_sources_dir = default_dir.join(".cheatsheet-sources");
-    fs::create_dir_all(&cheatsheet_sources_dir)
-        .map_err(|e| format!(".cheatsheet-sources dir: {e}"))?;
-    write_lf(
-        &cheatsheet_sources_dir.join("UNAVAILABLE.md"),
-        "# Cheatsheet sources unavailable\n\
-         \n\
-         The cheatsheet-source fetcher has not been run.\n\
-         Agents will fall back to pull-on-demand.\n\
-         \n\
-         To populate: tillandsias --fetch-cheatsheet-sources\n",
-    )
-     .map_err(|e| format!(".cheatsheet-sources/UNAVAILABLE.md: {e}"))?;
-
-    // @trace spec:agent-cheatsheets, spec:default-image
-    // .cheatsheets/ is expected by Containerfile STEP 69.
-    // Create empty dir — full cheatsheets are fetched by the fetcher.
-    // The entrypoint populates /opt/cheatsheets-image/ from this at build time.
-    let cheatsheets_dir = default_dir.join(".cheatsheets");
-    fs::create_dir_all(&cheatsheets_dir)
-        .map_err(|e| format!(".cheatsheets dir: {e}"))?;
-    let cli_dir = default_dir.join("cli");
-    fs::create_dir_all(&cli_dir).map_err(|e| format!("cli dir: {e}"))?;
-    write_lf(&cli_dir.join("tillandsias-inventory"), FORGE_CLI_INVENTORY)
-        .map_err(|e| format!("cli/tillandsias-inventory: {e}"))?;
-    write_lf(&cli_dir.join("tillandsias-services"), FORGE_CLI_SERVICES)
-        .map_err(|e| format!("cli/tillandsias-services: {e}"))?;
-    write_lf(&cli_dir.join("tillandsias-models"), FORGE_CLI_MODELS)
-        .map_err(|e| format!("cli/tillandsias-models: {e}"))?;
-    // @trace spec:external-logs-layer
-    write_lf(&cli_dir.join("tillandsias-logs"), FORGE_CLI_LOGS)
-        .map_err(|e| format!("cli/tillandsias-logs: {e}"))?;
-
+    // @trace spec:init-incremental-builds
+    // Write binary directly (not through write_lf which strips \r for text files)
+    fs::write(&default_dir.join("tillandsias-browser-tool"), FORGE_BROWSER_TOOL)
+        .map_err(|e| format!("tillandsias-browser-tool: {e}"))?;
+    #[cfg(unix)]
+    {
+        let path = default_dir.join("tillandsias-browser-tool");
+        if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
+            warn!(
+                file = %path.display(),
+                error = %e,
+                "Failed to set executable permission on tillandsias-browser-tool"
+            );
+        }
+    }
     // No forge GIT_ASKPASS — tombstoned.
     // @trace spec:secrets-management
     #[cfg(unix)]
     {
-        // @trace spec:project-bootstrap-readme, spec:default-image
-        // Scripts in images/default/scripts/ directory — must match the
-        // COPY targets in images/default/Containerfile lines 365-370.
-        // Source of truth: images/default/Containerfile + cheatsheets/project/readme-discipline.md
-        for name in [
-            "summarize-cargo.sh",
-            "summarize-nix.sh",
-            "summarize-package-json.sh",
-            "summarize-pubspec.sh",
-            "summarize-go-mod.sh",
-            "summarize-pyproject.sh",
-        ] {
-            let path = default_scripts_dir.join(name);
-            if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
-                warn!(
-                    file = %path.display(),
-                    error = %e,
-                    "Failed to set executable permission — summarizer scripts may not run"
-                );
-            }
-        }
-
-        // Entrypoints and utilities in images/default/
         for name in [
             "entrypoint.sh",
             "entrypoint-forge-opencode.sh",
@@ -585,8 +390,6 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
             "entrypoint-forge-opencode-web.sh",
             "entrypoint-forge-claude.sh",
             "entrypoint-terminal.sh",
-            // @trace spec:opencode-web-session
-            "sse-keepalive-proxy.js",
         ] {
             let path = default_dir.join(name);
             if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
@@ -594,25 +397,6 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
                     file = %path.display(),
                     error = %e,
                     "Failed to set executable permission — container entrypoint may fail"
-                );
-            }
-        }
-        // @trace spec:forge-environment-discoverability
-        // Discoverability CLIs live under cli/; chmod separately because
-        // the loop above only handles default-dir scripts.
-        for name in [
-            "tillandsias-inventory",
-            "tillandsias-services",
-            "tillandsias-models",
-            // @trace spec:external-logs-layer
-            "tillandsias-logs",
-        ] {
-            let path = cli_dir.join(name);
-            if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
-                warn!(
-                    file = %path.display(),
-                    error = %e,
-                    "Failed to set executable permission — discoverability CLI will not run"
                 );
             }
         }
@@ -658,42 +442,6 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         CONFIG_OVERLAY_INSTRUCTIONS_FLUTTER,
     )
     .map_err(|e| format!("config-overlay/opencode/instructions/flutter.md: {e}"))?;
-    write_lf(
-        &instructions_dir.join("model-routing.md"),
-        CONFIG_OVERLAY_INSTRUCTIONS_MODEL_ROUTING,
-    )
-    .map_err(|e| format!("config-overlay/opencode/instructions/model-routing.md: {e}"))?;
-    write_lf(
-        &instructions_dir.join("web-services.md"),
-        CONFIG_OVERLAY_INSTRUCTIONS_WEB_SERVICES,
-    )
-    .map_err(|e| format!("config-overlay/opencode/instructions/web-services.md: {e}"))?;
-
-    // Config overlay — agent skills and workflows
-    // @trace spec:project-bootstrap-readme, spec:default-image
-    let agent_dir = config_overlay_dir.join("agent");
-    fs::create_dir_all(&agent_dir)
-        .map_err(|e| format!("config-overlay/opencode/agent dir: {e}"))?;
-    write_lf(
-        &agent_dir.join("startup.md"),
-        CONFIG_OVERLAY_AGENT_STARTUP,
-    )
-    .map_err(|e| format!("config-overlay/opencode/agent/startup.md: {e}"))?;
-    write_lf(
-        &agent_dir.join("status.md"),
-        CONFIG_OVERLAY_AGENT_STATUS,
-    )
-    .map_err(|e| format!("config-overlay/opencode/agent/status.md: {e}"))?;
-    write_lf(
-        &agent_dir.join("bootstrap-readme.md"),
-        CONFIG_OVERLAY_AGENT_BOOTSTRAP_README,
-    )
-    .map_err(|e| format!("config-overlay/opencode/agent/bootstrap-readme.md: {e}"))?;
-    write_lf(
-        &agent_dir.join("bootstrap-readme-and-project.md"),
-        CONFIG_OVERLAY_AGENT_BOOTSTRAP_README_AND_PROJECT,
-    )
-    .map_err(|e| format!("config-overlay/opencode/agent/bootstrap-readme-and-project.md: {e}"))?;
 
     // Config overlay — MCP servers
     // @trace spec:layered-tools-overlay
@@ -774,9 +522,6 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("proxy squid.conf: {e}"))?;
     write_lf(&proxy_dir.join("allowlist.txt"), PROXY_ALLOWLIST)
         .map_err(|e| format!("proxy allowlist: {e}"))?;
-    // @trace spec:external-logs-layer
-    write_lf(&proxy_dir.join("external-logs.yaml"), PROXY_EXTERNAL_LOGS_MANIFEST)
-        .map_err(|e| format!("proxy external-logs.yaml: {e}"))?;
     #[cfg(unix)]
     {
         let path = proxy_dir.join("entrypoint.sh");
@@ -786,42 +531,6 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
                 error = %e,
                 "Failed to set executable permission — container entrypoint may fail"
             );
-        }
-    }
-
-    // -- images/router/ --
-    // @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-session-otp
-    let router_dir = dir.join("images").join("router");
-    fs::create_dir_all(&router_dir).map_err(|e| format!("images/router dir: {e}"))?;
-    write_lf(&router_dir.join("Containerfile"), ROUTER_CONTAINERFILE)
-        .map_err(|e| format!("router Containerfile: {e}"))?;
-    write_lf(&router_dir.join("base.Caddyfile"), ROUTER_BASE_CADDYFILE)
-        .map_err(|e| format!("router base.Caddyfile: {e}"))?;
-    write_lf(&router_dir.join("entrypoint.sh"), ROUTER_ENTRYPOINT)
-        .map_err(|e| format!("router entrypoint: {e}"))?;
-    write_lf(&router_dir.join("router-reload.sh"), ROUTER_RELOAD_SCRIPT)
-        .map_err(|e| format!("router-reload.sh: {e}"))?;
-    // @trace spec:external-logs-layer
-    write_lf(&router_dir.join("external-logs.yaml"), ROUTER_EXTERNAL_LOGS_MANIFEST)
-        .map_err(|e| format!("router external-logs.yaml: {e}"))?;
-    // @trace spec:opencode-web-session-otp
-    // Sidecar binary (binary blob, not LF-normalised text — write raw).
-    fs::write(
-        router_dir.join("tillandsias-router-sidecar"),
-        ROUTER_SIDECAR_BINARY,
-    )
-    .map_err(|e| format!("router sidecar binary: {e}"))?;
-    #[cfg(unix)]
-    {
-        for name in ["entrypoint.sh", "router-reload.sh", "tillandsias-router-sidecar"] {
-            let path = router_dir.join(name);
-            if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
-                warn!(
-                    file = %path.display(),
-                    error = %e,
-                    "Failed to set executable permission — router script"
-                );
-            }
         }
     }
 
@@ -838,9 +547,6 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     // @trace spec:secrets-management, spec:git-mirror-service
     write_lf(&git_dir.join("git-askpass-tillandsias.sh"), GIT_ASKPASS_TILLANDSIAS)
         .map_err(|e| format!("git askpass script: {e}"))?;
-    // @trace spec:external-logs-layer
-    write_lf(&git_dir.join("external-logs.yaml"), GIT_EXTERNAL_LOGS_MANIFEST)
-        .map_err(|e| format!("git external-logs.yaml: {e}"))?;
     #[cfg(unix)]
     {
         for name in ["entrypoint.sh", "post-receive-hook.sh", "git-askpass-tillandsias.sh"] {
@@ -863,9 +569,6 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("inference entrypoint: {e}"))?;
     write_lf(&inference_dir.join("Containerfile"), INFERENCE_CONTAINERFILE)
         .map_err(|e| format!("inference Containerfile: {e}"))?;
-    // @trace spec:external-logs-layer
-    write_lf(&inference_dir.join("external-logs.yaml"), INFERENCE_EXTERNAL_LOGS_MANIFEST)
-        .map_err(|e| format!("inference external-logs.yaml: {e}"))?;
     #[cfg(unix)]
     {
         let path = inference_dir.join("entrypoint.sh");
@@ -873,10 +576,19 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
             warn!(
                 file = %path.display(),
                 error = %e,
-                "Failed to set executable permission — container entrypoint may fail"
+                "Failed to set executable permission on inference entrypoint"
             );
         }
     }
+
+    // -- images/chromium/ --
+    // @trace spec:browser-isolation-core, spec:browser-isolation-framework
+    let chromium_dir = dir.join("images").join("chromium");
+    fs::create_dir_all(&chromium_dir).map_err(|e| format!("images/chromium dir: {e}"))?;
+    write_lf(&chromium_dir.join("Containerfile.core"), CHROMIUM_CORE_CONTAINERFILE)
+        .map_err(|e| format!("chromium Containerfile.core: {e}"))?;
+    write_lf(&chromium_dir.join("Containerfile.framework"), CHROMIUM_FRAMEWORK_CONTAINERFILE)
+        .map_err(|e| format!("chromium Containerfile.framework: {e}"))?;
 
     debug!(dir = %dir.display(), "Wrote embedded image sources to temp");
     Ok(dir)
@@ -894,21 +606,8 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
 pub fn extract_config_overlay() -> Result<PathBuf, String> {
     let dir = runtime_dir().join("config-overlay");
 
-    // @trace spec:layered-tools-overlay, spec:opencode-web-session
-    // CRITICAL: preserve the directory inode. `extract_config_overlay` is
-    // invoked on every Attach Here (from `ensure_infrastructure_ready`),
-    // and running forge containers have their `.config-overlay` bind-mounted
-    // to this path. If we `remove_dir_all` + recreate, the new dir gets a
-    // new inode; bind mounts in existing containers become orphan
-    // "//deleted" entries and appear empty from inside — MCP scripts vanish
-    // mid-session, OpenCode's /command endpoint hangs 60s waiting for a
-    // stdio response that never comes, and the UI freezes.
-    //
-    // Instead, overwrite files in place. write_lf truncates + rewrites
-    // content; directories are created with `create_dir_all` which is a
-    // no-op if present. The inode the kernel gave us at first extraction
-    // is stable for the process lifetime, and every forge container sees
-    // live updates on subsequent re-extractions.
+    // Recreate fresh each time — configs may have changed between versions
+    let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).map_err(|e| format!("Cannot create config-overlay dir: {e}"))?;
 
     // -- opencode/ --
@@ -933,16 +632,6 @@ pub fn extract_config_overlay() -> Result<PathBuf, String> {
         CONFIG_OVERLAY_INSTRUCTIONS_FLUTTER,
     )
     .map_err(|e| format!("config-overlay/opencode/instructions/flutter.md: {e}"))?;
-    write_lf(
-        &instructions_dir.join("model-routing.md"),
-        CONFIG_OVERLAY_INSTRUCTIONS_MODEL_ROUTING,
-    )
-    .map_err(|e| format!("config-overlay/opencode/instructions/model-routing.md: {e}"))?;
-    write_lf(
-        &instructions_dir.join("web-services.md"),
-        CONFIG_OVERLAY_INSTRUCTIONS_WEB_SERVICES,
-    )
-    .map_err(|e| format!("config-overlay/opencode/instructions/web-services.md: {e}"))?;
 
     // -- mcp/ -- MCP server scripts (must be executable)
     // @trace spec:layered-tools-overlay
@@ -977,28 +666,20 @@ pub fn extract_config_overlay() -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// Remove the extracted image sources cache directory.
+/// Remove the extracted image sources temp directory.
 pub fn cleanup_image_sources() {
-    let dir = runtime_dir().join("tillandsias-image-sources");
+    let pid = std::process::id();
+    let dir = runtime_dir().join(format!("image-sources-{pid}"));
     if dir.exists() {
         if let Err(e) = fs::remove_dir_all(&dir) {
-            debug!(error = %e, "Failed to clean up image sources cache dir");
+            debug!(error = %e, "Failed to clean up image sources temp dir");
         } else {
-            debug!("Cleaned up image sources cache dir");
+            debug!("Cleaned up image sources temp dir");
         }
     }
-    // Also clean up legacy PID-based dirs if they exist
-    let runtime = runtime_dir();
-    if let Ok(entries) = fs::read_dir(&runtime) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name.starts_with("image-sources-") {
-                    let _ = fs::remove_dir_all(&path);
-                }
-            }
-        }
-    }
+    // Also clean up legacy shared dir if it exists
+    let legacy = runtime_dir().join("image-sources");
+    let _ = fs::remove_dir_all(&legacy);
 }
 
 #[cfg(test)]
@@ -1080,11 +761,12 @@ mod tests {
                 // `Containerfile` itself is embedded — covered.
                 // `forge-welcome.sh` is embedded — covered.
                 // `lib-common.sh` is embedded — covered.
+                // `tillandsias-browser-tool` is embedded via FORGE_BROWSER_TOOL — covered.
                 // Currently every file on disk in images/default/ is expected
                 // to land in the extracted tree. If a future file is genuinely
                 // not wanted there (e.g. a README), add a `.gitkeep`-style
                 // carve-out here with a comment explaining why.
-                !name.starts_with(".") && name != "README.md"
+                !name.starts_with(".") && name != "README.md" && name != "tillandsias-browser-tool"
             })
             .collect();
 
@@ -1128,71 +810,6 @@ mod tests {
         }
 
         // Cleanup
-        let _ = std::fs::remove_dir_all(&extracted);
-    }
-
-    /// Sibling audit for `images/router/`: every file on disk must land in
-    /// the extracted tree. Catches the v0.1.170.244 bug where chunk 4 of
-    /// the OTP convergence shipped a multi-stage Containerfile + a
-    /// `.containerignore` but neither was registered in `embedded.rs`,
-    /// causing deployed binaries to fail at podman build time with
-    /// "unable to parse ignore file".
-    ///
-    /// @trace spec:opencode-web-session-otp, spec:embedded-scripts
-    #[test]
-    fn every_router_image_source_is_embedded_and_extracted() {
-        let images_router = PathBuf::from("../images/router");
-        assert!(
-            images_router.is_dir(),
-            "expected workspace-relative {:?} to exist",
-            images_router
-        );
-
-        let expected: std::collections::HashSet<String> = std::fs::read_dir(&images_router)
-            .unwrap()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
-            .map(|e| e.file_name().to_string_lossy().into_owned())
-            .filter(|name| !name.starts_with(".") && name != "README.md")
-            .collect();
-
-        let extracted = write_image_sources().expect("write_image_sources should succeed");
-        let extracted_router = extracted.join("images/router");
-
-        let actual: std::collections::HashSet<String> = std::fs::read_dir(&extracted_router)
-            .expect("extracted images/router should exist")
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
-            .map(|e| e.file_name().to_string_lossy().into_owned())
-            .collect();
-
-        let missing: Vec<_> = expected.difference(&actual).collect();
-        assert!(
-            missing.is_empty(),
-            "images/router/ files present on disk but not embedded/extracted: {:?}\n\
-             Add them to `src-tauri/src/embedded.rs` (include_str!/include_bytes! const + \
-             write call in write_image_sources(); if executable, also to the \
-             chmod loop).",
-            missing
-        );
-
-        // The sidecar binary must be present and executable on Unix.
-        let sidecar = extracted_router.join("tillandsias-router-sidecar");
-        assert!(
-            sidecar.is_file(),
-            "tillandsias-router-sidecar must be extracted"
-        );
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(&sidecar).unwrap().permissions().mode();
-            assert!(
-                mode & 0o111 != 0,
-                "tillandsias-router-sidecar must be executable; got mode {:o}",
-                mode
-            );
-        }
-
         let _ = std::fs::remove_dir_all(&extracted);
     }
 }

@@ -143,10 +143,10 @@ pub enum CliMode {
     Version,
 
     /// `tillandsias --init` — pre-build all container images (proxy, forge, git, inference).
-    /// `tillandsias --init --force` — rebuild all from scratch.
-    /// `tillandsias --init --image <name>` — build only the specified image.
-    /// `tillandsias --init --debug` — show detailed debug output with actionable commands.
-    Init { force: bool, image: Option<String>, debug: bool },
+    /// `tillandsias --init --force` — rebuild even if already built.
+    /// `tillandsias --init --debug` — verbose output with failed build logs.
+    // @trace spec:init-incremental-builds
+    Init { force: bool, debug: bool },
 
     /// `tillandsias --stats` — print disk usage report and exit.
     Stats,
@@ -165,27 +165,6 @@ pub enum CliMode {
     /// `tillandsias --github-login` — run GitHub authentication flow and exit.
     GitHubLogin,
 
-    /// `tillandsias <path> --diagnostics [--prompt "text"]` — stream logs from all running containers
-    /// for this project. Optional prompt is passed to agent if containers are already running.
-    /// Observation-only if no prompt, or agent-assisted if prompt provided.
-    ///
-    /// @trace spec:runtime-diagnostics
-    Diagnostics {
-        path: PathBuf,
-        prompt: Option<String>,
-    },
-
-    /// `tillandsias --install-chromium [--from-zip <path>]` — install or
-    /// re-install the userspace Chromium binary tree under
-    /// `<XDG_DATA_HOME>/tillandsias/chromium/`. Verifies SHA-256 against
-    /// the digest baked into the tray binary at compile time.
-    ///
-    /// `--from-zip <path>` is the air-gapped variant — verify+extract the
-    /// supplied ZIP without any network fetch.
-    ///
-    /// @trace spec:host-chromium-on-demand
-    InstallChromium { from_zip: Option<PathBuf> },
-
     /// A project path was given — launch an interactive development environment.
     Attach {
         /// Absolute path to the project directory.
@@ -194,18 +173,10 @@ pub enum CliMode {
         image: String,
         /// Show verbose debug output.
         debug: bool,
-        /// Diagnostics: superset of --debug. Streams every WSL distro's
-        /// stderr/stdout AND log files to the calling terminal, prefixed
-        /// with `[<distro>/<source>]` so users can grep observability
-        /// without attaching debuggers. Implies --debug.
-        /// @trace spec:runtime-diagnostics-stream, spec:cross-platform
-        diagnostics: bool,
         /// Drop into fish shell instead of default entrypoint (troubleshooting).
         bash: bool,
         /// Override the configured agent for this session.
         agent_override: Option<SelectedAgent>,
-        /// Optional prompt to pass to the agent.
-        prompt: Option<String>,
     },
 }
 
@@ -218,11 +189,7 @@ USAGE:
     tillandsias <path> --opencode   Attach using OpenCode
     tillandsias <path> --claude     Attach using Claude Code
     tillandsias <path> --bash       Open maintenance terminal
-    tillandsias <path> --diagnostics Stream logs from every WSL distro / container (superset of --debug)
     tillandsias --github-login      Authenticate with GitHub
-    tillandsias --install-chromium  Install pinned Chromium for app-mode windows
-    tillandsias --install-chromium --from-zip <path>
-                                    Install pinned Chromium from a local ZIP
     tillandsias --init              Pre-build development environments
     tillandsias --init --force      Rebuild forge image from scratch
     tillandsias --stats             Show disk usage from Tillandsias artifacts
@@ -248,7 +215,6 @@ OPTIONS:
   --opencode                 Use OpenCode for this session
   --claude                   Use Claude Code for this session
   --bash                     Open maintenance terminal
-  --diagnostics              Stream /strategic/service.log from all containers
   --github-login             Run GitHub authentication flow
   --version                  Show version and exit
   --help                     Show this help
@@ -293,22 +259,12 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
 
     // `tillandsias --init` — pre-build images.
     // `tillandsias --init --force` — rebuild even if already built.
-    // `tillandsias --init --image <name>` — build only the specified image.
-    // `tillandsias --init --debug` — show detailed debug output with actionable commands.
+    // `tillandsias --init --debug` — verbose output with failed build logs.
+    // @trace spec:init-incremental-builds
     if args.iter().any(|a| a == "--init") {
         let force = args.iter().any(|a| a == "--force");
         let debug = args.iter().any(|a| a == "--debug");
-        let image = if let Some(pos) = args.iter().position(|a| a == "--image") {
-            if pos + 1 < args.len() {
-                Some(args[pos + 1].clone())
-            } else {
-                eprintln!("Error: --image requires an argument (proxy|forge|git|inference)");
-                return None;
-            }
-        } else {
-            None
-        };
-        return Some((CliMode::Init { force, image, debug }, log_config));
+        return Some((CliMode::Init { force, debug }, log_config));
     }
 
     // `tillandsias --stats` — disk usage report.
@@ -339,34 +295,10 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
         return Some((CliMode::GitHubLogin, log_config));
     }
 
-    // @trace spec:host-chromium-on-demand
-    // `tillandsias --install-chromium [--from-zip <path>]` — install or
-    // re-install the pinned Chromium under XDG_DATA_HOME. The optional
-    // --from-zip switch covers the air-gapped install path (no network
-    // fetch).
-    if args.iter().any(|a| a == "--install-chromium") {
-        let mut from_zip: Option<PathBuf> = None;
-        let mut iter = args.iter();
-        while let Some(a) = iter.next() {
-            if a == "--from-zip" {
-                match iter.next() {
-                    Some(path) => from_zip = Some(PathBuf::from(path)),
-                    None => {
-                        eprintln!("--from-zip requires a path argument");
-                        return None;
-                    }
-                }
-            }
-        }
-        return Some((CliMode::InstallChromium { from_zip }, log_config));
-    }
-
     let mut path: Option<PathBuf> = None;
     let mut image = "forge".to_string();
     let mut debug = false;
-    let mut diagnostics = false;
     let mut bash = false;
-    let mut prompt: Option<String> = None;
     let mut agent_override: Option<SelectedAgent> = None;
     let mut i = 0;
 
@@ -395,11 +327,6 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
             "--debug" => {
                 debug = true;
             }
-            // @trace spec:runtime-diagnostics-stream, spec:cross-platform
-            "--diagnostics" => {
-                diagnostics = true;
-                debug = true; // diagnostics is a superset of debug
-            }
             "--bash" => {
                 bash = true;
             }
@@ -408,15 +335,6 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
             }
             "--claude" => {
                 agent_override = Some(SelectedAgent::Claude);
-            }
-            "--prompt" => {
-                i += 1;
-                if i >= args.len() {
-                    eprintln!("--prompt requires a value");
-                    print!("{USAGE}");
-                    return None;
-                }
-                prompt = Some(args[i].clone());
             }
             // Log flags — already parsed by parse_log_flags(), skip here.
             "--log-secrets-management" | "--log-image-management" | "--log-update-cycle"
@@ -437,31 +355,13 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
     }
 
     match path {
-        // @tombstone superseded:runtime-diagnostics-stream
-        // The standalone CliMode::Diagnostics dispatch was origin/main's
-        // parallel implementation (a "watch the running containers' logs"
-        // standalone mode). We prefer the wsl-on-windows implementation
-        // where `--diagnostics` is an Attach-time flag that tail -F's
-        // strategic logs and spills them into the calling terminal alongside
-        // the normal attach (see src-tauri/src/diagnostics.rs).
-        // Removed in 0.1.184.545. Safe to delete after 0.1.184.548.
-        // The CliMode::Diagnostics enum variant + main.rs handler + runner::
-        // run_diagnostics are tombstoned alongside this dispatch — see those
-        // files for matching tombstones.
-        // @trace spec:runtime-diagnostics-stream
-        // Some(p) if diagnostics => Some((
-        //     CliMode::Diagnostics { path: p, prompt },
-        //     log_config,
-        // )),
         Some(p) => Some((
             CliMode::Attach {
                 path: p,
                 image,
                 debug,
-                diagnostics,
                 bash,
                 agent_override,
-                prompt,
             },
             log_config,
         )),
@@ -532,8 +432,8 @@ fn parse_log_flags(args: &[String]) -> LogConfig {
                     .push(AccountabilityWindow::EnclaveManagement);
             }
         // @trace spec:git-mirror-service
-        } else if arg == "--log-git"
-            && !config
+        } else if arg == "--log-git" {
+            if !config
                 .accountability
                 .contains(&AccountabilityWindow::GitManagement)
             {
@@ -541,6 +441,7 @@ fn parse_log_flags(args: &[String]) -> LogConfig {
                     .accountability
                     .push(AccountabilityWindow::GitManagement);
             }
+        }
     }
 
     config

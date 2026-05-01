@@ -18,11 +18,11 @@
         forgeEntrypointClaude = ./images/default/entrypoint-forge-claude.sh;
         forgeEntrypointTerminal = ./images/default/entrypoint-terminal.sh;
         forgeOpencode = ./images/default/opencode.json;
+        forgeGitAskpass = ./images/default/git-askpass-tillandsias.sh;
         forgeShellConfigs = ./images/default/shell;
         forgeWelcome = ./images/default/forge-welcome.sh;
         forgeLocales = ./images/default/locales;
-        # @trace spec:cheatsheets-license-tiered, spec:external-logs-layer
-        forgeExternalLogsManifest = ./images/default/external-logs.yaml;
+        forgeMcpBrowser = ./images/default/tillandsias-mcp-browser;
         webEntrypoint = ./images/web/entrypoint.sh;
 
       in {
@@ -84,10 +84,6 @@
               # The binary is cached in ~/.cache/tillandsias/opencode/
               # Nix itself (for nix develop inside container)
               nix
-              # @trace spec:forge-nix-toolchain
-              # direnv + nix-direnv for .envrc auto-activation with flake support
-              direnv
-              nix-direnv
               # TLS certificates
               cacert
               # Make /usr/bin/env and /bin/sh work
@@ -122,10 +118,17 @@
               chmod +x ./usr/local/bin/entrypoint-forge-opencode.sh
               chmod +x ./usr/local/bin/entrypoint-forge-claude.sh
               chmod +x ./usr/local/bin/entrypoint-terminal.sh
+              cp ${forgeMcpBrowser} ./usr/local/bin/tillandsias-mcp-browser
+              chmod +x ./usr/local/bin/tillandsias-mcp-browser
 
               # Copy legacy entrypoint (backward compat redirect)
               cp ${forgeEntrypoint} ./usr/local/bin/tillandsias-entrypoint.sh
               chmod +x ./usr/local/bin/tillandsias-entrypoint.sh
+
+              # GIT_ASKPASS helper for token file credential delivery
+              # @trace spec:secret-rotation
+              cp ${forgeGitAskpass} ./usr/local/bin/git-askpass-tillandsias.sh
+              chmod 0755 ./usr/local/bin/git-askpass-tillandsias.sh
 
               # Copy opencode config
               cp ${forgeOpencode} ./home/forge/.config/opencode/config.json
@@ -146,15 +149,6 @@
               cp ${forgeLocales}/en.sh ./etc/tillandsias/locales/en.sh
               cp ${forgeLocales}/es.sh ./etc/tillandsias/locales/es.sh
               chmod +r ./etc/tillandsias/locales/en.sh ./etc/tillandsias/locales/es.sh
-
-              # @trace spec:cheatsheets-license-tiered, spec:external-logs-layer
-              # External-logs producer manifest — forge agents emit cheatsheet
-              # telemetry to /var/log/tillandsias/external/cheatsheet-telemetry/
-              # lookups.jsonl. The tray auditor reads this manifest via
-              # `podman cp <container>:/etc/tillandsias/external-logs.yaml -`.
-              mkdir -p ./etc/tillandsias
-              cp ${forgeExternalLogsManifest} ./etc/tillandsias/external-logs.yaml
-              chmod +r ./etc/tillandsias/external-logs.yaml
 
               # Fish config in the user's config dir — fish reads from
               # $__fish_config_dir/conf.d/ which is ~/.config/fish/conf.d/

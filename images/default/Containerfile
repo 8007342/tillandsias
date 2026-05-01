@@ -2,245 +2,34 @@
 # Standard glibc, SELinux-ready, FHS-compliant.
 # Pre-built binaries (OpenCode, Claude Code) execute directly — no linker hacks.
 # @trace spec:default-image
-# DISTRO: Fedora Minimal 43 — microdnf (NOT dnf), glibc, bash default.
+# DISTRO: Fedora Minimal 44 — microdnf (NOT dnf), glibc, bash default.
 #         Both curl AND wget installed explicitly.
 #         User creation: useradd (NOT Alpine's adduser -D).
 #         CA bundle at /etc/pki/tls/certs/ca-bundle.crt.
-FROM registry.fedoraproject.org/fedora-minimal:43
+FROM registry.fedoraproject.org/fedora-minimal:44
 
 # @trace spec:default-image — forge system packages
 # ── System packages ────────────────────────────────────────────
-# FULL-BATTERY forge: every compiler, interpreter, and build tool a coding
-# agent typically reaches for, baked into the image at build time. The
-# ephemeral contract says tools never get downloaded at runtime — the
-# image IS the toolbox. The mutable overlay is ONLY for config files that
-# need to be writable at runtime (opencode session db, openspec init
-# output), NEVER for binaries.
-#
-# Layer grouping prioritises cache reuse: core utils rarely change, then
-# shells, then compilers, then language runtimes (biggest), then CLI
-# extras. Flutter gets its own layer because it's the heaviest single
-# component (~1GB).
-#
-# DISTRO: microdnf (Fedora Minimal), NOT apk (Alpine) or dnf (standard
-# Fedora). Some packages only exist under `dnf install --allowerasing`
-# — where the need arises we call microdnf with the matching flag.
+# LEAN forge: essential dev tools only. Terminal UX tools (mc, vim, nano,
+# eza, bat, fd-find, fzf, htop, tree, zoxide) removed to save ~90MB.
+# Users who need them can install via the tools overlay or microdnf.
+# DISTRO: microdnf (Fedora Minimal), NOT apk (Alpine) or dnf (standard Fedora)
 RUN microdnf install -y \
-        # @trace spec:default-image
-        # glibc-langpack-en provides en_US.UTF-8. fedora-minimal strips
-        # all locale data by default; without this, every interactive
-        # bash/zsh emits "setlocale: LC_CTYPE: cannot change locale
-        # (en_US.UTF-8): No such file or directory" warnings on attach,
-        # and any locale-sensitive code (sort, ls, gettext-using tools)
-        # silently falls back to C/POSIX collation.
-        glibc-langpack-en \
-        bash coreutils findutils grep sed gawk tar gzip xz unzip zip bzip2 zstd \
-        procps-ng shadow-utils ca-certificates which file less tree \
+        bash coreutils findutils grep sed gawk tar gzip xz \
+        procps-ng shadow-utils ca-certificates \
         fish zsh \
-        git git-lfs gh curl wget jq ripgrep fd-find fzf \
-        vim nano man-db \
-        # Build essentials — compile anything C/C++/Rust/Go/FFI-bound
-        gcc gcc-c++ clang lld llvm make cmake ninja-build \
-        autoconf automake libtool pkgconf pkgconf-pkg-config patch \
-        gdb strace ltrace binutils \
-        # Python ecosystem
-        python3 python3-pip python3-devel python3-virtualenv pipx \
-        # Node ecosystem (yarn + pnpm added below via corepack)
+        git gh curl wget jq ripgrep \
         nodejs npm \
-        # Java ecosystem
-        java-21-openjdk-devel maven \
-        # Go
-        golang \
-        # Rust toolchain from Fedora (rustup alternative is in /opt below)
-        rust cargo rust-std-static \
-        # Database clients (agents often need these)
-        sqlite postgresql \
-        # Networking / SSH clients
-        openssh-clients rsync iputils iproute bind-utils \
-        # Shell / fuzzy niceties the agent uses constantly
-        bash-completion socat netcat openssl \
-        # @trace spec:agent-cheatsheets, spec:default-image
-        # Shell-script lint + formatter (cited from cheatsheets/utils/shellcheck-shfmt.md
-        # as "added by agent-source-of-truth"). Both available from Fedora's repos.
-        # protobuf-compiler ships the `protoc` binary cheatsheets/web/protobuf.md depends on.
-        ShellCheck shfmt protobuf-compiler protobuf-devel xmlstarlet libxml2 \
-        # @trace spec:forge-headless-browsers, spec:default-image
-        # @cheatsheet test/selenium.md, test/playwright.md
-        # Headless browsers + WebDriver bridges so agent-driven UI tests
-        # (Selenium, Playwright, raw WebDriver) work inside the forge
-        # without runtime installs. Full GUI variants intentionally NOT
-        # included — interactive browser windows belong to the host
-        # (host-chromium-on-demand capability).
-        chromium-headless firefox chromedriver \
     && microdnf clean all
-
-# ── Node yarn + pnpm via npm -g ────────────────────────────────
-# @trace spec:default-image
-# Fedora's nodejs ships without corepack (they strip experimental features),
-# so we install yarn + pnpm directly via npm. The npm prefix /usr lands the
-# binaries in /usr/bin which is on PATH for every shell.
-RUN npm install -g --prefix=/usr yarn pnpm \
-    && yarn --version \
-    && pnpm --version
-
-# ── Python dev extras (pinned reasonable versions) ─────────────
-# @trace spec:default-image
-# `pipx` for tools the agent may invoke directly (ruff, black, mypy,
-# pytest). Installed globally under /usr/local/pipx so they're on PATH
-# from every forge user without per-project pip installs.
-ENV PIPX_HOME=/opt/pipx \
-    PIPX_BIN_DIR=/usr/local/bin \
-    PATH=/usr/local/bin:$PATH
-RUN mkdir -p "$PIPX_HOME" \
-    && pipx install --global ruff \
-    && pipx install --global black \
-    && pipx install --global mypy \
-    && pipx install --global pytest \
-    && pipx install --global httpie \
-    && pipx install --global uv \
-    && pipx install --global poetry
-
-# ── Gradle (installed from upstream — Fedora's gradle is often old) ─
-# @trace spec:default-image
-ENV GRADLE_VERSION=8.10 \
-    GRADLE_HOME=/opt/gradle
-RUN curl -fsSL "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" \
-        -o /tmp/gradle.zip \
-    && unzip -q /tmp/gradle.zip -d /opt \
-    && mv "/opt/gradle-${GRADLE_VERSION}" "$GRADLE_HOME" \
-    && rm /tmp/gradle.zip \
-    && ln -s "$GRADLE_HOME/bin/gradle" /usr/local/bin/gradle
-
-# ── yq (mikefarah, Go-based) and grpcurl ─────────────────────────
-# @trace spec:agent-cheatsheets, spec:default-image
-# Both are needed by cheatsheets/utils/yq.md and cheatsheets/web/grpc.md.
-# Neither has a Fedora package (kislyuk/yq is in EPEL but is a different,
-# Python-based tool — not what mikefarah/yq cheatsheet describes), so we
-# fetch upstream binaries pinned by version. Single layer for cache stability.
-ENV YQ_VERSION=4.45.1 \
-    GRPCURL_VERSION=1.9.1
-RUN curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" \
-        -o /usr/local/bin/yq \
-    && chmod +x /usr/local/bin/yq \
-    && /usr/local/bin/yq --version \
-    && curl -fsSL "https://github.com/fullstorydev/grpcurl/releases/download/v${GRPCURL_VERSION}/grpcurl_${GRPCURL_VERSION}_linux_x86_64.tar.gz" \
-        -o /tmp/grpcurl.tar.gz \
-    && tar -xzf /tmp/grpcurl.tar.gz --no-same-owner -C /usr/local/bin grpcurl \
-    && chmod +x /usr/local/bin/grpcurl \
-    && rm /tmp/grpcurl.tar.gz \
-    && /usr/local/bin/grpcurl -version 2>&1 | head -1
-
-# ── chromium-headless on PATH ─────────────────────────────────
-# @trace spec:forge-headless-browsers
-# Fedora's chromium-headless package installs the binary at
-# /usr/lib64/chromium-browser/headless_shell — not on PATH. Symlink so
-# `which chromium-headless` resolves and the audit-cited usage works.
-RUN ln -sf /usr/lib64/chromium-browser/headless_shell /usr/local/bin/chromium-headless \
-    && /usr/local/bin/chromium-headless --version 2>&1 | head -1
-
-# ── geckodriver (Mozilla WebDriver for Firefox) ──────────────────
-# @trace spec:forge-headless-browsers, spec:default-image
-# @cheatsheet test/selenium.md, test/playwright.md
-# Fedora doesn't package geckodriver — pulled from the official Mozilla
-# release. chromedriver IS in Fedora's repos and was installed in the
-# microdnf layer above; geckodriver gets its own layer because it's a
-# single-binary upstream tarball.
-ENV GECKODRIVER_VERSION=0.36.0
-RUN curl -fsSL "https://github.com/mozilla/geckodriver/releases/download/v${GECKODRIVER_VERSION}/geckodriver-v${GECKODRIVER_VERSION}-linux64.tar.gz" \
-        -o /tmp/geckodriver.tar.gz \
-    && tar -xzf /tmp/geckodriver.tar.gz --no-same-owner -C /usr/local/bin geckodriver \
-    && chmod +x /usr/local/bin/geckodriver \
-    && rm /tmp/geckodriver.tar.gz \
-    && /usr/local/bin/geckodriver --version 2>&1 | head -1
-
-# ── Nix + direnv + nix-direnv (single-user, flakes enabled) ─────────
-# @trace spec:forge-nix-toolchain, spec:default-image
-# Nix installed in single-user mode (no daemon needed for ephemeral forge).
-# Direnv + nix-direnv for .envrc auto-activation and flake evaluation caching.
-# Experimental features (nix-command, flakes) are enabled system-wide.
-# Extract, patch nix.conf in tarball, then install (ephemeral container workaround).
-RUN mkdir -m 0755 /nix \
-    && curl -fsSL https://nixos.org/nix/install -o /tmp/nix-install.sh \
-    && bash /tmp/nix-install.sh --no-daemon 2>&1 || true \
-    && if [ -f /root/.nix-profile/etc/profile.d/nix.sh ]; then \
-         sed -i 's/build-users-group = nixbld/build-users-group =/' /root/.nix/nix.conf 2>/dev/null || true; \
-         . /root/.nix-profile/etc/profile.d/nix.sh && nix --version; \
-       else \
-         echo "Nix installation failed, attempting workaround..."; \
-         mkdir -p /root/.nix-profile/etc/profile.d && \
-         echo 'export PATH="/nix/var/nix/profiles/default/bin:/nix/var/nix/profiles/default/sbin:$PATH"' > /root/.nix-profile/etc/profile.d/nix.sh && \
-         mkdir -p /root/.nix && echo "experimental-features = nix-command flakes" > /root/.nix/nix.conf; \
-       fi \
-    && rm -f /tmp/nix-install.sh \
-    && microdnf install -y direnv \
-    && nix-env -i nix-direnv 2>/dev/null || true \
-    && microdnf clean all
-
-# ── Nix configuration ──────────────────────────────────────────────
-# @trace spec:forge-nix-toolchain, spec:default-image
-# Enable experimental features (nix-command, flakes) system-wide.
-RUN mkdir -p /etc/nix \
-    && echo "experimental-features = nix-command flakes" > /etc/nix/nix.conf \
-    && chmod 644 /etc/nix/nix.conf
-
-# ── Flutter SDK (hard-installed at /opt/flutter, pre-cached) ───
-# @trace spec:default-image
-# Flutter is a heavyweight SDK (~1GB after precache) so it gets its own
-# layer for cache stability. Pinned to a stable release. `flutter precache
-# --linux` downloads Linux-desktop engine artefacts at image-build time so
-# the forge never touches the network to bootstrap Flutter.
-# Mobile (Android / iOS) tooling is NOT included — that requires Android
-# Studio SDK and platform-specific licenses; Flutter web + desktop work
-# without it.
-ENV FLUTTER_VERSION=3.24.5 \
-    FLUTTER_HOME=/opt/flutter \
-    PATH=/opt/flutter/bin:$PATH \
-    PUB_CACHE=/opt/flutter/.pub-cache
-RUN curl -fsSL "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
-        -o /tmp/flutter.tar.xz \
-    && tar -xJf /tmp/flutter.tar.xz -C /opt \
-    && rm /tmp/flutter.tar.xz \
-    && git config --system --add safe.directory "$FLUTTER_HOME" \
-    && "$FLUTTER_HOME/bin/flutter" --no-version-check config --no-analytics \
-    && "$FLUTTER_HOME/bin/flutter" --no-version-check precache --linux --web --no-android --no-ios --no-macos --no-windows \
-    && chmod -R a+rX "$FLUTTER_HOME"
-
-# ── Coding agents (hard-installed, NOT mutable overlay) ─────────
-# @trace spec:default-image, spec:tools-overlay-deprecated
-# OpenCode + Claude Code + OpenSpec used to live in the mutable
-# `.tools-overlay` image built at runtime against the proxy. That violated
-# the ephemeral contract: a downloaded binary in the user-writable layer is
-# state, not config. We move them into /opt at image-build time so:
-#   • forge containers boot with the agents already on PATH
-#   • the mutable overlay is reduced to genuine config (openspec init,
-#     opencode session db) which legitimately needs to be writable
-#   • image rebuilds are deterministic — same VERSION = same agent bins
-RUN mkdir -p /opt/agents/claude /opt/agents/openspec /opt/agents/opencode/bin \
-    && npm install -g --prefix=/opt/agents/claude @anthropic-ai/claude-code \
-    && npm install -g --prefix=/opt/agents/openspec @fission-ai/openspec \
-    && ln -s /opt/agents/claude/bin/claude /usr/local/bin/claude \
-    && ln -s /opt/agents/openspec/bin/openspec /usr/local/bin/openspec \
-    && curl -fsSL https://opencode.ai/install \
-        | OPENCODE_INSTALL_DIR=/opt/agents/opencode bash \
-    && if [ ! -x /opt/agents/opencode/bin/opencode ] && [ -x /root/.opencode/bin/opencode ]; then \
-           cp /root/.opencode/bin/opencode /opt/agents/opencode/bin/opencode; \
-       fi \
-    && rm -rf /root/.opencode \
-    && ln -s /opt/agents/opencode/bin/opencode /usr/local/bin/opencode \
-    && /usr/local/bin/claude --version \
-    && /usr/local/bin/openspec --version \
-    && /usr/local/bin/opencode --version
 
 # ── Create forge user ──────────────────────────────────────────
 # DISTRO: useradd (Fedora shadow-utils), NOT adduser -D (Alpine)
 RUN useradd -u 1000 -m -s /bin/bash forge
 
 # ── Directory structure ────────────────────────────────────────
-# @trace spec:runtime-diagnostics
 RUN mkdir -p /home/forge/src \
     && mkdir -p /home/forge/.cache/tillandsias \
     && mkdir -p /home/forge/.config/opencode \
-    && mkdir -p /strategic \
     && mkdir -p /tmp && chmod 1777 /tmp
 
 # ── Shared library ─────────────────────────────────────────────
@@ -253,17 +42,12 @@ COPY entrypoint-forge-opencode.sh /usr/local/bin/entrypoint-forge-opencode.sh
 COPY entrypoint-forge-opencode-web.sh /usr/local/bin/entrypoint-forge-opencode-web.sh
 COPY entrypoint-forge-claude.sh /usr/local/bin/entrypoint-forge-claude.sh
 COPY entrypoint-terminal.sh /usr/local/bin/entrypoint-terminal.sh
-# @trace spec:opencode-web-session
-# Tiny Node.js HTTP proxy that injects SSE keepalive comments so Bun's default
-# 10s idleTimeout doesn't drop /event and /global/event streams when the
-# session is idle. Fronts opencode serve on port 4096 → 4097.
-COPY sse-keepalive-proxy.js /usr/local/bin/sse-keepalive-proxy.js
+COPY tillandsias-browser-tool /usr/local/bin/tillandsias-browser-tool
 RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/entrypoint-forge-opencode.sh \
              /usr/local/bin/entrypoint-forge-opencode-web.sh \
              /usr/local/bin/entrypoint-forge-claude.sh \
-             /usr/local/bin/entrypoint-terminal.sh \
-             /usr/local/bin/sse-keepalive-proxy.js
+             /usr/local/bin/entrypoint-terminal.sh
 
 # No GIT_ASKPASS helper in the forge image — forge containers have ZERO
 # credentials. The old askpass was a dead-code vector superseded by the
@@ -281,37 +65,13 @@ COPY opencode.json /home/forge/.config/opencode/config.json
 # at the user-config layer when applications resolve XDG paths).
 COPY config-overlay/opencode/tui.json /home/forge/.config/opencode/tui.json
 
-# ── Project bootstrap skills ───────────────────────────────────
-# @trace spec:project-bootstrap-readme
-# Four OpenCode agent/command files for /startup routing and README management.
-# Copied into ~/.config-overlay/opencode/agent/ so they're discoverable
-# before project-local overrides (if any).
-RUN mkdir -p /home/forge/.config-overlay/opencode/agent
-COPY config-overlay/opencode/agent/*.md /home/forge/.config-overlay/opencode/agent/
-RUN chmod 644 /home/forge/.config-overlay/opencode/agent/*.md
-
 # ── Shell configs ──────────────────────────────────────────────
-# /etc/skel is populated AFTER `useradd -m` ran above, so the forge user's
-# home was created from an empty /etc/skel — its ~/.bashrc and ~/.zshrc do
-# NOT exist by default. We have to copy the shell configs DIRECTLY to
-# /home/forge as well (and chown them in the chown -R below).
-#
-# .bash_profile sources .bashrc so `bash -l` (used by the Maintenance
-# terminal) picks up our PATH, prompt, aliases, and welcome banner. Without
-# this, login bash reads only /etc/profile and the user gets a vanilla
-# distro prompt with no project context.
-#
-# @trace spec:default-image, spec:forge-environment-discoverability
 RUN mkdir -p /etc/skel/.config/fish
 COPY shell/bashrc /etc/skel/.bashrc
 COPY shell/zshrc /etc/skel/.zshrc
 COPY shell/config.fish /etc/skel/.config/fish/config.fish
 RUN mkdir -p /home/forge/.config/fish/conf.d
 COPY shell/config.fish /home/forge/.config/fish/conf.d/tillandsias.fish
-COPY shell/bashrc /home/forge/.bashrc
-COPY shell/zshrc /home/forge/.zshrc
-RUN printf '# Login bash sources .bashrc so PATH + welcome + prompt apply.\n[ -f ~/.bashrc ] && . ~/.bashrc\n' \
-        > /home/forge/.bash_profile
 
 # ── Welcome script ─────────────────────────────────────────────
 RUN mkdir -p /usr/local/share/tillandsias
@@ -323,128 +83,12 @@ RUN chmod +x /usr/local/share/tillandsias/forge-welcome.sh || true
 RUN mkdir -p /etc/tillandsias/locales
 COPY locales/ /etc/tillandsias/locales/
 
-# ── External-logs producer manifest ────────────────────────────
-# @trace spec:cheatsheets-license-tiered, spec:external-logs-layer
-# @cheatsheet runtime/external-logs.md
-# Forge containers are EXTERNAL-tier producers of cheatsheet-telemetry —
-# in-forge agents (claude / opencode / opsx) emit one JSONL event per
-# cheatsheet consultation to lookups.jsonl. The tray-side auditor reads
-# this manifest at /etc/tillandsias/external-logs.yaml every 60 s and
-# flags any unlisted file in the role dir as a LEAK event.
-RUN mkdir -p /etc/tillandsias
-COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
-
-# ── Discoverability CLI tools ─────────────────────────────
-# @trace spec:forge-environment-discoverability
-# Three image-baked bash commands the agent can run on first turn to learn
-# what the forge ships: `tillandsias-inventory` (every dev runtime + version),
-# `tillandsias-services` (enclave services + ports + status), and
-# `tillandsias-models` (loaded ollama models + planner tier). All three
-# accept --json for machine consumption. Tools live under
-# /opt/agents/tillandsias-cli/bin/ to mirror the other agent installs and
-# are symlinked into /usr/local/bin/ for PATH discovery.
-RUN mkdir -p /opt/agents/tillandsias-cli/bin
-COPY cli/tillandsias-inventory /opt/agents/tillandsias-cli/bin/tillandsias-inventory
-COPY cli/tillandsias-services /opt/agents/tillandsias-cli/bin/tillandsias-services
-COPY cli/tillandsias-models /opt/agents/tillandsias-cli/bin/tillandsias-models
-# @trace spec:external-logs-layer
-# tillandsias-logs: ls / tail / combine subcommands for the external-logs layer.
-COPY cli/tillandsias-logs /opt/agents/tillandsias-cli/bin/tillandsias-logs
-RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
-    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-inventory /usr/local/bin/tillandsias-inventory \
-    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-services /usr/local/bin/tillandsias-services \
-    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-models /usr/local/bin/tillandsias-models \
-    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-logs /usr/local/bin/tillandsias-logs
-
-# ── README dispatcher + validator + summarizers ────────────────
-# @trace spec:project-summarizers, spec:project-bootstrap-readme
-# Six language-specific summarizers for detecting tech stack from manifests.
-# Dispatcher orchestrates them and renders README.md atomically.
-# Validator checks README structure and enforces discipline.
-RUN mkdir -p /opt/summarizers
-COPY scripts/summarize-cargo.sh /opt/summarizers/summarize-cargo.sh
-COPY scripts/summarize-nix.sh /opt/summarizers/summarize-nix.sh
-COPY scripts/summarize-package-json.sh /opt/summarizers/summarize-package-json.sh
-COPY scripts/summarize-pubspec.sh /opt/summarizers/summarize-pubspec.sh
-COPY scripts/summarize-go-mod.sh /opt/summarizers/summarize-go-mod.sh
-COPY scripts/summarize-pyproject.sh /opt/summarizers/summarize-pyproject.sh
-RUN chmod +x /opt/summarizers/*.sh
-
-# Dispatcher + validator into /usr/local/bin for direct invocation
-COPY scripts/regenerate-readme.sh /usr/local/bin/regenerate-readme.sh
-COPY scripts/check-readme-discipline.sh /usr/local/bin/check-readme-discipline.sh
-RUN chmod +x /usr/local/bin/regenerate-readme.sh /usr/local/bin/check-readme-discipline.sh
-
-# Symlinks for convenience (optional, since /opt/summarizers is not on PATH)
-RUN ln -sf /opt/summarizers/summarize-cargo.sh /usr/local/bin/summarize-cargo.sh \
-    && ln -sf /opt/summarizers/summarize-nix.sh /usr/local/bin/summarize-nix.sh \
-    && ln -sf /opt/summarizers/summarize-package-json.sh /usr/local/bin/summarize-package-json.sh \
-    && ln -sf /opt/summarizers/summarize-pubspec.sh /usr/local/bin/summarize-pubspec.sh \
-    && ln -sf /opt/summarizers/summarize-go-mod.sh /usr/local/bin/summarize-go-mod.sh \
-    && ln -sf /opt/summarizers/summarize-pyproject.sh /usr/local/bin/summarize-pyproject.sh
-
-# ── Agent cheatsheets ─────────────────────────────────────────
-# @trace spec:agent-cheatsheets, spec:default-image, spec:forge-hot-cold-split
-# `cheatsheets/` lives at the project root as the source of truth.
-# `scripts/build-image.sh` stages it into `images/default/.cheatsheets/`
-# right before podman build, so the COPY here resolves inside the build
-# context. The staged dir is removed after build completes.
-#
-# Baked into /opt/cheatsheets-image/ (RO image lower layer). At container
-# start, populate_hot_paths() in lib-common.sh copies these into
-# /opt/cheatsheets/ (tmpfs hot mount, 8MB cap) so every agent read is
-# RAM-served. TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets is UNCHANGED —
-# agents see the same path; only the backing store changes.
-# /opt/cheatsheets/ is NOT created here — podman --tmpfs creates the mount
-# point at launch time; the entrypoint populates it via populate_hot_paths().
-RUN mkdir -p /opt/cheatsheets-image
-COPY .cheatsheets/ /opt/cheatsheets-image/
-RUN chmod -R a+rX /opt/cheatsheets-image && chmod -R go-w /opt/cheatsheets-image
-
-# ── Bundled-tier cheatsheet sources + meta side-channel ────────
-# @trace spec:cheatsheets-license-tiered
-# @cheatsheet runtime/cheatsheet-tier-system.md
-# `.cheatsheet-sources/` is staged by `scripts/build-image.sh` from the
-# bundled-tier fetcher's cache-key directory (per Decision 7 of the
-# cheatsheets-license-tiered design). On network failure with no prior
-# cache, the directory contains a single `UNAVAILABLE.md` placeholder so
-# the COPY still succeeds (graceful degradation; agents see no
-# /opt/cheatsheet-sources/ entries and fall back to pull-on-demand).
-#
-# `.cheatsheets-meta/` carries `<category>/<name>.frontmatter.json` with
-# image_baked_sha256, structural_drift_fingerprint, fetched_at, and url.
-# populate_hot_paths() reads these at forge launch to inject the SHA into
-# INDEX.md without rewriting the cheatsheet inside the image.
-RUN mkdir -p /opt/cheatsheet-sources /opt/cheatsheets-meta
-COPY .cheatsheet-sources/ /opt/cheatsheet-sources/
-# @tombstone missing-cheatsheets-meta — .cheatsheets-meta/ does not exist; disabled in v0.1.183.290
-# COPY .cheatsheets-meta/ /opt/cheatsheets-meta/
-RUN chmod -R a+rX /opt/cheatsheet-sources \
-    && chmod -R go-w /opt/cheatsheet-sources
-
 # ── Fix ownership ──────────────────────────────────────────────
-# @trace spec:runtime-diagnostics
-RUN chown -R 1000:1000 /home/forge /strategic
+RUN chown -R 1000:1000 /home/forge
 
 USER 1000:1000
 WORKDIR /home/forge/src
 ENTRYPOINT ["/usr/local/bin/entrypoint-forge-claude.sh"]
 # No EXPOSE — forge containers live on the enclave network only.
 # @trace spec:forge-offline, spec:enclave-network
-ENV HOME=/home/forge USER=forge \
-    TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets \
-    LANG=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8 \
-    NIX_CONFIG=/etc/nix/nix.conf \
-    NIX_PATH=nixpkgs=flake:nixpkgs
-
-# @trace spec:forge-environment-discoverability
-# TILLANDSIAS_IMAGE_VERSION identifies the forge image build the agent is
-# attached to. Default placeholder until the image build pipeline injects a
-# real version (Cargo VERSION + git SHA). Override at podman run -e if needed.
-# TILLANDSIAS_CAPABILITIES is a comma-separated capability vector the agent
-# can read without invoking any binary — declarative discovery layer alongside
-# `tillandsias-inventory`. cheatsheets-mcp is declared ahead of its landing
-# change so agents can probe the intended capability surface today.
-ENV TILLANDSIAS_IMAGE_VERSION="forge-baseline" \
-    TILLANDSIAS_CAPABILITIES="rust,go,java-21,maven,gradle,flutter,nix,direnv,nix-direnv,headless-chromium,headless-firefox,protoc,grpcurl,opencode,claude,openspec,cheatsheets-mcp"
+ENV HOME=/home/forge USER=forge

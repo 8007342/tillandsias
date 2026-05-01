@@ -47,60 +47,10 @@ pub struct ContainerProfile {
     /// @trace spec:podman-orchestration
     pub read_only: bool,
 
-    /// Tmpfs mounts for runtime directories.
-    ///
-    /// Emitted unconditionally (regardless of `read_only`). Each mount carries
-    /// a kernel-enforced size cap (`size_mb`) and an octal permission mode.
-    /// When any entry is present, `build_podman_args` also emits
-    /// `--memory=<total>m --memory-swap=<total>m` where `total` = sum of all
-    /// caps + 256 MB baseline, preventing swap escape from the RAM-only
-    /// guarantee.
-    ///
-    /// @trace spec:podman-orchestration, spec:forge-hot-cold-split
-    pub tmpfs_mounts: Vec<TmpfsMount>,
-
-    /// Bind-mount the host control socket into the container at the
-    /// canonical path `/run/host/tillandsias/control.sock` and set the
-    /// `TILLANDSIAS_CONTROL_SOCKET` env var so client libraries inside
-    /// the container can find it without per-launch configuration.
-    ///
-    /// Default: `false`. Forge containers MUST keep this `false` —
-    /// per `secrets-management`, the default-deny posture prevents a
-    /// compromised forge from sending control-plane messages. Only
-    /// containers that explicitly opt in (e.g., the router) receive
-    /// the bind mount.
-    ///
-    /// @trace spec:tray-host-control-socket, spec:secrets-management
-    pub mount_control_socket: bool,
-
-    /// External-logs role — set to `Some("role-name")` for producer containers.
-    ///
-    /// When `Some`, the launcher creates
-    /// `~/.local/state/tillandsias/external-logs/<role>/` if absent and
-    /// bind-mounts it RW at `/var/log/tillandsias/external/` inside the
-    /// container. The producer can ONLY see its own role's files.
-    ///
-    /// Mutually exclusive with `external_logs_consumer: true`. Chunk 2 wires
-    /// git-service as the first producer; chunk 3 wires forge profiles as
-    /// consumers. Chunk 1 adds the type scaffolding only — all profiles
-    /// default to `None` until their respective chunks land.
-    ///
-    /// @trace spec:external-logs-layer
-    pub external_logs_role: Option<&'static str>,
-
-    /// External-logs consumer flag — set to `true` for containers that should
-    /// receive a read-only view of ALL producers' external logs.
-    ///
-    /// When `true`, the launcher bind-mounts the parent
-    /// `~/.local/state/tillandsias/external-logs/` directory RO at
-    /// `/var/log/tillandsias/external/` inside the container. Consumers see
-    /// one subdirectory per active producer role.
-    ///
-    /// Mutually exclusive with `external_logs_role: Some(_)`. Chunk 3 wires
-    /// forge/terminal profiles as consumers. Defaults to `false`.
-    ///
-    /// @trace spec:external-logs-layer
-    pub external_logs_consumer: bool,
+    /// Tmpfs mounts for runtime directories when `read_only` is true.
+    /// Each entry is a container path (e.g., "/tmp", "/var/run/squid").
+    /// @trace spec:podman-orchestration
+    pub tmpfs_mounts: Vec<&'static str>,
 }
 
 /// A volume mount with a logical host key resolved at launch time.
@@ -123,6 +73,10 @@ pub enum MountSource {
     ProjectDir,
     /// The tillandsias cache directory (~/.cache/tillandsias).
     CacheDir,
+    /// Pre-built tools overlay directory (~/.cache/tillandsias/tools-overlay/current).
+    /// Resolved at launch time; mount is skipped if the overlay doesn't exist yet.
+    /// @trace spec:layered-tools-overlay
+    ToolsOverlay,
     /// Opinionated config overlay on tmpfs (ramdisk) for fast reads.
     /// Resolved at launch time from `$XDG_RUNTIME_DIR/tillandsias/config-overlay/`.
     /// Mount is skipped if the tmpfs directory doesn't exist yet.
@@ -133,62 +87,11 @@ pub enum MountSource {
     /// Each container gets its own isolated log directory mounted RW.
     /// @trace spec:podman-orchestration
     ContainerLogs,
-    /// Shared cache (read-only from forge perspective). Single host-managed
-    /// nix store, content-addressed so multiple projects sharing entries
-    /// never trample. Resolved to `~/.cache/tillandsias/forge-shared/nix-store/`.
-    /// Mount target inside container: `/nix/store/`. Mount mode is
-    /// always `:ro`.
-    /// @trace spec:forge-cache-architecture, spec:forge-cache-dual
-    /// @cheatsheet runtime/forge-shared-cache-via-nix.md
-    SharedCache,
-    /// Per-project cache (read-write, isolated per project). Holds
-    /// expensive built artifacts for THIS specific project: cargo target/,
-    /// node_modules / package caches, Maven .m2/, Gradle ~/.gradle/, etc.
-    /// Resolved to `~/.cache/tillandsias/forge-projects/<project>/` —
-    /// project name comes from the launch context. Project A's container
-    /// CANNOT see project B's cache (different bind-mount target).
-    /// Mount target inside container: `/home/forge/.cache/tillandsias-project/`.
-    /// @trace spec:forge-cache-architecture, spec:forge-cache-dual
-    /// @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
-    ProjectCache,
-    /// External-logs producer mount: bind-mount the role-specific host
-    /// directory RW at `/var/log/tillandsias/external/` inside the container.
-    ///
-    /// Resolved to `~/.local/state/tillandsias/external-logs/<role>/`.
-    /// The launcher creates the directory on first launch if absent.
-    /// The producer can ONLY see its own role's files — cross-producer
-    /// scribbling is impossible because the host path is role-scoped.
-    ///
-    /// @trace spec:external-logs-layer
-    ExternalLogsProducer { role: &'static str },
-    /// External-logs consumer mount: bind-mount the parent external-logs/
-    /// directory RO at `/var/log/tillandsias/external/` inside the container.
-    ///
-    /// Consumers see one subdirectory per producer role. The parent-dir RO
-    /// mount means a long-running forge picks up new sibling producers
-    /// without restart, and an empty enclave still mounts a valid (empty)
-    /// directory.
-    ///
-    /// @trace spec:external-logs-layer
-    ExternalLogsConsumerRoot,
-}
-
-/// A tmpfs mount with a kernel-enforced size cap and permission mode.
-///
-/// Podman emits this as `--tmpfs=<path>:size=<N>m,mode=<oct>`. The kernel
-/// enforces the cap: writes beyond `size_mb` megabytes get `ENOSPC` rather
-/// than spilling to the host's swap, preserving the RAM-only guarantee.
-///
-/// @trace spec:podman-orchestration, spec:forge-hot-cold-split
-#[derive(Debug, Clone)]
-pub struct TmpfsMount {
-    /// Absolute path inside the container (e.g., "/tmp").
-    pub path: &'static str,
-    /// Maximum size in mebibytes, enforced by the kernel via the `size=` option.
-    /// Must be > 0.
-    pub size_mb: u32,
-    /// Octal permission mode (e.g., `0o1777` for `/tmp`, `0o755` for read dirs).
-    pub mode: u32,
+    /// Tray Unix socket for browser tool communication.
+    /// Resolved at launch time from `$XDG_RUNTIME_DIR/tillandsias/tray.sock`.
+    /// Allows tillandsias-browser-tool inside container to request browser windows.
+    /// @trace spec:mcp-on-demand
+    TraySocket,
 }
 
 /// Mount permission mode.
@@ -345,51 +248,6 @@ pub struct LaunchContext {
     /// the enclave-only port-skip logic. Mutually exclusive with the legacy
     /// port_range publish — when Some, port_range is ignored.
     pub web_host_port: Option<u16>,
-
-    /// Per-launch tmpfs size (MB) for `/home/forge/src`.
-    ///
-    /// Set at launch time by `compute_hot_budget()` from the bare git mirror's
-    /// pack size × `forge.hot_path_inflation`, clamped to `[256, forge.hot_path_max_mb]`.
-    /// Default: 1024 MB (1 GB). Used by `build_podman_args()` to emit
-    /// `--tmpfs=/home/forge/src:size=<N>m,mode=0755` for forge profiles.
-    ///
-    /// @trace spec:forge-hot-cold-split
-    pub hot_path_budget_mb: u32,
-}
-
-// ---------------------------------------------------------------------------
-// ContainerProfile validation
-// ---------------------------------------------------------------------------
-
-impl ContainerProfile {
-    /// Validate profile-level invariants.
-    ///
-    /// Returns `Err` if the profile violates a spec invariant that must be
-    /// caught before launching the container. Currently checked:
-    ///
-    /// - A profile MAY be a producer (`external_logs_role: Some(_)`), a
-    ///   consumer (`external_logs_consumer: true`), or BOTH. The dual
-    ///   role is the load-bearing case for `cheatsheet-telemetry`: forge
-    ///   containers are consumers (they read every other role's logs RO
-    ///   to surface them in `tillandsias-logs`) AND producers of their
-    ///   own role's `lookups.jsonl`. The launcher composes the two mounts
-    ///   so the parent RO mount lands first and the role-scoped RW mount
-    ///   overlays the producer's own subdirectory — no path collision,
-    ///   no leakage across roles.
-    ///
-    ///   The original `external-logs-layer` v1 reverse-breach refusal
-    ///   forbade dual roles; `cheatsheets-license-tiered` relaxes that
-    ///   constraint because the "shadowing" concern (a consumer mount
-    ///   masking a producer's own writes) does not arise when the
-    ///   producer mount is strictly under the consumer mount's tree.
-    ///
-    /// @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
-    pub fn validate(&self) -> Result<(), String> {
-        // Dual producer + consumer is now permitted (cheatsheets-license-tiered).
-        // The launcher's mount composition keeps the role-scoped RW mount
-        // strictly under the parent RO mount, so neither shadows the other.
-        Ok(())
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -408,29 +266,7 @@ pub fn forge_opencode_profile() -> ContainerProfile {
         image_override: None,
         pids_limit: 512,      // Compilers, language servers, AI tools
         read_only: false,      // Forge needs mutable workspace
-        // @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
-        // Chunk 2: /opt/cheatsheets on tmpfs (8MB cap). The entrypoint's
-        // populate_hot_paths() copies from /opt/cheatsheets-image/ (image
-        // lower layer) into this mount so every agent cheatsheet read is
-        // RAM-served. /home/forge/src tmpfs added in chunk 3.
-        tmpfs_mounts: common_forge_tmpfs_mounts(),
-        // @trace spec:tray-host-control-socket, spec:secrets-management
-        // Forge containers default-deny the control socket — see the
-        // secrets-management delta. A compromised forge MUST NOT be able
-        // to reach the tray's control plane.
-        mount_control_socket: false,
-        // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
-        // @cheatsheet runtime/external-logs.md
-        // Forge containers are BOTH external-logs producers AND consumers:
-        //   - producer of `cheatsheet-telemetry/lookups.jsonl` — in-forge
-        //     agents emit one JSONL event per cheatsheet consultation.
-        //   - consumer of every other role's logs (RO) — `tillandsias-logs`
-        //     surfaces git-push.log, proxy access logs, etc.
-        // The launcher composes the two mounts: parent RO first, then the
-        // role-scoped RW subdir on top. See validate() for the relaxed
-        // mutual-exclusion rationale.
-        external_logs_role: Some("cheatsheet-telemetry"),
-        external_logs_consumer: true,
+        tmpfs_mounts: vec![],
     }
 }
 
@@ -446,16 +282,7 @@ pub fn forge_claude_profile() -> ContainerProfile {
         image_override: None,
         pids_limit: 512,      // Compilers, language servers, AI tools
         read_only: false,      // Forge needs mutable workspace
-        // @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
-        // Chunk 2: /opt/cheatsheets on tmpfs. See forge_opencode_profile().
-        tmpfs_mounts: common_forge_tmpfs_mounts(),
-        // @trace spec:tray-host-control-socket, spec:secrets-management
-        mount_control_socket: false,
-        // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
-        // Forge dual-role: producer of cheatsheet-telemetry + consumer of
-        // every other role's logs. See forge_opencode_profile() note.
-        external_logs_role: Some("cheatsheet-telemetry"),
-        external_logs_consumer: true,
+        tmpfs_mounts: vec![],
     }
 }
 
@@ -474,18 +301,7 @@ pub fn forge_opencode_web_profile() -> ContainerProfile {
         image_override: None,
         pids_limit: 512,
         read_only: false,
-        // @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
-        // Chunk 2: /opt/cheatsheets on tmpfs. See forge_opencode_profile().
-        tmpfs_mounts: common_forge_tmpfs_mounts(),
-        // @trace spec:tray-host-control-socket, spec:secrets-management
-        // OpenCode Web forge does not need the control socket — the router
-        // (which fronts the web session) is the consumer.
-        mount_control_socket: false,
-        // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
-        // Forge dual-role: producer of cheatsheet-telemetry + consumer of
-        // every other role's logs. See forge_opencode_profile() note.
-        external_logs_role: Some("cheatsheet-telemetry"),
-        external_logs_consumer: true,
+        tmpfs_mounts: vec![],
     }
 }
 
@@ -499,9 +315,7 @@ pub fn terminal_profile() -> ContainerProfile {
         mounts: common_forge_mounts(),
         pids_limit: 512,      // Same as forge (maintenance shell)
         read_only: false,      // Terminal needs mutable workspace
-        // @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
-        // Chunk 2: /opt/cheatsheets on tmpfs. See forge_opencode_profile().
-        tmpfs_mounts: common_forge_tmpfs_mounts(),
+        tmpfs_mounts: vec![],
         env_vars: vec![
             ProfileEnvVar {
                 name: "TILLANDSIAS_PROJECT",
@@ -556,16 +370,9 @@ pub fn terminal_profile() -> ContainerProfile {
                 name: "HTTPS_PROXY",
                 value: EnvValue::Literal("http://proxy:3128"),
             },
-            // @trace spec:opencode-web-session, spec:proxy-container
-            // NO_PROXY covers loopback variants + every enclave-internal peer so
-            // intra-enclave traffic (inference:11434, git-service:9418, proxy
-            // self-reach) never hairpins through Squid. Without this, tools like
-            // opencode/bun see HTTP_PROXY set and route LOCAL requests through
-            // the proxy, which denies them because the destination isn't
-            // allowlisted — causing hangs on every inference probe.
             ProfileEnvVar {
                 name: "NO_PROXY",
-                value: EnvValue::Literal("localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
+                value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
             },
             ProfileEnvVar {
                 name: "http_proxy",
@@ -577,20 +384,11 @@ pub fn terminal_profile() -> ContainerProfile {
             },
             ProfileEnvVar {
                 name: "no_proxy",
-                value: EnvValue::Literal("localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
+                value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
             },
         ],
         secrets: vec![],
         image_override: None,
-        // @trace spec:tray-host-control-socket, spec:secrets-management
-        mount_control_socket: false,
-        // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
-        // Maintenance terminal is dual-role: an interactive maintainer can
-        // also `cat $TILLANDSIAS_CHEATSHEETS/...` and the same telemetry
-        // contract applies. The producer mount lands at the role-scoped
-        // subdir; the consumer mount surfaces every other role.
-        external_logs_role: Some("cheatsheet-telemetry"),
-        external_logs_consumer: true,
     }
 }
 
@@ -617,80 +415,7 @@ pub fn web_profile() -> ContainerProfile {
         image_override: Some("tillandsias-web:latest"),
         pids_limit: 32,        // Only httpd
         read_only: true,       // Static file server — no writes needed
-        // @trace spec:podman-orchestration, spec:forge-hot-cold-split
-        // /tmp: httpd temp files; /var/run: PID and socket files.
-        // 64 MB each is well above what a static file server needs.
-        tmpfs_mounts: vec![
-            TmpfsMount { path: "/tmp", size_mb: 64, mode: 0o1777 },
-            TmpfsMount { path: "/var/run", size_mb: 64, mode: 0o755 },
-        ],
-        // @trace spec:tray-host-control-socket, spec:secrets-management
-        mount_control_socket: false,
-        // @trace spec:external-logs-layer — chunk 1 defaults
-        external_logs_role: None,
-        external_logs_consumer: false,
-    }
-}
-
-/// Router container — Caddy 2 reverse proxy mapping
-/// `<project>.<service>.localhost` to enclave containers by name + port.
-///
-/// Runs Caddy on port 80 inside the enclave (DNS alias `router`) and is
-/// host-published only on `127.0.0.1:80` (loopback). The host kernel
-/// restricts the listener to loopback; Caddy adds a defence-in-depth
-/// `remote_ip` allowlist that rejects any source not on loopback or RFC
-/// 1918 private blocks.
-///
-/// The dynamic Caddyfile is bind-mounted into the container at
-/// `/run/router/dynamic.Caddyfile` from
-/// `$XDG_RUNTIME_DIR/tillandsias/router/dynamic.Caddyfile` (tmpfs).
-/// `handlers::regenerate_router_caddyfile` rewrites it on each attach
-/// and signals reload via `caddy reload` over the container's local
-/// admin API.
-///
-/// @trace spec:subdomain-routing-via-reverse-proxy, spec:enclave-network
-pub fn router_profile() -> ContainerProfile {
-    ContainerProfile {
-        entrypoint: "/usr/local/bin/entrypoint.sh",
-        working_dir: None,
-        mounts: vec![
-            // Per-container log directory — Caddy writes access + error logs here.
-            // @trace spec:podman-orchestration
-            ProfileMount {
-                host_key: MountSource::ContainerLogs,
-                container_path: "/var/log/tillandsias",
-                mode: MountMode::Rw,
-            },
-            // The dynamic Caddyfile is bind-mounted dynamically by
-            // handlers::ensure_router_running so the path includes the
-            // tmpfs base resolved at launch time.
-        ],
-        env_vars: vec![],
-        secrets: vec![],
-        image_override: None,
-        pids_limit: 64,        // Caddy + a single watcher
-        // NOT read-only: caddy needs writable /tmp for the merged
-        // Caddyfile and /tmp/caddy-storage. Writable root is fine in
-        // a single-purpose container with no shell access.
-        read_only: false,
-        // Router does not need hot-path tmpfs — no cheatsheets or source code.
-        // @trace spec:forge-hot-cold-split
-        tmpfs_mounts: vec![],
-        // @trace spec:tray-host-control-socket
-        // The router consumes the control socket: it receives
-        // `IssueWebSession` envelopes from the tray (carrying per-window
-        // session cookies) and replies with `IssueAck`. v1 of the socket
-        // ships the bind-mount plumbing; the cookie issuance flow lands
-        // with the `opencode-web-session-otp` change.
-        mount_control_socket: true,
-        // @trace spec:external-logs-layer
-        // Chunk 5: router is an external-logs producer. The manifest at
-        // /etc/tillandsias/external-logs.yaml (baked into the image) declares
-        // caddy-access.log. Producer code (Caddyfile log directive) comes in
-        // a later change; the mount being in place enables the observability
-        // contract now.
-        external_logs_role: Some("router"),
-        external_logs_consumer: false,
+        tmpfs_mounts: vec!["/tmp", "/var/run"],
     }
 }
 
@@ -732,19 +457,7 @@ pub fn proxy_profile() -> ContainerProfile {
         // runs as UID 1000 (proxy) via --userns=keep-id → permission denied.
         // Security comes from cap-drop, pids-limit, and enclave isolation.
         read_only: false,
-        // Proxy is a service container — no hot-path tmpfs needed.
-        // @trace spec:forge-hot-cold-split
         tmpfs_mounts: vec![],
-        // @trace spec:tray-host-control-socket, spec:secrets-management
-        mount_control_socket: false,
-        // @trace spec:external-logs-layer
-        // Chunk 5: proxy is an external-logs producer. The manifest at
-        // /etc/tillandsias/external-logs.yaml (baked into the image) declares
-        // access.log and denied.log. Producer code (Squid access_log directive)
-        // comes in a later change; the mount being in place enables the
-        // observability contract now.
-        external_logs_role: Some("proxy"),
-        external_logs_consumer: false,
     }
 }
 
@@ -789,20 +502,6 @@ pub fn inference_profile() -> ContainerProfile {
                 name: "https_proxy",
                 value: EnvValue::Literal("http://proxy:3128"),
             },
-            // @trace spec:inference-container, spec:proxy-container
-            // NO_PROXY is mandatory here: ollama does internal health probes
-            // against its own listen address (0.0.0.0:11434, 127.0.0.1:11434)
-            // and these would otherwise traverse Squid and be denied — every
-            // denied probe delays model readiness. Covering enclave peers
-            // ensures any inter-container probe stays inside the network.
-            ProfileEnvVar {
-                name: "NO_PROXY",
-                value: EnvValue::Literal("localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service"),
-            },
-            ProfileEnvVar {
-                name: "no_proxy",
-                value: EnvValue::Literal("localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service"),
-            },
         ],
         secrets: vec![],  // No credentials needed
         image_override: None,
@@ -811,18 +510,7 @@ pub fn inference_profile() -> ContainerProfile {
         // model downloads, and temporary files. Same --userns=keep-id
         // tmpfs ownership issue as squid (UID 1000 can't write root-owned tmpfs).
         read_only: false,
-        // Inference is a service container — no hot-path tmpfs needed.
-        // @trace spec:forge-hot-cold-split
         tmpfs_mounts: vec![],
-        // @trace spec:tray-host-control-socket, spec:secrets-management
-        mount_control_socket: false,
-        // @trace spec:external-logs-layer
-        // Chunk 5: inference is an external-logs producer. The manifest at
-        // /etc/tillandsias/external-logs.yaml (baked into the image) declares
-        // model-load.log. Producer code (entrypoint telemetry) comes in a later
-        // change; the mount being in place enables the observability contract now.
-        external_logs_role: Some("inference"),
-        external_logs_consumer: false,
     }
 }
 
@@ -851,45 +539,7 @@ pub fn git_service_profile() -> ContainerProfile {
                 mode: MountMode::Rw,
             },
         ],
-        env_vars: vec![
-            // @trace spec:git-mirror-service, spec:proxy-container
-            // The post-receive hook pushes the bare mirror to GitHub via
-            // HTTPS. The enclave network has no external DNS or routing —
-            // without these proxy vars, `git push origin` fails with
-            // "Could not resolve host: github.com" and forge commits are
-            // silently stranded in the mirror (data-loss risk: if the
-            // mirror container dies before the push succeeds on retry,
-            // the commit is gone). Squid's allowlist already admits
-            // `.github.com`; ssl_bump is `splice all` so we don't need
-            // to inject the CA cert here — HTTPS is a plain CONNECT tunnel.
-            ProfileEnvVar {
-                name: "HTTP_PROXY",
-                value: EnvValue::Literal("http://proxy:3128"),
-            },
-            ProfileEnvVar {
-                name: "HTTPS_PROXY",
-                value: EnvValue::Literal("http://proxy:3128"),
-            },
-            ProfileEnvVar {
-                name: "http_proxy",
-                value: EnvValue::Literal("http://proxy:3128"),
-            },
-            ProfileEnvVar {
-                name: "https_proxy",
-                value: EnvValue::Literal("http://proxy:3128"),
-            },
-            // Loopback + enclave peers bypass the proxy so intra-service
-            // traffic (git-daemon on localhost, any future sidecar) stays
-            // local.
-            ProfileEnvVar {
-                name: "NO_PROXY",
-                value: EnvValue::Literal("localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
-            },
-            ProfileEnvVar {
-                name: "no_proxy",
-                value: EnvValue::Literal("localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
-            },
-        ],
+        env_vars: vec![],
         secrets: vec![
             SecretMount {
                 kind: SecretKind::GitHubToken,
@@ -898,21 +548,7 @@ pub fn git_service_profile() -> ContainerProfile {
         image_override: None,
         pids_limit: 64,        // Only git-daemon + git processes
         read_only: true,       // Service container — immutable root FS
-        // @trace spec:podman-orchestration, spec:forge-hot-cold-split
-        // /tmp: git operations write pack files and temp refs here.
-        // 64 MB is generous for a bare mirror service.
-        tmpfs_mounts: vec![
-            TmpfsMount { path: "/tmp", size_mb: 64, mode: 0o1777 },
-        ],
-        // @trace spec:tray-host-control-socket, spec:secrets-management
-        mount_control_socket: false,
-        // @trace spec:external-logs-layer
-        // Chunk 2: git-service is the first producer. The bind-mount shadow
-        // routes the post-receive hook's /var/log/tillandsias/git-push.log
-        // write to ~/.local/state/tillandsias/external-logs/git-service/
-        // on the host — no hook code change required.
-        external_logs_role: Some("git-service"),
-        external_logs_consumer: false,
+        tmpfs_mounts: vec!["/tmp"],
     }
 }
 
@@ -921,84 +557,37 @@ pub fn git_service_profile() -> ContainerProfile {
 // ---------------------------------------------------------------------------
 
 fn common_forge_mounts() -> Vec<ProfileMount> {
-    // Four-category path model — see cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md
-    // for the full table. Forge containers see exactly four categories:
-    //   1. Project workspace      (RW)  — ProjectDir, mounted elsewhere by per-profile code
-    //   2. Per-project cache      (RW)  — ProjectCache (this function, below)
-    //   3. Shared cache           (RO)  — SharedCache (this function, below)
-    //   4. Ephemeral              (RW)  — /tmp + unmounted home (no mount needed)
-    // Plus support mounts:
-    //   - ConfigOverlay  (RO)  — opinionated config on tmpfs
-    //   - ContainerLogs  (RW)  — per-container log isolation
-    //
-    // The old tools overlay was tombstoned on 2026-04-25 — agents (claude,
-    // opencode, openspec) are hard-installed in the forge image under
-    // /opt/agents/ with /usr/local/bin/ symlinks.
-    //
-    // @trace spec:forge-cache-architecture, spec:forge-cache-dual,
-    //        spec:proxy-container, spec:tombstone-tools-overlay, spec:podman-orchestration
-    // @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md, runtime/forge-shared-cache-via-nix.md
+    // Code comes from git mirror service, packages through proxy.
+    // Mounts: pre-built tools overlay + config overlay (both read-only),
+    // plus per-container log directory (RW).
+    // @trace spec:proxy-container, spec:layered-tools-overlay, spec:podman-orchestration
     vec![
-        // Opinionated configs on ramdisk — entrypoints copy into ~/.config/
+        ProfileMount {
+            host_key: MountSource::ToolsOverlay,
+            container_path: "/home/forge/.tools",
+            mode: MountMode::Ro,
+        },
+        // @trace spec:layered-tools-overlay
+        // Opinionated configs on ramdisk — entrypoints symlink into ~/.config/
         ProfileMount {
             host_key: MountSource::ConfigOverlay,
             container_path: "/home/forge/.config-overlay",
             mode: MountMode::Ro,
         },
-        // Per-container log directory — each container writes its own logs in isolation.
         // @trace spec:podman-orchestration
+        // Per-container log directory — each container writes its own logs in isolation.
         ProfileMount {
             host_key: MountSource::ContainerLogs,
             container_path: "/var/log/tillandsias",
             mode: MountMode::Rw,
         },
-        // Shared cache (RO) — single host-managed nix store. Conflict-free
-        // because nix's content-addressed paths can't trample.
-        // @trace spec:forge-cache-architecture
+        // @trace spec:mcp-on-demand
+        // Tray socket for browser tool communication with host tray.
         ProfileMount {
-            host_key: MountSource::SharedCache,
-            container_path: "/nix/store",
-            mode: MountMode::Ro,
-        },
-        // Per-project cache (RW) — built artifacts for THIS project only.
-        // The host path resolves from project name; cross-project leak is
-        // impossible by mount-target separation, not by fs permissions.
-        // @trace spec:forge-cache-architecture
-        ProfileMount {
-            host_key: MountSource::ProjectCache,
-            container_path: "/home/forge/.cache/tillandsias-project",
+            host_key: MountSource::TraySocket,
+            container_path: "/run/tillandsias/tray.sock",
             mode: MountMode::Rw,
         },
-    ]
-}
-
-/// Tmpfs mounts shared by all four forge/maintenance profiles (chunks 2+).
-///
-/// HOT path mounts (RAM-backed, kernel-capped):
-///   /opt/cheatsheets  — agent knowledge bank; copied from /opt/cheatsheets-image/
-///                       at entrypoint start by populate_hot_paths() in lib-common.sh.
-///   /home/forge/src   — per-launch project source (size from hot_path_budget_mb,
-///                       chunk 3); capped at 4GB, default 1GB.
-///
-/// COLD-but-bounded mounts (tmpfs to cap worst-case, not to RAM-serve):
-///   /tmp              — 256MB cap; prevents accidental `dd` OOM on host.
-///                       Default uncapped tmpfs = 50% host RAM (tmpfs(5)).
-///   /run/user/1000    — 64MB cap; XDG_RUNTIME_DIR, dbus socket, systemd user session.
-///
-/// @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
-fn common_forge_tmpfs_mounts() -> Vec<TmpfsMount> {
-    vec![
-        // Chunk 2: agent cheatsheets on RAM — 8MB cap (~13× current size).
-        // ENV TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets is unchanged.
-        TmpfsMount { path: "/opt/cheatsheets", size_mb: 8, mode: 0o755 },
-        // Chunk 4: /tmp with explicit 256MB cap.
-        // Without a cap, the kernel default is 50% of host RAM (tmpfs(5) §size option).
-        // An agent doing `dd if=/dev/zero of=/tmp/x bs=1M` could fill half of host
-        // RAM before getting ENOSPC. The cap bounds the worst case.
-        TmpfsMount { path: "/tmp", size_mb: 256, mode: 0o1777 },
-        // Chunk 4: XDG_RUNTIME_DIR / D-Bus socket / systemd user session files.
-        // 64MB is well above what fish + D-Bus stubs need.
-        TmpfsMount { path: "/run/user/1000", size_mb: 64, mode: 0o0700 },
     ]
 }
 
@@ -1063,16 +652,9 @@ fn common_forge_env() -> Vec<ProfileEnvVar> {
             name: "HTTPS_PROXY",
             value: EnvValue::Literal("http://proxy:3128"),
         },
-        // @trace spec:opencode-web-session, spec:proxy-container
-        // NO_PROXY lists every enclave-internal destination (loopback variants
-        // + service names) so intra-enclave traffic never hairpins through
-        // Squid. Without this, tools like opencode/bun see HTTP_PROXY set and
-        // route local requests through the proxy, which denies them because
-        // the destination isn't allowlisted — causing hangs on every
-        // inference probe. Applies to every forge variant.
         ProfileEnvVar {
             name: "NO_PROXY",
-            value: EnvValue::Literal("localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
+            value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
         },
         // Lowercase — required by libcurl, Go net/http, some Python libs.
         ProfileEnvVar {
@@ -1085,7 +667,7 @@ fn common_forge_env() -> Vec<ProfileEnvVar> {
         },
         ProfileEnvVar {
             name: "no_proxy",
-            value: EnvValue::Literal("localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
+            value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
         },
     ]
 }
@@ -1136,55 +718,18 @@ mod tests {
         assert_eq!(profile.image_override, Some("tillandsias-web:latest"));
     }
 
-    // @trace spec:tombstone-tools-overlay, spec:podman-orchestration, spec:forge-cache-architecture
+    // @trace spec:layered-tools-overlay, spec:podman-orchestration
     #[test]
-    fn forge_profiles_have_no_tools_overlay_mount() {
+    fn forge_profiles_have_tools_overlay_mount() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
-        // Mounts under forge-cache-architecture: config overlay (RO) +
-        // container logs (RW) + shared cache (RO) + per-project cache (RW).
-        // Tools overlay was tombstoned 2026-04-25 — agents are hard-installed.
-        assert_eq!(opencode.mounts.len(), 4);
-        assert_eq!(claude.mounts.len(), 4);
-        assert!(
-            !opencode.mounts.iter().any(|m| m.container_path == "/home/forge/.tools"),
-            "No profile should mount the tools overlay — tombstoned"
-        );
-    }
-
-    /// @trace spec:forge-cache-architecture, spec:forge-cache-dual
-    /// @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
-    #[test]
-    fn forge_profiles_have_shared_and_per_project_cache_mounts() {
-        for profile in [
-            forge_opencode_profile(),
-            forge_claude_profile(),
-            terminal_profile(),
-        ] {
-            let shared = profile
-                .mounts
-                .iter()
-                .find(|m| matches!(m.host_key, MountSource::SharedCache));
-            let project = profile
-                .mounts
-                .iter()
-                .find(|m| matches!(m.host_key, MountSource::ProjectCache));
-            assert!(
-                shared.is_some(),
-                "Forge profile must mount the shared cache (RO via nix-store)"
-            );
-            assert_eq!(shared.unwrap().container_path, "/nix/store");
-            assert_eq!(shared.unwrap().mode, MountMode::Ro);
-            assert!(
-                project.is_some(),
-                "Forge profile must mount the per-project cache (RW)"
-            );
-            assert_eq!(
-                project.unwrap().container_path,
-                "/home/forge/.cache/tillandsias-project"
-            );
-            assert_eq!(project.unwrap().mode, MountMode::Rw);
-        }
+        // Mounts: tools overlay + config overlay (both read-only) + container logs (RW)
+        // @trace spec:proxy-container, spec:layered-tools-overlay, spec:podman-orchestration
+        assert_eq!(opencode.mounts.len(), 3);
+        assert_eq!(claude.mounts.len(), 3);
+        assert_eq!(opencode.mounts[0].container_path, "/home/forge/.tools");
+        assert_eq!(opencode.mounts[0].mode, MountMode::Ro);
+        assert!(matches!(opencode.mounts[0].host_key, MountSource::ToolsOverlay));
     }
 
     // @trace spec:layered-tools-overlay
@@ -1256,16 +801,9 @@ mod tests {
         );
         assert_eq!(profile.mounts[0].container_path, "/var/log/tillandsias");
         assert_eq!(profile.mounts[0].mode, MountMode::Rw);
-        // Git service has HTTP(S)_PROXY + NO_PROXY env vars so the post-receive
-        // retry-push can reach github.com through the enclave proxy.
-        // @trace spec:git-mirror-service, spec:proxy-container
         assert!(
-            profile.env_vars.iter().any(|e| e.name == "HTTPS_PROXY"),
-            "Git service needs HTTPS_PROXY for post-receive push to github.com"
-        );
-        assert!(
-            profile.env_vars.iter().any(|e| e.name == "NO_PROXY"),
-            "Git service needs NO_PROXY to bypass proxy for enclave peers"
+            profile.env_vars.is_empty(),
+            "Git service has no static env vars"
         );
         assert!(
             profile.image_override.is_none(),
@@ -1291,36 +829,26 @@ mod tests {
         );
         assert_eq!(profile.mounts[0].container_path, "/var/log/tillandsias");
         assert_eq!(profile.mounts[0].mode, MountMode::Rw);
-        // @trace spec:inference-container, spec:proxy-container
-        // 6 proxy env vars: HTTP_PROXY, HTTPS_PROXY, http_proxy, https_proxy,
-        // NO_PROXY, no_proxy. NO_PROXY is required so ollama's loopback probes
-        // don't hairpin through Squid (which would deny them).
+        // 4 proxy env vars: HTTP_PROXY, HTTPS_PROXY, http_proxy, https_proxy
         assert_eq!(
             profile.env_vars.len(),
-            6,
-            "Inference should have 6 proxy env vars (4 proxy + 2 bypass)"
+            4,
+            "Inference should have 4 proxy env vars"
         );
         assert!(
-            profile.env_vars.iter().any(|e| e.name == "HTTP_PROXY"),
+            profile
+                .env_vars
+                .iter()
+                .any(|e| e.name == "HTTP_PROXY"),
             "Inference must have HTTP_PROXY"
         );
         assert!(
-            profile.env_vars.iter().any(|e| e.name == "https_proxy"),
+            profile
+                .env_vars
+                .iter()
+                .any(|e| e.name == "https_proxy"),
             "Inference must have https_proxy"
         );
-        let no_proxy = profile
-            .env_vars
-            .iter()
-            .find(|e| e.name == "NO_PROXY")
-            .expect("Inference must have NO_PROXY");
-        if let EnvValue::Literal(v) = no_proxy.value {
-            assert!(
-                v.contains("0.0.0.0") && v.contains("127.0.0.1") && v.contains("localhost"),
-                "NO_PROXY must cover loopback; got: {v}"
-            );
-        } else {
-            panic!("NO_PROXY must be a literal");
-        }
         assert!(
             profile.image_override.is_none(),
             "Inference image tag comes from LaunchContext"
@@ -1343,18 +871,35 @@ mod tests {
         assert!(profile.image_override.is_none(), "Proxy image tag comes from LaunchContext");
     }
 
-    // @trace spec:tombstone-tools-overlay, spec:default-image
+    // @trace spec:layered-tools-overlay
     #[test]
-    fn agents_are_hard_installed_paths() {
-        // After the tombstone of the runtime tools overlay, agents live at
-        // /usr/local/bin/ (symlinked from /opt/agents/...) — baked into the
-        // forge image at build time per images/default/Containerfile.
-        // No profile mount targets /home/forge/.tools anymore.
+    fn tools_overlay_expected_paths() {
+        // These paths must match between:
+        // - scripts/build-tools-overlay.sh (installs to /home/forge/.tools/<tool>)
+        // - entrypoint-forge-claude.sh (checks /home/forge/.tools/claude/bin/claude)
+        // - entrypoint-forge-opencode.sh (checks /home/forge/.tools/opencode/bin/opencode)
+        // - lib-common.sh install_openspec() (checks /home/forge/.tools/openspec/bin/openspec)
+        let container_mount = "/home/forge/.tools";
+        let expected_bins = [
+            format!("{container_mount}/claude/bin/claude"),
+            format!("{container_mount}/opencode/bin/opencode"),
+            format!("{container_mount}/openspec/bin/openspec"),
+        ];
+
+        // Verify the container mount path matches what forge profiles declare
         let profile = forge_opencode_profile();
-        assert!(
-            !profile.mounts.iter().any(|m| m.container_path == "/home/forge/.tools"),
-            "Profiles must not mount the old tools overlay — agents are image-baked"
+        assert_eq!(
+            profile.mounts[0].container_path, container_mount,
+            "Profile mount path must match the expected tools container mount"
         );
+
+        // Verify all expected tool binaries live under the mount root
+        for bin in &expected_bins {
+            assert!(
+                bin.starts_with(container_mount),
+                "Tool binary {bin} must be under {container_mount}"
+            );
+        }
     }
 
     // @trace spec:podman-orchestration, spec:secrets-management
@@ -1407,7 +952,7 @@ mod tests {
         assert!(!terminal_profile().read_only, "Terminal must NOT be read-only");
     }
 
-    // @trace spec:podman-orchestration, spec:forge-hot-cold-split
+    // @trace spec:podman-orchestration
     #[test]
     fn read_only_containers_have_tmpfs_mounts() {
         // Only git_service and web are read-only.
@@ -1423,163 +968,8 @@ mod tests {
                 "Profile {name} should be read-only"
             );
             assert!(
-                profile.tmpfs_mounts.iter().any(|m| m.path == "/tmp"),
+                profile.tmpfs_mounts.contains(&"/tmp"),
                 "Read-only profile {name} must have /tmp as tmpfs"
-            );
-        }
-    }
-
-    // @trace spec:forge-hot-cold-split
-    #[test]
-    fn every_profile_with_tmpfs_emits_size_cap() {
-        let profiles: &[(&str, ContainerProfile)] = &[
-            ("forge_opencode", forge_opencode_profile()),
-            ("forge_claude", forge_claude_profile()),
-            ("forge_opencode_web", forge_opencode_web_profile()),
-            ("terminal", terminal_profile()),
-            ("web", web_profile()),
-            ("proxy", proxy_profile()),
-            ("inference", inference_profile()),
-            ("git_service", git_service_profile()),
-        ];
-
-        for (name, profile) in profiles {
-            for mount in &profile.tmpfs_mounts {
-                assert!(
-                    mount.size_mb > 0,
-                    "Profile {name}: tmpfs mount '{}' must have size_mb > 0",
-                    mount.path
-                );
-            }
-        }
-    }
-
-    // @trace spec:forge-hot-cold-split
-    #[test]
-    fn web_and_git_service_keep_their_existing_tmpfs_paths() {
-        // Backward-compatibility: the two service profiles that had
-        // tmpfs_mounts as bare strings now carry typed TmpfsMount entries
-        // for the same paths.
-        let web = web_profile();
-        assert!(
-            web.tmpfs_mounts.iter().any(|m| m.path == "/tmp"),
-            "web profile must keep /tmp tmpfs mount"
-        );
-        assert!(
-            web.tmpfs_mounts.iter().any(|m| m.path == "/var/run"),
-            "web profile must keep /var/run tmpfs mount"
-        );
-
-        let git = git_service_profile();
-        assert!(
-            git.tmpfs_mounts.iter().any(|m| m.path == "/tmp"),
-            "git_service profile must keep /tmp tmpfs mount"
-        );
-    }
-
-    // @trace spec:forge-hot-cold-split
-    #[test]
-    fn forge_profile_caps_tmp_and_run_user() {
-        // Chunk 4: all four forge/maintenance profiles now carry three tmpfs entries:
-        //   [0] /opt/cheatsheets  — 8MB, mode 0755  (chunk 2)
-        //   [1] /tmp              — 256MB, mode 1777 (chunk 4)
-        //   [2] /run/user/1000   — 64MB,  mode 0700  (chunk 4)
-        for (name, profile) in [
-            ("forge_opencode", forge_opencode_profile()),
-            ("forge_claude", forge_claude_profile()),
-            ("forge_opencode_web", forge_opencode_web_profile()),
-            ("terminal", terminal_profile()),
-        ] {
-            assert_eq!(
-                profile.tmpfs_mounts.len(),
-                3,
-                "Profile {name} must have exactly 3 tmpfs entries after chunk 4"
-            );
-
-            let tmp = profile
-                .tmpfs_mounts
-                .iter()
-                .find(|m| m.path == "/tmp")
-                .unwrap_or_else(|| panic!("Profile {name} must have /tmp tmpfs mount"));
-            assert_eq!(
-                tmp.size_mb, 256,
-                "Profile {name}: /tmp tmpfs must be 256MB cap"
-            );
-            assert_eq!(
-                tmp.mode, 0o1777,
-                "Profile {name}: /tmp tmpfs must be mode 0o1777"
-            );
-
-            let run_user = profile
-                .tmpfs_mounts
-                .iter()
-                .find(|m| m.path == "/run/user/1000")
-                .unwrap_or_else(|| panic!("Profile {name} must have /run/user/1000 tmpfs mount"));
-            assert_eq!(
-                run_user.size_mb, 64,
-                "Profile {name}: /run/user/1000 tmpfs must be 64MB cap"
-            );
-            assert_eq!(
-                run_user.mode, 0o0700,
-                "Profile {name}: /run/user/1000 tmpfs must be mode 0o0700"
-            );
-        }
-    }
-
-    // @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
-    #[test]
-    fn forge_profile_includes_cheatsheets_tmpfs_mount() {
-        // Chunk 2: /opt/cheatsheets is a tmpfs hot mount on all four
-        // forge/maintenance profiles. populate_hot_paths() copies from the
-        // image lower layer (/opt/cheatsheets-image/) into this mount at
-        // container start so every agent cheatsheet read is RAM-served.
-        for (name, profile) in [
-            ("forge_opencode", forge_opencode_profile()),
-            ("forge_claude", forge_claude_profile()),
-            ("forge_opencode_web", forge_opencode_web_profile()),
-            ("terminal", terminal_profile()),
-        ] {
-            let mount = profile
-                .tmpfs_mounts
-                .iter()
-                .find(|m| m.path == "/opt/cheatsheets");
-            assert!(
-                mount.is_some(),
-                "Profile {name} must have /opt/cheatsheets tmpfs mount"
-            );
-            assert_eq!(
-                mount.unwrap().size_mb,
-                8,
-                "Profile {name}: /opt/cheatsheets tmpfs must be 8MB cap"
-            );
-            assert_eq!(
-                mount.unwrap().mode,
-                0o755,
-                "Profile {name}: /opt/cheatsheets tmpfs must be mode 0o755"
-            );
-        }
-    }
-
-    // @trace spec:forge-hot-cold-split
-    #[test]
-    fn service_profiles_do_not_have_cheatsheets_tmpfs() {
-        // Service containers (router, proxy, inference, git_service, web)
-        // do NOT mount /opt/cheatsheets — they are not coding agents and
-        // don't read cheatsheets. This is a sanity guard against accidental
-        // inclusion in common helpers.
-        for (name, profile) in [
-            ("router", router_profile()),
-            ("proxy", proxy_profile()),
-            ("inference", inference_profile()),
-            ("git_service", git_service_profile()),
-            ("web", web_profile()),
-        ] {
-            assert!(
-                !profile
-                    .tmpfs_mounts
-                    .iter()
-                    .any(|m| m.path == "/opt/cheatsheets"),
-                "Service profile {name} must NOT have /opt/cheatsheets tmpfs mount"
             );
         }
     }
@@ -1592,64 +982,6 @@ mod tests {
         // squid runs as UID 1000 via --userns=keep-id → permission denied.
         let profile = proxy_profile();
         assert!(!profile.read_only, "Proxy must NOT be read-only (squid needs writable runtime dirs)");
-    }
-
-    // @trace spec:tray-host-control-socket, spec:secrets-management
-    #[test]
-    fn forge_profiles_default_to_no_control_socket() {
-        // Per the secrets-management delta, forge containers MUST default-deny
-        // the control-socket bind mount so a compromised forge cannot reach
-        // the tray's control plane.
-        assert!(
-            !forge_opencode_profile().mount_control_socket,
-            "forge_opencode must default-deny control socket"
-        );
-        assert!(
-            !forge_claude_profile().mount_control_socket,
-            "forge_claude must default-deny control socket"
-        );
-        assert!(
-            !forge_opencode_web_profile().mount_control_socket,
-            "forge_opencode_web must default-deny control socket"
-        );
-        assert!(
-            !terminal_profile().mount_control_socket,
-            "terminal must default-deny control socket"
-        );
-    }
-
-    // @trace spec:tray-host-control-socket
-    #[test]
-    fn router_opts_in_to_control_socket() {
-        // Router consumes IssueWebSession envelopes from the tray; it MUST
-        // receive the bind mount.
-        assert!(
-            router_profile().mount_control_socket,
-            "router must opt in to control socket"
-        );
-    }
-
-    // @trace spec:tray-host-control-socket, spec:secrets-management
-    #[test]
-    fn service_containers_default_to_no_control_socket() {
-        // Proxy, inference, git_service, web have no control-plane reason
-        // to talk to the tray; they keep the default-deny posture.
-        assert!(
-            !proxy_profile().mount_control_socket,
-            "proxy must default-deny control socket"
-        );
-        assert!(
-            !inference_profile().mount_control_socket,
-            "inference must default-deny control socket"
-        );
-        assert!(
-            !git_service_profile().mount_control_socket,
-            "git_service must default-deny control socket"
-        );
-        assert!(
-            !web_profile().mount_control_socket,
-            "web must default-deny control socket"
-        );
     }
 
     // @trace spec:podman-orchestration
@@ -1676,225 +1008,5 @@ mod tests {
                 "Profile {name} must have a ContainerLogs mount at /var/log/tillandsias (RW)"
             );
         }
-    }
-
-    // @trace spec:external-logs-layer
-    #[test]
-    fn service_profiles_neither_producer_nor_consumer() {
-        // Only the web profile is still unwired as a producer or consumer.
-        // git_service, proxy, router, inference are now producers (chunks 2 + 5).
-        // forge/terminal are consumers (chunk 3).
-        let profiles: Vec<(&str, ContainerProfile)> = vec![
-            ("web", web_profile()),
-        ];
-        for (name, profile) in &profiles {
-            assert!(
-                profile.external_logs_role.is_none(),
-                "Profile {name}: external_logs_role should be None (not yet wired as producer)"
-            );
-            assert!(
-                !profile.external_logs_consumer,
-                "Profile {name}: external_logs_consumer should be false (not yet wired as consumer)"
-            );
-        }
-    }
-
-    // @trace spec:external-logs-layer
-    #[test]
-    fn infrastructure_service_profiles_are_external_logs_producers() {
-        // Chunk 5: proxy, router, inference join git-service as external-logs
-        // producers. Each must declare its role name (matching the manifest)
-        // and must NOT be a consumer.
-        for (name, profile, expected_role) in [
-            ("proxy", proxy_profile(), "proxy"),
-            ("router", router_profile(), "router"),
-            ("inference", inference_profile(), "inference"),
-        ] {
-            assert_eq!(
-                profile.external_logs_role,
-                Some(expected_role),
-                "Profile {name} must declare external_logs_role = Some(\"{expected_role}\")"
-            );
-            assert!(
-                !profile.external_logs_consumer,
-                "Profile {name} must NOT be a consumer — producers and consumers are mutually exclusive"
-            );
-            // validate() must accept this combination.
-            assert!(
-                profile.validate().is_ok(),
-                "Profile {name} must pass validate()"
-            );
-        }
-    }
-
-    // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
-    #[test]
-    fn forge_profiles_are_external_logs_consumers() {
-        // All four forge/maintenance profiles are external-logs consumers
-        // AND producers of the cheatsheet-telemetry role. The launcher
-        // composes parent RO + role-scoped RW so neither shadows the other.
-        for (name, profile) in [
-            ("forge_opencode", forge_opencode_profile()),
-            ("forge_claude", forge_claude_profile()),
-            ("forge_opencode_web", forge_opencode_web_profile()),
-            ("terminal", terminal_profile()),
-        ] {
-            assert!(
-                profile.external_logs_consumer,
-                "Profile {name} must be an external-logs consumer"
-            );
-            assert_eq!(
-                profile.external_logs_role,
-                Some("cheatsheet-telemetry"),
-                "Profile {name} must also be the cheatsheet-telemetry producer (cheatsheets-license-tiered)"
-            );
-            // validate() must accept the dual role — the v1 reverse-breach
-            // refusal was relaxed in cheatsheets-license-tiered.
-            assert!(
-                profile.validate().is_ok(),
-                "Profile {name} must pass validate() despite being dual-role"
-            );
-        }
-    }
-
-    // @trace spec:external-logs-layer
-    #[test]
-    fn service_profiles_are_not_external_logs_consumers() {
-        // Service containers (git_service, proxy, router, inference, web)
-        // are not consumers — they write to external logs (as producers)
-        // or have no external-log relationship at all. None should have
-        // external_logs_consumer: true.
-        for (name, profile) in [
-            ("git_service", git_service_profile()),
-            ("proxy", proxy_profile()),
-            ("router", router_profile()),
-            ("inference", inference_profile()),
-            ("web", web_profile()),
-        ] {
-            assert!(
-                !profile.external_logs_consumer,
-                "Service profile {name} must NOT be an external-logs consumer"
-            );
-        }
-    }
-
-    // @trace spec:external-logs-layer
-    #[test]
-    fn git_service_is_external_logs_producer_with_role_git_service() {
-        // Chunk 2: git_service is the first producer. Its external_logs_role
-        // must be exactly "git-service" so the launcher creates
-        // ~/.local/state/tillandsias/external-logs/git-service/ and
-        // bind-mounts it RW at /var/log/tillandsias/external/ in-container.
-        let profile = git_service_profile();
-        assert_eq!(
-            profile.external_logs_role,
-            Some("git-service"),
-            "git_service_profile must declare role 'git-service'"
-        );
-        assert!(
-            !profile.external_logs_consumer,
-            "git_service_profile must NOT be a consumer — mutually exclusive with producer"
-        );
-    }
-
-    // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
-    #[test]
-    fn service_profiles_remain_single_role() {
-        // Service containers (proxy, router, inference, git-service) MUST
-        // remain producer-ONLY — they never read other roles. The dual-role
-        // pattern is reserved for forge/terminal containers under
-        // cheatsheets-license-tiered.
-        for (name, profile) in [
-            ("git_service", git_service_profile()),
-            ("proxy", proxy_profile()),
-            ("router", router_profile()),
-            ("inference", inference_profile()),
-        ] {
-            assert!(
-                !profile.external_logs_consumer,
-                "Service profile {name} MUST NOT be a consumer — only forge/terminal are dual-role"
-            );
-            assert!(
-                profile.external_logs_role.is_some(),
-                "Service profile {name} must declare a producer role"
-            );
-        }
-    }
-
-    // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
-    #[test]
-    fn forge_profiles_are_dual_role_producer_and_consumer() {
-        // Under cheatsheets-license-tiered, forge and terminal profiles are
-        // BOTH producers (cheatsheet-telemetry role) AND consumers (RO view
-        // of every other role). The launcher composes parent-RO + role-RW
-        // mounts so neither shadows the other. validate() accepts the combo.
-        for (name, profile) in [
-            ("forge_opencode", forge_opencode_profile()),
-            ("forge_claude", forge_claude_profile()),
-            ("forge_opencode_web", forge_opencode_web_profile()),
-            ("terminal", terminal_profile()),
-        ] {
-            assert_eq!(
-                profile.external_logs_role,
-                Some("cheatsheet-telemetry"),
-                "Profile {name} must declare cheatsheet-telemetry producer role"
-            );
-            assert!(
-                profile.external_logs_consumer,
-                "Profile {name} must remain a consumer (preserves tillandsias-logs RO view)"
-            );
-            assert!(
-                profile.validate().is_ok(),
-                "Profile {name} dual-role must pass validate()"
-            );
-        }
-    }
-
-    // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
-    #[test]
-    fn validate_profile_accepts_dual_producer_and_consumer() {
-        // The v1 reverse-breach refusal forbade dual roles; cheatsheets-
-        // license-tiered relaxes that constraint because the launcher's
-        // mount composition keeps the role-scoped RW mount strictly under
-        // the parent RO mount, so neither shadows the other.
-        let profile = forge_opencode_profile();
-        assert_eq!(profile.external_logs_role, Some("cheatsheet-telemetry"));
-        assert!(profile.external_logs_consumer);
-        assert!(
-            profile.validate().is_ok(),
-            "validate() must accept the forge dual-role profile"
-        );
-    }
-
-    // @trace spec:external-logs-layer
-    #[test]
-    fn validate_profile_accepts_producer_only() {
-        // A producer-only profile (external_logs_role: Some(_), consumer false)
-        // must pass validate().
-        let profile = git_service_profile();
-        assert_eq!(profile.external_logs_role, Some("git-service"));
-        assert!(!profile.external_logs_consumer);
-        assert!(
-            profile.validate().is_ok(),
-            "validate() must accept a producer-only profile"
-        );
-    }
-
-    // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
-    #[test]
-    fn validate_profile_accepts_consumer_only() {
-        // A synthetic consumer-only profile (no built-in profile is consumer-
-        // only any more — forge profiles are dual-role since cheatsheets-
-        // license-tiered, and service profiles are producer-only) must still
-        // pass validate(). This guards the fallback path for any future
-        // profile that opts into consumer access without producing logs.
-        let mut profile = forge_opencode_profile();
-        profile.external_logs_role = None;
-        assert!(profile.external_logs_role.is_none());
-        assert!(profile.external_logs_consumer);
-        assert!(
-            profile.validate().is_ok(),
-            "validate() must accept a consumer-only profile"
-        );
     }
 }

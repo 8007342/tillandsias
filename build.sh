@@ -159,24 +159,6 @@ build_appimage() {
 
     _info "Output dir:  $output_dir"
     _info "Cache dir:   $cache_base"
-
-    # Pre-build diagnostics
-    _info "Checking prerequisites..."
-    if ! command -v podman &>/dev/null; then
-        _error "podman not found. Install: sudo dnf install podman"
-        exit 1
-    fi
-    if ! podman info &>/dev/null; then
-        _error "podman not running or misconfigured. Check: podman system info"
-        exit 1
-    fi
-    local available_space_kb
-    available_space_kb=$(df -k "$SCRIPT_DIR" | awk 'NR==2 {print $4}')
-    local available_gb=$((available_space_kb / 1024 / 1024))
-    if [[ $available_gb -lt 5 ]]; then
-        _warn "Low disk space: ${available_gb}GB available (recommend 5GB+)"
-    fi
-
     _step "Starting Ubuntu 22.04 podman container for AppImage build..."
     if [[ -f "$cache_base/rustup/settings.toml" ]]; then
         _info "Cached toolchain found — skipping install (~1-2 min build)"
@@ -235,46 +217,7 @@ else
 fi
 
 echo "[appimage] Copying source to writable build directory..."
-# @trace spec:appimage-builder-source-slim
-# cp -r /src /build previously copied the entire workspace including
-# the host 47 GB target/ and 1.5 GB .git/ — neither read by the
-# in-container cargo build (which writes its own /build/target/ from
-# scratch under Ubuntu glibc 2.35). The streaming tar pipe below
-# excludes artefact directories so only ~17 MB of actual source moves.
-# tar is default-installed in ubuntu:22.04; rsync is not, and would
-# require an apt-get install + network fetch on every cold cache.
-#
-# NOTE: this comment block must contain NO apostrophes — the entire
-# script body lives inside a bash -c single-quoted argument, and any
-# unescaped apostrophe terminates the outer string.
-mkdir -p /build
-# No single quotes inside this bash -c string. The wildcard below is
-# escaped as ./\*.AppImage so the shell does not expand it AND no
-# single quote is needed (which would close the outer -c string).
-( cd /src && tar \
-    --exclude=./target \
-    --exclude=./target-musl \
-    --exclude=./.git \
-    --exclude=./.nix-output \
-    --exclude=./.claude \
-    --exclude=./.opencode \
-    --exclude=./node_modules \
-    --exclude=./\*.AppImage \
-    -cf - . ) | ( cd /build && tar -xf - )
-# Spec gate: 150 MB cap. If the copied tree is bigger, someone has
-# committed a multi-MB artefact and we want to know LOUDLY before we
-# spend minutes on cargo. 150 MB is about 10x the current 17 MB
-# footprint of the workspace minus artefact directories.
-copied_bytes=$(du -sb /build | cut -f1)
-copy_cap=157286400
-if (( copied_bytes > copy_cap )); then
-    echo "[appimage] FAIL: /build is $(numfmt --to=iec --suffix=B $copied_bytes) — exceeds 150 MB cap" >&2
-    echo "[appimage] Largest top-level dirs:" >&2
-    du -sh /build/* 2>/dev/null | sort -hr | head -3 >&2
-    echo "[appimage] See openspec/changes/appimage-builder-source-slim/" >&2
-    exit 1
-fi
-echo "[appimage] Copied $(numfmt --to=iec --suffix=B $copied_bytes) of source"
+cp -r /src /build
 cd /build
 
 echo "[appimage] Running cargo tauri build (AppImage target)..."
@@ -327,12 +270,7 @@ install_appimage() {
     appimage_src="$(find "$appimage_output_dir" -name "*.AppImage" -type f 2>/dev/null | head -1)"
     if [[ -z "$appimage_src" ]]; then
         _error "AppImage build failed — no .AppImage found"
-        _error "Troubleshooting:"
-        _error "  • Check podman is running: podman ps"
-        _error "  • Check available disk space: df -h"
-        _error "  • View build logs: ls -la $appimage_output_dir/"
-        _error "  • Try manual build: cd $SCRIPT_DIR && cargo tauri build --bundles appimage"
-        exit 1
+        return 1
     fi
 
     # Install to ~/Applications/ (same location as curl installer and self-updater)
@@ -348,29 +286,18 @@ install_appimage() {
     ln -sf "$app_path" "$INSTALL_BIN"
     _info "Symlink: $INSTALL_BIN -> $app_path"
 
-    # Verify the installation works
-    _step "Verifying installation..."
-    if [[ -x "$app_path" ]]; then
-        _info "AppImage is executable"
-        # Quick smoke test - just check if it can show version
-        if timeout 5 "$app_path" --version &>/dev/null; then
-            _info "Installation verified successfully"
-        else
-            _warn "Could not verify AppImage (may need first-run setup)"
-        fi
+    # Build the forge container image with versioned tag (handles staleness detection)
+    if [[ -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
+        local full_version
+        full_version="$(cat "$SCRIPT_DIR/VERSION" | tr -d '[:space:]')"
+        _step "Building forge container image..."
+        "$SCRIPT_DIR/scripts/build-image.sh" forge --tag "tillandsias-forge:v${full_version}" || _warn "Forge image build failed, continuing..."
+        _info "Forge image built and loaded"
     else
-        _error "AppImage is not executable after install"
+        _warn "scripts/build-image.sh not found, skipping image build"
     fi
 
-    # Image builds are now deferred to runtime (tillandsias --init or first launch).
-    # This speeds up local dev builds and ensures the built binary can smoke-test
-    # its own image builds without rebuilding images twice.
-    _info ""
-    _info "Next steps:"
-    _info "  1. Run 'tillandsias --init --debug' to build container images"
-    _info "  2. Launch 'tillandsias' to start the system tray application"
-    _info "  3. If --init fails, check: podman system info"
-    _info ""
+    _info "Installed. Run 'tillandsias' or launch from your desktop."
     _info "Desktop integration (icons, launcher) is set up on first run."
 }
 
@@ -419,18 +346,6 @@ _run() {
     toolbox run -c "$TOOLBOX_NAME" "$@"
 }
 
-# @trace spec:opencode-web-session-otp
-# Stage the pre-built tillandsias-router-sidecar binary into
-# images/router/ before any build path that consumes
-# include_bytes!("../../images/router/tillandsias-router-sidecar").
-# The helper is idempotent (no-op when the staged binary is fresher
-# than every source file) so calling this on every build is cheap.
-# Runs inside the toolbox because cargo/rustup live there on Silverblue.
-_stage_sidecar() {
-    _toolbox_ensure
-    _run bash "$SCRIPT_DIR/scripts/build-sidecar.sh"
-}
-
 # Toolbox reset
 if [[ "$FLAG_TOOLBOX_RESET" == true ]]; then
     _step "Resetting toolbox '${TOOLBOX_NAME}'..."
@@ -448,14 +363,6 @@ fi
 # AppImage build (standalone — bypasses toolbox entirely)
 if [[ "$FLAG_APPIMAGE" == true ]]; then
     "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
-    # @trace spec:opencode-web-session-otp
-    # Stage the sidecar binary on the host BEFORE the podman AppImage
-    # builder runs. The container's tar-pipe copy then carries
-    # images/router/tillandsias-router-sidecar into /build, where
-    # src-tauri/build.rs's include_bytes! check finds it. Without this,
-    # the in-container build panics: "pre-built router sidecar binary
-    # missing".
-    _stage_sidecar
     build_appimage
     # If --appimage is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL" == "falsefalsefalsefalsefalse" ]]; then
@@ -467,19 +374,12 @@ fi
 if [[ "$FLAG_INSTALL" == true ]]; then
     "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
     "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
-    # @trace spec:opencode-web-session-otp
-    # Same staging step as --appimage.
-    _stage_sidecar
     install_appimage
     exit 0
 fi
 
 # Ensure toolbox exists for any build operation
 _toolbox_ensure
-# @trace spec:opencode-web-session-otp
-# Stage the sidecar binary so subsequent in-toolbox cargo invocations
-# find it via include_bytes!. Cheap idempotent no-op when up-to-date.
-_stage_sidecar
 
 # ---------------------------------------------------------------------------
 # Auto-increment build number on every build (not test/check/clean-only)
@@ -521,22 +421,19 @@ if [[ "$FLAG_RELEASE" == true ]]; then
     # Skip AppImage in toolbox — linuxdeploy needs FUSE which isn't available.
     # AppImage bundling works in CI (ubuntu with FUSE) and via --appimage.
     # Linux only distributes via AppImage; no deb/rpm bundles.
-    # On macOS, build dmg bundle. On Linux, skip bundles (FUSE not available in toolbox).
-    BUNDLE_FLAG=""
+    BUNDLES="none"
     if [[ "$(uname -s)" == "Darwin" ]]; then
-        BUNDLE_FLAG="--bundles dmg"
-        _step "Building release with dmg bundle..."
-    else
-        _step "Building release (no bundles — AppImage built in CI)..."
+        BUNDLES="dmg"
     fi
+
+    _step "Building release (bundles: ${BUNDLES})..."
 
     # Clean old bundles to avoid listing stale versions
     rm -rf "$SCRIPT_DIR/target/release/bundle"
 
-    # Build: cargo tauri build handles platform-specific bundles.
+    # Single build: --bundles skips AppImage (needs FUSE, CI handles it).
     # The updater error is expected in toolbox — ignore it.
-    # @trace spec:dev-build
-    _run bash -c "cd '$SCRIPT_DIR' && cargo tauri build ${BUNDLE_FLAG}" 2>&1 || {
+    _run bash -c "cd '$SCRIPT_DIR' && cargo tauri build --bundles ${BUNDLES}" 2>&1 || {
         # Check if the binary was built despite the bundle error
         if [[ -f "$SCRIPT_DIR/target/release/tillandsias" ]]; then
             _warn "Some bundles failed (updater needs AppImage — CI handles that)"

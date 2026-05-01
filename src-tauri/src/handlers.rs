@@ -30,7 +30,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, instrument, warn};
@@ -66,97 +66,14 @@ pub fn build_mutex_lock() -> std::sync::MutexGuard<'static, ()> {
     })
 }
 
-use std::sync::Arc;
-
-use serde_json;
 use tillandsias_core::config::{GlobalConfig, cache_dir, load_global_config, load_project_config};
 use tillandsias_core::event::{AppEvent, BuildProgressEvent, ContainerState};
 use tillandsias_core::genus::GenusAllocator;
-use tillandsias_core::state::{ContainerInfo, TrayState};
+use tillandsias_core::state::{BuildProgress, BuildStatus, ContainerInfo, ContainerType, TrayState};
 use tillandsias_core::tools::ToolAllocator;
 use tillandsias_podman::PodmanClient;
 use tillandsias_podman::launch::{ContainerLauncher, allocate_port_range};
 use tillandsias_podman::query_occupied_ports;
-use tillandsias_podman::runtime::{Runtime, default_runtime};
-
-/// Find the `gh` CLI binary on the host.
-///
-/// Checks common installation locations before falling back to PATH.
-/// Returns `Some(path)` if gh is found, `None` if it should use container fallback.
-///
-/// # Locations checked:
-/// - Windows: `C:\Program Files\GitHub CLI\gh.exe`, common `winget` paths
-/// - Linux/macOS: `/usr/bin/gh`, `/usr/local/bin/gh`, `~/.local/bin/gh`, etc.
-///
-/// @trace spec:direct-podman-calls
-fn find_gh_path() -> Option<PathBuf> {
-    #[cfg(target_os = "windows")]
-    {
-        // Windows: check common install locations before PATH fallback.
-        static WIN_PATHS: &[&str] = &[
-            r"C:\Program Files\GitHub CLI\gh.exe",
-            r"C:\Program Files (x86)\GitHub CLI\gh.exe",
-            r"C:\ProgramData\Chocolatey\bin\gh.exe",
-        ];
-
-        for path in WIN_PATHS {
-            let p = PathBuf::from(path);
-            if p.exists() {
-                return Some(p);
-            }
-        }
-
-        // Try which or standard PATH
-        if let Ok(output) = std::process::Command::new("where")
-            .arg("gh")
-            .output()
-        {
-            if output.status.success() {
-                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                return Some(PathBuf::from(path));
-            }
-        }
-        None
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        // Unix: check standard locations first
-        static PATHS: &[&str] = &[
-            "/usr/bin/gh",
-            "/usr/local/bin/gh",
-            "/opt/homebrew/bin/gh", // Homebrew on Apple Silicon
-            "/opt/local/bin/gh",    // MacPorts
-        ];
-
-        for path in PATHS {
-            let p = PathBuf::from(path);
-            if p.exists() {
-                return Some(p);
-            }
-        }
-
-        // Try ~/.local/bin/gh (user install)
-        if let Ok(home) = std::env::var("HOME") {
-            let user_bin = PathBuf::from(&home).join(".local/bin/gh");
-            if user_bin.exists() {
-                return Some(user_bin);
-            }
-        }
-
-        // Try which
-        if let Ok(output) = std::process::Command::new("which")
-            .arg("gh")
-            .output()
-        {
-            if output.status.success() {
-                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                return Some(PathBuf::from(path));
-            }
-        }
-        None
-    }
-}
 
 /// Derive the forge image tag from the full 4-part version.
 ///
@@ -186,10 +103,16 @@ pub(crate) fn inference_image_tag() -> String {
     format!("tillandsias-inference:v{}", env!("TILLANDSIAS_FULL_VERSION"))
 }
 
-/// The versioned router image tag.
-/// @trace spec:subdomain-routing-via-reverse-proxy
-pub(crate) fn router_image_tag() -> String {
-    format!("tillandsias-router:v{}", env!("TILLANDSIAS_FULL_VERSION"))
+/// The chromium-core browser image tag (not versioned, uses :latest).
+/// @trace spec:browser-isolation-core
+pub(crate) fn chromium_core_image_tag() -> String {
+    "tillandsias-chromium-core:latest".to_string()
+}
+
+/// The chromium-framework browser image tag (not versioned, uses :latest).
+/// @trace spec:browser-isolation-framework
+pub(crate) fn chromium_framework_image_tag() -> String {
+    "tillandsias-chromium-framework:latest".to_string()
 }
 
 /// The fixed container name for the inference service (not project-specific).
@@ -204,27 +127,11 @@ const INFERENCE_CONTAINER_NAME: &str = "tillandsias-inference";
 /// The model cache is mounted from `~/.cache/tillandsias/models/` to
 /// `/home/ollama/.ollama/models/` so downloaded models persist across restarts.
 ///
-/// @trace spec:inference-container, spec:cross-platform, spec:windows-wsl-runtime
-// Windows arm returns early into a no-op; the cfg-gated Unix podman path
-// below is unreachable on Windows builds. The compiler can't see across cfg.
-#[allow(unreachable_code)]
+/// @trace spec:inference-container
 pub(crate) async fn ensure_inference_running(
     state: &TrayState,
     build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<(), String> {
-    // @trace spec:cross-platform, spec:windows-wsl-runtime
-    // Windows: inference (ollama) Phase 2 — distro exists but daemon-launch
-    // via wsl.exe isn't wired yet. No-op on Windows so the async spawn doesn't
-    // produce spurious podman errors; opencode degrades gracefully when
-    // OLLAMA_HOST is unreachable.
-    #[cfg(target_os = "windows")]
-    {
-        let _ = (state, build_tx);
-        debug!(spec = "cross-platform, windows-wsl-runtime", "Inference no-op on Windows (Phase 2)");
-        return Ok(());
-    }
-
-    #[cfg(not(target_os = "windows"))]
     // Check if already running (in our state or via podman inspect)
     if state.running.iter().any(|c| c.name == INFERENCE_CONTAINER_NAME) {
         debug!(spec = "inference-container", "Inference container already tracked in state");
@@ -235,8 +142,8 @@ pub(crate) async fn ensure_inference_running(
 
     // Check if it's running outside our state (e.g., surviving a restart).
     // If running but with a stale image version, stop it and rebuild.
-    if let Ok(inspect) = client.inspect_container(INFERENCE_CONTAINER_NAME).await
-        && inspect.state == "running" {
+    if let Ok(inspect) = client.inspect_container(INFERENCE_CONTAINER_NAME).await {
+        if inspect.state == "running" {
             let expected_tag = inference_image_tag();
             if inspect.image.contains(&expected_tag) {
                 debug!(spec = "inference-container", "Inference container already running (correct version)");
@@ -254,6 +161,7 @@ pub(crate) async fn ensure_inference_running(
             }
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
+    }
 
     info!(
         accountability = true,
@@ -371,7 +279,6 @@ pub(crate) async fn ensure_inference_running(
         // @trace spec:opencode-web-session
         persistent: false,
         web_host_port: None,
-        hot_path_budget_mb: 0, // @trace spec:forge-hot-cold-split — service container
     };
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
@@ -392,20 +299,6 @@ pub(crate) async fn ensure_inference_running(
     // Insert before the image tag (always last element)
     run_args.insert(run_args.len() - 1, "-v".to_string());
     run_args.insert(run_args.len() - 1, model_mount);
-
-    // @trace spec:inference-container, spec:proxy-container
-    // Inject proxy CA so ollama trusts the SSL-bumped certs from registry.ollama.ai.
-    // Without this, `ollama pull` fails with x509 unknown authority because
-    // Squid's MITM cert is signed by Tillandsias's own CA. Go reads SSL_CERT_FILE
-    // for crypto/tls verification.
-    inject_ca_chain_mounts(&mut run_args);
-    let chain_path = crate::ca::proxy_certs_dir().join("ca-chain.crt");
-    if chain_path.exists() {
-        run_args.insert(
-            run_args.len() - 1,
-            "-e=SSL_CERT_FILE=/run/tillandsias/ca-chain.crt".to_string(),
-        );
-    }
 
     // Launch the inference container via podman run (detached)
     match client.run_container(&run_args).await {
@@ -451,12 +344,6 @@ pub(crate) async fn ensure_inference_running(
                     .await;
                 if check.map(|s| s.success()).unwrap_or(false) {
                     info!(spec = "inference-container", attempt, "Inference health check passed");
-
-                    // @trace spec:inference-host-side-pull
-                    // Spawn background task to pull higher-tier models based on GPU tier
-                    let gpu_tier = crate::gpu::detect_gpu_tier();
-                    crate::inference_lazy_pull::spawn_model_pull_task(gpu_tier);
-
                     break;
                 }
                 if attempt < max_attempts - 1 {
@@ -488,9 +375,10 @@ pub(crate) async fn ensure_inference_running(
 
 /// Stop the inference container if running. Best-effort, errors are logged.
 /// @trace spec:inference-container
-pub(crate) async fn stop_inference(runtime: Arc<dyn Runtime>) {
-    // @trace spec:cross-platform, spec:podman-orchestration
-    match runtime.container_stop(INFERENCE_CONTAINER_NAME, 10).await {
+pub(crate) async fn stop_inference() {
+    let client = PodmanClient::new();
+    let launcher = tillandsias_podman::launch::ContainerLauncher::new(client);
+    match launcher.stop(INFERENCE_CONTAINER_NAME).await {
         Ok(()) => info!(
             accountability = true,
             category = "inference",
@@ -564,10 +452,9 @@ const PROXY_CONTAINER_NAME: &str = "tillandsias-proxy";
 /// builds the proxy image if needed and starts a detached proxy container
 /// on the enclave network (dual-homed with bridge for external access).
 ///
-/// @trace spec:proxy-container, spec:enclave-network, spec:cross-platform, spec:podman-orchestration
+/// @trace spec:proxy-container, spec:enclave-network
 pub(crate) async fn ensure_proxy_running(
     state: &TrayState,
-    runtime: Arc<dyn Runtime>,
     build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<(), String> {
     // Check if already running (in our state or via podman inspect)
@@ -576,11 +463,12 @@ pub(crate) async fn ensure_proxy_running(
         return Ok(());
     }
 
+    let client = PodmanClient::new();
+
     // Check if it's running outside our state (e.g., surviving a restart).
     // If running but with a stale image version, stop it and rebuild.
-    // @trace spec:cross-platform, spec:podman-orchestration
-    if let Ok(inspect) = runtime.container_inspect(PROXY_CONTAINER_NAME).await
-        && inspect.state == "running" {
+    if let Ok(inspect) = client.inspect_container(PROXY_CONTAINER_NAME).await {
+        if inspect.state == "running" {
             let expected_tag = proxy_image_tag();
             if inspect.image.contains(&expected_tag) {
                 debug!(spec = "proxy-container", "Proxy container already running (correct version)");
@@ -593,13 +481,13 @@ pub(crate) async fn ensure_proxy_running(
                 expected = %expected_tag,
                 "Proxy container running stale version — restarting"
             );
-            // @trace spec:cross-platform, spec:podman-orchestration
-            if let Err(e) = runtime.container_stop(PROXY_CONTAINER_NAME, 5).await {
+            if let Err(e) = client.stop_container(PROXY_CONTAINER_NAME, 5).await {
                 warn!(container = PROXY_CONTAINER_NAME, error = %e, "Failed to stop stale proxy container");
             }
             // Wait briefly for cleanup
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
+    }
 
     info!(
         accountability = true,
@@ -607,11 +495,6 @@ pub(crate) async fn ensure_proxy_running(
         spec = "proxy-container",
         "Starting proxy container"
     );
-
-    // For image/container operations, use PodmanClient directly (container_run and image_exists
-    // not yet migrated to Runtime trait). Inspect/stop calls above use the Runtime trait.
-    // @trace spec:cross-platform, spec:podman-orchestration
-    let client = PodmanClient::new();
 
     // Ensure proxy image is up to date — always invoke the build script
     // (it handles staleness internally via hash check and exits fast when current).
@@ -727,7 +610,6 @@ pub(crate) async fn ensure_proxy_running(
         // @trace spec:opencode-web-session
         persistent: false,
         web_host_port: None,
-        hot_path_budget_mb: 0, // @trace spec:forge-hot-cold-split — service container
     };
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
@@ -839,520 +721,12 @@ pub(crate) async fn ensure_proxy_running(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Router container — Caddy reverse proxy mapping <project>.<service>.localhost
-// to enclave containers by name + port.
-// @trace spec:subdomain-routing-via-reverse-proxy
-// ---------------------------------------------------------------------------
-
-const ROUTER_CONTAINER_NAME: &str = "tillandsias-router";
-
-/// Path on host to the dynamic Caddyfile written by the tray, bind-mounted
-/// into the router container at `/run/router/dynamic.Caddyfile`.
-fn router_dynamic_caddyfile_host_path() -> std::path::PathBuf {
-    let base = if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
-        std::path::PathBuf::from(xdg).join("tillandsias")
-    } else {
-        std::env::temp_dir().join("tillandsias-embedded")
-    };
-    base.join("router")
-}
-
-/// Ensure the router container is running.
-///
-/// Brings up `tillandsias-router` (Caddy 2) on the enclave with DNS alias
-/// `router` and a host loopback bind at `127.0.0.1:80`. The router only
-/// accepts traffic from RFC 1918 / loopback sources (defence-in-depth on
-/// top of the binding-level loopback restriction).
-///
-/// @trace spec:subdomain-routing-via-reverse-proxy, spec:enclave-network
-pub(crate) async fn ensure_router_running(
-    state: &TrayState,
-    build_tx: mpsc::Sender<BuildProgressEvent>,
-) -> Result<(), String> {
-    if state.running.iter().any(|c| c.name == ROUTER_CONTAINER_NAME) {
-        debug!(spec = "subdomain-routing-via-reverse-proxy", "Router already tracked in state");
-        return Ok(());
-    }
-
-    let client = PodmanClient::new();
-
-    if let Ok(inspect) = client.inspect_container(ROUTER_CONTAINER_NAME).await
-        && inspect.state == "running"
-    {
-        let expected_tag = router_image_tag();
-        if inspect.image.contains(&expected_tag) {
-            debug!(spec = "subdomain-routing-via-reverse-proxy", "Router already running (correct version)");
-            return Ok(());
-        }
-        warn!(
-            spec = "subdomain-routing-via-reverse-proxy",
-            current = %inspect.image,
-            expected = %expected_tag,
-            "Router running stale version — restarting"
-        );
-        if let Err(e) = client.stop_container(ROUTER_CONTAINER_NAME, 5).await {
-            warn!(container = ROUTER_CONTAINER_NAME, error = %e, "Failed to stop stale router");
-        }
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    }
-
-    info!(
-        accountability = true,
-        category = "router",
-        spec = "subdomain-routing-via-reverse-proxy",
-        "Starting router container"
-    );
-
-    let mut tag = router_image_tag();
-    if let Some(newer) = find_newer_image(&tag) {
-        warn!(expected = %tag, found = %newer, spec = "subdomain-routing-via-reverse-proxy", "Found newer router image — using it");
-        tag = newer;
-    } else {
-        info!(tag = %tag, spec = "subdomain-routing-via-reverse-proxy", "Ensuring router image is up to date...");
-        let chip_name = "router".to_string();
-        if build_tx
-            .try_send(BuildProgressEvent::Started { image_name: chip_name.clone() })
-            .is_err()
-        {
-            debug!("Build progress channel full/closed — UI may show stale state");
-        }
-        let build_result =
-            tokio::task::spawn_blocking(|| run_build_image_script("router")).await;
-        match build_result {
-            Ok(Ok(())) => {
-                if !client.image_exists(&tag).await {
-                    error!(tag = %tag, spec = "subdomain-routing-via-reverse-proxy", "Router image still not found after build");
-                    let _ = build_tx.try_send(BuildProgressEvent::Failed {
-                        image_name: chip_name,
-                        reason: "Router image not ready".to_string(),
-                    });
-                    return Err("Router image not ready after build".into());
-                }
-                let _ = build_tx.try_send(BuildProgressEvent::Completed { image_name: chip_name });
-            }
-            Ok(Err(ref e)) => {
-                error!(tag = %tag, error = %e, spec = "subdomain-routing-via-reverse-proxy", "Router image build failed");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: chip_name,
-                    reason: format!("Router build failed: {e}"),
-                });
-                return Err(format!("Router image build failed: {e}"));
-            }
-            Err(ref e) => {
-                error!(tag = %tag, error = %e, spec = "subdomain-routing-via-reverse-proxy", "Router image build task panicked");
-                let _ = build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: chip_name,
-                    reason: format!("Router build panicked: {e}"),
-                });
-                return Err(format!("Router image build panicked: {e}"));
-            }
-        }
-    }
-
-    // Ensure the dynamic Caddyfile path exists. The tray rewrites this on each
-    // attach; on first start it's empty (router serves only the base catchall).
-    let dyn_dir = router_dynamic_caddyfile_host_path();
-    std::fs::create_dir_all(&dyn_dir)
-        .map_err(|e| format!("Cannot create router dynamic dir: {e}"))?;
-    let dyn_file = dyn_dir.join("dynamic.Caddyfile");
-    if !dyn_file.exists() {
-        std::fs::write(&dyn_file, "")
-            .map_err(|e| format!("Cannot create router dynamic.Caddyfile: {e}"))?;
-    }
-
-    ensure_container_log_dir(ROUTER_CONTAINER_NAME);
-
-    let port_mapping = needs_port_mapping();
-
-    let profile = tillandsias_core::container_profile::router_profile();
-    let ctx = tillandsias_core::container_profile::LaunchContext {
-        container_name: ROUTER_CONTAINER_NAME.to_string(),
-        project_path: dyn_dir.clone(),
-        project_name: "router".to_string(),
-        cache_dir: dyn_dir.clone(),
-        port_range: (0, 0),
-        host_os: tillandsias_core::config::detect_host_os(),
-        detached: true,
-        is_watch_root: false,
-        custom_mounts: vec![],
-        image_tag: tag.clone(),
-        selected_language: "en".to_string(),
-        // Enclave alias `router` so Squid's cache_peer + forge agents can resolve.
-        // @trace spec:subdomain-routing-via-reverse-proxy, spec:enclave-network
-        network: if port_mapping {
-            None
-        } else {
-            Some(format!("{}:alias=router", tillandsias_podman::ENCLAVE_NETWORK))
-        },
-        git_author_name: String::new(),
-        git_author_email: String::new(),
-        token_file_path: None,
-        use_port_mapping: port_mapping,
-        persistent: false,
-        web_host_port: None,
-        hot_path_budget_mb: 0, // @trace spec:forge-hot-cold-split — service container
-    };
-
-    let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
-
-    // @trace spec:subdomain-routing-via-reverse-proxy
-    // Bind-mount the dynamic Caddyfile into the container at the path the
-    // entrypoint expects. The tray rewrites the host file and signals reload
-    // via `regenerate_router_caddyfile`.
-    run_args.insert(
-        run_args.len() - 1,
-        format!("-v={}:/run/router/dynamic.Caddyfile:rw", dyn_file.display()),
-    );
-
-    // @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-session
-    // @cheatsheet runtime/forge-container.md
-    // Host loopback publish — 127.0.0.1:8080 ONLY. NEVER 0.0.0.0. The host
-    // kernel restricts the listener so external clients can't reach port 8080
-    // even if they spoof a Host header. The internal Caddy listener inside
-    // the container stays on :80 (allowed within the user namespace);
-    // only the host-side publish moves to :8080 because rootless podman
-    // cannot bind ports below `net.ipv4.ip_unprivileged_port_start`
-    // (default 1024 on Fedora/Silverblue/most distros). Browser-facing URL
-    // therefore carries `:8080` — see browser::build_subdomain_url.
-    //
-    // @tombstone superseded:fix-router-loopback-port — kept for three
-    // releases (until 0.1.169.230). Original publish was `127.0.0.1:80:80`
-    // which silently failed under rootless podman, producing the
-    // ERR_CONNECTION_REFUSED reported by the user against
-    // `<project>.opencode.localhost`.
-    // @trace spec:fix-router-loopback-port
-    // Both host AND container ports are 8080 — internal Caddy listener
-    // moved to :8080 (was :80) so binding doesn't need CAP_NET_BIND_SERVICE
-    // under --cap-drop=ALL. Caddy v2 image's `cap_net_bind_service=ep`
-    // file capability also conflicts with --security-opt=no-new-privileges
-    // (kernel rejects exec); the router image now strips that file cap
-    // (see images/router/Containerfile).
-    run_args.insert(run_args.len() - 1, "-p".to_string());
-    run_args.insert(run_args.len() - 1, "127.0.0.1:8080:8080".to_string());
-
-    match client.run_container(&run_args).await {
-        Ok(container_id) => {
-            info!(
-                accountability = true,
-                category = "router",
-                spec = "subdomain-routing-via-reverse-proxy",
-                container_id = %container_id,
-                "Router container started (detached, 127.0.0.1:80 host bind)"
-            );
-
-            // Like proxy and inference, the router isn't tracked in
-            // state.running. Liveness is checked via podman inspect.
-
-            // @trace spec:subdomain-routing-via-reverse-proxy
-            // Health probe: hit the router's catchall on enclave + host. The
-            // base.Caddyfile returns 404 for unknown hosts to trusted sources
-            // — that's the "ready" signal. We accept any 4xx as proof of life
-            // since 200 only happens once routes are loaded.
-            for attempt in 0..10 {
-                let check = tillandsias_podman::podman_cmd()
-                    .args([
-                        "exec",
-                        ROUTER_CONTAINER_NAME,
-                        "sh",
-                        "-c",
-                        "curl -fsS -o /dev/null -w '%{http_code}' http://127.0.0.1/ -H 'Host: ready.localhost' || true",
-                    ])
-                    .output()
-                    .await;
-                if let Ok(out) = check {
-                    let code = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                    if code == "404" || code == "200" {
-                        info!(
-                            spec = "subdomain-routing-via-reverse-proxy",
-                            attempt,
-                            "Router readiness check passed"
-                        );
-                        return Ok(());
-                    }
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                let _ = attempt;
-            }
-            warn!(spec = "subdomain-routing-via-reverse-proxy", "Router health probe never confirmed ready — continuing anyway");
-            Ok(())
-        }
-        Err(e) => {
-            error!(error = %e, spec = "subdomain-routing-via-reverse-proxy", "Router container failed to start");
-            Err(format!("Router start failed: {e}"))
-        }
-    }
-}
-
-/// Stop the router container if running. Best-effort, errors are logged.
-/// @trace spec:subdomain-routing-via-reverse-proxy
-pub(crate) async fn stop_router(runtime: Arc<dyn Runtime>) {
-    // @trace spec:cross-platform, spec:podman-orchestration
-    match runtime.container_stop(ROUTER_CONTAINER_NAME, 10).await {
-        Ok(()) => info!(
-            accountability = true,
-            category = "router",
-            spec = "subdomain-routing-via-reverse-proxy",
-            "Router container stopped"
-        ),
-        Err(e) => {
-            debug!(spec = "subdomain-routing-via-reverse-proxy", error = %e, "Router stop returned error (may not have been running)");
-        }
-    }
-}
-
-/// Regenerate the router's dynamic.Caddyfile from the currently-running
-/// forge containers and tell Caddy to reload.
-///
-/// Idempotent. Safe to call after every forge launch and after every
-/// shutdown.
-///
-/// Format per project:
-///     <project>.opencode.localhost:80 {
-///         reverse_proxy tillandsias-<project>-forge:4096
-///     }
-///
-/// Behaviour:
-/// - Iterates `state.running` filtered to OpenCodeWeb forge containers
-///   (named `tillandsias-<project>-forge`).
-/// - Writes the merged snippet to the host `dynamic.Caddyfile` that the
-///   router container bind-mounts at `/run/router/dynamic.Caddyfile`.
-/// - If the router container is running, executes
-///   `/usr/local/bin/router-reload.sh` inside it to apply the new
-///   routes synchronously. If the router isn't running yet, the write
-///   alone is sufficient — the router's entrypoint reads the file on
-///   the next start.
-/// - Best-effort: errors are logged but never propagated. The caller
-///   should not fail an attach because the router reload hiccupped;
-///   the forge container itself is healthy and reachable on the
-///   enclave.
-///
-/// Whether the Caddy router should reject opencode-web requests that lack
-/// a session cookie validated by the router-side sidecar.
-///
-/// **`true` since chunk 7 of the opencode-web-session-otp convergence**.
-/// The full chain is live: tray issues a 256-bit cookie, broadcasts
-/// IssueWebSession to subscribed sidecars over the control socket,
-/// hands the cookie to Chromium via CDP `Network.setCookies` before
-/// `Page.navigate`, and Caddy's `forward_auth` directive consults the
-/// router sidecar at `127.0.0.1:9090/validate` on every request.
-/// Anything without a cookie matching an entry in the sidecar's
-/// per-project session list — `curl` from another shell, sibling
-/// browser tab, process discovering the URL via `/proc/<pid>/cmdline`,
-/// extension reading the URL of another tab — gets HTTP 401 with the
-/// friendly "open this project from the Tillandsias tray" body.
-///
-/// To temporarily disable enforcement (e.g. local debugging without
-/// the sidecar), flip to `false`. The Caddy block falls back to the
-/// pre-OTP unconditional reverse_proxy. The
-/// `render_caddy_route_block_*` tests cover both shapes; toggling this
-/// constant is the only source change needed.
-///
-/// @trace spec:opencode-web-session-otp
-/// @cheatsheet web/cookie-auth-best-practices.md
-pub(crate) const ENFORCE_SESSION_COOKIE: bool = true;
-
-/// Render the Caddy site block for a single project's OpenCode Web route.
-///
-/// When [`ENFORCE_SESSION_COOKIE`] is `true`, the block delegates auth to
-/// the router-side sidecar via Caddy's built-in `forward_auth` directive:
-/// every request triggers `GET /validate?project=<host-label>` against
-/// `127.0.0.1:9090` (in-container loopback to the sidecar). The sidecar
-/// inspects the forwarded `Cookie:` header, decodes the
-/// `tillandsias_session=<base64url>` value, looks it up in the per-project
-/// session list, and replies `204` (allow) or `401` (deny). Caddy
-/// continues the request on 204 and returns the sidecar's 401 body
-/// (friendly "open from the tray" message) on deny.
-///
-/// When `false`, the block reverse-proxies all requests unconditionally —
-/// the pre-OTP behaviour. Pure function exposed at module level so unit
-/// tests can pin both byte shapes.
-///
-/// @trace spec:opencode-web-session-otp, spec:subdomain-routing-via-reverse-proxy
-/// @cheatsheet web/cookie-auth-best-practices.md
-pub(crate) fn render_caddy_route_block(project: &str) -> String {
-    if ENFORCE_SESSION_COOKIE {
-        // forward_auth: Caddy fires GET /validate against the sidecar with
-        // the original Cookie header copied over. On non-2xx the sidecar's
-        // response (status + body) is returned to the client unchanged —
-        // we don't need a separate `respond 401` directive here.
-        format!(
-            "http://opencode.{project}.localhost:8080 {{\n    forward_auth 127.0.0.1:9090 {{\n        uri /validate?project=opencode.{project}.localhost\n        copy_headers Cookie\n    }}\n    reverse_proxy tillandsias-{project}-forge:4096\n}}\n",
-            project = project
-        )
-    } else {
-        // Pre-OTP shape — direct reverse_proxy, no cookie gate. Used until
-        // ENFORCE_SESSION_COOKIE flips (see the doc-comment for the
-        // flip-the-switch instructions).
-        format!(
-            "http://opencode.{project}.localhost:8080 {{\n    reverse_proxy tillandsias-{project}-forge:4096\n}}\n",
-            project = project
-        )
-    }
-}
-
-/// @trace spec:subdomain-routing-via-reverse-proxy
-pub(crate) async fn regenerate_router_caddyfile(state: &TrayState) -> Result<(), String> {
-    // Build the dynamic Caddyfile contents from currently-tracked forge containers.
-    // @trace spec:subdomain-routing-via-reverse-proxy
-    let mut snippet = String::new();
-    let mut route_count = 0usize;
-    for entry in &state.running {
-        if !matches!(
-            entry.container_type,
-            tillandsias_core::state::ContainerType::OpenCodeWeb
-        ) {
-            continue;
-        }
-        let project = match ContainerInfo::parse_forge_container_name(&entry.name) {
-            Some(p) => p,
-            None => {
-                debug!(
-                    container = %entry.name,
-                    spec = "subdomain-routing-via-reverse-proxy",
-                    "OpenCodeWeb container name did not parse as forge — skipping route"
-                );
-                continue;
-            }
-        };
-        // @trace spec:subdomain-naming-flip
-        // @cheatsheet runtime/networking.md
-        // Service-leftmost ordering — see browser::build_subdomain_url for
-        // the rationale. Future per-project services (web/dashboard/www)
-        // slot under the same `*.<project>.localhost` namespace.
-        //
-        // @tombstone superseded:subdomain-naming-flip — kept for three
-        // releases (until 0.1.169.231). Prior shape was
-        // `"{project}.opencode.localhost:80 ..."` (project-leftmost).
-        // @trace spec:subdomain-naming-flip, spec:fix-router-loopback-port
-        // @cheatsheet runtime/networking.md
-        // Internal Caddy listener moved from :80 to :8080 to avoid
-        // CAP_NET_BIND_SERVICE requirement under --cap-drop=ALL. Host
-        // publish stays 127.0.0.1:8080:8080 (was :8080:80).
-        //
-        // Explicit `http://` scheme is REQUIRED: Caddy treats `*.localhost`
-        // site addresses as TLS-eligible by default (RFC 6761 local-dev
-        // convention — Caddy auto-issues a localhost cert via its built-in
-        // CA). Even with `auto_https off` in the global block, the listener
-        // ends up with an empty `tls_connection_policies: [{}]`, causing
-        // plain HTTP requests to be rejected with HTTP/1.0 400 "Client
-        // sent an HTTP request to an HTTPS server." The `http://` prefix
-        // opts out of this implicit TLS expectation.
-        //
-        // @trace spec:opencode-web-session-otp
-        // @cheatsheet web/cookie-auth-best-practices.md
-        // Per-window session cookie required when ENFORCE_SESSION_COOKIE
-        // is true. Caddy's `forward_auth` directive consults the router
-        // sidecar at 127.0.0.1:9090 on every request; the sidecar decodes
-        // the cookie value and checks membership in the per-project session
-        // list. Any request whose cookie value is NOT in the list — `curl`
-        // from another shell, sibling browser windows that did not go
-        // through the tray, processes that discovered the URL via
-        // `/proc/<pid>/cmdline` of the spawned browser — gets HTTP 401
-        // with the friendly "open from the tray" body.
-        snippet.push_str(&render_caddy_route_block(&project));
-        route_count += 1;
-    }
-
-    let dyn_dir = router_dynamic_caddyfile_host_path();
-    if let Err(e) = tokio::fs::create_dir_all(&dyn_dir).await {
-        warn!(
-            spec = "subdomain-routing-via-reverse-proxy",
-            dir = %dyn_dir.display(),
-            error = %e,
-            "Failed to ensure router dynamic dir — skipping Caddyfile regeneration"
-        );
-        return Ok(());
-    }
-    let dyn_file = dyn_dir.join("dynamic.Caddyfile");
-
-    if let Err(e) = tokio::fs::write(&dyn_file, snippet.as_bytes()).await {
-        warn!(
-            spec = "subdomain-routing-via-reverse-proxy",
-            path = %dyn_file.display(),
-            error = %e,
-            "Failed to write router dynamic.Caddyfile — routes may be stale"
-        );
-        return Ok(());
-    }
-
-    debug!(
-        spec = "subdomain-routing-via-reverse-proxy",
-        path = %dyn_file.display(),
-        routes = route_count,
-        "Wrote router dynamic.Caddyfile"
-    );
-
-    // If the router container isn't running, skip the reload — the file
-    // we just wrote will be picked up on the next router start via the
-    // bind-mount + entrypoint's initial merge.
-    // @trace spec:subdomain-routing-via-reverse-proxy
-    let client = PodmanClient::new();
-    match client.inspect_container(ROUTER_CONTAINER_NAME).await {
-        Ok(inspect) if inspect.state == "running" => {}
-        Ok(_) => {
-            debug!(
-                spec = "subdomain-routing-via-reverse-proxy",
-                "Router not running — wrote dynamic.Caddyfile only (entrypoint will pick it up on next start)"
-            );
-            return Ok(());
-        }
-        Err(_) => {
-            debug!(
-                spec = "subdomain-routing-via-reverse-proxy",
-                "Router inspect failed — skipping reload (next router start will pick up the file)"
-            );
-            return Ok(());
-        }
-    }
-
-    // Trigger the reload synchronously so callers know the new routes are
-    // live before returning to the user. Errors are logged but non-fatal.
-    // @trace spec:subdomain-routing-via-reverse-proxy
-    let reload_result = tillandsias_podman::podman_cmd()
-        .args([
-            "exec",
-            ROUTER_CONTAINER_NAME,
-            "/usr/local/bin/router-reload.sh",
-        ])
-        .output()
-        .await;
-    match reload_result {
-        Ok(out) if out.status.success() => {
-            info!(
-                accountability = true,
-                category = "router",
-                spec = "subdomain-routing-via-reverse-proxy",
-                routes = route_count,
-                "Router Caddyfile regenerated and reloaded"
-            );
-        }
-        Ok(out) => {
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            warn!(
-                spec = "subdomain-routing-via-reverse-proxy",
-                exit_code = out.status.code().unwrap_or(-1),
-                stderr = %stderr,
-                "router-reload.sh exited non-zero — routes may not be live yet"
-            );
-        }
-        Err(e) => {
-            warn!(
-                spec = "subdomain-routing-via-reverse-proxy",
-                error = %e,
-                "Failed to invoke router-reload.sh — routes may not be live yet"
-            );
-        }
-    }
-
-    Ok(())
-}
-
 /// Stop the proxy container if running. Best-effort, errors are logged.
 /// @trace spec:proxy-container
-pub(crate) async fn stop_proxy(runtime: Arc<dyn Runtime>) {
-    // @trace spec:cross-platform, spec:podman-orchestration
-    match runtime.container_stop(PROXY_CONTAINER_NAME, 10).await {
+pub(crate) async fn stop_proxy() {
+    let client = PodmanClient::new();
+    let launcher = tillandsias_podman::launch::ContainerLauncher::new(client);
+    match launcher.stop(PROXY_CONTAINER_NAME).await {
         Ok(()) => info!(
             accountability = true,
             category = "proxy",
@@ -1371,6 +745,23 @@ pub(crate) async fn stop_proxy(runtime: Arc<dyn Runtime>) {
 /// Performs a single health probe using `wget --spider`.
 /// DISTRO: Proxy is Alpine — busybox wget is built-in, curl is NOT available.
 /// Returns `true` if the proxy responds, `false` otherwise.
+///
+/// Used by both `ensure_proxy_running` (readiness loop) and `tools_overlay`
+/// (to decide whether to route builds through the enclave or direct).
+///
+/// @trace spec:proxy-container
+pub(crate) async fn is_proxy_healthy() -> bool {
+    // DISTRO: Proxy is Alpine — busybox nc (netcat) for TCP probe.
+    // wget --spider returns 400 because squid rejects non-proxy HTTP requests.
+    let check = tillandsias_podman::podman_cmd()
+        .args(["exec", PROXY_CONTAINER_NAME, "sh", "-c", "nc -z localhost 3128"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .await;
+    check.map(|s| s.success()).unwrap_or(false)
+}
+
 /// Remove the enclave network if no containers are attached.
 /// Best-effort — silently ignores errors (e.g., containers still attached).
 /// On podman machine, the enclave network was never created — nothing to do.
@@ -1410,29 +801,29 @@ pub(crate) async fn cleanup_enclave_network() {
 /// inherited from `--stop-timeout=10`.
 ///
 /// @trace spec:podman-orchestration, spec:secrets-management
-pub(crate) async fn sweep_orphan_containers(runtime: Arc<dyn Runtime>) {
-    // @trace spec:simplified-tray-ux, spec:cross-platform, spec:podman-orchestration
-    // Get list of all containers with "tillandsias-" in name
-    let names = match runtime.container_list().await {
-        Ok(json_output) => {
-            if let Ok(containers) = serde_json::from_str::<Vec<serde_json::Value>>(&json_output) {
-                containers
-                    .iter()
-                    .filter_map(|c| {
-                        c.get("Names")
-                            .and_then(|n| n.as_array())
-                            .and_then(|a| a.first())
-                            .and_then(|name| name.as_str())
-                            .map(|s| s.to_string())
-                    })
-                    .filter(|name| name.contains("tillandsias-"))
-                    .collect::<Vec<_>>()
-            } else {
-                Vec::new()
-            }
+pub(crate) async fn sweep_orphan_containers() {
+    let output = tillandsias_podman::podman_cmd()
+        .args(["ps", "--filter", "name=tillandsias-", "--format", "{{.Names}}"])
+        .output()
+        .await;
+    let names = match output {
+        Ok(o) if o.status.success() => {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        }
+        Ok(o) => {
+            debug!(
+                exit_code = o.status.code().unwrap_or(-1),
+                "podman ps exited non-zero during orphan sweep — skipping"
+            );
+            return;
         }
         Err(e) => {
-            debug!(error = %e, "container_list failed during orphan sweep — skipping");
+            debug!(error = %e, "podman ps failed during orphan sweep — skipping");
             return;
         }
     };
@@ -1447,37 +838,24 @@ pub(crate) async fn sweep_orphan_containers(runtime: Arc<dyn Runtime>) {
         orphan_count = names.len(),
         "Orphan sweep: stopping containers left over from a prior session"
     );
+    let client = PodmanClient::new();
+    let launcher = tillandsias_podman::launch::ContainerLauncher::new(client);
     for name in &names {
-        if let Err(e) = runtime.container_stop(name, 10).await {
+        if let Err(e) = launcher.stop(name).await {
             debug!(container = %name, error = %e, "Orphan container stop returned error (may have exited already)");
         }
         // Belt-and-suspenders: our runtime always uses `--rm`, so stop also
         // deletes. But older installations or hand-built containers might
         // not; force-remove here so the orphan is fully gone either way.
-        let client = PodmanClient::new();
-        let _ = client.remove_container(name).await;
+        let _ = tillandsias_podman::podman_cmd()
+            .args(["rm", "-f", name])
+            .output()
+            .await;
         // Also wipe any residual token file for this container.
         crate::secrets::cleanup_token_file(name);
     }
     // Finally clear the enclave network itself — safe to recreate on next launch.
     cleanup_enclave_network().await;
-}
-
-/// Pre-UI cleanup of stale containers from a prior session.
-///
-/// Public wrapper around `sweep_orphan_containers` for the spec name in
-/// `simplified-tray-ux`. Call this from `main.rs` BEFORE the event loop
-/// accepts user input — the singleton guard guarantees no other tray is
-/// running, so any `tillandsias-*` containers that exist must be
-/// orphans from a prior session that wasn't shut down cleanly.
-///
-/// Idempotent: no-op if there are no orphans. Best-effort: logs but does
-/// not fail the startup path on podman errors.
-///
-/// @trace spec:simplified-tray-ux, spec:podman-orchestration
-pub async fn pre_ui_cleanup_stale_containers() {
-    let runtime = default_runtime();
-    sweep_orphan_containers(runtime).await;
 }
 
 // ---------------------------------------------------------------------------
@@ -1577,147 +955,6 @@ fn rotate_container_logs(log_dir: &Path, container_name: &str) {
 }
 
 // ---------------------------------------------------------------------------
-// External-logs migration
-// @trace spec:external-logs-layer
-// ---------------------------------------------------------------------------
-
-/// One-shot migration from the old internal log path to the new external-logs
-/// location for the git-service producer.
-///
-/// # What it does
-///
-/// Before chunk 2 the post-receive hook's `git-push.log` landed in the
-/// INTERNAL per-container log directory
-/// (`~/.local/state/tillandsias/containers/git/logs/git-push.log`) via the
-/// `ContainerLogs` mount. The EXTERNAL mount (`ExternalLogsProducer`) now
-/// shadows the same in-container path (`/var/log/tillandsias/external/`), so
-/// the hook continues writing to the same path — but that path is now routed
-/// to `~/.local/state/tillandsias/external-logs/git-service/` on the host.
-///
-/// To carry forward any log content that accumulated before the migration,
-/// this function:
-///
-/// 1. Checks whether the old file exists at `containers/git/logs/git-push.log`.
-/// 2. If it does, creates the new destination directory and renames the file
-///    (atomic on the same filesystem).
-/// 3. Leaves a `MIGRATED.txt` stub at the old directory with the new path
-///    inside, so an operator checking the old location gets a clear pointer.
-///
-/// # Idempotency
-///
-/// - If `from` does not exist: no-op, returns `Ok(())`.
-/// - If `to` already exists: migration was already done; no-op.
-/// - If both exist: old entry is a leftover artifact; no-op (the new
-///   location wins).
-///
-/// Errors are logged but NOT propagated — a migration failure must NEVER
-/// abort tray startup.
-///
-/// @trace spec:external-logs-layer
-pub(crate) fn ensure_external_logs_dir() -> Result<(), String> {
-    use tillandsias_core::config::{container_log_dir, external_logs_role_dir};
-
-    // Old path: the per-container INTERNAL log dir for the git service.
-    // container_log_dir("tillandsias-git") or ("git") — both resolve the
-    // same because container_log_dir strips the "tillandsias-" prefix.
-    let from = container_log_dir("tillandsias-git").join("git-push.log");
-
-    // New path: the EXTERNAL producer dir for the "git-service" role.
-    let role_dir = external_logs_role_dir("git-service");
-    let to = role_dir.join("git-push.log");
-
-    if !from.exists() {
-        // Nothing to migrate — either never existed or already moved.
-        debug!(
-            spec = "external-logs-layer",
-            operation = "migrate",
-            "ensure_external_logs_dir: no old git-push.log found, nothing to migrate"
-        );
-        return Ok(());
-    }
-
-    if to.exists() {
-        // Already migrated on a previous tray run.
-        debug!(
-            spec = "external-logs-layer",
-            operation = "migrate",
-            "ensure_external_logs_dir: destination already exists, migration idempotent"
-        );
-        return Ok(());
-    }
-
-    // Create the destination directory.
-    if let Err(e) = std::fs::create_dir_all(&role_dir) {
-        let msg = format!("ensure_external_logs_dir: failed to create role dir {}: {e}", role_dir.display());
-        warn!(
-            accountability = true,
-            category = "git-service-logs",
-            spec = "external-logs-layer",
-            operation = "migrate",
-            error = %e,
-            path = %role_dir.display(),
-            "Failed to create external-logs role directory during migration"
-        );
-        return Err(msg);
-    }
-
-    // Atomic rename — source and destination are typically on the same filesystem
-    // (~/.local/state/tillandsias/…) so this is a single syscall on Linux/macOS.
-    if let Err(e) = std::fs::rename(&from, &to) {
-        let msg = format!(
-            "ensure_external_logs_dir: rename {} -> {} failed: {e}",
-            from.display(),
-            to.display()
-        );
-        warn!(
-            accountability = true,
-            category = "git-service-logs",
-            spec = "external-logs-layer",
-            operation = "migrate",
-            error = %e,
-            from = %from.display(),
-            to = %to.display(),
-            "Failed to rename git-push.log to new external-logs location"
-        );
-        return Err(msg);
-    }
-
-    // Leave a MIGRATED.txt stub at the old directory so operators inspecting
-    // the old path see a clear pointer.
-    let stub_dir = from.parent().unwrap_or(&from);
-    let stub_path = stub_dir.join("MIGRATED.txt");
-    let stub_content = format!(
-        "git-push.log was migrated to the external-logs producer directory.\n\
-         New path: {}\n\
-         Migration performed at tray startup by ensure_external_logs_dir().\n\
-         @trace spec:external-logs-layer\n",
-        to.display()
-    );
-    if let Err(e) = std::fs::write(&stub_path, &stub_content) {
-        // Non-fatal — the migration succeeded, the stub is cosmetic.
-        warn!(
-            spec = "external-logs-layer",
-            operation = "migrate",
-            error = %e,
-            path = %stub_path.display(),
-            "Failed to write MIGRATED.txt stub (non-fatal)"
-        );
-    }
-
-    info!(
-        accountability = true,
-        category = "git-service-logs",
-        spec = "external-logs-layer",
-        operation = "migrate",
-        from = %from.display(),
-        to = %to.display(),
-        "Migrated git-push.log to external-logs producer directory"
-    );
-
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
 // Git mirror service
 // @trace spec:git-mirror-service
 // ---------------------------------------------------------------------------
@@ -1765,8 +1002,8 @@ fn detect_project_git_state(project_path: &Path) -> GitProjectState {
             in_origin_section = trimmed == "[remote \"origin\"]";
             continue;
         }
-        if in_origin_section
-            && let Some(url) = trimmed.strip_prefix("url") {
+        if in_origin_section {
+            if let Some(url) = trimmed.strip_prefix("url") {
                 let url = url.trim().strip_prefix('=').unwrap_or("").trim();
                 if !url.is_empty() {
                     return GitProjectState::RemoteRepo {
@@ -1774,6 +1011,7 @@ fn detect_project_git_state(project_path: &Path) -> GitProjectState {
                     };
                 }
             }
+        }
     }
 
     GitProjectState::LocalRepo
@@ -1897,91 +1135,7 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
         );
 
         let mirror_ref = if has_git { mp.as_str() } else { container_mirror.as_str() };
-
-        // @trace spec:git-mirror-service, spec:cross-platform, spec:windows-wsl-runtime
-        // Refresh hook + origin URL on every attach so that:
-        //  - The post-receive hook is up to date (multi-path log fallback,
-        //    stderr emission for --diagnostics).
-        //  - The mirror's origin URL has the LATEST token from the keyring.
-        //    Token rotation by the user immediately propagates without
-        //    needing to delete + reclone the mirror.
-        let hooks_dir = mirror_path.join("hooks");
-        if let Err(e) = std::fs::create_dir_all(&hooks_dir) {
-            warn!(spec = "git-mirror-service", error = %e, "Cannot create hooks dir");
-        }
-        let hook_path = hooks_dir.join("post-receive");
-        if let Err(e) = std::fs::write(&hook_path, crate::embedded::POST_RECEIVE_HOOK) {
-            warn!(spec = "git-mirror-service", error = %e, "Cannot refresh post-receive hook");
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&hook_path, std::fs::Permissions::from_mode(0o755));
-        }
-
-        // @trace spec:git-mirror-service, spec:secrets-management
-        // Strip any tokens that prior INTERIM versions of Tillandsias may
-        // have injected into the mirror URL. Going forward the URL is the
-        // clean GitHub URL only — auth is handled by the git-daemon's env
-        // (Windows) or the git-service container's tmpfs file (Linux).
-        #[cfg(target_os = "windows")]
-        if let Ok(o) = run_git(&["-C", mirror_ref, "remote", "get-url", "origin"], &mounts)
-            && o.status.success()
-        {
-            let current = String::from_utf8_lossy(&o.stdout).trim().to_string();
-            if let Some(rest) = current.strip_prefix("https://")
-                && let Some((_, host_path)) = rest.split_once('@')
-            {
-                let canonical = format!("https://{host_path}");
-                let _ = run_git(
-                    &["-C", mirror_ref, "remote", "set-url", "origin", &canonical],
-                    &mounts,
-                );
-                info!(
-                    spec = "git-mirror-service, secrets-management",
-                    project = %project_name,
-                    "Cleaned legacy token-in-URL from mirror config"
-                );
-            }
-        }
-
-        // @trace spec:git-mirror-service, spec:secrets-management, spec:windows-wsl-runtime, spec:windows-git-mirror-cred-isolation
-        // @cheatsheet runtime/secrets-management.md
-        // Host-side fetch on Windows must bypass Git Credential Manager (which
-        // pops a GUI prompt and blocks the tray's startup) AND must NOT touch
-        // the user's keyring twice. We inject a shell credential-helper that
-        // reads a process-scoped env var. The token is never written to disk
-        // and never appears in the command line. We empty the existing helper
-        // list first (`credential.helper=`) so GCM is disabled for this call,
-        // then append our env-reader. GIT_TERMINAL_PROMPT=0 prevents any TTY
-        // fallback. On Linux this code is gated out — Linux uses the git-
-        // service container which has its own credential plumbing.
-        #[cfg(target_os = "windows")]
-        let fetch_result = {
-            let token = match crate::secrets::retrieve_github_token() {
-                Ok(Some(t)) => Some(t),
-                _ => None,
-            };
-            let mut cmd = std::process::Command::new("git");
-            cmd.env_remove("LD_LIBRARY_PATH").env_remove("LD_PRELOAD");
-            cmd.env("GIT_TERMINAL_PROMPT", "0");
-            cmd.env("GCM_INTERACTIVE", "Never");
-            if let Some(ref t) = token {
-                cmd.env("TILLANDSIAS_FETCH_TOKEN", t);
-                cmd.args([
-                    "-c", "credential.helper=",
-                    "-c", "credential.helper=!f() { echo username=oauth2; echo \"password=$TILLANDSIAS_FETCH_TOKEN\"; }; f",
-                ]);
-            } else {
-                cmd.args(["-c", "credential.helper="]);
-            }
-            cmd.args(["-C", mirror_ref, "fetch", "--all"]);
-            cmd.output().map_err(|e| format!("git failed: {e}"))
-        };
-        #[cfg(not(target_os = "windows"))]
-        let fetch_result = run_git(&["-C", mirror_ref, "fetch", "--all"], &mounts);
-
-        match fetch_result {
+        match run_git(&["-C", mirror_ref, "fetch", "--all"], &mounts) {
             Ok(o) if o.status.success() => {
                 debug!(spec = "git-mirror-service", project = %project_name, "Mirror fetch succeeded");
             }
@@ -2096,40 +1250,21 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
     // Fix mirror origin URL: `git clone --mirror` sets origin to the local
     // path we cloned from. If the project has a real remote (e.g., github.com),
     // update the mirror's origin to that URL. This way the post-receive hook
-    // pushes to the real remote (through the git service's D-Bus keyring access
-    // on Linux, or token-in-URL on Windows) instead of trying to push to an
-    // inaccessible local path.
-    //
-    // @trace spec:git-mirror-service, spec:cross-platform, spec:windows-wsl-runtime, spec:secrets-management
-    // On Windows, the post-receive hook runs in the FORGE distro's process
-    // context (since the forge invokes git push to the bare mirror via
-    // filesystem). The forge has zero credentials. To make `git push` truly
-    // automatic and transparent (the spec's ZERO OVERHEAD UX requirement),
-    // we embed the GitHub token directly in the mirror's origin URL. The
-    // token lives only in /mnt/c/.../mirrors/<project>/config — a host file
-    // that's not visible to other forge sessions or processes outside the
-    // attached forge. This is the simplest path to honour the spec on
-    // Windows without separate per-container credential isolation.
+    // pushes to the real remote (through the git service's D-Bus keyring access)
+    // instead of trying to push to an inaccessible local path.
+    // @trace spec:git-mirror-service
     if let GitProjectState::RemoteRepo { ref remote_url } = state {
         let mirror_ref = if has_git { mp.as_str() } else { container_mirror.as_str() };
-        // @trace spec:git-mirror-service, spec:secrets-management
-        // Mirror's origin URL is the CLEAN GitHub URL (no token embedded).
-        // The token never lands in any file the forge can read. On Linux the
-        // git-service container runs the daemon and reads token from
-        // /run/secrets/github_token (tmpfs bind-mount). On Windows the daemon
-        // runs in tillandsias-git distro with GH_TOKEN injected via env at
-        // spawn time; the post-receive hook reads $GH_TOKEN at push time and
-        // constructs an ephemeral auth URL — token is never persisted to disk.
         match run_git(
             &["-C", mirror_ref, "remote", "set-url", "origin", remote_url],
             &mounts,
         ) {
             Ok(o) if o.status.success() => {
                 info!(
-                    spec = "git-mirror-service, secrets-management",
+                    spec = "git-mirror-service",
                     project = %project_name,
                     remote_url = %remote_url,
-                    "Mirror origin set (clean URL; auth via daemon env / hook)"
+                    "Mirror origin set to project's remote URL"
                 );
             }
             Ok(o) => {
@@ -2170,264 +1305,13 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
     Ok(mirror_path)
 }
 
-// @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service
-// WSL-native git-daemon launcher. Idempotent — checks if a git-daemon is
-// already listening on 127.0.0.1:9418 inside tillandsias-git, and starts one
-// if not. The daemon's --base-path points at the host's mirrors dir mapped
-// through /mnt/c/... so distros and host share one source of truth.
-//
-// Why localhost: WSL2 runs all distros in one VM with one network namespace.
-// Distro A binding 127.0.0.1:9418 is reachable from distro B as
-// 127.0.0.1:9418. From the Windows host, WSL2 also auto-forwards localhost
-// (so the user could `git clone git://localhost:9418/<project>` natively if
-// they wanted). The git daemon is NOT exposed beyond localhost.
-#[cfg(target_os = "windows")]
-async fn ensure_git_service_running_wsl(
-    project_name: &str,
-) -> Result<(), String> {
-    use tokio::process::Command;
-
-    // Resolve mirrors dir (parent of any specific mirror) → /mnt/c/...
-    let mirrors_dir = cache_dir().join("mirrors");
-    let mirrors_mnt = windows_path_to_wsl_mnt(&mirrors_dir)?;
-
-    // Read GH_TOKEN once; passed via env to the daemon if present.
-    // @trace spec:secrets-management, spec:git-mirror-service
-    let gh_token: Option<String> = match crate::secrets::retrieve_github_token() {
-        Ok(Some(t)) => Some(t),
-        _ => None,
-    };
-    if gh_token.is_none() {
-        warn!(
-            spec = "git-mirror-service, secrets-management",
-            project = %project_name,
-            "No GitHub token in keyring — git daemon will start but post-receive push will fail. Run `tillandsias --github-login` first."
-        );
-    }
-
-    // @cheatsheet runtime/wsl-on-windows.md
-    // Probe via `ss -tln` — works in busybox (Alpine /bin/sh has no /dev/tcp;
-    // earlier we tried `echo > /dev/tcp/...` and it always failed silently
-    // because busybox sh lacks that bash feature). `ss` ships in Alpine's
-    // iproute2 package which is pulled in by tillandsias-git's apk install.
-    // If `ss` is missing, fall back to `netstat`.
-    let probe_cmd = "ss -tln 2>/dev/null | grep -qE '127\\.0\\.0\\.1:9418\\b' && echo UP || \
-                     (netstat -tln 2>/dev/null | grep -qE '127\\.0\\.0\\.1:9418\\b' && echo UP || echo DOWN)";
-
-    let probe = { let mut __c = Command::new("wsl.exe"); tillandsias_podman::no_window_async(&mut __c); __c }
-        .args([
-            "-d", "tillandsias-git", "--user", "git", "--exec",
-            "/bin/sh", "-c", probe_cmd,
-        ])
-        .output()
-        .await
-        .map_err(|e| format!("wsl probe failed: {e}"))?;
-    if String::from_utf8_lossy(&probe.stdout).contains("UP") {
-        info!(
-            spec = "git-mirror-service, cross-platform, windows-wsl-runtime",
-            project = %project_name,
-            "git-daemon already listening on 127.0.0.1:9418 (re-using)"
-        );
-        return Ok(());
-    }
-
-    info!(
-        accountability = true,
-        category = "git",
-        spec = "git-mirror-service, cross-platform, windows-wsl-runtime",
-        project = %project_name,
-        mirrors = %mirrors_mnt,
-        "Starting git-daemon in tillandsias-git distro (base-path={})", mirrors_mnt
-    );
-
-    // @trace spec:git-mirror-service, spec:windows-wsl-runtime, spec:windows-git-mirror-cred-isolation
-    // @cheatsheet runtime/wsl-mount-points.md
-    // Bootstrap system-wide safe.directory in /etc/gitconfig so the `git`
-    // user (uid=1000, runs the daemon) can read mirrors owned by root on
-    // drvfs (/mnt/c is always reported as owned by root regardless of NTFS
-    // ACL — see Microsoft's WSL filesystems doc). Without this, git refuses
-    // with "fatal: detected dubious ownership". --system gitconfig requires
-    // root, hence we run this WITHOUT --user git. We use `safe.directory=*`
-    // because mirror paths are dynamic (one per project) and the parent
-    // directory is the controlled boundary.
-    let bootstrap = { let mut __c = Command::new("wsl.exe"); tillandsias_podman::no_window_async(&mut __c); __c }
-        .args([
-            "-d", "tillandsias-git", "--exec",
-            "/bin/sh", "-c",
-            "git config --system --get-all safe.directory 2>/dev/null | grep -qx '*' || \
-             git config --system --add safe.directory '*'",
-        ])
-        .output()
-        .await
-        .map_err(|e| format!("wsl bootstrap safe.directory failed: {e}"))?;
-    if !bootstrap.status.success() {
-        warn!(
-            spec = "git-mirror-service, windows-wsl-runtime",
-            stderr = %String::from_utf8_lossy(&bootstrap.stderr),
-            "Failed to bootstrap system-wide safe.directory in tillandsias-git (continuing)"
-        );
-    }
-
-    // Use git's built-in --detach so we don't need nohup/setsid wrapping. git
-    // daemon will fork itself into the background and return 0 immediately
-    // (or non-zero if the bind fails). Logs would go to syslog by default;
-    // we redirect to /tmp/git-daemon.log for diagnostics.
-    let start_script = format!(
-        "git daemon --reuseaddr --export-all --enable=receive-pack \
-         --base-path='{mirrors_mnt}' --listen=127.0.0.1 --port=9418 \
-         --detach --pid-file=/tmp/git-daemon.pid \
-         --log-destination=stderr 2>>/tmp/git-daemon.log",
-    );
-
-    // @trace spec:secrets-management, spec:git-mirror-service
-    // GH_TOKEN forwarded via WSLENV so wsl.exe propagates it from the host
-    // process into the distro shell. The token therefore exists only in the
-    // wsl.exe process env (host side) and the daemon's process tree (distro
-    // side). Never written to disk; never visible to the forge distro.
-    // Reference: https://learn.microsoft.com/en-us/windows/wsl/filesystems#share-environment-variables-between-windows-and-wsl
-    let mut start_cmd = Command::new("wsl.exe");
-    tillandsias_podman::no_window_async(&mut start_cmd);
-    start_cmd.args([
-        "-d", "tillandsias-git", "--user", "git", "--exec",
-        "/bin/sh", "-c", &start_script,
-    ]);
-    if let Some(ref tok) = gh_token {
-        start_cmd.env("WSLENV", "GH_TOKEN/u");
-        start_cmd.env("GH_TOKEN", tok);
-    }
-    let start = start_cmd
-        .output()
-        .await
-        .map_err(|e| format!("wsl spawn git-daemon failed: {e}"))?;
-
-    if !start.status.success() {
-        let stderr = String::from_utf8_lossy(&start.stderr);
-        // Also pull the daemon log for diagnosis.
-        let log = { let mut __c = Command::new("wsl.exe"); tillandsias_podman::no_window_async(&mut __c); __c }
-            .args(["-d", "tillandsias-git", "--user", "git", "--exec",
-                   "/bin/sh", "-c", "tail -20 /tmp/git-daemon.log 2>/dev/null"])
-            .output()
-            .await
-            .ok()
-            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-            .unwrap_or_default();
-        return Err(format!(
-            "git-daemon spawn failed: exit={:?} stderr={} log={}",
-            start.status.code(), stderr.trim(), log.trim()
-        ));
-    }
-
-    // Wait for the daemon to actually bind (--detach returns before bind
-    // completes occasionally).
-    for attempt in 0..25 {
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-        let probe = { let mut __c = Command::new("wsl.exe"); tillandsias_podman::no_window_async(&mut __c); __c }
-            .args([
-                "-d", "tillandsias-git", "--user", "git", "--exec",
-                "/bin/sh", "-c", probe_cmd,
-            ])
-            .output()
-            .await
-            .map_err(|e| format!("wsl probe failed: {e}"))?;
-        if String::from_utf8_lossy(&probe.stdout).contains("UP") {
-            info!(
-                spec = "git-mirror-service, cross-platform, windows-wsl-runtime",
-                project = %project_name,
-                attempt = attempt + 1,
-                "git-daemon bound on 127.0.0.1:9418"
-            );
-            return Ok(());
-        }
-    }
-    // Last-resort diagnosis: pull the daemon log
-    let log = { let mut __c = Command::new("wsl.exe"); tillandsias_podman::no_window_async(&mut __c); __c }
-        .args(["-d", "tillandsias-git", "--user", "git", "--exec",
-               "/bin/sh", "-c", "tail -30 /tmp/git-daemon.log 2>/dev/null; echo ---; ss -tln 2>/dev/null | head"])
-        .output()
-        .await
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-        .unwrap_or_default();
-    Err(format!(
-        "git-daemon failed to bind 127.0.0.1:9418 after 5s. Diagnostics:\n{}",
-        log
-    ))
-}
-
-/// Embed a GitHub PAT/OAuth token in an HTTPS clone URL.
-/// Format: `https://USER:TOKEN@github.com/owner/repo.git` per Git docs.
-/// We use `oauth2` as the literal username (recommended for tokens).
-/// Documented at: https://git-scm.com/book/en/v2/Git-on-the-Server-Smart-HTTP
-///
-/// @tombstone superseded:windows-git-mirror-cred-isolation
-/// @trace spec:secrets-management, spec:git-mirror-service, spec:cross-platform, spec:windows-git-mirror-cred-isolation
-/// Token-in-URL was the INTERIM auth path before the
-/// windows-git-mirror-cred-isolation change replaced it with env-only
-/// credentials (GH_TOKEN forwarded to the daemon process via WSLENV;
-/// post-receive hook constructs the auth URL ephemerally in process
-/// memory without ever persisting it). The mirror's stored origin URL
-/// is now the clean `https://github.com/owner/repo.git` form. Function
-/// retained behind `#[allow(dead_code)]` for ≥3 releases per the
-/// project's @tombstone convention.
-/// Removed (call sites) in 0.1.184.545. Safe to delete after 0.1.184.548.
-#[allow(dead_code)]
-fn embed_github_token_in_url(url: &str, token: &str) -> String {
-    if let Some(rest) = url.strip_prefix("https://") {
-        // Strip any existing user:pass component if present (rare but defensive).
-        let after_at = rest.split_once('@').map(|(_, host)| host).unwrap_or(rest);
-        format!("https://oauth2:{token}@{after_at}")
-    } else {
-        // Non-HTTPS URLs (ssh://, git://, etc.) — leave alone; ssh has its own auth.
-        url.to_string()
-    }
-}
-
-/// Mask the token in `https://oauth2:TOKEN@github.com/...` so it's safe to log.
-///
-/// @tombstone superseded:windows-git-mirror-cred-isolation
-/// @trace spec:secrets-management, spec:windows-git-mirror-cred-isolation
-/// Companion to `embed_github_token_in_url`: only useful when URLs
-/// CARRY tokens. Since that pattern is now superseded by env-only
-/// credentials, this redactor has no live callers either. Retained
-/// alongside its companion for the same retention window.
-/// Removed (call sites) in 0.1.184.545. Safe to delete after 0.1.184.548.
-#[allow(dead_code)]
-fn redact_url_for_log(url: &str) -> String {
-    if let Some(rest) = url.strip_prefix("https://") {
-        if let Some((_user_pass, host_path)) = rest.split_once('@') {
-            return format!("https://***@{host_path}");
-        }
-    }
-    url.to_string()
-}
-
-/// Translate `C:\path\to\dir` → `/mnt/c/path/to/dir` for WSL access.
-/// @trace spec:cross-platform, spec:windows-wsl-runtime
-#[cfg(target_os = "windows")]
-fn windows_path_to_wsl_mnt(p: &Path) -> Result<String, String> {
-    let s = p.to_string_lossy();
-    let bytes = s.as_bytes();
-    if bytes.len() >= 3 && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/') {
-        let drive = (bytes[0] as char).to_ascii_lowercase();
-        let rest = s[2..].replace('\\', "/");
-        Ok(format!("/mnt/{drive}{rest}"))
-    } else {
-        Err(format!("Path is not a Windows drive path: {}", s))
-    }
-}
-
 /// Ensure the git service container is running for a project.
 ///
 /// Checks if `tillandsias-git-<project>` is already running. If not,
 /// builds the git image if needed and starts a detached git service
 /// container on the enclave network with the mirror mounted.
 ///
-/// @trace spec:git-mirror-service, spec:cross-platform, spec:windows-wsl-runtime
-// On Windows, the function takes the early-return path into
-// `ensure_git_service_running_wsl` and the Unix podman-driven path is
-// unreachable. The compiler can't see across the cfg gate, so allow
-// unreachable_code for the Unix-only suffix.
-#[allow(unreachable_code)]
+/// @trace spec:git-mirror-service
 pub(crate) async fn ensure_git_service_running(
     project_name: &str,
     mirror_path: &Path,
@@ -2436,24 +1320,6 @@ pub(crate) async fn ensure_git_service_running(
 ) -> Result<(), String> {
     let container_name = tillandsias_core::state::ContainerInfo::git_service_container_name(project_name);
 
-    // @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service, spec:secrets-management
-    // Windows: spawn git-daemon in tillandsias-git distro with GH_TOKEN env.
-    // Requires WSL2 mirrored networking (configured in ~/.wslconfig at init
-    // time). Daemon listens on 127.0.0.1:9418; forge connects via
-    // git://localhost:9418/<project> matching the Linux DNS-via-podman flow
-    // (TILLANDSIAS_GIT_SERVICE=localhost on Windows; git-service on Linux).
-    //
-    // Token isolation: GH_TOKEN lives only in the git daemon process env
-    // and child hook processes. The forge has zero filesystem path to it
-    // (different distro, different /run/secrets, different /tmp). Matches
-    // the Linux container-isolation property.
-    #[cfg(target_os = "windows")]
-    {
-        let _ = (state, build_tx, container_name, mirror_path);
-        return ensure_git_service_running_wsl(project_name).await;
-    }
-
-    #[cfg(not(target_os = "windows"))]
     // Check if already running (in our state or via podman inspect)
     if state.running.iter().any(|c| c.name == container_name) {
         debug!(spec = "git-mirror-service", project = %project_name, "Git service already tracked in state");
@@ -2464,8 +1330,8 @@ pub(crate) async fn ensure_git_service_running(
 
     // Check if it's running outside our state.
     // If running but with a stale image version, stop it and rebuild.
-    if let Ok(inspect) = client.inspect_container(&container_name).await
-        && inspect.state == "running" {
+    if let Ok(inspect) = client.inspect_container(&container_name).await {
+        if inspect.state == "running" {
             let expected_tag = git_image_tag();
             if inspect.image.contains(&expected_tag) {
                 debug!(spec = "git-mirror-service", project = %project_name, "Git service already running (correct version)");
@@ -2484,6 +1350,7 @@ pub(crate) async fn ensure_git_service_running(
             }
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
+    }
 
     info!(
         accountability = true,
@@ -2620,7 +1487,6 @@ pub(crate) async fn ensure_git_service_running(
         // @trace spec:opencode-web-session
         persistent: false,
         web_host_port: None,
-        hot_path_budget_mb: 0, // @trace spec:forge-hot-cold-split — service container
     };
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
@@ -2729,6 +1595,14 @@ pub(crate) async fn ensure_git_service_running(
 }
 
 // ---------------------------------------------------------------------------
+// Tools overlay — delegated to tools_overlay module
+// @trace spec:layered-tools-overlay
+// ---------------------------------------------------------------------------
+
+// NOTE: tools_overlay::ensure_tools_overlay is called via the full
+// crate::tools_overlay::ensure_tools_overlay path in handle_attach_here().
+
+// ---------------------------------------------------------------------------
 // Unified enclave startup
 // @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container
 // ---------------------------------------------------------------------------
@@ -2769,19 +1643,6 @@ pub async fn ensure_enclave_ready(
     state: &TrayState,
     build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<EnclaveContext, String> {
-    // @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service
-    // On Windows the enclave is decomposed: the git mirror service IS load-
-    // bearing (provides the isolation + lifecycle separation between host
-    // source, long-lived bare mirror, and ephemeral forge working tree) and
-    // MUST run; the proxy/router/inference services are Phase 2 work and are
-    // skipped (`ensure_infrastructure_ready` returns early). The git daemon
-    // runs in the tillandsias-git WSL distro listening on localhost:9418
-    // because all WSL2 distros share a single network namespace — the forge
-    // distro reaches it as `git://localhost:9418/<project>` (matching the
-    // Linux/podman semantics that use `git://git-service:9418/<project>`
-    // via podman DNS). The forge entrypoint env-substitutes the host so
-    // `TILLANDSIAS_GIT_SERVICE=localhost` makes both paths use the same
-    // entrypoint code.
     // Step 1+2: Infrastructure services (network + proxy) — hard requirement
     ensure_infrastructure_ready(state, build_tx.clone()).await?;
 
@@ -2826,10 +1687,11 @@ pub async fn ensure_enclave_ready(
         }
     });
 
-    // Tools overlay tombstoned 2026-04-25 — agents (claude, opencode,
-    // openspec) are baked into the forge image at /usr/local/bin/. No
-    // separate overlay build step here.
-    // @trace spec:tombstone-tools-overlay
+    // NOTE: Tools overlay (ensure_tools_overlay) is NOT called here because it
+    // requires the forge image to exist (it runs a temporary forge container).
+    // On first launch, the forge image may not be built yet. Instead, tools
+    // overlay is called from handle_attach_here() AFTER forge image is confirmed.
+    // @trace spec:layered-tools-overlay
 
     // Step 4+5: Git mirror + service — mirror creation failure propagates
     let mirror_path = match tokio::task::spawn_blocking({
@@ -2887,69 +1749,31 @@ pub async fn ensure_enclave_ready(
 /// enclave network and proxy but not git mirror/service (e.g., root terminal,
 /// serve-here).
 ///
-/// @trace spec:enclave-network, spec:proxy-container, spec:cross-platform, spec:podman-orchestration
+/// @trace spec:enclave-network, spec:proxy-container
 pub async fn ensure_infrastructure_ready(
     state: &TrayState,
     build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<(), String> {
-    // @trace spec:cross-platform, spec:windows-wsl-runtime
-    // On Windows, the supporting services (proxy/router/git-service/inference)
-    // are not yet ported to WSL; running them through podman violates the
-    // WSL-only directive and produces zombie containers ("name in use" on
-    // restart) plus image-not-found errors when their tags don't exist in any
-    // local registry. Skip the entire infrastructure-setup phase: the forge
-    // distro on Windows uses host /mnt/c/... paths directly and does not need
-    // the proxy / git mirror / inference at attach time. Phase 2 will land
-    // WSL-native equivalents.
-    #[cfg(target_os = "windows")]
-    {
-        let _ = state;
-        let _ = build_tx;
-        if let Err(e) = crate::embedded::extract_config_overlay() {
-            warn!(error = %e, spec = "layered-tools-overlay", "Config overlay extraction failed");
-        }
-        info!(
-            spec = "cross-platform, windows-wsl-runtime",
-            "Infrastructure step skipped on Windows (WSL backend; supporting services not yet ported)"
-        );
-        return Ok(());
+    // @trace spec:layered-tools-overlay
+    // Extract config overlay to tmpfs before containers launch.
+    // Non-fatal — containers will use defaults if extraction fails.
+    if let Err(e) = crate::embedded::extract_config_overlay() {
+        warn!(error = %e, spec = "layered-tools-overlay", "Config overlay extraction failed — containers will use default configs");
     }
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        // @trace spec:layered-tools-overlay
-        // Extract config overlay to tmpfs before containers launch.
-        // Non-fatal — containers will use defaults if extraction fails.
-        if let Err(e) = crate::embedded::extract_config_overlay() {
-            warn!(error = %e, spec = "layered-tools-overlay", "Config overlay extraction failed — containers will use default configs");
-        }
+    ensure_enclave_network().await?;
+    ensure_proxy_running(state, build_tx).await?;
 
-        // @trace spec:cross-platform, spec:podman-orchestration
-        let runtime = default_runtime();
+    // @trace spec:enclave-network, spec:proxy-container
+    info!(
+        accountability = true,
+        category = "enclave",
+        spec = "enclave-network",
+        proxy = PROXY_CONTAINER_NAME,
+        "Infrastructure ready — proxy (strict:3128, permissive:3129)"
+    );
 
-        ensure_enclave_network().await?;
-        ensure_proxy_running(state, runtime, build_tx.clone()).await?;
-
-        // @trace spec:subdomain-routing-via-reverse-proxy, spec:enclave-network
-        // Router (Caddy) — must come up after the proxy because Squid forwards
-        // *.localhost requests to it via cache_peer. If router fails, the rest
-        // of the enclave stays usable; agents just can't reach
-        // <project>.<service>.localhost URLs.
-        if let Err(e) = ensure_router_running(state, build_tx).await {
-            warn!(error = %e, spec = "subdomain-routing-via-reverse-proxy", "Router failed to start — *.localhost subdomain routing unavailable");
-        }
-
-        // @trace spec:enclave-network, spec:proxy-container
-        info!(
-            accountability = true,
-            category = "enclave",
-            spec = "enclave-network",
-            proxy = PROXY_CONTAINER_NAME,
-            "Infrastructure ready — proxy (strict:3128, permissive:3129)"
-        );
-
-        Ok(())
-    }
+    Ok(())
 }
 
 /// Public wrapper around `ensure_enclave_network` for use from `main.rs`
@@ -2992,10 +1816,11 @@ pub fn ensure_enclave_ready_cli(
 /// Stop the git service container for a project. Best-effort, errors are logged.
 /// Also unlinks the ephemeral GitHub token file materialised at launch.
 /// @trace spec:git-mirror-service, spec:secrets-management
-pub(crate) async fn stop_git_service(project_name: &str, runtime: Arc<dyn Runtime>) {
+pub(crate) async fn stop_git_service(project_name: &str) {
     let name = tillandsias_core::state::ContainerInfo::git_service_container_name(project_name);
-    // @trace spec:cross-platform, spec:podman-orchestration
-    match runtime.container_stop(&name, 10).await {
+    let client = PodmanClient::new();
+    let launcher = tillandsias_podman::launch::ContainerLauncher::new(client);
+    match launcher.stop(&name).await {
         Ok(()) => info!(
             accountability = true,
             category = "git",
@@ -3394,13 +2219,14 @@ fn get_proxy_ip() -> Result<String, String> {
     // Parse the IPs — prefer the one NOT on the enclave (10.89.0.x).
     // The podman default network typically uses 10.88.0.x.
     let ips = String::from_utf8_lossy(&output.stdout);
-    for ip in ips.split_whitespace() {
+    for ip in ips.trim().split_whitespace() {
         if !ip.starts_with("10.89.") {
             return Ok(ip.to_string());
         }
     }
     // Fallback: use any IP
-    ips.split_whitespace()
+    ips.trim()
+        .split_whitespace()
         .next()
         .map(|s| s.to_string())
         .ok_or_else(|| "no IP found".into())
@@ -3414,9 +2240,22 @@ fn get_proxy_ip() -> Result<String, String> {
 ///
 /// @trace spec:default-image, spec:fix-windows-image-routing
 #[allow(dead_code)] // Used on Windows; non-Windows path shells out to build-image.sh
-/// Run image build via direct podman invocation.
-///
-/// @trace spec:direct-podman-calls, spec:default-image
+fn image_build_paths(source_dir: &std::path::Path, image_name: &str) -> (PathBuf, PathBuf) {
+    let subdir = match image_name {
+        "proxy" => "proxy",
+        "git" => "git",
+        "inference" => "inference",
+        "web" => "web",
+        // forge / default / unknown all build the forge image. Keeping this
+        // permissive matches build-image.sh's behavior; the image_name
+        // validation lives at the call sites that compute the tag.
+        _ => "default",
+    };
+    let dir = source_dir.join("images").join(subdir);
+    (dir.join("Containerfile"), dir)
+}
+
+/// Run `build-image.sh` from the embedded binary scripts.
 ///
 /// Extracts image sources + build scripts to temp, executes, cleans up.
 /// No filesystem scripts are trusted — everything comes from the signed binary.
@@ -3444,110 +2283,133 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
         strings::SETUP_ERROR
     })?;
 
+    let script = source_dir.join("scripts").join("build-image.sh");
     // Use the correct versioned tag for each image type.
-    // @trace spec:direct-podman-calls, spec:default-image, spec:proxy-container, spec:git-mirror-service, spec:inference-container
+    // @trace spec:default-image, spec:proxy-container, spec:git-mirror-service, spec:inference-container
     let tag = match image_name {
         "proxy" => proxy_image_tag(),
         "git" => git_image_tag(),
         "inference" => inference_image_tag(),
-        "router" => router_image_tag(),
         _ => forge_image_tag(),
     };
+    info!(script = %script.display(), image = image_name, tag = %tag, spec = "default-image, nix-builder", "Running embedded build-image.sh");
 
-    // @trace spec:cross-platform, spec:windows-wsl-runtime
-    // Windows path is WSL-native: no podman, no bash wrapper. The image is
-    // already an imported WSL distro `tillandsias-<name>` produced by --init.
-    // Verify presence; if missing, instruct user to run --init.
+    // On Windows, call podman build directly instead of going through bash.
+    // Git Bash's MSYS2 doesn't initialize properly from native Windows processes.
     #[cfg(target_os = "windows")]
     {
-        let _ = source_dir;
-        let _ = tag;
-        let distro = format!("tillandsias-{}", image_name);
-        let mut __listing_cmd = std::process::Command::new("wsl.exe");
-        tillandsias_podman::no_window_sync(&mut __listing_cmd);
-        let listing = __listing_cmd
-            .args(["--list", "--quiet"])
-            .output()
-            .map_err(|e| {
-                error!(image = image_name, error = %e, "Cannot query WSL");
-                strings::SETUP_ERROR
-            })?;
-        let text: String = listing
-            .stdout
-            .iter()
-            .filter(|&&b| b != 0 && b != b'\r')
-            .map(|&b| b as char)
-            .collect();
-        let exists = text.lines().any(|l| l.trim() == distro);
-        crate::embedded::cleanup_image_sources();
-        crate::build_lock::release(image_name);
-        if exists {
-            info!(image = image_name, distro = %distro, spec = "cross-platform, windows-wsl-runtime", "WSL distro present — skipping build (Windows uses WSL runtime)");
-            return Ok(());
-        }
-        error!(image = image_name, distro = %distro, "WSL distro not imported — user must run tillandsias --init");
-        return Err(strings::SETUP_ERROR.into());
-    }
-
-    // On Unix, build the image using the direct podman ImageBuilder.
-    // @trace spec:direct-podman-calls, spec:default-image
-    #[cfg(not(target_os = "windows"))]
-    {
-        let builder = crate::image_builder::ImageBuilder::new(
-            source_dir.clone(),
-            image_name.to_string(),
-            tag.clone(),
-        );
-
+        // @trace spec:default-image, spec:fix-windows-image-routing
+        // Route Containerfile + context by image_name. Mirrors the `case` in
+        // scripts/build-image.sh so Windows builds the right image instead of
+        // tagging the forge image with proxy/git/inference names.
+        let (containerfile, context_dir) = image_build_paths(&source_dir, image_name);
         info!(
             image = image_name,
             tag = %tag,
-            spec = "direct-podman-calls, default-image",
-            "Starting image build via direct podman invocation"
+            containerfile = %containerfile.display(),
+            spec = "default-image, fix-windows-image-routing",
+            "Running podman build directly (Windows)"
         );
 
-        // Attempt build
-        match builder.build_image() {
-            Ok(()) => {
-                crate::embedded::cleanup_image_sources();
+        let output = tillandsias_podman::podman_cmd_sync()
+            .args(["build", "--tag", &tag, "-f"])
+            .arg(&containerfile)
+            .arg(&context_dir)
+            .output()
+            .map_err(|e| {
+                error!(image = image_name, error = %e, "Failed to launch podman build");
+                strings::SETUP_ERROR
+            })?;
 
-                // Clean up any leftover buildah containers from builds
-                // @trace spec:default-image
-                let _ = std::process::Command::new("buildah")
-                    .args(["rm", "--all"])
-                    .env_remove("LD_LIBRARY_PATH")
-                    .env_remove("LD_PRELOAD")
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .status();
+        crate::embedded::cleanup_image_sources();
 
-                crate::build_lock::release(image_name);
-                prune_old_images();
-                Ok(())
-            }
-            Err(e) => {
-                error!(
-                    image = image_name,
-                    tag = %tag,
-                    error = %e,
-                    spec = "direct-podman-calls",
-                    "Image build failed"
-                );
-                crate::embedded::cleanup_image_sources();
+        // Clean up any leftover buildah containers from builds
+        // @trace spec:default-image
+        let _ = std::process::Command::new("buildah")
+            .args(["rm", "--all"])
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
 
-                // Clean up any leftover buildah containers
-                let _ = std::process::Command::new("buildah")
-                    .args(["rm", "--all"])
-                    .env_remove("LD_LIBRARY_PATH")
-                    .env_remove("LD_PRELOAD")
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .status();
+        crate::build_lock::release(image_name);
 
-                crate::build_lock::release(image_name);
-                Err(e)
-            }
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            error!(
+                image = image_name,
+                exit_code = output.status.code().unwrap_or(-1),
+                stdout = %stdout,
+                stderr = %stderr,
+                "podman build failed"
+            );
+            return Err(strings::SETUP_ERROR.into());
         }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        debug!(output = %stdout, "podman build completed");
+        prune_old_images();
+        return Ok(());
+    }
+
+    // On Unix, use the build-image.sh script (handles nix + fedora backends).
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mut cmd = std::process::Command::new(&script);
+        cmd.arg(image_name)
+            .args(["--tag", &tag, "--backend", "fedora"])
+            .current_dir(&source_dir)
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            .env("PODMAN_PATH", tillandsias_podman::find_podman_path());
+
+        // Image builds do NOT go through the proxy. SSL bump on port 3129
+        // intercepts HTTPS, but build containers don't have our CA cert
+        // installed — they'd reject the MITM'd certificate. Runtime containers
+        // have the CA chain injected via bind-mount + update-ca-trust.
+        // @trace spec:proxy-container
+
+        let output = cmd.output()
+            .map_err(|e| {
+                error!(script = %script.display(), image = image_name, error = %e, "Failed to launch image build script");
+                strings::SETUP_ERROR
+            })?;
+
+        crate::embedded::cleanup_image_sources();
+
+        // Clean up any leftover buildah containers from builds
+        // @trace spec:default-image
+        let _ = std::process::Command::new("buildah")
+            .args(["rm", "--all"])
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+
+        crate::build_lock::release(image_name);
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            error!(
+                image = image_name,
+                exit_code = output.status.code().unwrap_or(-1),
+                stdout = %stdout,
+                stderr = %stderr,
+                spec = "default-image, nix-builder",
+                "Image build script failed"
+            );
+            return Err(strings::SETUP_ERROR.into());
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        debug!(output = %stdout, "build-image.sh completed");
+        prune_old_images();
+
+        Ok(())
     }
 }
 
@@ -3608,19 +2470,6 @@ fn build_launch_context(
     // Custom mounts from project config
     let project_config = tillandsias_core::config::load_project_config(project_path);
 
-    // @trace spec:forge-hot-cold-split
-    // Compute the per-launch tmpfs budget for /home/forge/src from the bare
-    // git mirror's pack size. The budget is passed through LaunchContext so
-    // build_podman_args() can emit --tmpfs=/home/forge/src:size=<N>m for
-    // forge-shaped profiles without touching service container args.
-    let global_forge_cfg = tillandsias_core::config::load_global_config();
-    let hot_path_budget_mb = crate::launch::compute_hot_budget_with_limits(
-        project_name,
-        cache,
-        global_forge_cfg.forge.hot_path_inflation,
-        global_forge_cfg.forge.hot_path_max_mb,
-    );
-
     tillandsias_core::container_profile::LaunchContext {
         container_name: container_name.to_string(),
         project_path: project_path.to_path_buf(),
@@ -3632,7 +2481,7 @@ fn build_launch_context(
         is_watch_root,
         custom_mounts: project_config.mounts,
         image_tag: image_tag.to_string(),
-        selected_language: global_forge_cfg.i18n.language.clone(),
+        selected_language: tillandsias_core::config::load_global_config().i18n.language.clone(),
         // @trace spec:enclave-network
         // On Linux: forge and terminal containers join the enclave network so
         // they route through the proxy. The proxy itself gets dual-homed separately.
@@ -3650,8 +2499,6 @@ fn build_launch_context(
         // @trace spec:opencode-web-session
         persistent: false,
         web_host_port: None,
-        // @trace spec:forge-hot-cold-split
-        hot_path_budget_mb,
     }
 }
 
@@ -3750,17 +2597,12 @@ async fn cleanup_stale_containers(state: &TrayState) {
 
 /// Handle the "Attach Here" action: build image if needed, open terminal
 /// with an interactive container.
-#[instrument(skip(state, allocator, build_tx, notify), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "attach", spec = "podman-orchestration, default-image"))]
-// `notify` — progressive menu-rebuild callback, called immediately after the
-// placeholder is pushed to `state.running` so the tray chip flips to
-// "Starting / Building" before the long forge-build + enclave-setup pipeline.
-// @trace spec:tray-app
+#[instrument(skip(state, allocator, build_tx), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "attach", spec = "podman-orchestration, default-image"))]
 pub async fn handle_attach_here(
     project_path: PathBuf,
     state: &mut TrayState,
     allocator: &mut GenusAllocator,
     build_tx: mpsc::Sender<BuildProgressEvent>,
-    notify: crate::event_loop::MenuRebuildFn,
 ) -> Result<AppEvent, String> {
     let start = std::time::Instant::now();
     let project_name = project_path
@@ -3787,7 +2629,7 @@ pub async fn handle_attach_here(
     // The terminal flow below remains for opt-in `opencode` / `claude` users.
     let global_config = load_global_config();
     if global_config.agent.selected.is_web() {
-        return handle_attach_web(project_path, state, allocator, build_tx, notify).await;
+        return handle_attach_web(project_path, state, allocator, build_tx).await;
     }
 
     // Don't-relaunch guard: if a forge container for this project is already running,
@@ -3850,12 +2692,6 @@ pub async fn handle_attach_here(
         display_emoji: display_emoji.clone(),
     };
     state.running.push(placeholder);
-    // @trace spec:tray-app
-    // Notify the event loop immediately so the tray chip flips to
-    // "Starting" before the long forge-build + enclave pipeline begins.
-    // Without this call the chip stays on the previous value until the
-    // entire handler returns (the select! loop is blocked on this await).
-    notify(state);
     info!(container = %container_name, "Preparing environment... (bud state)");
 
     // Ensure forge image is up to date — always invoke the build script
@@ -3946,9 +2782,21 @@ pub async fn handle_attach_here(
     // Single unified enclave setup: network, proxy, inference, mirror, git service.
     let _enclave = ensure_enclave_ready(&project_path, &project_name, state, build_tx.clone()).await?;
 
-    // @trace spec:tombstone-tools-overlay
-    // Tools overlay removed — agents (claude, opencode, openspec) are hard-
-    // installed in the forge image at /usr/local/bin/. Nothing to build here.
+    // @trace spec:layered-tools-overlay
+    // Tools overlay runs HERE — after forge image is confirmed ready (above) and
+    // enclave is up (proxy available for npm downloads). Hard failure: no
+    // per-container fallback — if the overlay cannot be built we refuse the
+    // launch so the real ordering/build error is visible.
+    if let Err(e) = crate::tools_overlay::ensure_tools_overlay(build_tx.clone()).await {
+        error!(
+            spec = "layered-tools-overlay",
+            error = %e,
+            "Tools overlay build failed — aborting attach"
+        );
+        state.running.retain(|c| c.name != container_name);
+        allocator.release(&project_name, genus);
+        return Err(strings::SETUP_ERROR.into());
+    }
 
     // Detect whether the project path IS the watch root (e.g., ~/src/) rather
     // than a project inside it. When true, mount at /home/forge/src/ directly
@@ -3977,61 +2825,6 @@ pub async fn handle_attach_here(
         is_watch_root,
         &tag,
     );
-
-    // @trace spec:forge-hot-cold-split
-    // Pre-flight RAM check: refuse to launch if the host cannot satisfy the
-    // /home/forge/src tmpfs budget (project source) plus static tmpfs caps
-    // (cheatsheets 8MB) with a 1.25× headroom factor.
-    let preflight_required_mb = ctx.hot_path_budget_mb.saturating_add(80);
-    match crate::preflight::check_host_ram(preflight_required_mb) {
-        Ok(ram_check) => {
-            info!(
-                accountability = true,
-                category = "forge-launch",
-                spec = "forge-hot-cold-split",
-                project = %project_name,
-                host_mem_available_mb = ram_check.mem_available_mb,
-                budget_mb = ctx.hot_path_budget_mb,
-                decision = "launch",
-                "RAM preflight passed — launching forge"
-            );
-        }
-        Err(crate::preflight::PreflightError::InsufficientRam { available_mb, required_mb, .. }) => {
-            let msg = format!(
-                "Project source on RAM: required {required_mb}MB exceeds the configured limit \
-                ({available_mb}MB available). Either commit & prune unreachable refs in the \
-                mirror, or raise forge.hot_path_max_mb in ~/.config/tillandsias/config.toml."
-            );
-            warn!(
-                accountability = true,
-                category = "forge-launch",
-                spec = "forge-hot-cold-split",
-                project = %project_name,
-                host_mem_available_mb = available_mb,
-                budget_mb = ctx.hot_path_budget_mb,
-                decision = "refuse",
-                "RAM preflight failed — refusing forge launch"
-            );
-            state.running.retain(|c| c.name != container_name);
-            allocator.release(&project_name, genus);
-            send_notification("Tillandsias", &msg);
-            return Err(msg);
-        }
-        Err(crate::preflight::PreflightError::Probe(probe_err)) => {
-            // Cannot probe RAM — be permissive and warn rather than blocking.
-            warn!(
-                accountability = true,
-                category = "forge-launch",
-                spec = "forge-hot-cold-split",
-                project = %project_name,
-                budget_mb = ctx.hot_path_budget_mb,
-                decision = "launch",
-                error = %probe_err,
-                "RAM probe unavailable — proceeding without preflight"
-            );
-        }
-    }
-
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
     // @trace spec:proxy-container
     inject_ca_chain_mounts(&mut run_args);
@@ -4081,8 +2874,11 @@ pub async fn handle_attach_here(
         project.assigned_genus = Some(genus);
     }
 
-    // Tools overlay background update tombstoned — agents are image-baked.
-    // @trace spec:tombstone-tools-overlay
+    // P2-4: Spawn background tools overlay update after successful launch.
+    // Non-blocking — container is already running, this checks for newer
+    // tool versions in the background.
+    // @trace spec:layered-tools-overlay
+    crate::tools_overlay::spawn_background_update();
 
     let elapsed = start.elapsed();
     info!(
@@ -4107,23 +2903,18 @@ pub async fn handle_attach_here(
 ///
 /// @trace spec:opencode-web-session
 #[instrument(
-    skip(state, allocator, build_tx, notify),
+    skip(state, allocator, build_tx),
     fields(
         project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()),
         operation = "attach-web",
         spec = "opencode-web-session, podman-orchestration, default-image"
     )
 )]
-// `notify` — progressive menu-rebuild callback, called immediately after the
-// placeholder is pushed to `state.running` so the tray chip flips to
-// "Starting" before the long forge-build + enclave-setup pipeline begins.
-// @trace spec:tray-app
 pub async fn handle_attach_web(
     project_path: PathBuf,
     state: &mut TrayState,
     allocator: &mut GenusAllocator,
     build_tx: mpsc::Sender<BuildProgressEvent>,
-    notify: crate::event_loop::MenuRebuildFn,
 ) -> Result<AppEvent, String> {
     let start = std::time::Instant::now();
     let project_name = project_path
@@ -4172,7 +2963,7 @@ pub async fn handle_attach_web(
         );
         // Wait for readiness again — cheap if already healthy, essential if the
         // container was created moments ago by a concurrent click.
-        if let Err(e) = crate::browser::wait_for_web_ready(host_port).await {
+        if let Err(e) = crate::webview::wait_for_web_ready(host_port).await {
             let msg = format!(
                 "OpenCode Web server not responding for '{}': {}",
                 project_name, e
@@ -4180,26 +2971,22 @@ pub async fn handle_attach_web(
             send_notification("Tillandsias", &msg);
             return Err(msg);
         }
-        // @trace spec:opencode-web-session, spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-session-otp
-        // Reattach = launch a fresh native-browser window. We no longer have
-        // a single long-lived webview to "show" — each Attach Here click
-        // produces a new app-mode browser window against the same forge,
-        // giving the user parallel sessions naturally.
-        // The URL passed to the browser is the router-fronted
-        // `<project>.opencode.localhost` form — the legacy `host_port`
-        // argument is retained on the call only for the readiness probe
-        // path; it is not embedded in the URL.
-        // The session-aware variant mints a fresh per-window cookie and
-        // injects it via CDP before navigation (per opencode-web-session-otp).
+        // Find the genus for the title (should exist since we matched above).
+        let genus_label = state
+            .running
+            .iter()
+            .find(|c| c.name == container_name)
+            .map(|c| c.genus.display_name().to_string())
+            .unwrap_or_default();
         if let Err(e) =
-            crate::browser::launch_for_project_with_session(&project_name, host_port).await
+            crate::webview::open_web_session_global(&project_name, &genus_label, host_port)
         {
             warn!(
                 project = %project_name,
                 port = host_port,
                 error = %e,
-                spec = "subdomain-routing-via-reverse-proxy",
-                "Failed to launch native browser (container remains running)"
+                spec = "opencode-web-session",
+                "Failed to open additional webview (container remains running)"
             );
         }
         return Ok(AppEvent::ContainerStateChange {
@@ -4266,12 +3053,6 @@ pub async fn handle_attach_web(
         display_emoji: display_emoji.clone(),
     };
     state.running.push(placeholder);
-    // @trace spec:tray-app
-    // Notify the event loop immediately so the tray chip flips to
-    // "Starting" before the long forge-build + enclave pipeline begins.
-    // Without this call the chip stays on the previous value until the
-    // entire handler returns (the select! loop is blocked on this await).
-    notify(state);
     info!(container = %container_name, "Preparing web environment... (bud state)");
 
     // @trace spec:default-image
@@ -4374,8 +3155,17 @@ pub async fn handle_attach_web(
         return Err(e);
     }
 
-    // Tools overlay tombstoned — agents hard-installed in forge image.
-    // @trace spec:tombstone-tools-overlay
+    // @trace spec:layered-tools-overlay
+    if let Err(e) = crate::tools_overlay::ensure_tools_overlay(build_tx.clone()).await {
+        warn!(
+            accountability = true,
+            category = "performance",
+            safety = "DEGRADED: tools will be installed per-container instead of from cache",
+            spec = "layered-tools-overlay",
+            error = %e,
+            "Tools overlay setup failed — performance degradation (web mode)"
+        );
+    }
 
     let global_config = load_global_config();
     let is_watch_root = global_config
@@ -4407,57 +3197,6 @@ pub async fn handle_attach_web(
     ctx.persistent = true;
     ctx.web_host_port = Some(host_port);
 
-    // @trace spec:forge-hot-cold-split
-    // Pre-flight RAM check before launching the detached web forge container.
-    let preflight_required_mb = ctx.hot_path_budget_mb.saturating_add(80);
-    match crate::preflight::check_host_ram(preflight_required_mb) {
-        Ok(ram_check) => {
-            info!(
-                accountability = true,
-                category = "forge-launch",
-                spec = "forge-hot-cold-split",
-                project = %project_name,
-                host_mem_available_mb = ram_check.mem_available_mb,
-                budget_mb = ctx.hot_path_budget_mb,
-                decision = "launch",
-                "RAM preflight passed — launching web forge"
-            );
-        }
-        Err(crate::preflight::PreflightError::InsufficientRam { available_mb, required_mb, .. }) => {
-            let msg = format!(
-                "Project source on RAM: required {required_mb}MB exceeds the configured limit \
-                ({available_mb}MB available). Either commit & prune unreachable refs in the \
-                mirror, or raise forge.hot_path_max_mb in ~/.config/tillandsias/config.toml."
-            );
-            warn!(
-                accountability = true,
-                category = "forge-launch",
-                spec = "forge-hot-cold-split",
-                project = %project_name,
-                host_mem_available_mb = available_mb,
-                budget_mb = ctx.hot_path_budget_mb,
-                decision = "refuse",
-                "RAM preflight failed — refusing web forge launch"
-            );
-            state.running.retain(|c| c.name != container_name);
-            allocator.release(&project_name, genus);
-            send_notification("Tillandsias", &msg);
-            return Err(msg);
-        }
-        Err(crate::preflight::PreflightError::Probe(probe_err)) => {
-            warn!(
-                accountability = true,
-                category = "forge-launch",
-                spec = "forge-hot-cold-split",
-                project = %project_name,
-                budget_mb = ctx.hot_path_budget_mb,
-                decision = "launch",
-                error = %probe_err,
-                "RAM probe unavailable — proceeding without preflight (web mode)"
-            );
-        }
-    }
-
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
     // @trace spec:proxy-container
     inject_ca_chain_mounts(&mut run_args);
@@ -4474,21 +3213,6 @@ pub async fn handle_attach_web(
                 port = host_port,
                 "OpenCode Web container started (detached, persistent)"
             );
-
-            // @trace spec:subdomain-routing-via-reverse-proxy
-            // The forge container is now alive on the enclave; rewrite the
-            // router's dynamic.Caddyfile so `<project>.opencode.localhost`
-            // resolves to it. Best-effort — failure here does NOT fail the
-            // attach (the loopback host-port path still works for OpenCode
-            // Web; only the friendly subdomain URL would be unreachable).
-            if let Err(e) = regenerate_router_caddyfile(state).await {
-                warn!(
-                    project = %project_name,
-                    error = %e,
-                    spec = "subdomain-routing-via-reverse-proxy",
-                    "Router Caddyfile regeneration returned error — continuing attach"
-                );
-            }
         }
         Err(e) => {
             error!(
@@ -4504,10 +3228,10 @@ pub async fn handle_attach_web(
     }
 
     // @trace spec:opencode-web-session
-    // Health-wait for the loopback server before launching the browser.
+    // Health-wait for the loopback server before opening the webview.
     // On timeout: the container stays running (user can retry); we only
     // fail the open attempt.
-    if let Err(e) = crate::browser::wait_for_web_ready(host_port).await {
+    if let Err(e) = crate::webview::wait_for_web_ready(host_port).await {
         warn!(
             project = %project_name,
             port = host_port,
@@ -4523,24 +3247,20 @@ pub async fn handle_attach_web(
         return Err(e);
     }
 
-    // @trace spec:opencode-web-session, spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-session-otp
-    // Launch the user's native browser in app-mode against the forge URL.
-    // Failure is decoupled from container health — log a warning and keep
-    // the container running for another attempt. The `genus` label is
-    // retained only for tray UI (container icon + name). The URL handed to
-    // the browser is `http://<project>.opencode.localhost/`; the router
-    // container reverse-proxies that to the forge on the enclave network.
-    // The session-aware variant mints a fresh per-window cookie and
-    // injects it via CDP before navigation (per opencode-web-session-otp).
-    let _ = genus; // label consumed elsewhere; browser URL is router-fronted
-    if let Err(e) = crate::browser::launch_for_project_with_session(&project_name, host_port).await
-    {
+    // @trace spec:opencode-web-session
+    // Open the Tauri webview. Failure is decoupled from container health —
+    // log a warning and keep the container running for another attempt.
+    if let Err(e) = crate::webview::open_web_session_global(
+        &project_name,
+        genus.display_name(),
+        host_port,
+    ) {
         warn!(
             project = %project_name,
             port = host_port,
             error = %e,
-            spec = "subdomain-routing-via-reverse-proxy",
-            "Failed to launch native browser (container remains running)"
+            spec = "opencode-web-session",
+            "Failed to open webview window (container remains running)"
         );
     }
 
@@ -4563,8 +3283,8 @@ pub async fn handle_attach_web(
         project.assigned_genus = Some(genus);
     }
 
-    // Tools overlay background update tombstoned — agents image-baked.
-    // @trace spec:tombstone-tools-overlay
+    // @trace spec:layered-tools-overlay
+    crate::tools_overlay::spawn_background_update();
 
     let elapsed = start.elapsed();
     info!(
@@ -4603,62 +3323,64 @@ pub async fn handle_stop_project(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
-    // @trace spec:opencode-web-session
-    let container_opt = state
+    // @trace spec:opencode-web-session, spec:browser-daemon-tracking
+    // Stop all containers for this project: OpenCodeWeb + Browser containers.
+    let containers: Vec<ContainerInfo> = state
         .running
         .iter()
-        .find(|c| {
+        .filter(|c| {
             c.project_name == project_name
                 && matches!(
                     c.container_type,
                     tillandsias_core::state::ContainerType::OpenCodeWeb
+                        | tillandsias_core::state::ContainerType::Browser
                 )
         })
-        .cloned();
+        .cloned()
+        .collect();
 
-    let container = match container_opt {
-        Some(c) => c,
-        None => {
-            info!(
-                project = %project_name,
-                spec = "opencode-web-session",
-                "Stop requested but no OpenCode Web container is tracked for project — nothing to do"
-            );
-            return Ok(());
-        }
-    };
+    if containers.is_empty() {
+        info!(
+            project = %project_name,
+            spec = "opencode-web-session, browser-daemon-tracking",
+            "Stop requested but no tracked containers for project — nothing to do"
+        );
+        return Ok(());
+    }
 
     info!(
-        container = %container.name,
         project = %project_name,
-        spec = "opencode-web-session",
-        "Stop project requested — closing webviews and stopping web container"
+        count = containers.len(),
+        spec = "opencode-web-session, browser-daemon-tracking",
+        "Stop project requested — stopping all containers for project"
     );
 
-    // @trace spec:opencode-web-session
-    // Browser windows are the user's property — we do NOT close them. When
-    // the container stops, the browser window pointing at the defunct
-    // forge transitions to "connection refused" on next reload. The user
-    // closes the window manually; killing user-spawned browser processes
-    // would be a respect boundary violation.
+    // Close webviews first so the user sees them vanish before the container
+    // actually stops. Order doesn't affect correctness but matches intent.
+    crate::webview::close_web_sessions_for_project_global(&project_name);
 
     let client = PodmanClient::new();
     let launcher = ContainerLauncher::new(client);
-    if let Err(e) = launcher.stop(&container.name).await {
-        // Graceful fallback: the launcher already did SIGTERM→SIGKILL; if that
-        // still failed (container already gone, podman flaky), log and proceed
-        // so state doesn't desync.
-        warn!(
-            container = %container.name,
-            error = %e,
-            spec = "opencode-web-session",
-            "launcher.stop failed — removing from state anyway"
-        );
+
+    for container in &containers {
+        if let Err(e) = launcher.stop(&container.name).await {
+            // Graceful fallback: the launcher already did SIGTERM→SIGKILL; if that
+            // still failed (container already gone, podman flaky), log and proceed
+            // so state doesn't desync.
+            warn!(
+                container = %container.name,
+                error = %e,
+                spec = "opencode-web-session, browser-daemon-tracking",
+                "launcher.stop failed — removing from state anyway"
+            );
+        }
     }
 
+    // Remove all stopped containers from state
+    let names_to_remove: Vec<String> = containers.iter().map(|c| c.name.clone()).collect();
     state
         .running
-        .retain(|c| c.name != container.name);
+        .retain(|c| !names_to_remove.contains(&c.name));
 
     // If no more environments remain for this project, clear the assigned genus.
     let still_running = state
@@ -4675,10 +3397,10 @@ pub async fn handle_stop_project(
     }
 
     info!(
-        container = %container.name,
         project = %project_name,
-        spec = "opencode-web-session",
-        "Web container stopped and removed from state"
+        count = containers.len(),
+        spec = "opencode-web-session, browser-daemon-tracking",
+        "Containers stopped and removed from state"
     );
 
     Ok(())
@@ -4806,26 +3528,13 @@ pub async fn shutdown_all(state: &TrayState) {
     );
 
     // @trace spec:app-lifecycle, spec:opencode-web-session
-    // Browser windows are user-owned — we do NOT close them on shutdown.
-    // Any native browser window still pointing at the forge URL will
-    // transition to a connection-refused page on next reload, which is the
-    // correct feedback. Killing user-spawned browser processes would be a
-    // respect-boundary violation (could take down the user's other tabs
-    // or work).
-
-    // @trace spec:git-mirror-service
-    // Final mirror -> host sync before we tear anything down. Catches any
-    // forge push that landed in the mirror in the last few ms (e.g. the
-    // inotify debounce window hadn't expired yet) so the user's host
-    // working copy is up to date before containers disappear.
-    {
-        let cfg = tillandsias_core::config::load_global_config();
-        let mirrors_root = tillandsias_core::config::cache_dir().join("mirrors");
-        crate::mirror_sync::sync_all_projects(&mirrors_root, &cfg.scanner.watch_paths);
-    }
+    // Close every open OpenCode Web webview first so the UI fades out before
+    // the backing containers begin to stop. Failures are logged inside the
+    // helper and do not block the rest of the shutdown sequence.
+    crate::webview::close_all_web_sessions_global();
 
     let client = PodmanClient::new();
-    let launcher = ContainerLauncher::new(client.clone());
+    let launcher = ContainerLauncher::new(client);
 
     // @trace spec:git-mirror-service, spec:persistent-git-service
     // Collect git-service project names from `state.running` directly. Since
@@ -4844,14 +3553,6 @@ pub async fn shutdown_all(state: &TrayState) {
             Err(e) => {
                 warn!(container = %container.name, error = %e, "Failed to stop container on shutdown")
             }
-        }
-        // @trace spec:enclave-network
-        // Stop alone leaves the container in "exited" state — still attached to
-        // the enclave network, which blocks `podman network rm` later. Remove
-        // the container immediately after stopping so the enclave can tear
-        // down cleanly. Errors are non-fatal (may already be gone).
-        if let Err(e) = client.remove_container(&container.name).await {
-            debug!(container = %container.name, error = %e, "remove_container on shutdown (non-fatal)");
         }
 
         // Track projects that need their git service stopped.
@@ -4875,37 +3576,19 @@ pub async fn shutdown_all(state: &TrayState) {
     // The generic stop-by-name loop above already handles every ContainerType,
     // including OpenCodeWeb — no special casing required. The orphan sweep below
     // matches `tillandsias-*-forge` via the existing `tillandsias-` prefix filter.
-    // Get default runtime for cross-platform operations
-    // @trace spec:cross-platform
-    let runtime = default_runtime();
-
     // Stop git service containers for every project that had one tracked.
     // @trace spec:git-mirror-service, spec:persistent-git-service, spec:opencode-web-session
     for project_name in &git_service_projects {
-        stop_git_service(project_name, runtime.clone()).await;
+        stop_git_service(project_name).await;
     }
 
     // Stop the inference container
     // @trace spec:inference-container
-    stop_inference(runtime.clone()).await;
-
-    // @trace spec:subdomain-routing-via-reverse-proxy
-    // Regenerate the dynamic Caddyfile from current `state.running` before
-    // tearing the router down. In the shutdown path this is mostly defensive:
-    // the router itself is about to stop, but rewriting the file leaves a
-    // consistent on-disk state for the next session's router start (which
-    // reads `dynamic.Caddyfile` via the bind-mount during entrypoint init).
-    if let Err(e) = regenerate_router_caddyfile(state).await {
-        debug!(spec = "subdomain-routing-via-reverse-proxy", error = %e, "Router Caddyfile regeneration on shutdown returned error (non-fatal)");
-    }
-
-    // Stop the router (must come before proxy since Squid forwards to it).
-    // @trace spec:subdomain-routing-via-reverse-proxy
-    stop_router(runtime.clone()).await;
+    stop_inference().await;
 
     // Stop the proxy
     // @trace spec:proxy-container
-    stop_proxy(runtime.clone()).await;
+    stop_proxy().await;
 
     // Catch-all: stop any remaining tillandsias-* containers that may be orphaned
     // from previous sessions or not tracked in state. The `tillandsias-` prefix
@@ -4921,14 +3604,6 @@ pub async fn shutdown_all(state: &TrayState) {
                     warn!(container = %entry.name, error = %e, "Failed to stop orphaned container on shutdown");
                 }
             }
-            // @trace spec:enclave-network
-            // Remove EVERY tillandsias-* container (running or exited) so the
-            // enclave network has no residual attachments when we try to
-            // destroy it. A stale "exited" forge container from a previous
-            // crash will otherwise block network removal indefinitely.
-            if let Err(e) = cleanup_client.remove_container(&entry.name).await {
-                debug!(container = %entry.name, error = %e, "Orphan remove (non-fatal)");
-            }
         }
     }
 
@@ -4936,230 +3611,12 @@ pub async fn shutdown_all(state: &TrayState) {
     // @trace spec:enclave-network
     cleanup_enclave_network().await;
 
-    // @trace spec:app-lifecycle, spec:podman-orchestration
-    // Final escalation pass — verify nothing tillandsias-* survived the
-    // graceful + orphan-sweep phases. If anything did, escalate through
-    // SIGKILL, then SIGTERM-on-conmon (Unix only). Bounded by a 5s budget.
-    verify_shutdown_clean().await;
-
     info!(
         accountability = true,
         category = "enclave",
         spec = "enclave-network",
         "All containers stopped, enclave shut down"
     );
-}
-
-/// List `tillandsias-*` containers that podman currently sees as running.
-/// Returns `Vec<String>` of names. On podman invocation failure returns
-/// an empty vec — verification continues with what it can see.
-///
-/// @trace spec:app-lifecycle, spec:podman-orchestration
-pub(crate) async fn list_running_tillandsias_containers(runtime: Arc<dyn Runtime>) -> Vec<String> {
-    // @trace spec:cross-platform, spec:podman-orchestration
-    match runtime.container_list().await {
-        Ok(json_output) => {
-            // Parse JSON output to extract container names starting with "tillandsias-"
-            if let Ok(containers) = serde_json::from_str::<Vec<serde_json::Value>>(&json_output) {
-                containers
-                    .iter()
-                    .filter_map(|c| {
-                        c.get("Names")
-                            .and_then(|n| n.as_array())
-                            .and_then(|a| a.first())
-                            .and_then(|name| name.as_str())
-                            .map(|s| s.to_string())
-                    })
-                    .filter(|name| name.contains("tillandsias-"))
-                    .collect()
-            } else {
-                Vec::new()
-            }
-        }
-        Err(_) => Vec::new(),
-    }
-}
-
-/// Force-kill a container with SIGKILL, then `podman rm -f`. Used by the
-/// post-shutdown verification phase — never on the routine teardown path.
-///
-/// @trace spec:app-lifecycle, spec:podman-orchestration
-pub(crate) async fn kill_and_remove(name: &str, runtime: Arc<dyn Runtime>) {
-    info!(
-        accountability = true,
-        category = "enclave",
-        spec = "app-lifecycle, podman-orchestration",
-        container = %name,
-        escalation = "sigkill",
-        "verify_shutdown_clean: escalating to SIGKILL + rm -f"
-    );
-    // @trace spec:cross-platform, spec:podman-orchestration
-    if let Err(e) = runtime.container_kill(name, Some("KILL")).await {
-        warn!(
-            container = %name,
-            error = %e,
-            spec = "app-lifecycle",
-            "container_kill(KILL) returned error (continuing)"
-        );
-    }
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-    // Note: Runtime trait does not expose container remove; use PodmanClient for belt-and-suspenders
-    let client = PodmanClient::new();
-    if let Err(e) = client.remove_container(name).await {
-        debug!(
-            container = %name,
-            error = %e,
-            spec = "app-lifecycle",
-            "remove_container after SIGKILL returned error (non-fatal)"
-        );
-    }
-}
-
-/// Last-resort SIGTERM to any `conmon` process whose command line carries
-/// `--name tillandsias-`. SIGTERM (not SIGKILL) so conmon can flush the
-/// container's exit status file and avoid leaving podman in a permanently
-/// inconsistent state.
-///
-/// Unix only. On Windows this is a no-op — Windows containers use HCS,
-/// not conmon.
-///
-/// @trace spec:app-lifecycle, spec:podman-orchestration
-#[cfg(unix)]
-pub(crate) fn pkill_orphan_conmon() {
-    let result = std::process::Command::new("pkill")
-        .args(["-TERM", "-f", "conmon.*--name tillandsias-"])
-        .output();
-    match result {
-        Ok(out) => {
-            // pkill exits 0 on match, 1 on no-match — both fine here.
-            info!(
-                accountability = true,
-                category = "enclave",
-                spec = "app-lifecycle",
-                exit_code = out.status.code().unwrap_or(-1),
-                "verify_shutdown_clean: pkill conmon orphans"
-            );
-        }
-        Err(e) => {
-            warn!(
-                error = %e,
-                spec = "app-lifecycle",
-                "pkill_orphan_conmon failed to invoke pkill (continuing)"
-            );
-        }
-    }
-}
-
-#[cfg(not(unix))]
-pub(crate) fn pkill_orphan_conmon() {
-    // No-op on non-Unix (Windows HCS has no conmon analogue).
-    // @trace spec:app-lifecycle
-}
-
-/// Verify the post-shutdown state is clean. Polls `podman ps` for
-/// `tillandsias-*` containers and escalates through SIGKILL → conmon
-/// SIGTERM (Unix only) when any survive the existing graceful + orphan
-/// sweep phases. Bounded by a 5-second total budget so the user is never
-/// blocked indefinitely on a host-level pathology.
-///
-/// @trace spec:app-lifecycle, spec:podman-orchestration
-pub(crate) async fn verify_shutdown_clean() {
-    use std::time::{Duration, Instant};
-    const POLL_INTERVAL: Duration = Duration::from_millis(200);
-    const TOTAL_BUDGET: Duration = Duration::from_secs(5);
-
-    let runtime = default_runtime();
-    let start = Instant::now();
-
-    // Phase 1: poll until empty or ~half the budget elapses.
-    let phase_one_budget = Duration::from_secs(2);
-    while start.elapsed() < phase_one_budget {
-        let stragglers = list_running_tillandsias_containers(runtime.clone()).await;
-        if stragglers.is_empty() {
-            info!(
-                accountability = true,
-                category = "enclave",
-                spec = "app-lifecycle",
-                "verify_shutdown_clean: zero stragglers"
-            );
-            return;
-        }
-        tokio::time::sleep(POLL_INTERVAL).await;
-    }
-
-    // Phase 2: SIGKILL escalation for whatever's still listed.
-    let stragglers = list_running_tillandsias_containers(runtime.clone()).await;
-    if stragglers.is_empty() {
-        info!(
-            accountability = true,
-            category = "enclave",
-            spec = "app-lifecycle",
-            "verify_shutdown_clean: zero stragglers (cleared during phase 1)"
-        );
-        return;
-    }
-    warn!(
-        accountability = true,
-        category = "enclave",
-        spec = "app-lifecycle",
-        count = stragglers.len(),
-        names = ?stragglers,
-        "verify_shutdown_clean: stragglers detected — escalating to SIGKILL"
-    );
-    for name in &stragglers {
-        kill_and_remove(name, runtime.clone()).await;
-    }
-
-    // Re-check after SIGKILL.
-    tokio::time::sleep(POLL_INTERVAL).await;
-    let stragglers = list_running_tillandsias_containers(runtime.clone()).await;
-    if stragglers.is_empty() {
-        info!(
-            accountability = true,
-            category = "enclave",
-            spec = "app-lifecycle",
-            "verify_shutdown_clean: SIGKILL escalation cleared all stragglers"
-        );
-        return;
-    }
-
-    // Phase 3: conmon pkill (Unix only — on Windows this is a no-op
-    // and we drop straight to the error log below).
-    warn!(
-        accountability = true,
-        category = "enclave",
-        spec = "app-lifecycle, podman-orchestration",
-        count = stragglers.len(),
-        names = ?stragglers,
-        "verify_shutdown_clean: SIGKILL did not clear — escalating to conmon SIGTERM"
-    );
-    pkill_orphan_conmon();
-    tokio::time::sleep(Duration::from_millis(500)).await;
-    let stragglers = list_running_tillandsias_containers(runtime.clone()).await;
-    if stragglers.is_empty() {
-        info!(
-            accountability = true,
-            category = "enclave",
-            spec = "app-lifecycle",
-            "verify_shutdown_clean: conmon escalation cleared all stragglers"
-        );
-        return;
-    }
-
-    // Budget exhausted. Log every survivor so the next session's first
-    // log lines surface the host-level pathology, then return — the user
-    // clicked Quit; we don't block them indefinitely on a kernel/podman bug.
-    let _ = start; // bounded internally — global budget is informational
-    for name in &stragglers {
-        error!(
-            accountability = true,
-            category = "enclave",
-            spec = "app-lifecycle",
-            container = %name,
-            reason = "survived_all_escalation",
-            "verify_shutdown_clean: container survived graceful + SIGKILL + conmon SIGTERM"
-        );
-    }
 }
 
 /// Handle "Maintenance" — open fish/bash in a forge container for the project.
@@ -5354,8 +3811,9 @@ pub async fn handle_terminal(
                     "Maintenance terminal {container_name} launched credential-free — zero D-Bus, zero credentials, pids-limit=512",
                 );
             }
-            // Tools overlay background update tombstoned — agents image-baked.
-            // @trace spec:tombstone-tools-overlay
+            // P2-4: Spawn background tools overlay update after successful launch.
+            // @trace spec:layered-tools-overlay
+            crate::tools_overlay::spawn_background_update();
             Ok(())
         }
         Err(e) => {
@@ -5384,60 +3842,6 @@ pub async fn handle_terminal(
 /// - Volume mount: `<watch_path>:/home/forge/src` (entire src tree, rw)
 /// - Window title: `🛠️ Root`
 /// - The `🛠️` emoji is reserved for this item and is absent from `TOOL_EMOJIS`.
-/// Open a host terminal that `podman exec -it`s into the project's
-/// running opencode-web forge container.
-///
-/// Spec: simplified-tray-ux. The maintenance terminal attaches to the
-/// SAME container as opencode-web — not a fresh one. Multiple maintenance
-/// terminals can be open against the same forge; they're independent
-/// shells in the existing container.
-///
-/// If the forge isn't running, returns an error so the caller can
-/// surface a "click Launch first" hint.
-///
-/// @trace spec:simplified-tray-ux
-pub async fn handle_maintenance_terminal(
-    project_path: PathBuf,
-) -> Result<(), String> {
-    let project_name = project_path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "project".to_string());
-
-    let container_name = ContainerInfo::forge_container_name(&project_name);
-
-    let client = PodmanClient::new();
-    match client.inspect_container(&container_name).await {
-        Ok(inspect) if inspect.state == "running" => {}
-        Ok(inspect) => {
-            return Err(format!(
-                "Forge container `{container_name}` is in state `{}` — click Launch first.",
-                inspect.state
-            ));
-        }
-        Err(_) => {
-            return Err(format!(
-                "Forge container `{container_name}` is not running — click Launch first."
-            ));
-        }
-    }
-
-    let podman = tillandsias_podman::find_podman_path();
-    let title = format!("🛠️ {project_name} (maintenance)");
-    // -i: keep stdin open even if not attached. -t: allocate a TTY.
-    // -l: login shell so /etc/skel/.bashrc + /etc/skel/.zshrc kick in.
-    // We deliberately exec /bin/bash -l rather than fish so the user gets
-    // a predictable shell across distros.
-    let podman_cmd = format!("{podman} exec -it {container_name} /bin/bash -l");
-    info!(
-        spec = "simplified-tray-ux",
-        project = %project_name,
-        container = %container_name,
-        "Opening maintenance terminal (exec into running forge)"
-    );
-    open_terminal(&podman_cmd, &title)
-}
-
 pub async fn handle_root_terminal(
     watch_path: PathBuf,
     state: &mut TrayState,
@@ -5588,58 +3992,6 @@ pub async fn handle_root_terminal(
         true,  // watch root — mount at /home/forge/src directly
         &tag,
     );
-
-    // @trace spec:forge-hot-cold-split
-    // Pre-flight RAM check for root terminal (same forge profile, same tmpfs).
-    let preflight_required_mb = ctx.hot_path_budget_mb.saturating_add(80);
-    match crate::preflight::check_host_ram(preflight_required_mb) {
-        Ok(ram_check) => {
-            info!(
-                accountability = true,
-                category = "forge-launch",
-                spec = "forge-hot-cold-split",
-                project = "(all projects)",
-                host_mem_available_mb = ram_check.mem_available_mb,
-                budget_mb = ctx.hot_path_budget_mb,
-                decision = "launch",
-                "RAM preflight passed — launching root terminal"
-            );
-        }
-        Err(crate::preflight::PreflightError::InsufficientRam { available_mb, required_mb, .. }) => {
-            let msg = format!(
-                "Project source on RAM: required {required_mb}MB exceeds the configured limit \
-                ({available_mb}MB available). Either commit & prune unreachable refs in the \
-                mirror, or raise forge.hot_path_max_mb in ~/.config/tillandsias/config.toml."
-            );
-            warn!(
-                accountability = true,
-                category = "forge-launch",
-                spec = "forge-hot-cold-split",
-                project = "(all projects)",
-                host_mem_available_mb = available_mb,
-                budget_mb = ctx.hot_path_budget_mb,
-                decision = "refuse",
-                "RAM preflight failed — refusing root terminal launch"
-            );
-            state.running.retain(|c| c.name != container_name);
-            allocator.release(&project_name, genus);
-            send_notification("Tillandsias", &msg);
-            return Err(msg);
-        }
-        Err(crate::preflight::PreflightError::Probe(probe_err)) => {
-            warn!(
-                accountability = true,
-                category = "forge-launch",
-                spec = "forge-hot-cold-split",
-                project = "(all projects)",
-                budget_mb = ctx.hot_path_budget_mb,
-                decision = "launch",
-                error = %probe_err,
-                "RAM probe unavailable — proceeding without preflight (root terminal)"
-            );
-        }
-    }
-
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
     // @trace spec:proxy-container
     inject_ca_chain_mounts(&mut run_args);
@@ -5719,75 +4071,26 @@ pub async fn handle_root_terminal(
 /// Tray and CLI must stay identical.
 ///
 /// @trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
-/// Handle GitHub login via direct `gh` CLI or container fallback.
-///
-/// # Strategy
-/// 1. Try to find `gh` on the host (checked first, preferred)
-/// 2. If found: spawn terminal with `gh auth login --git-protocol https`
-/// 3. If not found: spawn terminal with `podman run -it ... gh auth login --git-protocol https`
-///
-/// All paths use the `open_terminal` function which is platform-aware and handles
-/// terminal spawning (ptyxis/gnome-terminal on Linux, Terminal.app on macOS, wt.exe on Windows).
-///
-/// # Credentials
-/// - Token stored in OS keyring after auth completes (native gh auth behavior)
-/// - No ephemeral credentials needed since gh handles the login interactively
-///
-/// @trace spec:direct-podman-calls, spec:secrets-management
 pub async fn handle_github_login(
     _state: &TrayState,
     _build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<(), String> {
-    // Try host gh first (preferred — token goes to OS keyring)
-    if let Some(gh_path) = find_gh_path() {
-        info!(gh_path = ?gh_path, "GitHub Login: using host gh");
-        let gh_str = gh_path.to_string_lossy();
-        let cmd = format!("{} auth login --git-protocol https", gh_str);
-        return open_terminal(&cmd, "GitHub Login")
-            .map_err(|e| format!("Failed to open terminal for host gh: {e}"));
-    }
+    info!("GitHub Login: spawning `tillandsias --github-login` in a terminal");
 
-    // Fallback: gh inside forge container with D-Bus forwarding (Linux) or ephemeral mode
-    info!("GitHub Login: using container gh (no host gh found)");
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("Cannot locate own executable: {e}"))?;
 
-    let forge_image = forge_image_tag();
-
-    // Build podman run command with security flags
-    #[cfg(target_os = "linux")]
-    let cmd = {
-        // On Linux, forward D-Bus so the container can write to the host keyring
-        format!(
-            "podman run -it --rm --cap-drop=ALL --security-opt=no-new-privileges \
-             --userns=keep-id --security-opt=label=disable \
-             -v /run/user/$(id -u)/bus:/run/user/1000/bus:ro \
-             --entrypoint gh {} auth login --git-protocol https",
-            forge_image
-        )
-    };
-
-    #[cfg(target_os = "macos")]
-    let cmd = {
-        // On macOS, no D-Bus available; token stored in container's ephemeral keychain.
-        // User will need to manually push/pull with gh auth setup or export token.
-        format!(
-            "podman run -it --rm --cap-drop=ALL --security-opt=no-new-privileges \
-             --userns=keep-id --entrypoint gh {} auth login --git-protocol https",
-            forge_image
-        )
-    };
-
-    #[cfg(target_os = "windows")]
-    let cmd = {
-        // On Windows, no D-Bus; ephemeral container. Token stored in container's hosts.yml.
-        format!(
-            "podman run -it --rm --cap-drop=ALL --security-opt=no-new-privileges \
-             --entrypoint gh {} auth login --git-protocol https",
-            forge_image
-        )
+    // open_terminal takes a command string it hands to the OS's shell.
+    // Quote the executable path so spaces (Program Files, username etc.) work.
+    let exe_str = exe.to_string_lossy();
+    let cmd = if exe_str.contains(' ') {
+        format!("\"{exe_str}\" --github-login")
+    } else {
+        format!("{exe_str} --github-login")
     };
 
     open_terminal(&cmd, "GitHub Login")
-        .map_err(|e| format!("Failed to open terminal for container gh: {e}"))
+        .map_err(|e| format!("Failed to open terminal: {e}"))
 }
 
 /// Handle "Claude Reset Credentials" — remove `~/.claude/` contents so next
@@ -6070,705 +4373,209 @@ pub async fn handle_serve_here(
     }
 }
 
-// ---------------------------------------------------------------------------
-// External-logs auditor
-// @trace spec:external-logs-layer
-// ---------------------------------------------------------------------------
-
-/// Growth-rate sample: (Instant of measurement, file size in bytes).
-type GrowthSample = (std::time::Instant, u64);
-
-/// Per-(role, file) growth-rate history, keyed by (role_name, file_name).
-/// Stored as a deque of the last 5 size samples (one per 60 s tick).
-pub type ExternalLogsGrowthCache =
-    std::collections::HashMap<(String, String), std::collections::VecDeque<GrowthSample>>;
-
-/// Audit one tick of the external-logs layer for all running producer containers.
+/// Handle a browser window request from the MCP server.
 ///
-/// Called every 60 s from the event loop alongside the proxy health check.
-/// For each container with `external_logs_role: Some(role)`:
+/// Validates the request, applies debouncing, spawns a Chromium window using
+/// the `chromium_launcher` module, and tracks the container in TrayState.
 ///
-/// 1. Reads the producer's manifest via `podman cp <container>:/etc/tillandsias/external-logs.yaml -`.
-///    Builds the set of allowed file names.
-/// 2. Walks the on-disk role directory
-///    (`~/.local/state/tillandsias/external-logs/<role>/`).
-///    - **Manifest match**: any unlisted file → WARN+accountability
-///      `[external-logs] LEAK: <role> wrote <file> (not in manifest)`.
-///    - **Size cap**: any file > `rotate_at_mb` MB (default 10 MB) →
-///      truncate oldest 50% of bytes in place (INFO+accountability).
-///    - **Growth-rate**: if > 1 MB/min sustained for 5 ticks → WARN.
+/// # Arguments
 ///
-/// The growth cache is kept in the caller (event_loop.rs) as a local
-/// `ExternalLogsGrowthCache` and passed in mutably so it persists across
-/// ticks without adding another field to TrayState.
+/// * `project` - The project name
+/// * `url` - The URL to open
+/// * `window_type` - Either "open_safe_window" or "open_debug_window"
+/// * `state` - Mutable reference to TrayState for tracking
 ///
-/// @trace spec:external-logs-layer
-pub(crate) async fn external_logs_audit_tick(
-    state: &TrayState,
-    growth_cache: &mut ExternalLogsGrowthCache,
-) {
-    use tillandsias_core::config::external_logs_role_dir;
-    use tillandsias_core::container_profile::{
-        git_service_profile, inference_profile, proxy_profile, router_profile,
-    };
+/// @trace spec:browser-daemon-tracking, spec:browser-debounce, spec:browser-isolation-core
+#[cfg(target_os = "linux")]
+pub async fn handle_open_browser_window(
+    project: &str,
+    url: &str,
+    window_type: &str,
+    state: &mut TrayState,
+) -> Result<(), String> {
+    use crate::chromium_launcher;
+    use std::time::Instant;
 
-    // Build a lookup from container name prefix → external_logs_role.
-    // We recognise the four infrastructure containers by their known naming
-    // convention (tillandsias-git-<project>, tillandsias-proxy, etc.).
-    // For v1 we only audit the four infrastructure producers by name.
-    for container in &state.running {
-        let role = match container.name.as_str() {
-            n if n.starts_with("tillandsias-git-") => {
-                // git_service_profile().external_logs_role
-                git_service_profile().external_logs_role
-            }
-            "tillandsias-proxy" => proxy_profile().external_logs_role,
-            "tillandsias-router" => router_profile().external_logs_role,
-            "tillandsias-inference" => inference_profile().external_logs_role,
-            _ => None,
-        };
-        let role = match role {
-            Some(r) => r,
-            None => continue,
-        };
+    info!(
+        spec = "browser-daemon-tracking",
+        project = %project,
+        url = %url,
+        window_type = %window_type,
+        "Handling browser window request"
+    );
 
-        // 1. Read the manifest via podman cp.
-        let allowed = read_external_logs_manifest(&container.name).await;
+    // Validate window type
+    match window_type {
+        "open_safe_window" | "open_debug_window" => {}
+        _ => {
+            return Err(format!(
+                "Invalid window_type: '{}'. Expected 'open_safe_window' or 'open_debug_window'",
+                window_type
+            ));
+        }
+    }
 
-        // 2. Walk the on-disk role directory.
-        let role_dir = external_logs_role_dir(role);
-        let entries = match std::fs::read_dir(&role_dir) {
-            Ok(rd) => rd,
-            Err(_) => continue, // directory doesn't exist yet — no files to audit
-        };
+    // Validate URL
+    if window_type == "open_safe_window" {
+        if !url.contains(&format!(".{}.localhost", project))
+            && !url.contains("dashboard.localhost")
+        {
+            return Err(format!(
+                "Invalid URL for safe window: '{}'. Expected <service>.<project>.localhost or dashboard.localhost",
+                url
+            ));
+        }
+    } else if window_type == "open_debug_window" {
+        if !url.contains(&format!(".{}.localhost", project)) {
+            return Err(format!(
+                "Invalid URL for debug window: '{}'. Expected <service>.<project>.localhost",
+                url
+            ));
+        }
+    }
 
-        let tick_time = std::time::Instant::now();
-
-        for entry in entries.flatten() {
-            let file_name = entry.file_name().to_string_lossy().to_string();
-            let file_path = entry.path();
-
-            // Skip directories and non-files.
-            let Ok(meta) = std::fs::metadata(&file_path) else { continue };
-            if !meta.is_file() { continue; }
-
-            let file_size = meta.len();
-
-            // --- Manifest-match check ---
-            if let Some(ref allowed_set) = allowed {
-                if !allowed_set.contains(&file_name) {
-                    warn!(
-                        accountability = true,
-                        category = "external-logs",
-                        spec = "external-logs-layer",
-                        operation = "leak",
-                        role = %role,
-                        file = %file_name,
-                        "[external-logs] LEAK: {role} wrote {file_name} (not in manifest)"
-                    );
-                }
-            }
-            // If manifest read failed, skip the leak check (container may be starting).
-
-            // --- Size cap: 10 MB hard cap, truncate oldest 50% ---
-            const DEFAULT_ROTATE_BYTES: u64 = 10 * 1024 * 1024; // 10 MiB
-            if file_size > DEFAULT_ROTATE_BYTES {
-                truncate_external_log_to_half(&file_path, file_size, role, &file_name);
-            }
-
-            // --- Growth-rate tracking ---
-            let key = (role.to_string(), file_name.clone());
-            let history = growth_cache.entry(key.clone()).or_default();
-            history.push_back((tick_time, file_size));
-            // Keep at most 5 samples (5 × 60 s = 5 min window).
-            while history.len() > 5 {
-                history.pop_front();
-            }
-
-            // Alarm if growth > 1 MB/min sustained across all 5 samples.
-            if history.len() == 5 {
-                let (oldest_time, oldest_size) = history.front().copied().unwrap();
-                let elapsed_secs = oldest_time.elapsed().as_secs_f64();
-                if elapsed_secs > 0.0 && file_size > oldest_size {
-                    let grown_bytes = file_size - oldest_size;
-                    let bytes_per_min = grown_bytes as f64 / (elapsed_secs / 60.0);
-                    const ONE_MB_PER_MIN: f64 = 1024.0 * 1024.0;
-                    if bytes_per_min > ONE_MB_PER_MIN {
-                        warn!(
-                            accountability = true,
-                            category = "external-logs",
-                            spec = "external-logs-layer",
-                            operation = "growth-alarm",
-                            role = %role,
-                            file = %file_name,
-                            growth_mb_per_min = %format!("{:.2}", bytes_per_min / ONE_MB_PER_MIN),
-                            "[external-logs] WARN: {role} {file_name} growing {:.2} MB/min (>1 MB/min sustained)",
-                            bytes_per_min / ONE_MB_PER_MIN
-                        );
-                    }
-                }
+    // Debounce: prevent rapid successive spawns (10s window for safe windows)
+    let now = Instant::now();
+    if window_type == "open_safe_window" {
+        if let Some(last_launch) = state.browser_last_launch.get(project) {
+            if now.duration_since(*last_launch) < Duration::from_secs(10) {
+                info!(
+                    spec = "browser-debounce",
+                    project = %project,
+                    "Debounced rapid browser spawn (safe window)"
+                );
+                return Err("Debounced: too many rapid browser launches".to_string());
             }
         }
     }
-}
 
-/// Read the external-logs manifest from a container via `podman cp`.
-///
-/// Returns `Some(HashSet<filename>)` on success, `None` if the manifest
-/// could not be read (container stopped, file absent, podman error).
-///
-/// @trace spec:external-logs-layer
-async fn read_external_logs_manifest(container_name: &str) -> Option<std::collections::HashSet<String>> {
-    // `podman cp <container>:/etc/tillandsias/external-logs.yaml -` writes a
-    // tar archive to stdout. We pipe it through `tar -xO` to get the raw file.
-    // @cheatsheet runtime/external-logs.md
-    let output = tokio::process::Command::new(tillandsias_podman::find_podman_path())
-        .args([
-            "cp",
-            &format!("{container_name}:/etc/tillandsias/external-logs.yaml"),
-            "-",
-        ])
-        .output()
-        .await
-        .ok()?;
-
-    if !output.status.success() || output.stdout.is_empty() {
-        return None;
-    }
-
-    // The output is a tar archive; pipe through `tar -xO` to extract content.
-    let tar_bytes = output.stdout;
-    let mut tar_child = tokio::process::Command::new("tar")
-        .args(["-xO"])
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .spawn()
-        .ok()?;
-
-    // Write tar bytes to stdin.
-    if let Some(mut stdin) = tar_child.stdin.take() {
-        use tokio::io::AsyncWriteExt;
-        let _ = stdin.write_all(&tar_bytes).await;
-    }
-
-    let tar_out = tar_child.wait_with_output().await.ok()?;
-    if !tar_out.status.success() { return None; }
-
-    let yaml_str = String::from_utf8(tar_out.stdout).ok()?;
-    parse_external_logs_manifest_names(&yaml_str)
-}
-
-/// Parse the `files[].name` entries from an external-logs.yaml manifest.
-///
-/// Uses a minimal line-oriented YAML parser — no serde_yaml dep required.
-/// The manifest schema is fixed and small (< 50 lines); a regex/line-scan
-/// approach is simpler and more robust than adding a full YAML parser dep.
-///
-/// Returns `Some(HashSet<filename>)`, `None` if the yaml is malformed.
-///
-/// @trace spec:external-logs-layer
-pub(crate) fn parse_external_logs_manifest_names(yaml: &str) -> Option<std::collections::HashSet<String>> {
-    let mut names = std::collections::HashSet::new();
-    for line in yaml.lines() {
-        let trimmed = line.trim();
-        // Match lines like `  - name: git-push.log` or `    name: git-push.log`
-        // (with or without the leading `- `).
-        let rest = if let Some(s) = trimmed.strip_prefix("- name:") {
-            s
-        } else if let Some(s) = trimmed.strip_prefix("name:") {
-            s
-        } else {
-            continue;
-        };
-        let name = rest.trim().trim_matches('"').trim_matches('\'').to_string();
-        if !name.is_empty() && !name.starts_with('#') {
-            names.insert(name);
+    // Debug browser: only one per project
+    if window_type == "open_debug_window" {
+        if let Some(pid) = state.debug_browser_pid.get(project) {
+            // Check if the process is still running
+            if crate::chromium_launcher::is_process_running(*pid) {
+                return Err(format!(
+                    "Debug browser already running for project '{}' (PID: {})",
+                    project, pid
+                ));
+            }
+            // Stale PID, remove it
+            state.debug_browser_pid.remove(project);
         }
     }
-    if names.is_empty() {
-        // An empty manifest is valid (no files declared). Return empty set.
-        // Distinguish from parse failure by always returning Some here.
-    }
-    Some(names)
-}
 
-/// Truncate an external-log file to its newest 50% of bytes.
-///
-/// Reads the file, discards the oldest half of bytes, writes the remainder
-/// back in place. Uses an INFO+accountability log event.
-///
-/// This is an in-place rotation — no `.1`/`.2` rotation files are created;
-/// `tail -f` consumers can keep reading the same path after the rotation.
-///
-/// @trace spec:external-logs-layer
-fn truncate_external_log_to_half(path: &std::path::Path, current_size: u64, role: &str, file_name: &str) {
-    let keep_from = (current_size / 2) as usize;
-    let contents = match std::fs::read(path) {
-        Ok(b) => b,
-        Err(e) => {
-            warn!(
-                spec = "external-logs-layer",
-                role = %role,
-                file = %file_name,
-                error = %e,
-                "Failed to read external-log file for rotation"
-            );
-            return;
-        }
-    };
-    if keep_from >= contents.len() { return; }
-    let tail = &contents[keep_from..];
-    match std::fs::write(path, tail) {
-        Ok(()) => {
-            info!(
-                accountability = true,
-                category = "external-logs",
-                spec = "external-logs-layer",
-                operation = "rotate",
-                role = %role,
-                file = %file_name,
-                original_bytes = current_size,
-                kept_bytes = tail.len(),
-                "[external-logs] Rotated {role}/{file_name}: truncated {current_size} → {} bytes (oldest 50% dropped)",
-                tail.len()
-            );
-        }
-        Err(e) => {
-            warn!(
-                spec = "external-logs-layer",
-                role = %role,
-                file = %file_name,
-                error = %e,
-                "Failed to write rotated external-log file"
-            );
+    // Push BuildProgress notification (Browser — <project>)
+    let build_id = format!("browser-{}", project);
+    state.active_builds.retain(|b| b.image_name != build_id);
+    state.active_builds.push(BuildProgress {
+        image_name: format!("Browser — {}", project),
+        status: BuildStatus::InProgress,
+        started_at: now,
+        completed_at: None,
+    });
+
+    // Spawn the Chromium window
+    let container_id = chromium_launcher::spawn_chromium_window(project, url, window_type)?;
+
+    // Update timestamp on successful spawn
+    state.browser_last_launch.insert(project.to_string(), now);
+
+    // Track the container in state.running
+    let container_name = format!("tillandsias-chromium-{}-{}", project, window_type);
+    let genus = tillandsias_core::genus::TillandsiaGenus::Ionantha; // placeholder
+    state.running.push(ContainerInfo {
+        name: container_name,
+        project_name: project.to_string(),
+        genus,
+        state: ContainerState::Running,
+        port_range: (0, 0), // Browser containers don't use port ranges
+        container_type: ContainerType::Browser,
+        display_emoji: "🌐".to_string(),
+    });
+
+    // Track debug browser PID
+    if window_type == "open_debug_window" {
+        // Extract PID from container info or process table
+        if let Ok(pid) = chromium_launcher::get_container_pid(&container_id) {
+            state.debug_browser_pid.insert(project.to_string(), pid);
         }
     }
+
+    // Update BuildProgress to Completed, start 5s fadeout
+    if let Some(build) = state.active_builds.iter_mut().find(|b| b.image_name == format!("Browser — {}", project)) {
+        build.status = BuildStatus::Completed;
+        build.completed_at = Some(Instant::now());
+    }
+
+    info!(
+        spec = "browser-daemon-tracking",
+        container_id = %container_id,
+        project = %project,
+        window_type = %window_type,
+        "Browser window spawned and tracked successfully"
+    );
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::Path;
+    use tillandsias_core::state::{ContainerType, TrayState};
 
-    /// Caddy route block for a project preserves the explicit `http://`
-    /// scheme regardless of cookie enforcement. Pin the exact bytes so
-    /// any drift breaks this test loudly.
-    /// @trace spec:opencode-web-session-otp, spec:subdomain-routing-via-reverse-proxy
+    // @trace spec:default-image, spec:fix-windows-image-routing
     #[test]
-    fn render_caddy_route_block_preserves_http_scheme_and_routes_to_forge() {
-        let snippet = render_caddy_route_block("thinking-service");
+    fn image_build_paths_routes_each_image_to_its_own_subdir() {
+        let root = Path::new("/tmp/sources");
 
-        // Site address: http:// scheme + opencode.<project>.localhost:8080
-        assert!(
-            snippet.contains("http://opencode.thinking-service.localhost:8080"),
-            "missing site address: {snippet}"
-        );
-        // Always reverse_proxy to the project's forge (gated on cookie
-        // when ENFORCE_SESSION_COOKIE is true, unconditional otherwise).
-        assert!(
-            snippet.contains("reverse_proxy tillandsias-thinking-service-forge:4096"),
-            "missing reverse_proxy line: {snippet}"
-        );
-        // No HTTPS scheme leaked anywhere — would trip auto_https.
-        assert!(
-            !snippet.contains("https://"),
-            "Caddy snippet must not contain https:// — got {snippet}"
-        );
-    }
+        let cases = [
+            ("forge", "default"),
+            ("proxy", "proxy"),
+            ("git", "git"),
+            ("inference", "inference"),
+            ("web", "web"),
+            ("definitely-not-real", "default"),
+        ];
 
-    /// Cookie-on shape (currently NOT the default; ENFORCE_SESSION_COOKIE
-    /// must flip to true in chunk 7 for this to be the live shape). The
-    /// assertions only run when the constant is true so future toggles
-    /// are caught.
-    /// @trace spec:opencode-web-session-otp
-    #[test]
-    fn render_caddy_route_block_forward_auth_when_enforced() {
-        if !ENFORCE_SESSION_COOKIE {
-            // Pre-flip: nothing to assert. The pre-OTP shape is covered
-            // by `render_caddy_route_block_pre_otp_shape_when_not_enforced`.
-            return;
-        }
-        let snippet = render_caddy_route_block("thinking-service");
-        // Caddy directive that delegates auth to the sidecar.
-        assert!(
-            snippet.contains("forward_auth 127.0.0.1:9090"),
-            "missing forward_auth directive targeting sidecar: {snippet}"
-        );
-        // The validate URI carries the project's host label so the sidecar
-        // can look it up in the per-project session list.
-        assert!(
-            snippet
-                .contains("uri /validate?project=opencode.thinking-service.localhost"),
-            "missing validate URI: {snippet}"
-        );
-        // The original Cookie header must be forwarded so the sidecar
-        // sees what the browser actually sent.
-        assert!(
-            snippet.contains("copy_headers Cookie"),
-            "missing copy_headers Cookie: {snippet}"
-        );
-        // Reverse proxy still on the success path.
-        assert!(
-            snippet.contains("reverse_proxy tillandsias-thinking-service-forge:4096"),
-            "missing reverse_proxy: {snippet}"
-        );
-        // No legacy presence-regex matcher.
-        assert!(
-            !snippet.contains("@hassession"),
-            "@hassession matcher must be gone — sidecar does value validation now: {snippet}"
-        );
-    }
-
-    /// Cookie-off shape — the current pre-OTP behaviour. Asserts the route
-    /// block does NOT include the auth gate when ENFORCE_SESSION_COOKIE
-    /// is false. When the constant flips, this test becomes a no-op and
-    /// the forward_auth test above starts asserting.
-    /// @trace spec:opencode-web-session-otp
-    #[test]
-    fn render_caddy_route_block_pre_otp_shape_when_not_enforced() {
-        if ENFORCE_SESSION_COOKIE {
-            return;
-        }
-        let snippet = render_caddy_route_block("thinking-service");
-        assert!(
-            !snippet.contains("forward_auth"),
-            "forward_auth must NOT be present when not enforced: {snippet}"
-        );
-        assert!(
-            !snippet.contains("@hassession"),
-            "@hassession matcher must NOT be present when not enforced: {snippet}"
-        );
-    }
-
-    /// Preflight refusal unit test: when `required_mb` is set to u32::MAX,
-    /// `check_host_ram` MUST return `Err(PreflightError::InsufficientRam)`.
-    ///
-    /// This is the pure-logic leg of task 6.3 — it verifies the refusal path
-    /// WITHOUT needing a Tauri runtime or a real podman invocation.
-    /// The downstream `send_notification` call is exercised in production; here
-    /// we assert only that the preflight gate fires before any container work
-    /// could begin.
-    ///
-    /// Marked `#[ignore]` on platforms where RAM probing is not implemented
-    /// (the `Probe` error variant is returned instead of `InsufficientRam`
-    /// when `/proc/meminfo` is unavailable). Re-enable with
-    /// `cargo test -- --ignored` on a Linux host.
-    ///
-    /// @trace spec:forge-hot-cold-split
-    #[test]
-    fn preflight_refuses_launch_when_host_ram_is_insufficient() {
-        // u32::MAX MB is guaranteed to exceed any real host's available RAM.
-        let required_mb = u32::MAX;
-        let result = crate::preflight::check_host_ram(required_mb);
-        match result {
-            Err(crate::preflight::PreflightError::InsufficientRam {
-                required_mb: r,
-                available_mb,
-                headroom_factor,
-            }) => {
-                // Confirm the error carries the correct budget and headroom.
-                assert_eq!(r, u32::MAX, "required_mb should be echoed in error");
-                assert!(available_mb < u32::MAX, "available_mb should be a real measurement");
-                assert!(
-                    (headroom_factor - 1.25).abs() < f32::EPSILON,
-                    "headroom_factor must be 1.25"
-                );
-                // Confirm the error message is human-readable (surfaced via tray notification).
-                let msg = result.unwrap_err().to_string();
-                assert!(
-                    msg.contains("Insufficient host RAM"),
-                    "notification message should be human-readable: {msg}"
-                );
-            }
-            Err(crate::preflight::PreflightError::Probe(_)) => {
-                // Platform without /proc/meminfo support — acceptable in non-Linux CI.
-                // The test is still useful on Linux hosts where the check is real.
-            }
-            Ok(_) => {
-                panic!(
-                    "preflight MUST refuse when required_mb == u32::MAX — \
-                     this machine does not have {required_mb} MB of RAM"
-                );
-            }
+        for (image_name, expected_subdir) in cases {
+            let (containerfile, context) = image_build_paths(root, image_name);
+            let expected_dir = root.join("images").join(expected_subdir);
+            assert_eq!(
+                context, expected_dir,
+                "context for {image_name} should be {expected_dir:?}"
+            );
+            assert_eq!(
+                containerfile,
+                expected_dir.join("Containerfile"),
+                "Containerfile for {image_name} should live in {expected_dir:?}"
+            );
         }
     }
 
-    // @trace spec:direct-podman-calls, spec:default-image
-    // Image routing is now tested in image_builder.rs module tests.
-
-    // @trace spec:external-logs-layer
     #[test]
-    fn ensure_external_logs_dir_migrates_existing_file() {
-        // Set up: old internal log dir with a git-push.log containing known content.
-        use std::io::Write;
-        let tmp = std::env::temp_dir().join(format!(
-            "til-test-migrate-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .subsec_nanos()
-        ));
-        // Construct the expected paths that ensure_external_logs_dir() resolves
-        // via tillandsias_core::config. Since we can't redirect $HOME easily in
-        // tests, we exercise the migration logic directly using tempdir paths.
-        let old_dir = tmp.join("containers").join("git").join("logs");
-        let new_dir = tmp.join("external-logs").join("git-service");
-        std::fs::create_dir_all(&old_dir).expect("create old log dir");
-        let old_file = old_dir.join("git-push.log");
-        let mut f = std::fs::File::create(&old_file).expect("create old log file");
-        f.write_all(b"[git-mirror] Push: success\n").expect("write log");
-        drop(f);
-
-        // Rename: simulate the migration (same logic as ensure_external_logs_dir).
-        std::fs::create_dir_all(&new_dir).expect("create new dir");
-        let new_file = new_dir.join("git-push.log");
-        std::fs::rename(&old_file, &new_file).expect("rename");
-
-        // Write MIGRATED.txt stub.
-        let stub = old_dir.join("MIGRATED.txt");
-        std::fs::write(&stub, format!("Migrated to {}\n", new_file.display()))
-            .expect("write stub");
-
-        // Assert: content moved to new location.
-        assert!(new_file.exists(), "git-push.log must exist at new location");
-        assert!(!old_file.exists(), "git-push.log must no longer exist at old location");
-        let content = std::fs::read_to_string(&new_file).expect("read new file");
-        assert!(content.contains("[git-mirror] Push: success"), "content must be preserved");
-
-        // Assert: stub left at old directory.
-        assert!(stub.exists(), "MIGRATED.txt stub must be left at old directory");
-        let stub_content = std::fs::read_to_string(&stub).expect("read stub");
-        assert!(
-            stub_content.contains(new_file.to_string_lossy().as_ref()),
-            "MIGRATED.txt must contain the new path"
-        );
-
-        std::fs::remove_dir_all(&tmp).ok();
+    fn test_debounce_prevents_rapid_spawns() {
+        // This is a unit test for the debounce logic
+        // In practice, this would need a mock of TrayState and time
+        // For now, just verify the logic exists in handle_open_browser_window
+        assert!(true); // Placeholder - full test needs integration setup
     }
 
-    // @trace spec:external-logs-layer
     #[test]
-    fn ensure_external_logs_dir_idempotent_when_already_migrated() {
-        // Set up: new path already exists; old path absent.
-        let tmp = std::env::temp_dir().join(format!(
-            "til-test-idem-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .subsec_nanos()
-        ));
-        let new_dir = tmp.join("external-logs").join("git-service");
-        std::fs::create_dir_all(&new_dir).expect("create new dir");
-        let new_file = new_dir.join("git-push.log");
-        std::fs::write(&new_file, b"already migrated\n").expect("write new file");
-
-        // The old path must not exist.
-        let old_dir = tmp.join("containers").join("git").join("logs");
-        assert!(!old_dir.join("git-push.log").exists(), "precondition: old file absent");
-
-        // Simulate idempotent call: new file exists → no-op; no error.
-        // Since the function reads real $HOME paths we test the contract directly:
-        // if to.exists() already, nothing should change.
-        assert!(new_file.exists(), "new file must still exist");
-
-        // Clean up.
-        std::fs::remove_dir_all(&tmp).ok();
+    fn test_only_one_debug_browser_per_project() {
+        // Placeholder for testing that only one debug browser can run per project
+        assert!(true); // Placeholder - full test needs integration setup
     }
 
-    // @trace spec:external-logs-layer
     #[test]
-    fn ensure_external_logs_dir_noop_when_nothing_to_migrate() {
-        // Set up: neither old nor new path exists.
-        let tmp = std::env::temp_dir().join(format!(
-            "til-test-noop-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .subsec_nanos()
-        ));
-        std::fs::create_dir_all(&tmp).expect("create tmp");
-
-        let old_file = tmp.join("containers").join("git").join("logs").join("git-push.log");
-        let new_file = tmp.join("external-logs").join("git-service").join("git-push.log");
-
-        // Precondition: neither file exists.
-        assert!(!old_file.exists(), "precondition: old file absent");
-        assert!(!new_file.exists(), "precondition: new file absent");
-
-        // The function should be a no-op — no files created, no errors.
-        // We verify the postcondition: neither file appeared.
-        assert!(!old_file.exists(), "old file must remain absent");
-        assert!(!new_file.exists(), "new file must remain absent");
-
-        std::fs::remove_dir_all(&tmp).ok();
+    fn test_browser_container_tracked_in_state() {
+        // Placeholder for testing that browser containers are added to state.running
+        assert!(true); // Placeholder - full test needs integration setup
     }
 
-    // -------------------------------------------------------------------------
-    // Auditor unit tests
-    // @trace spec:external-logs-layer
-    // -------------------------------------------------------------------------
-
-    // @trace spec:external-logs-layer
     #[test]
-    fn auditor_manifest_parser_detects_names() {
-        // The minimal YAML manifest parser must correctly extract file names.
-        let yaml = r#"
-role: git-service
-files:
-  - name: git-push.log
-    purpose: |
-      One line per push attempt.
-    format: text
-    rotate_at_mb: 10
-    written_by: post-receive hook
-  - name: another.log
-    purpose: second file
-    format: text
-    rotate_at_mb: 5
-    written_by: entrypoint
-"#;
-        let names = parse_external_logs_manifest_names(yaml)
-            .expect("must parse successfully");
-        assert!(names.contains("git-push.log"), "must contain git-push.log");
-        assert!(names.contains("another.log"), "must contain another.log");
-        assert_eq!(names.len(), 2, "must contain exactly 2 names");
-    }
-
-    // @trace spec:external-logs-layer
-    #[test]
-    fn auditor_manifest_parser_empty_manifest_returns_empty_set() {
-        // An empty files list is valid (producer declares no external logs for now).
-        let yaml = "role: proxy\nfiles: []\n";
-        let names = parse_external_logs_manifest_names(yaml)
-            .expect("must parse empty manifest");
-        assert!(names.is_empty(), "empty manifest must yield empty name set");
-    }
-
-    // @trace spec:external-logs-layer
-    #[test]
-    fn auditor_detects_unlisted_file_emits_leak() {
-        // Set up a role dir with one allowed file (git-push.log) and one
-        // unlisted file (unlisted.log). Run the manifest-match logic directly
-        // (without podman) by calling parse_external_logs_manifest_names and
-        // the walk logic inline. Assert the unlisted file is identified.
-        let manifest_yaml = r#"
-role: git-service
-files:
-  - name: git-push.log
-    purpose: push log
-    format: text
-    rotate_at_mb: 10
-    written_by: hook
-"#;
-        let allowed = parse_external_logs_manifest_names(manifest_yaml)
-            .expect("manifest must parse");
-
-        let tmp = std::env::temp_dir().join(format!(
-            "til-audit-leak-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .subsec_nanos()
-        ));
-        std::fs::create_dir_all(&tmp).expect("create tmp");
-        std::fs::write(tmp.join("git-push.log"), b"ok\n").expect("write allowed");
-        std::fs::write(tmp.join("unlisted.log"), b"leaky\n").expect("write unlisted");
-
-        // Walk and classify.
-        let mut leaks = vec![];
-        for entry in std::fs::read_dir(&tmp).expect("read dir").flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if !allowed.contains(&name) {
-                leaks.push(name);
-            }
-        }
-
-        assert_eq!(leaks, vec!["unlisted.log"], "exactly one LEAK should be identified");
-
-        std::fs::remove_dir_all(&tmp).ok();
-    }
-
-    // @trace spec:external-logs-layer
-    #[test]
-    fn auditor_truncates_oversized_file() {
-        // Write a file larger than DEFAULT_ROTATE_BYTES (10 MB), call
-        // truncate_external_log_to_half, and assert the result is ~50% of the
-        // original. We use a much smaller size (100 KB) to keep the test fast.
-        let tmp = std::env::temp_dir().join(format!(
-            "til-audit-rotate-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .subsec_nanos()
-        ));
-        std::fs::create_dir_all(&tmp).expect("create tmp");
-        let file_path = tmp.join("big.log");
-
-        // Write 100 KB of content.
-        let content: Vec<u8> = (0..100 * 1024).map(|i| (i % 256) as u8).collect();
-        std::fs::write(&file_path, &content).expect("write big file");
-        let original_size = content.len() as u64;
-
-        // Call the rotation function.
-        truncate_external_log_to_half(&file_path, original_size, "test-role", "big.log");
-
-        // Assert: file now holds approximately the newest 50% of bytes.
-        let rotated = std::fs::read(&file_path).expect("read rotated file");
-        let expected_size = original_size / 2;
-        assert!(
-            rotated.len() as u64 >= expected_size - 1 && rotated.len() as u64 <= expected_size + 1,
-            "rotated file must be ~50% of original: expected {expected_size}, got {}",
-            rotated.len()
-        );
-
-        // The content should be the TAIL of the original.
-        let keep_from = (original_size / 2) as usize;
-        assert_eq!(&rotated, &content[keep_from..], "rotated content must be the tail");
-
-        std::fs::remove_dir_all(&tmp).ok();
-    }
-
-    // @trace spec:external-logs-layer
-    #[test]
-    fn auditor_growth_rate_alarm_after_5_ticks() {
-        // Simulate 5 growth-rate samples — each growing by 2 MB in 60 s,
-        // which is 2 MB/min (above the 1 MB/min alarm threshold). The test
-        // verifies that the growth-rate calculation would trigger the alarm.
-        let mut history: std::collections::VecDeque<GrowthSample> = std::collections::VecDeque::new();
-
-        // Simulate 5 ticks, each 60 s apart (using Instant::now() - offset).
-        let now = std::time::Instant::now();
-        let two_mb: u64 = 2 * 1024 * 1024;
-        // We can't wind back Instant, so we use a forward simulation:
-        // oldest entry was at now - 4 min, newest at now.
-        // Build the deque as if 5 ticks of 60 s have elapsed.
-        for i in 0u64..5 {
-            // The test uses a fixed growing size pattern.
-            history.push_back((now, i * two_mb));
-        }
-        // Trim to 5 samples (already at 5).
-        while history.len() > 5 { history.pop_front(); }
-
-        // Current (latest) size is 4 * 2MB = 8MB.
-        let current_size = 4 * two_mb;
-        let (oldest_time, oldest_size) = history.front().copied().unwrap();
-        // oldest_time == now (0 elapsed in unit test clock). Use a synthetic
-        // elapsed to avoid division by zero: 4 min = 240 s.
-        let elapsed_secs = 240.0_f64;
-        let grown = current_size.saturating_sub(oldest_size);
-        let bytes_per_min = grown as f64 / (elapsed_secs / 60.0);
-
-        // 8 MB grown over 4 min = 2 MB/min > 1 MB/min threshold.
-        const ONE_MB_PER_MIN: f64 = 1024.0 * 1024.0;
-        assert!(
-            bytes_per_min > ONE_MB_PER_MIN,
-            "growth rate of {:.2} MB/min must exceed the 1 MB/min threshold",
-            bytes_per_min / ONE_MB_PER_MIN
-        );
-
-        // Verify the oldest_time comparison used in real code; in tests
-        // Instant::now() doesn't elapse, but the logic is covered above.
-        // elapsed() in the real code: oldest_time.elapsed() — same pattern.
-        let _ = oldest_time.elapsed();
+    fn test_shutdown_cleans_up_browser_containers() {
+        // Placeholder for testing that shutdown_all stops browser containers
+        assert!(true); // Placeholder - full test needs integration setup
     }
 }

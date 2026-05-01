@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::genus::TillandsiaGenus;
 use crate::project::ProjectChange;
 
 /// Build progress events sent from async build tasks back to the event loop.
@@ -53,45 +54,69 @@ pub enum ContainerState {
 }
 
 /// Commands dispatched from tray menu interactions.
-///
-/// Pruned by `simplified-tray-ux`: the tray surfaces a near-flat menu with
-/// only Launch / Maintenance terminal / Sign in / Quit / Language. CLI mode
-/// keeps `AttachHere` because `tillandsias <path>` still drives that path.
-///
-/// @trace spec:simplified-tray-ux
 #[derive(Debug, Clone)]
 pub enum MenuCommand {
-    /// "Attach Here" — kept for CLI mode (`tillandsias <path>`); the tray
-    /// no longer offers it directly.
+    /// "Attach Here" on a project
     AttachHere { project_path: PathBuf },
 
-    /// GitHub Login — run gh auth login in a container.
+    /// Start a project's runtime
+    Start { project_path: PathBuf },
+
+    /// Stop a running environment
+    Stop {
+        container_name: String,
+        genus: TillandsiaGenus,
+    },
+
+    /// Stop a per-project OpenCode Web container (and close all its webviews).
+    /// @trace spec:opencode-web-session, spec:tray-app
+    StopProject { project_path: PathBuf },
+
+    /// Destroy an environment (requires 5s hold confirmation)
+    Destroy {
+        container_name: String,
+        genus: TillandsiaGenus,
+    },
+
+    /// Open a bash terminal in the project's forge container
+    Terminal { project_path: PathBuf },
+
+    /// Launch a web server container for the project (Serve Here)
+    ServeHere { project_path: PathBuf },
+
+    /// Open a bash terminal in the forge container at the root src/ directory
+    RootTerminal,
+
+    /// GitHub Login — run gh auth login in a container
     GitHubLogin,
 
-    /// Clone a remote GitHub repository into ~/src/<name>.
+    /// Clone a remote GitHub repository into ~/src/<name>
     CloneProject { full_name: String, name: String },
 
-    /// Trigger a background refresh of the remote repos list.
+    /// Trigger a background refresh of the remote repos list
     RefreshRemoteProjects,
+
+    /// Select an AI coding agent (OpenCode or Claude)
+    SelectAgent { agent: String },
 
     /// Select a language for the UI and container LANG propagation.
     /// @trace spec:tray-app
     SelectLanguage { language: String },
 
-    /// @trace spec:simplified-tray-ux
-    /// Launch the project's forge in opencode-web mode (the only tray-driven
-    /// launch option). Reuses an existing forge container if one is running;
-    /// otherwise spawns a fresh one. Subsequent clicks reopen another browser
-    /// window pointing at the same container — opencode-web supports
-    /// concurrent sessions in a single process.
-    Launch { project_path: PathBuf },
+    /// Claude Reset Credentials — clear ~/.claude/ so next launch re-authenticates
+    ClaudeResetCredentials,
 
-    /// @trace spec:tray-app
-    /// Open a host terminal running `podman exec -it` inside the project's
-    /// running forge container. Multiple maintenance terminals can be open
-    /// against the same forge.
-    MaintenanceTerminal { project_path: PathBuf },
+    /// Open settings
+    Settings,
 
-    /// Quit the application.
+    /// Open a browser window (from MCP server in forge container)
+    /// @trace spec:browser-mcp-server
+    OpenBrowserWindow {
+        project: String,
+        url: String,
+        window_type: String, // "open_safe_window" or "open_debug_window"
+    },
+
+    /// Quit the application
     Quit,
 }

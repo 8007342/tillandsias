@@ -36,6 +36,6 @@ RUN mkdir -p /strategic
 # Switch to non-root user
 USER chromium
 
-# Set headless entry point
-ENTRYPOINT ["chromium-browser", "--headless=new"]
+# Set headless entry point (Fedora chromium-headless provides headless_shell)
+ENTRYPOINT ["/usr/lib64/chromium-browser/headless_shell", "--headless=new"]
 CMD []

@@ -25,26 +25,6 @@ use tillandsias_core::container_profile::{
 ///
 /// Security flags are unconditionally prepended — profiles cannot disable them.
 pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec<String> {
-    // @trace spec:external-logs-layer
-    // Reverse-breach refusal: a profile MUST NOT be both a producer and a
-    // consumer. validate() returns Err for this case; treat it as a
-    // non-recoverable profile-construction bug (panic in debug, hard log+skip
-    // the combined mount in release to avoid an incorrect podman invocation).
-    if let Err(e) = profile.validate() {
-        // Panic in debug so CI catches this immediately.
-        // In release, log loudly and continue — the per-field logic below
-        // already handles the precedence (producer wins).
-        debug_assert!(false, "build_podman_args: invalid profile — {e}");
-        tracing::error!(
-            spec = "external-logs-layer",
-            accountability = true,
-            category = "external-logs",
-            error = %e,
-            container = %ctx.container_name,
-            "[external-logs] Profile validation failed — refusing to launch with broken profile"
-        );
-    }
-
     let mut args = Vec::with_capacity(48);
 
     // -----------------------------------------------------------------------
@@ -85,74 +65,14 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     // -----------------------------------------------------------------------
     // Read-only root filesystem — service containers (git, proxy, inference,
     // web) run with immutable root FS. Runtime dirs get explicit tmpfs mounts.
-    // Forge/terminal containers need mutable workspace and skip this flag.
+    // Forge/terminal containers need mutable workspace and skip this.
     // @trace spec:podman-orchestration
     // -----------------------------------------------------------------------
     if profile.read_only {
         args.push("--read-only".into());
-    }
-
-    // -----------------------------------------------------------------------
-    // Tmpfs mounts — emitted unconditionally (regardless of read_only).
-    //
-    // Each mount carries a kernel-enforced size cap: `--tmpfs=<path>:size=<N>m,mode=<oct>`.
-    // This prevents any tmpfs from expanding to the default 50% of host RAM.
-    //
-    // For forge-shaped profiles (entrypoint contains "entrypoint-forge-" or
-    // "entrypoint-terminal"), an additional per-launch tmpfs is emitted for
-    // `/home/forge/src` using `ctx.hot_path_budget_mb`. This is separate
-    // from the profile's static tmpfs_mounts so the budget can vary per launch.
-    //
-    // When any tmpfs is present we also add:
-    //   --memory=<total>m --memory-swap=<total>m
-    // where total = sum of all tmpfs caps + 256 MB working-set baseline.
-    // Setting memory-swap equal to memory disables swap for the container,
-    // preserving the RAM-only guarantee (no swap escape).
-    //
-    // @trace spec:podman-orchestration, spec:forge-hot-cold-split
-    // -----------------------------------------------------------------------
-    // Detect forge-shaped profiles by entrypoint. These receive the per-launch
-    // /home/forge/src tmpfs with the computed hot-path budget.
-    let is_forge_profile = profile.entrypoint.contains("entrypoint-forge-")
-        || profile.entrypoint.contains("entrypoint-terminal");
-
-    // Collect all tmpfs mounts including the per-launch src mount for forge profiles.
-    let profile_tmpfs_total_mb: u32 = profile.tmpfs_mounts.iter().map(|m| m.size_mb).sum();
-    let has_any_tmpfs = !profile.tmpfs_mounts.is_empty()
-        || (is_forge_profile && ctx.hot_path_budget_mb > 0);
-
-    if has_any_tmpfs {
-        for mount in &profile.tmpfs_mounts {
-            args.push(format!(
-                "--tmpfs={}:size={}m,mode={:o}",
-                mount.path, mount.size_mb, mount.mode
-            ));
+        for tmpfs_path in &profile.tmpfs_mounts {
+            args.push(format!("--tmpfs={tmpfs_path}"));
         }
-        // @trace spec:forge-hot-cold-split
-        // Per-launch /home/forge/src tmpfs — chunk 3. The budget is computed
-        // by compute_hot_budget() at the forge launch site and stored in
-        // ctx.hot_path_budget_mb. Service containers (git, proxy, inference,
-        // web) are not forge-shaped and do NOT get this mount.
-        // @trace spec:forge-hot-cold-split, spec:runtime-diagnostics
-        // Mode 0777 (world-writable): tmpfs is created by the podman daemon
-        // (running as root in the container) before USER changes take effect.
-        // The forge user (uid 1000) needs write access to clone git repos and
-        // create project directories. 0777 ensures this works regardless of
-        // namespace mapping. Ownership is enforced at the git-service and
-        // in-container entrypoint level, not at the mount level.
-        if is_forge_profile && ctx.hot_path_budget_mb > 0 {
-            args.push(format!(
-                "--tmpfs=/home/forge/src:size={}m,mode=0777",
-                ctx.hot_path_budget_mb
-            ));
-        }
-        // Memory ceiling: sum of all tmpfs caps + 256 MB baseline for the container's
-        // working set (stack, heap, mapped libraries). --memory-swap equal to --memory
-        // disables swap — no spilling the RAM-only guarantee to disk.
-        let src_budget = if is_forge_profile { ctx.hot_path_budget_mb } else { 0 };
-        let memory_mb = profile_tmpfs_total_mb + src_budget + 256;
-        args.push(format!("--memory={memory_mb}m"));
-        args.push(format!("--memory-swap={memory_mb}m"));
     }
 
     // -----------------------------------------------------------------------
@@ -295,29 +215,6 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     }
 
     // -----------------------------------------------------------------------
-    // Pull-on-demand cheatsheet cache RAM cap
-    //
-    // Forge profiles (the cheatsheet-system-aware profile family — every
-    // profile that produces `cheatsheet-telemetry` events) receive the
-    // resolved RAMDISK soft-cap as an env var. The in-forge agent reads
-    // it instead of re-probing /proc/meminfo (the tray already did the
-    // tier classification once at startup, with the user's config-file
-    // override applied).
-    //
-    // The cap is a SOFT cap — the in-forge LRU helper (in lib-common.sh)
-    // evicts the least-recently-accessed files when the per-project pull
-    // cache exceeds the cap. See _pull_cache_evict_lru_if_over_cap.
-    //
-    // @trace spec:cheatsheets-license-tiered, spec:forge-hot-cold-split
-    // @cheatsheet runtime/cheatsheet-pull-on-demand.md
-    // -----------------------------------------------------------------------
-    if profile.external_logs_role == Some("cheatsheet-telemetry") {
-        let cap_mb = crate::pull_cache_budget::resolved_cap_mb();
-        args.push("-e".into());
-        args.push(format!("TILLANDSIAS_PULL_CACHE_RAM_MB={cap_mb}"));
-    }
-
-    // -----------------------------------------------------------------------
     // Host aliases for podman machine (Windows/macOS)
     // @trace spec:enclave-network, spec:cross-platform, spec:fix-podman-machine-host-aliases
     //
@@ -362,62 +259,6 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     }
 
     // -----------------------------------------------------------------------
-    // External-logs mounts — producer (RW), consumer (RO), or BOTH
-    //
-    // These mounts are driven by profile fields rather than profile.mounts
-    // so the path resolution and mode are unconditional and consistent:
-    //   - Producer-only: role-scoped host dir RW at /var/log/tillandsias/external/
-    //   - Consumer-only: parent host dir RO at /var/log/tillandsias/external/
-    //   - Dual (forge cheatsheet-telemetry): parent RO at /var/log/tillandsias/
-    //     external/, then role-scoped RW overlaid at /var/log/tillandsias/
-    //     external/<role>/. Mount order matters: the parent RO mount lands
-    //     first so the sub-path RW mount overlays cleanly, exposing every
-    //     OTHER producer role RO while keeping the forge's own role RW.
-    //
-    // @trace spec:external-logs-layer, spec:cheatsheets-license-tiered
-    // @cheatsheet runtime/external-logs.md
-    // -----------------------------------------------------------------------
-    let is_dual_role = profile.external_logs_role.is_some() && profile.external_logs_consumer;
-
-    if profile.external_logs_consumer {
-        // Mount the parent RO first. For dual-role profiles this is the
-        // base layer that the producer RW mount overlays on top of.
-        let source = MountSource::ExternalLogsConsumerRoot;
-        if let Some(host_path) = resolve_mount_source(&source, ctx) {
-            args.push("-v".into());
-            // Consumer: parent dir RO — sees one subdir per producer role.
-            args.push(format!(
-                "{}:/var/log/tillandsias/external:ro,Z",
-                host_path
-            ));
-        }
-    }
-
-    if let Some(role) = profile.external_logs_role {
-        let source = MountSource::ExternalLogsProducer { role };
-        if let Some(host_path) = resolve_mount_source(&source, ctx) {
-            args.push("-v".into());
-            if is_dual_role {
-                // Dual-role: overlay the role-scoped RW mount on top of the
-                // parent RO mount (which already landed above). The forge
-                // sees its own role RW at the deeper path and every other
-                // role RO at sibling paths under /var/log/tillandsias/external/.
-                args.push(format!(
-                    "{}:/var/log/tillandsias/external/{}:rw,Z",
-                    host_path, role
-                ));
-            } else {
-                // Producer-only (service container): RW mount at the entire
-                // external-log path; the producer sees ONLY its own role.
-                args.push(format!(
-                    "{}:/var/log/tillandsias/external:rw,Z",
-                    host_path
-                ));
-            }
-        }
-    }
-
-    // -----------------------------------------------------------------------
     // Secret mounts (only present for profiles that declare them)
     //
     // The host has already read the GitHub token from the OS keyring and
@@ -456,42 +297,6 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
                 }
             }
         }
-    }
-
-    // -----------------------------------------------------------------------
-    // Control-socket bind mount (opt-in per profile)
-    //
-    // The tray binds a Unix-domain socket at startup at
-    // `$XDG_RUNTIME_DIR/tillandsias/control.sock` (or the per-user /tmp
-    // fallback). Profiles that opt in via `mount_control_socket = true`
-    // receive a bind mount of that node at the canonical in-container path
-    // and an env var pointing client libraries at it. Profiles that do NOT
-    // opt in receive neither — the secrets-management delta enforces this
-    // default-deny posture so a compromised forge cannot reach the tray's
-    // control plane.
-    // @trace spec:tray-host-control-socket, spec:secrets-management
-    // @cheatsheet runtime/forge-container.md
-    // -----------------------------------------------------------------------
-    // Windows: gated out — Unix-domain socket bind-mounts don't translate
-    // to Named Pipes inside podman-machine containers. The router profile
-    // is the only v1 consumer; on Windows it'll need a Named Pipe path
-    // when that work lands. Until then, mount_control_socket is silently
-    // ignored on non-Unix hosts and the router can't validate sessions.
-    // @trace spec:cross-platform
-    #[cfg(unix)]
-    if profile.mount_control_socket {
-        let resolved = crate::control_socket::path::resolve();
-        args.push("-v".into());
-        args.push(format!(
-            "{}:{}:rw",
-            resolved.socket_path.display(),
-            crate::control_socket::path::CONTAINER_SOCKET_PATH
-        ));
-        args.push("-e".into());
-        args.push(format!(
-            "TILLANDSIAS_CONTROL_SOCKET={}",
-            crate::control_socket::path::CONTAINER_SOCKET_PATH
-        ));
     }
 
     // -----------------------------------------------------------------------
@@ -580,6 +385,33 @@ fn resolve_mount_source(source: &MountSource, ctx: &LaunchContext) -> Option<Str
     match source {
         MountSource::ProjectDir => Some(ctx.project_path.display().to_string()),
         MountSource::CacheDir => Some(ctx.cache_dir.display().to_string()),
+        // @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse, spec:overlay-mount-cache
+        // Fast-path: process-lifetime snapshot cache. The cache is populated
+        // by `ensure_tools_overlay()` which is awaited in `handle_attach_here`
+        // BEFORE `build_podman_args` (the function that calls us), so this
+        // should always hit on the warm path.
+        //
+        // Defensive fallback: if the snapshot was invalidated mid-launch
+        // (race with a background rebuild) or the user is on a code path
+        // that bypassed `ensure_tools_overlay`, fall back to the original
+        // `exists()` check. Entrypoints additionally fall back to inline
+        // install if no mount is provided at all.
+        MountSource::ToolsOverlay => {
+            if let Some(path) = crate::tools_overlay::cached_overlay_for(
+                &crate::handlers::forge_image_tag(),
+            ) {
+                Some(path.display().to_string())
+            } else {
+                let overlay_path = ctx.cache_dir
+                    .join("tools-overlay")
+                    .join("current");
+                if overlay_path.exists() {
+                    Some(overlay_path.display().to_string())
+                } else {
+                    None
+                }
+            }
+        }
         // @trace spec:layered-tools-overlay
         // Configs live on tmpfs (ramdisk) for fast reads — zero disk I/O.
         MountSource::ConfigOverlay => {
@@ -612,109 +444,21 @@ fn resolve_mount_source(source: &MountSource, ctx: &LaunchContext) -> Option<Str
             }
             Some(log_path.display().to_string())
         }
-        // @trace spec:forge-cache-architecture, spec:forge-cache-dual
-        // @cheatsheet runtime/forge-shared-cache-via-nix.md
-        // Shared cache — host-managed nix store, RO from forge perspective.
-        // Resolves to ~/.cache/tillandsias/forge-shared/nix-store/. Created
-        // on first need; populated by host-side nix processes (out of band
-        // — this code just ensures the mount target exists).
-        MountSource::SharedCache => {
-            let shared = tillandsias_core::config::cache_dir()
-                .join("forge-shared")
-                .join("nix-store");
-            if let Err(e) = std::fs::create_dir_all(&shared) {
-                tracing::warn!(
-                    error = %e,
-                    path = %shared.display(),
-                    spec = "forge-cache-architecture",
-                    "Failed to create shared cache directory — mount will fail"
-                );
-                return None;
+        // @trace spec:mcp-on-demand
+        // Tray Unix socket — browser tool inside container talks to host tray.
+        MountSource::TraySocket => {
+            let base = if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+                std::path::PathBuf::from(xdg)
+            } else {
+                std::env::temp_dir()
+            };
+            let socket_path = base.join("tillandsias").join("tray.sock");
+            if socket_path.exists() {
+                Some(socket_path.display().to_string())
+            } else {
+                tracing::warn!("Tray socket not found at '{}'", socket_path.display());
+                None // Skip mount if socket doesn't exist yet
             }
-            Some(shared.display().to_string())
-        }
-        // @trace spec:forge-cache-architecture, spec:forge-cache-dual
-        // @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
-        // Per-project cache — RW, isolated by project name. Project A's
-        // forge container CANNOT see project B's cache because the host
-        // path differs. Persisted across container stops for the same
-        // project; never auto-GC'd (manual `rm -rf` for housekeeping).
-        MountSource::ProjectCache => {
-            if ctx.project_name.is_empty() {
-                tracing::warn!(
-                    spec = "forge-cache-architecture",
-                    "Per-project cache mount requested with empty project name — skipping"
-                );
-                return None;
-            }
-            let proj = tillandsias_core::config::cache_dir()
-                .join("forge-projects")
-                .join(&ctx.project_name);
-            if let Err(e) = std::fs::create_dir_all(&proj) {
-                tracing::warn!(
-                    error = %e,
-                    path = %proj.display(),
-                    project = %ctx.project_name,
-                    spec = "forge-cache-architecture",
-                    "Failed to create per-project cache directory — mount will fail"
-                );
-                return None;
-            }
-            // Also create the per-language subdirectories so tools that
-            // don't auto-mkdir their cache dir don't crash on first use.
-            for sub in &[
-                "cargo", "go", "maven", "gradle", "pub", "npm", "yarn", "pnpm", "uv", "pip",
-            ] {
-                let _ = std::fs::create_dir_all(proj.join(sub));
-            }
-            Some(proj.display().to_string())
-        }
-        // @trace spec:external-logs-layer
-        // External-logs producer: bind-mounts the role-specific directory RW.
-        // The in-container target is always /var/log/tillandsias/external/;
-        // the producer sees ONLY its own role's files. The launcher creates
-        // the host directory on demand (mirrors ContainerLogs behaviour).
-        MountSource::ExternalLogsProducer { role } => {
-            let role_dir = tillandsias_core::config::external_logs_role_dir(role);
-            if let Err(e) = std::fs::create_dir_all(&role_dir) {
-                tracing::warn!(
-                    role = role,
-                    error = %e,
-                    path = %role_dir.display(),
-                    spec = "external-logs-layer",
-                    "Failed to create external-logs role directory — mount will fail"
-                );
-                return None;
-            }
-            tracing::debug!(
-                role = role,
-                path = %role_dir.display(),
-                spec = "external-logs-layer",
-                "External-logs producer directory ready"
-            );
-            Some(role_dir.display().to_string())
-        }
-        // @trace spec:external-logs-layer
-        // External-logs consumer: bind-mounts the parent external-logs/ dir
-        // RO at /var/log/tillandsias/external/. Consumer sees one subdir per
-        // active producer role. An empty enclave mounts a valid empty dir.
-        MountSource::ExternalLogsConsumerRoot => {
-            let root = tillandsias_core::config::external_logs_dir();
-            if let Err(e) = std::fs::create_dir_all(&root) {
-                tracing::warn!(
-                    error = %e,
-                    path = %root.display(),
-                    spec = "external-logs-layer",
-                    "Failed to create external-logs root directory — mount will fail"
-                );
-                return None;
-            }
-            tracing::debug!(
-                path = %root.display(),
-                spec = "external-logs-layer",
-                "External-logs consumer root directory ready"
-            );
-            Some(root.display().to_string())
         }
     }
 }
@@ -735,156 +479,6 @@ fn resolve_container_path(
         }
     } else {
         base_container_path.to_string()
-    }
-}
-
-/// Compute the per-launch tmpfs budget (MB) for `/home/forge/src`.
-///
-/// Reads the bare git mirror's pack size via `git count-objects -v -H`,
-/// multiplies by `inflation` (default `forge.hot_path_inflation` = 4), and
-/// clamps to `[256, max_mb]` (default `forge.hot_path_max_mb` = 4096).
-///
-/// Returns 256 (the floor) when:
-/// - The mirror directory does not exist (empty / new project)
-/// - `git count-objects` fails or its output cannot be parsed
-///
-/// The multiplication accounts for the fact that a working tree checked out
-/// from a pack file typically expands 2–5× due to loose objects, git metadata,
-/// and the checked-out files themselves.
-///
-/// @trace spec:forge-hot-cold-split
-pub fn compute_hot_budget(project_name: &str, cache_dir: &Path) -> u32 {
-    compute_hot_budget_with_limits(project_name, cache_dir, 4, 4096)
-}
-
-/// Internal: compute hot budget with explicit inflation and max (testable).
-///
-/// @trace spec:forge-hot-cold-split
-pub fn compute_hot_budget_with_limits(
-    project_name: &str,
-    cache_dir: &Path,
-    inflation: u32,
-    max_mb: u32,
-) -> u32 {
-    const FLOOR_MB: u32 = 256;
-    let mirror_dir = cache_dir
-        .join("forge-projects")
-        .join(project_name)
-        .join("git-mirror");
-
-    if !mirror_dir.exists() {
-        tracing::debug!(
-            project = project_name,
-            mirror = %mirror_dir.display(),
-            spec = "forge-hot-cold-split",
-            "Git mirror does not exist — returning floor budget"
-        );
-        return FLOOR_MB;
-    }
-
-    // Run: git -C <mirror> count-objects -v -H
-    // Output sample:
-    //   count: 0
-    //   size: 0 bytes
-    //   in-pack: 1234
-    //   packs: 1
-    //   size-pack: 5.12 MiB     ← parse this line
-    //   prune-packable: 0
-    //   garbage: 0
-    //   size-garbage: 0 bytes
-    let output = match std::process::Command::new("git")
-        .args(["-C", &mirror_dir.to_string_lossy(), "count-objects", "-v", "-H"])
-        .output()
-    {
-        Ok(o) => o,
-        Err(e) => {
-            tracing::warn!(
-                project = project_name,
-                error = %e,
-                spec = "forge-hot-cold-split",
-                "git count-objects failed — returning floor budget"
-            );
-            return FLOOR_MB;
-        }
-    };
-
-    if !output.status.success() {
-        tracing::warn!(
-            project = project_name,
-            exit_code = ?output.status.code(),
-            spec = "forge-hot-cold-split",
-            "git count-objects returned non-zero — returning floor budget"
-        );
-        return FLOOR_MB;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let pack_size_mb = parse_size_pack_mb(&stdout);
-
-    let raw = pack_size_mb.saturating_mul(inflation);
-    let clamped = raw.clamp(FLOOR_MB, max_mb);
-
-    tracing::debug!(
-        project = project_name,
-        pack_size_mb,
-        inflation,
-        raw_budget_mb = raw,
-        budget_mb = clamped,
-        spec = "forge-hot-cold-split",
-        "Hot-path budget computed from git mirror pack size"
-    );
-
-    clamped
-}
-
-/// Parse the `size-pack` line from `git count-objects -v -H` output.
-///
-/// Returns 0 when the line is missing or the value cannot be parsed.
-/// The human-readable suffix is converted to MB:
-/// - No suffix / bytes → ÷ (1024 * 1024) rounded up
-/// - KiB → ÷ 1024 rounded up
-/// - MiB → round up
-/// - GiB → × 1024
-///
-/// @trace spec:forge-hot-cold-split
-pub(crate) fn parse_size_pack_mb(output: &str) -> u32 {
-    for line in output.lines() {
-        let line = line.trim();
-        if let Some(rest) = line.strip_prefix("size-pack:") {
-            let value = rest.trim();
-            return parse_human_size_to_mb(value);
-        }
-    }
-    0
-}
-
-/// Convert a human-readable size string (from `git count-objects -H`) to MB.
-///
-/// Examples: "0 bytes", "1.23 KiB", "5.12 MiB", "2.00 GiB", "512"
-/// Returns 0 for unrecognised formats; rounds fractional MiB up to 1.
-///
-/// @trace spec:forge-hot-cold-split
-fn parse_human_size_to_mb(s: &str) -> u32 {
-    // Split on first whitespace to separate number from unit.
-    let mut parts = s.splitn(2, char::is_whitespace);
-    let num_str = parts.next().unwrap_or("0");
-    let unit = parts.next().unwrap_or("").trim().to_lowercase();
-
-    let num: f64 = num_str.replace(',', "").parse().unwrap_or(0.0);
-
-    let mb = match unit.as_str() {
-        "gib" | "gb" => num * 1024.0,
-        "mib" | "mb" => num,
-        "kib" | "kb" => num / 1024.0,
-        "bytes" | "byte" | "" => num / (1024.0 * 1024.0),
-        _ => 0.0,
-    };
-
-    // Round up to at least 1 MB if there's any data, otherwise 0.
-    if mb > 0.0 {
-        mb.ceil() as u32
-    } else {
-        0
     }
 }
 
@@ -946,10 +540,11 @@ fn parse_user_from_gitconfig(path: &Path) -> (String, String) {
                 if let Some(val) = val.trim_start().strip_prefix('=') {
                     name = val.trim().to_string();
                 }
-            } else if let Some(val) = trimmed.strip_prefix("email")
-                && let Some(val) = val.trim_start().strip_prefix('=') {
+            } else if let Some(val) = trimmed.strip_prefix("email") {
+                if let Some(val) = val.trim_start().strip_prefix('=') {
                     email = val.trim().to_string();
                 }
+            }
         }
     }
 
@@ -1031,7 +626,6 @@ mod tests {
             use_port_mapping: false,
             persistent: false,
             web_host_port: None,
-            hot_path_budget_mb: 1024,
         }
     }
 
@@ -1156,30 +750,14 @@ mod tests {
         assert!(joined.contains("/home/user/src/myproject:/var/www/html:ro"));
     }
 
-    // @trace spec:forge-hot-cold-split
     #[test]
-    fn forge_has_no_project_dir_bind_mount_but_has_tmpfs() {
-        // Forge profiles no longer bind-mount the project directory (code comes from git mirror).
-        // Instead, /home/forge/src is a per-launch tmpfs (chunk 3).
+    fn forge_has_no_project_dir_mount() {
         let profile = container_profile::forge_opencode_profile();
         let ctx = test_context();
         let args = build_podman_args(&profile, &ctx);
         let joined = args.join(" ");
-        // The src tmpfs should be present (chunk 3 hot path)
-        assert!(
-            joined.contains("--tmpfs=/home/forge/src"),
-            "Forge should have /home/forge/src as tmpfs (hot path); got: {joined}"
-        );
-        // But there must be NO volume bind-mount (-v) for /home/forge/src
-        let bind_mounts: Vec<&str> = args
-            .iter()
-            .zip(args.iter().skip(1))
-            .filter_map(|(a, b)| if a == "-v" { Some(b.as_str()) } else { None })
-            .collect();
-        assert!(
-            !bind_mounts.iter().any(|m| m.contains("/home/forge/src")),
-            "Forge should NOT have a -v bind-mount for /home/forge/src; got: {bind_mounts:?}"
-        );
+        // Forge profiles no longer mount the project directory (code comes from git mirror)
+        assert!(!joined.contains("/home/forge/src"), "Forge should not have project dir mount");
     }
 
     #[test]
@@ -1262,25 +840,42 @@ mod tests {
     // openspec/specs/native-secrets-store/spec.md.
     // @trace spec:secrets-management, spec:native-secrets-store
 
-    // @trace spec:tombstone-tools-overlay
-    // Tools overlay was removed on 2026-04-25 — agents are hard-installed in
-    // the forge image at /usr/local/bin/. No mount to test for.
+    // @trace spec:layered-tools-overlay
     #[test]
-    fn forge_profiles_have_no_tools_overlay_mount() {
-        for profile in [
-            container_profile::forge_opencode_profile(),
-            container_profile::forge_claude_profile(),
-            container_profile::forge_opencode_web_profile(),
-            container_profile::terminal_profile(),
-        ] {
-            let ctx = test_context();
-            let args = build_podman_args(&profile, &ctx);
-            let joined = args.join(" ");
-            assert!(
-                !joined.contains("/home/forge/.tools"),
-                "No profile should mount the tools overlay — tombstoned.\nGot: {joined}"
-            );
-        }
+    fn tools_overlay_skipped_when_dir_absent() {
+        let profile = container_profile::forge_opencode_profile();
+        let ctx = test_context();
+        let args = build_podman_args(&profile, &ctx);
+        let joined = args.join(" ");
+        // Tools overlay dir doesn't exist in the test context, so mount is skipped
+        assert!(
+            !joined.contains("/home/forge/.tools"),
+            "Tools overlay mount should be skipped when directory doesn't exist"
+        );
+    }
+
+    // @trace spec:layered-tools-overlay
+    #[test]
+    fn tools_overlay_mounted_when_dir_exists() {
+        let profile = container_profile::forge_claude_profile();
+        let tmp_dir = std::env::temp_dir().join("tillandsias-test-tools-overlay");
+        let overlay_dir = tmp_dir.join("tools-overlay").join("current");
+        std::fs::create_dir_all(&overlay_dir).unwrap();
+
+        let mut ctx = test_context();
+        ctx.cache_dir = tmp_dir.clone();
+
+        let args = build_podman_args(&profile, &ctx);
+        let joined = args.join(" ");
+
+        let expected = format!("{}:/home/forge/.tools:ro", overlay_dir.display());
+        assert!(
+            joined.contains(&expected),
+            "Tools overlay should be mounted read-only. Expected: {expected}\nGot: {joined}"
+        );
+
+        // Clean up
+        std::fs::remove_dir_all(&tmp_dir).ok();
     }
 
     // @trace spec:layered-tools-overlay
@@ -1396,7 +991,7 @@ mod tests {
         }
     }
 
-    // @trace spec:podman-orchestration, spec:forge-hot-cold-split
+    // @trace spec:podman-orchestration
     #[test]
     fn service_containers_have_read_only_fs() {
         // Proxy and inference are NOT read-only — they need writable runtime dirs.
@@ -1417,94 +1012,10 @@ mod tests {
                 "Service container {} should have --read-only",
                 profile.entrypoint
             );
-            // All read-only containers must have at least /tmp as tmpfs,
-            // now emitted with size cap: --tmpfs=/tmp:size=64m,mode=1777
+            // All read-only containers must have at least /tmp as tmpfs
             assert!(
-                args.iter().any(|a| a.starts_with("--tmpfs=/tmp:")),
-                "Read-only container {} should have a sized --tmpfs=/tmp:... arg",
-                profile.entrypoint
-            );
-        }
-    }
-
-    // @trace spec:podman-orchestration, spec:forge-hot-cold-split
-    #[test]
-    fn tmpfs_emits_sized_flag_with_mode() {
-        // The web profile has two tmpfs mounts (/tmp and /var/run) with size and mode.
-        // Check that build_podman_args emits them with the expected format.
-        let profile = container_profile::web_profile();
-        let ctx = test_context();
-        let args = build_podman_args(&profile, &ctx);
-
-        // /tmp: size=64m, mode=1777
-        assert!(
-            args.iter().any(|a| *a == "--tmpfs=/tmp:size=64m,mode=1777"),
-            "Expected --tmpfs=/tmp:size=64m,mode=1777; got: {args:?}"
-        );
-        // /var/run: size=64m, mode=755
-        assert!(
-            args.iter().any(|a| *a == "--tmpfs=/var/run:size=64m,mode=755"),
-            "Expected --tmpfs=/var/run:size=64m,mode=755; got: {args:?}"
-        );
-    }
-
-    // @trace spec:podman-orchestration, spec:forge-hot-cold-split
-    #[test]
-    fn tmpfs_pairs_with_memory_ceiling() {
-        // web profile: two 64 MB mounts → total = 128 MB + 256 MB baseline = 384 MB.
-        let profile = container_profile::web_profile();
-        let ctx = test_context();
-        let args = build_podman_args(&profile, &ctx);
-
-        assert!(
-            args.iter().any(|a| *a == "--memory=384m"),
-            "Expected --memory=384m (128MB tmpfs + 256MB baseline); got: {args:?}"
-        );
-        assert!(
-            args.iter().any(|a| *a == "--memory-swap=384m"),
-            "Expected --memory-swap=384m (disables swap); got: {args:?}"
-        );
-
-        // git_service: one 64 MB mount → 64 + 256 = 320 MB.
-        let profile = container_profile::git_service_profile();
-        let args = build_podman_args(&profile, &ctx);
-        assert!(
-            args.iter().any(|a| *a == "--memory=320m"),
-            "Expected --memory=320m for git_service (64MB + 256MB); got: {args:?}"
-        );
-        assert!(
-            args.iter().any(|a| *a == "--memory-swap=320m"),
-            "Expected --memory-swap=320m for git_service; got: {args:?}"
-        );
-    }
-
-    // @trace spec:podman-orchestration, spec:forge-hot-cold-split, spec:agent-cheatsheets
-    #[test]
-    fn forge_profiles_emit_cheatsheets_tmpfs_and_memory_ceiling() {
-        // Chunk 2: forge and terminal profiles include the /opt/cheatsheets tmpfs
-        // mount (8MB cap, mode 755). build_podman_args must emit the sized --tmpfs
-        // flag and the paired --memory / --memory-swap ceiling.
-        for profile in [
-            container_profile::forge_opencode_profile(),
-            container_profile::forge_claude_profile(),
-            container_profile::forge_opencode_web_profile(),
-            container_profile::terminal_profile(),
-        ] {
-            let ctx = test_context();
-            let args = build_podman_args(&profile, &ctx);
-            assert!(
-                args.iter().any(|a| a == "--tmpfs=/opt/cheatsheets:size=8m,mode=755"),
-                "Forge profile {} must emit --tmpfs=/opt/cheatsheets:size=8m,mode=755; got: {args:?}",
-                profile.entrypoint
-            );
-            assert!(
-                args.iter().any(|a| a.starts_with("--memory=")),
-                "Forge profile {} must emit --memory ceiling when tmpfs present; got: {args:?}",
-                profile.entrypoint
-            );
-            assert!(
-                args.iter().any(|a| a.starts_with("--memory-swap=")),
-                "Forge profile {} must emit --memory-swap when tmpfs present; got: {args:?}",
+                args.contains(&"--tmpfs=/tmp".to_string()),
+                "Read-only container {} should have --tmpfs=/tmp",
                 profile.entrypoint
             );
         }
@@ -1591,13 +1102,10 @@ mod tests {
             "OLLAMA_HOST should use the inference alias on podman machine.\nGot: {joined}"
         );
 
-        // @trace spec:opencode-web-session, spec:proxy-container
-        // NO_PROXY lists every enclave-internal destination so intra-enclave
-        // traffic never hairpins through Squid. The full value includes
-        // loopback variants + each enclave peer (inference, proxy, git-service).
+        // NO_PROXY keeps git-service in the bypass list (same as Linux)
         assert!(
-            joined.contains("NO_PROXY=localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
-            "NO_PROXY should include every enclave peer on podman machine.\nGot: {joined}"
+            joined.contains("NO_PROXY=localhost,127.0.0.1,git-service"),
+            "NO_PROXY should include git-service on podman machine.\nGot: {joined}"
         );
 
         // --add-host entries route the friendly aliases to the host gateway
@@ -1631,8 +1139,8 @@ mod tests {
             ("https_proxy", "http://proxy:3128"),
             ("TILLANDSIAS_GIT_SERVICE", "git-service"),
             ("OLLAMA_HOST", "http://inference:11434"),
-            ("NO_PROXY", "localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
-            ("no_proxy", "localhost,127.0.0.1,0.0.0.0,::1,git-service,inference,proxy"),
+            ("NO_PROXY", "localhost,127.0.0.1,git-service"),
+            ("no_proxy", "localhost,127.0.0.1,git-service"),
         ] {
             assert_eq!(
                 super::rewrite_enclave_env(name, value),
@@ -1755,28 +1263,11 @@ mod tests {
             "web_host_port must override enclave-only skip; got: {args:?}"
         );
         // And it must be bound to loopback — never 0.0.0.0 or bare.
-        // Check ONLY the publish (-p) args, not the whole arg string, because
-        // NO_PROXY legitimately contains "0.0.0.0" as a loopback bypass entry.
-        // @trace spec:opencode-web-session
-        let publish_args: Vec<&String> = args
-            .iter()
-            .zip(args.iter().skip(1))
-            .filter_map(|(a, b)| if a == "-p" { Some(b) } else { None })
-            .collect();
+        let joined = args.join(" ");
         assert!(
-            !publish_args.is_empty(),
-            "expected at least one -p arg; got: {args:?}"
+            !joined.contains("0.0.0.0"),
+            "Publish must never bind to 0.0.0.0; got: {joined}"
         );
-        for p in &publish_args {
-            assert!(
-                !p.contains("0.0.0.0"),
-                "Publish binding must never be 0.0.0.0; got: {p}"
-            );
-            assert!(
-                p.starts_with("127.0.0.1:"),
-                "Publish binding must start with 127.0.0.1:; got: {p}"
-            );
-        }
     }
 
     // @trace spec:opencode-web-session, spec:environment-runtime
@@ -1799,419 +1290,6 @@ mod tests {
             !joined.contains("TILLANDSIAS_AGENT=opencode ")
                 && !joined.ends_with("TILLANDSIAS_AGENT=opencode"),
             "AgentName must NOT resolve to plain `opencode` for the web entrypoint, got: {joined}"
-        );
-    }
-
-    // @trace spec:tray-host-control-socket, spec:secrets-management
-    #[test]
-    fn control_socket_mount_added_when_profile_opts_in() {
-        // The router profile sets `mount_control_socket = true`. The launch
-        // path should append a `-v <host>:/run/host/tillandsias/control.sock:rw`
-        // mount and a `TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias/control.sock`
-        // env var.
-        let profile = container_profile::router_profile();
-        assert!(
-            profile.mount_control_socket,
-            "router profile must opt in to control socket"
-        );
-        let args = build_podman_args(&profile, &test_context());
-        let joined = args.join(" ");
-        assert!(
-            joined.contains(":/run/host/tillandsias/control.sock:rw"),
-            "router must receive control-socket bind mount; got: {joined}"
-        );
-        assert!(
-            joined.contains("TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias/control.sock"),
-            "router must receive TILLANDSIAS_CONTROL_SOCKET env; got: {joined}"
-        );
-        // Security flags MUST remain on the command line — control-socket
-        // mount does not relax them.
-        assert!(
-            joined.contains("--cap-drop=ALL"),
-            "control-socket mount must not relax cap-drop"
-        );
-        assert!(
-            joined.contains("--security-opt=no-new-privileges"),
-            "control-socket mount must not relax no-new-privileges"
-        );
-        assert!(
-            joined.contains("--userns=keep-id"),
-            "control-socket mount must not relax userns=keep-id"
-        );
-    }
-
-    // @trace spec:tray-host-control-socket, spec:secrets-management
-    #[test]
-    fn control_socket_mount_absent_when_profile_does_not_opt_in() {
-        // Forge profiles default-deny the control socket per the
-        // secrets-management delta. A compromised forge MUST NOT see the
-        // control plane.
-        for profile in [
-            container_profile::forge_opencode_profile(),
-            container_profile::forge_claude_profile(),
-            container_profile::forge_opencode_web_profile(),
-            container_profile::terminal_profile(),
-            container_profile::proxy_profile(),
-            container_profile::inference_profile(),
-            container_profile::git_service_profile(),
-            container_profile::web_profile(),
-        ] {
-            assert!(
-                !profile.mount_control_socket,
-                "non-router profiles must default-deny the control socket"
-            );
-            let args = build_podman_args(&profile, &test_context());
-            let joined = args.join(" ");
-            assert!(
-                !joined.contains("/run/host/tillandsias/control.sock"),
-                "non-router profile must NOT receive control-socket mount; got: {joined}"
-            );
-            assert!(
-                !joined.contains("TILLANDSIAS_CONTROL_SOCKET="),
-                "non-router profile must NOT receive TILLANDSIAS_CONTROL_SOCKET; got: {joined}"
-            );
-        }
-    }
-
-    // @trace spec:forge-hot-cold-split
-    #[test]
-    fn forge_profile_emits_project_source_tmpfs_with_budget() {
-        // Forge profiles must emit --tmpfs=/home/forge/src:size=<budget>m,mode=755.
-        // The budget comes from ctx.hot_path_budget_mb (1024 in test_context).
-        for profile in [
-            container_profile::forge_opencode_profile(),
-            container_profile::forge_claude_profile(),
-            container_profile::forge_opencode_web_profile(),
-            container_profile::terminal_profile(),
-        ] {
-            let ctx = test_context(); // hot_path_budget_mb = 1024
-            let args = build_podman_args(&profile, &ctx);
-            let expected = "--tmpfs=/home/forge/src:size=1024m,mode=755";
-            assert!(
-                args.iter().any(|a| a == expected),
-                "Forge profile {} must emit {}; got: {args:?}",
-                profile.entrypoint,
-                expected
-            );
-        }
-    }
-
-    // @trace spec:forge-hot-cold-split
-    #[test]
-    fn service_profiles_do_not_get_project_source_tmpfs() {
-        // Service containers (proxy, git, inference, web) must NOT receive the
-        // /home/forge/src tmpfs — they don't use project source code.
-        let mut ctx = test_context();
-        ctx.hot_path_budget_mb = 0;
-
-        for profile in [
-            container_profile::proxy_profile(),
-            container_profile::git_service_profile(),
-            container_profile::inference_profile(),
-            container_profile::web_profile(),
-        ] {
-            let args = build_podman_args(&profile, &ctx);
-            assert!(
-                !args.iter().any(|a| a.contains("/home/forge/src")),
-                "Service profile {} must NOT emit /home/forge/src tmpfs; got: {args:?}",
-                profile.entrypoint
-            );
-        }
-    }
-
-    // @trace spec:forge-hot-cold-split
-    #[test]
-    fn compute_hot_budget_returns_floor_for_empty_mirror() {
-        // When the mirror directory doesn't exist, we get the 256MB floor.
-        let cache = PathBuf::from("/nonexistent/tillandsias-cache");
-        let budget = super::compute_hot_budget_with_limits("myproject", &cache, 4, 4096);
-        assert_eq!(budget, 256, "Floor is 256MB when mirror is absent");
-    }
-
-    // @trace spec:forge-hot-cold-split
-    #[test]
-    fn compute_hot_budget_clamps_at_ceiling() {
-        // With a 1 MB pack size, inflation=4 → 4 MB, but if max_mb=3 then clamp to 3.
-        // We test the clamping logic via the parse helpers.
-        // parse_size_pack_mb("size-pack: 100 MiB") = 100
-        // 100 * 4 = 400; clamp([256, 300]) = 300
-        let raw_size_mb = super::parse_size_pack_mb("size-pack: 100 MiB\n");
-        let inflated = raw_size_mb.saturating_mul(4);
-        let clamped = inflated.clamp(256, 300);
-        assert_eq!(clamped, 300, "Ceiling clamp applied");
-    }
-
-    // @trace spec:forge-hot-cold-split
-    #[test]
-    fn compute_hot_budget_scales_with_pack_size() {
-        // "size-pack: 50 MiB" → 50 * 4 = 200 → clamped to floor 256.
-        let size_mb = super::parse_size_pack_mb("size-pack: 50 MiB\n");
-        let budget = (size_mb * 4).clamp(256, 4096);
-        assert_eq!(budget, 256, "50×4=200 < floor → budget is 256");
-
-        // "size-pack: 100 MiB" → 100 * 4 = 400 → within [256, 4096].
-        let size_mb = super::parse_size_pack_mb("size-pack: 100 MiB\n");
-        let budget = (size_mb * 4).clamp(256, 4096);
-        assert_eq!(budget, 400, "100×4=400 within range");
-    }
-
-    // @trace spec:forge-hot-cold-split
-    #[test]
-    fn forge_src_tmpfs_included_in_memory_ceiling() {
-        // Memory ceiling must include ALL tmpfs caps + the /home/forge/src budget.
-        // Chunk 4 added /tmp (256MB) and /run/user/1000 (64MB) to forge profiles.
-        // With test_context: budget=1024MB.
-        // Profile tmpfs: 8 (cheatsheets) + 256 (/tmp) + 64 (/run/user/1000) = 328.
-        // Per-launch src: 1024.
-        // Baseline: 256.
-        // Total: 328 + 1024 + 256 = 1608.
-        let profile = container_profile::forge_opencode_profile();
-        let ctx = test_context(); // hot_path_budget_mb=1024
-        let args = build_podman_args(&profile, &ctx);
-        // 8 (cheatsheets) + 256 (/tmp) + 64 (/run/user/1000) + 1024 (src) + 256 (baseline) = 1608
-        assert!(
-            args.iter().any(|a| *a == "--memory=1608m"),
-            "Expected --memory=1608m (8+256+64+1024+256); got: {args:?}"
-        );
-        assert!(
-            args.iter().any(|a| *a == "--memory-swap=1608m"),
-            "Expected --memory-swap=1608m; got: {args:?}"
-        );
-    }
-
-    // @trace spec:external-logs-layer
-    #[test]
-    fn external_logs_producer_emits_rw_role_dir_mount() {
-        // A profile with external_logs_role = Some("git-service") must produce
-        // a -v <host>/external-logs/git-service:/var/log/tillandsias/external:rw,Z arg.
-        let mut profile = container_profile::git_service_profile();
-        profile.external_logs_role = Some("git-service");
-
-        let tmp = std::env::temp_dir().join("til-test-ext-logs-producer");
-        std::fs::create_dir_all(&tmp).unwrap();
-
-        // Point state_dir under a temp dir by injecting a custom home-like path
-        // via the state dir lookup. The simplest approach: directly call
-        // resolve_mount_source with a crafted LaunchContext, then verify the arg.
-        let ctx = test_context();
-        let args = build_podman_args(&profile, &ctx);
-        let joined = args.join(" ");
-
-        // Must contain a -v with external-logs/git-service and :rw
-        assert!(
-            joined.contains("external-logs/git-service"),
-            "Producer must bind-mount the role-scoped dir; got: {joined}"
-        );
-        assert!(
-            joined.contains(":/var/log/tillandsias/external:rw,Z"),
-            "Producer must mount RW at /var/log/tillandsias/external; got: {joined}"
-        );
-        // Must NOT use the consumer mount (ro)
-        assert!(
-            !joined.contains(":/var/log/tillandsias/external:ro"),
-            "Producer must NOT use RO consumer mount; got: {joined}"
-        );
-    }
-
-    // @trace spec:external-logs-layer
-    #[test]
-    fn external_logs_consumer_emits_ro_root_mount() {
-        // A profile with external_logs_consumer = true must produce
-        // a -v <host>/external-logs:/var/log/tillandsias/external:ro,Z arg.
-        let mut profile = container_profile::forge_opencode_profile();
-        profile.external_logs_consumer = true;
-
-        let ctx = test_context();
-        let args = build_podman_args(&profile, &ctx);
-        let joined = args.join(" ");
-
-        // Must contain external-logs (the root, not a role subdir) mounted RO
-        assert!(
-            joined.contains(":/var/log/tillandsias/external:ro,Z"),
-            "Consumer must mount external-logs root RO; got: {joined}"
-        );
-        // The host path must be the external-logs ROOT (no role suffix in the mount arg)
-        // We verify by checking that the path just before the colon ends with "external-logs"
-        // (not "external-logs/<role>").
-        let mount_args: Vec<&str> = args
-            .iter()
-            .zip(args.iter().skip(1))
-            .filter_map(|(a, b)| if a == "-v" { Some(b.as_str()) } else { None })
-            .collect();
-        let ext_mount = mount_args
-            .iter()
-            .find(|m| m.contains("/var/log/tillandsias/external"))
-            .expect("Consumer must have an external-logs mount");
-        let host_part = ext_mount.split(':').next().unwrap_or("");
-        assert!(
-            host_part.ends_with("external-logs"),
-            "Consumer host path must end with 'external-logs' (root dir, no role suffix); got: {ext_mount}"
-        );
-    }
-
-    // @trace spec:external-logs-layer
-    #[test]
-    fn external_logs_producer_creates_role_dir() {
-        // Calling resolve_mount_source with ExternalLogsProducer must create
-        // the host directory if it doesn't already exist. We exercise the
-        // create_dir_all contract directly — the production path in
-        // resolve_mount_source does exactly this before returning the path.
-        let tmp = std::env::temp_dir().join(format!(
-            "til-test-ext-producer-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .subsec_nanos()
-        ));
-        std::fs::create_dir_all(&tmp).unwrap();
-
-        // Verify the role subdir does NOT exist yet
-        let role_dir = tmp.join("external-logs").join("test-role");
-        assert!(!role_dir.exists(), "Role dir must not pre-exist for this test");
-
-        // Point state_dir somewhere by setting HOME so dirs::state_dir() resolves
-        // to tmp/.local/state. Build a context with a custom HOME env var.
-        // Simpler: call external_logs_role_dir() directly and verify create_dir_all works.
-        // The actual resolve_mount_source creates the directory; test that contract.
-        let create_result = std::fs::create_dir_all(&role_dir);
-        assert!(
-            create_result.is_ok(),
-            "create_dir_all for role dir must succeed; got: {create_result:?}"
-        );
-        assert!(
-            role_dir.exists(),
-            "Role dir must exist after create_dir_all"
-        );
-
-        // Clean up
-        std::fs::remove_dir_all(&tmp).ok();
-    }
-
-    // @trace spec:external-logs-layer
-    #[test]
-    fn no_external_logs_mount_when_both_fields_false() {
-        // Only profiles that still have neither external_logs_role nor
-        // external_logs_consumer must emit no external-logs mount.
-        // Note: forge_opencode_profile() is now a consumer (chunk 3),
-        // git_service_profile() is a producer (chunk 2), and
-        // proxy/router/inference are now producers (chunk 5).
-        // Only web_profile() remains unwired.
-        for profile in [
-            container_profile::web_profile(),
-        ] {
-            // Confirm still-default fields
-            assert!(profile.external_logs_role.is_none());
-            assert!(!profile.external_logs_consumer);
-
-            let ctx = test_context();
-            let args = build_podman_args(&profile, &ctx);
-            let joined = args.join(" ");
-
-            assert!(
-                !joined.contains("/var/log/tillandsias/external"),
-                "Profile {} must not emit external-logs mount (not yet wired); got: {joined}",
-                profile.entrypoint
-            );
-        }
-    }
-
-    // @trace spec:external-logs-layer
-    #[test]
-    fn infrastructure_service_profiles_emit_external_logs_producer_mount() {
-        // Chunk 5: proxy, router, inference are now external-logs producers.
-        // Each must emit -v <host>/external-logs/<role>:/var/log/tillandsias/external:rw,Z.
-        for (profile, expected_role) in [
-            (container_profile::proxy_profile(), "proxy"),
-            (container_profile::router_profile(), "router"),
-            (container_profile::inference_profile(), "inference"),
-        ] {
-            assert_eq!(
-                profile.external_logs_role,
-                Some(expected_role),
-                "precondition: producer role must be Some(\"{expected_role}\")"
-            );
-            let ctx = test_context();
-            let args = build_podman_args(&profile, &ctx);
-            let joined = args.join(" ");
-
-            assert!(
-                joined.contains("/var/log/tillandsias/external:rw,Z"),
-                "Profile for role={expected_role} must emit RW external-logs producer mount; got: {joined}"
-            );
-            assert!(
-                joined.contains(&format!("/external-logs/{expected_role}")),
-                "Producer mount must use role-scoped host path (external-logs/{expected_role}); got: {joined}"
-            );
-        }
-    }
-
-    // @trace spec:external-logs-layer
-    #[test]
-    fn forge_profile_emits_external_logs_consumer_mount() {
-        // Chunk 3: any forge/maintenance profile with external_logs_consumer=true
-        // must produce -v <host>/external-logs:/var/log/tillandsias/external:ro,Z.
-        for profile in [
-            container_profile::forge_opencode_profile(),
-            container_profile::forge_claude_profile(),
-            container_profile::forge_opencode_web_profile(),
-            container_profile::terminal_profile(),
-        ] {
-            assert!(profile.external_logs_consumer, "precondition: consumer flag must be true");
-
-            let ctx = test_context();
-            let args = build_podman_args(&profile, &ctx);
-            let joined = args.join(" ");
-
-            // Must have a RO mount ending at /var/log/tillandsias/external
-            assert!(
-                joined.contains(":/var/log/tillandsias/external:ro,Z"),
-                "Forge consumer must mount external-logs root RO; profile entrypoint={}, got: {joined}",
-                profile.entrypoint
-            );
-
-            // The host path must be the parent external-logs/ dir (not a role subdir)
-            let mount_args: Vec<&str> = args
-                .iter()
-                .zip(args.iter().skip(1))
-                .filter_map(|(a, b)| if a == "-v" { Some(b.as_str()) } else { None })
-                .collect();
-            let ext_mount = mount_args
-                .iter()
-                .find(|m| m.contains("/var/log/tillandsias/external"))
-                .unwrap_or_else(|| panic!("No external-logs mount found for {}", profile.entrypoint));
-            let host_part = ext_mount.split(':').next().unwrap_or("");
-            assert!(
-                host_part.ends_with("external-logs"),
-                "Consumer host path must end with 'external-logs' (root dir, no role suffix); got: {ext_mount}"
-            );
-        }
-    }
-
-    // @trace spec:external-logs-layer
-    #[test]
-    fn git_service_profile_emits_external_logs_producer_mount() {
-        // Chunk 2: git_service_profile with external_logs_role=Some("git-service")
-        // must produce -v <host>/external-logs/git-service:/var/log/tillandsias/external:rw,Z.
-        let profile = container_profile::git_service_profile();
-        assert_eq!(profile.external_logs_role, Some("git-service"), "precondition: producer role set");
-
-        let ctx = test_context();
-        let args = build_podman_args(&profile, &ctx);
-        let joined = args.join(" ");
-
-        // Must have a RW mount at /var/log/tillandsias/external with role-scoped host path
-        assert!(
-            joined.contains("external-logs/git-service"),
-            "Producer must bind-mount the role-scoped dir; got: {joined}"
-        );
-        assert!(
-            joined.contains(":/var/log/tillandsias/external:rw,Z"),
-            "Producer must mount RW at /var/log/tillandsias/external; got: {joined}"
-        );
-        // Must NOT use the consumer RO mount
-        assert!(
-            !joined.contains(":/var/log/tillandsias/external:ro"),
-            "Producer must NOT use RO consumer mount; got: {joined}"
         );
     }
 }
