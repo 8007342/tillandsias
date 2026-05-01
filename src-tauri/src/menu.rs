@@ -119,6 +119,7 @@ pub mod ids {
 }
 
 /// Build the complete tray menu from current application state.
+/// @trace spec:tray-minimal-ux
 pub fn build_tray_menu<R: Runtime>(
     app: &AppHandle<R>,
     state: &TrayState,
@@ -129,6 +130,12 @@ pub fn build_tray_menu<R: Runtime>(
     // Dried state: podman unavailable — show minimal error menu
     if state.tray_icon_state == TrayIconState::Dried {
         return build_dried_menu(app);
+    }
+
+    // Minimal UX: show simplified menu until environment is ready
+    // @trace spec:tray-minimal-ux
+    if !state.forge_available {
+        return build_minimal_menu(app, state);
     }
 
     let mut menu = MenuBuilder::new(app);
@@ -166,6 +173,24 @@ pub fn build_tray_menu<R: Runtime>(
             .enabled(state.forge_available)
             .build(app)?,
     );
+
+    // Cloud — show remote projects if authenticated and repos exist
+    // @trace spec:tray-minimal-ux
+    let authenticated = !needs_github_login();
+    if authenticated && !state.remote_repos.is_empty() {
+        let cloud_submenu = build_remote_projects_submenu(app, state, &watch_path)?;
+        menu = menu.item(&cloud_submenu);
+    }
+
+    // GitHub login — show if not authenticated
+    // @trace spec:tray-minimal-ux
+    if !authenticated {
+        menu = menu.item(
+            &MenuItemBuilder::with_id(ids::GITHUB_LOGIN, i18n::t("menu.github.login"))
+                .enabled(state.forge_available)
+                .build(app)?,
+        );
+    }
 
     menu = menu.separator();
 
@@ -256,6 +281,94 @@ fn build_dried_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu
     debug!("Dried menu built (podman unavailable)");
 
     menu.build()
+}
+
+/// Build the minimal tray menu shown during environment verification.
+/// Shows only: status item, divider, version, quit.
+/// @trace spec:tray-minimal-ux
+fn build_minimal_menu<R: Runtime>(
+    app: &AppHandle<R>,
+    state: &TrayState,
+) -> tauri::Result<tauri::menu::Menu<R>> {
+    let mut menu = MenuBuilder::new(app);
+
+    // Status item — shows environment verification state
+    let status_label = environment_status_label(state);
+    menu = menu.item(
+        &MenuItemBuilder::with_id(ids::static_id("env-status"), &status_label)
+            .enabled(false)
+            .build(app)?,
+    );
+
+    menu = menu.separator();
+
+    // Version + attribution
+    let version = format!("Tillandsias v{}", env!("TILLANDSIAS_FULL_VERSION"));
+    menu = menu.item(
+        &MenuItemBuilder::with_id(ids::static_id("version"), &version)
+            .enabled(false)
+            .build(app)?,
+    );
+
+    // Quit — always visible and enabled
+    menu =
+        menu.item(&MenuItemBuilder::with_id(gen_id(ids::QUIT), i18n::t("menu.quit")).build(app)?);
+
+    menu.build()
+}
+
+/// Generate the environment status label based on current state.
+/// @trace spec:tray-minimal-ux
+fn environment_status_label(state: &TrayState) -> String {
+    // Check if environment is fully ready
+    if state.forge_available {
+        return "✅ Environment OK".to_string();
+    }
+
+    // Check if any builds are active
+    if !state.active_builds.is_empty() {
+        let mut icons = String::new();
+        let mut stages = Vec::new();
+
+        for build in &state.active_builds {
+            let name = build.image_name.as_str();
+            if name == "proxy" {
+                icons.push_str("🌐");
+                stages.push("Network");
+            } else if name == "forge" {
+                icons.push_str("🔧");
+                stages.push("Forge");
+            } else if name == "git" {
+                icons.push_str("🪞");
+                stages.push("Mirror");
+            } else if name == "inference" {
+                icons.push_str("🧠");
+                stages.push("Inference");
+            } else if name == "chromium-core" {
+                icons.push_str("🌐");
+                stages.push("Browser");
+            } else if name == "chromium-framework" {
+                icons.push_str("🌐");
+                stages.push("Framework");
+            } else {
+                icons.push_str("⚙️");
+            }
+        }
+
+        if !stages.is_empty() {
+            let stages_str = stages.join(" + ");
+            return format!("{} Building {}...", icons, stages_str);
+        }
+        return format!("{} Building enclave...", icons);
+    }
+
+    // Check TrayIconState for failure state
+    if state.tray_icon_state == TrayIconState::Dried {
+        return "🌹 Unhealthy environment".to_string();
+    }
+
+    // Default: verifying
+    "☐ Verifying environment...".to_string()
 }
 
 /// Build the Projects submenu containing only inactive per-project submenus.
