@@ -1,3 +1,4 @@
+<!-- @trace spec:embedded-scripts -->
 ## MODIFIED Requirements
 
 ### Requirement: Scripts embedded in binary

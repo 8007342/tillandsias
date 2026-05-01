@@ -1,3 +1,4 @@
+<!-- @trace spec:forge-offline -->
 # forge-offline Specification
 
 ## Purpose

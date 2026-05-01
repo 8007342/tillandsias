@@ -1,3 +1,4 @@
+<!-- @trace spec:tray-ux -->
 # tray-ux Specification
 
 ## Purpose
@@ -7,58 +8,58 @@ Define the minimalistic tray UX flow for Tillandsias, showing only essential ele
 
 ### Requirement: First-launch minimal tray
 At launch, the tray SHALL show only four elements:
-1. `<Checklist> Verifying environment ...` (with spinner/animation)
+1. `<☐ Verifying environment ...` (dynamic status icon + text)
 2. Divider
-3. `Version X.Y.Z + Attributions`
-4. `Quit Tillandsias`
+3. `Tillandsias vX.Y.Z` (version + attribution, disabled)
+4. `Quit Tillandsias` (always visible and enabled)
 
 #### Scenario: Initial state
 - **WHEN** Tillandsias starts for the first time
 - **THEN** only the four elements above are visible in the tray menu
 - **AND** no Projects, Cloud, or GitHub login items are shown
+- **AND** the status item shows "☐ Verifying environment..." initially
 
 ### Requirement: Dynamic environment verification status
 The first element SHALL change dynamically as containers are initialized:
-- Initial: `<Checklist> Verifying environment ...`
-- During proxy build: `<Checklist><Network> Building enclave ...`
-- During git build: `<Checklist><Network><Mirror> Building git mirror ...`
-- Final success: `<Checklist><Network><Mirror><Browser><DebugBrowser> ✓ Environment OK`
-- Final failure: `<WhiteRose> Unhealthy environment`
+- Initial: `☐ Verifying environment ...`
+- During builds: Shows icons (🌐=proxy, 🔧=forge, 🪞=git, 🧠=inference, 🌐=chromium) + "Building Network + Forge + Mirror..."
+- Final success: `✅ Environment OK` (when `forge_available = true`)
+- Final failure: `🌹 Unhealthy environment` (when `TrayIconState::Dried`)
 
-#### Scenario: Proxy container ready
-- **WHEN** the proxy container is successfully built and running
-- **THEN** the first element shows `<Checklist><Network> Building enclave ...`
+#### Scenario: Initial state
+- **WHEN** Tillandsias starts for the first time
+- **THEN** the status shows `☐ Verifying environment...`
 
-#### Scenario: Git mirror ready
-- **WHEN** the git container is successfully built and running
-- **THEN** the first element shows `<Checklist><Network><Mirror> Building git mirror ...`
+#### Scenario: Build in progress
+- **WHEN** one or more images are building (`active_builds` not empty)
+- **THEN** the status shows icons for each building component + "Building Network + Mirror + ..."
 
 #### Scenario: All images built successfully
-- **WHEN** all enclave images (proxy, forge, git, inference, chromium-core, chromium-framework) are built
-- **THEN** the first element shows `<Checklist><Network><Mirror><Browser><DebugBrowser> ✓ Environment OK`
+- **WHEN** all enclave images are built and `forge_available = true`
+- **THEN** the status shows `✅ Environment OK`
 
 #### Scenario: Build failure
-- **WHEN** any enclave image fails to build
-- **THEN** the first element shows `<WhiteRose> Unhealthy environment`
+- **WHEN** any enclave image fails to build (`TrayIconState::Dried`)
+- **THEN** the status shows `🌹 Unhealthy environment`
 
 ### Requirement: Post-initialization menu items
-Once all images are built successfully, the UX SHALL show:
-- `<Home> ~/src >` (local projects) if projects exist
-- `<Cloud> Cloud >` if GitHub credentials are present AND remote projects are read successfully
-- `<Key> GitHub login` if no GitHub credentials are present
+Once `forge_available = true`, the UX SHALL show at the top level:
+- `<~/src> Attach Here` (uses first watch path from config, gated on `forge_available`)
+- `<Cloud> Remote Projects >` if GitHub authenticated AND remote repos exist
+- `<Key> GitHub login` if NOT authenticated (gated on `forge_available`)
 
 #### Scenario: With GitHub auth and local projects
-- **WHEN** all images are built AND GitHub credentials exist AND local projects exist
-- **THEN** the menu shows `<Home> ~/src >` and `<Cloud> Cloud >`
+- **WHEN** `forge_available = true` AND GitHub credentials exist AND remote projects exist
+- **THEN** the menu shows "Attach Here" item and "Cloud >" submenu with remote projects
 
 #### Scenario: Without GitHub auth
-- **WHEN** all images are built AND no GitHub credentials exist
-- **THEN** the menu shows only `<Key> GitHub login`
+- **WHEN** `forge_available = true` AND no GitHub credentials exist
+- **THEN** the menu shows "Attach Here" item and "GitHub login" item (no Cloud)
 
 #### Scenario: No local projects
-- **WHEN** all images are built AND no local projects exist
-- **THEN** the menu shows `<Home> ~/src >` (empty) or omits it
-- **AND** shows `<Cloud> Cloud >` if authenticated
+- **WHEN** `forge_available = true` AND no local projects exist
+- **THEN** the menu still shows "Attach Here" with watch path
+- **AND** shows "Cloud >" submenu if authenticated
 
 ### Requirement: Project click launches OpenCode Web
 When clicking on a project in the tray menu:

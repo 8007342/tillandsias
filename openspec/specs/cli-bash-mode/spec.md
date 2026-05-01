@@ -1,3 +1,4 @@
+<!-- @trace spec:cli-bash-mode -->
 # cli-bash-mode Specification
 
 ## Purpose

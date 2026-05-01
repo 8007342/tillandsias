@@ -1,3 +1,4 @@
+<!-- @trace spec:secrets-management -->
 # secrets-management Specification
 
 ## Purpose

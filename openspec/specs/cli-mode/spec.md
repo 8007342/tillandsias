@@ -1,3 +1,4 @@
+<!-- @trace spec:cli-mode -->
 # cli-mode Specification
 
 ## Purpose

@@ -1,3 +1,4 @@
+<!-- @trace spec:proxy-container -->
 # proxy-container Specification
 
 ## Purpose

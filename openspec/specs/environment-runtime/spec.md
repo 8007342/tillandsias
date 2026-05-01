@@ -1,3 +1,4 @@
+<!-- @trace spec:environment-runtime -->
 ## MODIFIED Requirements
 
 ### Requirement: Global and per-project configuration

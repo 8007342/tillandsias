@@ -1,3 +1,4 @@
+<!-- @trace spec:knowledge-source-of-truth -->
 ## ADDED Requirements
 
 ### Requirement: Knowledge directory structure

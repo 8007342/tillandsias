@@ -1,3 +1,4 @@
+<!-- @trace spec:forge-welcome -->
 # forge-welcome Specification
 
 ## Purpose

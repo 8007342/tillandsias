@@ -1,3 +1,4 @@
+<!-- @trace spec:singleton-guard -->
 # singleton-guard Specification
 
 ## Purpose

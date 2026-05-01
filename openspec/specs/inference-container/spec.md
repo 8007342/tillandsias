@@ -1,3 +1,4 @@
+<!-- @trace spec:inference-container -->
 # inference-container Specification
 
 ## Purpose

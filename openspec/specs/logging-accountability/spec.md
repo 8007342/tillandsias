@@ -1,3 +1,4 @@
+<!-- @trace spec:logging-accountability -->
 ## ADDED Requirements
 
 ### Requirement: Per-module log level control

@@ -1,3 +1,4 @@
+<!-- @trace spec:enclave-network -->
 # enclave-network Specification
 
 ## Purpose

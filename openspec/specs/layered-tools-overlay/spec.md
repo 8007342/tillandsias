@@ -1,3 +1,4 @@
+<!-- @trace spec:layered-tools-overlay -->
 # layered-tools-overlay Specification
 
 ## Purpose

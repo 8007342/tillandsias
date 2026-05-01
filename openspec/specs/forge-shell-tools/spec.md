@@ -1,3 +1,4 @@
+<!-- @trace spec:forge-shell-tools -->
 # forge-shell-tools Specification
 
 ## Purpose

@@ -1,3 +1,4 @@
+<!-- @trace spec:tray-app -->
 ## MODIFIED Requirements
 
 ### Requirement: First-launch readiness feedback

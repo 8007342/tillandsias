@@ -1,3 +1,4 @@
+<!-- @trace spec:runtime-logging -->
 # runtime-logging Specification
 
 ## Purpose

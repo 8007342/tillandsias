@@ -1,3 +1,4 @@
+<!-- @trace spec:opencode-web-session -->
 # opencode-web-session Specification
 
 ## Purpose

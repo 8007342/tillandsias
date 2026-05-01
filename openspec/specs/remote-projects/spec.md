@@ -1,3 +1,4 @@
+<!-- @trace spec:remote-projects -->
 # remote-projects Specification
 
 ## Purpose

@@ -1,3 +1,4 @@
+<!-- @trace spec:init-incremental-builds -->
 # init-incremental-builds Specification
 
 ## Purpose

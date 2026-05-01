@@ -1,3 +1,4 @@
+<!-- @trace spec:artifact-detection -->
 # artifact-detection Specification
 
 ## Purpose

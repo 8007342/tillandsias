@@ -1,3 +1,4 @@
+<!-- @trace spec:app-lifecycle -->
 # app-lifecycle Specification
 
 ## Purpose

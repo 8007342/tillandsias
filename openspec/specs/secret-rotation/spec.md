@@ -1,3 +1,4 @@
+<!-- @trace spec:secret-rotation -->
 ## ADDED Requirements
 
 ### Requirement: Token files on tmpfs

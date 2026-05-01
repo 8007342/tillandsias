@@ -1,3 +1,4 @@
+<!-- @trace spec:tray-icon-lifecycle -->
 ## ADDED Requirements
 
 ### Requirement: Five-state tray icon lifecycle

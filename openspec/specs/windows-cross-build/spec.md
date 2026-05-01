@@ -1,3 +1,4 @@
+<!-- @trace spec:windows-cross-build -->
 # windows-cross-build Specification
 
 ## Purpose

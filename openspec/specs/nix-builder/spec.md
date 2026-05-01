@@ -1,3 +1,4 @@
+<!-- @trace spec:nix-builder -->
 ## ADDED Requirements
 
 ### Requirement: Git-tracked files for flake builds
