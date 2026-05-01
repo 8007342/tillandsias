@@ -116,6 +116,8 @@ pub const FORGE_ENTRYPOINT_TERMINAL: &str =
 pub const FORGE_WELCOME: &str = include_str!("../../images/default/forge-welcome.sh");
 pub const FORGE_CONTAINERFILE: &str = include_str!("../../images/default/Containerfile");
 pub const FORGE_OPENCODE_JSON: &str = include_str!("../../images/default/opencode.json");
+// @trace spec:init-incremental-builds
+pub const FORGE_BROWSER_TOOL: &[u8] = include_bytes!("../../target/debug/tillandsias-browser-tool");
 
 // No forge GIT_ASKPASS const — the forge-side askpass was tombstoned.
 // Forge containers have ZERO credentials; only the git-service container
@@ -199,10 +201,18 @@ pub const GIT_ASKPASS_TILLANDSIAS: &str =
 // ---------------------------------------------------------------------------
 // Image sources — inference image
 // @trace spec:inference-container
-// ---------------------------------------------------------------------------
 pub const INFERENCE_ENTRYPOINT: &str = include_str!("../../images/inference/entrypoint.sh");
 pub const INFERENCE_CONTAINERFILE: &str = include_str!("../../images/inference/Containerfile");
 
+// ---------------------------------------------------------------------------
+// Image sources — chromium browser containers
+// @trace spec:browser-isolation-core, spec:browser-isolation-framework
+// ---------------------------------------------------------------------------
+pub const CHROMIUM_CORE_CONTAINERFILE: &str = include_str!("../../images/chromium/Containerfile.core");
+pub const CHROMIUM_FRAMEWORK_CONTAINERFILE: &str = include_str!("../../images/chromium/Containerfile.framework");
+
+// ---------------------------------------------------------------------------
+// Helpers
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -354,6 +364,21 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("Containerfile: {e}"))?;
     write_lf(&default_dir.join("opencode.json"), FORGE_OPENCODE_JSON)
         .map_err(|e| format!("opencode.json: {e}"))?;
+    // @trace spec:init-incremental-builds
+    // Write binary directly (not through write_lf which strips \r for text files)
+    fs::write(&default_dir.join("tillandsias-browser-tool"), FORGE_BROWSER_TOOL)
+        .map_err(|e| format!("tillandsias-browser-tool: {e}"))?;
+    #[cfg(unix)]
+    {
+        let path = default_dir.join("tillandsias-browser-tool");
+        if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
+            warn!(
+                file = %path.display(),
+                error = %e,
+                "Failed to set executable permission on tillandsias-browser-tool"
+            );
+        }
+    }
     // No forge GIT_ASKPASS — tombstoned.
     // @trace spec:secrets-management
     #[cfg(unix)]
@@ -551,10 +576,19 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
             warn!(
                 file = %path.display(),
                 error = %e,
-                "Failed to set executable permission — container entrypoint may fail"
+                "Failed to set executable permission on inference entrypoint"
             );
         }
     }
+
+    // -- images/chromium/ --
+    // @trace spec:browser-isolation-core, spec:browser-isolation-framework
+    let chromium_dir = dir.join("images").join("chromium");
+    fs::create_dir_all(&chromium_dir).map_err(|e| format!("images/chromium dir: {e}"))?;
+    write_lf(&chromium_dir.join("Containerfile.core"), CHROMIUM_CORE_CONTAINERFILE)
+        .map_err(|e| format!("chromium Containerfile.core: {e}"))?;
+    write_lf(&chromium_dir.join("Containerfile.framework"), CHROMIUM_FRAMEWORK_CONTAINERFILE)
+        .map_err(|e| format!("chromium Containerfile.framework: {e}"))?;
 
     debug!(dir = %dir.display(), "Wrote embedded image sources to temp");
     Ok(dir)
@@ -727,11 +761,12 @@ mod tests {
                 // `Containerfile` itself is embedded — covered.
                 // `forge-welcome.sh` is embedded — covered.
                 // `lib-common.sh` is embedded — covered.
+                // `tillandsias-browser-tool` is embedded via FORGE_BROWSER_TOOL — covered.
                 // Currently every file on disk in images/default/ is expected
                 // to land in the extracted tree. If a future file is genuinely
                 // not wanted there (e.g. a README), add a `.gitkeep`-style
                 // carve-out here with a comment explaining why.
-                !name.starts_with(".") && name != "README.md"
+                !name.starts_with(".") && name != "README.md" && name != "tillandsias-browser-tool"
             })
             .collect();
 

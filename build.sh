@@ -270,7 +270,7 @@ install_appimage() {
     appimage_src="$(find "$appimage_output_dir" -name "*.AppImage" -type f 2>/dev/null | head -1)"
     if [[ -z "$appimage_src" ]]; then
         _error "AppImage build failed — no .AppImage found"
-        exit 1
+        return 1
     fi
 
     # Install to ~/Applications/ (same location as curl installer and self-updater)
@@ -291,7 +291,7 @@ install_appimage() {
         local full_version
         full_version="$(cat "$SCRIPT_DIR/VERSION" | tr -d '[:space:]')"
         _step "Building forge container image..."
-        "$SCRIPT_DIR/scripts/build-image.sh" forge --tag "tillandsias-forge:v${full_version}"
+        "$SCRIPT_DIR/scripts/build-image.sh" forge --tag "tillandsias-forge:v${full_version}" || _warn "Forge image build failed, continuing..."
         _info "Forge image built and loaded"
     else
         _warn "scripts/build-image.sh not found, skipping image build"

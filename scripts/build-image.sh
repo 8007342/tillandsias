@@ -82,7 +82,7 @@ FLAG_BACKEND="fedora"  # Default: Fedora minimal. Use --backend nix for Nix imag
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        forge|web|proxy|git|inference)
+        forge|web|proxy|git|inference|chromium-core|chromium-framework)
             IMAGE_NAME="$1"
             ;;
         --force)
@@ -107,6 +107,8 @@ while [[ $# -gt 0 ]]; do
             echo "  proxy              Build the enclave proxy image"
             echo "  git                Build the git service image"
             echo "  inference          Build the local LLM inference image"
+            echo "  chromium-core      Build the secure browser container (minimal)"
+            echo "  chromium-framework Build the debug browser container (with Node.js+Playwright)"
             echo "  --force            Rebuild even if sources haven't changed"
             echo "  --tag <tag>        Override the image tag (default: tillandsias-<name>:latest)"
             echo "  --backend <type>   Build backend: fedora (default) or nix"
@@ -254,10 +256,22 @@ if [[ "$FLAG_BACKEND" == "fedora" ]]; then
         proxy)     IMAGE_DIR="$ROOT/images/proxy" ;;
         git)       IMAGE_DIR="$ROOT/images/git" ;;
         inference) IMAGE_DIR="$ROOT/images/inference" ;;
+        chromium-core) IMAGE_DIR="$ROOT/images/chromium" ;;
+        chromium-framework) IMAGE_DIR="$ROOT/images/chromium" ;;
         *)         IMAGE_DIR="$ROOT/images/default" ;;
     esac
+
+    # Set the correct Containerfile based on image type
+    if [[ "$IMAGE_NAME" == "chromium-core" ]]; then
+        CONTAINERFILE="$IMAGE_DIR/Containerfile.core"
+    elif [[ "$IMAGE_NAME" == "chromium-framework" ]]; then
+        CONTAINERFILE="$IMAGE_DIR/Containerfile.framework"
+    else
+        CONTAINERFILE="$IMAGE_DIR/Containerfile"
+    fi
+
     _step "Building ${BOLD}${IMAGE_TAG}${NC} via podman build (Fedora minimal)..."
-    CONTAINERFILE="$IMAGE_DIR/Containerfile"
+    # @trace spec:browser-isolation-core, spec:browser-isolation-framework
     if [[ ! -f "$CONTAINERFILE" ]]; then
         _error "Containerfile not found at $CONTAINERFILE"
         exit 1

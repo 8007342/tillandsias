@@ -87,6 +87,11 @@ pub enum MountSource {
     /// Each container gets its own isolated log directory mounted RW.
     /// @trace spec:podman-orchestration
     ContainerLogs,
+    /// Tray Unix socket for browser tool communication.
+    /// Resolved at launch time from `$XDG_RUNTIME_DIR/tillandsias/tray.sock`.
+    /// Allows tillandsias-browser-tool inside container to request browser windows.
+    /// @trace spec:mcp-on-demand
+    TraySocket,
 }
 
 /// Mount permission mode.
@@ -574,6 +579,13 @@ fn common_forge_mounts() -> Vec<ProfileMount> {
         ProfileMount {
             host_key: MountSource::ContainerLogs,
             container_path: "/var/log/tillandsias",
+            mode: MountMode::Rw,
+        },
+        // @trace spec:mcp-on-demand
+        // Tray socket for browser tool communication with host tray.
+        ProfileMount {
+            host_key: MountSource::TraySocket,
+            container_path: "/run/tillandsias/tray.sock",
             mode: MountMode::Rw,
         },
     ]

@@ -143,8 +143,10 @@ pub enum CliMode {
     Version,
 
     /// `tillandsias --init` — pre-build all container images (proxy, forge, git, inference).
-    /// `tillandsias --init --force` — rebuild all from scratch.
-    Init { force: bool },
+    /// `tillandsias --init --force` — rebuild even if already built.
+    /// `tillandsias --init --debug` — verbose output with failed build logs.
+    // @trace spec:init-incremental-builds
+    Init { force: bool, debug: bool },
 
     /// `tillandsias --stats` — print disk usage report and exit.
     Stats,
@@ -257,9 +259,12 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
 
     // `tillandsias --init` — pre-build images.
     // `tillandsias --init --force` — rebuild even if already built.
+    // `tillandsias --init --debug` — verbose output with failed build logs.
+    // @trace spec:init-incremental-builds
     if args.iter().any(|a| a == "--init") {
         let force = args.iter().any(|a| a == "--force");
-        return Some((CliMode::Init { force }, log_config));
+        let debug = args.iter().any(|a| a == "--debug");
+        return Some((CliMode::Init { force, debug }, log_config));
     }
 
     // `tillandsias --stats` — disk usage report.

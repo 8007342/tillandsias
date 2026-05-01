@@ -444,6 +444,22 @@ fn resolve_mount_source(source: &MountSource, ctx: &LaunchContext) -> Option<Str
             }
             Some(log_path.display().to_string())
         }
+        // @trace spec:mcp-on-demand
+        // Tray Unix socket — browser tool inside container talks to host tray.
+        MountSource::TraySocket => {
+            let base = if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+                std::path::PathBuf::from(xdg)
+            } else {
+                std::env::temp_dir()
+            };
+            let socket_path = base.join("tillandsias").join("tray.sock");
+            if socket_path.exists() {
+                Some(socket_path.display().to_string())
+            } else {
+                tracing::warn!("Tray socket not found at '{}'", socket_path.display());
+                None // Skip mount if socket doesn't exist yet
+            }
+        }
     }
 }
 
