@@ -304,12 +304,16 @@ install_appimage() {
         local full_version
         full_version="$(cat "$SCRIPT_DIR/VERSION" | tr -d '[:space:]')"
         _step "Building forge container image..."
-        "$SCRIPT_DIR/scripts/build-image.sh" forge --tag "tillandsias-forge:v${full_version}" || _warn "Forge image build failed, continuing..."
+        if ! "$SCRIPT_DIR/scripts/build-image.sh" forge --tag "tillandsias-forge:v${full_version}"; then
+            _error "ERROR: forge image build failed — install aborted"
+            return 1
+        fi
         _info "Forge image built and loaded"
     else
         _warn "scripts/build-image.sh not found, skipping image build"
     fi
 
+    _info "[build] SUCCESS: tillandsias installed and forge image ready"
     _info "Installed. Run 'tillandsias' or launch from your desktop."
     _info "Desktop integration (icons, launcher) is set up on first run."
 }
@@ -387,7 +391,10 @@ fi
 if [[ "$FLAG_INSTALL" == true ]]; then
     "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
     "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
-    install_appimage
+    if ! install_appimage; then
+        _error "[build] ERROR: install failed — check output above for which step failed"
+        exit 1
+    fi
     exit 0
 fi
 
