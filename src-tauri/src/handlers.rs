@@ -4464,7 +4464,7 @@ pub async fn handle_open_browser_window(
 ///
 /// Discovers all running Tillandsias containers (shared infra + project-specific)
 /// and spawns `podman logs -f` for each, with line-by-line source labels.
-pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, _debug: bool) -> Result<(), String> {
+pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, debug: bool) -> Result<(), String> {
     use std::process::{Command, Stdio};
     use std::io::{BufRead, BufReader};
 
@@ -4515,23 +4515,28 @@ pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, _debug: 
 
     if running_containers.is_empty() {
         let msg = if let Some(path) = project_path {
-            format!("No running Tillandsias containers found for project: {}", path.display())
+            format!("ERROR: no containers found for project: {}", path.display())
         } else {
-            "No running Tillandsias containers found".to_string()
+            "ERROR: no running Tillandsias containers found".to_string()
         };
-        warn!(
-            spec = "cli-diagnostics",
-            "Diagnostics: no running containers",
-        );
+        warn!(spec = "cli-diagnostics", "Diagnostics: no running containers");
         eprintln!("{}", msg);
-        return Ok(());
+        return Err(msg);
     }
 
-    info!(
-        spec = "cli-diagnostics",
-        container_count = running_containers.len(),
-        "Diagnostics: found running containers"
-    );
+    eprintln!("[diagnostics] SUCCESS: monitoring {} containers", running_containers.len());
+
+    if debug {
+        info!(
+            spec = "cli-diagnostics",
+            container_count = running_containers.len(),
+            containers = ?running_containers,
+            "Diagnostics: debug mode — container list"
+        );
+        for container in &running_containers {
+            eprintln!("[diagnostics:debug] monitoring: {}", container);
+        }
+    }
 
     // Spawn `podman logs -f` for each container in parallel
     let mut children = Vec::new();
@@ -4574,14 +4579,30 @@ pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, _debug: 
                 .stderr(Stdio::piped());
 
             if let Ok(mut child) = cmd.spawn() {
-                if let Some(stdout) = child.stdout.take() {
-                    let reader = BufReader::new(stdout);
-                    for line in reader.lines() {
-                        if let Ok(line) = line {
-                            let prefix = format!("[{}:{}]", container_type_copy, owner_copy);
-                            eprintln!("{} {}", prefix, line);
+                let stdout = child.stdout.take();
+                let stderr = child.stderr.take();
+                let prefix_out = format!("[{}:{}]", container_type_copy, owner_copy);
+                let prefix_err = prefix_out.clone();
+
+                // Spawn a thread for stderr to avoid deadlock from pipe buffering
+                let stderr_thread = stderr.map(|e| {
+                    std::thread::spawn(move || {
+                        let reader = BufReader::new(e);
+                        for line in reader.lines().flatten() {
+                            eprintln!("{} {}", prefix_err, line);
                         }
+                    })
+                });
+
+                if let Some(out) = stdout {
+                    let reader = BufReader::new(out);
+                    for line in reader.lines().flatten() {
+                        eprintln!("{} {}", prefix_out, line);
                     }
+                }
+
+                if let Some(t) = stderr_thread {
+                    let _ = t.join();
                 }
             }
         });
