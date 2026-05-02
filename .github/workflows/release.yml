@@ -68,15 +68,18 @@ jobs:
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             label: linux-x86_64
-          - platform: macos-latest
-            target: aarch64-apple-darwin
-            label: macos-aarch64
-          - platform: macos-latest
-            target: x86_64-apple-darwin
-            label: macos-x86_64
-          - platform: windows-latest
-            target: x86_64-pc-windows-msvc
-            label: windows-x86_64
+          # @suspend macos-aarch64 — macOS support suspended, using container stack in future
+          # - platform: macos-latest
+          #   target: aarch64-apple-darwin
+          #   label: macos-aarch64
+          # @suspend macos-x86_64 — macOS support suspended, using container stack in future
+          # - platform: macos-latest
+          #   target: x86_64-apple-darwin
+          #   label: macos-x86_64
+          # @suspend windows-x86_64 — Windows support suspended, using container stack in future
+          # - platform: windows-latest
+          #   target: x86_64-pc-windows-msvc
+          #   label: windows-x86_64
 
     runs-on: ${{ matrix.platform }}
 
