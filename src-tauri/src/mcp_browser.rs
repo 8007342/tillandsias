@@ -59,6 +59,7 @@ struct McpTool {
 }
 
 /// Build the tool list (not const to avoid json!() in const context).
+#[cfg(unix)]
 fn get_tools() -> Vec<McpTool> {
     vec![
         McpTool {
@@ -129,6 +130,7 @@ struct ToolCall {
 /// Tray expects: `{ "method": "open_browser_window", "params": { "project": "...", "url": "...", "window_type": "..." }`
 ///
 /// @trace spec:browser-mcp-server
+#[cfg(unix)]
 fn request_browser_window(project: &str, url: &str, window_type: &str) -> Result<(), String> {
     if !Path::new(TRAY_SOCKET).exists() {
         return Err(format!(
@@ -178,6 +180,7 @@ fn request_browser_window(project: &str, url: &str, window_type: &str) -> Result
 }
 
 /// Handle an MCP tool call.
+#[cfg(unix)]
 fn handle_tool_call(tool_name: &str, arguments: Option<&Value>, project: &str) -> Result<Value, String> {
     let url = arguments
         .and_then(|args| args.get("url"))
@@ -218,12 +221,14 @@ fn handle_tool_call(tool_name: &str, arguments: Option<&Value>, project: &str) -
 }
 
 /// Validate URL for safe windows.
+#[cfg(unix)]
 fn is_safe_url(url: &str, project: &str) -> bool {
     url.contains(&format!(".{}.localhost", project))
         || url.contains("dashboard.localhost")
 }
 
 /// Validate URL for debug windows.
+#[cfg(unix)]
 fn is_debug_url(url: &str, project: &str) -> bool {
     url.contains(&format!(".{}.localhost", project))
 }
@@ -233,6 +238,7 @@ fn is_debug_url(url: &str, project: &str) -> bool {
 /// Reads JSON-RPC requests from stdin, processes them, writes responses to stdout.
 ///
 /// @trace spec:browser-mcp-server
+#[cfg(unix)]
 pub fn run_mcp_server(project: &str) -> Result<(), String> {
     info!(
         spec = "browser-mcp-server",
