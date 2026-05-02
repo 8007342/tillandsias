@@ -44,44 +44,64 @@ The first element SHALL change dynamically as containers are initialized:
 
 ### Requirement: Post-initialization menu items
 Once `forge_available = true`, the UX SHALL show at the top level:
-- `<~/src> Attach Here` (uses first watch path from config, gated on `forge_available`)
+- `<Root Terminal>` (opens terminal at watch path)
 - `<Cloud> Remote Projects >` if GitHub authenticated AND remote repos exist
 - `<Key> GitHub login` if NOT authenticated (gated on `forge_available`)
+- Per-project submenus with 4 action buttons (see below)
 
 #### Scenario: With GitHub auth and local projects
 - **WHEN** `forge_available = true` AND GitHub credentials exist AND remote projects exist
-- **THEN** the menu shows "Attach Here" item and "Cloud >" submenu with remote projects
+- **THEN** the menu shows root terminal, Cloud > submenu, and project submenus with action buttons
 
 #### Scenario: Without GitHub auth
 - **WHEN** `forge_available = true` AND no GitHub credentials exist
-- **THEN** the menu shows "Attach Here" item and "GitHub login" item (no Cloud)
+- **THEN** the menu shows root terminal, GitHub login item, and project submenus
 
 #### Scenario: No local projects
 - **WHEN** `forge_available = true` AND no local projects exist
-- **THEN** the menu still shows "Attach Here" with watch path
-- **AND** shows "Cloud >" submenu if authenticated
+- **THEN** the Projects submenu shows "No projects detected"
+- **AND** Cloud > submenu is shown if authenticated
 
-### Requirement: Project click launches OpenCode Web
-When clicking on a project in the tray menu:
-1. If remote project not cloned locally, clone it first
-2. Launch OpenCode Web container for the project
-3. Once container is healthy, launch a safe browser window inside `tillandsias-chromium-core` container
+### Requirement: Per-project action buttons
+Each project submenu SHALL display 4 explicit action buttons:
+1. `💻 OpenCode` — Opens terminal-based IDE
+2. `🌐 OpenCode Web` — Opens web-based IDE via browser isolation
+3. `👽 Claude` — Opens Claude AI assistant
+4. `🔧 Maintenance` — Opens terminal access to the project
 
-#### Scenario: Click local project
-- **WHEN** user clicks a local project
-- **THEN** OpenCode Web container is launched for that project
+All actions are gated on `forge_available`. When a container is running for an action,
+the project label shows status emojis (🔧 for maintenance, 🌸 for forge, 🔗 for web server).
+
+#### Scenario: Click OpenCode action
+- **WHEN** user clicks 💻 OpenCode button
+- **THEN** a terminal-based IDE container is launched for that project
+- **AND** a terminal window opens showing the development environment
+
+#### Scenario: Click OpenCode Web action
+- **WHEN** user clicks 🌐 OpenCode Web button
+- **THEN** an OpenCode Web container is launched for the project
 - **AND** once healthy, a safe browser window opens via `tillandsias-chromium-core` container
+- **AND** the browser communicates with OpenCode Web via the project's enclave network
 
-#### Scenario: Click remote project (not cloned)
-- **WHEN** user clicks a remote project that isn't cloned locally
-- **THEN** the project is cloned to local machine first
-- **AND** then OpenCode Web container is launched
+#### Scenario: Click Claude action
+- **WHEN** user clicks 👽 Claude button
+- **THEN** a Claude AI assistant container is launched for that project
+- **AND** a terminal window opens with Claude interface
 
-#### Scenario: Browser launches in chromium container
-- **WHEN** OpenCode Web container is healthy
-- **THEN** the browser window is launched using `tillandsias-browser-tool` 
-- **AND** the browser runs inside `tillandsias-chromium-core` container for isolation
-- **AND** communicates with OpenCode Web via the tray socket mount
+#### Scenario: Click Maintenance action
+- **WHEN** user clicks 🔧 Maintenance button
+- **THEN** a terminal container is launched for that project
+- **AND** a terminal window opens for manual maintenance tasks
+
+#### Scenario: Remote project cloning
+- **WHEN** user clicks any action for a remote project not cloned locally
+- **THEN** the project is cloned to local machine first (shows progress in menu chip)
+- **AND** then the action container is launched
+
+## Sources of Truth
+
+- `cheatsheets/runtime/container-lifecycle.md` — Container state machine and lifecycle management for Tillandsias containers
+- `cheatsheets/utils/podman-logging.md` — Log inspection techniques for debugging container issues
 
 ### Requirement: Stale container cleanup
 The system SHALL clean up stale Tillandsias containers on startup:

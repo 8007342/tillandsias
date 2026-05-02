@@ -1,9 +1,22 @@
+<!-- @tombstone superseded:browser-isolation-tray-integration -->
 <!-- @trace spec:opencode-web-session -->
-# opencode-web-session Specification
+# opencode-web-session Specification (Deprecated)
 
-## Purpose
+## Deprecation Notice
+
+This specification describes the webview-based approach to OpenCode Web. As of 2026-05-02,
+this flow is being **superseded by browser isolation** (`browser-isolation-tray-integration`).
+
+The webview path is deprecated and should not be used for new implementations. All browser-based
+interfaces now launch via `tillandsias-chromium-core` containers for improved security and isolation.
+
+Kept for reference and backwards compatibility through version 0.1.163 (three releases).
+
+## Purpose (Legacy)
 
 How Tillandsias runs a persistent OpenCode Web server per project, maps it to a local-only host port, and renders it in an embedded Tauri webview — including multi-session reattach semantics and shutdown guarantees.
+
+**This approach is no longer recommended. See `browser-isolation-tray-integration` for the current design.**
 
 ## Requirements
 
