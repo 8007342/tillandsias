@@ -4,8 +4,13 @@
 #   - Playwright for browser automation
 #   - Node.js for agent scripting
 #   - Fonts and locales for rendering
+#
+# The chromium-core version is parameterized via ARG so the build is
+# non-interactive and tracks the exact same version as the running binary.
+# @trace spec:versioning
 
-FROM tillandsias-chromium-core:latest
+ARG CHROMIUM_CORE_TAG
+FROM tillandsias-chromium-core:${CHROMIUM_CORE_TAG}
 
 # Switch to root for package installation
 USER root

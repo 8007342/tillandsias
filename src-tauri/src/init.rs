@@ -303,6 +303,8 @@ pub fn run_with_force(force: bool, debug: bool) -> bool {
             Ok(s) if s.success() => {
                 println!("  {}", i18n::tf("init.build.build_success", &[("name", image_name), ("tag", &tag)]));
                 update_image_status(&mut build_state, image_name, &tag, "success", log_path);
+                // Prune old images after each successful build
+                prune_old_images();
             }
             Ok(s) => {
                 eprintln!(
@@ -355,12 +357,26 @@ pub fn run_with_force(force: bool, debug: bool) -> bool {
     if all_success {
         println!();
         println!("  {}", i18n::t("init.build.tools_overlay"));
-        match crate::tools_overlay::build_overlay_for_init() {
+        let tools_log = if debug {
+            Some(format!("/tmp/tillandsias-init-tools-overlay.log"))
+        } else {
+            None
+        };
+        match crate::tools_overlay::build_overlay_for_init(tools_log.as_deref().map(|p| std::path::Path::new(p))) {
             Ok(()) => {
                 println!("  {}", i18n::t("init.build.tools_overlay_ready"));
             }
             Err(e) => {
                 eprintln!("  [tools-overlay] {e}");
+                // In debug mode, tail the log file
+                if let Some(ref log) = tools_log {
+                    eprintln!("\n  --- Tools overlay build log (last 10 lines) ---");
+                    let _ = std::process::Command::new("tail")
+                        .args(["-10", log])
+                        .stdout(std::process::Stdio::inherit())
+                        .stderr(std::process::Stdio::inherit())
+                        .status();
+                }
                 // Non-fatal — overlay will be built on first container launch
             }
         }

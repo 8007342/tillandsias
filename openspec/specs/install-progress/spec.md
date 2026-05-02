@@ -1,3 +1,4 @@
+<!-- @trace spec:install-progress -->
 ## ADDED Requirements
 
 ### Requirement: Spinner during tool installation

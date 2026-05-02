@@ -1,3 +1,4 @@
+<!-- @trace spec:default-image -->
 # default-image Specification
 
 ## Purpose

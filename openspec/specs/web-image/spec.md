@@ -1,3 +1,4 @@
+<!-- @trace spec:web-image -->
 # web-image Specification
 
 ## Purpose

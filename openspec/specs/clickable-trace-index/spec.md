@@ -1,3 +1,4 @@
+<!-- @trace spec:clickable-trace-index -->
 ## ADDED Requirements
 
 ### Requirement: Trace index script

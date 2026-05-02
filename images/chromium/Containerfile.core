@@ -1,4 +1,4 @@
-# @trace spec:browser-isolation-core
+# @trace spec:browser-isolation-core, spec:versioning
 # Minimal Chromium container for isolated, headless rendering.
 # Reference: openspec/changes/chromium-browser-isolation/design.md
 # Security model: read-only root, no external network, no credentials, reduced capabilities

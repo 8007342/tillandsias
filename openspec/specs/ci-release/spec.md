@@ -1,3 +1,4 @@
+<!-- @trace spec:ci-release -->
 ## MODIFIED Requirements
 
 ### Requirement: Node.js 24 runtime for GitHub Actions

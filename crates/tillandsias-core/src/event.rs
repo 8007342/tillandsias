@@ -117,6 +117,22 @@ pub enum MenuCommand {
         window_type: String, // "open_safe_window" or "open_debug_window"
     },
 
+    /// Open OpenCode terminal-based IDE for a project.
+    /// @trace spec:tray-minimal-ux
+    OpenCodeProject { project_path: PathBuf },
+
+    /// Open OpenCode Web for a project (web-based IDE).
+    /// @trace spec:browser-isolation-tray-integration
+    OpenCodeWebProject { project_path: PathBuf },
+
+    /// Open Claude assistant for a project.
+    /// @trace spec:tray-minimal-ux
+    ClaudeProject { project_path: PathBuf },
+
+    /// Open maintenance terminal for a project.
+    /// @trace spec:tray-minimal-ux
+    MaintenanceProject { project_path: PathBuf },
+
     /// Quit the application
     Quit,
 }

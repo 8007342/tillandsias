@@ -10,8 +10,10 @@ Tillandsias runs OpenCode Web inside a container, but the browser must also be i
 
 | Image | Purpose | Packages |
 |-------|---------|----------|
-| `tillandsias-chromium-core:latest` | Secure, headless browser | Chromium headless, mesa-dri-drivers |
-| `tillandsias-chromium-framework:latest` | Debug browser with DevTools | Node.js, npm, Playwright, DevTools |
+| `tillandsias-chromium-core:vX.Y.Z.B` | Secure, headless browser | Chromium headless, mesa-dri-drivers |
+| `tillandsias-chromium-framework:vX.Y.Z.B` | Debug browser with DevTools | Node.js, npm, Playwright, DevTools |
+
+**Versioning**: Both images use the full Tillandsias version tag (`vX.Y.Z.B`) matching the running binary. No `:latest` tags are used. @trace spec:versioning
 
 ## How It Works
 
@@ -20,8 +22,8 @@ HOST (Tillandsias Tray)
   ├── Unix Socket: /run/tillandsias/tray.sock
   │     ↑ listens for browser requests
   └── event_loop.rs → handle_open_browser_window()
-         └── chromium_launcher::spawn_chromium_window()
-              └── launch-chromium.sh → podman run tillandsias-chromium-*
+       └── chromium_launcher::spawn_chromium_window()
+            └── launch-chromium.sh → podman run tillandsias-chromium-*
 
 FORGE CONTAINER (tillandsias-forge)
   ├── OpenCode Web (opencode serve --port 4096)
@@ -45,28 +47,52 @@ FORGE CONTAINER (tillandsias-forge)
 ### Via `tillandsias --init` (automatic)
 
 ```bash
-tillandsias --init --debug
+tillandsias --init
 # Builds: proxy, forge, git, inference, chromium-core, chromium-framework
 ```
 
-The `--init` sequence now includes all 6 container images.
+The `--init` sequence now includes all 6 container images. @trace spec:init-incremental-builds
 
-### Manual build
+### Versioned Tags (Non-Interactive Build)
+
+Both chromium images use **versioned tags** that match the running Tillandsias binary:
 
 ```bash
-# Core (minimal, secure)
-podman build -f images/chromium/Containerfile.core \
-  -t tillandsias-chromium-core:latest images/chromium/
+# Core (minimal, secure) - tag matches binary version
+podman build \
+  --tag "tillandsias-chromium-core:v$(cat VERSION)" \
+  -f images/chromium/Containerfile.core \
+  images/chromium/
+```
 
-# Framework (debug, with Node.js + Playwright)
-podman build -f images/chromium/Containerfile.framework \
-  -t tillandsias-chromium-framework:latest images/chromium/
+```bash
+# Framework (debug, with Node.js + Playwright) - extends versioned core
+podman build \
+  --build-arg CHROMIUM_CORE_TAG="v$(cat VERSION)" \
+  --tag "tillandsias-chromium-framework:v$(cat VERSION)" \
+  -f images/chromium/Containerfile.framework \
+  images/chromium/
+```
+
+**The `chromium-framework` Containerfile accepts `CHROMIUM_CORE_TAG` as a build arg** to avoid interactive prompts and ensure the exact same-version core image is used. @trace spec:versioning
+
+### Manual build (development only)
+
+```bash
+# Core
+podman build -f images/chromium/Containerfile.core \
+  -t tillandsias-chromium-core:v0.1.160.204 images/chromium/
+
+# Framework (extends core with SDK tools)
+podman build --build-arg CHROMIUM_CORE_TAG=v0.1.160.204 \
+  -f images/chromium/Containerfile.framework \
+  -t tillandsias-chromium-framework:v0.1.160.204 images/chromium/
 ```
 
 ## Verifying Isolation
 
 ```bash
-# Check browser containers exist
+# Check browser containers exist with versioned tags
 podman images | grep chromium
 
 # Check tray socket is mounted in forge container
@@ -96,13 +122,11 @@ If links open in your native browser:
    podman exec tillandsias-forge-<project>-<genus> env | grep OPENCODE_BROWSER
    # Should print: OPENCODE_BROWSER=safe
    ```
-
 2. Check `tillandsias-browser-tool` exists in container:
    ```bash
    podman exec tillandsias-forge-<project>-<genus> which tillandsias-browser-tool
    # Should print: /usr/local/bin/tillandsias-browser-tool
    ```
-
 3. Check browser tool can reach tray:
    ```bash
    podman exec tillandsias-forge-<project>-<genus> \
@@ -114,10 +138,10 @@ If links open in your native browser:
 
 | Component | File | Trace |
 |-----------|------|-------|
-| Chromium Containerfiles | `images/chromium/Containerfile.core`, `Containerfile.framework` | `spec:browser-isolation-core`, `spec:browser-isolation-framework` |
-| Build integration | `scripts/build-image.sh` | `spec:browser-isolation-core` |
+| Chromium Containerfiles | `images/chromium/Containerfile.core`, `Containerfile.framework` | `spec:browser-isolation-core`, `spec:browser-isolation-framework`, `spec:versioning` |
+| Build integration | `scripts/build-image.sh` | `spec:browser-isolation-core`, `spec:versioning` |
 | Init sequence | `src-tauri/src/init.rs:114-121` | `spec:init-incremental-builds` |
-| Tag functions | `src-tauri/src/handlers.rs:106-116` | `spec:browser-isolation-core` |
+| Tag functions | `src-tauri/src/handlers.rs:106-116` | `spec:browser-isolation-core`, `spec:versioning` |
 | Mount definitions | `crates/tillandsias-core/src/container_profile.rs:86-92` | `spec:mcp-on-demand` |
 | Socket resolution | `src-tauri/src/launch.rs:433-448` | `spec:mcp-on-demand` |
 | Browser launcher | `scripts/launch-chromium.sh` | `spec:browser-isolation-core` |

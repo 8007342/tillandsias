@@ -61,6 +61,10 @@ pub enum ContainerType {
     /// Named `tillandsias-inference` — shared, not project-specific.
     /// @trace spec:inference-container
     Inference,
+    /// Chromium browser container for safe/debug browsing.
+    /// Named `tillandsias-chromium-<project>-<type>` — no genus allocation.
+    /// @trace spec:browser-isolation-core
+    Browser,
 }
 
 /// Info about a running container environment.
@@ -250,13 +254,20 @@ pub struct TrayState {
     ///
     /// Starts as `false` on every launch. Set to `true` when:
     /// - The forge image is confirmed present at startup (no build needed), or
-    /// - A forge image build completes successfully.
+    /// - A forge build completes successfully.
     /// Set to `false` when a forge rebuild begins (image stale or absent).
     ///
     /// While `false`, all forge-dependent menu actions (Attach Here, Maintenance,
     /// Root terminal, GitHub Login) are disabled so the user cannot trigger them
     /// before the image is ready.
     pub forge_available: bool,
+
+    /// Track browser launch times for debouncing (prevent rapid successive spawns).
+    /// Key: project name, Value: last launch Instant.
+    pub browser_last_launch: std::collections::HashMap<String, std::time::Instant>,
+
+    /// Track debug browser PIDs (one per project, for "open_debug_window").
+    pub debug_browser_pid: std::collections::HashMap<String, u32>,
 }
 
 impl TrayState {
@@ -274,6 +285,8 @@ impl TrayState {
             remote_repos_error: None,
             active_builds: Vec::new(),
             forge_available: false,
+            browser_last_launch: std::collections::HashMap::new(),
+            debug_browser_pid: std::collections::HashMap::new(),
         }
     }
 

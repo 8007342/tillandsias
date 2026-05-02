@@ -1,3 +1,4 @@
+<!-- @trace spec:update-system -->
 ## MODIFIED Requirements
 
 ### Requirement: Platform-appropriate artifact selection

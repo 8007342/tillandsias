@@ -1,3 +1,4 @@
+<!-- @trace spec:init-command -->
 # init-command Specification
 
 ## Purpose

@@ -1,3 +1,4 @@
+<!-- @trace spec:versioning -->
 # versioning Specification
 
 ## Purpose

@@ -1,3 +1,4 @@
+<!-- @trace spec:cross-platform -->
 # Spec: Cross-Platform Windows Support (Delta)
 
 ## Requirements

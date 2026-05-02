@@ -1,3 +1,4 @@
+<!-- @trace spec:filesystem-scanner -->
 ## MODIFIED Requirements
 
 ### Requirement: OS-native event-driven watching

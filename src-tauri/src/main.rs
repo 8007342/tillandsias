@@ -91,8 +91,8 @@ fn main() {
     }
 
     // Init mode — pre-build images and exit.
-    if let cli::CliMode::Init { force } = cli_mode {
-        let success = init::run_with_force(force);
+    if let cli::CliMode::Init { force, debug: _ } = cli_mode {
+        let success = init::run_with_force(force, false);
         std::process::exit(if success { 0 } else { 1 });
     }
 
@@ -125,6 +125,17 @@ fn main() {
         let _log_guard = logging::init(&log_config);
         let success = runner::run_github_login();
         std::process::exit(if success { 0 } else { 1 });
+    }
+
+    // Diagnostics mode — stream container logs and exit.
+    // @trace spec:cli-diagnostics
+    if let cli::CliMode::Diagnostics { path, debug } = cli_mode {
+        let _log_guard = logging::init(&log_config);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let result = rt.block_on(async {
+            handlers::handle_diagnostics(path.as_deref(), debug).await
+        });
+        std::process::exit(if result.is_ok() { 0 } else { 1 });
     }
 
     // If CLI attach mode, run the container runner and exit — no tray app.
@@ -1027,6 +1038,23 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
             if let Some((action, payload)) = menu::ids::parse(id) {
                 match action {
                     "attach" => Some(MenuCommand::AttachHere {
+                        project_path: payload.into(),
+                    }),
+                    // New explicit action buttons for projects
+                    // @trace spec:tray-minimal-ux
+                    "opencode" => Some(MenuCommand::OpenCodeProject {
+                        project_path: payload.into(),
+                    }),
+                    // @trace spec:browser-isolation-tray-integration
+                    "opencode-web" => Some(MenuCommand::OpenCodeWebProject {
+                        project_path: payload.into(),
+                    }),
+                    // @trace spec:tray-minimal-ux
+                    "claude" => Some(MenuCommand::ClaudeProject {
+                        project_path: payload.into(),
+                    }),
+                    // @trace spec:tray-minimal-ux
+                    "maintenance" => Some(MenuCommand::MaintenanceProject {
                         project_path: payload.into(),
                     }),
                     "terminal" => Some(MenuCommand::Terminal {

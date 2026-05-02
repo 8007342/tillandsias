@@ -1,3 +1,4 @@
+<!-- @trace spec:binary-signing -->
 ## MODIFIED Requirements
 
 ### Requirement: Signature and certificate artifacts

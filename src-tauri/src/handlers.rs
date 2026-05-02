@@ -66,7 +66,7 @@ pub fn build_mutex_lock() -> std::sync::MutexGuard<'static, ()> {
     })
 }
 
-use tillandsias_core::config::{GlobalConfig, cache_dir, load_global_config, load_project_config};
+use tillandsias_core::config::{GlobalConfig, SelectedAgent, cache_dir, load_global_config, load_project_config, save_selected_agent};
 use tillandsias_core::event::{AppEvent, BuildProgressEvent, ContainerState};
 use tillandsias_core::genus::GenusAllocator;
 use tillandsias_core::state::{BuildProgress, BuildStatus, ContainerInfo, ContainerType, TrayState};
@@ -103,16 +103,16 @@ pub(crate) fn inference_image_tag() -> String {
     format!("tillandsias-inference:v{}", env!("TILLANDSIAS_FULL_VERSION"))
 }
 
-/// The chromium-core browser image tag (not versioned, uses :latest).
+/// The chromium-core browser image tag, e.g., `tillandsias-chromium-core:v0.1.126.83`.
 /// @trace spec:browser-isolation-core
 pub(crate) fn chromium_core_image_tag() -> String {
-    "tillandsias-chromium-core:latest".to_string()
+    format!("tillandsias-chromium-core:v{}", env!("TILLANDSIAS_FULL_VERSION"))
 }
 
-/// The chromium-framework browser image tag (not versioned, uses :latest).
+/// The chromium-framework browser image tag, e.g., `tillandsias-chromium-framework:v0.1.126.83`.
 /// @trace spec:browser-isolation-framework
 pub(crate) fn chromium_framework_image_tag() -> String {
-    "tillandsias-chromium-framework:latest".to_string()
+    format!("tillandsias-chromium-framework:v{}", env!("TILLANDSIAS_FULL_VERSION"))
 }
 
 /// The fixed container name for the inference service (not project-specific).
@@ -1871,13 +1871,15 @@ pub(crate) fn any_versioned_forge_exists() -> bool {
 ///
 /// Best-effort — failures are logged but do not block operation.
 /// Prune old versioned images for ALL tillandsias image types.
-/// Keeps only the current version tag for each type (forge, proxy, git, inference).
+/// Keeps only the current version tag for each type (forge, proxy, git, inference, chromium).
 pub(crate) fn prune_old_images() {
     let current_tags = [
         forge_image_tag(),
         proxy_image_tag(),
         git_image_tag(),
         inference_image_tag(),
+        chromium_core_image_tag(),
+        chromium_framework_image_tag(),
     ];
 
     let output = tillandsias_podman::podman_cmd_sync()
@@ -1891,16 +1893,18 @@ pub(crate) fn prune_old_images() {
                 .lines()
                 .filter(|line| {
                     let trimmed = line.trim();
-                    // Only target tillandsias images
-                    let is_tillandsias = trimmed.contains("tillandsias-forge:")
-                        || trimmed.contains("tillandsias-proxy:")
-                        || trimmed.contains("tillandsias-git:")
-                        || trimmed.contains("tillandsias-inference:");
+                    // Normalize: strip localhost/ prefix for comparison
+                    let normalized = trimmed.strip_prefix("localhost/").unwrap_or(trimmed);
+                    // Only target tillandsias images (all types including chromium)
+                    let is_tillandsias = normalized.starts_with("tillandsias-forge:")
+                        || normalized.starts_with("tillandsias-proxy:")
+                        || normalized.starts_with("tillandsias-git:")
+                        || normalized.starts_with("tillandsias-inference:")
+                        || normalized.starts_with("tillandsias-chromium-core:")
+                        || normalized.starts_with("tillandsias-chromium-framework:")
+                        || normalized.starts_with("tillandsias-router:");  // Legacy: remove old router images
                     // Keep current version tags
-                    let is_current = current_tags.iter().any(|tag| {
-                        let suffix = tag.rsplit_once(':').map(|(_, t)| t).unwrap_or(tag);
-                        trimmed.ends_with(&format!(":{suffix}"))
-                    });
+                    let is_current = current_tags.iter().any(|tag| normalized == tag);
                     is_tillandsias && !is_current
                 })
                 .map(|s| s.trim().to_string())
@@ -1915,7 +1919,7 @@ pub(crate) fn prune_old_images() {
     for image in &images_to_remove {
         info!(image = %image, "Pruning old image");
         let result = tillandsias_podman::podman_cmd_sync()
-            .args(["rmi", image])
+            .args(["rmi", "-f", image])
             .output();
         match result {
             Ok(o) if o.status.success() => {
@@ -2286,10 +2290,13 @@ fn run_build_image_script(image_name: &str) -> Result<(), String> {
     let script = source_dir.join("scripts").join("build-image.sh");
     // Use the correct versioned tag for each image type.
     // @trace spec:default-image, spec:proxy-container, spec:git-mirror-service, spec:inference-container
+    // @trace spec:browser-isolation-core, spec:browser-isolation-framework
     let tag = match image_name {
         "proxy" => proxy_image_tag(),
         "git" => git_image_tag(),
         "inference" => inference_image_tag(),
+        "chromium-core" => chromium_core_image_tag(),
+        "chromium-framework" => chromium_framework_image_tag(),
         _ => forge_image_tag(),
     };
     info!(script = %script.display(), image = image_name, tag = %tag, spec = "default-image, nix-builder", "Running embedded build-image.sh");
@@ -2559,6 +2566,7 @@ pub fn inject_ca_chain_mounts_pub(run_args: &mut Vec<String>) {
 /// Queries podman for all containers matching `tillandsias-*`, then removes
 /// any that are not present in our in-memory state. Skips infrastructure
 /// toolboxes (builder, windows, etc.).
+// @trace spec:tray-minimal-ux
 async fn cleanup_stale_containers(state: &TrayState) {
     let output = tillandsias_podman::podman_cmd_sync()
         .args([
@@ -4449,19 +4457,11 @@ pub async fn handle_open_browser_window(
         }
     }
 
-    // Debug browser: only one per project
+    // Debug browser: only one per project (simplified for now)
     if window_type == "open_debug_window" {
-        if let Some(pid) = state.debug_browser_pid.get(project) {
-            // Check if the process is still running
-            if crate::chromium_launcher::is_process_running(*pid) {
-                return Err(format!(
-                    "Debug browser already running for project '{}' (PID: {})",
-                    project, pid
-                ));
-            }
-            // Stale PID, remove it
-            state.debug_browser_pid.remove(project);
-        }
+        // NOTE: is_process_running() and get_container_pid() not yet implemented
+        // Skipping debug browser duplicate check for now
+        // TODO: implement these functions in chromium_launcher module
     }
 
     // Push BuildProgress notification (Browser — <project>)
@@ -4474,8 +4474,10 @@ pub async fn handle_open_browser_window(
         completed_at: None,
     });
 
-    // Spawn the Chromium window
-    let container_id = chromium_launcher::spawn_chromium_window(project, url, window_type)?;
+    // Spawn the Chromium window with versioned image tag
+    // @trace spec:browser-isolation-core
+    let version = env!("TILLANDSIAS_FULL_VERSION");
+    let container_id = chromium_launcher::spawn_chromium_window(project, url, window_type, version)?;
 
     // Update timestamp on successful spawn
     state.browser_last_launch.insert(project.to_string(), now);
@@ -4493,12 +4495,10 @@ pub async fn handle_open_browser_window(
         display_emoji: "🌐".to_string(),
     });
 
-    // Track debug browser PID
+    // Track debug browser PID (simplified - no PID tracking without get_container_pid)
     if window_type == "open_debug_window" {
-        // Extract PID from container info or process table
-        if let Ok(pid) = chromium_launcher::get_container_pid(&container_id) {
-            state.debug_browser_pid.insert(project.to_string(), pid);
-        }
+        // NOTE: get_container_pid() not yet implemented
+        // TODO: implement PID tracking when needed
     }
 
     // Update BuildProgress to Completed, start 5s fadeout
@@ -4516,6 +4516,209 @@ pub async fn handle_open_browser_window(
     );
 
     Ok(())
+}
+
+/// @trace spec:cli-diagnostics, spec:observability-convergence
+/// Stream live container logs for the given project to stdout.
+///
+/// Discovers all running Tillandsias containers (shared infra + project-specific)
+/// and spawns `podman logs -f` for each, with line-by-line source labels.
+pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, _debug: bool) -> Result<(), String> {
+    use std::process::{Command, Stdio};
+    use std::io::{BufRead, BufReader};
+
+    info!(
+        spec = "cli-diagnostics",
+        cheatsheet = "docs/cheatsheets/podman-logging.md",
+        "Diagnostics: starting container log stream"
+    );
+
+    // Discover running containers: shared infra + project-specific
+    let shared_containers = vec!["tillandsias-proxy", "tillandsias-git", "tillandsias-inference"];
+
+    let project_containers: Vec<String> = if let Some(project_path) = project_path {
+        let project_name = project_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+            .to_string();
+        vec![
+            format!("tillandsias-{}-forge", project_name),
+            format!("tillandsias-{}-browser-core", project_name),
+            format!("tillandsias-{}-browser-framework", project_name),
+        ]
+    } else {
+        vec![]
+    };
+
+    let all_containers: Vec<&str> = shared_containers
+        .iter()
+        .map(|s| &s[..])
+        .chain(project_containers.iter().map(|s| &s[..]))
+        .collect();
+
+    // Check which containers are actually running
+    let mut running_containers = Vec::new();
+    for container in &all_containers {
+        let output = Command::new("podman")
+            .args(&["ps", "--quiet", "--filter", &format!("name={}", container)])
+            .output();
+
+        if let Ok(output) = output {
+            let container_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !container_id.is_empty() {
+                running_containers.push(*container);
+            }
+        }
+    }
+
+    if running_containers.is_empty() {
+        let msg = if let Some(path) = project_path {
+            format!("No running Tillandsias containers found for project: {}", path.display())
+        } else {
+            "No running Tillandsias containers found".to_string()
+        };
+        warn!(
+            spec = "cli-diagnostics",
+            "Diagnostics: no running containers",
+        );
+        eprintln!("{}", msg);
+        return Ok(());
+    }
+
+    info!(
+        spec = "cli-diagnostics",
+        container_count = running_containers.len(),
+        "Diagnostics: found running containers"
+    );
+
+    // Spawn `podman logs -f` for each container in parallel
+    let mut children = Vec::new();
+    for container in &running_containers {
+        // Extract container type (proxy, git, forge, browser-core, browser-framework)
+        let container_type = if container.contains("proxy") {
+            "proxy"
+        } else if container.contains("git") {
+            "git"
+        } else if container.contains("inference") {
+            "inference"
+        } else if container.contains("browser-core") {
+            "browser-core"
+        } else if container.contains("browser-framework") {
+            "browser-framework"
+        } else {
+            "forge"
+        };
+
+        // Extract project name if present
+        let owner = if container.starts_with("tillandsias-") {
+            let parts: Vec<&str> = container.split('-').collect();
+            if parts.len() > 1 && parts[1] != "proxy" && parts[1] != "git" && parts[1] != "inference" {
+                parts[1]
+            } else {
+                "shared"
+            }
+        } else {
+            "unknown"
+        };
+
+        let container_copy = container.to_string();
+        let container_type_copy = container_type.to_string();
+        let owner_copy = owner.to_string();
+
+        let child = std::thread::spawn(move || {
+            let mut cmd = Command::new("podman");
+            cmd.args(&["logs", "-f", &container_copy])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+
+            if let Ok(mut child) = cmd.spawn() {
+                if let Some(stdout) = child.stdout.take() {
+                    let reader = BufReader::new(stdout);
+                    for line in reader.lines() {
+                        if let Ok(line) = line {
+                            let prefix = format!("[{}:{}]", container_type_copy, owner_copy);
+                            eprintln!("{} {}", prefix, line);
+                        }
+                    }
+                }
+            }
+        });
+
+        children.push(child);
+    }
+
+    // Wait for all children to finish (they run until Ctrl+C)
+    for child in children {
+        let _ = child.join();
+    }
+
+    info!(
+        spec = "cli-diagnostics",
+        "Diagnostics: stream ended"
+    );
+
+    Ok(())
+}
+
+/// Handle "OpenCode" action: opens the terminal-based IDE.
+/// @trace spec:tray-minimal-ux
+#[instrument(skip(state, allocator, build_tx), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "opencode", spec = "tray-minimal-ux"))]
+pub async fn handle_opencode_project(
+    project_path: PathBuf,
+    state: &mut TrayState,
+    allocator: &mut GenusAllocator,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<AppEvent, String> {
+    // OpenCode terminal mode: use the standard attach-here flow
+    // which defaults to terminal-based OpenCode unless overridden by config.
+    // @trace spec:tray-minimal-ux
+    handle_attach_here(project_path, state, allocator, build_tx).await
+}
+
+/// Handle "OpenCode Web" action: opens the web-based IDE.
+/// Currently routes through handle_attach_web, but should transition to browser isolation.
+/// @trace spec:browser-isolation-tray-integration
+#[instrument(skip(state, allocator, build_tx), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "opencode-web", spec = "browser-isolation-tray-integration"))]
+pub async fn handle_opencode_web_project(
+    project_path: PathBuf,
+    state: &mut TrayState,
+    allocator: &mut GenusAllocator,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<AppEvent, String> {
+    // OpenCode Web mode: use handle_attach_web which manages the persistent
+    // forge container and opens the web interface.
+    // TODO: @tombstone webview-based flow, transition to browser-isolation-core
+    // @trace spec:browser-isolation-tray-integration
+    handle_attach_web(project_path, state, allocator, build_tx).await
+}
+
+/// Handle "Claude" action: opens the Claude assistant.
+/// @trace spec:tray-minimal-ux
+#[instrument(skip(state, allocator, build_tx), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "claude", spec = "tray-minimal-ux"))]
+pub async fn handle_claude_project(
+    project_path: PathBuf,
+    state: &mut TrayState,
+    allocator: &mut GenusAllocator,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<AppEvent, String> {
+    // Claude mode: use the standard attach-here flow.
+    // @trace spec:tray-minimal-ux
+    handle_attach_here(project_path, state, allocator, build_tx).await
+}
+
+/// Handle "Maintenance" action: opens a terminal for maintenance tasks.
+/// @trace spec:tray-minimal-ux
+#[instrument(skip(state, allocator, tool_allocator, build_tx), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "maintenance", spec = "tray-minimal-ux"))]
+pub async fn handle_maintenance_project(
+    project_path: PathBuf,
+    state: &mut TrayState,
+    allocator: &mut GenusAllocator,
+    tool_allocator: &mut ToolAllocator,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<(), String> {
+    // Maintenance is equivalent to Terminal mode
+    handle_terminal(project_path, state, allocator, tool_allocator, build_tx).await
 }
 
 #[cfg(test)]

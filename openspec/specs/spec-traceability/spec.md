@@ -1,3 +1,4 @@
+<!-- @trace spec:spec-traceability -->
 ## ADDED Requirements
 
 ### Requirement: Code annotations link to specs and knowledge

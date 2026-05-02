@@ -1,14 +1,4 @@
----
-tags: [tray, ux, icons, tauri, design]
-languages: [rust]
-since: 2024-01-01
-last_verified: 2026-04-27
-sources:
-  - https://tauri.app/learn/system-tray/
-authority: high
-status: current
----
-
+<!-- @trace spec:tray-icon-ux -->
 # Tray Icon UX Guidelines
 
 ## Design Principles
@@ -102,8 +92,3 @@ Each genus has a distinctive silhouette that remains recognizable at small sizes
 | Tectorum | Circle with spikes | Fuzzy ball with trichomes |
 | Usneoides | Hanging strands from bar | Only genus that hangs downward |
 | Xerographica | Wide curling arcs | Sweeping spiral curves |
-
-## Provenance
-
-- https://tauri.app/learn/system-tray/ — Tauri system tray guide; TrayIcon and TrayIconBuilder API, icon customization, menu integration via `menu` option, tray events (Click, DoubleClick, Enter, Move, Leave), `features = ["tray-icon"]` requirement
-- **Last updated:** 2026-04-27

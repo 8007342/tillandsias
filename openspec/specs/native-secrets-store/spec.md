@@ -1,3 +1,4 @@
+<!-- @trace spec:native-secrets-store -->
 # native-secrets-store Specification
 
 ## Purpose

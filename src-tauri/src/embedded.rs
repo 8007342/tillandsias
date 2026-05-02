@@ -117,8 +117,6 @@ pub const FORGE_WELCOME: &str = include_str!("../../images/default/forge-welcome
 pub const FORGE_CONTAINERFILE: &str = include_str!("../../images/default/Containerfile");
 pub const FORGE_OPENCODE_JSON: &str = include_str!("../../images/default/opencode.json");
 // @trace spec:init-incremental-builds
-pub const FORGE_BROWSER_TOOL: &[u8] = include_bytes!("../../target/debug/tillandsias-browser-tool");
-
 // No forge GIT_ASKPASS const — the forge-side askpass was tombstoned.
 // Forge containers have ZERO credentials; only the git-service container
 // receives the ephemeral token (see images/git/git-askpass-tillandsias.sh
@@ -364,21 +362,6 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("Containerfile: {e}"))?;
     write_lf(&default_dir.join("opencode.json"), FORGE_OPENCODE_JSON)
         .map_err(|e| format!("opencode.json: {e}"))?;
-    // @trace spec:init-incremental-builds
-    // Write binary directly (not through write_lf which strips \r for text files)
-    fs::write(&default_dir.join("tillandsias-browser-tool"), FORGE_BROWSER_TOOL)
-        .map_err(|e| format!("tillandsias-browser-tool: {e}"))?;
-    #[cfg(unix)]
-    {
-        let path = default_dir.join("tillandsias-browser-tool");
-        if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
-            warn!(
-                file = %path.display(),
-                error = %e,
-                "Failed to set executable permission on tillandsias-browser-tool"
-            );
-        }
-    }
     // No forge GIT_ASKPASS — tombstoned.
     // @trace spec:secrets-management
     #[cfg(unix)]
@@ -755,19 +738,18 @@ mod tests {
             // build context (e.g. sibling docs, config-overlay subdir content
             // handled separately, or files read only at host-side build time).
             // Keep this allowlist minimal; when adding, document why.
-            .filter(|name| {
-                // `opencode.json` is embedded via FORGE_OPENCODE_JSON — covered.
-                // `git-askpass-tillandsias.sh` is embedded — covered.
-                // `Containerfile` itself is embedded — covered.
-                // `forge-welcome.sh` is embedded — covered.
-                // `lib-common.sh` is embedded — covered.
-                // `tillandsias-browser-tool` is embedded via FORGE_BROWSER_TOOL — covered.
-                // Currently every file on disk in images/default/ is expected
-                // to land in the extracted tree. If a future file is genuinely
-                // not wanted there (e.g. a README), add a `.gitkeep`-style
-                // carve-out here with a comment explaining why.
-                !name.starts_with(".") && name != "README.md" && name != "tillandsias-browser-tool"
-            })
+                .filter(|name| {
+                    // `opencode.json` is embedded via FORGE_OPENCODE_JSON — covered.
+                    // `git-askpass-tillandsias.sh` is embedded — covered.
+                    // `Containerfile` itself is embedded — covered.
+                    // `forge-welcome.sh` is embedded — covered.
+                    // `lib-common.sh` is embedded — covered.
+                    // Currently every file on disk in images/default/ is expected
+                    // to land in the extracted tree. If a future file is genuinely
+                    // not wanted there (e.g. a README), add a `.gitkeep`-style
+                    // carve-out here with a comment explaining why.
+                    !name.starts_with(".") && name != "README.md"
+                })
             .collect();
 
         let extracted = write_image_sources().expect("write_image_sources should succeed");

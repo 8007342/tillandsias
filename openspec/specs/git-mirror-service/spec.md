@@ -1,3 +1,4 @@
+<!-- @trace spec:git-mirror-service -->
 # git-mirror-service Specification
 
 ## Purpose

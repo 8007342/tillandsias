@@ -1,3 +1,4 @@
+<!-- @trace spec:tray-cli-coexistence -->
 # tray-cli-coexistence Specification
 
 ## Purpose

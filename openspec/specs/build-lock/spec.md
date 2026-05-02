@@ -1,3 +1,4 @@
+<!-- @trace spec:build-lock -->
 # build-lock Specification
 
 ## Purpose

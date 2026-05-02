@@ -25,6 +25,7 @@ pub enum ChromiumWindowType {
 /// * `project` - The project name (used for container naming)
 /// * `url` - The URL to open in the browser
 /// * `window_type` - Either "open_safe_window" or "open_debug_window"
+/// * `version` - Version string for versioned image tags (e.g., "0.1.160"), or "latest"
 ///
 /// # Returns
 ///
@@ -36,6 +37,7 @@ pub fn spawn_chromium_window(
     project: &str,
     url: &str,
     window_type: &str,
+    version: &str,
 ) -> Result<String, String> {
     // Validate window type (safe or debug)
     if window_type != "open_safe_window" && window_type != "open_debug_window" {
@@ -53,6 +55,7 @@ pub fn spawn_chromium_window(
         project = %project,
         url = %url,
         window_type = %window_type,
+        version = %version,
         "Spawning Chromium window"
     );
 
@@ -60,12 +63,14 @@ pub fn spawn_chromium_window(
     let debug_port = 9222u16;
 
     // Build the command arguments for launch-chromium.sh
-    // Script usage: launch-chromium.sh <project> <url> [port] [window_type]
+    // Script usage: launch-chromium.sh <project> <url> [port] [window_type] [version]
+    // @trace spec:browser-isolation-core
     let mut cmd = Command::new(&script_path);
     cmd.arg(project)
         .arg(url)
         .arg(debug_port.to_string())
         .arg(window_type)  // Pass window type to script
+        .arg(version)      // Pass version for versioned image tags
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -164,7 +169,7 @@ mod tests {
     fn test_window_type_validation() {
         // These will fail in test environment without the script
         // but we can test the validation logic
-        assert!(spawn_chromium_window("test", "http://localhost:3000", "invalid").is_err());
-        assert!(spawn_chromium_window("test", "http://localhost:3000", "open_safe_window").is_err()); // Will fail without script
+        assert!(spawn_chromium_window("test", "http://localhost:3000", "invalid", "0.1.160").is_err());
+        assert!(spawn_chromium_window("test", "http://localhost:3000", "open_safe_window", "0.1.160").is_err()); // Will fail without script
     }
 }

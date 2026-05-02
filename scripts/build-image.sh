@@ -277,14 +277,43 @@ if [[ "$FLAG_BACKEND" == "fedora" ]]; then
         exit 1
     fi
 
+    # Remove any existing tags for this image name to prevent double-tagging
+    # (podman adds new tag to same ID without removing old ones)
+    # Note: podman may add localhost/ prefix, so we normalize for comparison
+    EXISTING_TAGS=$("$PODMAN" images --format "{{.Repository}}:{{.Tag}}" | grep "tillandsias-${IMAGE_NAME}:" || true)
+    for old_tag in $EXISTING_TAGS; do
+        # Normalize: strip localhost/ prefix for comparison
+        old_tag_normalized=$(echo "$old_tag" | sed 's|^localhost/||')
+        if [[ "$old_tag_normalized" != "$IMAGE_TAG" ]]; then
+            _info "  Removing old tag: $old_tag"
+            "$PODMAN" rmi -f "$old_tag" 2>/dev/null || true
+        fi
+    done
+
+    # Build args: pass CHROMIUM_CORE_TAG for framework images
+    BUILD_ARGS=()
+    if [[ "$IMAGE_NAME" == "chromium-framework" ]]; then
+        # Extract the tag from IMAGE_TAG (e.g., v0.1.160.204)
+        CHROMIUM_CORE_TAG=$(echo "$IMAGE_TAG" | sed 's/.*://')
+        BUILD_ARGS+=(--build-arg "CHROMIUM_CORE_TAG=${CHROMIUM_CORE_TAG}")
+    fi
+
     # Pass proxy env vars as build args if available.
     # Image builds do NOT go through the proxy — SSL bump requires CA trust
     # that build containers don't have. Proxy is for runtime containers only.
 
     "$PODMAN" build \
         --tag "$IMAGE_TAG" \
+        "${BUILD_ARGS[@]}" \
         -f "$CONTAINERFILE" \
         "$IMAGE_DIR/"
+
+    # Remove :latest tag if it exists and differs from IMAGE_TAG
+    LATEST_TAG="tillandsias-${IMAGE_NAME}:latest"
+    if [[ "$IMAGE_TAG" != "$LATEST_TAG" ]]; then
+        _info "  Removing ${LATEST_TAG} tag if present..."
+        "$PODMAN" rmi "$LATEST_TAG" 2>/dev/null || true
+    fi
 
 else
     # ── Nix backend: nix build inside ephemeral container ─────
@@ -327,25 +356,44 @@ else
         _step "Tagging as ${IMAGE_TAG}..."
         "$PODMAN" tag "$LOADED_IMAGE" "$IMAGE_TAG"
     fi
-fi
 
-# Verify the image exists — retry briefly because podman storage may need
-# a moment to flush after a build completes (prevents false negatives).
-# @trace spec:default-image
-_image_found=false
-for _attempt in 1 2 3; do
-    if "$PODMAN" image exists "$IMAGE_TAG" 2>/dev/null; then
-        _image_found=true
-        break
+    # Remove :latest tag if it exists and differs from IMAGE_TAG
+    LATEST_TAG="tillandsias-${IMAGE_NAME}:latest"
+    if [[ "$IMAGE_TAG" != "$LATEST_TAG" ]]; then
+        _info "  Removing ${LATEST_TAG} tag if present..."
+        "$PODMAN" rmi "$LATEST_TAG" 2>/dev/null || true
     fi
-    _warn "Image ${IMAGE_TAG} not found on attempt ${_attempt}/3, retrying..."
-    sleep 1
-done
-
-if [[ "$_image_found" == false ]]; then
-    _error "Image ${IMAGE_TAG} not found after build + 3 retries. Something went wrong."
-    exit 1
 fi
+
+    # Verify the image exists — retry briefly because podman storage may need
+    # a moment to flush after a build completes (prevents false negatives).
+    # @trace spec:default-image
+    _image_found=false
+    for _attempt in 1 2 3; do
+        if "$PODMAN" image exists "$IMAGE_TAG" 2>/dev/null; then
+            _image_found=true
+            break
+        fi
+        _warn "Image ${IMAGE_TAG} not found on attempt ${_attempt}/3, retrying..."
+        sleep 1
+    done
+
+    if [[ "$_image_found" == false ]]; then
+        _error "Image ${IMAGE_TAG} not found after build + 3 retries. Something went wrong."
+        exit 1
+    fi
+
+    # Remove ANY tags for this image name that don't match IMAGE_TAG
+    # (podman may have left old tags on the same image ID)
+    # Note: podman may add localhost/ prefix, so we normalize for comparison
+    ALL_TAGS="$("$PODMAN" images --format "{{.Repository}}:{{.Tag}}" | grep "tillandsias-${IMAGE_NAME}:" || true)"
+    for old_tag in $ALL_TAGS; do
+        old_tag_normalized=$(echo "$old_tag" | sed 's|^localhost/||')
+        if [[ "$old_tag_normalized" != "$IMAGE_TAG" ]]; then
+            _info "  Removing stale tag: $old_tag"
+            "$PODMAN" rmi -f "$old_tag" 2>/dev/null || true
+        fi
+    done
 
 # ---------------------------------------------------------------------------
 # Step 5: Save hash for staleness detection
@@ -378,3 +426,6 @@ _info "Image:    ${BOLD}${IMAGE_TAG}${NC}"
 _info "Size:     ${SIZE_DISPLAY}"
 _info "Time:     ${BUILD_DURATION}s"
 _info "----------------------------------------------"
+
+# Explicit success exit (podman build may return non-zero even on success)
+exit 0

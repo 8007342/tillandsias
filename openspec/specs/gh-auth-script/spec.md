@@ -1,3 +1,4 @@
+<!-- @trace spec:gh-auth-script -->
 # gh-auth-script Specification
 
 ## Purpose
