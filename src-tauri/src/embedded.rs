@@ -186,6 +186,7 @@ pub const PROXY_ENTRYPOINT: &str = include_str!("../../images/proxy/entrypoint.s
 pub const PROXY_CONTAINERFILE: &str = include_str!("../../images/proxy/Containerfile");
 pub const PROXY_SQUID_CONF: &str = include_str!("../../images/proxy/squid.conf");
 pub const PROXY_ALLOWLIST: &str = include_str!("../../images/proxy/allowlist.txt");
+pub const PROXY_EXTERNAL_LOGS: &str = include_str!("../../images/proxy/external-logs.yaml");
 
 // ---------------------------------------------------------------------------
 // Image sources — git service image
@@ -507,6 +508,8 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("proxy squid.conf: {e}"))?;
     write_lf(&proxy_dir.join("allowlist.txt"), PROXY_ALLOWLIST)
         .map_err(|e| format!("proxy allowlist: {e}"))?;
+    write_lf(&proxy_dir.join("external-logs.yaml"), PROXY_EXTERNAL_LOGS)
+        .map_err(|e| format!("proxy external-logs.yaml: {e}"))?;
     #[cfg(unix)]
     {
         let path = proxy_dir.join("entrypoint.sh");

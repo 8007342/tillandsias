@@ -4468,21 +4468,56 @@ pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, debug: b
     use std::process::{Command, Stdio};
     use std::io::{BufRead, BufReader};
 
-    info!(
-        spec = "cli-diagnostics",
-        cheatsheet = "docs/cheatsheets/podman-logging.md",
-        "Diagnostics: starting container log stream"
-    );
+    // @trace spec:cli-diagnostics, spec:default-image
+    // Diagnostics mode: launch the full stack (same as attach) then stream logs.
+    // Unlike attach (which opens a terminal), diagnostics launches containers
+    // in the background and streams their logs to stdout.
 
-    // Discover running containers: shared infra + project-specific
-    let shared_containers = vec!["tillandsias-proxy", "tillandsias-git", "tillandsias-inference"];
-
-    let project_containers: Vec<String> = if let Some(project_path) = project_path {
-        let project_name = project_path
-            .file_name()
+    let project_name = if let Some(path) = project_path {
+        path.file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unknown")
-            .to_string();
+            .to_string()
+    } else {
+        "shared-infra".to_string()
+    };
+
+    info!(
+        spec = "cli-diagnostics",
+        project = %project_name,
+        "Diagnostics: launching stack and streaming logs"
+    );
+
+    let client = PodmanClient::new();
+
+    // --- Phase 1: Ensure forge image exists (if project-specific) ---
+    if project_path.is_some() {
+        let tag = forge_image_tag();
+        if !client.image_exists(&tag).await {
+            info!(tag = %tag, "Diagnostics: building forge image");
+            eprintln!("[diagnostics] Building development environment image...");
+
+            let build_result = tokio::task::spawn_blocking(|| {
+                let _lock = build_mutex_lock();
+                run_build_image_script("forge")
+            })
+            .await;
+
+            if let Ok(Ok(())) = build_result {
+                info!(tag = %tag, "Forge image ready");
+            } else {
+                let err_msg = "Failed to build forge image".to_string();
+                error!(spec = "cli-diagnostics", error = %err_msg);
+                eprintln!("[diagnostics] ERROR: {}", err_msg);
+                return Err(err_msg);
+            }
+        }
+    }
+
+    // --- Phase 2: Discover target containers ---
+    let shared_containers = vec!["tillandsias-proxy", "tillandsias-git", "tillandsias-inference"];
+
+    let project_containers: Vec<String> = if project_path.is_some() {
         vec![
             format!("tillandsias-{}-forge", project_name),
             format!("tillandsias-{}-browser-core", project_name),
@@ -4492,13 +4527,60 @@ pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, debug: b
         vec![]
     };
 
-    let all_containers: Vec<&str> = shared_containers
+    let all_containers: Vec<String> = shared_containers
         .iter()
-        .map(|s| &s[..])
-        .chain(project_containers.iter().map(|s| &s[..]))
+        .map(|s| s.to_string())
+        .chain(project_containers)
         .collect();
 
-    // Check which containers are actually running
+    if debug {
+        eprintln!("[diagnostics:debug] Target containers: {:?}", all_containers);
+    }
+
+    // --- Phase 3: Wait for containers to start (with exponential backoff) ---
+    eprintln!("[diagnostics] Waiting for containers to start...");
+
+    let max_wait_secs = 30;
+    let start_wait = std::time::Instant::now();
+
+    loop {
+        // Check which containers are actually running
+        let mut running_containers = Vec::new();
+        for container in &all_containers {
+            let output = Command::new("podman")
+                .args(&["ps", "--quiet", "--filter", &format!("name={}", container)])
+                .output();
+
+            if let Ok(output) = output {
+                let container_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !container_id.is_empty() {
+                    running_containers.push(container.clone());
+                }
+            }
+        }
+
+        if !running_containers.is_empty() {
+            eprintln!("[diagnostics] SUCCESS: monitoring {} containers", running_containers.len());
+            if debug {
+                eprintln!("[diagnostics:debug] Running containers: {:?}", running_containers);
+            }
+            break;
+        }
+
+        if start_wait.elapsed().as_secs() > max_wait_secs {
+            let err_msg = format!(
+                "No containers started within {max_wait_secs}s. Ensure you've launched a project with 'tillandsias /path/'"
+            );
+            warn!(spec = "cli-diagnostics", "Diagnostics: timeout waiting for containers");
+            eprintln!("[diagnostics] ERROR: {}", err_msg);
+            return Err(err_msg);
+        }
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+
+    // --- Phase 4: Stream logs from running containers ---
+    // Check which containers are actually running one more time (they may have started)
     let mut running_containers = Vec::new();
     for container in &all_containers {
         let output = Command::new("podman")
@@ -4508,33 +4590,8 @@ pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, debug: b
         if let Ok(output) = output {
             let container_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !container_id.is_empty() {
-                running_containers.push(*container);
+                running_containers.push(container.clone());
             }
-        }
-    }
-
-    if running_containers.is_empty() {
-        let msg = if let Some(path) = project_path {
-            format!("ERROR: no containers found for project: {}", path.display())
-        } else {
-            "ERROR: no running Tillandsias containers found".to_string()
-        };
-        warn!(spec = "cli-diagnostics", "Diagnostics: no running containers");
-        eprintln!("{}", msg);
-        return Err(msg);
-    }
-
-    eprintln!("[diagnostics] SUCCESS: monitoring {} containers", running_containers.len());
-
-    if debug {
-        info!(
-            spec = "cli-diagnostics",
-            container_count = running_containers.len(),
-            containers = ?running_containers,
-            "Diagnostics: debug mode — container list"
-        );
-        for container in &running_containers {
-            eprintln!("[diagnostics:debug] monitoring: {}", container);
         }
     }
 
@@ -4559,18 +4616,20 @@ pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, debug: b
         // Extract project name if present
         let owner = if container.starts_with("tillandsias-") {
             let parts: Vec<&str> = container.split('-').collect();
-            if parts.len() > 1 && parts[1] != "proxy" && parts[1] != "git" && parts[1] != "inference" {
-                parts[1]
+            if parts.len() > 1
+                && parts[1] != "proxy"
+                && parts[1] != "git"
+                && parts[1] != "inference"
+            {
+                parts[1].to_string()
             } else {
-                "shared"
+                "shared".to_string()
             }
         } else {
-            "unknown"
+            "unknown".to_string()
         };
 
-        let container_copy = container.to_string();
-        let container_type_copy = container_type.to_string();
-        let owner_copy = owner.to_string();
+        let container_copy = container.clone();
 
         let child = std::thread::spawn(move || {
             let mut cmd = Command::new("podman");
@@ -4581,7 +4640,7 @@ pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, debug: b
             if let Ok(mut child) = cmd.spawn() {
                 let stdout = child.stdout.take();
                 let stderr = child.stderr.take();
-                let prefix_out = format!("[{}:{}]", container_type_copy, owner_copy);
+                let prefix_out = format!("[{}:{}] @trace spec:cli-diagnostics", container_type, owner);
                 let prefix_err = prefix_out.clone();
 
                 // Spawn a thread for stderr to avoid deadlock from pipe buffering
