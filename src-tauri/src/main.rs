@@ -93,8 +93,8 @@ fn main() {
     }
 
     // Init mode — pre-build images and exit.
-    if let cli::CliMode::Init { force, debug: _ } = cli_mode {
-        let success = init::run_with_force(force, false);
+    if let cli::CliMode::Init { force, debug } = cli_mode {
+        let success = init::run_with_force(force, debug);
         std::process::exit(if success { 0 } else { 1 });
     }
 
