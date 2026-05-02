@@ -118,6 +118,12 @@ pub const FORGE_ENTRYPOINT_TERMINAL: &str =
 pub const FORGE_WELCOME: &str = include_str!("../../images/default/forge-welcome.sh");
 pub const FORGE_CONTAINERFILE: &str = include_str!("../../images/default/Containerfile");
 pub const FORGE_OPENCODE_JSON: &str = include_str!("../../images/default/opencode.json");
+// @trace spec:browser-isolation-framework, spec:external-logs-layer
+pub const FORGE_EXTERNAL_LOGS: &str = include_str!("../../images/default/external-logs.yaml");
+// @trace spec:browser-mcp-server
+pub const MCP_SERVER_BROWSER: &str = include_str!("../../images/default/mcp-server-browser.js");
+pub const SSE_KEEPALIVE_PROXY: &str = include_str!("../../images/default/sse-keepalive-proxy.js");
+pub const TILLANDSIAS_MCP_BROWSER_BIN: &[u8] = include_bytes!("../../images/default/tillandsias-mcp-browser");
 // @trace spec:init-incremental-builds
 // No forge GIT_ASKPASS const — the forge-side askpass was tombstoned.
 // Forge containers have ZERO credentials; only the git-service container
@@ -365,6 +371,17 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("Containerfile: {e}"))?;
     write_lf(&default_dir.join("opencode.json"), FORGE_OPENCODE_JSON)
         .map_err(|e| format!("opencode.json: {e}"))?;
+    // @trace spec:external-logs-layer
+    write_lf(&default_dir.join("external-logs.yaml"), FORGE_EXTERNAL_LOGS)
+        .map_err(|e| format!("external-logs.yaml: {e}"))?;
+    // @trace spec:browser-mcp-server
+    write_lf(&default_dir.join("mcp-server-browser.js"), MCP_SERVER_BROWSER)
+        .map_err(|e| format!("mcp-server-browser.js: {e}"))?;
+    write_lf(&default_dir.join("sse-keepalive-proxy.js"), SSE_KEEPALIVE_PROXY)
+        .map_err(|e| format!("sse-keepalive-proxy.js: {e}"))?;
+    // Write binary executable (tillandsias-mcp-browser)
+    fs::write(&default_dir.join("tillandsias-mcp-browser"), TILLANDSIAS_MCP_BROWSER_BIN)
+        .map_err(|e| format!("tillandsias-mcp-browser: {e}"))?;
     // No forge GIT_ASKPASS — tombstoned.
     // @trace spec:secrets-management
     #[cfg(unix)]
@@ -376,6 +393,10 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
             "entrypoint-forge-opencode-web.sh",
             "entrypoint-forge-claude.sh",
             "entrypoint-terminal.sh",
+            // @trace spec:browser-mcp-server
+            "mcp-server-browser.js",
+            "sse-keepalive-proxy.js",
+            "tillandsias-mcp-browser",
         ] {
             let path = default_dir.join(name);
             if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
