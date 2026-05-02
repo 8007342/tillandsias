@@ -40,6 +40,10 @@ mod chromium_launcher;
 #[cfg(target_os = "linux")]
 mod mcp_browser;
 
+/// Windows event log integration.
+#[cfg(target_os = "windows")]
+mod windows_eventlog;
+
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU64, Ordering};
 

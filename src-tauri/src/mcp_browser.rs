@@ -15,7 +15,7 @@
 //! @trace spec:browser-mcp-server
 //! @trace spec:browser-isolation-core
 
-#![cfg(unix)] // Unix sockets only
+#![cfg_attr(unix, allow(dead_code))] // Unix sockets only on Unix
 
 use std::io::{BufRead, Read, Write};
 #[cfg(unix)]
@@ -380,4 +380,11 @@ mod tests {
         assert!(!is_debug_url("dashboard.localhost", "my-project"));
         assert!(!is_debug_url("evil.com", "my-project"));
     }
+}
+
+/// Windows stub - MCP browser server is Unix-only
+#[cfg(not(unix))]
+fn main() {
+    eprintln!("MCP browser server is not available on this platform (Unix/Linux only)");
+    std::process::exit(1);
 }
