@@ -397,20 +397,10 @@ fn resolve_mount_source(source: &MountSource, ctx: &LaunchContext) -> Option<Str
         // `exists()` check. Entrypoints additionally fall back to inline
         // install if no mount is provided at all.
         MountSource::ToolsOverlay => {
-            if let Some(path) = crate::tools_overlay::cached_overlay_for(
-                &crate::handlers::forge_image_tag(),
-            ) {
-                Some(path.display().to_string())
-            } else {
-                let overlay_path = ctx.cache_dir
-                    .join("tools-overlay")
-                    .join("current");
-                if overlay_path.exists() {
-                    Some(overlay_path.display().to_string())
-                } else {
-                    None
-                }
-            }
+            // @tombstone obsolete:layered-tools-overlay
+            // Tools overlay mount is no longer needed — agents are baked into the forge image.
+            // Safe to delete after v0.1.163.
+            None
         }
         // @trace spec:layered-tools-overlay
         // Configs live on tmpfs (ramdisk) for fast reads — zero disk I/O.

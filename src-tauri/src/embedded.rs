@@ -86,7 +86,9 @@ fn write_lf(path: &std::path::Path, content: &str) -> std::io::Result<()> {
 // Executable scripts
 // ---------------------------------------------------------------------------
 pub const BUILD_IMAGE: &str = include_str!("../../scripts/build-image.sh");
-pub const BUILD_TOOLS_OVERLAY: &str = include_str!("../../scripts/build-tools-overlay.sh");
+// @tombstone obsolete:layered-tools-overlay
+// pub const BUILD_TOOLS_OVERLAY: &str = include_str!("../../scripts/build-tools-overlay.sh");
+pub const BUILD_TOOLS_OVERLAY: &str = "";
 // @trace spec:native-secrets-store
 // GitHub login is driven from Rust (`runner::run_github_login`): `gh auth
 // login` runs via `podman exec` against a keep-alive git-service container,

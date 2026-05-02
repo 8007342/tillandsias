@@ -26,13 +26,11 @@ mod runner;
 mod secrets;
 mod singleton;
 mod strings;
-mod tools_overlay;
 mod tray_spawn;
 mod uninstall;
 mod update_cli;
 mod update_log;
 mod updater;
-mod webview;
 
 /// Chromium launcher for browser isolation.
 #[cfg(target_os = "linux")]
@@ -244,11 +242,9 @@ fn main() {
             let app_handle = app.handle().clone();
 
             // Register the global AppHandle used by the opencode-web webview
-            // module to spawn and close WebviewWindows from non-Tauri contexts
-            // (menu command dispatch, shutdown_all). Must run before any
-            // "Attach Here" click can reach the web-session flow.
-            // @trace spec:opencode-web-session
-            crate::webview::set_app_handle(app_handle.clone());
+            // @tombstone superseded:browser-isolation-tray-integration
+            // Old webview app handle setup — removed with browser isolation transition.
+            // crate::webview::set_app_handle(app_handle.clone());
 
             // Spawn updater background tasks
             updater::spawn_update_tasks(&app_handle, update_state);
@@ -518,63 +514,31 @@ fn main() {
                         // All images already present — go straight to ready state.
                         info!("All images present at launch — skipping builds");
 
-                        // @trace spec:layered-tools-overlay
-                        // Build tools overlay. Hard failure — no per-container
-                        // fallback. Forge stays unavailable so the real error
-                        // (missing forge image, WSL broken, etc.) is visible.
-                        let overlay_build_tx = build_tx.clone();
-                        let overlay_ok = match crate::tools_overlay::ensure_tools_overlay(overlay_build_tx).await {
-                            Ok(()) => true,
-                            Err(e) => {
-                                error!(
-                                    spec = "layered-tools-overlay",
-                                    error = %e,
-                                    "Tools overlay build failed — forge unavailable",
-                                );
-                                false
-                            }
-                        };
-
-                        if overlay_ok {
-                            {
-                                let mut s = state_for_loop.lock().unwrap();
-                                s.forge_available = true;
-                                s.tray_icon_state = TrayIconState::Mature;
-                            }
-                            if let Some(tray_lock) = TRAY_ICON.get()
-                                && let Ok(tray) = tray_lock.lock()
-                            {
-                                if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
-                                    TrayIconState::Mature,
-                                )) {
-                                    if let Err(e) = tray.set_icon(Some(icon)) {
-                                        debug!(error = %e, "Tray icon update failed (cosmetic)");
-                                    }
+                        // @tombstone obsolete:layered-tools-overlay
+                        // Tools overlay build removed — agents are now baked into the forge image.
+                        // Safe to delete after v0.1.163.
+                        // Previously: Build tools overlay with hard failure if missing.
+                        // Now: Agents are in the image, so just mark forge as available.
+                        {
+                            let mut s = state_for_loop.lock().unwrap();
+                            s.forge_available = true;
+                            s.tray_icon_state = TrayIconState::Mature;
+                        }
+                        if let Some(tray_lock) = TRAY_ICON.get()
+                            && let Ok(tray) = tray_lock.lock()
+                        {
+                            if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                                TrayIconState::Mature,
+                            )) {
+                                if let Err(e) = tray.set_icon(Some(icon)) {
+                                    debug!(error = %e, "Tray icon update failed (cosmetic)");
                                 }
                             }
-                        } else {
-                            {
-                                let mut s = state_for_loop.lock().unwrap();
-                                s.tray_icon_state = TrayIconState::Dried;
-                            }
-                            if let Some(tray_lock) = TRAY_ICON.get()
-                                && let Ok(tray) = tray_lock.lock()
-                            {
-                                if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
-                                    TrayIconState::Dried,
-                                )) {
-                                    if let Err(e) = tray.set_icon(Some(icon)) {
-                                        debug!(error = %e, "Tray icon update failed (cosmetic)");
-                                    }
-                                }
-                            }
-                            handlers::send_notification(
-                                "Tillandsias",
-                                i18n::t("notifications.infrastructure_failed"),
-                            );
                         }
                         rebuild_menu(&app_handle_for_loop, &state_for_loop);
-                    } else {
+                    }
+
+                    if !needs_build.is_empty() {
                         // Step 3: Build missing images sequentially with per-component chips.
                         // Set icon to Building and keep forge_available = false.
                         {
@@ -699,27 +663,14 @@ fn main() {
 
                         // Step 4: Build tools overlay now that forge image is ready.
                         // Hard failure — no per-container fallback. Overlay
-                        // failure keeps forge_available=false so the menu
-                        // reflects the real state.
-                        // @trace spec:layered-tools-overlay
-                        let mut overlay_ok = false;
-                        if proxy_ok && forge_ok {
-                            let overlay_build_tx = build_tx.clone();
-                            match crate::tools_overlay::ensure_tools_overlay(overlay_build_tx).await {
-                                Ok(()) => overlay_ok = true,
-                                Err(e) => {
-                                    error!(
-                                        spec = "layered-tools-overlay",
-                                        error = %e,
-                                        "Tools overlay build failed — forge unavailable",
-                                    );
-                                }
-                            }
-                        }
+                        // @tombstone obsolete:layered-tools-overlay
+                        // Tools overlay check removed — agents are now baked into the forge image.
+                        // Safe to delete after v0.1.163.
+                        // Previously: Built tools overlay only if proxy + forge OK.
 
-                        // Step 5: Set forge_available only if proxy + forge built AND
-                        // tools overlay succeeded. forge_available gates menu items.
-                        if proxy_ok && forge_ok && overlay_ok {
+                        // Step 5: Set forge_available if proxy + forge built.
+                        // forge_available gates menu items.
+                        if proxy_ok && forge_ok {
                             {
                                 let mut s = state_for_loop.lock().unwrap();
                                 s.forge_available = true;
@@ -747,8 +698,7 @@ fn main() {
                             warn!(
                                 proxy_ok,
                                 forge_ok,
-                                overlay_ok,
-                                "Setup incomplete (images or tools overlay) — menus remain disabled"
+                                "Setup incomplete (images) — menus remain disabled"
                             );
                             {
                                 let mut s = state_for_loop.lock().unwrap();

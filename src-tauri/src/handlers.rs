@@ -2790,21 +2790,10 @@ pub async fn handle_attach_here(
     // Single unified enclave setup: network, proxy, inference, mirror, git service.
     let _enclave = ensure_enclave_ready(&project_path, &project_name, state, build_tx.clone()).await?;
 
-    // @trace spec:layered-tools-overlay
-    // Tools overlay runs HERE — after forge image is confirmed ready (above) and
-    // enclave is up (proxy available for npm downloads). Hard failure: no
-    // per-container fallback — if the overlay cannot be built we refuse the
-    // launch so the real ordering/build error is visible.
-    if let Err(e) = crate::tools_overlay::ensure_tools_overlay(build_tx.clone()).await {
-        error!(
-            spec = "layered-tools-overlay",
-            error = %e,
-            "Tools overlay build failed — aborting attach"
-        );
-        state.running.retain(|c| c.name != container_name);
-        allocator.release(&project_name, genus);
-        return Err(strings::SETUP_ERROR.into());
-    }
+    // @tombstone obsolete:layered-tools-overlay
+    // Tools overlay was tombstoned in c811454 — agents are now baked into the forge image.
+    // Previously ran here after forge image ready and enclave up.
+    // Safe to delete after v0.1.163 (3 release retention window).
 
     // Detect whether the project path IS the watch root (e.g., ~/src/) rather
     // than a project inside it. When true, mount at /home/forge/src/ directly
@@ -2883,10 +2872,10 @@ pub async fn handle_attach_here(
     }
 
     // P2-4: Spawn background tools overlay update after successful launch.
-    // Non-blocking — container is already running, this checks for newer
-    // tool versions in the background.
-    // @trace spec:layered-tools-overlay
-    crate::tools_overlay::spawn_background_update();
+    // @tombstone obsolete:layered-tools-overlay
+    // Non-blocking background update of tools — removed with tools overlay module.
+    // Safe to delete after v0.1.163.
+    // crate::tools_overlay::spawn_background_update();
 
     let elapsed = start.elapsed();
     info!(
@@ -2969,34 +2958,14 @@ pub async fn handle_attach_web(
             spec = "opencode-web-session",
             "Reusing existing forge web container — opening additional webview"
         );
-        // Wait for readiness again — cheap if already healthy, essential if the
-        // container was created moments ago by a concurrent click.
-        if let Err(e) = crate::webview::wait_for_web_ready(host_port).await {
-            let msg = format!(
-                "OpenCode Web server not responding for '{}': {}",
-                project_name, e
-            );
-            send_notification("Tillandsias", &msg);
-            return Err(msg);
-        }
-        // Find the genus for the title (should exist since we matched above).
-        let genus_label = state
-            .running
-            .iter()
-            .find(|c| c.name == container_name)
-            .map(|c| c.genus.display_name().to_string())
-            .unwrap_or_default();
-        if let Err(e) =
-            crate::webview::open_web_session_global(&project_name, &genus_label, host_port)
-        {
-            warn!(
-                project = %project_name,
-                port = host_port,
-                error = %e,
-                spec = "opencode-web-session",
-                "Failed to open additional webview (container remains running)"
-            );
-        }
+        // @tombstone superseded:browser-isolation-tray-integration
+        // Old Tauri webview-based OpenCode Web flow — removed in favor of browser isolation.
+        // Previously waited for readiness and opened Tauri webview here.
+        // Safe to delete after v0.1.163.
+
+        // Placeholder: in browser-isolation-tray-integration flow, we would:
+        // 1. Wait for OpenCode Web server readiness on localhost:host_port
+        // 2. Open a safe browser window via browser isolation (not Tauri webview)
         return Ok(AppEvent::ContainerStateChange {
             container_name,
             new_state: ContainerState::Running,
@@ -3163,17 +3132,10 @@ pub async fn handle_attach_web(
         return Err(e);
     }
 
-    // @trace spec:layered-tools-overlay
-    if let Err(e) = crate::tools_overlay::ensure_tools_overlay(build_tx.clone()).await {
-        warn!(
-            accountability = true,
-            category = "performance",
-            safety = "DEGRADED: tools will be installed per-container instead of from cache",
-            spec = "layered-tools-overlay",
-            error = %e,
-            "Tools overlay setup failed — performance degradation (web mode)"
-        );
-    }
+    // @tombstone obsolete:layered-tools-overlay
+    // Tools overlay module deleted in c811454 — agents now baked into forge image.
+    // Safe to delete after v0.1.163.
+    // if let Err(e) = crate::tools_overlay::ensure_tools_overlay(build_tx.clone()).await { ... }
 
     let global_config = load_global_config();
     let is_watch_root = global_config
@@ -3235,42 +3197,11 @@ pub async fn handle_attach_web(
         }
     }
 
-    // @trace spec:opencode-web-session
-    // Health-wait for the loopback server before opening the webview.
-    // On timeout: the container stays running (user can retry); we only
-    // fail the open attempt.
-    if let Err(e) = crate::webview::wait_for_web_ready(host_port).await {
-        warn!(
-            project = %project_name,
-            port = host_port,
-            error = %e,
-            spec = "opencode-web-session",
-            "OpenCode Web server failed readiness probe — leaving container running for retry"
-        );
-        let msg = format!(
-            "OpenCode Web server did not start for '{}' — try again in a moment",
-            project_name
-        );
-        send_notification("Tillandsias", &msg);
-        return Err(e);
-    }
-
-    // @trace spec:opencode-web-session
-    // Open the Tauri webview. Failure is decoupled from container health —
-    // log a warning and keep the container running for another attempt.
-    if let Err(e) = crate::webview::open_web_session_global(
-        &project_name,
-        genus.display_name(),
-        host_port,
-    ) {
-        warn!(
-            project = %project_name,
-            port = host_port,
-            error = %e,
-            spec = "opencode-web-session",
-            "Failed to open webview window (container remains running)"
-        );
-    }
+    // @tombstone superseded:browser-isolation-tray-integration
+    // Old webview-based OpenCode Web flow — replaced with browser isolation.
+    // Safe to delete after v0.1.163.
+    // Previously: Health-wait for loopback server + open Tauri webview.
+    // Now: Browser isolation handles window opening in a safe container.
 
     // Accountability: credential-free, loopback-only, detached.
     // @trace spec:secrets-management, spec:opencode-web-session
@@ -3291,8 +3222,8 @@ pub async fn handle_attach_web(
         project.assigned_genus = Some(genus);
     }
 
-    // @trace spec:layered-tools-overlay
-    crate::tools_overlay::spawn_background_update();
+    // @tombstone obsolete:layered-tools-overlay
+    // crate::tools_overlay::spawn_background_update();
 
     let elapsed = start.elapsed();
     info!(
@@ -3363,9 +3294,9 @@ pub async fn handle_stop_project(
         "Stop project requested — stopping all containers for project"
     );
 
-    // Close webviews first so the user sees them vanish before the container
-    // actually stops. Order doesn't affect correctness but matches intent.
-    crate::webview::close_web_sessions_for_project_global(&project_name);
+    // @tombstone superseded:browser-isolation-tray-integration
+    // Old webview closing logic — replaced with browser isolation.
+    // crate::webview::close_web_sessions_for_project_global(&project_name);
 
     let client = PodmanClient::new();
     let launcher = ContainerLauncher::new(client);
@@ -3535,11 +3466,9 @@ pub async fn shutdown_all(state: &TrayState) {
         "Shutting down: stopping all managed containers"
     );
 
-    // @trace spec:app-lifecycle, spec:opencode-web-session
-    // Close every open OpenCode Web webview first so the UI fades out before
-    // the backing containers begin to stop. Failures are logged inside the
-    // helper and do not block the rest of the shutdown sequence.
-    crate::webview::close_all_web_sessions_global();
+    // @tombstone superseded:browser-isolation-tray-integration
+    // Old webview closing logic — replaced with browser isolation.
+    // crate::webview::close_all_web_sessions_global();
 
     let client = PodmanClient::new();
     let launcher = ContainerLauncher::new(client);
@@ -3819,9 +3748,9 @@ pub async fn handle_terminal(
                     "Maintenance terminal {container_name} launched credential-free — zero D-Bus, zero credentials, pids-limit=512",
                 );
             }
-            // P2-4: Spawn background tools overlay update after successful launch.
-            // @trace spec:layered-tools-overlay
-            crate::tools_overlay::spawn_background_update();
+            // @tombstone obsolete:layered-tools-overlay
+            // Background tools overlay update — removed with tools overlay module.
+            // crate::tools_overlay::spawn_background_update();
             Ok(())
         }
         Err(e) => {

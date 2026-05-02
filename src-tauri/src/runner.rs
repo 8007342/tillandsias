@@ -521,29 +521,14 @@ pub fn run(
         return false;
     }
 
-    // @trace spec:layered-tools-overlay
-    // Build tools overlay if needed — must happen before build_podman_args()
-    // which resolves the overlay mount path. Non-fatal: entrypoints fall back
-    // to inline install if the overlay is absent.
-    let tools_log = if debug {
-        Some(std::path::Path::new("/tmp/tillandsias-runner-tools-overlay.log"))
-    } else {
-        None
-    };
-    if let Err(e) = crate::tools_overlay::build_overlay_for_init(tools_log) {
-        if debug {
-            eprintln!("  [debug] Tools overlay build failed (non-fatal): {e}");
-            // In debug mode, tail the log file
-            if let Some(log) = tools_log {
-                eprintln!("\n  --- Tools overlay build log (last 10 lines) ---");
-                let _ = std::process::Command::new("tail")
-                    .args(["-10", log.to_str().unwrap_or("")])
-                    .stdout(std::process::Stdio::inherit())
-                    .stderr(std::process::Stdio::inherit())
-                    .status();
-            }
-        }
-    }
+    // @tombstone obsolete:layered-tools-overlay
+    // Tools overlay build removed — agents are now baked into the forge image.
+    // Safe to delete after v0.1.163.
+    // Previously: Build tools overlay before build_podman_args() (non-fatal if failed).
+    /*
+    let tools_log = if debug { Some(...) } else { None };
+    if let Err(e) = crate::tools_overlay::build_overlay_for_init(tools_log) { ... }
+    */
 
     // Drop guard ensures service containers are cleaned up on ANY exit path:
     // normal return, panic, Ctrl+C (podman forwards SIGINT, container exits,
