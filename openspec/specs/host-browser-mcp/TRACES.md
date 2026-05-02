@@ -78,4 +78,3 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [src-tauri/src/browser_mcp/window_registry.rs#L6](../../../src-tauri/src/browser_mcp/window_registry.rs#L6)
 - [src-tauri/src/cdp.rs#L532](../../../src-tauri/src/cdp.rs#L532)
 - [src-tauri/src/cdp.rs#L612](../../../src-tauri/src/cdp.rs#L612)
-- [src-tauri/src/main.rs#L7](../../../src-tauri/src/main.rs#L7)

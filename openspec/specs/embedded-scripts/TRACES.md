@@ -10,6 +10,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/embedded.rs#L847](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/embedded.rs#L847)
 - [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/embedded.rs#L941](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/embedded.rs#L941)
 - [src-tauri/src/embedded.rs#L11](../../../src-tauri/src/embedded.rs#L11)
-- [src-tauri/src/embedded.rs#L387](../../../src-tauri/src/embedded.rs#L387)
-- [src-tauri/src/embedded.rs#L1047](../../../src-tauri/src/embedded.rs#L1047)
-- [src-tauri/src/embedded.rs#L1141](../../../src-tauri/src/embedded.rs#L1141)
+- [src-tauri/src/embedded.rs#L296](../../../src-tauri/src/embedded.rs#L296)
+- [src-tauri/src/embedded.rs#L740](../../../src-tauri/src/embedded.rs#L740)

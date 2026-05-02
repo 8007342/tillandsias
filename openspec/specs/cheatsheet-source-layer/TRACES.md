@@ -31,4 +31,3 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [scripts/regenerate-cheatsheet-index.sh#L33](../../../scripts/regenerate-cheatsheet-index.sh#L33)
 - [scripts/regenerate-source-index.sh#L4](../../../scripts/regenerate-source-index.sh#L4)
 - [scripts/regenerate-source-index.sh#L25](../../../scripts/regenerate-source-index.sh#L25)
-- [src-tauri/src/embedded.rs#L517](../../../src-tauri/src/embedded.rs#L517)

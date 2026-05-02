@@ -4490,27 +4490,17 @@ pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, debug: b
 
     let client = PodmanClient::new();
 
-    // --- Phase 1: Ensure forge image exists (if project-specific) ---
+    // --- Phase 1: Check forge image (don't build - that's what --init is for) ---
     if project_path.is_some() {
         let tag = forge_image_tag();
         if !client.image_exists(&tag).await {
-            info!(tag = %tag, "Diagnostics: building forge image");
-            eprintln!("[diagnostics] Building development environment image...");
-
-            let build_result = tokio::task::spawn_blocking(|| {
-                let _lock = build_mutex_lock();
-                run_build_image_script("forge")
-            })
-            .await;
-
-            if let Ok(Ok(())) = build_result {
-                info!(tag = %tag, "Forge image ready");
-            } else {
-                let err_msg = "Failed to build forge image".to_string();
-                error!(spec = "cli-diagnostics", error = %err_msg);
-                eprintln!("[diagnostics] ERROR: {}", err_msg);
-                return Err(err_msg);
-            }
+            let err_msg = format!(
+                "Forge image {} not found. Run 'tillandsias --init' first to build images.",
+                tag
+            );
+            warn!(spec = "cli-diagnostics", error = %err_msg);
+            eprintln!("[diagnostics] ERROR: {}", err_msg);
+            return Err(err_msg);
         }
     }
 
