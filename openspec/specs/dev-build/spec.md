@@ -100,3 +100,19 @@ The project SHALL include documentation at `docs/cross-platform-builds.md` expla
 - **WHEN** a developer reads `docs/cross-platform-builds.md`
 - **THEN** they understand that CI (GitHub Actions) remains the authoritative build pipeline for all platforms, and local cross-compilation is supplementary for troubleshooting
 
+### Requirement: Install exits with deterministic exit codes
+The `--install` flag SHALL exit with code 0 (success) or 1 (failure), enabling chaining with subsequent commands.
+
+#### Scenario: Install succeeds
+- **WHEN** `./build.sh --install` completes successfully
+- **THEN** the command exits with code 0
+- **AND** critical images are built and binary is installed
+- **AND** a `[build] SUCCESS` message is printed to stdout
+- **AND** safe to chain: `./build.sh --install && tillandsias --init --debug && tillandsias /path --diagnostics`
+
+#### Scenario: Install fails
+- **WHEN** `./build.sh --install` fails (image build failed or binary copy failed)
+- **THEN** the command exits with code 1
+- **AND** a `[build] ERROR` message is printed to stderr
+- **AND** safe for error handling: `./build.sh --install || echo "build failed; fix errors above"`
+
