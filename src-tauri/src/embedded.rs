@@ -204,6 +204,8 @@ pub const POST_RECEIVE_HOOK: &str = include_str!("../../images/git/post-receive-
 // @trace spec:secrets-management, spec:git-mirror-service
 pub const GIT_ASKPASS_TILLANDSIAS: &str =
     include_str!("../../images/git/git-askpass-tillandsias.sh");
+// @trace spec:cli-diagnostics, spec:logging-levels
+pub const GIT_EXTERNAL_LOGS: &str = include_str!("../../images/git/external-logs.yaml");
 
 // ---------------------------------------------------------------------------
 // Image sources — inference image
@@ -211,6 +213,11 @@ pub const GIT_ASKPASS_TILLANDSIAS: &str =
 pub const INFERENCE_ENTRYPOINT: &str = include_str!("../../images/inference/entrypoint.sh");
 pub const INFERENCE_CONTAINERFILE: &str = include_str!("../../images/inference/Containerfile");
 pub const INFERENCE_EXTERNAL_LOGS: &str = include_str!("../../images/inference/external-logs.yaml");
+
+// Router image files
+// @trace spec:proxy-container
+pub const ROUTER_CONTAINERFILE: &str = include_str!("../../images/router/Containerfile");
+pub const ROUTER_EXTERNAL_LOGS: &str = include_str!("../../images/router/external-logs.yaml");
 
 // ---------------------------------------------------------------------------
 // Image sources — chromium browser containers
@@ -557,6 +564,9 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     // @trace spec:secrets-management, spec:git-mirror-service
     write_lf(&git_dir.join("git-askpass-tillandsias.sh"), GIT_ASKPASS_TILLANDSIAS)
         .map_err(|e| format!("git askpass script: {e}"))?;
+    // @trace spec:cli-diagnostics, spec:logging-levels
+    write_lf(&git_dir.join("external-logs.yaml"), GIT_EXTERNAL_LOGS)
+        .map_err(|e| format!("git external-logs: {e}"))?;
     #[cfg(unix)]
     {
         for name in ["entrypoint.sh", "post-receive-hook.sh", "git-askpass-tillandsias.sh"] {
@@ -592,6 +602,15 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
             );
         }
     }
+
+    // -- images/router/ --
+    // @trace spec:proxy-container
+    let router_dir = dir.join("images").join("router");
+    fs::create_dir_all(&router_dir).map_err(|e| format!("images/router dir: {e}"))?;
+    write_lf(&router_dir.join("Containerfile"), ROUTER_CONTAINERFILE)
+        .map_err(|e| format!("router Containerfile: {e}"))?;
+    write_lf(&router_dir.join("external-logs.yaml"), ROUTER_EXTERNAL_LOGS)
+        .map_err(|e| format!("router external-logs: {e}"))?;
 
     // -- images/chromium/ --
     // @trace spec:browser-isolation-core, spec:browser-isolation-framework
