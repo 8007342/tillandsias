@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# @trace spec:browser-isolation-launcher
+# @trace spec:browser-isolation-launcher, spec:browser-isolation-core
 # Launch a Chromium container with security hardening and GPU support detection.
-# Usage: launch-chromium.sh <project> <url> [port]
-# Example: launch-chromium.sh my-project "http://localhost:3000" 9222
+# Usage: launch-chromium.sh <project> <url> [port] [window_type] [version]
+# Example: launch-chromium.sh my-project "http://localhost:3000" 9222 open_safe_window "0.1.160"
 
 set -euo pipefail
 
-PROJECT="${1:?'Usage: launch-chromium.sh <project> <url> [port] [window_type]'}"
-URL="${2:?'Usage: launch-chromium.sh <project> <url> [port] [window_type]'}"
+PROJECT="${1:?'Usage: launch-chromium.sh <project> <url> [port] [window_type] [version]'}"
+URL="${2:?'Usage: launch-chromium.sh <project> <url> [port] [window_type] [version]'}"
 PORT="${3:-9222}"
 WINDOW_TYPE="${4:-open_safe_window}"
+VERSION="${5:-latest}"  # Default to :latest for backwards compatibility, but accept version
 
 # Detect GPU availability
 detect_gpu() {
@@ -58,11 +59,23 @@ elif [[ "$GPU_TIER" == "amd_intel" ]]; then
     CMD+=("--device=/dev/dri/renderD128")
 fi
 
-# Add image and URL
-if [[ "$WINDOW_TYPE" == "open_debug_window" ]]; then
-    CMD+=("tillandsias-chromium-framework:latest" "$URL")
+# Add image and URL — use versioned image tags for reproducibility
+# @trace spec:browser-isolation-core
+if [[ "$VERSION" == "latest" ]]; then
+    # Backwards compatibility: if no version provided, use :latest
+    if [[ "$WINDOW_TYPE" == "open_debug_window" ]]; then
+        CMD+=("tillandsias-chromium-framework:latest" "$URL")
+    else
+        CMD+=("tillandsias-chromium-core:latest" "$URL")
+    fi
 else
-    CMD+=("tillandsias-chromium-core:latest" "$URL")
+    # Use versioned tags: tillandsias-chromium-core:v0.1.160
+    # @trace spec:browser-isolation-core
+    if [[ "$WINDOW_TYPE" == "open_debug_window" ]]; then
+        CMD+=("tillandsias-chromium-framework:v${VERSION}" "$URL")
+    else
+        CMD+=("tillandsias-chromium-core:v${VERSION}" "$URL")
+    fi
 fi
 
 # Spawn container and output container ID

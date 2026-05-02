@@ -4474,8 +4474,10 @@ pub async fn handle_open_browser_window(
         completed_at: None,
     });
 
-    // Spawn the Chromium window
-    let container_id = chromium_launcher::spawn_chromium_window(project, url, window_type)?;
+    // Spawn the Chromium window with versioned image tag
+    // @trace spec:browser-isolation-core
+    let version = env!("TILLANDSIAS_FULL_VERSION");
+    let container_id = chromium_launcher::spawn_chromium_window(project, url, window_type, version)?;
 
     // Update timestamp on successful spawn
     state.browser_last_launch.insert(project.to_string(), now);
