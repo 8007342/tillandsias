@@ -93,7 +93,7 @@ pub async fn run(
                 on_state_change(&state);
             }
 
-            // Browser socket: requests from MCP server
+            // Browser socket: requests from MCP server (Linux only)
             // @trace spec:browser-mcp-server
             Some(command) = browser_rx.recv() => {
                 match command {

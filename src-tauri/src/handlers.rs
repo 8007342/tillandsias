@@ -4447,6 +4447,18 @@ pub async fn handle_open_browser_window(
     Ok(())
 }
 
+/// Stub version of handle_open_browser_window for non-Linux platforms.
+/// Browser isolation is Linux-only; this returns an error on other platforms.
+#[cfg(not(target_os = "linux"))]
+pub async fn handle_open_browser_window(
+    _project: &str,
+    _url: &str,
+    _window_type: &str,
+    _state: &mut TrayState,
+) -> Result<(), String> {
+    Err("Browser isolation is only available on Linux".to_string())
+}
+
 /// @trace spec:cli-diagnostics, spec:observability-convergence
 /// Stream live container logs for the given project to stdout.
 ///
