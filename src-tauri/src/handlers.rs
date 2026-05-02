@@ -66,7 +66,7 @@ pub fn build_mutex_lock() -> std::sync::MutexGuard<'static, ()> {
     })
 }
 
-use tillandsias_core::config::{GlobalConfig, cache_dir, load_global_config, load_project_config};
+use tillandsias_core::config::{GlobalConfig, SelectedAgent, cache_dir, load_global_config, load_project_config, save_selected_agent};
 use tillandsias_core::event::{AppEvent, BuildProgressEvent, ContainerState};
 use tillandsias_core::genus::GenusAllocator;
 use tillandsias_core::state::{BuildProgress, BuildStatus, ContainerInfo, ContainerType, TrayState};
@@ -4657,6 +4657,66 @@ pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, _debug: 
     );
 
     Ok(())
+}
+
+/// Handle "OpenCode" action: opens the terminal-based IDE.
+/// @trace spec:tray-minimal-ux
+#[instrument(skip(state, allocator, build_tx), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "opencode", spec = "tray-minimal-ux"))]
+pub async fn handle_opencode_project(
+    project_path: PathBuf,
+    state: &mut TrayState,
+    allocator: &mut GenusAllocator,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<AppEvent, String> {
+    // OpenCode terminal mode: use the standard attach-here flow
+    // which defaults to terminal-based OpenCode unless overridden by config.
+    // @trace spec:tray-minimal-ux
+    handle_attach_here(project_path, state, allocator, build_tx).await
+}
+
+/// Handle "OpenCode Web" action: opens the web-based IDE.
+/// Currently routes through handle_attach_web, but should transition to browser isolation.
+/// @trace spec:browser-isolation-tray-integration
+#[instrument(skip(state, allocator, build_tx), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "opencode-web", spec = "browser-isolation-tray-integration"))]
+pub async fn handle_opencode_web_project(
+    project_path: PathBuf,
+    state: &mut TrayState,
+    allocator: &mut GenusAllocator,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<AppEvent, String> {
+    // OpenCode Web mode: use handle_attach_web which manages the persistent
+    // forge container and opens the web interface.
+    // TODO: @tombstone webview-based flow, transition to browser-isolation-core
+    // @trace spec:browser-isolation-tray-integration
+    handle_attach_web(project_path, state, allocator, build_tx).await
+}
+
+/// Handle "Claude" action: opens the Claude assistant.
+/// @trace spec:tray-minimal-ux
+#[instrument(skip(state, allocator, build_tx), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "claude", spec = "tray-minimal-ux"))]
+pub async fn handle_claude_project(
+    project_path: PathBuf,
+    state: &mut TrayState,
+    allocator: &mut GenusAllocator,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<AppEvent, String> {
+    // Claude mode: use the standard attach-here flow.
+    // @trace spec:tray-minimal-ux
+    handle_attach_here(project_path, state, allocator, build_tx).await
+}
+
+/// Handle "Maintenance" action: opens a terminal for maintenance tasks.
+/// @trace spec:tray-minimal-ux
+#[instrument(skip(state, allocator, tool_allocator, build_tx), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "maintenance", spec = "tray-minimal-ux"))]
+pub async fn handle_maintenance_project(
+    project_path: PathBuf,
+    state: &mut TrayState,
+    allocator: &mut GenusAllocator,
+    tool_allocator: &mut ToolAllocator,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<(), String> {
+    // Maintenance is equivalent to Terminal mode
+    handle_terminal(project_path, state, allocator, tool_allocator, build_tx).await
 }
 
 #[cfg(test)]

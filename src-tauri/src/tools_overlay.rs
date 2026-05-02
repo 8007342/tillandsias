@@ -402,7 +402,7 @@ async fn build_tools_overlay_versioned(
     }
 
     tokio::task::spawn_blocking(move || {
-        build_overlay_sync(&overlay_dir, &version_name, &forge_tag, proxy_healthy)
+        build_overlay_sync(&overlay_dir, &version_name, &forge_tag, proxy_healthy, None)
     })
     .await
     .map_err(|e| format!("Tools overlay build task panicked: {e}"))?
@@ -417,11 +417,16 @@ async fn build_tools_overlay_versioned(
 /// direct network access (default bridge network, no proxy).
 ///
 /// @trace spec:layered-tools-overlay
+/// Build the tools overlay synchronously.
+///
+/// When `log_path` is `Some`, writes stdout+stderr to that file for debug mode.
+/// @trace spec:layered-tools-overlay, spec:init-command
 fn build_overlay_sync(
     overlay_dir: &Path,
     version_name: &str,
     forge_tag: &str,
     proxy_healthy: bool,
+    log_path: Option<&Path>,
 ) -> Result<(), String> {
     // Step 1: Create versioned directory
     let version_dir = overlay_dir.join(version_name);
@@ -461,6 +466,7 @@ fn build_overlay_sync(
             ));
         }
 
+        // Build the base command
         let mut cmd = std::process::Command::new(&script);
         cmd.arg(version_dir.to_str().unwrap_or_default())
             .arg(forge_tag)
@@ -482,7 +488,29 @@ fn build_overlay_sync(
             info!(spec = "layered-tools-overlay", "Proxy unhealthy — builder will use direct network access");
         }
 
-        cmd.output().map_err(|e| {
+        // When log_path is provided, use shell + tee to capture output
+        if let Some(log) = log_path {
+            let log_str = log.to_string_lossy();
+            let cmd_str = format!(
+                "{} {:?} {:?} 2>&1 | tee {}",
+                script.display(),
+                version_dir.to_str().unwrap_or_default(),
+                forge_tag,
+                log_str
+            );
+            std::process::Command::new("bash")
+                .arg("-c")
+                .arg(&cmd_str)
+                .env_remove("LD_LIBRARY_PATH")
+                .env_remove("LD_PRELOAD")
+                .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
+                .env("TOOLS_OVERLAY_QUIET", "1")
+                .env("TILLANDSIAS_PORT_MAPPING", if tillandsias_core::state::Os::detect().needs_podman_machine() { "1" } else { "" })
+                .env("CA_CHAIN_PATH", if proxy_healthy && ca_chain.exists() { ca_chain.to_str().unwrap_or_default() } else { "" })
+                .output()
+        } else {
+            cmd.output()
+        }.map_err(|e| {
             error!(error = %e, spec = "layered-tools-overlay", "Failed to launch build script");
             format!("Failed to launch build-tools-overlay.sh: {e}")
         })?
@@ -1025,10 +1053,13 @@ async fn rebuild_tools_overlay(overlay_dir: &Path) -> Result<(), String> {
 /// no overlay exists), builds it. Returns `Ok(())` on success, `Err` on
 /// build failure. Non-fatal — callers should log and continue.
 ///
+/// When `log_path` is `Some`, the build script output is captured to that file
+/// so `--debug` mode can display the last 10 lines on failure.
+///
 /// This does NOT require a tokio runtime or a build_tx channel.
 ///
 /// @trace spec:layered-tools-overlay, spec:init-command
-pub fn build_overlay_for_init() -> Result<(), String> {
+pub fn build_overlay_for_init(log_path: Option<&Path>) -> Result<(), String> {
     let cache = cache_dir();
     let overlay_dir = cache.join("tools-overlay");
     let current = overlay_dir.join("current");
@@ -1059,7 +1090,7 @@ pub fn build_overlay_for_init() -> Result<(), String> {
             let version_name = format!("v{next}");
             // Sync context — check proxy health synchronously via podman exec.
             let proxy_ok = is_proxy_healthy_sync();
-            build_overlay_sync(&overlay_dir, &version_name, &expected_tag, proxy_ok)?;
+            build_overlay_sync(&overlay_dir, &version_name, &expected_tag, proxy_ok, log_path)?;
             prune_old_versions(&overlay_dir);
             // @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse
             // Stale rebuild completed — invalidate any prior snapshot so the
@@ -1075,7 +1106,7 @@ pub fn build_overlay_for_init() -> Result<(), String> {
         "Building tools overlay (init)"
     );
     let proxy_ok = is_proxy_healthy_sync();
-    let result = build_overlay_sync(&overlay_dir, "v1", &expected_tag, proxy_ok);
+    let result = build_overlay_sync(&overlay_dir, "v1", &expected_tag, proxy_ok, log_path);
     if result.is_ok() {
         // @trace spec:layered-tools-overlay, spec:tools-overlay-fast-reuse
         // First-time build succeeded — invalidate so the next reader picks

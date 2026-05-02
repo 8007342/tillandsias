@@ -7,6 +7,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/secrets.rs#L162](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/secrets.rs#L162)
 - [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/secrets.rs#L201](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/secrets.rs#L201)
-- [flake.nix#L126](../../../flake.nix#L126)
+- [flake.nix#L129](../../../flake.nix#L129)
 - [src-tauri/src/secrets.rs#L162](../../../src-tauri/src/secrets.rs#L162)
 - [src-tauri/src/secrets.rs#L201](../../../src-tauri/src/secrets.rs#L201)

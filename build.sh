@@ -53,6 +53,7 @@ FLAG_REMOVE=false
 FLAG_WIPE=false
 FLAG_TOOLBOX_RESET=false
 FLAG_APPIMAGE=false
+FLAG_INIT=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -65,6 +66,7 @@ while [[ $# -gt 0 ]]; do
         --wipe)           FLAG_WIPE=true ;;
         --toolbox-reset)  FLAG_TOOLBOX_RESET=true ;;
         --appimage)       FLAG_APPIMAGE=true ;;
+        --init)           FLAG_INIT=true ;;
         --help|-h)
             cat <<'EOF'
 Tillandsias Development Build Script
@@ -86,6 +88,7 @@ Install flags:
 Maintenance flags:
   --wipe            Remove target/, ~/.cache/tillandsias/, temp files
   --toolbox-reset   Destroy and recreate the tillandsias toolbox
+  --init            Build all container images with versioned tags (runs on host)
   --help            Show this message
 
 Flags combine: ./build.sh --clean --release --install
@@ -103,6 +106,16 @@ done
 # ---------------------------------------------------------------------------
 # Standalone operations (don't need toolbox)
 # ---------------------------------------------------------------------------
+
+if [[ "$FLAG_INIT" == true ]]; then
+    _step "Running tillandsias --init (builds all images with versioned tags)..."
+    # Runs on HOST where podman works (not nested in toolbox)
+    "$SCRIPT_DIR/target/debug/tillandsias" --init 2>&1
+    # Also prune old images
+    _step "Pruning old images..."
+    podman image prune -f 2>/dev/null || true
+    exit 0
+fi
 
 if [[ "$FLAG_REMOVE" == true ]]; then
     # Remove AppImage (new install layout)
@@ -421,7 +434,7 @@ if [[ "$FLAG_RELEASE" == true ]]; then
     # Skip AppImage in toolbox — linuxdeploy needs FUSE which isn't available.
     # AppImage bundling works in CI (ubuntu with FUSE) and via --appimage.
     # Linux only distributes via AppImage; no deb/rpm bundles.
-    BUNDLES="none"
+    BUNDLES=""
     if [[ "$(uname -s)" == "Darwin" ]]; then
         BUNDLES="dmg"
     fi
@@ -433,7 +446,11 @@ if [[ "$FLAG_RELEASE" == true ]]; then
 
     # Single build: --bundles skips AppImage (needs FUSE, CI handles it).
     # The updater error is expected in toolbox — ignore it.
-    _run bash -c "cd '$SCRIPT_DIR' && cargo tauri build --bundles ${BUNDLES}" 2>&1 || {
+    tauri_build="cd '$SCRIPT_DIR' && cargo tauri build"
+    if [[ -n "$BUNDLES" ]]; then
+        tauri_build="$tauri_build --bundles $BUNDLES"
+    fi
+    _run bash -c "$tauri_build" 2>&1 || {
         # Check if the binary was built despite the bundle error
         if [[ -f "$SCRIPT_DIR/target/release/tillandsias" ]]; then
             _warn "Some bundles failed (updater needs AppImage — CI handles that)"

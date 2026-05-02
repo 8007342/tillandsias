@@ -1,0 +1,37 @@
+# Browser Isolation Framework Spec
+
+@trace spec:browser-isolation-framework
+@trace spec:versioning
+
+## Image Versioning
+
+The `chromium-framework` image MUST use versioned tags that match the Tillandsias binary version:
+
+- Tag format: `tillandsias-chromium-framework:v<Major>.<Minor>.<ChangeCount>.<Build>`
+- Tags are derived from the `VERSION` file at the project root
+- NO `:latest` tags are allowed
+
+## Image Hierarchy
+
+The `chromium-framework` image MUST extend `chromium-core` using the same version tag:
+
+```dockerfile
+ARG CHROMIUM_CORE_TAG
+FROM tillandsias-chromium-core:${CHROMIUM_CORE_TAG}
+```
+
+This ensures the framework and core images are version-locked together.
+
+## Security Model
+
+Inherits the `chromium-core` security model (read-only root, no external network, no credentials, reduced capabilities) and adds framework-specific browser isolation layers.
+
+## Build
+
+The image is built using:
+
+```
+images/chromium/Containerfile.framework
+```
+
+Build is invoked via `scripts/build-image.sh chromium-framework` which resolves the core tag and passes it as a build argument.

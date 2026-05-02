@@ -1040,6 +1040,23 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
                     "attach" => Some(MenuCommand::AttachHere {
                         project_path: payload.into(),
                     }),
+                    // New explicit action buttons for projects
+                    // @trace spec:tray-minimal-ux
+                    "opencode" => Some(MenuCommand::OpenCodeProject {
+                        project_path: payload.into(),
+                    }),
+                    // @trace spec:browser-isolation-tray-integration
+                    "opencode-web" => Some(MenuCommand::OpenCodeWebProject {
+                        project_path: payload.into(),
+                    }),
+                    // @trace spec:tray-minimal-ux
+                    "claude" => Some(MenuCommand::ClaudeProject {
+                        project_path: payload.into(),
+                    }),
+                    // @trace spec:tray-minimal-ux
+                    "maintenance" => Some(MenuCommand::MaintenanceProject {
+                        project_path: payload.into(),
+                    }),
                     "terminal" => Some(MenuCommand::Terminal {
                         project_path: payload.into(),
                     }),

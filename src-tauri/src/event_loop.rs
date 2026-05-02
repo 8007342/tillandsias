@@ -105,7 +105,7 @@ pub async fn run(
                             window_type = %window_type,
                             "Browser window request from MCP server"
                         );
-                        match handlers::handle_open_browser_window(&project, &url, &window_type).await {
+                        match handlers::handle_open_browser_window(&project, &url, &window_type, &mut state).await {
                             Ok(_) => {
                                 info!(url = %url, "Browser window opened successfully");
                             }
@@ -150,6 +150,54 @@ pub async fn run(
                             }
                             Err(e) => {
                                 error!(error = %e, "Attach Here failed");
+                            }
+                        }
+                    }
+                    // @trace spec:tray-minimal-ux
+                    MenuCommand::OpenCodeProject { project_path } => {
+                        match handlers::handle_opencode_project(project_path, &mut state, &mut allocator, build_tx.clone()).await {
+                            Ok(_event) => {
+                                prune_completed_builds(&mut state);
+                                on_state_change(&state);
+                            }
+                            Err(e) => {
+                                error!(error = %e, "OpenCode project failed");
+                            }
+                        }
+                    }
+                    // @trace spec:browser-isolation-tray-integration
+                    MenuCommand::OpenCodeWebProject { project_path } => {
+                        match handlers::handle_opencode_web_project(project_path, &mut state, &mut allocator, build_tx.clone()).await {
+                            Ok(_event) => {
+                                prune_completed_builds(&mut state);
+                                on_state_change(&state);
+                            }
+                            Err(e) => {
+                                error!(error = %e, "OpenCode Web project failed");
+                            }
+                        }
+                    }
+                    // @trace spec:tray-minimal-ux
+                    MenuCommand::ClaudeProject { project_path } => {
+                        match handlers::handle_claude_project(project_path, &mut state, &mut allocator, build_tx.clone()).await {
+                            Ok(_event) => {
+                                prune_completed_builds(&mut state);
+                                on_state_change(&state);
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Claude project failed");
+                            }
+                        }
+                    }
+                    // @trace spec:tray-minimal-ux
+                    MenuCommand::MaintenanceProject { project_path } => {
+                        match handlers::handle_maintenance_project(project_path, &mut state, &mut allocator, &mut tool_allocator, build_tx.clone()).await {
+                            Ok(()) => {
+                                prune_completed_builds(&mut state);
+                                on_state_change(&state);
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Maintenance project failed");
                             }
                         }
                     }
@@ -306,7 +354,7 @@ pub async fn run(
                             window_type = %window_type,
                             "Browser window request from MCP server (menu channel)"
                         );
-                        match handlers::handle_open_browser_window(&project, &url, &window_type).await {
+                        match handlers::handle_open_browser_window(&project, &url, &window_type, &mut state).await {
                             Ok(_) => {
                                 info!(url = %url, "Browser window opened successfully");
                             }

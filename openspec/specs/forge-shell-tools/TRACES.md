@@ -12,7 +12,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [.claude/worktrees/design-chromium-browser-isolation/images/default/entrypoint-terminal.sh#L87](../../../.claude/worktrees/design-chromium-browser-isolation/images/default/entrypoint-terminal.sh#L87)
 - [.claude/worktrees/design-chromium-browser-isolation/images/default/lib-common.sh#L138](../../../.claude/worktrees/design-chromium-browser-isolation/images/default/lib-common.sh#L138)
 - [.claude/worktrees/design-chromium-browser-isolation/images/default/lib-common.sh#L266](../../../.claude/worktrees/design-chromium-browser-isolation/images/default/lib-common.sh#L266)
-- [flake.nix#L34](../../../flake.nix#L34)
+- [flake.nix#L35](../../../flake.nix#L35)
 - [images/default/entrypoint-forge-claude.sh#L105](../../../images/default/entrypoint-forge-claude.sh#L105)
 - [images/default/entrypoint-forge-opencode.sh#L100](../../../images/default/entrypoint-forge-opencode.sh#L100)
 - [images/default/entrypoint-forge-opencode-web.sh#L102](../../../images/default/entrypoint-forge-opencode-web.sh#L102)

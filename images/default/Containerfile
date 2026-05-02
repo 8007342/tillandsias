@@ -42,7 +42,6 @@ COPY entrypoint-forge-opencode.sh /usr/local/bin/entrypoint-forge-opencode.sh
 COPY entrypoint-forge-opencode-web.sh /usr/local/bin/entrypoint-forge-opencode-web.sh
 COPY entrypoint-forge-claude.sh /usr/local/bin/entrypoint-forge-claude.sh
 COPY entrypoint-terminal.sh /usr/local/bin/entrypoint-terminal.sh
-COPY tillandsias-browser-tool /usr/local/bin/tillandsias-browser-tool
 RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/entrypoint-forge-opencode.sh \
              /usr/local/bin/entrypoint-forge-opencode-web.sh \

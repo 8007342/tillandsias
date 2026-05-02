@@ -55,17 +55,45 @@ pub mod ids {
     pub const CLAUDE_RESET_CREDENTIALS: &str = "claude-reset-credentials";
     pub const REFRESH_REMOTE_PROJECTS: &str = "refresh-remote-projects";
 
+    /// Build an "opencode project" menu item ID for a project path.
+    /// @trace spec:tray-minimal-ux
+    pub fn opencode_project(project_path: &std::path::Path) -> String {
+        gen_id(&format!("opencode:{}", project_path.display()))
+    }
+
+    /// Build an "opencode web project" menu item ID for a project path.
+    /// Launches OpenCode Web in a browser-isolation container.
+    /// @trace spec:browser-isolation-tray-integration
+    pub fn opencode_web_project(project_path: &std::path::Path) -> String {
+        gen_id(&format!("opencode-web:{}", project_path.display()))
+    }
+
+    /// Build a "claude project" menu item ID for a project path.
+    /// @trace spec:tray-minimal-ux
+    pub fn claude_project(project_path: &std::path::Path) -> String {
+        gen_id(&format!("claude:{}", project_path.display()))
+    }
+
+    /// Build a "maintenance project" menu item ID for a project path.
+    /// @trace spec:tray-minimal-ux
+    pub fn maintenance_project(project_path: &std::path::Path) -> String {
+        gen_id(&format!("maintenance:{}", project_path.display()))
+    }
+
     /// Build an "attach here" menu item ID for a project path.
+    /// @deprecated Use opencode_project, opencode_web_project, claude_project, or maintenance_project instead.
     pub fn attach_here(project_path: &std::path::Path) -> String {
         gen_id(&format!("attach:{}", project_path.display()))
     }
 
     /// Build a "terminal" menu item ID for a project path.
+    /// @deprecated Use maintenance_project instead.
     pub fn terminal(project_path: &std::path::Path) -> String {
         gen_id(&format!("terminal:{}", project_path.display()))
     }
 
     /// Build a "serve here" menu item ID for a project path.
+    /// @deprecated Serve Here is no longer offered in the menu.
     pub fn serve_here(project_path: &std::path::Path) -> String {
         gen_id(&format!("serve:{}", project_path.display()))
     }
@@ -140,8 +168,9 @@ pub fn build_tray_menu<R: Runtime>(
 
     let mut menu = MenuBuilder::new(app);
 
-    // Permanent "~/src/ — Attach Here" entry at the top.
+    // Get watch path for remote projects cloud menu — but don't create a top-level "Attach Here" entry.
     // Uses the first watch path from config (default ~/src).
+    // @trace spec:tray-minimal-ux
     let global_config = load_global_config();
     let watch_path = global_config
         .scanner
@@ -152,20 +181,6 @@ pub fn build_tray_menu<R: Runtime>(
             std::path::PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/root".to_string()))
                 .join("src")
         });
-
-    let src_label = format!(
-        "{}/ \u{2014} {}",
-        watch_path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| watch_path.display().to_string()),
-        i18n::t("menu.attach_here")
-    );
-    menu = menu.item(
-        &MenuItemBuilder::with_id(ids::attach_here(&watch_path), &src_label)
-            .enabled(state.forge_available)
-            .build(app)?,
-    );
 
     // Global root terminal — 🛠️ is reserved for this item and MUST NOT appear in TOOL_EMOJIS.
     menu = menu.item(
@@ -380,8 +395,14 @@ fn environment_status_label(state: &TrayState) -> String {
 /// this function is not called. When no projects are discovered at all,
 /// this is called with an empty slice and shows "No projects detected".
 ///
-/// `forge_available` gates "Attach Here" and "Maintenance" — both require the
-/// forge image to be present. When `false`, those items are disabled.
+/// Each inactive project shows 4 action buttons:
+/// - 💻 OpenCode (terminal-based)
+/// - 🌐 OpenCode Web (browser-based with browser isolation)
+/// - 👽 Claude (AI assistant)
+/// - 🔧 Maintenance (terminal access)
+///
+/// All actions require `forge_available`. When `false`, all items are disabled.
+/// @trace spec:tray-minimal-ux
 fn build_inactive_projects_submenu<R: Runtime>(
     app: &AppHandle<R>,
     inactive: &[&tillandsias_core::project::Project],
@@ -396,30 +417,48 @@ fn build_inactive_projects_submenu<R: Runtime>(
                 .build(app)?,
         );
     } else {
-        // Inactive projects have no running containers so we pass a TrayState-like
-        // view with an empty running list. Rather than threading a full TrayState
-        // reference just for the emoji logic, we use a zero-running sentinel directly.
-        // build_project_submenu uses state.running to find emojis — passing state
-        // with the real running list is still correct here: inactive projects won't
-        // match any running container by name, so they'll render with plain labels.
         for project in inactive {
-            let attach_label = format!("\u{1F331} {}", i18n::t("menu.attach_here"));
-            let submenu = SubmenuBuilder::new(app, &project.name)
-                .item(
-                    &MenuItemBuilder::with_id(ids::attach_here(&project.path), &attach_label)
-                        .enabled(forge_available)
-                        .build(app)?,
+            let mut submenu = SubmenuBuilder::new(app, &project.name);
+
+            // OpenCode — terminal-based IDE
+            submenu = submenu.item(
+                &MenuItemBuilder::with_id(
+                    ids::opencode_project(&project.path),
+                    "💻 OpenCode",
                 )
-                .item(
-                    &MenuItemBuilder::with_id(
-                        ids::terminal(&project.path),
-                        i18n::t("menu.maintenance"),
-                    )
+                .enabled(forge_available)
+                .build(app)?,
+            );
+
+            // OpenCode Web — browser-based IDE with browser isolation
+            // @trace spec:browser-isolation-tray-integration
+            submenu = submenu.item(
+                &MenuItemBuilder::with_id(
+                    ids::opencode_web_project(&project.path),
+                    "🌐 OpenCode Web",
+                )
+                .enabled(forge_available)
+                .build(app)?,
+            );
+
+            // Claude — AI assistant
+            submenu = submenu.item(
+                &MenuItemBuilder::with_id(ids::claude_project(&project.path), "👽 Claude")
                     .enabled(forge_available)
                     .build(app)?,
+            );
+
+            // Maintenance — terminal access
+            submenu = submenu.item(
+                &MenuItemBuilder::with_id(
+                    ids::maintenance_project(&project.path),
+                    "🔧 Maintenance",
                 )
-                .build()?;
-            projects = projects.item(&submenu);
+                .enabled(forge_available)
+                .build(app)?,
+            );
+
+            projects = projects.item(&submenu.build()?);
         }
     }
 
@@ -465,19 +504,13 @@ fn build_settings_submenu<R: Runtime>(
     let language_submenu = build_language_submenu(app)?;
     settings = settings.item(&language_submenu);
 
-    // Version and credit at the bottom of Settings
+    // Version and attribution at the bottom of Settings
+    // @trace spec:tray-minimal-ux
     settings = settings.separator();
     let version = include_str!("../../VERSION").trim();
+    let version_label = format!("v{} - By Tlatoāni", version);
     settings = settings.item(
-        &MenuItemBuilder::with_id(
-            ids::static_id("version"),
-            i18n::tf("menu.version", &[("version", version)]),
-        )
-        .enabled(false)
-        .build(app)?,
-    );
-    settings = settings.item(
-        &MenuItemBuilder::with_id(ids::static_id("credit"), i18n::t("menu.credit"))
+        &MenuItemBuilder::with_id(ids::static_id("version"), &version_label)
             .enabled(false)
             .build(app)?,
     );
@@ -684,6 +717,7 @@ fn build_language_submenu<R: Runtime>(
 }
 
 /// Build a submenu for a single project.
+/// @trace spec:tray-minimal-ux
 fn build_project_submenu<R: Runtime>(
     app: &AppHandle<R>,
     project: &tillandsias_core::project::Project,
@@ -711,13 +745,11 @@ fn build_project_submenu<R: Runtime>(
     // Persistent opencode-web forge container for this project — drives the
     // per-project "Stop" menu entry. Distinct from ContainerType::Web (static
     // httpd) and from ContainerType::Forge (ephemeral CLI sessions).
-    // @trace spec:opencode-web-session, spec:tray-app
+    // @trace spec:browser-isolation-tray-integration
     let opencode_web_running = state
         .running
         .iter()
         .any(|c| c.project_name == project.name && c.container_type == ContainerType::OpenCodeWeb);
-
-    let maintenance_running = !tool_emojis.is_empty();
 
     // Project label: name first, emojis as suffix. Tools then flowers, then web globe.
     // Idle: plain name. Running: "project-name  🔧🪛🌸🔗"
@@ -736,64 +768,43 @@ fn build_project_submenu<R: Runtime>(
 
     let mut submenu = SubmenuBuilder::new(app, &label);
 
-    // "Attach Here" — primary action (opens OpenCode)
-    // Idle: 🌱 Attach Here (clickable, gated on forge_available)
-    // Running: 🌺 Blooming (genus flower, disabled — prevents re-launch)
-    let (attach_label, attach_enabled) = if let Some(genus) = project.assigned_genus {
-        (
-            format!("{} {}", genus.flower(), i18n::t("menu.blooming")),
-            false,
-        )
-    } else {
-        (
-            format!("\u{1F331} {}", i18n::t("menu.attach_here")),
-            state.forge_available,
-        ) // 🌱
-    };
+    // OpenCode — terminal-based IDE
+    // All actions require the forge image to be available.
     submenu = submenu.item(
-        &MenuItemBuilder::with_id(ids::attach_here(&project.path), &attach_label)
-            .enabled(attach_enabled)
-            .build(app)?,
-    );
-
-    // Maintenance menu item.
-    // When running: show the first maintenance container's tool emoji.
-    // When idle: show pick icon (⛏️).
-    // Gated on forge_available — requires the image to launch.
-    let maintenance_word = i18n::t("menu.maintenance"); // already includes ⛏️ emoji
-    let maintenance_label = if maintenance_running {
-        let tool = tool_emojis.first().copied().unwrap_or("\u{26CF}\u{FE0F}");
-        // Replace the default ⛏️ prefix with the running tool emoji
-        format!("{tool} Maintenance")
-    } else {
-        maintenance_word.to_string()
-    };
-    // "Maintenance" — opens bash in a forge container
-    submenu = submenu.item(
-        &MenuItemBuilder::with_id(ids::terminal(&project.path), &maintenance_label)
+        &MenuItemBuilder::with_id(ids::opencode_project(&project.path), "💻 OpenCode")
             .enabled(state.forge_available)
             .build(app)?,
     );
 
-    // "Serve Here" — launch a web server container for static files.
-    // Running: 🔗 Serving (disabled — prevents duplicate)
-    // Idle: 🔗 Serve Here (clickable — always enabled; web image is separate from forge)
-    let serve_label = if web_running {
-        format!("\u{1F517} {}", i18n::t("menu.serving")) // 🔗 Serving
-    } else {
-        i18n::t("menu.serve_here").to_string() // 🔗 Serve Here
-    };
+    // OpenCode Web — browser-based IDE with browser isolation
+    // Launches in a chromium-core container for security isolation.
+    // @trace spec:browser-isolation-tray-integration
     submenu = submenu.item(
-        &MenuItemBuilder::with_id(ids::serve_here(&project.path), &serve_label)
-            .enabled(!web_running)
+        &MenuItemBuilder::with_id(ids::opencode_web_project(&project.path), "🌐 OpenCode Web")
+            .enabled(state.forge_available)
+            .build(app)?,
+    );
+
+    // Claude — AI assistant
+    submenu = submenu.item(
+        &MenuItemBuilder::with_id(ids::claude_project(&project.path), "👽 Claude")
+            .enabled(state.forge_available)
+            .build(app)?,
+    );
+
+    // Maintenance — terminal access to the project environment
+    submenu = submenu.item(
+        &MenuItemBuilder::with_id(ids::maintenance_project(&project.path), "🔧 Maintenance")
+            .enabled(state.forge_available)
             .build(app)?,
     );
 
     // "Stop" — only shown when a persistent OpenCode Web (forge) container is
-    // running for this project. Genus-named forge/maintenance containers keep
-    // their own per-container Stop flow (handled via ids::parse "stop" arm).
-    // @trace spec:opencode-web-session, spec:tray-app
+    // running for this project. Allows stopping the container without stopping
+    // other project activities.
+    // @trace spec:browser-isolation-tray-integration
     if opencode_web_running {
+        submenu = submenu.separator();
         submenu = submenu.item(
             &MenuItemBuilder::with_id(ids::stop_project(&project.path), i18n::t("menu.stop"))
                 .build(app)?,
