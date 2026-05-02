@@ -177,6 +177,8 @@ git_desc = "  ✓ git        — serviciu oglinda git (depozite bare + daemon)"
 inference_desc = "  ✓ inference  — LLM local (ollama)"
 tools_overlay = "Se construieste stratul de software (Claude Code, OpenSpec, OpenCode)..."
 tools_overlay_ready = "✓ Stratul de software este gata"
+failed_logs_header = "Jurnale de construire esuata (--debug):"
+skipping = "↷ {name}: {tag} (deja construit, omis)"
 
 # ── CLI welcome banner ──────────────────────────────────────
 [cli.welcome]

@@ -200,6 +200,8 @@ git_desc = "  ✓ git        — servicio espejo de git (repos bare + daemon)"
 inference_desc = "  ✓ inference  — LLM local (ollama)"
 tools_overlay = "Construyendo capa de software (Claude Code, OpenSpec, OpenCode)..."
 tools_overlay_ready = "✓ Capa de software lista"
+failed_logs_header = "Logs de construcción fallida (--debug):"
+skipping = "↷ {name}: {tag} (ya construido, omitiendo)"
 
 # ── CLI welcome banner ──────────────────────────────────────
 [cli.welcome]

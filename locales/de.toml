@@ -208,6 +208,8 @@ git_desc = "  ✓ git        — Git-Mirror-Dienst (Bare-Repos + Daemon)"
 inference_desc = "  ✓ inference  — Lokales LLM (ollama)"
 tools_overlay = "Softwareschicht wird erstellt (Claude Code, OpenSpec, OpenCode)..."
 tools_overlay_ready = "✓ Softwareschicht bereit"
+failed_logs_header = "Fehlgeschlagene Build-Logs (--debug):"
+skipping = "↷ {name}: {tag} (bereits erstellt, wird übersprungen)"
 
 # ── CLI welcome banner ──────────────────────────────────────
 [cli.welcome]

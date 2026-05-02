@@ -177,6 +177,8 @@ git_desc = "  ✓ git        — сервис зеркалирования git (
 inference_desc = "  ✓ inference  — локальная LLM (ollama)"
 tools_overlay = "Сборка программного слоя (Claude Code, OpenSpec, OpenCode)..."
 tools_overlay_ready = "✓ Программный слой готов"
+failed_logs_header = "Журналы ошибок сборки (--debug):"
+skipping = "↷ {name}: {tag} (уже собран, пропуск)"
 
 # ── CLI welcome banner ──────────────────────────────────────
 [cli.welcome]

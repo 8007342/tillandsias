@@ -177,6 +177,8 @@ git_desc = "  ✓ git        — servico de espelhamento git (repositorios bare 
 inference_desc = "  ✓ inference  — LLM local (ollama)"
 tools_overlay = "Construindo camada de software (Claude Code, OpenSpec, OpenCode)..."
 tools_overlay_ready = "✓ Camada de software pronta"
+failed_logs_header = "Logs de construcao falhada (--debug):"
+skipping = "↷ {name}: {tag} (ja construido, pulando)"
 
 # ── CLI welcome banner ──────────────────────────────────────
 [cli.welcome]
