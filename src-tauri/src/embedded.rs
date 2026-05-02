@@ -210,6 +210,7 @@ pub const GIT_ASKPASS_TILLANDSIAS: &str =
 // @trace spec:inference-container
 pub const INFERENCE_ENTRYPOINT: &str = include_str!("../../images/inference/entrypoint.sh");
 pub const INFERENCE_CONTAINERFILE: &str = include_str!("../../images/inference/Containerfile");
+pub const INFERENCE_EXTERNAL_LOGS: &str = include_str!("../../images/inference/external-logs.yaml");
 
 // ---------------------------------------------------------------------------
 // Image sources — chromium browser containers
@@ -578,6 +579,8 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("inference entrypoint: {e}"))?;
     write_lf(&inference_dir.join("Containerfile"), INFERENCE_CONTAINERFILE)
         .map_err(|e| format!("inference Containerfile: {e}"))?;
+    write_lf(&inference_dir.join("external-logs.yaml"), INFERENCE_EXTERNAL_LOGS)
+        .map_err(|e| format!("inference external-logs.yaml: {e}"))?;
     #[cfg(unix)]
     {
         let path = inference_dir.join("entrypoint.sh");
