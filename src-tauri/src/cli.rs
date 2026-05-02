@@ -165,6 +165,15 @@ pub enum CliMode {
     /// `tillandsias --github-login` — run GitHub authentication flow and exit.
     GitHubLogin,
 
+    /// `tillandsias --diagnostics <path>` — stream live container logs for project troubleshooting.
+    /// @trace spec:cli-diagnostics
+    Diagnostics {
+        /// Absolute path to the project directory (or empty for shared infra only).
+        path: Option<PathBuf>,
+        /// Show verbose debug output.
+        debug: bool,
+    },
+
     /// A project path was given — launch an interactive development environment.
     Attach {
         /// Absolute path to the project directory.
@@ -190,6 +199,7 @@ USAGE:
     tillandsias <path> --claude     Attach using Claude Code
     tillandsias <path> --bash       Open maintenance terminal
     tillandsias --github-login      Authenticate with GitHub
+    tillandsias --diagnostics [p]   Stream live container logs for troubleshooting
     tillandsias --init              Pre-build development environments
     tillandsias --init --force      Rebuild forge image from scratch
     tillandsias --stats             Show disk usage from Tillandsias artifacts
@@ -293,6 +303,24 @@ pub fn parse() -> Option<(CliMode, LogConfig)> {
     // `tillandsias --github-login` — run GitHub auth flow.
     if args.iter().any(|a| a == "--github-login") {
         return Some((CliMode::GitHubLogin, log_config));
+    }
+
+    // `tillandsias --diagnostics [path]` — stream container logs for troubleshooting.
+    // @trace spec:cli-diagnostics
+    if args.iter().any(|a| a == "--diagnostics") {
+        let debug = args.iter().any(|a| a == "--debug");
+        // Next argument after --diagnostics is the project path (optional).
+        let path = args
+            .iter()
+            .position(|a| a == "--diagnostics")
+            .and_then(|i| {
+                if i + 1 < args.len() && !args[i + 1].starts_with("--") {
+                    Some(PathBuf::from(args[i + 1].clone()))
+                } else {
+                    None
+                }
+            });
+        return Some((CliMode::Diagnostics { path, debug }, log_config));
     }
 
     let mut path: Option<PathBuf> = None;
