@@ -32,3 +32,49 @@ The application SHALL provide a `tillandsias --init` command that pre-builds all
 #### Scenario: Help text
 - **WHEN** `tillandsias --help` is run
 - **THEN** the `--init` flag is listed with description "Pre-build container images" and `--debug` flag is shown as available option
+
+### Requirement: Exit code contract for init command
+The `--init` command SHALL exit deterministically with codes 0 (all images built successfully) or 1 (any image build failed), enabling safe use in shell pipelines and conditionals.
+
+#### Scenario: Successful init
+- **WHEN** `tillandsias --init` completes and all images built successfully
+- **THEN** the command exits with code 0
+- **AND** safe to chain: `./build.sh --install && tillandsias --init --debug && tillandsias /path --diagnostics`
+
+#### Scenario: Partial failure exits with code 1
+- **WHEN** `tillandsias --init` completes and one or more images failed to build
+- **THEN** the command exits with code 1
+- **AND** each failure is visible in terminal output
+- **AND** can chain with error handling: `tillandsias --init || echo "init failed"`
+
+### Requirement: Debug mode log capture
+When `--debug` flag is passed, init SHALL capture each image build's output to `/tmp/tillandsias-init-{image}.log` and display failed logs on stderr.
+
+#### Scenario: Debug mode tees output
+- **WHEN** `tillandsias --init --debug` is run
+- **THEN** each image build is piped to `tee /tmp/tillandsias-init-{image_name}.log`
+- **AND** user sees progress in real-time on stdout
+- **AND** logs are preserved for post-mortem analysis
+
+#### Scenario: Failed logs displayed inline
+- **WHEN** `tillandsias --init --debug` completes with failures
+- **THEN** the last 10 lines of each failed build's log are displayed to stderr
+- **AND** log lines are prefixed with image name for clarity
+
+### Requirement: All images built
+The init command SHALL build exactly six container images in sequence.
+
+#### Scenario: Image build sequence
+- **WHEN** `tillandsias --init` is run
+- **THEN** the following images are built in this order:
+  1. `proxy` — caching HTTP/S proxy with domain allowlist
+  2. `forge` — main dev environment
+  3. `git` — mirror service with push support
+  4. `inference` — ollama for local models
+  5. `chromium-core` — browser isolation core (Linux)
+  6. `chromium-framework` — browser isolation framework (Linux)
+
+## Sources of Truth
+
+- `docs/cheatsheets/build-lock-semantics.md` — process coordination via PID files to prevent concurrent builds
+- `docs/cheatsheets/container-image-tagging.md` — versioned image tag scheme and staleness detection
