@@ -2,7 +2,7 @@
 tags: [external-logs, observability, logs, forge, runtime, producers, consumers]
 languages: []
 since: 2026-04-26
-last_verified: 2026-04-27
+last_verified: 2026-05-02
 sources:
   - https://docs.podman.io/en/stable/markdown/podman-cp.1.html
   - https://docs.podman.io/en/stable/markdown/podman-run.1.html
@@ -19,9 +19,42 @@ status: current
 
 ## Provenance
 
+- Rust `include_str!()` macro (compile-time file embedding): <https://doc.rust-lang.org/std/macro.include_str.html>
+- Containerfile/Dockerfile COPY instruction (build context semantics): <https://docs.podman.io/en/latest/markdown/podman-build.1.html#copy>
+- rsyslog configuration and local facility semantics: <https://www.rsyslog.com/doc/master/concepts/index.html>
 - Podman cp reference (streaming container files to stdout as tar, used by the tray-side auditor): <https://docs.podman.io/en/stable/markdown/podman-cp.1.html>
 - Podman run reference (bind-mount semantics: `:rw`/`:ro`, the mount modes that make producer vs consumer roles possible): <https://docs.podman.io/en/stable/markdown/podman-run.1.html>
-- **Last updated:** 2026-04-27
+- **Last updated:** 2026-05-02
+
+## Lifecycle: binary → tmpfs → container image
+
+The `external-logs.yaml` manifest file for each service container follows a deterministic lifecycle:
+
+@trace spec:cli-diagnostics, spec:default-image
+
+1. **Compile time (embedded.rs)**: Each service's manifest is embedded as a compile-time string constant:
+   - `GIT_EXTERNAL_LOGS` (git service syslog config)
+   - `PROXY_EXTERNAL_LOGS` (proxy service syslog config)
+   - `ROUTER_EXTERNAL_LOGS` (router service syslog config)
+   - `INFERENCE_EXTERNAL_LOGS` (inference service syslog config)
+   - `FORGE_EXTERNAL_LOGS` (forge container cheatsheet-telemetry producer)
+
+2. **Runtime: extraction to tmpfs** (`write_image_sources()`):
+   - At tray startup or `--init`, the binary calls `write_image_sources()`
+   - Each service's tmpdir (e.g., `$XDG_RUNTIME_DIR/tillandsias/images/<service>/`) is populated
+   - `external-logs.yaml` is written to tmpfs (RAM-backed, per-session) with LF normalization
+
+3. **Build time: Containerfile COPY**:
+   - When `podman build` executes the service's Containerfile:
+   - `COPY external-logs.yaml /etc/tillandsias/external-logs.yaml` pulls from tmpfs → image layer
+   - Critical: the file MUST exist in tmpfs; if not, the build fails immediately
+
+4. **Container runtime: syslog integration**:
+   - Service entrypoint reads `/etc/tillandsias/external-logs.yaml` (read-only from image layer)
+   - Configures syslog output for each declared log file
+   - Parent tray listens on syslog socket (`local1` facility) and streams to host
+
+**Consequence**: The manifest file is never mutable and never touches disk — it lives on RAM only during the build window and on the read-only image layer thereafter. Restart a service container → same manifest (from layer). Rebuild with a new VERSION → new manifest (re-embedded, re-extracted, re-baked into image).
 
 ## The two log tiers
 

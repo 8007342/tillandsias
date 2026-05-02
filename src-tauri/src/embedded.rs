@@ -205,6 +205,10 @@ pub const POST_RECEIVE_HOOK: &str = include_str!("../../images/git/post-receive-
 pub const GIT_ASKPASS_TILLANDSIAS: &str =
     include_str!("../../images/git/git-askpass-tillandsias.sh");
 // @trace spec:cli-diagnostics, spec:logging-levels
+// external-logs.yaml: Squid logging config for git container syslog integration.
+// Embedded at compile time, extracted to tmpfs at runtime (write_image_sources),
+// copied into git image build context, mounted as /etc/tillandsias/external-logs.yaml.
+// Enables structured log streaming to host via syslog (local1 facility) for --diagnostics.
 pub const GIT_EXTERNAL_LOGS: &str = include_str!("../../images/git/external-logs.yaml");
 
 // ---------------------------------------------------------------------------
@@ -214,9 +218,13 @@ pub const INFERENCE_ENTRYPOINT: &str = include_str!("../../images/inference/entr
 pub const INFERENCE_CONTAINERFILE: &str = include_str!("../../images/inference/Containerfile");
 pub const INFERENCE_EXTERNAL_LOGS: &str = include_str!("../../images/inference/external-logs.yaml");
 
-// Router image files
+// Router image files (Windows + macOS sidecar network orchestration)
 // @trace spec:proxy-container
 pub const ROUTER_CONTAINERFILE: &str = include_str!("../../images/router/Containerfile");
+// @trace spec:cli-diagnostics, spec:logging-levels
+// external-logs.yaml: syslog config for router sidecar (cross-platform DNS + routing).
+// Embedded at compile time, extracted at runtime, mounted in router image build context.
+// Lifecycle: binary → tmpfs → build context → image layer → mounted /etc/tillandsias/ → syslog streaming.
 pub const ROUTER_EXTERNAL_LOGS: &str = include_str!("../../images/router/external-logs.yaml");
 
 // ---------------------------------------------------------------------------
@@ -537,6 +545,7 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("proxy squid.conf: {e}"))?;
     write_lf(&proxy_dir.join("allowlist.txt"), PROXY_ALLOWLIST)
         .map_err(|e| format!("proxy allowlist: {e}"))?;
+    // @trace spec:cli-diagnostics — Extract external-logs.yaml for proxy to build context (tmpfs)
     write_lf(&proxy_dir.join("external-logs.yaml"), PROXY_EXTERNAL_LOGS)
         .map_err(|e| format!("proxy external-logs.yaml: {e}"))?;
     #[cfg(unix)]
@@ -565,6 +574,8 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     write_lf(&git_dir.join("git-askpass-tillandsias.sh"), GIT_ASKPASS_TILLANDSIAS)
         .map_err(|e| format!("git askpass script: {e}"))?;
     // @trace spec:cli-diagnostics, spec:logging-levels
+    // Lifecycle: GIT_EXTERNAL_LOGS (binary const) → tmpfs here → Containerfile COPY into image layer
+    // → mounted at /etc/tillandsias/external-logs.yaml in git container → syslog streaming via --diagnostics
     write_lf(&git_dir.join("external-logs.yaml"), GIT_EXTERNAL_LOGS)
         .map_err(|e| format!("git external-logs: {e}"))?;
     #[cfg(unix)]
@@ -589,6 +600,8 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("inference entrypoint: {e}"))?;
     write_lf(&inference_dir.join("Containerfile"), INFERENCE_CONTAINERFILE)
         .map_err(|e| format!("inference Containerfile: {e}"))?;
+    // @trace spec:cli-diagnostics, spec:inference-container
+    // ollama syslog config: binary → tmpfs → image build context → layer → /etc/tillandsias/external-logs.yaml
     write_lf(&inference_dir.join("external-logs.yaml"), INFERENCE_EXTERNAL_LOGS)
         .map_err(|e| format!("inference external-logs.yaml: {e}"))?;
     #[cfg(unix)]
@@ -604,11 +617,14 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     }
 
     // -- images/router/ --
-    // @trace spec:proxy-container
+    // @trace spec:proxy-container, spec:cli-diagnostics
     let router_dir = dir.join("images").join("router");
     fs::create_dir_all(&router_dir).map_err(|e| format!("images/router dir: {e}"))?;
     write_lf(&router_dir.join("Containerfile"), ROUTER_CONTAINERFILE)
         .map_err(|e| format!("router Containerfile: {e}"))?;
+    // @trace spec:cli-diagnostics, spec:logging-levels
+    // Lifecycle: ROUTER_EXTERNAL_LOGS (binary const) → tmpfs (build context) → Containerfile COPY
+    // → image layer → /etc/tillandsias/external-logs.yaml (mounted) → syslog integration
     write_lf(&router_dir.join("external-logs.yaml"), ROUTER_EXTERNAL_LOGS)
         .map_err(|e| format!("router external-logs: {e}"))?;
 
