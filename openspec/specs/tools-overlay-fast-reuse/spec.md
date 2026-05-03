@@ -83,6 +83,16 @@ An instrumentation timer MUST be added around the snapshot lookup so warm-launch
 
 The overlay checking is performed on every launch and involves multiple I/O operations (exists() syscall, manifest.json read, JSON deserialization, version comparison). Since the overlay is stable across launches (same forge image tag, same source files), computing the answer once at app startup and caching it for the tray process lifetime eliminates redundant work and meets the <2 second warm-launch latency target.
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee` — overlay snapshot invalidation on forge tag change
+
+Gating points:
+- Snapshot is computed once at startup and cached for tray process lifetime
+- Cache is invalidated immediately when forge image tag changes
+- Overlay mount operations complete sub-millisecond from cached snapshot (no I/O)
+
 ## Sources of Truth
 
 - `docs/cheatsheets/runtime/cache-architecture.md` — process-lifetime caching patterns

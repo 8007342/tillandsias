@@ -88,6 +88,19 @@ The cheatsheet `docs/cheatsheets/tray-state-machine.md` SHALL be updated to refl
 - New static-row composition (no Language menu item)
 - New project submenu labels and their meanings
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee` — submenu labels, i18n menu hiding, tombstone preservation
+
+Gating points:
+- Local projects submenu labeled `🏠 ~/src` (not generic "Projects")
+- Remote projects submenu labeled `☁️ Cloud` (not "Remote Projects")
+- Language submenu not visible in tray menu (i18n hardcoded to "en")
+- MenuCommand::SelectLanguage unreachable (no menu item triggers it)
+- Feature flag `i18n-menu` guards submenu append for one-line re-enablement
+- Tombstone annotation preserves original locale detection code for three releases
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/forge-container.md` — confirms the `~/src` watch path cited in the new label

@@ -102,6 +102,20 @@ the project label shows status emojis (🔧 for maintenance, 🌸 for forge, �
 - **THEN** the project is cloned to local machine first (shows progress in menu chip)
 - **AND** then the action container is launched
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee` — menu composition at each lifecycle stage, container action launch and cleanup
+
+Gating points:
+- Tray starts with exactly 4 menu items (status, divider, version, quit)
+- Menu expands to 6-7 items (root terminal, cloud, projects) after forge available
+- Status dynamically updates as containers initialize: "Verifying..." → "Building..." → "OK"
+- Status shows "Unhealthy environment" immediately on any container failure
+- Project submenu shows 4 action buttons (OpenCode, Web, Claude, Maintenance) when forge available
+- Remote projects cloned before container launch
+- Stale containers cleaned on startup; only tracked containers remain
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/container-lifecycle.md` — Container state machine and lifecycle management for Tillandsias containers

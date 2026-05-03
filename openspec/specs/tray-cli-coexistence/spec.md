@@ -80,6 +80,17 @@ The tracing/logging layer SHALL tolerate `BrokenPipe` / `EPIPE` errors on the st
 - **AND** the process does not panic or exit
 - **AND** the file appender at `~/.local/state/tillandsias/tillandsias.log` continues to capture events
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee` — tray process isolation and lifecycle guarantees
+
+Gating points:
+- CLI detects graphical session correctly across Linux/macOS/Windows
+- Tray spawns as detached child process when graphical session detected
+- Tray remains running after CLI foreground completes
+- Broken pipe errors on stderr do not crash the process
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/systemd-socket-activation.md` — Systemd Socket Activation reference and patterns

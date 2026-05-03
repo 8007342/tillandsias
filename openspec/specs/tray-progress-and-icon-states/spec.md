@@ -88,6 +88,19 @@ The "Sign in to GitHub" menu item SHALL be renamed:
 - Old label: `Sign in to GitHub`
 - New label: `🔑 GitHub Login` (shorter, matches user UX terminology)
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee` — progress chip state transitions and menu collapsing on failure
+
+Gating points:
+- Status chip starts with `✅ Verifying environment …` on cold start
+- Emoji appended in deterministic order as each subsystem completes
+- All subsystems report completion within 30 seconds typical
+- Menu collapses to single `🥀 Unhealthy environment` item when any subsystem fails
+- Unhealthy stage does not retry automatically (detail only in logs)
+- Locale keys enforced across en/de/es with parity tests
+
 ## Sources of Truth
 
 - Project memory: `feedback_design_philosophy` — single line, detail in logs

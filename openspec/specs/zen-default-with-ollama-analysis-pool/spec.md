@@ -87,6 +87,20 @@ The spec SHALL NOT block on a Squid fix — it acknowledges the issue and provid
 - **AND** does NOT route through Squid
 - **AND** the model lands in `~/.cache/tillandsias/models/` and is discovered by the container
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee` — default model routing, tier-tagged pre-pulls, Squid proxy bypass
+
+Gating points:
+- Default config ships `opencode/big-pickle` as primary Zen model (not ollama)
+- User can opt into offline analysis via `--model ollama/<name>` CLI flag
+- T0/T1 models baked into inference image; zero network overhead on first attach
+- T2+ models pulled at runtime via host-side ollama (bypasses Squid); detect GPU tier correctly
+- Build-time pulls do not route through Squid proxy (sidestep EOF failure)
+- Model tiers match capability matrix: T0/T1 on CPU, T2/T3 on 4-8GB GPU, T4/T5 on 16GB+ GPU
+- All tool-capable models tagged as such in tier table
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/ollama-model-management.md` — model manifest structure, cache checking, pull semantics

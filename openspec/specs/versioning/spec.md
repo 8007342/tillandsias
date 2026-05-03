@@ -75,6 +75,21 @@ A `scripts/bump-version.sh` script SHALL atomically update all version locations
 - **THEN** no files are modified on the second run
 
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee` — version monotonicity, tag immutability, semver parity
+
+Gating points:
+- VERSION file exists at repo root with valid 4-part version
+- VERSION is source of truth; all artifacts (git tags, Cargo.toml, tauri.conf.json) derived from it
+- Version increments are strictly monotonic (left-to-right component comparison)
+- BuildIncrement incremented on each local build; ChangeCount incremented on /opsx:archive
+- Cargo.toml and tauri.conf.json use 3-part semver (Major.Minor.ChangeCount)
+- Version-specific tags (v0.1.37.25) are immutable (never force-pushed/deleted)
+- Rolling tags (stable, latest) are force-pushed to track current release/build
+- bump-version.sh is idempotent; updates all version locations atomically
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns

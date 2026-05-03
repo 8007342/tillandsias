@@ -76,6 +76,18 @@ Each message type is registered with the tray-side router at startup. Unrecogniz
 - **THEN** deserialization fails and the connection is closed
 - **AND** an error is logged (no crash)
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee` — socket lifecycle and capability-based message routing
+
+Gating points:
+- Control socket created at `$XDG_RUNTIME_DIR/tillandsias/control.sock` with mode 0600 at tray startup
+- Stale sockets cleaned up on tray restart
+- Postcard-framed messages routed to correct consumer based on message type enum
+- Malformed messages cause connection close without tray crash
+- Socket removed on tray shutdown after all containers cleaned up
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md` — the socket lives at `$XDG_RUNTIME_DIR/` (XDG runtime), ephemeral by design

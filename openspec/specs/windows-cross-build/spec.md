@@ -74,6 +74,20 @@ The script SHALL clearly indicate that cross-compiled artifacts are unsigned and
 - **THEN** the script does not fail but warns that Tauri update signatures are not generated
 
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee` — cross-compilation target isolation, toolbox lifecycle, artifact signing
+
+Gating points:
+- Cross-compilation script targets `x86_64-pc-windows-msvc` from Linux host via cargo-xwin
+- Debug/release/test/check/clean build modes all work correctly
+- Dedicated `tillandsias-windows` toolbox created on first run; reused on subsequent runs
+- Microsoft SDK license notice shown on first SDK download; cached SDK skips notice
+- Cross-compiled artifacts marked as unsigned and unsuitable for distribution
+- TAURI_SIGNING_PRIVATE_KEY absence handled gracefully; no update signatures generated
+- Help flag displays all available options
+
 ## Sources of Truth
 
 - `cheatsheets/build/cargo.md` — Cargo reference and patterns

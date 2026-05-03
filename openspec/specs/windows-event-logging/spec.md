@@ -212,6 +212,21 @@ When Windows builds are re-enabled:
 4. Verify Event Viewer shows accountability events correctly
 5. Test graceful degradation when registry key missing
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee` — event source registration, level/accountability mapping, metadata preservation
+
+Gating points (when Windows builds resume):
+- Event source "Tillandsias" registered in Windows registry via NSIS or PowerShell
+- ERROR events always written to Event Log; WARN events always written
+- INFO events written only if accountability = true; DEBUG/TRACE skipped
+- Accountability event metadata includes category, safety, @trace spec annotations
+- Layer implements tracing::field::Visit for field extraction
+- Graceful degradation when registry key missing; no crash, only DEBUG log
+- Conditional compilation gates Windows Event Log code; zero cost on other platforms
+- Reactivation checklist preserved for future Windows build resumption
+
 ## Sources of Truth
 
 - https://docs.microsoft.com/en-us/windows/win32/wes/about-windows-event-log — Windows Event Log architecture

@@ -73,6 +73,21 @@ The container WORKDIR and httpd document root SHALL be `/var/www`, where the pro
 - **THEN** the project files are served by httpd
 
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee` — image size, static file serving, port exposure, shutdown grace
+
+Gating points:
+- Image size < 10MB; based on alpine:latest
+- busybox httpd serves static files from /var/www on port 8080
+- HTML/JS/CSS/images served with appropriate MIME types
+- 404 returned for missing index.html (no directory listing)
+- Port 8080 exposed and accessible from host
+- Entrypoint prints banner with serving URL before exec httpd
+- SIGTERM handled gracefully; httpd exits cleanly
+- Document root at /var/www; accepts volume mounts with -v
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns
