@@ -1,6 +1,6 @@
 # spec: no-terminal-flicker
 
-**Status:** active
+## Status: active
 
 **Version:** v1.0
 

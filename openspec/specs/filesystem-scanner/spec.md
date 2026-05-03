@@ -3,7 +3,7 @@
 
 status: active
 
-## MODIFIED Requirements
+## Requirements
 
 ### Requirement: OS-native event-driven watching
 The filesystem scanner MUST use OS-native file event mechanisms (inotify on Linux, FSEvents on macOS, ReadDirectoryChangesW on Windows) via the `notify` crate's `RecommendedWatcher` and MUST NOT use polling loops of any kind.

@@ -1,6 +1,6 @@
 # spec: wsl-daemon-orchestration
 
-**Status:** active
+## Status: active
 
 **Version:** v1.0
 

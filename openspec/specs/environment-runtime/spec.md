@@ -3,7 +3,7 @@
 
 status: active
 
-## MODIFIED Requirements
+## Requirements
 
 ### Requirement: Global and per-project configuration
 The configuration system MUST support a two-level hierarchy: global defaults at a platform-specific path and per-project overrides at `<project>/.tillandsias/config.toml`.
