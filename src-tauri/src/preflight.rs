@@ -4,10 +4,8 @@
 //! host must have enough free RAM to satisfy the combined budget:
 //! project-source tmpfs + cheatsheets (8MB) + a 1.25× headroom factor.
 //!
-//! Platform implementations:
-//! - Linux:   reads `/proc/meminfo`, parses the `MemAvailable:` line.
-//! - macOS:   calls `host_statistics64` via the `vm_statistics64` sysctl family.
-//! - Windows: calls `GlobalMemoryStatusEx` from `windows-sys`.
+//! Implementation:
+//! - Linux: reads `/proc/meminfo`, parses the `MemAvailable:` line.
 //!
 //! @trace spec:forge-hot-cold-split
 
@@ -199,7 +197,6 @@ mod tests {
     }
 
     // @trace spec:forge-hot-cold-split
-    #[cfg(target_os = "linux")]
     #[test]
     fn probe_linux_meminfo_returns_nonzero() {
         let result = probe_linux_meminfo();
@@ -210,7 +207,6 @@ mod tests {
     }
 
     // @trace spec:forge-hot-cold-split
-    #[cfg(target_os = "linux")]
     #[test]
     fn parse_linux_meminfo_extracts_mem_available() {
         // Simulate /proc/meminfo output with known MemAvailable.

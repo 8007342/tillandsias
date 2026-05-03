@@ -66,7 +66,7 @@ Tillandsias uses a multi-container enclave for security isolation. Coding contai
 - Multiple forge containers per project, each with independent git working tree
 - All operations logged via `--log-enclave`, `--log-proxy`, `--log-git` with `@trace` links
 
-**Credential flow:** GitHub tokens live exclusively in the host OS keyring (Linux: Secret Service / GNOME Keyring via D-Bus; macOS: Keychain; Windows: Credential Manager). The git service container reads the token through a D-Bus bridge and performs authenticated push/fetch against GitHub on behalf of the forge. Forge containers never see tokens — they speak plain git protocol to the enclave-local mirror.
+**Credential flow:** GitHub tokens live exclusively in the host OS keyring (Linux: Secret Service / GNOME Keyring via D-Bus). The git service container reads the token through a D-Bus bridge and performs authenticated push/fetch against GitHub on behalf of the forge. Forge containers never see tokens — they speak plain git protocol to the enclave-local mirror.
 
 **Images are built via:**
 ```bash
