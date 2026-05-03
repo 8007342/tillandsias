@@ -3,9 +3,33 @@
 @trace spec:browser-isolation-core
 @trace spec:versioning
 
-## Status
+## Status: active
 
-status: active
+## Requirements
+
+### Requirement: Security model for chromium-core image
+
+The `chromium-core` image MUST enforce the following security properties:
+
+- **Read-only root filesystem** — the image MUST prevent runtime modification of system files
+- **No external network** — the browser container MUST NOT access external networks directly
+- **No credentials** — the image MUST contain zero secrets, tokens, or keys
+- **Reduced capabilities** — the image MUST use minimal kernel capabilities via `--cap-drop=ALL`
+
+### Requirement: Image versioning with explicit tags
+
+The `chromium-core` image MUST use versioned tags derived from the `VERSION` file:
+
+- Tag format MUST be `tillandsias-chromium-core:v<Major>.<Minor>.<ChangeCount>.<Build>`
+- NO `:latest` tags ARE allowed — all references MUST be version-explicit
+- The tag MUST be computed at runtime from the VERSION file by `scripts/build-image.sh`
+
+### Requirement: Build invocation via build-image.sh
+
+The image build MUST be invoked via `scripts/build-image.sh chromium-core` which:
+
+- MUST read the VERSION file and apply the appropriate tag
+- MUST use `images/chromium/Containerfile.core` as the build definition
 
 ## Security Model
 

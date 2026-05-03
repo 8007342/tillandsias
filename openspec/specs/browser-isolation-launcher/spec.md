@@ -1,6 +1,8 @@
-# spec: browser-isolation-launcher
+# Browser Isolation Launcher Spec
 
-Status: suspended — created to resolve traces-audit ghost traces
+@trace spec:browser-isolation-launcher
+
+## Status: suspended
 
 ## Why This Spec
 
@@ -8,7 +10,9 @@ Multiple @trace annotations reference this spec name, but the spec was never for
 
 ## Requirements
 
-TBD — placeholder spec.
+### Requirement: TBD — placeholder spec
+
+This spec is created retroactively as part of the traces-audit refactor and serves as a placeholder. Actual requirements are to be determined based on usage patterns in annotations.
 
 ## Implementation Notes
 

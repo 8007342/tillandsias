@@ -1,12 +1,12 @@
 <!-- @trace spec:ci-release -->
-## Status
 
-status: active
+## Status: active
 
-## MODIFIED Requirements
+## Requirements
 
-### Requirement: Node.js 24 runtime for GitHub Actions
-Both CI and release workflows SHALL opt into Node.js 24 for GitHub Actions runners using `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`. This environment variable is not documented in the verified GitHub Actions knowledge base and SHALL be periodically validated against upstream GitHub documentation.
+### Node.js 24 runtime for GitHub Actions
+
+Both CI and release workflows MUST opt into Node.js 24 for GitHub Actions runners using `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`. This environment variable is not documented in the verified GitHub Actions knowledge base and SHALL be periodically validated against upstream GitHub documentation.
 
 #### Scenario: CI workflow uses Node.js 24
 - **WHEN** the CI workflow runs

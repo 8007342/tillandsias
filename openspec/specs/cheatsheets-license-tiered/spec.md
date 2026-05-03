@@ -1,20 +1,15 @@
 <!-- @trace spec:cheatsheets-license-tiered -->
 
-## Status
+## Status: active
 
-status: active
-promoted-from: openspec/changes/archive/cheatsheets-license-tiered/
-annotation-count: 61
+Promoted from: `openspec/changes/archive/cheatsheets-license-tiered/`
+Annotation count: 61
 
----
+## Requirements
 
-# cheatsheets-license-tiered Specification
+### Three-tier classification of cheatsheets
 
-## ADDED Requirements
-
-### Requirement: Three-tier classification of cheatsheets
-
-Every cheatsheet under `cheatsheets/` SHALL declare exactly one redistribution tier in its YAML frontmatter `tier:` field. The three permitted values are `bundled`, `distro-packaged`, and `pull-on-demand`. When `tier:` is omitted, the validator (`scripts/check-cheatsheet-sources.sh`) SHALL infer it from the first entry in `source_urls[]` by matching the URL's host against `cheatsheets/license-allowlist.toml`'s `default_tier` for that domain; if no domain match exists, the inferred tier SHALL default to `pull-on-demand` (the safe-default — never accidentally bundle an unaudited domain). The cheatsheet author MAY override the allowlist default by setting `tier:` explicitly and citing the per-document license in `## Provenance`.
+Every cheatsheet under `cheatsheets/` MUST declare exactly one redistribution tier in its YAML frontmatter `tier:` field. The three permitted values are `bundled`, `distro-packaged`, and `pull-on-demand`. When `tier:` is omitted, the validator (`scripts/check-cheatsheet-sources.sh`) SHALL infer it from the first entry in `source_urls[]` by matching the URL's host against `cheatsheets/license-allowlist.toml`'s `default_tier` for that domain; if no domain match exists, the inferred tier SHALL default to `pull-on-demand` (the safe-default — never accidentally bundle an unaudited domain). The cheatsheet author MAY override the allowlist default by setting `tier:` explicitly and citing the per-document license in `## Provenance`.
 
 #### Scenario: Bundled tier — explicit declaration
 
@@ -45,9 +40,9 @@ Every cheatsheet under `cheatsheets/` SHALL declare exactly one redistribution t
 
 ---
 
-### Requirement: Provenance schema v2 — frontmatter contract
+### Provenance schema v2 — frontmatter contract
 
-Every cheatsheet's YAML frontmatter SHALL carry the v2 schema fields below. Field presence is tier-conditional: the validator SHALL emit ERROR if a tier-required field is missing, and WARN if a tier-forbidden field is present.
+Every cheatsheet's YAML frontmatter MUST carry the v2 schema fields below. Field presence is tier-conditional: the validator SHALL emit ERROR if a tier-required field is missing, and WARN if a tier-forbidden field is present.
 
 | Field | bundled | distro-packaged | pull-on-demand |
 |---|---|---|---|
@@ -90,9 +85,9 @@ Every cheatsheet's YAML frontmatter SHALL carry the v2 schema fields below. Fiel
 
 ---
 
-### Requirement: Bundled-tier build-time fetch and image bake
+### Bundled-tier build-time fetch and image bake
 
-`scripts/build-image.sh forge` SHALL invoke a fetch-and-bake stage immediately before the existing cheatsheet staging step. The stage SHALL:
+`scripts/build-image.sh forge` MUST invoke a fetch-and-bake stage immediately before the existing cheatsheet staging step. The stage SHALL:
 
 1. Read every cheatsheet's frontmatter under `cheatsheets/**/*.md` and filter to `tier: bundled`.
 2. For each, derive the URL → `/opt/cheatsheet-sources/<host>/<path>` mapping (mirroring URL host structure).
@@ -140,9 +135,9 @@ A `--refresh-sources` flag on `build-image.sh` SHALL force re-fetch regardless o
 
 ---
 
-### Requirement: Pull-on-demand stub format
+### Pull-on-demand stub format
 
-A `tier: pull-on-demand` cheatsheet SHALL include a `## Pull on Demand` section after `## See also`. The section SHALL contain three sub-headings in this exact order: `### Source`, `### Materialize recipe`, `### Generation guidelines`. The validator SHALL emit ERROR if any sub-heading is missing.
+A `tier: pull-on-demand` cheatsheet MUST include a `## Pull on Demand` section after `## See also`. The section SHALL contain three sub-headings in this exact order: `### Source`, `### Materialize recipe`, `### Generation guidelines`. The validator SHALL emit ERROR if any sub-heading is missing.
 
 The `### Source` block SHALL list the upstream URL(s), the archive type (one of `single-html`, `zip`, `tar.gz`, `tar.xz`, `directory-recursive`), the expected size, the per-project cache target path under `~/.cache/tillandsias/cheatsheets-pulled/<project>/<host>/<path>`, the SPDX or short license identifier, and the canonical license URL.
 
@@ -176,9 +171,9 @@ The `### Generation guidelines` block SHALL describe how the agent produces a pr
 
 ---
 
-### Requirement: Pull-on-demand runtime cache topology
+### Pull-on-demand runtime cache topology
 
-When an in-forge agent runs a `### Materialize recipe`, the materialized content SHALL land under `~/.cache/tillandsias/cheatsheets-pulled/<project>/<host>/<path>` (mirroring URL structure). This path SHALL be a subdirectory of the per-project cache mount governed by `forge-cache-dual` — project A SHALL NEVER see project B's pulled content.
+When an in-forge agent runs a `### Materialize recipe`, the materialized content MUST land under `~/.cache/tillandsias/cheatsheets-pulled/<project>/<host>/<path>` (mirroring URL structure). This path SHALL be a subdirectory of the per-project cache mount governed by `forge-cache-dual` — project A SHALL NEVER see project B's pulled content.
 
 The pull cache SHALL operate as a single LRU-managed pool with a tiered RAMDISK soft cap, auto-detected from `MemTotal` at tray startup:
 
@@ -218,9 +213,9 @@ The agent's GENERATED summary cheatsheet SHALL land in `/opt/cheatsheets/` (the 
 
 ---
 
-### Requirement: Distro-packaged tier — package validation
+### Distro-packaged tier — package validation
 
-A `tier: distro-packaged` cheatsheet SHALL declare `package: <name>` in its frontmatter, where `<name>` is the OS package providing the doc files. The cheatsheet SHALL also declare `local: <path>` pointing to the file inside the forge image (e.g., `/usr/share/javadoc/java-21-openjdk/api/index.html`). At validation time, `scripts/check-cheatsheet-sources.sh` SHALL confirm `<name>` is listed in the forge image's package manifest. The package manifest SHALL be discoverable via one of: `flake.nix` `contents` attribute, `images/default/Containerfile` `dnf install` lines, or a dedicated `images/default/distro-packages.txt` file (in that fallback order).
+A `tier: distro-packaged` cheatsheet MUST declare `package: <name>` in its frontmatter, where `<name>` is the OS package providing the doc files. The cheatsheet SHALL also declare `local: <path>` pointing to the file inside the forge image (e.g., `/usr/share/javadoc/java-21-openjdk/api/index.html`). At validation time, `scripts/check-cheatsheet-sources.sh` SHALL confirm `<name>` is listed in the forge image's package manifest. The package manifest SHALL be discoverable via one of: `flake.nix` `contents` attribute, `images/default/Containerfile` `dnf install` lines, or a dedicated `images/default/distro-packages.txt` file (in that fallback order).
 
 At runtime, the in-forge agent SHALL read the cheatsheet and follow the `local:` path directly — no fetch, no recipe, no proxy round-trip. The frontmatter `source_urls[]` records the upstream truth so structural-drift comparisons remain possible (host or in-forge agent SHALL be able to compare the package's local content against upstream).
 
@@ -246,9 +241,9 @@ At runtime, the in-forge agent SHALL read the cheatsheet and follow the `local:`
 
 ---
 
-### Requirement: Structural-drift fingerprint
+### Structural-drift fingerprint
 
-For `tier: bundled` cheatsheets, the build-time fetcher SHALL compute a structural-drift fingerprint as `SHA256( join("\n", [h.text for h in <h1, h2, h3 elements>]) )` over the fetched HTML, and persist the first 16 hex chars to the cheatsheet's `structural_drift_fingerprint` frontmatter field. Word-level edits inside an unchanged outline SHALL NOT change the fingerprint. The implementation SHALL use `htmlq` if available, otherwise a self-contained Python heading extractor (no new heavyweight dependency).
+For `tier: bundled` cheatsheets, the build-time fetcher MUST compute a structural-drift fingerprint as `SHA256( join("\n", [h.text for h in <h1, h2, h3 elements>]) )` over the fetched HTML, and persist the first 16 hex chars to the cheatsheet's `structural_drift_fingerprint` frontmatter field. Word-level edits inside an unchanged outline SHALL NOT change the fingerprint. The implementation SHALL use `htmlq` if available, otherwise a self-contained Python heading extractor (no new heavyweight dependency).
 
 For `tier: pull-on-demand` cheatsheets, the in-forge agent SHALL compute the same fingerprint after running the materialize recipe, and report it via the `cheatsheet-telemetry` channel as a `structural_drift` event. The host MAY compare fingerprints across forge launches to detect upstream restructures before the agent consults the cheatsheet again.
 
@@ -280,9 +275,9 @@ A fingerprint mismatch SHALL flag the cheatsheet for human review as a WARN — 
 
 ---
 
-### Requirement: CRDT override discipline for project-committed cheatsheets
+### CRDT override discipline for project-committed cheatsheets
 
-When a project-committed cheatsheet at `<project>/.tillandsias/cheatsheets/<path>` shadows a forge-bundled cheatsheet at the same `<path>`, the project-committed file's frontmatter SHALL contain four override fields: `shadows_forge_default: cheatsheets/<path>`, `override_reason: |`, `override_consequences: |`, and `override_fallback: |`. Each of `override_reason`, `override_consequences`, `override_fallback` SHALL be non-empty multi-line scalars. The validator SHALL emit ERROR if `shadows_forge_default` is set and any of the three other fields is missing or empty.
+When a project-committed cheatsheet at `<project>/.tillandsias/cheatsheets/<path>` shadows a forge-bundled cheatsheet at the same `<path>`, the project-committed file's frontmatter MUST contain four override fields: `shadows_forge_default: cheatsheets/<path>`, `override_reason: |`, `override_consequences: |`, and `override_fallback: |`. Each of `override_reason`, `override_consequences`, `override_fallback` SHALL be non-empty multi-line scalars. The validator SHALL emit ERROR if `shadows_forge_default` is set and any of the three other fields is missing or empty.
 
 At forge launch, `populate_hot_paths()` (per `forge-hot-cold-split`) SHALL extend to merge `<project>/.tillandsias/cheatsheets/` into `/opt/cheatsheets/` (tmpfs view) AFTER the image-baked canonical, so project files override forge-shipped files at the same path. The merger SHALL emit one banner line per active shadow at forge launch:
 
@@ -322,9 +317,9 @@ A project-committed cheatsheet that does NOT shadow any forge default (a net-new
 
 ---
 
-### Requirement: License-allowlist as a CRDT classifier
+### License-allowlist as a CRDT classifier
 
-The repository SHALL maintain `cheatsheets/license-allowlist.toml` (relocated from the legacy `cheatsheet-sources/license-allowlist.toml`). Each `[domains."<host>"]` entry SHALL declare: `publisher`, `license` (short identifier), `license_url`, `redistribution` (one of `bundled`, `attribute-only`, `do-not-bundle`), `default_tier` (one of `bundled`, `distro-packaged`, `pull-on-demand`), `last_evaluated` (ISO date), and `evaluated_by` (one of `hand-curated`, `agent-runtime-pull`, `host-refresh-script`).
+The repository MUST maintain `cheatsheets/license-allowlist.toml` (relocated from the legacy `cheatsheet-sources/license-allowlist.toml`). Each `[domains."<host>"]` entry SHALL declare: `publisher`, `license` (short identifier), `license_url`, `redistribution` (one of `bundled`, `attribute-only`, `do-not-bundle`), `default_tier` (one of `bundled`, `distro-packaged`, `pull-on-demand`), `last_evaluated` (ISO date), and `evaluated_by` (one of `hand-curated`, `agent-runtime-pull`, `host-refresh-script`).
 
 The allowlist SHALL be treated as a CRDT: every pull-on-demand fetch by an in-forge agent SHALL re-evaluate the upstream's license declaration (the agent SHOULD `curl` the cited `license_url` and parse the SPDX or vendor-license identifier), and SHALL emit a `license_drift` event via `cheatsheet-telemetry` if the parsed declaration differs from the stored value. The host-side refresh script SHALL aggregate these events and surface drift for human triage; **the actual edit to the TOML stays manual through this change** (auto-merge of agent-proposed allowlist changes is deferred to v3).
 
@@ -352,9 +347,9 @@ When the validator infers a cheatsheet's tier from `source_urls[0]`'s host, it S
 
 ---
 
-### Requirement: cheatsheet-telemetry EXTERNAL log producer
+### cheatsheet-telemetry EXTERNAL log producer
 
-A new EXTERNAL-tier producer role `cheatsheet-telemetry` SHALL be defined per the `external-logs-layer` capability. The producer is the forge container itself; the manifest SHALL be baked at `images/default/external-logs.yaml` (a new file, parallel to `images/git/external-logs.yaml`). The manifest SHALL declare:
+A new EXTERNAL-tier producer role `cheatsheet-telemetry` MUST be defined per the `external-logs-layer` capability. The producer is the forge container itself; the manifest SHALL be baked at `images/default/external-logs.yaml` (a new file, parallel to `images/git/external-logs.yaml`). The manifest SHALL declare:
 
 ```yaml
 role: cheatsheet-telemetry
@@ -410,9 +405,9 @@ The forge container SHALL bind-mount `~/.local/state/tillandsias/external-logs/c
 
 ---
 
-### Requirement: Tier-aware INDEX regeneration with badges
+### Tier-aware INDEX regeneration with badges
 
-`scripts/regenerate-cheatsheet-index.sh` SHALL emit one suffix per cheatsheet line in `cheatsheets/INDEX.md` based on tier and validation state:
+`scripts/regenerate-cheatsheet-index.sh` MUST emit one suffix per cheatsheet line in `cheatsheets/INDEX.md` based on tier and validation state:
 
 | Tier and state | Suffix |
 |---|---|
@@ -450,9 +445,9 @@ Inside the forge, `populate_hot_paths()` SHALL re-run a stripped-down version of
 
 ---
 
-### Requirement: Cheatsheet lifecycle observability
+### Cheatsheet lifecycle observability
 
-Every transition in the cheatsheet lifecycle SHALL emit a structured signal so that meaning converges across replicas (forge default, project override, agent-generated refinement) without requiring a central authority.
+Every transition in the cheatsheet lifecycle MUST emit a structured signal so that meaning converges across replicas (forge default, project override, agent-generated refinement) without requiring a central authority.
 
 | Transition | Observable signal |
 |---|---|
