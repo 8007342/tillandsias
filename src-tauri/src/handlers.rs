@@ -1643,6 +1643,12 @@ pub async fn ensure_enclave_ready(
     state: &TrayState,
     build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<EnclaveContext, String> {
+    // GitHub health check — gate enclave initialization on remote capability
+    // @trace spec:simplified-tray-ux, spec:enclave-network
+    if !state.github_healthy {
+        return Err("Cannot initialize enclave: GitHub not reachable (spec:simplified-tray-ux, spec:enclave-network)".into());
+    }
+
     // Step 1+2: Infrastructure services (network + proxy) — hard requirement
     ensure_infrastructure_ready(state, build_tx.clone()).await?;
 
@@ -2632,6 +2638,12 @@ pub async fn handle_attach_here(
         return Err("Forge image not yet available".into());
     }
 
+    // GitHub health check — gate terminal-mode launch on remote capability
+    // @trace spec:simplified-tray-ux
+    if !state.github_healthy {
+        return Err("Cannot start environment: GitHub not reachable (spec:simplified-tray-ux)".into());
+    }
+
     // @trace spec:opencode-web-session
     // Branch to the web-session flow when the user has picked OpenCode Web.
     // The terminal flow below remains for opt-in `opencode` / `claude` users.
@@ -2930,6 +2942,12 @@ pub async fn handle_attach_web(
         info!(project = %project_name, "Forge-readiness guard fired — image not yet available (web mode)");
         send_notification("Tillandsias", msg);
         return Err("Forge image not yet available".into());
+    }
+
+    // GitHub health check — gate web-mode launch on remote capability
+    // @trace spec:simplified-tray-ux
+    if !state.github_healthy {
+        return Err("Cannot start environment: GitHub not reachable (spec:simplified-tray-ux)".into());
     }
 
     let container_name = ContainerInfo::forge_container_name(&project_name);
