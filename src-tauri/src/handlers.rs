@@ -588,13 +588,13 @@ pub(crate) async fn ensure_proxy_running(
             e
         })?;
 
-    crate::podman_secret::create("tillandsias-ca-intermediate-cert", &intermediate_cert)
+    crate::podman_secret::create("tillandsias-ca-cert", &intermediate_cert)
         .map_err(|e| {
-            warn!(error = %e, spec = "secrets-management", "Failed to create intermediate CA cert secret");
+            warn!(error = %e, spec = "secrets-management", "Failed to create CA cert secret");
             e
         })?;
 
-    crate::podman_secret::create("tillandsias-ca-intermediate-key", &intermediate_key)
+    crate::podman_secret::create("tillandsias-ca-key", &intermediate_key)
         .map_err(|e| {
             warn!(error = %e, spec = "secrets-management", "Failed to create intermediate CA key secret");
             e
