@@ -1,5 +1,9 @@
 # enforce-trace-presence
 
+## Status
+
+status: active
+
 ## Objective
 
 Enforce that every public function, trait, struct, and enum in `src-tauri/src/` has a `@trace spec:NAME` annotation. This is Phase 2 of the Monotonic Reduction system, which ensures runtime behavior is traceable back to OpenSpec design documents.

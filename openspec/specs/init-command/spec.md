@@ -11,66 +11,66 @@ Define behavior of `tillandsias --init` command including incremental builds and
 ## Requirements
 
 ### Requirement: Init CLI command
-The application SHALL provide a `tillandsias --init` command that pre-builds all container images. The command SHALL support `--force` to rebuild all images and `--debug` to enable verbose output with failed build log capture. The command SHALL track successful builds across runs and skip already-built images on re-run.
+The application MUST provide a `tillandsias --init` command that pre-builds all container images. The command MUST support `--force` to rebuild all images and `--debug` to enable verbose output with failed build log capture. The command MUST track successful builds across runs and skip already-built images on re-run.
 
 #### Scenario: First run
 - **WHEN** `tillandsias --init` is run and no images exist
-- **THEN** all images are built in sequence (proxy, forge, git, inference, chromium-core, chromium-framework), progress is shown on stdout, and the command exits with code 0
+- **THEN** all images MUST be built in sequence (proxy, forge, git, inference, chromium-core, chromium-framework), progress MUST be shown on stdout, and the command MUST exit with code 0
 
 #### Scenario: Images already exist (staleness)
 - **WHEN** `tillandsias --init` is run and all images already exist and sources unchanged
-- **THEN** the command prints "Images up to date" and exits immediately
+- **THEN** the command MUST print "Images up to date" and exit immediately
 
 #### Scenario: Partial failure with state tracking
 - **WHEN** `tillandsias --init` is run, previous run built proxy successfully but forge failed
-- **THEN** proxy is skipped (verified via podman image exists), forge is rebuilt, and remaining images proceed
+- **THEN** proxy MUST be skipped (verified via podman image exists), forge MUST be rebuilt, and remaining images MUST proceed
 
 #### Scenario: Build in progress
 - **WHEN** `tillandsias --init` is run and another init process is already building
-- **THEN** the command waits for the existing build to complete instead of starting a duplicate
+- **THEN** the command MUST wait for the existing build to complete instead of starting a duplicate
 
 #### Scenario: Debug mode with failed builds
 - **WHEN** `tillandsias --init --debug` completes and some images failed to build
-- **THEN** the last 10 lines of each failed build's log file are displayed after all images are processed
+- **THEN** the last 10 lines of each failed build's log file MUST be displayed after all images are processed
 
 #### Scenario: Help text
 - **WHEN** `tillandsias --help` is run
-- **THEN** the `--init` flag is listed with description "Pre-build container images" and `--debug` flag is shown as available option
+- **THEN** the `--init` flag MUST be listed with description "Pre-build container images" and `--debug` flag MUST be shown as available option
 
 ### Requirement: Exit code contract for init command
-The `--init` command SHALL exit deterministically with codes 0 (all images built successfully) or 1 (any image build failed), enabling safe use in shell pipelines and conditionals.
+The `--init` command MUST exit deterministically with codes 0 (all images built successfully) or 1 (any image build failed), enabling safe use in shell pipelines and conditionals.
 
 #### Scenario: Successful init
 - **WHEN** `tillandsias --init` completes and all images built successfully
-- **THEN** the command exits with code 0
-- **AND** safe to chain: `./build.sh --install && tillandsias --init --debug && tillandsias /path --diagnostics`
+- **THEN** the command MUST exit with code 0
+- **AND** MUST be safe to chain: `./build.sh --install && tillandsias --init --debug && tillandsias /path --diagnostics`
 
 #### Scenario: Partial failure exits with code 1
 - **WHEN** `tillandsias --init` completes and one or more images failed to build
-- **THEN** the command exits with code 1
-- **AND** each failure is visible in terminal output
-- **AND** can chain with error handling: `tillandsias --init || echo "init failed"`
+- **THEN** the command MUST exit with code 1
+- **AND** each failure MUST be visible in terminal output
+- **AND** MUST be chainable with error handling: `tillandsias --init || echo "init failed"`
 
 ### Requirement: Debug mode log capture
-When `--debug` flag is passed, init SHALL capture each image build's output to `/tmp/tillandsias-init-{image}.log` and display failed logs on stderr.
+When `--debug` flag is passed, init MUST capture each image build's output to `/tmp/tillandsias-init-{image}.log` and display failed logs on stderr.
 
 #### Scenario: Debug mode tees output
 - **WHEN** `tillandsias --init --debug` is run
-- **THEN** each image build is piped to `tee /tmp/tillandsias-init-{image_name}.log`
-- **AND** user sees progress in real-time on stdout
-- **AND** logs are preserved for post-mortem analysis
+- **THEN** each image build MUST be piped to `tee /tmp/tillandsias-init-{image_name}.log`
+- **AND** user MUST see progress in real-time on stdout
+- **AND** logs MUST be preserved for post-mortem analysis
 
 #### Scenario: Failed logs displayed inline
 - **WHEN** `tillandsias --init --debug` completes with failures
-- **THEN** the last 10 lines of each failed build's log are displayed to stderr
-- **AND** log lines are prefixed with image name for clarity
+- **THEN** the last 10 lines of each failed build's log MUST be displayed to stderr
+- **AND** log lines MUST be prefixed with image name for clarity
 
 ### Requirement: All images built
-The init command SHALL build exactly six container images in sequence.
+The init command MUST build exactly six container images in sequence.
 
 #### Scenario: Image build sequence
 - **WHEN** `tillandsias --init` is run
-- **THEN** the following images are built in this order:
+- **THEN** the following images MUST be built in this order:
   1. `proxy` — caching HTTP/S proxy with domain allowlist
   2. `forge` — main dev environment
   3. `git` — mirror service with push support

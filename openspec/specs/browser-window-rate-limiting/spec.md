@@ -17,64 +17,64 @@ Defines per-project minimum time interval enforcement between browser window ope
 
 ### Requirement: Per-Project Debouncing
 
-The browser window handler SHALL maintain a per-project timestamp to track the last time a window was opened for each project.
+The browser window handler MUST maintain a per-project timestamp to track the last time a window was opened for each project.
 
 - **Granularity**: Per project (by project name, not by URL or service)
-- **Interval**: 10 seconds minimum between window opens for the same project
-- **Tracking**: Use `WindowDebounce` struct with `HashMap<String, Instant>`
-- **Reset**: Timestamp updates only when a request is ALLOWED (not when rejected)
+- **Interval**: MUST be 10 seconds minimum between window opens for the same project
+- **Tracking**: MUST use `WindowDebounce` struct with `HashMap<String, Instant>`
+- **Reset**: Timestamp MUST update only when a request is ALLOWED (not when rejected)
 
 #### Scenario: First window request
 
 - **WHEN** agent requests `open_safe_window("opencode.my-app.localhost")` for project `"my-app"`
 - **AND** no previous window record exists for `"my-app"`
-- **THEN** request is ALLOWED
-- **AND** timestamp recorded for `"my-app"`
-- **AND** browser window spawned
+- **THEN** request MUST be ALLOWED
+- **AND** timestamp MUST be recorded for `"my-app"`
+- **AND** browser window MUST be spawned
 
 #### Scenario: Second request within interval
 
 - **WHEN** agent requests `open_safe_window("dashboard.localhost")` 5 seconds after first request
 - **AND** both requests are for project `"my-app"`
-- **THEN** request is REJECTED
-- **AND** return error: "Window request too frequent; minimum interval is 10 seconds"
-- **AND** timestamp NOT updated (remains at first request)
+- **THEN** request MUST be REJECTED
+- **AND** MUST return error: "Window request too frequent; minimum interval is 10 seconds"
+- **AND** timestamp MUST NOT be updated (remains at first request)
 - **AND** no window spawned
 
 #### Scenario: Second request after interval elapsed
 
 - **WHEN** agent requests window 11 seconds after first request
 - **AND** same project `"my-app"`
-- **THEN** request is ALLOWED
-- **AND** timestamp updated to new request time
-- **AND** window spawned
+- **THEN** request MUST be ALLOWED
+- **AND** timestamp MUST be updated to new request time
+- **AND** window MUST be spawned
 
 ### Requirement: Independent Project Tracking
 
-Window request rates for different projects SHALL NOT interfere with each other.
+Window request rates for different projects MUST NOT interfere with each other.
 
-- **Isolation**: Each project maintains separate debounce state
-- **No cross-project limits**: Project A window requests do NOT block project B requests
-- **Use case**: User working on two projects in parallel can open windows for each independently
+- **Isolation**: Each project MUST maintain separate debounce state
+- **No cross-project limits**: Project A window requests MUST NOT block project B requests
+- **Use case**: User working on two projects in parallel MUST be able to open windows for each independently
 
 #### Scenario: Multiple projects
 
 - **WHEN** agent in project `"frontend"` opens window at T=0
 - **AND** agent in project `"backend"` opens window at T=5 seconds
-- **THEN** backend window is ALLOWED (different project)
-- **AND** both windows spawn
-- **AND** timestamps tracked separately: frontend=T0, backend=T5
+- **THEN** backend window MUST be ALLOWED (different project)
+- **AND** both windows MUST spawn
+- **AND** timestamps MUST be tracked separately: frontend=T0, backend=T5
 
 #### Scenario: Same project, staggered intervals
 
 - **WHEN** project `"my-app"` requests windows at T=0, T=5, T=15
-- **THEN** window at T=0: ALLOWED (first)
-- **AND** window at T=5: REJECTED (within 10-second interval)
-- **AND** window at T=15: ALLOWED (10+ seconds elapsed)
+- **THEN** window at T=0: MUST be ALLOWED (first)
+- **AND** window at T=5: MUST be REJECTED (within 10-second interval)
+- **AND** window at T=15: MUST be ALLOWED (10+ seconds elapsed)
 
 ### Requirement: Integration with URL Validation
 
-Rate limiting SHALL occur AFTER URL validation but BEFORE socket communication.
+Rate limiting MUST occur AFTER URL validation but BEFORE socket communication.
 
 #### Request Processing Order
 
@@ -87,49 +87,49 @@ Rate limiting SHALL occur AFTER URL validation but BEFORE socket communication.
 #### Scenario: Invalid URL + rate limit
 
 - **WHEN** agent requests invalid URL AND within debounce interval
-- **THEN** validation fails FIRST
-- **AND** return validation error (rate limit check skipped)
-- **AND** timestamp NOT updated
+- **THEN** validation MUST fail FIRST
+- **AND** MUST return validation error (rate limit check skipped)
+- **AND** timestamp MUST NOT be updated
 
 #### Scenario: Valid URL + rate limit
 
 - **WHEN** agent requests valid URL AND within debounce interval
-- **THEN** validation passes
-- **AND** rate limit check rejects
-- **AND** return error: "Window request too frequent"
-- **AND** timestamp NOT updated
-- **AND** socket NOT contacted
+- **THEN** validation MUST pass
+- **AND** rate limit check MUST reject
+- **AND** MUST return error: "Window request too frequent"
+- **AND** timestamp MUST NOT be updated
+- **AND** socket MUST NOT be contacted
 
 ### Requirement: Debounce Configuration
 
-The debounce interval SHALL be configurable and default to 10 seconds.
+The debounce interval MUST be configurable and MUST default to 10 seconds.
 
-- **Default**: 10 seconds
-- **Field**: `debounce_secs: u64` in `WindowDebounce` struct
-- **Configuration**: Hardcoded in source (no runtime config file)
-- **No overrides**: Environment variables do NOT override debounce interval
+- **Default**: MUST be 10 seconds
+- **Field**: MUST be `debounce_secs: u64` in `WindowDebounce` struct
+- **Configuration**: MUST be hardcoded in source (no runtime config file)
+- **No overrides**: Environment variables MUST NOT override debounce interval
 
 ### Requirement: Stateless Per-Request Handling
 
-Each window request handler invocation SHALL check and update debounce state atomically.
+Each window request handler invocation MUST check and update debounce state atomically.
 
-- **State**: Stored in global `Mutex<WindowDebounce>` (thread-safe)
-- **Atomicity**: Lock acquired at start, released after timestamp update
-- **No prediction**: Handler does NOT pre-check; validation happens at request time
+- **State**: MUST be stored in global `Mutex<WindowDebounce>` (thread-safe)
+- **Atomicity**: Lock MUST be acquired at start, released after timestamp update
+- **No prediction**: Handler MUST NOT pre-check; validation MUST happen at request time
 
 #### Scenario: Concurrent requests (same project)
 
 - **WHEN** two concurrent agents (same project) submit requests within interval
-- **THEN** first request acquires lock, checks timestamp, ALLOWS, updates
-- **AND** second request acquires lock, checks updated timestamp, REJECTS
-- **AND** no race condition; mutex serializes access
+- **THEN** first request MUST acquire lock, check timestamp, ALLOW, update
+- **AND** second request MUST acquire lock, check updated timestamp, REJECT
+- **AND** no race condition; mutex MUST serialize access
 
 ### Requirement: Logging
 
-Rate limit rejections SHALL emit DEBUG-level logs for troubleshooting.
+Rate limit rejections MUST emit DEBUG-level logs for troubleshooting.
 
-- **Level**: DEBUG (verbose, for developer troubleshooting)
-- **Format**: Include project, reason, and next allowed time if useful
+- **Level**: MUST be DEBUG (verbose, for developer troubleshooting)
+- **Format**: MUST include project, reason, and next allowed time if useful
 - **No accountability**: Rate limiting is operational, not sensitive
 
 #### Log Example
