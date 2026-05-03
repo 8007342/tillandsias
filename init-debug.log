@@ -1,0 +1,23 @@
+Tillandsias init — preparing development environment
+
+  Setting up development environment...
+  (This may take a few minutes on first run)
+
+  Building proxy...
+[0;36m[build-image][0m Building image: [1mtillandsias-proxy:v0.1.160.240[0m
+[0;36m[build-image][0m Building [1mtillandsias-proxy:v0.1.160.240[0m via podman build (Fedora minimal)...
+[0;32m[build-image][0m   Removing old tag: localhost/tillandsias-proxy:v0.1.160.241
+Untagged: localhost/tillandsias-proxy:v0.1.160.241
+Deleted: b726d8e28e95425ac438edb4be64de55b60618e179dafd5bb3928bcab12824d3
+Deleted: 47412f70927387c8a809e97e5a615b978e142ee75239b14f1e71d7f423d18b4c
+Deleted: 345d3e3030a9b3efcc94635c30afd49d50fe0dc7dd4048a92d535cb262dd27f3
+Deleted: 1344c36952192c79283f5775c4912d7da255073dfdb1413a4abea85cdd6b0ad8
+Deleted: c29582537658e5fa28d90e80c8d67941886fc9ddfa4092a77c23e971d3894a76
+Deleted: 69dec5fc202c418790289cc7cba0b2ca7f97c12b7587064b7c7b01042270472b
+Deleted: 0c9be73666f07b9e9ec305c0fbb6806d3905df7048d8602e90aac90c4c324eae
+Deleted: 3c1a730aa8d99f6a951fa1b81bf93f6306a7a4e66f392819c90a63cdf4c43734
+Deleted: ec94f79977f18f30e7492420b501caf882a8e8c18097ce2024988e0c0d618f85
+Deleted: fce5ab9221642a701eaf171524960a18dd9e2589c5e0646221d19957ee9754bf
+STEP 1/11: FROM docker.io/library/alpine:3.20
+STEP 2/11: RUN apk add --no-cache squid openssl bash ca-certificates     && adduser -D -u 1000 -s /sbin/nologin proxy     && mkdir -p /var/spool/squid /var/log/squid /var/run/squid     && mkdir -p /var/lib/squid /etc/squid/certs     && chown -R proxy:proxy /var/spool/squid /var/log/squid /var/run/squid /var/lib/squid
+fetch https://dl-cdn.alpinelinux.org/alpine/v3.20/main/x86_64/APKINDEX.tar.gz

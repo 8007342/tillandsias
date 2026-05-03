@@ -33,7 +33,7 @@ impl PodmanEventStream {
     /// Platform-specific dispatch:
     /// - **Linux**: Uses `podman events --format json` as primary source.
     /// - **Windows (WSL)**: Connects to systemd socket at `\\wsl$\<distro>\run\tillandsias\router.sock`.
-    /// Falls back to exponential backoff inspection when events fail.
+    /// - Falls back to exponential backoff inspection when events fail.
     ///
     /// The outer loop has its own exponential backoff (2s → 5min) to prevent
     /// tight retry loops when podman is persistently unavailable (e.g. machine

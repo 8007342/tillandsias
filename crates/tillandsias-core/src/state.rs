@@ -255,7 +255,7 @@ pub struct TrayState {
     /// Starts as `false` on every launch. Set to `true` when:
     /// - The forge image is confirmed present at startup (no build needed), or
     /// - A forge build completes successfully.
-    /// Set to `false` when a forge rebuild begins (image stale or absent).
+    /// - Set to `false` when a forge rebuild begins (image stale or absent).
     ///
     /// While `false`, all forge-dependent menu actions (Attach Here, Maintenance,
     /// Root terminal, GitHub Login) are disabled so the user cannot trigger them

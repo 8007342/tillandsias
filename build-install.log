@@ -1,0 +1,101 @@
+Bumped build: 0.1.161.245
+All version locations updated to 0.1.161 (full: 0.1.161.245)
+
+  VERSION file:    0.1.161.245
+  Cargo.toml:      0.1.161
+  tauri.conf.json: 0.1.161
+[generate-traces] Written: TRACES.md
+[generate-traces] Written: openspec/specs/agent-cheatsheets/TRACES.md
+[generate-traces] Written: openspec/specs/app-lifecycle/TRACES.md
+[generate-traces] Written: openspec/specs/async-inference-launch/TRACES.md
+[generate-traces] Written: openspec/specs/browser-isolation-core/TRACES.md
+[generate-traces] Written: openspec/specs/browser-isolation-framework/TRACES.md
+[generate-traces] Written: openspec/specs/browser-isolation-launcher/TRACES.md
+[generate-traces] Written: openspec/specs/browser-isolation-tray-integration/TRACES.md
+[generate-traces] Written: openspec/specs/browser-mcp-server/TRACES.md
+[generate-traces] Written: openspec/specs/browser-window-rate-limiting/TRACES.md
+[generate-traces] Written: openspec/specs/build-lock/TRACES.md
+[generate-traces] Written: openspec/specs/cheatsheet-methodology-evolution/TRACES.md
+[generate-traces] Written: openspec/specs/cheatsheets-license-tiered/TRACES.md
+[generate-traces] Written: openspec/specs/cheatsheet-source-layer/TRACES.md
+[generate-traces] Written: openspec/specs/cheatsheet-tooling/TRACES.md
+[generate-traces] Written: openspec/specs/clickable-trace-index/TRACES.md
+[generate-traces] Written: openspec/specs/cli-diagnostics/TRACES.md
+[generate-traces] Written: openspec/specs/cli-mode/TRACES.md
+[generate-traces] Written: openspec/specs/cross-platform/TRACES.md
+[generate-traces] Written: openspec/specs/default-image/TRACES.md
+[generate-traces] Written: openspec/specs/dev-build/TRACES.md
+[generate-traces] Written: openspec/specs/direct-podman-calls/TRACES.md
+[generate-traces] Written: openspec/specs/embedded-scripts/TRACES.md
+[generate-traces] Written: openspec/specs/enclave-network/TRACES.md
+[generate-traces] Written: openspec/specs/enforce-trace-presence/TRACES.md
+[generate-traces] Written: openspec/specs/environment-runtime/TRACES.md
+[generate-traces] Written: openspec/specs/external-logs-layer/TRACES.md
+[generate-traces] Written: openspec/specs/filesystem-scanner/TRACES.md
+[generate-traces] Written: openspec/specs/fix-podman-machine-host-aliases/TRACES.md
+[generate-traces] Written: openspec/specs/fix-windows-extended-path/TRACES.md
+[generate-traces] Written: openspec/specs/fix-windows-image-routing/TRACES.md
+[generate-traces] Written: openspec/specs/forge-cache-architecture/TRACES.md
+[generate-traces] Written: openspec/specs/forge-cache-dual/TRACES.md
+[generate-traces] Written: openspec/specs/forge-environment-discoverability/TRACES.md
+[generate-traces] Written: openspec/specs/forge-forward-compat/TRACES.md
+[generate-traces] Written: openspec/specs/forge-hot-cold-split/TRACES.md
+[generate-traces] Written: openspec/specs/forge-offline/TRACES.md
+[generate-traces] Written: openspec/specs/forge-shell-tools/TRACES.md
+[generate-traces] Written: openspec/specs/forge-staleness/TRACES.md
+[generate-traces] Written: openspec/specs/forge-welcome/TRACES.md
+[generate-traces] Written: openspec/specs/gh-auth-script/TRACES.md
+[generate-traces] Written: openspec/specs/git-mirror-service/TRACES.md
+[generate-traces] Written: openspec/specs/host-browser-mcp/TRACES.md
+[generate-traces] Written: openspec/specs/host-chromium-on-demand/TRACES.md
+[generate-traces] Written: openspec/specs/inference-container/TRACES.md
+[generate-traces] Written: openspec/specs/inference-host-side-pull/TRACES.md
+[generate-traces] Written: openspec/specs/init-command/TRACES.md
+[generate-traces] Written: openspec/specs/init-incremental-builds/TRACES.md
+[generate-traces] Written: openspec/specs/install-progress/TRACES.md
+[generate-traces] Written: openspec/specs/knowledge-source-of-truth/TRACES.md
+[generate-traces] Written: openspec/specs/layered-tools-overlay/TRACES.md
+[generate-traces] Written: openspec/specs/logging-accountability/TRACES.md
+[generate-traces] Written: openspec/specs/logging-levels/TRACES.md
+[generate-traces] Written: openspec/specs/native-secrets-store/TRACES.md
+[generate-traces] Written: openspec/specs/nix-builder/TRACES.md
+[generate-traces] Written: openspec/specs/no-terminal-flicker/TRACES.md
+[generate-traces] Written: openspec/specs/opencode-web-session/TRACES.md
+[generate-traces] Written: openspec/specs/opencode-web-session-otp/TRACES.md
+[generate-traces] Written: openspec/specs/overlay-mount-cache/TRACES.md
+[generate-traces] Written: openspec/specs/persistent-git-service/TRACES.md
+[generate-traces] Written: openspec/specs/podman-orchestration/TRACES.md
+[generate-traces] Written: openspec/specs/project-bootstrap-readme/TRACES.md
+[generate-traces] Written: openspec/specs/project-summarizers/TRACES.md
+[generate-traces] Written: openspec/specs/proxy-container/TRACES.md
+[generate-traces] Written: openspec/specs/remote-projects/TRACES.md
+[generate-traces] Written: openspec/specs/secret-rotation/TRACES.md
+[generate-traces] Written: openspec/specs/secrets-management/TRACES.md
+[generate-traces] Written: openspec/specs/simplified-tray-ux/TRACES.md
+[generate-traces] Written: openspec/specs/singleton-guard/TRACES.md
+[generate-traces] Written: openspec/specs/spec-traceability/TRACES.md
+[generate-traces] Written: openspec/specs/subdomain-naming-flip/TRACES.md
+[generate-traces] Written: openspec/specs/subdomain-routing-via-reverse-proxy/TRACES.md
+[generate-traces] Written: openspec/specs/tools-overlay-fast-reuse/TRACES.md
+[generate-traces] Written: openspec/specs/tray-app/TRACES.md
+[generate-traces] Written: openspec/specs/tray-cli-coexistence/TRACES.md
+[generate-traces] Written: openspec/specs/tray-host-control-socket/TRACES.md
+[generate-traces] Written: openspec/specs/tray-icon-lifecycle/TRACES.md
+[generate-traces] Written: openspec/specs/tray-minimal-ux/TRACES.md
+[generate-traces] Written: openspec/specs/tray-progress-and-icon-states/TRACES.md
+[generate-traces] Written: openspec/specs/tray-projects-rename/TRACES.md
+[generate-traces] Written: openspec/specs/update-system/TRACES.md
+[generate-traces] Written: openspec/specs/versioning/TRACES.md
+[generate-traces] Written: openspec/specs/web-image/TRACES.md
+[generate-traces] Written: openspec/specs/windows-event-logging/TRACES.md
+[generate-traces] Written: openspec/specs/wsl-daemon-orchestration/TRACES.md
+[generate-traces] Written: openspec/specs/wsl-runtime/TRACES.md
+[generate-traces] Written: openspec/specs/zen-default-with-ollama-analysis-pool/TRACES.md
+[generate-traces] Done.
+[0;36m[build][0m Building AppImage for install...
+[0;36m[build][0m Preparing AppImage build directories...
+[0;32m[build][0m Output dir:  /var/home/machiyotl/src/tillandsias/target/release/bundle/appimage
+[0;32m[build][0m Cache dir:   /var/home/machiyotl/.cache/tillandsias/appimage-builder
+[0;36m[build][0m Starting Ubuntu 22.04 podman container for AppImage build...
+[0;32m[build][0m Cached toolchain found — skipping install (~1-2 min build)
+[appimage] Installing system dependencies...
