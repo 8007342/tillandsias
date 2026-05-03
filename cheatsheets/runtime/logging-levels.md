@@ -114,7 +114,7 @@ tillandsias --log-secrets-management --log-update-cycle
 2026-04-27T16:49:44Z  INFO secrets: GitHub token retrieved {container=tillandsias-myapp-aeranthos}
 2026-04-27T16:49:45Z  INFO [secrets] Token cached for next 24 hours
   -> Prevents repeated OS keyring lookups
-  @trace spec:native-secrets-store https://github.com/...
+  @trace spec:native-secrets-store
 ```
 
 **Retention**: Logs never rotate; they grow indefinitely. Manually delete if they exceed a few MB.

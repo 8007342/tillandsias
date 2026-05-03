@@ -8,7 +8,8 @@
 use serde_json::{json, Value};
 use tracing::info;
 
-use crate::browser_mcp::window_registry::WindowRegistry; // @trace spec:host-browser-mcp
+// @trace spec:host-browser-mcp
+use crate::browser_mcp::window_registry::WindowRegistry;
 
 /// Handle browser.click tool call.
 pub async fn handle_click(

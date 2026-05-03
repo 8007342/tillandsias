@@ -1,6 +1,10 @@
 <!-- @trace spec:forge-offline -->
 # forge-offline Specification
 
+## Status
+
+status: active
+
 ## Purpose
 
 Forge containers operate offline -- no credentials, no project mounts, no direct internet. Code comes from git clone, packages come through the proxy, secrets live exclusively in the git service.
@@ -50,3 +54,10 @@ Forge containers SHALL be attached to the `tillandsias-enclave` internal network
 #### Scenario: Package install through proxy works
 - **WHEN** a forge container runs `npm install` with proxy env vars
 - **THEN** the install SHALL succeed through the proxy
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:forge-offline" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

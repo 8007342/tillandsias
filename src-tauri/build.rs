@@ -75,14 +75,6 @@ fn main() {
         pin.win64
     );
 
-    // @trace spec:windows-event-logging
-    // Emit environment variable for NSIS installer event source registration.
-    // The NSIS installer uses this to register the "Tillandsias" event source
-    // so that the Event Log layer in windows_eventlog.rs can write events to
-    // the Application log visible in Event Viewer.
-    #[cfg(target_os = "windows")]
-    println!("cargo:rustc-env=WINDOWS_EVENT_LOG_SOURCE=Tillandsias");
-
     tauri_build::build();
 }
 

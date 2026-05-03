@@ -1,6 +1,10 @@
 <!-- @trace spec:forge-welcome -->
 # forge-welcome Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change forge-welcome-fish-default. Update Purpose after archive.
 ## Requirements
@@ -38,3 +42,10 @@ The Terminal menu item and `--bash` CLI flag SHALL launch the fish shell instead
 - **WHEN** the user types `bash` inside the fish shell
 - **THEN** bash starts normally (fish is not mandatory)
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:forge-welcome" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

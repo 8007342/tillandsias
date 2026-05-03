@@ -30,6 +30,7 @@ pub struct SessionState {
 }
 
 /// The MCP server instance.
+#[allow(dead_code)]
 pub struct BrowserMcpServer {
     config: McpServerConfig,
 }

@@ -132,33 +132,6 @@ fn detect_locale_from_os() -> &'static str {
         }
     }
 
-    // macOS: GUI apps often don't set $LANG; read AppleLanguages plist instead.
-    #[cfg(target_os = "macos")]
-    {
-        if let Ok(output) = std::process::Command::new("defaults")
-            .args(["read", "-g", "AppleLanguages"])
-            .output()
-        {
-            let text = String::from_utf8_lossy(&output.stdout);
-            // Output looks like:  (\n    "es-MX",\n    "en-US",\n)
-            for line in text.lines() {
-                let trimmed = line
-                    .trim()
-                    .trim_matches(|c| c == '"' || c == ',' || c == '(' || c == ')');
-                let lang = trimmed
-                    .split('-')
-                    .next()
-                    .unwrap_or("")
-                    .split('_')
-                    .next()
-                    .unwrap_or("");
-                if is_supported(lang) {
-                    return Box::leak(lang.to_ascii_lowercase().into_boxed_str());
-                }
-            }
-        }
-    }
-
     "en"
 }
 

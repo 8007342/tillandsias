@@ -1,5 +1,9 @@
 # forge-hot-cold-split Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change forge-hot-cold-split. Update Purpose after archive.
 ## Requirements
@@ -221,3 +225,10 @@ The resolved cap SHALL be passed into the forge container via the env var `TILLA
 - **AND** `~/.cache/tillandsias/cheatsheets-pulled/` SHALL NOT appear in that enumeration
 - **AND** the "Maybe a hot path" HARD NO rule SHALL remain unweakened
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:forge-hot-cold-split" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

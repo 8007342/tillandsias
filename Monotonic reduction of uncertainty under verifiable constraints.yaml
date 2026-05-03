@@ -1,0 +1,284 @@
+openspec_system:
+  version: v0.1
+  philosophy:
+    core_principle: >
+      Monotonic reduction of uncertainty under verifiable constraints.
+    system_model: >
+      A closed-loop system where specs define intent, cheatsheets provide compressed knowledge,
+      code implements behavior, traces provide evidence, and CI enforces correctness and convergence.
+    invariant:
+      - cheatsheet_size_bounded: true
+      - spec_stability_required: true
+      - verification_claims_must_be_falsifiable: true
+
+  layers:
+    - name: spec
+      description: >
+        Canonical, versioned, machine-verifiable definition of intent and constraints.
+    - name: cheatsheet
+      description: >
+        Compressed, curated, adaptive knowledge cache with provenance and metrics.
+    - name: code
+      description: >
+        Rust implementation annotated with attributes enforcing observability and traceability.
+    - name: trace
+      description: >
+        Runtime evidence linking implementation to spec and knowledge sources.
+    - name: metrics
+      description: >
+        Signals derived from execution (hits, misses, verification levels).
+    - name: ci
+      description: >
+        Global validator enforcing invariants, detecting drift, and applying selection pressure.
+
+  spec:
+    id_format: "<domain>.<capability>.<intent>@<version>"
+    example: "auth.login.validate-credentials@v3"
+    storage: "/openspec/<domain>/<capability>/<intent>/<version>.yaml"
+    schema:
+      id: string
+      status: [active, deprecated, obsolete]
+      summary: string
+      inputs: list
+      outputs: list
+      invariants: list
+      observability:
+        emits: list
+      replaces: list
+      introduced_in: string
+    rules:
+      - spec_ids_must_be_stable
+      - version_bumps_only_on_semantic_change
+      - no_orphan_specs_in_ci
+      - no_cycles_in_replaces_graph
+
+  rust_annotations:
+    trace:
+      syntax: |
+        #[trace(
+          spec = "...",
+          cheatsheets = ["..."],
+          verified_at = "L0|L1|L2|L3",
+          knowledge_pressure = "low|medium|high",
+          binding = "optional-language"
+        )]
+      semantics:
+        - declares epistemic sufficiency claim
+        - binds code to spec and cheatsheets
+      macro_enforcement:
+        - spec_exists_and_active
+        - cheatsheets_exist
+        - binding_required_if_ambiguous
+    grounded_by:
+      syntax: |
+        #[grounded_by(
+          rust = "...",
+          js = "..."
+        )]
+      semantics:
+        - explicit multi-api disambiguation
+    obsolete:
+      syntax: |
+        #[obsolete(
+          spec = "...",
+          replaced_by = "...",
+          sunset = "YYYY-MM-DD"
+        )]
+      enforcement:
+        - spec_status_must_be_deprecated_or_obsolete
+        - replacement_must_exist
+        - fail_ci_if_past_sunset
+    tombstone:
+      syntax: |
+        #[tombstone(
+          spec = "...",
+          reason = "...",
+          replaced_by = "..."
+        )]
+      semantics:
+        - preserves historical intent without dead code
+    constraints:
+      - every_public_fn_requires_trace
+      - no_implicit_semantic_resolution
+
+  verification_levels:
+    levels:
+      L0: "spec only"
+      L1: "spec + cheatsheet"
+      L2: "spec + cheatsheet + api lookup"
+      L3: "spec + cheatsheet + api + runtime validation"
+    rules:
+      - declared_level_is_claim
+      - ci_validates_against_observed_level
+      - mismatch_causes_failure_or_downgrade
+      - upward_pressure_on_failure
+      - downward_pressure_on_stability
+
+  cheatsheets:
+    structure:
+      id: string
+      entries:
+        - key: string
+          content: string
+          metadata:
+            hits: integer
+            misses: integer
+            last_used: timestamp
+            specs: list
+            verification_levels: map
+            provenance: list
+            confidence: float
+            size_cost: integer
+    properties:
+      - acts_as_compressed_hot_cache
+      - must_be_lossy_but_canonical
+      - must_be_bounded_in_size
+    provenance:
+      required: true
+      examples:
+        - "official docs"
+        - "standards"
+        - "trusted sources"
+    versioning:
+      tied_to_environment_hash: true
+      triggers_revalidation_on_change: true
+
+  cheatsheet_operations:
+    signals:
+      - hits
+      - misses
+      - spec_bindings
+      - verification_deltas
+      - token_size
+    scoring_function: |
+      score =
+        w1 * normalized_hits
+      + w2 * spec_binding_strength
+      + w3 * recency_decay
+      + w4 * verification_success
+      - w5 * size_cost
+    actions:
+      expand:
+        condition: "high_misses"
+        method: "targeted_patch_only"
+      compact:
+        condition: "high_hits_and_low_misses"
+        constraint: "must_preserve_success_rate"
+      delete:
+        condition: "low_hits_and_no_spec_binding"
+      protect:
+        condition: "high_score_or_high_spec_criticality"
+    compaction:
+      definition: "semantic compression preserving correctness"
+      invariant:
+        - no_loss_of_L1_success_rate
+      rollback_on_failure: true
+
+  crdt_model:
+    type: "compacting-crdt"
+    merge_rule: "merge = union + normalization + compression"
+    constraints:
+      - must_not_grow_unbounded
+      - must_preserve_high_confidence_entries
+      - must_eliminate_redundancy
+    anti_pattern:
+      - grow_only_crdt_forbidden
+
+  cache_model:
+    definitions:
+      hit: "resolved_without_leaving_cheatsheet"
+      miss: "requires_api_lookup_or_retry"
+    metrics:
+      per_entry:
+        - hits
+        - misses
+        - assisted_resolutions
+    policies:
+      - enforce_global_size_limit
+      - evict_low_score_entries
+      - compact_mid_score_entries
+
+  ci_validator:
+    responsibilities:
+      - validate_all_annotations
+      - ensure_every_fn_has_trace
+      - detect_orphan_specs
+      - enforce_obsolete_lifecycle
+      - validate_spec_graph
+      - compare_declared_vs_observed_verification
+      - trigger_revalidation_on_cheatsheet_change
+    failure_conditions:
+      - missing_spec
+      - invalid_binding
+      - verification_mismatch
+      - expired_obsolete_code
+    modes:
+      - warn_only_initially
+      - strict_enforcement_after_stabilization
+
+  runtime_tracing:
+    output_format:
+      fn: string
+      spec: string
+      cheatsheet_hits: list
+      misses: list
+      verification_level: string
+    purpose:
+      - provide evidence for ci validation
+      - feed metrics system
+
+  convergence_engine:
+    objective: |
+      minimize:
+        Δ(spec ↔ code)
+      + Δ(code ↔ cheatsheet)
+      + Δ(cheatsheet ↔ reality)
+    constraints:
+      - compilation_success
+      - spec_compliance
+      - bounded_context_size
+    fitness_function: |
+      fitness =
+        compile_success
+      + spec_coverage
+      - cheatsheet_violation
+      - runtime_error_rate
+      - drift_penalty
+
+  pitfalls:
+    - cheatsheet_entropy_growth_without_bounds
+    - spec_ambiguity_causing_oscillation
+    - multi_api_semantic_collision_without_binding
+    - agents_gaming_metrics
+    - divergence_between_spec_and_code
+    - excessive_macro_complexity
+    - encoding_temporal_truth_in_static_code
+    - turning_cheatsheet_into_general_wiki
+
+  constraints:
+    - specs_must_be_minimal_and_precise
+    - cheatsheets_must_be_canonical_per_context
+    - annotations_must_be_enforced_not_advisory
+    - deletion_and_compaction_must_be_automatic
+    - system_complexity_must_not_exceed_code_complexity
+
+  implementation_phases:
+    phase_1:
+      - implement_trace_annotation
+      - validate_spec_existence
+    phase_2:
+      - build_ci_ast_scanner
+      - enforce_trace_presence
+    phase_3:
+      - add_verification_level_tracking
+      - log_hits_and_misses
+    phase_4:
+      - introduce_cheatsheet_metrics
+      - manual_compaction
+    phase_5:
+      - enable_automated_compaction_and_eviction
+      - enforce_full_convergence_loop
+
+  final_assertion: >
+    The system converges only if knowledge remains compressed, specs remain stable,
+    and every claim made in code is continuously validated against observed reality.

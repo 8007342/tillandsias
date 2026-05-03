@@ -1,6 +1,10 @@
 <!-- @trace spec:singleton-guard -->
 # singleton-guard Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change singleton-instance. Update Purpose after archive.
 ## Requirements
@@ -68,3 +72,10 @@ The singleton check SHALL verify that the PID in the lock file belongs to an act
 - **WHEN** the lock file contains PID 12345 and no process with PID 12345 exists
 - **THEN** the lock is considered stale and the new instance takes over
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:singleton-guard" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

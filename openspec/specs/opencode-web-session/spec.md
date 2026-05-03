@@ -2,6 +2,10 @@
 <!-- @trace spec:opencode-web-session -->
 # opencode-web-session Specification (Deprecated)
 
+## Status
+
+status: active
+
 ## Deprecation Notice
 
 This specification describes the webview-based approach to OpenCode Web. As of 2026-05-02,
@@ -141,3 +145,10 @@ Closing a `WebviewWindow` whose label starts with `web-` SHALL close only that w
 - **THEN** the window is destroyed
 - **AND** the Tauri runtime does NOT exit
 - **AND** the tray icon and infrastructure persist
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:opencode-web-session" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

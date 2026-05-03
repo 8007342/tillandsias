@@ -1,6 +1,10 @@
 <!-- @trace spec:forge-shell-tools -->
 # forge-shell-tools Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change forge-shell-tools. Update Purpose after archive.
 ## Requirements
@@ -45,3 +49,10 @@ The forge image SHALL include sensible default configs for bash, fish, and zsh w
 - **WHEN** zoxide is installed and the shell config is loaded
 - **THEN** `z` command is available for smart directory navigation
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:forge-shell-tools" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

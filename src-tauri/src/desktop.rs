@@ -24,6 +24,8 @@ const ICON_256: &[u8] = include_bytes!("../icons/icon.png");
 ///
 /// This is called early in `main()` — after CLI parsing, before tray setup.
 /// Failures are logged but never cause a crash; desktop integration is cosmetic.
+///
+/// @trace spec:app-lifecycle
 pub fn ensure_desktop_integration() {
     let appimage_path = match std::env::var("APPIMAGE") {
         Ok(path) if !path.is_empty() => path,

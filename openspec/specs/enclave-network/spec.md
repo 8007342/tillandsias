@@ -1,6 +1,10 @@
 <!-- @trace spec:enclave-network -->
 # enclave-network Specification
 
+## Status
+
+status: active
+
 ## Purpose
 
 Internal podman network that isolates forge, git, inference, and proxy containers. Only the proxy container has external access (dual-homed). All other containers communicate exclusively through the enclave.
@@ -58,3 +62,10 @@ All enclave network operations SHALL be logged to the `--log-enclave` accountabi
 #### Scenario: Container attachment logged
 - **WHEN** a container is attached to the enclave network
 - **THEN** the system SHALL log `[enclave] Container attached: <name>` with `@trace spec:enclave-network`
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:enclave-network" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

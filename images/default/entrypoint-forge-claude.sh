@@ -22,7 +22,8 @@ populate_hot_paths
 # (set by podman env) which adds to its built-in trust store separately.
 CA_CHAIN="/run/tillandsias/ca-chain.crt"
 if [ -f "$CA_CHAIN" ]; then
-    # @trace spec:environment-runtime — CA trust: Fedora uses pki, Alpine uses ca-certificates
+    # @trace spec:environment-runtime
+    # CA trust: Fedora uses pki, Alpine uses ca-certificates
     # DISTRO: Fedora path checked first (/etc/pki/), Alpine/Debian fallback (/etc/ssl/)
     SYSTEM_CA=""
     if [ -f /etc/pki/tls/certs/ca-bundle.crt ]; then

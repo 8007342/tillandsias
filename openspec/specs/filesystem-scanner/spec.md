@@ -1,4 +1,8 @@
 <!-- @trace spec:filesystem-scanner -->
+## Status
+
+status: active
+
 ## MODIFIED Requirements
 
 ### Requirement: OS-native event-driven watching
@@ -30,3 +34,10 @@ The scanner SHALL debounce rapid filesystem events into batched project state up
 #### Scenario: Debounce configuration
 - **WHEN** the user configures `debounce_ms = 5000` in the global config
 - **THEN** the scanner waits 5 seconds of filesystem quiet before emitting a batched update
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:filesystem-scanner" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

@@ -1,5 +1,9 @@
 # cheatsheet-source-layer Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change cheatsheet-source-layer. Update Purpose after archive.
 ## Requirements
@@ -176,3 +180,10 @@ human-triaged, not auto-resolved.
 - **WHEN** `scripts/refresh-cheatsheet-sources.sh --max-age-days 90` runs
 - **THEN** only sources with `fetched` date older than 90 days are re-fetched
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:cheatsheet-source-layer" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

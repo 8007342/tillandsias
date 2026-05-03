@@ -1,4 +1,8 @@
 <!-- @trace spec:logging-accountability -->
+## Status
+
+status: active
+
 ## ADDED Requirements
 
 ### Requirement: Per-module log level control
@@ -102,3 +106,10 @@ The logging system SHALL accept configuration from CLI flags in addition to envi
 - **WHEN** `logging::init(log_config)` is called
 - **THEN** the tracing subscriber is configured according to the `LogConfig`
 - **AND** if `LogConfig` has no module overrides, behavior is identical to the current implementation (TILLANDSIAS_LOG / RUST_LOG / default)
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:logging-accountability" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

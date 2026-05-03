@@ -1,4 +1,8 @@
 <!-- @trace spec:spec-traceability -->
+## Status
+
+status: active
+
 ## ADDED Requirements
 
 ### Requirement: Code annotations link to specs and knowledge
@@ -87,3 +91,10 @@ Together these form a navigable cheatsheet→code→spec→log graph that lets r
 #### Scenario: Log event with both spec and cheatsheet fields
 - **WHEN** an `info!` / `warn!` / `error!` event emits with `accountability = true` because of cheatsheet-derived behaviour
 - **THEN** the event SHALL include both `spec = "<name>"` and `cheatsheet = "<category>/<filename>.md"` as structured fields
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:spec-traceability" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

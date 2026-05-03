@@ -1,4 +1,8 @@
 <!-- @trace spec:secret-rotation -->
+## Status
+
+status: active
+
 ## ADDED Requirements
 
 ### Requirement: Token files on tmpfs
@@ -172,3 +176,10 @@ The container profile system SHALL support GitHub token as a secret kind.
 #### Scenario: Web profile has NO GitHubToken secret
 - **WHEN** `web_profile()` is called
 - **THEN** the profile's secrets list does NOT include `SecretKind::GitHubToken`
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:secret-rotation" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

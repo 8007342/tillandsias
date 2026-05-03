@@ -1,6 +1,10 @@
 <!-- @trace spec:tray-cli-coexistence -->
 # tray-cli-coexistence Specification
 
+## Status
+
+status: active
+
 ## Purpose
 
 Contract for running the Tillandsias tray icon concurrently with CLI modes, detecting whether the host has a graphical session, and tolerating broken stdout/stderr without taking the process down.
@@ -75,3 +79,10 @@ The tracing/logging layer SHALL tolerate `BrokenPipe` / `EPIPE` errors on the st
 - **THEN** subsequent stderr writes return `BrokenPipe` and are silently dropped
 - **AND** the process does not panic or exit
 - **AND** the file appender at `~/.local/state/tillandsias/tillandsias.log` continues to capture events
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:tray-cli-coexistence" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

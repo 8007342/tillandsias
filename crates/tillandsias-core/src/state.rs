@@ -46,7 +46,7 @@ pub enum ContainerType {
     /// Persistent OpenCode Web forge running `opencode serve` on :4096.
     /// Named `tillandsias-<project>-forge` — no genus allocation. Distinct
     /// from `Web` (which is the static-httpd "Serve Here" feature).
-    /// @trace spec:opencode-web-session — persistent forge running 'opencode serve' on :4096.
+    /// @trace spec:opencode-web-session
     #[serde(rename = "opencode-web")]
     OpenCodeWeb,
     /// Caching HTTP/HTTPS proxy with domain allowlist.
@@ -255,7 +255,7 @@ pub struct TrayState {
     /// Starts as `false` on every launch. Set to `true` when:
     /// - The forge image is confirmed present at startup (no build needed), or
     /// - A forge build completes successfully.
-    /// Set to `false` when a forge rebuild begins (image stale or absent).
+    /// - Set to `false` when a forge rebuild begins (image stale or absent).
     ///
     /// While `false`, all forge-dependent menu actions (Attach Here, Maintenance,
     /// Root terminal, GitHub Login) are disabled so the user cannot trigger them

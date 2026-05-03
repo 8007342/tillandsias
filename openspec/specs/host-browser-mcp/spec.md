@@ -1,5 +1,9 @@
 # host-browser-mcp Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change host-browser-mcp. Update Purpose after archive.
 ## Requirements
@@ -507,3 +511,10 @@ risk note.
   `-32000 ConcurrentCallLimit`
 - **AND** the 16 in-flight calls continue to completion unaffected
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:host-browser-mcp" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

@@ -1,6 +1,10 @@
 <!-- @trace spec:proxy-container -->
 # proxy-container Specification
 
+## Status
+
+status: active
+
 ## Purpose
 
 Caching HTTP/HTTPS forward proxy with domain allowlist that mediates all external traffic from forge containers. Alpine-based with squid, ~500MB disk cache. Uses ssl-bump MITM infrastructure with an ephemeral CA chain for HTTPS handling. Currently operates in splice-all mode (passthrough, no decryption) but the architecture supports selective per-domain interception for HTTPS content caching.
@@ -362,3 +366,10 @@ both an `acl localhost_subdomain dstdomain .localhost` and a
 2. **Proxy has no credentials**: it cannot authenticate to any service on behalf of forge containers.
 3. **Key material is ephemeral**: all CA keys live on tmpfs and die with the session. There is no persistent CA that could be compromised across reboots.
 4. **Image builds are outside the trust boundary**: they fetch packages directly, never through the proxy.
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:proxy-container" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

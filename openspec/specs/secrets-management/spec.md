@@ -1,6 +1,10 @@
 <!-- @trace spec:secrets-management -->
 # secrets-management Specification
 
+## Status
+
+status: active
+
 ## Purpose
 
 Credential delivery pipeline for Tillandsias containers. The host Rust process is the sole consumer of the OS native keyring; containers never see D-Bus, the keyring API, or any host credential beyond a single ephemeral token file this pipeline writes before launch and unlinks on stop. Enforces the zero-credential security boundary: forge and terminal containers have ZERO credentials; only the git service container receives a read-only token file via bind mount.
@@ -340,3 +344,10 @@ subject to the same handling rules as the GitHub OAuth token. Concretely:
   `reason = "ttl-expired" | "stack-stopped" | "router-restart"` and no value
   field
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:secrets-management" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

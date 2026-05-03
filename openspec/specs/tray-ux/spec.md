@@ -1,6 +1,10 @@
 <!-- @trace spec:tray-ux -->
 # tray-ux Specification
 
+## Status
+
+status: active
+
 ## Purpose
 Define the minimalistic tray UX flow for Tillandsias, showing only essential elements at each stage of the application lifecycle.
 
@@ -112,3 +116,10 @@ The system SHALL clean up stale Tillandsias containers on startup:
 - **WHEN** Tillandsias starts
 - **THEN** all stopped/orphaned `tillandsias-*` containers are removed
 - **AND** only actively tracked containers remain
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:tray-ux" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

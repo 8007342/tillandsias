@@ -1,6 +1,10 @@
 <!-- @trace spec:versioning -->
 # versioning Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change version-scheme. Update Purpose after archive.
 ## Requirements
@@ -70,3 +74,10 @@ A `scripts/bump-version.sh` script SHALL atomically update all version locations
 - **WHEN** the script is run twice with no VERSION change
 - **THEN** no files are modified on the second run
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:versioning" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

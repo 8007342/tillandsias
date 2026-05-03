@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias"
-version = "0.1.160"
+version = "0.1.161"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -44,9 +44,9 @@ tracing-subscriber = { workspace = true }
 dirs = { workspace = true }
 # Platform-specific backends: without one of these keyring v3 builds a no-op
 # mock store — writes appear to succeed but nothing lands in the OS vault.
-# Linux: Secret Service over D-Bus. macOS: Keychain Services. Windows: Wincred.
+# Linux: Secret Service over D-Bus.
 # @trace spec:native-secrets-store
-keyring = { version = "3", features = ["sync-secret-service", "crypto-rust", "apple-native", "windows-native"] }
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
 # zeroize is already pulled in transitively by keyring; declare it directly so
 # we can `Zeroizing<String>`-wrap the OAuth token and wipe its heap allocation
 # on drop (mitigates process-memory scrape / core-dump disclosure).
@@ -75,13 +75,6 @@ lazy_static = "1.4"
 url = "2"
 uuid = { version = "1", features = ["v4"] }
 chrono = "0.4"
-
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_System_Console", "Win32_System_SystemInformation"] }
-# @trace spec:windows-event-logging
-# ETW Event Log integration — writes errors/warnings/accountability events to Windows Event Viewer.
-# Requires event source registered in registry (installer or PowerShell: New-EventLog -LogName Application -Source Tillandsias).
-tracing-layer-win-eventlog = "0.1"
 
 # Unix: setsid() in tray_spawn::spawn_detached_tray() to detach the child
 # from the parent's process group / controlling terminal.

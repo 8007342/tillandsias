@@ -1,4 +1,8 @@
 <!-- @trace spec:update-system -->
+## Status
+
+status: active
+
 ## MODIFIED Requirements
 
 ### Requirement: Platform-appropriate artifact selection
@@ -11,3 +15,10 @@ The updater SHALL select the correct artifact for the current platform and handl
 #### Scenario: AppImage on immutable OS without FUSE
 - **WHEN** the application runs as an AppImage on an immutable operating system (e.g., Fedora Silverblue, SteamOS) where FUSE is unavailable or restricted
 - **THEN** the application sets the `APPIMAGE_EXTRACT_AND_RUN=1` environment variable to enable AppImage execution via extraction fallback instead of FUSE mounting
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:update-system" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

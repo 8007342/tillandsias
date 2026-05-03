@@ -1,6 +1,10 @@
 <!-- @trace spec:init-command -->
 # init-command Specification
 
+## Status
+
+status: active
+
 ## Purpose
 Define behavior of `tillandsias --init` command including incremental builds and debug mode.
 
@@ -78,3 +82,10 @@ The init command SHALL build exactly six container images in sequence.
 
 - `docs/cheatsheets/build-lock-semantics.md` — process coordination via PID files to prevent concurrent builds
 - `docs/cheatsheets/container-image-tagging.md` — versioned image tag scheme and staleness detection
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:init-command" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

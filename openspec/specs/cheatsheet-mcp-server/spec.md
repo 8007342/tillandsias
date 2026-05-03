@@ -1,5 +1,9 @@
 # cheatsheet-mcp-server Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change cheatsheet-tooling-and-mcp. Update Purpose after archive.
 ## Requirements
@@ -67,3 +71,10 @@ The regenerator SHALL emit `[DRAFT]` next to entries with `status: draft`, `[STA
 - **THEN** it SHALL emit a warning naming the file AND fall back to using the filename + first H1 for the index entry
 - **AND** the entry SHALL be tagged `[DRAFT]` so the gap is visible
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:cheatsheet-mcp-server" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

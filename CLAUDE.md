@@ -2,7 +2,7 @@
 
 ## Project
 
-**Tillandsias** — a cross-platform system tray application (Rust + Tauri v2) that orchestrates containerized development environments invisibly. Users never see containers.
+**Tillandsias** — a Linux system tray application (Rust + Tauri v2) that orchestrates containerized development environments invisibly. Users never see containers.
 
 ## Build Commands
 
@@ -20,45 +20,6 @@
 ```
 
 The build script auto-creates the `tillandsias` toolbox with all system deps on first run.
-
-### macOS Native Build
-
-```bash
-./build-osx.sh                      # Debug build (native, no toolbox)
-./build-osx.sh --release            # Release build (Tauri .dmg bundle)
-./build-osx.sh --test               # Run test suite
-./build-osx.sh --check              # Type-check only
-./build-osx.sh --clean              # Clean + rebuild
-./build-osx.sh --clean --release    # Clean release build
-./build-osx.sh --install            # Release build + install to ~/Applications/
-./build-osx.sh --remove             # Remove installed app + CLI symlink
-./build-osx.sh --wipe               # Remove target/, caches
-```
-
-Builds directly on macOS using Xcode CLT + Rust — no toolbox needed. Supports Apple Silicon (aarch64) and Intel (x86_64). Local builds are unsigned; use `xattr -cr ~/Applications/Tillandsias.app` to bypass Gatekeeper.
-
-### Windows Cross-Compilation
-
-```bash
-./build-windows.sh                  # Debug cross-build (auto-creates toolbox)
-./build-windows.sh --release        # Release cross-build (unsigned NSIS/MSI)
-./build-windows.sh --check          # Type-check for Windows target
-./build-windows.sh --test           # Compile tests (not executed on Linux)
-./build-windows.sh --clean          # Clean Windows artifacts
-./build-windows.sh --toolbox-reset  # Destroy and recreate Windows toolbox
-```
-
-Uses `cargo-xwin` in a dedicated `tillandsias-windows` toolbox. Artifacts are unsigned — for local testing only. See `docs/cross-platform-builds.md` for details and macOS build strategy.
-
-### Windows Native Build
-
-```bash
-./build-local.sh                    # Debug build, install to %LOCALAPPDATA%\Tillandsias
-./build-local.sh --release          # Release build (still installs to %LOCALAPPDATA%)
-./build-local.ps1                   # PowerShell-native variant
-```
-
-Run from a Windows host with rustup, podman 5.x, and WSL2 (podman-machine). Both scripts stage the router sidecar via `scripts/build-sidecar.sh` (cross-compiled to `x86_64-unknown-linux-musl` using `rust-lld` — no external `cc` needed) before `cargo build`. The installed binary lands at `%LOCALAPPDATA%\Tillandsias\tillandsias.exe`; that directory should be on `PATH`. After install, `tillandsias --init` builds proxy + forge + git + inference images. Set `TILLANDSIAS_WORKSPACE` to your repo path so `--init` can stage `cheatsheets/` into the forge build context (otherwise the layer is replaced with a `MISSING.md` placeholder). The Windows control plane (router profile) is currently stubbed — Named Pipes wiring lives in a follow-up change. @trace spec:cross-platform
 
 ### Manual Commands (without build.sh)
 
@@ -105,7 +66,7 @@ Tillandsias uses a multi-container enclave for security isolation. Coding contai
 - Multiple forge containers per project, each with independent git working tree
 - All operations logged via `--log-enclave`, `--log-proxy`, `--log-git` with `@trace` links
 
-**Credential flow:** GitHub tokens live exclusively in the host OS keyring (Linux: Secret Service / GNOME Keyring via D-Bus; macOS: Keychain; Windows: Credential Manager). The git service container reads the token through a D-Bus bridge and performs authenticated push/fetch against GitHub on behalf of the forge. Forge containers never see tokens — they speak plain git protocol to the enclave-local mirror.
+**Credential flow:** GitHub tokens live exclusively in the host OS keyring (Linux: Secret Service / GNOME Keyring via D-Bus). The git service container reads the token through a D-Bus bridge and performs authenticated push/fetch against GitHub on behalf of the forge. Forge containers never see tokens — they speak plain git protocol to the enclave-local mirror.
 
 **Images are built via:**
 ```bash
@@ -406,7 +367,7 @@ Invoke installed skills proactively when their trigger fires. Order below is by 
 - **OpenSpec suite (`opsx:new`, `opsx:ff`, `opsx:apply`, `opsx:verify`, `opsx:archive`, `opsx:sync`, plus `openspec-*` equivalents)**: the primary workflow gate. See the **OpenSpec — Monotonic Convergence** section above for rules and sequencing. Never bypass with ad-hoc edits.
 - **`simplify`**: invoke after implementing a non-trivial change (new module, refactor, >100 LOC touched) and before `opsx:verify`. Catches duplication, leaky abstractions, and hot-path JSON (forbidden here — use `postcard`).
 - **`security-review`**: invoke before merging any branch that touches enclave containers, credential paths, proxy/git-service config, `--cap-drop`/`--security-opt`/`--userns` flags, keyring/D-Bus code, or anything under `src-tauri/` that crosses the host/forge boundary.
-- **`review`**: invoke before `gh pr create` on branches destined for `main` from `linux-next`/`osx-next`/`windows-next`. Complements `security-review`; run both for enclave-adjacent work.
+- **`review`**: invoke before `gh pr create` on branches destined for `main` from `linux-next`. Complements `security-review`; run both for enclave-adjacent work.
 - **`less-permission-prompts`**: invoke opportunistically when the session has racked up repeated permission prompts for read-only commands. Scans transcripts and updates `.claude/settings.json`.
 - **`update-config`**: invoke for any settings.json / hooks change, or when the user asks for automated "from now on" behavior (memory cannot satisfy those — hooks can).
 - **`claude-api`**: invoke only if work touches Anthropic SDK code (none in-tree today; reserved for future inference-container client code).
@@ -423,43 +384,21 @@ For batch tasks, organize parallel agents into waves by size (small first, large
 - Between waves: build + test to catch integration issues early
 - Each agent gets: full context, OpenSpec creation instructions, @trace requirements
 
-## Cross-Platform Development — Branch-per-Machine
+## Linux-Only Development
 
-The project is developed across Linux (Fedora Silverblue), macOS, and Windows. To prevent cross-platform merge conflicts:
+Tillandsias is developed exclusively on Linux (Fedora Silverblue) with the following workflow:
 
-**Branch strategy:**
-- `main` — stable, release-ready. Only merge completed work here.
-- `linux-next` — active Linux development branch
-- `osx-next` — active macOS development branch
-- `windows-next` — active Windows development branch
-
-**Workflow:**
-1. Work on the platform branch for your current machine (`git checkout linux-next`)
-2. Push to the platform branch freely — no conflicts with other machines
-3. When a batch of work is complete and tested: merge to main
-4. Bump version ONLY at merge-to-main time, not during feature work
-5. Push main. Trigger release from main.
-
-**Why:** Pushing from multiple machines to main simultaneously causes rebase conflicts (version numbers, Cargo.lock, platform-specific scripts). Platform branches eliminate this entirely.
+**Build and test:**
+```bash
+./build.sh --test && cargo clippy --workspace
+```
 
 **Version bumps:**
 - During development: NO version bumps. Let `--bump-build` happen locally but don't commit it.
 - At merge time: `./scripts/bump-version.sh --bump-changes` once, commit, push main.
 - Release: `gh workflow run release.yml -f version="X.Y.Z.B"` from main only.
 
-**Cross-platform checks before merging to main:**
-```bash
-# On Linux:
-./build.sh --test && cargo clippy --workspace
-
-# On macOS:
-./build-osx.sh --test && cargo clippy --workspace
-
-# On Windows:
-./build-windows.sh --check
-```
-
-**Cargo.lock:** Committed to git (correct for binary projects). Platform-specific deps resolve the same on all platforms. If Cargo.lock conflicts at merge time, regenerate: `cargo generate-lockfile`.
+**Cargo.lock:** Committed to git (correct for binary projects). If Cargo.lock conflicts at merge time, regenerate: `cargo generate-lockfile`.
 
 ## Cloud Workflows — Conservative Usage
 

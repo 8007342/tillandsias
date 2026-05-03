@@ -1,6 +1,10 @@
 <!-- @trace spec:cli-mode -->
 # cli-mode Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change cli-mode. Update Purpose after archive.
 ## Requirements
@@ -110,3 +114,10 @@ Every CLI path that may have started enclave infrastructure SHALL install a SIGI
 - **WHEN** the user hits Ctrl+C twice within a few seconds
 - **THEN** the second SIGINT is not handled by the cleanup path
 - **AND** the process terminates immediately via the default signal action
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:cli-mode" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

@@ -10,7 +10,7 @@
 //! Accountability windows (`--log-secrets-management`, etc.) are composable
 //! with `--log` and add a curated stderr layer for sensitive operations.
 //!
-//! @trace spec:logging-accountability, spec:windows-event-logging
+//! @trace spec:logging-accountability
 
 use std::io::IsTerminal;
 
@@ -103,13 +103,16 @@ fn build_filter(config: &LogConfig) -> EnvFilter {
     // Accountability windows implicitly enable their modules at info level
     // (or trace if --log already set a higher detail level for that module).
     for window in &config.accountability {
+        // @trace spec:proxy-container
+        // @trace spec:enclave-network
+        // @trace spec:git-mirror-service
         let module_name = match window {
             AccountabilityWindow::SecretManagement => "secrets",
             AccountabilityWindow::ImageManagement => "containers",
             AccountabilityWindow::UpdateCycle => "updates",
-            AccountabilityWindow::ProxyManagement => "proxy",       // @trace spec:proxy-container
-            AccountabilityWindow::EnclaveManagement => "enclave",   // @trace spec:enclave-network
-            AccountabilityWindow::GitManagement => "git",              // @trace spec:git-mirror-service
+            AccountabilityWindow::ProxyManagement => "proxy",
+            AccountabilityWindow::EnclaveManagement => "enclave",
+            AccountabilityWindow::GitManagement => "git",
         };
 
         // Only add if not already overridden by --log.
@@ -144,15 +147,13 @@ fn build_env_filter() -> EnvFilter {
 // ---------------------------------------------------------------------------
 
 /// Initialize the tracing subscriber with file logging, optional stderr output,
-/// optional Windows Event Log layer, and optional accountability layer.
+/// and optional accountability layer.
 ///
 /// Accepts a `LogConfig` parsed from CLI arguments. If the config is default
 /// (no flags), behavior is identical to the previous `init()`.
 ///
 /// Returns a [`WorkerGuard`] that **must** be held for the lifetime of the
 /// application so the non-blocking file writer flushes on shutdown.
-///
-/// @trace spec:windows-event-logging
 pub fn init(config: &LogConfig) -> WorkerGuard {
     let log_path = log_dir();
 
@@ -185,28 +186,11 @@ pub fn init(config: &LogConfig) -> WorkerGuard {
         None
     };
 
-    // @trace spec:windows-event-logging
-    // Windows-only Event Log layer. Returns None if event source registration fails;
-    // logging continues via file+stderr only.
-    #[cfg(target_os = "windows")]
-    {
-        let eventlog_layer = crate::windows_eventlog::try_init();
-        tracing_subscriber::registry()
-            .with(filter)
-            .with(file_layer)
-            .with(stderr_layer)
-            .with(eventlog_layer)
-            .init();
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        tracing_subscriber::registry()
-            .with(filter)
-            .with(file_layer)
-            .with(stderr_layer)
-            .init();
-    }
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(file_layer)
+        .with(stderr_layer)
+        .init();
 
     guard
 }

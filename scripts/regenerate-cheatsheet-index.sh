@@ -325,7 +325,8 @@ process_file() {
     status="$(printf '%s' "$parsed" | awk -F$'\x1f' '{print $1}')"
     title="$(printf '%s' "$parsed" | awk -F$'\x1f' '{print $2}')"
     description="$(printf '%s' "$parsed" | awk -F$'\x1f' '{print $3}')"
-    # @trace spec:cheatsheets-license-tiered — v2 tier-aware fields
+    # @trace spec:cheatsheets-license-tiered
+    # V2 tier-aware fields
     local tier image_baked_sha256 package committed_for_project tier_marker
     tier="$(printf '%s' "$parsed" | awk -F$'\x1f' '{print $4}')"
     image_baked_sha256="$(printf '%s' "$parsed" | awk -F$'\x1f' '{print $5}')"
@@ -370,8 +371,8 @@ process_file() {
         esac
     fi
 
-    # @trace spec:cheatsheets-license-tiered — v2 tier badges (task 8.1)
-    # Tier-aware badges supersede the legacy verify_marker for cheatsheets
+    # @trace spec:cheatsheets-license-tiered
+    # V2 tier badges (task 8.1) — Tier-aware badges supersede the legacy verify_marker for cheatsheets
     # whose frontmatter declares a tier. If tier is set, build the badge
     # from frontmatter; otherwise fall back to the legacy verify_marker.
     tier_marker=""

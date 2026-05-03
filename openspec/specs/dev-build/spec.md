@@ -1,6 +1,10 @@
 <!-- @trace spec:dev-build -->
 # dev-build Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change dev-build-script. Update Purpose after archive.
 ## Requirements
@@ -116,3 +120,10 @@ The `--install` flag SHALL exit with code 0 (success) or 1 (failure), enabling c
 - **AND** a `[build] ERROR` message is printed to stderr
 - **AND** safe for error handling: `./build.sh --install || echo "build failed; fix errors above"`
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:dev-build" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

@@ -1,4 +1,8 @@
 <!-- @trace spec:podman-orchestration -->
+## Status
+
+status: active
+
 ## MODIFIED Requirements
 
 ### Requirement: Security-hardened container defaults
@@ -99,3 +103,10 @@ The orchestration layer SHALL name persistent OpenCode Web containers exactly `t
 - **THEN** the `--name` flag is `tillandsias-my-app-forge`
 - **AND** the genus still appears in the `ContainerInfo` record for UI/iconography purposes
 - **AND** the name never collides with a concurrently-running `tillandsias-my-app-web` static-httpd container
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:podman-orchestration" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

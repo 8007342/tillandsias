@@ -1,6 +1,10 @@
 <!-- @trace spec:init-incremental-builds -->
 # init-incremental-builds Specification
 
+## Status
+
+status: active
+
 ## Purpose
 Track and resume partial `tillandsias --init` builds, with debug logging for failed images.
 
@@ -46,3 +50,10 @@ After all images are processed, if `--debug` was used and any builds failed, the
 #### Scenario: No debug mode
 - **WHEN** `tillandsias --init` (without `--debug`) completes with failures
 - **THEN** no failed build logs are displayed (user should re-run with `--debug`)
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:init-incremental-builds" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

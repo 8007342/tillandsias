@@ -1,6 +1,10 @@
 <!-- @trace spec:runtime-logging -->
 # runtime-logging Specification
 
+## Status
+
+status: active
+
 ## Purpose
 
 Structured logging system with compact formatting, accountability windows for sensitive operations, and spec traceability via `@trace` links.
@@ -172,3 +176,10 @@ Tillandsias SHALL distinguish two log tiers per container: INTERNAL (existing pe
 - **AND** binary formats are NOT permitted
 - **AND** agents reading external logs SHALL be able to `grep` or `jq` them without a deserialiser dep
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:runtime-logging" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

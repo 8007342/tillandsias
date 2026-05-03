@@ -1,5 +1,9 @@
 # direct-podman-calls Specification
 
+## Status
+
+status: active
+
 ## Purpose
 
 Host-side operations (GitHub authentication, image builds) use direct podman and gh CLI invocations from Rust instead of bash script wrappers. Eliminates bash as a runtime dependency for host-side operations on all platforms while keeping bash scripts in the repository for manual use and documentation.
@@ -102,3 +106,10 @@ All direct podman invocations SHALL apply the same security flags as the bash sc
 - `cheatsheets/languages/rust.md` — async/await patterns, Rust CLI argument building
 - `cheatsheets/utils/podman.md` — security flags, D-Bus forwarding, container networking
 - `cheatsheets/utils/bash.md` — reference for original bash script behavior
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:direct-podman-calls" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

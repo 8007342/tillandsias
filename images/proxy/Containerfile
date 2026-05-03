@@ -7,8 +7,8 @@
 #         User creation: adduser -D (NOT useradd).
 FROM docker.io/library/alpine:3.20
 
-# @trace spec:proxy-container — squid + SSL for MITM proxy
-# squid + openssl for SSL bump support
+# @trace spec:proxy-container
+# Squid + SSL for MITM proxy; squid + openssl for SSL bump support
 # ca-certificates for upstream TLS verification
 # bash: entrypoint.sh uses #!/bin/bash (busybox sh would also work but bash is explicit)
 # Alpine's squid package includes SSL support (--enable-ssl-crtd) by default.

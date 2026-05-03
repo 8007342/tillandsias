@@ -1,5 +1,9 @@
 # download-telemetry Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change forge-cache-architecture. Update Purpose after archive.
 ## Requirements
@@ -62,3 +66,10 @@ This addresses the `../java/` audit's finding: the test agent committed a 200 MB
 - **THEN** the download event SHALL carry `reason="workspace-anti-pattern"` (not `"cache-miss"`)
 - **AND** `tillandsias --download-stats` SHALL surface it under a "anti-patterns" header in addition to the per-source breakdown
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:download-telemetry" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

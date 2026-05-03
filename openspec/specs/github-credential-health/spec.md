@@ -1,5 +1,9 @@
 # github-credential-health Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change tray-responsiveness-and-startup-gating. Update Purpose after archive.
 ## Requirements
@@ -69,3 +73,10 @@ Background re-probing every N seconds is forbidden (`spec:tray-app` responsivene
 - **AND** the new classification replaces the cached one
 - **AND** UI gating advances to the new state
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:github-credential-health" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```
