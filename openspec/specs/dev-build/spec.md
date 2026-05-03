@@ -13,112 +13,112 @@ The build script SHALL auto-create the `tillandsias` toolbox with all build depe
 
 #### Scenario: First run on fresh checkout
 - **WHEN** `./build.sh` is run and no `tillandsias` toolbox exists
-- **THEN** the toolbox is created, system dependencies are installed, and the build proceeds
+- **THEN** the toolbox SHALL be created, system dependencies SHALL be installed, and the build SHALL proceed
 
 #### Scenario: Subsequent runs
 - **WHEN** `./build.sh` is run and the `tillandsias` toolbox already exists
-- **THEN** the build proceeds immediately with no setup overhead
+- **THEN** the build SHALL proceed immediately with no setup overhead
 
 ### Requirement: Debug build by default
 Running `./build.sh` with no flags SHALL perform a debug workspace build inside the toolbox.
 
 #### Scenario: Default invocation
 - **WHEN** `./build.sh` is run with no arguments
-- **THEN** `cargo build --workspace` runs inside the `tillandsias` toolbox
+- **THEN** `cargo build --workspace` SHALL run inside the `tillandsias` toolbox
 
 ### Requirement: Release build
 The `--release` flag SHALL produce a Tauri release bundle.
 
 #### Scenario: Release build
 - **WHEN** `./build.sh --release` is run
-- **THEN** `cargo tauri build` runs inside the toolbox, producing platform-native bundles in `src-tauri/target/release/bundle/`
+- **THEN** `cargo tauri build` SHALL run inside the toolbox, producing platform-native bundles in `src-tauri/target/release/bundle/`
 
 ### Requirement: Test execution
 The `--test` flag SHALL run the full test suite.
 
 #### Scenario: Run tests
 - **WHEN** `./build.sh --test` is run
-- **THEN** `cargo test --workspace` runs inside the toolbox and reports results
+- **THEN** `cargo test --workspace` SHALL run inside the toolbox and SHALL report results
 
 ### Requirement: Clean build
 The `--clean` flag SHALL remove all build artifacts before building.
 
 #### Scenario: Clean then build
 - **WHEN** `./build.sh --clean` is run
-- **THEN** `cargo clean` runs first, then the default build proceeds
+- **THEN** `cargo clean` SHALL run first, then the default build SHALL proceed
 
 #### Scenario: Clean with release
 - **WHEN** `./build.sh --clean --release` is run
-- **THEN** `cargo clean` runs first, then a release build proceeds
+- **THEN** `cargo clean` SHALL run first, then a release build SHALL proceed
 
 ### Requirement: Install to local path
 The `--install` flag SHALL build a release binary and copy it to `~/.local/bin/` with only non-executable supporting files.
 
 #### Scenario: Install binary
 - **WHEN** `./build.sh --install` is run
-- **THEN** the binary and runtime libraries are installed to `~/.local/bin/` and `~/.local/lib/tillandsias/`
-- **AND** icons are installed for the desktop launcher
-- **AND** no shell scripts, flake files, or image sources are copied to `~/.local/share/tillandsias/`
+- **THEN** the binary and runtime libraries SHALL be installed to `~/.local/bin/` and `~/.local/lib/tillandsias/`
+- **AND** icons SHALL be installed for the desktop launcher
+- **AND** no shell scripts, flake files, or image sources MUST be copied to `~/.local/share/tillandsias/`
 
 ### Requirement: Remove installed binary
 The `--remove` flag SHALL remove the installed binary from `~/.local/bin/`.
 
 #### Scenario: Remove binary
 - **WHEN** `./build.sh --remove` is run
-- **THEN** `~/.local/bin/tillandsias` is deleted if it exists
+- **THEN** `~/.local/bin/tillandsias` SHALL be deleted if it exists
 
 ### Requirement: Wipe caches and artifacts
 The `--wipe` flag SHALL remove all caches and build artifacts.
 
 #### Scenario: Wipe everything
 - **WHEN** `./build.sh --wipe` is run
-- **THEN** `target/`, `~/.cache/tillandsias/`, and any temporary build files are removed
+- **THEN** `target/`, `~/.cache/tillandsias/`, and any temporary build files SHALL be removed
 
 ### Requirement: Toolbox reset
 The `--toolbox-reset` flag SHALL destroy and recreate the toolbox from scratch.
 
 #### Scenario: Reset toolbox
 - **WHEN** `./build.sh --toolbox-reset` is run
-- **THEN** the `tillandsias` toolbox is removed and recreated with fresh dependencies
+- **THEN** the `tillandsias` toolbox SHALL be removed and recreated with fresh dependencies
 
 ### Requirement: Installer triggers init
 The installer script SHALL run `tillandsias --init` as a background task after installation.
 
 #### Scenario: Fresh install
 - **WHEN** `install.sh` completes the binary installation
-- **THEN** `tillandsias --init` is spawned as a background process
-- **AND** the installer prints a message indicating images are building in the background
+- **THEN** `tillandsias --init` SHALL be spawned as a background process
+- **AND** the installer SHALL print a message indicating images are building in the background
 
 ### Requirement: Cross-platform build documentation
 The project SHALL include documentation at `docs/cross-platform-builds.md` explaining the cross-platform build strategy and legal constraints.
 
 #### Scenario: macOS infeasibility documented
 - **WHEN** a developer reads `docs/cross-platform-builds.md`
-- **THEN** they find a clear explanation that macOS cross-compilation from Linux is not feasible due to Apple EULA restrictions and Tauri's native framework requirements
+- **THEN** they SHALL find a clear explanation that macOS cross-compilation from Linux is not feasible due to Apple EULA restrictions and Tauri's native framework requirements
 
 #### Scenario: Windows cross-compilation documented
 - **WHEN** a developer reads `docs/cross-platform-builds.md`
-- **THEN** they find instructions for using `build-windows.sh` with its limitations (unsigned, experimental)
+- **THEN** they SHALL find instructions for using `build-windows.sh` with its limitations (unsigned, experimental)
 
 #### Scenario: CI-first strategy documented
 - **WHEN** a developer reads `docs/cross-platform-builds.md`
-- **THEN** they understand that CI (GitHub Actions) remains the authoritative build pipeline for all platforms, and local cross-compilation is supplementary for troubleshooting
+- **THEN** they SHALL understand that CI (GitHub Actions) remains the authoritative build pipeline for all platforms, and local cross-compilation is supplementary for troubleshooting
 
 ### Requirement: Install exits with deterministic exit codes
 The `--install` flag SHALL exit with code 0 (success) or 1 (failure), enabling chaining with subsequent commands.
 
 #### Scenario: Install succeeds
 - **WHEN** `./build.sh --install` completes successfully
-- **THEN** the command exits with code 0
-- **AND** critical images are built and binary is installed
-- **AND** a `[build] SUCCESS` message is printed to stdout
-- **AND** safe to chain: `./build.sh --install && tillandsias --init --debug && tillandsias /path --diagnostics`
+- **THEN** the command SHALL exit with code 0
+- **AND** critical images SHALL be built and binary SHALL be installed
+- **AND** a `[build] SUCCESS` message SHALL be printed to stdout
+- **AND** MUST be safe to chain: `./build.sh --install && tillandsias --init --debug && tillandsias /path --diagnostics`
 
 #### Scenario: Install fails
 - **WHEN** `./build.sh --install` fails (image build failed or binary copy failed)
-- **THEN** the command exits with code 1
-- **AND** a `[build] ERROR` message is printed to stderr
-- **AND** safe for error handling: `./build.sh --install || echo "build failed; fix errors above"`
+- **THEN** the command SHALL exit with code 1
+- **AND** a `[build] ERROR` message SHALL be printed to stderr
+- **AND** MUST be safe for error handling: `./build.sh --install || echo "build failed; fix errors above"`
 
 
 ## Sources of Truth

@@ -31,7 +31,7 @@ The event message text SHALL be `"downloading"` for the start, `"downloaded"` fo
 
 #### Scenario: Cache-hit emits no download event
 - **WHEN** the same crate is requested on a second build with no version change
-- **THEN** NO `category="download"` event SHALL be emitted (the bytes never crossed the network)
+- **THEN** NO `category="download"` event MUST be emitted (the bytes never crossed the network)
 
 ### Requirement: tillandsias --download-stats reports the aggregate
 
@@ -42,13 +42,13 @@ A new host-side CLI subcommand `tillandsias --download-stats [--since=<duration>
 - Top 10 reasons by count
 - A per-day timeseries
 
-Default `--since=24h`. The command is for power users / metrics inspection — there is NO tray menu item, NO desktop notification, NO new prompt.
+Default `--since=24h`. The command is for power users / metrics inspection — there MUST be NO tray menu item, NO desktop notification, NO new prompt.
 
 #### Scenario: Power user inspects yesterday's downloads
 - **WHEN** the user runs `tillandsias --download-stats --since=24h`
-- **THEN** the command exits 0 with a textual report on stdout
-- **AND** the report includes total bytes, per-source breakdown, per-reason breakdown
-- **AND** if zero downloads occurred, the report says `"no downloads in last 24h ✓"`
+- **THEN** the command SHALL exit 0 with a textual report on stdout
+- **AND** the report SHALL include total bytes, per-source breakdown, per-reason breakdown
+- **AND** if zero downloads occurred, the report SHALL say `"no downloads in last 24h ✓"`
 
 #### Scenario: Convergence target — zero in steady state
 - **WHEN** the forge image and per-project caches are warm AND the user is in steady-state development
