@@ -45,6 +45,16 @@ Build is invoked via `scripts/build-image.sh chromium-framework` which resolves 
 - `cheatsheets/runtime/chromium-seccomp.md` — Chromium Seccomp reference and patterns
 - `cheatsheets/runtime/chromium-isolation.md` — Chromium Isolation reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:browser-ephemeral`
+
+Gating points:
+- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked resources, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

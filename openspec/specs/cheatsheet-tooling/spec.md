@@ -22,6 +22,16 @@ This spec is created retroactively as part of the traces-audit refactor. It may 
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns
 - `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked resources, persistence) are detectable
+
 ## Observability
 
 ```bash

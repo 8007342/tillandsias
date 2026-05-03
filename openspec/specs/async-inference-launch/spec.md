@@ -65,3 +65,13 @@ This prevents the user from being surprised that inference is not immediately av
 
 - `cheatsheets/runtime/async-patterns-rust.md` — tokio::spawn, JoinHandle dropping, fire-and-forget task lifecycle
 - `cheatsheets/runtime/enclave-startup-sequencing.md` — enclave readiness state machine and timing targets
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked resources, persistence) are detectable
+

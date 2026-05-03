@@ -74,6 +74,16 @@ bytes stream from reader to writer in a single pass.
 - `cheatsheets/build/cargo.md` — Cargo reference and patterns
 - `cheatsheets/build/nix-flake-basics.md` — Nix Flake Basics reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked resources, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

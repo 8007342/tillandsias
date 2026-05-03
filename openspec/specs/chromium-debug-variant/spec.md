@@ -303,3 +303,13 @@ Log events SHALL include:
 - `cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md` — tmpfs-backed ephemeral storage
 - `cheatsheets/observability/cheatsheet-metrics.md` — structured logging for network events
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked resources, persistence) are detectable
+

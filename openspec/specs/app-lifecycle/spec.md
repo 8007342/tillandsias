@@ -266,6 +266,16 @@ The `ContainerLauncher::kill_container` (or its underlying client method) SHALL 
 - `cheatsheets/runtime/container-health-checks.md` — Container Health Checks reference and patterns
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:environment-isolation`
+
+Gating points:
+- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked resources, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

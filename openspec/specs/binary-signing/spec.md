@@ -44,6 +44,16 @@ All release artifacts SHALL be signed with Cosign keyless mode and verifiable lo
 - `cheatsheets/utils/gh-cli.md` — Gh Cli reference and patterns
 - `cheatsheets/security/owasp-top-10-2021.md` — Owasp Top 10 2021 reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked resources, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

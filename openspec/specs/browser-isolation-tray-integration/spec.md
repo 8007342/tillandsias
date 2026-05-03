@@ -108,6 +108,16 @@ All web-based interfaces are launched through browser isolation containers only.
 - `openspec/specs/browser-isolation-core/spec.md` — Core browser isolation container requirements
 - `openspec/specs/enclave-network/spec.md` — Network isolation and enclave architecture
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked resources, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

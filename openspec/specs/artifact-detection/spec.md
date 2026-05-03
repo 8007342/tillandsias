@@ -97,6 +97,16 @@ The artifact system SHALL detect project types from standard project files to in
 - `cheatsheets/build/cargo.md` — Cargo reference and patterns
 - `cheatsheets/utils/gh-cli.md` — Gh Cli reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked resources, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

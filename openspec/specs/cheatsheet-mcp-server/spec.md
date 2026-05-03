@@ -77,6 +77,16 @@ The regenerator SHALL emit `[DRAFT]` next to entries with `status: draft`, `[STA
 - `cheatsheets/web/mcp.md` — Mcp reference and patterns
 - `cheatsheets/runtime/local-inference.md` — Local Inference reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked resources, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

@@ -499,3 +499,13 @@ The lifecycle SHALL be a CRDT, not a state machine: a single cheatsheet MAY simu
 - `cheatsheets/runtime/external-logs.md` — EXTERNAL-tier producer/consumer contract that the new `cheatsheet-telemetry` role implements.
 - `cheatsheets/utils/jq.md` — JSON Lines processing for `lookups.jsonl` events; the schema is `jq -c`-friendly.
 - `cheatsheets/build/nix-flake-basics.md` — `dockerTools.buildLayeredImage` `contents` path that lands `/opt/cheatsheet-sources/` in the image and discovers the package manifest for distro-packaged validation.
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked resources, persistence) are detectable
+

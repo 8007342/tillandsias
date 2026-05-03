@@ -227,6 +227,16 @@ delta adds the `local:` sub-requirement.
 - `cheatsheets/agents/claude-code.md` — Agent framework and patterns
 - `cheatsheets/runtime/cheatsheet-architecture-v2.md` — Cheatsheet architecture and lifecycle
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked resources, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

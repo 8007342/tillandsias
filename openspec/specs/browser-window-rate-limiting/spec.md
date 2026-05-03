@@ -143,6 +143,16 @@ DEBUG browser: Window request rate-limited {project=my-app, elapsed_secs=5, min_
 
 - `cheatsheets/runtime/logging-levels.md` — DEBUG-level logging conventions
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked resources, persistence) are detectable
+
 ## Related Specifications
 
 - `browser-mcp-server` — MCP server and URL validation (executed before rate limit)

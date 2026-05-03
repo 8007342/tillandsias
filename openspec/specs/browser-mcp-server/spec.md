@@ -176,6 +176,16 @@ The MCP server SHALL handle errors gracefully and return meaningful error messag
 - `cheatsheets/runtime/logging-levels.md` — Log level conventions and INFO/WARN/ERROR semantics
 - `cheatsheets/runtime/browser-isolation.md` — Browser window isolation and security constraints (if exists)
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked resources, persistence) are detectable
+
 ## Related Specifications
 
 - `browser-isolation-core` — Chromium container orchestration and isolation engine

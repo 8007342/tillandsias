@@ -179,3 +179,13 @@ Log events SHALL include:
 - `cheatsheets/security/owasp-top-10-2021.md` — zero-persistence credential handling (A02:2021 - Cryptographic Failures)
 - `cheatsheets/observability/cheatsheet-metrics.md` — event counting for cert issuance lifecycle
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked resources, persistence) are detectable
+
