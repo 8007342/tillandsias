@@ -10,14 +10,15 @@ Without mandatory @trace annotations, orphaned public APIs accumulate in the cod
 
 ## Requirements
 
-### Scanning
+### Requirement: Scanning and trace presence enforcement
 
-- **Scope**: `src-tauri/src/**/*.rs` (all Rust source files in the Tauri tray app)
-- **Targets**: `pub fn`, `pub async fn`, `pub trait`, `pub struct`, `pub enum` (top-level and in nested modules)
-- **Exempt**: `fn` (private functions), test-only items (unless `#[cfg(test)]` is a public test)
-- **Scanner**: bash/grep-based (no new Rust crates); runs in < 10 seconds
+All public symbols in `src-tauri/src/**/*.rs` MUST have a `@trace spec:NAME` annotation. The scanner MUST target only `pub fn`, `pub async fn`, `pub trait`, `pub struct`, and `pub enum` declarations at all nesting levels. The scanner MUST exempt private functions (`fn` without `pub`) and test-only items (unless they are public tests with `#[cfg(test)]`). The scanner MUST be bash/grep-based with no new Rust crate dependencies and MUST complete in less than 10 seconds.
 
-### Permitted Formats
+@trace spec:enforce-trace-presence
+
+### Requirement: Annotation format validation
+
+@trace annotations MUST follow one of three permitted formats:
 
 1. **Single-line comment** before function:
    ```rust
@@ -39,40 +40,41 @@ Without mandatory @trace annotations, orphaned public APIs accumulate in the cod
    pub fn bar() { ... }
    ```
 
-### Format Validation
-
-Format regex (machine-verifiable):
+The format MUST match the machine-verifiable regex:
 ```regex
 ^[[:space:]]*(//|#!?\[)\s*@trace\s+spec:[a-z0-9_-]+(,\s*spec:[a-z0-9_-]+)*[[:space:]]*$
 ```
 
-**Violations that fail CI**:
+The following violations MUST cause CI failure:
 - Trailing comma after spec name: `@trace spec:foo,`
 - Trailing prose: `@trace spec:foo — reason here`
 - Inline URL: `@trace spec:foo https://...`
-- Combined @trace + @cheatsheet on one line: use separate lines instead
+- Combined @trace + @cheatsheet on one line (MUST use separate lines)
 - Inline after code: `let x = 1; // @trace spec:foo`
 
-### Exit Codes
+@trace spec:enforce-trace-presence
 
-- `0` = all checks passed
-- `1` = errors found (missing traces or format violations)
-- `2` = warnings only (use with `--warn-only` flag)
+### Requirement: Exit codes and CI integration
+
+The validator MUST return exit code `0` when all checks pass, exit code `1` when errors are found (missing traces or format violations), and exit code `2` when only warnings are detected (when invoked with `--warn-only` flag). CI MUST call the validator before build; developers MUST run it locally before pushing.
+
+@trace spec:enforce-trace-presence
 
 ## Implementation
 
-- **Tool**: `scripts/validate-traces.sh --enforce-presence`
-- **Flag**: Add `--enforce-presence` to existing Phase 1 validator
-- **Integration**: CI calls this before build; developers run locally before push
-- **Performance**: Full codebase scan < 10 seconds
+The validator tool `scripts/validate-traces.sh --enforce-presence` MUST be added to (or extended from) the existing Phase 1 validator. CI MUST call this validator before building the binary. Developers MUST run the validator locally before pushing changes. The full codebase scan MUST complete in less than 10 seconds.
+
+@trace spec:enforce-trace-presence
 
 ## Remediation
 
-When CI reports missing @trace:
-1. Identify the spec the function implements (read module doc comment, related specs, git history)
-2. Add `// @trace spec:SPECNAME` on the line immediately before `pub fn`
-3. Run `bash scripts/validate-traces.sh --enforce-presence` locally
-4. Commit with trace URL: `https://github.com/8007342/tillandsias/search?q=%40trace+spec%3ASPECNAME&type=code`
+When CI reports missing @trace annotations, developers SHALL:
+1. Identify the spec the function implements by reading module doc comments, related specs, or git history
+2. Add `// @trace spec:SPECNAME` on the line immediately before the `pub fn` declaration
+3. Run `bash scripts/validate-traces.sh --enforce-presence` locally to verify the fix
+4. Commit the change with a clickable trace URL in the commit body: `https://github.com/8007342/tillandsias/search?q=%40trace+spec%3ASPECNAME&type=code`
+
+@trace spec:enforce-trace-presence
 
 ## Related
 
