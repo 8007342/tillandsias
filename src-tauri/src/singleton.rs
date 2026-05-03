@@ -5,10 +5,8 @@
 //! If the lock file references a stale PID (dead process or different binary), the
 //! new instance takes over.
 //!
-//! Lock file locations:
+//! Lock file location:
 //! - Linux:   `$XDG_RUNTIME_DIR/tillandsias.lock`
-//! - macOS:   `$TMPDIR/tillandsias.lock`
-//! - Windows: `%TEMP%\tillandsias.lock`
 //!
 //! @trace spec:singleton-guard
 
@@ -20,27 +18,12 @@ const LOCK_FILENAME: &str = "tillandsias.lock";
 
 /// Returns the platform-specific lock file path.
 pub fn lock_path() -> PathBuf {
-    #[cfg(target_os = "linux")]
-    {
-        // $XDG_RUNTIME_DIR is the standard ephemeral, per-user runtime directory.
-        // Falls back to /tmp if unset (non-systemd environments).
-        std::env::var("XDG_RUNTIME_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| std::env::temp_dir())
-            .join(LOCK_FILENAME)
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        // $TMPDIR on macOS is per-user and per-session.
-        std::env::temp_dir().join(LOCK_FILENAME)
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        // %TEMP% on Windows is per-user.
-        std::env::temp_dir().join(LOCK_FILENAME)
-    }
+    // $XDG_RUNTIME_DIR is the standard ephemeral, per-user runtime directory.
+    // Falls back to /tmp if unset (non-systemd environments).
+    std::env::var("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir())
+        .join(LOCK_FILENAME)
 }
 
 /// Attempt to acquire the singleton lock.
@@ -128,7 +111,6 @@ pub fn release() {
 }
 
 /// Check whether the given PID is alive and belongs to a Tillandsias process.
-#[cfg(target_os = "linux")]
 fn is_alive(pid: u32) -> bool {
     // On Linux, /proc/<pid>/comm contains the process name (first 15 chars).
     let comm_path = format!("/proc/{pid}/comm");
@@ -144,55 +126,6 @@ fn is_alive(pid: u32) -> bool {
         Err(_) => {
             // Process doesn't exist or we can't read it — treat as dead.
             debug!(pid, "Cannot read /proc/{}/comm, treating as dead", pid);
-            false
-        }
-    }
-}
-
-/// Check whether the given PID is alive on macOS.
-///
-/// Uses `ps -p <pid> -o comm=` which returns the process command name.
-/// No extra crate dependencies required.
-#[cfg(target_os = "macos")]
-fn is_alive(pid: u32) -> bool {
-    match std::process::Command::new("ps")
-        .args(["-p", &pid.to_string(), "-o", "comm="])
-        .output()
-    {
-        Ok(output) if output.status.success() => {
-            let comm = String::from_utf8_lossy(&output.stdout);
-            let comm = comm.trim();
-            // On macOS, comm is the full path; check if it ends with "tillandsias"
-            // or contains it (for development builds).
-            let is_ours = comm.contains("tillandsias");
-            debug!(pid, comm, is_ours, "Process check via ps");
-            is_ours
-        }
-        _ => {
-            debug!(pid, "Process not found via ps");
-            false
-        }
-    }
-}
-
-/// Check whether the given PID is alive on Windows.
-///
-/// Uses `tasklist /FI "PID eq <pid>"` to check process existence and name.
-/// No extra crate dependencies required.
-#[cfg(target_os = "windows")]
-fn is_alive(pid: u32) -> bool {
-    match std::process::Command::new("tasklist")
-        .args(["/FI", &format!("PID eq {pid}"), "/NH", "/FO", "CSV"])
-        .output()
-    {
-        Ok(output) if output.status.success() => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let is_ours = stdout.contains("tillandsias");
-            debug!(pid, is_ours, "Process check via tasklist");
-            is_ours
-        }
-        _ => {
-            debug!(pid, "Process not found via tasklist");
             false
         }
     }

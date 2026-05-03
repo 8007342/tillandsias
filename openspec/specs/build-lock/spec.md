@@ -1,6 +1,10 @@
 <!-- @trace spec:build-lock -->
 # build-lock Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change init-prebuilt-images. Update Purpose after archive.
 ## Requirements
@@ -23,3 +27,10 @@ Image builds SHALL use a lock file to prevent duplicate concurrent builds.
 - **WHEN** a build completes (success or failure)
 - **THEN** the lock file is removed
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:build-lock" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

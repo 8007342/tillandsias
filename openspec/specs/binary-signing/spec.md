@@ -1,4 +1,8 @@
 <!-- @trace spec:binary-signing -->
+## Status
+
+status: active
+
 ## MODIFIED Requirements
 
 ### Requirement: Signature and certificate artifacts
@@ -34,3 +38,10 @@ All release artifacts SHALL be signed with Cosign keyless mode and verifiable lo
 #### Scenario: Verification on clean machine
 - **WHEN** the release notes verification instructions are followed on a machine with no prior Cosign state
 - **THEN** the verification succeeds without additional configuration
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:binary-signing" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

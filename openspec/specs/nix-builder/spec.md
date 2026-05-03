@@ -1,4 +1,8 @@
 <!-- @trace spec:nix-builder -->
+## Status
+
+status: active
+
 ## ADDED Requirements
 
 ### Requirement: Git-tracked files for flake builds
@@ -27,3 +31,10 @@ The flake.nix image definitions SHALL use `copyToRoot` instead of the legacy `co
 #### Scenario: Image definition uses copyToRoot
 - **WHEN** an image is defined in `flake.nix` using `dockerTools.buildLayeredImage`
 - **THEN** the `copyToRoot` attribute is used to specify packages to include. The `contents` attribute is a legacy alias that still works but is deprecated in favor of `copyToRoot`.
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:nix-builder" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

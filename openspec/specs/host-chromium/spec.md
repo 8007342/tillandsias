@@ -1,5 +1,9 @@
 # host-chromium Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change host-chromium-on-demand. Update Purpose after archive.
 ## Requirements
@@ -463,3 +467,10 @@ authorised the install.sh download (and only that).
 - **AND** the tray process does NOT initiate any HTTP request to
   `storage.googleapis.com` or `googlechromelabs.github.io`
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:host-chromium" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

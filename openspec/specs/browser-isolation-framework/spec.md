@@ -3,6 +3,10 @@
 @trace spec:browser-isolation-framework
 @trace spec:versioning
 
+## Status
+
+status: active
+
 ## Image Versioning
 
 The `chromium-framework` image MUST use versioned tags that match the Tillandsias binary version:
@@ -35,3 +39,10 @@ images/chromium/Containerfile.framework
 ```
 
 Build is invoked via `scripts/build-image.sh chromium-framework` which resolves the core tag and passes it as a build argument.
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:browser-isolation-framework" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

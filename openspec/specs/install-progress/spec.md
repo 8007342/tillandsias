@@ -1,4 +1,8 @@
 <!-- @trace spec:install-progress -->
+## Status
+
+status: active
+
 ## ADDED Requirements
 
 ### Requirement: Spinner during tool installation
@@ -33,3 +37,10 @@ The system SHALL provide a reusable `spin` function in `lib-common.sh` that acce
 - **WHEN** an entrypoint calls `spin "$L_INSTALLING_OPENSPEC" npm install -g ...`
 - **THEN** the spinner displays the message while npm runs
 - **THEN** the function returns npm's exit code
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:install-progress" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

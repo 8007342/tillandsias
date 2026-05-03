@@ -1,6 +1,10 @@
 <!-- @trace spec:default-image -->
 # default-image Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change attach-here-mvp. Update Purpose after archive.
 ## Requirements
@@ -424,3 +428,10 @@ equivalent key, so both agent runtimes see the eight `browser.*` tools.
 - **AND** the host-side `WindowRegistry` retains any open windows per
   the host-browser-mcp window-survival requirement
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:default-image" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

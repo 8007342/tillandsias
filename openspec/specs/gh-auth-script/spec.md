@@ -1,6 +1,10 @@
 <!-- @trace spec:gh-auth-script -->
 # gh-auth-script Specification
 
+## Status
+
+status: active
+
 ## Purpose
 
 The interactive GitHub Login user experience. Both the CLI entry point (`tillandsias --github-login`) and the tray menu item ("GitHub Login") drive the same single Rust implementation: spin up an ephemeral container from the git service image, run `gh auth login` interactively, extract the resulting OAuth token on the host, persist it via the native keyring, and tear the container down. There is no external shell script — the flow lives entirely in `src-tauri/src/runner.rs::run_github_login`.
@@ -80,3 +84,10 @@ The login container SHALL be destroyed on every exit path so no `gh` on-disk sta
 - **THEN** the Drop guard SHALL still run `podman rm -f tillandsias-gh-login`
 - **AND** all on-disk `gh` state inside the container SHALL be destroyed with the container
 - **AND** no token SHALL be written to any host file outside the keyring
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:gh-auth-script" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

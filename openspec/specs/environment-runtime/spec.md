@@ -1,4 +1,8 @@
 <!-- @trace spec:environment-runtime -->
+## Status
+
+status: active
+
 ## MODIFIED Requirements
 
 ### Requirement: Global and per-project configuration
@@ -51,3 +55,10 @@ The runtime environment contract SHALL recognise `TILLANDSIAS_AGENT=opencode-web
 #### Scenario: Unknown values fall through safely
 - **WHEN** `TILLANDSIAS_AGENT` is any value not in the recognised set
 - **THEN** existing fallback behaviour remains unchanged
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:environment-runtime" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

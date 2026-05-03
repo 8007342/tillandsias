@@ -1,6 +1,10 @@
 <!-- @trace spec:artifact-detection -->
 # artifact-detection Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change tillandsias-bootstrap. Update Purpose after archive.
 ## Requirements
@@ -87,3 +91,10 @@ The artifact system SHALL detect project types from standard project files to in
 - **WHEN** a project directory contains no recognized project files
 - **THEN** it is classified as unknown but still eligible for "Attach Here" with the generic forge environment
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:artifact-detection" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

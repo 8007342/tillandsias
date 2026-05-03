@@ -92,27 +92,8 @@ pub fn check_host_ram(required_mb: u32) -> Result<HostRamCheck, PreflightError> 
 // Platform implementations
 // ---------------------------------------------------------------------------
 
-#[cfg(target_os = "linux")]
 fn probe_mem_available_mb() -> Result<u32, PreflightError> {
     probe_linux_meminfo()
-}
-
-#[cfg(target_os = "macos")]
-fn probe_mem_available_mb() -> Result<u32, PreflightError> {
-    probe_macos_vm_stats()
-}
-
-#[cfg(target_os = "windows")]
-fn probe_mem_available_mb() -> Result<u32, PreflightError> {
-    probe_windows_global_memory()
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-fn probe_mem_available_mb() -> Result<u32, PreflightError> {
-    // Unsupported platform — be permissive (don't block launches).
-    Err(PreflightError::Probe(
-        "RAM probe not implemented for this platform".to_string(),
-    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -142,98 +123,6 @@ fn probe_linux_meminfo() -> Result<u32, PreflightError> {
     ))
 }
 
-// ---------------------------------------------------------------------------
-// macOS: host_statistics64 via libc
-// ---------------------------------------------------------------------------
-
-#[cfg(target_os = "macos")]
-fn probe_macos_vm_stats() -> Result<u32, PreflightError> {
-    use std::mem::MaybeUninit;
-
-    // We use `vm_statistics64_data_t` which requires the
-    // `mach/vm_statistics.h` types. The simplest portable approach that
-    // avoids a build-time dependency on the Mach headers is `sysctlbyname`
-    // for `hw.memsize` (total) combined with `vm.page_*` counters, or
-    // falling back to `sysctl -n vm.swapusage`. However, the most accurate
-    // "available" figure comes from `host_statistics64` with flavor
-    // `HOST_VM_INFO64`, which gives us `free_count + inactive_count` pages.
-    //
-    // Since we already have `libc` in scope (declared for the unix target),
-    // we call the raw Mach API directly.
-
-    // PAGE_SIZE on macOS arm64/x86_64 is 16384 or 4096.
-    let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) } as u64;
-    if page_size == 0 {
-        return Err(PreflightError::Probe("sysconf(_SC_PAGESIZE) returned 0".to_string()));
-    }
-
-    // host_statistics64 fills a vm_statistics64_data_t (34 × u64 ints).
-    // We approximate by reading `/usr/bin/vm_stat` output as a fallback
-    // since the Mach header types aren't stable in the libc crate.
-    // The `vm_stat` binary ships with macOS and is at /usr/bin/vm_stat.
-    let output = std::process::Command::new("/usr/bin/vm_stat")
-        .output()
-        .map_err(|e| PreflightError::Probe(format!("vm_stat failed: {e}")))?;
-
-    let text = String::from_utf8_lossy(&output.stdout);
-    let mut free_pages: u64 = 0;
-    let mut inactive_pages: u64 = 0;
-
-    for line in text.lines() {
-        if line.starts_with("Pages free:") {
-            free_pages = parse_vm_stat_pages(line);
-        } else if line.starts_with("Pages inactive:") {
-            inactive_pages = parse_vm_stat_pages(line);
-        }
-    }
-
-    let available_bytes = (free_pages + inactive_pages) * page_size;
-    Ok((available_bytes / (1024 * 1024)) as u32)
-}
-
-#[cfg(target_os = "macos")]
-fn parse_vm_stat_pages(line: &str) -> u64 {
-    // Format: "Pages free:                         12345."
-    line.split(':')
-        .nth(1)
-        .unwrap_or("")
-        .trim()
-        .trim_end_matches('.')
-        .replace(',', "")
-        .parse()
-        .unwrap_or(0)
-}
-
-// ---------------------------------------------------------------------------
-// Windows: GlobalMemoryStatusEx
-// ---------------------------------------------------------------------------
-
-#[cfg(target_os = "windows")]
-fn probe_windows_global_memory() -> Result<u32, PreflightError> {
-    use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
-
-    let mut mem_status = MEMORYSTATUSEX {
-        dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
-        dwMemoryLoad: 0,
-        ullTotalPhys: 0,
-        ullAvailPhys: 0,
-        ullTotalPageFile: 0,
-        ullAvailPageFile: 0,
-        ullTotalVirtual: 0,
-        ullAvailVirtual: 0,
-        ullAvailExtendedVirtual: 0,
-    };
-
-    let ok = unsafe { GlobalMemoryStatusEx(&mut mem_status) };
-    if ok == 0 {
-        return Err(PreflightError::Probe(
-            "GlobalMemoryStatusEx returned FALSE".to_string(),
-        ));
-    }
-
-    let available_mb = (mem_status.ullAvailPhys / (1024 * 1024)) as u32;
-    Ok(available_mb)
-}
 
 // ---------------------------------------------------------------------------
 // Tests

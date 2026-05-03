@@ -1,5 +1,9 @@
 # forge-cache-dual Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change forge-cache-architecture. Update Purpose after archive.
 ## Requirements
@@ -100,3 +104,10 @@ This means: `target/`, `node_modules/`, `build/`, `dist/`, `.gradle/`, `.dart_to
 - **WHEN** the methodology cheatsheet `runtime/forge-paths-ephemeral-vs-persistent.md` is read by an agent
 - **THEN** it SHALL clearly state that build artifacts under the project workspace (e.g., `node_modules/` for projects that don't redirect via tooling) are an anti-pattern, AND it SHALL list which tools have native env-var redirection support
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:forge-cache-dual" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

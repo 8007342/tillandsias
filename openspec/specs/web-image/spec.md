@@ -1,6 +1,10 @@
 <!-- @trace spec:web-image -->
 # web-image Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change web-image. Update Purpose after archive.
 ## Requirements
@@ -68,3 +72,10 @@ The container WORKDIR and httpd document root SHALL be `/var/www`, where the pro
 - **WHEN** the container is launched with `-v /path/to/project:/var/www:ro`
 - **THEN** the project files are served by httpd
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:web-image" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

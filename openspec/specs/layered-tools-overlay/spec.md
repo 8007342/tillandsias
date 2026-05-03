@@ -1,6 +1,10 @@
 <!-- @trace spec:layered-tools-overlay -->
 # layered-tools-overlay Specification
 
+## Status
+
+status: active
+
 ## Purpose
 
 Pre-built tools overlay that decouples AI coding tool lifecycle (OpenCode, Claude Code, OpenSpec) from the forge base image lifecycle. Tools are installed once into a host directory, mounted read-only into all forge containers, and updated in the background. Eliminates the 15-60 second per-launch install delay.
@@ -20,3 +24,10 @@ tmpfs).
   tombstone
 - **AND** they SHALL be pointed to the superseding specs
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:layered-tools-overlay" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

@@ -1,6 +1,10 @@
 <!-- @trace spec:app-lifecycle -->
 # app-lifecycle Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change tillandsias-bootstrap. Update Purpose after archive.
 ## Requirements
@@ -256,3 +260,10 @@ The `ContainerLauncher::kill_container` (or its underlying client method) SHALL 
 - **WHEN** the verification phase invokes `kill_container(name, Some("KILL"))`
 - **THEN** the underlying `podman kill --signal=KILL <name>` invocation runs
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:app-lifecycle" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

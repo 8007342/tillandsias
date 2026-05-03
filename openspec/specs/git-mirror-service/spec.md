@@ -1,6 +1,10 @@
 <!-- @trace spec:git-mirror-service -->
 # git-mirror-service Specification
 
+## Status
+
+status: active
+
 ## Purpose
 
 Per-project bare mirror repositories with git daemon serving clones over the enclave network. Post-receive hooks auto-push to remote. D-Bus forwarding provides host keyring access for credentials.
@@ -216,3 +220,10 @@ event" and "gone container".
 - **AND** the subsequent container teardown does not disturb the already-
   synced state
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:git-mirror-service" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

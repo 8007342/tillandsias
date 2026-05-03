@@ -1,4 +1,8 @@
 <!-- @trace spec:clickable-trace-index -->
+## Status
+
+status: active
+
 ## ADDED Requirements
 
 ### Requirement: Trace index script
@@ -85,3 +89,10 @@ For each active spec that has at least one `@trace` annotation in the codebase, 
 #### Scenario: Toolbox-free execution
 - **WHEN** `generate-traces.sh` is run on the host (outside the tillandsias toolbox)
 - **THEN** it SHALL complete successfully using only tools available on a standard Fedora Silverblue host
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:clickable-trace-index" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

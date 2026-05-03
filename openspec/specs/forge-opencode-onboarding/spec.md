@@ -1,5 +1,9 @@
 # forge-opencode-onboarding Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change forge-opencode-methodology-overhaul. Update Purpose after archive.
 ## Requirements
@@ -96,3 +100,10 @@ The OpenCode `config.json` instructions list SHALL include 5 files: methodology.
 - **WHEN** agent starts work in a new project
 - **THEN** agent consults `/home/forge/.config-overlay/opencode/instructions/forge-discovery.md` for first-turn steps
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:forge-opencode-onboarding" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

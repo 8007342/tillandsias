@@ -1,8 +1,3 @@
-// On Windows, we use "console" subsystem (the default) so CLI output works
-// from any terminal. For tray-only mode (no args), the console window is
-// hidden via FreeConsole() after startup.
-// On non-Windows, the attribute is irrelevant.
-
 mod accountability;
 mod build_lock;
 mod ca;
@@ -40,10 +35,6 @@ mod chromium_launcher;
 #[cfg(target_os = "linux")]
 mod mcp_browser;
 
-/// Windows event log integration.
-#[cfg(target_os = "windows")]
-mod windows_eventlog;
-
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -66,17 +57,6 @@ use updater::UpdateState;
 static TRAY_ICON: std::sync::OnceLock<Mutex<tauri::tray::TrayIcon>> = std::sync::OnceLock::new();
 
 fn main() {
-    // On Windows, hide the console window for tray-only mode (no args).
-    // CLI mode keeps the console so output is visible in any terminal.
-    #[cfg(target_os = "windows")]
-    {
-        if std::env::args().len() <= 1 {
-            unsafe {
-                windows_sys::Win32::System::Console::FreeConsole();
-            }
-        }
-    }
-
     // Parse CLI arguments first — before any heavy initialization.
     let (cli_mode, log_config) = match cli::parse() {
         Some(parsed) => parsed,

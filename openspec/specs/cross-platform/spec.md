@@ -1,6 +1,10 @@
 <!-- @trace spec:cross-platform -->
 # Spec: Cross-Platform Windows Support (Delta)
 
+## Status
+
+status: suspended
+
 ## Requirements
 
 ### REQ-WIN-INSTALL: One-line Windows installer
@@ -23,3 +27,10 @@ Changing the language in the tray menu MUST reload the i18n string table immedia
 
 ### REQ-WIN-OS: Host OS detection
 `detect_host_os()` MUST return a meaningful string on Windows (e.g., "Microsoft Windows [Version 10.0.26200]") instead of "Unknown OS".
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:cross-platform" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

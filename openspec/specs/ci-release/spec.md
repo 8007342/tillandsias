@@ -1,4 +1,8 @@
 <!-- @trace spec:ci-release -->
+## Status
+
+status: active
+
 ## MODIFIED Requirements
 
 ### Requirement: Node.js 24 runtime for GitHub Actions
@@ -19,3 +23,10 @@ Both CI and release workflows SHALL opt into Node.js 24 for GitHub Actions runne
 #### Scenario: Upstream validation
 - **WHEN** the project performs a periodic dependency or CI audit
 - **THEN** the `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` variable is checked against current GitHub Actions documentation to confirm it remains a supported mechanism
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:ci-release" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

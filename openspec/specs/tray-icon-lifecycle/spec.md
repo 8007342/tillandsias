@@ -1,4 +1,8 @@
 <!-- @trace spec:tray-icon-lifecycle -->
+## Status
+
+status: active
+
 ## ADDED Requirements
 
 ### Requirement: Five-state tray icon lifecycle
@@ -94,3 +98,10 @@ The tray icon is the sole visual indicator of system health. Users MUST be able 
 
 ### No container terminology in user-facing context
 Users MUST never see the words "container", "pod", "image", or "runtime" in any tray menu item, tooltip, or notification associated with these icon states.
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:tray-icon-lifecycle" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

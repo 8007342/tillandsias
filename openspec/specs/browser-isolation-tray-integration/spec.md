@@ -1,6 +1,10 @@
 <!-- @trace spec:browser-isolation-tray-integration -->
 # browser-isolation-tray-integration Specification
 
+## Status
+
+status: active
+
 ## Purpose
 Define how the tray menu integrates with browser isolation containers to launch safe, isolated browser windows for OpenCode Web and other web-based tools.
 
@@ -103,3 +107,10 @@ All web-based interfaces are launched through browser isolation containers only.
 - `cheatsheets/runtime/podman-logging.md` — Debugging container startup and health issues
 - `openspec/specs/browser-isolation-core/spec.md` — Core browser isolation container requirements
 - `openspec/specs/enclave-network/spec.md` — Network isolation and enclave architecture
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:browser-isolation-tray-integration" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

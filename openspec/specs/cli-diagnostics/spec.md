@@ -2,6 +2,10 @@
 
 # cli-diagnostics Specification
 
+## Status
+
+status: active
+
 ## Purpose
 
 Define the `--diagnostics` command-line flag for real-time inspection of Tillandsias container logs. Enables troubleshooting of container lifecycle, build failures, and runtime issues without requiring manual `podman logs` commands.
@@ -91,3 +95,10 @@ The diagnostics process SHALL run indefinitely until the user presses Ctrl+C, al
 
 - `docs/cheatsheets/podman-logging.md` — `podman logs` options, filtering, timestamp formats
 - `docs/cheatsheets/container-lifecycle.md` — container state transitions and cleanup
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:cli-diagnostics" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

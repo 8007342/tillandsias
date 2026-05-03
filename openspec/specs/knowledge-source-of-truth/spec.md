@@ -1,4 +1,8 @@
 <!-- @trace spec:knowledge-source-of-truth -->
+## Status
+
+status: active
+
 ## ADDED Requirements
 
 ### Requirement: Knowledge directory structure
@@ -61,3 +65,10 @@ The project SHALL provide `scripts/fetch-debug-source.sh` for on-demand fetching
 - **WHEN** a new developer clones the repository
 - **THEN** `vendor/debug/` SHALL NOT exist
 - **AND** no external source code SHALL be downloaded automatically
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:knowledge-source-of-truth" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

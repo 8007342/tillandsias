@@ -1,5 +1,9 @@
 # external-logs-layer Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change external-logs-layer. Update Purpose after archive.
 ## Requirements
@@ -104,3 +108,10 @@ The pre-existing `git-push.log` file under `~/.local/state/tillandsias/container
 - **AND** the bind-mount shadows this to `~/.local/state/tillandsias/external-logs/git-service/git-push.log` on the host
 - **AND** NO entrypoint code change is required in the git-service image
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:external-logs-layer" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

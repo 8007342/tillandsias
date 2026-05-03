@@ -1,6 +1,10 @@
 <!-- @trace spec:remote-projects -->
 # remote-projects Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change remote-project-clone. Update Purpose after archive.
 ## Requirements
@@ -73,3 +77,10 @@ The Remote Projects submenu SHALL show a loading indicator while fetching the re
 - **WHEN** the remote repo list is being fetched for the first time or after cache expiry
 - **THEN** the submenu shows a disabled "Loading..." item
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:remote-projects" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

@@ -1,5 +1,9 @@
 # agent-cheatsheets Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change agent-source-of-truth. Update Purpose after archive.
 ## Requirements
@@ -218,3 +222,10 @@ delta adds the `local:` sub-requirement.
 - **GIVEN** only SOME Provenance URLs have been fetched
 - **THEN** the line ends with `[partial-verify]`
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:agent-cheatsheets" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

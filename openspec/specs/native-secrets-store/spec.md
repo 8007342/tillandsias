@@ -1,6 +1,10 @@
 <!-- @trace spec:native-secrets-store -->
 # native-secrets-store Specification
 
+## Status
+
+status: active
+
 ## Purpose
 
 Store and retrieve the GitHub OAuth token in the host OS's platform-native secret service. The host Rust process is the sole consumer of the keyring; containers never call any keyring API. This is the source of truth for GitHub credentials — no plaintext credential files live on persistent disk.
@@ -58,3 +62,10 @@ The functions `store_github_token`, `retrieve_github_token`, and `delete_github_
 - **WHEN** `delete_github_token()` is invoked
 - **THEN** the keyring entry SHALL be removed
 - **AND** the function SHALL return `Ok(())` even if no entry existed (idempotent)
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:native-secrets-store" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

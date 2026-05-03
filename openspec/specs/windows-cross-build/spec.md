@@ -1,6 +1,10 @@
 <!-- @trace spec:windows-cross-build -->
 # windows-cross-build Specification
 
+## Status
+
+status: suspended
+
 ## Purpose
 TBD - created by archiving change local-cross-platform-builds. Update Purpose after archive.
 ## Requirements
@@ -69,3 +73,10 @@ The script SHALL clearly indicate that cross-compiled artifacts are unsigned and
 - **WHEN** `TAURI_SIGNING_PRIVATE_KEY` is not set
 - **THEN** the script does not fail but warns that Tauri update signatures are not generated
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:windows-cross-build" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

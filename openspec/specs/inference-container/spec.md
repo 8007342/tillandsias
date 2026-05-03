@@ -1,6 +1,10 @@
 <!-- @trace spec:inference-container -->
 # inference-container Specification
 
+## Status
+
+status: active
+
 ## Purpose
 
 Shared ollama inference container on the enclave network. Forge containers query it via OLLAMA_HOST. Models persist in a host-mounted cache volume. Downloads route through the proxy.
@@ -123,3 +127,10 @@ above.
 - **AND** subsequent `[inference] T<N> ...` lines correspond to that
   tier or below
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:inference-container" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

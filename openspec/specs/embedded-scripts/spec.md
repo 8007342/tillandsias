@@ -1,4 +1,8 @@
 <!-- @trace spec:embedded-scripts -->
+## Status
+
+status: active
+
 ## MODIFIED Requirements
 
 ### Requirement: Scripts embedded in binary
@@ -28,3 +32,10 @@ All executable scripts SHALL be embedded in the compiled binary via `include_str
 #### Scenario: Temp file cleanup
 - **WHEN** an embedded script finishes executing
 - **THEN** the temp files are deleted (or left for session cleanup if immediate deletion isn't possible)
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:embedded-scripts" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

@@ -1,4 +1,8 @@
 <!-- @trace spec:tray-app -->
+## Status
+
+status: active
+
 ## MODIFIED Requirements
 
 ### Requirement: First-launch readiness feedback
@@ -78,3 +82,10 @@ Clicking "Attach Here" SHALL dispatch to the web-session flow when `AgentConfig:
 #### Scenario: Terminal flow preserved for opt-in users
 - **WHEN** `agent.selected = opencode` or `claude` and the user clicks "Attach Here"
 - **THEN** the existing terminal-based flow runs unchanged
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:tray-app" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

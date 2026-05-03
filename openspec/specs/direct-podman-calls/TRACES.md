@@ -5,21 +5,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [.claude/worktrees/design-chromium-browser-isolation/scripts/build-image.sh#L32](../../../.claude/worktrees/design-chromium-browser-isolation/scripts/build-image.sh#L32)
-- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/embedded.rs#L325](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/embedded.rs#L325)
-- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/handlers.rs#L87](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/handlers.rs#L87)
-- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/handlers.rs#L2991](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/handlers.rs#L2991)
-- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/handlers.rs#L3020](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/handlers.rs#L3020)
-- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/handlers.rs#L3030](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/handlers.rs#L3030)
-- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/handlers.rs#L5260](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/handlers.rs#L5260)
-- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/handlers.rs#L6020](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/handlers.rs#L6020)
-- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/image_builder.rs#L6](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/image_builder.rs#L6)
-- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/image_builder.rs#L24](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/image_builder.rs#L24)
-- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/image_builder.rs#L39](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/image_builder.rs#L39)
-- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/image_builder.rs#L55](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/image_builder.rs#L55)
-- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/image_builder.rs#L114](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/image_builder.rs#L114)
-- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/image_builder.rs#L180](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/image_builder.rs#L180)
-- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/image_builder.rs#L236](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/image_builder.rs#L236)
 - [src-tauri/src/image_builder.rs#L6](../../../src-tauri/src/image_builder.rs#L6)
 - [src-tauri/src/image_builder.rs#L24](../../../src-tauri/src/image_builder.rs#L24)
 - [src-tauri/src/image_builder.rs#L39](../../../src-tauri/src/image_builder.rs#L39)

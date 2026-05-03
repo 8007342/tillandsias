@@ -1,6 +1,10 @@
 <!-- @trace spec:cli-bash-mode -->
 # cli-bash-mode Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change iconography-gh-auth-bash-mode. Update Purpose after archive.
 ## Requirements
@@ -30,3 +34,10 @@ The `--bash` CLI flag SHALL launch fish (not bash) with the welcome message.
 - **WHEN** the container starts
 - **THEN** the host OS info is available via `TILLANDSIAS_HOST_OS` environment variable for the welcome script to display
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:cli-bash-mode" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

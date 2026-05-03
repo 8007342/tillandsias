@@ -1,5 +1,9 @@
 # appimage-build-pipeline Specification
 
+## Status
+
+status: active
+
 ## Purpose
 TBD - created by archiving change appimage-builder-source-slim. Update Purpose after archive.
 ## Requirements
@@ -64,3 +68,10 @@ bytes stream from reader to writer in a single pass.
   container with no extra packages
 - **THEN** the step succeeds without `apt-get install rsync`
 
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:appimage-build-pipeline" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

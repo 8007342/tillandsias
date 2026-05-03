@@ -23,7 +23,6 @@ fn lock_path(image: &str) -> PathBuf {
 /// Checks both that the process exists AND that its name is plausibly
 /// related to a tillandsias build (tillandsias, nix, bash, sh).
 /// This prevents false positives from PID reuse.
-#[cfg(target_os = "linux")]
 fn is_alive(pid: u32) -> bool {
     let comm_path = format!("/proc/{pid}/comm");
     if let Ok(comm) = fs::read_to_string(comm_path) {
@@ -33,44 +32,6 @@ fn is_alive(pid: u32) -> bool {
         name.starts_with("tillandsias") || name == "nix" || name == "bash" || name == "sh"
     } else {
         false
-    }
-}
-
-/// Check if a PID is alive and could be a tillandsias build process (macOS).
-///
-/// Uses `ps -p <pid> -o comm=` since /proc doesn't exist on macOS.
-#[cfg(target_os = "macos")]
-fn is_alive(pid: u32) -> bool {
-    match std::process::Command::new("ps")
-        .args(["-p", &pid.to_string(), "-o", "comm="])
-        .output()
-    {
-        Ok(output) if output.status.success() => {
-            let comm = String::from_utf8_lossy(&output.stdout);
-            let name = comm.trim();
-            // On macOS, comm may be a full path — extract the basename
-            let basename = name.rsplit('/').next().unwrap_or(name);
-            basename.starts_with("tillandsias")
-                || basename == "nix"
-                || basename == "bash"
-                || basename == "sh"
-        }
-        _ => false,
-    }
-}
-
-/// Check if a PID is alive on Windows.
-#[cfg(target_os = "windows")]
-fn is_alive(pid: u32) -> bool {
-    match std::process::Command::new("tasklist")
-        .args(["/FI", &format!("PID eq {pid}"), "/NH", "/FO", "CSV"])
-        .output()
-    {
-        Ok(output) if output.status.success() => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            stdout.contains("tillandsias") || stdout.contains("nix") || stdout.contains("bash")
-        }
-        _ => false,
     }
 }
 
