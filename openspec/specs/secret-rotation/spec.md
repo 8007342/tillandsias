@@ -3,9 +3,13 @@
 
 status: active
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Token files on tmpfs
+- **ID**: secret-rotation.token.tmpfs-storage@v1
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [secret-rotation.invariant.tokens-never-persistent-storage, secret-rotation.invariant.atomic-token-writes]
 GitHub tokens SHALL be stored on tmpfs (RAM-backed filesystem), never on persistent storage.
 
 #### Scenario: Token file written to XDG_RUNTIME_DIR
@@ -29,6 +33,10 @@ GitHub tokens SHALL be stored on tmpfs (RAM-backed filesystem), never on persist
 - **AND** no token SHALL be written to persistent storage
 
 ### Requirement: GIT_ASKPASS credential delivery
+- **ID**: secret-rotation.credential.git-askpass-delivery@v1
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [secret-rotation.invariant.git-askpass-immutable, secret-rotation.invariant.token-via-file-not-env]
 Containers SHALL use a GIT_ASKPASS helper script for git authentication via the mounted token file.
 
 #### Scenario: Git push uses GIT_ASKPASS with token file
@@ -49,6 +57,10 @@ Containers SHALL use a GIT_ASKPASS helper script for git authentication via the 
 - **AND** git prompts for credentials interactively (or fails in non-interactive mode)
 
 ### Requirement: Token not in process environment
+- **ID**: secret-rotation.token.no-environ-exposure@v1
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [secret-rotation.invariant.token-via-file-not-env, secret-rotation.invariant.environ-no-github-token]
 Tokens SHALL NOT be passed as environment variables visible in `/proc/*/environ`.
 
 #### Scenario: Token absent from container environment
@@ -58,6 +70,10 @@ Tokens SHALL NOT be passed as environment variables visible in `/proc/*/environ`
 - **AND** the token is only accessible via the file at `/run/secrets/github_token`
 
 ### Requirement: Token file mount in containers
+- **ID**: secret-rotation.container.token-mount-delivery@v1
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [secret-rotation.invariant.token-mount-ro, secret-rotation.invariant.web-container-no-token]
 Container launch SHALL include a read-only mount of the token file at `/run/secrets/github_token`.
 
 #### Scenario: Forge container has token mount
@@ -77,6 +93,10 @@ Container launch SHALL include a read-only mount of the token file at `/run/secr
 - **AND** no GitHub credentials are accessible inside the web container
 
 ### Requirement: Token cleanup on container stop
+- **ID**: secret-rotation.token.cleanup-on-stop@v1
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [secret-rotation.invariant.token-deleted-on-container-stop, secret-rotation.invariant.token-cleanup-guard-drop]
 Token files SHALL be deleted immediately when the associated container stops.
 
 #### Scenario: Token deleted on container stop
@@ -101,6 +121,10 @@ Token files SHALL be deleted immediately when the associated container stops.
 - **THEN** tmpfs is cleared and the token files are gone
 
 ### Requirement: Host-side token refresh
+- **ID**: secret-rotation.token.periodic-refresh@v1
+- **Modality**: SHOULD
+- **Measurable**: true
+- **Invariants**: [secret-rotation.invariant.refresh-interval-55min, secret-rotation.invariant.keyring-fallback-preserve]
 A background task SHALL periodically rewrite token files to prepare for future rotation.
 
 #### Scenario: Token refreshed every 55 minutes
@@ -117,6 +141,10 @@ A background task SHALL periodically rewrite token files to prepare for future r
 - **AND** a warning is logged: "Keyring unavailable during token refresh, existing token preserved"
 
 ### Requirement: Accountability logging for token operations
+- **ID**: secret-rotation.logging.accountability-instrumentation@v1
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [secret-rotation.invariant.token-value-never-logged, secret-rotation.invariant.operations-logged-with-spec-field]
 All token lifecycle events SHALL be logged to the accountability window when `--log-secrets-management` is active.
 
 #### Scenario: Token write logged
@@ -151,9 +179,11 @@ All token lifecycle events SHALL be logged to the accountability window when `--
 - **THEN** the actual token value NEVER appears in the log
 - **AND** only the operation, target container, and mechanism are shown
 
-## MODIFIED Requirements
-
 ### Requirement: Container volume mounts (updated)
+- **ID**: secret-rotation.mounts.credential-delivery-via-tmpfs@v2
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [secret-rotation.invariant.token-file-sole-mount, secret-rotation.invariant.git-askpass-configured]
 Container volume mounts SHALL deliver GitHub credentials exclusively through the tmpfs token file — no directory-level credential mounts.
 
 #### Scenario: Token file is the sole credential mount
@@ -163,6 +193,10 @@ Container volume mounts SHALL deliver GitHub credentials exclusively through the
 - **AND** `gh` CLI operations use the same token via `gh auth login --with-token` at entrypoint, or via the credential helper configured by `gh auth setup-git`
 
 ### Requirement: Container profile secrets (updated)
+- **ID**: secret-rotation.profile.secrets-declaration@v2
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [secret-rotation.invariant.forge-terminal-have-github-secret, secret-rotation.invariant.web-has-no-github-secret]
 The container profile system SHALL support GitHub token as a secret kind.
 
 #### Scenario: Forge profiles declare GitHubToken secret
@@ -176,6 +210,104 @@ The container profile system SHALL support GitHub token as a secret kind.
 #### Scenario: Web profile has NO GitHubToken secret
 - **WHEN** `web_profile()` is called
 - **THEN** the profile's secrets list does NOT include `SecretKind::GitHubToken`
+
+## Invariants
+
+### Invariant: Tokens are never stored on persistent storage
+- **ID**: secret-rotation.invariant.tokens-never-persistent-storage
+- **Expression**: `token_write() => tmpfs_only && NOT(/persistent/mnt, /home, /root, /var/lib) && tmpfs_cleared_on_reboot`
+- **Measurable**: true
+
+### Invariant: Token writes are atomic
+- **ID**: secret-rotation.invariant.atomic-token-writes
+- **Expression**: `write_to_tmpfile() THEN rename_to_target() && NOT(partial_reads_possible)`
+- **Measurable**: true
+
+### Invariant: GIT_ASKPASS script is immutable
+- **ID**: secret-rotation.invariant.git-askpass-immutable
+- **Expression**: `/usr/local/bin/git-askpass-tillandsias IS_IN_IMAGE && owned_by_root && mode_0755`
+- **Measurable**: true
+
+### Invariant: Token via file, never environment
+- **ID**: secret-rotation.invariant.token-via-file-not-env
+- **Expression**: `credential_delivery ALWAYS_uses(/run/secrets/github_token) && NEVER(environ, cmdline)`
+- **Measurable**: true
+
+### Invariant: /proc/*/environ contains no GitHub token
+- **ID**: secret-rotation.invariant.environ-no-github-token
+- **Expression**: `cat /proc/*/environ | tr '\\0' '\\n' | grep -i token => empty_result`
+- **Measurable**: true
+
+### Invariant: Token mount is read-only
+- **ID**: secret-rotation.invariant.token-mount-ro
+- **Expression**: `container_mount INCLUDES -v <path>:/run/secrets/github_token:ro`
+- **Measurable**: true
+
+### Invariant: Web containers have no token
+- **ID**: secret-rotation.invariant.web-container-no-token
+- **Expression**: `web_container.mounts NOT_CONTAINS /run/secrets/github_token && NOT_CONTAINS GIT_ASKPASS`
+- **Measurable**: true
+
+### Invariant: Token deleted on container stop
+- **ID**: secret-rotation.invariant.token-deleted-on-container-stop
+- **Expression**: `container_stopped => token_file_deleted && container_directory_removed_from_tmpfs`
+- **Measurable**: true
+
+### Invariant: TokenCleanupGuard Drop removes files
+- **ID**: secret-rotation.invariant.token-cleanup-guard-drop
+- **Expression**: `Drop::drop(TokenCleanupGuard) => best_effort_removal(<base>/...)`
+- **Measurable**: true
+
+### Invariant: Token refresh interval is 55 minutes
+- **ID**: secret-rotation.invariant.refresh-interval-55min
+- **Expression**: `refresh_task.interval == 55m && periodic_token_rewrite()`
+- **Measurable**: true
+
+### Invariant: Keyring unavailable, preserve existing token
+- **ID**: secret-rotation.invariant.keyring-fallback-preserve
+- **Expression**: `keyring_unavailable => existing_token_left_unchanged && warning_logged`
+- **Measurable**: true
+
+### Invariant: Token value never in logs
+- **ID**: secret-rotation.invariant.token-value-never-logged
+- **Expression**: `accountability_log NEVER_CONTAINS(actual_token_value) && CONTAINS(operation, container, mechanism)`
+- **Measurable**: true
+
+### Invariant: Operations logged with spec field
+- **ID**: secret-rotation.invariant.operations-logged-with-spec-field
+- **Expression**: `log_event(token_operation) INCLUDES spec="secret-rotation" && cheatsheet="..."`
+- **Measurable**: true
+
+### Invariant: Token file is sole credential mount
+- **ID**: secret-rotation.invariant.token-file-sole-mount
+- **Expression**: `forge_container.credential_mounts ONLY(/run/secrets/github_token) && NOT(credential_dirs)`
+- **Measurable**: true
+
+### Invariant: GIT_ASKPASS is configured
+- **ID**: secret-rotation.invariant.git-askpass-configured
+- **Expression**: `container.env INCLUDES GIT_ASKPASS=/usr/local/bin/git-askpass-tillandsias`
+- **Measurable**: true
+
+### Invariant: Forge and terminal have GitHub secret
+- **ID**: secret-rotation.invariant.forge-terminal-have-github-secret
+- **Expression**: `[forge_opencode_profile(), forge_claude_profile(), terminal_profile()].secrets CONTAINS GitHubToken`
+- **Measurable**: true
+
+### Invariant: Web profile has no GitHub secret
+- **ID**: secret-rotation.invariant.web-has-no-github-secret
+- **Expression**: `web_profile().secrets NOT_CONTAINS GitHubToken`
+- **Measurable**: true
+
+## Litmus Tests
+
+The following litmus tests validate secret-rotation requirements:
+
+- `litmus-credential-isolation.yaml` — Validates token files on tmpfs and GIT_ASKPASS delivery (Req: secret-rotation.token.tmpfs-storage@v1, secret-rotation.credential.git-askpass-delivery@v1)
+- `litmus-token-file-cleanup.yaml` — Validates token cleanup on container stop (Req: secret-rotation.token.cleanup-on-stop@v1)
+- `litmus-no-environ-token.yaml` — Validates token not exposed in /proc/*/environ (Req: secret-rotation.token.no-environ-exposure@v1)
+- `litmus-token-mount-isolation.yaml` — Validates token mount and web container isolation (Req: secret-rotation.container.token-mount-delivery@v1)
+
+See `openspec/litmus-bindings.yaml` for full binding definitions.
 
 ## Sources of Truth
 

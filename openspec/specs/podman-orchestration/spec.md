@@ -3,9 +3,13 @@
 
 status: active
 
-## MODIFIED Requirements
+## Requirements
 
 ### Requirement: Security-hardened container defaults
+- **ID**: podman-orchestration.container.security-hardened-defaults@v1
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [podman-orchestration.invariant.security-flags-immutable]
 Every container launched by Tillandsias SHALL include non-negotiable security flags that MUST NOT be weakened by configuration. Additional restrictions MAY be added.
 
 #### Scenario: Default container launch
@@ -21,6 +25,10 @@ Every container launched by Tillandsias SHALL include non-negotiable security fl
 - **THEN** the additional restrictions are applied on top of the non-negotiable defaults
 
 ### Requirement: FUSE file descriptor sanitization before container launch
+- **ID**: podman-orchestration.container.fuse-fd-sanitization@v1
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [podman-orchestration.invariant.fd-table-minimal-before-exec]
 All podman command constructors (`podman_cmd_sync()` and `podman_cmd()`) SHALL close inherited file descriptors >= 3 before exec'ing the podman binary, using a POSIX-standard `pre_exec` hook.
 
 #### Scenario: AppImage FUSE FD inheritance
@@ -44,6 +52,10 @@ All podman command constructors (`podman_cmd_sync()` and `podman_cmd()`) SHALL c
 - **THEN** crun SHALL NOT need to call `close_range()` for FD cleanup AND the default seccomp profile's syscall restrictions SHALL NOT cause container startup failures
 
 ### Requirement: Rootless networking backend
+- **ID**: podman-orchestration.network.rootless-backend@v1
+- **Modality**: SHOULD
+- **Measurable**: true
+- **Invariants**: [podman-orchestration.invariant.no-slirp-on-podman5]
 Rootless containers SHALL use the platform-default networking backend. As of Podman 5.0+, the default rootless networking backend is pasta (not slirp4netns).
 
 #### Scenario: Rootless container networking
@@ -55,6 +67,10 @@ Rootless containers SHALL use the platform-default networking backend. As of Pod
 - **THEN** networking uses slirp4netns as the default backend
 
 ### Requirement: Volume mount strategy
+- **ID**: podman-orchestration.mounts.secure-volume-strategy@v1
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [podman-orchestration.invariant.mounts-respect-security-opts]
 Container volume mounts SHALL follow a secure, minimal strategy with configurable overrides for power users. Because `--security-opt=label=disable` is applied as a non-negotiable security default (disabling SELinux separation for the container), volume mounts do not require `:z` or `:Z` SELinux relabeling suffixes.
 
 #### Scenario: Default mounts
@@ -75,6 +91,10 @@ Container volume mounts SHALL follow a secure, minimal strategy with configurabl
 
 
 ### Requirement: Detached web-mode launch profile
+- **ID**: podman-orchestration.web.detached-launch-profile@v1
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [podman-orchestration.invariant.web-detached-survives-click, podman-orchestration.invariant.hardening-flags-persist]
 
 The orchestration layer SHALL provide a launch profile that runs web-mode containers detached (`-d`), without `-i`, `-t`, or `--rm`, so that the container survives its originating click. All other hardening flags (`--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`, read-only root) remain applied.
 
@@ -85,6 +105,10 @@ The orchestration layer SHALL provide a launch profile that runs web-mode contai
 - **AND** still contains `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`
 
 ### Requirement: Loopback-bound single-port publish for web mode
+- **ID**: podman-orchestration.web.loopback-port-publish@v1
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [podman-orchestration.invariant.port-binding-loopback-only]
 
 The orchestration layer SHALL publish exactly one container port to exactly one host port bound to `127.0.0.1` when the profile is web-mode.
 
@@ -95,6 +119,10 @@ The orchestration layer SHALL publish exactly one container port to exactly one 
 - **AND** no `0.0.0.0` or `::` binding appears
 
 ### Requirement: Deterministic forge-container name
+- **ID**: podman-orchestration.container.deterministic-forge-name@v1
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [podman-orchestration.invariant.forge-name-no-genus-suffix, podman-orchestration.invariant.no-forge-web-collision]
 
 The orchestration layer SHALL name persistent OpenCode Web containers exactly `tillandsias-<project>-forge`, without a genus suffix, to make lookup and Stop actions deterministic. The `-forge` suffix is distinct from the existing `-web` suffix reserved for the static-httpd Serve Here feature and SHALL NOT collide with it.
 
@@ -103,6 +131,59 @@ The orchestration layer SHALL name persistent OpenCode Web containers exactly `t
 - **THEN** the `--name` flag is `tillandsias-my-app-forge`
 - **AND** the genus still appears in the `ContainerInfo` record for UI/iconography purposes
 - **AND** the name never collides with a concurrently-running `tillandsias-my-app-web` static-httpd container
+
+## Invariants
+
+### Invariant: Security flags are non-negotiable
+- **ID**: podman-orchestration.invariant.security-flags-immutable
+- **Expression**: `config.security_flags CONTAINS [--cap-drop=ALL, --security-opt=no-new-privileges, --userns=keep-id] && IMMUTABLE_BY_PROJECT_CONFIG`
+- **Measurable**: true
+
+### Invariant: FD table is minimal before exec()
+- **ID**: podman-orchestration.invariant.fd-table-minimal-before-exec
+- **Expression**: `pre_exec_hook() ENSURES FDs_0_to_2_open AND FDs >= 3_are_closed_before_podman_exec()`
+- **Measurable**: true
+
+### Invariant: Port binding is loopback-only
+- **ID**: podman-orchestration.invariant.port-binding-loopback-only
+- **Expression**: `web_profile.publish_arg MATCHES 127.0.0.1:<PORT>:4096 AND NOT [0.0.0.0, ::, bare_<PORT>]`
+- **Measurable**: true
+
+### Invariant: Forge container name has no genus suffix
+- **ID**: podman-orchestration.invariant.forge-name-no-genus-suffix
+- **Expression**: `forge_container_name() == tillandsias-<project>-forge AND !contains(genus_suffix)`
+- **Measurable**: true
+
+### Invariant: No collision between forge and web container names
+- **ID**: podman-orchestration.invariant.no-forge-web-collision
+- **Expression**: `tillandsias-<project>-forge !== tillandsias-<project>-web`
+- **Measurable**: true
+
+### Invariant: Hardening flags persist in web mode
+- **ID**: podman-orchestration.invariant.hardening-flags-persist
+- **Expression**: `web_profile.build_podman_args() CONTAINS [--cap-drop=ALL, --security-opt=no-new-privileges, --userns=keep-id] && INDEPENDENT_OF_TTY_FLAGS`
+- **Measurable**: true
+
+### Invariant: No slirp4netns on Podman 5.0+
+- **ID**: podman-orchestration.invariant.no-slirp-on-podman5
+- **Expression**: `podman_version >= 5.0 AND rootless_container => pasta_backend (NOT slirp4netns)`
+- **Measurable**: true
+
+### Invariant: Mounts respect security options
+- **ID**: podman-orchestration.invariant.mounts-respect-security-opts
+- **Expression**: `label=disable => no_selinux_relabel_suffixes_needed && mounts_inherit_container_security_context`
+- **Measurable**: true
+
+## Litmus Tests
+
+The following litmus tests validate podman-orchestration requirements:
+
+- `litmus-enclave-isolation.yaml` — Validates security-hardened container defaults (Req: podman-orchestration.container.security-hardened-defaults@v1)
+- `litmus-fd-table-minimal.yaml` — Validates FD sanitization before container launch (Req: podman-orchestration.container.fuse-fd-sanitization@v1)
+- `litmus-port-binding-loopback.yaml` — Validates loopback-scoped port publish for web mode (Req: podman-orchestration.web.loopback-port-publish@v1)
+- `litmus-container-naming.yaml` — Validates deterministic forge-container naming (Req: podman-orchestration.container.deterministic-forge-name@v1)
+
+See `openspec/litmus-bindings.yaml` for full binding definitions.
 
 ## Sources of Truth
 
