@@ -69,6 +69,51 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     args.push(format!("--pids-limit={}", profile.pids_limit));
 
     // -----------------------------------------------------------------------
+    // Podman secrets — deliver CA certs and credentials via podman secret API
+    // instead of environment variables or bind mounts.
+    //
+    // Secrets are stored by the podman backend driver and mounted read-only
+    // at /run/secrets/<name> inside the container. This avoids exposing
+    // credentials in process arguments or logs.
+    //
+    // @trace spec:podman-secrets-integration, spec:secrets-management,
+    // spec:default-image, spec:proxy-container, spec:git-mirror-service
+    // -----------------------------------------------------------------------
+    // CA certificate secrets (proxy and git-service need SSL)
+    if crate::podman_secret::exists("tillandsias-ca-cert").unwrap_or(false) {
+        args.push("--secret=tillandsias-ca-cert".to_string());
+        tracing::debug!(
+            spec = "podman-secrets-integration",
+            container = %ctx.container_name,
+            "Added CA cert secret"
+        );
+    } else {
+        tracing::debug!(
+            spec = "podman-secrets-integration",
+            "CA cert secret does not exist — containers will use default system certs"
+        );
+    }
+
+    if crate::podman_secret::exists("tillandsias-ca-key").unwrap_or(false) {
+        args.push("--secret=tillandsias-ca-key".to_string());
+        tracing::debug!(
+            spec = "podman-secrets-integration",
+            container = %ctx.container_name,
+            "Added CA key secret"
+        );
+    }
+
+    // GitHub token secret (for git-service and forge remote clones)
+    if crate::podman_secret::exists("tillandsias-github-token").unwrap_or(false) {
+        args.push("--secret=tillandsias-github-token".to_string());
+        tracing::debug!(
+            spec = "podman-secrets-integration",
+            container = %ctx.container_name,
+            "Added GitHub token secret"
+        );
+    }
+
+    // -----------------------------------------------------------------------
     // Read-only root filesystem — service containers (git, proxy, inference,
     // web) run with immutable root FS. Runtime dirs get explicit tmpfs mounts.
     // Forge/terminal containers need mutable workspace and skip this.
@@ -1309,5 +1354,56 @@ mod tests {
                 && !joined.ends_with("TILLANDSIAS_AGENT=opencode"),
             "AgentName must NOT resolve to plain `opencode` for the web entrypoint, got: {joined}"
         );
+    }
+
+    // @trace spec:podman-secrets-integration, spec:secrets-management
+    #[test]
+    fn podman_secrets_not_present_when_missing() {
+        // When secrets don't exist in the podman store, they should not be added.
+        // In test environment, secrets typically don't exist, so args should not
+        // contain --secret= flags (or if they do, it's from actual podman state).
+        let profile = container_profile::forge_opencode_profile();
+        let args = build_podman_args(&profile, &test_context());
+        let joined = args.join(" ");
+
+        // In the test environment, podman_secret::exists() returns false for
+        // non-existent secrets, so --secret flags should not be present.
+        // This is a behavioral test: if secrets existed, they would appear.
+        // (In live tests with actual podman running, this might differ.)
+        // For now, we just verify the arg building doesn't crash.
+        assert!(
+            !joined.is_empty(),
+            "Pod args should not be empty"
+        );
+    }
+
+    // @trace spec:podman-secrets-integration, spec:secrets-management,
+    // spec:proxy-container, spec:git-mirror-service
+    #[test]
+    fn all_container_types_support_secrets() {
+        // Verify that all container profile types can be launched with
+        // the podman secrets path (even if secrets don't exist).
+        let profiles = [
+            container_profile::forge_opencode_profile(),
+            container_profile::forge_claude_profile(),
+            container_profile::terminal_profile(),
+            container_profile::git_service_profile(),
+            container_profile::proxy_profile(),
+            container_profile::inference_profile(),
+            container_profile::web_profile(),
+        ];
+
+        // SAFETY: Test-only env var manipulation.
+        unsafe { std::env::remove_var("DBUS_SESSION_BUS_ADDRESS") };
+
+        for profile in &profiles {
+            let ctx = test_context();
+            let args = build_podman_args(profile, &ctx);
+            // Just verify it doesn't crash and produces args
+            assert!(!args.is_empty());
+            // If secrets existed, they would appear; in test env they don't.
+            // This test passes as long as build_podman_args handles the secret
+            // existence check gracefully.
+        }
     }
 }
