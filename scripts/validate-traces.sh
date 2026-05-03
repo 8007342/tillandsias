@@ -2,8 +2,15 @@
 # =============================================================================
 # Tillandsias — Trace Validator
 #
-# Detects ghost traces, orphaned specs, and format violations.
-# Usage: ./scripts/validate-traces.sh [--warn-only]
+# Phase 1: Detects ghost traces, orphaned specs, and format violations.
+# Phase 2: Enforces @trace presence on public functions in src-tauri.
+#
+# Usage:
+#   ./scripts/validate-traces.sh              # Run Phase 1 (ghost, orphan, format)
+#   ./scripts/validate-traces.sh --enforce-presence  # Run Phase 2 (public fn traces)
+#   ./scripts/validate-traces.sh --warn-only  # Phase 1 warnings only (exit 0)
+#   ./scripts/validate-traces.sh --enforce-presence --warn-only  # Phase 2 warnings only
+#
 # @trace spec:spec-traceability
 # =============================================================================
 
@@ -12,7 +19,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SPECS_DIR="$ROOT/openspec/specs"
 WARN_ONLY=false
+ENFORCE_PRESENCE=false
 [[ "${1:-}" == "--warn-only" ]] && WARN_ONLY=true
+[[ "${1:-}" == "--enforce-presence" ]] && ENFORCE_PRESENCE=true
+[[ "${2:-}" == "--warn-only" ]] && WARN_ONLY=true
 
 errors=0
 warnings=0
@@ -78,6 +88,11 @@ while IFS= read -r line; do
   rest="${line#*:}"
   lineno="${rest%%:*}"
   content="${rest#*:}"
+  # Skip format checks for lines that are documentation/examples
+  # If line is a comment but doesn't have an actual @trace annotation, skip it
+  if [[ "$content" =~ ^[[:space:]]*(//|#).* ]] && ! [[ "$content" =~ @trace[[:space:]]+spec:[a-zA-Z0-9_-]+ ]]; then
+    continue
+  fi
   # Trailing comma
   if [[ "$content" =~ @trace.*spec:[a-zA-Z0-9_-]+,\ *$ ]]; then
     _warn "trailing comma: $file:$lineno"
@@ -94,7 +109,7 @@ while IFS= read -r line; do
   if [[ "$content" =~ @trace.*spec:[a-zA-Z0-9_-]+.*https:// ]]; then
     _warn "inline URL: $file:$lineno"
   fi
-  # Inline after code
+  # Inline after code (only check lines with non-comment code before @trace)
   if [[ "$content" =~ [a-zA-Z0-9\"].*//\ @trace\ spec: ]]; then
     _warn "inline-after-code: $file:$lineno"
   fi
@@ -104,6 +119,87 @@ done <<< "$FMT_VIOLATIONS"
 if [[ -f "$ROOT/TRACES.md" ]]; then
   grep -q '\.claude/worktrees/' "$ROOT/TRACES.md" && \
     _warn "TRACES.md contains worktree paths — regenerate"
+fi
+
+# ============================================================================
+# Phase 2: Enforce @trace presence on public functions in src-tauri
+# ============================================================================
+if [[ "$ENFORCE_PRESENCE" == true ]]; then
+  # @trace spec:enforce-trace-presence
+  # Scan src-tauri/src for all public function declarations
+  # Check if they have @trace annotations in preceding lines
+
+  RUST_FILES=$(find "$ROOT/src-tauri/src" -name "*.rs" -type f \
+    ! -path "*target*" ! -path "*.claude*" 2>/dev/null)
+
+  # Temporary file to hold violations
+  TMP_VIOLATIONS=$(mktemp)
+  trap "rm -f $TMP_VIOLATIONS" EXIT
+
+  while IFS= read -r file; do
+    [[ -z "$file" ]] && continue
+
+    # Extract all public function/trait/struct/enum declarations with line numbers
+    # pub fn, pub async fn, pub trait, pub struct, pub enum
+    # @trace spec:enforce-trace-presence
+    DECLS=$(grep -n '^[[:space:]]*pub\s\+\(async\s\+\)\?\(fn\|trait\|struct\|enum\)\s' "$file" 2>/dev/null) || continue
+
+    while IFS= read -r decl_line; do
+      [[ -z "$decl_line" ]] && continue
+
+      # Extract line number and declaration
+      decl_lineno="${decl_line%%:*}"
+      decl_content="${decl_line#*:}"
+
+      # Extract function/type name (word after fn/trait/struct/enum)
+      if [[ "$decl_content" =~ pub[[:space:]]+async[[:space:]]+fn[[:space:]]+([a-zA-Z_][a-zA-Z0-9_]*) ]]; then
+        decl_name="${BASH_REMATCH[1]}"
+      elif [[ "$decl_content" =~ pub[[:space:]]+fn[[:space:]]+([a-zA-Z_][a-zA-Z0-9_]*) ]]; then
+        decl_name="${BASH_REMATCH[1]}"
+      elif [[ "$decl_content" =~ pub[[:space:]]+\(trait\|struct\|enum\)[[:space:]]+([a-zA-Z_][a-zA-Z0-9_]*) ]]; then
+        decl_name="${BASH_REMATCH[1]}"
+      else
+        continue
+      fi
+
+      # Check if @trace exists in the 3 lines BEFORE the declaration
+      # Look for patterns: // @trace spec: or /// @trace spec: or #![...@trace...]
+      found_trace=false
+
+      # Check up to 3 lines before
+      start_line=$((decl_lineno - 3))
+      [[ $start_line -lt 1 ]] && start_line=1
+
+      # Extract lines before the declaration
+      preceding=$(sed -n "${start_line},$((decl_lineno - 1))p" "$file")
+
+      # Check for @trace annotation (// @trace spec: or /// @trace spec:)
+      if echo "$preceding" | grep -qE '(//|#!?\[)\s*@trace\s+spec:'; then
+        found_trace=true
+      fi
+
+      # Also check module-level #![trace(...)] attribute (applies to entire module)
+      if grep -q '#!\[.*@trace.*spec:' "$file"; then
+        found_trace=true
+      fi
+
+      if [[ "$found_trace" == false ]]; then
+        echo "$file:$decl_lineno:$decl_name" >> "$TMP_VIOLATIONS"
+      fi
+    done <<< "$DECLS"
+  done <<< "$RUST_FILES"
+
+  # Report violations
+  # @trace spec:enforce-trace-presence
+  if [[ -s "$TMP_VIOLATIONS" ]]; then
+    while IFS= read -r violation; do
+      file="${violation%%:*}"
+      rest="${violation#*:}"
+      lineno="${rest%%:*}"
+      name="${rest#*:}"
+      _err "ENFORCE_TRACE: $file:$lineno $name missing @trace"
+    done < "$TMP_VIOLATIONS"
+  fi
 fi
 
 echo ""

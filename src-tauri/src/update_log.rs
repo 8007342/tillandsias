@@ -38,6 +38,8 @@ const ROTATE_KEEP_LINES: usize = 100;
 // ---------------------------------------------------------------------------
 
 /// Path to the persistent update audit log.
+///
+/// @trace spec:logging-accountability
 pub fn log_path() -> PathBuf {
     cache_dir().join("update.log")
 }
@@ -49,6 +51,8 @@ pub fn log_path() -> PathBuf {
 /// If the parent directory does not exist it is created. Rotation is checked
 /// before writing so the file never grows past `ROTATE_THRESHOLD_BYTES` plus
 /// a few bytes for the new entry.
+///
+/// @trace spec:logging-accountability
 pub fn append_entry(line: &str) {
     let path = log_path();
 
@@ -79,6 +83,8 @@ pub fn append_entry(line: &str) {
 
 /// Read the last non-empty line from `update.log`, or `None` if the file is
 /// absent or empty.
+///
+/// @trace spec:logging-accountability
 pub fn read_last_entry() -> Option<String> {
     let contents = std::fs::read_to_string(log_path()).ok()?;
     contents
@@ -89,6 +95,8 @@ pub fn read_last_entry() -> Option<String> {
 }
 
 /// Compute the SHA256 digest of a file and return it as a lowercase hex string.
+///
+/// @trace spec:logging-accountability
 pub fn sha256_file(path: &Path) -> Result<String, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("cannot read file for SHA256: {e}"))?;
     let digest = sha2::Sha256::digest(&bytes);

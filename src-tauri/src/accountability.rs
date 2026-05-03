@@ -21,6 +21,8 @@
 /// spec_url("native-secrets-store")
 /// // -> "https://github.com/8007342/tillandsias/search?q=%40trace+spec%3Anative-secrets-store&type=code"
 /// ```
+///
+/// @trace spec:logging-accountability
 pub fn spec_url(spec_name: &str) -> String {
     format!(
         "https://github.com/8007342/tillandsias/search?q=%40trace+spec%3A{}&type=code",
