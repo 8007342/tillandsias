@@ -1,6 +1,6 @@
 # spec: tray-minimal-ux
 
-**Status:** active
+## Status: active
 
 **Version:** v1.0
 
@@ -13,7 +13,7 @@
 ### Requirement 1: First-launch minimal tray
 **Modality:** MUST
 
-The tray SHALL display exactly four elements when Tillandsias starts:
+The tray MUST display exactly four elements when Tillandsias starts:
 1. Dynamic status element: `<Checklist> Verifying environment ...` (with animation)
 2. Visual divider
 3. Version attribution: `Tillandsias vX.Y.Z + Attributions` (disabled, non-clickable)
@@ -28,7 +28,7 @@ The tray SHALL display exactly four elements when Tillandsias starts:
 ### Requirement 2: Dynamic environment verification status
 **Modality:** MUST
 
-The first tray element SHALL update dynamically as enclave containers transition through build states:
+The first tray element MUST update dynamically as enclave containers transition through build states:
 
 | State | Display Text | Icon Progression |
 |-------|--------------|------------------|
@@ -47,7 +47,7 @@ The first tray element SHALL update dynamically as enclave containers transition
 ### Requirement 3: Post-initialization menu expansion
 **Modality:** MUST
 
-Once all enclave images are healthy (`enclave_status == OK`), the tray SHALL conditionally add menu items:
+Once all enclave images are healthy (`enclave_status == OK`), the tray MUST conditionally add menu items:
 
 - If local projects exist: `<Home> ~/src >` submenu (lists local projects)
 - If GitHub authenticated AND remote projects readable: `<Cloud> Cloud >` submenu (lists remote projects)
@@ -62,12 +62,12 @@ Once all enclave images are healthy (`enclave_status == OK`), the tray SHALL con
 ### Requirement 4: Project launch flow
 **Modality:** MUST
 
-When a user clicks a project in the tray menu, Tillandsias SHALL:
+When a user clicks a project in the tray menu, Tillandsias MUST:
 1. If project is remote (not cloned): clone it locally to the watch directory first
 2. Launch an OpenCode Web container (`tillandsias-<project>-opencode-web`) with the project directory
 3. Monitor container health via port 4096 readiness check
 4. Once healthy, launch a safe browser window via `tillandsias-chromium-core` container
-5. Browser communicates with OpenCode Web through the tray socket mount (`/run/tillandsias/tray.sock`)
+5. Browser MUST communicate with OpenCode Web through the tray socket mount (`/run/tillandsias/tray.sock`)
 
 **Measurable:** Git clone completes (0 exit code); container becomes healthy within 30 seconds; browser window PID is logged with `spec = "tray-minimal-ux"`; tray socket is mounted into browser container.
 
@@ -78,7 +78,7 @@ When a user clicks a project in the tray menu, Tillandsias SHALL:
 ### Requirement 5: Stale container cleanup
 **Modality:** MUST
 
-On tray startup, Tillandsias SHALL:
+On tray startup, Tillandsias MUST:
 1. List all containers matching `tillandsias-*` pattern
 2. Compare against `TrayState::containers` (tracked containers)
 3. Remove any stopped or orphaned containers
@@ -96,6 +96,8 @@ On tray startup, Tillandsias SHALL:
 All code implementing this spec MUST be annotated with `@trace spec:tray-minimal-ux` near the relevant function or block.
 
 **Measurable:** `git grep -n '@trace spec:tray-minimal-ux'` returns at least one hit per major code path (menu builder, status updater, project launcher, cleanup handler).
+
+---
 
 ---
 

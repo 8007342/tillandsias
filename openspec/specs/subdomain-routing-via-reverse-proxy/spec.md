@@ -15,23 +15,23 @@ Enable stable, port-agnostic URLs for all web services spawned in the enclave vi
 
 ### Requirement: Reverse-proxy container and binding
 
-A new reverse-proxy container (Caddy 2.x) SHALL bind to exactly two addresses:
+A new reverse-proxy container (Caddy 2.x) MUST bind to exactly two addresses:
 
 1. `127.0.0.1:80` on the host (loopback only — no external access possible)
 2. `proxy:80` on the enclave network (accessible to forge agents via the forward proxy)
 
-The container SHALL be named `tillandsias-router` and SHALL be created alongside the proxy and git-service containers at attach time.
+The container MUST be named `tillandsias-router` and MUST be created alongside the proxy and git-service containers at attach time.
 
 #### Scenario: Reverse proxy binds to loopback only
 
 - **WHEN** `ensure_enclave_ready()` creates the router container
-- **THEN** port `80` SHALL be bound to `127.0.0.1` only on the host
-- **AND** the container SHALL be reachable at `proxy:80` on the enclave network
-- **AND** external port scanning SHALL find no listening socket on `0.0.0.0:80`
+- **THEN** port `80` MUST be bound to `127.0.0.1` only on the host
+- **AND** the container MUST be reachable at `proxy:80` on the enclave network
+- **AND** external port scanning MUST find no listening socket on `0.0.0.0:80`
 
 ### Requirement: Dynamic routing table from Caddyfile
 
-The tray SHALL generate a Caddyfile at `$XDG_RUNTIME_DIR/tillandsias/router/Caddyfile` with one stanza per service at each attach. The stanza maps `<service>.<project>.localhost:80` to an internal container port using Caddy's `reverse_proxy` directive.
+The tray MUST generate a Caddyfile at `$XDG_RUNTIME_DIR/tillandsias/router/Caddyfile` with one stanza per service at each attach. The stanza maps `<service>.<project>.localhost:80` to an internal container port using Caddy's `reverse_proxy` directive.
 
 Service-to-port conventions:
 
@@ -49,51 +49,51 @@ Service-to-port conventions:
 #### Scenario: Router forwards to correct internal port
 
 - **WHEN** a browser request arrives for `opencode.java.localhost/`
-- **THEN** the reverse proxy SHALL forward to `tillandsias-java-forge:4096`
-- **AND** the host port `80` is never exposed to the service container
+- **THEN** the reverse proxy MUST forward to `tillandsias-java-forge:4096`
+- **AND** the host port `80` MUST NOT be exposed to the service container
 
 #### Scenario: Multiple services per project coexist
 
 - **WHEN** a forge runs both OpenCode Web and Flutter
-- **THEN** the Caddyfile SHALL contain two stanzas: `opencode.java.localhost:80` and `flutter.java.localhost:80`
-- **AND** both route to the same forge container but different internal ports
+- **THEN** the Caddyfile MUST contain two stanzas: `opencode.java.localhost:80` and `flutter.java.localhost:80`
+- **AND** both MUST route to the same forge container but different internal ports
 
 ### Requirement: Forward-proxy integration
 
-Squid SHALL be configured to recognize `.localhost` domains and forward them to the reverse-proxy sibling at `proxy:80`. From inside a forge, `curl http://project.service.localhost/` SHALL be transparently routed via `HTTP_PROXY=http://proxy:3128` to the reverse proxy.
+Squid MUST be configured to recognize `.localhost` domains and forward them to the reverse-proxy sibling at `proxy:80`. From inside a forge, `curl http://project.service.localhost/` MUST be transparently routed via `HTTP_PROXY=http://proxy:3128` to the reverse proxy.
 
 #### Scenario: Agents reach reverse proxy through forward proxy
 
 - **WHEN** an in-forge agent runs `curl http://project.opencode.localhost/`
-- **THEN** Squid recognizes the `.localhost` TLD and forwards the request to `proxy:80`
-- **AND** the reverse proxy fulfills it at `tillandsias-project-forge:4096`
-- **AND** the agent sees the response as if directly connected
+- **THEN** Squid MUST recognize the `.localhost` TLD and forward the request to `proxy:80`
+- **AND** the reverse proxy MUST fulfill it at `tillandsias-project-forge:4096`
+- **AND** the agent MUST see the response as if directly connected
 
 ### Requirement: No container port publication
 
-Container service ports (e.g., `flutter run` binding `0.0.0.0:8080` inside the container) SHALL NOT be published to the host via `-p`. The router is the sole host-side listener on port `80`.
+Container service ports (e.g., `flutter run` binding `0.0.0.0:8080` inside the container) MUST NOT be published to the host via `-p`. The router is the sole host-side listener on port `80`.
 
 #### Scenario: Container ports stay internal
 
 - **WHEN** a forge container's application binds port `8080` internally
-- **THEN** the tray SHALL NOT invoke `podman run -p 8080:8080`
-- **AND** the reverse router proxies to that internal port instead
-- **AND** the application is unreachable from the host without going through the router
+- **THEN** the tray MUST NOT invoke `podman run -p 8080:8080`
+- **AND** the reverse router MUST proxy to that internal port instead
+- **AND** the application MUST be unreachable from the host without going through the router
 
 ### Requirement: Caddyfile reload via admin API
 
-The tray SHALL reload the router's configuration by sending a POST request to the Caddy admin API (`http://proxy:2019/config/` by default) with the updated Caddyfile. This enables dynamic route updates without restarting the container.
+The tray MUST reload the router's configuration by sending a POST request to the Caddy admin API (`http://proxy:2019/config/` by default) with the updated Caddyfile. This enables dynamic route updates without restarting the container.
 
 #### Scenario: Configuration update without container restart
 
 - **WHEN** a new service spins up inside the forge
-- **THEN** the tray updates `$XDG_RUNTIME_DIR/tillandsias/router/Caddyfile`
-- **AND** POSTs it to the Caddy admin API
-- **AND** the new route is live within milliseconds (no container restart)
+- **THEN** the tray MUST update `$XDG_RUNTIME_DIR/tillandsias/router/Caddyfile`
+- **AND** MUST POST it to the Caddy admin API
+- **AND** the new route MUST be live within milliseconds (no container restart)
 
 ### Requirement: Agent instructions for service binding
 
-A new cheatsheet file `config-overlay/opencode/instructions/web-services.md` SHALL instruct agents:
+A new cheatsheet file `config-overlay/opencode/instructions/web-services.md` MUST instruct agents:
 
 1. Bind service servers to `0.0.0.0:<port>` inside the forge (never `localhost:N`)
 2. The user accesses the service via `http://<project>.<service>.localhost/` on port `80`
@@ -103,8 +103,8 @@ A new cheatsheet file `config-overlay/opencode/instructions/web-services.md` SHA
 #### Scenario: Agent documentation guides correct binding
 
 - **WHEN** an agent is asked to run a dev server
-- **THEN** the instructions cheatsheet explains binding to `0.0.0.0:<service-port>` and the stable URL format
-- **AND** the agent follows the pattern without operator involvement
+- **THEN** the instructions cheatsheet MUST explain binding to `0.0.0.0:<service-port>` and the stable URL format
+- **AND** the agent MUST follow the pattern without operator involvement
 
 ## Sources of Truth
 

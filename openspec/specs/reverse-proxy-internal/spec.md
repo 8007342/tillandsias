@@ -21,56 +21,56 @@ This spec ensures:
 
 ### Requirement: Enclave-internal routing
 
-The reverse proxy routes all enclave-internal traffic (no external routing).
+The reverse proxy MUST route all enclave-internal traffic (no external routing).
 
 #### Scenario: Forge container routing
 - **WHEN** a client connects to `reverse-proxy:443` requesting `/project/dev`
-- **THEN** the proxy routes the request to the appropriate forge container (e.g., `tillandsias-myproject-foo:5000`)
-- **AND** the routing table is loaded from `/opt/routing-config/routes.toml` (baked into image)
+- **THEN** the proxy MUST route the request to the appropriate forge container (e.g., `tillandsias-myproject-foo:5000`)
+- **AND** the routing table MUST be loaded from `/opt/routing-config/routes.toml` (baked into image)
 
 #### Scenario: Inference service routing
 - **WHEN** a client connects requesting `inference.tillandsias/v1/chat/completions`
-- **THEN** the proxy routes to the inference container (e.g., `tillandsias-inference:11434`)
-- **AND** the request is forwarded with authentication (if required)
+- **THEN** the proxy MUST route to the inference container (e.g., `tillandsias-inference:11434`)
+- **AND** the request MUST be forwarded with authentication (if required)
 
 #### Scenario: Git mirror service routing
 - **WHEN** a client connects requesting `git.tillandsias/my-repo.git`
-- **THEN** the proxy routes to the git mirror container (e.g., `tillandsias-git:9418`)
-- **AND** credentials are handled via enclave-local authentication (no exposure to forge)
+- **THEN** the proxy MUST route to the git mirror container (e.g., `tillandsias-git:9418`)
+- **AND** credentials MUST be handled via enclave-local authentication (no exposure to forge)
 
 #### Scenario: Unknown route
 - **WHEN** a request is made to a route not in the routing table
-- **THEN** the proxy returns HTTP 404 or 503 (service unavailable)
-- **AND** logs `route_not_found = true, requested_path = "/unknown"`
+- **THEN** the proxy MUST return HTTP 404 or 503 (service unavailable)
+- **AND** MUST log `route_not_found = true, requested_path = "/unknown"`
 
 ### Requirement: SSL termination with ephemeral CA
 
-The proxy terminates HTTPS connections using certificates issued by the ephemeral CA.
+The proxy MUST terminate HTTPS connections using certificates issued by the ephemeral CA.
 
 #### Scenario: Client HTTPS connection
 - **WHEN** a client connects via TLS to the proxy (port 443)
-- **THEN** the proxy presents a certificate issued by the ephemeral CA (see spec:certificate-authority)
-- **AND** the certificate covers the proxy's hostname (e.g., `internal-forge.tillandsias`, `inference.tillandsias`)
+- **THEN** the proxy MUST present a certificate issued by the ephemeral CA (see spec:certificate-authority)
+- **AND** the certificate MUST cover the proxy's hostname (e.g., `internal-forge.tillandsias`, `inference.tillandsias`)
 
 #### Scenario: CA certificate installation
 - **WHEN** a forge container starts
-- **THEN** the ephemeral CA's public certificate is injected into the container
-- **AND** the container trusts the CA for upstream proxy connections
-- **AND** is configured via env var `TILLANDSIAS_CA_BUNDLE=/tmp/ca/ca.crt`
+- **THEN** the ephemeral CA's public certificate MUST be injected into the container
+- **AND** the container MUST trust the CA for upstream proxy connections
+- **AND** MUST be configured via env var `TILLANDSIAS_CA_BUNDLE=/tmp/ca/ca.crt`
 
 #### Scenario: Certificate rotation on proxy restart
 - **WHEN** the reverse-proxy container is stopped and restarted
-- **THEN** a new certificate is issued by the (new) ephemeral CA
-- **AND** the old certificate is destroyed
-- **AND** clients must accept the new cert (or pinning is updated)
+- **THEN** a new certificate MUST be issued by the (new) ephemeral CA
+- **AND** the old certificate MUST be destroyed
+- **AND** clients MUST accept the new cert (or pinning MUST be updated)
 
 ### Requirement: Request/response logging
 
-All traffic through the proxy is logged in a structured format.
+All traffic through the proxy MUST be logged in a structured format.
 
 #### Scenario: Request log entry
 - **WHEN** a request is received by the proxy
-- **THEN** the proxy logs:
+- **THEN** the proxy MUST log:
   ```
   timestamp = "2026-05-03T14:23:45.123Z"
   method = "GET"
@@ -80,90 +80,90 @@ All traffic through the proxy is logged in a structured format.
   backend = "tillandsias-myproject-foo:5000"
   spec = "reverse-proxy-internal"
   ```
-- **AND** the log is written to stdout (captured by podman logs)
+- **AND** the log MUST be written to stdout (captured by podman logs)
 
 #### Scenario: Request headers logging
 - **WHEN** a request includes custom headers
-- **THEN** non-sensitive headers are logged (User-Agent, Accept, etc.)
-- **AND** sensitive headers (Authorization, Cookie) are masked in logs
-- **AND** logs show `authorization_header = "[REDACTED]"`
+- **THEN** non-sensitive headers SHOULD be logged (User-Agent, Accept, etc.)
+- **AND** sensitive headers (Authorization, Cookie) MUST be masked in logs
+- **AND** logs MUST show `authorization_header = "[REDACTED]"`
 
 #### Scenario: Response body logging
 - **WHEN** the response body is small (< 1 KB)
-- **THEN** the body is logged verbatim
-- **AND** large responses are truncated to the first 1 KB with `...truncated` marker
+- **THEN** the body SHOULD be logged verbatim
+- **AND** large responses MUST be truncated to the first 1 KB with `...truncated` marker
 
 ### Requirement: Caching for performance
 
-The proxy caches responses to reduce backend load and latency.
+The proxy SHOULD cache responses to reduce backend load and latency.
 
 #### Scenario: Cache key
 - **WHEN** a cacheable request is received (GET, no cookies, Cache-Control: public)
-- **THEN** the proxy computes a cache key from method, path, and query string
-- **AND** checks the cache (stored in tmpfs at `/tmp/proxy-cache/`)
+- **THEN** the proxy MUST compute a cache key from method, path, and query string
+- **AND** MUST check the cache (stored in tmpfs at `/tmp/proxy-cache/`)
 
 #### Scenario: Cache hit
 - **WHEN** a request matches a cached response and the response is fresh
-- **THEN** the cached response is returned immediately (no backend call)
-- **AND** the response includes `X-Cache: HIT` header
-- **AND** latency is < 5 ms
+- **THEN** the cached response MUST be returned immediately (no backend call)
+- **AND** the response MUST include `X-Cache: HIT` header
+- **AND** latency MUST be < 5 ms
 
 #### Scenario: Cache miss
 - **WHEN** a request is not in cache or is stale
-- **THEN** the request is forwarded to the backend
-- **AND** the response is cached (if cacheable)
-- **AND** the response includes `X-Cache: MISS` header
+- **THEN** the request MUST be forwarded to the backend
+- **AND** the response SHOULD be cached (if cacheable)
+- **AND** the response MUST include `X-Cache: MISS` header
 
 #### Scenario: Cache invalidation
 - **WHEN** a POST or PUT request is received
-- **THEN** the proxy invalidates related cache entries
-- **AND** logs `cache_invalidation = true, pattern = "/project/*"`
+- **THEN** the proxy SHOULD invalidate related cache entries
+- **AND** SHOULD log `cache_invalidation = true, pattern = "/project/*"`
 
 #### Scenario: Cache size limit
 - **WHEN** the cache reaches 500 MB
-- **THEN** least-recently-used (LRU) entries are evicted
-- **AND** the proxy logs `cache_eviction = true, reason = "size limit"`
+- **THEN** least-recently-used (LRU) entries MUST be evicted
+- **AND** the proxy MUST log `cache_eviction = true, reason = "size limit"`
 
 ### Requirement: Ephemeral cache and state
 
-Cache and all proxy state are stored in tmpfs and destroyed on shutdown.
+Cache and all proxy state MUST be stored in tmpfs and MUST be destroyed on shutdown.
 
 #### Scenario: Cache in tmpfs
 - **WHEN** responses are cached
-- **THEN** the cache is stored in `/tmp/proxy-cache/` (tmpfs)
-- **AND** survives for the container's lifetime
-- **AND** is destroyed on container exit
+- **THEN** the cache MUST be stored in `/tmp/proxy-cache/` (tmpfs)
+- **AND** MUST survive for the container's lifetime
+- **AND** MUST be destroyed on container exit
 
 #### Scenario: No cache persistence
 - **WHEN** the proxy container stops and is removed
-- **THEN** all cached responses are destroyed
-- **AND** the next proxy instance has an empty cache
-- **AND** must re-fetch all resources from backends
+- **THEN** all cached responses MUST be destroyed
+- **AND** the next proxy instance MUST have an empty cache
+- **AND** MUST re-fetch all resources from backends
 
 #### Scenario: Log file cleanup
 - **WHEN** the proxy container exits
-- **THEN** request/response logs are deleted (not persisted to disk)
-- **AND** only summary statistics remain in the tray's logs
+- **THEN** request/response logs MUST be deleted (not persisted to disk)
+- **AND** only summary statistics SHOULD remain in the tray's logs
 
 ### Requirement: Access control and authentication
 
-The proxy can enforce authentication and authorization for upstream services.
+The proxy SHOULD enforce authentication and authorization for upstream services.
 
 #### Scenario: Git service authentication
 - **WHEN** a client requests `/git/...` (git mirror)
-- **THEN** the proxy checks credentials (via HTTP Basic Auth or Bearer token)
-- **AND** forwards credentials to the git service (if required)
-- **AND** logs `authentication_required = true, service = "git"`
+- **THEN** the proxy SHOULD check credentials (via HTTP Basic Auth or Bearer token)
+- **AND** MUST forward credentials to the git service (if required)
+- **AND** SHOULD log `authentication_required = true, service = "git"`
 
 #### Scenario: Credential passthrough
 - **WHEN** a forge container makes an authenticated request to inference
-- **THEN** the proxy forwards the request with the container's credentials
-- **AND** credentials are not logged or exposed to the host
+- **THEN** the proxy MUST forward the request with the container's credentials
+- **AND** credentials MUST NOT be logged or exposed to the host
 
 #### Scenario: Unauthorized access
 - **WHEN** a request lacks required credentials
-- **THEN** the proxy returns HTTP 401 or 403
-- **AND** logs `access_denied = true, reason = "missing credentials"`
+- **THEN** the proxy MUST return HTTP 401 or 403
+- **AND** SHOULD log `access_denied = true, reason = "missing credentials"`
 
 ### Requirement: Litmus test — reverse-proxy-internal lifecycle
 

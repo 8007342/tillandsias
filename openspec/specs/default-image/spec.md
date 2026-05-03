@@ -9,52 +9,52 @@ status: active
 TBD - created by archiving change attach-here-mvp. Update Purpose after archive.
 ## Requirements
 ### Requirement: Fedora Minimal base image with dev tools
-The default container image SHALL be based on Fedora Minimal and include OpenCode, OpenSpec CLI, Nix, and essential development tools.
+The default container image SHALL be based on Fedora Minimal and MUST include OpenCode, OpenSpec CLI, Nix, and essential development tools.
 
 #### Scenario: Image contains OpenCode
 - **WHEN** the container starts
-- **THEN** `opencode` is available in PATH and executable
+- **THEN** `opencode` SHALL be available in PATH and executable
 
 #### Scenario: Image contains OpenSpec
 - **WHEN** the container starts
-- **THEN** `openspec` is available in PATH (installed or deferred to first run)
+- **THEN** `openspec` SHALL be available in PATH (installed or deferred to first run)
 
 #### Scenario: Image contains Nix
 - **WHEN** the container starts
-- **THEN** `nix` is available for reproducible builds with flakes enabled
+- **THEN** `nix` SHALL be available for reproducible builds with flakes enabled
 
 #### Scenario: Image contains git and GitHub CLI
 - **WHEN** the container starts
-- **THEN** `git` and `gh` are available in PATH
+- **THEN** `git` and `gh` SHALL be available in PATH
 
 ### Requirement: Non-root user with UID 1000
 The container SHALL run as user `forge` (UID 1000) to match host user UID via `--userns=keep-id`.
 
 #### Scenario: Volume permissions
 - **WHEN** the container mounts a host directory
-- **THEN** files created inside the container are owned by the host user (UID 1000)
+- **THEN** files created inside the container SHALL be owned by the host user (UID 1000)
 
 ### Requirement: Entrypoint launches OpenCode
 The container entrypoint SHALL bootstrap the environment and launch OpenCode as the foreground process.
 
 #### Scenario: First run bootstrap
 - **WHEN** the container starts for the first time
-- **THEN** cache directories are created, OpenSpec is installed if deferred, and OpenCode launches
+- **THEN** cache directories SHALL be created, OpenSpec SHALL be installed if deferred, and OpenCode SHALL launch
 
 #### Scenario: Subsequent runs
 - **WHEN** the container starts with existing cache
-- **THEN** bootstrap is skipped and OpenCode launches immediately
+- **THEN** bootstrap MAY be skipped and OpenCode SHALL launch immediately
 
 ### Requirement: Declarative image definition via flake.nix
 The default forge image SHALL be defined declaratively in flake.nix using Nix's dockerTools, replacing the Containerfile as the primary build path.
 
 #### Scenario: Build forge image
 - **WHEN** `scripts/build-image.sh forge` is run
-- **THEN** the image is built via `nix build .#forge-image` inside the builder toolbox
+- **THEN** the image SHALL be built via `nix build .#forge-image` inside the builder toolbox
 
 #### Scenario: Build web image
 - **WHEN** `scripts/build-image.sh web` is run
-- **THEN** the image is built via `nix build .#web-image` inside the builder toolbox
+- **THEN** the image SHALL be built via `nix build .#web-image` inside the builder toolbox
 
 ### Requirement: Forge image ships an OpenCode Web entrypoint
 
@@ -62,8 +62,8 @@ The default forge image SHALL include `/usr/local/bin/entrypoint-forge-opencode-
 
 #### Scenario: Script is present and executable
 - **WHEN** the built forge image is inspected
-- **THEN** the file `/usr/local/bin/entrypoint-forge-opencode-web.sh` exists and is executable
-- **AND** the file is owned consistently with the other entrypoints
+- **THEN** the file `/usr/local/bin/entrypoint-forge-opencode-web.sh` SHALL exist and be executable
+- **AND** the file SHALL be owned consistently with the other entrypoints
 
 ### Requirement: OpenCode Web entrypoint runs opencode serve
 
@@ -71,8 +71,8 @@ The web entrypoint SHALL terminate by `exec`-ing `opencode serve --hostname 0.0.
 
 #### Scenario: Final exec targets opencode serve
 - **WHEN** a web-mode container starts to steady state
-- **THEN** the container's PID 1 is an `opencode serve` process listening on `0.0.0.0:4096` inside the container's netns
-- **AND** no terminal UI is launched
+- **THEN** the container's PID 1 SHALL be an `opencode serve` process listening on `0.0.0.0:4096` inside the container's netns
+- **AND** no terminal UI MUST be launched
 
 ### Requirement: Default opencode model is a tool-capable Zen provider
 
@@ -91,12 +91,12 @@ so tier-upgrades past T1 are a user-driven opt-in via
 `--model ollama/<name>` after they've manually pulled what they want.
 
 The `ollama` provider SHALL remain fully enumerated in the config so
-users can select any enumerated model on demand.
+users MAY select any enumerated model on demand.
 
 #### Scenario: Ultra-tier host uses the baked T1 model for analysis
 - **WHEN** the host has a GPU classified as Ultra (>=12GB VRAM) and the
   tray patches the config overlay
-- **THEN** `small_model` SHALL be `ollama/llama3.2:3b` (baked T1), NOT
+- **THEN** `small_model` SHALL be `ollama/llama3.2:3b` (baked T1), MUST NOT be
   `ollama/qwen2.5:14b` or any other non-baked model
 - **AND** opencode sub-tasks SHALL succeed on a freshly-attached project
   with no manual model pulls
@@ -115,7 +115,7 @@ users can select any enumerated model on demand.
 - **AND** later runs `opencode run --model ollama/qwen2.5:14b
   "<prompt>"`
 - **THEN** the request SHALL route to that model
-- **AND** the clamp SHALL NOT interfere — the clamp only affects the
+- **AND** the clamp MUST NOT interfere — the clamp only affects the
   default `small_model`, not explicit `--model` overrides
 
 ### Requirement: Cooperative split documented in agent instructions
@@ -123,7 +123,7 @@ users can select any enumerated model on demand.
 The bundled instructions surfaced to opencode SHALL include guidance
 that ollama models are for analysis subtasks (no tool calling required)
 and Zen models are for tool-driven work. Future expansion to give
-ollama models tool access SHALL update this guidance and the spec
+ollama models tool access MUST update this guidance and the spec
 together.
 
 #### Scenario: Agent picks the right model for the work
@@ -137,11 +137,11 @@ together.
 
 ### Requirement: Coding agents are image-baked, not runtime-installed
 
-Claude Code, OpenCode, and OpenSpec SHALL be installed into the forge
+Claude Code, OpenCode, and OpenSpec MUST be installed into the forge
 image at `podman build` time. The binaries SHALL live under
 `/opt/agents/{claude,opencode,openspec}/` with symlinks at
 `/usr/local/bin/{claude,opencode,openspec}`. No runtime installer
-(npm, curl | bash) SHALL run on each attach.
+(npm, curl | bash) MUST run on each attach.
 
 Rationale: the prior runtime tools overlay re-installed these agents on
 every launch into a bind-mounted `/home/forge/.tools` directory. It
@@ -161,9 +161,9 @@ network for agents, and one fewer failure surface.
 #### Scenario: No runtime overlay build runs
 - **WHEN** the user runs `tillandsias <project>` with a fresh or
   existing forge image
-- **THEN** the tray SHALL NOT invoke `scripts/build-tools-overlay.sh`
-  (the script SHALL NOT exist in the repo or the embedded source tree)
-- **AND** no temporary forge container SHALL spawn to populate
+- **THEN** the tray MUST NOT invoke `scripts/build-tools-overlay.sh`
+  (the script MUST NOT exist in the repo or the embedded source tree)
+- **AND** no temporary forge container MUST spawn to populate
   `/home/forge/.tools`
 - **AND** no `[tools-overlay]` log lines SHALL appear at attach time
 
@@ -176,7 +176,7 @@ spawns inside the forge: `http://<project>.<service>.localhost/`,
 port `80` always implicit. The instruction file SHALL also list the
 service-port conventions (opencode=4096, flutter=8080, vite=5173,
 next=3000, storybook=6006, jupyter=8888, streamlit=8501) and
-explicitly forbid:
+MUST explicitly forbid:
 
 - Binding servers to `localhost` / `127.0.0.1` inside the container.
 - Including a port number in the URL given to the human.
@@ -192,7 +192,7 @@ for each service.
   `flutter run -d web-server --web-hostname 0.0.0.0 --web-port 8080`
 - **AND** the agent SHALL tell the user to open
   `http://<project>.flutter.localhost/`
-- **AND** the agent SHALL NOT print `http://localhost:8080/`
+- **AND** the agent MUST NOT print `http://localhost:8080/`
 
 #### Scenario: Agent self-tests through the proxy
 - **WHEN** the agent wants to verify its server is up before reporting

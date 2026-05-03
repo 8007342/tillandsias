@@ -20,34 +20,34 @@ This spec ensures:
 
 ### Requirement: Capture exit code and termination signal
 
-When a container exits, the runtime SHALL record the exit code, any termination signal, and the duration the container ran.
+When a container exits, the runtime MUST record the exit code, any termination signal, and the duration the container ran.
 
 #### Scenario: Normal exit
 - **WHEN** a container exits cleanly (status 0)
-- **THEN** the tray logs `container_exit_code = 0, duration_seconds = N`
-- **AND** the user is not notified of a failure (cleanup succeeded)
+- **THEN** the tray MUST log `container_exit_code = 0, duration_seconds = N`
+- **AND** the user MUST NOT be notified of a failure (cleanup succeeded)
 
 #### Scenario: Abnormal exit
 - **WHEN** a container exits with non-zero status (e.g., 139 from SIGSEGV)
-- **THEN** the tray logs `container_exit_code = 139, signal = "SIGSEGV"` with `category = "runtime-diagnostics"`
-- **AND** a toast or tray message tells the user "Build failed. Check logs for details."
-- **AND** the error message does NOT expose the exit code or signal name to the user
+- **THEN** the tray MUST log `container_exit_code = 139, signal = "SIGSEGV"` with `category = "runtime-diagnostics"`
+- **AND** a toast or tray message MUST tell the user "Build failed. Check logs for details."
+- **AND** the error message MUST NOT expose the exit code or signal name to the user
 
 #### Scenario: Timeout termination
 - **WHEN** a container exceeds a build timeout (default 3600 seconds)
-- **THEN** the tray sends SIGTERM to the container
-- **AND** logs `timeout_seconds = 3600, terminated_reason = "timeout"`
-- **AND** the user sees "Build timed out after 1 hour"
+- **THEN** the tray MUST send SIGTERM to the container
+- **AND** MUST log `timeout_seconds = 3600, terminated_reason = "timeout"`
+- **AND** the user MUST see "Build timed out after 1 hour"
 
 ### Requirement: Capture container stderr during execution
 
-The container's stderr output SHALL be streamed to a temporary log file during execution, deleted on shutdown.
+The container's stderr output MUST be streamed to a temporary log file during execution and MUST be deleted on shutdown.
 
 #### Scenario: Stderr collection
 - **WHEN** a container is running and outputs to stderr
-- **THEN** the tray captures stderr to `$XDG_RUNTIME_DIR/tillandsias-<project>-<genus>-stderr.log` (tmpfs-backed on Linux)
-- **AND** the log file is world-unreadable (0400)
-- **AND** the log is available for inspection during the container's lifetime
+- **THEN** the tray MUST capture stderr to `$XDG_RUNTIME_DIR/tillandsias-<project>-<genus>-stderr.log` (tmpfs-backed on Linux)
+- **AND** the log file MUST be world-unreadable (0400)
+- **AND** the log MUST be available for inspection during the container's lifetime
 
 #### Scenario: Stderr destruction
 - **WHEN** the container stops (graceful or crash)

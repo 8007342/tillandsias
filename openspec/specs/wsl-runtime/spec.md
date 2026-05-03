@@ -32,7 +32,7 @@ Containers launched in WSL MUST:
 1. Use podman's default network (bridge mode) that auto-creates `/etc/hosts` entries
 2. Resolve Windows host DNS queries (WSL passes `nameserver 127.0.0.11` in container /etc/resolv.conf)
 3. Access Windows host services at `host.docker.internal` (WSL automatic alias to gateway IP)
-4. NOT require special `--userns=host` flags; use `--userns=keep-id` for security
+4. MUST NOT require special `--userns=host` flags; MUST use `--userns=keep-id` for security
 
 **Measurable:** `podman run alpine cat /etc/resolv.conf` shows WSL resolver; `podman run alpine ping -c 1 host.docker.internal` succeeds; container DNS resolves external domains; containers get unique IPs (`ip addr` shows `172.17.x.x` range).
 
@@ -74,9 +74,9 @@ Containers launched in WSL MUST receive:
 **Modality:** SHOULD
 
 Containers SHOULD support automatic Windows ↔ Linux path translation:
-1. Input: Windows path `C:\Users\bullo\src\project` → translated to `/mnt/c/Users/bullo/src/project` inside container
-2. Output: Linux path `/workspace/project` → can be mounted to Windows host without manual translation
-3. No hardcoded drive letters (use environment variables or symlinks)
+1. Input: Windows path `C:\Users\bullo\src\project` SHOULD be translated to `/mnt/c/Users/bullo/src/project` inside container
+2. Output: Linux path `/workspace/project` SHOULD be mountable to Windows host without manual translation
+3. SHOULD NOT use hardcoded drive letters (use environment variables or symlinks instead)
 
 **Measurable:** Container receives Windows paths as arguments; they are correctly mounted; symlinks inside container resolve to Windows paths correctly.
 
@@ -91,7 +91,7 @@ Containers running services (proxy, inference, etc.) MUST:
 1. Expose ports on the WSL gateway IP (172.17.0.1) so Windows host can reach them
 2. Use `podman run -p 127.0.0.1:<port>:<port>` to bind to localhost only (security default)
 3. OR use `podman run -p 0.0.0.0:<port>:<port>` to expose to Windows host network (for browser access)
-4. Document which ports are Windows-facing vs. container-only
+4. MUST document which ports are Windows-facing vs. container-only
 
 **Measurable:** `podman port <container>` shows port mappings; Windows host can connect to `127.0.0.1:<port>` (if bound to localhost) or `host.docker.internal:<port>` (if bound to all interfaces); container cannot directly access Windows host ports (security).
 
@@ -103,10 +103,10 @@ Containers running services (proxy, inference, etc.) MUST:
 **Modality:** MUST
 
 On WSL, secrets MUST NOT leak to containers:
-1. GitHub tokens stored in host OS keyring (`Credential Manager` on Windows, `Secret Service` on Linux)
-2. Containers receive secrets only via `podman secret` mount (not environment variables)
-3. Custom CA certificates stored in host keyring OR in encrypted file (not in workspace)
-4. No plaintext credentials in workspace files or container environment
+1. GitHub tokens MUST be stored in host OS keyring (`Credential Manager` on Windows, `Secret Service` on Linux)
+2. Containers MUST receive secrets only via `podman secret` mount (NOT via environment variables)
+3. Custom CA certificates MUST be stored in host keyring OR in encrypted file (NOT in workspace)
+4. MUST NOT have plaintext credentials in workspace files or container environment
 
 **Measurable:** `podman inspect <container> | jq '.Config.Env'` shows no tokens; secrets are mounted at `/run/secrets/` only; keyring integration works (verify with credential reads from Python/Rust code).
 
@@ -119,7 +119,7 @@ On WSL, secrets MUST NOT leak to containers:
 
 The host tray and WSL daemon MUST communicate asynchronously via:
 1. Unix socket at `/run/user/1000/tillandsias/router.sock` (or Windows equivalent)
-2. Non-blocking reads/writes (async I/O, no polling)
+2. Non-blocking reads/writes (async I/O, MUST NOT use polling)
 3. Protocol: JSON request-response over the socket
 4. Timeout: 10 seconds for any single operation (prevents hangs)
 

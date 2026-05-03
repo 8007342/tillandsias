@@ -21,129 +21,129 @@ This spec ensures:
 
 ### Requirement: Ephemeral profile on tmpfs
 
-The Chromium profile (bookmarks, history, preferences, extensions) is stored in tmpfs, created fresh on startup, and destroyed on shutdown.
+Chromium profile (bookmarks, history, preferences, extensions) MUST be stored in tmpfs, created fresh on startup, and destroyed on shutdown.
 
 #### Scenario: Profile creation on startup
 - **WHEN** a safe-variant browser container starts
-- **THEN** a new Chromium user profile is created in `/tmp/chrome-profile/` (tmpfs-backed)
-- **AND** the profile is completely empty (no history, bookmarks, extensions)
-- **AND** default preferences are applied from a read-only template
+- **THEN** a new Chromium user profile SHALL be created in `/tmp/chrome-profile/` (tmpfs-backed)
+- **AND** the profile MUST be completely empty (no history, bookmarks, extensions)
+- **AND** default preferences SHALL be applied from a read-only template
 
 #### Scenario: Profile destruction on shutdown
 - **WHEN** the container exits (graceful or crash)
-- **THEN** the profile directory is deleted via tmpfs unmount
-- **AND** no profile data persists to the next launch
-- **AND** history, cookies, and local storage are completely erased
+- **THEN** the profile directory SHALL be deleted via tmpfs unmount
+- **AND** no profile data MUST persist to the next launch
+- **AND** history, cookies, and local storage MUST be completely erased
 
 #### Scenario: No sync or cloud services
 - **WHEN** Chromium starts in the safe-variant container
-- **THEN** all cloud sync services (Google Account sync, Chromium Sync) are disabled
-- **AND** Chromium is not logged in to any account
-- **AND** no data is transmitted to external sync services
+- **THEN** all cloud sync services (Google Account sync, Chromium Sync) MUST be disabled
+- **AND** Chromium MUST NOT be logged in to any account
+- **AND** no data SHALL be transmitted to external sync services
 
 ### Requirement: Domain allowlist enforcement
 
-Only whitelisted domains are accessible from the safe-variant browser.
+Only whitelisted domains MAY be accessible from the safe-variant browser.
 
 #### Scenario: Domain allowlist configuration
 - **WHEN** the container starts
-- **THEN** a domain allowlist is loaded from `/opt/chromium-config/allowlist.txt` (baked into image)
-- **AND** the allowlist contains FQDNs and wildcard patterns (e.g., `*.github.com`, `example.org`)
-- **AND** a proxy or extension enforces the allowlist
+- **THEN** a domain allowlist SHALL be loaded from `/opt/chromium-config/allowlist.txt` (baked into image)
+- **AND** the allowlist SHALL contain FQDNs and wildcard patterns (e.g., `*.github.com`, `example.org`)
+- **AND** a proxy or extension MUST enforce the allowlist
 
 #### Scenario: Allowed domain access
 - **WHEN** the user navigates to `github.com` (in allowlist)
-- **THEN** the request is allowed
-- **AND** the page loads normally
+- **THEN** the request MUST be allowed
+- **AND** the page SHALL load normally
 
 #### Scenario: Blocked domain access
 - **WHEN** the user navigates to `facebook.com` (not in allowlist)
-- **THEN** the browser blocks the request with a "Not allowed" message
-- **AND** logs `domain_blocked = true, domain = "facebook.com", reason = "not in allowlist"` with `spec = "chromium-safe-variant"`
-- **AND** no request reaches the domain (not a server-side block)
+- **THEN** the browser MUST block the request with a "Not allowed" message
+- **AND** MUST log `domain_blocked = true, domain = "facebook.com", reason = "not in allowlist"` with `spec = "chromium-safe-variant"`
+- **AND** no request MUST reach the domain (not a server-side block)
 
 #### Scenario: Dynamic allowlist updates
 - **WHEN** a new project-specific allowlist is provided via `.tillandsias/chromium-allowlist.txt`
-- **THEN** the container merges it with the default allowlist
-- **AND** the browser enforces the combined set
-- **AND** invalid entries are logged as warnings
+- **THEN** the container SHALL merge it with the default allowlist
+- **AND** the browser SHALL enforce the combined set
+- **AND** invalid entries SHOULD be logged as warnings
 
 ### Requirement: Credential isolation — no persistence
 
-Credentials (cookies, passwords, autofill) are NOT persisted and NOT synced.
+Credentials (cookies, passwords, autofill) MUST NOT be persisted and MUST NOT be synced.
 
 #### Scenario: Cookies ephemeral
 - **WHEN** a website sets a cookie during the session
-- **THEN** the cookie is stored in memory (session storage)
-- **AND** on container shutdown, the cookie is destroyed
-- **AND** the next browser session has no cookies (clean slate)
+- **THEN** the cookie SHALL be stored in memory (session storage)
+- **AND** on container shutdown, the cookie MUST be destroyed
+- **AND** the next browser session SHALL have no cookies (clean slate)
 
 #### Scenario: Password manager disabled
 - **WHEN** the user enters a password in a form
-- **THEN** Chromium does NOT offer to save the password
-- **AND** no password manager data is stored
-- **AND** the user cannot auto-fill credentials
+- **THEN** Chromium MUST NOT offer to save the password
+- **AND** no password manager data MUST be stored
+- **AND** the user MUST NOT be able to auto-fill credentials
 
 #### Scenario: Autofill disabled
 - **WHEN** the user types into a form field
-- **THEN** Chromium does NOT suggest previously-entered values
-- **AND** no form history is persisted
-- **AND** the user must manually re-enter information each session
+- **THEN** Chromium MUST NOT suggest previously-entered values
+- **AND** no form history MUST be persisted
+- **AND** the user SHALL manually re-enter information each session
 
 ### Requirement: Cache is ephemeral and minimal
 
-The Chromium cache is stored in tmpfs, limited in size, and destroyed on shutdown.
+Chromium cache MUST be stored in tmpfs, limited in size, and destroyed on shutdown.
 
 #### Scenario: Cache in tmpfs
 - **WHEN** Chromium caches a web resource
-- **THEN** the cache is written to `/tmp/chrome-cache/` (tmpfs, not disk)
-- **AND** survives for the duration of the container
-- **AND** is deleted on shutdown
+- **THEN** the cache SHALL be written to `/tmp/chrome-cache/` (tmpfs, not disk)
+- **AND** SHALL survive for the duration of the container
+- **AND** SHALL be deleted on shutdown
 
 #### Scenario: Cache size limit
 - **WHEN** the cache reaches 500 MB (configurable)
-- **THEN** Chromium evicts oldest entries
-- **AND** does not grow beyond the limit
-- **AND** logs `cache_eviction = true, reason = "size limit"`
+- **THEN** Chromium MUST evict oldest entries
+- **AND** MUST NOT grow beyond the limit
+- **AND** SHOULD log `cache_eviction = true, reason = "size limit"`
 
 #### Scenario: No persistent cache on reboot
 - **WHEN** a browser container is destroyed and a new one starts
-- **THEN** the new container has an empty cache
-- **AND** must re-fetch all resources
+- **THEN** the new container SHALL have an empty cache
+- **AND** SHALL re-fetch all resources
 
 ### Requirement: Minimal capabilities — cap-drop=ALL
 
-The safe-variant container runs with the minimum Linux capabilities required for display and network access.
+Safe-variant container MUST run with minimum Linux capabilities required for display and network access.
 
 #### Scenario: Capability set
 - **WHEN** the container starts
-- **THEN** it is launched with `--cap-drop=ALL` (no Linux capabilities)
-- **AND** only capabilities explicitly needed are added back (e.g., `--cap-add=NET_BIND_SERVICE` if needed for local proxies)
-- **AND** most system privileges are removed
+- **THEN** it SHALL be launched with `--cap-drop=ALL` (no Linux capabilities)
+- **AND** only capabilities explicitly needed MAY be added back (e.g., `--cap-add=NET_BIND_SERVICE` if needed for local proxies)
+- **AND** most system privileges MUST be removed
 
 #### Scenario: No privilege escalation
 - **WHEN** code inside the container attempts privilege escalation
-- **THEN** it fails (no `CAP_SYS_ADMIN`, `CAP_SETUID`, etc.)
-- **AND** logs `privilege_escalation_attempt = true` for audit
+- **THEN** it MUST fail (no `CAP_SYS_ADMIN`, `CAP_SETUID`, etc.)
+- **AND** SHOULD log `privilege_escalation_attempt = true` for audit
 
 #### Scenario: Network isolation
 - **WHEN** the container is not in the enclave network
-- **THEN** it has only host (gateway) network access
-- **OR** if in the enclave, it connects via the proxy (allowlist enforced upstream)
+- **THEN** it SHALL have only host (gateway) network access
+- **OR** if in the enclave, it SHALL connect via the proxy (allowlist enforced upstream)
 
 ### Requirement: No extensions or plugins
 
-Third-party extensions and plugins are not allowed in the safe-variant.
+Third-party extensions and plugins MUST NOT be allowed in the safe-variant.
 
 #### Scenario: Extensions disabled
 - **WHEN** the container starts
-- **THEN** Chromium is configured with `--disable-extensions`
-- **AND** even built-in extensions (if not critical) are disabled
+- **THEN** Chromium SHALL be configured with `--disable-extensions`
+- **AND** even built-in extensions (if not critical) SHOULD be disabled
 
 #### Scenario: Plugin sandboxing
 - **WHEN** a website attempts to load a plugin (PPAPI)
-- **THEN** the plugin is blocked
-- **AND** logs `plugin_blocked = true, plugin = "flash"` or similar
+- **THEN** the plugin MUST be blocked
+- **AND** SHOULD log `plugin_blocked = true, plugin = "flash"` or similar
 
 ### Requirement: Litmus test — chromium-safe-variant lifecycle
 

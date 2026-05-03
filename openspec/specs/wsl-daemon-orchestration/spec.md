@@ -32,7 +32,7 @@ On Windows WSL2 distributions where Tillandsias daemon runs, the daemon MUST:
 The router daemon socket MUST be created at a location that satisfies three constraints:
 
 1. **Persistent across WSL reboots**: Use `/run/user/1000/tillandsias/` (per-user TMPFS, survives reboots) OR `/mnt/c/Users/<USER>/.tillandsias/sockets/` (Windows-visible, shared with host)
-2. **Accessible from Windows host**: Windows PowerShell scripts can connect via `\\.\pipe\tillandsias-router` (named pipe) OR via the mounted path above
+2. **Accessible from Windows host**: Windows PowerShell scripts MUST be able to connect via `\\.\pipe\tillandsias-router` (named pipe) OR via the mounted path above
 3. **Correct ownership**: Socket file MUST be readable/writable by the daemon user (non-root if daemon runs unprivileged)
 
 **Measurable:** Socket file exists at configured path; `ls -la <socket>` shows correct user ownership; socket is accessible from Windows PowerShell without `sudo`.
@@ -45,10 +45,10 @@ The router daemon socket MUST be created at a location that satisfies three cons
 **Modality:** MUST
 
 When the Windows host tray starts:
-1. It SHALL verify the WSL distribution is running: `wsl -d <distro> -e true`
-2. Wait for the router daemon socket to appear (timeout: 30 seconds)
-3. Only proceed with tray initialization after socket is ready
-4. Log the handshake result: `socket_ready = true/false`, `wait_time_ms = <elapsed>`
+1. It MUST verify the WSL distribution is running: `wsl -d <distro> -e true`
+2. MUST wait for the router daemon socket to appear (timeout: 30 seconds)
+3. MUST only proceed with tray initialization after socket is ready
+4. MUST log the handshake result: `socket_ready = true/false`, `wait_time_ms = <elapsed>`
 
 **Measurable:** Windows host process blocks until socket appears OR times out; tray startup log includes `socket_ready` field; socket appears within 5 seconds of WSL boot in normal operation.
 
@@ -60,9 +60,9 @@ When the Windows host tray starts:
 **Modality:** SHOULD
 
 The daemon SHOULD emit periodic `sd_notify("WATCHDOG=1")` signals to systemd, allowing systemd to detect deadlocks or hangs:
-1. Configure `WatchdogSec=10s` in the service unit
-2. Emit `WATCHDOG=1` signal every 5 seconds from the daemon
-3. On missed watchdog signal, systemd automatically restarts the daemon
+1. SHOULD configure `WatchdogSec=10s` in the service unit
+2. SHOULD emit `WATCHDOG=1` signal every 5 seconds from the daemon
+3. SHOULD allow systemd to automatically restart the daemon on missed watchdog signal
 
 **Measurable:** `journalctl -u tillandsias-router` shows watchdog heartbeats; if daemon hangs, systemd restart is logged within 10 seconds.
 
@@ -105,7 +105,7 @@ The daemon MUST:
 All daemon events MUST be logged to:
 1. systemd journal (via stdout/stderr; systemd captures automatically)
 2. File log (optional): `~/.cache/tillandsias/tillandsias-router.log` (if configured)
-3. Include: `event = "<name>"`, `timestamp = ISO8601`, `spec = "wsl-daemon-orchestration"`
+3. MUST include: `event = "<name>"`, `timestamp = ISO8601`, `spec = "wsl-daemon-orchestration"`
 
 **Measurable:** `journalctl -u tillandsias-router | grep 'spec="wsl-daemon-orchestration"'` returns results; host-side monitoring can read daemon logs from either journalctl (via `wsl -e journalctl`) OR from shared log file.
 

@@ -16,7 +16,7 @@ Keep the per-project git-service container alive across forge launches within a 
 
 ### Requirement: Tray-Session Scoped Git Service Lifetime
 
-The git-service container SHALL be started lazily on first "Attach Here" for a project (unchanged) and kept alive across all subsequent forge launches for that project within the same tray session.
+The git-service container MUST be started lazily on first "Attach Here" for a project (unchanged) and MUST be kept alive across all subsequent forge launches for that project within the same tray session.
 
 #### Scenario: First attach to a project
 - **WHEN** user clicks "Attach Here" for a project that has no running git-service
@@ -33,7 +33,7 @@ The git-service container SHALL be started lazily on first "Attach Here" for a p
 
 ### Requirement: Event Loop No Longer Stops Git Service
 
-The event loop trigger that stops the git-service container when the last forge for a project exits SHALL be removed.
+The event loop trigger that stops the git-service container when the last forge for a project exits MUST be removed.
 
 #### Scenario: Last forge exits
 - **WHEN** the last forge or maintenance container for a project exits
@@ -41,7 +41,7 @@ The event loop trigger that stops the git-service container when the last forge 
 
 ### Requirement: Shutdown Collects Git Services by Project
 
-The `handlers::shutdown_all` function SHALL collect git-service project names from `state.running` rows where `container_type == GitService`, rather than deriving them from active forge projects.
+The `handlers::shutdown_all` function MUST collect git-service project names from `state.running` rows where `container_type == GitService`, rather than deriving them from active forge projects.
 
 #### Scenario: Tray shutdown with orphaned git services
 - **WHEN** the tray is shutting down

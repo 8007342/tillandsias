@@ -10,9 +10,11 @@ Multiple @trace annotations reference this spec name, but the spec was never for
 
 ## Requirements
 
-### TBD — placeholder spec
+### Requirement: Spec is placeholder — RFC 2119 revision pending
 
-This spec is created retroactively as part of the traces-audit refactor and serves as a placeholder. Actual requirements are to be determined based on usage patterns in annotations.
+This spec is created retroactively as part of the traces-audit refactor. The placeholder text below SHALL be replaced with formal RFC 2119 requirements once usage patterns are confirmed.
+
+**Pending clarification:** Actual requirements are to be determined based on usage patterns in `@trace spec:cheatsheet-tooling` annotations. Upon clarification, all requirement statements MUST use RFC 2119 keywords (MUST, SHOULD, MAY, MUST_NOT, SHOULD_NOT).
 
 ## Implementation Notes
 
