@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # entrypoint-forge-opencode-web.sh — OpenCode Web forge entrypoint.
 #
-# Lifecycle: source common -> require OpenCode from tools overlay ->
-#            install OpenSpec -> clone project from git mirror ->
-#            openspec init -> exec opencode serve (no banner, no TTY)
+# Lifecycle: source common -> require OpenCode + OpenSpec (hard-installed) ->
+#            clone project from git mirror -> openspec init ->
+#            exec opencode serve (no banner, no TTY)
 #
 # Secrets: gh credentials, git config, cache. No Claude secrets.
 # Unlike the CLI variant, there is no TTY and no user-facing banner —
 # this entrypoint drives a headless HTTP server rendered in a host webview.
 #
-# @trace spec:opencode-web-session, spec:default-image, spec:environment-runtime, spec:layered-tools-overlay, spec:secrets-management
+# @trace spec:opencode-web-session, spec:default-image, spec:environment-runtime, spec:secrets-management, spec:simplified-tray-ux
 
 source /usr/local/lib/tillandsias/lib-common.sh
 
@@ -81,28 +81,10 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
     echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
 fi
 
-# ── OpenCode (tools overlay only) ──────────────────────────
-# @trace spec:layered-tools-overlay
-# Hard requirement: tools overlay mounted at /home/forge/.tools. The host tray
-# builds and mounts it before launching the container. Inline install removed —
-# missing overlay is a fatal error.
-TOOLS_DIR="/home/forge/.tools"
-OC_DIR="$TOOLS_DIR/opencode"
-OC_BIN="$OC_DIR/bin/opencode"
-
-if [ ! -x "$OC_BIN" ]; then
-    echo "[entrypoint] FATAL: OpenCode not found in tools overlay at $OC_BIN" >&2
-    echo "[entrypoint] The tools overlay is missing or incomplete. The host tray" >&2
-    echo "[entrypoint] should have built it before launching this container." >&2
-    exit 1
-fi
-export PATH="$OC_DIR/bin:$PATH"
-trace_lifecycle "install" "opencode: overlay ($OC_BIN)"
-
-# ── OpenSpec (overlay-only, shared helper) ──────────────────
-# @trace spec:forge-shell-tools
+# ── OpenCode + OpenSpec (hard-installed) ───────────────────
+# @trace spec:default-image, spec:forge-shell-tools, spec:simplified-tray-ux
+require_opencode
 require_openspec
-OS_BIN="/home/forge/.tools/openspec/bin/openspec"
 
 trace_lifecycle "entrypoint" "opencode web ready"
 
