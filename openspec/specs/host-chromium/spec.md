@@ -468,6 +468,20 @@ authorised the install.sh download (and only that).
   `storage.googleapis.com` or `googlechromelabs.github.io`
 
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- pending — test binding required for S2→S3 progression
+
+Gating points:
+- `scripts/install.sh` contains non-empty CHROMIUM_VERSION and four CHROMIUM_SHA256_* variables
+- Each SHA-256 digest is 64 lowercase-hex characters matching downloaded archive
+- Version string matches format `<MAJOR>.<MINOR>.<BUILD>.<PATCH>`
+- Chromium binary lives under XDG_DATA_HOME (or platform equivalent) with version subdirectory
+- `current` symlink (or Windows junction) points to active version
+- On-demand download runs without blocking tray if image is present
+- All HTTP requests go through proxy; tray never directly reaches googleapis.com or googlechromelabs.github.io
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns

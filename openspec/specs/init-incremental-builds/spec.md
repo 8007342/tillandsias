@@ -51,6 +51,19 @@ After all images are processed, if `--debug` was used and any builds failed, the
 - **WHEN** `tillandsias --init` (without `--debug`) completes with failures
 - **THEN** no failed build logs are displayed (user should re-run with `--debug`)
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:init-log-cleanup` — Verify init logs are collected, displayed on failure, and cleaned up on success
+
+Gating points:
+- On first init, all images build (cold start)
+- Subsequent init with unchanged Containerfile/flake.nix uses cached layers; rebuilds skip unchanged stages
+- Source file staleness tracked via hash; if source.hash == cached.hash, layer rebuild skipped
+- Init success (all images built/cached) removes temp logs; user never sees log files
+- Init failure logs are displayed inline (with `--debug`, full output; without `--debug`, error summary only)
+- Build errors are non-fatal to tray startup; tray shows degraded status until user fixes and re-runs init
+
 ## Sources of Truth
 
 - `cheatsheets/build/cargo.md` — Cargo reference and patterns

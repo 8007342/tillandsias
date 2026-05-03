@@ -25,6 +25,16 @@ tmpfs).
 - **AND** they SHALL be pointed to the superseding specs
 
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- pending — test binding required for S2→S3 progression
+
+Gating points:
+- Spec README contains `@tombstone` annotation with superseded spec reference
+- Readers are directed to forge-hot-cold-split or other replacement specs
+- No active requirements; spec is informational only (transition documentation)
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/forge-hot-cold-split.md` — Forge Hot Cold Split reference and patterns

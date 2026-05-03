@@ -112,6 +112,21 @@ All log events from the pull task MUST include `spec = "inference-host-side-pull
 - **WHEN** all models processed
 - **THEN** log at info level: `tier = <tier>, "Model pull task completed"`
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- pending — test binding required for S2→S3 progression
+
+Gating points:
+- Host-side ollama pulls models asynchronously after inference health check passes
+- Pull bypasses proxy entirely (uses host-side native ollama binary)
+- Models cached at `~/.cache/tillandsias/models/` and bind-mounted RW into container
+- Before pulling, checks if model already in local ollama manifest (skips if cached)
+- Pull failures log at warn level with error message and elapsed time; not fatal
+- GPU tier detection determines which T2-T5 models to pull
+- Task logs completion with tier and success/failure count at info level
+- Pull is non-blocking; forge operations proceed while models download
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md` — cache path management pattern

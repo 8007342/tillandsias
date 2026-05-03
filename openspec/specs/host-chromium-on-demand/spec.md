@@ -61,6 +61,19 @@ The host SHALL emit telemetry on first-launch download per the `forge-cache-arch
 - Timestamp and binary size (bytes downloaded) are recorded
 - The event is logged but NEVER blocks the browser launch
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:browser-ephemeral` — Verify browser instance is launched without blocking tray
+
+Gating points:
+- Browser launch request returns immediately without waiting for download to complete
+- Download progress is logged asynchronously; tray continues responding to user input
+- Downloaded binary is verified against SHA-256 digest from Chrome for Testing manifest
+- Binary is cached at `~/.cache/tillandsias/chromium/<version>/` and reused on subsequent launches
+- Telemetry event emitted with download timestamp, size, and target path
+- Each browser instance (opened via `browser.open`) is independent and ephemeral
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md` — confirms `~/.cache/tillandsias/chromium/` is host-managed shared state, never bind-mounted into forge

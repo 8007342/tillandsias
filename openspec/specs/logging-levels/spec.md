@@ -209,6 +209,21 @@ Every external-logs.yaml file SHALL include a manifest comment block describing 
 - `cheatsheets/runtime/syslog-configuration.md` — Syslog protocol and facility codes (if exists)
 - https://tools.ietf.org/html/rfc5424 — Syslog Message Format standard
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- pending — test binding required for S2→S3 progression
+
+Gating points:
+- TRACE level only emitted when RUST_LOG or TILLANDSIAS_LOG explicitly enables it
+- DEBUG level shows development details (image pulls, build logs, RPC calls)
+- INFO level shows user-facing progress (container startup, authentication, sync)
+- WARN level triggers alert UI if applicable (credential expiry, network timeout)
+- ERROR level halts that operation and forces user remediation
+- FATAL level stops entire tray
+- --log-* CLI flags stream corresponding logs to diagnostic window in real-time
+- Sensitive fields (tokens, credentials, SSHkeys) never appear in any log level
+
 ## Related Specifications
 
 - `cli-diagnostics` — --log-* flags and diagnostic window streaming

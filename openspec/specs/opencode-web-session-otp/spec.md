@@ -99,6 +99,22 @@ OTP generation and validation SHALL be governed by the `secrets-management` spec
 - Accountability log tracks OTP generation and validation without recording the value itself
 - Evicted from memory immediately after use (single-use TTL)
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:credential-isolation` — Verify OTP is never persisted and only valid for single use
+
+Gating points:
+- OTP generated with cryptographically strong randomness (OS CSPRNG)
+- OTP embedded in data: URI form (not logged, not on disk)
+- OTP passed to router via control socket (loopback only)
+- Router accepts OTP at `_auth/login` POST endpoint
+- Router issues HttpOnly + SameSite=Strict session cookie (independent random value)
+- OTP evicted from memory after first use; second use returns 403 Forbidden
+- Session cookie valid for remainder of container stack lifetime
+- Multiple windows can attach with independent OTPs and cookies
+- Stolen OTP after consumption does not yield session cookie (separate random values)
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/forge-container.md` — the forge runtime contract this OTP layer protects

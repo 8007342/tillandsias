@@ -74,6 +74,19 @@ Background re-probing every N seconds is forbidden (`spec:tray-app` responsivene
 - **AND** UI gating advances to the new state
 
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:credential-isolation` — Verify token isolation and probe classification accuracy
+
+Gating points:
+- Probe classifies a valid token as `Authenticated` with HTTP 200 from GitHub API
+- Probe classifies missing token as `CredentialMissing` (no network call made)
+- Probe classifies HTTP 401 as `CredentialInvalid`, not `GithubUnreachable`
+- Probe with network timeout (DNS, TCP, or 10-second budget) classifies as `GithubUnreachable`
+- UI gating (projects DISABLED when `CredentialMissing`, ENABLED when `GithubUnreachable`)
+- Probe cache is invalidated exactly once per user-initiated sign-in/sign-out (no polling)
+
 ## Sources of Truth
 
 - `cheatsheets/utils/git-workflows.md` — Git Workflows reference and patterns

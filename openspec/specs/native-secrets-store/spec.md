@@ -63,6 +63,21 @@ The functions `store_github_token`, `retrieve_github_token`, and `delete_github_
 - **THEN** the keyring entry SHALL be removed
 - **AND** the function SHALL return `Ok(())` even if no entry existed (idempotent)
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:credential-isolation` — Verify token is stored in native keyring and never written to disk outside keyring
+- `litmus:socket-cleanup` — Verify D-Bus sockets are cleaned up after keyring operations
+
+Gating points:
+- `store_github_token(token)` writes to OS native keyring (GNOME Keyring on Linux, Keychain on macOS, Credential Manager on Windows)
+- Token stored with service name `tillandsias` and username `github`
+- `retrieve_github_token()` reads from keyring; returns `None` if no entry exists
+- `delete_github_token()` removes entry from keyring; idempotent (no error if missing)
+- No token file written to `~/.config/` or `~/.ssh/` or any host filesystem
+- D-Bus/IPC sockets used for keyring access are cleaned up after operation
+- Container cannot access host keyring directly; only via D-Bus bridge
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/unix-socket-ipc.md` — Unix Socket Ipc reference and patterns

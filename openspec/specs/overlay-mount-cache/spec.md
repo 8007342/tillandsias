@@ -41,6 +41,19 @@ The overlay mount cache SHALL operate in tandem with the snapshot cache introduc
 
 The snapshot cache from `tools-overlay-fast-reuse` is guaranteed to be hot at mount-resolution time because `ensure_tools_overlay` is awaited before `build_podman_args` is called. This allows the mount-path resolution to skip the unconditional `exists()` syscall on every launch. The fallback to `exists()` on snapshot miss handles the rare case of a background rebuild invalidating the cache mid-launch, making the slow path acceptable and invisible to the user.
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- pending — test binding required for S2→S3 progression
+
+Gating points:
+- Process-lifetime snapshot populated by `ensure_tools_overlay` before `build_podman_args`
+- Mount resolution queries snapshot first (fast path, no I/O)
+- If snapshot valid and current, mount path returned immediately
+- If snapshot invalidated by background rebuild, fallback to `exists()` syscall (slow path)
+- Fast path eliminates per-launch `exists()` syscall overhead
+- Snapshot cache hit rate > 95% under normal operation
+
 ## Sources of Truth
 
 - `docs/cheatsheets/runtime/cache-architecture.md` — process-lifetime snapshot patterns

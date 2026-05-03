@@ -66,6 +66,19 @@ The project SHALL provide `scripts/fetch-debug-source.sh` for on-demand fetching
 - **THEN** `vendor/debug/` SHALL NOT exist
 - **AND** no external source code SHALL be downloaded automatically
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- pending — test binding required for S2→S3 progression
+
+Gating points:
+- Cloned repository contains ONLY `openspec/vendor/` (no `vendor/debug/`)
+- Developers run `/startup` or `/bootstrap-readme` to populate vendored knowledge
+- All tools and agents are available after bootstrap; no runtime downloads needed
+- Clean clone works offline (no network calls before bootstrap)
+- Bootstrap completes within X seconds on typical hardware
+- Vendored knowledge is read-only from developer perspective; updates come from CI/CD
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns

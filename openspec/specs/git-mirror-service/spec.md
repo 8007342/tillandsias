@@ -221,6 +221,22 @@ event" and "gone container".
   synced state
 
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:enclave-isolation` — Verify git service is enclave-only and credentials never leak
+- pending — test binding required for S2→S3 progression
+
+Gating points:
+- Bare mirror created at `~/.cache/tillandsias/mirrors/<project>/` on first launch
+- git daemon serves clones from enclave network only; external clones fail
+- Post-receive hook auto-pushes to remote if configured, logs result with no credentials
+- D-Bus forwarding allows `gh auth token` inside container via host keyring
+- Forge containers cannot access any credentials (no D-Bus, no token files, no git config)
+- Mirror sync event-driven by filesystem watcher, zero polling
+- Sync skips if host has uncommitted changes, diverged branch, or detached HEAD
+- Tray startup sweeps all mirrors and syncs host working copies that are clean and ahead
+
 ## Sources of Truth
 
 - `cheatsheets/utils/git-workflows.md` — Git Workflows reference and patterns

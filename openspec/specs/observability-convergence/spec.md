@@ -242,6 +242,20 @@ Log events SHALL include:
 - `spec_staleness = true` when last trace is > 30 days old
 - `dead_trace = true` when trace references non-existent spec
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- pending — test binding required for S2→S3 progression
+
+Gating points:
+- Trace annotation points to valid spec in openspec/specs/ directory
+- Log events include structured fields: spec, trace_timestamp, implementation_timestamp
+- Convergence score computed as (implementation_traces / active_specs) * 100
+- Spec staleness detected when last trace is > 30 days old
+- Dead traces (referencing non-existent specs) flagged in validation and logged as `dead_trace=true`
+- Latency from spec creation to first trace recorded and reported
+- All accountability events include spec, timestamp, and source context
+
 ## Sources of Truth
 
 - `cheatsheets/observability/cheatsheet-metrics.md` — metric definitions and aggregation patterns

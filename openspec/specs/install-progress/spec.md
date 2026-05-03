@@ -38,6 +38,19 @@ The system SHALL provide a reusable `spin` function in `lib-common.sh` that acce
 - **THEN** the spinner displays the message while npm runs
 - **THEN** the function returns npm's exit code
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- pending — test binding required for S2→S3 progression
+
+Gating points:
+- Spinner displays user-facing message while child process runs
+- Spinner output is aligned with terminal width (no truncation)
+- Long-running processes show spinner feedback; user never sees blank terminal
+- Spinner animation does not flicker or corrupt on slow terminals
+- Function passes through exit code of child process (success/failure)
+- On failure, spinner stops and error is displayed (not hidden)
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns

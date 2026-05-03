@@ -146,6 +146,20 @@ Closing a `WebviewWindow` whose label starts with `web-` SHALL close only that w
 - **AND** the Tauri runtime does NOT exit
 - **AND** the tray icon and infrastructure persist
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- pending — test binding required for S2→S3 progression
+
+Gating points:
+- Webview window created on localhost at dynamically allocated port (e.g., http://127.0.0.1:NNNN)
+- Window does NOT block tray operations; menu remains responsive during webview load
+- Multiple webview windows can be open simultaneously; each is independent
+- Closing one webview does not affect others or the tray
+- Closing the last webview does NOT exit Tauri runtime; tray continues running
+- Navigation to new URLs within the webview does not spawn new windows
+- Backward button works; forward button enabled when history exists
+
 ## Sources of Truth
 
 - `cheatsheets/web/websocket.md` — Websocket reference and patterns

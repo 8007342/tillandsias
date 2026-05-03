@@ -105,6 +105,20 @@ The logging system SHALL accept configuration from CLI flags in addition to envi
 - **THEN** the tracing subscriber is configured according to the `LogConfig`
 - **AND** if `LogConfig` has no module overrides, behavior is identical to the current implementation (TILLANDSIAS_LOG / RUST_LOG / default)
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- pending — test binding required for S2→S3 progression
+
+Gating points:
+- Each log line includes structured fields: timestamp, level, module, message
+- Accountability log format includes `account_id`, `timestamp`, `source`, `action`, optional `error`
+- All container/forge/proxy operations logged to stdout (captured by tray)
+- Sensitive fields (credentials, tokens) never logged
+- Log filtering via `TILLANDSIAS_LOG=module1=warn,module2=debug` works end-to-end
+- LogConfig struct properly serialized from env vars and passed to logging::init
+- Backward compatibility: no env vars = default behavior (identical to current implementation)
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/logging-levels.md` — Logging Levels reference and patterns

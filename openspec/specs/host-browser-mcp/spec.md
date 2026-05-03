@@ -512,6 +512,22 @@ risk note.
 - **AND** the 16 in-flight calls continue to completion unaffected
 
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- pending — test binding required for S2→S3 progression
+
+Gating points:
+- MCP server responds to `initialize` with proper protocol version
+- `tools/list` returns exactly eight tools with correct names and JSON schemas
+- `prompts/list` and `resources/list` return empty arrays within 100ms
+- Unknown MCP methods return JSON-RPC error `-32601 Method not found`
+- `browser.open` with valid URL returns a `window_id`
+- `browser.screenshot` captures PNG and returns base64 with width/height
+- `browser.click` and `browser.type` modify DOM and return `{ ok: boolean }`
+- Concurrent call limit enforces at 16 in-flight calls, returns `-32000 ConcurrentCallLimit`
+- Closed windows cannot be screenshotted or manipulated (return error)
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/chromium-isolation.md` — Chromium Isolation reference and patterns

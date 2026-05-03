@@ -78,6 +78,20 @@ The init command SHALL build exactly six container images in sequence.
   5. `chromium-core` — browser isolation core (Linux)
   6. `chromium-framework` — browser isolation framework (Linux)
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:init-log-cleanup` — Verify init logs are cleaned up and do not persist after tray restarts
+
+Gating points:
+- All six images build or validate (cached) before first forge launch
+- Build lock prevents concurrent builds; subsequent builds wait for lock release
+- Image tags include version number from VERSION file (e.g., tillandsias-forge:v0.1.37.25)
+- Staleness detection checks if image was built before current app version; if stale, rebuilds
+- Init logs written to `~/.cache/tillandsias/init-<date>-<time>.log` and cleaned up after init completes
+- On init failure, error is logged but tray continues (degraded state, not fatal)
+- Incremental builds cache layers; unchanged sources skip rebuild
+
 ## Sources of Truth
 
 - `docs/cheatsheets/build-lock-semantics.md` — process coordination via PID files to prevent concurrent builds

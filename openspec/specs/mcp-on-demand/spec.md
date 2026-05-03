@@ -231,6 +231,22 @@ ls /tmp/mcp-*.sock 2>&1
 # Expected: no such file (cleaned up)
 ```
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- pending — test binding required for S2→S3 progression
+
+Gating points:
+- MCP server spins up on first tool/resource request; health check passes within timeout
+- Server listens on Unix socket at `/tmp/mcp-<server>-<project>.sock`
+- Requests while server is starting are queued and retried after health check
+- Health check verifies `initialize` RPC succeeds and includes required fields
+- Server exits cleanly when forge container stops; socket file cleaned up
+- Second request to same server reuses socket (no restart)
+- Server crash is detected on next request attempt; new server spawned on retry
+- Latency for first request includes startup overhead (logged as `mcp_request_latency_ms`)
+- Subsequent requests skip startup (latency is <10ms typical)
+
 ## Observability
 
 Annotations referencing this spec can be found by:

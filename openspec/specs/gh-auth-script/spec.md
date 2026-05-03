@@ -85,6 +85,16 @@ The login container SHALL be destroyed on every exit path so no `gh` on-disk sta
 - **AND** all on-disk `gh` state inside the container SHALL be destroyed with the container
 - **AND** no token SHALL be written to any host file outside the keyring
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee` — Verify login container is destroyed on all exit paths
+
+Gating points:
+- Container named `tillandsias-gh-login` does not exist after login flow exits (success or failure)
+- Token is stored in native keyring and not written to any host file outside keyring
+- No leftover `gh` configuration files in container filesystem after cleanup
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns
