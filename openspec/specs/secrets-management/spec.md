@@ -184,6 +184,46 @@ Each container type SHALL have a `--pids-limit` matching its intended workload, 
 - **THEN** it SHALL have `--pids-limit=32` (only httpd)
 - **AND** it SHALL run with `--read-only` root filesystem and `--tmpfs=/tmp --tmpfs=/var/run`
 
+### Requirement: Podman secrets as exclusive credential transport
+
+All credentials (GitHub tokens, CA certificates, SSH keys) SHALL be delivered to containers exclusively via podman's native `--secret` mechanism, which mounts credentials at `/run/secrets/<name>` inside containers. Bind mounts and environment variables for credential material are forbidden. Credentials are created as ephemeral secrets at tray startup, mounted via `--secret`, and cleaned up on tray shutdown. This migration is tracked under `@trace spec:podman-secrets-integration`.
+
+@trace spec:secrets-management, spec:podman-secrets-integration
+
+#### Scenario: All credential transport uses podman secrets
+- **WHEN** a container that requires credentials (git service, proxy) is launched
+- **THEN** the tray SHALL NOT use bind mounts (no `-v /host/secret:/container/path:ro`)
+- **AND** the tray SHALL NOT use environment variables (no `-e GITHUB_TOKEN=...`)
+- **AND** the tray SHALL use only `--secret=<name>` flags
+- **AND** the container entrypoint SHALL read from `/run/secrets/<name>`
+
+#### Scenario: Container migration—bind mount to podman secrets
+- **WHEN** migrating an existing container from bind-mount credentials to podman secrets
+- **THEN** the removal of `-v /path:/run/secrets/<name>:ro` flags from `podman run` calls
+- **AND** the addition of `--secret=<name>` flags
+- **AND** container entrypoint SHALL be updated to read from the new location if the old code hard-coded bind mount paths
+- **AND** no functional change to the credential's accessibility inside the container (still at `/run/secrets/<name>`)
+
+#### Scenario: Forge container zero-credential enforcement
+- **WHEN** a forge container is launched
+- **THEN** the tray SHALL NOT add any `--secret` flags for credentials
+- **AND** no bind mounts for credential material SHALL be mounted
+- **AND** the forge SHALL access credentials (if needed) only through authenticated requests to the git service or proxy, never through local secrets
+
+#### Scenario: GitHub token lifecycle via podman secrets
+- **WHEN** the user authenticates via `--github-login` or the token is already in the OS keyring
+- **THEN** the tray SHALL retrieve the token and create an ephemeral `tillandsias-github-token` secret at startup
+- **AND** pass the secret to the git service container via `--secret=tillandsias-github-token`
+- **AND** the git service entrypoint SHALL read from `/run/secrets/tillandsias-github-token`
+- **AND** the secret SHALL be removed on tray shutdown via `podman secret rm`
+
+#### Scenario: CA certificate lifecycle via podman secrets
+- **WHEN** the tray generates an ephemeral CA certificate (new per session)
+- **THEN** the tray SHALL create `tillandsias-ca-cert` and `tillandsias-ca-key` secrets
+- **AND** pass both to the proxy container via `--secret=tillandsias-ca-cert --secret=tillandsias-ca-key`
+- **AND** the proxy entrypoint SHALL read from `/run/secrets/tillandsias-ca-cert` and `/run/secrets/tillandsias-ca-key`
+- **AND** both secrets SHALL be removed on tray shutdown
+
 ### Requirement: AppImage environment sanitization
 
 The authentication flow SHALL unset `LD_LIBRARY_PATH` and `LD_PRELOAD` before invoking podman. These variables are set by AppImage extraction and break podman's ability to launch containers.
@@ -349,6 +389,8 @@ subject to the same handling rules as the GitHub OAuth token. Concretely:
 
 - `cheatsheets/security/owasp-top-10-2021.md` — Owasp Top 10 2021 reference and patterns
 - `cheatsheets/runtime/unix-socket-ipc.md` — Unix Socket Ipc reference and patterns
+- `cheatsheets/utils/podman-secrets.md` — Podman secrets mechanism, storage drivers, and usage patterns
+- `cheatsheets/utils/tillandsias-secrets-architecture.md` — Tillandsias three-layer secret flow and threat mitigation
 
 ## Observability
 

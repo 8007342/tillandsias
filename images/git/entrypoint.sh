@@ -17,6 +17,28 @@ echo "  listening on :9418"
 echo "  base-path: /srv/git"
 echo "========================================"
 
+# GitHub token from podman secret.
+# @trace spec:podman-secrets-integration, spec:git-mirror-service
+# The tray creates tillandsias-github-token secret if a token is available
+# in the OS keyring. Read it from /run/secrets/ (podman's standard location).
+if [ -f /run/secrets/tillandsias-github-token ]; then
+    export GITHUB_TOKEN
+    GITHUB_TOKEN=$(cat /run/secrets/tillandsias-github-token)
+    echo "GitHub token loaded from podman secret."
+else
+    echo "No GitHub token available; authenticated git operations will fail."
+fi
+
+# CA certificate from podman secret.
+# @trace spec:podman-secrets-integration, spec:git-mirror-service
+# Git CLI uses GIT_SSL_CAINFO to trust custom CA certificates.
+# This allows git push --mirror to work through the enclave proxy.
+if [ -f /run/secrets/tillandsias-ca-cert ]; then
+    export GIT_SSL_CAINFO
+    GIT_SSL_CAINFO=/run/secrets/tillandsias-ca-cert
+    echo "CA certificate loaded from podman secret."
+fi
+
 # @trace spec:git-mirror-service
 # Retry-on-startup: flush any commits that landed in the mirror while the
 # previous session couldn't reach GitHub (e.g. the mirror had no HTTP_PROXY,

@@ -12,6 +12,16 @@ export OLLAMA_HOST=0.0.0.0:11434
 # Shared model cache — persisted via volume mount.
 export OLLAMA_MODELS=/home/ollama/.ollama/models/
 
+# CA certificate from podman secret for HTTPS trust.
+# @trace spec:podman-secrets-integration, spec:inference-container
+# Ollama may need to trust the enclave proxy's CA when pulling models through it.
+# Curl (used by health checks) also respects this variable.
+if [ -f /run/secrets/tillandsias-ca-cert ]; then
+    export CURL_CA_BUNDLE
+    CURL_CA_BUNDLE=/run/secrets/tillandsias-ca-cert
+    echo "[inference] CA certificate loaded from podman secret."
+fi
+
 # @trace spec:inference-container
 # Detect GPU at runtime (devices passed through via --device flags)
 GPU_STATUS="CPU only"

@@ -5,4 +5,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [src-tauri/src/launch.rs#L416](../../../src-tauri/src/launch.rs#L416)
+- [src-tauri/src/launch.rs#L461](../../../src-tauri/src/launch.rs#L461)

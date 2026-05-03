@@ -18,6 +18,7 @@ mod launch;
 mod log_format;
 mod logging;
 mod menu;
+mod podman_secret;
 mod runner;
 mod secrets;
 mod singleton;

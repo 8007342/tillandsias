@@ -107,6 +107,41 @@ The inference container (ollama-based) supports both baked and lazy-pulled model
 
 **If ollama missing**: Logs `DEGRADED: host-side ollama not found`, skips all pulls. T0/T1 baked models are still available.
 
+## Secrets Architecture — Ephemeral-First Security
+
+@trace spec:podman-secrets-integration, spec:secrets-management
+
+Tillandsias uses **ephemeral podman secrets** for credential isolation in rootless containers. Secrets are never stored on disk and never appear in logs, ps output, or `podman inspect` output.
+
+**Flow:**
+1. **Host keyring** — GitHub tokens and CA certificates stored in Linux Secret Service (GNOME Keyring / pass)
+2. **Tray creates secrets** — At startup, `handlers::setup_secrets()` reads credentials from keyring and creates podman secrets via `podman secret create --driver=file`
+3. **Containers mount secrets** — Container launch passes `--secret <name>` flags; secrets appear at `/run/secrets/<name>` inside container with no world-readable file on disk
+4. **Cleanup on shutdown** — `scripts/cleanup-secrets.sh` removes all `tillandsias-*` secrets when tray exits
+
+**Secret names and contents:**
+- `tillandsias-github-token` — GitHub OAuth token (read by git-service container for authenticated push/fetch)
+- `tillandsias-ca-cert` — Custom CA certificate (read by proxy and inference containers for HTTPS verification)
+- `tillandsias-ca-key` — Custom CA private key (read by proxy container for TLS interception)
+
+**Security properties:**
+- Secrets are NOT visible in `podman inspect` output (no value exposure)
+- Secrets are NOT visible in `ps` output inside containers
+- Secrets are NOT visible in container logs
+- Only containers explicitly mounted with `--secret <name>` can read the secret
+- Forge containers do NOT receive any secrets (fully offline)
+- Secrets auto-cleanup prevents accidental credential leaks after tray shutdown
+
+**Implementation:**
+- Script: `scripts/create-secrets.sh` — reads from keyring, creates secrets (called by tray)
+- Script: `scripts/cleanup-secrets.sh` — removes secrets (called on shutdown)
+- Test script: `scripts/test-secrets.sh` — verifies mount, isolation, and cleanup with `--userns=keep-id`
+- Entrypoints: `images/proxy/entrypoint.sh`, `images/git/entrypoint.sh`, `images/inference/entrypoint.sh` read from `/run/secrets/`
+
+**References:**
+- `cheatsheets/utils/podman-secrets.md` — Podman secrets mechanics and rootless mode requirements
+- `cheatsheets/utils/tillandsias-secrets-architecture.md` — Tillandsias-specific credential flow and D-Bus integration
+
 ## CI/CD — Conservative Cloud Usage
 
 Both CI and Release workflows are **manual trigger only** (`workflow_dispatch`). They NEVER run automatically on push or PR. This is intentional — cloud minutes are expensive.

@@ -570,6 +570,43 @@ pub(crate) async fn ensure_proxy_running(
     // Everything on tmpfs — dies with the session. Takes ~5ms.
     let certs_dir = crate::ca::generate_ephemeral_certs()?;
 
+    // @trace spec:secrets-management, spec:podman-secrets-integration
+    // Create podman secrets for CA certificate and key, enabling secure injection
+    // into containers without exposing files on the host filesystem.
+    let root_cert = std::fs::read(certs_dir.join("root.crt"))
+        .map_err(|e| format!("Failed to read root CA cert: {e}"))?;
+    let intermediate_cert = std::fs::read(certs_dir.join("intermediate.crt"))
+        .map_err(|e| format!("Failed to read intermediate CA cert: {e}"))?;
+    let intermediate_key = std::fs::read(certs_dir.join("intermediate.key"))
+        .map_err(|e| format!("Failed to read intermediate CA key: {e}"))?;
+
+    // Create secrets for the proxy and forge containers
+    // @trace spec:podman-secrets-integration, spec:secrets-management
+    crate::podman_secret::create("tillandsias-ca-root", &root_cert)
+        .map_err(|e| {
+            warn!(error = %e, spec = "secrets-management", "Failed to create root CA secret");
+            e
+        })?;
+
+    crate::podman_secret::create("tillandsias-ca-intermediate-cert", &intermediate_cert)
+        .map_err(|e| {
+            warn!(error = %e, spec = "secrets-management", "Failed to create intermediate CA cert secret");
+            e
+        })?;
+
+    crate::podman_secret::create("tillandsias-ca-intermediate-key", &intermediate_key)
+        .map_err(|e| {
+            warn!(error = %e, spec = "secrets-management", "Failed to create intermediate CA key secret");
+            e
+        })?;
+
+    info!(
+        accountability = true,
+        category = "secrets",
+        spec = "podman-secrets-integration, secrets-management",
+        "CA certificate secrets created for proxy and forge containers"
+    );
+
     // Build proxy container args using the profile + LaunchContext
     let profile = tillandsias_core::container_profile::proxy_profile();
     let cache = cache_dir();
@@ -1769,6 +1806,33 @@ pub async fn ensure_infrastructure_ready(
 
     ensure_enclave_network().await?;
     ensure_proxy_running(state, build_tx).await?;
+
+    // @trace spec:secrets-management, spec:podman-secrets-integration
+    // Create podman secret for GitHub token if available in OS keyring.
+    // Non-fatal if token is unavailable or secret creation fails — git operations
+    // will simply fail gracefully with auth errors if no token is available.
+    if let Ok(Some(token)) = crate::secrets::retrieve_github_token() {
+        match crate::podman_secret::create("tillandsias-github-token", token.as_bytes()) {
+            Ok(secret_id) => {
+                info!(
+                    accountability = true,
+                    category = "secrets",
+                    spec = "podman-secrets-integration, secrets-management",
+                    secret = %secret_id,
+                    "GitHub token secret created for git service containers"
+                );
+            }
+            Err(e) => {
+                warn!(
+                    error = %e,
+                    spec = "secrets-management",
+                    "Failed to create GitHub token secret — git operations may fail if auth is required"
+                );
+            }
+        }
+    } else {
+        debug!(spec = "secrets-management", "No GitHub token in OS keyring, skipping GitHub token secret creation");
+    }
 
     // @trace spec:enclave-network, spec:proxy-container
     info!(
@@ -3565,6 +3629,23 @@ pub async fn shutdown_all(state: &TrayState) {
     // Clean up the enclave network
     // @trace spec:enclave-network
     cleanup_enclave_network().await;
+
+    // Clean up all podman secrets created during infrastructure setup
+    // @trace spec:secrets-management, spec:podman-secrets-integration
+    if let Err(e) = crate::podman_secret::cleanup_all() {
+        warn!(
+            error = %e,
+            spec = "secrets-management",
+            "Failed to clean up podman secrets on shutdown — some secrets may persist"
+        );
+    } else {
+        info!(
+            accountability = true,
+            category = "secrets",
+            spec = "secrets-management",
+            "All podman secrets cleaned up on shutdown"
+        );
+    }
 
     info!(
         accountability = true,
