@@ -282,3 +282,51 @@ openspec_system:
   final_assertion: >
     The system converges only if knowledge remains compressed, specs remain stable,
     and every claim made in code is continuously validated against observed reality.
+
+  litmus_test:
+    definition: >
+      Reproducible full-stack smoke test exercising observable short-circuit errors.
+      GitHub capability (remote project listing) is the test's critical gating point.
+    command: "./build.sh --install && tillandsias --init --debug && tillandsias /path/to/project/ --debug"
+    stack_layers:
+      layer_1_build:
+        name: "Binary and image compilation"
+        gated_by: "none — all sources from git tree"
+        observable_errors:
+          - "[build] cargo compile failed"
+          - "[build] Nix build failed — check flake.nix"
+      layer_2_enclave:
+        name: "Proxy, git-service, inference startup"
+        gated_by: "none — offline infrastructure (GitHub still not needed)"
+        observable_errors:
+          - "[enclave] Proxy health check failed (spec:proxy-container)"
+          - "[enclave] Git service cannot bind to network (spec:git-mirror-service)"
+          - "[enclave] Inference container failed to pull T0/T1 models"
+      layer_3_launch:
+        name: "Forge container launch and project cloning"
+        gated_by: "GitHub capability via git-mirror-service (spec:git-mirror-service, spec:remote-projects)"
+        observable_errors:
+          - "[container] Cannot start forge — GitHub unreachable (spec:simplified-tray-ux)"
+          - "[git-service] Mirror sync failed for GitHub token (spec:github-credential-health)"
+          - "[git-service] Cannot clone from mirror (spec:persistent-git-service)"
+      layer_4_agent:
+        name: "Agent session and tool execution"
+        gated_by: "Forge availability, tools-overlay completeness, connection to inference"
+        observable_errors:
+          - "[entrypoint] Building tools-overlay — OK (spec:default-image)"
+          - "[tools-overlay] Incomplete — Claude Code not found (spec:layered-tools-overlay, TOMBSTONE)"
+          - "[inference] Model routing failed — T2/T5 unavailable (spec:inference-container)"
+    github_capability_as_litmus:
+      principle: >
+        GitHub capability is THE critical test. Without it, the enclave cannot load
+        projects and the stack is non-viable for real work. All four layers above it
+        must succeed before GitHub becomes a blocker.
+      detailed_error_trace:
+        - "Layer 3 failure (GitHub): stack is incomplete. Cannot proceed to agent sessions."
+        - "Layer 2 failure (enclave): GitHub unreachable but expected. Degrade gracefully (spec:simplified-tray-ux)."
+        - "Layer 1 failure (build): compile-time error. User must fix CLAUDE.md / flake.nix."
+    implementation_notes:
+      - "Error messages must include @trace spec:name for bidirectional spec→code linking."
+      - "Each layer's observability comes from podman events + container logs + runtime tracing."
+      - "Failures cascade upward; success at layer N implies success at all layers < N."
+      - "GitHub is explicitly a layer 3 gate because project loading is the user's first real task after environment launch."
