@@ -162,6 +162,7 @@ pub fn create(name: &str, value: &[u8]) -> Result<String, String> {
         .arg("secret")
         .arg("create")
         .arg(name)
+        .arg("-")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
