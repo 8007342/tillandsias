@@ -17,7 +17,7 @@ Replace the accreted, multi-submenu tray design with a minimal, static menu stru
 
 @trace spec:simplified-tray-ux
 
-On application startup, the tray displays exactly 4 static menu items:
+On application startup, the tray MUST display exactly 4 static menu items:
 
 1. **Status Indicator** — Single dynamic entry that displays startup progress
    - Initially: `[<checklist> Verifying environment ...]` (animated, clickable suppressed)
@@ -45,7 +45,7 @@ The status indicator is the only dynamic top-level item. No menu flicker; status
 
 @trace spec:simplified-tray-ux
 
-The tray pre-builds a single menu tree on startup with all items created upfront. State transitions ONLY toggle the `enabled` property on individual items, never rebuild the tree. The project list is the sole exception (rebuild only when the project set changes, detected via set comparison, not polling).
+The tray MUST pre-build a single menu tree on startup with all items created upfront. State transitions MUST ONLY toggle the `enabled` property on individual items, never rebuild the tree. The project list is the sole exception (rebuild only when the project set changes, detected via set comparison, not polling).
 
 Menu stages and their contents (after startup status indicator is removed):
 
@@ -69,7 +69,7 @@ The version line (e.g., `v0.1.168.224`) and the signature `— by Tlatoāni` app
 
 @trace spec:simplified-tray-ux
 
-Visible only when authenticated. Shows all local projects found in `~/.tillandsias/watch/` (or configured watch path), alphabetically sorted. Each project displays exactly 4 tools:
+When authenticated, MUST show all local projects found in `~/.tillandsias/watch/` (or configured watch path), alphabetically sorted. Each project MUST display exactly 4 tools:
 
 ```
 [<home> ~/src/ >
@@ -113,7 +113,7 @@ Visible only when authenticated. Shows all local projects found in `~/.tillandsi
 
 @trace spec:simplified-tray-ux
 
-Visible only when authenticated and remote projects are readable from GitHub. Shows all remote projects available to the user, MINUS any projects that already exist locally in `~/.tillandsias/watch/`. Alphabetically sorted.
+When authenticated and remote projects are readable from GitHub, MUST show all remote projects available to the user, MINUS any projects that already exist locally in `~/.tillandsias/watch/`. Alphabetically sorted.
 
 ```
 [<cloud> Cloud >
@@ -160,7 +160,7 @@ Visible only when authenticated and remote projects are readable from GitHub. Sh
 
 @trace spec:simplified-tray-ux
 
-Visible when the user is not authenticated or GitHub is unreachable.
+MUST be visible when the user is not authenticated or GitHub is unreachable.
 
 **Menu Item:** `[<key> GitHub Login]`
 
@@ -172,11 +172,11 @@ Visible when the user is not authenticated or GitHub is unreachable.
 
 ### Requirement: Single Container Per Project
 
-- There is at most ONE forge container (`tillandsias-<project>-<genus>`) per project per tray process
-- Container lifetime: created on first "Launch", persists until tray Quit
-- Multiple browser windows can connect to the same container (OpenCode Web supports concurrent conversations in the same process)
-- Multiple maintenance terminals can exec into the same container
-- Container teardown happens on tray Quit (after `shutdown_all`)
+- There MUST be at most ONE forge container (`tillandsias-<project>-<genus>`) per project per tray process
+- Container lifetime MUST be created on first "Launch" and MUST persist until tray Quit
+- Multiple browser windows MUST be able to connect to the same container (OpenCode Web supports concurrent conversations in the same process)
+- Multiple maintenance terminals SHOULD be able to exec into the same container
+- Container teardown MUST happen on tray Quit (after `shutdown_all`)
 
 #### Scenario: User launches and then attaches another window
 - **WHEN** user clicks "Launch", then later clicks "Launch" again
@@ -185,10 +185,10 @@ Visible when the user is not authenticated or GitHub is unreachable.
 
 ### Requirement: CLI Behavior Unchanged
 
-Command-line invocation (`tillandsias <path>`) SHALL preserve current defaults:
+Command-line invocation (`tillandsias <path>`) MUST preserve current defaults:
 
-- Default action: drop into an interactive shell (via `entrypoint-terminal.sh`)
-- `tillandsias <path> --opencode` flag still forces OpenCode TUI
+- Default action MUST be to drop into an interactive shell (via `entrypoint-terminal.sh`)
+- `tillandsias <path> --opencode` flag SHOULD force OpenCode TUI
 - This is intentionally different from tray default (tray launches OpenCode Web in browser)
 
 ## Sources of Truth

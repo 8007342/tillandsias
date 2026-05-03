@@ -156,25 +156,25 @@ Tillandsias MUST distinguish two log tiers per container: INTERNAL (existing per
 
 #### Scenario: INTERNAL isolation is an explicit invariant
 - **WHEN** a sibling forge or maintenance container is running
-- **THEN** it SHALL NOT receive a mount of any other container's `ContainerLogs` directory
+- **THEN** it MUST NOT receive a mount of any other container's `ContainerLogs` directory
 - **AND** this property is now an explicit, enumerable requirement (previously true by accident of per-container mount naming; now locked by spec)
 
 #### Scenario: External-log retention across container stop
 - **WHEN** a producer container stops
-- **THEN** its external-log files in `~/.local/state/tillandsias/external-logs/<role>/` SHALL persist on the host
-- **AND** NOT be deleted or rotated by container lifecycle events
+- **THEN** its external-log files in `~/.local/state/tillandsias/external-logs/<role>/` MUST persist on the host
+- **AND** MUST NOT be deleted or rotated by container lifecycle events
 
 #### Scenario: External-log rotation discipline
 - **WHEN** an external-log file exceeds its `rotate_at_mb` cap (default 10 MB)
-- **THEN** the tray auditor rotates it in place (truncate to newest 50% of bytes)
-- **AND** no `.1`/`.2` rotation files are created (flat layout for `tail -f` consumers)
-- **AND** rotation is logged at INFO+accountability level
+- **THEN** the tray auditor MUST rotate it in place (truncate to newest 50% of bytes)
+- **AND** no `.1`/`.2` rotation files MUST be created (flat layout for `tail -f` consumers)
+- **AND** rotation MUST be logged at INFO+accountability level
 
 #### Scenario: Content-type restriction
 - **WHEN** a producer declares a file in its manifest
-- **THEN** `format` SHALL be `text` or `jsonl` only
-- **AND** binary formats are NOT permitted
-- **AND** agents reading external logs SHALL be able to `grep` or `jq` them without a deserialiser dep
+- **THEN** `format` MUST be `text` or `jsonl` only
+- **AND** binary formats MUST NOT be permitted
+- **AND** agents reading external logs SHOULD be able to `grep` or `jq` them without a deserialiser dep
 
 
 ## Sources of Truth
