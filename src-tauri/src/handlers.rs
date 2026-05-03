@@ -1643,11 +1643,11 @@ pub async fn ensure_enclave_ready(
     state: &TrayState,
     build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<EnclaveContext, String> {
-    // GitHub health check — gate enclave initialization on remote capability
-    // @trace spec:simplified-tray-ux, spec:enclave-network
-    if !state.github_healthy {
-        return Err("Cannot initialize enclave: GitHub not reachable (spec:simplified-tray-ux, spec:enclave-network)".into());
-    }
+    // NOTE: GitHub health is NOT a gate for local enclave initialization.
+    // Proxy, forge, git service, and inference are local and don't require
+    // GitHub. GitHub health is only checked when performing remote operations
+    // (cloning remote repos, fetching project metadata).
+    // @trace spec:simplified-tray-ux, spec:enclave-network, spec:tray-minimal-ux
 
     // Step 1+2: Infrastructure services (network + proxy) — hard requirement
     ensure_infrastructure_ready(state, build_tx.clone()).await?;

@@ -5,5 +5,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [src-tauri/src/browser.rs#L806](../../../src-tauri/src/browser.rs#L806)
-- [src-tauri/src/browser.rs#L873](../../../src-tauri/src/browser.rs#L873)
+- [src-tauri/src/browser.rs#L858](../../../src-tauri/src/browser.rs#L858)
+- [src-tauri/src/browser.rs#L925](../../../src-tauri/src/browser.rs#L925)

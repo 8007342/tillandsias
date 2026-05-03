@@ -1,8 +1,8 @@
-# Traces for tools-overlay-fast-reuse
+# Traces for runtime-diagnostics
 
 Code implementing this spec (auto-generated — do not edit).
 Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [src-tauri/src/launch.rs#L416](../../../src-tauri/src/launch.rs#L416)
+- [images/git/entrypoint.sh#L10](../../../images/git/entrypoint.sh#L10)

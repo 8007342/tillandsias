@@ -5,6 +5,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [src-tauri/src/handlers.rs#L2245](../../../src-tauri/src/handlers.rs#L2245)
-- [src-tauri/src/handlers.rs#L2308](../../../src-tauri/src/handlers.rs#L2308)
-- [src-tauri/src/handlers.rs#L4746](../../../src-tauri/src/handlers.rs#L4746)
+- [src-tauri/src/handlers.rs#L2251](../../../src-tauri/src/handlers.rs#L2251)
+- [src-tauri/src/handlers.rs#L2314](../../../src-tauri/src/handlers.rs#L2314)
+- [src-tauri/src/handlers.rs#L4764](../../../src-tauri/src/handlers.rs#L4764)

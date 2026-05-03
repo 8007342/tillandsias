@@ -1,8 +1,8 @@
-# Traces for tools-overlay-fast-reuse
+# Traces for observability-convergence
 
 Code implementing this spec (auto-generated — do not edit).
 Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [src-tauri/src/launch.rs#L416](../../../src-tauri/src/launch.rs#L416)
+- [src-tauri/src/handlers.rs#L4480](../../../src-tauri/src/handlers.rs#L4480)
