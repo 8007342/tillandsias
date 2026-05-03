@@ -1,15 +1,17 @@
 openspec_system:
-  version: v0.1
+  version: v0.2
   philosophy:
     core_principle: >
       Monotonic reduction of uncertainty under verifiable constraints.
     system_model: >
       A closed-loop system where specs define intent, cheatsheets provide compressed knowledge,
-      code implements behavior, traces provide evidence, and CI enforces correctness and convergence.
+      code implements behavior, traces provide evidence, litmus tests define decision boundaries,
+      and CI enforces correctness and convergence.
     invariant:
       - cheatsheet_size_bounded: true
       - spec_stability_required: true
       - verification_claims_must_be_falsifiable: true
+      - convergence_requires_stability: true
 
   layers:
     - name: spec
@@ -24,6 +26,9 @@ openspec_system:
     - name: trace
       description: >
         Runtime evidence linking implementation to spec and knowledge sources.
+    - name: litmus
+      description: >
+        Executable decision boundaries for correctness.
     - name: metrics
       description: >
         Signals derived from execution (hits, misses, verification levels).
@@ -207,11 +212,13 @@ openspec_system:
       - validate_spec_graph
       - compare_declared_vs_observed_verification
       - trigger_revalidation_on_cheatsheet_change
+      - enforce_litmus_tests
     failure_conditions:
       - missing_spec
       - invalid_binding
       - verification_mismatch
       - expired_obsolete_code
+      - litmus_failure
     modes:
       - warn_only_initially
       - strict_enforcement_after_stabilization
@@ -237,10 +244,12 @@ openspec_system:
       - compilation_success
       - spec_compliance
       - bounded_context_size
+      - litmus_pass
     fitness_function: |
       fitness =
         compile_success
       + spec_coverage
+      + litmus_pass_rate
       - cheatsheet_violation
       - runtime_error_rate
       - drift_penalty
@@ -280,20 +289,44 @@ openspec_system:
       - enforce_full_convergence_loop
 
   final_assertion: >
-    The system converges only if knowledge remains compressed, specs remain stable,
-    and every claim made in code is continuously validated against observed reality.
+    The system converges only if: (1) knowledge remains compressed and canonical,
+    (2) specs remain stable and machine-verifiable, (3) every claim made in code
+    is continuously validated against observed reality, and (4) litmus tests
+    reproducibly verify that code satisfies its governing specs. Convergence is
+    monotonic: once achieved, divergence is immediately detectable and reversible.
 
   litmus_test:
     purpose: >
       Reproducible, observable, verifiable test that exercises the system's critical path
       and gates progression on observable success/failure signals. The litmus test is a
       composable assertion that the system converges toward its spec intent.
+
     definition:
       - reproducible: identical preconditions yield identical results
       - observable: all execution emits verifiable signals (logs, metrics, traces, exit codes)
       - falsifiable: success and failure conditions are unambiguous and testable
       - composable: smaller litmus tests combine into larger ones without interference
       - deterministic: no timing assumptions, no flaky conditions, no external polling
+
+    versioning:
+      format: "<domain>.<capability>.<test-intent>@<version>"
+      example: "system.convergence.spec-code-drift@v1"
+      semantic_change_triggers:
+        - new_preconditions
+        - modified_gating_points
+        - changed_success_criteria
+        - added_or_removed_specs
+        - altered_observable_signals
+
+    binding:
+      rule: >
+        Litmus tests bind implementation to specs through observable signals.
+        Each signal must reference one or more specs it validates.
+      enforcement:
+        - every_signal_must_name_specs
+        - specs_must_be_active
+        - no_orphan_signals
+
     structure:
       gates:
         - preconditions: what must be true before the test can run
@@ -305,11 +338,125 @@ openspec_system:
           success: what success looks like
           failure: what failure looks like
           spec_linkage: which spec(s) govern this signal
+          timeout: max time allowed before forced failure (if applicable)
+
     properties:
       - must_short_circuit_on_failure: failing signal halts progression with root cause
       - must_emit_spec_traces: every observable links to its governing spec(s)
       - must_be_self_contained: can run offline, no external dependencies unless explicitly gated
       - must_converge: repeated runs on the same code and state converge to the same result
+      - must_be_independent: success/failure of one litmus test does not depend on others
+
+    drift_detection:
+      mechanism: >
+        Litmus tests serve as drift detectors. When a test that previously passed begins to fail,
+        it signals divergence between code and spec.
+      workflow:
+        - baseline: record passing state as authoritative
+        - monitor: re-run test on every change
+        - alert: failing signal triggers root cause analysis
+        - remediate: update code to re-align with spec
+      properties:
+        - regression_detection: previous-passing test now fails
+        - forward_validation: new test validates new spec requirement
+        - stability_check: test remains stable across repeated runs
+
+    coverage:
+      rule: >
+        Every critical path through the system must be covered by at least one litmus test.
+        Coverage is measured as (specs with litmus tests) / (total active specs).
+      minimum_threshold: 80%
+      calculation: >
+        coverage_ratio = count(specs_with_litmus) / count(specs_active_and_non_deprecated)
+      enforcement:
+        - warn_if_below_threshold
+        - block_archive_if_critical_path_uncovered
+
+    minimality:
+      principle: >
+        A litmus test should exercise only what is necessary to validate its bound specs.
+        Unnecessary complexity introduces false negatives and maintenance burden.
+      rules:
+        - no_redundant_gating_points
+        - preconditions_must_be_minimal
+        - each_signal_validates_exactly_one_semantic_question
+        - compress_adjacent_operations_into_single_signal
+      anti_pattern: >
+        A litmus test that validates the entire system in one run.
+        Split by subsystem and compose smaller tests.
+
+    cost_model:
+      signals:
+        - wall_time_seconds: total time to run test
+        - cpu_time: actual CPU consumed
+        - io_operations: disk/network calls
+        - external_dependencies: counts services that must be running
+        - flakiness_rate: percentage of reruns that differ
+      constraints:
+        - wall_time_per_test_max: 30 seconds
+        - total_ci_litmus_budget: 300 seconds
+        - zero_flakiness: repeatable runs must have identical outcome
+      optimization:
+        - parallelize_independent_tests
+        - cache_preconditions
+        - batch_gating_point_checks
+
+    verification_integration:
+      verification_levels:
+        L0: "litmus test defined and executable"
+        L1: "litmus test passes on reference implementation"
+        L2: "litmus test executes in CI and gates PRs"
+        L3: "litmus test result drives automated remediation"
+      progression:
+        - all_specs_must_achieve_L1
+        - critical_path_specs_must_achieve_L2
+        - convergence_requires_L2_minimum
+      ci_gating:
+        - L0_specs: warn_if_no_litmus
+        - L1_specs: require_litmus_pass
+        - L2_specs: block_merge_on_failure
+
+    failure_types:
+      precondition_failure:
+        signal: >
+          Test prerequisites not met (missing service, data, permissions, etc.)
+        action: >
+          Report unmet precondition, do not execute critical path, exit with SKIP status
+      gating_point_failure:
+        signal: >
+          Observable condition not met during critical path execution
+        action: >
+          Stop execution, emit root cause trace linking to spec, exit with FAIL status
+      timeout_failure:
+        signal: >
+          Operation exceeded specified timeout
+        action: >
+          Force termination, emit timeout signal with elapsed duration and spec linkage
+      divergence_failure:
+        signal: >
+          Litmus test previously passing now fails; code diverged from spec
+        action: >
+          Escalate to human review, suggest root cause by comparing spec vs observed behavior
+      flakiness_detection:
+        signal: >
+          Same inputs produce different outputs on repeated runs
+        action: >
+          Quarantine test, escalate for investigation, do not gate CI
+
+    anti_gaming:
+      rules:
+        - tests_must_exercise_actual_code_paths: no_mocking_required_behavior
+        - success_cannot_be_hardcoded: test must fail if spec is violated
+        - signals_must_be_externally_observable: internal state does not count
+        - gating_points_must_be_deterministic: no random passes
+      detection:
+        - code_review: human inspection of test source
+        - mutation_testing: randomly modify code and verify test fails
+        - coverage_analysis: ensure test actually touches the code it claims to validate
+      enforcement: >
+        Tests that fail mutation testing or code review are downgraded to L0
+        and do not gate CI until remediated.
+
     root_cause_citation:
       rule: >
         Every litmus test failure MUST emit a spec trace linking to the failing spec.
@@ -319,11 +466,17 @@ openspec_system:
         [fail] health_check_timeout: service did not respond in 5s
         @trace spec:service-startup
         Root cause: initialization_timeout in spec:service-startup
-    monotonic_convergence:
-      role: >
-        Litmus tests enforce monotonic convergence by making spec compliance verifiable.
-        If a litmus test fails, code diverges from spec. If it passes, the system converges
-        toward spec intent. CI runs litmus tests to validate every change.
+
+    convergence_role:
+      statement: >
+        Litmus tests are the bridge between spec and code. They enforce monotonic convergence
+        by making spec compliance verifiable and falsifiable. A system can only claim convergence
+        if its litmus tests pass.
+      convergence_properties:
+        - litmus_pass_is_necessary_condition: code_divergence ⟹ litmus_fail
+        - litmus_pass_is_sufficient_condition: litmus_pass ⟹ spec_alignment
+        - monotonic_enforcement: once_passing_must_remain_passing_or_fail_explicitly
       constraint: >
         A passing litmus test is a claim that the system satisfies all specs it
         references. A failing litmus test must identify which spec was violated.
+        The system can only converge if all critical-path litmus tests pass.
