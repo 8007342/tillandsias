@@ -16,26 +16,26 @@ Optimize launch-time mount path resolution by consulting the process-lifetime to
 
 ### Requirement: Fast-Path Snapshot Lookup in Mount Resolution
 
-The mount source resolution for `MountSource::ToolsOverlay` SHALL consult the cached overlay snapshot before performing an `exists()` syscall.
+The mount source resolution for `MountSource::ToolsOverlay` MUST consult the cached overlay snapshot before performing an `exists()` syscall. @trace spec:overlay-mount-cache
 
 #### Scenario: Normal launch with valid snapshot
 - **WHEN** `resolve_mount_source()` is called with `MountSource::ToolsOverlay` during a launch
-- **THEN** the function queries `crate::tools_overlay::cached_overlay_for(&forge_image_tag())` first
-- **THEN** if the snapshot is valid and current, mount path resolution returns immediately without `exists()` call
+- **THEN** the function MUST query `crate::tools_overlay::cached_overlay_for(&forge_image_tag())` first
+- **THEN** if the snapshot is valid and current, mount path resolution MUST return immediately without `exists()` call
 
 #### Scenario: Snapshot invalidated by background rebuild
 - **WHEN** a background overlay rebuild invalidates the process-lifetime snapshot mid-launch
-- **THEN** the fast-path lookup returns `None`
-- **THEN** the fallback `exists()` check runs (rare, acceptable slow path)
+- **THEN** the fast-path lookup MUST return `None`
+- **THEN** the fallback `exists()` check SHOULD run (rare, acceptable slow path)
 
 ### Requirement: Integrated with Process-Lifetime Snapshot
 
-The overlay mount cache SHALL operate in tandem with the snapshot cache introduced in `tools-overlay-fast-reuse`.
+The overlay mount cache MUST operate in tandem with the snapshot cache introduced in `tools-overlay-fast-reuse`.
 
 #### Scenario: Snapshot guaranteed warm at mount resolution time
 - **WHEN** `handle_attach_here` awaits `ensure_tools_overlay` (which populates the snapshot)
-- **THEN** `build_podman_args` is called
-- **THEN** `resolve_mount_source` is guaranteed to find a valid snapshot in `cached_overlay_for`
+- **THEN** `build_podman_args` MUST be called
+- **THEN** `resolve_mount_source` MUST be guaranteed to find a valid snapshot in `cached_overlay_for`
 
 ## Rationale
 

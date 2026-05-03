@@ -21,70 +21,70 @@ Defines Windows-specific accountability logging via ETW (Event Tracing for Windo
 
 ### Requirement: Windows Event Log Integration (Suspended)
 
-When Windows builds are re-enabled, the Tillandsias tray binary SHALL write selected tracing events to the Windows Event Log via ETW.
+When Windows builds are re-enabled, the Tillandsias tray binary MUST write selected tracing events to the Windows Event Log via ETW. @trace spec:windows-event-logging
 
 **Note**: This requirement is currently SUSPENDED. The implementation in `src-tauri/src/windows_eventlog.rs` exists but is NOT active. See `build.rs` and `logging.rs` for conditional compilation guards.
 
 - **Platform**: Windows-only (conditional compilation: `#[cfg(target_os = "windows")]`)
-- **Registry**: Event source "Tillandsias" must be registered in Windows registry under `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\eventlog\Application\Tillandsias`
+- **Registry**: Event source "Tillandsias" MUST be registered in Windows registry under `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\eventlog\Application\Tillandsias`
 - **Registration method**: Installer (NSIS) or manual PowerShell: `New-EventLog -LogName Application -Source Tillandsias`
-- **Layer integration**: Part of `tracing_subscriber::Layer` stack (same as file logging, stderr)
+- **Layer integration**: MUST be part of `tracing_subscriber::Layer` stack (same as file logging, stderr)
 
 #### Scenario: Event source registration
 
 - **WHEN** NSIS installer runs on Windows
-- **THEN** create registry key `HKEY_LOCAL_MACHINE\...\Tillandsias`
-- **AND** set `EventMessageFile` to Tillandsias binary path
-- **AND** set `TypesSupported` to 7 (error | warning | information)
+- **THEN** MUST create registry key `HKEY_LOCAL_MACHINE\...\Tillandsias`
+- **AND** MUST set `EventMessageFile` to Tillandsias binary path
+- **AND** MUST set `TypesSupported` to 7 (error | warning | information)
 
 - **WHEN** registry key does NOT exist and user starts Tillandsias
-- **THEN** Windows Event Log layer silently returns `None` (disabled)
-- **AND** emit DEBUG log: "Windows Event Log source not registered"
-- **AND** application continues normally (no crash)
+- **THEN** Windows Event Log layer MUST silently return `None` (disabled)
+- **AND** MUST emit DEBUG log: "Windows Event Log source not registered"
+- **AND** application MUST continue normally (no crash)
 
 ### Requirement: Event Type Mapping
 
-Tracing events SHALL be mapped to Windows Event Log types based on level and accountability.
+Tracing events MUST be mapped to Windows Event Log types based on level and accountability.
 
 #### Mapping Rules
 
 | Tracing Level | Accountability | Event Type | Action |
 |---------------|---|---|---|
-| **ERROR** | any | `EVENTLOG_ERROR_TYPE` (1) | Always written |
-| **WARN** | any | `EVENTLOG_WARNING_TYPE` (2) | Always written |
-| **INFO** | true | `EVENTLOG_INFORMATION_TYPE` (4) | Written (sensitive) |
-| **INFO** | false | (skipped) | Not written |
-| **DEBUG** | any | (skipped) | Not written |
-| **TRACE** | any | (skipped) | Not written |
+| **ERROR** | any | `EVENTLOG_ERROR_TYPE` (1) | MUST be written |
+| **WARN** | any | `EVENTLOG_WARNING_TYPE` (2) | MUST be written |
+| **INFO** | true | `EVENTLOG_INFORMATION_TYPE` (4) | MUST be written (sensitive) |
+| **INFO** | false | (skipped) | MUST NOT be written |
+| **DEBUG** | any | (skipped) | MUST NOT be written |
+| **TRACE** | any | (skipped) | MUST NOT be written |
 
 #### Scenario: Error event
 
 - **WHEN** tray emits: `error!(accountability = true, spec = "secrets", "GitHub token fetch failed")`
-- **THEN** Windows Event Log layer detects ERROR level
-- **AND** writes to Event Log type `EVENTLOG_ERROR_TYPE`
-- **AND** event appears in Event Viewer
+- **THEN** Windows Event Log layer MUST detect ERROR level
+- **AND** MUST write to Event Log type `EVENTLOG_ERROR_TYPE`
+- **AND** event MUST appear in Event Viewer
 
 #### Scenario: Accountability info event
 
 - **WHEN** tray emits: `info!(accountability = true, category = "secrets", safety = "...", "Token cached")`
-- **THEN** Window Event Log layer detects INFO + accountability = true
-- **AND** writes to Event Log type `EVENTLOG_INFORMATION_TYPE`
-- **AND** event includes metadata (see next requirement)
+- **THEN** Window Event Log layer MUST detect INFO + accountability = true
+- **AND** MUST write to Event Log type `EVENTLOG_INFORMATION_TYPE`
+- **AND** event MUST include metadata (see next requirement)
 
 #### Scenario: Non-accountability info event
 
 - **WHEN** tray emits: `info!("Container started")`
-- **THEN** layer detects INFO without accountability
-- **AND** event is SKIPPED (not written to Event Log)
-- **AND** still written to file log and stderr (normal path)
+- **THEN** layer MUST detect INFO without accountability
+- **AND** event MUST be SKIPPED (not written to Event Log)
+- **AND** SHOULD still be written to file log and stderr (normal path)
 
 ### Requirement: Metadata Preservation in Event Log
 
-Accountability events written to Windows Event Log SHALL include structured metadata fields.
+Accountability events written to Windows Event Log MUST include structured metadata fields.
 
 #### Metadata Fields
 
-For accountability events, the Event Log message body SHALL include:
+For accountability events, the Event Log message body MUST include:
 
 ```text
 [Base message from tracing event]
@@ -111,39 +111,39 @@ Safety: Never written to disk, injected via bind mount
   - category: "secrets"
   - safety: "Never written to disk"
   - spec: "native-secrets-store"
-- **THEN** Event Log layer formats as above
-- **AND** writes full message to Event Viewer
+- **THEN** Event Log layer MUST format as above
+- **AND** MUST write full message to Event Viewer
 
 ### Requirement: Graceful Degradation on Missing Registry
 
-If the Windows Event Log source is not registered, the layer SHALL silently degrade without crashing.
+If the Windows Event Log source is not registered, the layer MUST silently degrade without crashing.
 
-- **Registration check**: Attempt to open registry path on first write
-- **If not found**: Return `None` (layer disabled for this session)
-- **Logging**: Emit single DEBUG log: `"Windows Event Log source 'Tillandsias' not registered; skipping"`
-- **No retry**: Do not attempt to create registry key or re-check in subsequent events
-- **No crash**: Application continues normally
+- **Registration check**: MUST attempt to open registry path on first write
+- **If not found**: MUST return `None` (layer disabled for this session)
+- **Logging**: MUST emit single DEBUG log: `"Windows Event Log source 'Tillandsias' not registered; skipping"`
+- **No retry**: MUST NOT attempt to create registry key or re-check in subsequent events
+- **No crash**: Application MUST continue normally
 
 #### Scenario: Registry key missing on first event
 
 - **WHEN** user starts Tillandsias without prior registry registration
 - **AND** first tracing event occurs (e.g., startup INFO)
-- **THEN** layer attempts registry lookup
-- **AND** lookup fails
-- **AND** emit single DEBUG log (per session)
-- **AND** subsequent events skip Event Log entirely
-- **AND** application continues with file + stderr logging only
+- **THEN** layer MUST attempt registry lookup
+- **AND** lookup MUST fail
+- **AND** MUST emit single DEBUG log (per session)
+- **AND** subsequent events MUST skip Event Log entirely
+- **AND** application MUST continue with file + stderr logging only
 
 ### Requirement: Logging and Observability
 
-The Windows Event Log layer SHALL emit DEBUG logs for registration status on startup.
+The Windows Event Log layer MUST emit DEBUG logs for registration status on startup.
 
 - **Condition 1**: Registry key found
-  - DEBUG log: `"Windows Event Log source registered"`
+  - DEBUG log: MUST be `"Windows Event Log source registered"`
 - **Condition 2**: Registry key NOT found
-  - DEBUG log: `"Windows Event Log source 'Tillandsias' not registered; skipping"`
+  - DEBUG log: MUST be `"Windows Event Log source 'Tillandsias' not registered; skipping"`
 - **Level**: DEBUG (verbose, for troubleshooting)
-- **Frequency**: Once per session (not on every event)
+- **Frequency**: MUST be once per session (not on every event)
 
 #### Log Examples
 
@@ -160,7 +160,7 @@ DEBUG logging: Windows Event Log source 'Tillandsias' not registered; skipping
 
 ### Requirement: Layer Implementation (Suspended)
 
-The Windows Event Log layer is implemented as a `tracing_subscriber::Layer<S>` that wraps the ETW API.
+The Windows Event Log layer MUST be implemented as a `tracing_subscriber::Layer<S>` that wraps the ETW API.
 
 **File**: `src-tauri/src/windows_eventlog.rs` (currently conditional on `#[cfg(target_os = "windows")]`)
 
@@ -169,20 +169,20 @@ The Windows Event Log layer is implemented as a `tracing_subscriber::Layer<S>` t
 - **Name**: `WindowsEventLogLayer`
 - **Generic over**: `S: Subscriber + for<'a> LookupSpan<'a>`
 - **Methods**:
-  - `on_new_span()` — not used (events only)
-  - `on_event()` — extract fields, format, write to Event Log
-- **Integration**: Added to subscriber stack via `.with(WindowsEventLogLayer::new())`
-- **Thread-safe**: Safe for concurrent event emission (uses Win32 APIs)
+  - `on_new_span()` — MUST NOT be used (events only)
+  - `on_event()` — MUST extract fields, format, write to Event Log
+- **Integration**: MUST be added to subscriber stack via `.with(WindowsEventLogLayer::new())`
+- **Thread-safe**: MUST be safe for concurrent event emission (uses Win32 APIs)
 
 #### Event Field Extraction
 
-The layer implements `tracing::field::Visit` to extract fields:
+The layer MUST implement `tracing::field::Visit` to extract fields:
 - `message` — base event message
 - `accountability` (bool) — sensitivity flag
 - `category` (str) — operation category
 - `safety` (str) — safety note
 - `spec` (str) — spec reference
-- `other` — all other fields (discarded for accountability events)
+- `other` — all other fields (MUST be discarded for accountability events)
 
 #### Scenario: Layer in subscriber stack
 
@@ -196,21 +196,21 @@ tracing_subscriber::registry()
 
 ### Requirement: Suspension Mechanics
 
-When Windows builds are suspended, the following apply:
+When Windows builds are suspended, the following MUST apply:
 
-- **Conditional compilation**: `#[cfg(target_os = "windows")]` gates all Windows Event Log code
-- **Build flag**: `scripts/build-windows.sh` and `build.rs` do NOT attempt to compile Windows Event Log layer
-- **No-op on non-Windows**: Other platforms compile nothing; zero runtime cost
+- **Conditional compilation**: `#[cfg(target_os = "windows")]` MUST gate all Windows Event Log code
+- **Build flag**: `scripts/build-windows.sh` and `build.rs` MUST NOT attempt to compile Windows Event Log layer
+- **No-op on non-Windows**: Other platforms MUST compile nothing; zero runtime cost
 - **Reactivation**: When Windows builds resume, rebuild binary with same code (no changes needed unless Windows APIs changed)
 
 #### Reactivation Checklist (for future)
 
 When Windows builds are re-enabled:
-1. Verify `src-tauri/src/windows_eventlog.rs` compiles (Windows SDK requirements)
-2. Confirm `build.rs` includes Windows Event Log layer in subscriber stack
-3. Test registry key creation via NSIS installer
-4. Verify Event Viewer shows accountability events correctly
-5. Test graceful degradation when registry key missing
+1. MUST verify `src-tauri/src/windows_eventlog.rs` compiles (Windows SDK requirements)
+2. MUST confirm `build.rs` includes Windows Event Log layer in subscriber stack
+3. MUST test registry key creation via NSIS installer
+4. MUST verify Event Viewer shows accountability events correctly
+5. MUST test graceful degradation when registry key missing
 
 ## Litmus Tests
 
