@@ -4505,15 +4505,20 @@ pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, debug: b
     }
 
     // --- Phase 2: Discover target containers ---
-    let shared_containers = vec!["tillandsias-proxy", "tillandsias-git", "tillandsias-inference"];
+    // @trace spec:cli-diagnostics
+    // Shared enclave containers: proxy and inference are global.
+    // Git service is per-project: tillandsias-git-{project_name}
+    let shared_containers = vec!["tillandsias-proxy", "tillandsias-inference"];
 
     let project_containers: Vec<String> = if project_path.is_some() {
         vec![
+            format!("tillandsias-git-{}", project_name),
             format!("tillandsias-{}-forge", project_name),
             format!("tillandsias-{}-browser-core", project_name),
             format!("tillandsias-{}-browser-framework", project_name),
         ]
     } else {
+        // For shared-infra diagnostics, still monitor git containers if any exist
         vec![]
     };
 
