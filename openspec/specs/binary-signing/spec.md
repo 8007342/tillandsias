@@ -3,7 +3,7 @@
 
 status: active
 
-## MODIFIED Requirements
+## Requirements
 
 ### Requirement: Signature and certificate artifacts
 Each signed binary SHALL have its signature and certificate published as separate files alongside the binary in the GitHub Release. Signature files use the `.sig` extension and certificate files use the `.cert` extension.

@@ -6,121 +6,120 @@ status: active
 promoted-from: openspec/changes/archive/inference-host-side-pull-completed-2026-04-27/
 annotation-count: 7
 
----
+## Requirements
 
-# Spec: inference-host-side-pull
+### Requirement: Automatic model pulling on inference startup
+After inference container health check passes, tray MUST detect GPU tier and spawn a background model pull task. The pull task SHALL be fire-and-forget with no await or blocking.
 
-## Feature
+#### Scenario: Health check triggers pull
+- **WHEN** inference container `/api/version` health check succeeds
+- **THEN** tray calls `gpu::detect_gpu_tier()` once and spawns `inference_lazy_pull::spawn_model_pull_task(tier)`
 
-Automatic lazy model pulling for inference container, spawned after inference startup completes. Host-side `ollama pull` bypasses proxy, lands models in `~/.cache/tillandsias/models/` which the inference container bind-mounts and discovers on next `/api/tags` call.
+#### Scenario: Fire-and-forget execution
+- **WHEN** spawn_model_pull_task is called
+- **THEN** control returns immediately without awaiting task completion
 
-## Behavior
+### Requirement: GPU tier-driven model selection
+The pull task MUST select models based on detected GPU VRAM tier. Model selection follows a static tier-to-models mapping that MUST be immutable at runtime.
 
-### Triggering
+#### Scenario: Mid-tier GPU models
+- **WHEN** detected tier is Mid (4-8GB VRAM)
+- **THEN** pull task SHALL attempt to pull `qwen2.5-coder:7b`
 
-- After inference container health check passes (curl to `/api/version` succeeds)
-- Tray calls `gpu::detect_gpu_tier()` once
-- Spawns background task via `inference_lazy_pull::spawn_model_pull_task(tier)`
-- Fire-and-forget; no await
+#### Scenario: High-tier GPU models
+- **WHEN** detected tier is High (8-12GB VRAM)
+- **THEN** pull task SHALL attempt to pull `qwen2.5-coder:7b` and `qwen2.5-coder:14b`
 
-### Model Selection by Tier
+#### Scenario: Ultra-tier GPU models
+- **WHEN** detected tier is Ultra (≥12GB VRAM)
+- **THEN** pull task SHALL attempt to pull `qwen2.5-coder:7b`, `qwen2.5-coder:14b`, and `qwen2.5-coder:32b`
 
-| Tier | VRAM | Models to Pull |
-|------|------|---|
-| None | 0GB | None (T0/T1 baked) |
-| Low | ≤4GB | None (T0/T1 baked) |
-| Mid | 4-8GB | qwen2.5-coder:7b |
-| High | 8-12GB | qwen2.5-coder:7b, qwen2.5-coder:14b |
-| Ultra | ≥12GB | qwen2.5-coder:7b, qwen2.5-coder:14b, qwen2.5-coder:32b |
+#### Scenario: No additional models for low tiers
+- **WHEN** detected tier is None or Low (≤4GB VRAM)
+- **THEN** pull task SHALL skip pulling (T0/T1 models already baked in image)
 
-### Caching
+### Requirement: Cache-aware manifest checking
+Before attempting each model pull, the pull task MUST check if the model manifest already exists locally. If present, the model pull MUST be skipped.
 
-- Before pulling, check if manifest exists at `~/.ollama/models/manifests/registry.ollama.ai/library/<name>/<tag>`
-- If exists → skip (already cached)
-- If missing → spawn `ollama pull <model>` on host
+#### Scenario: Model already cached
+- **WHEN** manifest exists at `~/.ollama/models/manifests/registry.ollama.ai/library/<name>/<tag>`
+- **THEN** pull task SHALL skip pulling and log at debug level
 
-### Error Handling
+#### Scenario: Model not cached, pull spawned
+- **WHEN** manifest does not exist
+- **THEN** pull task SHALL spawn `ollama pull <model>` as a blocking task on host
 
-- **ollama binary not found**: log `DEGRADED: host-side ollama not found`, skip all pulls
-- **Pull fails**: log warning with stderr, continue to next model
-- **Manifest check fails**: benign, log debug, skip
+### Requirement: Graceful error handling with degradation
+The pull task MUST handle missing ollama binary, failed pulls, and manifest check failures without crashing or blocking inference. Errors MUST be logged with appropriate severity.
 
-### No UX
+#### Scenario: Ollama binary not found
+- **WHEN** `which ollama` returns empty or error
+- **THEN** pull task SHALL log warning with `safety = "DEGRADED: host-side ollama not found"` and skip all pulls
 
-- No tray menu item
-- No notification
-- No progress bar
-- No user prompt
-- Background-only operation
+#### Scenario: Individual model pull fails
+- **WHEN** `ollama pull <model>` exits non-zero
+- **THEN** pull task SHALL log warning with stderr and continue to next model (not fatal)
 
-## Implementation
+#### Scenario: Manifest check fails
+- **WHEN** manifest existence check encounters I/O error
+- **THEN** pull task SHALL log at debug level and benignly continue
 
-### Module: `src-tauri/src/inference_lazy_pull.rs`
+### Requirement: Host-side pull via native ollama binary
+Model pulls MUST occur via the host-side `ollama` binary, NOT through the inference container or proxy. This bypass is critical because Squid 6.x manifests EOF on large ollama pull streams.
 
-```rust
-pub fn spawn_model_pull_task(tier: GpuTier)
-  → async fn run_model_pull(tier: GpuTier)
-    → async fn pull_model_host_side(model: &str)
-       → tokio::task::spawn_blocking(|| Command::new("ollama").arg("pull")...)
+#### Scenario: Pull bypasses proxy
+- **WHEN** pull task spawns `ollama pull <model>`
+- **THEN** command runs on host (not inside inference container), using native `ollama` binary with direct registry access
 
-fn is_model_cached(model_name: &str) -> bool
-  → checks ~/.ollama/models/manifests/.../library/{name}/{tag}
+### Requirement: Cache path binding to inference container
+The inference container MUST bind-mount `~/.cache/tillandsias/models/` as `{OLLAMA_HOME}/models` (read-write). Ollama MUST auto-rescan and discover newly pulled models on next `/api/tags` call.
 
-fn model_tier_map() -> HashMap<GpuTier, Vec<&'static str>>
-  → static tier → model mapping
-```
+#### Scenario: Cache mount and discovery
+- **WHEN** pull task completes and inference container runs `GET /api/tags`
+- **THEN** newly pulled models appear in the tags list without restart
 
-### Wiring: `src-tauri/src/handlers.rs`
+### Requirement: Silent background operation with no UX
+The pull task MUST NOT show tray menu items, notifications, progress bars, or user prompts. Operation is entirely background-only.
 
-Line ~354 in `ensure_inference_running()`, after health check passes:
+#### Scenario: No user-facing UI
+- **WHEN** model pull task is running
+- **THEN** no tray menu changes, no notifications sent, no progress displayed
 
-```rust
-let gpu_tier = crate::gpu::detect_gpu_tier();
-crate::inference_lazy_pull::spawn_model_pull_task(gpu_tier);
-```
+### Requirement: Comprehensive telemetry with spec tracing
+All log events from the pull task MUST include `spec = "inference-host-side-pull"` field. Telemetry MUST cover task lifecycle, per-model progress, and error conditions.
 
-### GPU Tier: `src-tauri/src/gpu.rs`
+#### Scenario: Task start logging
+- **WHEN** pull task begins
+- **THEN** log at info level: `tier = <tier>, model_count = <count>, "Starting lazy model pull task"`
 
-- Added `Hash` derive to `GpuTier` enum (required for HashMap key)
-- Reused existing `detect_gpu_tier()` function
-- Reused existing tier classification logic (0-3GB, 4-7GB, 8-11GB, 12+GB)
+#### Scenario: Model pull start logging
+- **WHEN** individual model pull begins
+- **THEN** log at info level: `model = <name>, "Starting model pull from ollama registry"`
 
-## Telemetry
+#### Scenario: Cached model skip logging
+- **WHEN** model manifest is found and pull skipped
+- **THEN** log at debug level: `model = <name>, "Model already cached — skipping"`
 
-All log events use `spec = "inference-host-side-pull"`:
+#### Scenario: Pull success logging
+- **WHEN** model pull completes successfully
+- **THEN** log at info level: `elapsed_secs = <duration>, "Model pull completed successfully"`
 
-- **Task start**: `info!(..., tier = %tier, model_count = ..., "Starting lazy model pull task")`
-- **Per-model start**: `info!(..., model = ..., "Starting model pull from ollama registry")`
-- **Cached skip**: `debug!(..., model = ..., "Model already cached — skipping")`
-- **Pull complete**: `info!(..., elapsed_secs = ..., "Model pull completed successfully")`
-- **Pull fail**: `warn!(..., error = %stderr, elapsed_secs = ..., "Model pull failed")`
-- **Ollama missing**: `warn!(..., category = "capability", safety = "DEGRADED: host-side ollama not found", ...)`
-- **Task complete**: `info!(..., tier = %tier, "Model pull task completed")`
+#### Scenario: Pull failure logging
+- **WHEN** model pull fails
+- **THEN** log at warn level: `error = <stderr>, elapsed_secs = <duration>, "Model pull failed"`
 
-## Cache Integration
-
-Inference container mount (handlers.rs line 289-295):
-```
--v ~/.cache/tillandsias/models/:/home/ollama/.ollama/models:rw
-```
-
-Ollama auto-rescans at next `/api/tags` call → newly pulled models appear.
-
-## Assumptions
-
-- Host has `ollama` binary in PATH (checked via `which ollama`)
-- `~/.ollama/models/manifests/` directory structure exists (created by ollama on first run)
-- HOME env var is set (used to find cache path)
-- `gpu::detect_gpu_tier()` is fast (<100ms) and cached if called multiple times
-
-## Future Extensions
-
-- Track model pull metrics (bytes, time, tier distribution)
-- Expose via `tillandsias --download-stats` CLI
-- Consider background queuing if multiple tiers pull simultaneously
-- Pre-pull models on first install (before user launches inference)
+#### Scenario: Task completion logging
+- **WHEN** all models processed
+- **THEN** log at info level: `tier = <tier>, "Model pull task completed"`
 
 ## Sources of Truth
 
 - `cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md` — cache path management pattern
 - `cheatsheets/runtime/ollama-model-management.md` — ollama pull semantics (resumable, manifest checking)
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:inference-host-side-pull" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```
