@@ -9,6 +9,29 @@
 - [Red Hat Container Security Best Practices](https://access.redhat.com/articles/3757761) — secrets handling in containers
 - **Last updated:** 2026-05-03
 
+## Critical Implementation Detail: Secret Names Must Match
+
+**GOTCHA**: Podman does NOT validate that secret names used in `podman run --secret=<name>` actually exist. If you try to mount a non-existent secret, the `podman run` command silently fails or the container exits with a cryptic error.
+
+When implementing secrets:
+1. Secret creation: `podman secret create <name> <source>` must use the exact name
+2. Secret mounting: `podman run --secret=<name>` must use the **same exact name**
+3. Container reading: `/run/secrets/<name>` must match the name above
+4. Any mismatch will silently fail at container startup time
+
+Example of the bug:
+```bash
+# Created as "github-token"
+podman secret create github-token <value>
+
+# But mounted as "github-secret" (typo!)
+podman run --secret=github-secret myimage
+
+# Result: Container starts but secret doesn't exist, reads from /run/secrets/github-secret fail
+```
+
+Always grep your codebase to ensure secret names are consistent across creation, mounting, and reading.
+
 ## What Are Podman Secrets?
 
 Podman secrets are a built-in mechanism for managing sensitive data that containers need at runtime. Unlike environment variables or bind mounts, secrets:

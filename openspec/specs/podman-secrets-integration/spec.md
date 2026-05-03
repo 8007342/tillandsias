@@ -11,6 +11,25 @@ Tillandsias SHALL use podman's native secret mechanism (`podman secret`) as the 
 
 @trace spec:podman-secrets-integration
 
+## Secret Names Registry
+
+All ephemeral secrets use the following names. These names are hardcoded and MUST match across all references (handlers.rs creation, launch.rs mounting, entrypoints reading).
+
+| Secret Name | Purpose | Created In | Mounted To | Read At |
+|---|---|---|---|---|
+| `tillandsias-ca-root` | Root CA certificate (for cert chain validation) | `handlers.rs:585` | None (archive only) | N/A |
+| `tillandsias-ca-cert` | Intermediate CA certificate (for MITM proxy) | `handlers.rs:591` | proxy, forge | `/run/secrets/tillandsias-ca-cert` |
+| `tillandsias-ca-key` | Intermediate CA private key (for MITM proxy) | `handlers.rs:597` | proxy, forge | `/run/secrets/tillandsias-ca-key` |
+| `tillandsias-github-token` | GitHub personal access token | `handlers.rs:740` | git service | `/run/secrets/tillandsias-github-token` |
+
+**Critical**: Secret name references MUST be identical in:
+1. `src-tauri/src/handlers.rs` — creation with `podman_secret::create()`
+2. `src-tauri/src/launch.rs` — mounting checks with `podman_secret::exists()` and `--secret=` flags
+3. Container entrypoints (`images/proxy/entrypoint.sh`, `images/git/entrypoint.sh`) — reading from `/run/secrets/<name>`
+4. This spec document — documented in the table above
+
+Any mismatch between these locations is a critical bug that prevents containers from accessing credentials.
+
 ## Requirements
 
 ### Requirement: Ephemeral secrets created at tray startup

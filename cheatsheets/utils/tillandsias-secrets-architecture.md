@@ -23,6 +23,27 @@ Tillandsias follows **ephemeral-first security**: all secrets are created at ses
 | **SSH Keys** (future) | Per-session | Until logout | Ephemeral tmpfs | Git clone/push |
 | **Database Password** (future) | Per-session | Container lifetime | Ephemeral tmpfs | Inference container |
 
+## Secret Names Reference
+
+All secrets in Tillandsias use explicit, hardcoded names. These names are **critical** — they must match exactly across all code paths.
+
+| Secret Name | Type | Lifetime | Container | Path |
+|---|---|---|---|---|
+| `tillandsias-ca-root` | X.509 cert | Session | (none) | Archive |
+| `tillandsias-ca-cert` | X.509 cert | Session | proxy, forge | `/run/secrets/tillandsias-ca-cert` |
+| `tillandsias-ca-key` | Private key | Session | proxy, forge | `/run/secrets/tillandsias-ca-key` |
+| `tillandsias-github-token` | OAuth token | Session | git service | `/run/secrets/tillandsias-github-token` |
+
+**How to verify names match**: grep for these strings in:
+```bash
+grep -r "tillandsias-ca-cert\|tillandsias-ca-key\|tillandsias-github-token" \
+  src-tauri/src/handlers.rs \
+  src-tauri/src/launch.rs \
+  images/*/entrypoint.sh
+```
+
+All matches should show the same names in creation, mounting, and reading contexts.
+
 ## Architecture: Three-Layer Secret Flow
 
 ### Layer 1: Secret Source (Host)
