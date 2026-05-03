@@ -11,18 +11,18 @@ Pre-built tools overlay that decouples AI coding tool lifecycle (OpenCode, Claud
 ## Requirements
 ### Requirement: Capability is tombstoned
 
-The `layered-tools-overlay` capability SHALL remain in the spec index
+The `layered-tools-overlay` capability MUST remain in the spec index
 only as a tombstone. All operative requirements have been removed.
-Any code or documentation that references this capability SHALL be
+Any code or documentation that references this capability MUST be
 treated as legacy and migrated to `spec:default-image` (agent
 hard-install) or `spec:opencode-web-session` (config overlay on
 tmpfs).
 
 #### Scenario: Tombstone visible to readers
 - **WHEN** an engineer opens `openspec/specs/layered-tools-overlay/spec.md`
-- **THEN** they SHALL see exactly one active requirement noting the
+- **THEN** they MUST see exactly one active requirement noting the
   tombstone
-- **AND** they SHALL be pointed to the superseding specs
+- **AND** they MUST be pointed to the superseding specs
 
 
 ## Litmus Tests

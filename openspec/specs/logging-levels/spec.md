@@ -17,7 +17,7 @@ Defines the embedded external-logs.yaml configuration files that control logging
 
 ### Requirement: External Logs Configuration Files
 
-The Tillandsias binary SHALL embed external-logs.yaml files for each service container that requires logging configuration.
+The Tillandsias binary MUST embed external-logs.yaml files for each service container that requires logging configuration.
 
 #### Embedded Files
 
@@ -33,12 +33,12 @@ The Tillandsias binary SHALL embed external-logs.yaml files for each service con
 #### Scenario: Embedded configuration
 
 - **WHEN** Tillandsias binary is built
-- **THEN** each external-logs.yaml file is compiled into the binary as a static string constant
+- **THEN** each external-logs.yaml file MUST be compiled into the binary as a static string constant
 - **AND** available as `GIT_EXTERNAL_LOGS`, `INFERENCE_EXTERNAL_LOGS`, `ROUTER_EXTERNAL_LOGS`, etc.
 
 ### Requirement: YAML Configuration Format
 
-Each external-logs.yaml file SHALL define logging rules using standard syslog/rsyslog conventions.
+Each external-logs.yaml file MUST define logging rules using standard syslog/rsyslog conventions.
 
 #### Configuration Structure
 
@@ -70,7 +70,7 @@ services:
 
 ### Requirement: Runtime Extraction and Mounting
 
-At startup, the tray SHALL extract each embedded external-logs.yaml to tmpfs and mount it into the container build context.
+At startup, the tray MUST extract each embedded external-logs.yaml to tmpfs and mount it into the container build context.
 
 #### Lifecycle: Binary → Tmpfs → Container
 
@@ -86,11 +86,11 @@ At startup, the tray SHALL extract each embedded external-logs.yaml to tmpfs and
 - **WHEN** tray initializes git service image build
 - **THEN** extract `GIT_EXTERNAL_LOGS` constant to `/run/tillandsias/external-logs-git.yaml`
 - **AND** add `COPY external-logs-git.yaml /etc/tillandsias/external-logs.yaml` to git Containerfile
-- **AND** git startup script mounts config for syslog
+- **AND** git startup script MUST mount config for syslog
 
 ### Requirement: Service-Specific Logging Levels
 
-Each service container SHALL respect the log level defined in its external-logs.yaml.
+Each service container MUST respect the log level defined in its external-logs.yaml.
 
 #### Log Level Semantics
 
@@ -113,23 +113,23 @@ Each service container SHALL respect the log level defined in its external-logs.
 
 ### Requirement: Syslog Integration
 
-External log configuration SHALL route container logs to the host syslog via syslog protocol (RFC 3164).
+External log configuration MUST route container logs to the host syslog via syslog protocol (RFC 3164).
 
 - **Facility**: Service-specific (local0–local7)
 - **Protocol**: UDP or Unix socket to host syslog
-- **Hostname field**: Set to container name for filtering (e.g., `tillandsias-git`)
+- **Hostname field**: MUST be set to container name for filtering (e.g., `tillandsias-git`)
 - **Format**: Structured JSON when possible (for parsing)
 
 #### Scenario: Git service syslog streaming
 
 - **WHEN** git-daemon writes a log line: `INFO: Pushed refs/heads/main`
-- **THEN** external-logs.yaml routes to syslog facility `local1`, hostname `tillandsias-git`
-- **AND** line appears in host syslog with timestamp and container name
-- **AND** user can retrieve logs via: `journalctl --facility local1 -u tillandsias-git` (if systemd)
+- **THEN** external-logs.yaml MUST route to syslog facility `local1`, hostname `tillandsias-git`
+- **AND** line MUST appear in host syslog with timestamp and container name
+- **AND** user CAN retrieve logs via: `journalctl --facility local1 -u tillandsias-git` (if systemd)
 
 ### Requirement: Diagnostics Integration
 
-External log configuration enables structured log collection via `--log-<service>` CLI flags.
+External log configuration MUST enable structured log collection via `--log-<service>` CLI flags.
 
 #### CLI Flags (examples, see logging-levels cheatsheet)
 
@@ -139,21 +139,21 @@ tillandsias --log-git-management      # Stream git service logs to stderr
 tillandsias --log-enclave-management  # Stream all enclave service logs
 ```
 
-- **Mechanism**: Tray reads externals-logs.yaml config, opens syslog stream, and re-emits to stderr
+- **Mechanism**: Tray MUST read externals-logs.yaml config, open syslog stream, and re-emit to stderr
 - **Format**: Same JSON format as in container
 - **Timestamp**: Host-relative (recomputed on stderr emission)
 
 #### Scenario: Proxy diagnostics
 
 - **WHEN** user runs: `tillandsias --log-proxy-management`
-- **THEN** tray reads `ROUTER_EXTERNAL_LOGS` config
-- **AND** listens to syslog facility from router container
-- **AND** streams decoded JSON log lines to stderr in real-time
-- **AND** user sees proxy cache hits, DNS lookups, connection errors
+- **THEN** tray MUST read `ROUTER_EXTERNAL_LOGS` config
+- **AND** listen to syslog facility from router container
+- **AND** stream decoded JSON log lines to stderr in real-time
+- **AND** user MUST see proxy cache hits, DNS lookups, connection errors
 
 ### Requirement: No Runtime Reconfiguration
 
-External log levels SHALL NOT be changed at runtime; they are baked into container images at build time.
+External log levels MUST NOT be changed at runtime; they are baked into container images at build time.
 
 - **Immutability**: YAML file is read-only after bind-mount
 - **Rebuild required**: To change log levels, image rebuild is required
@@ -162,12 +162,12 @@ External log levels SHALL NOT be changed at runtime; they are baked into contain
 #### Scenario: Change git logging
 
 - **WHEN** user wants to change git service logging from `info` to `debug`
-- **THEN** manual process: edit `images/git/external-logs.yaml`, rebuild image, restart container
-- **AND** NO `TILLANDSIAS_LOG` environment variable override
+- **THEN** manual process MUST be: edit `images/git/external-logs.yaml`, rebuild image, restart container
+- **AND** NO `TILLANDSIAS_LOG` environment variable override SHOULD be used
 
 ### Requirement: Manifest and Documentation
 
-Every external-logs.yaml file SHALL include a manifest comment block describing its purpose and owner service.
+Every external-logs.yaml file MUST include a manifest comment block describing its purpose and owner service.
 
 #### Header Format
 

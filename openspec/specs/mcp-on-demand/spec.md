@@ -20,112 +20,112 @@ This spec ensures:
 
 ### Requirement: On-demand MCP server startup
 
-MCP servers SHALL NOT be started during container initialization. Instead, they are spawned lazily when an agent first invokes a server operation.
+MCP servers MUST NOT be started during container initialization. Instead, they are spawned lazily when an agent first invokes a server operation.
 
 #### Scenario: Container startup without MCP
 - **WHEN** a forge container starts
-- **THEN** no MCP servers (filesystem, resource, inference) are launched
-- **AND** the container enters ready state without waiting for MCP health checks
-- **AND** container boot time is measured in seconds, not minutes
+- **THEN** no MCP servers (filesystem, resource, inference) MUST be launched
+- **AND** the container MUST enter ready state without waiting for MCP health checks
+- **AND** container boot time MUST be measured in seconds, not minutes
 
 #### Scenario: MCP server spawned on first use
 - **WHEN** an agent inside the forge invokes a filesystem operation (e.g., `list_directory`)
-- **THEN** the tray detects that the filesystem MCP server is not running
-- **AND** spawns the server process (if defined for the container image)
-- **AND** waits for health check to pass (max 5 seconds)
-- **AND** then forwards the agent's request to the server
+- **THEN** the tray MUST detect that the filesystem MCP server is not running
+- **AND** MUST spawn the server process (if defined for the container image)
+- **AND** MUST wait for health check to pass (max 5 seconds)
+- **AND** MUST then forward the agent's request to the server
 
 #### Scenario: MCP server remains running
 - **WHEN** the first MCP server is started successfully
-- **THEN** it remains running for the container's lifetime
-- **AND** subsequent operations do not re-spawn the server
-- **AND** the server uses a persistent connection (not restart per RPC)
+- **THEN** it MUST remain running for the container's lifetime
+- **AND** subsequent operations MUST NOT re-spawn the server
+- **AND** the server MUST use a persistent connection (not restart per RPC)
 
 #### Scenario: MCP server startup failure
 - **WHEN** an MCP server fails to start (health check timeout or crash)
-- **THEN** the tray logs `mcp_startup_failed = true, server = "filesystem", reason = "timeout"`
-- **AND** returns an error to the agent (e.g., "MCP server unavailable")
-- **AND** does NOT retry automatically; the next operation re-attempts
+- **THEN** the tray MUST log `mcp_startup_failed = true, server = "filesystem", reason = "timeout"`
+- **AND** MUST return an error to the agent (e.g., "MCP server unavailable")
+- **AND** MUST NOT retry automatically; the next operation re-attempts
 
 ### Requirement: Multiple MCP servers coexist
 
-If multiple MCP servers are configured, each is started independently on-demand.
+If multiple MCP servers are configured, each MUST be started independently on-demand.
 
 #### Scenario: Filesystem MCP started first
 - **WHEN** an agent calls `read_file`
-- **THEN** the filesystem MCP server is spawned
+- **THEN** the filesystem MCP server MUST be spawned
 
 #### Scenario: Resource MCP started later
 - **WHEN** an agent later calls `get_system_info`
-- **THEN** the resource MCP server is spawned independently
-- **AND** does not affect the filesystem server
+- **THEN** the resource MCP server MUST be spawned independently
+- **AND** MUST NOT affect the filesystem server
 
 #### Scenario: Inference MCP only if configured
 - **WHEN** the container image does NOT include inference tools
-- **THEN** no inference MCP server is attempted
-- **AND** agents receive a "not available" response if they query it
+- **THEN** no inference MCP server SHOULD be attempted
+- **AND** agents MUST receive a "not available" response if they query it
 
 ### Requirement: Health check and readiness
 
-Before accepting requests, an MCP server SHALL pass a health check proving it is ready to accept connections.
+Before accepting requests, an MCP server MUST pass a health check proving it is ready to accept connections.
 
 #### Scenario: Health check passes
 - **WHEN** an MCP server process starts
-- **THEN** the tray waits for the server to bind to its socket/port
-- **AND** sends a simple ping or version query
-- **AND** waits up to 5 seconds for a successful response
-- **AND** if successful, marks the server as ready
+- **THEN** the tray MUST wait for the server to bind to its socket/port
+- **AND** MUST send a simple ping or version query
+- **AND** MUST wait up to 5 seconds for a successful response
+- **AND** if successful, MUST mark the server as ready
 
 #### Scenario: Health check timeout
 - **WHEN** the health check does not receive a response within 5 seconds
-- **THEN** the tray kills the server process
-- **AND** logs `mcp_health_check_failed = true, timeout_seconds = 5`
-- **AND** returns error to the agent without retrying
+- **THEN** the tray MUST kill the server process
+- **AND** MUST log `mcp_health_check_failed = true, timeout_seconds = 5`
+- **AND** MUST return error to the agent without retrying
 
 #### Scenario: Health check response parsing
 - **WHEN** the server responds to health check
-- **THEN** the tray verifies the response format matches expected protocol
-- **AND** if malformed, treats it as a failed check
+- **THEN** the tray MUST verify the response format matches expected protocol
+- **AND** if malformed, MUST treat it as a failed check
 
 ### Requirement: Ephemeral lifecycle — servers destroyed on shutdown
 
-MCP servers are children of the container process. On container exit, all MCP servers are terminated.
+MCP servers are children of the container process. On container exit, all MCP servers MUST be terminated.
 
 #### Scenario: Container graceful shutdown
 - **WHEN** the tray sends SIGTERM to the container
-- **THEN** the container's init process receives SIGTERM
-- **AND** all MCP server processes (children) are terminated as part of the container's shutdown
-- **AND** resources are cleaned up
+- **THEN** the container's init process MUST receive SIGTERM
+- **AND** all MCP server processes (children) MUST be terminated as part of the container's shutdown
+- **AND** resources MUST be cleaned up
 
 #### Scenario: Container forced kill
 - **WHEN** the tray sends SIGKILL to the container
-- **THEN** all container processes (including MCP servers) are killed immediately
-- **AND** resources are reclaimed by the kernel
+- **THEN** all container processes (including MCP servers) MUST be killed immediately
+- **AND** resources MUST be reclaimed by the kernel
 
 #### Scenario: No MCP server persistence
 - **WHEN** the container stops and is removed
-- **THEN** all MCP server state is lost
-- **AND** next container start creates fresh processes
-- **AND** no socket files or IPC state persists
+- **THEN** all MCP server state MUST be lost
+- **AND** next container start MUST create fresh processes
+- **AND** no socket files or IPC state MUST persist
 
 ### Requirement: MCP server communication channel
 
-MCP servers communicate with agents via a channel (socket, pipe, or stdio).
+MCP servers MUST communicate with agents via a channel (socket, pipe, or stdio).
 
 #### Scenario: Unix socket communication
 - **WHEN** the MCP server uses a Unix socket
-- **THEN** the socket is created in a tmpfs directory (e.g., `/tmp/mcp-<server>.sock`)
-- **AND** the socket is cleaned up when the server exits
+- **THEN** the socket MUST be created in a tmpfs directory (e.g., `/tmp/mcp-<server>.sock`)
+- **AND** the socket MUST be cleaned up when the server exits
 
 #### Scenario: Stdio-based communication
 - **WHEN** the MCP server uses stdio for RPC
-- **THEN** the tray connects to the server's stdin/stdout
-- **AND** sends requests as JSON-RPC and reads responses
+- **THEN** the tray MUST connect to the server's stdin/stdout
+- **AND** MUST send requests as JSON-RPC and read responses
 
 #### Scenario: Concurrent requests
 - **WHEN** multiple agents invoke the same MCP server concurrently
-- **THEN** the server handles multiple connections (or multiplexes requests)
-- **AND** does not deadlock or drop requests
+- **THEN** the server MUST handle multiple connections (or multiplex requests)
+- **AND** MUST NOT deadlock or drop requests
 
 ### Requirement: Litmus test — on-demand MCP lifecycle
 
