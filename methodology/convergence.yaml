@@ -1,0 +1,190 @@
+# Tillandsias Convergence Methodology — Convergence Component
+#
+# The convergence engine is the system's self-improvement mechanism. It continuously
+# measures divergence between specs, code, cheatsheets, and reality, then applies
+# selection pressure to minimize that divergence.
+#
+# Source: monotonic-reduction-of-uncertainty-under-verifiable-constraints.yaml (v0.2,
+#         sections: convergence_engine, implementation_phases, constraints)
+#         specs.yaml (v0.1, sections: spec_system.metrics, spec_system.drift_control)
+
+convergence_engine:
+  objective: |
+    Minimize:
+      Δ(spec ↔ code)
+    + Δ(code ↔ cheatsheet)
+    + Δ(cheatsheet ↔ reality)
+    + Δ(litmus_binding ↔ spec)
+
+  constraints:
+    - compilation_success: "Code must compile without errors"
+    - spec_compliance: "Code must satisfy all MUST requirements from its specs"
+    - bounded_context_size: "Cached knowledge must remain finite"
+    - litmus_pass: "All critical-path litmus tests must pass"
+    - temporal_stability_verified: "Tests must pass consistently"
+    - completeness_mapping_valid: "Every active spec has a litmus test"
+    - spec_litmus_versioning_synchronized: "Specs and tests are kept in sync"
+
+  stability_metrics:
+    flakiness_rate: "[0, 1] — 0 means all runs identical, 1 means all runs differ"
+    stability_window: "time duration over which test results remain consistent"
+    convergence_velocity: "rate at which drift_penalty decreases over commits"
+    spec_code_alignment_drift: "measured via litmus test results"
+
+  fitness_function: |
+    fitness =
+      compile_success
+    + spec_coverage
+    + litmus_pass_rate
+    + temporal_stability_score
+    + completeness_mapping_score
+    - cheatsheet_violation
+    - runtime_error_rate
+    - drift_penalty
+    - flakiness_penalty
+
+  rules:
+    - Convergence is monotonic: once achieved, divergence must be detectable
+    - Selection pressure favors: passing tests, reduced drift, increased stability
+    - Anti-pattern: Gaming metrics by hardcoding success
+    - Anti-pattern: Ignoring temporal stability (flaky tests mask real bugs)
+
+drift_control:
+  description: >
+    Drift is any divergence between what the spec says and what the code does.
+    The convergence engine continuously detects and rejects drift.
+
+  rules:
+    - spec_change_must_reduce_ambiguity:
+        reason: "Every spec change must move toward clearer intent, not fuzzier"
+
+    - spec_change_must_not_remove_validated_invariant:
+        reason: "Invariants are immutable once verified. Removing them breaks the contract"
+
+    - spec_change_must_increase_or_preserve_verification_level:
+        reason: "A spec update should add validation, never weaken it"
+
+  detection:
+    - compare_previous_and_current_spec: "Diff old and new spec versions"
+    - flag_if_uncertainty_increases: "Fail if ambiguity_score rises"
+
+  action:
+    - reject_change: "Block spec archive if drift rules violated"
+
+ambiguity_detection:
+  rule: >
+    If two or more distinct implementations satisfy all requirements and litmus tests,
+    the spec is ambiguous. Ambiguity is the enemy of convergence.
+
+  action:
+    - block_spec_activation: "Spec cannot move from draft to active if ambiguous"
+    - require_additional_invariants: >
+        "Add more invariants to the spec until only one implementation remains valid"
+
+  detection_mechanism:
+    - Run multiple independent implementations against the same litmus tests
+    - If two implementations both pass all tests, spec is ambiguous
+    - Flag the spec and require additional constraints
+
+metrics:
+  description: >
+    Signals derived from code execution, spec verification, and litmus test results.
+    These metrics drive the convergence engine's selection pressure.
+
+  tracked:
+    - ambiguity_score: >
+        "0 = spec is unambiguous, >0 = multiple implementations possible"
+    - litmus_pass_rate: >
+        "Percentage of critical-path litmus tests passing"
+    - invariant_stability: >
+        "Do verified invariants remain invariant across changes?"
+    - verification_level: >
+        "Distribution of specs across S0–S3 (are specs actively validated?)"
+
+  convergence_signal:
+    - decreasing_ambiguity: "Ambiguity score trends toward 0"
+    - increasing_verification: "More specs achieving S2+ status"
+    - stable_invariants: "Invariants remain true over repeated test runs"
+
+  monitoring:
+    - CI emits metrics after every test run
+    - Metrics feed into the convergence engine's fitness function
+    - Fitness function guides optimization (code changes, spec refinements)
+
+implementation_phases:
+  description: >
+    Convergence is not immediate. The system progressively strengthens validation
+    as confidence increases.
+
+  phase_1:
+    name: "Trace Annotation Foundation"
+    goal: "Make code-to-spec linkage explicit"
+    tasks:
+      - implement_trace_annotation: "#[trace(spec = '...')] on public functions"
+      - validate_spec_existence: "CI checks specs exist and are active"
+
+  phase_2:
+    name: "Structural Validation"
+    goal: "Ensure annotations are well-formed and complete"
+    tasks:
+      - build_ci_ast_scanner: "Parse Rust AST, extract annotations"
+      - enforce_trace_presence: "Every public function must have #[trace]"
+
+  phase_3:
+    name: "Verification Level Tracking"
+    goal: "Distinguish claimed evidence levels from observed evidence"
+    tasks:
+      - add_verification_level_tracking: "Track L0–L3 per annotation"
+      - log_hits_and_misses: "Record which cheatsheets succeed vs fail"
+
+  phase_4:
+    name: "Cheatsheet Metrics"
+    goal: "Link cheatsheet quality to litmus test outcomes"
+    tasks:
+      - introduce_cheatsheet_metrics: "Score entries by hit_rate, spec_binding"
+      - manual_compaction: "Delete low-score entries, compress mid-score"
+
+  phase_5:
+    name: "Automated Convergence"
+    goal: "Full closed-loop: metrics drive optimization"
+    tasks:
+      - enable_automated_compaction_and_eviction: "Cheatsheets self-shrink"
+      - enforce_full_convergence_loop: "Fitness function gates all changes"
+
+methodology_complexity_constraint:
+  rule: >
+    The convergence methodology itself (specs, litmus, CI validators, cheatsheets)
+    MUST remain simpler than the codebase it governs. If the methodology becomes
+    more complex than the code, it becomes unmaintainable and defeats its purpose.
+
+  enforcement:
+    - measure_methodology_complexity: "count_YAML_lines, annotation_density, validator_rules"
+    - measure_codebase_complexity: "count_source_lines, cyclomatic_complexity"
+    - ratio_constraint: "methodology_complexity / codebase_complexity < 0.15"
+
+  anti_pattern: >
+    A validation system that requires more code to understand than the code being validated.
+    Red flag: CI validators exceed 5000 lines or require specialized training to understand.
+
+independent_and_composable_litmus_constraint:
+  rule: >
+    Litmus tests are composable building blocks. No test should depend on the side
+    effects of another test. Tests must be runnable in any order and still produce
+    consistent results.
+
+  enforcement:
+    - each_test_provisions_its_own_preconditions
+    - no_shared_state_across_tests
+    - ci_runs_tests_in_random_order_to_detect_coupling
+
+bidirectional_knowledge_flow_constraint:
+  rule: >
+    Specs inform code, code validates against specs, cheatsheets support both, and
+    litmus tests link all three. Information must flow in all directions: code changes
+    trigger spec re-validation, spec changes invalidate litmus tests, litmus failures
+    update cheatsheet quality scores.
+
+  enforcement:
+    - no_dead_ends_in_feedback_loops
+    - every_layer_can_signal_upstream
+    - ci_validator_enforces_bidirectional_consistency

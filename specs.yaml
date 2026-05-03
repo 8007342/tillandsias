@@ -1,0 +1,24 @@
+# @tombstone superseded:methodology-spec-system
+#
+# Spec system rules have been absorbed into the methodology component hierarchy.
+# All content is preserved in methodology/spec-system.yaml
+#
+# Reason: This file contained spec lifecycle, modality, verification levels (S0–S3),
+#         and binding requirements. These are now integrated into the methodology
+#         component system alongside the prior monotonic-*.yaml content.
+#
+# Safe to delete after: 2026-08-03 (three releases: v0.3.X, v0.3.Y, v0.3.Z)
+#
+# Migration path:
+#   - For spec structure and lifecycle: see methodology/spec-system.yaml
+#   - For S-level verification (spec validity): see methodology/verification.yaml
+#   - For litmus binding requirements: see methodology/litmus.yaml
+#   - For trace binding requirements: see methodology/ci.yaml
+#   - For cheatsheet binding: see methodology/cheatsheets.yaml
+#
+# Previous version: v0.1 (212 lines)
+# Archived in git history at: commit <will-be-added-on-merge>
+#
+# Note: This file was created on 2026-05-03 from ChatGPT recommendations to add
+#       new verifiable metrics to the spec system. Its recommendations have been
+#       integrated into the methodology hierarchy as v0.3.

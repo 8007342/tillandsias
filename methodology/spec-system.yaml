@@ -1,0 +1,153 @@
+# Tillandsias Convergence Methodology — Spec System Component
+#
+# Spec structure, lifecycle, modality, versioning, schema, rules, drift control,
+# ambiguity detection, CRDT properties, temporal model, and constraints.
+#
+# Source: specs.yaml (v0.1, sections: spec_system.*)
+#         monotonic-reduction-of-uncertainty-under-verifiable-constraints.yaml (v0.2, sections: spec)
+
+spec_system:
+  version: v0.1
+
+  philosophy:
+    principle: >
+      Monotonic reduction of uncertainty under verifiable constraints.
+    definition: >
+      A spec is a constraint system that MUST converge toward a single, unambiguous,
+      executable truth. Every modification MUST reduce ambiguity, preserve validated
+      invariants, and increase verifiability.
+
+  modality:
+    allowed:
+      MUST:
+        meaning: "absolute requirement; violation is failure"
+      MUST_NOT:
+        meaning: "absolute prohibition; violation is failure"
+      SHOULD:
+        meaning: "strong recommendation; deviation must be justified"
+      SHOULD_NOT:
+        meaning: "discouraged; deviation must be justified"
+      MAY:
+        meaning: "optional behavior"
+    enforcement:
+      - MUST_and_MUST_NOT_require_litmus_validation
+      - SHOULD_requires_rationale_if_not_followed
+
+  spec:
+    id_format: "<domain>.<capability>.<intent>@<version>"
+    example: "auth.login.validate-credentials@v3"
+    storage: "/openspec/specs/<capability>/spec.md"
+
+    versioning:
+      rules:
+        - version_bump_required_on_semantic_change
+        - version_must_reference_previous
+        - no_mutation_of_past_versions
+
+    lifecycle:
+      states:
+        - draft: "spec being written; not yet active"
+        - active: "spec is canonical and binding; code must implement"
+        - deprecated: "spec is superseded; migration path provided"
+        - obsolete: "spec is removed; retention window expired"
+      transitions:
+        - draft_to_active_requires_L1_verification
+        - active_to_deprecated_requires_replacement
+        - deprecated_to_obsolete_requires_sunset
+
+    structure:
+      id: string
+      version: string
+      status: [draft, active, deprecated, obsolete]
+
+      requirements:
+        - id: string
+          statement: string
+          modality: [MUST, MUST_NOT, SHOULD, SHOULD_NOT, MAY]
+          measurable: boolean
+          invariants_ref: list
+
+      invariants:
+        - id: string
+          expression: string
+          measurable: true
+          immutable_after_verification: true
+
+      bindings:
+        trace:
+          required: true
+          format: "@trace spec:name"
+        litmus:
+          required: true
+          tests: list
+        cheatsheets:
+          required: true
+          refs: list
+
+      ambiguity:
+        score: integer
+        allowed: 0
+        detection:
+          - multiple_valid_implementations
+          - undefined_edge_cases
+        enforcement:
+          - fail_if_score_above_zero
+
+    rules:
+      - spec_ids_must_be_stable
+      - version_bumps_only_on_semantic_change
+      - no_orphan_specs_in_ci
+      - no_cycles_in_replaces_graph
+
+  drift_control:
+    rules:
+      - spec_change_must_reduce_ambiguity
+      - spec_change_must_not_remove_validated_invariant
+      - spec_change_must_increase_or_preserve_verification_level
+    detection:
+      - compare_previous_and_current_spec
+      - flag_if_uncertainty_increases
+    action:
+      - reject_change
+
+  ambiguity_detection:
+    rule: >
+      If two or more distinct implementations satisfy all requirements and litmus tests,
+      the spec is ambiguous.
+    action:
+      - block_spec_activation
+      - require_additional_invariants
+
+  crdt_properties:
+    type: "compacting_crdt"
+    merge:
+      strategy: "semantic_merge"
+      rules:
+        - preserve_verified_invariants
+        - prefer_higher_verification_level
+        - reject_conflicting_requirements
+    compaction:
+      rule: >
+        Historical states are compressed into invariant-preserving canonical form.
+    constraints:
+      - no_unbounded_growth
+      - no_loss_of_verified_truth
+
+  temporal_model:
+    history_source: "git"
+    behavior:
+      - past_versions_are_read_only
+      - agents_may_read_past_versions_for_context
+      - only_latest_version_is_active_truth
+    compression:
+      method: "semantic_distillation"
+      invariant: "current_spec_contains_all_valid_truth"
+
+  constraints:
+    - spec_complexity_must_be_less_than_code_complexity
+    - all_spec_elements_must_be_machine_parsable
+    - no_free_text_without_binding
+    - no_requirement_without_measurement
+    - specs_must_be_minimal_and_precise
+    - annotations_must_be_enforced_not_advisory
+    - deletion_and_compaction_must_be_automatic

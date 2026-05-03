@@ -1,0 +1,144 @@
+# Tillandsias Convergence Methodology — Root Index
+#
+# Version: v0.3
+# Purpose: Organize monotonic reduction of uncertainty under verifiable constraints
+#          into navigable component files. Each component is independently readable.
+#
+# Git history: This file supersedes prior monolithic YAML files that contained
+#              philosophy, spec system, verification levels, litmus tests, cheatsheets,
+#              convergence engine, and CI validation in a single file.
+#
+# To understand the methodology:
+#   1. Read this file first (navigation guide)
+#   2. Jump to the component that answers your question:
+#      - "What is the core principle?" → philosophy.yaml
+#      - "How do specs work?" → spec-system.yaml
+#      - "What are verification levels?" → verification.yaml
+#      - "How do litmus tests work?" → litmus.yaml
+#      - "How do cheatsheets fit in?" → cheatsheets.yaml
+#      - "How does convergence work?" → convergence.yaml
+#      - "What does CI enforce?" → ci.yaml
+
+methodology:
+  version: v0.3
+  description: >
+    A closed-loop system where specs define intent, cheatsheets provide compressed
+    knowledge, code implements behavior, traces provide evidence, litmus tests define
+    decision boundaries, and CI enforces correctness and convergence.
+
+  components:
+    philosophy:
+      file: methodology/philosophy.yaml
+      description: >
+        Core principles, system model, invariants, layers (spec, cheatsheet, code,
+        trace, litmus, metrics, ci), pitfalls, and final assertion.
+      lines: ~100
+
+    spec_system:
+      file: methodology/spec-system.yaml
+      description: >
+        Spec structure, lifecycle (draft → active → deprecated → obsolete), modality
+        (MUST/SHOULD/MAY), versioning rules, id format, schema, drift control,
+        ambiguity detection, CRDT properties, temporal model, constraints.
+      lines: ~220
+
+    verification:
+      file: methodology/verification.yaml
+      description: >
+        Two complementary verification level systems: S0–S3 (spec's own validity),
+        L0–L3 (code annotation's evidence level). Reconciles both into a single
+        view. Includes verification integration rules for litmus binding.
+      lines: ~80
+
+    litmus:
+      file: methodology/litmus.yaml
+      description: >
+        Litmus test system: purpose, definition, versioning, binding to specs,
+        structure (gates, signals), drift detection, coverage requirements, minimality,
+        cost model, failure types, anti-gaming, root cause citation, convergence role,
+        completeness mapping, spec-litmus version enforcement, temporal stability.
+      lines: ~450
+
+    cheatsheets:
+      file: methodology/cheatsheets.yaml
+      description: >
+        Cheatsheet CRDT model: structure, operations (expand, compact, delete, protect),
+        scoring function, compaction rules, cache model (hit/miss), eviction policies.
+        Includes cheatsheet binding requirements from spec-system.
+      lines: ~120
+
+    convergence:
+      file: methodology/convergence.yaml
+      description: >
+        Convergence engine: objective (minimize deltas), constraints, stability metrics,
+        fitness function. Drift control (spec-to-code alignment), ambiguity detection,
+        metrics tracking (hits, misses, verification levels), implementation phases.
+      lines: ~100
+
+    ci:
+      file: methodology/ci.yaml
+      description: >
+        CI enforcement: validator responsibilities, failure conditions, modes (warn vs strict).
+        Rust annotations (#[trace], #[obsolete], #[tombstone]). Runtime tracing output format.
+        Trace binding and CI enforcement rules.
+      lines: ~180
+
+  supersedes:
+    old_monolithic_yaml:
+      file: monotonic-reduction-of-uncertainty-under-verifiable-constraints.yaml
+      version: v0.2
+      lines: 701
+      reason: >
+        Split into components for readability and maintenance. Original file preserved
+        as @tombstone referencing this file.
+
+    old_specs_rules:
+      file: specs.yaml
+      version: v0.1
+      lines: 212
+      reason: >
+        Spec system rules absorbed into methodology/spec-system.yaml. Original file
+        preserved as @tombstone referencing spec-system.yaml.
+
+  constraints:
+    - name: methodology_complexity_ratio
+      description: >
+        Methodology YAML lines / Codebase SLOC < 0.15.
+        Ensures the convergence system doesn't become more complex than the code it governs.
+      current_status: "Monitoring (no enforcement gate yet)"
+
+    - name: component_independence
+      description: >
+        Each component file must be readable as a standalone YAML without requiring
+        context from other components. Cross-references are explicit and sparse.
+      status: "Enforced by design"
+
+    - name: no_duplicate_content
+      description: >
+        Each concept (convergence_engine, litmus_test, spec_lifecycle, etc.) appears
+        in exactly one component file. Git grep should find unique locations.
+      status: "Enforced during split"
+
+  verification:
+    step_1: "All 7 component files exist: ls methodology/*.yaml | wc -l → 7"
+    step_2: "Root index references all components: grep 'file:' @methodology.yaml"
+    step_3: "No duplicate content: for each concept, grep should appear in exactly one file"
+    step_4: "Tombstones in place: grep '@tombstone' old-files.yaml"
+    step_5: "YAML is well-formed: yq eval @methodology.yaml > /dev/null"
+
+  navigation_index:
+    by_question:
+      what_is_the_core_principle: "philosophy.yaml → core_principle"
+      how_do_specs_work: "spec-system.yaml → spec lifecycle, modality, schema"
+      how_are_specs_verified: "verification.yaml → S0–S3 levels"
+      how_is_code_verified_against_specs: "litmus.yaml → litmus test system"
+      how_do_cheatsheets_help: "cheatsheets.yaml → CRDT model, cache operations"
+      how_do_i_know_when_code_converges: "convergence.yaml → objective, fitness function"
+      what_breaks_builds: "ci.yaml → validator failure conditions"
+
+    by_artifact:
+      reading_a_spec_md: "spec-system.yaml → spec schema, lifecycle"
+      writing_a_litmus_test: "litmus.yaml → structure, versioning, binding"
+      updating_a_cheatsheet: "cheatsheets.yaml → operations, scoring, compaction"
+      annotating_rust_code: "ci.yaml → rust_annotations, #[trace] macro"
+      running_ci_checks: "ci.yaml → validator responsibilities, ci_enforcement"

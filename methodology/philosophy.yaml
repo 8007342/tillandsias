@@ -1,0 +1,125 @@
+# Tillandsias Convergence Methodology — Philosophy Component
+#
+# Core principles, system model, invariants, layers, pitfalls, and final assertion.
+# This component defines the WHY and WHAT of the convergence system.
+#
+# Source: monotonic-reduction-of-uncertainty-under-verifiable-constraints.yaml (v0.2, sections: philosophy, layers, pitfalls, final_assertion)
+#         specs.yaml (v0.1, sections: spec_system.philosophy, spec_system.global_invariants)
+
+philosophy:
+  core_principle: >
+    Monotonic reduction of uncertainty under verifiable constraints.
+
+  system_model: >
+    A closed-loop system where specs define intent, cheatsheets provide compressed knowledge,
+    code implements behavior, traces provide evidence, litmus tests define decision boundaries,
+    and CI enforces correctness and convergence.
+
+  invariants:
+    - cheatsheet_size_bounded: true
+    - spec_stability_required: true
+    - verification_claims_must_be_falsifiable: true
+    - convergence_requires_stability: true
+
+  global_invariants:
+    - no_ambiguity_allowed
+    - all_requirements_must_be_testable
+    - all_specs_must_bind_to_litmus
+    - all_specs_must_bind_to_trace
+    - spec_changes_must_reduce_uncertainty
+    - validated_invariants_are_immutable
+    - spec_is_source_of_truth_not_code
+
+layers:
+  - name: spec
+    description: >
+      Canonical, versioned, machine-verifiable definition of intent and constraints.
+
+  - name: cheatsheet
+    description: >
+      Compressed, curated, adaptive knowledge cache with provenance and metrics.
+
+  - name: code
+    description: >
+      Rust implementation annotated with attributes enforcing observability and traceability.
+
+  - name: trace
+    description: >
+      Runtime evidence linking implementation to spec and knowledge sources.
+
+  - name: litmus
+    description: >
+      Executable decision boundaries for correctness.
+
+  - name: metrics
+    description: >
+      Signals derived from execution (hits, misses, verification levels).
+
+  - name: ci
+    description: >
+      Global validator enforcing invariants, detecting drift, and applying selection pressure.
+
+pitfalls:
+  - cheatsheet_entropy_growth_without_bounds:
+      description: >
+        Cheatsheets expand to answer every question without being compacted,
+        becoming unwieldy and losing canonical status.
+      mitigation: Enforce automatic compaction, bounded size limits.
+
+  - spec_ambiguity_causing_oscillation:
+      description: >
+        Ambiguous specs lead to multiple valid implementations, causing code to
+        oscillate between implementations during refactoring.
+      mitigation: Ambiguity score must be 0 before spec activation.
+
+  - multi_api_semantic_collision_without_binding:
+      description: >
+        A single identifier (e.g., "read") means different things in different contexts
+        (file I/O, network, database). Annotations don't disambiguate.
+      mitigation: #[grounded_by] explicitly disambiguates across APIs.
+
+  - agents_gaming_metrics:
+      description: >
+        Agents hardcode success to game litmus tests or cheatsheet scores,
+        creating false convergence signals.
+      mitigation: >
+        Mutation testing, code review, and mutation analysis verify tests
+        actually touch the code they claim to validate.
+
+  - divergence_between_spec_and_code:
+      description: >
+        Code drifts from spec intent over time without detection because
+        litmus tests pass but only exercise happy paths.
+      mitigation: >
+        Negative testing (failure path validation), temporal stability checks,
+        repeated test runs to detect flakiness.
+
+  - excessive_macro_complexity:
+      description: >
+        Procedural macros (#[trace], #[grounded_by]) become harder to understand
+        than the code they annotate.
+      mitigation: >
+        Keep macros simple; implement complex logic in CI validators, not in macros.
+
+  - encoding_temporal_truth_in_static_code:
+      description: >
+        Code embeds assumptions about time (e.g., "retry 3 times" in a loop)
+        that become incorrect when conditions change.
+      mitigation: >
+        Distinguish deterministic logic from timing assumptions. Timeout boundaries
+        are observable signals, not correctness logic.
+
+  - turning_cheatsheet_into_general_wiki:
+      description: >
+        Cheatsheets expand to cover "everything nice to know" instead of
+        "everything required to implement this spec."
+      mitigation: >
+        Bind cheatsheets to specs. Remove entries with no spec binding.
+        Use spec hit/miss signals to guide expansion/compaction.
+
+final_assertion: >
+  The system converges only if: (1) knowledge remains compressed and canonical,
+  (2) specs remain stable and machine-verifiable, (3) every claim made in code
+  is continuously validated against observed reality, and (4) litmus tests
+  reproducibly verify that code satisfies its governing specs. Convergence is
+  monotonic: once achieved, divergence is immediately detectable and reversible.

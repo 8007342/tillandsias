@@ -1,0 +1,371 @@
+# Tillandsias Convergence Methodology — Litmus Tests Component
+#
+# Litmus tests are executable decision boundaries that validate code against specs.
+# This is the most comprehensive component—litmus tests are the convergence system's
+# strongest mechanism for detecting and preventing spec-code divergence.
+#
+# Source: monotonic-reduction-of-uncertainty-under-verifiable-constraints.yaml (v0.2, section: litmus_test)
+#         specs.yaml (v0.1, section: spec_system.litmus_binding)
+
+litmus_test:
+  purpose: >
+    Reproducible, observable, verifiable test that exercises the system's critical path
+    and gates progression on observable success/failure signals. The litmus test is a
+    composable assertion that the system converges toward its spec intent.
+
+  definition:
+    - reproducible: "identical preconditions yield identical results"
+    - observable: "all execution emits verifiable signals (logs, metrics, traces, exit codes)"
+    - falsifiable: "success and failure conditions are unambiguous and testable"
+    - composable: "smaller litmus tests combine into larger ones without interference"
+    - deterministic: "no timing assumptions, no flaky conditions, no external polling"
+
+  versioning:
+    format: "<domain>.<capability>.<test-intent>@<version>"
+    example: "system.convergence.spec-code-drift@v1"
+    semantic_change_triggers:
+      - new_preconditions
+      - modified_gating_points
+      - changed_success_criteria
+      - added_or_removed_specs
+      - altered_observable_signals
+
+  binding:
+    rule: >
+      Litmus tests bind implementation to specs through observable signals.
+      Each signal must reference one or more specs it validates.
+    enforcement:
+      - every_signal_must_name_specs
+      - specs_must_be_active
+      - no_orphan_signals
+
+  structure:
+    gates:
+      - preconditions: "what must be true before the test can run"
+      - critical_path: "the sequence of operations exercising core functionality"
+      - gating_points: "observable signals that determine progression"
+    signals:
+      - name: "human-readable name"
+        observable: "concrete log line, metric, exit code, or file state"
+        success: "what success looks like"
+        failure: "what failure looks like"
+        spec_linkage: "which spec(s) govern this signal"
+        timeout: "max time allowed before forced failure (if applicable)"
+
+  properties:
+    - must_short_circuit_on_failure: "failing signal halts progression with root cause"
+    - must_emit_spec_traces: "every observable links to its governing spec(s)"
+    - must_be_self_contained: "can run offline, no external dependencies unless explicitly gated"
+    - must_converge: "repeated runs on the same code and state converge to the same result"
+    - must_be_independent: "success/failure of one litmus test does not depend on others"
+
+  drift_detection:
+    mechanism: >
+      Litmus tests serve as drift detectors. When a test that previously passed begins
+      to fail, it signals divergence between code and spec.
+    workflow:
+      - baseline: "record passing state as authoritative"
+      - monitor: "re-run test on every change"
+      - alert: "failing signal triggers root cause analysis"
+      - remediate: "update code to re-align with spec"
+    properties:
+      - regression_detection: "previous-passing test now fails"
+      - forward_validation: "new test validates new spec requirement"
+      - stability_check: "test remains stable across repeated runs"
+
+  coverage:
+    rule: >
+      Every critical path through the system must be covered by at least one litmus test.
+      Coverage is measured as (specs with litmus tests) / (total active specs).
+    minimum_threshold: 80%
+    calculation: >
+      coverage_ratio = count(specs_with_litmus) / count(specs_active_and_non_deprecated)
+    enforcement:
+      - warn_if_below_threshold
+      - block_archive_if_critical_path_uncovered
+
+  minimality:
+    principle: >
+      A litmus test should exercise only what is necessary to validate its bound specs.
+      Unnecessary complexity introduces false negatives and maintenance burden.
+    rules:
+      - no_redundant_gating_points
+      - preconditions_must_be_minimal
+      - each_signal_validates_exactly_one_semantic_question
+      - compress_adjacent_operations_into_single_signal
+    anti_pattern: >
+      A litmus test that validates the entire system in one run.
+      Split by subsystem and compose smaller tests.
+
+  cost_model:
+    signals:
+      - wall_time_seconds: "total time to run test"
+      - cpu_time: "actual CPU consumed"
+      - io_operations: "disk/network calls"
+      - external_dependencies: "counts services that must be running"
+      - flakiness_rate: "percentage of reruns that differ"
+    constraints:
+      - wall_time_per_test_max: "30 seconds"
+      - total_ci_litmus_budget: "300 seconds"
+      - zero_flakiness: "repeatable runs must have identical outcome"
+    optimization:
+      - parallelize_independent_tests
+      - cache_preconditions
+      - batch_gating_point_checks
+
+  failure_types:
+    precondition_failure:
+      signal: >
+        Test prerequisites not met (missing service, data, permissions, etc.)
+      action: >
+        Report unmet precondition, do not execute critical path, exit with SKIP status
+
+    gating_point_failure:
+      signal: >
+        Observable condition not met during critical path execution
+      action: >
+        Stop execution, emit root cause trace linking to spec, exit with FAIL status
+
+    timeout_failure:
+      signal: >
+        Operation exceeded specified timeout
+      action: >
+        Force termination, emit timeout signal with elapsed duration and spec linkage
+
+    divergence_failure:
+      signal: >
+        Litmus test previously passing now fails; code diverged from spec
+      action: >
+        Escalate to human review, suggest root cause by comparing spec vs observed behavior
+
+    flakiness_detection:
+      signal: >
+        Same inputs produce different outputs on repeated runs
+      action: >
+        Quarantine test, escalate for investigation, do not gate CI
+
+  anti_gaming:
+    rules:
+      - tests_must_exercise_actual_code_paths: "no_mocking_required_behavior"
+      - success_cannot_be_hardcoded: "test must fail if spec is violated"
+      - signals_must_be_externally_observable: "internal state does not count"
+      - gating_points_must_be_deterministic: "no random passes"
+    detection:
+      - code_review: "human inspection of test source"
+      - mutation_testing: "randomly modify code and verify test fails"
+      - coverage_analysis: "ensure test actually touches the code it claims to validate"
+    enforcement: >
+      Tests that fail mutation testing or code review are downgraded to L0
+      and do not gate CI until remediated.
+
+  root_cause_citation:
+    rule: >
+      Every litmus test failure MUST emit a spec trace linking to the failing spec.
+      Agents implementing litmus tests MUST cite the spec and provide root cause
+      (not just "failed" but "failed because X, governed by spec:Y").
+    example: |
+      [fail] health_check_timeout: service did not respond in 5s
+      @trace spec:service-startup
+      Root cause: initialization_timeout in spec:service-startup
+
+  convergence_role:
+    statement: >
+      Litmus tests are the bridge between spec and code. They enforce monotonic convergence
+      by making spec compliance verifiable and falsifiable. A system can only claim convergence
+      if its litmus tests pass.
+    convergence_properties:
+      - litmus_pass_is_necessary_condition: "code_divergence ⟹ litmus_fail"
+      - litmus_pass_is_sufficient_condition: false
+      - litmus_pass_provides_strong_evidence: "litmus_pass ⟹ high_confidence_in_spec_alignment"
+      - litmus_pass_is_not_proof: "test_pass ≠ absolute_correctness"
+      - monotonic_enforcement: "once_passing_must_remain_passing_or_fail_explicitly"
+    epistemic_humility: >
+      A passing litmus test provides strong evidence that the system satisfies the specs it validates,
+      but cannot prove absence of defects beyond the test's scope. Tests exercise finite paths;
+      specs may omit edge cases. Alignment is demonstrated, not guaranteed.
+    constraint: >
+      A passing litmus test is a claim that the system satisfies all specs it
+      references. A failing litmus test must identify which spec was violated.
+      The system can only claim convergence if all critical-path litmus tests pass.
+
+  completeness_mapping:
+    rule: >
+      Every active, non-deprecated spec SHALL have at least one associated litmus test.
+      When a spec exists without a litmus test, it is marked as "test_required" and
+      blocks archive until remediated.
+    enforcement:
+      - every_active_spec_requires_litmus_binding
+      - ci_validator_scans_spec_dir_and_litmus_test_dir
+      - mismatch_emits_error_if_critical_path_spec_uncovered
+      - warning_if_non_critical_spec_uncovered
+    bidirectional_sync:
+      - when_spec_added: "implicitly creates 'test_required' status in litmus registry"
+      - when_spec_deleted: "marks all bound litmus tests as 'orphaned'"
+      - when_spec_status_changes: "updates bound litmus test status"
+    registry:
+      file: "openspec/litmus-bindings.yaml"
+      schema:
+        - spec_id: "string"
+          status: "active|deprecated|test_required|orphaned"
+          litmus_tests: "list of test IDs"
+          coverage_ratio: "percent"
+          last_verified: "ISO8601"
+
+  spec_ambiguity_detection:
+    rule: >
+      A spec is too ambiguous for litmus binding if: (1) it lacks precise input/output contracts,
+      (2) success criteria are subjective, (3) observable signals cannot be unambiguously mapped
+      to spec clauses, or (4) the spec references external systems beyond the code's control.
+    enforcement:
+      - ci_validator_inspects_spec_for_ambiguity_markers
+      - if_ambiguous: "require_clarification_before_litmus_binding"
+      - anti_pattern: "vague success criteria like 'works correctly' or 'is performant'"
+    resolution:
+      - clarify_spec_inputs_outputs
+      - define_objective_success_criteria
+      - enumerate_observable_signals
+      - narrow_scope_if_external_dependencies_unavoidable
+    status_tracking:
+      - flag_spec: "spec.litmus_binding_status = 'requires_clarification'"
+      - block_litmus_creation: "if spec is ambiguous, litmus_test creation is deferred"
+      - unblock_on_clarification: "once spec is precise, litmus can be written"
+
+  litmus_cheatsheet_feedback_loop:
+    mechanism: >
+      Litmus test execution and cheatsheet usage are correlated. When a litmus test
+      fails due to missing knowledge (e.g., wrong API signature), the failure signal
+      includes a reference to which cheatsheet entry was consulted and whether it
+      was correct. This feedback improves cheatsheet quality over time.
+    signal_flow:
+      - litmus_test_emits: "which cheatsheet entries were consulted"
+      - test_fails: "cheatsheet_consulted but_resulted_in_failure"
+      - ci_validator_tracks: "cheatsheet_hit_rate, cheatsheet_fail_rate"
+      - convergence_engine_adjusts: "cheatsheet_score_down if failure_related_to_that_entry"
+    actions:
+      - expand_cheatsheet_if_hits_high_but_misses_increasing
+      - downgrade_confidence_if_failures_trace_to_stale_entry
+      - trigger_refresh_if_cheatsheet_age_exceeds_threshold
+    integration:
+      - litmus_failure_traces_include: "cheatsheet_lookups_performed"
+      - cheatsheet_metadata_updated: "with_fail_signals_from_litmus_tests"
+      - human_review: "failures_traced_to_cheatsheet_trigger_provenance_check"
+
+  temporal_stability:
+    definition: >
+      Temporal stability means that running the same litmus test on the same code
+      at different times produces identical results (barring clock-dependent operations
+      which must be explicitly gated as nondeterministic).
+    metrics:
+      - flakiness_rate: "percentage of reruns with divergent results"
+      - stability_window: "time over which test results remain consistent"
+      - volatility: "standard deviation of execution time"
+    enforcement:
+      - ci_re_runs_litmus_3_times_and_requires_all_pass
+      - detects_flakiness: "if_2_or_more_runs_differ then QUARANTINE_TEST"
+      - nondeterministic_ops: "must_be_isolated_in_separate_signal"
+    convergence_constraint: >
+      The convergence_engine.constraints list requires: temporal_stability_verified.
+      Tests that fail the stability check are downgraded to L0 and do not gate CI.
+
+  timeout_vs_determinism:
+    tension: >
+      Determinism requires no timing assumptions, but timeouts inherently rely on wall-clock time.
+      This is resolved by distinguishing between deterministic logic and timeout boundaries.
+    resolution:
+      - deterministic_core: "success/failure decision logic must be time-independent"
+      - timeout_is_gating_point: "timeout failure is an observable signal, not part of correctness logic"
+      - nondeterministic_operations: >
+          "Operations that depend on wall-clock time (retries, delays, polling)
+          must be explicitly marked and isolated from deterministic logic"
+    rules:
+      - a_litmus_signal_can_have_a_timeout: "if_wall_time_exceeds_limit then emit TIMEOUT_SIGNAL"
+      - timeout_signal_counts_as_failure: "TIMEOUT is an observable condition that gates progression"
+      - determinism_means: "given_preconditions_identical_outcomes_always_occur"
+      - nondeterminism_must_be_bounded: "timeouts must have explicit_max_duration, not indefinite waits"
+    enforcement:
+      - litmus_test_structure_separates: "deterministic_logic from timeout_boundaries"
+      - ci_validator_flags: "signals_with_implicit_timing_assumptions"
+      - test_design_rule: "if_signal_depends_on_wall_time then_must_be_explicitly_named_and_justified"
+
+  environment_invariance:
+    requirement: >
+      A litmus test must produce identical results across different but compatible environments
+      (different machines, different container runtimes, different filesystems, different network
+      topologies, as long as the spec requirements are met).
+    scope:
+      - applies_to: "tests_marked_as_portable_in_spec"
+      - not_required_for: "tests_bound_to_platform_specific_specs"
+    enforcement:
+      - ci_runs_litmus_in_multiple_environments
+      - environments_tested:
+        - bare_linux_host
+        - systemd_nspawn_container
+        - podman_container
+        - kubernetes_pod
+      - results_must_be_identical: "test passes or fails the same way in all envs"
+      - environment_specific_failures: "must_be_marked_as_such_in_spec"
+    anti_pattern: >
+      A test that passes on the developer's machine but fails in CI due to environmental
+      differences. All environmental assumptions must be explicit in the litmus binding.
+
+  negative_testing:
+    requirement: >
+      Litmus tests must exercise both success and failure paths. For every spec requirement,
+      there must be a test signal that validates: (1) the requirement succeeds when conditions
+      are met, and (2) the requirement fails unambiguously when conditions are NOT met.
+    enforcement:
+      - for_each_spec_requirement: "create_both_success_and_failure_litmus_signals"
+      - failure_signal_is_not_optional: "required_to_gate_ci"
+    signal_structure:
+      - positive_test: "requirement_met ⟹ success_signal_emitted"
+      - negative_test: "requirement_NOT_met ⟹ failure_signal_emitted (unambiguous error)"
+    rules:
+      - no_spec_requirement_without_both_success_and_failure_validation
+      - failure_must_be_distinguishable: "different_failure_modes_emit_different_signals"
+    anti_pattern: >
+      Testing only the happy path. This masks spec violations that occur under error conditions.
+
+  composition_and_inheritance:
+    principle: >
+      Litmus tests are composable and hierarchical. Smaller tests validate subsystems;
+      larger tests combine them into end-to-end validation. A parent litmus test succeeds
+      only if all dependent sub-tests pass.
+    structure:
+      - atomic_tests: "single_signal_validates_one_semantic_boundary"
+      - composite_tests: "depend on atomic_tests, add higher_level_validation"
+      - end_to_end_tests: "exercise entire_critical_path via composition"
+    rules:
+      - child_test_failure_immediately_fails_parent: "no_masking"
+      - parent_test_pass_requires_all_children_pass: "mandatory_dependency"
+      - tests_are_independently_runnable: "child_tests_can_run_without_parent"
+    versioning_inheritance:
+      - when_child_test_changes: "parent_tests_must_be_re_validated"
+      - when_parent_test_changes: "child_tests_inherit_new_constraints_if_compatible"
+      - incompatible_changes: "emit_error_and_block_until_manually_resolved"
+
+  spec_litmus_versioning_enforcement:
+    rule: >
+      When a spec changes semantically, all bound litmus tests MUST be re-evaluated.
+      If a litmus test becomes invalid due to the spec change, it must be updated or
+      unbound, and the spec change is blocked until litmus binding is resolved.
+    enforcement:
+      - ci_detects_when_spec_version_bumps
+      - ci_scans_openspec_litmus_bindings_yaml
+      - if_spec_version_bumped: "all_bound_litmus_tests_must_pass_with_new_spec"
+      - if_litmus_test_fails_after_spec_change: "spec_archive_is_blocked"
+    workflow:
+      - spec_change_detected: "flag spec as 'litmus_validation_pending'"
+      - validate_litmus_tests: "re_run all_bound_tests_against_new_spec"
+      - all_pass: "proceed_with_archive"
+      - any_fail: "require_litmus_update before_archive_allowed"
+    anti_pattern: >
+      Changing a spec without ensuring its litmus tests still bind correctly.
+      This causes spec-code divergence that manifests at runtime.
+
+litmus_binding:
+  requirements:
+    - every_requirement_with_modality_MUST_or_MUST_NOT_has_litmus
+    - every_invariant_is_tested_by_at_least_one_signal
+  mapping:
+    requirement_to_test: required
+    invariant_to_signal: required

@@ -1,0 +1,148 @@
+# Tillandsias Convergence Methodology — Cheatsheets Component
+#
+# Cheatsheets are compressed, curated knowledge caches that support spec-to-code binding.
+# This component covers the structure, CRDT model, operations, and cache policies.
+#
+# Source: monotonic-reduction-of-uncertainty-under-verifiable-constraints.yaml (v0.2,
+#         sections: cheatsheets, cheatsheet_operations, crdt_model, cache_model)
+#         specs.yaml (v0.1, section: spec_system.cheatsheet_binding)
+
+cheatsheets:
+  structure:
+    id: string
+    entries:
+      - key: string
+        content: string
+        metadata:
+          hits: integer
+          misses: integer
+          last_used: timestamp
+          specs: list
+          verification_levels: map
+          provenance: list
+          confidence: float
+          size_cost: integer
+
+  properties:
+    - acts_as_compressed_hot_cache
+    - must_be_lossy_but_canonical
+    - must_be_bounded_in_size
+
+  provenance:
+    required: true
+    examples:
+      - "official docs"
+      - "standards"
+      - "trusted sources"
+
+  versioning:
+    tied_to_environment_hash: true
+    triggers_revalidation_on_change: true
+
+cheatsheet_operations:
+  description: >
+    Cheatsheets are not static documents. They grow, shrink, and evolve based on
+    usage signals (hits/misses), spec bindings, and verification deltas.
+
+  signals:
+    - hits: "how many times this entry was consulted and succeeded"
+    - misses: "how many times this entry was consulted and failed"
+    - spec_bindings: "which specs reference this entry"
+    - verification_deltas: "when litmus tests fail due to stale content"
+    - token_size: "how many tokens this entry costs to include in context"
+
+  scoring_function: |
+    score =
+      w1 * normalized_hits
+    + w2 * spec_binding_strength
+    + w3 * recency_decay
+    + w4 * verification_success
+    - w5 * size_cost
+
+  actions:
+    expand:
+      condition: "high_misses"
+      method: "targeted_patch_only"
+      goal: "Add specific content that litmus tests revealed missing"
+
+    compact:
+      condition: "high_hits_and_low_misses"
+      constraint: "must_preserve_success_rate"
+      goal: "Compress well-understood content into concise form"
+
+    delete:
+      condition: "low_hits_and_no_spec_binding"
+      goal: "Remove orphaned entries no longer in use"
+
+    protect:
+      condition: "high_score_or_high_spec_criticality"
+      goal: "Prevent deletion of critical-path knowledge"
+
+  compaction:
+    definition: "semantic compression preserving correctness"
+    invariant:
+      - no_loss_of_L1_success_rate
+    rollback_on_failure: true
+    method: >
+      Replace verbose examples with minimal patterns. Remove redundant sections.
+      Preserve all information that distinguishes success from failure.
+
+crdt_model:
+  description: >
+    Cheatsheets are modeled as a Compacting CRDT (Conflict-free Replicated Data Type).
+    This enables automatic merging of updates and automatic compaction without data loss.
+
+  type: "compacting_crdt"
+
+  merge_rule: "merge = union + normalization + compression"
+
+  constraints:
+    - must_not_grow_unbounded: "Size limit enforced; evict low-score entries"
+    - must_preserve_high_confidence_entries: "Never drop entries with verification_success > 95%"
+    - must_eliminate_redundancy: "Merge duplicate or overlapping entries"
+
+  anti_pattern:
+    - grow_only_crdt_forbidden: >
+        "A CRDT that never shrinks defeats the purpose of a cache.
+        Automatic compaction is mandatory."
+
+cache_model:
+  definitions:
+    hit: "resolved_without_leaving_cheatsheet"
+    miss: "requires_api_lookup_or_retry"
+
+  metrics:
+    per_entry:
+      - hits: "count of successful consultations"
+      - misses: "count of failed consultations"
+      - assisted_resolutions: "count of times this entry helped resolve a query"
+
+  policies:
+    - enforce_global_size_limit: "Total cheatsheet bytes <= LIMIT"
+    - evict_low_score_entries: "If size exceeds limit, remove lowest-scoring entries"
+    - compact_mid_score_entries: "Compress entries with score > median but below high threshold"
+
+  hit_rate_target: "> 85%"
+  miss_triggers_action: "If miss_rate > 15%, flag for expansion or verification"
+
+cheatsheet_binding:
+  description: >
+    Specs reference cheatsheets to pin tool versions and document idiomatic usage.
+    This binding creates bidirectional dependency: cheatsheet changes trigger spec
+    re-validation; spec changes may invalidate cheatsheet assumptions.
+
+  requirements:
+    - every_spec_must_reference_cheatsheet_entries:
+        reason: >
+          Specs must document the tools/languages/APIs they use.
+          Cheatsheets pin the versions and patterns for those tools.
+
+    - cheatsheet_entries_must_have_provenance:
+        reason: >
+          All entries must cite authoritative sources (vendor docs, standards, etc).
+          Without provenance, outdated entries can't be detected.
+
+    - cheatsheet_usage_must_be_measurable:
+        reason: >
+          Every cheatsheet entry tracks hits/misses/verification_deltas.
+          Unused or failing entries are deleted to keep the cache compact.
