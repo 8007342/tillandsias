@@ -21,128 +21,128 @@ This spec ensures:
 
 ### Requirement: Stream activation on --debug flag
 
-When the tray is launched with `--debug`, diagnostic streaming SHALL be enabled and connected to stdout/stderr.
+When the tray is launched with `--debug`, diagnostic streaming MUST be enabled and MUST be connected to stdout/stderr.
 
 #### Scenario: Debug flag activates streaming
 - **WHEN** the user runs `tillandsias --debug`
-- **THEN** the tray parses the `--debug` flag
-- **AND** initializes the diagnostic event stream
-- **AND** connects the stream to the terminal
+- **THEN** the tray MUST parse the `--debug` flag
+- **AND** MUST initialize the diagnostic event stream
+- **AND** MUST connect the stream to the terminal
 
 #### Scenario: Streaming disabled by default
 - **WHEN** the tray runs without `--debug`
-- **THEN** container events are logged but NOT streamed to terminal
-- **AND** events are available via log files for post-mortem analysis
+- **THEN** container events SHOULD be logged but MUST NOT be streamed to terminal
+- **AND** events SHOULD be available via log files for post-mortem analysis
 
 #### Scenario: Debug output to stderr
 - **WHEN** the stream is active
-- **THEN** events are written to stderr (not stdout)
-- **AND** stdout remains clean for user-facing text
+- **THEN** events MUST be written to stderr (not stdout)
+- **AND** stdout MUST remain clean for user-facing text
 
 ### Requirement: Event structure and formatting
 
-Each diagnostic event SHALL have a consistent, parseable structure with timestamp, event type, container, and payload.
+Each diagnostic event MUST have a consistent, parseable structure with timestamp, event type, container, and payload.
 
 #### Scenario: Container start event
 - **WHEN** a container transitions to running state
-- **THEN** the stream emits:
+- **THEN** the stream MUST emit:
   ```
   [2026-05-03T14:23:45.123Z] event:container_start container=tillandsias-myproject-foo status=running
   ```
-- **AND** the timestamp is in ISO 8601 UTC
-- **AND** the event type is prefixed with `event:`
+- **AND** the timestamp MUST be in ISO 8601 UTC
+- **AND** the event type MUST be prefixed with `event:`
 
 #### Scenario: Container exit event
 - **WHEN** a container exits
-- **THEN** the stream emits:
+- **THEN** the stream MUST emit:
   ```
   [2026-05-03T14:24:10.456Z] event:container_exit container=tillandsias-myproject-foo exit_code=0 duration_seconds=25
   ```
-- **AND** exit code and duration are included
+- **AND** exit code and duration MUST be included
 
 #### Scenario: Container signal event
 - **WHEN** a container receives a signal (SIGTERM, SIGSEGV, OOM)
-- **THEN** the stream emits:
+- **THEN** the stream MUST emit:
   ```
   [2026-05-03T14:24:12.789Z] event:container_signal container=tillandsias-myproject-foo signal=SIGSEGV
   ```
 
 #### Scenario: Resource event (OOM, disk)
 - **WHEN** resource exhaustion is detected
-- **THEN** the stream emits:
+- **THEN** the stream MUST emit:
   ```
   [2026-05-03T14:24:15.012Z] event:resource_exhaustion container=tillandsias-myproject-foo resource=memory_oom limit_bytes=2147483648
   ```
 
 #### Scenario: Stderr line pass-through
 - **WHEN** a container writes to stderr
-- **THEN** the stream emits:
+- **THEN** the stream MUST emit:
   ```
   [2026-05-03T14:24:16.345Z] event:container_stderr container=tillandsias-myproject-foo line="error: compilation failed"
   ```
-- **AND** the line is truncated or escaped to fit on one line
-- **AND** only the last N lines are streamed (e.g., 1000, to prevent noise)
+- **AND** the line MUST be truncated or escaped to fit on one line
+- **AND** only the last N lines SHOULD be streamed (e.g., 1000, to prevent noise)
 
 ### Requirement: Event filtering and control
 
-The user SHALL be able to control which events are streamed via command-line or environment variables.
+The user SHOULD be able to control which events are streamed via command-line or environment variables.
 
 #### Scenario: Filter by event type
 - **WHEN** the user runs `tillandsias --debug --debug-filter=event:container_exit,event:container_signal`
-- **THEN** only exit and signal events are streamed
-- **AND** other events (stderr, resource) are logged but not printed
+- **THEN** only exit and signal events SHOULD be streamed
+- **AND** other events (stderr, resource) SHOULD be logged but not printed
 
 #### Scenario: Filter by container name
 - **WHEN** the user runs `tillandsias --debug --debug-container=tillandsias-myproject-*`
-- **THEN** only events from matching containers are streamed
-- **AND** other containers' events are logged but not streamed
+- **THEN** only events from matching containers SHOULD be streamed
+- **AND** other containers' events SHOULD be logged but not streamed
 
 #### Scenario: Debug level control
 - **WHEN** the user sets `TILLANDSIAS_DEBUG_LEVEL=verbose`
-- **THEN** additional internal events (network, mounts, cgroup) are streamed
-- **AND** the default level is `normal` (container events only)
+- **THEN** additional internal events (network, mounts, cgroup) SHOULD be streamed
+- **AND** the default level SHOULD be `normal` (container events only)
 
 ### Requirement: Ephemeral stream lifecycle
 
-The diagnostic stream exists only for the duration of the current tray session and is NOT persisted.
+The diagnostic stream MUST exist only for the duration of the current tray session and MUST NOT be persisted.
 
 #### Scenario: Stream created on tray start
 - **WHEN** the tray starts with `--debug`
-- **THEN** the event stream is initialized from a fresh queue
-- **AND** no historical events from previous runs are replayed
+- **THEN** the event stream MUST be initialized from a fresh queue
+- **AND** no historical events from previous runs MUST be replayed
 
 #### Scenario: Stream destroyed on tray exit
 - **WHEN** the tray shuts down
-- **THEN** the event stream is flushed and closed
-- **AND** any buffered events are discarded
-- **AND** the next tray session starts with an empty queue
+- **THEN** the event stream MUST be flushed and closed
+- **AND** any buffered events MUST be discarded
+- **AND** the next tray session MUST start with an empty queue
 
 #### Scenario: No stream file on disk
 - **WHEN** checking the tray's runtime directory
-- **THEN** no `.stream` or `.events` files persist after tray exit
-- **AND** events are available only in the scrollback terminal history or log files
+- **THEN** no `.stream` or `.events` files MUST persist after tray exit
+- **AND** events SHOULD be available only in the scrollback terminal history or log files
 
 ### Requirement: Backpressure and flow control
 
-The stream SHALL handle high event rates gracefully without overwhelming the terminal.
+The stream MUST handle high event rates gracefully without overwhelming the terminal.
 
 #### Scenario: Event rate limit
 - **WHEN** a container produces > 1000 events per second (pathological case)
-- **THEN** the stream buffers events and emits them at a controlled rate
-- **AND** logs `event_buffer_depth = N` when the buffer exceeds 100 events
-- **AND** does not drop events but may batch them: `[...truncated N events...]`
+- **THEN** the stream MUST buffer events and MUST emit them at a controlled rate
+- **AND** SHOULD log `event_buffer_depth = N` when the buffer exceeds 100 events
+- **AND** MUST NOT drop events but MAY batch them: `[...truncated N events...]`
 
 #### Scenario: Terminal blocked
 - **WHEN** the terminal is slow to read (e.g., over a slow SSH connection)
-- **THEN** the event stream does not block the tray's event loop
-- **AND** buffered events are kept in a ring buffer (max 10K events)
-- **AND** oldest events are dropped if the buffer overflows
+- **THEN** the event stream MUST NOT block the tray's event loop
+- **AND** buffered events MUST be kept in a ring buffer (max 10K events)
+- **AND** oldest events MAY be dropped if the buffer overflows
 
 #### Scenario: Streaming failure
 - **WHEN** the stream writer encounters an error (broken pipe, disk full)
-- **THEN** the tray logs the error but continues running
-- **AND** container operations are not affected
-- **AND** events can still be found in log files
+- **THEN** the tray SHOULD log the error but MUST continue running
+- **AND** container operations MUST NOT be affected
+- **AND** events SHOULD be found in log files
 
 ### Requirement: Litmus test — diagnostic streaming activation and lifecycle
 

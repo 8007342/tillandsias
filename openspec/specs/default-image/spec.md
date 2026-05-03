@@ -210,50 +210,50 @@ The full-Chrome / full-Firefox GUI variants are intentionally NOT installed — 
 
 #### Scenario: chromium-headless invokable
 - **WHEN** an agent inside the forge runs `chromium-headless --version`
-- **THEN** the command prints a version string (e.g., `Chromium 134.x`) and exits 0
+- **THEN** the command SHALL print a version string (e.g., `Chromium 134.x`) and exit 0
 
 #### Scenario: firefox headless invokable
 - **WHEN** an agent inside the forge runs `firefox --version`
-- **THEN** the command prints a version string and exits 0
-- **AND** `firefox --headless --screenshot=/tmp/test.png https://example.com` produces a PNG when run with proxy env vars set (egress goes through the enclave proxy)
+- **THEN** the command SHALL print a version string and exit 0
+- **AND** `firefox --headless --screenshot=/tmp/test.png https://example.com` SHALL produce a PNG when run with proxy env vars set (egress goes through the enclave proxy)
 
 #### Scenario: WebDriver bridges available
 - **WHEN** an agent inside the forge runs `chromedriver --version` and `geckodriver --version`
-- **THEN** both commands print their respective versions and exit 0
+- **THEN** both commands SHALL print their respective versions and exit 0
 
 #### Scenario: Image size impact bounded
 - **WHEN** the forge image is built with the headless browsers added
-- **THEN** the image size SHALL grow by no more than 600 MB compared to the previous version (target: ~+400 MB; bound: 600 MB to allow for Fedora package transitive deps)
+- **THEN** the image size MUST grow by no more than 600 MB compared to the previous version (target: ~+400 MB; bound: 600 MB to allow for Fedora package transitive deps)
 
 #### Scenario: Drivers are pinned
 - **WHEN** the Containerfile fetches `geckodriver` from upstream
 - **THEN** the URL SHALL pin a specific version (e.g., `v0.36.0`)
-- **AND** the version SHALL be bumped by deliberate Containerfile edits, not by `:latest`-style floating refs
+- **AND** the version SHALL be bumped by deliberate Containerfile edits, NOT by `:latest`-style floating refs
 
 ### Requirement: Forge image bakes the cheatsheets directory at /opt/cheatsheets/
 
-The forge image (`images/default/Containerfile`) SHALL `COPY cheatsheets/ /opt/cheatsheets/` near the end of the build (after the `/opt/agents/` layer, before the locale-files COPY) and SHALL set `ENV TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets` so agent runtimes can discover the path without hardcoding it. Ownership SHALL be `root:root` and permissions SHALL be world-readable, so the forge user (UID 1000) can read but not modify any cheatsheet.
+The forge image (`images/default/Containerfile`) SHALL `COPY cheatsheets/ /opt/cheatsheets/` near the end of the build (after the `/opt/agents/` layer, before the locale-files COPY) and SHALL set `ENV TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets` so agent runtimes can discover the path without hardcoding it. Ownership SHALL be `root:root` and permissions SHALL be world-readable, so the forge user (UID 1000) MAY read but MUST NOT modify any cheatsheet.
 
 #### Scenario: Image build succeeds with cheatsheets present
 - **WHEN** the forge image is built via `scripts/build-image.sh forge`
-- **THEN** the resulting image contains `/opt/cheatsheets/INDEX.md` and the seven category subdirectories
-- **AND** `podman run --rm <image> ls /opt/cheatsheets/` lists `INDEX.md` plus `runtime/`, `languages/`, `utils/`, `build/`, `web/`, `test/`, `agents/`
+- **THEN** the resulting image SHALL contain `/opt/cheatsheets/INDEX.md` and the seven category subdirectories
+- **AND** `podman run --rm <image> ls /opt/cheatsheets/` SHALL list `INDEX.md` plus `runtime/`, `languages/`, `utils/`, `build/`, `web/`, `test/`, `agents/`
 
 #### Scenario: Environment variable is exported
 - **WHEN** an agent inside a running forge container runs `printenv TILLANDSIAS_CHEATSHEETS`
-- **THEN** the output is `/opt/cheatsheets`
+- **THEN** the output SHALL be `/opt/cheatsheets`
 
 #### Scenario: Forge user cannot mutate cheatsheets
 - **WHEN** the forge user (UID 1000) runs `touch /opt/cheatsheets/INDEX.md`
-- **THEN** the call fails with EACCES — `/opt/cheatsheets/` is image-state, not user-state
+- **THEN** the call MUST fail with EACCES — `/opt/cheatsheets/` is image-state, not user-state
 
 ### Requirement: Forge entrypoint surfaces TILLANDSIAS_CHEATSHEETS to agents
 
-Every forge entrypoint script (`entrypoint-forge-claude.sh`, `entrypoint-forge-opencode.sh`, `entrypoint-forge-opencode-web.sh`, `entrypoint-terminal.sh`) SHALL ensure `TILLANDSIAS_CHEATSHEETS` is in the agent's environment. The image-level `ENV` already covers this; entrypoints SHALL NOT unset or shadow it.
+Every forge entrypoint script (`entrypoint-forge-claude.sh`, `entrypoint-forge-opencode.sh`, `entrypoint-forge-opencode-web.sh`, `entrypoint-terminal.sh`) SHALL ensure `TILLANDSIAS_CHEATSHEETS` is in the agent's environment. The image-level `ENV` already covers this; entrypoints MUST NOT unset or shadow it.
 
 #### Scenario: Variable survives entrypoint
 - **WHEN** any forge entrypoint launches its agent
-- **THEN** the launched agent's process environment contains `TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets`
+- **THEN** the launched agent's process environment SHALL contain `TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets`
 
 ### Requirement: forge-welcome.sh prints the cheatsheet location once per session
 
@@ -261,7 +261,7 @@ Every forge entrypoint script (`entrypoint-forge-claude.sh`, `entrypoint-forge-o
 
 #### Scenario: Welcome line is present
 - **WHEN** `forge-welcome.sh` runs at agent startup
-- **THEN** its stdout contains the single-line cheatsheet hint
+- **THEN** its stdout SHALL contain the single-line cheatsheet hint
 
 ### Requirement: Forge image ships cheatsheets at /opt/cheatsheets-image (image-baked canonical)
 
@@ -276,7 +276,7 @@ The forge image (`images/default/Containerfile`) SHALL bake cheatsheets at
 > `/opt/cheatsheets-image` is the immutable, image-baked lower-layer copy.
 
 1. `COPY cheatsheets/ /opt/cheatsheets-image/` at image-build time (lower-layer bake).
-2. NOT create `/opt/cheatsheets/` at image-build time — that directory is created
+2. MUST NOT create `/opt/cheatsheets/` at image-build time — that directory is created
    by the tmpfs mount at container start.
 3. Export `ENV TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets` unchanged (the runtime
    tmpfs view, not the image-baked canonical).
@@ -284,17 +284,17 @@ The forge image (`images/default/Containerfile`) SHALL bake cheatsheets at
 #### Scenario: /opt/cheatsheets/ is tmpfs-backed at runtime; canonical at /opt/cheatsheets-image/
 
 - **WHEN** a forge container starts
-- **THEN** `findmnt /opt/cheatsheets -no FSTYPE` returns `tmpfs`
-- **AND** `ls /opt/cheatsheets-image/INDEX.md` succeeds (image-baked canonical)
-- **AND** `ls /opt/cheatsheets/INDEX.md` succeeds (runtime tmpfs view, populated
+- **THEN** `findmnt /opt/cheatsheets -no FSTYPE` SHALL return `tmpfs`
+- **AND** `ls /opt/cheatsheets-image/INDEX.md` SHALL succeed (image-baked canonical)
+- **AND** `ls /opt/cheatsheets/INDEX.md` SHALL succeed (runtime tmpfs view, populated
   by `populate_hot_paths()`)
 
 #### Scenario: populate_hot_paths copies image-baked content to tmpfs at entrypoint
 
 - **WHEN** the forge entrypoint runs `populate_hot_paths()`
-- **THEN** `/opt/cheatsheets/` contains the same files as `/opt/cheatsheets-image/`
-- **AND** the copy is a `cp -a` (preserving permissions and timestamps)
-- **AND** running `populate_hot_paths()` a second time is idempotent (safe to call
+- **THEN** `/opt/cheatsheets/` SHALL contain the same files as `/opt/cheatsheets-image/`
+- **AND** the copy SHALL be a `cp -a` (preserving permissions and timestamps)
+- **AND** running `populate_hot_paths()` a second time SHALL be idempotent (safe to call
   from multiple entrypoints via `lib-common.sh`)
 
 ### Requirement: OpenCode config includes 4 new instruction files
@@ -302,7 +302,7 @@ The `images/default/config-overlay/opencode/config.json` instructions list SHALL
 
 #### Scenario: config.json lists all 5 instruction files in order
 - **WHEN** the default forge image is built
-- **THEN** `config.json` instructions array includes these paths in order:
+- **THEN** `config.json` instructions array SHALL include these paths in order:
   - `/home/forge/.config-overlay/opencode/instructions/methodology.md`
   - `/home/forge/.config-overlay/opencode/instructions/forge-discovery.md`
   - `/home/forge/.config-overlay/opencode/instructions/cache-discipline.md`
@@ -312,43 +312,43 @@ The `images/default/config-overlay/opencode/config.json` instructions list SHALL
 
 #### Scenario: Agent reads methodology.md first
 - **WHEN** OpenCode loads config.json
-- **THEN** the first instruction file is methodology.md
-- **THEN** methodology.md directs the agent to the 4 sub-files for specific workflows
+- **THEN** the first instruction file SHALL be methodology.md
+- **THEN** methodology.md SHALL direct the agent to the 4 sub-files for specific workflows
 
 ### Requirement: config-overlay installs 4 new instruction files
 The `images/default/config-overlay/opencode/instructions/` directory SHALL contain 4 new markdown files, each under 200 lines and action-first in structure.
 
 #### Scenario: forge-discovery.md exists
 - **WHEN** the image is built
-- **THEN** `/home/forge/.config-overlay/opencode/instructions/forge-discovery.md` exists and is readable
-- **THEN** the file contains inventory, cheatsheet discovery, and openspec workflow guidance
+- **THEN** `/home/forge/.config-overlay/opencode/instructions/forge-discovery.md` SHALL exist and be readable
+- **THEN** the file SHALL contain inventory, cheatsheet discovery, and openspec workflow guidance
 
 #### Scenario: cache-discipline.md exists
 - **WHEN** the image is built
-- **THEN** `/home/forge/.config-overlay/opencode/instructions/cache-discipline.md` exists and is readable
-- **THEN** the file contains the four-category path model and per-language env vars
+- **THEN** `/home/forge/.config-overlay/opencode/instructions/cache-discipline.md` SHALL exist and be readable
+- **THEN** the file SHALL contain the four-category path model and per-language env vars
 
 #### Scenario: nix-first.md exists
 - **WHEN** the image is built
-- **THEN** `/home/forge/.config-overlay/opencode/instructions/nix-first.md` exists and is readable
-- **THEN** the file contains Nix flake guidance for new projects
+- **THEN** `/home/forge/.config-overlay/opencode/instructions/nix-first.md` SHALL exist and be readable
+- **THEN** the file SHALL contain Nix flake guidance for new projects
 
 #### Scenario: openspec-workflow.md exists
 - **WHEN** the image is built
-- **THEN** `/home/forge/.config-overlay/opencode/instructions/openspec-workflow.md` exists and is readable
-- **THEN** the file contains step-by-step workflow with proposal, design, specs, tasks, archive
+- **THEN** `/home/forge/.config-overlay/opencode/instructions/openspec-workflow.md` SHALL exist and be readable
+- **THEN** the file SHALL contain step-by-step workflow with proposal, design, specs, tasks, archive
 
 ### Requirement: methodology.md becomes an index
 The `images/default/config-overlay/opencode/instructions/methodology.md` file SHALL be rewritten as a ~15-line index that points agents to the 4 sub-files, replacing the current 36-line generic principles document.
 
 #### Scenario: methodology.md is concise and actionable
 - **WHEN** agent reads methodology.md
-- **THEN** the file is under 20 lines
-- **THEN** each line describes when to read which sub-file
+- **THEN** the file SHALL be under 20 lines
+- **THEN** each line SHALL describe when to read which sub-file
 
 #### Scenario: methodology.md maintains core principles section
 - **WHEN** agent needs a reminder of the five core principles (monotonic convergence, CRDT, spec-is-truth, ephemeral-first, privacy-first)
-- **THEN** methodology.md includes a short "Core Principles" section linking to the deeper guidance in sub-files
+- **THEN** methodology.md SHALL include a short "Core Principles" section linking to the deeper guidance in sub-files
 
 ### Requirement: Forge image ships the host-browser MCP stub
 
@@ -359,7 +359,7 @@ SHALL relay JSON-RPC frames between the agent's stdio and the host
 control socket bound at `$TILLANDSIAS_CONTROL_SOCKET`
 (`/run/host/tillandsias/control.sock`).
 
-The stub SHALL:
+The stub MUST:
 
 1. Connect to `$TILLANDSIAS_CONTROL_SOCKET` (failing with a clear
    error message on stderr if the env var is unset or the socket is
@@ -402,10 +402,10 @@ equivalent key, so both agent runtimes see the eight `browser.*` tools.
 
 - **WHEN** an agent inside the forge invokes the configured `host-browser`
   MCP server
-- **THEN** the stub connects to `$TILLANDSIAS_CONTROL_SOCKET`
-- **AND** completes `Hello`/`HelloAck`
-- **AND** an agent-issued `tools/list` reaches the host MCP module and
-  the response — listing the eight `browser.*` tools — reaches the
+- **THEN** the stub SHALL connect to `$TILLANDSIAS_CONTROL_SOCKET`
+- **AND** SHALL complete `Hello`/`HelloAck`
+- **AND** an agent-issued `tools/list` SHALL reach the host MCP module and
+  the response — listing the eight `browser.*` tools — SHALL reach the
   agent within 500 ms
 
 #### Scenario: Stub fails clearly when env var is missing
@@ -413,19 +413,19 @@ equivalent key, so both agent runtimes see the eight `browser.*` tools.
 - **WHEN** the stub is invoked in a context where
   `TILLANDSIAS_CONTROL_SOCKET` is unset or the socket file does not
   exist
-- **THEN** the stub writes a one-line error to stderr naming the
+- **THEN** the stub MUST write a one-line error to stderr naming the
   missing variable / unreachable path
-- **AND** exits with a non-zero status
-- **AND** writes a JSON-RPC error response on stdout for the in-flight
+- **AND** SHALL exit with a non-zero status
+- **AND** MUST write a JSON-RPC error response on stdout for the in-flight
   `initialize` request so the agent's MCP client surfaces a clean
   failure rather than a 60 s timeout
 
 #### Scenario: Stub disconnect on EOF
 
 - **WHEN** the agent closes stdin (terminating the MCP server lifecycle)
-- **THEN** the stub closes its socket connection cleanly within 1 s
-- **AND** exits with status 0
-- **AND** the host-side `WindowRegistry` retains any open windows per
+- **THEN** the stub SHALL close its socket connection cleanly within 1 s
+- **AND** SHALL exit with status 0
+- **AND** the host-side `WindowRegistry` SHALL retain any open windows per
   the host-browser-mcp window-survival requirement
 
 

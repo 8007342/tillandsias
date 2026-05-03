@@ -10,7 +10,7 @@ status: active
 Structured logging system with compact formatting, accountability windows for sensitive operations, and spec traceability via `@trace` links.
 ## Requirements
 ### Requirement: Terminal log output when launched from CLI
-The application SHALL output structured logs to stderr when launched from a terminal, using a custom compact format that separates accountability metadata from regular event fields.
+The application MUST output structured logs to stderr when launched from a terminal, using a custom compact format that separates accountability metadata from regular event fields.
 
 #### Scenario: CLI launch
 - **WHEN** tillandsias is launched from a terminal (stderr is a TTY)

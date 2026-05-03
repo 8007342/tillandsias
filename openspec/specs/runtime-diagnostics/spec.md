@@ -51,78 +51,78 @@ The container's stderr output MUST be streamed to a temporary log file during ex
 
 #### Scenario: Stderr destruction
 - **WHEN** the container stops (graceful or crash)
-- **THEN** the stderr log is deleted from the runtime directory
-- **AND** stderr history does NOT persist to disk or `.tillandsias/` cache
-- **AND** if the container is restarted, a fresh stderr log is created
+- **THEN** the stderr log MUST be deleted from the runtime directory
+- **AND** stderr history MUST NOT persist to disk or `.tillandsias/` cache
+- **AND** if the container is restarted, a fresh stderr log MUST be created
 
 #### Scenario: Stderr size limit
 - **WHEN** a container writes > 100 MB to stderr (runaway logging)
-- **THEN** the tray truncates the log to the last 10 MB
-- **AND** logs `stderr_truncated = true, max_bytes = 104857600, kept_tail_bytes = 10485760`
-- **AND** continues capture without blocking the container
+- **THEN** the tray MUST truncate the log to the last 10 MB
+- **AND** MUST log `stderr_truncated = true, max_bytes = 104857600, kept_tail_bytes = 10485760`
+- **AND** MUST continue capture without blocking the container
 
 ### Requirement: Detect resource exhaustion conditions
 
-The runtime SHALL detect OOM (out of memory) kills, disk full conditions, and file descriptor exhaustion from container-side signals.
+The runtime MUST detect OOM (out of memory) kills, disk full conditions, and file descriptor exhaustion from container-side signals.
 
 #### Scenario: OOM kill detected
 - **WHEN** a container receives SIGKILL due to memory pressure
-- **THEN** the tray detects the condition via cgroup memory limits or podman events
-- **AND** logs `oom_kill = true, memory_limit_bytes = N, memory_used_bytes = M` with `category = "runtime-diagnostics"`
-- **AND** the user sees "Build ran out of memory. Increase container memory and retry."
+- **THEN** the tray MUST detect the condition via cgroup memory limits or podman events
+- **AND** MUST log `oom_kill = true, memory_limit_bytes = N, memory_used_bytes = M` with `category = "runtime-diagnostics"`
+- **AND** the user MUST see "Build ran out of memory. Increase container memory and retry."
 
 #### Scenario: Disk full detection
 - **WHEN** a container attempts to write and receives ENOSPC
-- **THEN** the tray logs stderr pattern match: `"No space left on device"`
-- **AND** logs `disk_full_detected = true, mount_point = "/"`
-- **AND** the user sees "Build failed: disk space exhausted"
+- **THEN** the tray MUST log stderr pattern match: `"No space left on device"`
+- **AND** MUST log `disk_full_detected = true, mount_point = "/"`
+- **AND** the user MUST see "Build failed: disk space exhausted"
 
 #### Scenario: File descriptor exhaustion
 - **WHEN** a container receives EMFILE (too many open files)
-- **THEN** the tray detects via stderr analysis
-- **AND** logs `fd_exhaustion_detected = true, ulimit = "default"`
-- **AND** the user sees "Build failed: too many open files (increase ulimit)"
+- **THEN** the tray MUST detect via stderr analysis
+- **AND** MUST log `fd_exhaustion_detected = true, ulimit = "default"`
+- **AND** the user MUST see "Build failed: too many open files (increase ulimit)"
 
 ### Requirement: Analyze stderr for common failure patterns
 
-The runtime SHALL scan captured stderr for patterns indicating common failures and surface human-readable explanations.
+The runtime MUST scan captured stderr for patterns indicating common failures and surface human-readable explanations.
 
 #### Scenario: Compilation error detection
 - **WHEN** stderr contains `"error[E"` (Rust compiler pattern)
-- **THEN** the tray extracts the first 3 compilation errors
-- **AND** displays them as "Compilation failed" with line numbers and error text
-- **AND** does NOT expose the full stderr wall to the user
+- **THEN** the tray MUST extract the first 3 compilation errors
+- **AND** MUST display them as "Compilation failed" with line numbers and error text
+- **AND** MUST NOT expose the full stderr wall to the user
 
 #### Scenario: Network error detection
 - **WHEN** stderr contains `"Connection refused"` or `"Name or service not known"`
-- **THEN** the tray logs `network_error_detected = true, pattern = "Connection refused"`
-- **AND** suggests to the user "Check that required services are running"
+- **THEN** the tray MUST log `network_error_detected = true, pattern = "Connection refused"`
+- **AND** SHOULD suggest to the user "Check that required services are running"
 
 #### Scenario: Permission error detection
 - **WHEN** stderr contains `"Permission denied"` or `"Operation not permitted"`
-- **THEN** the tray logs `permission_error_detected = true`
-- **AND** suggests "Check file/directory ownership or container capabilities"
+- **THEN** the tray MUST log `permission_error_detected = true`
+- **AND** SHOULD suggest "Check file/directory ownership or container capabilities"
 
 ### Requirement: Ephemeral diagnostics lifecycle
 
-Diagnostic data (stderr logs, exit codes, failure analysis) SHALL be ephemeral, collected only during container execution, and destroyed on shutdown.
+Diagnostic data (stderr logs, exit codes, failure analysis) MUST be ephemeral, collected only during container execution, and MUST be destroyed on shutdown.
 
 #### Scenario: Ephemeral stderr log
 - **WHEN** a container is running
-- **THEN** stderr is captured to a tmpfs-backed runtime file
-- **AND** the file is accessible for debugging during the container's lifetime
-- **AND** on container stop, the file is immediately deleted
-- **AND** the next container start creates a fresh log file
+- **THEN** stderr MUST be captured to a tmpfs-backed runtime file
+- **AND** the file MUST be accessible for debugging during the container's lifetime
+- **AND** on container stop, the file MUST be immediately deleted
+- **AND** the next container start MUST create a fresh log file
 
 #### Scenario: No diagnostic persistence
 - **WHEN** checking project cache or config after container shutdown
-- **THEN** no stderr logs, exit codes, or failure history is found
-- **AND** the only persistent record is a one-line summary in tray logs (e.g., "Project X failed: timeout")
+- **THEN** no stderr logs, exit codes, or failure history MUST be found
+- **AND** the only persistent record MUST be a one-line summary in tray logs (e.g., "Project X failed: timeout")
 
 #### Scenario: Log cleanup on tray exit
 - **WHEN** the tray exits while containers are still running
-- **THEN** all ephemeral stderr logs are deleted via cleanup signal handler
-- **AND** next tray launch has no inherited diagnostic data
+- **THEN** all ephemeral stderr logs MUST be deleted via cleanup signal handler
+- **AND** next tray launch MUST NOT have inherited diagnostic data
 
 ### Requirement: Litmus test — runtime diagnostics capture and lifecycle
 
