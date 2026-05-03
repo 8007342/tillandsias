@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-# @trace spec:forge-welcome — bright colors for dark terminals, ramdisk distinction
+# @trace spec:forge-welcome
 # ── Colors (bright variants for dark backgrounds) ────────────
 RST=$'\033[0m'
 BOLD=$'\033[1m'
@@ -147,8 +147,8 @@ printf "  ${B_WHITE}%s${RST}\n" "$L_WELCOME_MOUNTS"
 printf "    ${B_GREEN}%-38s${RST} ${A} ${DIM}%-26s${RST} ${B_GREEN}rw${RST}\n" \
     "/home/forge/.cache/tillandsias"      "~/.cache/tillandsias"
 echo ""
-# @trace spec:forge-hot-cold-split — RAM mounts summary: surfaces hot-path
-# tmpfs caps so agents and humans immediately see what is RAM-backed and what
+# @trace spec:forge-hot-cold-split
+# RAM mounts summary: surfaces hot-path, tmpfs caps so agents and humans immediately see what is RAM-backed and what
 # the worst-case footprint per mount is. Lost on container stop.
 printf "  ${B_WHITE}RAM mounts${RST}  ${DIM}(HOT path — RAM-backed tmpfs; lost on container stop)${RST}\n"
 printf "    ${B_MAGENTA}%-38s${RST} ${DIM}%s${RST}\n" "/opt/cheatsheets"    "8 MB   ← knowledge bank (agent reads)"
@@ -164,8 +164,8 @@ printf "    ${B_MAGENTA}%-38s${RST} ${DIM}%s${RST}\n" "/run/user/1000"      " 64
 echo ""
 printf "  ${B_YELLOW}→${RST} Project at ${B_WHITE}/home/forge/src/%s${RST}\n" "$PROJECT"
 echo ""
-# @trace spec:forge-environment-discoverability — at-a-glance summary of the
-# loaded runtimes by category. The full enumeration lives in
+# @trace spec:forge-environment-discoverability
+# At-a-glance summary of the loaded runtimes by category. The full enumeration lives in
 # `tillandsias-inventory`; the welcome banner is the discovery hint.
 printf "  ${B_WHITE}Languages${RST}    ${DIM}rust, go, java 21, python 3.13, node 22, dart 3 (flutter)${RST}\n"
 printf "  ${B_WHITE}Build${RST}        ${DIM}cargo, maven, gradle, npm/yarn/pnpm, nix, make, cmake, ninja${RST}\n"
@@ -173,8 +173,8 @@ printf "  ${B_WHITE}Test${RST}         ${DIM}pytest, junit, cargo-test, chromium
 printf "  ${B_WHITE}Inventory${RST}    ${DIM}run ${B_CYAN}tillandsias-inventory${RST}${DIM} for the full list${RST}\n"
 echo ""
 
-# @trace spec:agent-cheatsheets — surface the cheatsheets path on every attach
-# so agents and humans both see it before guessing tool flags.
+# @trace spec:agent-cheatsheets
+# Surface the cheatsheets path on every attach so agents and humans both see it before guessing tool flags.
 if [ -d "${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets}" ]; then
     printf "  📚 ${B_WHITE}Cheatsheets${RST} ${DIM}cat${RST} ${B_CYAN}%s/INDEX.md${RST} ${DIM}| rg <topic>${RST}\n" \
         "${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets}"

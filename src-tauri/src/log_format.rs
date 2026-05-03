@@ -11,7 +11,7 @@
 //! ```text
 //! 2026-04-01T18:49:44Z  INFO [secrets] GitHub token retrieved from OS keyring
 //!   -> Never written to disk, injected via bind mount
-//!   @trace spec:native-secrets-store https://github.com/8007342/tillandsias/search?q=...
+//!   @trace spec:native-secrets-store
 //! ```
 //!
 //! **Regular events:**

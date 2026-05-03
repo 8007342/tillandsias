@@ -103,13 +103,16 @@ fn build_filter(config: &LogConfig) -> EnvFilter {
     // Accountability windows implicitly enable their modules at info level
     // (or trace if --log already set a higher detail level for that module).
     for window in &config.accountability {
+        // @trace spec:proxy-container
+        // @trace spec:enclave-network
+        // @trace spec:git-mirror-service
         let module_name = match window {
             AccountabilityWindow::SecretManagement => "secrets",
             AccountabilityWindow::ImageManagement => "containers",
             AccountabilityWindow::UpdateCycle => "updates",
-            AccountabilityWindow::ProxyManagement => "proxy",       // @trace spec:proxy-container
-            AccountabilityWindow::EnclaveManagement => "enclave",   // @trace spec:enclave-network
-            AccountabilityWindow::GitManagement => "git",              // @trace spec:git-mirror-service
+            AccountabilityWindow::ProxyManagement => "proxy",
+            AccountabilityWindow::EnclaveManagement => "enclave",
+            AccountabilityWindow::GitManagement => "git",
         };
 
         // Only add if not already overridden by --log.

@@ -46,7 +46,7 @@ pub enum ContainerType {
     /// Persistent OpenCode Web forge running `opencode serve` on :4096.
     /// Named `tillandsias-<project>-forge` — no genus allocation. Distinct
     /// from `Web` (which is the static-httpd "Serve Here" feature).
-    /// @trace spec:opencode-web-session — persistent forge running 'opencode serve' on :4096.
+    /// @trace spec:opencode-web-session
     #[serde(rename = "opencode-web")]
     OpenCodeWeb,
     /// Caching HTTP/HTTPS proxy with domain allowlist.

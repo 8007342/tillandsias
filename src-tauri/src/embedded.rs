@@ -545,7 +545,7 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("proxy squid.conf: {e}"))?;
     write_lf(&proxy_dir.join("allowlist.txt"), PROXY_ALLOWLIST)
         .map_err(|e| format!("proxy allowlist: {e}"))?;
-    // @trace spec:cli-diagnostics — Extract external-logs.yaml for proxy to build context (tmpfs)
+    // @trace spec:cli-diagnostics
     write_lf(&proxy_dir.join("external-logs.yaml"), PROXY_EXTERNAL_LOGS)
         .map_err(|e| format!("proxy external-logs.yaml: {e}"))?;
     #[cfg(unix)]

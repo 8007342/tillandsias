@@ -8,7 +8,7 @@
 #         CA bundle at /etc/pki/tls/certs/ca-bundle.crt.
 FROM registry.fedoraproject.org/fedora-minimal:44
 
-# @trace spec:default-image — forge system packages
+# @trace spec:default-image
 # ── System packages ────────────────────────────────────────────
 # LEAN forge: essential dev tools only. Terminal UX tools (mc, vim, nano,
 # eza, bat, fd-find, fzf, htop, tree, zoxide) removed to save ~90MB.

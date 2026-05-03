@@ -8,8 +8,8 @@
 #         CA bundle at /etc/pki/tls/certs/ca-bundle.crt (NOT Alpine's /etc/ssl/).
 FROM registry.fedoraproject.org/fedora-minimal:43
 
-# @trace spec:inference-container — runtime deps for ollama
-# -- Minimal deps for running ollama CPU-only --
+# @trace spec:inference-container
+# Runtime deps for ollama, minimal deps for running ollama CPU-only
 # pciutils provides lspci (runtime GPU detection in entrypoint)
 # DISTRO: microdnf (Fedora Minimal), NOT apk (Alpine) or dnf (standard Fedora)
 # DISTRO: wget intentionally omitted — curl is the HTTP tool here.

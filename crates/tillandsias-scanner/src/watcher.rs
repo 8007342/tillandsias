@@ -128,7 +128,7 @@ impl Scanner {
             notify::Config::default(),
         )?;
 
-        // @trace spec:filesystem-scanner — graceful degradation for watch setup
+        // @trace spec:filesystem-scanner
         // Watch each configured path (non-recursive — we only care about depth 1-2).
         // Errors are logged and skipped rather than propagated — the scanner degrades
         // gracefully when paths are missing, permissions are denied, or inotify watch
@@ -411,7 +411,7 @@ mod tests {
         handle.abort();
     }
 
-    // @trace spec:filesystem-scanner — graceful degradation tests
+    // @trace spec:filesystem-scanner
 
     #[test]
     fn initial_scan_skips_nonexistent_watch_path() {
