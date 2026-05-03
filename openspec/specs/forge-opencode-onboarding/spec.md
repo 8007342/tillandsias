@@ -105,6 +105,16 @@ The OpenCode `config.json` instructions list SHALL include 5 files: methodology.
 - `cheatsheets/agents/opencode.md` — OpenCode IDE and development patterns
 - `cheatsheets/runtime/forge-container.md` — Forge container runtime and configuration
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Onboarding state is temporary; completed steps don't persist across restarts
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

@@ -68,6 +68,16 @@ All enclave network operations SHALL be logged to the `--log-enclave` accountabi
 - `cheatsheets/runtime/networking.md` — Networking reference and patterns
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:enclave-isolation`
+
+Gating points:
+- Enclave network is isolated; no egress to host network without proxy
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

@@ -78,6 +78,16 @@ The singleton check SHALL verify that the PID in the lock file belongs to an act
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns
 - `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Singleton enforcement is ephemeral; guards are cleaned on process exit
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

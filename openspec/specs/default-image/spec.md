@@ -434,6 +434,16 @@ equivalent key, so both agent runtimes see the eight `browser.*` tools.
 - `cheatsheets/runtime/forge-container.md` — Forge Container reference and patterns
 - `cheatsheets/build/cargo.md` — Cargo reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Default forge image is pulled fresh; cached images are cleared on container stop
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

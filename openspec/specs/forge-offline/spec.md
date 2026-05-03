@@ -60,6 +60,16 @@ Forge containers SHALL be attached to the `tillandsias-enclave` internal network
 - `cheatsheets/runtime/forge-container.md` — Forge Container reference and patterns
 - `cheatsheets/security/owasp-top-10-2021.md` — Owasp Top 10 2021 reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:credential-isolation`
+
+Gating points:
+- Forge containers have zero credentials; no token leakage through environment or files
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

@@ -111,3 +111,13 @@ A new cheatsheet file `config-overlay/opencode/instructions/web-services.md` SHA
 - `cheatsheets/runtime/caddy-reverse-proxy.md` — Caddy 2.x configuration, admin API, hostname matching
 - `cheatsheets/runtime/networking.md` — RFC 6761 loopback-only binding, localhost resolution
 - `cheatsheets/runtime/squid-cache-peer-routing.md` — forward proxy integration with peer services
+
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Subdomain routing state is ephemeral; reverse-proxy rules are cleaned on reload
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable

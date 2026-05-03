@@ -107,6 +107,16 @@ All direct podman invocations SHALL apply the same security flags as the bash sc
 - `cheatsheets/utils/podman.md` — security flags, D-Bus forwarding, container networking
 - `cheatsheets/utils/bash.md` — reference for original bash script behavior
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Podman calls cleanup resources; no orphaned containers or volumes
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

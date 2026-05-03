@@ -72,6 +72,16 @@ This addresses the `../java/` audit's finding: the test agent committed a 200 MB
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns
 - `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Telemetry downloads do not persist; no lingering download state
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

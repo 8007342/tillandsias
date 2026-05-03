@@ -265,6 +265,16 @@ podman exec test-safe-cache du -sh /tmp/chrome-cache/ 2>&1
 # Expected: error (container stopped)
 ```
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:browser-ephemeral`
+
+Gating points:
+- Profile and cache are ephemeral (tmpfs), destroyed on shutdown; credentials never persist; domain allowlist is enforced
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

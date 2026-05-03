@@ -104,3 +104,13 @@ This spec fix unblocks this flow on Windows as well.
 
 - `docs/cheatsheets/runtime/windows-paths.md` — Windows path forms and canonicalization
 - `docs/cheatsheets/build/git-operations.md` — git clone semantics and path handling
+
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Windows path handling is temporary; no registry changes persist
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable

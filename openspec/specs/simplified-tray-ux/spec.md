@@ -194,3 +194,13 @@ Command-line invocation (`tillandsias <path>`) SHALL preserve current defaults:
 ## Sources of Truth
 
 - Project memory: `feedback_tray_first_ux` — tray-first architecture, zero maintenance
+
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Tray UX state is ephemeral; UI choices don't persist inappropriately
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable

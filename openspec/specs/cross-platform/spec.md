@@ -33,6 +33,16 @@ Changing the language in the tray menu MUST reload the i18n string table immedia
 - `cheatsheets/runtime/wsl2-isolation-boundary.md` — Wsl2 Isolation Boundary reference and patterns
 - `cheatsheets/runtime/windows-event-viewer.md` — Windows Event Viewer reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Containers are destroyed after use; no cross-platform lingering state
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

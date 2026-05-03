@@ -231,6 +231,16 @@ The resolved cap SHALL be passed into the forge container via the env var `TILLA
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns
 - `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Hot/cold split is ephemeral; hot paths are tmpfs; cold paths are read-only
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

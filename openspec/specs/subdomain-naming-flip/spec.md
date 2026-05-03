@@ -53,3 +53,13 @@ The `*.localhost` loopback resolution (RFC 6761) applies at any subdomain depth 
 ## Sources of Truth
 
 - `cheatsheets/runtime/networking.md` — RFC 6761 wildcard loopback resolution behavior at any subdomain depth
+
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Subdomain naming changes don't leak; routing is cleaned up
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable

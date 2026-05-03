@@ -289,6 +289,16 @@ podman run --rm --name test-check tillandsias-reverse-proxy \
 # Expected: empty or no files (fresh start)
 ```
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Reverse proxy state is temporary; routing rules don't leak between containers
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

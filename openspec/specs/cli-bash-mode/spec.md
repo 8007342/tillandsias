@@ -40,6 +40,16 @@ The `--bash` CLI flag SHALL launch fish (not bash) with the welcome message.
 - `cheatsheets/languages/bash.md` — Bash reference and patterns
 - `cheatsheets/runtime/cmd.md` — Cmd reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Bash mode launches without persistence; environment and history are session-only
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

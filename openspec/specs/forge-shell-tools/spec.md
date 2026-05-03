@@ -55,6 +55,16 @@ The forge image SHALL include sensible default configs for bash, fish, and zsh w
 - `cheatsheets/languages/bash.md` — Bash reference and patterns
 - `cheatsheets/runtime/cmd.md` — Cmd reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Shell tools are isolated; no host tools leak into container
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

@@ -137,3 +137,13 @@ When using a newer image, the tray SHALL NOT invalidate any local caches or rebu
 - `forge-staleness` — Image staleness detection and rebuild triggers
 - `forge-launch` — Enclave creation and forge container startup
 - `init-command` — Initialization workflow and image management
+
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Forward compatibility is transparent; old and new containers coexist without state leakage
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable

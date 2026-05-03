@@ -113,3 +113,13 @@ The `tillandsias --init` command SHALL apply the same version-scoped staleness a
 - `cheatsheets/build/podman-image-management.md` — image listing, deletion, version tag patterns
 - `cheatsheets/runtime/version-file-conventions.md` — VERSION file structure and semantic versioning in scripts
 - `cheatsheets/build/nix-flake-caching.md` — reproducible hash computation for Nix builds
+
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Stale entries are cleaned; no persistent outdated state
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable

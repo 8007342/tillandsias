@@ -107,3 +107,13 @@ The Windows direct-podman build path (used when `build-image.sh` is unavailable)
 
 - `docs/cheatsheets/build/image-building.md` — container image build routing and Containerfile selection
 - `docs/cheatsheets/runtime/enclave-services.md` — enclave service architecture and entrypoints
+
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Image routing state is ephemeral; WSL containers are cleaned up
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable

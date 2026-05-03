@@ -182,6 +182,16 @@ Tillandsias SHALL distinguish two log tiers per container: INTERNAL (existing pe
 - `cheatsheets/runtime/logging-levels.md` — Logging Levels reference and patterns
 - `cheatsheets/runtime/external-logs.md` — External Logs reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Runtime logs are ephemeral; logs don't persist beyond container lifetime
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

@@ -251,6 +251,16 @@ ls $XDG_RUNTIME_DIR/tillandsias-*.stream 2>&1
 # Expected: no such file
 ```
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Diagnostic streams are ephemeral; streamed data is not persisted
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

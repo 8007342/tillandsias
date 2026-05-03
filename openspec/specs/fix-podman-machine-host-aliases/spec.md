@@ -71,3 +71,13 @@ The previous fix used `--add-host alias:127.0.0.1` with the assumption that `127
 
 - `docs/cheatsheets/runtime/enclave-network.md` — enclave architecture and service discovery
 - `docs/cheatsheets/runtime/container-networking.md` — podman machine networking and aliases
+
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Host aliases are ephemeral; DNS state is cleaned up on container exit
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable

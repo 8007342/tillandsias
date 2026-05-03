@@ -392,6 +392,16 @@ subject to the same handling rules as the GitHub OAuth token. Concretely:
 - `cheatsheets/utils/podman-secrets.md` — Podman secrets mechanism, storage drivers, and usage patterns
 - `cheatsheets/utils/tillandsias-secrets-architecture.md` — Tillandsias three-layer secret flow and threat mitigation
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:credential-isolation`
+
+Gating points:
+- Secrets are never persisted; mount points are cleaned on container exit
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

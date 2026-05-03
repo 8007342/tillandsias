@@ -120,6 +120,16 @@ Every CLI path that may have started enclave infrastructure SHALL install a SIGI
 - `cheatsheets/runtime/cmd.md` — Cmd reference and patterns
 - `cheatsheets/languages/bash.md` — Bash reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- CLI interface is stateless; no persistent state between invocations
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

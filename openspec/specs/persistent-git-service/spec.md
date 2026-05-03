@@ -54,3 +54,13 @@ The git-service is architecturally similar to the proxy and inference services: 
 ## Sources of Truth
 
 - `docs/cheatsheets/runtime/container-lifecycle.md` — container lifetime management and cleanup patterns
+
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Git service cleanups are verified; no orphaned repos or mirrors
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable

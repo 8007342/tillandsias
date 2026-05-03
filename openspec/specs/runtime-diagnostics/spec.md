@@ -199,6 +199,16 @@ ls /run/user/$(id -u)/tillandsias-*-lifecycle-stderr.log 2>&1
 # Expected: no such file
 ```
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Diagnostics are ephemeral; diagnostic data doesn't persist
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:

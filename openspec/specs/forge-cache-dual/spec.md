@@ -110,6 +110,16 @@ This means: `target/`, `node_modules/`, `build/`, `dist/`, `.gradle/`, `.dart_to
 - `cheatsheets/runtime/forge-shared-cache-via-nix.md` — Forge Shared Cache Via Nix reference and patterns
 - `cheatsheets/runtime/forge-hot-cold-split.md` — Forge Hot Cold Split reference and patterns
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Dual-layer cache is ephemeral; RW layer is cleaned up; RO layer immutable
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
 ## Observability
 
 Annotations referencing this spec can be found by:
