@@ -3,7 +3,7 @@
 
 status: active
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Spinner during tool installation
 The system SHALL display an animated terminal spinner while installing tools (npm install for openspec, claude-code; curl for opencode). The spinner MUST show a localized status message describing what is being installed.

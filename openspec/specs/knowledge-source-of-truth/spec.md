@@ -3,7 +3,7 @@
 
 status: active
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Knowledge directory structure
 The project SHALL maintain a `knowledge/` directory at the repository root containing project-agnostic technology cheatsheets organized by domain.

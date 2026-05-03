@@ -3,7 +3,7 @@
 
 status: active
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Per-module log level control
 Users SHALL be able to control log verbosity for individual subsystems via a CLI flag.
@@ -96,8 +96,6 @@ Log output SHALL NEVER contain actual secret values, regardless of log level.
 - **WHEN** any log message references a token or API key
 - **THEN** the log shows the operation and target but not the secret value
 - **AND** examples: "Token retrieved from native keyring" (not "Token gho_abc123 retrieved"), "ANTHROPIC_API_KEY injected" (not "ANTHROPIC_API_KEY=sk-ant-...")
-
-## MODIFIED Requirements
 
 ### Requirement: Logging initialization (updated)
 The logging system SHALL accept configuration from CLI flags in addition to environment variables.

@@ -3,7 +3,7 @@
 
 status: active
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Git-tracked files for flake builds
 Nix flake builds SHALL only see files that are tracked by git. The staleness check in `build-image.sh` SHALL use `git ls-files` to enumerate source files, ensuring the staleness hash covers exactly the same files that Nix will build.
