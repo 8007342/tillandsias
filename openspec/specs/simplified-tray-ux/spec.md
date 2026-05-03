@@ -5,7 +5,7 @@
 
 status: active
 promoted-from: openspec/changes/archive/2026-04-25-simplified-tray-ux/
-annotation-count: 12
+annotation-count: 17
 
 ## Purpose
 
@@ -13,67 +13,162 @@ Replace the accreted, multi-submenu tray design with a minimal, static menu stru
 
 ## Requirements
 
-### Requirement: Five-Stage Static Menu Structure
+### Requirement: Startup Menu Structure
 
-The tray SHALL pre-build a single menu tree on startup with all items created upfront. State transitions ONLY toggle the `enabled` property on individual items, never rebuild the tree. The project list is the sole exception (rebuild only when the project set changes, detected via set comparison, not polling).
+@trace spec:simplified-tray-ux
 
-Menu stages and their contents:
+On application startup, the tray displays exactly 4 static menu items:
 
-| Stage | Menu items (top → bottom) |
-|-------|---------------------------|
-| **Booting** | `Building [image names]` / divider / version (disabled) / `— by Tlatoāni` (disabled) / Quit |
-| **Ready** | `Ready` (2-sec transient) / divider / version (disabled) / `— by Tlatoāni` (disabled) / Quit |
-| **NoAuth** | `Sign in to GitHub` / divider / version (disabled) / `— by Tlatoāni` (disabled) / Quit |
-| **Authed** | `Projects ▸` / divider / version (disabled) / `— by Tlatoāni` (disabled) / Quit |
-| **NetIssue** | `Sign in to GitHub` / `(GitHub unreachable, using cached)` / `Projects ▸` / divider / version (disabled) / `— by Tlatoāni` (disabled) / Quit |
+1. **Status Indicator** — Single dynamic entry that displays startup progress
+   - Initially: `[<checklist> Verifying environment ...]` (animated, clickable suppressed)
+   - Updates: `[<checklist> Building [image names] ...]` as stages progress
+   - Removed: Once startup completes and GitHub auth state is determined
+2. **Separator** — A divider line (─────────────────────────)
+3. **Version & Attribution** — `vn.n.nnn.nnn - By Tlatoāni` (always present, disabled, never clickable)
+4. **Quit** — `Quit Tillandsias` (always present, always immediately responsive, shuts down all containers on exit)
 
-The version line (e.g., `v0.1.168.224`) and the signature `— by Tlatoāni` appear in every stage, both disabled (visual signature only, never clickable), immediately above `Quit Tillandsias`.
+The status indicator is the only dynamic top-level item. No menu flicker; status updates in-place without rebuild.
 
 #### Scenario: Cold start with image build required
 - **WHEN** tray starts and images are missing
-- **THEN** menu shows "Building [image names]" for several minutes (first time) or seconds (subsequent)
-- **AND** user can see which subsystems are building (deterministic emoji order)
-- **AND** menu does not flicker
+- **THEN** menu shows 4 static items: status indicator (building), separator, version, quit
+- **AND** status indicator animates to show which subsystems are building (deterministic emoji order)
+- **AND** menu does not flicker or rebuild
+
+#### Scenario: Status completion — transition to authentication
+- **WHEN** all images finish building
+- **THEN** status indicator is removed from the menu
+- **AND** the menu now shows: separator, version, quit (if no auth yet) OR separator, home/cloud menus, version, quit (if authed)
+- **AND** no flicker; single property toggle (`enabled = false` on status indicator, then `hidden = true`)
+
+### Requirement: Five-Stage Static Menu Structure
+
+@trace spec:simplified-tray-ux
+
+The tray pre-builds a single menu tree on startup with all items created upfront. State transitions ONLY toggle the `enabled` property on individual items, never rebuild the tree. The project list is the sole exception (rebuild only when the project set changes, detected via set comparison, not polling).
+
+Menu stages and their contents (after startup status indicator is removed):
+
+| Stage | Menu items (top → bottom) |
+|-------|---------------------------|
+| **Booting** | `[<checklist> Verifying environment ...]` / Separator / Version / Quit |
+| **Ready** | (status indicator removed) / Separator / Version / Quit |
+| **NoAuth** | `[<key> GitHub Login]` / Separator / Version / Quit |
+| **Authed** | `[<home> ~/src/ >]` / `[<cloud> Cloud >]` / Separator / Version / Quit |
+| **NetIssue** | `[<key> GitHub Login]` (or cached) / `[<home> ~/src/ >]` (if cached) / `[<cloud> Cloud >]` (if available) / Separator / Version / Quit |
+
+The version line (e.g., `v0.1.168.224`) and the signature `— by Tlatoāni` appear in every stage after the final separator, both disabled (visual signature only, never clickable), immediately above `Quit Tillandsias`.
 
 #### Scenario: State transition from Booting to Authed
-- **WHEN** all images finish building
-- **THEN** the "Building" item is replaced by "Ready" (2-sec transient)
-- **AND** "Ready" fades to "Projects ▸"
-- **AND** no menu rebuild, only `enabled` toggle
+- **WHEN** all images finish building and GitHub auth is confirmed
+- **THEN** the status indicator is hidden
+- **AND** menu transitions to show `[<home> ~/src/ >]` and `[<cloud> Cloud >]` menus
+- **AND** no menu rebuild, only property toggles
 
-### Requirement: Projects Submenu
+### Requirement: Home Menu ([<home> ~/src/ >])
 
-When the user has authenticated to GitHub, a `Projects ▸` submenu appears with the following structure:
+@trace spec:simplified-tray-ux
+
+Visible only when authenticated. Shows all local projects found in `~/.tillandsias/watch/` (or configured watch path), alphabetically sorted. Each project displays exactly 4 tools:
 
 ```
-Projects ▸
-├── [ ] Include remote        (toggle; default off)
-├── ──────────────────────
-├── <local-project-1>      ▸  ├── Launch
-├── <local-project-2>      ▸  ├── Maintenance terminal
-├── ...                       └── ──────────────────
-├── ──────────────────── (visible only when "Include remote" is on)
-├── <remote-project-1>    ▸
-├── <remote-project-2>    ▸
+[<home> ~/src/ >
+├── <project-1> ▸
+│   ├── 💻 OpenCode (terminal-based IDE)
+│   ├── 🌐 OpenCode Web (browser-based IDE)
+│   ├── 👽 Claude (AI assistant)
+│   └── 🔧 Maintenance terminal (direct shell access)
+├── <project-2> ▸
+│   ├── 💻 OpenCode (terminal-based IDE)
+│   ├── 🌐 OpenCode Web (browser-based IDE)
+│   ├── 👽 Claude (AI assistant)
+│   └── 🔧 Maintenance terminal (direct shell access)
 └── ...
 ```
 
-- Local projects (from `~/.tillandsias/watch/`) are listed alphabetically
-- Remote projects (from GitHub) appear under a divider when `Include remote` is enabled
-- Each project has exactly two actions: **Launch** and **Maintenance terminal**
-- The `Include remote` toggle persists across restarts
+**Tool Descriptions:**
+- **💻 OpenCode** — Terminal-based IDE. Opens an interactive session inside the forge container.
+- **🌐 OpenCode Web** — Browser-based IDE. Opens the web interface in the system's default browser.
+- **👽 Claude** — AI assistant. Launches Claude (host-side or in-container) for code assistance.
+- **🔧 Maintenance terminal** — Direct shell access. Opens a terminal with `podman exec -it tillandsias-<project>-<genus> /bin/bash`.
 
-#### Scenario: User launches a project
-- **WHEN** user clicks "Launch" for a local project
+**Behavior:**
+- Selecting a tool launches the corresponding service for that project
+- A single forge container `tillandsias-<project>-<genus>` persists for the lifetime of the tray app
+- Multiple browser windows, terminals, or IDE sessions can connect to the same container concurrently
+
+#### Scenario: User launches a local project via OpenCode Web
+- **WHEN** user clicks 🌐 OpenCode Web for a local project
 - **THEN** a single forge container `tillandsias-<project>-<genus>` starts (or reuses existing)
-- **AND** Chromium opens a window pointing to `<project>.opencode.localhost:8080`
-- **AND** subsequent "Launch" clicks open additional browser windows (same container)
+- **AND** the system's default browser opens pointing to `<project>.opencode.localhost:8080`
+- **AND** subsequent tool clicks open new windows/sessions against the same running container
 
-#### Scenario: User opens a maintenance terminal
-- **WHEN** user clicks "Maintenance terminal"
-- **THEN** a host terminal opens with `podman exec -it tillandsias-<project>-<genus> /bin/bash`
-- **AND** multiple terminals can be open against the same container
-- **AND** the user can run any tool already in the forge
+#### Scenario: User opens multiple tools for the same project
+- **WHEN** user clicks different tools (e.g., Claude, then Maintenance terminal)
+- **THEN** the same container continues running
+- **AND** each tool attaches or launches a new session within that container
+- **AND** all sessions share the same project state and git history
+
+### Requirement: Cloud Menu ([<cloud> Cloud >])
+
+@trace spec:simplified-tray-ux
+
+Visible only when authenticated and remote projects are readable from GitHub. Shows all remote projects available to the user, MINUS any projects that already exist locally in `~/.tillandsias/watch/`. Alphabetically sorted.
+
+```
+[<cloud> Cloud >
+├── <remote-project-1> ▸
+│   ├── 💻 OpenCode (clone to ~/.tillandsias/watch/<name>, then terminal IDE)
+│   ├── 🌐 OpenCode Web (clone, then browser IDE)
+│   ├── 👽 Claude (clone, then AI assistant)
+│   └── 🔧 Maintenance terminal (clone, then shell)
+├── <remote-project-2> ▸
+│   ├── 💻 OpenCode
+│   ├── 🌐 OpenCode Web
+│   ├── 👽 Claude
+│   └── 🔧 Maintenance terminal
+└── ...
+```
+
+**Tool Descriptions:**
+- Same 4 tools as Home menu, with checkout applied
+- **💻 OpenCode** — Clone to `~/.tillandsias/watch/<project-name>` (if not already cloned), then open terminal IDE
+- **🌐 OpenCode Web** — Clone, then open browser IDE
+- **👽 Claude** — Clone, then launch AI assistant
+- **🔧 Maintenance terminal** — Clone, then open shell
+
+**Checkout Behavior:**
+1. When user selects an action on a cloud project:
+   - If not already cloned: clone repository to `~/.tillandsias/watch/<project-name>` in the background
+   - Once cloned, launch the selected tool
+2. Subsequent selections of the same cloud project reuse the cloned copy (no re-clone)
+3. After clone completes, the project appears in the Home menu on next menu rebuild
+
+#### Scenario: User launches a cloud project for the first time
+- **WHEN** user clicks 🌐 OpenCode Web for a remote project
+- **THEN** system begins cloning the repository to `~/.tillandsias/watch/<project-name>`
+- **AND** once clone completes, a forge container starts and browser opens
+- **AND** project now appears in Home menu ([<home> ~/src/ >])
+- **AND** subsequent tool selections on this project reuse the cloned copy
+
+#### Scenario: User selects a cloud project that is already cloned locally
+- **WHEN** user clicks a tool for a remote project that is already in `~/.tillandsias/watch/`
+- **THEN** the tool launches immediately (no clone needed)
+- **AND** the project is NOT shown in Cloud menu (only in Home)
+
+### Requirement: GitHub Login Menu ([<key> GitHub Login])
+
+@trace spec:simplified-tray-ux
+
+Visible when the user is not authenticated or GitHub is unreachable.
+
+**Menu Item:** `[<key> GitHub Login]`
+
+**Behavior:**
+- Selecting this item opens the GitHub OAuth flow in the system's default browser
+- Upon successful authentication, the menu transitions from NoAuth to Authed stage
+- After auth completes, the menu shows `[<home> ~/src/ >]` and `[<cloud> Cloud >]` instead of the login item
+- During GitHubunreachable (NetIssue stage), this menu item displays but may use cached authentication state
 
 ### Requirement: Single Container Per Project
 

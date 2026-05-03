@@ -9,6 +9,7 @@ mod desktop_env;
 mod embedded;
 mod event_loop;
 mod github;
+mod github_health;
 mod gpu;
 mod handlers;
 mod i18n;
@@ -764,6 +765,47 @@ fn main() {
                     });
                 }
 
+                // @trace spec:simplified-tray-ux
+                // Blocking GitHub health check on startup (3s timeout).
+                // If authenticated, verify GitHub connectivity before starting the event loop.
+                // Results gate visibility of Home/Cloud menus.
+                if menu::needs_github_login() == false {
+                    // Token exists, perform blocking health check
+                    info!("Performing GitHub connectivity check...");
+                    let github_health = match tokio::time::timeout(
+                        std::time::Duration::from_secs(3),
+                        crate::github_health::probe(),
+                    )
+                    .await
+                    {
+                        Ok(result) => {
+                            use crate::github_health::CredentialHealth;
+                            matches!(result, CredentialHealth::Authenticated)
+                        }
+                        Err(_elapsed) => {
+                            warn!("GitHub health check timed out (>3s) — treating as unreachable");
+                            false
+                        }
+                    };
+
+                    {
+                        let mut s = state_for_loop.lock().unwrap();
+                        s.github_healthy = github_health;
+                        s.github_last_check = Some(std::time::Instant::now());
+                        if github_health {
+                            info!("GitHub connectivity verified");
+                        } else {
+                            warn!(
+                                accountability = true,
+                                category = "secrets",
+                                spec = "simplified-tray-ux",
+                                "GitHub connectivity check failed — retries will begin in event loop"
+                            );
+                        }
+                    }
+                    rebuild_menu(&app_handle_for_loop, &state_for_loop);
+                }
+
                 // Run main event loop
                 let loop_state = { state_for_loop.lock().unwrap().clone() };
 
@@ -791,6 +833,11 @@ fn main() {
                                 .clone_from(&new_state.remote_repos_error);
                             s.active_builds.clone_from(&new_state.active_builds);
                             s.forge_available = new_state.forge_available;
+                            // @trace spec:simplified-tray-ux
+                            s.github_healthy = new_state.github_healthy;
+                            s.github_last_check = new_state.github_last_check;
+                            s.github_retry_count = new_state.github_retry_count;
+                            s.github_next_retry = new_state.github_next_retry;
                             old
                         };
 

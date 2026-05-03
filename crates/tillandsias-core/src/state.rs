@@ -268,6 +268,16 @@ pub struct TrayState {
 
     /// Track debug browser PIDs (one per project, for "open_debug_window").
     pub debug_browser_pid: std::collections::HashMap<String, u32>,
+
+    /// @trace spec:simplified-tray-ux
+    /// Last known GitHub health status (true = reachable, false = unreachable or unknown).
+    pub github_healthy: bool,
+    /// When the GitHub health was last checked (None = never checked).
+    pub github_last_check: Option<Instant>,
+    /// Failed retry count (for exponential backoff).
+    pub github_retry_count: u32,
+    /// Next time to retry GitHub connectivity (with exponential backoff).
+    pub github_next_retry: Option<Instant>,
 }
 
 impl TrayState {
@@ -287,6 +297,11 @@ impl TrayState {
             forge_available: false,
             browser_last_launch: std::collections::HashMap::new(),
             debug_browser_pid: std::collections::HashMap::new(),
+            // @trace spec:simplified-tray-ux
+            github_healthy: false,
+            github_last_check: None,
+            github_retry_count: 0,
+            github_next_retry: None,
         }
     }
 

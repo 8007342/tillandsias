@@ -76,6 +76,12 @@ pub async fn run(
     let mut proxy_health_interval = tokio::time::interval(Duration::from_secs(60));
     proxy_health_interval.tick().await; // consume first immediate tick
 
+    // @trace spec:simplified-tray-ux
+    // GitHub retry timer — background exponential backoff when GitHub is unreachable.
+    // Ticks every 1s to check if it's time to retry (based on github_next_retry).
+    let mut github_retry_interval = tokio::time::interval(Duration::from_secs(1));
+    github_retry_interval.tick().await; // consume first immediate tick
+
     // @trace spec:tray-app, spec:podman-orchestration, knowledge:lang/rust-async
     loop {
         tokio::select! {
@@ -391,6 +397,82 @@ pub async fn run(
             // Only checks when forge/maintenance containers are running (no point
             // keeping the proxy alive if nothing uses it).
             // @trace spec:proxy-container
+            // @trace spec:simplified-tray-ux
+            // GitHub retry timer with exponential backoff.
+            // Checks every 1s if it's time to retry GitHub connectivity.
+            _ = github_retry_interval.tick() => {
+                // Only retry if:
+                // 1. We're authenticated (have a token)
+                // 2. GitHub is not currently healthy
+                // 3. A retry is scheduled (github_next_retry is set)
+                // 4. The scheduled time has arrived
+                let should_retry = !crate::menu::needs_github_login()
+                    && !state.github_healthy
+                    && state.github_next_retry.is_some()
+                    && state.github_next_retry.unwrap() <= Instant::now();
+
+                if should_retry {
+                    // Perform GitHub connectivity check
+                    match tokio::time::timeout(
+                        Duration::from_secs(3),
+                        crate::github_health::probe(),
+                    )
+                    .await
+                    {
+                        Ok(health_result) => {
+                            use crate::github_health::CredentialHealth;
+                            if matches!(health_result, CredentialHealth::Authenticated) {
+                                // Success: GitHub is healthy again
+                                state.github_healthy = true;
+                                state.github_retry_count = 0;
+                                state.github_next_retry = None;
+                                info!(
+                                    accountability = true,
+                                    category = "secrets",
+                                    spec = "simplified-tray-ux",
+                                    "GitHub connectivity restored after retry"
+                                );
+                                on_state_change(&state);
+                            } else {
+                                // Still failing: increment retry count and schedule next attempt
+                                state.github_retry_count += 1;
+                                let backoff_secs =
+                                    5 * (2_u64.pow(state.github_retry_count.min(6)));
+                                state.github_next_retry =
+                                    Some(Instant::now() + Duration::from_secs(backoff_secs));
+                                warn!(
+                                    accountability = true,
+                                    category = "secrets",
+                                    spec = "simplified-tray-ux",
+                                    retry_count = state.github_retry_count,
+                                    backoff_secs = backoff_secs,
+                                    health = %health_result,
+                                    "GitHub connectivity check failed — scheduling next retry"
+                                );
+                                on_state_change(&state);
+                            }
+                        }
+                        Err(_elapsed) => {
+                            // Timeout: treat as failure and retry
+                            state.github_retry_count += 1;
+                            let backoff_secs =
+                                5 * (2_u64.pow(state.github_retry_count.min(6)));
+                            state.github_next_retry =
+                                Some(Instant::now() + Duration::from_secs(backoff_secs));
+                            warn!(
+                                accountability = true,
+                                category = "secrets",
+                                spec = "simplified-tray-ux",
+                                retry_count = state.github_retry_count,
+                                backoff_secs = backoff_secs,
+                                "GitHub connectivity check timed out — scheduling next retry"
+                            );
+                            on_state_change(&state);
+                        }
+                    }
+                }
+            }
+
             _ = proxy_health_interval.tick() => {
                 let has_forge_containers = state.running.iter().any(|c| {
                     matches!(c.container_type,

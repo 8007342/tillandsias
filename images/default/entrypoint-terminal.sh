@@ -8,6 +8,22 @@
 
 source /usr/local/lib/tillandsias/lib-common.sh
 
+# @trace spec:simplified-tray-ux
+# EXIT trap: pause on error so user can read git cloning errors before terminal closes
+exit_pause() {
+    local exit_code=$?
+    if [ $exit_code -ne 0 ] && [ -t 0 ]; then
+        echo ""
+        echo "═══════════════════════════════════════════════════════"
+        echo "ERROR: Terminal startup failed (exit code: $exit_code)"
+        echo "═══════════════════════════════════════════════════════"
+        echo ""
+        echo "Press any key to exit..."
+        read -r -n 1 -s 2>/dev/null || true
+    fi
+}
+trap 'exit_pause' EXIT
+
 # @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
 # Populate tmpfs hot mount (/opt/cheatsheets) from image-baked lower layer.
 # The --tmpfs mount is already in place (podman establishes it before exec).

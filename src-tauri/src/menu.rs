@@ -178,28 +178,50 @@ pub fn build_tray_menu<R: Runtime>(
 
     let authenticated = !needs_github_login();
 
-    // Build Home (local projects) submenu — always shown when authenticated
     // @trace spec:simplified-tray-ux
-    if authenticated && !state.projects.is_empty() {
-        let home_submenu = build_home_projects_submenu(app, state)?;
-        menu = menu.item(&home_submenu);
-    }
+    // GitHub health gating logic:
+    // - If authenticated but GitHub not checked yet: show "🔄 Checking GitHub..." (disabled)
+    // - If authenticated but GitHub check failed: show "🔑 GitHub Retry Login" (enabled)
+    // - If not authenticated: show "🔑 GitHub Login" (enabled)
+    // - If authenticated AND GitHub healthy: show Home/Cloud menus
 
-    // Build Cloud (remote projects) submenu — shown when authenticated and remote repos exist
-    // @trace spec:simplified-tray-ux
-    if authenticated && !state.remote_repos.is_empty() {
-        let cloud_submenu = build_cloud_projects_submenu(app, state, &watch_path)?;
-        menu = menu.item(&cloud_submenu);
+    // During initial GitHub health check: show "Checking..." (disabled)
+    if authenticated && state.github_last_check.is_none() {
+        menu = menu.item(
+            &MenuItemBuilder::with_id(ids::static_id("github-checking"), "🔄 Checking GitHub...")
+                .enabled(false)
+                .build(app)?,
+        );
     }
-
-    // GitHub Login — show if not authenticated
-    // @trace spec:simplified-tray-ux
-    if !authenticated {
+    // On GitHub health failure: show retry option (enabled)
+    else if authenticated && !state.github_healthy {
+        menu = menu.item(
+            &MenuItemBuilder::with_id(ids::GITHUB_LOGIN, "🔑 GitHub Retry Login")
+                .enabled(true)
+                .build(app)?,
+        );
+    }
+    // If not authenticated: show login option (enabled if forge ready)
+    else if !authenticated {
         menu = menu.item(
             &MenuItemBuilder::with_id(ids::GITHUB_LOGIN, i18n::t("menu.github.login"))
                 .enabled(state.forge_available)
                 .build(app)?,
         );
+    }
+
+    // Build Home (local projects) submenu — only shown when authenticated AND GitHub is healthy
+    // @trace spec:simplified-tray-ux
+    if authenticated && state.github_healthy && !state.projects.is_empty() {
+        let home_submenu = build_home_projects_submenu(app, state)?;
+        menu = menu.item(&home_submenu);
+    }
+
+    // Build Cloud (remote projects) submenu — only shown when authenticated AND GitHub is healthy
+    // @trace spec:simplified-tray-ux
+    if authenticated && state.github_healthy && !state.remote_repos.is_empty() {
+        let cloud_submenu = build_cloud_projects_submenu(app, state, &watch_path)?;
+        menu = menu.item(&cloud_submenu);
     }
 
     menu = menu.separator();

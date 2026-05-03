@@ -1,0 +1,602 @@
+Tillandsias init — preparing development environment
+
+  Setting up development environment...
+  (This may take a few minutes on first run)
+
+  ↷ proxy: tillandsias-proxy:v0.1.160.240 (already built, skipping)
+  Building forge...
+[0;36m[build-image][0m Building image: [1mtillandsias-forge:v0.1.160.240[0m
+[0;36m[build-image][0m Building [1mtillandsias-forge:v0.1.160.240[0m via podman build (Fedora minimal)...
+STEP 1/30: FROM registry.fedoraproject.org/fedora-minimal:44
+STEP 2/30: RUN microdnf install -y         bash coreutils findutils grep sed gawk tar gzip xz         procps-ng shadow-utils ca-certificates         fish zsh         git gh curl wget jq ripgrep         nodejs npm     && microdnf clean all
+Updating and loading repositories:
+ Fedora 44 - x86_64 - Updates           100% | 942.4 KiB/s |   4.3 MiB |  00m05s
+ Fedora 44 openh264 (From Cisco) - x86_ 100% |   1.2 KiB/s |   5.3 KiB |  00m04s
+ Fedora 44 - x86_64                     100% |   6.1 MiB/s |  36.4 MiB |  00m06s
+Repositories loaded.
+Package "bash-5.3.9-3.fc44.x86_64" is already installed.
+Package "coreutils-9.10-3.fc44.x86_64" is already installed.
+Package "findutils-1:4.10.0-7.fc44.x86_64" is already installed.
+Package "grep-3.12-3.fc44.x86_64" is already installed.
+Package "sed-4.9-7.fc44.x86_64" is already installed.
+Package "gawk-5.3.2-3.fc44.x86_64" is already installed.
+Package "shadow-utils-2:4.19.0-6.fc44.x86_64" is already installed.
+Package "ca-certificates-2025.2.80_v9.0.304-7.fc44.noarch" is already installed.
+Package "curl-8.18.0-6.fc44.x86_64" is already installed.
+
+Package                     Arch   Version                   Repository      Size
+Installing:
+ fish                       x86_64 0:4.6.0-1.fc44            fedora      21.2 MiB
+ gh                         x86_64 0:2.87.3-1.fc44           fedora      37.5 MiB
+ git                        x86_64 0:2.54.0-1.fc44           updates     57.7 KiB
+ gzip                       x86_64 0:1.14-2.fc44             fedora     401.6 KiB
+ jq                         x86_64 0:1.8.1-3.fc44            updates    465.4 KiB
+ nodejs22                   x86_64 1:22.22.0-7.fc44          fedora     301.4 KiB
+ nodejs22-npm               noarch 1:10.9.4-1.22.22.0.7.fc44 fedora       8.2 MiB
+ procps-ng                  x86_64 0:4.0.6-1.fc44            fedora       1.1 MiB
+ ripgrep                    x86_64 0:14.1.1-4.fc44           fedora       4.7 MiB
+ tar                        x86_64 2:1.35-8.fc44             fedora       3.0 MiB
+ wget2-wget                 x86_64 0:2.2.1-2.fc44            fedora      42.0   B
+ xz                         x86_64 1:5.8.2-2.fc44            fedora       1.3 MiB
+ zsh                        x86_64 0:5.9-20.fc44             updates      7.9 MiB
+Installing dependencies:
+ c-ares                     x86_64 0:1.34.6-3.fc44           fedora     281.5 KiB
+ dns-root-data              noarch 0:2026260100-2.fc44       fedora      10.9 KiB
+ expat                      x86_64 0:2.7.3-2.fc44            fedora     316.8 KiB
+ git-core                   x86_64 0:2.54.0-1.fc44           updates     25.1 MiB
+ git-core-doc               noarch 0:2.54.0-1.fc44           updates     18.7 MiB
+ gnupg2                     x86_64 0:2.4.9-7.fc44            updates      6.5 MiB
+ gnupg2-dirmngr             x86_64 0:2.4.9-7.fc44            updates    634.0 KiB
+ gnupg2-gpg-agent           x86_64 0:2.4.9-7.fc44            updates    686.6 KiB
+ gnupg2-gpgconf             x86_64 0:2.4.9-7.fc44            updates    249.7 KiB
+ gnupg2-keyboxd             x86_64 0:2.4.9-7.fc44            updates    201.2 KiB
+ gnupg2-verify              x86_64 0:2.4.9-7.fc44            updates    360.3 KiB
+ gnutls-dane                x86_64 0:3.8.12-1.fc44           fedora      60.8 KiB
+ gpgme                      x86_64 0:2.0.1-3.fc44            fedora     617.8 KiB
+ groff-base                 x86_64 0:1.23.0-12.fc44          fedora       3.9 MiB
+ hiredis                    x86_64 0:1.2.0-8.fc44            fedora     105.7 KiB
+ less                       x86_64 0:692-5.fc44              updates    466.8 KiB
+ libassuan                  x86_64 0:2.5.7-5.fc44            fedora     163.8 KiB
+ libedit                    x86_64 0:3.1-58.20251016cvs.fc44 fedora     248.1 KiB
+ libfdisk                   x86_64 0:2.41.4-7.fc44           updates    388.3 KiB
+ libgcrypt                  x86_64 0:1.12.2-1.fc44           updates      1.7 MiB
+ libgpg-error               x86_64 0:1.58-2.fc44             fedora     941.6 KiB
+ libksba                    x86_64 0:1.6.7-5.fc44            fedora     414.4 KiB
+ liblastlog2                x86_64 0:2.41.4-7.fc44           updates     37.6 KiB
+ libpipeline                x86_64 0:1.5.8-4.fc44            fedora     145.0 KiB
+ libpkgconf                 x86_64 0:2.5.1-1.fc44            fedora      90.1 KiB
+ libsecret                  x86_64 0:0.21.7-10.fc44          fedora     581.0 KiB
+ libusb1                    x86_64 0:1.0.29-5.fc44           fedora     175.2 KiB
+ libuv                      x86_64 1:1.51.0-3.fc44           fedora     582.8 KiB
+ mpdecimal                  x86_64 0:4.0.1-3.fc44            fedora     217.1 KiB
+ ncurses                    x86_64 0:6.6-1.fc44              fedora     611.4 KiB
+ ncurses-term               noarch 0:6.6-1.fc44              fedora       1.8 MiB
+ nodejs22-bin               noarch 1:22.22.0-7.fc44          fedora     140.0 KiB
+ nodejs22-libs              x86_64 1:22.22.0-7.fc44          fedora      78.8 MiB
+ nodejs22-npm-bin           noarch 1:22.22.0-7.fc44          fedora      12.7 KiB
+ npth                       x86_64 0:1.8-4.fc44              fedora      49.5 KiB
+ oniguruma                  x86_64 0:6.9.10-4.fc44           fedora     770.9 KiB
+ openssh                    x86_64 0:10.2p1-9.fc44           updates      1.4 MiB
+ openssh-clients            x86_64 0:10.2p1-9.fc44           updates      2.7 MiB
+ pcre2-utf32                x86_64 0:10.47-1.fc44.1          fedora     623.1 KiB
+ perl-AutoLoader            noarch 0:5.74-524.fc44           updates     20.6 KiB
+ perl-B                     x86_64 0:1.89-524.fc44           updates    501.2 KiB
+ perl-Carp                  noarch 0:1.54-521.fc44           fedora      46.6 KiB
+ perl-Class-Struct          noarch 0:0.68-524.fc44           updates     25.4 KiB
+ perl-Data-Dumper           x86_64 0:2.191-522.fc44          fedora     115.5 KiB
+ perl-Digest                noarch 0:1.20-521.fc44           fedora      35.3 KiB
+ perl-Digest-MD5            x86_64 0:2.59-521.fc44           fedora      59.6 KiB
+ perl-DynaLoader            x86_64 0:1.57-524.fc44           updates     32.1 KiB
+ perl-Encode                x86_64 4:3.21-521.fc44           fedora       4.7 MiB
+ perl-Errno                 x86_64 0:1.38-524.fc44           updates      8.4 KiB
+ perl-Error                 noarch 1:0.17030-3.fc44          fedora      76.8 KiB
+ perl-Exporter              noarch 0:5.79-521.fc44           fedora      54.3 KiB
+ perl-Fcntl                 x86_64 0:1.20-524.fc44           updates     48.7 KiB
+ perl-File-Basename         noarch 0:2.86-524.fc44           updates     14.0 KiB
+ perl-File-Copy             noarch 0:2.41-524.fc44           updates     19.7 KiB
+ perl-File-Path             noarch 0:2.18-522.fc44           fedora      63.5 KiB
+ perl-File-Temp             noarch 1:0.231.200-2.fc44        fedora     163.7 KiB
+ perl-File-stat             noarch 0:1.14-524.fc44           updates     12.5 KiB
+ perl-FileHandle            noarch 0:2.05-524.fc44           updates      9.4 KiB
+ perl-Getopt-Long           noarch 1:2.58-521.fc44           fedora     144.5 KiB
+ perl-Getopt-Std            noarch 0:1.14-524.fc44           updates     11.2 KiB
+ perl-Git                   noarch 0:2.54.0-1.fc44           updates     64.4 KiB
+ perl-HTTP-Tiny             noarch 0:0.092-2.fc44            fedora     157.6 KiB
+ perl-IO                    x86_64 0:1.55-524.fc44           updates    147.3 KiB
+ perl-IO-Socket-IP          noarch 0:0.43-522.fc44           fedora     100.3 KiB
+ perl-IO-Socket-SSL         noarch 0:2.098-2.fc44            fedora     723.5 KiB
+ perl-IPC-Open3             noarch 0:1.24-524.fc44           updates     27.7 KiB
+ perl-MIME-Base32           noarch 0:1.303-25.fc44           fedora      30.7 KiB
+ perl-MIME-Base64           x86_64 0:3.16-521.fc44           fedora      41.9 KiB
+ perl-Net-SSLeay            x86_64 0:1.94-12.fc44            fedora       1.3 MiB
+ perl-POSIX                 x86_64 0:2.23-524.fc44           updates    229.4 KiB
+ perl-PathTools             x86_64 0:3.94-521.fc44           fedora     179.9 KiB
+ perl-Pod-Escapes           noarch 1:1.07-521.fc44           fedora      24.9 KiB
+ perl-Pod-Perldoc           noarch 0:3.28.01-522.fc44        fedora     163.7 KiB
+ perl-Pod-Simple            noarch 1:3.47-4.fc44             fedora     565.3 KiB
+ perl-Pod-Usage             noarch 4:2.05-521.fc44           fedora      86.3 KiB
+ perl-Scalar-List-Utils     x86_64 5:1.70-2.fc44             fedora     144.8 KiB
+ perl-SelectSaver           noarch 0:1.02-524.fc44           updates      2.2 KiB
+ perl-Socket                x86_64 4:2.040-3.fc44            fedora     120.1 KiB
+ perl-Storable              x86_64 1:3.37-522.fc44           fedora     235.1 KiB
+ perl-Symbol                noarch 0:1.09-524.fc44           updates      6.8 KiB
+ perl-Term-ANSIColor        noarch 0:5.01-522.fc44           fedora      97.5 KiB
+ perl-Term-Cap              noarch 0:1.18-521.fc44           fedora      29.3 KiB
+ perl-TermReadKey           x86_64 0:2.38-27.fc44            fedora      63.9 KiB
+ perl-Text-ParseWords       noarch 0:3.31-521.fc44           fedora      13.6 KiB
+ perl-Text-Tabs+Wrap        noarch 0:2024.001-521.fc44       fedora      22.6 KiB
+ perl-Time-HiRes            x86_64 4:1.9778-521.fc44         fedora     115.6 KiB
+ perl-Time-Local            noarch 2:1.350-521.fc44          fedora      69.0 KiB
+ perl-URI                   noarch 0:5.34-3.fc44             fedora     268.0 KiB
+ perl-base                  noarch 0:2.27-524.fc44           updates     12.6 KiB
+ perl-constant              noarch 0:1.33-522.fc44           fedora      26.2 KiB
+ perl-if                    noarch 0:0.61.000-524.fc44       updates      5.8 KiB
+ perl-interpreter           x86_64 4:5.42.2-524.fc44         updates    118.7 KiB
+ perl-lib                   x86_64 0:0.65-524.fc44           updates      8.5 KiB
+ perl-libnet                noarch 0:3.15-522.fc44           fedora     289.4 KiB
+ perl-libs                  x86_64 4:5.42.2-524.fc44         updates     11.6 MiB
+ perl-locale                noarch 0:1.13-524.fc44           updates      6.1 KiB
+ perl-mro                   x86_64 0:1.29-524.fc44           updates     41.4 KiB
+ perl-overload              noarch 0:1.40-524.fc44           updates     71.6 KiB
+ perl-overloading           noarch 0:0.02-524.fc44           updates      4.9 KiB
+ perl-parent                noarch 1:0.244-521.fc44          fedora      10.3 KiB
+ perl-podlators             noarch 1:6.0.2-521.fc44          fedora     317.5 KiB
+ perl-vars                  noarch 0:1.05-524.fc44           updates      3.9 KiB
+ pkgconf                    x86_64 0:2.5.1-1.fc44            fedora      92.7 KiB
+ pkgconf-m4                 noarch 0:2.5.1-1.fc44            fedora      14.3 KiB
+ pkgconf-pkg-config         x86_64 0:2.5.1-1.fc44            fedora     989.0   B
+ protobuf-c                 x86_64 0:1.5.2-2.fc44            fedora      53.7 KiB
+ python-pip-wheel           noarch 0:26.0.1-2.fc44           fedora       1.2 MiB
+ python3                    x86_64 0:3.14.4-2.fc44           updates     28.7 KiB
+ python3-libs               x86_64 0:3.14.4-2.fc44           updates     43.8 MiB
+ tpm2-tss                   x86_64 0:4.1.3-9.fc44            fedora       1.6 MiB
+ tzdata                     noarch 0:2026a-1.fc44            fedora       1.2 MiB
+ unbound-libs               x86_64 0:1.24.2-10.fc44          fedora       1.5 MiB
+ util-linux                 x86_64 0:2.41.4-7.fc44           updates      3.5 MiB
+ wget2                      x86_64 0:2.2.1-2.fc44            fedora       1.1 MiB
+ wget2-libs                 x86_64 0:2.2.1-2.fc44            fedora     369.5 KiB
+Installing weak dependencies:
+ 7zip                       x86_64 0:25.01-5.fc44            fedora       3.3 MiB
+ less-color                 x86_64 0:692-5.fc44              updates     13.7 KiB
+ man-db                     x86_64 0:2.13.1-3.fc44           fedora       2.9 MiB
+ man-pages                  noarch 0:6.13-3.fc44             fedora       2.9 MiB
+ nodejs22-docs              noarch 1:22.22.0-7.fc44          fedora      49.5 MiB
+ nodejs22-full-i18n         x86_64 1:22.22.0-7.fc44          fedora      30.4 MiB
+ perl-NDBM_File             x86_64 0:1.18-524.fc44           updates     28.4 KiB
+ pinentry                   x86_64 0:1.3.2-3.fc44            updates    266.8 KiB
+ python-unversioned-command noarch 0:3.14.4-2.fc44           updates     23.0   B
+ python3-html2text          noarch 0:2025.4.15-6.fc44        fedora     289.4 KiB
+ unbound-anchor             x86_64 0:1.24.2-10.fc44          fedora      52.3 KiB
+ unzip                      x86_64 0:6.0-69.fc44             fedora     445.8 KiB
+
+Transaction Summary:
+ Installing:       140 packages
+
+Total size of inbound packages is 106 MiB. Need to download 106 MiB.
+After this operation, 405 MiB extra will be used (install 405 MiB, remove 0 B).
+[  1/140] gzip-0:1.14-2.fc44.x86_64     100% | 237.2 KiB/s | 179.1 KiB |  00m01s
+[  2/140] xz-1:5.8.2-2.fc44.x86_64      100% | 685.4 KiB/s | 607.2 KiB |  00m01s
+[  3/140] tar-2:1.35-8.fc44.x86_64      100% | 888.6 KiB/s | 868.2 KiB |  00m01s
+[  4/140] fish-0:4.6.0-1.fc44.x86_64    100% |  12.2 MiB/s |   5.1 MiB |  00m00s
+[  5/140] ripgrep-0:14.1.1-4.fc44.x86_6 100% |   6.3 MiB/s |   1.6 MiB |  00m00s
+[  6/140] pcre2-utf32-0:10.47-1.fc44.1. 100% | 910.5 KiB/s | 242.2 KiB |  00m00s
+[  7/140] gh-0:2.87.3-1.fc44.x86_64     100% |  17.4 MiB/s |  11.1 MiB |  00m01s
+[  8/140] ncurses-term-0:6.6-1.fc44.noa 100% |   2.7 MiB/s | 994.3 KiB |  00m00s
+[  9/140] procps-ng-0:4.0.6-1.fc44.x86_ 100% |   4.5 MiB/s | 398.9 KiB |  00m00s
+[ 10/140] git-0:2.54.0-1.fc44.x86_64    100% |  70.1 KiB/s |  41.3 KiB |  00m01s
+[ 11/140] zsh-0:5.9-20.fc44.x86_64      100% |   3.0 MiB/s |   3.3 MiB |  00m01s
+[ 12/140] git-core-0:2.54.0-1.fc44.x86_ 100% |   4.9 MiB/s |   5.4 MiB |  00m01s
+[ 13/140] git-core-doc-0:2.54.0-1.fc44. 100% |   5.1 MiB/s |   3.1 MiB |  00m01s
+[ 14/140] perl-Getopt-Long-1:2.58-521.f 100% | 826.1 KiB/s |  63.6 KiB |  00m00s
+[ 15/140] perl-Git-0:2.54.0-1.fc44.noar 100% | 223.0 KiB/s |  37.9 KiB |  00m00s
+[ 16/140] perl-PathTools-0:3.94-521.fc4 100% |   1.1 MiB/s |  87.3 KiB |  00m00s
+[ 17/140] perl-TermReadKey-0:2.38-27.fc 100% | 443.2 KiB/s |  35.5 KiB |  00m00s
+[ 18/140] expat-0:2.7.3-2.fc44.x86_64   100% |   1.6 MiB/s | 124.8 KiB |  00m00s
+[ 19/140] perl-Error-1:0.17030-3.fc44.n 100% | 503.9 KiB/s |  40.3 KiB |  00m00s
+[ 20/140] perl-Exporter-0:5.79-521.fc44 100% | 390.1 KiB/s |  30.8 KiB |  00m00s
+[ 21/140] perl-constant-0:1.33-522.fc44 100% | 297.4 KiB/s |  22.9 KiB |  00m00s
+[ 22/140] perl-Pod-Usage-4:2.05-521.fc4 100% | 521.3 KiB/s |  40.7 KiB |  00m00s
+[ 23/140] perl-Text-ParseWords-0:3.31-5 100% | 198.5 KiB/s |  16.5 KiB |  00m00s
+[ 24/140] perl-Carp-0:1.54-521.fc44.noa 100% | 364.3 KiB/s |  28.8 KiB |  00m00s
+[ 25/140] perl-Scalar-List-Utils-5:1.70 100% | 919.5 KiB/s |  75.4 KiB |  00m00s
+[ 26/140] perl-Pod-Perldoc-0:3.28.01-52 100% |   1.1 MiB/s |  86.1 KiB |  00m00s
+[ 27/140] perl-podlators-1:6.0.2-521.fc 100% |   1.5 MiB/s | 128.5 KiB |  00m00s
+[ 28/140] groff-base-0:1.23.0-12.fc44.x 100% |   6.8 MiB/s |   1.1 MiB |  00m00s
+[ 29/140] perl-File-Temp-1:0.231.200-2. 100% | 509.1 KiB/s |  59.6 KiB |  00m00s
+[ 30/140] perl-HTTP-Tiny-0:0.092-2.fc44 100% | 497.2 KiB/s |  57.2 KiB |  00m00s
+[ 31/140] perl-Pod-Simple-1:3.47-4.fc44 100% |   2.7 MiB/s | 220.0 KiB |  00m00s
+[ 32/140] perl-parent-1:0.244-521.fc44. 100% | 183.7 KiB/s |  14.9 KiB |  00m00s
+[ 33/140] perl-Term-ANSIColor-0:5.01-52 100% | 588.6 KiB/s |  47.7 KiB |  00m00s
+[ 34/140] perl-Term-Cap-0:1.18-521.fc44 100% | 285.7 KiB/s |  22.0 KiB |  00m00s
+[ 35/140] perl-File-Path-0:2.18-522.fc4 100% | 452.0 KiB/s |  35.3 KiB |  00m00s
+[ 36/140] perl-IO-Socket-SSL-0:2.098-2. 100% |   2.8 MiB/s | 234.7 KiB |  00m00s
+[ 37/140] perl-MIME-Base64-0:3.16-521.f 100% | 367.5 KiB/s |  29.8 KiB |  00m00s
+[ 38/140] perl-Net-SSLeay-0:1.94-12.fc4 100% |   4.2 MiB/s | 373.4 KiB |  00m00s
+[ 39/140] perl-Socket-4:2.040-3.fc44.x8 100% | 674.6 KiB/s |  55.3 KiB |  00m00s
+[ 40/140] perl-Time-HiRes-4:1.9778-521. 100% | 697.5 KiB/s |  57.2 KiB |  00m00s
+[ 41/140] perl-Time-Local-2:1.350-521.f 100% | 442.4 KiB/s |  34.5 KiB |  00m00s
+[ 42/140] perl-Pod-Escapes-1:1.07-521.f 100% | 257.0 KiB/s |  19.8 KiB |  00m00s
+[ 43/140] perl-Text-Tabs+Wrap-0:2024.00 100% | 278.9 KiB/s |  21.8 KiB |  00m00s
+[ 44/140] ncurses-0:6.6-1.fc44.x86_64   100% |   4.9 MiB/s | 429.8 KiB |  00m00s
+[ 45/140] perl-IO-Socket-IP-0:0.43-522. 100% | 490.3 KiB/s |  42.2 KiB |  00m00s
+[ 46/140] perl-URI-0:5.34-3.fc44.noarch 100% |   1.7 MiB/s | 149.2 KiB |  00m00s
+[ 47/140] perl-Data-Dumper-0:2.191-522. 100% | 689.6 KiB/s |  56.5 KiB |  00m00s
+[ 48/140] perl-MIME-Base32-0:1.303-25.f 100% | 250.2 KiB/s |  20.5 KiB |  00m00s
+[ 49/140] perl-libnet-0:3.15-522.fc44.n 100% |   1.6 MiB/s | 128.4 KiB |  00m00s
+[ 50/140] perl-Digest-MD5-0:2.59-521.fc 100% | 467.7 KiB/s |  36.0 KiB |  00m00s
+[ 51/140] perl-Digest-0:1.20-521.fc44.n 100% | 310.7 KiB/s |  24.9 KiB |  00m00s
+[ 52/140] wget2-wget-0:2.2.1-2.fc44.x86 100% | 121.3 KiB/s |   9.3 KiB |  00m00s
+[ 53/140] wget2-0:2.2.1-2.fc44.x86_64   100% |   3.3 MiB/s | 292.5 KiB |  00m00s
+[ 54/140] gpgme-0:2.0.1-3.fc44.x86_64   100% |   2.6 MiB/s | 231.7 KiB |  00m00s
+[ 55/140] wget2-libs-0:2.2.1-2.fc44.x86 100% |   1.8 MiB/s | 151.7 KiB |  00m00s
+[ 56/140] libassuan-0:2.5.7-5.fc44.x86_ 100% | 850.4 KiB/s |  68.9 KiB |  00m00s
+[ 57/140] libgpg-error-0:1.58-2.fc44.x8 100% |   3.0 MiB/s | 254.1 KiB |  00m00s
+[ 58/140] gnutls-dane-0:3.8.12-1.fc44.x 100% | 497.0 KiB/s |  39.8 KiB |  00m00s
+[ 59/140] unbound-libs-0:1.24.2-10.fc44 100% |   6.4 MiB/s | 600.7 KiB |  00m00s
+[ 60/140] dns-root-data-0:2026260100-2. 100% | 167.6 KiB/s |  14.6 KiB |  00m00s
+[ 61/140] hiredis-0:1.2.0-8.fc44.x86_64 100% | 665.8 KiB/s |  52.6 KiB |  00m00s
+[ 62/140] protobuf-c-0:1.5.2-2.fc44.x86 100% | 437.7 KiB/s |  33.7 KiB |  00m00s
+[ 63/140] oniguruma-0:6.9.10-4.fc44.x86 100% |   2.6 MiB/s | 220.0 KiB |  00m00s
+[ 64/140] nodejs22-1:22.22.0-7.fc44.x86 100% | 804.7 KiB/s |  69.2 KiB |  00m00s
+[ 65/140] jq-0:1.8.1-3.fc44.x86_64      100% | 819.4 KiB/s | 215.5 KiB |  00m00s
+[ 66/140] c-ares-0:1.34.6-3.fc44.x86_64 100% | 536.7 KiB/s | 124.0 KiB |  00m00s
+[ 67/140] libuv-1:1.51.0-3.fc44.x86_64  100% | 854.5 KiB/s | 270.0 KiB |  00m00s
+[ 68/140] nodejs22-libs-1:22.22.0-7.fc4 100% |  26.0 MiB/s |  20.0 MiB |  00m01s
+[ 69/140] nodejs22-npm-1:10.9.4-1.22.22 100% |   4.5 MiB/s |   2.3 MiB |  00m01s
+[ 70/140] mpdecimal-0:4.0.1-3.fc44.x86_ 100% |   1.3 MiB/s |  99.1 KiB |  00m00s
+[ 71/140] python-pip-wheel-0:26.0.1-2.f 100% |  11.7 MiB/s |   1.1 MiB |  00m00s
+[ 72/140] tzdata-0:2026a-1.fc44.noarch  100% |   7.7 MiB/s | 713.4 KiB |  00m00s
+[ 73/140] perl-File-Basename-0:2.86-524 100% |  64.9 KiB/s |  16.9 KiB |  00m00s
+[ 74/140] python3-libs-0:3.14.4-2.fc44. 100% |  12.5 MiB/s |  10.1 MiB |  00m01s
+[ 75/140] perl-POSIX-0:2.23-524.fc44.x8 100% | 276.5 KiB/s |  96.8 KiB |  00m00s
+[ 76/140] perl-interpreter-4:5.42.2-524 100% | 282.9 KiB/s |  72.1 KiB |  00m00s
+[ 77/140] perl-Errno-0:1.38-524.fc44.x8 100% |  90.2 KiB/s |  14.7 KiB |  00m00s
+[ 78/140] perl-Encode-4:3.21-521.fc44.x 100% |  11.0 MiB/s |   1.1 MiB |  00m00s
+[ 79/140] perl-Storable-1:3.37-522.fc44 100% |   1.2 MiB/s | 100.9 KiB |  00m00s
+[ 80/140] perl-Fcntl-0:1.20-524.fc44.x8 100% | 173.6 KiB/s |  29.5 KiB |  00m00s
+[ 81/140] perl-FileHandle-0:2.05-524.fc 100% |  93.1 KiB/s |  15.3 KiB |  00m00s
+[ 82/140] perl-IO-0:1.55-524.fc44.x86_6 100% | 470.9 KiB/s |  81.9 KiB |  00m00s
+[ 83/140] perl-Symbol-0:1.09-524.fc44.n 100% |  79.9 KiB/s |  14.0 KiB |  00m00s
+[ 84/140] perl-libs-4:5.42.2-524.fc44.x 100% |   3.8 MiB/s |   2.6 MiB |  00m01s
+[ 85/140] perl-base-0:2.27-524.fc44.noa 100% |  94.0 KiB/s |  16.0 KiB |  00m00s
+[ 86/140] perl-overload-0:1.40-524.fc44 100% | 274.8 KiB/s |  45.3 KiB |  00m00s
+[ 87/140] perl-DynaLoader-0:1.57-524.fc 100% | 152.5 KiB/s |  25.8 KiB |  00m00s
+[ 88/140] perl-vars-0:1.05-524.fc44.noa 100% |  75.1 KiB/s |  12.8 KiB |  00m00s
+[ 89/140] perl-if-0:0.61.000-524.fc44.n 100% |  82.5 KiB/s |  13.8 KiB |  00m00s
+[ 90/140] perl-IPC-Open3-0:1.24-524.fc4 100% | 139.4 KiB/s |  23.7 KiB |  00m00s
+[ 91/140] perl-AutoLoader-0:5.74-524.fc 100% | 120.1 KiB/s |  21.0 KiB |  00m00s
+[ 92/140] perl-Getopt-Std-0:1.14-524.fc 100% |  95.0 KiB/s |  15.5 KiB |  00m00s
+[ 93/140] nodejs22-npm-bin-1:22.22.0-7. 100% | 313.9 KiB/s |  24.8 KiB |  00m00s
+[ 94/140] perl-B-0:1.89-524.fc44.x86_64 100% |   1.0 MiB/s | 177.7 KiB |  00m00s
+[ 95/140] nodejs22-bin-1:22.22.0-7.fc44 100% | 356.8 KiB/s |  28.5 KiB |  00m00s
+[ 96/140] gnupg2-dirmngr-0:2.4.9-7.fc44 100% |   1.6 MiB/s | 281.8 KiB |  00m00s
+[ 97/140] gnupg2-gpgconf-0:2.4.9-7.fc44 100% | 680.8 KiB/s | 117.1 KiB |  00m00s
+[ 98/140] gnupg2-gpg-agent-0:2.4.9-7.fc 100% | 690.4 KiB/s | 281.7 KiB |  00m00s
+[ 99/140] gnupg2-keyboxd-0:2.4.9-7.fc44 100% | 556.1 KiB/s |  97.3 KiB |  00m00s
+[100/140] gnupg2-0:2.4.9-7.fc44.x86_64  100% |   2.8 MiB/s |   1.7 MiB |  00m01s
+[101/140] gnupg2-verify-0:2.4.9-7.fc44. 100% |   1.0 MiB/s | 176.9 KiB |  00m00s
+[102/140] npth-0:1.8-4.fc44.x86_64      100% | 338.9 KiB/s |  25.8 KiB |  00m00s
+[103/140] libksba-0:1.6.7-5.fc44.x86_64 100% |   1.1 MiB/s | 167.4 KiB |  00m00s
+[104/140] tpm2-tss-0:4.1.3-9.fc44.x86_6 100% |   1.9 MiB/s | 440.9 KiB |  00m00s
+[105/140] libusb1-0:1.0.29-5.fc44.x86_6 100% | 366.2 KiB/s |  82.8 KiB |  00m00s
+[106/140] pkgconf-pkg-config-0:2.5.1-1. 100% | 124.6 KiB/s |   9.5 KiB |  00m00s
+[107/140] pkgconf-0:2.5.1-1.fc44.x86_64 100% | 632.4 KiB/s |  48.7 KiB |  00m00s
+[108/140] python3-0:3.14.4-2.fc44.x86_6 100% | 160.2 KiB/s |  28.5 KiB |  00m00s
+[109/140] pkgconf-m4-0:2.5.1-1.fc44.noa 100% | 147.9 KiB/s |  13.8 KiB |  00m00s
+[110/140] libpkgconf-0:2.5.1-1.fc44.x86 100% | 463.9 KiB/s |  42.7 KiB |  00m00s
+[111/140] perl-mro-0:1.29-524.fc44.x86_ 100% | 175.1 KiB/s |  29.6 KiB |  00m00s
+[112/140] perl-overloading-0:0.02-524.f 100% |  75.0 KiB/s |  12.7 KiB |  00m00s
+[113/140] perl-locale-0:1.13-524.fc44.n 100% |  78.6 KiB/s |  13.3 KiB |  00m00s
+[114/140] perl-File-stat-0:1.14-524.fc4 100% |  98.5 KiB/s |  16.8 KiB |  00m00s
+[115/140] perl-Class-Struct-0:0.68-524. 100% | 130.9 KiB/s |  21.9 KiB |  00m00s
+[116/140] perl-SelectSaver-0:1.02-524.f 100% |  68.5 KiB/s |  11.5 KiB |  00m00s
+[117/140] libgcrypt-0:1.12.2-1.fc44.x86 100% |   2.4 MiB/s | 629.8 KiB |  00m00s
+[118/140] less-0:692-5.fc44.x86_64      100% | 877.1 KiB/s | 221.0 KiB |  00m00s
+[119/140] libedit-0:3.1-58.20251016cvs. 100% |   1.4 MiB/s | 109.7 KiB |  00m00s
+[120/140] openssh-0:10.2p1-9.fc44.x86_6 100% |   2.1 MiB/s | 355.4 KiB |  00m00s
+[121/140] openssh-clients-0:10.2p1-9.fc 100% |   1.8 MiB/s | 778.2 KiB |  00m00s
+[122/140] perl-lib-0:0.65-524.fc44.x86_ 100% |  83.1 KiB/s |  14.7 KiB |  00m00s
+[123/140] libfdisk-0:2.41.4-7.fc44.x86_ 100% | 972.9 KiB/s | 168.3 KiB |  00m00s
+[124/140] util-linux-0:2.41.4-7.fc44.x8 100% |   3.6 MiB/s |   1.2 MiB |  00m00s
+[125/140] liblastlog2-0:2.41.4-7.fc44.x 100% | 132.2 KiB/s |  23.5 KiB |  00m00s
+[126/140] man-pages-0:6.13-3.fc44.noarc 100% |   9.2 MiB/s |   3.7 MiB |  00m00s
+[127/140] libpipeline-0:1.5.8-4.fc44.x8 100% | 189.6 KiB/s |  60.3 KiB |  00m00s
+[128/140] man-db-0:2.13.1-3.fc44.x86_64 100% |   3.5 MiB/s |   1.4 MiB |  00m00s
+[129/140] unbound-anchor-0:1.24.2-10.fc 100% | 522.5 KiB/s |  40.8 KiB |  00m00s
+[130/140] nodejs22-docs-1:22.22.0-7.fc4 100% |  23.4 MiB/s |   4.7 MiB |  00m00s
+[131/140] perl-NDBM_File-0:1.18-524.fc4 100% | 119.2 KiB/s |  22.3 KiB |  00m00s
+[132/140] pinentry-0:1.3.2-3.fc44.x86_6 100% | 648.7 KiB/s | 112.9 KiB |  00m00s
+[133/140] nodejs22-full-i18n-1:22.22.0- 100% |  22.4 MiB/s |   8.6 MiB |  00m00s
+[134/140] libsecret-0:0.21.7-10.fc44.x8 100% |   1.1 MiB/s | 201.4 KiB |  00m00s
+[135/140] unzip-0:6.0-69.fc44.x86_64    100% |   2.4 MiB/s | 199.6 KiB |  00m00s
+[136/140] python3-html2text-0:2025.4.15 100% | 996.1 KiB/s |  81.7 KiB |  00m00s
+[137/140] python-unversioned-command-0: 100% |  60.5 KiB/s |  10.6 KiB |  00m00s
+[138/140] 7zip-0:25.01-5.fc44.x86_64    100% |  12.9 MiB/s |   1.3 MiB |  00m00s
+[139/140] less-color-0:692-5.fc44.x86_6 100% |  84.1 KiB/s |  15.3 KiB |  00m00s
+[140/140] perl-File-Copy-0:2.41-524.fc4 100% | 122.1 KiB/s |  19.9 KiB |  00m00s
+--------------------------------------------------------------------------------
+[140/140] Total                         100% |  10.9 MiB/s | 105.6 MiB |  00m10s
+Running transaction
+[  1/142] Verify package files          100% | 828.0   B/s | 140.0   B |  00m00s
+[  2/142] Prepare transaction           100% |   1.7 KiB/s | 140.0   B |  00m00s
+[  3/142] Installing libgpg-error-0:1.5 100% | 102.8 MiB/s | 947.5 KiB |  00m00s
+[  4/142] Installing libassuan-0:2.5.7- 100% | 161.8 MiB/s | 165.7 KiB |  00m00s
+[  5/142] Installing libgcrypt-0:1.12.2 100% | 552.9 MiB/s |   1.7 MiB |  00m00s
+[  6/142] Installing npth-0:1.8-4.fc44. 100% |   0.0   B/s |  50.6 KiB |  00m00s
+[  7/142] Installing gnupg2-gpgconf-0:2 100% |  30.7 MiB/s | 251.8 KiB |  00m00s
+[  8/142] Installing less-0:692-5.fc44. 100% |  57.4 MiB/s | 470.4 KiB |  00m00s
+[  9/142] Installing expat-0:2.7.3-2.fc 100% |  44.5 MiB/s | 318.9 KiB |  00m00s
+[ 10/142] Installing libksba-0:1.6.7-5. 100% |  31.3 MiB/s | 416.9 KiB |  00m00s
+[ 11/142] Installing groff-base-0:1.23. 100% | 118.0 MiB/s |   3.9 MiB |  00m00s
+[ 12/142] Installing gnupg2-dirmngr-0:2 100% |  34.5 MiB/s | 636.7 KiB |  00m00s
+[ 13/142] Installing gnupg2-keyboxd-0:2 100% |  28.2 MiB/s | 202.5 KiB |  00m00s
+[ 14/142] Installing gnupg2-verify-0:2. 100% |  39.2 MiB/s | 361.7 KiB |  00m00s
+[ 15/142] Installing libsecret-0:0.21.7 100% |  64.4 MiB/s | 593.4 KiB |  00m00s
+[ 16/142] Installing libpipeline-0:1.5. 100% |   0.0   B/s | 146.5 KiB |  00m00s
+[ 17/142] Installing liblastlog2-0:2.41 100% |   5.5 MiB/s |  39.8 KiB |  00m00s
+[ 18/142] Installing libfdisk-0:2.41.4- 100% | 190.1 MiB/s | 389.3 KiB |  00m00s
+[ 19/142] Installing util-linux-0:2.41. 100% | 108.6 MiB/s |   3.6 MiB |  00m00s
+[ 20/142] Installing openssh-0:10.2p1-9 100% | 159.2 MiB/s |   1.4 MiB |  00m00s
+[ 21/142] Installing libedit-0:3.1-58.2 100% | 243.9 MiB/s | 249.8 KiB |  00m00s
+[ 22/142] Installing openssh-clients-0: 100% | 128.1 MiB/s |   2.7 MiB |  00m00s
+[ 23/142] Installing git-core-0:2.54.0- 100% | 662.1 MiB/s |  25.2 MiB |  00m00s
+[ 24/142] Installing git-core-doc-0:2.5 100% |   1.8 GiB/s |  18.9 MiB |  00m00s
+[ 25/142] Installing libpkgconf-0:2.5.1 100% |   0.0   B/s |  91.3 KiB |  00m00s
+[ 26/142] Installing pkgconf-0:2.5.1-1. 100% |  11.6 MiB/s |  95.2 KiB |  00m00s
+[ 27/142] Installing pkgconf-m4-0:2.5.1 100% |   0.0   B/s |  14.7 KiB |  00m00s
+[ 28/142] Installing pkgconf-pkg-config 100% | 253.3 KiB/s |   1.8 KiB |  00m00s
+[ 29/142] Installing libusb1-0:1.0.29-5 100% |  15.7 MiB/s | 176.9 KiB |  00m00s
+>>> Running sysusers scriptlet: tpm2-tss-0:4.1.3-9.fc44.x86_64
+>>> Finished sysusers scriptlet: tpm2-tss-0:4.1.3-9.fc44.x86_64
+>>> Scriptlet output:
+>>> Failed to connect to audit log, ignoring: Invalid argument
+>>> Creating group 'tss' with GID 59.
+>>> Creating user 'tss' (Account used for TPM access) with UID 59 and GID 59.
+>>> 
+[ 30/142] Installing tpm2-tss-0:4.1.3-9 100% | 326.6 MiB/s |   1.6 MiB |  00m00s
+[ 31/142] Installing gnupg2-gpg-agent-0 100% |  32.1 MiB/s | 690.5 KiB |  00m00s
+[ 32/142] Installing gnupg2-0:2.4.9-7.f 100% | 433.6 MiB/s |   6.5 MiB |  00m00s
+[ 33/142] Installing gpgme-0:2.0.1-3.fc 100% |  60.6 MiB/s | 620.8 KiB |  00m00s
+[ 34/142] Installing tzdata-0:2026a-1.f 100% |  30.2 MiB/s |   1.5 MiB |  00m00s
+[ 35/142] Installing python-pip-wheel-0 100% |   1.2 GiB/s |   1.2 MiB |  00m00s
+[ 36/142] Installing mpdecimal-0:4.0.1- 100% |  71.2 MiB/s | 218.6 KiB |  00m00s
+[ 37/142] Installing python3-libs-0:3.1 100% | 394.6 MiB/s |  44.2 MiB |  00m00s
+[ 38/142] Installing python3-0:3.14.4-2 100% |   3.7 MiB/s |  30.5 KiB |  00m00s
+[ 39/142] Installing libuv-1:1.51.0-3.f 100% | 285.9 MiB/s | 585.6 KiB |  00m00s
+[ 40/142] Installing c-ares-0:1.34.6-3. 100% | 276.4 MiB/s | 283.1 KiB |  00m00s
+[ 41/142] Installing nodejs22-libs-1:22 100% | 821.4 MiB/s |  78.9 MiB |  00m00s
+[ 42/142] Installing nodejs22-1:22.22.0 100% |  33.0 MiB/s | 304.0 KiB |  00m00s
+[ 43/142] Installing nodejs22-bin-1:22. 100% |  13.7 MiB/s | 140.7 KiB |  00m00s
+[ 44/142] Installing nodejs22-npm-1:10. 100% |  88.7 MiB/s |   8.7 MiB |  00m00s
+[ 45/142] Installing nodejs22-npm-bin-1 100% |   3.7 MiB/s |  26.3 KiB |  00m00s
+[ 46/142] Installing oniguruma-0:6.9.10 100% | 754.9 MiB/s | 773.1 KiB |  00m00s
+[ 47/142] Installing protobuf-c-0:1.5.2 100% |   0.0   B/s |  55.2 KiB |  00m00s
+[ 48/142] Installing hiredis-0:1.2.0-8. 100% |   0.0   B/s | 107.4 KiB |  00m00s
+[ 49/142] Installing dns-root-data-0:20 100% | 964.5 KiB/s |  12.5 KiB |  00m00s
+>>> Running sysusers scriptlet: unbound-libs-0:1.24.2-10.fc44.x86_64
+>>> Finished sysusers scriptlet: unbound-libs-0:1.24.2-10.fc44.x86_64
+>>> Scriptlet output:
+>>> Failed to connect to audit log, ignoring: Invalid argument
+>>> Creating group 'unbound' with GID 999.
+>>> Creating user 'unbound' (Unbound DNS resolver) with UID 999 and GID 999.
+>>> 
+[ 50/142] Installing unbound-libs-0:1.2 100% | 510.1 MiB/s |   1.5 MiB |  00m00s
+[ 51/142] Installing gnutls-dane-0:3.8. 100% |   0.0   B/s |  61.5 KiB |  00m00s
+[ 52/142] Installing wget2-libs-0:2.2.1 100% | 362.0 MiB/s | 370.7 KiB |  00m00s
+[ 53/142] Installing wget2-0:2.2.1-2.fc 100% | 127.0 MiB/s |   1.1 MiB |  00m00s
+[ 54/142] Installing ncurses-0:6.6-1.fc 100% |  67.1 MiB/s | 618.0 KiB |  00m00s
+[ 55/142] Installing perl-Digest-0:1.20 100% |   0.0   B/s |  37.1 KiB |  00m00s
+[ 56/142] Installing perl-FileHandle-0: 100% |   0.0   B/s |   9.8 KiB |  00m00s
+[ 57/142] Installing perl-B-0:1.89-524. 100% | 492.7 MiB/s | 504.5 KiB |  00m00s
+[ 58/142] Installing perl-Digest-MD5-0: 100% |  60.0 MiB/s |  61.5 KiB |  00m00s
+[ 59/142] Installing perl-libnet-0:3.15 100% | 287.8 MiB/s | 294.7 KiB |  00m00s
+[ 60/142] Installing perl-Data-Dumper-0 100% |   0.0   B/s | 117.4 KiB |  00m00s
+[ 61/142] Installing perl-MIME-Base32-0 100% |   0.0   B/s |  32.2 KiB |  00m00s
+[ 62/142] Installing perl-URI-0:5.34-3. 100% |  91.7 MiB/s | 281.8 KiB |  00m00s
+[ 63/142] Installing perl-IO-Socket-IP- 100% |   0.0   B/s | 102.2 KiB |  00m00s
+[ 64/142] Installing perl-AutoLoader-0: 100% |   0.0   B/s |  21.0 KiB |  00m00s
+[ 65/142] Installing perl-IO-Socket-SSL 100% | 710.6 MiB/s | 727.6 KiB |  00m00s
+[ 66/142] Installing perl-locale-0:1.13 100% |   0.0   B/s |   6.5 KiB |  00m00s
+[ 67/142] Installing perl-Net-SSLeay-0: 100% | 336.7 MiB/s |   1.3 MiB |  00m00s
+[ 68/142] Installing perl-if-0:0.61.000 100% |   0.0   B/s |   6.2 KiB |  00m00s
+[ 69/142] Installing perl-Pod-Escapes-1 100% |   0.0   B/s |  25.9 KiB |  00m00s
+[ 70/142] Installing perl-File-Path-0:2 100% |   0.0   B/s |  64.5 KiB |  00m00s
+[ 71/142] Installing perl-Text-Tabs+Wra 100% |   0.0   B/s |  23.9 KiB |  00m00s
+[ 72/142] Installing perl-Time-Local-2: 100% |   0.0   B/s |  70.6 KiB |  00m00s
+[ 73/142] Installing perl-Time-HiRes-4: 100% |   0.0   B/s | 117.7 KiB |  00m00s
+[ 74/142] Installing perl-Class-Struct- 100% |   0.0   B/s |  25.9 KiB |  00m00s
+[ 75/142] Installing perl-IPC-Open3-0:1 100% |   0.0   B/s |  28.5 KiB |  00m00s
+[ 76/142] Installing perl-HTTP-Tiny-0:0 100% |   0.0   B/s | 159.7 KiB |  00m00s
+[ 77/142] Installing perl-File-Temp-1:0 100% |   0.0   B/s | 165.5 KiB |  00m00s
+[ 78/142] Installing perl-POSIX-0:2.23- 100% |   0.0   B/s | 230.6 KiB |  00m00s
+[ 79/142] Installing perl-Pod-Simple-1: 100% | 280.7 MiB/s | 574.9 KiB |  00m00s
+[ 80/142] Installing perl-Term-Cap-0:1. 100% |   0.0   B/s |  30.6 KiB |  00m00s
+[ 81/142] Installing perl-Term-ANSIColo 100% |   0.0   B/s |  99.2 KiB |  00m00s
+[ 82/142] Installing perl-File-stat-0:1 100% |   0.0   B/s |  13.1 KiB |  00m00s
+[ 83/142] Installing perl-Pod-Perldoc-0 100% |  18.4 MiB/s | 169.2 KiB |  00m00s
+[ 84/142] Installing perl-podlators-1:6 100% |  39.2 MiB/s | 321.4 KiB |  00m00s
+[ 85/142] Installing perl-SelectSaver-0 100% |   0.0   B/s |   2.6 KiB |  00m00s
+[ 86/142] Installing perl-Symbol-0:1.09 100% |   0.0   B/s |   7.3 KiB |  00m00s
+[ 87/142] Installing perl-Socket-4:2.04 100% | 119.3 MiB/s | 122.2 KiB |  00m00s
+[ 88/142] Installing perl-IO-0:1.55-524 100% | 148.0 MiB/s | 151.5 KiB |  00m00s
+[ 89/142] Installing perl-Pod-Usage-4:2 100% |  12.3 MiB/s |  87.9 KiB |  00m00s
+[ 90/142] Installing perl-overloading-0 100% |   0.0   B/s |   5.6 KiB |  00m00s
+[ 91/142] Installing perl-mro-0:1.29-52 100% |   0.0   B/s |  42.6 KiB |  00m00s
+[ 92/142] Installing perl-base-0:2.27-5 100% |   0.0   B/s |  13.0 KiB |  00m00s
+[ 93/142] Installing perl-Fcntl-0:1.20- 100% |   0.0   B/s |  49.8 KiB |  00m00s
+[ 94/142] Installing perl-Text-ParseWor 100% |   0.0   B/s |  14.6 KiB |  00m00s
+[ 95/142] Installing perl-Getopt-Long-1 100% |   0.0   B/s | 147.2 KiB |  00m00s
+[ 96/142] Installing perl-Storable-1:3. 100% | 231.2 MiB/s | 236.7 KiB |  00m00s
+[ 97/142] Installing perl-overload-0:1. 100% |   0.0   B/s |  72.0 KiB |  00m00s
+[ 98/142] Installing perl-Getopt-Std-0: 100% |   0.0   B/s |  11.8 KiB |  00m00s
+[ 99/142] Installing perl-vars-0:1.05-5 100% |   0.0   B/s |   4.3 KiB |  00m00s
+[100/142] Installing perl-Errno-0:1.38- 100% |   0.0   B/s |   8.8 KiB |  00m00s
+[101/142] Installing perl-File-Basename 100% |   0.0   B/s |  14.6 KiB |  00m00s
+[102/142] Installing perl-MIME-Base64-0 100% |  43.1 MiB/s |  44.2 KiB |  00m00s
+[103/142] Installing perl-parent-1:0.24 100% |   0.0   B/s |  11.0 KiB |  00m00s
+[104/142] Installing perl-Scalar-List-U 100% | 145.0 MiB/s | 148.5 KiB |  00m00s
+[105/142] Installing perl-constant-0:1. 100% |   0.0   B/s |  27.4 KiB |  00m00s
+[106/142] Installing perl-Encode-4:3.21 100% | 312.9 MiB/s |   4.7 MiB |  00m00s
+[107/142] Installing perl-DynaLoader-0: 100% |   0.0   B/s |  32.5 KiB |  00m00s
+[108/142] Installing perl-PathTools-0:3 100% | 180.1 MiB/s | 184.4 KiB |  00m00s
+[109/142] Installing perl-Carp-0:1.54-5 100% |   0.0   B/s |  47.7 KiB |  00m00s
+[110/142] Installing perl-Exporter-0:5. 100% |  54.3 MiB/s |  55.6 KiB |  00m00s
+[111/142] Installing perl-libs-4:5.42.2 100% | 315.6 MiB/s |  11.7 MiB |  00m00s
+[112/142] Installing perl-interpreter-4 100% |  14.7 MiB/s | 120.4 KiB |  00m00s
+[113/142] Installing perl-TermReadKey-0 100% |  64.5 MiB/s |  66.1 KiB |  00m00s
+[114/142] Installing perl-Error-1:0.170 100% |   0.0   B/s |  80.0 KiB |  00m00s
+[115/142] Installing perl-lib-0:0.65-52 100% |   0.0   B/s |   8.9 KiB |  00m00s
+[116/142] Installing git-0:2.54.0-1.fc4 100% |   0.0   B/s |  59.0 KiB |  00m00s
+[117/142] Installing perl-Git-0:2.54.0- 100% |   0.0   B/s |  65.4 KiB |  00m00s
+[118/142] Installing perl-File-Copy-0:2 100% |   0.0   B/s |  20.2 KiB |  00m00s
+[119/142] Installing pcre2-utf32-0:10.4 100% | 152.3 MiB/s | 623.9 KiB |  00m00s
+[120/142] Installing ncurses-term-0:6.6 100% |  29.3 MiB/s |   2.2 MiB |  00m00s
+[121/142] Installing gzip-0:1.14-2.fc44 100% |  17.3 MiB/s | 407.1 KiB |  00m00s
+[122/142] Installing man-db-0:2.13.1-3. 100% | 108.2 MiB/s |   2.9 MiB |  00m00s
+[123/142] Installing fish-0:4.6.0-1.fc4 100% | 246.8 MiB/s |  21.5 MiB |  00m00s
+[124/142] Installing less-color-0:692-5 100% |   1.7 MiB/s |  14.1 KiB |  00m00s
+[125/142] Installing perl-NDBM_File-0:1 100% |   0.0   B/s |  29.5 KiB |  00m00s
+[126/142] Installing wget2-wget-0:2.2.1 100% |  61.9 KiB/s | 444.0   B |  00m00s
+[127/142] Installing unbound-anchor-0:1 100% |   2.9 MiB/s |  53.7 KiB |  00m00s
+[128/142] Installing jq-0:1.8.1-3.fc44. 100% |  50.8 MiB/s | 467.8 KiB |  00m00s
+[129/142] Installing nodejs22-full-i18n 100% | 708.0 MiB/s |  30.4 MiB |  00m00s
+[130/142] Installing python-unversioned 100% |  59.2 KiB/s | 424.0   B |  00m00s
+[131/142] Installing python3-html2text- 100% |  29.1 MiB/s | 297.9 KiB |  00m00s
+[132/142] Installing gh-0:2.87.3-1.fc44 100% | 501.9 MiB/s |  37.6 MiB |  00m00s
+[133/142] Installing pinentry-0:1.3.2-3 100% |  32.8 MiB/s | 269.1 KiB |  00m00s
+[134/142] Installing 7zip-0:25.01-5.fc4 100% | 278.3 MiB/s |   3.3 MiB |  00m00s
+[135/142] Installing unzip-0:6.0-69.fc4 100% |  48.8 MiB/s | 449.3 KiB |  00m00s
+[136/142] Installing nodejs22-docs-1:22 100% |   1.6 GiB/s |  49.6 MiB |  00m00s
+[137/142] Installing man-pages-0:6.13-3 100% | 143.4 MiB/s |   3.3 MiB |  00m00s
+[138/142] Installing zsh-0:5.9-20.fc44. 100% | 114.6 MiB/s |   8.1 MiB |  00m00s
+[139/142] Installing procps-ng-0:4.0.6- 100% |  91.7 MiB/s |   1.1 MiB |  00m00s
+[140/142] Installing ripgrep-0:14.1.1-4 100% | 332.6 MiB/s |   4.7 MiB |  00m00s
+[141/142] Installing xz-1:5.8.2-2.fc44. 100% | 152.1 MiB/s |   1.4 MiB |  00m00s
+[142/142] Installing tar-2:1.35-8.fc44. 100% |  48.8 MiB/s |   3.0 MiB |  00m00s
+Complete!
+Removed 18 files, 11 directories (total of 78 MiB). 0 errors occurred.
+--> 6db4f6b586bd
+STEP 3/30: RUN useradd -u 1000 -m -s /bin/bash forge
+--> 632033356d1e
+STEP 4/30: RUN mkdir -p /home/forge/src     && mkdir -p /home/forge/.cache/tillandsias     && mkdir -p /home/forge/.config/opencode     && mkdir -p /tmp && chmod 1777 /tmp
+--> 2b34c18b16b7
+STEP 5/30: RUN mkdir -p /usr/local/lib/tillandsias
+--> dd1ea198398c
+STEP 6/30: COPY lib-common.sh /usr/local/lib/tillandsias/lib-common.sh
+--> e4ca5f580c49
+STEP 7/30: COPY entrypoint.sh /usr/local/bin/tillandsias-entrypoint.sh
+--> f7d305e35c45
+STEP 8/30: COPY entrypoint-forge-opencode.sh /usr/local/bin/entrypoint-forge-opencode.sh
+--> 7a92678ed556
+STEP 9/30: COPY entrypoint-forge-opencode-web.sh /usr/local/bin/entrypoint-forge-opencode-web.sh
+--> 2859680be9b0
+STEP 10/30: COPY entrypoint-forge-claude.sh /usr/local/bin/entrypoint-forge-claude.sh
+--> 80f0c5b21586
+STEP 11/30: COPY entrypoint-terminal.sh /usr/local/bin/entrypoint-terminal.sh
+--> 065823155fdb
+STEP 12/30: RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh              /usr/local/bin/entrypoint-forge-opencode.sh              /usr/local/bin/entrypoint-forge-opencode-web.sh              /usr/local/bin/entrypoint-forge-claude.sh              /usr/local/bin/entrypoint-terminal.sh
+--> b0dbba6692ac
+STEP 13/30: COPY opencode.json /home/forge/.config/opencode/config.json
+--> 9ec1d77d20fe
+STEP 14/30: COPY config-overlay/opencode/tui.json /home/forge/.config/opencode/tui.json
+--> ddea64d0554d
+STEP 15/30: RUN mkdir -p /etc/skel/.config/fish
+--> 92e9b4a7e951
+STEP 16/30: COPY shell/bashrc /etc/skel/.bashrc
+--> ad1e73ebd122
+STEP 17/30: COPY shell/zshrc /etc/skel/.zshrc
+--> 7beab7a8a604
+STEP 18/30: COPY shell/config.fish /etc/skel/.config/fish/config.fish
+--> a7ee2dae8215
+STEP 19/30: RUN mkdir -p /home/forge/.config/fish/conf.d
+--> 2738c6635a4a
+STEP 20/30: COPY shell/config.fish /home/forge/.config/fish/conf.d/tillandsias.fish
+--> 25b13506e9f8
+STEP 21/30: RUN mkdir -p /usr/local/share/tillandsias
+--> c88a7fe7bca7
+STEP 22/30: COPY forge-welcome.sh /usr/local/share/tillandsias/forge-welcome.sh
+--> 0889547ae205
+STEP 23/30: RUN chmod +x /usr/local/share/tillandsias/forge-welcome.sh || true
+--> 385aa8cbcea1
+STEP 24/30: RUN mkdir -p /etc/tillandsias/locales
+--> e923db5b21aa
+STEP 25/30: COPY locales/ /etc/tillandsias/locales/
+--> aa06f5bdc308
+STEP 26/30: RUN chown -R 1000:1000 /home/forge
+--> 06b3dab59f5e
+STEP 27/30: USER 1000:1000
+--> eedd87953d16
+STEP 28/30: WORKDIR /home/forge/src
+--> 3a51a7aeef3c
+STEP 29/30: ENTRYPOINT ["/usr/local/bin/entrypoint-forge-claude.sh"]
+--> 972d8801a02a
+STEP 30/30: ENV HOME=/home/forge USER=forge
+COMMIT tillandsias-forge:v0.1.160.240
+--> c5c5e22d4233
+Successfully tagged localhost/tillandsias-forge:v0.1.160.240
+c5c5e22d423311264fbb5838f65f6e1ca85dab12515cf53ba3c6f031e1ea6539
+[0;32m[build-image][0m   Removing tillandsias-forge:latest tag if present...
+
+[0;32m[build-image][0m ----------------------------------------------
+[0;32m[build-image][0m Image:    [1mtillandsias-forge:v0.1.160.240[0m
+[0;32m[build-image][0m Size:     456 MB
+[0;32m[build-image][0m Time:     51s
+[0;32m[build-image][0m ----------------------------------------------
+  ✓ forge: tillandsias-forge:v0.1.160.240
+  Building git...
+[0;36m[build-image][0m Building image: [1mtillandsias-git:v0.1.160.240[0m
+[0;36m[build-image][0m Building [1mtillandsias-git:v0.1.160.240[0m via podman build (Fedora minimal)...
+STEP 1/11: FROM docker.io/library/alpine:3.20
+STEP 2/11: RUN apk add --no-cache git git-daemon bash openssh-client github-cli     && adduser -D -u 1000 -s /bin/bash git     && mkdir -p /srv/git /var/log/git-service /strategic     && chown -R git:git /srv/git /var/log/git-service /strategic
+fetch https://dl-cdn.alpinelinux.org/alpine/v3.20/main/x86_64/APKINDEX.tar.gz
+fetch https://dl-cdn.alpinelinux.org/alpine/v3.20/community/x86_64/APKINDEX.tar.gz
+(1/23) Installing ncurses-terminfo-base (6.4_p20240420-r2)
+(2/23) Installing libncursesw (6.4_p20240420-r2)
+(3/23) Installing readline (8.2.10-r0)
+(4/23) Installing bash (5.2.26-r0)
+Executing bash-5.2.26-r0.post-install
+(5/23) Installing ca-certificates (20260413-r0)
+(6/23) Installing brotli-libs (1.1.0-r2)
+(7/23) Installing c-ares (1.33.1-r0)
+(8/23) Installing libunistring (1.2-r0)
+(9/23) Installing libidn2 (2.3.7-r0)
+(10/23) Installing nghttp2-libs (1.62.1-r0)
+(11/23) Installing libpsl (0.21.5-r1)
+(12/23) Installing zstd-libs (1.5.6-r0)
+(13/23) Installing libcurl (8.14.1-r2)
+(14/23) Installing libexpat (2.7.5-r0)
+(15/23) Installing pcre2 (10.43-r0)
+(16/23) Installing git (2.45.4-r0)
+(17/23) Installing git-init-template (2.45.4-r0)
+(18/23) Installing git-daemon (2.45.4-r0)
+(19/23) Installing github-cli (2.47.0-r4)
+(20/23) Installing openssh-keygen (9.7_p1-r5)
+(21/23) Installing libedit (20240517.3.1-r0)
+(22/23) Installing openssh-client-common (9.7_p1-r5)
+(23/23) Installing openssh-client-default (9.7_p1-r5)
+Executing busybox-1.36.1-r31.trigger
+Executing ca-certificates-20260413-r0.trigger
+OK: 78 MiB in 37 packages
+--> 631ca4b89965
+STEP 3/11: COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+--> faa5045e67a0
+STEP 4/11: COPY post-receive-hook.sh /usr/local/share/git-service/post-receive-hook.sh
+--> b02508583864
+STEP 5/11: COPY git-askpass-tillandsias.sh /usr/local/bin/git-askpass-tillandsias.sh
+--> 5abc926f6285
+STEP 6/11: RUN mkdir -p /etc/tillandsias
+--> 8d4efd5f3926
+STEP 7/11: COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
+Error: building at STEP "COPY external-logs.yaml /etc/tillandsias/external-logs.yaml": checking on sources under "/run/user/1000/tillandsias/image-sources-2986118/images/git": copier: stat: "/external-logs.yaml": no such file or directory
+  ✓ git: tillandsias-git:v0.1.160.240
+  ↷ inference: tillandsias-inference:v0.1.160.240 (already built, skipping)
+  ↷ chromium-core: tillandsias-chromium-core:v0.1.160.240 (already built, skipping)
+  ↷ chromium-framework: tillandsias-chromium-framework:v0.1.160.240 (already built, skipping)
+
+  Enclave images:
+    ✓ proxy      — caching HTTPS proxy with domain allowlist
+    ✓ forge      — development environment
+    ✓ git        — git mirror service (bare repos + daemon)
+    ✓ inference  — local LLM (ollama)
+
+Ready. Run: tillandsias
