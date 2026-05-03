@@ -66,6 +66,11 @@ The project SHALL provide `scripts/fetch-debug-source.sh` for on-demand fetching
 - **THEN** `vendor/debug/` SHALL NOT exist
 - **AND** no external source code SHALL be downloaded automatically
 
+## Sources of Truth
+
+- `cheatsheets/runtime/podman.md` — Podman reference and patterns
+- `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

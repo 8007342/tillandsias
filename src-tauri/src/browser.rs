@@ -263,30 +263,82 @@ pub fn detect_browser() -> Result<BrowserKind, String> {
     Ok(BrowserKind::Chromium { bin: resolved.bin })
 }
 
+/// Ephemeral browser profile session — holds a temporary directory that is
+/// cleaned up on Drop. Ensures tmpdir deletion even if the browser process
+/// outlives the caller.
+///
+/// @trace spec:chromium-safe-variant, spec:ephemeral-guarantee
+pub struct EphemeralBrowserSession {
+    tmpdir: PathBuf,
+}
+
+impl EphemeralBrowserSession {
+    /// Create a new ephemeral session in `$XDG_RUNTIME_DIR/tillandsias/browser/`.
+    fn new(project_name: &str) -> Self {
+        let base = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        let epoch_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let tmpdir = base
+            .join("tillandsias")
+            .join("browser")
+            .join(format!("{}-{}", sanitize_hostname_label(project_name), epoch_ms));
+
+        if let Err(e) = std::fs::create_dir_all(&tmpdir) {
+            warn!(
+                spec = "opencode-web-session",
+                error = %e,
+                path = %tmpdir.display(),
+                "Failed to create browser profile dir — launch will still try without isolation"
+            );
+        }
+
+        EphemeralBrowserSession { tmpdir }
+    }
+
+    /// Get the tmpdir path for passing to the browser.
+    fn path(&self) -> &Path {
+        &self.tmpdir
+    }
+}
+
+impl Drop for EphemeralBrowserSession {
+    /// Clean up the ephemeral profile directory on session end.
+    ///
+    /// @trace spec:chromium-safe-variant, spec:ephemeral-guarantee
+    fn drop(&mut self) {
+        if self.tmpdir.exists() {
+            match std::fs::remove_dir_all(&self.tmpdir) {
+                Ok(()) => {
+                    debug!(
+                        spec = "chromium-safe-variant, ephemeral-guarantee",
+                        path = %self.tmpdir.display(),
+                        "Browser ephemeral tmpdir cleaned on session exit"
+                    );
+                }
+                Err(e) => {
+                    warn!(
+                        spec = "chromium-safe-variant, ephemeral-guarantee",
+                        path = %self.tmpdir.display(),
+                        error = %e,
+                        "Failed to clean browser ephemeral tmpdir (systemd will clean on logout)"
+                    );
+                }
+            }
+        }
+    }
+}
+
 /// Allocate a temporary per-session profile / user-data directory under
 /// `$XDG_RUNTIME_DIR/tillandsias/browser/<project>-<epoch>`. Created fresh;
 /// cleaned up by systemd on user logout regardless.
+///
+/// Deprecated: use EphemeralBrowserSession instead for automatic cleanup.
 fn session_profile_dir(project_name: &str) -> PathBuf {
-    let base = std::env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir);
-    let epoch_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-    let dir = base
-        .join("tillandsias")
-        .join("browser")
-        .join(format!("{}-{}", sanitize_hostname_label(project_name), epoch_ms));
-    if let Err(e) = std::fs::create_dir_all(&dir) {
-        warn!(
-            spec = "opencode-web-session",
-            error = %e,
-            path = %dir.display(),
-            "Failed to create browser profile dir — launch will still try without isolation"
-        );
-    }
-    dir
+    EphemeralBrowserSession::new(project_name).path().to_path_buf()
 }
 
 /// Launch the native browser against a project's forge URL. Does NOT wait

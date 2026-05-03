@@ -51,6 +51,11 @@ After all images are processed, if `--debug` was used and any builds failed, the
 - **WHEN** `tillandsias --init` (without `--debug`) completes with failures
 - **THEN** no failed build logs are displayed (user should re-run with `--debug`)
 
+## Sources of Truth
+
+- `cheatsheets/build/cargo.md` — Cargo reference and patterns
+- `cheatsheets/build/nix-flake-basics.md` — Nix Flake Basics reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

@@ -99,6 +99,11 @@ The tray icon is the sole visual indicator of system health. Users MUST be able 
 ### No container terminology in user-facing context
 Users MUST never see the words "container", "pod", "image", or "runtime" in any tray menu item, tooltip, or notification associated with these icon states.
 
+## Sources of Truth
+
+- `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+- `cheatsheets/runtime/container-health-checks.md` — Container Health Checks reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

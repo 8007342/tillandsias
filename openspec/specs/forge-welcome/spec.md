@@ -43,6 +43,11 @@ The Terminal menu item and `--bash` CLI flag SHALL launch the fish shell instead
 - **THEN** bash starts normally (fish is not mandatory)
 
 
+## Sources of Truth
+
+- `cheatsheets/runtime/podman.md` — Podman reference and patterns
+- `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

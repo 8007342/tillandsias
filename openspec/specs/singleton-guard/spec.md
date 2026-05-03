@@ -73,6 +73,11 @@ The singleton check SHALL verify that the PID in the lock file belongs to an act
 - **THEN** the lock is considered stale and the new instance takes over
 
 
+## Sources of Truth
+
+- `cheatsheets/runtime/podman.md` — Podman reference and patterns
+- `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

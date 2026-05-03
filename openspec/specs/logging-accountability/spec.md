@@ -107,6 +107,11 @@ The logging system SHALL accept configuration from CLI flags in addition to envi
 - **THEN** the tracing subscriber is configured according to the `LogConfig`
 - **AND** if `LogConfig` has no module overrides, behavior is identical to the current implementation (TILLANDSIAS_LOG / RUST_LOG / default)
 
+## Sources of Truth
+
+- `cheatsheets/runtime/logging-levels.md` — Logging Levels reference and patterns
+- `cheatsheets/runtime/external-logs.md` — External Logs reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

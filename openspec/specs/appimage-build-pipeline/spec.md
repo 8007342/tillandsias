@@ -69,6 +69,11 @@ bytes stream from reader to writer in a single pass.
 - **THEN** the step succeeds without `apt-get install rsync`
 
 
+## Sources of Truth
+
+- `cheatsheets/build/cargo.md` — Cargo reference and patterns
+- `cheatsheets/build/nix-flake-basics.md` — Nix Flake Basics reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

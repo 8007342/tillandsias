@@ -429,6 +429,11 @@ equivalent key, so both agent runtimes see the eight `browser.*` tools.
   the host-browser-mcp window-survival requirement
 
 
+## Sources of Truth
+
+- `cheatsheets/runtime/forge-container.md` — Forge Container reference and patterns
+- `cheatsheets/build/cargo.md` — Cargo reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

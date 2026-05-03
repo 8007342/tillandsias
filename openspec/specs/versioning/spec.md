@@ -75,6 +75,11 @@ A `scripts/bump-version.sh` script SHALL atomically update all version locations
 - **THEN** no files are modified on the second run
 
 
+## Sources of Truth
+
+- `cheatsheets/runtime/podman.md` — Podman reference and patterns
+- `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

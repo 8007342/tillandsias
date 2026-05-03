@@ -74,6 +74,11 @@ Background re-probing every N seconds is forbidden (`spec:tray-app` responsivene
 - **AND** UI gating advances to the new state
 
 
+## Sources of Truth
+
+- `cheatsheets/utils/git-workflows.md` — Git Workflows reference and patterns
+- `cheatsheets/runtime/unix-socket-ipc.md` — Unix Socket Ipc reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

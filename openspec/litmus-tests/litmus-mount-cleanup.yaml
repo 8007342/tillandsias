@@ -1,0 +1,79 @@
+name: litmus:mount-cleanup
+spec: podman-orchestration
+description: Verify no leftover bind mounts after shutdown
+severity: high
+
+preconditions:
+  - tillandsias tray running
+  - multiple forge containers active with bind mounts
+  - forge working directories mounted
+
+critical_path:
+  - step: "baseline: count active tillandsias mounts"
+    command: "mount | grep tillandsias | wc -l"
+    timeout_ms: 3000
+    expected_behavior: "multiple mounts during operation (bind mounts for projects)"
+
+  - step: "list all tillandsias mounts with mount paths"
+    command: "mount | grep tillandsias"
+    timeout_ms: 3000
+    expected_behavior: "several bind mounts for project directories"
+
+  - step: "verify mounts are accessible and contain data"
+    command: "mount | grep tillandsias | awk '{print $3}' | head -1 | xargs ls -la | head -3"
+    timeout_ms: 5000
+    expected_behavior: "mount point accessible with files"
+
+  - step: "verify enclave mounts exist"
+    command: "mount | grep 'tillandsias-enclave' | wc -l"
+    timeout_ms: 3000
+    expected_behavior: "1 or more enclave-specific mounts"
+
+  - step: "shutdown tillandsias tray"
+    command: "pkill -f tillandsias 2>/dev/null && sleep 4 && echo SHUTDOWN_COMPLETE"
+    timeout_ms: 10000
+    expected_behavior: "shutdown command succeeds"
+
+  - step: "wait for container cleanup"
+    command: "sleep 2"
+    timeout_ms: 3000
+
+  - step: "verify all tillandsias mounts removed"
+    command: "mount | grep tillandsias | wc -l"
+    timeout_ms: 3000
+    expected_behavior: "0 mounts"
+
+  - step: "verify no leftover enclave mounts"
+    command: "mount | grep 'tillandsias-enclave' | wc -l"
+    timeout_ms: 3000
+    expected_behavior: "0 mounts"
+
+gating_points:
+  - signal: "all bind mounts cleaned on shutdown"
+    success: "mount | grep tillandsias returns nothing"
+    failure: "mounts still listed after shutdown"
+    spec_linkage: "podman-orchestration"
+
+  - signal: "enclave mounts properly unmounted"
+    success: "no tillandsias-enclave mounts remain"
+    failure: "enclave mounts still active"
+
+  - signal: "no mount leaks"
+    success: "filesystem clean, all mounts gone"
+    failure: "orphaned or lingering mounts"
+
+observability:
+  traces:
+    - "@trace spec:podman-orchestration"
+    - "@trace spec:ephemeral-guarantee"
+    - "@trace spec:enclave-network"
+  expected_log: "Bind mounts cleaned on tray shutdown"
+  log_fields:
+    spec: "podman-orchestration"
+    test: "mount-cleanup"
+    resource_type: "mounts"
+    cleanup_scope: "all-containers"
+
+rollback:
+  on_failure: "forcefully unmount and cleanup"
+  command: "mount | grep tillandsias | awk '{print $3}' | xargs -I {} umount -l {} 2>/dev/null; podman system prune --volumes -f 2>/dev/null; systemctl --user restart tillandsias 2>/dev/null || true"

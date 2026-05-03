@@ -115,6 +115,11 @@ Every CLI path that may have started enclave infrastructure SHALL install a SIGI
 - **THEN** the second SIGINT is not handled by the cleanup path
 - **AND** the process terminates immediately via the default signal action
 
+## Sources of Truth
+
+- `cheatsheets/runtime/cmd.md` — Cmd reference and patterns
+- `cheatsheets/languages/bash.md` — Bash reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

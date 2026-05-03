@@ -35,6 +35,11 @@ The `--bash` CLI flag SHALL launch fish (not bash) with the welcome message.
 - **THEN** the host OS info is available via `TILLANDSIAS_HOST_OS` environment variable for the welcome script to display
 
 
+## Sources of Truth
+
+- `cheatsheets/languages/bash.md` — Bash reference and patterns
+- `cheatsheets/runtime/cmd.md` — Cmd reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

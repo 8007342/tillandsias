@@ -9,7 +9,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-forge-opencode.sh#L45](../../../images/default/entrypoint-forge-opencode.sh#L45)
 - [images/default/entrypoint-forge-opencode-web.sh#L44](../../../images/default/entrypoint-forge-opencode-web.sh#L44)
 - [images/default/entrypoint-forge-opencode-web.sh#L60](../../../images/default/entrypoint-forge-opencode-web.sh#L60)
-- [images/default/entrypoint-terminal.sh#L45](../../../images/default/entrypoint-terminal.sh#L45)
+- [images/default/entrypoint-terminal.sh#L61](../../../images/default/entrypoint-terminal.sh#L61)
 - [images/default/forge-welcome.sh#L132](../../../images/default/forge-welcome.sh#L132)
 - [images/default/lib-common.sh#L159](../../../images/default/lib-common.sh#L159)
 - [src-tauri/src/embedded.rs#L132](../../../src-tauri/src/embedded.rs#L132)

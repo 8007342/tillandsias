@@ -72,6 +72,11 @@ The regenerator SHALL emit `[DRAFT]` next to entries with `status: draft`, `[STA
 - **AND** the entry SHALL be tagged `[DRAFT]` so the gap is visible
 
 
+## Sources of Truth
+
+- `cheatsheets/web/mcp.md` — Mcp reference and patterns
+- `cheatsheets/runtime/local-inference.md` — Local Inference reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

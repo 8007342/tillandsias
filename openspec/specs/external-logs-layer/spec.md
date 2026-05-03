@@ -109,6 +109,11 @@ The pre-existing `git-push.log` file under `~/.local/state/tillandsias/container
 - **AND** NO entrypoint code change is required in the git-service image
 
 
+## Sources of Truth
+
+- `cheatsheets/runtime/podman.md` — Podman reference and patterns
+- `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

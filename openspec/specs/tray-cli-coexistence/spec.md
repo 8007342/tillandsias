@@ -80,6 +80,11 @@ The tracing/logging layer SHALL tolerate `BrokenPipe` / `EPIPE` errors on the st
 - **AND** the process does not panic or exit
 - **AND** the file appender at `~/.local/state/tillandsias/tillandsias.log` continues to capture events
 
+## Sources of Truth
+
+- `cheatsheets/runtime/systemd-socket-activation.md` — Systemd Socket Activation reference and patterns
+- `cheatsheets/languages/rust.md` — Rust reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

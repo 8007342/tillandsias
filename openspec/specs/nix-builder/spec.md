@@ -32,6 +32,11 @@ The flake.nix image definitions SHALL use `copyToRoot` instead of the legacy `co
 - **WHEN** an image is defined in `flake.nix` using `dockerTools.buildLayeredImage`
 - **THEN** the `copyToRoot` attribute is used to specify packages to include. The `contents` attribute is a legacy alias that still works but is deprecated in favor of `copyToRoot`.
 
+## Sources of Truth
+
+- `cheatsheets/build/cargo.md` — Cargo reference and patterns
+- `cheatsheets/build/nix-flake-basics.md` — Nix Flake Basics reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

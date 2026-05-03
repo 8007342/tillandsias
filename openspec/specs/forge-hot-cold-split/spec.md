@@ -226,6 +226,11 @@ The resolved cap SHALL be passed into the forge container via the env var `TILLA
 - **AND** the "Maybe a hot path" HARD NO rule SHALL remain unweakened
 
 
+## Sources of Truth
+
+- `cheatsheets/runtime/podman.md` — Podman reference and patterns
+- `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

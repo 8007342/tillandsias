@@ -261,6 +261,11 @@ The `ContainerLauncher::kill_container` (or its underlying client method) SHALL 
 - **THEN** the underlying `podman kill --signal=KILL <name>` invocation runs
 
 
+## Sources of Truth
+
+- `cheatsheets/runtime/container-health-checks.md` — Container Health Checks reference and patterns
+- `cheatsheets/runtime/podman.md` — Podman reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

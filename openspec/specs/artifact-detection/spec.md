@@ -92,6 +92,11 @@ The artifact system SHALL detect project types from standard project files to in
 - **THEN** it is classified as unknown but still eligible for "Attach Here" with the generic forge environment
 
 
+## Sources of Truth
+
+- `cheatsheets/build/cargo.md` — Cargo reference and patterns
+- `cheatsheets/utils/gh-cli.md` — Gh Cli reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

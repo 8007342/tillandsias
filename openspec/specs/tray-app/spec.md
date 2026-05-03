@@ -83,6 +83,11 @@ Clicking "Attach Here" SHALL dispatch to the web-session flow when `AgentConfig:
 - **WHEN** `agent.selected = opencode` or `claude` and the user clicks "Attach Here"
 - **THEN** the existing terminal-based flow runs unchanged
 
+## Sources of Truth
+
+- `cheatsheets/runtime/systemd-socket-activation.md` — Systemd Socket Activation reference and patterns
+- `cheatsheets/utils/gh-cli.md` — Gh Cli reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

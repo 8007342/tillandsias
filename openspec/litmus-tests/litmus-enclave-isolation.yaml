@@ -1,0 +1,49 @@
+name: litmus:enclave-isolation
+spec: enclave-network
+description: Verify forge cannot reach proxy container and reverse isolation
+severity: critical
+
+preconditions:
+  - tillandsias tray running
+  - enclave network created (--enclave-network flag)
+  - proxy container running
+  - forge container running
+
+critical_path:
+  - step: "verify proxy container is running in enclave"
+    command: "podman ps -f 'label=tillandsias-enclave' | grep proxy"
+    timeout_ms: 5000
+    expected_behavior: "proxy container listed"
+
+  - step: "attempt forge to proxy connection"
+    command: "podman exec tillandsias-proxy-* ip addr show | grep -q 'inet' && echo PROXY_IP_EXISTS || echo PROXY_IP_MISSING"
+    timeout_ms: 3000
+
+  - step: "test forge cannot reach proxy internal services"
+    command: "podman run --rm --net=tillandsias-enclave tillandsias-forge sh -c 'timeout 3 curl http://proxy:3128 2>&1' || echo TIMEOUT_EXPECTED"
+    timeout_ms: 5000
+    expected_behavior: "connection refused or timeout"
+
+gating_points:
+  - signal: "forge isolated from proxy services"
+    success: "connection refused OR timeout OR Cannot assign requested address"
+    failure: "curl succeeds OR HTTP response received"
+    spec_linkage: "enclave-network"
+
+  - signal: "network namespace isolation verified"
+    success: "different network interfaces visible"
+    failure: "both containers see same network stack"
+
+observability:
+  traces:
+    - "@trace spec:enclave-network"
+    - "@trace spec:enclave-network-isolation"
+  expected_log: "Enclave network isolation enforced"
+  log_fields:
+    spec: "enclave-network"
+    test: "enclave-isolation"
+    isolation_type: "network-namespace"
+
+rollback:
+  on_failure: "restart enclave network and containers"
+  command: "podman network rm tillandsias-enclave 2>/dev/null; podman compose down 2>/dev/null || true"

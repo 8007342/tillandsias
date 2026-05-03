@@ -28,6 +28,11 @@ Changing the language in the tray menu MUST reload the i18n string table immedia
 ### REQ-WIN-OS: Host OS detection
 `detect_host_os()` MUST return a meaningful string on Windows (e.g., "Microsoft Windows [Version 10.0.26200]") instead of "Unknown OS".
 
+## Sources of Truth
+
+- `cheatsheets/runtime/wsl2-isolation-boundary.md` — Wsl2 Isolation Boundary reference and patterns
+- `cheatsheets/runtime/windows-event-viewer.md` — Windows Event Viewer reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

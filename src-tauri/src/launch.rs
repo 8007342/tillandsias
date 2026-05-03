@@ -47,7 +47,13 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
         args.push("--rm".into());
     }
     args.push("--init".into());
-    args.push("--stop-timeout=10".into());
+    // @trace spec:podman-orchestration, spec:ephemeral-guarantee
+    // Graceful shutdown: send SIGTERM first, give 15 seconds to drain connections,
+    // then podman forcefully kills if still running. This ensures ephemeral
+    // artifacts (tmpfiles, sockets, caches) are properly flushed and cleaned
+    // before the container's lifecycle ends.
+    args.push("--stop-timeout=15".into());
+    args.push("--stop-signal=SIGTERM".into());
     args.push("--name".into());
     args.push(ctx.container_name.clone());
     args.push("--cap-drop=ALL".into());
@@ -152,7 +158,29 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
 
     // -----------------------------------------------------------------------
     // Environment variables (resolved from context)
+    //
+    // @trace spec:environment-runtime, spec:ephemeral-guarantee
+    // Explicitly set ONLY the environment variables needed by the container.
+    // Host environment leakage is prevented by passing `--env-file=/dev/null`
+    // (unsetting all inherited vars) and then explicitly adding only the
+    // vars defined in the profile. This ensures:
+    //   - SHELL, LANG, LC_*, HISTFILE, ZDOTDIR, etc. are NOT inherited
+    //   - Only intentional, profile-defined vars reach the container
+    //   - No accidental host state pollution (locale, shell prefs, etc.)
     // -----------------------------------------------------------------------
+
+    // Block all inherited environment variables from the host
+    args.push("--env-file=/dev/null".into());
+
+    // Explicitly set only the minimally-required defaults
+    // @trace spec:environment-runtime, spec:ephemeral-guarantee
+    args.push("-e".into());
+    args.push("PATH=/usr/local/bin:/usr/bin".into());
+    args.push("-e".into());
+    args.push("HOME=/home/forge".into());
+    args.push("-e".into());
+    args.push("USER=forge".into());
+
     for env_var in &profile.env_vars {
         let value = match &env_var.value {
             EnvValue::FromContext(key) => match key {

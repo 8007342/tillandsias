@@ -25,6 +25,11 @@ tmpfs).
 - **AND** they SHALL be pointed to the superseding specs
 
 
+## Sources of Truth
+
+- `cheatsheets/runtime/forge-hot-cold-split.md` — Forge Hot Cold Split reference and patterns
+- `cheatsheets/runtime/forge-container.md` — Forge Container reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

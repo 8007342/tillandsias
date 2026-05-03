@@ -28,6 +28,11 @@ Image builds SHALL use a lock file to prevent duplicate concurrent builds.
 - **THEN** the lock file is removed
 
 
+## Sources of Truth
+
+- `cheatsheets/build/cargo.md` — Cargo reference and patterns
+- `cheatsheets/build/nix-flake-basics.md` — Nix Flake Basics reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

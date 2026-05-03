@@ -85,6 +85,11 @@ The login container SHALL be destroyed on every exit path so no `gh` on-disk sta
 - **AND** all on-disk `gh` state inside the container SHALL be destroyed with the container
 - **AND** no token SHALL be written to any host file outside the keyring
 
+## Sources of Truth
+
+- `cheatsheets/runtime/podman.md` — Podman reference and patterns
+- `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

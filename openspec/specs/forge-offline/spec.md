@@ -55,6 +55,11 @@ Forge containers SHALL be attached to the `tillandsias-enclave` internal network
 - **WHEN** a forge container runs `npm install` with proxy env vars
 - **THEN** the install SHALL succeed through the proxy
 
+## Sources of Truth
+
+- `cheatsheets/runtime/forge-container.md` — Forge Container reference and patterns
+- `cheatsheets/security/owasp-top-10-2021.md` — Owasp Top 10 2021 reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

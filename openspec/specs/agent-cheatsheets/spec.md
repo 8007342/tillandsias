@@ -222,6 +222,10 @@ delta adds the `local:` sub-requirement.
 - **GIVEN** only SOME Provenance URLs have been fetched
 - **THEN** the line ends with `[partial-verify]`
 
+## Sources of Truth
+
+- `cheatsheets/agents/claude-code.md` — Agent framework and patterns
+- `cheatsheets/runtime/cheatsheet-architecture-v2.md` — Cheatsheet architecture and lifecycle
 
 ## Observability
 

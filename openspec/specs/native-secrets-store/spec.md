@@ -63,6 +63,11 @@ The functions `store_github_token`, `retrieve_github_token`, and `delete_github_
 - **THEN** the keyring entry SHALL be removed
 - **AND** the function SHALL return `Ok(())` even if no entry existed (idempotent)
 
+## Sources of Truth
+
+- `cheatsheets/runtime/unix-socket-ipc.md` — Unix Socket Ipc reference and patterns
+- `cheatsheets/security/owasp-top-10-2021.md` — Owasp Top 10 2021 reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

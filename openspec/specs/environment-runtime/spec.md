@@ -56,6 +56,11 @@ The runtime environment contract SHALL recognise `TILLANDSIAS_AGENT=opencode-web
 - **WHEN** `TILLANDSIAS_AGENT` is any value not in the recognised set
 - **THEN** existing fallback behaviour remains unchanged
 
+## Sources of Truth
+
+- `cheatsheets/runtime/podman.md` — Podman reference and patterns
+- `cheatsheets/runtime/container-health-checks.md` — Container Health Checks reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

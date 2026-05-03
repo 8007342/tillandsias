@@ -35,6 +35,11 @@ The scanner SHALL debounce rapid filesystem events into batched project state up
 - **WHEN** the user configures `debounce_ms = 5000` in the global config
 - **THEN** the scanner waits 5 seconds of filesystem quiet before emitting a batched update
 
+## Sources of Truth
+
+- `cheatsheets/runtime/podman.md` — Podman reference and patterns
+- `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

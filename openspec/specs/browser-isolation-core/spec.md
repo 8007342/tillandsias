@@ -33,6 +33,11 @@ images/chromium/Containerfile.core
 
 Build is invoked via `scripts/build-image.sh chromium-core` which reads the VERSION file and applies the appropriate tag.
 
+## Sources of Truth
+
+- `cheatsheets/runtime/chromium-isolation.md` — Chromium Isolation reference and patterns
+- `cheatsheets/security/owasp-top-10-2021.md` — Owasp Top 10 2021 reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

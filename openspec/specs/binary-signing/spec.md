@@ -39,6 +39,11 @@ All release artifacts SHALL be signed with Cosign keyless mode and verifiable lo
 - **WHEN** the release notes verification instructions are followed on a machine with no prior Cosign state
 - **THEN** the verification succeeds without additional configuration
 
+## Sources of Truth
+
+- `cheatsheets/utils/gh-cli.md` — Gh Cli reference and patterns
+- `cheatsheets/security/owasp-top-10-2021.md` — Owasp Top 10 2021 reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

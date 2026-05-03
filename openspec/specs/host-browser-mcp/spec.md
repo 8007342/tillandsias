@@ -512,6 +512,11 @@ risk note.
 - **AND** the 16 in-flight calls continue to completion unaffected
 
 
+## Sources of Truth
+
+- `cheatsheets/runtime/chromium-isolation.md` — Chromium Isolation reference and patterns
+- `cheatsheets/web/cdp.md` — Cdp reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

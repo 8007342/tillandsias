@@ -1,0 +1,63 @@
+name: litmus:browser-ephemeral
+spec: chromium-safe-variant
+description: Verify browser tmpdir deleted on exit, no persistence
+severity: critical
+
+preconditions:
+  - tillandsias tray running
+  - browser capability initialized
+  - /tmp/tillandsias-browser-* does not exist
+
+critical_path:
+  - step: "baseline check: no browser temp dirs"
+    command: "find /tmp -maxdepth 1 -type d -name 'tillandsias-browser-*' 2>/dev/null | wc -l"
+    timeout_ms: 3000
+    expected_behavior: "0 directories"
+
+  - step: "launch browser container"
+    command: "podman run --rm -d --cap-drop=ALL --security-opt=no-new-privileges -v /tmp:/tmp tillandsias-chromium /bin/sh -c 'touch /tmp/tillandsias-browser-test.lock && sleep 5 && rm /tmp/tillandsias-browser-test.lock'"
+    timeout_ms: 10000
+    expected_behavior: "container ID returned"
+
+  - step: "verify browser temp directory exists while running"
+    command: "sleep 2 && find /tmp -maxdepth 1 -type d -name 'tillandsias-browser-*' 2>/dev/null | wc -l"
+    timeout_ms: 5000
+    expected_behavior: "1 or more directories"
+
+  - step: "wait for browser to exit"
+    command: "sleep 6"
+    timeout_ms: 8000
+
+  - step: "verify browser temp dir cleanup after exit"
+    command: "find /tmp -maxdepth 1 -type d -name 'tillandsias-browser-*' 2>/dev/null | wc -l"
+    timeout_ms: 3000
+    expected_behavior: "0 directories"
+
+  - step: "measure cleanup: du -sh before and after"
+    command: "du -sh /tmp | tail -1"
+    timeout_ms: 5000
+    expected_behavior: "no growth after cleanup"
+
+gating_points:
+  - signal: "browser tmpdir cleaned on exit"
+    success: "0 tillandsias-browser-* directories remaining"
+    failure: "directories still present OR ownership prevents cleanup"
+    spec_linkage: "chromium-safe-variant"
+
+  - signal: "ephemeral-first guarantee met"
+    success: "/tmp/tillandsias-browser-* fully removed"
+    failure: "dangling temp directories"
+
+observability:
+  traces:
+    - "@trace spec:chromium-safe-variant"
+    - "@trace spec:ephemeral-guarantee"
+  expected_log: "Browser temp directory cleaned after container exit"
+  log_fields:
+    spec: "chromium-safe-variant"
+    test: "browser-ephemeral"
+    cleanup_status: "success"
+
+rollback:
+  on_failure: "force cleanup of browser containers and temp dirs"
+  command: "podman rm -f $(podman ps -a -q -f 'label=tillandsias-browser' 2>/dev/null) 2>/dev/null; find /tmp -maxdepth 1 -type d -name 'tillandsias-browser-*' -exec rm -rf {} + 2>/dev/null || true"

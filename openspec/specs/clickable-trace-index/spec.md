@@ -90,6 +90,11 @@ For each active spec that has at least one `@trace` annotation in the codebase, 
 - **WHEN** `generate-traces.sh` is run on the host (outside the tillandsias toolbox)
 - **THEN** it SHALL complete successfully using only tools available on a standard Fedora Silverblue host
 
+## Sources of Truth
+
+- `cheatsheets/runtime/cmd.md` — Cmd reference and patterns
+- `cheatsheets/languages/bash.md` — Bash reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

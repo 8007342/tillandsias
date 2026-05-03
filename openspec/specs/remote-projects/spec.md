@@ -78,6 +78,11 @@ The Remote Projects submenu SHALL show a loading indicator while fetching the re
 - **THEN** the submenu shows a disabled "Loading..." item
 
 
+## Sources of Truth
+
+- `cheatsheets/runtime/podman.md` — Podman reference and patterns
+- `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

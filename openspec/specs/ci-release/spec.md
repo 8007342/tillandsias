@@ -24,6 +24,11 @@ Both CI and release workflows SHALL opt into Node.js 24 for GitHub Actions runne
 - **WHEN** the project performs a periodic dependency or CI audit
 - **THEN** the `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` variable is checked against current GitHub Actions documentation to confirm it remains a supported mechanism
 
+## Sources of Truth
+
+- `cheatsheets/utils/gh-cli.md` — Gh Cli reference and patterns
+- `cheatsheets/build/cargo.md` — Cargo reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

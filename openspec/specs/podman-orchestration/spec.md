@@ -104,6 +104,11 @@ The orchestration layer SHALL name persistent OpenCode Web containers exactly `t
 - **AND** the genus still appears in the `ContainerInfo` record for UI/iconography purposes
 - **AND** the name never collides with a concurrently-running `tillandsias-my-app-web` static-httpd container
 
+## Sources of Truth
+
+- `cheatsheets/runtime/podman.md` — Podman reference and patterns
+- `cheatsheets/utils/podman-containers.md` — Podman Containers reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

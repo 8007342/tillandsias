@@ -105,6 +105,11 @@ This means: `target/`, `node_modules/`, `build/`, `dist/`, `.gradle/`, `.dart_to
 - **THEN** it SHALL clearly state that build artifacts under the project workspace (e.g., `node_modules/` for projects that don't redirect via tooling) are an anti-pattern, AND it SHALL list which tools have native env-var redirection support
 
 
+## Sources of Truth
+
+- `cheatsheets/runtime/forge-shared-cache-via-nix.md` — Forge Shared Cache Via Nix reference and patterns
+- `cheatsheets/runtime/forge-hot-cold-split.md` — Forge Hot Cold Split reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

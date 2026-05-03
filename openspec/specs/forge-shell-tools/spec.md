@@ -50,6 +50,11 @@ The forge image SHALL include sensible default configs for bash, fish, and zsh w
 - **THEN** `z` command is available for smart directory navigation
 
 
+## Sources of Truth
+
+- `cheatsheets/languages/bash.md` — Bash reference and patterns
+- `cheatsheets/runtime/cmd.md` — Cmd reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

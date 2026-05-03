@@ -177,6 +177,11 @@ Tillandsias SHALL distinguish two log tiers per container: INTERNAL (existing pe
 - **AND** agents reading external logs SHALL be able to `grep` or `jq` them without a deserialiser dep
 
 
+## Sources of Truth
+
+- `cheatsheets/runtime/logging-levels.md` — Logging Levels reference and patterns
+- `cheatsheets/runtime/external-logs.md` — External Logs reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

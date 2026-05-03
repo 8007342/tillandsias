@@ -40,6 +40,11 @@ images/chromium/Containerfile.framework
 
 Build is invoked via `scripts/build-image.sh chromium-framework` which resolves the core tag and passes it as a build argument.
 
+## Sources of Truth
+
+- `cheatsheets/runtime/chromium-seccomp.md` — Chromium Seccomp reference and patterns
+- `cheatsheets/runtime/chromium-isolation.md` — Chromium Isolation reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

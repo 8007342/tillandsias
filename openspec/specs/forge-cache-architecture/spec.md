@@ -17,6 +17,11 @@ This spec is created retroactively as part of the traces-audit refactor. It may 
 - A feature whose spec was lost or mishandled
 - A trace annotation that should have been corrected instead
 
+## Sources of Truth
+
+- `cheatsheets/runtime/forge-shared-cache-via-nix.md` — Forge Shared Cache Via Nix reference and patterns
+- `cheatsheets/runtime/forge-hot-cold-split.md` — Forge Hot Cold Split reference and patterns
+
 ## Observability
 
 ```bash

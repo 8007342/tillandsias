@@ -17,6 +17,11 @@ This spec is created retroactively as part of the traces-audit refactor. It may 
 - A feature whose spec was lost or mishandled
 - A trace annotation that should have been corrected instead
 
+## Sources of Truth
+
+- `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+- `cheatsheets/runtime/systemd-socket-activation.md` — Systemd Socket Activation reference and patterns
+
 ## Observability
 
 ```bash

@@ -221,6 +221,11 @@ event" and "gone container".
   synced state
 
 
+## Sources of Truth
+
+- `cheatsheets/utils/git-workflows.md` — Git Workflows reference and patterns
+- `cheatsheets/runtime/unix-socket-ipc.md` — Unix Socket Ipc reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

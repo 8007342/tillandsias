@@ -926,6 +926,11 @@ fn main() {
                     });
                 }
 
+                // @trace spec:ephemeral-guarantee
+                // Clean up ephemeral init logs from /tmp on shutdown.
+                // These are temporary artifacts that must not persist across sessions.
+                cleanup_init_logs();
+
                 singleton::release();
                 let _ = shutdown_tx.blocking_send(());
             }
@@ -1218,4 +1223,53 @@ async fn handle_browser_socket_connection(
     }
 
     Ok(())
+}
+
+/// Clean up ephemeral init logs from /tmp on shutdown.
+///
+/// Removes all Tillandsias init log files from /tmp that were created during
+/// this session. These are temporary artifacts that must not persist across
+/// sessions per the ephemeral-first design. Failures are logged but not fatal.
+///
+/// @trace spec:ephemeral-guarantee
+fn cleanup_init_logs() {
+    use std::fs;
+    use std::path::Path;
+
+    let temp_dir = std::env::temp_dir();
+
+    // Patterns to clean: /tmp/tillandsias-init-*.log and /tmp/tillandsias-*.log
+    // glob is not available; use read_dir + pattern matching instead
+    if let Ok(entries) = fs::read_dir(&temp_dir) {
+        for entry in entries.flatten() {
+            if let Ok(file_name) = entry.file_name().into_string() {
+                let is_init_log = file_name.starts_with("tillandsias-init-")
+                    && file_name.ends_with(".log");
+                let is_generic_log = file_name.starts_with("tillandsias-")
+                    && file_name.ends_with(".log")
+                    && !file_name.contains("init");
+
+                if is_init_log || is_generic_log {
+                    let path = temp_dir.join(&file_name);
+                    match fs::remove_file(&path) {
+                        Ok(()) => {
+                            debug!(
+                                spec = "ephemeral-guarantee",
+                                file = %file_name,
+                                "Cleaned ephemeral init log"
+                            );
+                        }
+                        Err(e) => {
+                            warn!(
+                                spec = "ephemeral-guarantee",
+                                file = %file_name,
+                                error = %e,
+                                "Failed to clean ephemeral init log (non-fatal)"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

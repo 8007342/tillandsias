@@ -146,6 +146,11 @@ Closing a `WebviewWindow` whose label starts with `web-` SHALL close only that w
 - **AND** the Tauri runtime does NOT exit
 - **AND** the tray icon and infrastructure persist
 
+## Sources of Truth
+
+- `cheatsheets/web/websocket.md` — Websocket reference and patterns
+- `cheatsheets/runtime/chromium-headless.md` — Chromium Headless reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

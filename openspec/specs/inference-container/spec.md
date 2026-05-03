@@ -128,6 +128,11 @@ above.
   tier or below
 
 
+## Sources of Truth
+
+- `cheatsheets/runtime/local-inference.md` — Local Inference reference and patterns
+- `cheatsheets/runtime/container-gpu.md` — Container Gpu reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

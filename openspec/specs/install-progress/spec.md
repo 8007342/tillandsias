@@ -38,6 +38,11 @@ The system SHALL provide a reusable `spin` function in `lib-common.sh` that acce
 - **THEN** the spinner displays the message while npm runs
 - **THEN** the function returns npm's exit code
 
+## Sources of Truth
+
+- `cheatsheets/runtime/podman.md` — Podman reference and patterns
+- `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

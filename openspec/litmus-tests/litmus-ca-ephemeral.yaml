@@ -1,0 +1,65 @@
+name: litmus:ca-ephemeral
+spec: certificate-authority
+description: Verify CA certs deleted on tray shutdown, no persistence
+severity: high
+
+preconditions:
+  - tillandsias tray running
+  - proxy container with certificate authority initialized
+  - /tmp/tillandsias-ca-* does not exist initially
+
+critical_path:
+  - step: "baseline check: no CA temp files"
+    command: "find /tmp -maxdepth 1 -type f -name 'tillandsias-ca-*' 2>/dev/null | wc -l"
+    timeout_ms: 3000
+    expected_behavior: "0 files"
+
+  - step: "verify CA files exist during proxy operation"
+    command: "podman exec tillandsias-proxy-* find /tmp -maxdepth 1 -name 'tillandsias-ca-*' 2>/dev/null | wc -l"
+    timeout_ms: 5000
+    expected_behavior: "1 or more CA files"
+
+  - step: "verify CA file is readable in proxy"
+    command: "podman exec tillandsias-proxy-* ls -lah /tmp/tillandsias-ca-* 2>/dev/null | head -1"
+    timeout_ms: 3000
+    expected_behavior: "file with read permissions shown"
+
+  - step: "check CA file size is non-zero"
+    command: "podman exec tillandsias-proxy-* stat -c '%s' /tmp/tillandsias-ca-* 2>/dev/null | head -1"
+    timeout_ms: 3000
+    expected_behavior: "size > 0 bytes"
+
+  - step: "shutdown tillandsias tray"
+    command: "pkill -f tillandsias 2>/dev/null && sleep 3 && echo SHUTDOWN_COMPLETE"
+    timeout_ms: 8000
+    expected_behavior: "shutdown command succeeds"
+
+  - step: "verify CA files deleted after shutdown"
+    command: "find /tmp -maxdepth 1 -type f -name 'tillandsias-ca-*' 2>/dev/null | wc -l"
+    timeout_ms: 3000
+    expected_behavior: "0 files"
+
+gating_points:
+  - signal: "CA certs cleaned on shutdown"
+    success: "no tillandsias-ca-* files remaining"
+    failure: "CA files still present in /tmp"
+    spec_linkage: "certificate-authority"
+
+  - signal: "ephemeral-first CA guarantee"
+    success: "temporary certificates fully removed"
+    failure: "CA certs persist on disk after shutdown"
+
+observability:
+  traces:
+    - "@trace spec:certificate-authority"
+    - "@trace spec:ephemeral-guarantee"
+  expected_log: "CA certificate cleaned on proxy shutdown"
+  log_fields:
+    spec: "certificate-authority"
+    test: "ca-ephemeral"
+    resource_type: "certificates"
+    cleanup_status: "success"
+
+rollback:
+  on_failure: "manually clean CA files and restart tray"
+  command: "rm -f /tmp/tillandsias-ca-*; podman rm -f tillandsias-proxy-* 2>/dev/null; systemctl --user restart tillandsias 2>/dev/null || true"

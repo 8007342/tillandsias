@@ -100,6 +100,10 @@ The OpenCode `config.json` instructions list SHALL include 5 files: methodology.
 - **WHEN** agent starts work in a new project
 - **THEN** agent consults `/home/forge/.config-overlay/opencode/instructions/forge-discovery.md` for first-turn steps
 
+## Sources of Truth
+
+- `cheatsheets/agents/opencode.md` — OpenCode IDE and development patterns
+- `cheatsheets/runtime/forge-container.md` — Forge container runtime and configuration
 
 ## Observability
 

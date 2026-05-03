@@ -367,6 +367,11 @@ both an `acl localhost_subdomain dstdomain .localhost` and a
 3. **Key material is ephemeral**: all CA keys live on tmpfs and die with the session. There is no persistent CA that could be compromised across reboots.
 4. **Image builds are outside the trust boundary**: they fetch packages directly, never through the proxy.
 
+## Sources of Truth
+
+- `cheatsheets/runtime/networking.md` — Networking reference and patterns
+- `cheatsheets/web/http.md` — Http reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

@@ -33,6 +33,11 @@ All executable scripts SHALL be embedded in the compiled binary via `include_str
 - **WHEN** an embedded script finishes executing
 - **THEN** the temp files are deleted (or left for session cleanup if immediate deletion isn't possible)
 
+## Sources of Truth
+
+- `cheatsheets/languages/bash.md` — Bash reference and patterns
+- `cheatsheets/build/cargo.md` — Cargo reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

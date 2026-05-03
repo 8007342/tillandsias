@@ -177,6 +177,11 @@ The container profile system SHALL support GitHub token as a secret kind.
 - **WHEN** `web_profile()` is called
 - **THEN** the profile's secrets list does NOT include `SecretKind::GitHubToken`
 
+## Sources of Truth
+
+- `cheatsheets/runtime/unix-socket-ipc.md` — Unix Socket Ipc reference and patterns
+- `cheatsheets/security/owasp-top-10-2021.md` — Owasp Top 10 2021 reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

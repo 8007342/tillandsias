@@ -92,6 +92,11 @@ Together these form a navigable cheatsheet→code→spec→log graph that lets r
 - **WHEN** an `info!` / `warn!` / `error!` event emits with `accountability = true` because of cheatsheet-derived behaviour
 - **THEN** the event SHALL include both `spec = "<name>"` and `cheatsheet = "<category>/<filename>.md"` as structured fields
 
+## Sources of Truth
+
+- `cheatsheets/observability/cheatsheet-metrics.md` — Metrics and traceability patterns
+- `cheatsheets/agents/openspec.md` — OpenSpec methodology and spec-driven development
+
 ## Observability
 
 Annotations referencing this spec can be found by:

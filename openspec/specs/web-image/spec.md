@@ -73,6 +73,11 @@ The container WORKDIR and httpd document root SHALL be `/var/www`, where the pro
 - **THEN** the project files are served by httpd
 
 
+## Sources of Truth
+
+- `cheatsheets/runtime/podman.md` — Podman reference and patterns
+- `cheatsheets/build/cargo.md` — Cargo reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

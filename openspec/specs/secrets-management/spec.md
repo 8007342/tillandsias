@@ -345,6 +345,11 @@ subject to the same handling rules as the GitHub OAuth token. Concretely:
   field
 
 
+## Sources of Truth
+
+- `cheatsheets/security/owasp-top-10-2021.md` — Owasp Top 10 2021 reference and patterns
+- `cheatsheets/runtime/unix-socket-ipc.md` — Unix Socket Ipc reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

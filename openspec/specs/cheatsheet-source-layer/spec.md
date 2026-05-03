@@ -181,6 +181,11 @@ human-triaged, not auto-resolved.
 - **THEN** only sources with `fetched` date older than 90 days are re-fetched
 
 
+## Sources of Truth
+
+- `cheatsheets/runtime/podman.md` — Podman reference and patterns
+- `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:

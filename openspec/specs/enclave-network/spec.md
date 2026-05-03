@@ -63,6 +63,11 @@ All enclave network operations SHALL be logged to the `--log-enclave` accountabi
 - **WHEN** a container is attached to the enclave network
 - **THEN** the system SHALL log `[enclave] Container attached: <name>` with `@trace spec:enclave-network`
 
+## Sources of Truth
+
+- `cheatsheets/runtime/networking.md` — Networking reference and patterns
+- `cheatsheets/runtime/podman.md` — Podman reference and patterns
+
 ## Observability
 
 Annotations referencing this spec can be found by:
