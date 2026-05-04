@@ -24,12 +24,13 @@ ephemeral_work_problem:
     - At batch completion, agent merges back to main
     - Main's VCS history MUST remain clean: one squashed commit per batch, no noise
     - Full iteration history MUST be queryable (audit trail for debugging)
-    - Concurrent agents working in parallel MUST never conflict (CRDT property)
+    - Concurrent agents working in parallel MUST merge metadata deterministically under declared CRDT preconditions
 
   goal: >
     Ephemeral work produces: (1) clean, squashed main history, (2) queryable metadata
-    of all iterations, (3) full traceability of failure root causes, (4) CRDT-safe
-    concurrent merges (any agent order produces same final result).
+    of all iterations, (3) full traceability of failure root causes, (4) CRDT-style
+    concurrent metadata merges when stable IDs, idempotent merge, and deterministic
+    tie-breakers are respected.
 
 lamport_clock_system:
   description: >
@@ -176,14 +177,16 @@ side_band_metadata_file:
 
 crdt_properties_guarantee_safety:
   description: >
-    The iteration metadata adheres to CRDT properties. This means: agents can work
-    in any order, merge in any order, and the final history is identical. No conflicts.
+    The iteration metadata can adhere to CRDT properties if entries have stable
+    batch IDs, duplicate detection, deterministic ordering, and append-only
+    semantics. This guarantees deterministic metadata convergence, not automatic
+    conflict-free source-code merging.
 
   mathematical_properties:
     commutativity: >
       merge(Agent-A-metadata, Agent-B-metadata) ==
       merge(Agent-B-metadata, Agent-A-metadata)
-      → Agents can merge in any order, same final state.
+      → Metadata can merge in any order, same final metadata state.
 
     associativity: >
       merge(merge(A, B), C) == merge(A, merge(B, C))
@@ -201,7 +204,13 @@ crdt_properties_guarantee_safety:
     algorithm: >
       Merge iterations by sorting on (lamport_clock, agent_id) tuple.
       Iteration order is deterministic regardless of arrival order.
-      Append-only JSONL ensures no data loss.
+      Append-only JSONL plus stable batch IDs ensures no data loss or duplicates.
+
+    preconditions:
+      - every_batch_has_stable_unique_id
+      - duplicate_batch_ids_are_idempotent
+      - merge_rejects_conflicting_payloads_for_same_batch_id
+      - source_code_conflicts_are_resolved_before_metadata_merge_is_claimed_safe
 
     verification: |
       verify_crdt_properties() {
@@ -330,20 +339,21 @@ integration_with_main_versioning:
         Orchestrator creates change manifest, bumps BUILD number
         Version now v0.1.260505.13
         <ephemeral-metadata-log> gets new entry for agent-a's batch
-        → Proof: agent did 47 iterations, converged to v0.1.260505.13
+        → Evidence: agent metadata records 47 iterations before integration into v0.1.260505.13
 
-  queryable_proof: >
+  queryable_evidence: >
     Query <ephemeral-metadata-log> for batch ID:
     select(batch_id == "<change-id>") | .iteration_count
     → Output: 47
-    This proves the agent iterated 47 times before converging.
+    This records that the agent reported 47 iterations before convergence. It is
+    audit evidence, not semantic proof of correctness.
 
 automation_and_orchestration:
   coordinator_role: >
     Orchestrator (agent coordinator system) acts as convergence gate. When all agents
     in a batch complete:
     1. Collect <agent-iteration-state> from all agents
-    2. Merge metadata using CRDT algorithm (order-independent)
+    2. Merge metadata using deterministic CRDT-style algorithm (order-independent under preconditions)
     3. Execute squash merge operation (one per agent)
     4. Append merged metadata to <ephemeral-metadata-log>
     5. Trigger version bump via change integration workflow

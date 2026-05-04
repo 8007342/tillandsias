@@ -83,6 +83,10 @@ litmus_test:
     enforcement:
       - warn_if_below_threshold
       - block_archive_if_critical_path_uncovered
+    risk_tiers:
+      critical_path: "requires positive and negative litmus coverage before archive"
+      user_visible_contract: "requires at least one behavioral litmus test before strict mode"
+      internal_helper: "may inherit coverage from a traced parent module if no external contract exists"
 
   minimality:
     principle: >
@@ -314,8 +318,9 @@ litmus_test:
       there must be a test signal that validates: (1) the requirement succeeds when conditions
       are met, and (2) the requirement fails unambiguously when conditions are NOT met.
     enforcement:
-      - for_each_spec_requirement: "create_both_success_and_failure_litmus_signals"
-      - failure_signal_is_not_optional: "required_to_gate_ci"
+      - for_each_MUST_or_MUST_NOT_requirement: "create_both_success_and_failure_litmus_signals"
+      - critical_path_failure_signal_is_not_optional: "required_to_gate_ci"
+      - non_critical_requirements_may_group_negative_cases_with_rationale
     signal_structure:
       - positive_test: "requirement_met ⟹ success_signal_emitted"
       - negative_test: "requirement_NOT_met ⟹ failure_signal_emitted (unambiguous error)"
@@ -366,6 +371,7 @@ litmus_binding:
   requirements:
     - every_requirement_with_modality_MUST_or_MUST_NOT_has_litmus
     - every_invariant_is_tested_by_at_least_one_signal
+    - implementation_latitude_is_not_a_litmus_failure_if_observable_behavior_matches_spec
   mapping:
     requirement_to_test: required
     invariant_to_signal: required

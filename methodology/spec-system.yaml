@@ -13,9 +13,10 @@ spec_system:
     principle: >
       Monotonic reduction of uncertainty under verifiable constraints.
     definition: >
-      A spec is a constraint system that MUST converge toward a single, unambiguous,
-      executable truth. Every modification MUST reduce ambiguity, preserve validated
-      invariants, and increase verifiability.
+      A spec is a constraint system that MUST converge toward a precise, executable
+      behavioral contract. Every modification MUST reduce behavioral ambiguity,
+      preserve validated invariants unless superseded through the bounded uncertainty
+      exception, and increase or preserve verifiability.
 
   modality:
     allowed:
@@ -88,7 +89,7 @@ spec_system:
         score: integer
         allowed: 0
         detection:
-          - multiple_valid_implementations
+          - multiple_externally_distinct_valid_behaviors
           - undefined_edge_cases
         enforcement:
           - fail_if_score_above_zero
@@ -102,24 +103,56 @@ spec_system:
   drift_control:
     rules:
       - spec_change_must_reduce_ambiguity
-      - spec_change_must_not_remove_validated_invariant
+      - spec_change_must_not_remove_validated_invariant_without_exception
       - spec_change_must_increase_or_preserve_verification_level
     detection:
       - compare_previous_and_current_spec
       - flag_if_uncertainty_increases
     action:
-      - reject_change
+      - reject_change_or_require_bounded_uncertainty_exception
 
   ambiguity_detection:
     rule: >
-      If two or more distinct implementations satisfy all requirements and litmus tests,
-      the spec is ambiguous.
+      If two or more externally distinct behaviors satisfy all requirements and litmus
+      tests, and the difference matters to users, safety, persistence, interoperability,
+      or downstream contracts, the spec is behaviorally ambiguous.
     action:
       - block_spec_activation
       - require_additional_invariants
+    taxonomy:
+      behavioral_ambiguity: >
+        Observable outcomes differ in a contract-relevant way while all tests still pass.
+      implementation_latitude: >
+        Internal algorithms, data structures, or performance strategies differ while
+        preserving the same externally specified behavior. This is allowed.
+      missing_edge_case_contract: >
+        Inputs, failures, ordering, timeouts, or environment assumptions are not specified
+        well enough to build a falsifiable litmus signal.
+    non_ambiguity: >
+      Multiple correct implementations are acceptable when they produce equivalent
+      observable behavior under the spec's declared contract and evidence scope.
+
+  bounded_uncertainty_exception:
+    description: >
+      A controlled path for cases where new evidence shows that a previous invariant,
+      litmus test, or requirement was wrong or incomplete. This path prevents the
+      monotonicity rule from forcing retention of false certainty.
+    required_fields:
+      issue_or_rfc: string
+      affected_specs: list
+      prior_invariant_or_requirement: string
+      new_evidence_bundle: string
+      risk_owner: string
+      migration_window: string
+      rollback_plan: string
+    rules:
+      - exception_is_temporary
+      - old_truth_is_marked_superseded_not_silently_deleted
+      - verification_level_may_drop_only_with_explicit_rationale
+      - exit_requires_updated_litmus_trace_and_cheatsheet_bindings
 
   crdt_properties:
-    type: "compacting_crdt"
+    type: "semantic_merge_with_crdt_preconditions"
     merge:
       strategy: "semantic_merge"
       rules:
@@ -132,6 +165,7 @@ spec_system:
     constraints:
       - no_unbounded_growth
       - no_loss_of_verified_truth
+      - crdt_claim_requires_stable_ids_tombstones_deterministic_join_and_property_tests
 
   temporal_model:
     history_source: "git"

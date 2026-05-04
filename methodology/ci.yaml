@@ -100,8 +100,12 @@ rust_annotations:
       // fn set_stage(&self, stage: Stage) { ... }
 
   constraints:
-    - every_public_fn_requires_trace:
-        reason: "Public functions are part of the contract; they must reference a spec"
+    - public_contract_boundary_requires_trace:
+        reason: >
+          Public contract boundaries, external I/O, persistence, security-sensitive
+          behavior, and spec-critical functions must reference a spec. Low-risk helper
+          functions may inherit a parent module trace when they expose no independent
+          contract.
     - no_implicit_semantic_resolution:
         reason: "Ambiguous function purposes must use #[grounded_by]"
 
@@ -112,7 +116,7 @@ ci_validator:
 
   responsibilities:
     - validate_all_annotations: "Check syntax, spec existence, cheatsheet presence"
-    - ensure_every_fn_has_trace: "No public function without #[trace]"
+    - ensure_contract_boundaries_have_trace: "No public contract boundary without #[trace] or explicit inherited trace"
     - detect_orphan_specs: "Specs with no code annotations"
     - enforce_obsolete_lifecycle: "Expired #[obsolete] annotations → hard error"
     - validate_spec_graph: "No cycles in spec replacement chain"
@@ -157,7 +161,7 @@ runtime_tracing:
       - "utils/github-oauth.md#token-storage"
       - "utils/secret-rotation.md#ephemeral-lifetime"
     cheatsheet_misses:
-      - "utils/github-tokens.md#legacy-pat" (expected but not found)
+      - "utils/github-tokens.md#legacy-pat (expected but not found)"
     verification_level: "L2"
 
   purpose:

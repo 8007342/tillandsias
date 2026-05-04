@@ -20,15 +20,17 @@ philosophy:
     - spec_stability_required: true
     - verification_claims_must_be_falsifiable: true
     - convergence_requires_stability: true
+    - evidence_is_not_proof: true
 
   global_invariants:
-    - no_ambiguity_allowed
+    - no_behavioral_ambiguity_allowed
     - all_requirements_must_be_testable
     - all_specs_must_bind_to_litmus
     - all_specs_must_bind_to_trace
-    - spec_changes_must_reduce_uncertainty
-    - validated_invariants_are_immutable
+    - spec_changes_must_reduce_uncertainty_or_enter_bounded_exception
+    - validated_invariants_are_stable_until_superseded_by_stronger_evidence
     - spec_is_source_of_truth_not_code
+    - convergence_claims_must_cite_evidence_bundle
 
 layers:
   - name: spec
@@ -55,9 +57,30 @@ layers:
     description: >
       Signals derived from execution (hits, misses, verification levels).
 
+  - name: evidence_bundle
+    description: >
+      Queryable set of spec versions, artifact hashes, commits, litmus runs,
+      trace coverage, environment profile, and dependency locks that supports a
+      convergence claim without pretending to prove absolute correctness.
+
   - name: ci
     description: >
       Global validator enforcing invariants, detecting drift, and applying selection pressure.
+
+evidence_boundaries:
+  principle: >
+    Traceability, version matching, litmus success, and CRDT metadata convergence
+    are evidence. They are not proof of semantic correctness by themselves.
+
+  claim_strength:
+    provenance: "artifact, spec, and commit can be linked"
+    structural: "schemas, annotations, bindings, and dependency locks are valid"
+    behavioral: "litmus tests exercise the claimed behavior and pass"
+    operational: "runtime traces show the behavior remains stable under observed conditions"
+
+  rule: >
+    A convergence claim MUST name its highest supported claim strength and cite the
+    evidence bundle that supports it.
 
 pitfalls:
   - cheatsheet_entropy_growth_without_bounds:
@@ -68,9 +91,18 @@ pitfalls:
 
   - spec_ambiguity_causing_oscillation:
       description: >
-        Ambiguous specs lead to multiple valid implementations, causing code to
-        oscillate between implementations during refactoring.
-      mitigation: Ambiguity score must be 0 before spec activation.
+        Behaviorally ambiguous specs permit externally meaningful differences
+        that tests cannot distinguish, causing code to oscillate during refactoring.
+      mitigation: Behavioral ambiguity score must be 0 before spec activation.
+
+  - implementation_freedom_misclassified_as_ambiguity:
+      description: >
+        A spec can be precise while allowing multiple internal implementations.
+        Treating every implementation difference as ambiguity over-constrains the
+        system and blocks useful optimization.
+      mitigation: >
+        Distinguish behavioral ambiguity from acceptable implementation latitude.
+        Only observable differences that matter to the contract require new invariants.
 
   - multi_api_semantic_collision_without_binding:
       description: >
@@ -117,9 +149,30 @@ pitfalls:
         Bind cheatsheets to specs. Remove entries with no spec binding.
         Use spec hit/miss signals to guide expansion/compaction.
 
+bounded_uncertainty_exception:
+  purpose: >
+    Discovery can legitimately reveal that a validated invariant was incomplete,
+    a spec was too narrow, or a litmus test encoded a false assumption. The system
+    must allow temporary uncertainty increases without normalizing drift.
+
+  gates:
+    - exception_requires_issue_or_rfc
+    - affected_specs_enter_quarantine_or_draft_state
+    - old_invariant_remains_visible_until_replaced
+    - replacement_must_cite_stronger_evidence_bundle
+    - migration_window_and_owner_are_required
+
+  exit_criteria:
+    - new_spec_has_behavioral_ambiguity_zero
+    - litmus_bindings_updated_or_retired
+    - traces_and_evidence_bundle_rebuilt
+    - exception_record_closed_with_root_cause
+
 final_assertion: >
   The system converges only if: (1) knowledge remains compressed and canonical,
   (2) specs remain stable and machine-verifiable, (3) every claim made in code
   is continuously validated against observed reality, and (4) litmus tests
   reproducibly verify that code satisfies its governing specs. Convergence is
-  monotonic: once achieved, divergence is immediately detectable and reversible.
+  monotonic under normal operation: once achieved, divergence must become
+  detectable and recoverable. When learning invalidates prior assumptions, the
+  bounded uncertainty exception records and gates the temporary loss of certainty.

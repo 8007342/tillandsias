@@ -116,6 +116,33 @@ verification:
       - upward_pressure_on_failure
       - downward_pressure_on_stability
 
+  evidence_bundle:
+    description: >
+      Evidence bundles collect the concrete artifacts behind convergence claims.
+      They prevent version numbers, annotations, or passing tests from being treated
+      as standalone proof.
+
+    required_fields:
+      - spec_ids_and_versions
+      - spec_hashes
+      - artifact_version_and_hash
+      - commit_hash
+      - dependency_lock_hash
+      - environment_profile
+      - litmus_run_ids_and_results
+      - trace_coverage_summary
+      - ci_run_id
+
+    claim_strength:
+      provenance: "artifact, spec, and commit can be linked"
+      structural: "schemas, annotations, bindings, and dependency locks are valid"
+      behavioral: "litmus tests exercise the claimed behavior and pass"
+      operational: "runtime traces remain stable in declared environments"
+
+    rule: >
+      A release, annotation, or convergence report MUST cite the evidence bundle and
+      its highest supported claim strength.
+
   litmus_verification_integration:
     description: >
       Litmus tests are the bridge between spec S-levels and code L-levels.

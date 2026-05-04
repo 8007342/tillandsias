@@ -6,7 +6,8 @@
 #
 # Git history: This file supersedes prior monolithic YAML files that contained
 #              philosophy, spec system, verification levels, litmus tests, cheatsheets,
-#              convergence engine, and CI validation in a single file.
+#              convergence engine, CI validation, versioning, and between-commit
+#              work discipline in a single file.
 #
 # ╔════════════════════════════════════════════════════════════════════════════════╗
 # ║ BOOTSTRAP (for agents reading this for the first time)                         ║
@@ -64,7 +65,7 @@ methodology:
       file: methodology/philosophy.yaml
       description: >
         Core principles, system model, invariants, layers (spec, cheatsheet, code,
-        trace, litmus, metrics, ci), pitfalls, and final assertion.
+        trace, litmus, metrics, ci), evidence boundaries, pitfalls, and final assertion.
       lines: ~100
 
     spec_system:
@@ -72,7 +73,8 @@ methodology:
       description: >
         Spec structure, lifecycle (draft → active → deprecated → obsolete), modality
         (MUST/SHOULD/MAY), versioning rules, id format, schema, drift control,
-        ambiguity detection, CRDT properties, temporal model, constraints.
+        ambiguity taxonomy, bounded uncertainty exception path, temporal model,
+        constraints.
       lines: ~220
 
     verification:
@@ -80,7 +82,7 @@ methodology:
       description: >
         Two complementary verification level systems: S0–S3 (spec's own validity),
         L0–L3 (code annotation's evidence level). Reconciles both into a single
-        view. Includes verification integration rules for litmus binding.
+        view and defines evidence bundles that support convergence claims.
       lines: ~80
 
     litmus:
@@ -95,9 +97,9 @@ methodology:
     cheatsheets:
       file: methodology/cheatsheets.yaml
       description: >
-        Cheatsheet CRDT model: structure, operations (expand, compact, delete, protect),
-        scoring function, compaction rules, cache model (hit/miss), eviction policies.
-        Includes cheatsheet binding requirements from spec-system.
+        Cheatsheet merge model: structure, operations (expand, compact, delete, protect),
+        scoring function, compaction rules, cache model (hit/miss), eviction policies,
+        and conditions required before compacted knowledge can be called CRDT-safe.
       lines: ~120
 
     convergence:
@@ -120,8 +122,8 @@ methodology:
       file: methodology/versioning.yaml
       description: >
         Version format (CalVer + build counter + hash), semantic intent, branch discipline
-        (main-only bumps), CRDT merge driver (LUB for conflicts), reconvergence rules.
-        Proves artifact convergence to spec via version matching.
+        (main-only bumps), LUB merge driver for conflicts, reconvergence rules.
+        Treats version matching as an index into the convergence evidence bundle.
       lines: ~380
 
     between_commits_work_discipline:
@@ -129,7 +131,8 @@ methodology:
       description: >
         Ephemeral agent iteration versioning: Lamport clocks (local temporal ordering),
         squash merge (clean history), side-band metadata file (queryable audit trail).
-        CRDT-safe concurrent merges. Failure recovery strategies.
+        Deterministic metadata merging under explicit CRDT preconditions. Failure recovery
+        strategies.
       lines: ~320
 
   supersedes:
@@ -165,14 +168,15 @@ methodology:
     - name: no_duplicate_content
       description: >
         Each concept (convergence_engine, litmus_test, spec_lifecycle, etc.) appears
-        in exactly one component file. Git grep should find unique locations.
+        in one primary component file. Secondary references are allowed only when they
+        point back to the owning component instead of redefining the concept.
       status: "Enforced during split"
 
   verification:
-    step_1: "All 7 component files exist: ls methodology/*.yaml | wc -l → 7"
+    step_1: "All 9 component files exist: ls methodology/*.yaml | wc -l → 9"
     step_2: "Root index references all components: grep 'file:' methodology.yaml"
-    step_3: "No duplicate content: for each concept, grep should appear in exactly one file"
-    step_4: "Tombstones in place: grep '@tombstone' old-files.yaml"
+    step_3: "No duplicate ownership: each concept has one primary component and sparse references"
+    step_4: "Tombstones in place: grep '@tombstone' superseded files"
     step_5: "YAML is well-formed: yq eval methodology.yaml > /dev/null"
 
   navigation_index:
@@ -181,10 +185,10 @@ methodology:
       how_do_specs_work: "spec-system.yaml → spec lifecycle, modality, schema"
       how_are_specs_verified: "verification.yaml → S0–S3 levels"
       how_is_code_verified_against_specs: "litmus.yaml → litmus test system"
-      how_do_cheatsheets_help: "cheatsheets.yaml → CRDT model, cache operations"
+      how_do_cheatsheets_help: "cheatsheets.yaml → semantic cache model, cache operations"
       how_do_i_know_when_code_converges: "convergence.yaml → objective, fitness function"
       what_breaks_builds: "ci.yaml → validator failure conditions"
-      how_does_versioning_prove_convergence: "versioning.yaml → CalVer format, branch discipline, LUB merge"
+      how_does_versioning_support_convergence: "versioning.yaml → evidence bundles, CalVer format, branch discipline, LUB merge"
       how_do_agents_version_ephemeral_work: "between-commits-work-discipline.yaml → Lamport clocks, squash, metadata"
 
     by_artifact:

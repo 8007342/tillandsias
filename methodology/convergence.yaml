@@ -44,7 +44,8 @@ convergence_engine:
     - flakiness_penalty
 
   rules:
-    - Convergence is monotonic: once achieved, divergence must be detectable
+    - Convergence is monotonic under normal operation: once achieved, divergence must be detectable
+    - Temporary uncertainty increases require the bounded uncertainty exception
     - Selection pressure favors: passing tests, reduced drift, increased stability
     - Anti-pattern: Gaming metrics by hardcoding success
     - Anti-pattern: Ignoring temporal stability (flaky tests mask real bugs)
@@ -58,8 +59,11 @@ drift_control:
     - spec_change_must_reduce_ambiguity:
         reason: "Every spec change must move toward clearer intent, not fuzzier"
 
-    - spec_change_must_not_remove_validated_invariant:
-        reason: "Invariants are immutable once verified. Removing them breaks the contract"
+    - spec_change_must_not_remove_validated_invariant_without_exception:
+        reason: >
+          Invariants are stable contracts once verified. If new evidence invalidates
+          one, it must be superseded through the bounded uncertainty exception rather
+          than silently removed.
 
     - spec_change_must_increase_or_preserve_verification_level:
         reason: "A spec update should add validation, never weaken it"
@@ -73,8 +77,10 @@ drift_control:
 
 ambiguity_detection:
   rule: >
-    If two or more distinct implementations satisfy all requirements and litmus tests,
-    the spec is ambiguous. Ambiguity is the enemy of convergence.
+    If two or more externally distinct behaviors satisfy all requirements and litmus
+    tests, and the difference matters to users or downstream contracts, the spec is
+    behaviorally ambiguous. Implementation latitude is allowed when observable
+    behavior remains equivalent.
 
   action:
     - block_spec_activation: "Spec cannot move from draft to active if ambiguous"
@@ -82,9 +88,10 @@ ambiguity_detection:
         "Add more invariants to the spec until only one implementation remains valid"
 
   detection_mechanism:
-    - Run multiple independent implementations against the same litmus tests
-    - If two implementations both pass all tests, spec is ambiguous
-    - Flag the spec and require additional constraints
+    - Run behaviorally distinct candidates against the same litmus tests
+    - If contract-relevant outcomes differ while all tests pass, spec is ambiguous
+    - If only internal implementation differs, record permitted latitude
+    - Flag behaviorally ambiguous specs and require additional constraints
 
 metrics:
   description: >
@@ -93,7 +100,8 @@ metrics:
 
   tracked:
     - ambiguity_score: >
-        "0 = spec is unambiguous, >0 = multiple implementations possible"
+        "0 = no known contract-relevant behavioral ambiguity, >0 = observable
+        uncertainty remains"
     - litmus_pass_rate: >
         "Percentage of critical-path litmus tests passing"
     - invariant_stability: >
@@ -105,6 +113,33 @@ metrics:
     - decreasing_ambiguity: "Ambiguity score trends toward 0"
     - increasing_verification: "More specs achieving S2+ status"
     - stable_invariants: "Invariants remain true over repeated test runs"
+
+evidence_bundle:
+  description: >
+    A convergence claim is supported by a queryable evidence bundle. The bundle
+    links provenance, structure, behavior, and operation without claiming absolute
+    proof of correctness.
+
+  required_fields:
+    - spec_ids_and_versions
+    - spec_hashes
+    - artifact_version_and_hash
+    - commit_hash
+    - dependency_lock_hash
+    - environment_profile
+    - litmus_run_ids_and_results
+    - trace_coverage_summary
+    - ci_run_id
+
+  claim_levels:
+    provenance: "artifact, spec, and commit are linked"
+    structural: "schemas, annotations, bindings, and locks validate"
+    behavioral: "critical litmus tests pass and negative paths are covered"
+    operational: "runtime traces show stable behavior in declared environments"
+
+  rule: >
+    CI and release notes MUST report the highest claim level supported by the
+    evidence bundle. No version string alone may be reported as proof of convergence.
 
   monitoring:
     - CI emits metrics after every test run

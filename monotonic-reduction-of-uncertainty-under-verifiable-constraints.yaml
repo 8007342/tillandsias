@@ -4,8 +4,9 @@
 # All content is preserved in methodology.yaml and methodology/*.yaml
 #
 # Reason: The monolithic 701-line YAML became difficult to navigate and update.
-#         Split into 7 components (philosophy, spec-system, verification, litmus,
-#         cheatsheets, convergence, ci) with root index methodology.yaml.
+#         Split into 9 components (philosophy, spec-system, verification, litmus,
+#         cheatsheets, convergence, ci, versioning, between-commits work discipline)
+#         with root index methodology.yaml.
 #
 # Safe to delete after: 2026-08-03 (three releases: v0.3.X, v0.3.Y, v0.3.Z)
 #
@@ -16,4 +17,4 @@
 #   - For CI validation: see methodology/ci.yaml
 #
 # Previous version: v0.2 (701 lines)
-# Archived in git history at: commit <will-be-added-on-merge>
+# Archived in git history before the methodology component split.

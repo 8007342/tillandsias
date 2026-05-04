@@ -89,12 +89,21 @@ cheatsheet_operations:
 
 crdt_model:
   description: >
-    Cheatsheets are modeled as a Compacting CRDT (Conflict-free Replicated Data Type).
-    This enables automatic merging of updates and automatic compaction without data loss.
+    Cheatsheets use a semantic merge model. They may be treated as CRDT-safe only
+    when their merge and compaction rules satisfy the listed preconditions. Lossy
+    compression by itself is not a CRDT.
 
-  type: "compacting_crdt"
+  type: "semantic_cache_with_crdt_preconditions"
 
-  merge_rule: "merge = union + normalization + compression"
+  merge_rule: "merge = stable_id_union + tombstone_resolution + deterministic_normalization + verified_compression"
+
+  crdt_preconditions:
+    - stable_entry_ids
+    - tombstones_for_deletions
+    - deterministic_tie_breakers
+    - compaction_is_idempotent
+    - compaction_preserves_bound_spec_distinctions
+    - property_tests_for_commutativity_associativity_idempotence
 
   constraints:
     - must_not_grow_unbounded: "Size limit enforced; evict low-score entries"
@@ -103,8 +112,8 @@ crdt_model:
 
   anti_pattern:
     - grow_only_crdt_forbidden: >
-        "A CRDT that never shrinks defeats the purpose of a cache.
-        Automatic compaction is mandatory."
+        "Calling a lossy semantic cache a CRDT without stable IDs, tombstones,
+        deterministic merge, and property tests creates false convergence claims."
 
 cache_model:
   definitions:
