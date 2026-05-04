@@ -45,6 +45,35 @@ else
 fi
 
 # ===========================================================================
+# Step 1b: Certificate Authority Generation
+# ===========================================================================
+# @trace spec:transparent-https-caching, spec:proxy-container
+# Generate ephemeral 30-day CA cert for entire enclave stack.
+# Stored at /tmp/tillandsias-ca/ so it persists across container restarts
+# within a session, but is wiped on host reboot (ephemeral-first security).
+log_step "Setting up transparent HTTPS certificate authority..."
+
+CERTS_DIR="/tmp/tillandsias-ca"
+mkdir -p "$CERTS_DIR"
+
+# Idempotent: only generate if cert doesn't exist or is older than 25 days
+if [ ! -f "$CERTS_DIR/intermediate.crt" ] || \
+   [ $(find "$CERTS_DIR/intermediate.crt" -mtime +25 2>/dev/null | wc -l) -gt 0 ]; then
+    log_info "Generating new 30-day CA certificate for enclave..."
+    openssl req -x509 -newkey rsa:2048 -keyout "$CERTS_DIR/intermediate.key" \
+        -out "$CERTS_DIR/intermediate.crt" -days 30 -nodes \
+        -subj "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=Tillandsias CA" 2>/dev/null || {
+        log_error "Failed to generate CA certificates"
+        exit 1
+    }
+    chmod 644 "$CERTS_DIR/intermediate.crt"
+    chmod 600 "$CERTS_DIR/intermediate.key"
+    log_info "CA certificate generated: $CERTS_DIR/intermediate.crt (30 days)"
+else
+    log_info "Using existing CA certificate: $CERTS_DIR/intermediate.crt"
+fi
+
+# ===========================================================================
 # Step 2: Proxy Container (critical path)
 # ===========================================================================
 log_step "Starting proxy container..."
@@ -57,18 +86,6 @@ if [ -z "$PROXY_IMAGE" ]; then
 fi
 
 podman rm -f "$PROXY_CONTAINER" 2>/dev/null || true
-
-# Create temporary directory for CA certs
-CERTS_DIR=$(mktemp -d)
-trap "rm -rf $CERTS_DIR" EXIT
-
-# Generate self-signed CA for testing (in real flow, CA is from tray)
-openssl req -x509 -newkey rsa:2048 -keyout "$CERTS_DIR/intermediate.key" \
-    -out "$CERTS_DIR/intermediate.crt" -days 30 -nodes \
-    -subj "/CN=tillandsias-proxy" 2>/dev/null || {
-    log_error "Failed to generate CA certificates"
-    exit 1
-}
 
 if ! podman run \
     --detach \
@@ -134,6 +151,7 @@ else
         --read-only \
         --env "PROJECT=$PROJECT_NAME" \
         --env "GIT_TRACE=1" \
+        --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
         "$GIT_IMAGE" \
     /usr/bin/git daemon --verbose --listen=0.0.0.0 --base-path=/var/lib/git 2>&1 | tee /tmp/git-start.log; then
     log_error "Failed to start git mirror container"
@@ -165,6 +183,7 @@ podman run \
     --env "OLLAMA_DEBUG=1" \
     --env "OLLAMA_KEEP_ALIVE=24h" \
     -v "$HOME/.cache/tillandsias/models:/root/.ollama/models:rw" \
+    --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
     tillandsias-inference:latest \
     /usr/bin/ollama serve &>/tmp/inference-start.log &
 
@@ -199,6 +218,7 @@ if ! podman run \
     --env "USER=forge" \
     --env "PROJECT=$PROJECT_NAME" \
     -v "$PROJECT_PATH:/home/forge/src:rw" \
+    --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
     tillandsias-forge:latest \
     /bin/bash; then
     log_error "Forge container exited with error"

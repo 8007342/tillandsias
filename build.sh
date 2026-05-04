@@ -118,6 +118,65 @@ EOF
 done
 
 # ---------------------------------------------------------------------------
+# Transparent HTTPS caching setup (dev proxy)
+# ---------------------------------------------------------------------------
+# @trace spec:transparent-https-caching
+ensure_dev_cache() {
+    # Skip if explicitly disabled
+    [[ "${TILLANDSIAS_NO_PROXY:-}" == "1" ]] && return 0
+
+    # Skip if dev proxy image hasn't been built yet (avoid blocking fresh install)
+    if ! podman images --format "{{.Repository}}" 2>/dev/null | grep -q "tillandsias-proxy"; then
+        return 0
+    fi
+
+    # Ensure CA cert exists
+    local ca_cert="$CACHE_DIR/ca-cert.pem"
+    local ca_key="$CACHE_DIR/ca-key.pem"
+    if [[ ! -f "$ca_cert" ]]; then
+        mkdir -p "$CACHE_DIR"
+        openssl req -x509 -newkey rsa:2048 -keyout "$ca_key" -out "$ca_cert" \
+            -days 3650 -nodes -subj "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=Tillandsias CA" 2>/dev/null || return 0
+    fi
+
+    # Ensure dev proxy cache dir exists
+    mkdir -p "$CACHE_DIR/dev-proxy-cache"
+
+    # Start dev proxy if not already running
+    if ! podman inspect tillandsias-dev-proxy &>/dev/null 2>&1; then
+        local proxy_image
+        proxy_image=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep tillandsias-proxy | head -1)
+        if [[ -z "$proxy_image" ]]; then
+            return 0
+        fi
+
+        podman run \
+            --detach \
+            --rm \
+            --name tillandsias-dev-proxy \
+            --publish "127.0.0.1:3129:3129" \
+            --volume "$CACHE_DIR/dev-proxy-cache:/var/spool/squid:rw,Z" \
+            --volume "$ca_cert:/etc/squid/certs/intermediate.crt:ro,Z" \
+            --volume "$ca_key:/etc/squid/certs/intermediate.key:ro,Z" \
+            "$proxy_image" >/dev/null 2>&1 || return 0
+
+        sleep 1  # Give proxy time to start
+    fi
+
+    # Export proxy env vars for toolbox and AppImage builder
+    export HTTP_PROXY="http://127.0.0.1:3129"
+    export HTTPS_PROXY="http://127.0.0.1:3129"
+    export http_proxy="http://127.0.0.1:3129"
+    export https_proxy="http://127.0.0.1:3129"
+    export CARGO_HTTP_PROXY="http://127.0.0.1:3129"
+    export CARGO_HTTP_CAINFO="$ca_cert"
+
+    _info "Dev proxy active: $HTTP_PROXY"
+}
+
+ensure_dev_cache
+
+# ---------------------------------------------------------------------------
 # Standalone operations (don't need toolbox)
 # ---------------------------------------------------------------------------
 
@@ -236,19 +295,45 @@ build_appimage() {
     mkdir -p "$cache_base"/apt-lists
 
     # Run podman in background so we can capture PID for signal handling
-    podman run --rm \
-        --device /dev/fuse \
-        --cap-add SYS_ADMIN \
-        -v "$SCRIPT_DIR:/src:ro,Z" \
-        -v "$cache_base/cargo-registry:/root/.cargo/registry:rw,Z" \
-        -v "$cache_base/cargo-bin:/root/.cargo/bin:rw,Z" \
-        -v "$cache_base/rustup:/root/.rustup:rw,Z" \
-        -v "$cache_base/apt:/var/cache/apt:rw,Z" \
-        -v "$cache_base/apt-lists:/var/lib/apt/lists:rw,Z" \
-        -v "$output_dir:/output:rw,Z" \
+    local podman_args=(
+        --rm
+        --device /dev/fuse
+        --cap-add SYS_ADMIN
+        -v "$SCRIPT_DIR:/src:ro,Z"
+        -v "$cache_base/cargo-registry:/root/.cargo/registry:rw,Z"
+        -v "$cache_base/cargo-bin:/root/.cargo/bin:rw,Z"
+        -v "$cache_base/rustup:/root/.rustup:rw,Z"
+        -v "$cache_base/apt:/var/cache/apt:rw,Z"
+        -v "$cache_base/apt-lists:/var/lib/apt/lists:rw,Z"
+        -v "$output_dir:/output:rw,Z"
+    )
+
+    # Add proxy and CA cert if dev proxy is running
+    if [[ -n "${HTTP_PROXY:-}" ]]; then
+        local ca_cert="$CACHE_DIR/ca-cert.pem"
+        podman_args+=(
+            --env "HTTP_PROXY=http://host.containers.internal:3129"
+            --env "HTTPS_PROXY=http://host.containers.internal:3129"
+            --env "http_proxy=http://host.containers.internal:3129"
+            --env "https_proxy=http://host.containers.internal:3129"
+            --env "CARGO_HTTP_PROXY=http://host.containers.internal:3129"
+            --env "CARGO_HTTP_CAINFO=/tmp/tillandsias-ca.crt"
+            -v "$ca_cert:/tmp/tillandsias-ca.crt:ro,Z"
+        )
+    fi
+
+    podman run "${podman_args[@]}" \
         ubuntu:22.04 \
         bash -euo pipefail -c '
 set -euo pipefail
+
+# ── Certificate Authority injection ──────────────────────────
+# @trace spec:transparent-https-caching
+if [ -f /tmp/tillandsias-ca.crt ]; then
+    mkdir -p /usr/local/share/ca-certificates
+    cp /tmp/tillandsias-ca.crt /usr/local/share/ca-certificates/tillandsias.crt
+    update-ca-certificates --fresh 2>/dev/null || true
+fi
 
 # System deps — apt cache and lists are persistent across builds (RW mounts)
 # apt-get update will be skipped if real package metadata exists and is recent

@@ -8,6 +8,18 @@
 
 set -euo pipefail
 
+# ── Certificate Authority injection ──────────────────────────
+# @trace spec:transparent-https-caching
+# If the enclave CA cert is mounted at /etc/tillandsias/ca.crt (from orchestrate-enclave.sh),
+# inject it into the system trust store. This allows cargo, npm, rustup, curl, and all other
+# tools to transparently trust the tillandsias-proxy's generated certificates for HTTPS caching.
+# This runs silently if no cert is present (e.g., in dev builds without enclave).
+if [ -f /etc/tillandsias/ca.crt ]; then
+    mkdir -p /usr/local/share/ca-certificates/
+    cp /etc/tillandsias/ca.crt /usr/local/share/ca-certificates/tillandsias.crt 2>/dev/null || true
+    update-ca-certificates 2>/dev/null || true
+fi
+
 # Ensure all files created by this script and any process it execs are
 # user-writable. Without this, tools running inside the container may
 # create files on bind-mounted directories with restrictive modes.

@@ -6,6 +6,17 @@ set -e
 # DISTRO: Fedora Minimal 43 — has curl (NOT wget), bash, pciutils.
 #         Rust health checks use curl, not wget (see handlers.rs).
 
+# ── Certificate Authority injection ──────────────────────────
+# @trace spec:transparent-https-caching
+# If the enclave CA cert is mounted at /etc/tillandsias/ca.crt (from orchestrate-enclave.sh),
+# inject it into the system trust store so ollama and curl can use the tillandsias-proxy
+# for transparent HTTPS caching.
+if [ -f /etc/tillandsias/ca.crt ]; then
+    mkdir -p /usr/local/share/ca-certificates/
+    cp /etc/tillandsias/ca.crt /usr/local/share/ca-certificates/tillandsias.crt 2>/dev/null || true
+    update-ca-certificates 2>/dev/null || true
+fi
+
 # Bind to all interfaces — reachable from other containers in the enclave.
 export OLLAMA_HOST=0.0.0.0:11434
 
