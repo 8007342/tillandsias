@@ -202,6 +202,11 @@ build_appimage() {
     mkdir -p "$output_dir"
     mkdir -p "$cache_base"/{cargo-registry,cargo-bin,rustup,apt}
 
+    # Clean stale apt locks from previous interrupted builds
+    # @trace spec:appimage-build-pipeline
+    rm -f "$cache_base/apt/archives/lock" 2>/dev/null || true
+    rm -rf "$cache_base/apt/partial" 2>/dev/null || true
+
     # Remove old AppImages — avoids "Text file busy" if one is still running.
     # On Linux, rm unlinks the file but running processes keep their fd.
     rm -f "$output_dir"/*.AppImage 2>/dev/null || true
