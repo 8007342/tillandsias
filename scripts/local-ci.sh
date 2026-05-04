@@ -143,8 +143,12 @@ fi
 
 log_section "Rust Code Quality (fmt, clippy, tests)"
 
+# @trace spec:dev-build, spec:ci-release
+# Run cargo commands in toolbox where all system deps are available
+TOOLBOX_NAME="tillandsias"
+
 # Formatting check
-if cargo fmt --check --all 2>&1 | tee /tmp/fmt-check.log; then
+if toolbox run -c "$TOOLBOX_NAME" cargo fmt --check --all 2>&1 | tee /tmp/fmt-check.log; then
     log_pass "Rust formatting valid"
 else
     log_fail_tracked "rust-formatting" "Rust code not formatted: run 'cargo fmt --all' (see /tmp/fmt-check.log)"
@@ -152,7 +156,7 @@ else
 fi
 
 # Clippy check
-if cargo clippy --workspace -- -D warnings 2>&1 | tee /tmp/clippy-check.log; then
+if toolbox run -c "$TOOLBOX_NAME" cargo clippy --workspace -- -D warnings 2>&1 | tee /tmp/clippy-check.log; then
     log_pass "Clippy checks pass (no warnings)"
 else
     log_fail_tracked "rust-clippy" "Clippy warnings found: run 'cargo clippy --workspace' to see details (see /tmp/clippy-check.log)"
@@ -161,7 +165,7 @@ fi
 
 # Tests - run lib tests only (integration tests require GTK headers in toolbox)
 # @trace spec:testing
-if cargo test --workspace --lib 2>&1 | tee /tmp/test-check.log; then
+if toolbox run -c "$TOOLBOX_NAME" cargo test --workspace --lib 2>&1 | tee /tmp/test-check.log; then
     log_pass "All unit tests pass (integration tests require toolbox)"
 else
     log_fail_tracked "rust-tests" "Test failures detected: run 'cargo test --workspace --lib' to see details (see /tmp/test-check.log)"
