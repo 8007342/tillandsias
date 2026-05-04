@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-# pre-commit-openspec.sh — Non-blocking OpenSpec trace warnings
+# pre-commit-openspec.sh — Non-blocking OpenSpec trace warnings (default), CI-mode enforcement
 # @trace spec:spec-traceability, spec:cheatsheet-source-layer
 #
-# PHILOSOPHY: This hook ALWAYS exits 0. It NEVER blocks a commit.
+# PHILOSOPHY: This hook ALWAYS exits 0 by default. It NEVER blocks commits.
 #
 # OpenSpec follows CRDT-inspired monotonic convergence: specs and code
 # drift apart naturally, and warnings nudge them back together over time.
 # A warning today becomes a fix next week — or stays as a known gap.
 # Blocking commits would break flow and punish incremental progress.
+#
+# CI mode (--ci-mode): In CI/release workflows, exit 1 on ANY warning.
+# This ensures releases only happen when spec-code alignment is verified.
 #
 # What it checks:
 #   1. Ghost traces — @trace referencing non-existent specs
@@ -15,14 +18,18 @@
 #   3. Stale changes — active changes older than 7 days
 #   4. Cheatsheet source binding — INDEX.json ↔ local: path ↔ file consistency
 #      (via scripts/check-cheatsheet-sources.sh --no-sha)
-#      ERRORS from the binding check are printed as warnings (never blocking).
+#      ERRORS from the binding check are printed as warnings.
 #
 # Usage:
 #   Installed as .git/hooks/pre-commit (via scripts/install-hooks.sh)
 #   Or run manually: bash scripts/hooks/pre-commit-openspec.sh
+#   In CI: bash scripts/hooks/pre-commit-openspec.sh --ci-mode
 
-# No set -e — we handle errors ourselves. This hook must never abort.
+# No set -e — we handle errors ourselves. This hook must never abort (except in --ci-mode).
 set -uo pipefail
+
+CI_MODE=false
+[[ "${1:-}" == "--ci-mode" ]] && CI_MODE=true
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { exit 0; }
 SPECS_DIR="$REPO_ROOT/openspec/specs"
@@ -198,9 +205,17 @@ cheatsheet_tier_check
 
 if [[ "$warnings" -gt 0 ]]; then
     echo "" >&2
-    echo "  OpenSpec: $warnings warning(s) — not blocking commit" >&2
+    if [[ "$CI_MODE" == "true" ]]; then
+        echo "  OpenSpec: $warnings warning(s) — FAILING CI MODE" >&2
+    else
+        echo "  OpenSpec: $warnings warning(s) — not blocking commit" >&2
+    fi
     echo "" >&2
 fi
 
-# Always exit 0 — see PHILOSOPHY comment at top
+# Exit 0 by default (pre-commit hook philosophy)
+# Exit 1 in CI mode if any warnings found
+if [[ "$CI_MODE" == "true" && "$warnings" -gt 0 ]]; then
+    exit 1
+fi
 exit 0
