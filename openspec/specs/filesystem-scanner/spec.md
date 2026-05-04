@@ -35,6 +35,43 @@ The scanner MUST debounce rapid filesystem events into batched project state upd
 - **WHEN** the user configures `debounce_ms = 5000` in the global config
 - **THEN** the scanner MUST wait 5 seconds of filesystem quiet before emitting a batched update
 
+## Litmus Tests
+
+### Test: inotify backend detection on Linux
+- **Setup**: Run scanner on Linux with inotify available
+- **Action**: Create a new directory under watched path
+- **Signal**: Directory appears in project state within debounce window
+- **Pass**: Event received via inotify (not polling), zero CPU idle
+- **Fail**: Event delayed beyond 3× debounce window, or CPU spikes during idle
+
+### Test: FSEvents backend detection on macOS
+- **Setup**: Run scanner on macOS with FSEvents available
+- **Action**: Modify a file in a watched directory
+- **Signal**: State change detected
+- **Pass**: Event received via FSEvents, debounce-window accuracy maintained
+- **Fail**: Fallback to polling or event loss
+
+### Test: Watch limit exhaustion graceful degradation
+- **Setup**: Fill inotify limit via concurrent watchers or many watch targets
+- **Action**: Create new project directory when watch limit exceeded
+- **Signal**: Scanner logs warning but continues
+- **Pass**: Warning logged with clear guidance; existing watches remain active
+- **Fail**: Scanner crashes or silently drops events
+
+### Test: Debounce accumulation correctness
+- **Setup**: Configure `debounce_ms = 500`
+- **Action**: Create 10 files with 100ms spacing (total 1000ms > debounce)
+- **Signal**: All files appear in single batched update
+- **Pass**: One event emitted after 500ms silence, containing all 10 files
+- **Fail**: Multiple events or individual events, or event after full 1000ms elapsed
+
+### Test: Zero-CPU idle state
+- **Setup**: Scanner running, no filesystem activity
+- **Action**: Measure CPU usage for 10 seconds
+- **Signal**: CPU usage remains near 0%
+- **Pass**: Blocked on OS event wait (inotify, FSEvents, ReadDirectoryChangesW)
+- **Fail**: Polling loop detected; CPU >1% sustained
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns

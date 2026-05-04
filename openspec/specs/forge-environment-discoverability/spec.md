@@ -76,6 +76,43 @@ All discovery commands MUST support `--help` and provide usage examples.
 - **THEN** the output includes subcommands (`languages`, `tools`, etc.) with brief descriptions
 - **AND** includes example usage: `tillandsias-inventory languages --verbose`
 
+## Litmus Tests
+
+### Test: tillandsias-inventory languages completeness
+- **Setup**: Launch forge container
+- **Action**: Run `tillandsias-inventory languages`
+- **Signal**: Output lists installed toolchains (rust, go, python, node, java, c/c++)
+- **Pass**: All 6+ toolchains listed with versions; format is parseable (tab-delimited or JSON)
+- **Fail**: Missing toolchains, malformed output, or version query fails
+
+### Test: tillandsias-services enclave discovery
+- **Setup**: Launch forge with proxy, git, inference services active
+- **Action**: Run `tillandsias-services` inside forge
+- **Signal**: Lists 3+ services with network endpoints
+- **Pass**: proxy (http:3128), git-daemon (9418), inference (11434) all reachable; endpoints correct
+- **Fail**: Services missing, unreachable, or wrong ports
+
+### Test: tillandsias-models inference availability
+- **Setup**: Launch inference container with T0/T1 models baked; optionally lazy-pull T2
+- **Action**: Run `tillandsias-models` and `tillandsias-models --coding`
+- **Signal**: T0 (qwen2.5:0.5b), T1 (llama3.2:3b) always listed; T2+ shown if available
+- **Pass**: Correct models listed by tier; `--coding` filters correctly
+- **Fail**: Models missing, incorrect tier, or filter has no effect
+
+### Test: Welcome banner on terminal entry
+- **Setup**: Attach forge with `tillandsias attach /path/to/project --terminal`
+- **Action**: Observe initial shell prompt
+- **Signal**: Banner displayed before prompt
+- **Pass**: Banner mentions discovery commands, is colorized, non-intrusive; doesn't block
+- **Fail**: Banner missing, blocks input, or appears after other output
+
+### Test: Help command consistency
+- **Setup**: Run `tillandsias-inventory --help`, `tillandsias-services --help`, `tillandsias-models --help`
+- **Action**: Compare output format and structure
+- **Signal**: All help texts follow same template (usage, subcommands, examples)
+- **Pass**: Consistent format across all commands; examples are runnable
+- **Fail**: Inconsistent format, missing subcommands, or examples contain typos
+
 ## Implementation Notes
 
 This spec is created retroactively as part of the traces-audit refactor. It may represent:

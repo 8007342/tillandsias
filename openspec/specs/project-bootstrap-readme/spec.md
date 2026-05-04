@@ -126,6 +126,43 @@ Four CLI skills MUST guide users through project setup and maintenance.
   - README validation results
   - Traces ledger tail (last 5 entries)
 
+## Litmus Tests
+
+### Test: FOR HUMANS / FOR ROBOTS structure validation
+- **Setup**: Run `/startup` on empty project, allow bootstrap, generate README
+- **Action**: Parse README.md and check structure
+- **Signal**: Two top-level sections present: `## FOR HUMANS` and `## FOR ROBOTS`
+- **Pass**: Both sections present, human section readable (plain language, no YAML), robot section parseable (YAML/JSON valid)
+- **Fail**: Missing sections, malformed YAML, or content in wrong section
+
+### Test: Manifest detection and summarizer invocation
+- **Setup**: Create test projects: Rust (Cargo.toml), Node (package.json), Go (go.mod)
+- **Action**: Run `scripts/regenerate-readme.sh` in each
+- **Signal**: README generated with project-specific content
+- **Pass**: Cargo summarizer invoked for Rust, package.json summarizer for Node, go.mod for Go; content matches manifest
+- **Fail**: Wrong summarizer invoked, content missing, or determinism failure (different output on re-run)
+
+### Test: README staleness detection
+- **Setup**: Create README with old timestamp (e.g., 30 days old)
+- **Action**: Run `scripts/check-readme-discipline.sh`
+- **Signal**: Validator outputs staleness warning
+- **Pass**: Warning emitted; suggestion to run regenerate; check returns exit code 0 (non-blocking)
+- **Fail**: No warning, exit code 1 (blocking), or false negative on fresh README
+
+### Test: Pre-push hook regeneration
+- **Setup**: Modify project manifest (e.g., add dependency to Cargo.toml), don't regenerate README
+- **Action**: Stage changes, run `git push` (or simulate with hook invocation)
+- **Signal**: Hook runs and updates README automatically
+- **Pass**: README regenerated, staged, push aborted with message; user re-runs push and succeeds
+- **Fail**: Hook skipped, push proceeds with stale README, or regeneration produces wrong content
+
+### Test: Traces ledger persistence and cross-machine sync
+- **Setup**: Initialize project, run bootstrap, append observations to `.tillandsias/readme.traces`
+- **Action**: Commit and push to remote; clone repo on another machine
+- **Signal**: `.tillandsias/readme.traces` present and contains original observations
+- **Pass**: Ledger entries readable by downstream agents; history complete; format is valid JSONL
+- **Fail**: Ledger missing after clone, entries corrupted, or agent cannot parse
+
 ## Implementation Notes
 
 This spec is created retroactively as part of the traces-audit refactor. It may represent:

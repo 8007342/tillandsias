@@ -98,6 +98,43 @@ The caches MUST be architected such that project A's cache directory has zero ov
 - **THEN** those entries MUST NOT appear in any other project's cache directory
 - **AND** the shared `/nix/store/` is the ONLY writable-shared surface in the forge model
 
+## Litmus Tests
+
+### Test: litmus:dual-cache-architecture (zero overlap)
+- **Setup**: Launch two forge containers for project-a and project-b; both declare `openssl` dependency
+- **Action**: Run `cargo build` (or equivalent) in project-a, then examine both containers' caches
+- **Signal**: Check `/home/forge/.cache/tillandsias-project/` directory listings
+- **Pass**: project-a's cache contains build artifacts; project-b's cache is empty or isolated; `/nix/store` is shared (byte-identical openssl paths)
+- **Fail**: project-a's artifacts appear in project-b's cache, or `/nix/store` shows write evidence
+
+### Test: Per-project cache persistence and isolation
+- **Setup**: Launch forge for project-x, download 100MB of Maven artifacts
+- **Action**: Stop container, verify cache on host at `~/.cache/tillandsias/forge-projects/project-x/maven/`, restart container
+- **Signal**: Cache directory exists with same artifacts; container sees files at `/home/forge/.cache/tillandsias-project/maven/`
+- **Pass**: Cache persists, second build uses cached artifacts (time <5% of first build)
+- **Fail**: Cache lost, artifacts re-downloaded, or isolation boundary violated
+
+### Test: Read-only nix store mount
+- **Setup**: Launch forge container; inspect mount points via `mount` or `mountpoint`
+- **Action**: Attempt `touch /nix/store/test.txt` inside container
+- **Signal**: Command fails with "Read-only file system"
+- **Pass**: Mount shows `:ro`, write denied, nix hash-based paths protected
+- **Fail**: Write succeeds, mount is `:rw`, or compromise of shared cache
+
+### Test: Environment variable cargo/maven/npm routing
+- **Setup**: Launch forge; check `echo $CARGO_HOME`, `echo $MAVEN_OPTS`, `echo npm_config_cache`
+- **Action**: Run `cargo build` and observe where files land (use `find` to trace)
+- **Signal**: Files land in `/home/forge/.cache/tillandsias-project/cargo/target/`, not `~/.cargo/` or workspace
+- **Pass**: All env vars set correctly; tools respect them; per-project isolation enforced
+- **Fail**: Vars unset or tools ignore them; cache pollutes workspace or spills to home
+
+### Test: litmus:ephemeral-guarantee for container restarts
+- **Setup**: Build in project-c, stop container, check disk for any project-c artifacts outside cache
+- **Action**: Restart container and verify cache still present
+- **Signal**: Only `/home/forge/.cache/tillandsias-project/` persists; ephemeral layers are gone
+- **Pass**: Cache survives; workspace/build artifacts are ephemeral; clean restart preserves cache semantics
+- **Fail**: Stale artifacts accumulate; cache corrupted across restart
+
 ## Implementation Notes
 
 This spec is created retroactively as part of the traces-audit refactor. It may represent:

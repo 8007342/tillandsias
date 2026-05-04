@@ -135,6 +135,43 @@ A master dispatcher script MUST invoke the appropriate summarizers based on proj
 - **THEN** the dispatcher outputs a minimal README template
 - **AND** warns: "No manifest detected; README is a template — please customize manually"
 
+## Litmus Tests
+
+### Test: Deterministic JSON output from all summarizers
+- **Setup**: Run each summarizer individually (summarize-cargo.sh, summarize-package-json.sh, etc.)
+- **Action**: Execute same summarizer twice on identical manifest
+- **Signal**: Compare JSON output byte-for-byte
+- **Pass**: Identical output both times (deterministic); all required fields present; valid JSON parseable by `jq`
+- **Fail**: Output differs, fields missing, or malformed JSON
+
+### Test: Manifest file handling and error cases
+- **Setup**: Run summarize-cargo.sh in directory WITHOUT Cargo.toml; then WITH Cargo.toml
+- **Action**: Capture stdout and exit code
+- **Signal**: Without: JSON error object + exit 1; With: Valid project summary + exit 0
+- **Pass**: Graceful error handling; exit codes correct; error message clear
+- **Fail**: Crash, exit 0 on missing file, or garbled error output
+
+### Test: Multi-language project aggregation
+- **Setup**: Create project with both Cargo.toml AND package.json
+- **Action**: Run `scripts/regenerate-readme.sh`
+- **Signal**: README includes both Rust and Node.js metadata
+- **Pass**: Both summarizers invoked; results aggregated; "Technologies" section lists both; no data loss
+- **Fail**: Only one language detected, or aggregation skips second language
+
+### Test: Cargo summarizer extracts correct fields
+- **Setup**: Create Rust project with name, version, description, dependencies
+- **Action**: Run summarize-cargo.sh; parse JSON
+- **Signal**: Extract fields: `name`, `version`, `description`, `dependencies_count`, `main_entry`
+- **Pass**: All fields present and correct; dependencies_count matches manifest
+- **Fail**: Fields missing or incorrect values
+
+### Test: Unknown project type fallback
+- **Setup**: Create directory with no manifests (Cargo.toml, package.json, go.mod, etc.)
+- **Action**: Run `scripts/regenerate-readme.sh`
+- **Signal**: Output includes warning and template README
+- **Pass**: Warning message emitted; template README created; user can customize; exit code 0
+- **Fail**: Error exit code, template not created, or warning suppressed
+
 ## Implementation Notes
 
 This spec is created retroactively as part of the traces-audit refactor. It may represent:
