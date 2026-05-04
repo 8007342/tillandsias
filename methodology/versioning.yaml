@@ -104,56 +104,55 @@ branch_versioning_discipline:
     the VERSION file has a linear history with one author (main integration).
 
   rules:
-    - name: main_only_bumps
+    - name: integration_branch_only_bumps
       rule: >
-        Only commits to main (or tagged releases) modify VERSION.
-        Feature branches NEVER modify VERSION.
-      enforcement: Pre-push hook (blocks VERSION edits on non-main branches)
+        Only commits to the integration branch (main or equivalent) modify VERSION.
+        Feature/ephemeral branches NEVER modify VERSION.
+      enforcement: Pre-commit/pre-push hook (blocks VERSION edits on non-integration branches)
       rationale: >
-        Git doesn't have "merge base" semantics for arbitrary files. Allowing both
-        branches to edit VERSION creates 3-way merge conflicts that CRDT resolves,
-        but the LUB merge driver is expensive to run in CI on every PR.
-        Instead, enforce single-writer discipline: main is the sole VERSION author.
+        Allowing multiple branches to edit VERSION creates merge conflicts that require
+        CRDT resolution (expensive in CI). Single-writer discipline is simpler: the
+        integration branch is the sole VERSION author. All changes converge there.
 
-    - name: feature_branches_inherit
+    - name: ephemeral_branches_inherit
       rule: >
-        Feature branches inherit VERSION from main at branch time.
-        As main advances, feature branch's VERSION becomes stale (in code, not in git).
+        Ephemeral/feature branches inherit VERSION from integration branch at creation time.
+        As integration branch advances, feature branch's VERSION becomes stale (in worktree).
         This is intentional and correct — the branch's version at merge time is what matters.
       example: |
-        main at commit M: VERSION = v0.1.260101.5
-        Create feature/foo from main: VERSION still v0.1.260101.5 (inherited)
-        Main advances via merge: VERSION bumped to v0.1.260102.7
-        feature/foo still has v0.1.260101.5 (stale, but safe — it was correct at branch time)
-        Merge feature/foo back to main: VERSION on main remains v0.1.260102.7 (no conflict)
+        integration at commit M: VERSION = v0.1.260101.5
+        Create ephemeral branch from integration: VERSION still v0.1.260101.5 (inherited)
+        Integration advances via merge: VERSION bumped to v0.1.260102.7
+        ephemeral branch still has v0.1.260101.5 (stale, but safe — it was correct at creation)
+        Merge ephemeral branch back to integration: VERSION on integration remains v0.1.260102.7
 
-    - name: pre_push_hook
+    - name: version_authorship_hook
       rule: >
-        Pre-push hook in .git/hooks/pre-push blocks any commit modifying VERSION
-        unless the push is to main or a release tag.
+        Pre-push hook blocks any commit modifying VERSION unless the push targets the
+        integration branch or a release tag.
       implementation: >
-        See cheatsheets/utils/branch-versioning.md for complete code.
-        Pattern: Extract branch name from push target, reject if (branch != main and file modified).
+        Extract branch name from push target. Reject if (branch != integration_branch and VERSION modified).
+        Implementation details in project CLAUDE.md (language/VCS-specific).
       exemptions: >
-        Release tags (e.g., v0.1.260101.5) may include VERSION bump in commit history.
-        Merges back to main after /opsx:archive use main's Version as source of truth.
+        Release tags may include VERSION commits in their history.
+        Ephemeral->integration merges use integration's VERSION as source of truth.
 
-    - name: ci_blocks_release_from_feature
+    - name: release_gating_enforces_integration_source
       rule: >
-        CI workflow release.yml MUST refuse release requests from non-main branches.
-        Block in workflow_dispatch handler: check HEAD is main, reject otherwise.
-      enforcement: GitHub Actions check_ref_is_main step (blocks with clear error message)
+        Release workflows MUST refuse to trigger from non-integration branches.
+        Check: current branch == integration branch, reject if false.
+      enforcement: Release workflow gating (blocks with diagnostic message)
 
   workflow_example:
-    initial_state: "main at v0.1.260101.5"
-    step_1: "Developer: git checkout -b feature/browser-isolation"
-    step_2: "Feature branch inherits VERSION = v0.1.260101.5"
-    step_3: "Developer edits 50 files, does NOT edit VERSION"
-    step_4: "Developer: git push origin feature/browser-isolation"
-    step_5: "Pre-push hook checks: branch != main? Yes. VERSION modified? No. → ALLOW"
-    step_6: "Create PR, review, merge to main"
-    step_7: "Main's VERSION bumps to v0.1.260102.7 (via /opsx:archive)"
-    step_8: "Developer: git pull origin main → VERSION updates to v0.1.260102.7 automatically"
+    initial_state: "integration branch at v0.1.260101.5"
+    step_1: "Agent: Create ephemeral working branch from integration"
+    step_2: "Ephemeral branch inherits VERSION = v0.1.260101.5"
+    step_3: "Agent edits files, iterates locally, does NOT edit VERSION"
+    step_4: "Agent: Push ephemeral work to VCS"
+    step_5: "Pre-push hook checks: branch != integration? Yes. VERSION modified? No. → ALLOW"
+    step_6: "Merge request approved, squash merge back to integration"
+    step_7: "Integration's VERSION bumps to v0.1.260102.7 (via change integration)"
+    step_8: "Next agent: Fetch integration branch → VERSION updates to v0.1.260102.7"
 
 crdt_merge_driver:
   description: >
@@ -267,21 +266,22 @@ reconvergence_discipline:
 
 artifacts_and_tracing:
   description: >
-    Every released artifact (AppImage, container image, etc.) embeds a version
-    that matches the spec version. The version is the proof of convergence.
+    Every released artifact embeds a version that matches the spec version being
+    implemented. The version is the proof of convergence. Artifact version =
+    Spec version means implementation converged to specification.
 
   embedding:
-    - artifact: "AppImage binary (Linux)"
-      embed_mechanism: "Tauri binary metadata (src-tauri/tauri.conf.json)"
-      reference: "VERSION file at build time"
+    - artifact: "Executable/binary artifacts"
+      embed_mechanism: "Binary metadata (build-time version injection into executable)"
+      reference: "VERSION identifier at build time"
 
-    - artifact: "Container images (forge, proxy, git, inference)"
-      embed_mechanism: "Containerfile label: LABEL version='...' (from VERSION)"
-      reference: "Embedded at image build time via flake.nix"
+    - artifact: "Container artifacts"
+      embed_mechanism: "Image labels or metadata (version='...' from VERSION)"
+      reference: "Embedded at container image build time"
 
-    - artifact: "Spec delta at /opsx:archive"
-      embed_mechanism: "openspec/specs/<name>/spec.md header: `Version: X.Y.Z.B`"
-      reference: "VERSION file at archive time"
+    - artifact: "Spec documentation"
+      embed_mechanism: "Spec metadata header: `Version: X.Y.Z.B`"
+      reference: "VERSION identifier at integration time"
 
   tracing_principle: >
     When running an artifact (tray, inference container, etc.), query its version.
@@ -299,38 +299,35 @@ artifacts_and_tracing:
 
 metadata_tracking:
   purpose: >
-    Track which OpenSpec changes contributed to each version bump.
-    This creates a queryable audit trail: "Which features shipped in v0.1.260105?"
+    Track which change integrations contributed to each version bump.
+    This creates a queryable audit trail: "Which changes shipped in v0.1.260105?"
 
   mechanism: >
-    At archive time, ./scripts/bump-version.sh --bump-changes increments the Build
-    counter and records the change name in a separate log file.
-    File: .tillandsias/version-history.jsonl (append-only)
+    At change integration time, version bump operation increments the Build counter
+    and records the change identifier in a separate log file.
+    File: <project>/<metadata-dir>/version-history.jsonl (append-only)
 
   format: |
     {
       "version": "v0.1.260105.12",
       "date": "2026-05-05",
       "build_number": 12,
-      "change_archived": "browser-isolation-core",
+      "change_id": "<change-identifier>",
       "timestamp": "2026-05-05T14:32:15Z",
       "commit_hash": "k0l1m2n"
     }
 
   querying: |
-    # Which features are in v0.1.260105?
-    jq 'select(.version | startswith("v0.1.260105"))' .tillandsias/version-history.jsonl
+    # Which changes are in v0.1.260105?
+    jq 'select(.version | startswith("v0.1.260105"))' <version-history-log>
 
   observability_value: >
-    This log enables the convergence dashboard to show:
-    - "This artifact shipped with 7 features"
-    - "These 2 specs converged in this batch"
-    - "Feature lag: spec X was archived on day Y, released on day Z (lag = Z-Y days)"
+    This log enables convergence tracking to show:
+    - "This artifact shipped with N changes"
+    - "These M specs converged in this batch"
+    - "Change lag: spec X was integrated on day Y, released on day Z (lag = Z-Y days)"
 
 references:
   - "methodology/spec-system.yaml — Spec versioning rules"
   - "methodology/between-commits-work-discipline.yaml — Agent ephemeral versioning"
-  - "cheatsheets/utils/branch-versioning.md — Pre-push hook implementation"
-  - "cheatsheets/utils/crdt-safe-merges.md — LUB merge driver reference"
-  - "RESEARCH-VERSIONING-SYSTEMS.md — Complete research on CalVer, versioning schemes"
-  - "RESEARCH-GIT-CRDT-SAFE-MERGES.md — LUB merge driver analysis and implementation"
+  - "Project CLAUDE.md — Implementation-specific version bumping, branching rules, CI gating"

@@ -14,15 +14,15 @@ ephemeral_work_problem:
   scenario: >
     Agent A is assigned: "Fix 50 broken specs across browser-isolation capability.
     Each fix requires: audit spec → propose change → implement → verify." This takes
-    500 iterations before committing. Without discipline, agent's local git history
-    becomes a mess of incomplete commits, merge conflicts bloom, and main's git log
+    500 iterations before committing. Without discipline, agent's local VCS history
+    becomes a mess of incomplete commits, merge conflicts bloom, and main's history log
     shows 500 spec-fix commits (noise instead of signal).
 
   constraints:
-    - Agent runs in isolated git worktree (one per agent, siblings in .claude/worktrees/)
+    - Agent runs in isolated VCS worktree (one per agent, siblings in <worktree-dir>/)
     - Agent iterates freely in local worktree; no coordination with other agents during work
     - At batch completion, agent merges back to main
-    - Main's git history MUST remain clean: one squashed commit per batch, no noise
+    - Main's VCS history MUST remain clean: one squashed commit per batch, no noise
     - Full iteration history MUST be queryable (audit trail for debugging)
     - Concurrent agents working in parallel MUST never conflict (CRDT property)
 
@@ -39,10 +39,10 @@ lamport_clock_system:
     then clock(A) < clock(B).
 
   mechanics:
-    initialize: "Start with lamport_clock = 0"
-    on_local_iteration: "Increment: lamport_clock++ (before writing iteration state)"
-    on_fetch_from_main: "Sync: lamport_clock = max(lamport_clock, received_clock) + 1"
-    on_agent_merge: "Final clock value becomes iteration index in merged history"
+    initialize: "Start with lamport_clock = 0 per agent"
+    on_local_iteration: "Increment: lamport_clock++ (before writing iteration metadata)"
+    on_fetch_from_integration_branch: "Sync: lamport_clock = max(lamport_clock, received_clock) + 1"
+    on_merge_to_main: "Final clock value becomes iteration index in merged history"
 
   properties:
     causality_respected: >
@@ -83,30 +83,29 @@ squash_merge_pattern:
 
   implementation:
     step_1_complete_iterations: "Agent completes N iterations in local worktree"
-    step_2_prepare_merge: "Agent collects all iteration metadata (.ephemeral-state.json files)"
+    step_2_prepare_merge: "Agent collects all iteration metadata (local state files)"
     step_3_squash_merge: >
-      git merge --squash origin/main
-      git commit -m "batch: <change-name>
-      <change-name> — N iterations across X specs
-      Agents: <agent-list>
-      See .tillandsias/ephemeral-merges.jsonl for detailed iteration history.
+      Merge all local iterations as single commit to integration branch:
+      - Squash all N intermediate commits into one
+      - Commit message includes: batch ID, iteration count, agent ID, metadata reference
+      - Example: "batch: <change-name> — <N> iterations, <X> specs, agents: <list>"
+    step_4_side_band: "Append iteration metadata to <ephemeral-metadata-log>"
+    step_5_push: "Push squashed commit to main integration branch"
 
-      OpenSpec change: <change-id>"
-    step_4_side_band: "Append iteration metadata to .tillandsias/ephemeral-merges.jsonl"
-    step_5_push: "git push origin main"
-
-  git_log_visibility:
+  vcs_history_visibility:
     before_merge: |
-      commit A1 — spec: fix browser auth (Agent A iter 1)
-      commit A2 — spec: fix browser auth (Agent A iter 2)
-      commit A3 — spec: fix browser auth (Agent A iter 3)
-      ... (repeat 47 more times)
-      commit A50 — spec: fix browser auth (Agent A iter 50)
+      [local worktree only]
+      iteration A1 — spec: fix <capability> (Agent A iter 1)
+      iteration A2 — spec: fix <capability> (Agent A iter 2)
+      iteration A3 — spec: fix <capability> (Agent A iter 3)
+      ... (repeat N more times)
+      iteration AN — spec: fix <capability> (Agent A iter N)
 
     after_squash_merge: |
-      commit SQUASHED — batch: browser-isolation-core
-      (Single commit. All 50 intermediate states gone from git log, not deleted,
-       just aggregated. Details in .tillandsias/ephemeral-merges.jsonl)
+      [main integration branch]
+      commit SQUASHED — batch: <change-name>
+      (Single commit. All N intermediate states gone from history log, not deleted,
+       just aggregated. Details in <ephemeral-metadata-log>)
 
   benefits:
     clean_history: "main's git log is readable: one line per completed batch"
@@ -116,14 +115,14 @@ squash_merge_pattern:
 
 side_band_metadata_file:
   description: >
-    File .tillandsias/ephemeral-merges.jsonl is append-only JSON Lines. One entry
-    per merged batch. Each entry contains full iteration metadata: timestamps,
-    causality chain, agent identifiers, intermediate artifacts, failure modes.
+    File <ephemeral-metadata-log> is append-only JSON Lines. One entry per merged batch.
+    Each entry contains full iteration metadata: timestamps, causality chain, agent
+    identifiers, intermediate artifacts, failure modes.
 
-  location: ".tillandsias/ephemeral-merges.jsonl"
+  location: "<project>/<metadata-dir>/ephemeral-merges.jsonl"
   format: "JSON Lines — one JSON object per line"
   mutability: "Append-only. Never modify prior entries (immutable audit trail)"
-  storage: "Committed to git, cross-machine durable"
+  storage: "Committed to VCS, cross-machine durable"
 
   schema: |
     {
@@ -151,29 +150,29 @@ side_band_metadata_file:
     }
 
   querying_examples: |
-    # How many iterations in browser-isolation batch?
-    jq '.iteration_count' .tillandsias/ephemeral-merges.jsonl | grep browser-isolation
+    # How many iterations in a batch?
+    jq '.iteration_count' <ephemeral-metadata-log> | grep <batch-id>
 
-    # What happened in iteration 25?
-    jq '.iteration_causal_order[24]' .tillandsias/ephemeral-merges.jsonl | grep browser-isolation
+    # What happened in iteration N?
+    jq '.iteration_causal_order[N-1]' <ephemeral-metadata-log> | grep <batch-id>
 
     # Which batches were concurrent (overlapping merge timestamps)?
     jq -s 'group_by(.merge_timestamp) | map(select(length > 1))' \
-      .tillandsias/ephemeral-merges.jsonl
+      <ephemeral-metadata-log>
 
     # Causal chain: which batch triggered which?
-    jq '.dependency_batches[]' .tillandsias/ephemeral-merges.jsonl
+    jq '.dependency_batches[]' <ephemeral-metadata-log>
 
   source_of_truth:
     single_artifact: >
-      .tillandsias/ephemeral-merges.jsonl is the source of truth for iteration history.
-      If agent's .ephemeral-state.json is lost, can reconstruct from this file.
-      If this file is lost, can reconstruct from git commit messages (backup).
+      <ephemeral-metadata-log> is the source of truth for iteration history.
+      If agent's local iteration state is lost, can reconstruct from this file.
+      If this file is lost, can reconstruct from VCS commit messages (backup).
 
     redundancy:
-      primary: ".tillandsias/ephemeral-merges.jsonl (authoritative)"
-      backup: "Git commit messages contain full metadata as fallback"
-      tertiary: ".ephemeral-state.json per-worktree (ephemeral, not durable)"
+      primary: "<ephemeral-metadata-log> (authoritative)"
+      backup: "VCS commit messages contain full metadata as fallback"
+      tertiary: "<agent-iteration-state> per-worktree (ephemeral, not durable)"
 
 crdt_properties_guarantee_safety:
   description: >
@@ -225,22 +224,22 @@ crdt_properties_guarantee_safety:
 failure_modes_and_recovery:
   agent_crash_mid_iteration:
     description: "Agent process dies after writing iteration state 25, before 26"
-    detection: "Stale .ephemeral-state.json (mtime older than timeout)"
+    detection: "Stale <agent-iteration-state> (mtime older than timeout)"
     recovery: >
-      1. Detect stale worktree (no activity for 30 minutes)
-      2. Read last completed iteration from .ephemeral-state.json
-      3. Check .tillandsias/ephemeral-merges.jsonl for prior agent context
+      1. Detect stale agent (no activity for configured timeout)
+      2. Read last completed iteration from <agent-iteration-state>
+      3. Check <ephemeral-metadata-log> for prior agent context
       4. Resume agent from iteration 26 (reuse lamport_clock baseline)
-    data_loss: "None. Iteration 25's state is in .ephemeral-state.json; resumable"
+    data_loss: "None. Iteration 25's state is in <agent-iteration-state>; resumable"
 
   metadata_file_corruption:
-    description: ".tillandsias/ephemeral-merges.jsonl becomes unreadable (disk error)"
-    detection: "jq parse fails, file size smaller than expected"
+    description: "<ephemeral-metadata-log> becomes unreadable (storage error)"
+    detection: "Metadata parse fails, file integrity check fails"
     recovery: >
-      1. Reconstruct from git commit messages (full metadata in message)
-      2. Regenerate .tillandsias/ephemeral-merges.jsonl from commits
+      1. Reconstruct from VCS commit messages (full metadata in message)
+      2. Regenerate <ephemeral-metadata-log> from commits
       3. Verify reconstruction matches side-band (checksums in commit)
-    data_loss: "None. Git is the source of truth."
+    data_loss: "None. VCS is the source of truth."
 
   clock_desynchronization:
     description: "Agent A and B's clocks diverge; iterations out of order"
@@ -265,24 +264,25 @@ implementation_phases:
   phase_1_core_library:
     effort: "~2 hours"
     deliverables:
-      - "crates/tillandsias-ephemeral/ with EphemeralState, MergeCoordinator structs"
+      - "EphemeralState module: load/save agent iteration metadata"
+      - "MergeCoordinator module: aggregate metadata via CRDT merge"
       - "Lamport clock logic (sync, increment, comparison)"
-      - "JSONL writing (idempotent append)"
+      - "Metadata log writing (idempotent append to <ephemeral-metadata-log>)"
     tests:
       - "Lamport monotonicity (clock always increases)"
       - "CRDT properties (commutativity, associativity, idempotence)"
       - "Metadata serialization roundtrip"
 
-  phase_2_tauri_integration:
+  phase_2_orchestrator_integration:
     effort: "~1.5 hours"
     deliverables:
-      - "Hook in handlers.rs:submit_batch()"
-      - "Collect .ephemeral-state.json from all worktrees"
+      - "Hook in batch completion handler"
+      - "Collect <agent-iteration-state> from all agents"
       - "Invoke MergeCoordinator.aggregate_metadata()"
-      - "Execute git merge --squash across worktrees"
+      - "Execute squash merge across all agent changes"
     integration_points:
-      - "src-tauri/src/handlers.rs (batch submission)"
-      - "src-tauri/src/runner.rs (worktree lifecycle)"
+      - "Batch submission handler (collect metadata)"
+      - "Agent lifecycle management (monitor stale agents)"
 
   phase_3_testing:
     effort: "~2-3 hours"
@@ -293,73 +293,72 @@ implementation_phases:
       - "Agent crash mid-iteration, resume from saved state"
       - "Clock desync, re-sort, verify causality preserved"
     failure_injection:
-      - "Kill agent process; verify recovery"
-      - "Delete .ephemeral-state.json; verify reconstruction"
-      - "Corrupt metadata file; verify repair"
+      - "Terminate agent process; verify recovery"
+      - "Delete <agent-iteration-state>; verify reconstruction"
+      - "Corrupt <ephemeral-metadata-log>; verify repair"
 
   phase_4_documentation:
     effort: "~1 hour"
     deliverables:
-      - "Cheatsheet: cheatsheets/agents/ephemeral-versioning.md"
-      - "Update CLAUDE.md: agent batch workflow"
+      - "Operational guide: agent batch workflow and metadata discipline"
       - "Example code: metadata structure, clock sync, merge algorithm"
+      - "Integration guide: how to hook orchestrator into agent lifecycle"
 
   total_effort: "~6-8 hours"
   blockers: "None identified"
 
 integration_with_main_versioning:
   relationship: >
-    Main branch uses CalVer + LUB merge (see methodology/versioning.yaml).
+    Main integration branch uses CalVer + LUB merge (see methodology/versioning.yaml).
     Ephemeral work uses Lamport clocks + squash (this document).
-    The two systems are orthogonal: ephemeral work is LOCAL; main's VERSION
+    The two systems are orthogonal: ephemeral work is LOCAL; main's version
     only bumps after squash merges land.
 
   example:
     agent_work: |
       Agent A:
-      - Iteration 1: clock=1, .ephemeral-state.json written
-      - Iteration 2: clock=2
+      - Iteration 1: lamport_clock=1, <agent-iteration-state> written
+      - Iteration 2: lamport_clock=2
       - ...
-      - Iteration 47: clock=47
+      - Iteration 47: lamport_clock=47
       → Squash merge to main with single commit
 
     main_version: |
-      Before Agent A merge: VERSION = v0.1.260504.12
-      After Agent A merges: VERSION unchanged (no change made yet)
-      Later, /opsx:archive for "browser-isolation-core":
-        OpenSpec creates delta spec, bumps BUILD number
-        VERSION now v0.1.260505.13
-        .tillandsias/ephemeral-merges.jsonl gets new entry for agent-a's batch
+      Before Agent A merge: version = v0.1.260504.12
+      After Agent A merges: version unchanged (metadata updated, but version stable)
+      Later, upon change archive/integration:
+        Orchestrator creates change manifest, bumps BUILD number
+        Version now v0.1.260505.13
+        <ephemeral-metadata-log> gets new entry for agent-a's batch
         → Proof: agent did 47 iterations, converged to v0.1.260505.13
 
   queryable_proof: >
-    jq 'select(.batch_id == "browser-isolation-core") | .iteration_count' \
-      .tillandsias/ephemeral-merges.jsonl
+    Query <ephemeral-metadata-log> for batch ID:
+    select(batch_id == "<change-id>") | .iteration_count
     → Output: 47
     This proves the agent iterated 47 times before converging.
 
 automation_and_orchestration:
   coordinator_role: >
-    Tauri tray acts as coordinator. When all agents in a batch complete:
-    1. Collect metadata from all worktrees
-    2. Merge metadata using CRDT algorithm
-    3. Execute git merge --squash (one per agent)
-    4. Append to .tillandsias/ephemeral-merges.jsonl
-    5. Bump VERSION via /opsx:archive
-    6. Clean up worktrees
+    Orchestrator (agent coordinator system) acts as convergence gate. When all agents
+    in a batch complete:
+    1. Collect <agent-iteration-state> from all agents
+    2. Merge metadata using CRDT algorithm (order-independent)
+    3. Execute squash merge operation (one per agent)
+    4. Append merged metadata to <ephemeral-metadata-log>
+    5. Trigger version bump via change integration workflow
+    6. Clean up ephemeral agent state
 
   safety_gates:
     - "All metadata files present and parseable"
-    - "All iterations have monotonic clocks"
-    - "Git merge --squash succeeds with no conflicts"
-    - "Append to JSONL is atomic (temp file, then rename)"
+    - "All iterations have monotonic Lamport clocks"
+    - "Squash merge operation succeeds with no conflicts"
+    - "Append to metadata log is atomic (temp file, then rename)"
     - "Verification: Lamport properties still hold post-merge"
 
 references:
-  - "methodology/versioning.yaml — Main CalVer system and branch discipline"
-  - "cheatsheets/agents/ephemeral-versioning.md — Operational guide for agents"
-  - "RESEARCH-BETWEEN-COMMITS-WORK-VERSIONING.md — Complete research findings"
+  - "methodology/versioning.yaml — Main versioning system and integration discipline"
+  - "Project CLAUDE.md — Implementation-specific agent orchestration, metadata storage, and lifecycle management"
   - "Lamport clocks: https://martinfowler.com/articles/patterns-of-distributed-systems/lamport-clock.html"
   - "CRDT fundamentals: https://crdt.tech/"
-  - "Worktrunk: https://worktrunk.dev/ (AI agent worktree orchestration precedent)"
-  - "Neon Branching: https://neon.com/branching/branching-for-agents (distributed metadata pattern)"
+  - "Distributed systems: clock synchronization patterns across agent swarms"
