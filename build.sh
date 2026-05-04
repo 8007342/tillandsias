@@ -54,6 +54,7 @@ FLAG_WIPE=false
 FLAG_TOOLBOX_RESET=false
 FLAG_APPIMAGE=false
 FLAG_INIT=false
+FLAG_CI=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -67,6 +68,7 @@ while [[ $# -gt 0 ]]; do
         --toolbox-reset)  FLAG_TOOLBOX_RESET=true ;;
         --appimage)       FLAG_APPIMAGE=true ;;
         --init)           FLAG_INIT=true ;;
+        --ci)             FLAG_CI=true ;;
         --help|-h)
             cat <<'EOF'
 Tillandsias Development Build Script
@@ -75,11 +77,12 @@ Usage: ./build.sh [flags]
 
 Build flags:
   (none)            Debug build (cargo build --workspace)
-  --release         Release build (cargo tauri build)
+  --release         Release build (cargo tauri build — validates CI first)
   --test            Run test suite (cargo test --workspace)
   --check           Type-check only (cargo check --workspace)
   --clean           Clean build artifacts before building
   --appimage        Build AppImage in Ubuntu podman container (FUSE-capable)
+  --ci              Run local CI/CD validation (spec binding, drift, version, fmt, clippy, tests)
 
 Install flags:
   --install         Build AppImage + install to ~/Applications/ + symlink to ~/.local/bin/
@@ -115,6 +118,21 @@ if [[ "$FLAG_INIT" == true ]]; then
     _step "Pruning old images..."
     podman image prune -f 2>/dev/null || true
     exit 0
+fi
+
+# CI validation (standalone — runs locally without toolbox)
+if [[ "$FLAG_CI" == true ]]; then
+    _step "Running local CI/CD validation..."
+    if bash "$SCRIPT_DIR/scripts/local-ci.sh" --fast; then
+        _info "CI/CD validation passed — ready for release"
+        # If --ci is the only flag, exit with success
+        if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_APPIMAGE$FLAG_WIPE$FLAG_TOOLBOX_RESET" == "falsefalsefalsefalsefalsefalsefalse" ]]; then
+            exit 0
+        fi
+    else
+        _error "CI/CD validation failed — fix issues and retry"
+        exit 1
+    fi
 fi
 
 if [[ "$FLAG_REMOVE" == true ]]; then
@@ -436,6 +454,15 @@ fi
 
 # Release build (via tauri)
 if [[ "$FLAG_RELEASE" == true ]]; then
+    # Always run CI checks before release — fail if any check doesn't pass
+    # (Cloud minutes are expensive; validate locally first)
+    _step "Running CI/CD validation before release..."
+    if ! bash "$SCRIPT_DIR/scripts/local-ci.sh" --fast; then
+        _error "CI/CD validation failed — fix issues before retrying"
+        exit 1
+    fi
+    _info "CI/CD validation passed — proceeding with release build"
+
     _toolbox_ensure_tauri_cli
 
     # Skip AppImage in toolbox — linuxdeploy needs FUSE which isn't available.
