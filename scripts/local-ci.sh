@@ -193,7 +193,7 @@ if [[ "$FAST_MODE" == "0" ]]; then
     if [[ -f "scripts/run-litmus-test.sh" ]]; then
         # Check if podman is available
         if command -v podman &> /dev/null; then
-            if bash scripts/run-litmus-test.sh --all 2>&1 | tee /tmp/litmus-check.log; then
+            if bash scripts/run-litmus-test.sh 2>&1 | tee /tmp/litmus-check.log; then
                 log_pass "All litmus tests passed"
             else
                 log_fail_tracked "litmus-tests" "Litmus test failures detected (see /tmp/litmus-check.log)"

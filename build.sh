@@ -55,6 +55,7 @@ FLAG_TOOLBOX_RESET=false
 FLAG_APPIMAGE=false
 FLAG_INIT=false
 FLAG_CI=false
+FLAG_CI_FULL=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -69,6 +70,7 @@ while [[ $# -gt 0 ]]; do
         --appimage)       FLAG_APPIMAGE=true ;;
         --init)           FLAG_INIT=true ;;
         --ci)             FLAG_CI=true ;;
+        --ci-full)        FLAG_CI_FULL=true ;;
         --help|-h)
             cat <<'EOF'
 Tillandsias Development Build Script
@@ -82,7 +84,8 @@ Build flags:
   --check           Type-check only (cargo check --workspace)
   --clean           Clean build artifacts before building
   --appimage        Build AppImage in Ubuntu podman container (FUSE-capable)
-  --ci              Run local CI/CD validation (spec binding, drift, version, fmt, clippy, tests)
+  --ci              Run local CI/CD validation (quick: spec binding, drift, version, fmt, clippy, tests)
+  --ci-full         Run full CI/CD validation (includes litmus tests — required for releases)
 
 Install flags:
   --install         Build AppImage + install to ~/Applications/ + symlink to ~/.local/bin/
@@ -121,12 +124,23 @@ if [[ "$FLAG_INIT" == true ]]; then
 fi
 
 # CI validation (standalone — runs locally without toolbox)
-if [[ "$FLAG_CI" == true ]]; then
-    _step "Running local CI/CD validation..."
-    if bash "$SCRIPT_DIR/scripts/local-ci.sh" --fast; then
-        _info "CI/CD validation passed — ready for release"
-        # If --ci is the only flag, exit with success
-        if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_APPIMAGE$FLAG_WIPE$FLAG_TOOLBOX_RESET" == "falsefalsefalsefalsefalsefalsefalse" ]]; then
+if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
+    if [[ "$FLAG_CI_FULL" == true ]]; then
+        _step "Running full CI/CD validation (including litmus tests)..."
+        CI_ARGS=""
+    else
+        _step "Running quick CI/CD validation (skipping litmus tests)..."
+        CI_ARGS="--fast"
+    fi
+
+    if bash "$SCRIPT_DIR/scripts/local-ci.sh" $CI_ARGS; then
+        if [[ "$FLAG_CI_FULL" == true ]]; then
+            _info "Full CI/CD validation passed — ready for release"
+        else
+            _info "Quick CI/CD validation passed — ready for development"
+        fi
+        # If --ci or --ci-full is the only flag, exit with success
+        if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_APPIMAGE$FLAG_WIPE$FLAG_TOOLBOX_RESET$FLAG_REMOVE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
             exit 0
         fi
     else
@@ -155,7 +169,7 @@ if [[ "$FLAG_REMOVE" == true ]]; then
 
     _info "Removed tillandsias (AppImage, symlink, desktop integration)"
     # If --remove is the only flag, exit
-    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_WIPE$FLAG_TOOLBOX_RESET$FLAG_APPIMAGE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_WIPE$FLAG_TOOLBOX_RESET$FLAG_APPIMAGE$FLAG_CI$FLAG_CI_FULL" == "falsefalsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
     fi
 fi
@@ -167,7 +181,7 @@ if [[ "$FLAG_WIPE" == true ]]; then
     # Cargo registry cache inside toolbox is in the host home (shared)
     _info "Removed target/ and $CACHE_DIR"
     # If --wipe is the only remaining flag, exit
-    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_TOOLBOX_RESET$FLAG_APPIMAGE" == "falsefalsefalsefalsefalsefalsefalse" ]]; then
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_TOOLBOX_RESET$FLAG_APPIMAGE$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE" == "falsefalsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
     fi
 fi
@@ -390,7 +404,7 @@ if [[ "$FLAG_TOOLBOX_RESET" == true ]]; then
     fi
     _toolbox_ensure
     # If --toolbox-reset is the only flag, exit
-    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_APPIMAGE" == "falsefalsefalsefalsefalsefalse" ]]; then
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_APPIMAGE$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
     fi
 fi
@@ -400,7 +414,7 @@ if [[ "$FLAG_APPIMAGE" == true ]]; then
     "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
     build_appimage
     # If --appimage is the only remaining flag, exit
-    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL" == "falsefalsefalsefalsefalse" ]]; then
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE$FLAG_TOOLBOX_RESET" == "falsefalsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
     fi
 fi
