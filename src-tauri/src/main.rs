@@ -1,3 +1,5 @@
+#![allow(clippy::collapsible_if)]
+
 mod accountability;
 mod build_lock;
 mod ca;
@@ -453,7 +455,8 @@ fn main() {
                 // (foundation), then forge, git, inference.
                 //
                 // Image types and their user-facing chip names:
-                const INIT_IMAGE_TYPES: &[(&str, &str, fn() -> String)] = &[
+                type InitImageDef = (&'static str, &'static str, fn() -> String);
+                const INIT_IMAGE_TYPES: &[InitImageDef] = &[
                     ("proxy",     "Enclave",          handlers::proxy_image_tag),
                     ("forge",     "Forge",            handlers::forge_image_tag),
                     ("git",       "Code Mirror",      handlers::git_image_tag),
@@ -534,14 +537,12 @@ fn main() {
                         }
                         if let Some(tray_lock) = TRAY_ICON.get()
                             && let Ok(tray) = tray_lock.lock()
-                        {
-                            if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                            && let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
                                 TrayIconState::Building,
-                            )) {
-                                if let Err(e) = tray.set_icon(Some(icon)) {
-                                    debug!(error = %e, "Tray icon update failed (cosmetic)");
-                                }
-                            }
+                            ))
+                            && let Err(e) = tray.set_icon(Some(icon))
+                        {
+                            debug!(error = %e, "Tray icon update failed (cosmetic)");
                         }
                         rebuild_menu(&app_handle_for_loop, &state_for_loop);
 
@@ -665,14 +666,12 @@ fn main() {
                             }
                             if let Some(tray_lock) = TRAY_ICON.get()
                                 && let Ok(tray) = tray_lock.lock()
-                            {
-                                if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                                && let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
                                     TrayIconState::Mature,
-                                )) {
-                                    if let Err(e) = tray.set_icon(Some(icon)) {
-                                        debug!(error = %e, "Tray icon update failed (cosmetic)");
-                                    }
-                                }
+                                ))
+                                && let Err(e) = tray.set_icon(Some(icon))
+                            {
+                                debug!(error = %e, "Tray icon update failed (cosmetic)");
                             }
                             // @trace spec:tray-app
                             // Desktop notification so the user knows the system is ready,
@@ -693,14 +692,12 @@ fn main() {
                             }
                             if let Some(tray_lock) = TRAY_ICON.get()
                                 && let Ok(tray) = tray_lock.lock()
-                            {
-                                if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                                && let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
                                     TrayIconState::Dried,
-                                )) {
-                                    if let Err(e) = tray.set_icon(Some(icon)) {
-                                        debug!(error = %e, "Tray icon update failed (cosmetic)");
-                                    }
-                                }
+                                ))
+                                && let Err(e) = tray.set_icon(Some(icon))
+                            {
+                                debug!(error = %e, "Tray icon update failed (cosmetic)");
                             }
                             handlers::send_notification(
                                 "Tillandsias",
@@ -771,7 +768,7 @@ fn main() {
                 // Blocking GitHub health check on startup (3s timeout).
                 // If authenticated, verify GitHub connectivity before starting the event loop.
                 // Results gate visibility of Home/Cloud menus.
-                if menu::needs_github_login() == false {
+                if !menu::needs_github_login() {
                     // Token exists, perform blocking health check
                     info!("Performing GitHub connectivity check...");
                     let github_health = match tokio::time::timeout(
@@ -844,26 +841,25 @@ fn main() {
                         };
 
                         // Update tray icon if state changed
-                        if new_icon_state != old_icon_state {
-                            if let Some(tray_lock) = TRAY_ICON.get()
-                                && let Ok(tray) = tray_lock.lock()
-                            {
-                                match tauri::image::Image::from_bytes(icons::tray_icon_png(
-                                    new_icon_state,
-                                )) {
-                                    Ok(icon) => {
-                                        if let Err(e) = tray.set_icon(Some(icon)) {
-                                            debug!(error = %e, "Tray icon update failed (cosmetic)");
-                                        }
-                                        debug!(
-                                            old = ?old_icon_state,
-                                            new = ?new_icon_state,
-                                            "Tray icon updated"
-                                        );
+                        if new_icon_state != old_icon_state
+                            && let Some(tray_lock) = TRAY_ICON.get()
+                            && let Ok(tray) = tray_lock.lock()
+                        {
+                            match tauri::image::Image::from_bytes(icons::tray_icon_png(
+                                new_icon_state,
+                            )) {
+                                Ok(icon) => {
+                                    if let Err(e) = tray.set_icon(Some(icon)) {
+                                        debug!(error = %e, "Tray icon update failed (cosmetic)");
                                     }
-                                    Err(e) => {
-                                        error!(error = %e, "Failed to build tray icon image");
-                                    }
+                                    debug!(
+                                        old = ?old_icon_state,
+                                        new = ?new_icon_state,
+                                        "Tray icon updated"
+                                    );
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "Failed to build tray icon image");
                                 }
                             }
                         }
@@ -899,15 +895,14 @@ fn main() {
                 event: tauri::WindowEvent::CloseRequested { .. },
                 ..
             } = &event
+                && label.starts_with("web-")
             {
-                if label.starts_with("web-") {
-                    tracing::debug!(
-                        spec = "opencode-web-session",
-                        label = %label,
-                        "webview close intercepted — tray remains"
-                    );
-                    return;
-                }
+                tracing::debug!(
+                    spec = "opencode-web-session",
+                    label = %label,
+                    "webview close intercepted — tray remains"
+                );
+                return;
             }
 
             if let tauri::RunEvent::ExitRequested { .. } = event {
@@ -1040,6 +1035,10 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
                     "claude" => Some(MenuCommand::ClaudeProject {
                         project_path: payload.into(),
                     }),
+                    // @trace spec:codex-tray-launcher
+                    "codex" => Some(MenuCommand::CodexProject {
+                        project_path: payload.into(),
+                    }),
                     // @trace spec:tray-minimal-ux
                     "maintenance" => Some(MenuCommand::MaintenanceProject {
                         project_path: payload.into(),
@@ -1110,10 +1109,10 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
         }
     };
 
-    if let Some(cmd) = command {
-        if tx.try_send(cmd).is_err() {
-            debug!("Menu command channel full/closed — action may be dropped");
-        }
+    if let Some(cmd) = command
+        && tx.try_send(cmd).is_err()
+    {
+        debug!("Menu command channel full/closed — action may be dropped");
     }
 }
 
@@ -1180,16 +1179,16 @@ async fn handle_browser_socket_connection(
     use std::io::{BufRead, BufReader};
 
     let reader = BufReader::new(&stream);
-    let mut lines = reader.lines();
+    let lines = reader.lines();
 
-    while let Some(line_result) = lines.next() {
+    for line_result in lines {
         let line = line_result.map_err(|e| e.to_string())?;
         let line = line.trim();
         if line.is_empty() {
             continue;
         }
 
-        match serde_json::from_str::<serde_json::Value>(&line) {
+        match serde_json::from_str::<serde_json::Value>(line) {
             Ok(request) => {
                 let method = request.get("method").and_then(|m| m.as_str());
                 let params = request.get("params");

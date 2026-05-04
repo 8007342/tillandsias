@@ -68,6 +68,13 @@ pub mod ids {
         gen_id(&format!("claude:{}", project_path.display()))
     }
 
+    /// Build a "codex project" menu item ID for a project path.
+    /// Launches Codex code analysis agent in a container.
+    /// @trace spec:codex-tray-launcher
+    pub fn codex_project(project_path: &std::path::Path) -> String {
+        gen_id(&format!("codex:{}", project_path.display()))
+    }
+
     /// Build a "maintenance project" menu item ID for a project path.
     /// @trace spec:tray-minimal-ux
     pub fn maintenance_project(project_path: &std::path::Path) -> String {
@@ -358,7 +365,7 @@ fn environment_status_label(state: &TrayState) -> String {
 }
 
 /// Build the Home submenu containing local projects.
-/// Each project shows 4 action buttons: OpenCode, OpenCode Web, Claude, Maintenance.
+/// Each project shows 5 action buttons: OpenCode, OpenCode Web, Claude, Codex, Maintenance.
 /// @trace spec:simplified-tray-ux
 fn build_home_projects_submenu<R: Runtime>(
     app: &AppHandle<R>,
@@ -389,8 +396,17 @@ fn build_home_projects_submenu<R: Runtime>(
         );
 
         // Claude — AI assistant
+        // @trace spec:agent-icon-representation
         submenu = submenu.item(
-            &MenuItemBuilder::with_id(ids::claude_project(&project.path), "👽 Claude")
+            &MenuItemBuilder::with_id(ids::claude_project(&project.path), "👾 Claude")
+                .enabled(state.forge_available)
+                .build(app)?,
+        );
+
+        // Codex — code analysis agent
+        // @trace spec:codex-tray-launcher
+        submenu = submenu.item(
+            &MenuItemBuilder::with_id(ids::codex_project(&project.path), "🏗 Codex")
                 .enabled(state.forge_available)
                 .build(app)?,
         );
@@ -409,7 +425,7 @@ fn build_home_projects_submenu<R: Runtime>(
 }
 
 /// Build the Cloud submenu containing remote projects (minus those already cloned locally).
-/// Each project shows 4 action buttons with clone prefix: OpenCode, OpenCode Web, Claude, Maintenance.
+/// Each project shows 5 action buttons with clone prefix: OpenCode, OpenCode Web, Claude, Codex, Maintenance.
 /// All actions require cloning first if the project doesn't exist locally.
 /// @trace spec:simplified-tray-ux
 fn build_cloud_projects_submenu<R: Runtime>(
@@ -524,7 +540,18 @@ fn build_cloud_projects_submenu<R: Runtime>(
             submenu = submenu.item(
                 &MenuItemBuilder::with_id(
                     ids::clone_project(&format!("{}/claude", repo.full_name), &repo.name),
-                    "👽 Claude (clone+)",
+                    "👾 Claude (clone+)",
+                )
+                .enabled(state.forge_available)
+                .build(app)?,
+            );
+
+            // Codex (clone+) — code analysis agent
+            // @trace spec:codex-tray-launcher
+            submenu = submenu.item(
+                &MenuItemBuilder::with_id(
+                    ids::clone_project(&format!("{}/codex", repo.full_name), &repo.name),
+                    "🏗 Codex (clone+)",
                 )
                 .enabled(state.forge_available)
                 .build(app)?,

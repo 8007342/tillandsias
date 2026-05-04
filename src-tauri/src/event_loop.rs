@@ -202,6 +202,18 @@ pub async fn run(
                             }
                         }
                     }
+                    // @trace spec:codex-tray-launcher
+                    MenuCommand::CodexProject { project_path } => {
+                        match handlers::handle_codex_project(project_path, &mut state, &mut allocator, channels.build_tx.clone()).await {
+                            Ok(_event) => {
+                                prune_completed_builds(&mut state);
+                                on_state_change(&state);
+                            }
+                            Err(e) => {
+                                error!(error = %e, "Codex project failed");
+                            }
+                        }
+                    }
                     // @trace spec:tray-minimal-ux
                     MenuCommand::MaintenanceProject { project_path } => {
                         match handlers::handle_maintenance_project(project_path, &mut state, &mut allocator, &mut tool_allocator, channels.build_tx.clone()).await {
@@ -786,14 +798,13 @@ fn handle_podman_event(
                             ContainerType::Forge | ContainerType::Maintenance
                         )
                 });
-                if !still_has_forge {
-                    if let Some(project) = state
+                if !still_has_forge
+                    && let Some(project) = state
                         .projects
                         .iter_mut()
                         .find(|p| p.name == removed.project_name)
-                    {
-                        project.assigned_genus = None;
-                    }
+                {
+                    project.assigned_genus = None;
 
                     // @trace spec:git-mirror-service, spec:persistent-git-service
                     // Git service container is intentionally NOT stopped here.

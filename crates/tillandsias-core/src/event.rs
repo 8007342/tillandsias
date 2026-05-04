@@ -129,6 +129,10 @@ pub enum MenuCommand {
     /// @trace spec:tray-minimal-ux
     ClaudeProject { project_path: PathBuf },
 
+    /// Open Codex code analysis agent for a project.
+    /// @trace spec:codex-tray-launcher
+    CodexProject { project_path: PathBuf },
+
     /// Open maintenance terminal for a project.
     /// @trace spec:tray-minimal-ux
     MaintenanceProject { project_path: PathBuf },

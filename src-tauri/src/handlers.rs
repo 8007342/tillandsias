@@ -160,28 +160,28 @@ pub(crate) async fn ensure_inference_running(
 
     // Check if it's running outside our state (e.g., surviving a restart).
     // If running but with a stale image version, stop it and rebuild.
-    if let Ok(inspect) = client.inspect_container(INFERENCE_CONTAINER_NAME).await {
-        if inspect.state == "running" {
-            let expected_tag = inference_image_tag();
-            if inspect.image.contains(&expected_tag) {
-                debug!(
-                    spec = "inference-container",
-                    "Inference container already running (correct version)"
-                );
-                return Ok(());
-            }
-            // Stale version — stop it so we can start the correct one
-            warn!(
+    if let Ok(inspect) = client.inspect_container(INFERENCE_CONTAINER_NAME).await
+        && inspect.state == "running"
+    {
+        let expected_tag = inference_image_tag();
+        if inspect.image.contains(&expected_tag) {
+            debug!(
                 spec = "inference-container",
-                current = %inspect.image,
-                expected = %expected_tag,
-                "Inference container running stale version — restarting"
+                "Inference container already running (correct version)"
             );
-            if let Err(e) = client.stop_container(INFERENCE_CONTAINER_NAME, 5).await {
-                warn!(container = INFERENCE_CONTAINER_NAME, error = %e, "Failed to stop stale inference container");
-            }
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            return Ok(());
         }
+        // Stale version — stop it so we can start the correct one
+        warn!(
+            spec = "inference-container",
+            current = %inspect.image,
+            expected = %expected_tag,
+            "Inference container running stale version — restarting"
+        );
+        if let Err(e) = client.stop_container(INFERENCE_CONTAINER_NAME, 5).await {
+            warn!(container = INFERENCE_CONTAINER_NAME, error = %e, "Failed to stop stale inference container");
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
 
     info!(
@@ -510,29 +510,29 @@ pub(crate) async fn ensure_proxy_running(
 
     // Check if it's running outside our state (e.g., surviving a restart).
     // If running but with a stale image version, stop it and rebuild.
-    if let Ok(inspect) = client.inspect_container(PROXY_CONTAINER_NAME).await {
-        if inspect.state == "running" {
-            let expected_tag = proxy_image_tag();
-            if inspect.image.contains(&expected_tag) {
-                debug!(
-                    spec = "proxy-container",
-                    "Proxy container already running (correct version)"
-                );
-                return Ok(());
-            }
-            // Stale version — stop it so we can start the correct one
-            warn!(
+    if let Ok(inspect) = client.inspect_container(PROXY_CONTAINER_NAME).await
+        && inspect.state == "running"
+    {
+        let expected_tag = proxy_image_tag();
+        if inspect.image.contains(&expected_tag) {
+            debug!(
                 spec = "proxy-container",
-                current = %inspect.image,
-                expected = %expected_tag,
-                "Proxy container running stale version — restarting"
+                "Proxy container already running (correct version)"
             );
-            if let Err(e) = client.stop_container(PROXY_CONTAINER_NAME, 5).await {
-                warn!(container = PROXY_CONTAINER_NAME, error = %e, "Failed to stop stale proxy container");
-            }
-            // Wait briefly for cleanup
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            return Ok(());
         }
+        // Stale version — stop it so we can start the correct one
+        warn!(
+            spec = "proxy-container",
+            current = %inspect.image,
+            expected = %expected_tag,
+            "Proxy container running stale version — restarting"
+        );
+        if let Err(e) = client.stop_container(PROXY_CONTAINER_NAME, 5).await {
+            warn!(container = PROXY_CONTAINER_NAME, error = %e, "Failed to stop stale proxy container");
+        }
+        // Wait briefly for cleanup
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
 
     info!(
@@ -1085,14 +1085,14 @@ fn rotate_container_logs(log_dir: &Path, container_name: &str) {
 enum GitProjectState {
     /// Has a `.git` directory with a configured `origin` remote.
     // remote_url is parsed and stored for future use (e.g., displaying origin in UI)
-    RemoteRepo {
+    Remote {
         #[allow(dead_code)]
         remote_url: String,
     },
     /// Has a `.git` directory but no `origin` remote.
-    LocalRepo,
+    Local,
     /// Not a git repository.
-    NotGitRepo,
+    NotGit,
 }
 
 /// Detect the git state of a project directory.
@@ -1105,14 +1105,14 @@ enum GitProjectState {
 fn detect_project_git_state(project_path: &Path) -> GitProjectState {
     let git_dir = project_path.join(".git");
     if !git_dir.exists() {
-        return GitProjectState::NotGitRepo;
+        return GitProjectState::NotGit;
     }
 
     // Parse .git/config directly — no git binary needed.
     let config_path = git_dir.join("config");
     let contents = match std::fs::read_to_string(&config_path) {
         Ok(c) => c,
-        Err(_) => return GitProjectState::LocalRepo,
+        Err(_) => return GitProjectState::Local,
     };
 
     // Look for [remote "origin"] section and extract url = <value>
@@ -1123,19 +1123,17 @@ fn detect_project_git_state(project_path: &Path) -> GitProjectState {
             in_origin_section = trimmed == "[remote \"origin\"]";
             continue;
         }
-        if in_origin_section {
-            if let Some(url) = trimmed.strip_prefix("url") {
-                let url = url.trim().strip_prefix('=').unwrap_or("").trim();
-                if !url.is_empty() {
-                    return GitProjectState::RemoteRepo {
-                        remote_url: url.to_string(),
-                    };
-                }
+        if in_origin_section && let Some(url) = trimmed.strip_prefix("url") {
+            let url = url.trim().strip_prefix('=').unwrap_or("").trim();
+            if !url.is_empty() {
+                return GitProjectState::Remote {
+                    remote_url: url.to_string(),
+                };
             }
         }
     }
 
-    GitProjectState::LocalRepo
+    GitProjectState::Local
 }
 
 /// Check whether `git` is available on the host.
@@ -1286,7 +1284,7 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
     debug!(spec = "git-mirror-service", project = %project_name, state = ?state, "Project git state detected");
 
     // For NotGitRepo, initialize git in the project first
-    if matches!(state, GitProjectState::NotGitRepo) {
+    if matches!(state, GitProjectState::NotGit) {
         info!(spec = "git-mirror-service", project = %project_name, "Initializing git in project directory");
 
         let init_dir = if has_git { pp.as_str() } else { "/project" };
@@ -1383,7 +1381,7 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
     // pushes to the real remote (through the git service's D-Bus keyring access)
     // instead of trying to push to an inaccessible local path.
     // @trace spec:git-mirror-service
-    if let GitProjectState::RemoteRepo { ref remote_url } = state {
+    if let GitProjectState::Remote { ref remote_url } = state {
         let mirror_ref = if has_git {
             mp.as_str()
         } else {
@@ -1465,26 +1463,26 @@ pub(crate) async fn ensure_git_service_running(
 
     // Check if it's running outside our state.
     // If running but with a stale image version, stop it and rebuild.
-    if let Ok(inspect) = client.inspect_container(&container_name).await {
-        if inspect.state == "running" {
-            let expected_tag = git_image_tag();
-            if inspect.image.contains(&expected_tag) {
-                debug!(spec = "git-mirror-service", project = %project_name, "Git service already running (correct version)");
-                return Ok(());
-            }
-            // Stale version — stop it so we can start the correct one
-            warn!(
-                spec = "git-mirror-service",
-                project = %project_name,
-                current = %inspect.image,
-                expected = %expected_tag,
-                "Git service running stale version — restarting"
-            );
-            if let Err(e) = client.stop_container(&container_name, 5).await {
-                warn!(container = %container_name, error = %e, "Failed to stop stale git service container");
-            }
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    if let Ok(inspect) = client.inspect_container(&container_name).await
+        && inspect.state == "running"
+    {
+        let expected_tag = git_image_tag();
+        if inspect.image.contains(&expected_tag) {
+            debug!(spec = "git-mirror-service", project = %project_name, "Git service already running (correct version)");
+            return Ok(());
         }
+        // Stale version — stop it so we can start the correct one
+        warn!(
+            spec = "git-mirror-service",
+            project = %project_name,
+            current = %inspect.image,
+            expected = %expected_tag,
+            "Git service running stale version — restarting"
+        );
+        if let Err(e) = client.stop_container(&container_name, 5).await {
+            warn!(container = %container_name, error = %e, "Failed to stop stale git service container");
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
 
     info!(
@@ -2411,14 +2409,13 @@ fn get_proxy_ip() -> Result<String, String> {
     // Parse the IPs — prefer the one NOT on the enclave (10.89.0.x).
     // The podman default network typically uses 10.88.0.x.
     let ips = String::from_utf8_lossy(&output.stdout);
-    for ip in ips.trim().split_whitespace() {
+    for ip in ips.split_whitespace() {
         if !ip.starts_with("10.89.") {
             return Ok(ip.to_string());
         }
     }
     // Fallback: use any IP
-    ips.trim()
-        .split_whitespace()
+    ips.split_whitespace()
         .next()
         .map(|s| s.to_string())
         .ok_or_else(|| "no IP found".into())
@@ -4655,28 +4652,27 @@ pub async fn handle_open_browser_window(
                 url
             ));
         }
-    } else if window_type == "open_debug_window" {
-        if !url.contains(&format!(".{}.localhost", project)) {
-            return Err(format!(
-                "Invalid URL for debug window: '{}'. Expected <service>.<project>.localhost",
-                url
-            ));
-        }
+    } else if window_type == "open_debug_window"
+        && !url.contains(&format!(".{}.localhost", project))
+    {
+        return Err(format!(
+            "Invalid URL for debug window: '{}'. Expected <service>.<project>.localhost",
+            url
+        ));
     }
 
     // Debounce: prevent rapid successive spawns (10s window for safe windows)
     let now = Instant::now();
-    if window_type == "open_safe_window" {
-        if let Some(last_launch) = state.browser_last_launch.get(project) {
-            if now.duration_since(*last_launch) < Duration::from_secs(10) {
-                info!(
-                    spec = "browser-debounce",
-                    project = %project,
-                    "Debounced rapid browser spawn (safe window)"
-                );
-                return Err("Debounced: too many rapid browser launches".to_string());
-            }
-        }
+    if window_type == "open_safe_window"
+        && let Some(last_launch) = state.browser_last_launch.get(project)
+        && now.duration_since(*last_launch) < Duration::from_secs(10)
+    {
+        info!(
+            spec = "browser-debounce",
+            project = %project,
+            "Debounced rapid browser spawn (safe window)"
+        );
+        return Err("Debounced: too many rapid browser launches".to_string());
     }
 
     // Debug browser: only one per project (simplified for now)
@@ -4809,7 +4805,7 @@ pub async fn handle_diagnostics(
     // @trace spec:cli-diagnostics
     // Shared enclave containers: proxy and inference are global.
     // Git service is per-project: tillandsias-git-{project_name}
-    let shared_containers = vec!["tillandsias-proxy", "tillandsias-inference"];
+    let shared_containers = ["tillandsias-proxy", "tillandsias-inference"];
 
     let project_containers: Vec<String> = if project_path.is_some() {
         vec![
@@ -4847,7 +4843,7 @@ pub async fn handle_diagnostics(
         let mut running_containers = Vec::new();
         for container in &all_containers {
             let output = Command::new("podman")
-                .args(&["ps", "--quiet", "--filter", &format!("name={}", container)])
+                .args(["ps", "--quiet", "--filter", &format!("name={}", container)])
                 .output();
 
             if let Ok(output) = output {
@@ -4892,7 +4888,7 @@ pub async fn handle_diagnostics(
     let mut running_containers = Vec::new();
     for container in &all_containers {
         let output = Command::new("podman")
-            .args(&["ps", "--quiet", "--filter", &format!("name={}", container)])
+            .args(["ps", "--quiet", "--filter", &format!("name={}", container)])
             .output();
 
         if let Ok(output) = output {
@@ -4941,7 +4937,7 @@ pub async fn handle_diagnostics(
 
         let child = std::thread::spawn(move || {
             let mut cmd = Command::new("podman");
-            cmd.args(&["logs", "-f", &container_copy])
+            cmd.args(["logs", "-f", &container_copy])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped());
 
@@ -4956,7 +4952,7 @@ pub async fn handle_diagnostics(
                 let stderr_thread = stderr.map(|e| {
                     std::thread::spawn(move || {
                         let reader = BufReader::new(e);
-                        for line in reader.lines().flatten() {
+                        for line in reader.lines().map_while(Result::ok) {
                             eprintln!("{} {}", prefix_err, line);
                         }
                     })
@@ -4964,7 +4960,7 @@ pub async fn handle_diagnostics(
 
                 if let Some(out) = stdout {
                     let reader = BufReader::new(out);
-                    for line in reader.lines().flatten() {
+                    for line in reader.lines().map_while(Result::ok) {
                         eprintln!("{} {}", prefix_out, line);
                     }
                 }
@@ -5031,6 +5027,20 @@ pub async fn handle_claude_project(
 ) -> Result<AppEvent, String> {
     // Claude mode: use the standard attach-here flow.
     // @trace spec:tray-minimal-ux
+    handle_attach_here(project_path, state, allocator, build_tx).await
+}
+
+/// Handle "Codex" action: launches Codex code analysis agent in a container.
+/// @trace spec:codex-tray-launcher
+#[instrument(skip(state, allocator, build_tx), fields(project = %project_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string()), operation = "codex", spec = "codex-tray-launcher"))]
+pub async fn handle_codex_project(
+    project_path: PathBuf,
+    state: &mut TrayState,
+    allocator: &mut GenusAllocator,
+    build_tx: mpsc::Sender<BuildProgressEvent>,
+) -> Result<AppEvent, String> {
+    // Codex mode: launch code analysis agent in a container.
+    // @trace spec:codex-tray-launcher
     handle_attach_here(project_path, state, allocator, build_tx).await
 }
 
