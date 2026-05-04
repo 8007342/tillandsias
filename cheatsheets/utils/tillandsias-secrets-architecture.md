@@ -397,6 +397,50 @@ podman logs tillandsias-proxy | grep -i "token\|secret\|key" || echo "✓ No sec
 podman secret ls | grep tillandsias || echo "✓ No ephemeral secrets remaining"
 ```
 
+## Unclean Shutdown Recovery
+
+### Problem
+If the tray crashes or is force-killed (e.g., `pkill -9 tillandsias`), the normal shutdown sequence never runs. Podman secrets persist in the system, and on the next tray startup, secret creation fails with:
+
+```
+Error: tillandsias-ca-root: secret name in use
+```
+
+### Solution (Automatic)
+Tillandsias now automatically refreshes stale secrets on each startup:
+
+1. **Check if stale secret exists**: `podman secret exists tillandsias-ca-root`?
+2. **If yes, remove it**: `podman secret rm tillandsias-ca-root` (idempotent, safe)
+3. **Create fresh secret**: `podman secret create tillandsias-ca-root <fresh-cert>`
+
+This happens transparently during tray initialization. You will see a warning log:
+
+```
+WARN tillandsias::handlers: Removing stale CA secret from unclean shutdown {secret="tillandsias-ca-root", spec="ephemeral-secret-refresh, secrets-management"}
+```
+
+This is **normal and expected** after an unclean shutdown. The tray will continue startup without user intervention.
+
+### Manual Recovery (Rarely Needed)
+If for some reason you see "secret name in use" errors and the tray doesn't auto-recover:
+
+```bash
+# List all Tillandsias secrets
+podman secret ls | grep tillandsias
+
+# Remove stale secrets manually
+podman secret rm tillandsias-ca-root tillandsias-ca-cert tillandsias-ca-key
+podman secret rm tillandsias-github-token  # if it exists
+
+# Verify all are gone
+podman secret ls | grep tillandsias || echo "✓ Clean"
+
+# Restart tray
+tillandsias /path/to/project
+```
+
+**Do NOT manually remove secrets while tray is running** — this will cause containers to fail on next startup.
+
 ## Testing Checklist
 
 - [ ] Verify `podman secret inspect` does NOT reveal secret values

@@ -7,6 +7,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [src-tauri/src/event_loop.rs#L809](../../../src-tauri/src/event_loop.rs#L809)
 - [src-tauri/src/handlers.rs#L29](../../../src-tauri/src/handlers.rs#L29)
-- [src-tauri/src/handlers.rs#L3685](../../../src-tauri/src/handlers.rs#L3685)
-- [src-tauri/src/handlers.rs#L3705](../../../src-tauri/src/handlers.rs#L3705)
-- [src-tauri/src/handlers.rs#L3726](../../../src-tauri/src/handlers.rs#L3726)
+- [src-tauri/src/handlers.rs#L3703](../../../src-tauri/src/handlers.rs#L3703)
+- [src-tauri/src/handlers.rs#L3723](../../../src-tauri/src/handlers.rs#L3723)
+- [src-tauri/src/handlers.rs#L3744](../../../src-tauri/src/handlers.rs#L3744)

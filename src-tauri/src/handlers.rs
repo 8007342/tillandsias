@@ -641,22 +641,40 @@ pub(crate) async fn ensure_proxy_running(
         .map_err(|e| format!("Failed to read intermediate CA key: {e}"))?;
 
     // Create secrets for the proxy and forge containers
-    // @trace spec:podman-secrets-integration, spec:secrets-management
-    crate::podman_secret::create("tillandsias-ca-root", &root_cert).map_err(|e| {
-        warn!(error = %e, spec = "secrets-management", "Failed to create root CA secret");
-        e
-    })?;
+    // @trace spec:podman-secrets-integration, spec:secrets-management, spec:ephemeral-secret-refresh
+    // Refresh stale secrets from unclean shutdowns: check if secret exists, remove if found, create fresh
+    let secrets = vec![
+        ("tillandsias-ca-root", root_cert.as_slice()),
+        ("tillandsias-ca-cert", intermediate_cert.as_slice()),
+        ("tillandsias-ca-key", intermediate_key.as_slice()),
+    ];
 
-    crate::podman_secret::create("tillandsias-ca-cert", &intermediate_cert).map_err(|e| {
-        warn!(error = %e, spec = "secrets-management", "Failed to create CA cert secret");
-        e
-    })?;
+    for (name, value) in secrets {
+        // Check if stale secret exists from prior unclean shutdown
+        if crate::podman_secret::exists(name).unwrap_or(false) {
+            if let Err(e) = crate::podman_secret::remove(name) {
+                warn!(
+                    error = %e,
+                    spec = "secrets-management",
+                    secret = %name,
+                    "Failed to remove stale CA secret during refresh"
+                );
+                return Err(e);
+            }
+            warn!(
+                spec = "ephemeral-secret-refresh, secrets-management",
+                secret = %name,
+                reason = "stale secret from unclean shutdown",
+                "Removing and refreshing podman secret"
+            );
+        }
 
-    crate::podman_secret::create("tillandsias-ca-key", &intermediate_key)
-        .map_err(|e| {
-            warn!(error = %e, spec = "secrets-management", "Failed to create intermediate CA key secret");
+        // Create fresh secret with current CA material
+        crate::podman_secret::create(name, value).map_err(|e| {
+            warn!(error = %e, spec = "secrets-management", secret = %name, "Failed to create CA secret");
             e
         })?;
+    }
 
     info!(
         accountability = true,
