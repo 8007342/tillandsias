@@ -3,7 +3,7 @@
 
 ## Status
 
-status: active
+active
 promoted-from: openspec/changes/archive/2026-04-26-subdomain-naming-flip/
 annotation-count: 5
 

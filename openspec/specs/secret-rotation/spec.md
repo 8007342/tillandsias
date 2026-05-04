@@ -1,7 +1,7 @@
 <!-- @trace spec:secret-rotation -->
 ## Status
 
-status: active
+active
 
 ## Requirements
 

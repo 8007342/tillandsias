@@ -1,7 +1,7 @@
 <!-- @trace spec:podman-orchestration -->
 ## Status
 
-status: active
+active
 
 ## Requirements
 

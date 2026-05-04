@@ -1,6 +1,8 @@
 # spec: tray-minimal-ux
 
-## Status: active
+## Status
+
+active
 
 **Version:** v1.0
 

@@ -3,7 +3,7 @@
 
 ## Status
 
-status: active
+active
 promoted-from: openspec/changes/archive/2026-04-27-opencode-web-session-otp/
 annotation-count: 29
 

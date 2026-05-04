@@ -4,7 +4,7 @@
 
 ## Status
 
-status: active
+active
 
 ## Deprecation Notice
 

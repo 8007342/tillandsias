@@ -1,7 +1,7 @@
 <!-- @trace spec:nix-builder -->
 ## Status
 
-status: active
+active
 
 ## Requirements
 

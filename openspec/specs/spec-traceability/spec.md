@@ -1,7 +1,7 @@
 <!-- @trace spec:spec-traceability -->
 ## Status
 
-status: active
+active
 
 ## Requirements
 

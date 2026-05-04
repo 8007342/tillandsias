@@ -3,7 +3,7 @@
 
 ## Status
 
-status: active
+active
 promoted-from: openspec/changes/archive/2026-04-25-subdomain-routing-via-reverse-proxy/
 annotation-count: 11
 

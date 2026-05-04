@@ -3,7 +3,7 @@
 
 ## Status
 
-status: active
+active
 promoted-from: openspec/changes/archive/2026-04-26-tray-progress-and-icon-states/
 annotation-count: 5
 

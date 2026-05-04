@@ -3,7 +3,7 @@
 
 ## Status
 
-status: active
+active
 promoted-from: openspec/changes/archive/2026-04-16-overlay-mount-cache/
 annotation-count: 0
 implementation-complete: false

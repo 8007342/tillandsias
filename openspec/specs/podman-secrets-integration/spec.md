@@ -3,7 +3,7 @@
 
 ## Status
 
-status: active
+active
 
 ## Purpose
 

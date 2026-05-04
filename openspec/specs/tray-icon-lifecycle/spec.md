@@ -1,7 +1,7 @@
 <!-- @trace spec:tray-icon-lifecycle -->
 ## Status
 
-status: active
+active
 
 ## Requirements
 

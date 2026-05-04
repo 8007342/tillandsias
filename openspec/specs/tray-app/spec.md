@@ -1,7 +1,7 @@
 <!-- @trace spec:tray-app -->
 ## Status
 
-status: active
+active
 
 ## Requirements
 
