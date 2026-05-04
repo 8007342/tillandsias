@@ -179,7 +179,49 @@ When a new spec demands a host↔distro bridge be closed:
 
 ## Pull on Demand
 
-> Hand-curated, tracked in-repo (`committed_for_project: true`).
-> Provenance: vendor primary sources only (Microsoft Learn).
-> Refresh cadence: when Microsoft adds new `wsl.conf` / `.wslconfig` keys, when
-> a new bridge is documented, or when a default flips between Windows builds.
+### Source
+
+This cheatsheet documents the security boundary between Windows host and WSL2 distros, including 13 default bridges (drvfs, interop, WSLg, networking), and the hardening profile (wsl.conf knobs) that closes each bridge for the Tillandsias distro.
+
+### Materialize recipe
+
+```bash
+#!/bin/bash
+# Generate WSL2 isolation boundary hardening reference
+# @trace spec:windows-wsl-runtime, spec:cross-platform
+
+cat > wsl2-hardening.md <<'EOF'
+# WSL2 Isolation Boundary Hardening
+
+## Default Bridges (Closed by Tillandsias wsl.conf)
+1. /mnt/c auto-mount (drvfs) → [automount] enabled=false
+2. Windows binary interop → [interop] enabled=false
+3. WSLg X11/Wayland → [gui] gui=false
+4. /mnt/wsl vGPU → [gpu] memory limit + disable vGPU
+5. /mnt/wslg → [wsl2] guiApplications=false
+
+## Host-Side Hardening (.wslconfig)
+- kernel command-line: cgroup_no_v1=all
+- mirrored networking mode (no NAT exposure)
+- host address loopback disabled (no 172.31.0.1 access)
+- firewall enabled (Hyper-V boundary)
+
+## Verification
+- ls /mnt/c should fail (auto-mount disabled)
+- which cmd.exe should fail (interop disabled)
+- wsl --status shows mirrored mode, firewall enabled
+EOF
+```
+
+### Generation guidelines
+
+This cheatsheet is hand-curated and tracked in-repo. Regenerate after:
+1. Microsoft adds new wsl.conf or .wslconfig keys
+2. A new bridge is documented (Microsoft Learn updates)
+3. Default behaviors flip between Windows builds
+4. WSL2 networking mode changes
+
+### License
+
+License: CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/) Content derived from Microsoft Learn (public documentation).
+Last materialized: 2026-05-03

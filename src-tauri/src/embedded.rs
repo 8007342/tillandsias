@@ -40,10 +40,11 @@ pub fn simplify_path(path: &std::path::Path) -> PathBuf {
     let s = path.to_string_lossy();
     // Strip `\\?\` if followed by a drive letter (e.g. `\\?\C:\foo`).
     // Leave `\\?\UNC\server\share` alone — UNC paths cannot be simplified.
-    if let Some(rest) = s.strip_prefix(r"\\?\") {
-        if !rest.starts_with("UNC\\") && rest.len() >= 2 && rest.as_bytes()[1] == b':' {
-            return PathBuf::from(rest);
-        }
+    if let Some(rest) = s
+        .strip_prefix(r"\\?\")
+        .filter(|r| !r.starts_with("UNC\\") && r.len() >= 2 && r.as_bytes()[1] == b':')
+    {
+        return PathBuf::from(rest);
     }
     path.to_path_buf()
 }
@@ -406,7 +407,7 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     .map_err(|e| format!("sse-keepalive-proxy.js: {e}"))?;
     // Write binary executable (tillandsias-mcp-browser)
     fs::write(
-        &default_dir.join("tillandsias-mcp-browser"),
+        default_dir.join("tillandsias-mcp-browser"),
         TILLANDSIAS_MCP_BROWSER_BIN,
     )
     .map_err(|e| format!("tillandsias-mcp-browser: {e}"))?;

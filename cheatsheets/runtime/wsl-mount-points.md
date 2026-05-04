@@ -7,6 +7,7 @@ last_verified: 2026-04-28
 authority: high
 status: current
 tier: pull-on-demand
+pull_recipe: see-section-pull-on-demand
 sources:
   - https://learn.microsoft.com/en-us/windows/wsl/wsl-config
   - https://learn.microsoft.com/en-us/windows/wsl/filesystems
@@ -137,3 +138,46 @@ Never hardcode `/mnt/c/...` — always derive from the Windows path. The user mi
 - `cheatsheets/runtime/wsl-on-windows.md` — wsl.exe CLI surface
 - `cheatsheets/runtime/wsl-daemon-patterns.md` — running daemons inside distros
 - `cheatsheets/languages/bash.md` (Git Bash on Windows section) — `cygpath` for the host-side translation
+
+## Pull on Demand
+
+### Source
+
+This cheatsheet covers WSL2 filesystem integration, mount points, drvfs/9p protocol, and path translation between Windows and Linux.
+
+### Materialize recipe
+
+```bash
+#!/bin/bash
+# Generate WSL2 mount point reference
+cat > wsl2-mounts-reference.md <<'EOF'
+# WSL2 Mount Points Quick Reference
+
+## Default Automount
+- C:\ → /mnt/c/ (drvfs over 9p)
+- D:\ → /mnt/d/ (drvfs over 9p)
+- Network shares → /mnt/wsl/ (manual mount)
+
+## Key Differences
+- drvfs reports all files as root:root (git needs safe.directory)
+- chmod and symlinks are best-effort
+- /mnt/c is 10-100x slower than native /home
+- inotify is best-effort on /mnt/c
+
+## Path Translation
+Windows: C:\Users\user → Linux: /mnt/c/Users/user
+Use wslpath -a for automatic translation
+EOF
+```
+
+### Generation guidelines
+
+This cheatsheet covers WSL2 filesystem behavior from Microsoft documentation. Regenerate after:
+1. WSL2 major version updates
+2. Changes to drvfs or 9p protocol behavior
+3. New mount option support
+
+### License
+
+License: CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/) Source material from Microsoft Learn (public documentation).
+Last materialized: 2026-05-03

@@ -262,9 +262,51 @@ CDP attach from the host runs against `127.0.0.1:9222` directly — under WSL2 m
 
 ## Pull on Demand
 
-> Hand-curated, tracked in-repo (`committed_for_project: true`).
-> Provenance: vendor primary sources only (Microsoft Learn, Chromium upstream,
-> freedesktop, kernel.org, nftables.org, Fedora Project).
-> Refresh cadence: when Chromium changes its sandbox or headless model, when
-> WSL ships new `wsl.conf` keys, or when the WSL2 kernel adds/removes nftables
-> features.
+### Source
+
+This cheatsheet documents hardened Chromium deployment in a WSL2 distro alongside the main forge distro, with nftables egress filtering, SELinux hardening, systemd unit isolation, and CDP debugging support.
+
+### Materialize recipe
+
+```bash
+#!/bin/bash
+# Build WSL2 browser-chrome distro with Chromium hardening
+# @trace spec:chromium-browser-isolation, spec:windows-wsl-runtime
+
+# Build base distro from fedora-minimal:43 + Chromium + hardening tools
+podman create registry.fedoraproject.org/fedora-minimal:43 /bin/sh -c 'true' > "$BUILD_CONTAINER"
+
+# Layer 1: install Chromium + nftables + SELinux tools
+podman exec --user root "$BUILD_CONTAINER" microdnf install -y \
+    chromium \
+    nftables selinux-policy selinux-policy-devel \
+    systemd \
+    --setopt=install_weak_deps=False
+
+# Layer 2: create browser user with restricted capabilities
+podman exec --user root "$BUILD_CONTAINER" /bin/sh -c '
+  useradd -u 1000 -m -s /bin/bash chromium
+  usermod --add-subuids 100000-165535 chromium
+  usermod --add-subgids 100000-165535 chromium
+'
+
+# Layer 3: ship hardened wsl.conf and nftables.conf
+podman cp images/browser-chrome/wsl.conf "$BUILD_CONTAINER:/etc/wsl.conf"
+podman cp images/browser-chrome/nftables.conf "$BUILD_CONTAINER:/etc/nftables.conf"
+
+# Export to tarball for wsl --import
+podman export "$BUILD_CONTAINER" -o "target/wsl/tillandsias-browser-chrome.tar"
+```
+
+### Generation guidelines
+
+This cheatsheet is hand-curated and tracked in-repo. Regenerate after:
+1. Chromium changes to sandbox or headless mode
+2. WSL2 adds new wsl.conf keys
+3. WSL2 kernel changes nftables feature support
+4. Fedora's SELinux policy or tools update
+
+### License
+
+License: CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/) Content derived from Microsoft Learn, Chromium upstream documentation, freedesktop.org, kernel.org, and Fedora Project sources.
+Last materialized: 2026-05-03

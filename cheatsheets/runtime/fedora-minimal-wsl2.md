@@ -287,10 +287,54 @@ Each `podman build` produces an image stored in the distro's `containers-storage
 
 ## Pull on Demand
 
-> Hand-curated, tracked in-repo (`committed_for_project: true`).
-> Provenance: vendor primary sources only (Microsoft Learn, docs.podman.io,
-> github.com/containers/common, github.com/containers/storage, Fedora
-> Project).
-> Refresh cadence: when Fedora ships a new minor (43→44), when podman
-> ships a new major version, when WSL adds new wsl.conf keys, or when the
-> overlay storage driver semantics change.
+### Source
+
+This cheatsheet documents the Fedora-minimal WSL2 distro recipe that hosts podman and all Tillandsias containers on Windows. Built from registry.fedoraproject.org/fedora-minimal:43 + podman + crun + fuse-overlayfs + aardvark-dns + netavark + systemd.
+
+### Materialize recipe
+
+```bash
+#!/bin/bash
+# Build tillandsias-distro.tar for wsl --import on Windows
+# @trace spec:windows-wsl-runtime, spec:default-image
+
+OUT_DIR="${1:-target/wsl}"
+mkdir -p "$OUT_DIR"
+
+# Create a temporary build container from fedora-minimal:43
+BUILD_CONTAINER="$(podman create registry.fedoraproject.org/fedora-minimal:43 /bin/sh -c 'true')"
+
+# Install podman + ecosystem and create the forge user
+podman start --attach "$BUILD_CONTAINER" >/dev/null 2>&1 || true
+podman exec --user root "$BUILD_CONTAINER" microdnf install -y \
+    podman crun fuse-overlayfs \
+    aardvark-dns netavark \
+    systemd systemd-sysv \
+    iproute iputils ca-certificates util-linux shadow-utils \
+    --setopt=install_weak_deps=False
+
+podman exec --user root "$BUILD_CONTAINER" /bin/sh -c '
+  useradd -u 1000 -m -s /bin/bash forge
+  usermod --add-subuids 100000-165535 forge
+  usermod --add-subgids 100000-165535 forge
+'
+
+# Export to tarball
+podman export "$BUILD_CONTAINER" -o "$OUT_DIR/tillandsias-distro.tar"
+podman rm "$BUILD_CONTAINER"
+
+echo "Exported: $OUT_DIR/tillandsias-distro.tar"
+```
+
+### Generation guidelines
+
+This cheatsheet is hand-curated and tracked in-repo. Regenerate after:
+1. Fedora minor release updates (43→44)
+2. podman major version updates (5.x→6.x)
+3. WSL2 adds new wsl.conf keys
+4. Overlay storage driver semantics changes
+
+### License
+
+License: CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/) Build recipe adapted from Microsoft Learn, podman.io, and containers/* community documentation.
+Last materialized: 2026-05-03

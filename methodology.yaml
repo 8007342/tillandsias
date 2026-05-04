@@ -8,16 +8,49 @@
 #              philosophy, spec system, verification levels, litmus tests, cheatsheets,
 #              convergence engine, and CI validation in a single file.
 #
+# ╔════════════════════════════════════════════════════════════════════════════════╗
+# ║ BOOTSTRAP (for agents reading this for the first time)                         ║
+# ║                                                                                ║
+# ║ This file IS ITSELF a methodology cheatsheet: it's dense, reference-heavy,    ║
+# ║ and requires upfront investment to read. Agents should load it EAGERLY        ║
+# ║ at session startup. Each section is navigable and independently meaningful.   ║
+# ║                                                                                ║
+# ║ IMPORTANCE HIERARCHY (read in this order):                                    ║
+# ║                                                                                ║
+# ║ TIER 1 (ALWAYS READ FIRST — the "why"):                                      ║
+# ║   • philosophy.yaml    → Core principle: monotonic reduction of uncertainty   ║
+# ║     WHY: Explains why the system exists, what invariants it preserves.        ║
+# ║                                                                                ║
+# ║ TIER 2 (READ BASED ON ROLE):                                                  ║
+# ║   • Spec writer?     → spec-system.yaml (lifecycle, schema, drift control)   ║
+# ║   • Litmus author?   → litmus.yaml (gating, signal binding)                  ║
+# ║   • Code author?     → ci.yaml (what annotations to add, trace binding)      ║
+# ║   • Cheatsheet maint? → cheatsheets.yaml (CRDT ops, cache, compaction)       ║
+# ║   • Release manager? → versioning.yaml (CalVer format, LUB merge, bumps)      ║
+# ║   • Agent batch work? → between-commits-work-discipline.yaml (ephemeral)     ║
+# ║                                                                                ║
+# ║ TIER 3 (READ FOR DEEP UNDERSTANDING):                                        ║
+# ║   • verification.yaml → S0–S3 (spec validity) + L0–L3 (code evidence)        ║
+# ║   • convergence.yaml  → Engine objective, stability metrics, fitness fn      ║
+# ║                                                                                ║
+# ║ READING GUIDES (by task, not by file):                                       ║
+# ║   • "I'm implementing a spec"      → spec-system, ci.yaml (trace binding)    ║
+# ║   • "I'm writing a litmus test"    → litmus.yaml, spec-system.yaml           ║
+# ║   • "I need to release"            → versioning.yaml, philosophy.yaml        ║
+# ║   • "What should my PR include?"   → ci.yaml, between-commits.yaml           ║
+# ║   • "How do I know code is right?" → verification.yaml, litmus.yaml          ║
+# ║                                                                                ║
+# ║ KEY AFFORDANCES:                                                              ║
+# ║   Each component file includes examples, rationale, and NOT just rules.       ║
+# ║   Files are dense but navigable: jump to the heading that answers your Q.    ║
+# ║   This file gives you the map; the components give you the territory.        ║
+# ╚════════════════════════════════════════════════════════════════════════════════╝
+#
 # To understand the methodology:
-#   1. Read this file first (navigation guide)
-#   2. Jump to the component that answers your question:
-#      - "What is the core principle?" → philosophy.yaml
-#      - "How do specs work?" → spec-system.yaml
-#      - "What are verification levels?" → verification.yaml
-#      - "How do litmus tests work?" → litmus.yaml
-#      - "How do cheatsheets fit in?" → cheatsheets.yaml
-#      - "How does convergence work?" → convergence.yaml
-#      - "What does CI enforce?" → ci.yaml
+#   1. Read BOOTSTRAP above (you are here)
+#   2. Based on your role, read TIER 1 (always: philosophy.yaml)
+#   3. Jump to your TIER 2 component via the task index below
+#   4. Deep dives optional (TIER 3) based on your needs
 
 methodology:
   version: v0.3

@@ -9,6 +9,7 @@ sources:
 authority: high
 status: current
 tier: pull-on-demand
+pull_recipe: see-section-pull-on-demand
 summary_generated_by: hand-curated
 bundled_into_image: false
 committed_for_project: false
@@ -152,3 +153,42 @@ updated: 2026-04-28**.
 - `runtime/cmd.md` — non-elevated cmd-line basics; this file is the elevation layer on top.
 - `runtime/wsl-on-windows.md` — WSL install requires admin (one-time); day-to-day WSL use does not.
 - `runtime/windows-native-dev-build.md` — Tillandsias dev install on Windows; runs entirely as user.
+
+## Pull on Demand
+
+### Source
+
+This cheatsheet covers elevation mechanisms on Windows (UAC, `runas`, `sudo`, `Start-Process -Verb RunAs`).
+
+### Materialize recipe
+
+```bash
+#!/bin/bash
+# Generate admin-console reference for Windows development
+cat > admin-console.md <<'EOF'
+# Admin Console Elevation Quick Reference
+
+## Techniques
+
+- UAC dialog: Start-Process -Verb RunAs
+- Password prompt: runas /user:Administrator
+- Native sudo (Windows 11 23H2+): sudo --inline
+
+## Key SIDs
+
+- S-1-16-12288: High Mandatory Level (admin)
+EOF
+```
+
+### Generation guidelines
+
+This cheatsheet is hand-curated from Microsoft documentation. Regenerate after:
+1. Windows 11 feature releases (new sudo capabilities)
+2. Changes to UAC policy documentation
+3. Feedback from Windows developers on new elevation patterns
+
+### License
+
+License: CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/)
+Source material from Microsoft Learn (public documentation).
+Last materialized: 2026-05-03

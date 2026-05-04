@@ -7,6 +7,7 @@ last_verified: 2026-04-28
 authority: high
 status: current
 tier: pull-on-demand
+pull_recipe: see-section-pull-on-demand
 sources:
   - https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags
   - https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw
@@ -113,3 +114,44 @@ Get-CimInstance Win32_Process -Filter "Name='wsl.exe'" | Select-Object ProcessId
 - `cheatsheets/runtime/wsl-on-windows.md` — wsl.exe semantics
 - `cheatsheets/runtime/powershell.md` — Stop-Process / Start-Process equivalents
 - `cheatsheets/runtime/cmd.md` — `start /b` background launching
+
+## Pull on Demand
+
+### Source
+
+This cheatsheet covers Windows process creation flags for suppressing console windows and controlling child process lifecycle.
+
+### Materialize recipe
+
+```bash
+#!/bin/bash
+# Generate Windows process creation flags reference
+cat > windows-process-flags.md <<'EOF'
+# Windows Process Creation Flags
+
+## Key Flags
+- CREATE_NEW_CONSOLE (0x10): Force new console window
+- CREATE_NO_WINDOW (0x08000000): Suppress console, keep pipes
+- DETACHED_PROCESS (0x08): No console, no pipes
+- CREATE_BREAKAWAY_FROM_JOB (0x01000000): Survive parent death
+
+## Rust Pattern
+Use CommandExt::creation_flags() to set flags:
+```rust
+use std::os::windows::process::CommandExt;
+cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+```
+EOF
+```
+
+### Generation guidelines
+
+This cheatsheet is hand-curated from Windows API documentation. Regenerate after:
+1. Windows API changes to process creation
+2. Updates to Rust stdlib CommandExt
+3. Feedback from Windows process management changes
+
+### License
+
+License: CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/) Source material from Microsoft Learn (public documentation).
+Last materialized: 2026-05-03

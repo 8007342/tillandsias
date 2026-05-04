@@ -9,15 +9,6 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use tracing::{debug, error, info};
 
-/// Window type for the Chromium instance.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChromiumWindowType {
-    /// Safe window: headless mode, no dev tools, dark theme
-    Safe,
-    /// Debug window: remote debugging enabled on port 9222
-    Debug,
-}
-
 /// Spawn a Chromium window in a container.
 ///
 /// # Arguments

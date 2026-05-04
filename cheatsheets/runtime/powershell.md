@@ -10,6 +10,7 @@ sources:
 authority: high
 status: current
 tier: pull-on-demand
+pull_recipe: see-section-pull-on-demand
 ---
 
 # PowerShell — Windows scripting for forge & host builds
@@ -275,3 +276,46 @@ Get-Content .\file.txt | & wsl.exe -- grep error
 - `runtime/windows-native-dev-build.md` — `build-local.ps1` invocation context
 - `runtime/wsl-on-windows.md` — WSL distro lifecycle from PowerShell
 - `languages/bash.md` — counterpart for the Linux side of the same build pipelines
+
+## Pull on Demand
+
+### Source
+
+This cheatsheet covers PowerShell scripting fundamentals, variable scoping, native exe interop, WSL integration, and cross-platform patterns.
+
+### Materialize recipe
+
+```bash
+#!/bin/bash
+# Generate PowerShell quick reference for Windows development
+cat > powershell-reference.md <<'EOF'
+# PowerShell Quick Reference
+
+## Variables and Operators
+- $var = "value" — variable assignment
+- & "C:\path\exe" — call operator for exes with spaces
+- $LASTEXITCODE — last native exe exit code
+- $? — boolean success status
+
+## Common Commands
+- Get-Content — read file (cat equivalent)
+- Write-Output — pipeline output (cmdlet)
+- Start-Process -WindowStyle Hidden — launch detached
+
+## WSL Integration
+- wsl.exe -d Ubuntu -u user -- command — run Linux command
+- wslpath -a — translate Windows to Linux paths
+EOF
+```
+
+### Generation guidelines
+
+This cheatsheet is hand-curated from Microsoft PowerShell documentation. Regenerate after:
+1. Major PowerShell releases (version detection changes)
+2. WSL integration changes
+3. Updates to native exe interop behavior
+
+### License
+
+License: CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/) Source material from Microsoft Learn (public documentation).
+Last materialized: 2026-05-03

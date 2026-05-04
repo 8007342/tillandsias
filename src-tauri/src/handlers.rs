@@ -2646,6 +2646,7 @@ fn forge_profile(
 /// no token files, no Claude dir mounts.
 ///
 /// @trace spec:native-secrets-store
+#[allow(clippy::too_many_arguments)]
 fn build_launch_context(
     container_name: &str,
     project_path: &Path,
@@ -5051,7 +5052,6 @@ pub async fn handle_maintenance_project(
 mod tests {
     use super::*;
     use std::path::Path;
-    use tillandsias_core::state::{ContainerType, TrayState};
 
     // @trace spec:default-image, spec:fix-windows-image-routing
     #[test]

@@ -100,10 +100,12 @@ pub struct Secret {
 
     /// When the secret was created (ISO 8601 timestamp, typically).
     #[serde(rename = "CreatedAt")]
+    #[allow(dead_code)]
     pub created_at: Option<String>,
 
     /// When the secret was last updated.
     #[serde(rename = "UpdatedAt")]
+    #[allow(dead_code)]
     pub updated_at: Option<String>,
 }
 

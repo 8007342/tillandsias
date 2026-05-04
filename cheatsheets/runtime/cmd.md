@@ -10,6 +10,7 @@ sources:
 authority: high
 status: current
 tier: pull-on-demand
+pull_recipe: see-section-pull-on-demand
 summary_generated_by: hand-curated
 bundled_into_image: false
 committed_for_project: false
@@ -183,3 +184,48 @@ PowerShell `[Environment]::SetEnvironmentVariable(...)` API.
 - `runtime/admin-console.md` — when and how to elevate from cmd or PowerShell.
 - `runtime/windows-native-dev-build.md` — building Tillandsias on Windows; uses cmd-style env vars in a few wrappers.
 - `runtime/wsl-on-windows.md` — invoking `wsl.exe` from cmd vs PowerShell.
+
+## Pull on Demand
+
+### Source
+
+This cheatsheet covers cmd.exe fundamentals, command reference, environment variables, and batch scripting patterns.
+
+### Materialize recipe
+
+```bash
+#!/bin/bash
+# Generate cmd.exe quick reference for Windows development
+cat > cmd-reference.md <<'EOF'
+# cmd.exe Quick Reference
+
+## Process Management
+- taskkill /F /IM <exe> /T — kill process tree
+- tasklist /FI "IMAGENAME eq <exe>" — list processes
+- where <cmd> — find executable
+
+## Environment Variables
+- set — list all vars
+- set FOO=bar — session-only var
+- setx FOO bar — persist to user registry
+- setx FOO bar /M — persist to machine registry (requires admin)
+
+## File Operations
+- type <file> — print file contents
+- dir /b — bare file listing
+- del /F /Q — force delete
+- rmdir /S /Q — recursive delete
+EOF
+```
+
+### Generation guidelines
+
+This cheatsheet is hand-curated from Microsoft documentation. Regenerate after:
+1. New Windows releases with cmd.exe changes
+2. Updates to command behavior or switches
+3. Feedback from Windows development teams
+
+### License
+
+License: CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/) Source material from Microsoft Learn (public documentation).
+Last materialized: 2026-05-03

@@ -224,8 +224,50 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "
 
 ## Pull on Demand
 
-> Hand-curated, tracked in-repo (`committed_for_project: true`).
-> Provenance: vendor primary sources only (Microsoft Learn).
-> Refresh cadence: when `wsl --install` flags change, when DISM feature names
-> change (rare), or when a new Windows build ships that affects the minimum
-> requirement.
+### Source
+
+This cheatsheet documents the hard-requirement checks that the Tillandsias Windows installer must perform before downloading any artifacts. Covers hardware (VT-x, SLAT, DEP/NX), OS version (Win 10 19041+), and Windows feature enablement (VirtualMachinePlatform, Microsoft-Windows-Subsystem-Linux).
+
+### Materialize recipe
+
+```bash
+#!/bin/bash
+# WSL2 prerequisite validation for Tillandsias on Windows
+# @trace spec:install-progress, spec:windows-wsl-runtime
+
+# Run PowerShell-based checks (hardware, OS version, features)
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "
+  # Hardware checks via systeminfo
+  \$sysinfo = systeminfo.exe
+  \$vt = \$sysinfo | Select-String 'VM Monitor Mode Extensions.*Yes'
+  \$slat = \$sysinfo | Select-String 'Second Level Address Translation.*Yes'
+  \$dep = \$sysinfo | Select-String 'Data Execution Prevention.*Yes'
+  
+  if (-not \$vt -or -not \$slat -or -not \$dep) {
+    Write-Host 'Hardware requirements not met' -ForegroundColor Red
+    exit 1
+  }
+  
+  # Enable required features
+  dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+  dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+  
+  # Install WSL kernel
+  wsl.exe --install --no-distribution
+  wsl.exe --set-default-version 2
+  wsl.exe --update
+"
+```
+
+### Generation guidelines
+
+This cheatsheet is hand-curated and tracked in-repo. Regenerate after:
+1. Changes to wsl.exe command flags or behavior
+2. Updates to DISM feature names
+3. New Windows builds that affect minimum OS requirement (19041)
+4. Changes to Hyper-V hardware requirements
+
+### License
+
+License: CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/) Content derived from Microsoft Learn (public documentation).
+Last materialized: 2026-05-03

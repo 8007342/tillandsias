@@ -872,17 +872,16 @@ fn main() {
                         rebuild_menu(&app_for_rebuild, &state_for_rebuild);
                     });
 
-                event_loop::run(
-                    loop_state,
-                    scanner_rx,
-                    podman_rx,
-                    menu_rx,
-                    browser_rx,
+                let channels = event_loop::EventChannels {
+                    scanner: scanner_rx,
+                    podman: podman_rx,
+                    menu: menu_rx,
+                    browser: browser_rx,
                     build_rx,
                     build_tx,
-                    on_state_change,
-                )
-                .await;
+                };
+
+                event_loop::run(loop_state, channels, on_state_change).await;
             });
 
             Ok(())

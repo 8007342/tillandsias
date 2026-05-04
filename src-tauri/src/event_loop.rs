@@ -29,6 +29,16 @@ const BUILD_CHIP_FADEOUT: Duration = Duration::from_secs(10);
 /// Callback for menu rebuilds after state changes.
 pub type MenuRebuildFn = Box<dyn Fn(&TrayState) + Send + Sync>;
 
+/// Event channels for the main event loop.
+pub struct EventChannels {
+    pub scanner: mpsc::Receiver<ProjectChange>,
+    pub podman: mpsc::Receiver<tillandsias_podman::events::PodmanEvent>,
+    pub menu: mpsc::Receiver<MenuCommand>,
+    pub browser: mpsc::Receiver<MenuCommand>,
+    pub build_rx: mpsc::Receiver<BuildProgressEvent>,
+    pub build_tx: mpsc::Sender<BuildProgressEvent>,
+}
+
 /// Run the main event loop. This drives the entire application.
 ///
 /// Listens on five event sources via `tokio::select!`:
@@ -43,12 +53,7 @@ pub type MenuRebuildFn = Box<dyn Fn(&TrayState) + Send + Sync>;
 /// progress back into this loop via `build_rx`.
 pub async fn run(
     mut state: TrayState,
-    mut scanner_rx: mpsc::Receiver<ProjectChange>,
-    mut podman_rx: mpsc::Receiver<tillandsias_podman::events::PodmanEvent>,
-    mut menu_rx: mpsc::Receiver<MenuCommand>,
-    mut browser_rx: mpsc::Receiver<MenuCommand>,
-    mut build_rx: mpsc::Receiver<BuildProgressEvent>,
-    build_tx: mpsc::Sender<BuildProgressEvent>,
+    mut channels: EventChannels,
     on_state_change: MenuRebuildFn,
 ) {
     let mut allocator = GenusAllocator::new();
@@ -88,14 +93,14 @@ pub async fn run(
     loop {
         tokio::select! {
             // Scanner: filesystem changes
-            Some(change) = scanner_rx.recv() => {
+            Some(change) = channels.scanner.recv() => {
                 handle_scanner_event(change, &mut state);
                 prune_completed_builds(&mut state);
                 on_state_change(&state);
             }
 
             // Podman: container state changes
-            Some(event) = podman_rx.recv() => {
+            Some(event) = channels.podman.recv() => {
                 handle_podman_event(event, &mut state, &mut allocator, &mut tool_allocator);
                 prune_completed_builds(&mut state);
                 on_state_change(&state);
@@ -103,7 +108,7 @@ pub async fn run(
 
             // Browser socket: requests from MCP server (Linux only)
             // @trace spec:browser-mcp-server
-            Some(command) = browser_rx.recv() => {
+            Some(command) = channels.browser.recv() => {
                 match command {
                     MenuCommand::OpenBrowserWindow { project, url, window_type } => {
                         info!(
@@ -129,7 +134,7 @@ pub async fn run(
             }
 
             // Build progress: image/maintenance build state transitions
-            Some(event) = build_rx.recv() => {
+            Some(event) = channels.build_rx.recv() => {
                 handle_build_progress_event(event, &mut state, prune_tx.clone());
                 prune_completed_builds(&mut state);
                 on_state_change(&state);
@@ -142,7 +147,7 @@ pub async fn run(
             }
 
             // Menu: user actions
-            Some(command) = menu_rx.recv() => {
+            Some(command) = channels.menu.recv() => {
                 match command {
                     MenuCommand::Quit => {
                         info!(spec = "tray-app", "Quit requested from menu");
@@ -150,7 +155,7 @@ pub async fn run(
                         break;
                     }
                     MenuCommand::AttachHere { project_path } => {
-                        match handlers::handle_attach_here(project_path, &mut state, &mut allocator, build_tx.clone()).await {
+                        match handlers::handle_attach_here(project_path, &mut state, &mut allocator, channels.build_tx.clone()).await {
                             Ok(_event) => {
 
                                 prune_completed_builds(&mut state);
@@ -163,7 +168,7 @@ pub async fn run(
                     }
                     // @trace spec:tray-minimal-ux
                     MenuCommand::OpenCodeProject { project_path } => {
-                        match handlers::handle_opencode_project(project_path, &mut state, &mut allocator, build_tx.clone()).await {
+                        match handlers::handle_opencode_project(project_path, &mut state, &mut allocator, channels.build_tx.clone()).await {
                             Ok(_event) => {
                                 prune_completed_builds(&mut state);
                                 on_state_change(&state);
@@ -175,7 +180,7 @@ pub async fn run(
                     }
                     // @trace spec:browser-isolation-tray-integration
                     MenuCommand::OpenCodeWebProject { project_path } => {
-                        match handlers::handle_opencode_web_project(project_path, &mut state, &mut allocator, build_tx.clone()).await {
+                        match handlers::handle_opencode_web_project(project_path, &mut state, &mut allocator, channels.build_tx.clone()).await {
                             Ok(_event) => {
                                 prune_completed_builds(&mut state);
                                 on_state_change(&state);
@@ -187,7 +192,7 @@ pub async fn run(
                     }
                     // @trace spec:tray-minimal-ux
                     MenuCommand::ClaudeProject { project_path } => {
-                        match handlers::handle_claude_project(project_path, &mut state, &mut allocator, build_tx.clone()).await {
+                        match handlers::handle_claude_project(project_path, &mut state, &mut allocator, channels.build_tx.clone()).await {
                             Ok(_event) => {
                                 prune_completed_builds(&mut state);
                                 on_state_change(&state);
@@ -199,7 +204,7 @@ pub async fn run(
                     }
                     // @trace spec:tray-minimal-ux
                     MenuCommand::MaintenanceProject { project_path } => {
-                        match handlers::handle_maintenance_project(project_path, &mut state, &mut allocator, &mut tool_allocator, build_tx.clone()).await {
+                        match handlers::handle_maintenance_project(project_path, &mut state, &mut allocator, &mut tool_allocator, channels.build_tx.clone()).await {
                             Ok(()) => {
                                 prune_completed_builds(&mut state);
                                 on_state_change(&state);
@@ -253,7 +258,7 @@ pub async fn run(
                     }
                     MenuCommand::Terminal { project_path } => {
                         info!(project = ?project_path, "Terminal requested");
-                        match handlers::handle_terminal(project_path, &mut state, &mut allocator, &mut tool_allocator, build_tx.clone()).await {
+                        match handlers::handle_terminal(project_path, &mut state, &mut allocator, &mut tool_allocator, channels.build_tx.clone()).await {
                             Ok(()) => {
 
                                 prune_completed_builds(&mut state);
@@ -266,7 +271,7 @@ pub async fn run(
                     }
                     MenuCommand::ServeHere { project_path } => {
                         info!(project = ?project_path, "Serve Here requested");
-                        match handlers::handle_serve_here(project_path, &mut state, build_tx.clone()).await {
+                        match handlers::handle_serve_here(project_path, &mut state, channels.build_tx.clone()).await {
                             Ok(()) => {
                                 prune_completed_builds(&mut state);
                                 on_state_change(&state);
@@ -292,7 +297,7 @@ pub async fn run(
                                     .join("src")
                                 })
                         };
-                        match handlers::handle_root_terminal(watch_path, &mut state, &mut allocator, &mut tool_allocator, build_tx.clone()).await {
+                        match handlers::handle_root_terminal(watch_path, &mut state, &mut allocator, &mut tool_allocator, channels.build_tx.clone()).await {
                             Ok(()) => {
 
                                 prune_completed_builds(&mut state);
@@ -305,7 +310,7 @@ pub async fn run(
                     }
                     MenuCommand::GitHubLogin => {
                         info!("GitHub Login requested");
-                        if let Err(e) = handlers::handle_github_login(&state, build_tx.clone()).await {
+                        if let Err(e) = handlers::handle_github_login(&state, channels.build_tx.clone()).await {
                             error!(error = %e, "GitHub Login failed");
                         } else {
                             // Invalidate remote repos cache so it refreshes
@@ -321,7 +326,7 @@ pub async fn run(
                     }
                     MenuCommand::CloneProject { full_name, name } => {
                         info!(repo = %full_name, "Clone project requested");
-                        handle_clone_project(&full_name, &name, &mut state, &mut allocator, build_tx.clone(), &on_state_change).await;
+                        handle_clone_project(&full_name, &name, &mut state, &mut allocator, channels.build_tx.clone(), &on_state_change).await;
                     }
                     MenuCommand::ClaudeResetCredentials => {
                         info!("Claude Reset Credentials requested");
@@ -494,7 +499,7 @@ pub async fn run(
                             spec = "proxy-container",
                             "Proxy container not running — restarting"
                         );
-                        if let Err(e) = handlers::ensure_infrastructure_ready(&state, build_tx.clone()).await {
+                        if let Err(e) = handlers::ensure_infrastructure_ready(&state, channels.build_tx.clone()).await {
                             error!(spec = "proxy-container", error = %e, "Infrastructure restart failed");
                         }
                     }

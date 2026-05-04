@@ -166,6 +166,48 @@ tray (Rust)
 
 ## Pull on Demand
 
-> This cheatsheet is hand-curated and tracked in-repo (committed_for_project: true).
-> Provenance is exclusively Microsoft Learn. Refresh cadence: when Microsoft
-> announces new `.wsb` keys or `wsb` subcommands.
+### Source
+
+This cheatsheet documents Windows Sandbox configuration (.wsb XML), lifecycle control via wsb/WindowsSandbox.exe, and integration points for Tillandsias browser isolation backend on Windows.
+
+### Materialize recipe
+
+```bash
+#!/bin/bash
+# Generate Windows Sandbox configuration reference for Tillandsias browser isolation
+# @trace spec:chromium-browser-isolation, spec:windows-sandbox
+
+cat > windows-sandbox-config.md <<'EOF'
+# Windows Sandbox Configuration
+
+## Key .wsb Elements
+- <Networking>Enabled/Disabled</Networking> — enable/disable network access
+- <MappedFolders> — bind-mount host directories
+- <LogonCommand> — run command on sandbox startup
+- <PrinterRedirection>Enabled/Disabled</PrinterRedirection> — device passthrough
+- <CameraRedirection>Enabled/Disabled</CameraRedirection> — device passthrough
+
+## Lifecycle Control
+- wsb start --config sandbox.wsb (Windows 24H2+)
+- WindowsSandbox.exe sandbox.wsb (legacy)
+- wsb stop --id <sandbox-id> (Windows 24H2+)
+- Track sandbox-id to session mapping in tray state
+
+## Security Properties
+- Hyper-V isolation for browser process
+- No persistent storage (ephemeral RW overlay)
+- No credential access (no network, no host drives by default)
+EOF
+```
+
+### Generation guidelines
+
+This cheatsheet is hand-curated and tracked in-repo. Regenerate after:
+1. New Microsoft Sandbox `.wsb` XML keys or attributes
+2. New `wsb` CLI subcommands (24H2+)
+3. Changes to sandbox lifecycle or isolation semantics
+
+### License
+
+License: CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/) Content derived from Microsoft Learn (public documentation).
+Last materialized: 2026-05-03
