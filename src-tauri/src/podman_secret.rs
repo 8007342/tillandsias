@@ -264,6 +264,7 @@ pub fn exists(name: &str) -> Result<bool, String> {
 ///
 /// @trace spec:secrets-management, spec:podman-orchestration
 #[instrument(skip_all, fields(name = %name))]
+#[allow(clippy::needless_borrows_for_generic_args)]
 pub fn remove(name: &str) -> Result<(), String> {
     debug!(spec = "secrets-management", "Removing podman secret");
 
@@ -323,6 +324,7 @@ pub fn remove(name: &str) -> Result<(), String> {
 ///
 /// @trace spec:secrets-management, spec:podman-orchestration
 #[instrument(skip_all)]
+#[allow(clippy::needless_borrows_for_generic_args)]
 pub fn list() -> Result<Vec<Secret>, String> {
     debug!(spec = "secrets-management", "Listing podman secrets");
 

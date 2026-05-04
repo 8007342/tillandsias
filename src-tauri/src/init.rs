@@ -123,7 +123,8 @@ fn update_image_status(
 /// Proxy first (foundation), then forge (main), then git + inference,
 /// then browser containers for OpenCode Web isolation.
 /// @trace spec:init-incremental-builds, spec:browser-isolation-core
-const IMAGE_TYPES: &[(&str, fn() -> String)] = &[
+type ImageDef = (&'static str, fn() -> String);
+const IMAGE_TYPES: &[ImageDef] = &[
     ("proxy", proxy_image_tag),
     ("forge", forge_image_tag),
     ("git", git_image_tag),
@@ -197,19 +198,19 @@ pub fn run_with_force(force: bool, debug: bool) -> bool {
 
         // Check if image was already built successfully (incremental build)
         // @trace spec:init-incremental-builds
-        if !force {
-            if let Some(status) = build_state.images.get(*image_name) {
-                if status.status == "success" && image_exists(&tag) {
-                    println!(
-                        "  {}",
-                        i18n::tf(
-                            "init.build.skipping",
-                            &[("name", image_name), ("tag", &tag)]
-                        )
-                    );
-                    continue;
-                }
-            }
+        if !force
+            && let Some(status) = build_state.images.get(*image_name)
+            && status.status == "success"
+            && image_exists(&tag)
+        {
+            println!(
+                "  {}",
+                i18n::tf(
+                    "init.build.skipping",
+                    &[("name", image_name), ("tag", &tag)]
+                )
+            );
+            continue;
         }
 
         // Remove existing image if force-rebuilding
@@ -260,41 +261,38 @@ pub fn run_with_force(force: bool, debug: bool) -> bool {
         };
 
         #[cfg(not(target_os = "windows"))]
-        let status = {
-            let cmd_result = if debug {
-                let log = log_path.as_ref().unwrap();
-                let cmd = format!(
-                    "{} {} --tag {} --backend fedora 2>&1 | tee {}",
-                    script.display(),
-                    image_name,
-                    tag,
-                    log
-                );
-                std::process::Command::new("bash")
-                    .arg("-c")
-                    .arg(&cmd)
-                    .current_dir(&source_dir)
-                    .env_remove("LD_LIBRARY_PATH")
-                    .env_remove("LD_PRELOAD")
-                    .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
-                    .stdin(std::process::Stdio::inherit())
-                    .stdout(std::process::Stdio::inherit())
-                    .stderr(std::process::Stdio::inherit())
-                    .status()
-            } else {
-                std::process::Command::new(&script)
-                    .arg(*image_name)
-                    .args(["--tag", &tag, "--backend", "fedora"])
-                    .current_dir(&source_dir)
-                    .env_remove("LD_LIBRARY_PATH")
-                    .env_remove("LD_PRELOAD")
-                    .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
-                    .stdin(std::process::Stdio::inherit())
-                    .stdout(std::process::Stdio::inherit())
-                    .stderr(std::process::Stdio::inherit())
-                    .status()
-            };
-            cmd_result
+        let status = if debug {
+            let log = log_path.as_ref().unwrap();
+            let cmd = format!(
+                "{} {} --tag {} --backend fedora 2>&1 | tee {}",
+                script.display(),
+                image_name,
+                tag,
+                log
+            );
+            std::process::Command::new("bash")
+                .arg("-c")
+                .arg(&cmd)
+                .current_dir(&source_dir)
+                .env_remove("LD_LIBRARY_PATH")
+                .env_remove("LD_PRELOAD")
+                .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
+                .stdin(std::process::Stdio::inherit())
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
+                .status()
+        } else {
+            std::process::Command::new(&script)
+                .arg(*image_name)
+                .args(["--tag", &tag, "--backend", "fedora"])
+                .current_dir(&source_dir)
+                .env_remove("LD_LIBRARY_PATH")
+                .env_remove("LD_PRELOAD")
+                .env("PODMAN_PATH", tillandsias_podman::find_podman_path())
+                .stdin(std::process::Stdio::inherit())
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
+                .status()
         };
 
         #[cfg(target_os = "windows")]

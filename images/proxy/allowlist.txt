@@ -104,6 +104,16 @@
 .perplexity.ai
 .searchapi.io
 
+# --- Code analysis services (used by Codex) ---
+# @trace spec:enclave-network, spec:proxy-egress-allowlist
+# Codex requires external access for code inspection and analysis.
+# api.github.com is covered by .github.com
+# PyPI and files.pythonhosted.org covered by .pypi.org and .pythonhosted.org
+.codeclimate.com
+.sonarcloud.io
+.codacy.com
+.deepsource.io
+
 # --- Documentation ---
 .docs.rs
 .w3.org

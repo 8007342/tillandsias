@@ -140,7 +140,7 @@ pub fn delete_github_token() -> Result<(), String> {
 /// - Linux:   `$XDG_RUNTIME_DIR/tillandsias/tokens/` (real tmpfs)
 /// - macOS:   `$TMPDIR/tillandsias-tokens/` (per-user tmpfs under /var/folders)
 /// - Windows: `%LOCALAPPDATA%\Temp\tillandsias-tokens\` (per-user NTFS —
-///            not literal tmpfs, but user-scoped and swept on cleanup)
+///   not literal tmpfs, but user-scoped and swept on cleanup)
 fn token_file_root() -> PathBuf {
     #[cfg(target_os = "linux")]
     {

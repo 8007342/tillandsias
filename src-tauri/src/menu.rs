@@ -585,3 +585,117 @@ fn build_cloud_projects_submenu<R: Runtime>(
 pub(crate) fn needs_github_login() -> bool {
     !matches!(crate::secrets::retrieve_github_token(), Ok(Some(_)))
 }
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+//! Unit tests for menu button logic and ID generation.
+//! @trace spec:codex-tray-launcher
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    /// Test that the generation-based ID suffix is properly appended.
+    /// @trace spec:codex-tray-launcher
+    #[test]
+    fn test_codex_project_id_generation() {
+        let path = Path::new("/home/user/src/my-project");
+        let id = ids::codex_project(path);
+
+        // ID should contain the base format "codex:/home/user/src/my-project"
+        let stripped = ids::strip_gen(&id);
+        assert_eq!(stripped, "codex:/home/user/src/my-project");
+    }
+
+    /// Test that strip_gen correctly removes generation suffix.
+    #[test]
+    fn test_strip_gen_removes_suffix() {
+        let id_with_suffix = "codex:/path#42";
+        let stripped = ids::strip_gen(id_with_suffix);
+        assert_eq!(stripped, "codex:/path");
+    }
+
+    /// Test that strip_gen handles IDs without suffix gracefully.
+    #[test]
+    fn test_strip_gen_no_suffix() {
+        let id_no_suffix = "codex:/path";
+        let stripped = ids::strip_gen(id_no_suffix);
+        assert_eq!(stripped, "codex:/path");
+    }
+
+    /// Test that parse() extracts action and payload correctly.
+    /// @trace spec:codex-tray-launcher
+    #[test]
+    fn test_parse_codex_menu_id() {
+        let id = "codex:/home/user/src/my-project";
+        let parsed = ids::parse(id);
+
+        assert!(parsed.is_some());
+        let (action, payload) = parsed.unwrap();
+        assert_eq!(action, "codex");
+        assert_eq!(payload, "/home/user/src/my-project");
+    }
+
+    /// Test that parse() handles IDs with generation suffix.
+    #[test]
+    fn test_parse_with_generation_suffix() {
+        let id = "codex:/home/user/src/my-project#42";
+        let parsed = ids::parse(id);
+
+        assert!(parsed.is_some());
+        let (action, payload) = parsed.unwrap();
+        assert_eq!(action, "codex");
+        assert_eq!(payload, "/home/user/src/my-project");
+    }
+
+    /// Test that other project types (opencode, claude, maintenance) generate correct IDs.
+    #[test]
+    fn test_other_project_id_types() {
+        let path = Path::new("/home/user/src/test-project");
+
+        // OpenCode
+        let oc_id = ids::opencode_project(path);
+        assert!(oc_id.contains("opencode:/home/user/src/test-project"));
+
+        // Claude
+        let claude_id = ids::claude_project(path);
+        assert!(claude_id.contains("claude:/home/user/src/test-project"));
+
+        // Maintenance
+        let maint_id = ids::maintenance_project(path);
+        assert!(maint_id.contains("maintenance:/home/user/src/test-project"));
+    }
+
+    /// Test that clone_project IDs encode both full_name and name.
+    #[test]
+    fn test_clone_project_id_format() {
+        let full_name = "github.com/user/repo";
+        let name = "repo";
+        let id = ids::clone_project(full_name, name);
+
+        let stripped = ids::strip_gen(&id);
+        assert!(stripped.contains("clone:"));
+        assert!(stripped.contains("github.com/user/repo"));
+        assert!(stripped.contains("repo"));
+    }
+
+    /// Test that gen_id increments generation counter on successive calls.
+    #[test]
+    fn test_gen_id_increments() {
+        let id1 = gen_id("test");
+        let id2 = gen_id("test");
+
+        // Both should have generation suffix, and they should be different
+        assert!(id1.contains('#'));
+        assert!(id2.contains('#'));
+        assert_ne!(id1, id2);
+    }
+
+    /// Test static_id works for non-actionable menu items.
+    #[test]
+    fn test_static_id() {
+        let id = ids::static_id("version");
+        let stripped = ids::strip_gen(&id);
+        assert_eq!(stripped, "version");
+    }
+}

@@ -601,14 +601,14 @@ fn parse_user_from_gitconfig(path: &Path) -> (String, String) {
             continue;
         }
         if in_user_section {
-            if let Some(val) = trimmed.strip_prefix("name") {
-                if let Some(val) = val.trim_start().strip_prefix('=') {
-                    name = val.trim().to_string();
-                }
-            } else if let Some(val) = trimmed.strip_prefix("email") {
-                if let Some(val) = val.trim_start().strip_prefix('=') {
-                    email = val.trim().to_string();
-                }
+            if let Some(val) = trimmed.strip_prefix("name")
+                && let Some(val) = val.trim_start().strip_prefix('=')
+            {
+                name = val.trim().to_string();
+            } else if let Some(val) = trimmed.strip_prefix("email")
+                && let Some(val) = val.trim_start().strip_prefix('=')
+            {
+                email = val.trim().to_string();
             }
         }
     }

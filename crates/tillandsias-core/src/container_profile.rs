@@ -740,10 +740,10 @@ mod tests {
     fn forge_profiles_have_tools_overlay_mount() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
-        // Mounts: tools overlay + config overlay (both read-only) + container logs (RW)
-        // @trace spec:proxy-container, spec:layered-tools-overlay, spec:podman-orchestration
-        assert_eq!(opencode.mounts.len(), 3);
-        assert_eq!(claude.mounts.len(), 3);
+        // Mounts: tools overlay + config overlay (both read-only) + container logs (RW) + tray socket (RW)
+        // @trace spec:proxy-container, spec:layered-tools-overlay, spec:podman-orchestration, spec:mcp-on-demand
+        assert_eq!(opencode.mounts.len(), 4);
+        assert_eq!(claude.mounts.len(), 4);
         assert_eq!(opencode.mounts[0].container_path, "/home/forge/.tools");
         assert_eq!(opencode.mounts[0].mode, MountMode::Ro);
         assert!(matches!(

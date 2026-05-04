@@ -730,7 +730,7 @@ pub fn run_github_login() -> bool {
     // No enclave network needed — the login container uses default bridge
     // for direct internet access to github.com.
     // @trace spec:secrets-management
-    return run_github_login_git_service(&tag);
+    run_github_login_git_service(&tag)
 }
 
 /// Run `gh auth login` in a temporary git service container, then extract
@@ -855,6 +855,7 @@ fn run_github_login_git_service(tag: &str) -> bool {
                 .status();
         }
     }
+    #[allow(clippy::needless_borrow)]
     let _guard = LoginContainerGuard {
         podman: &podman_path,
         name: container_name,
@@ -865,6 +866,7 @@ fn run_github_login_git_service(tag: &str) -> bool {
     // the CREATE_NO_WINDOW wrapper in podman_cmd_sync on Windows breaks the
     // interactive device-code flow.
     // @trace spec:secrets-management, spec:cross-platform
+    #[allow(clippy::needless_borrows_for_generic_args)]
     let status = std::process::Command::new(&podman_path)
         .args(["exec", "-it", container_name])
         .args(["gh", "auth", "login", "--git-protocol", "https"])
