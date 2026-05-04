@@ -94,6 +94,56 @@ For each active spec that has at least one `@trace` annotation in the codebase, 
 - **WHEN** `generate-traces.sh` is run on the host (outside the tillandsias toolbox)
 - **THEN** it SHALL complete successfully using only tools available on a standard Fedora Silverblue host
 
+## Litmus Tests
+
+### test_traces_script_exists (binding: litmus:enclave-isolation)
+**Setup**: Check working directory and `scripts/` subdirectory
+**Signal**: File `scripts/generate-traces.sh` exists and is executable
+**Pass**: Script present with `#!/bin/bash` header and execute bit set
+**Fail**: File missing or not executable
+
+### test_scan_scope_coverage (binding: litmus:enclave-isolation)
+**Setup**: Run `scripts/generate-traces.sh` on fresh repository
+**Signal**: Output includes `.rs`, `.sh`, `.toml`, and `.nix` file extensions in scanned files list
+**Pass**: All four file types appear in scan results
+**Fail**: Any file type missing from coverage
+
+### test_root_traces_md_generated (binding: litmus:enclave-isolation)
+**Setup**: Run `scripts/generate-traces.sh` from repository root
+**Signal**: File `TRACES.md` created with Markdown table structure
+**Pass**: `TRACES.md` exists, contains table header with columns `Trace | Spec | Source Files`, and spec rows are sorted
+**Fail**: File missing, not a valid Markdown table, or unsorted entries
+
+### test_spec_links_clickable (binding: litmus:enclave-isolation)
+**Setup**: Create a temporary GitHub repo with test specs and run script; validate with `md-link-check TRACES.md`
+**Signal**: Markdown links in TRACES.md resolve to actual files in `openspec/specs/` or `openspec/changes/archive/`
+**Pass**: All links resolve when rendered on GitHub (test on a fork or local GitHub Pages)
+**Fail**: Any broken links or references to non-existent spec files
+
+### test_per_spec_backlinkfile_exists (binding: litmus:enclave-isolation)
+**Setup**: Run `scripts/generate-traces.sh` and inspect `openspec/specs/*/` directories
+**Signal**: Each active spec with ≥1 `@trace` annotation has a `TRACES.md` file alongside `spec.md`
+**Pass**: Backlinkfiles exist for all traced specs
+**Fail**: Any traced spec missing its backlinkfile
+
+### test_build_integration_auto_regenerates (binding: litmus:enclave-isolation)
+**Setup**: Modify a source file to add a new `@trace spec:test-spec` annotation; run `./build.sh`
+**Signal**: `TRACES.md` is regenerated and includes the new annotation
+**Pass**: TRACES.md updated before build completes
+**Fail**: TRACES.md not regenerated or still shows old state
+
+### test_posix_only_execution (binding: litmus:enclave-isolation)
+**Setup**: Run `scripts/generate-traces.sh` on a host with only POSIX tools (no Perl, Ruby, Python, Node)
+**Signal**: Script completes successfully using only `grep`, `find`, `sort`, `awk`, `sed`
+**Pass**: Execution time <10 seconds, no external runtime errors
+**Fail**: Script fails or calls non-POSIX tools
+
+### test_empty_codebase_handling (binding: litmus:enclave-isolation)
+**Setup**: Create empty directory tree with no source files; copy `scripts/generate-traces.sh` only
+**Signal**: Script runs without crashing
+**Pass**: Exits 0 with message "no traces found" in TRACES.md
+**Fail**: Script errors or exits non-zero
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/cmd.md` — Cmd reference and patterns

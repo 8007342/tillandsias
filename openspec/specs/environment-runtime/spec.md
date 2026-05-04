@@ -56,6 +56,62 @@ The runtime environment contract MUST recognise `TILLANDSIAS_AGENT=opencode-web`
 - **WHEN** `TILLANDSIAS_AGENT` is any value not in the recognised set
 - **THEN** existing fallback behaviour MUST remain unchanged
 
+## Litmus Tests
+
+### test_linux_config_path (binding: litmus:enclave-isolation)
+**Setup**: Run Tillandsias on Linux; check for config file
+**Signal**: Global config location
+**Pass**: Config file exists or can be created at `~/.config/tillandsias/config.toml`
+**Fail**: Config stored elsewhere (e.g., XDG_CONFIG_HOME not respected, or path is wrong)
+
+### test_project_config_override (binding: litmus:enclave-isolation)
+**Setup**: Create `.tillandsias/config.toml` in a project directory; run Tillandsias on that project
+**Signal**: Configuration values from per-project config
+**Pass**: Project config overrides global config settings (e.g., project-specific agent value overrides global default)
+**Fail**: Per-project config ignored or global config always takes precedence
+
+### test_config_file_user_friendly (binding: litmus:ephemeral-guarantee)
+**Setup**: Open `~/.config/tillandsias/config.toml` in a text editor
+**Signal**: File content and comments
+**Pass**: File includes plain-language comments explaining each setting, deletion safety, security non-negotiable note
+**Fail**: File contains unexplained technical jargon; user cannot understand purpose of settings
+
+### test_uninstall_script_lists_before_delete (binding: litmus:enclave-isolation)
+**Setup**: Run uninstall script (without `--wipe`)
+**Signal**: Script output BEFORE deletion begins
+**Pass**: Script prints list of files/dirs to be removed; user can review before proceeding
+**Fail**: Deletion happens without prior list; user cannot review what will be deleted
+
+### test_uninstall_reports_cleanup (binding: litmus:enclave-isolation)
+**Setup**: Run uninstall script to completion
+**Signal**: Script output AFTER deletion completes
+**Pass**: Script confirms what was cleaned (binary, libs, data, settings, logs removed; project files untouched)
+**Fail**: No confirmation printed; user unsure if uninstall succeeded
+
+### test_uninstall_wipe_flag_behavior (binding: litmus:enclave-isolation)
+**Setup**: Run uninstall script with `--wipe` flag
+**Signal**: Script removes cache and container images in addition to standard cleanup
+**Pass**: Cache directories and image artifacts deleted; user can verify with `podman images | grep tillandsias` returns empty
+**Fail**: Cache or images still present after `--wipe`
+
+### test_tillandsias_agent_opencode_web_value (binding: litmus:ephemeral-guarantee)
+**Setup**: Launch a forge container with `TILLANDSIAS_AGENT=opencode-web`
+**Signal**: Entrypoint routing decision
+**Pass**: `entrypoint.sh` execs `/usr/local/bin/entrypoint-forge-opencode-web.sh` (not CLI opencode path)
+**Fail**: Env var not recognized; default CLI opencode entrypoint runs instead
+
+### test_unknown_agent_fallback (binding: litmus:ephemeral-guarantee)
+**Setup**: Launch a forge container with `TILLANDSIAS_AGENT=unknown-agent`
+**Signal**: Entrypoint routing decision
+**Pass**: Fallback behavior remains unchanged (likely defaults to terminal or CLI opencode)
+**Fail**: Entrypoint crashes or ignores unknown value without safe fallback
+
+### test_config_hierarchy_resolution (binding: litmus:ephemeral-guarantee)
+**Setup**: Create both global and per-project config files with conflicting values for a setting (e.g., `timeout`)
+**Signal**: Which value is used at runtime
+**Pass**: Per-project value takes precedence over global value
+**Fail**: Global always wins or per-project config is ignored
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns
