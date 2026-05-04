@@ -28,6 +28,7 @@
 //!
 //! @trace spec:podman-orchestration, spec:default-image, spec:tray-app, spec:download-telemetry, spec:forge-cache-dual, spec:overlay-mount-cache, spec:persistent-git-service, spec:tools-overlay-fast-reuse
 
+use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -282,9 +283,10 @@ pub(crate) async fn ensure_inference_running(
     // @trace spec:podman-orchestration
     ensure_container_log_dir(INFERENCE_CONTAINER_NAME);
 
-    // Ensure model cache dir exists
-    // @trace spec:forge-cache-architecture, spec:forge-cache-dual
-    let models_cache = cache.join("models");
+    // Ensure model cache dir exists (use ~/.ollama/models where ollama stores them)
+    // @trace spec:inference-container, spec:forge-cache-architecture
+    let ollama_home = PathBuf::from(env::var("HOME").unwrap_or_default()).join(".ollama");
+    let models_cache = ollama_home.join("models");
     std::fs::create_dir_all(&models_cache).ok();
 
     let port_mapping = needs_port_mapping();
@@ -2716,6 +2718,49 @@ fn build_launch_context(
     }
 }
 
+/// Inject per-project dependency cache mounts into forge/terminal podman args.
+///
+/// Adds read-write mounts for cargo, npm, pip, pip-cache, and gem directories
+/// so that build artifacts and downloaded packages persist across container runs.
+/// This dramatically reduces build time on repeated runs.
+///
+/// The volume mounts are inserted before the final image tag argument.
+///
+/// @trace spec:forge-cache-architecture, spec:forge-cache-dual
+fn inject_forge_cache_mounts(run_args: &mut Vec<String>, project_name: &str, cache_dir: &PathBuf) {
+    // Per-project cache directory structure:
+    // ~/.cache/tillandsias/forge/<project-name>/
+    // ├── cargo/
+    // ├── npm/
+    // ├── pip/
+    // ├── pip-cache/
+    // └── gem/
+    let project_cache = cache_dir.join("forge").join(project_name);
+
+    let caches = vec![
+        ("cargo", "/home/forge/.cargo"),
+        ("npm", "/home/forge/.npm"),
+        ("pip", "/home/forge/.cache/pip"),
+        ("pip-cache", "/home/forge/.cache/pip-cache"),
+        ("gem", "/home/forge/.gem"),
+    ];
+
+    for (cache_name, container_path) in caches {
+        let host_path = project_cache.join(cache_name);
+        if std::fs::create_dir_all(&host_path).is_ok() {
+            let pos = run_args.len().saturating_sub(1);
+            run_args.insert(
+                pos,
+                format!(
+                    "-v={}:{}:rw",
+                    host_path.display(),
+                    container_path
+                ),
+            );
+        }
+    }
+}
+
 /// Inject CA chain mount and trust env vars into forge/terminal podman args.
 ///
 /// Adds a read-only bind mount of the CA chain file at
@@ -3052,6 +3097,9 @@ pub async fn handle_attach_here(
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
     // @trace spec:proxy-container
     inject_ca_chain_mounts(&mut run_args);
+    // @trace spec:forge-cache-architecture, spec:forge-cache-dual
+    // Add per-project dependency cache mounts so cargo, npm, pip, etc. persist across runs
+    inject_forge_cache_mounts(&mut run_args, &project_name, &cache);
 
     let mut podman_parts = vec![
         tillandsias_podman::find_podman_path().to_string(),
@@ -3405,6 +3453,9 @@ pub async fn handle_attach_web(
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
     // @trace spec:proxy-container
     inject_ca_chain_mounts(&mut run_args);
+    // @trace spec:forge-cache-architecture, spec:forge-cache-dual
+    // Add per-project dependency cache mounts so cargo, npm, pip, etc. persist across runs
+    inject_forge_cache_mounts(&mut run_args, &project_name, &cache);
 
     // Launch detached — no terminal.
     match client.run_container(&run_args).await {

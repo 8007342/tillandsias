@@ -211,6 +211,9 @@ build_appimage() {
         _warn "First build installs Rust + tauri-cli — expect 10-20 minutes"
     fi
 
+    # Create apt lists cache directory
+    mkdir -p "$cache_base"/apt-lists
+
     podman run --rm \
         --device /dev/fuse \
         --cap-add SYS_ADMIN \
@@ -219,15 +222,25 @@ build_appimage() {
         -v "$cache_base/cargo-bin:/root/.cargo/bin:rw,Z" \
         -v "$cache_base/rustup:/root/.rustup:rw,Z" \
         -v "$cache_base/apt:/var/cache/apt:rw,Z" \
+        -v "$cache_base/apt-lists:/var/lib/apt/lists:rw,Z" \
         -v "$output_dir:/output:rw,Z" \
         ubuntu:22.04 \
         bash -euo pipefail -c '
 set -euo pipefail
 
-# System deps — skip if already installed (cached apt + dpkg state not preserved,
-# so we always run apt-get but it will be fast with cached packages)
+# System deps — apt cache and lists are persistent across builds (RW mounts)
+# apt-get update will be fast if lists are cached; skipped if recent
 echo "[appimage] Installing system dependencies..."
-apt-get update -qq
+# Skip update if lists were modified in the last 24 hours (cache hit)
+lists_modified="$(stat -c %Y /var/lib/apt/lists/lock 2>/dev/null || echo 0)"
+current_time="$(date +%s)"
+age_seconds=$((current_time - lists_modified))
+if [[ $age_seconds -gt 86400 ]] || [[ ! -f /var/lib/apt/lists/lock ]]; then
+    echo "[appimage] Updating apt lists..."
+    apt-get update -qq || apt-get update  # Retry without -qq on failure
+else
+    echo "[appimage] Apt lists cached ($(( age_seconds / 3600 ))h old) — skipping update"
+fi
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
