@@ -108,6 +108,28 @@ MCP servers are children of the container process. On container exit, all MCP se
 - **AND** next container start MUST create fresh processes
 - **AND** no socket files or IPC state MUST persist
 
+### Requirement: Browser tool variant — on-demand CLI instead of daemon
+
+The browser MCP interaction pattern uses an on-demand CLI tool instead of a persistent daemon, optimizing for interactive use cases.
+
+#### Scenario: Browser tool invoked on demand
+- **WHEN** an agent or user requests browser access
+- **THEN** the `tillandsias-browser-tool` binary is invoked with CLI args: `safe <url>` or `debug <url>`
+- **AND** the tool connects to `/run/tillandsias/tray.sock`
+- **AND** sends JSON-RPC: `{"method": "open_browser_window", "params": {...}}`
+- **AND** exits with code 0 (success) or 1 (failure)
+- **AND** outputs JSON: `{"status": "ok"}` or `{"status": "error", "message": "..."}`
+
+#### Scenario: OpenCode uses safe browser
+- **WHEN** `opencode serve` runs in the forge container
+- **AND** a user or agent clicks a link like `http://opencode.<project>.localhost`
+- **THEN** it calls `tillandsias-browser-tool safe http://opencode.<project>.localhost:<port>` (never debug)
+
+#### Scenario: One debug browser max per project
+- **WHEN** a debug browser exists for a project
+- **AND** another `debug <url>` request arrives
+- **THEN** reject with error: `"Debug browser already running for <project>"`
+
 ### Requirement: MCP server communication channel
 
 MCP servers MUST communicate with agents via a channel (socket, pipe, or stdio).

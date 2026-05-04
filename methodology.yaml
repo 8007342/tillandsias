@@ -137,10 +137,10 @@ methodology:
 
   verification:
     step_1: "All 7 component files exist: ls methodology/*.yaml | wc -l → 7"
-    step_2: "Root index references all components: grep 'file:' @methodology.yaml"
+    step_2: "Root index references all components: grep 'file:' methodology.yaml"
     step_3: "No duplicate content: for each concept, grep should appear in exactly one file"
     step_4: "Tombstones in place: grep '@tombstone' old-files.yaml"
-    step_5: "YAML is well-formed: yq eval @methodology.yaml > /dev/null"
+    step_5: "YAML is well-formed: yq eval methodology.yaml > /dev/null"
 
   navigation_index:
     by_question:
