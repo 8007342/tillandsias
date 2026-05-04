@@ -25,9 +25,17 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLBOX_NAME="$(basename "$SCRIPT_DIR")"
-INSTALL_DIR="$HOME/.local/bin"
+
+# Get the actual user's home directory (works with sudo)
+if [[ -n "${SUDO_USER:-}" ]]; then
+    ACTUAL_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+else
+    ACTUAL_HOME="$HOME"
+fi
+
+INSTALL_DIR="$ACTUAL_HOME/.local/bin"
 INSTALL_BIN="$INSTALL_DIR/tillandsias"
-CACHE_DIR="$HOME/.cache/tillandsias"
+CACHE_DIR="$ACTUAL_HOME/.cache/tillandsias"
 
 # Colors
 RED='\033[0;31m'
@@ -151,21 +159,21 @@ fi
 
 if [[ "$FLAG_REMOVE" == true ]]; then
     # Remove AppImage (new install layout)
-    rm -f "$HOME/Applications/Tillandsias.AppImage"
+    rm -f "$ACTUAL_HOME/Applications/Tillandsias.AppImage"
     # Remove CLI symlink
     rm -f "$INSTALL_BIN"
     # Remove legacy layout artifacts (old install format)
     rm -f "$INSTALL_DIR/.tillandsias-bin"
-    rm -rf "$HOME/.local/lib/tillandsias"
-    rm -rf "$HOME/.local/share/tillandsias"
+    rm -rf "$ACTUAL_HOME/.local/lib/tillandsias"
+    rm -rf "$ACTUAL_HOME/.local/share/tillandsias"
 
     # Remove desktop launcher and XDG icons
-    rm -f "$HOME/.local/share/applications/tillandsias.desktop"
+    rm -f "$ACTUAL_HOME/.local/share/applications/tillandsias.desktop"
     for size in 32x32 128x128 256x256; do
-        rm -f "$HOME/.local/share/icons/hicolor/$size/apps/tillandsias.png"
+        rm -f "$ACTUAL_HOME/.local/share/icons/hicolor/$size/apps/tillandsias.png"
     done
-    update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
-    gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+    update-desktop-database "$ACTUAL_HOME/.local/share/applications" 2>/dev/null || true
+    gtk-update-icon-cache "$ACTUAL_HOME/.local/share/icons/hicolor" 2>/dev/null || true
 
     _info "Removed tillandsias (AppImage, symlink, desktop integration)"
     # If --remove is the only flag, exit
@@ -192,7 +200,7 @@ fi
 
 build_appimage() {
     local output_dir="$SCRIPT_DIR/target/release/bundle/appimage"
-    local cache_base="$HOME/.cache/tillandsias/appimage-builder"
+    local cache_base="$ACTUAL_HOME/.cache/tillandsias/appimage-builder"
     local container_pid=""
 
     # Trap SIGINT to kill child podman process on Ctrl+C
@@ -369,7 +377,7 @@ install_appimage() {
     fi
 
     # Install to ~/Applications/ (same location as curl installer and self-updater)
-    local app_dir="$HOME/Applications"
+    local app_dir="$ACTUAL_HOME/Applications"
     local app_path="$app_dir/Tillandsias.AppImage"
     mkdir -p "$app_dir"
     cp "$appimage_src" "$app_path"
