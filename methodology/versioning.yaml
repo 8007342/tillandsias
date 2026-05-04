@@ -131,60 +131,61 @@ versioning_system:
 
 branch_versioning_discipline:
   description: >
-    Only the main branch bumps VERSION. Feature branches inherit VERSION from
-    their parent commit. This prevents distributed version conflicts and ensures
-    the VERSION file has a linear history with one author (main integration).
+    Only the main integration branch bumps VERSION. Feature/experimental branches
+    inherit VERSION from their parent commit. This prevents distributed version
+    conflicts and ensures the VERSION file has a linear history with one author
+    (main branch as single point of authority).
 
   rules:
-    - name: integration_branch_only_bumps
+    - name: main_only_bumps
       rule: >
-        Only commits to the integration branch (main or equivalent) modify VERSION.
-        Feature/ephemeral branches NEVER modify VERSION.
-      enforcement: Pre-commit/pre-push hook (blocks VERSION edits on non-integration branches)
+        Only commits to the main branch modify VERSION. Feature/ephemeral branches
+        (created from main or linux-next) NEVER modify VERSION.
+      enforcement: Pre-commit/pre-push hook (blocks VERSION edits on non-main branches)
       rationale: >
         Allowing multiple branches to edit VERSION creates merge conflicts that require
         CRDT resolution (expensive in CI). Single-writer discipline is simpler: the
-        integration branch is the sole VERSION author. All changes converge there.
+        main branch is the sole VERSION author. All changes converge there.
 
     - name: ephemeral_branches_inherit
       rule: >
-        Ephemeral/feature branches inherit VERSION from integration branch at creation time.
-        As integration branch advances, feature branch's VERSION becomes stale (in worktree).
+        Feature branches inherit VERSION from main branch at creation time.
+        As main advances, feature branch's VERSION becomes stale (in worktree).
         This is intentional and correct — the branch's version at merge time is what matters.
       example: |
-        integration at commit M: VERSION = v0.1.260101.5
-        Create ephemeral branch from integration: VERSION still v0.1.260101.5 (inherited)
-        Integration advances via merge: VERSION bumped to v0.1.260102.7
-        ephemeral branch still has v0.1.260101.5 (stale, but safe — it was correct at creation)
-        Merge ephemeral branch back to integration: VERSION on integration remains v0.1.260102.7
+        main at commit M: VERSION = v0.1.260101.5
+        Create feature/x branch from main: VERSION still v0.1.260101.5 (inherited)
+        Main advances via merge: VERSION bumped to v0.1.260102.7
+        feature/x still has v0.1.260101.5 (stale, but safe — it was correct at branch time)
+        Merge feature/x back to main: VERSION on main remains v0.1.260102.7
 
     - name: version_authorship_hook
       rule: >
-        Pre-push hook blocks any commit modifying VERSION unless the push targets the
-        integration branch or a release tag.
+        Pre-push hook blocks any commit modifying VERSION unless the push targets main
+        branch or a release tag.
       implementation: >
-        Extract branch name from push target. Reject if (branch != integration_branch and VERSION modified).
+        Extract branch name from push target. Reject if (branch != main and VERSION modified).
         Implementation details in project CLAUDE.md (language/VCS-specific).
       exemptions: >
         Release tags may include VERSION commits in their history.
-        Ephemeral->integration merges use integration's VERSION as source of truth.
+        Feature->main merges use main's VERSION as source of truth.
 
-    - name: release_gating_enforces_integration_source
+    - name: release_gating_enforces_main_source
       rule: >
-        Release workflows MUST refuse to trigger from non-integration branches.
-        Check: current branch == integration branch, reject if false.
+        Release workflows MUST refuse to trigger from non-main branches.
+        Check: current branch == main, reject if false.
       enforcement: Release workflow gating (blocks with diagnostic message)
 
   workflow_example:
-    initial_state: "integration branch at v0.1.260101.5"
-    step_1: "Agent: Create ephemeral working branch from integration"
-    step_2: "Ephemeral branch inherits VERSION = v0.1.260101.5"
+    initial_state: "main at v0.1.260101.5"
+    step_1: "Agent: Create feature branch from main (e.g., feature/browser-isolation)"
+    step_2: "Feature branch inherits VERSION = v0.1.260101.5"
     step_3: "Agent edits files, iterates locally, does NOT edit VERSION"
-    step_4: "Agent: Push ephemeral work to VCS"
-    step_5: "Pre-push hook checks: branch != integration? Yes. VERSION modified? No. → ALLOW"
-    step_6: "Merge request approved, squash merge back to integration"
-    step_7: "Integration's VERSION bumps to v0.1.260102.7 (via change integration)"
-    step_8: "Next agent: Fetch integration branch → VERSION updates to v0.1.260102.7"
+    step_4: "Agent: Push feature work to VCS"
+    step_5: "Pre-push hook checks: branch != main? Yes. VERSION modified? No. → ALLOW"
+    step_6: "Pull request approved, squash merge back to main"
+    step_7: "Main's VERSION bumps to v0.1.260102.7 (via /opsx:archive or change integration)"
+    step_8: "Next agent: Fetch main → VERSION updates to v0.1.260102.7"
 
 crdt_merge_driver:
   description: >

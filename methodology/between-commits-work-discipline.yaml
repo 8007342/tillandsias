@@ -41,7 +41,7 @@ lamport_clock_system:
   mechanics:
     initialize: "Start with lamport_clock = 0 per agent"
     on_local_iteration: "Increment: lamport_clock++ (before writing iteration metadata)"
-    on_fetch_from_integration_branch: "Sync: lamport_clock = max(lamport_clock, received_clock) + 1"
+    on_fetch_from_main: "Sync: lamport_clock = max(lamport_clock, received_clock) + 1"
     on_merge_to_main: "Final clock value becomes iteration index in merged history"
 
   properties:
