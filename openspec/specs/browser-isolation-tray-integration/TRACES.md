@@ -7,8 +7,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [crates/tillandsias-core/src/event.rs#L125](../../../crates/tillandsias-core/src/event.rs#L125)
 - [src-tauri/src/event_loop.rs#L181](../../../src-tauri/src/event_loop.rs#L181)
-- [src-tauri/src/handlers.rs#L5022](../../../src-tauri/src/handlers.rs#L5022)
-- [src-tauri/src/handlers.rs#L5033](../../../src-tauri/src/handlers.rs#L5033)
+- [src-tauri/src/handlers.rs#L5073](../../../src-tauri/src/handlers.rs#L5073)
+- [src-tauri/src/handlers.rs#L5084](../../../src-tauri/src/handlers.rs#L5084)
 - [src-tauri/src/main.rs#L1030](../../../src-tauri/src/main.rs#L1030)
 - [src-tauri/src/menu.rs#L60](../../../src-tauri/src/menu.rs#L60)
 - [src-tauri/src/menu.rs#L391](../../../src-tauri/src/menu.rs#L391)

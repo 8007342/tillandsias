@@ -2727,7 +2727,7 @@ fn build_launch_context(
 /// The volume mounts are inserted before the final image tag argument.
 ///
 /// @trace spec:forge-cache-architecture, spec:forge-cache-dual
-fn inject_forge_cache_mounts(run_args: &mut Vec<String>, project_name: &str, cache_dir: &PathBuf) {
+fn inject_forge_cache_mounts(run_args: &mut Vec<String>, project_name: &str, cache_dir: &Path) {
     // Per-project cache directory structure:
     // ~/.cache/tillandsias/forge/<project-name>/
     // ├── cargo/
@@ -2751,11 +2751,7 @@ fn inject_forge_cache_mounts(run_args: &mut Vec<String>, project_name: &str, cac
             let pos = run_args.len().saturating_sub(1);
             run_args.insert(
                 pos,
-                format!(
-                    "-v={}:{}:rw",
-                    host_path.display(),
-                    container_path
-                ),
+                format!("-v={}:{}:rw", host_path.display(), container_path),
             );
         }
     }

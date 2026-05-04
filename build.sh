@@ -193,6 +193,10 @@ fi
 build_appimage() {
     local output_dir="$SCRIPT_DIR/target/release/bundle/appimage"
     local cache_base="$HOME/.cache/tillandsias/appimage-builder"
+    local container_pid=""
+
+    # Trap SIGINT to kill child podman process on Ctrl+C
+    trap 'if [[ -n "$container_pid" ]]; then kill "$container_pid" 2>/dev/null || true; fi; exit 130' INT TERM
 
     _step "Preparing AppImage build directories..."
     mkdir -p "$output_dir"
@@ -214,6 +218,7 @@ build_appimage() {
     # Create apt lists cache directory
     mkdir -p "$cache_base"/apt-lists
 
+    # Run podman in background so we can capture PID for signal handling
     podman run --rm \
         --device /dev/fuse \
         --cap-add SYS_ADMIN \
@@ -229,17 +234,22 @@ build_appimage() {
 set -euo pipefail
 
 # System deps — apt cache and lists are persistent across builds (RW mounts)
-# apt-get update will be fast if lists are cached; skipped if recent
+# apt-get update will be skipped if lists are cached (modified within last 24h)
 echo "[appimage] Installing system dependencies..."
-# Skip update if lists were modified in the last 24 hours (cache hit)
-lists_modified="$(stat -c %Y /var/lib/apt/lists/lock 2>/dev/null || echo 0)"
-current_time="$(date +%s)"
-age_seconds=$((current_time - lists_modified))
-if [[ $age_seconds -gt 86400 ]] || [[ ! -f /var/lib/apt/lists/lock ]]; then
+should_update=true
+if [[ -d /var/lib/apt/lists ]] && [[ -n "$(ls -A /var/lib/apt/lists 2>/dev/null)" ]]; then
+    # Lists directory exists and has files — check age
+    lists_mtime="$(stat -c %Y /var/lib/apt/lists 2>/dev/null || echo 0)"
+    current_time="$(date +%s)"
+    age_seconds=$((current_time - lists_mtime))
+    if [[ $age_seconds -lt 86400 ]]; then
+        echo "[appimage] Apt lists cached ($(( age_seconds / 3600 ))h old) — skipping update"
+        should_update=false
+    fi
+fi
+if [[ "$should_update" == "true" ]]; then
     echo "[appimage] Updating apt lists..."
     apt-get update -qq || apt-get update  # Retry without -qq on failure
-else
-    echo "[appimage] Apt lists cached ($(( age_seconds / 3600 ))h old) — skipping update"
 fi
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     build-essential \
@@ -299,7 +309,20 @@ echo "[appimage] Copying $(basename "$appimage_file") to output mount..."
 rm -f /output/*.AppImage 2>/dev/null || true
 cp "$appimage_file" /output/
 echo "[appimage] Done: /output/$(basename "$appimage_file")"
-'
+' &
+    container_pid=$!
+
+    # Wait for container, properly handling signals
+    wait "$container_pid"
+    local build_status=$?
+
+    # Clean up trap
+    trap - INT TERM
+
+    if [[ $build_status -ne 0 ]]; then
+        _error "AppImage build failed with status $build_status"
+        return $build_status
+    fi
 
     # Find the produced AppImage and report it
     local appimage_path
