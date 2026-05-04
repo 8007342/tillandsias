@@ -1,0 +1,336 @@
+# Tillandsias Convergence Methodology — Versioning Component
+#
+# Versioning is the observability mechanism for monotonic convergence. A released
+# artifact's version number proves it converges to the spec with that version number.
+#
+# Sources: Three-part research on versioning systems (CalVer + LUB),
+#          branch discipline (main-only bumps), and CRDT merge driver (LUB conflicts).
+#          See research summary: RESEARCH-VERSIONING-SYSTEMS.md
+
+versioning_system:
+  description: >
+    Tillandsias uses Calendar Versioning (CalVer) with build counter and commit hash.
+    This format is naturally monotonic, CRDT-safe, and human-readable. It forms the
+    basis for proving monotonic convergence: every released artifact links back to
+    a spec version through bidirectional tracing (@trace spec:name).
+
+  format: "v<Major>.<Minor>.<YYMMDD>.<Build>+<CommitHash>"
+
+  semantic_intent:
+    Major:
+      meaning: "Contract version — breaking changes only"
+      monotonic: "Never decreases (semantic versioning contract)"
+      increment_rule: "User-driven for API-breaking changes"
+      example: "v1.X.X.X (major contract), v0.X.X.X (pre-release)"
+
+    Minor:
+      meaning: "Phase/compatibility — compatible enhancements"
+      monotonic: "Never decreases within Major version"
+      increment_rule: "User-driven for feature phases"
+      example: "0.1.X.X (core tray), 0.2.X.X (web interface)"
+
+    YYMMDD:
+      meaning: "Release date (calendar versioning) — reproducibility anchor"
+      monotonic: "Always increases with time"
+      interpretation: "This release was cut on YYYY-MM-DD"
+      example: "260503 = 2026-05-03 (ISO format, YYMMDD)"
+      rationale: >
+        Calendar date is naturally monotonic (time only moves forward). Enables
+        instant identification of release age. Survives distribution across
+        multiple time zones. Acts as reproducibility anchor for forensics.
+
+    Build:
+      meaning: "Local monotonic build counter — increments on every local build"
+      monotonic: "Globally monotonic across all machines and branches"
+      increment_rule: "Automatic on every local build (./build.sh), manual bump at merge"
+      conflict_resolution: "At merge time, use LUB (max of conflicting values)"
+      example: >
+        Machine A builds 10 times locally → Build becomes 10
+        Machine B builds 12 times locally → Build becomes 12
+        At merge: resolve to Build=12 (LUB / maximum wins)
+      rationale: >
+        Builds are fast and local. Build number serves as global proof of
+        reproducibility (every build gets a unique build number). At merge time,
+        conflicts resolve via Least Upper Bound (LUB) — a CRDT operation that
+        guarantees commutativity (order-independence of merges).
+
+    CommitHash:
+      meaning: "Commit SHA1 hash — proof this version came from a specific commit"
+      monotonic: "Not monotonic by itself; used as tie-breaker in version ordering"
+      format: "Short SHA1 (first 7 characters)"
+      example: "+a443652"
+      rationale: >
+        When comparing two versions with same Major.Minor.YYMMDD.Build, the commit
+        hash proves which came first (via git history). Also enables
+        reproducibility verification: `git verify <commit-hash> matches the artifact`.
+
+  example_progression:
+    - "v0.1.260101.1+a1b2c3d — Initial release on 2026-01-01, build 1"
+    - "v0.1.260102.3+f4e5d6c — Next day, build 3 (two local builds on 260102)"
+    - "v0.1.260103.5+g7h8i9j — Released on 260103, build 5"
+    - "v0.1.260110.12+k0l1m2n — After a week, build 12 (multiple local iterations)"
+    - "v0.2.260115.15+o3p4q5r — New minor version (feature phase change)"
+
+  comparison_and_ordering:
+    principle: >
+      Version comparison is lexicographic on components: Major → Minor → YYMMDD → Build.
+      CommitHash is used only as tie-breaker (via git history) if all numeric components match.
+
+    rules:
+      - "v0.1 < v0.2 (by Minor)"
+      - "v0.1.260101 < v0.1.260102 (by YYMMDD)"
+      - "v0.1.260101.1 < v0.1.260101.2 (by Build)"
+      - "v0.1.260101.5+a1b < v0.1.260101.5+f4e5d (same numeric version; use git history)"
+
+    semantic_gap_closure:
+      description: >
+        The original Tillandsias versioning (Major.Minor.ChangeCount.Build) mixed
+        semantic intent (ChangeCount = OpenSpec changes archived) with monotonic
+        count (Build = local builds). This caused ambiguity:
+        v0.1.161.258 vs v0.1.160.999 — which is newer? (Different components increased!)
+
+      solution: >
+        CalVer system cleanly separates concerns:
+        - Major.Minor: semantic intent (user-driven)
+        - YYMMDD: temporal anchor (always increasing)
+        - Build: monotonic counter (local, merges via LUB)
+
+        Now v0.1.260101.5 is always less than v0.1.260102.1 (time is the tiebreaker).
+
+branch_versioning_discipline:
+  description: >
+    Only the main branch bumps VERSION. Feature branches inherit VERSION from
+    their parent commit. This prevents distributed version conflicts and ensures
+    the VERSION file has a linear history with one author (main integration).
+
+  rules:
+    - name: main_only_bumps
+      rule: >
+        Only commits to main (or tagged releases) modify VERSION.
+        Feature branches NEVER modify VERSION.
+      enforcement: Pre-push hook (blocks VERSION edits on non-main branches)
+      rationale: >
+        Git doesn't have "merge base" semantics for arbitrary files. Allowing both
+        branches to edit VERSION creates 3-way merge conflicts that CRDT resolves,
+        but the LUB merge driver is expensive to run in CI on every PR.
+        Instead, enforce single-writer discipline: main is the sole VERSION author.
+
+    - name: feature_branches_inherit
+      rule: >
+        Feature branches inherit VERSION from main at branch time.
+        As main advances, feature branch's VERSION becomes stale (in code, not in git).
+        This is intentional and correct — the branch's version at merge time is what matters.
+      example: |
+        main at commit M: VERSION = v0.1.260101.5
+        Create feature/foo from main: VERSION still v0.1.260101.5 (inherited)
+        Main advances via merge: VERSION bumped to v0.1.260102.7
+        feature/foo still has v0.1.260101.5 (stale, but safe — it was correct at branch time)
+        Merge feature/foo back to main: VERSION on main remains v0.1.260102.7 (no conflict)
+
+    - name: pre_push_hook
+      rule: >
+        Pre-push hook in .git/hooks/pre-push blocks any commit modifying VERSION
+        unless the push is to main or a release tag.
+      implementation: >
+        See cheatsheets/utils/branch-versioning.md for complete code.
+        Pattern: Extract branch name from push target, reject if (branch != main and file modified).
+      exemptions: >
+        Release tags (e.g., v0.1.260101.5) may include VERSION bump in commit history.
+        Merges back to main after /opsx:archive use main's Version as source of truth.
+
+    - name: ci_blocks_release_from_feature
+      rule: >
+        CI workflow release.yml MUST refuse release requests from non-main branches.
+        Block in workflow_dispatch handler: check HEAD is main, reject otherwise.
+      enforcement: GitHub Actions check_ref_is_main step (blocks with clear error message)
+
+  workflow_example:
+    initial_state: "main at v0.1.260101.5"
+    step_1: "Developer: git checkout -b feature/browser-isolation"
+    step_2: "Feature branch inherits VERSION = v0.1.260101.5"
+    step_3: "Developer edits 50 files, does NOT edit VERSION"
+    step_4: "Developer: git push origin feature/browser-isolation"
+    step_5: "Pre-push hook checks: branch != main? Yes. VERSION modified? No. → ALLOW"
+    step_6: "Create PR, review, merge to main"
+    step_7: "Main's VERSION bumps to v0.1.260102.7 (via /opsx:archive)"
+    step_8: "Developer: git pull origin main → VERSION updates to v0.1.260102.7 automatically"
+
+crdt_merge_driver:
+  description: >
+    When VERSION merge conflicts occur (very rare with main-only discipline, but
+    possible in concurrent merge scenarios), use LUB (Least Upper Bound) merge
+    instead of Git's default 3-way merge. LUB is a CRDT operation: commutative,
+    associative, idempotent, and convergent.
+
+  when_needed: >
+    Main-only discipline prevents most conflicts. LUB driver is insurance for:
+    - Distributed systems with unreliable network (versions synced across regions)
+    - Offline repositories with local merges
+    - Scripts that allow VERSION edits from multiple sources (not recommended, but covered)
+    - Future multi-branch workflows if discipline changes
+
+  merge_semantics:
+    principle: "For VERSION conflicts, merge = LUB of all numeric components (take maximum)"
+    formula: >
+      merged_version = (
+        max(A.Major, B.Major),
+        max(A.Minor, B.Minor),
+        max(A.YYMMDD, B.YYMMDD),
+        max(A.Build, B.Build)
+      ) + max(A.Hash, B.Hash by git order)
+
+    example: |
+      Conflict: v0.1.260101.5+a1b vs v0.1.260102.3+f4e5d
+      Components:
+        Major: max(0, 0) = 0
+        Minor: max(1, 1) = 1
+        YYMMDD: max(260101, 260102) = 260102
+        Build: max(5, 3) = 5
+      Result: v0.1.260102.5+f4e5d (YYMMDD from B, Build from A)
+
+    crdt_properties:
+      commutativity: "LUB(A, B) == LUB(B, A) — merge order doesn't matter"
+      associativity: "LUB(LUB(A, B), C) == LUB(A, LUB(B, C)) — partial merges safe"
+      idempotence: "LUB(A, A) == A — merging with yourself is safe (no change)"
+      convergence: "All servers end at same version via distributed merges, in any order"
+
+  implementation:
+    driver_script: "scripts/resolve-version-conflict.sh"
+    integration: ".gitattributes: VERSION merge=version_crdt"
+    configuration: >
+      git config merge.version_crdt.driver ./scripts/resolve-version-conflict.sh
+
+    pseudocode: |
+      # Git passes three versions to driver:
+      # $1 = merged output file (current, should be updated in-place)
+      # $2 = base version (common ancestor)
+      # $3 = ours (local commit)
+      # $4 = theirs (incoming commit)
+
+      parse_version() {
+        local version="$1"
+        # Extract Major.Minor.YYMMDD.Build+Hash
+        Major=$(echo "$version" | cut -d. -f1)
+        Minor=$(echo "$version" | cut -d. -f2)
+        YYMMDD=$(echo "$version" | cut -d. -f3)
+        Build=$(echo "$version" | cut -d. -f4 | cut -d+ -f1)
+        Hash=$(echo "$version" | cut -d+ -f2)
+      }
+
+      # Parse ours and theirs, take component-wise max, write result
+      parse_version "$ours_version"
+      merge_major=$Major
+      # ... (repeat for all components)
+      merged="v${merged_major}.${merged_minor}.${merged_yymmdd}.${merged_build}+${merged_hash}"
+      echo "$merged" > "$output_file"
+      exit 0
+
+    failure_modes:
+      - description: "Driver crashes (syntax error, missing file)"
+        fallback: "Git falls back to 3-way merge; user resolves manually (rare)"
+      - description: "LUB result is not a valid version string"
+        recovery: "Validate output; if invalid, abort and request manual resolution"
+      - description: "Hash comparison is ambiguous"
+        resolution: "Use git rev-list to order hashes chronologically; take earlier"
+
+  when_to_avoid:
+    - "If VERSION file is edited by developers (violates discipline) — fix at source"
+    - "If merge conflicts happen frequently — revisit branch discipline enforcement"
+    - "In systems without git history available — fall back to manual resolution"
+
+reconvergence_discipline:
+  description: >
+    After a VERSION conflict is resolved (via LUB or manual merge), the resolved
+    version must re-converge with the upstream source of truth (main). This ensures
+    the merged version is monotonically greater than both parent versions.
+
+  rule: >
+    After resolving a VERSION merge conflict, run `./scripts/verify-version-monotonic.sh`
+    to confirm: merged_version >= LUB(parent_a, parent_b). If this check fails, abort merge.
+
+  verification: |
+    verify_monotonic() {
+      local parent_a="$1" parent_b="$2" merged="$3"
+      local lub=$(lub "$parent_a" "$parent_b")
+      if version_compare "$merged" "<" "$lub"; then
+        echo "ERROR: Merged version $merged is less than LUB($parent_a, $parent_b) = $lub"
+        return 1
+      fi
+      return 0
+    }
+
+  automation: >
+    This check is run automatically:
+    1. In CI (post-merge to main): verify VERSION is still monotonic
+    2. In pre-commit hook: warn if VERSION was modified (debug check)
+    3. In pre-push hook: block if VERSION is non-monotonic relative to upstream main
+
+artifacts_and_tracing:
+  description: >
+    Every released artifact (AppImage, container image, etc.) embeds a version
+    that matches the spec version. The version is the proof of convergence.
+
+  embedding:
+    - artifact: "AppImage binary (Linux)"
+      embed_mechanism: "Tauri binary metadata (src-tauri/tauri.conf.json)"
+      reference: "VERSION file at build time"
+
+    - artifact: "Container images (forge, proxy, git, inference)"
+      embed_mechanism: "Containerfile label: LABEL version='...' (from VERSION)"
+      reference: "Embedded at image build time via flake.nix"
+
+    - artifact: "Spec delta at /opsx:archive"
+      embed_mechanism: "openspec/specs/<name>/spec.md header: `Version: X.Y.Z.B`"
+      reference: "VERSION file at archive time"
+
+  tracing_principle: >
+    When running an artifact (tray, inference container, etc.), query its version.
+    Use @trace spec:<name> annotations to find which spec it implements.
+    Match artifact version to spec version → proof of convergence.
+
+  example:
+    artifact: "tillandsias v0.1.260103.7+g7h8i9j (AppImage, released May 3)"
+    matching_spec: "inference-container spec version v0.1.260103.7"
+    proof_of_convergence: >
+      Artifact version == Spec version → The released tray is the exact implementation
+      of the inference-container spec. They converged. git log shows the commit (g7h8i9j)
+      that produced both. Timeline proves monotonic reduction: every version bumps only
+      when a spec is archived.
+
+metadata_tracking:
+  purpose: >
+    Track which OpenSpec changes contributed to each version bump.
+    This creates a queryable audit trail: "Which features shipped in v0.1.260105?"
+
+  mechanism: >
+    At archive time, ./scripts/bump-version.sh --bump-changes increments the Build
+    counter and records the change name in a separate log file.
+    File: .tillandsias/version-history.jsonl (append-only)
+
+  format: |
+    {
+      "version": "v0.1.260105.12",
+      "date": "2026-05-05",
+      "build_number": 12,
+      "change_archived": "browser-isolation-core",
+      "timestamp": "2026-05-05T14:32:15Z",
+      "commit_hash": "k0l1m2n"
+    }
+
+  querying: |
+    # Which features are in v0.1.260105?
+    jq 'select(.version | startswith("v0.1.260105"))' .tillandsias/version-history.jsonl
+
+  observability_value: >
+    This log enables the convergence dashboard to show:
+    - "This artifact shipped with 7 features"
+    - "These 2 specs converged in this batch"
+    - "Feature lag: spec X was archived on day Y, released on day Z (lag = Z-Y days)"
+
+references:
+  - "methodology/spec-system.yaml — Spec versioning rules"
+  - "methodology/between-commits-work-discipline.yaml — Agent ephemeral versioning"
+  - "cheatsheets/utils/branch-versioning.md — Pre-push hook implementation"
+  - "cheatsheets/utils/crdt-safe-merges.md — LUB merge driver reference"
+  - "RESEARCH-VERSIONING-SYSTEMS.md — Complete research on CalVer, versioning schemes"
+  - "RESEARCH-GIT-CRDT-SAFE-MERGES.md — LUB merge driver analysis and implementation"

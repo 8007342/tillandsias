@@ -83,6 +83,22 @@ methodology:
         Trace binding and CI enforcement rules.
       lines: ~180
 
+    versioning:
+      file: methodology/versioning.yaml
+      description: >
+        Version format (CalVer + build counter + hash), semantic intent, branch discipline
+        (main-only bumps), CRDT merge driver (LUB for conflicts), reconvergence rules.
+        Proves artifact convergence to spec via version matching.
+      lines: ~380
+
+    between_commits_work_discipline:
+      file: methodology/between-commits-work-discipline.yaml
+      description: >
+        Ephemeral agent iteration versioning: Lamport clocks (local temporal ordering),
+        squash merge (clean history), side-band metadata file (queryable audit trail).
+        CRDT-safe concurrent merges. Failure recovery strategies.
+      lines: ~320
+
   supersedes:
     old_monolithic_yaml:
       file: monotonic-reduction-of-uncertainty-under-verifiable-constraints.yaml
@@ -135,6 +151,8 @@ methodology:
       how_do_cheatsheets_help: "cheatsheets.yaml → CRDT model, cache operations"
       how_do_i_know_when_code_converges: "convergence.yaml → objective, fitness function"
       what_breaks_builds: "ci.yaml → validator failure conditions"
+      how_does_versioning_prove_convergence: "versioning.yaml → CalVer format, branch discipline, LUB merge"
+      how_do_agents_version_ephemeral_work: "between-commits-work-discipline.yaml → Lamport clocks, squash, metadata"
 
     by_artifact:
       reading_a_spec_md: "spec-system.yaml → spec schema, lifecycle"
@@ -142,3 +160,6 @@ methodology:
       updating_a_cheatsheet: "cheatsheets.yaml → operations, scoring, compaction"
       annotating_rust_code: "ci.yaml → rust_annotations, #[trace] macro"
       running_ci_checks: "ci.yaml → validator responsibilities, ci_enforcement"
+      running_a_batch_of_agents: "between-commits-work-discipline.yaml → Lamport clocks, squash merge, metadata"
+      releasing_an_artifact: "versioning.yaml → CalVer format, version embedding, version history tracking"
+      resolving_version_conflict: "versioning.yaml → CRDT merge driver, LUB semantics"

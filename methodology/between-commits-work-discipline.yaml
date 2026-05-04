@@ -1,0 +1,365 @@
+# Tillandsias Convergence Methodology — Between-Commits Work Discipline
+#
+# Agents performing batch work iterate many times before committing to main.
+# This component defines versioning discipline for ephemeral, local-only work
+# that should not pollute git history or introduce merge conflicts.
+#
+# Pattern: Lamport clock (temporal ordering) + squash merge (clean history) +
+#          side-band metadata file (queryable audit trail).
+#
+# Source: Research on ephemeral agent versioning, Worktrunk, Neon branching,
+#         distributed systems consensus patterns (Lamport clocks).
+
+ephemeral_work_problem:
+  scenario: >
+    Agent A is assigned: "Fix 50 broken specs across browser-isolation capability.
+    Each fix requires: audit spec → propose change → implement → verify." This takes
+    500 iterations before committing. Without discipline, agent's local git history
+    becomes a mess of incomplete commits, merge conflicts bloom, and main's git log
+    shows 500 spec-fix commits (noise instead of signal).
+
+  constraints:
+    - Agent runs in isolated git worktree (one per agent, siblings in .claude/worktrees/)
+    - Agent iterates freely in local worktree; no coordination with other agents during work
+    - At batch completion, agent merges back to main
+    - Main's git history MUST remain clean: one squashed commit per batch, no noise
+    - Full iteration history MUST be queryable (audit trail for debugging)
+    - Concurrent agents working in parallel MUST never conflict (CRDT property)
+
+  goal: >
+    Ephemeral work produces: (1) clean, squashed main history, (2) queryable metadata
+    of all iterations, (3) full traceability of failure root causes, (4) CRDT-safe
+    concurrent merges (any agent order produces same final result).
+
+lamport_clock_system:
+  description: >
+    Lamport clocks order events causally without requiring synchronized clocks.
+    In Tillandsias, each agent maintains a local Lamport clock to timestamp
+    iterations. The clock respects causality: if event A causes event B,
+    then clock(A) < clock(B).
+
+  mechanics:
+    initialize: "Start with lamport_clock = 0"
+    on_local_iteration: "Increment: lamport_clock++ (before writing iteration state)"
+    on_fetch_from_main: "Sync: lamport_clock = max(lamport_clock, received_clock) + 1"
+    on_agent_merge: "Final clock value becomes iteration index in merged history"
+
+  properties:
+    causality_respected: >
+      If agent A's iteration I1 caused agent B's iteration I2, then
+      clock(I1) < clock(I2) in the final merged history.
+
+    zero_coordination: >
+      Agents do NOT need to communicate during iteration. Clocks sync only at
+      merge time by reading the finalized iteration metadata from prior agents.
+
+    total_ordering: >
+      Pair each iteration timestamp with agent_id to break ties:
+      (lamport_time, agent_id). Lexicographic sort produces deterministic
+      total order across all iterations, regardless of merge order.
+
+  example:
+    iteration_sequence: |
+      Agent A iteration 1: clock = 1
+      Agent A iteration 2: clock = 2
+      Agent B iteration 1: clock = 1 (local start; A's version not yet visible)
+      [Agent A merges back to main]
+      Agent B iteration 2: Syncs from main, sees A's max_clock=2, sets own = max(1, 2) + 1 = 3
+      Agent B iteration 3: clock = 4
+      [Agent B merges back to main]
+
+      Final merged history order:
+        (1, agent-a) ← Agent A iter 1
+        (2, agent-a) ← Agent A iter 2
+        (1, agent-b) ← Agent B iter 1 (concurrent with A iter 1)
+        (3, agent-b) ← Agent B iter 2 (after seeing A)
+        (4, agent-b) ← Agent B iter 3
+
+squash_merge_pattern:
+  description: >
+    Agent iterates N times locally. At merge time, all N intermediate commits are
+    squashed into one commit to main. The squashed commit is the only artifact
+    visible in main's git log. Full iteration details live in side-band metadata.
+
+  implementation:
+    step_1_complete_iterations: "Agent completes N iterations in local worktree"
+    step_2_prepare_merge: "Agent collects all iteration metadata (.ephemeral-state.json files)"
+    step_3_squash_merge: >
+      git merge --squash origin/main
+      git commit -m "batch: <change-name>
+      <change-name> — N iterations across X specs
+      Agents: <agent-list>
+      See .tillandsias/ephemeral-merges.jsonl for detailed iteration history.
+
+      OpenSpec change: <change-id>"
+    step_4_side_band: "Append iteration metadata to .tillandsias/ephemeral-merges.jsonl"
+    step_5_push: "git push origin main"
+
+  git_log_visibility:
+    before_merge: |
+      commit A1 — spec: fix browser auth (Agent A iter 1)
+      commit A2 — spec: fix browser auth (Agent A iter 2)
+      commit A3 — spec: fix browser auth (Agent A iter 3)
+      ... (repeat 47 more times)
+      commit A50 — spec: fix browser auth (Agent A iter 50)
+
+    after_squash_merge: |
+      commit SQUASHED — batch: browser-isolation-core
+      (Single commit. All 50 intermediate states gone from git log, not deleted,
+       just aggregated. Details in .tillandsias/ephemeral-merges.jsonl)
+
+  benefits:
+    clean_history: "main's git log is readable: one line per completed batch"
+    queryable_details: "Iteration history in JSONL file, queryable via jq"
+    failure_recovery: "If agent crashes mid-iteration, .ephemeral-state.json can resume"
+    no_merge_conflicts: "Squash commits don't conflict (one per batch)"
+
+side_band_metadata_file:
+  description: >
+    File .tillandsias/ephemeral-merges.jsonl is append-only JSON Lines. One entry
+    per merged batch. Each entry contains full iteration metadata: timestamps,
+    causality chain, agent identifiers, intermediate artifacts, failure modes.
+
+  location: ".tillandsias/ephemeral-merges.jsonl"
+  format: "JSON Lines — one JSON object per line"
+  mutability: "Append-only. Never modify prior entries (immutable audit trail)"
+  storage: "Committed to git, cross-machine durable"
+
+  schema: |
+    {
+      "batch_id": "browser-isolation-core",
+      "agent_id": "agent-a",
+      "merge_timestamp": "2026-05-05T14:32:15Z",
+      "commit_hash": "k0l1m2n",
+      "iteration_count": 47,
+      "lamport_clock_final": 47,
+      "iteration_causal_order": [
+        {"seq": 1, "agent": "agent-a", "clock": 1, "action": "audit spec browser-isolation-core"},
+        {"seq": 2, "agent": "agent-a", "clock": 2, "action": "create delta spec"},
+        {"seq": 3, "agent": "agent-a", "clock": 3, "action": "implement auth handlers"},
+        ...
+        {"seq": 47, "agent": "agent-a", "clock": 47, "action": "final verification pass"}
+      ],
+      "concurrent_batches": ["browser-isolation-framework"],
+      "dependency_batches": [],
+      "failure_modes": [],
+      "metadata": {
+        "files_modified": 12,
+        "specs_archived": 3,
+        "tests_added": 15
+      }
+    }
+
+  querying_examples: |
+    # How many iterations in browser-isolation batch?
+    jq '.iteration_count' .tillandsias/ephemeral-merges.jsonl | grep browser-isolation
+
+    # What happened in iteration 25?
+    jq '.iteration_causal_order[24]' .tillandsias/ephemeral-merges.jsonl | grep browser-isolation
+
+    # Which batches were concurrent (overlapping merge timestamps)?
+    jq -s 'group_by(.merge_timestamp) | map(select(length > 1))' \
+      .tillandsias/ephemeral-merges.jsonl
+
+    # Causal chain: which batch triggered which?
+    jq '.dependency_batches[]' .tillandsias/ephemeral-merges.jsonl
+
+  source_of_truth:
+    single_artifact: >
+      .tillandsias/ephemeral-merges.jsonl is the source of truth for iteration history.
+      If agent's .ephemeral-state.json is lost, can reconstruct from this file.
+      If this file is lost, can reconstruct from git commit messages (backup).
+
+    redundancy:
+      primary: ".tillandsias/ephemeral-merges.jsonl (authoritative)"
+      backup: "Git commit messages contain full metadata as fallback"
+      tertiary: ".ephemeral-state.json per-worktree (ephemeral, not durable)"
+
+crdt_properties_guarantee_safety:
+  description: >
+    The iteration metadata adheres to CRDT properties. This means: agents can work
+    in any order, merge in any order, and the final history is identical. No conflicts.
+
+  mathematical_properties:
+    commutativity: >
+      merge(Agent-A-metadata, Agent-B-metadata) ==
+      merge(Agent-B-metadata, Agent-A-metadata)
+      → Agents can merge in any order, same final state.
+
+    associativity: >
+      merge(merge(A, B), C) == merge(A, merge(B, C))
+      → Partial merges are safe. If coordinator crashes mid-merge, can resume.
+
+    idempotence: >
+      merge(metadata, metadata) == metadata
+      → Re-merging the same batch is safe (no duplicates, no loss).
+
+    convergence: >
+      All servers running the merge algorithm end at the same final metadata.
+      Useful for distributed systems (multi-region deploys, offline sync).
+
+  enforcement:
+    algorithm: >
+      Merge iterations by sorting on (lamport_clock, agent_id) tuple.
+      Iteration order is deterministic regardless of arrival order.
+      Append-only JSONL ensures no data loss.
+
+    verification: |
+      verify_crdt_properties() {
+        # Commutativity: merge(A,B) == merge(B,A)
+        merge_ab=$(merge_metadata "$metadata_a" "$metadata_b")
+        merge_ba=$(merge_metadata "$metadata_b" "$metadata_a")
+        assert_equal "$merge_ab" "$merge_ba" "merge order independence"
+
+        # Associativity
+        merge_ab_c=$(merge_metadata "$(merge_metadata "$metadata_a" "$metadata_b")" "$metadata_c")
+        merge_a_bc=$(merge_metadata "$metadata_a" "$(merge_metadata "$metadata_b" "$metadata_c")")
+        assert_equal "$merge_ab_c" "$merge_a_bc" "merge grouping independence"
+
+        # Idempotence
+        merged_once=$(merge_metadata "$metadata_a" "$metadata_a")
+        merged_twice=$(merge_metadata "$merged_once" "$metadata_a")
+        assert_equal "$merged_once" "$merged_twice" "re-merge idempotence"
+      }
+
+failure_modes_and_recovery:
+  agent_crash_mid_iteration:
+    description: "Agent process dies after writing iteration state 25, before 26"
+    detection: "Stale .ephemeral-state.json (mtime older than timeout)"
+    recovery: >
+      1. Detect stale worktree (no activity for 30 minutes)
+      2. Read last completed iteration from .ephemeral-state.json
+      3. Check .tillandsias/ephemeral-merges.jsonl for prior agent context
+      4. Resume agent from iteration 26 (reuse lamport_clock baseline)
+    data_loss: "None. Iteration 25's state is in .ephemeral-state.json; resumable"
+
+  metadata_file_corruption:
+    description: ".tillandsias/ephemeral-merges.jsonl becomes unreadable (disk error)"
+    detection: "jq parse fails, file size smaller than expected"
+    recovery: >
+      1. Reconstruct from git commit messages (full metadata in message)
+      2. Regenerate .tillandsias/ephemeral-merges.jsonl from commits
+      3. Verify reconstruction matches side-band (checksums in commit)
+    data_loss: "None. Git is the source of truth."
+
+  clock_desynchronization:
+    description: "Agent A and B's clocks diverge; iterations out of order"
+    cause: >
+      Agent B didn't fetch from main before merging; doesn't know Agent A's final clock.
+    detection: "Iteration tuples (clock, agent_id) are not sorted"
+    prevention: >
+      Before merge, agents fetch origin/main and update local metadata from
+      .tillandsias/ephemeral-merges.jsonl (sync clock baseline).
+    recovery: >
+      Re-sort iterations by (lamport_clock, agent_id), rewrite .ephemeral-merges.jsonl.
+      Causality is preserved by sort order.
+
+  concurrent_merge_conflicts:
+    description: "Two agents try to merge to main simultaneously"
+    prevention: >
+      Git's push lock prevents this. First agent's push succeeds; second agent
+      gets rejection, must fetch and re-base (rare, short-lived).
+    recovery: "Second agent: git fetch, re-read .ephemeral-merges.jsonl, update clock, retry push"
+
+implementation_phases:
+  phase_1_core_library:
+    effort: "~2 hours"
+    deliverables:
+      - "crates/tillandsias-ephemeral/ with EphemeralState, MergeCoordinator structs"
+      - "Lamport clock logic (sync, increment, comparison)"
+      - "JSONL writing (idempotent append)"
+    tests:
+      - "Lamport monotonicity (clock always increases)"
+      - "CRDT properties (commutativity, associativity, idempotence)"
+      - "Metadata serialization roundtrip"
+
+  phase_2_tauri_integration:
+    effort: "~1.5 hours"
+    deliverables:
+      - "Hook in handlers.rs:submit_batch()"
+      - "Collect .ephemeral-state.json from all worktrees"
+      - "Invoke MergeCoordinator.aggregate_metadata()"
+      - "Execute git merge --squash across worktrees"
+    integration_points:
+      - "src-tauri/src/handlers.rs (batch submission)"
+      - "src-tauri/src/runner.rs (worktree lifecycle)"
+
+  phase_3_testing:
+    effort: "~2-3 hours"
+    scenarios:
+      - "Single agent, 50 iterations (baseline)"
+      - "Two agents, concurrent work, verify order independence"
+      - "Three agents, cascading merges (A→main, B→main, C→main), verify CRDT"
+      - "Agent crash mid-iteration, resume from saved state"
+      - "Clock desync, re-sort, verify causality preserved"
+    failure_injection:
+      - "Kill agent process; verify recovery"
+      - "Delete .ephemeral-state.json; verify reconstruction"
+      - "Corrupt metadata file; verify repair"
+
+  phase_4_documentation:
+    effort: "~1 hour"
+    deliverables:
+      - "Cheatsheet: cheatsheets/agents/ephemeral-versioning.md"
+      - "Update CLAUDE.md: agent batch workflow"
+      - "Example code: metadata structure, clock sync, merge algorithm"
+
+  total_effort: "~6-8 hours"
+  blockers: "None identified"
+
+integration_with_main_versioning:
+  relationship: >
+    Main branch uses CalVer + LUB merge (see methodology/versioning.yaml).
+    Ephemeral work uses Lamport clocks + squash (this document).
+    The two systems are orthogonal: ephemeral work is LOCAL; main's VERSION
+    only bumps after squash merges land.
+
+  example:
+    agent_work: |
+      Agent A:
+      - Iteration 1: clock=1, .ephemeral-state.json written
+      - Iteration 2: clock=2
+      - ...
+      - Iteration 47: clock=47
+      → Squash merge to main with single commit
+
+    main_version: |
+      Before Agent A merge: VERSION = v0.1.260504.12
+      After Agent A merges: VERSION unchanged (no change made yet)
+      Later, /opsx:archive for "browser-isolation-core":
+        OpenSpec creates delta spec, bumps BUILD number
+        VERSION now v0.1.260505.13
+        .tillandsias/ephemeral-merges.jsonl gets new entry for agent-a's batch
+        → Proof: agent did 47 iterations, converged to v0.1.260505.13
+
+  queryable_proof: >
+    jq 'select(.batch_id == "browser-isolation-core") | .iteration_count' \
+      .tillandsias/ephemeral-merges.jsonl
+    → Output: 47
+    This proves the agent iterated 47 times before converging.
+
+automation_and_orchestration:
+  coordinator_role: >
+    Tauri tray acts as coordinator. When all agents in a batch complete:
+    1. Collect metadata from all worktrees
+    2. Merge metadata using CRDT algorithm
+    3. Execute git merge --squash (one per agent)
+    4. Append to .tillandsias/ephemeral-merges.jsonl
+    5. Bump VERSION via /opsx:archive
+    6. Clean up worktrees
+
+  safety_gates:
+    - "All metadata files present and parseable"
+    - "All iterations have monotonic clocks"
+    - "Git merge --squash succeeds with no conflicts"
+    - "Append to JSONL is atomic (temp file, then rename)"
+    - "Verification: Lamport properties still hold post-merge"
+
+references:
+  - "methodology/versioning.yaml — Main CalVer system and branch discipline"
+  - "cheatsheets/agents/ephemeral-versioning.md — Operational guide for agents"
+  - "RESEARCH-BETWEEN-COMMITS-WORK-VERSIONING.md — Complete research findings"
+  - "Lamport clocks: https://martinfowler.com/articles/patterns-of-distributed-systems/lamport-clock.html"
+  - "CRDT fundamentals: https://crdt.tech/"
+  - "Worktrunk: https://worktrunk.dev/ (AI agent worktree orchestration precedent)"
+  - "Neon Branching: https://neon.com/branching/branching-for-agents (distributed metadata pattern)"
