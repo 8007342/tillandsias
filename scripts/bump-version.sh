@@ -3,12 +3,17 @@
 # Tillandsias — Version Bump Script
 #
 # Reads VERSION file and updates all version locations atomically.
-# Version format: Major.Minor.ChangeCount.BuildIncrement
+# Version format: Major.Minor.YYMMDD.Build (CalVer with build counter)
+#   - Major: Contract version (user-driven for breaking changes)
+#   - Minor: Phase/compatibility (user-driven for phases)
+#   - YYMMDD: Release date (calendar versioning, always monotonic with time)
+#   - Build: Local build counter (auto-increments on every build, merges via LUB)
 #
 # Usage:
 #   ./scripts/bump-version.sh              # Sync all files to VERSION
-#   ./scripts/bump-version.sh --bump-build # Increment build number
-#   ./scripts/bump-version.sh --bump-changes # Increment change count + build (monotonic)
+#   ./scripts/bump-version.sh --bump-build # Increment build number (daily counter)
+#   ./scripts/bump-version.sh --new-day    # New calendar day, reset build to 1
+#   ./scripts/bump-version.sh --bump-minor # Increment minor version, reset day to today
 # =============================================================================
 
 set -euo pipefail
@@ -24,36 +29,60 @@ if [[ ! -f "$VERSION_FILE" ]]; then
     exit 1
 fi
 
-# Read current version
+# Read current version (CalVer format: Major.Minor.YYMMDD.Build)
 FULL_VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
-IFS='.' read -r MAJOR MINOR CHANGES BUILD <<< "$FULL_VERSION"
+IFS='.' read -r MAJOR MINOR YYMMDD BUILD <<< "$FULL_VERSION"
+
+# Get today's date in YYMMDD format
+TODAY_YYMMDD="$(date +%y%m%d)"
 
 # Handle flags
 case "${1:-}" in
     --bump-build)
-        BUILD=$((BUILD + 1))
-        FULL_VERSION="${MAJOR}.${MINOR}.${CHANGES}.${BUILD}"
+        # Increment build number for current day
+        if [[ "$YYMMDD" != "$TODAY_YYMMDD" ]]; then
+            echo "NOTICE: Date has changed ($YYMMDD → $TODAY_YYMMDD), resetting build to 1"
+            YYMMDD="$TODAY_YYMMDD"
+            BUILD=1
+        else
+            BUILD=$((BUILD + 1))
+        fi
+        FULL_VERSION="${MAJOR}.${MINOR}.${YYMMDD}.${BUILD}"
         echo "$FULL_VERSION" > "$VERSION_FILE"
         echo "Bumped build: $FULL_VERSION"
         ;;
-    --bump-changes)
-        CHANGES=$((CHANGES + 1))
-        BUILD=$((BUILD + 1))
-        FULL_VERSION="${MAJOR}.${MINOR}.${CHANGES}.${BUILD}"
+    --new-day)
+        # Manual new-day transition (rarely needed; usually auto-detected by --bump-build)
+        YYMMDD="$TODAY_YYMMDD"
+        BUILD=1
+        FULL_VERSION="${MAJOR}.${MINOR}.${YYMMDD}.${BUILD}"
         echo "$FULL_VERSION" > "$VERSION_FILE"
-        echo "Bumped changes: $FULL_VERSION"
+        echo "New day transition: $FULL_VERSION"
+        ;;
+    --bump-minor)
+        # Increment minor version (e.g., 0.1 → 0.2), reset date and build
+        MINOR=$((MINOR + 1))
+        YYMMDD="$TODAY_YYMMDD"
+        BUILD=1
+        FULL_VERSION="${MAJOR}.${MINOR}.${YYMMDD}.${BUILD}"
+        echo "$FULL_VERSION" > "$VERSION_FILE"
+        echo "Bumped minor version: $FULL_VERSION"
         ;;
     "")
+        # Sync mode: only print current version (no changes)
+        if [[ "$YYMMDD" != "$TODAY_YYMMDD" ]]; then
+            echo "WARNING: Version date ($YYMMDD) is behind today ($TODAY_YYMMDD)"
+        fi
         echo "Syncing version: $FULL_VERSION"
         ;;
     *)
-        echo "Usage: $0 [--bump-build|--bump-changes]" >&2
+        echo "Usage: $0 [--bump-build|--new-day|--bump-minor]" >&2
         exit 1
         ;;
 esac
 
-# Derive 3-part semver for Cargo/Tauri
-SEMVER="${MAJOR}.${MINOR}.${CHANGES}"
+# Derive 3-part semver for Cargo/Tauri (using YYMMDD as patch version)
+SEMVER="${MAJOR}.${MINOR}.${YYMMDD}"
 
 # Update all Cargo.toml files (workspace members)
 for cargo_toml in \
