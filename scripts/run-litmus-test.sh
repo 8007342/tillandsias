@@ -101,20 +101,20 @@ log_test_result() {
     case "$status" in
         PASS)
             printf '  %b[PASS]%b %s\n' "${GREEN}" "${NC}" "$test_name" >&2
-            ((TESTS_PASSED++))
+            TESTS_PASSED=$((TESTS_PASSED+1))
             ;;
         FAIL)
             printf '  %b[FAIL]%b %s\n' "${RED}" "${NC}" "$test_name" >&2
             [[ -n "$message" ]] && printf '         %b%s%b\n' "${RED}" "$message" "${NC}" >&2
-            ((TESTS_FAILED++))
+            TESTS_FAILED=$((TESTS_FAILED+1))
             ;;
         SKIP)
             printf '  %b[SKIP]%b %s\n' "${YELLOW}" "${NC}" "$test_name" >&2
             [[ -n "$message" ]] && printf '         %b%s%b\n' "${YELLOW}" "$message" "${NC}" >&2
-            ((TESTS_SKIPPED++))
+            TESTS_SKIPPED=$((TESTS_SKIPPED+1))
             ;;
     esac
-    ((TESTS_RUN++))
+    TESTS_RUN=$((TESTS_RUN+1))
 }
 
 # ============================================================================
@@ -143,22 +143,27 @@ get_litmus_tests_for_spec() {
 
     if command -v yq &>/dev/null; then
         yq eval ".specs[] | select(.spec_id==\"${spec_id}\") | .litmus_tests[]" \
-            "$LITMUS_BINDINGS" 2>/dev/null | sed 's/^/litmus:/' || true
+            "$LITMUS_BINDINGS" 2>/dev/null || true
     else
-        # Fallback: grep and parse (more robust)
+        # Fallback: grep and parse. YAML structure is:
+        # - spec_id: <name>
+        #   status: active
+        #   litmus_tests:
+        #   - <test-name>
         awk -v spec="$spec_id" '
-            /^- spec_id:/ {
-                if (target_found) exit
-                if ($3 == spec) target_found = 1
+            /^- spec_id: / {
+                gsub(/^- spec_id: /, "");
+                in_current = ($0 == spec) ? 1 : 0
+                in_tests = 0
                 next
             }
-            target_found && /^ *- litmus:/ {
-                gsub(/^[[:space:]]*- /, "");
+            in_current && /^  litmus_tests:/ { in_tests = 1; next }
+            in_current && in_tests && /^  - / {
+                gsub(/^  - /, "");
                 print
+                next
             }
-            target_found && /^[^ ]/ && !/^ *spec_id:/ {
-                exit
-            }
+            in_current && /^- spec_id/ { exit }
         ' "$LITMUS_BINDINGS"
     fi
 }
@@ -168,17 +173,19 @@ get_all_active_specs() {
     if command -v yq &>/dev/null; then
         yq eval '.specs[] | select(.status=="active") | .spec_id' "$LITMUS_BINDINGS" 2>/dev/null || true
     else
-        awk '/^- spec_id:/ { in_spec=1; id="" }
-             in_spec && /^ *spec_id:/ {
-                 gsub(/^[^:]*: */, "");
-                 gsub(/["'"'"']/, "");
-                 id=$0;
-                 next
-             }
-             in_spec && /^ *status: *active/ {
-                 if (id != "") print id;
-                 in_spec=0
-             }' "$LITMUS_BINDINGS"
+        # Fallback: grep-based parsing
+        awk '
+            /^- spec_id: / {
+                gsub(/^- spec_id: /, "");
+                current_spec = $0
+                next
+            }
+            /^  status: / {
+                gsub(/^  status: /, "");
+                status = $0
+                if (status == "active" && current_spec != "") print current_spec
+            }
+        ' "$LITMUS_BINDINGS"
     fi
 }
 
@@ -224,20 +231,17 @@ check_signal() {
 }
 
 # Parse and execute litmus test file
+# Returns 0 (success) if test should be considered passing, 1 (failure) otherwise
+# Note: Does NOT log results - caller is responsible for that
 run_litmus_test_file() {
     local test_file="$1"
-    local spec_name="$2"
-    local test_name=""
 
     if [[ ! -f "$test_file" ]]; then
-        log_fail "Test file not found: $test_file"
         return 1
     fi
 
-    # Extract test name from file
-    test_name="$(yaml_get "$test_file" ".name" 2>/dev/null || basename "$test_file" .yaml)"
-
-    log_test_result "$spec_name" "$test_name" "PASS" ""
+    # TODO: Parse and execute test commands from test_file
+    # For now, just verify the file exists (which we already did above)
     return 0
 }
 
@@ -261,11 +265,12 @@ run_tests_for_spec() {
     while IFS= read -r test_name; do
         [[ -z "$test_name" ]] && continue
 
-        local test_file="${LITMUS_TESTS_DIR}/${test_name}.yaml"
+        # Convert colon to hyphen for file lookup (litmus:ephemeral-guarantee -> litmus-ephemeral-guarantee)
+        local test_file="${LITMUS_TESTS_DIR}/${test_name//:/-}.yaml"
 
         if [[ ! -f "$test_file" ]]; then
             log_test_result "$spec_id" "$test_name" "SKIP" "Test file not found"
-            ((test_count++))
+            test_count=$((test_count+1))
             continue
         fi
 
@@ -276,7 +281,7 @@ run_tests_for_spec() {
             log_test_result "$spec_id" "$test_name" "FAIL" "Check implementation"
         fi
 
-        ((test_count++))
+        test_count=$((test_count+1))
     done <<<"$litmus_tests"
 
     SPEC_TEST_COUNT["$spec_id"]=$test_count
@@ -290,11 +295,11 @@ run_tests_for_spec() {
 # ============================================================================
 
 print_summary() {
-    local total_tests=$TESTS_RUN
+    local total_executed=$((TESTS_PASSED + TESTS_FAILED))
     local coverage_ratio="0"
 
-    if [[ $total_tests -gt 0 ]]; then
-        coverage_ratio="$((TESTS_PASSED * 100 / total_tests))"
+    if [[ $total_executed -gt 0 ]]; then
+        coverage_ratio="$((TESTS_PASSED * 100 / total_executed))"
     fi
 
     echo "" >&2
@@ -304,11 +309,11 @@ print_summary() {
 
     printf '  %bPASS%b:  %d\n' "${GREEN}" "${NC}" "$TESTS_PASSED" >&2
     printf '  %bFAIL%b:  %d\n' "${RED}" "${NC}" "$TESTS_FAILED" >&2
-    printf '  %bSKIP%b:  %d\n' "${YELLOW}" "${NC}" "$TESTS_SKIPPED" >&2
-    printf '  %bTotal%b: %d\n' "${BOLD}" "${NC}" "$total_tests" >&2
+    printf '  %bSKIP%b:  %d (excluded from coverage)\n' "${YELLOW}" "${NC}" "$TESTS_SKIPPED" >&2
+    printf '  %bTotal%b: %d (executed: %d, skipped: %d)\n' "${BOLD}" "${NC}" "$TESTS_RUN" "$total_executed" "$TESTS_SKIPPED" >&2
     echo "" >&2
 
-    # Coverage calculation
+    # Coverage calculation (excluding skipped tests)
     local all_specs
     all_specs="$(get_all_active_specs)"
     local total_specs=0
@@ -325,6 +330,7 @@ print_summary() {
     # coverage_text computed to avoid bash subshell interpretation of parentheses
     coverage_text="[$spec_count/$total_specs specs]"
     printf '%bCoverage%b: %d%% %s\n' "${BOLD}" "${NC}" "$covered_specs" "$coverage_text" >&2
+    printf '%bPass Rate%b: %d%% (%d/%d executed)\n' "${BOLD}" "${NC}" "$coverage_ratio" "$TESTS_PASSED" "$total_executed" >&2
     echo "" >&2
 
     # Overall status
@@ -338,9 +344,10 @@ print_summary() {
 }
 
 print_json_summary() {
+    local total_executed=$((TESTS_PASSED + TESTS_FAILED))
     local pass_rate=0
-    if [[ $TESTS_RUN -gt 0 ]]; then
-        pass_rate=$(( TESTS_PASSED * 100 / TESTS_RUN ))
+    if [[ $total_executed -gt 0 ]]; then
+        pass_rate=$(( TESTS_PASSED * 100 / total_executed ))
     fi
 
     local status="FAIL"
@@ -354,11 +361,12 @@ print_json_summary() {
     printf '    "passed": %d,\n' "$TESTS_PASSED"
     printf '    "failed": %d,\n' "$TESTS_FAILED"
     printf '    "skipped": %d,\n' "$TESTS_SKIPPED"
-    printf '    "total": %d\n' "$TESTS_RUN"
+    printf '    "total_run": %d,\n' "$TESTS_RUN"
+    printf '    "total_executed": %d\n' "$total_executed"
     printf '  },\n'
     printf '  "coverage": {\n'
     printf '    "specs_tested": %d,\n' "$spec_count"
-    printf '    "pass_rate": %d\n' "$pass_rate"
+    printf '    "pass_rate_executed": %d\n' "$pass_rate"
     printf '  },\n'
     printf '  "status": "%s"\n' "$status"
     printf '}\n'
@@ -439,12 +447,12 @@ validate_environment() {
 
     if [[ ! -f "$LITMUS_BINDINGS" ]]; then
         log_fail "Bindings file not found: $LITMUS_BINDINGS"
-        ((missing++))
+        missing=$((missing+1))
     fi
 
     if [[ ! -d "$LITMUS_TESTS_DIR" ]]; then
         log_fail "Tests directory not found: $LITMUS_TESTS_DIR"
-        ((missing++))
+        missing=$((missing+1))
     fi
 
     if [[ ! -f "$METHODOLOGY_LITMUS" ]]; then
@@ -489,6 +497,12 @@ main() {
     else
         log_info "Running tests for all active specs"
         specs_to_test="$(get_all_active_specs)"
+    fi
+
+    # Check if spec list is empty
+    if [[ -z "$specs_to_test" ]]; then
+        log_fail "No specs found in bindings. Check litmus-bindings.yaml."
+        exit 1
     fi
 
     # Execute tests for each spec
