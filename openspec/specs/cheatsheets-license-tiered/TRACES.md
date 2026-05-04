@@ -35,7 +35,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [scripts/fetch-cheatsheet-source.sh#L479](../../../scripts/fetch-cheatsheet-source.sh#L479)
 - [scripts/fetch-cheatsheet-source.sh#L483](../../../scripts/fetch-cheatsheet-source.sh#L483)
 - [scripts/fetch-cheatsheet-source.sh#L503](../../../scripts/fetch-cheatsheet-source.sh#L503)
-- [scripts/hooks/pre-commit-openspec.sh#L170](../../../scripts/hooks/pre-commit-openspec.sh#L170)
+- [scripts/hooks/pre-commit-openspec.sh#L177](../../../scripts/hooks/pre-commit-openspec.sh#L177)
 - [scripts/refresh-cheatsheet-sources.sh#L4](../../../scripts/refresh-cheatsheet-sources.sh#L4)
 - [scripts/regenerate-cheatsheet-index.sh#L187](../../../scripts/regenerate-cheatsheet-index.sh#L187)
 - [scripts/regenerate-cheatsheet-index.sh#L227](../../../scripts/regenerate-cheatsheet-index.sh#L227)

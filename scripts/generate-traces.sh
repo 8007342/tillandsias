@@ -57,6 +57,7 @@ done < <(
         --include="*.sh" \
         --include="*.toml" \
         --include="*.nix" \
+        --include="Containerfile*" \
         --exclude-dir='.claude' \
         --exclude-dir='target' \
         --exclude-dir='target-musl' \

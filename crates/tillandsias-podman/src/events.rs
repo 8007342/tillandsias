@@ -147,15 +147,18 @@ impl PodmanEventStream {
     // @trace spec:cross-platform, spec:wsl-daemon-orchestration
     // @cheatsheet runtime/wsl-daemon-patterns.md, runtime/systemd-socket-activation.md
     #[cfg(target_os = "windows")]
-    async fn stream_events_wsl(&self, tx: &mpsc::Sender<PodmanEvent>) -> Result<(), PodmanEventError> {
+    async fn stream_events_wsl(
+        &self,
+        tx: &mpsc::Sender<PodmanEvent>,
+    ) -> Result<(), PodmanEventError> {
         use tokio::fs::OpenOptions;
 
         debug!(prefix = %self.prefix, "Starting WSL systemd socket stream");
 
         // Construct socket path: \\wsl$\<distro>\run\tillandsias\router.sock
         // Get distro name from TILLANDSIAS_WSL_DISTRO env var, default to "Fedora"
-        let distro = std::env::var("TILLANDSIAS_WSL_DISTRO")
-            .unwrap_or_else(|_| "Fedora".to_string());
+        let distro =
+            std::env::var("TILLANDSIAS_WSL_DISTRO").unwrap_or_else(|_| "Fedora".to_string());
 
         // On Windows, UNC path to WSL socket: \\wsl$\Fedora\run\tillandsias\router.sock
         let socket_path = format!(r"\\wsl$\{}\run\tillandsias\router.sock", distro);

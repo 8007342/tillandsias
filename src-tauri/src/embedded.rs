@@ -123,7 +123,8 @@ pub const FORGE_EXTERNAL_LOGS: &str = include_str!("../../images/default/externa
 // @trace spec:browser-mcp-server
 pub const MCP_SERVER_BROWSER: &str = include_str!("../../images/default/mcp-server-browser.js");
 pub const SSE_KEEPALIVE_PROXY: &str = include_str!("../../images/default/sse-keepalive-proxy.js");
-pub const TILLANDSIAS_MCP_BROWSER_BIN: &[u8] = include_bytes!("../../images/default/tillandsias-mcp-browser");
+pub const TILLANDSIAS_MCP_BROWSER_BIN: &[u8] =
+    include_bytes!("../../images/default/tillandsias-mcp-browser");
 // @trace spec:init-incremental-builds
 // No forge GIT_ASKPASS const — the forge-side askpass was tombstoned.
 // Forge containers have ZERO credentials; only the git-service container
@@ -231,8 +232,10 @@ pub const ROUTER_EXTERNAL_LOGS: &str = include_str!("../../images/router/externa
 // Image sources — chromium browser containers
 // @trace spec:browser-isolation-core, spec:browser-isolation-framework
 // ---------------------------------------------------------------------------
-pub const CHROMIUM_CORE_CONTAINERFILE: &str = include_str!("../../images/chromium/Containerfile.core");
-pub const CHROMIUM_FRAMEWORK_CONTAINERFILE: &str = include_str!("../../images/chromium/Containerfile.framework");
+pub const CHROMIUM_CORE_CONTAINERFILE: &str =
+    include_str!("../../images/chromium/Containerfile.core");
+pub const CHROMIUM_FRAMEWORK_CONTAINERFILE: &str =
+    include_str!("../../images/chromium/Containerfile.framework");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -391,13 +394,22 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     write_lf(&default_dir.join("external-logs.yaml"), FORGE_EXTERNAL_LOGS)
         .map_err(|e| format!("external-logs.yaml: {e}"))?;
     // @trace spec:browser-mcp-server
-    write_lf(&default_dir.join("mcp-server-browser.js"), MCP_SERVER_BROWSER)
-        .map_err(|e| format!("mcp-server-browser.js: {e}"))?;
-    write_lf(&default_dir.join("sse-keepalive-proxy.js"), SSE_KEEPALIVE_PROXY)
-        .map_err(|e| format!("sse-keepalive-proxy.js: {e}"))?;
+    write_lf(
+        &default_dir.join("mcp-server-browser.js"),
+        MCP_SERVER_BROWSER,
+    )
+    .map_err(|e| format!("mcp-server-browser.js: {e}"))?;
+    write_lf(
+        &default_dir.join("sse-keepalive-proxy.js"),
+        SSE_KEEPALIVE_PROXY,
+    )
+    .map_err(|e| format!("sse-keepalive-proxy.js: {e}"))?;
     // Write binary executable (tillandsias-mcp-browser)
-    fs::write(&default_dir.join("tillandsias-mcp-browser"), TILLANDSIAS_MCP_BROWSER_BIN)
-        .map_err(|e| format!("tillandsias-mcp-browser: {e}"))?;
+    fs::write(
+        &default_dir.join("tillandsias-mcp-browser"),
+        TILLANDSIAS_MCP_BROWSER_BIN,
+    )
+    .map_err(|e| format!("tillandsias-mcp-browser: {e}"))?;
     // No forge GIT_ASKPASS — tombstoned.
     // @trace spec:secrets-management
     #[cfg(unix)]
@@ -571,8 +583,11 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     write_lf(&git_dir.join("post-receive-hook.sh"), POST_RECEIVE_HOOK)
         .map_err(|e| format!("git post-receive-hook: {e}"))?;
     // @trace spec:secrets-management, spec:git-mirror-service
-    write_lf(&git_dir.join("git-askpass-tillandsias.sh"), GIT_ASKPASS_TILLANDSIAS)
-        .map_err(|e| format!("git askpass script: {e}"))?;
+    write_lf(
+        &git_dir.join("git-askpass-tillandsias.sh"),
+        GIT_ASKPASS_TILLANDSIAS,
+    )
+    .map_err(|e| format!("git askpass script: {e}"))?;
     // @trace spec:cli-diagnostics, spec:logging-levels
     // Lifecycle: GIT_EXTERNAL_LOGS (binary const) → tmpfs here → Containerfile COPY into image layer
     // → mounted at /etc/tillandsias/external-logs.yaml in git container → syslog streaming via --diagnostics
@@ -580,7 +595,11 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         .map_err(|e| format!("git external-logs: {e}"))?;
     #[cfg(unix)]
     {
-        for name in ["entrypoint.sh", "post-receive-hook.sh", "git-askpass-tillandsias.sh"] {
+        for name in [
+            "entrypoint.sh",
+            "post-receive-hook.sh",
+            "git-askpass-tillandsias.sh",
+        ] {
             let path = git_dir.join(name);
             if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o755)) {
                 warn!(
@@ -598,12 +617,18 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     fs::create_dir_all(&inference_dir).map_err(|e| format!("images/inference dir: {e}"))?;
     write_lf(&inference_dir.join("entrypoint.sh"), INFERENCE_ENTRYPOINT)
         .map_err(|e| format!("inference entrypoint: {e}"))?;
-    write_lf(&inference_dir.join("Containerfile"), INFERENCE_CONTAINERFILE)
-        .map_err(|e| format!("inference Containerfile: {e}"))?;
+    write_lf(
+        &inference_dir.join("Containerfile"),
+        INFERENCE_CONTAINERFILE,
+    )
+    .map_err(|e| format!("inference Containerfile: {e}"))?;
     // @trace spec:cli-diagnostics, spec:inference-container
     // ollama syslog config: binary → tmpfs → image build context → layer → /etc/tillandsias/external-logs.yaml
-    write_lf(&inference_dir.join("external-logs.yaml"), INFERENCE_EXTERNAL_LOGS)
-        .map_err(|e| format!("inference external-logs.yaml: {e}"))?;
+    write_lf(
+        &inference_dir.join("external-logs.yaml"),
+        INFERENCE_EXTERNAL_LOGS,
+    )
+    .map_err(|e| format!("inference external-logs.yaml: {e}"))?;
     #[cfg(unix)]
     {
         let path = inference_dir.join("entrypoint.sh");
@@ -632,10 +657,16 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
     // @trace spec:browser-isolation-core, spec:browser-isolation-framework
     let chromium_dir = dir.join("images").join("chromium");
     fs::create_dir_all(&chromium_dir).map_err(|e| format!("images/chromium dir: {e}"))?;
-    write_lf(&chromium_dir.join("Containerfile.core"), CHROMIUM_CORE_CONTAINERFILE)
-        .map_err(|e| format!("chromium Containerfile.core: {e}"))?;
-    write_lf(&chromium_dir.join("Containerfile.framework"), CHROMIUM_FRAMEWORK_CONTAINERFILE)
-        .map_err(|e| format!("chromium Containerfile.framework: {e}"))?;
+    write_lf(
+        &chromium_dir.join("Containerfile.core"),
+        CHROMIUM_CORE_CONTAINERFILE,
+    )
+    .map_err(|e| format!("chromium Containerfile.core: {e}"))?;
+    write_lf(
+        &chromium_dir.join("Containerfile.framework"),
+        CHROMIUM_FRAMEWORK_CONTAINERFILE,
+    )
+    .map_err(|e| format!("chromium Containerfile.framework: {e}"))?;
 
     debug!(dir = %dir.display(), "Wrote embedded image sources to temp");
     Ok(dir)
@@ -685,11 +716,8 @@ pub fn extract_config_overlay() -> Result<PathBuf, String> {
     let mcp_dir = dir.join("mcp");
     fs::create_dir_all(&mcp_dir)
         .map_err(|e| format!("Cannot create config-overlay/mcp dir: {e}"))?;
-    write_lf(
-        &mcp_dir.join("git-tools.sh"),
-        CONFIG_OVERLAY_MCP_GIT_TOOLS,
-    )
-    .map_err(|e| format!("config-overlay/mcp/git-tools.sh: {e}"))?;
+    write_lf(&mcp_dir.join("git-tools.sh"), CONFIG_OVERLAY_MCP_GIT_TOOLS)
+        .map_err(|e| format!("config-overlay/mcp/git-tools.sh: {e}"))?;
     write_lf(
         &mcp_dir.join("project-info.sh"),
         CONFIG_OVERLAY_MCP_PROJECT_INFO,
@@ -802,18 +830,18 @@ mod tests {
             // build context (e.g. sibling docs, config-overlay subdir content
             // handled separately, or files read only at host-side build time).
             // Keep this allowlist minimal; when adding, document why.
-                .filter(|name| {
-                    // `opencode.json` is embedded via FORGE_OPENCODE_JSON — covered.
-                    // `git-askpass-tillandsias.sh` is embedded — covered.
-                    // `Containerfile` itself is embedded — covered.
-                    // `forge-welcome.sh` is embedded — covered.
-                    // `lib-common.sh` is embedded — covered.
-                    // Currently every file on disk in images/default/ is expected
-                    // to land in the extracted tree. If a future file is genuinely
-                    // not wanted there (e.g. a README), add a `.gitkeep`-style
-                    // carve-out here with a comment explaining why.
-                    !name.starts_with(".") && name != "README.md"
-                })
+            .filter(|name| {
+                // `opencode.json` is embedded via FORGE_OPENCODE_JSON — covered.
+                // `git-askpass-tillandsias.sh` is embedded — covered.
+                // `Containerfile` itself is embedded — covered.
+                // `forge-welcome.sh` is embedded — covered.
+                // `lib-common.sh` is embedded — covered.
+                // Currently every file on disk in images/default/ is expected
+                // to land in the extracted tree. If a future file is genuinely
+                // not wanted there (e.g. a README), add a `.gitkeep`-style
+                // carve-out here with a comment explaining why.
+                !name.starts_with(".") && name != "README.md"
+            })
             .collect();
 
         let extracted = write_image_sources().expect("write_image_sources should succeed");
@@ -838,8 +866,7 @@ mod tests {
 
         // Also verify the specific OpenCode Web entrypoint that regressed in
         // v0.1.159.189 is both present and executable on Unix.
-        let opencode_web =
-            extracted_default.join("entrypoint-forge-opencode-web.sh");
+        let opencode_web = extracted_default.join("entrypoint-forge-opencode-web.sh");
         assert!(
             opencode_web.is_file(),
             "entrypoint-forge-opencode-web.sh must be extracted"
@@ -847,7 +874,10 @@ mod tests {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(&opencode_web).unwrap().permissions().mode();
+            let mode = std::fs::metadata(&opencode_web)
+                .unwrap()
+                .permissions()
+                .mode();
             assert!(
                 mode & 0o111 != 0,
                 "entrypoint-forge-opencode-web.sh must be executable; got mode {:o}",

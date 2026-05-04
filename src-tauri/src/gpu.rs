@@ -87,27 +87,29 @@ pub fn detect_gpu_tier() -> GpuTier {
     if let Ok(output) = std::process::Command::new("nvidia-smi")
         .args(["--query-gpu=memory.total", "--format=csv,noheader,nounits"])
         .output()
-        && output.status.success() {
-            let vram_str = String::from_utf8_lossy(&output.stdout);
-            // nvidia-smi may report multiple GPUs (one line per GPU).
-            // Use the first GPU's VRAM for tier classification.
-            if let Some(first_line) = vram_str.lines().next()
-                && let Ok(vram_mib) = first_line.trim().parse::<u64>() {
-                    let vram_gb = vram_mib / 1024;
-                    debug!(
-                        vram_mib = vram_mib,
-                        vram_gb = vram_gb,
-                        spec = "inference-container",
-                        "nvidia-smi reported VRAM"
-                    );
-                    return match vram_gb {
-                        0..=3 => GpuTier::Low,
-                        4..=7 => GpuTier::Mid,
-                        8..=11 => GpuTier::High,
-                        _ => GpuTier::Ultra,
-                    };
-                }
+        && output.status.success()
+    {
+        let vram_str = String::from_utf8_lossy(&output.stdout);
+        // nvidia-smi may report multiple GPUs (one line per GPU).
+        // Use the first GPU's VRAM for tier classification.
+        if let Some(first_line) = vram_str.lines().next()
+            && let Ok(vram_mib) = first_line.trim().parse::<u64>()
+        {
+            let vram_gb = vram_mib / 1024;
+            debug!(
+                vram_mib = vram_mib,
+                vram_gb = vram_gb,
+                spec = "inference-container",
+                "nvidia-smi reported VRAM"
+            );
+            return match vram_gb {
+                0..=3 => GpuTier::Low,
+                4..=7 => GpuTier::Mid,
+                8..=11 => GpuTier::High,
+                _ => GpuTier::Ultra,
+            };
         }
+    }
 
     // TODO: AMD ROCm detection via rocm-smi
     debug!(
@@ -150,13 +152,13 @@ pub fn patch_config_overlay_for_gpu(tier: GpuTier) -> Result<(), String> {
         return Ok(());
     }
 
-    let content =
-        std::fs::read_to_string(&config_path).map_err(|e| format!("Cannot read config overlay: {e}"))?;
+    let content = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("Cannot read config overlay: {e}"))?;
 
     let (primary, small) = tier.model_pair();
 
-    let mut config: serde_json::Value =
-        serde_json::from_str(&content).map_err(|e| format!("Cannot parse config overlay JSON: {e}"))?;
+    let mut config: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("Cannot parse config overlay JSON: {e}"))?;
 
     config["model"] = serde_json::Value::String(primary.to_string());
     config["small_model"] = serde_json::Value::String(small.to_string());
@@ -271,7 +273,11 @@ mod tests {
             "model": "ollama/qwen2.5:0.5b",
             "small_model": "ollama/qwen2.5:0.5b"
         });
-        std::fs::write(&config_path, serde_json::to_string_pretty(&initial).unwrap()).unwrap();
+        std::fs::write(
+            &config_path,
+            serde_json::to_string_pretty(&initial).unwrap(),
+        )
+        .unwrap();
 
         // Patch with a custom runtime dir pointing to our temp dir
         // We can't easily override runtime_dir() in tests, so test the JSON

@@ -205,8 +205,7 @@ where
         // --- Deduplication check ---
         if let Ok(mut dedup) = self.dedup.lock() {
             let now = Instant::now();
-            let within_window =
-                now.duration_since(dedup.first_seen).as_secs() < DEDUP_WINDOW_SECS;
+            let within_window = now.duration_since(dedup.first_seen).as_secs() < DEDUP_WINDOW_SECS;
 
             if fingerprint == dedup.last_hash && within_window {
                 // Same message within window — suppress it.
@@ -282,10 +281,7 @@ where
                 for spec_name in spec_str.split(',').map(str::trim) {
                     let url = crate::accountability::spec_url(spec_name);
                     if ansi {
-                        write!(
-                            writer,
-                            "\n  \x1b[2m@trace spec:{spec_name} {url}\x1b[0m"
-                        )?;
+                        write!(writer, "\n  \x1b[2m@trace spec:{spec_name} {url}\x1b[0m")?;
                     } else {
                         write!(writer, "\n  @trace spec:{spec_name} {url}")?;
                     }
@@ -342,9 +338,9 @@ fn level_ansi(level: tracing::Level) -> &'static str {
     match level {
         tracing::Level::ERROR => "\x1b[1;31m", // bold red
         tracing::Level::WARN => "\x1b[1;33m",  // bold yellow
-        tracing::Level::INFO => "\x1b[1;32m",   // bold green
-        tracing::Level::DEBUG => "\x1b[1;34m",  // bold blue
-        tracing::Level::TRACE => "\x1b[2m",     // dim
+        tracing::Level::INFO => "\x1b[1;32m",  // bold green
+        tracing::Level::DEBUG => "\x1b[1;34m", // bold blue
+        tracing::Level::TRACE => "\x1b[2m",    // dim
     }
 }
 
@@ -382,10 +378,7 @@ mod tests {
     #[test]
     fn shorten_target_preserves_core_crate() {
         assert_eq!(shorten_target("tillandsias_core"), "core");
-        assert_eq!(
-            shorten_target("tillandsias_core::config"),
-            "core::config"
-        );
+        assert_eq!(shorten_target("tillandsias_core::config"), "core::config");
     }
 
     #[test]

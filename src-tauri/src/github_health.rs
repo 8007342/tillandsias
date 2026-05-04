@@ -69,8 +69,7 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 /// @trace spec:simplified-tray-ux
 #[allow(dead_code)] // Wired in by the TrayMenu refactor — see spec phase 6.
 pub async fn probe() -> CredentialHealth {
-    let result =
-        tokio::time::timeout(PROBE_TIMEOUT, probe_inner("https://api.github.com")).await;
+    let result = tokio::time::timeout(PROBE_TIMEOUT, probe_inner("https://api.github.com")).await;
     match result {
         Ok(health) => {
             info!(
@@ -96,12 +95,13 @@ pub async fn probe() -> CredentialHealth {
 
 async fn probe_inner(base_url: &str) -> CredentialHealth {
     // Step 1 — token from keyring.
-    let token = match tokio::task::spawn_blocking(crate::secrets::retrieve_github_token)
-        .await
-    {
+    let token = match tokio::task::spawn_blocking(crate::secrets::retrieve_github_token).await {
         Ok(Ok(Some(t))) if !t.trim().is_empty() => t,
         Ok(Ok(_)) => {
-            debug!(spec = "simplified-tray-ux", "No GitHub token in keyring → CredentialMissing");
+            debug!(
+                spec = "simplified-tray-ux",
+                "No GitHub token in keyring → CredentialMissing"
+            );
             return CredentialHealth::CredentialMissing;
         }
         Ok(Err(e)) => {
@@ -140,11 +140,7 @@ async fn probe_inner(base_url: &str) -> CredentialHealth {
 /// quickly.
 ///
 /// @trace spec:simplified-tray-ux
-async fn probe_with_token(
-    base_url: &str,
-    token: &str,
-    http_timeout: Duration,
-) -> CredentialHealth {
+async fn probe_with_token(base_url: &str, token: &str, http_timeout: Duration) -> CredentialHealth {
     let client = match reqwest::Client::builder()
         .timeout(http_timeout)
         .user_agent(concat!(
@@ -303,8 +299,7 @@ mod tests {
     async fn http_403_classifies_as_credential_invalid() {
         ensure_crypto_provider();
         let server = mock_user_endpoint(403).await;
-        let result =
-            probe_with_token(&server.uri(), "ghp_underscoped_token", FAST_TIMEOUT).await;
+        let result = probe_with_token(&server.uri(), "ghp_underscoped_token", FAST_TIMEOUT).await;
         assert_eq!(result, CredentialHealth::CredentialInvalid);
     }
 
@@ -370,10 +365,7 @@ mod tests {
                 // transport branch can fire depending on platform — both are
                 // valid Unreachable classifications. Just sanity-check the
                 // result isn't accidentally Authenticated/CredentialInvalid.
-                assert!(
-                    !reason.is_empty(),
-                    "expected non-empty unreachable reason"
-                );
+                assert!(!reason.is_empty(), "expected non-empty unreachable reason");
             }
             other => panic!("expected GithubUnreachable for refused conn, got: {other:?}"),
         }
@@ -391,9 +383,7 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/user"))
-            .respond_with(
-                ResponseTemplate::new(200).set_delay(Duration::from_secs(2)),
-            )
+            .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(2)))
             .mount(&server)
             .await;
 

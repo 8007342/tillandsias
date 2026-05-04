@@ -5,16 +5,17 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [crates/tillandsias-core/src/config.rs#L496](../../../crates/tillandsias-core/src/config.rs#L496)
-- [crates/tillandsias-core/src/config.rs#L617](../../../crates/tillandsias-core/src/config.rs#L617)
-- [crates/tillandsias-core/src/config.rs#L642](../../../crates/tillandsias-core/src/config.rs#L642)
-- [crates/tillandsias-core/src/config.rs#L671](../../../crates/tillandsias-core/src/config.rs#L671)
+- [crates/tillandsias-core/src/config.rs#L493](../../../crates/tillandsias-core/src/config.rs#L493)
+- [crates/tillandsias-core/src/config.rs#L614](../../../crates/tillandsias-core/src/config.rs#L614)
+- [crates/tillandsias-core/src/config.rs#L639](../../../crates/tillandsias-core/src/config.rs#L639)
+- [crates/tillandsias-core/src/config.rs#L668](../../../crates/tillandsias-core/src/config.rs#L668)
 - [crates/tillandsias-core/src/container_profile.rs#L11](../../../crates/tillandsias-core/src/container_profile.rs#L11)
 - [crates/tillandsias-core/src/container_profile.rs#L136](../../../crates/tillandsias-core/src/container_profile.rs#L136)
 - [crates/tillandsias-core/src/container_profile.rs#L197](../../../crates/tillandsias-core/src/container_profile.rs#L197)
 - [crates/tillandsias-core/src/container_profile.rs#L257](../../../crates/tillandsias-core/src/container_profile.rs#L257)
 - [crates/tillandsias-core/src/container_profile.rs#L328](../../../crates/tillandsias-core/src/container_profile.rs#L328)
-- [crates/tillandsias-core/src/container_profile.rs#L608](../../../crates/tillandsias-core/src/container_profile.rs#L608)
+- [crates/tillandsias-core/src/container_profile.rs#L606](../../../crates/tillandsias-core/src/container_profile.rs#L606)
+- [images/default/Containerfile#L81](../../../images/default/Containerfile#L81)
 - [images/default/entrypoint-forge-claude.sh#L25](../../../images/default/entrypoint-forge-claude.sh#L25)
 - [images/default/entrypoint-forge-opencode.sh#L25](../../../images/default/entrypoint-forge-opencode.sh#L25)
 - [images/default/entrypoint-forge-opencode-web.sh#L12](../../../images/default/entrypoint-forge-opencode-web.sh#L12)
@@ -27,4 +28,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [src-tauri/src/launch.rs#L221](../../../src-tauri/src/launch.rs#L221)
 - [src-tauri/src/launch.rs#L234](../../../src-tauri/src/launch.rs#L234)
 - [src-tauri/src/launch.rs#L250](../../../src-tauri/src/launch.rs#L250)
-- [src-tauri/src/launch.rs#L1336](../../../src-tauri/src/launch.rs#L1336)
+- [src-tauri/src/launch.rs#L1340](../../../src-tauri/src/launch.rs#L1340)

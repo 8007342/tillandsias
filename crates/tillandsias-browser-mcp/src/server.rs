@@ -5,8 +5,8 @@
 
 use crate::framing::{RpcRequest, RpcResponse};
 use serde_json::json;
-use tokio::sync::Semaphore;
 use std::sync::Arc;
+use tokio::sync::Semaphore;
 
 /// Configuration for the MCP server.
 pub struct McpServerConfig {
@@ -75,7 +75,7 @@ impl BrowserMcpServer {
                     id: 0,
                     code: -32600,
                     message: "initialize requires an id".to_string(),
-                }
+                };
             }
         };
 
@@ -103,7 +103,7 @@ impl BrowserMcpServer {
                     id: 0,
                     code: -32600,
                     message: "tools/list requires an id".to_string(),
-                }
+                };
             }
         };
 
@@ -247,7 +247,7 @@ impl BrowserMcpServer {
                     id: 0,
                     code: -32600,
                     message: "tools/call requires an id".to_string(),
-                }
+                };
             }
         };
 
@@ -276,7 +276,7 @@ impl BrowserMcpServer {
                     id: 0,
                     code: -32600,
                     message: "prompts/list requires an id".to_string(),
-                }
+                };
             }
         };
 
@@ -298,7 +298,7 @@ impl BrowserMcpServer {
                     id: 0,
                     code: -32600,
                     message: "resources/list requires an id".to_string(),
-                }
+                };
             }
         };
 
@@ -320,7 +320,7 @@ impl BrowserMcpServer {
                     id: 0,
                     code: -32600,
                     message: "resources/templates/list requires an id".to_string(),
-                }
+                };
             }
         };
 

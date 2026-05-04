@@ -109,7 +109,12 @@ pub struct Secret {
 
 impl std::fmt::Display for Secret {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ({})", self.name, self.driver.as_deref().unwrap_or("unknown"))
+        write!(
+            f,
+            "{} ({})",
+            self.name,
+            self.driver.as_deref().unwrap_or("unknown")
+        )
     }
 }
 
@@ -269,7 +274,10 @@ pub fn remove(name: &str) -> Result<(), String> {
         let stderr = String::from_utf8_lossy(&output.stderr);
         // "secret not found" is expected for idempotent cleanup; treat as success
         if stderr.contains("no such secret") || stderr.contains("not found") {
-            debug!(spec = "secrets-management", "Secret did not exist, cleanup ok");
+            debug!(
+                spec = "secrets-management",
+                "Secret did not exist, cleanup ok"
+            );
             return Ok(());
         }
         error!(
@@ -364,7 +372,10 @@ pub fn list() -> Result<Vec<Secret>, String> {
 /// @trace spec:secrets-management, spec:podman-orchestration
 #[instrument(skip_all)]
 pub fn cleanup_all() -> Result<(), String> {
-    info!(spec = "secrets-management", "Cleaning up all Tillandsias secrets");
+    info!(
+        spec = "secrets-management",
+        "Cleaning up all Tillandsias secrets"
+    );
 
     let secrets = list()?;
 

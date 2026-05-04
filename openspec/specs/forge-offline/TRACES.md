@@ -5,6 +5,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [images/default/Containerfile#L56](../../../images/default/Containerfile#L56)
+- [images/default/Containerfile#L92](../../../images/default/Containerfile#L92)
 - [images/default/entrypoint-forge-claude.sh#L45](../../../images/default/entrypoint-forge-claude.sh#L45)
 - [images/default/entrypoint-forge-opencode.sh#L45](../../../images/default/entrypoint-forge-opencode.sh#L45)
 - [images/default/entrypoint-forge-opencode-web.sh#L44](../../../images/default/entrypoint-forge-opencode-web.sh#L44)
@@ -12,4 +14,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-terminal.sh#L61](../../../images/default/entrypoint-terminal.sh#L61)
 - [images/default/forge-welcome.sh#L132](../../../images/default/forge-welcome.sh#L132)
 - [images/default/lib-common.sh#L159](../../../images/default/lib-common.sh#L159)
-- [src-tauri/src/embedded.rs#L132](../../../src-tauri/src/embedded.rs#L132)
+- [src-tauri/src/embedded.rs#L133](../../../src-tauri/src/embedded.rs#L133)

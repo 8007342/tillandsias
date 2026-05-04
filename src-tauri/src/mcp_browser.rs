@@ -23,20 +23,17 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use tracing::{debug, error, info, warn};
+use serde_json::{Value, json};
+use tracing::{debug, info, warn};
 
 /// Entry point for the MCP browser server binary (Unix only).
 /// Expects `TILLANDSIAS_PROJECT` environment variable to be set.
 #[cfg(unix)]
 fn main() {
-    let project = std::env::var("TILLANDSIAS_PROJECT")
-        .unwrap_or_else(|_| "unknown".to_string());
+    let project = std::env::var("TILLANDSIAS_PROJECT").unwrap_or_else(|_| "unknown".to_string());
 
     // Initialize logging
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter("info")
-        .try_init();
+    let _ = tracing_subscriber::fmt().with_env_filter("info").try_init();
 
     if let Err(e) = run_mcp_server(&project) {
         eprintln!("MCP server error: {}", e);
@@ -64,8 +61,7 @@ fn get_tools() -> Vec<McpTool> {
     vec![
         McpTool {
             name: "open_safe_window",
-            description:
-                "Open a URL in an isolated safe browser window with dark theme, hidden address bar, and no developer tools. \
+            description: "Open a URL in an isolated safe browser window with dark theme, hidden address bar, and no developer tools. \
                  Safe windows enforce read-only isolation. Available for URLs matching <service>.<project>.localhost or dashboard.localhost.",
             input_schema: json!({
                 "type": "object",
@@ -80,8 +76,7 @@ fn get_tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "open_debug_window",
-            description:
-                "Open a URL in an isolated debug browser window with Chrome DevTools enabled and visible address bar. \
+            description: "Open a URL in an isolated debug browser window with Chrome DevTools enabled and visible address bar. \
                  Debug windows expose the full inspector on localhost:9222 for troubleshooting. \
                  Agents can only open debug windows for their own project (e.g., 'web.my-project.localhost'). \
                  No debug windows for external or dashboard URLs.",
@@ -139,12 +134,8 @@ fn request_browser_window(project: &str, url: &str, window_type: &str) -> Result
         ));
     }
 
-    let mut stream = UnixStream::connect(TRAY_SOCKET).map_err(|e| {
-        format!(
-            "Failed to connect to tray socket '{}': {}",
-            TRAY_SOCKET, e
-        )
-    })?;
+    let mut stream = UnixStream::connect(TRAY_SOCKET)
+        .map_err(|e| format!("Failed to connect to tray socket '{}': {}", TRAY_SOCKET, e))?;
 
     let request = json!({
         "jsonrpc": "2.0",
@@ -168,7 +159,9 @@ fn request_browser_window(project: &str, url: &str, window_type: &str) -> Result
     // Use BufReader for reading response
     let mut reader = std::io::BufReader::new(&stream);
     let mut response = String::new();
-    reader.read_to_string(&mut response).map_err(|e| e.to_string())?;
+    reader
+        .read_to_string(&mut response)
+        .map_err(|e| e.to_string())?;
 
     info!(
         spec = "browser-mcp-server",
@@ -181,7 +174,11 @@ fn request_browser_window(project: &str, url: &str, window_type: &str) -> Result
 
 /// Handle an MCP tool call.
 #[cfg(unix)]
-fn handle_tool_call(tool_name: &str, arguments: Option<&Value>, project: &str) -> Result<Value, String> {
+fn handle_tool_call(
+    tool_name: &str,
+    arguments: Option<&Value>,
+    project: &str,
+) -> Result<Value, String> {
     let url = arguments
         .and_then(|args| args.get("url"))
         .and_then(|u| u.as_str())
@@ -194,20 +191,16 @@ fn handle_tool_call(tool_name: &str, arguments: Option<&Value>, project: &str) -
     };
 
     // Validate URL matches expected pattern
-    if window_type == "open_safe_window" {
-        if !is_safe_url(url, project) {
-            return Err(format!(
-                "Invalid URL for safe window: '{}'. Expected <service>.<project>.localhost or dashboard.localhost",
-                url
-            ));
-        }
-    } else if window_type == "open_debug_window" {
-        if !is_debug_url(url, project) {
-            return Err(format!(
-                "Invalid URL for debug window: '{}'. Expected <service>.<project>.localhost only",
-                url
-            ));
-        }
+    if window_type == "open_safe_window" && !is_safe_url(url, project) {
+        return Err(format!(
+            "Invalid URL for safe window: '{}'. Expected <service>.<project>.localhost or dashboard.localhost",
+            url
+        ));
+    } else if window_type == "open_debug_window" && !is_debug_url(url, project) {
+        return Err(format!(
+            "Invalid URL for debug window: '{}'. Expected <service>.<project>.localhost only",
+            url
+        ));
     }
 
     request_browser_window(project, url, window_type)?;
@@ -223,8 +216,7 @@ fn handle_tool_call(tool_name: &str, arguments: Option<&Value>, project: &str) -
 /// Validate URL for safe windows.
 #[cfg(unix)]
 fn is_safe_url(url: &str, project: &str) -> bool {
-    url.contains(&format!(".{}.localhost", project))
-        || url.contains("dashboard.localhost")
+    url.contains(&format!(".{}.localhost", project)) || url.contains("dashboard.localhost")
 }
 
 /// Validate URL for debug windows.
@@ -279,7 +271,11 @@ pub fn run_mcp_server(project: &str) -> Result<(), String> {
                         "message": "Parse error"
                     })),
                 };
-                let _ = writeln!(stdout, "{}", serde_json::to_string(&response).unwrap_or_default());
+                let _ = writeln!(
+                    stdout,
+                    "{}",
+                    serde_json::to_string(&response).unwrap_or_default()
+                );
                 let _ = stdout.flush();
                 continue;
             }
@@ -305,7 +301,10 @@ pub fn run_mcp_server(project: &str) -> Result<(), String> {
             }
             "tools/list" => {
                 debug!(spec = "browser-mcp-server", "Listing tools");
-                let tool_values: Vec<Value> = tools.iter().map(|t| serde_json::to_value(t).unwrap()).collect();
+                let tool_values: Vec<Value> = tools
+                    .iter()
+                    .map(|t| serde_json::to_value(t).unwrap())
+                    .collect();
                 McpResponse {
                     id: request.id,
                     result: Some(json!({ "tools": tool_values })),
@@ -318,21 +317,23 @@ pub fn run_mcp_server(project: &str) -> Result<(), String> {
                     .and_then(|p| serde_json::from_value(p.clone()).map_err(|e| e.to_string()));
 
                 match tool_call {
-                    Ok(call) => match handle_tool_call(&call.name, call.arguments.as_ref(), project) {
-                        Ok(result) => McpResponse {
-                            id: request.id,
-                            result: Some(json!({ "content": result })),
-                            error: None,
-                        },
-                        Err(e) => McpResponse {
-                            id: request.id,
-                            result: None,
-                            error: Some(json!({
-                                "code": -32602,
-                                "message": e
-                            })),
-                        },
-                    },
+                    Ok(call) => {
+                        match handle_tool_call(&call.name, call.arguments.as_ref(), project) {
+                            Ok(result) => McpResponse {
+                                id: request.id,
+                                result: Some(json!({ "content": result })),
+                                error: None,
+                            },
+                            Err(e) => McpResponse {
+                                id: request.id,
+                                result: None,
+                                error: Some(json!({
+                                    "code": -32602,
+                                    "message": e
+                                })),
+                            },
+                        }
+                    }
                     Err(e) => McpResponse {
                         id: request.id,
                         result: None,

@@ -152,14 +152,16 @@ async fn connect_and_run(socket_path: &std::path::Path, store: &OtpStore) -> std
                 ControlMessage::HelloAck { wire_version, .. } if wire_version == WIRE_VERSION => {
                     info!(
                         spec = "opencode-web-session-otp",
-                        wire_version,
-                        "Control-socket Hello handshake complete"
+                        wire_version, "Control-socket Hello handshake complete"
                     );
                 }
                 ControlMessage::HelloAck { wire_version, .. } => {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Unsupported,
-                        format!("wire_version mismatch: server={}, sidecar={}", wire_version, WIRE_VERSION),
+                        format!(
+                            "wire_version mismatch: server={}, sidecar={}",
+                            wire_version, WIRE_VERSION
+                        ),
                     ));
                 }
                 other => {
@@ -243,6 +245,7 @@ async fn write_envelope(
 
 fn init_tracing() {
     use tracing_subscriber::{EnvFilter, fmt};
-    let filter = EnvFilter::try_from_env("TILLANDSIAS_LOG").unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter =
+        EnvFilter::try_from_env("TILLANDSIAS_LOG").unwrap_or_else(|_| EnvFilter::new("info"));
     fmt().with_env_filter(filter).with_target(false).init();
 }

@@ -37,8 +37,8 @@ mod chromium_launcher;
 #[cfg(target_os = "linux")]
 mod mcp_browser;
 
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use tauri::tray::TrayIconBuilder;
 use tokio::sync::mpsc;
@@ -117,9 +117,8 @@ fn main() {
     if let cli::CliMode::Diagnostics { path, debug } = cli_mode {
         let _log_guard = logging::init(&log_config);
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let result = rt.block_on(async {
-            handlers::handle_diagnostics(path.as_deref(), debug).await
-        });
+        let result =
+            rt.block_on(async { handlers::handle_diagnostics(path.as_deref(), debug).await });
         std::process::exit(if result.is_ok() { 0 } else { 1 });
     }
 
@@ -146,7 +145,9 @@ fn main() {
             if let Err(e) = tray_spawn::spawn_detached_tray() {
                 tracing::warn!(error = %e, "Tray spawn failed — CLI continues");
             } else {
-                println!("  Tillandsias tray launched in background — open the menu for project actions.");
+                println!(
+                    "  Tillandsias tray launched in background — open the menu for project actions."
+                );
             }
         }
 
@@ -159,7 +160,6 @@ fn main() {
     // Initialize tracing — dual output (stderr if TTY + file appender) in all builds.
     // Hold the guard so the non-blocking file writer flushes on shutdown.
     let _log_guard = logging::init(&log_config);
-
 
     // AppImage desktop integration — install .desktop file and icons on first run.
     // Must happen after logging init (so we can trace) and before tray setup
@@ -1126,8 +1126,7 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
 /// @trace spec:browser-mcp-server
 #[cfg(target_os = "linux")]
 async fn listen_browser_socket(tx: mpsc::Sender<MenuCommand>) -> Result<(), String> {
-    use std::os::unix::net::{UnixListener, UnixStream};
-    use std::io::{BufRead, BufReader};
+    use std::os::unix::net::UnixListener;
     use std::path::Path;
 
     let socket_path = "/run/tillandsias/tray.sock";
@@ -1142,8 +1141,11 @@ async fn listen_browser_socket(tx: mpsc::Sender<MenuCommand>) -> Result<(), Stri
         .map_err(|e| format!("Failed to bind Unix socket '{}': {}", socket_path, e))?;
 
     // Set permissions so forge containers can connect
-    std::fs::set_permissions(socket_path, std::os::unix::fs::PermissionsExt::from_mode(0o666))
-        .map_err(|e| format!("Failed to set socket permissions: {}", e))?;
+    std::fs::set_permissions(
+        socket_path,
+        std::os::unix::fs::PermissionsExt::from_mode(0o666),
+    )
+    .map_err(|e| format!("Failed to set socket permissions: {}", e))?;
 
     info!(
         spec = "browser-mcp-server",
@@ -1200,7 +1202,9 @@ async fn handle_browser_socket_connection(
                             let url = params.get("url").and_then(|u| u.as_str());
                             let window_type = params.get("window_type").and_then(|w| w.as_str());
 
-                            if let (Some(project), Some(url), Some(window_type)) = (project, url, window_type) {
+                            if let (Some(project), Some(url), Some(window_type)) =
+                                (project, url, window_type)
+                            {
                                 let cmd = MenuCommand::OpenBrowserWindow {
                                     project: project.to_string(),
                                     url: url.to_string(),
@@ -1236,7 +1240,6 @@ async fn handle_browser_socket_connection(
 /// @trace spec:ephemeral-guarantee
 fn cleanup_init_logs() {
     use std::fs;
-    use std::path::Path;
 
     let temp_dir = std::env::temp_dir();
 
@@ -1245,8 +1248,8 @@ fn cleanup_init_logs() {
     if let Ok(entries) = fs::read_dir(&temp_dir) {
         for entry in entries.flatten() {
             if let Ok(file_name) = entry.file_name().into_string() {
-                let is_init_log = file_name.starts_with("tillandsias-init-")
-                    && file_name.ends_with(".log");
+                let is_init_log =
+                    file_name.starts_with("tillandsias-init-") && file_name.ends_with(".log");
                 let is_generic_log = file_name.starts_with("tillandsias-")
                     && file_name.ends_with(".log")
                     && !file_name.contains("init");

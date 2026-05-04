@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace spec:browser-isolation-launcher, spec:browser-isolation-core
+# @trace spec:browser-isolation-launcher, spec:browser-isolation-core, spec:chromium-debug-variant
 # Launch a Chromium container with security hardening and GPU support detection.
 # Usage: launch-chromium.sh <project> <url> [port] [window_type] [version]
 # Example: launch-chromium.sh my-project "http://localhost:3000" 9222 open_safe_window "0.1.160"

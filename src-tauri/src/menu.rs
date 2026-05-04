@@ -76,18 +76,21 @@ pub mod ids {
 
     /// Build an "attach here" menu item ID for a project path.
     /// @deprecated Use opencode_project, opencode_web_project, claude_project, or maintenance_project instead.
+    #[allow(dead_code)]
     pub fn attach_here(project_path: &std::path::Path) -> String {
         gen_id(&format!("attach:{}", project_path.display()))
     }
 
     /// Build a "terminal" menu item ID for a project path.
     /// @deprecated Use maintenance_project instead.
+    #[allow(dead_code)]
     pub fn terminal(project_path: &std::path::Path) -> String {
         gen_id(&format!("terminal:{}", project_path.display()))
     }
 
     /// Build a "serve here" menu item ID for a project path.
     /// @deprecated Serve Here is no longer offered in the menu.
+    #[allow(dead_code)]
     pub fn serve_here(project_path: &std::path::Path) -> String {
         gen_id(&format!("serve:{}", project_path.display()))
     }
@@ -99,6 +102,7 @@ pub mod ids {
     /// the caller to know the container name.
     ///
     /// @trace spec:opencode-web-session, spec:tray-app
+    #[allow(dead_code)]
     pub fn stop_project(project_path: &std::path::Path) -> String {
         gen_id(&format!("stop-project:{}", project_path.display()))
     }
@@ -109,6 +113,7 @@ pub mod ids {
     }
 
     /// Build the root terminal menu item ID.
+    #[allow(dead_code)]
     pub fn root_terminal() -> String {
         gen_id("root-terminal")
     }
@@ -119,11 +124,13 @@ pub mod ids {
     }
 
     /// Build an agent selection menu item ID.
+    #[allow(dead_code)]
     pub fn select_agent(agent_name: &str) -> String {
         gen_id(&format!("select-agent:{agent_name}"))
     }
 
     /// Build a language selection menu item ID.
+    #[allow(dead_code)]
     pub fn select_lang(code: &str) -> String {
         gen_id(&format!("select-lang:{code}"))
     }
@@ -350,7 +357,6 @@ fn environment_status_label(state: &TrayState) -> String {
     "📋 Verifying environment...".to_string()
 }
 
-
 /// Build the Home submenu containing local projects.
 /// Each project shows 4 action buttons: OpenCode, OpenCode Web, Claude, Maintenance.
 /// @trace spec:simplified-tray-ux
@@ -369,23 +375,17 @@ fn build_home_projects_submenu<R: Runtime>(
 
         // OpenCode — terminal-based IDE
         submenu = submenu.item(
-            &MenuItemBuilder::with_id(
-                ids::opencode_project(&project.path),
-                "💻 OpenCode",
-            )
-            .enabled(state.forge_available)
-            .build(app)?,
+            &MenuItemBuilder::with_id(ids::opencode_project(&project.path), "💻 OpenCode")
+                .enabled(state.forge_available)
+                .build(app)?,
         );
 
         // OpenCode Web — browser-based IDE with browser isolation
         // @trace spec:browser-isolation-tray-integration
         submenu = submenu.item(
-            &MenuItemBuilder::with_id(
-                ids::opencode_web_project(&project.path),
-                "🌐 OpenCode Web",
-            )
-            .enabled(state.forge_available)
-            .build(app)?,
+            &MenuItemBuilder::with_id(ids::opencode_web_project(&project.path), "🌐 OpenCode Web")
+                .enabled(state.forge_available)
+                .build(app)?,
         );
 
         // Claude — AI assistant
@@ -397,12 +397,9 @@ fn build_home_projects_submenu<R: Runtime>(
 
         // Maintenance — terminal access
         submenu = submenu.item(
-            &MenuItemBuilder::with_id(
-                ids::maintenance_project(&project.path),
-                "🔧 Maintenance",
-            )
-            .enabled(state.forge_available)
-            .build(app)?,
+            &MenuItemBuilder::with_id(ids::maintenance_project(&project.path), "🔧 Maintenance")
+                .enabled(state.forge_available)
+                .build(app)?,
         );
 
         home = home.item(&submenu.build()?);
@@ -549,10 +546,6 @@ fn build_cloud_projects_submenu<R: Runtime>(
 
     cloud.build()
 }
-
-
-
-
 
 /// Check if GitHub authentication is needed.
 ///

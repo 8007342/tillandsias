@@ -10,7 +10,9 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-use tillandsias_core::config::{SelectedAgent, load_global_config, save_selected_agent, save_selected_language};
+use tillandsias_core::config::{
+    SelectedAgent, load_global_config, save_selected_agent, save_selected_language,
+};
 use tillandsias_core::event::{BuildProgressEvent, ContainerState, MenuCommand};
 use tillandsias_core::genus::GenusAllocator;
 use tillandsias_core::project::{ArtifactStatus, Project, ProjectChange, ProjectType};
@@ -772,16 +774,13 @@ fn handle_podman_event(
                 }
 
                 // Clear project genus if no more environments
-                let still_has_forge = state
-                    .running
-                    .iter()
-                    .any(|c| {
-                        c.project_name == removed.project_name
-                            && matches!(
-                                c.container_type,
-                                ContainerType::Forge | ContainerType::Maintenance
-                            )
-                    });
+                let still_has_forge = state.running.iter().any(|c| {
+                    c.project_name == removed.project_name
+                        && matches!(
+                            c.container_type,
+                            ContainerType::Forge | ContainerType::Maintenance
+                        )
+                });
                 if !still_has_forge {
                     if let Some(project) = state
                         .projects
@@ -818,7 +817,9 @@ fn handle_podman_event(
         // Unknown container with our prefix — discovered on startup or external.
         // Try git service naming first, then web, then genus-based.
         // @trace spec:git-mirror-service
-        if let Some(project_name) = ContainerInfo::parse_git_service_container_name(&event.container_name) {
+        if let Some(project_name) =
+            ContainerInfo::parse_git_service_container_name(&event.container_name)
+        {
             debug!(
                 project = %project_name,
                 "Discovered running git service container"
@@ -833,7 +834,9 @@ fn handle_podman_event(
                 container_type: ContainerType::GitService,
                 display_emoji: String::new(), // Git service is invisible in the menu
             });
-        } else if let Some(project_name) = ContainerInfo::parse_web_container_name(&event.container_name) {
+        } else if let Some(project_name) =
+            ContainerInfo::parse_web_container_name(&event.container_name)
+        {
             debug!(
                 project = %project_name,
                 "Discovered running web container"
@@ -870,4 +873,3 @@ fn handle_podman_event(
         }
     }
 }
-

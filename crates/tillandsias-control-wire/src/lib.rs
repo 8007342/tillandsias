@@ -113,10 +113,7 @@ pub enum ControlMessage {
     /// encapsulated RPC call.
     ///
     /// @trace spec:host-browser-mcp, spec:tray-host-control-socket
-    McpFrame {
-        session_id: u64,
-        payload: Vec<u8>,
-    },
+    McpFrame { session_id: u64, payload: Vec<u8> },
 }
 
 /// Error categories the tray emits on the control socket.

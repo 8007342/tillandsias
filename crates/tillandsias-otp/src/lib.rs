@@ -349,8 +349,7 @@ pub fn spawn_eviction_task() -> tokio::task::JoinHandle<()> {
             if removed > 0 {
                 debug!(
                     spec = "opencode-web-session-otp",
-                    removed,
-                    "Evicted {removed} expired pending OTPs"
+                    removed, "Evicted {removed} expired pending OTPs"
                 );
             }
         }
@@ -373,8 +372,7 @@ pub fn issue_session(project_label: &str) -> [u8; COOKIE_LEN] {
 
 /// URL-safe base64 encode without padding. Standard alphabet `A-Z a-z 0-9 - _`.
 fn base64_url_no_pad(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     let mut i = 0;
     while i + 3 <= bytes.len() {
@@ -479,9 +477,15 @@ mod tests {
     fn format_set_cookie_header_attributes() {
         let tok = [0u8; COOKIE_LEN];
         let h = format_set_cookie_header(&tok, "opencode.demo.localhost");
-        assert!(h.contains("tillandsias_session="), "missing cookie name: {h}");
+        assert!(
+            h.contains("tillandsias_session="),
+            "missing cookie name: {h}"
+        );
         assert!(h.contains("HttpOnly"), "missing HttpOnly: {h}");
-        assert!(h.contains("SameSite=Strict"), "missing SameSite=Strict: {h}");
+        assert!(
+            h.contains("SameSite=Strict"),
+            "missing SameSite=Strict: {h}"
+        );
         assert!(h.contains("Path=/"), "missing Path=/: {h}");
         assert!(h.contains("Max-Age=86400"), "missing Max-Age=86400: {h}");
         assert!(!h.contains("Secure"), "must NOT contain Secure: {h}");
@@ -501,7 +505,11 @@ mod tests {
     #[test]
     fn parse_cookie_value_rejects_invalid() {
         assert_eq!(parse_cookie_value(""), None, "empty must reject");
-        assert_eq!(parse_cookie_value("short"), None, "wrong length must reject");
+        assert_eq!(
+            parse_cookie_value("short"),
+            None,
+            "wrong length must reject"
+        );
         // Exactly 43 chars but containing an invalid + character.
         let bad: String = "a".repeat(42) + "+";
         assert_eq!(parse_cookie_value(&bad), None, "+ must reject");
@@ -573,7 +581,13 @@ mod tests {
         assert_eq!(removed, 1);
         assert_eq!(store.session_count("opencode.demo.localhost"), 0);
         // After eviction the project key is dropped (HashMap entry removed).
-        assert!(!store.inner.lock().unwrap().contains_key("opencode.demo.localhost"));
+        assert!(
+            !store
+                .inner
+                .lock()
+                .unwrap()
+                .contains_key("opencode.demo.localhost")
+        );
     }
 
     #[test]
@@ -667,7 +681,8 @@ mod tests {
                 let end = rest.find('"').unwrap_or(rest.len());
                 let literal = &rest[..end];
                 assert_eq!(
-                    literal, "[redacted-32B]",
+                    literal,
+                    "[redacted-32B]",
                     "lib.rs line {} emits `value = ...` field with non-redacted literal {:?}: {}",
                     lineno + 1,
                     literal,

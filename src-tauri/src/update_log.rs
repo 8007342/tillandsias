@@ -215,15 +215,9 @@ mod tests {
     #[test]
     fn rfc3339_known_timestamp() {
         // 2025-03-30T14:17:23Z = 1743344243
-        assert_eq!(
-            unix_secs_to_rfc3339(1_743_344_243),
-            "2025-03-30T14:17:23Z"
-        );
+        assert_eq!(unix_secs_to_rfc3339(1_743_344_243), "2025-03-30T14:17:23Z");
         // 2026-03-30T14:17:23Z = 1774880243
-        assert_eq!(
-            unix_secs_to_rfc3339(1_774_880_243),
-            "2026-03-30T14:17:23Z"
-        );
+        assert_eq!(unix_secs_to_rfc3339(1_774_880_243), "2026-03-30T14:17:23Z");
     }
 
     #[test]

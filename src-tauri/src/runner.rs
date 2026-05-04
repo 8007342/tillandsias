@@ -132,7 +132,10 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
     // Git Bash's MSYS2 doesn't initialize properly from native Windows processes.
     #[cfg(target_os = "windows")]
     {
-        let containerfile = source_dir.join("images").join("default").join("Containerfile");
+        let containerfile = source_dir
+            .join("images")
+            .join("default")
+            .join("Containerfile");
         let context_dir = source_dir.join("images").join("default");
 
         if debug {
@@ -187,57 +190,57 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
     // On Unix, use the build-image.sh script (handles nix + fedora backends).
     #[cfg(not(target_os = "windows"))]
     {
-    let mut cmd = std::process::Command::new(&script);
+        let mut cmd = std::process::Command::new(&script);
 
-    cmd.arg(image_name)
-        .args(["--tag", &tag, "--backend", "fedora"])
-        .current_dir(&source_dir)
-        .env_remove("LD_LIBRARY_PATH")
-        .env_remove("LD_PRELOAD")
-        // Pass the resolved podman path so build-image.sh can find podman
-        // even when launched from Finder (which has a minimal PATH).
-        .env("PODMAN_PATH", tillandsias_podman::find_podman_path());
+        cmd.arg(image_name)
+            .args(["--tag", &tag, "--backend", "fedora"])
+            .current_dir(&source_dir)
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            // Pass the resolved podman path so build-image.sh can find podman
+            // even when launched from Finder (which has a minimal PATH).
+            .env("PODMAN_PATH", tillandsias_podman::find_podman_path());
 
-    // Image builds do NOT go through the proxy — SSL bump requires CA trust
-    // that build containers don't have. See handlers.rs for full rationale.
+        // Image builds do NOT go through the proxy — SSL bump requires CA trust
+        // that build containers don't have. See handlers.rs for full rationale.
 
-    let status = cmd
-        .stdin(std::process::Stdio::inherit())
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .map_err(|e| {
-            eprintln!("  [debug] Failed to launch build script: {e}");
-            strings::SETUP_ERROR
-        })?;
+        let status = cmd
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status()
+            .map_err(|e| {
+                eprintln!("  [debug] Failed to launch build script: {e}");
+                strings::SETUP_ERROR
+            })?;
 
-    crate::embedded::cleanup_image_sources();
+        crate::embedded::cleanup_image_sources();
 
-    // Clean up any leftover buildah containers from builds
-    // @trace spec:default-image
-    let _ = std::process::Command::new("buildah")
-        .args(["rm", "--all"])
-        .env_remove("LD_LIBRARY_PATH")
-        .env_remove("LD_PRELOAD")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
+        // Clean up any leftover buildah containers from builds
+        // @trace spec:default-image
+        let _ = std::process::Command::new("buildah")
+            .args(["rm", "--all"])
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
 
-    crate::build_lock::release(image_name);
+        crate::build_lock::release(image_name);
 
-    if status.success() {
-        // Prune older versioned forge images to reclaim disk space
-        crate::handlers::prune_old_images();
-        Ok(())
-    } else {
-        if debug {
-            eprintln!(
-                "  [debug] Build script exited with code {}",
-                status.code().unwrap_or(-1)
-            );
+        if status.success() {
+            // Prune older versioned forge images to reclaim disk space
+            crate::handlers::prune_old_images();
+            Ok(())
+        } else {
+            if debug {
+                eprintln!(
+                    "  [debug] Build script exited with code {}",
+                    status.code().unwrap_or(-1)
+                );
+            }
+            Err(strings::SETUP_ERROR.into())
         }
-        Err(strings::SETUP_ERROR.into())
-    }
     } // #[cfg(not(target_os = "windows"))]
 }
 
@@ -297,7 +300,10 @@ fn build_cli_launch_context(
         is_watch_root: false,
         custom_mounts: project_config.mounts,
         image_tag: image_tag.to_string(),
-        selected_language: tillandsias_core::config::load_global_config().i18n.language.clone(),
+        selected_language: tillandsias_core::config::load_global_config()
+            .i18n
+            .language
+            .clone(),
         // @trace spec:enclave-network
         // On Linux: CLI-mode forge containers join the enclave network.
         // On podman machine: no network flag (default), localhost port mapping.
@@ -457,7 +463,9 @@ pub fn run(
                 eprintln!("  [debug] Starting podman machine...");
             }
             if !rt.block_on(client.start_machine()) {
-                eprintln!("  Podman machine failed to start. Try: podman machine init && podman machine start");
+                eprintln!(
+                    "  Podman machine failed to start. Try: podman machine init && podman machine start"
+                );
                 return false;
             }
             // Wait for API to be ready
@@ -550,9 +558,7 @@ pub fn run(
             SelectedAgent::OpenCode => {
                 tillandsias_core::container_profile::forge_opencode_profile()
             }
-            SelectedAgent::Claude => {
-                tillandsias_core::container_profile::forge_claude_profile()
-            }
+            SelectedAgent::Claude => tillandsias_core::container_profile::forge_claude_profile(),
             // @trace spec:opencode-web-session
             SelectedAgent::OpenCodeWeb => {
                 tillandsias_core::container_profile::forge_opencode_web_profile()
@@ -580,7 +586,10 @@ pub fn run(
     }
     println!("  Name:   {container_name}");
     // Enclave-only containers don't expose ports to the host
-    let is_enclave = ctx.network.as_deref().is_some_and(|n| n.starts_with(tillandsias_podman::ENCLAVE_NETWORK));
+    let is_enclave = ctx
+        .network
+        .as_deref()
+        .is_some_and(|n| n.starts_with(tillandsias_podman::ENCLAVE_NETWORK));
     if !is_enclave {
         println!("  Ports:  {}-{}", base_port.0, base_port.1);
     }
@@ -590,7 +599,10 @@ pub fn run(
     println!();
     println!("  Security: credential-free (no tokens, no secrets mounted)");
     if !ctx.git_author_name.is_empty() {
-        println!("  Git ID:   {} <{}>", ctx.git_author_name, ctx.git_author_email);
+        println!(
+            "  Git ID:   {} <{}>",
+            ctx.git_author_name, ctx.git_author_email
+        );
     } else {
         println!("  Git ID:   not configured (run: tillandsias --login)");
     }
@@ -612,9 +624,16 @@ pub fn run(
 
     if debug {
         println!();
-        let debug_cmd: Vec<_> = run_args.iter().map(|a| {
-            if a.contains(' ') { format!("'{a}'") } else { a.clone() }
-        }).collect();
+        let debug_cmd: Vec<_> = run_args
+            .iter()
+            .map(|a| {
+                if a.contains(' ') {
+                    format!("'{a}'")
+                } else {
+                    a.clone()
+                }
+            })
+            .collect();
         println!("  [debug] podman run {}", debug_cmd.join(" "));
     }
 
@@ -650,7 +669,9 @@ pub fn run(
             // tray is still up. Tell the user where Tillandsias went.
             // Headless sessions never get a tray, so suppress the line.
             if crate::desktop_env::has_graphical_session() {
-                println!("  \u{2713} OpenCode session ended \u{2014} Tillandsias tray is still running.");
+                println!(
+                    "  \u{2713} OpenCode session ended \u{2014} Tillandsias tray is still running."
+                );
             }
             s.success()
         }
@@ -757,14 +778,19 @@ fn run_github_login_git_service(tag: &str) -> bool {
     }
     let content = format!("[user]\n\tname = {name}\n\temail = {email}\n");
     if let Err(e) = std::fs::write(&gitconfig, &content) {
-        eprintln!("  Error: failed to save git identity to {}: {e}", gitconfig.display());
+        eprintln!(
+            "  Error: failed to save git identity to {}: {e}",
+            gitconfig.display()
+        );
         return false;
     }
     println!("  \u{2713} Git identity saved.");
     println!();
 
     println!("  Starting GitHub authentication...");
-    println!("  (Running in the trusted git service container — credentials never touch the forge)");
+    println!(
+        "  (Running in the trusted git service container — credentials never touch the forge)"
+    );
     println!();
 
     // Shared security flags across every podman invocation below.
@@ -896,7 +922,9 @@ fn run_github_login_git_service(tag: &str) -> bool {
                 exit_code = o.status.code().unwrap_or(-1),
                 "gh auth token failed (raw stderr suppressed from console for safety)"
             );
-            eprintln!("  Error: `gh auth token` exited non-zero. See file logs under `--log-secrets-management` for details.");
+            eprintln!(
+                "  Error: `gh auth token` exited non-zero. See file logs under `--log-secrets-management` for details."
+            );
             return false;
         }
         Err(e) => {
@@ -913,7 +941,15 @@ fn run_github_login_git_service(tag: &str) -> bool {
     // piping discipline (defense-in-depth even though `--jq .login` only
     // returns a public-by-design username field).
     let user_out = tillandsias_podman::podman_cmd_sync()
-        .args(["exec", container_name, "gh", "api", "user", "--jq", ".login"])
+        .args([
+            "exec",
+            container_name,
+            "gh",
+            "api",
+            "user",
+            "--jq",
+            ".login",
+        ])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -947,7 +983,7 @@ fn run_github_login_git_service(tag: &str) -> bool {
 }
 
 fn prompt_with_default(label: &str, default: &str) -> String {
-    use std::io::{Write, BufRead};
+    use std::io::{BufRead, Write};
     let stdout = std::io::stdout();
     let stdin = std::io::stdin();
 

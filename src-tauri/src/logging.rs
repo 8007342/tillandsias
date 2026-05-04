@@ -50,25 +50,13 @@ pub fn module_to_targets(module: &str) -> Vec<&'static str> {
         ],
         "scanner" => vec!["tillandsias_scanner"],
         "menu" => vec!["tillandsias::menu", "tillandsias::event_loop"],
-        "events" => vec![
-            "tillandsias::event_loop",
-            "tillandsias_podman::events",
-        ],
+        "events" => vec!["tillandsias::event_loop", "tillandsias_podman::events"],
         // @trace spec:proxy-container
-        "proxy" => vec![
-            "tillandsias::handlers",
-            "tillandsias::proxy",
-        ],
+        "proxy" => vec!["tillandsias::handlers", "tillandsias::proxy"],
         // @trace spec:enclave-network
-        "enclave" => vec![
-            "tillandsias::handlers",
-            "tillandsias::enclave",
-        ],
+        "enclave" => vec!["tillandsias::handlers", "tillandsias::enclave"],
         // @trace spec:git-mirror-service
-        "git" => vec![
-            "tillandsias::handlers",
-            "tillandsias::git",
-        ],
+        "git" => vec!["tillandsias::handlers", "tillandsias::git"],
         _ => vec![],
     }
 }
@@ -137,8 +125,7 @@ fn build_env_filter() -> EnvFilter {
     if let Ok(val) = std::env::var("TILLANDSIAS_LOG") {
         EnvFilter::try_new(&val).unwrap_or_else(|_| EnvFilter::new("tillandsias=info"))
     } else {
-        EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("tillandsias=info"))
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("tillandsias=info"))
     }
 }
 

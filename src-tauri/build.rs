@@ -57,7 +57,10 @@ fn main() {
     let install_sh = std::fs::read_to_string(install_sh_path).unwrap_or_default();
 
     let pin = parse_chromium_pin(&install_sh);
-    println!("cargo:rustc-env=TILLANDSIAS_CHROMIUM_VERSION={}", pin.version);
+    println!(
+        "cargo:rustc-env=TILLANDSIAS_CHROMIUM_VERSION={}",
+        pin.version
+    );
     println!(
         "cargo:rustc-env=TILLANDSIAS_CHROMIUM_SHA256_LINUX64={}",
         pin.linux64

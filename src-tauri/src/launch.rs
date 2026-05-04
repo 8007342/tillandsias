@@ -249,7 +249,8 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
                 }
                 // @trace spec:environment-runtime
                 ContextKey::Language => {
-                    tillandsias_core::config::language_to_lang_value(&ctx.selected_language).to_string()
+                    tillandsias_core::config::language_to_lang_value(&ctx.selected_language)
+                        .to_string()
                 }
                 ContextKey::GitAuthorName => ctx.git_author_name.clone(),
                 ContextKey::GitAuthorEmail => ctx.git_author_email.clone(),
@@ -347,7 +348,10 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
             SecretKind::GitHubToken => {
                 if let Some(ref token_file) = ctx.token_file_path {
                     args.push("-v".into());
-                    args.push(format!("{}:/run/secrets/github_token:ro", token_file.display()));
+                    args.push(format!(
+                        "{}:/run/secrets/github_token:ro",
+                        token_file.display()
+                    ));
                     args.push("-e".into());
                     args.push("GIT_ASKPASS=/usr/local/bin/git-askpass-tillandsias.sh".into());
 
@@ -483,9 +487,7 @@ fn resolve_mount_source(source: &MountSource, ctx: &LaunchContext) -> Option<Str
             } else {
                 std::env::temp_dir()
             };
-            let overlay_path = base
-                .join("tillandsias")
-                .join("config-overlay");
+            let overlay_path = base.join("tillandsias").join("config-overlay");
             if overlay_path.exists() {
                 Some(overlay_path.display().to_string())
             } else {
@@ -820,7 +822,10 @@ mod tests {
         let args = build_podman_args(&profile, &ctx);
         let joined = args.join(" ");
         // Forge profiles no longer mount the project directory (code comes from git mirror)
-        assert!(!joined.contains("/home/forge/src"), "Forge should not have project dir mount");
+        assert!(
+            !joined.contains("/home/forge/src"),
+            "Forge should not have project dir mount"
+        );
     }
 
     #[test]
@@ -944,9 +949,9 @@ mod tests {
     // @trace spec:layered-tools-overlay
     #[test]
     #[ignore] // Filesystem race with `config_overlay_mounted_when_dir_exists` — both
-              // munge the same `$XDG_RUNTIME_DIR/tillandsias/config-overlay` path.
-              // Passes when run individually. Kept for documentation; a proper fix
-              // would isolate each test's runtime_dir via a mutable LaunchContext.
+    // munge the same `$XDG_RUNTIME_DIR/tillandsias/config-overlay` path.
+    // Passes when run individually. Kept for documentation; a proper fix
+    // would isolate each test's runtime_dir via a mutable LaunchContext.
     fn config_overlay_skipped_when_dir_absent() {
         // Ensure the overlay dir does NOT exist (another test may have created it)
         let base = if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
@@ -1252,8 +1257,7 @@ mod tests {
 
     /// Helper: find whether `args` contains `flag` immediately followed by `value`.
     fn has_flag_value(args: &[String], flag: &str, value: &str) -> bool {
-        args.windows(2)
-            .any(|w| w[0] == flag && w[1] == value)
+        args.windows(2).any(|w| w[0] == flag && w[1] == value)
     }
 
     // @trace spec:opencode-web-session
@@ -1371,10 +1375,7 @@ mod tests {
         // This is a behavioral test: if secrets existed, they would appear.
         // (In live tests with actual podman running, this might differ.)
         // For now, we just verify the arg building doesn't crash.
-        assert!(
-            !joined.is_empty(),
-            "Pod args should not be empty"
-        );
+        assert!(!joined.is_empty(), "Pod args should not be empty");
     }
 
     // @trace spec:podman-secrets-integration, spec:secrets-management,

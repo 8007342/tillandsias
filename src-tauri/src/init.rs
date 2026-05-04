@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use crate::build_lock;
 use crate::embedded;
 use crate::handlers::{
-    forge_image_tag, git_image_tag, inference_image_tag, proxy_image_tag,
-    chromium_core_image_tag, chromium_framework_image_tag, prune_old_images,
+    chromium_core_image_tag, chromium_framework_image_tag, forge_image_tag, git_image_tag,
+    inference_image_tag, proxy_image_tag, prune_old_images,
 };
 use crate::i18n;
 use crate::strings;
@@ -87,7 +87,13 @@ fn save_build_state(state: &InitBuildState) {
 
 /// Update a single image's status in the build state.
 /// @trace spec:init-incremental-builds
-fn update_image_status(state: &mut InitBuildState, image_name: &str, tag: &str, status: &str, log_path: Option<String>) {
+fn update_image_status(
+    state: &mut InitBuildState,
+    image_name: &str,
+    tag: &str,
+    status: &str,
+    log_path: Option<String>,
+) {
     use std::collections::hash_map::Entry;
     match state.images.entry(image_name.to_string()) {
         Entry::Occupied(mut entry) => {
@@ -103,10 +109,13 @@ fn update_image_status(state: &mut InitBuildState, image_name: &str, tag: &str, 
             });
         }
     }
-    state.last_run = format!("{}", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs());
+    state.last_run = format!(
+        "{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+    );
     state.version = env!("TILLANDSIAS_FULL_VERSION").to_string();
 }
 
@@ -191,7 +200,13 @@ pub fn run_with_force(force: bool, debug: bool) -> bool {
         if !force {
             if let Some(status) = build_state.images.get(*image_name) {
                 if status.status == "success" && image_exists(&tag) {
-                    println!("  {}", i18n::tf("init.build.skipping", &[("name", image_name), ("tag", &tag)]));
+                    println!(
+                        "  {}",
+                        i18n::tf(
+                            "init.build.skipping",
+                            &[("name", image_name), ("tag", &tag)]
+                        )
+                    );
                     continue;
                 }
             }
@@ -204,7 +219,10 @@ pub fn run_with_force(force: bool, debug: bool) -> bool {
                 .output();
         }
 
-        println!("  {}", i18n::tf("init.build.building", &[("name", image_name)]));
+        println!(
+            "  {}",
+            i18n::tf("init.build.building", &[("name", image_name)])
+        );
 
         // Acquire build lock for this image type
         if build_lock::is_running(image_name) {
@@ -217,7 +235,13 @@ pub fn run_with_force(force: bool, debug: bool) -> bool {
                 continue;
             }
             if image_exists(&tag) {
-                println!("  {}", i18n::tf("init.build.image_ready", &[("name", image_name), ("tag", &tag)]));
+                println!(
+                    "  {}",
+                    i18n::tf(
+                        "init.build.image_ready",
+                        &[("name", image_name), ("tag", &tag)]
+                    )
+                );
                 update_image_status(&mut build_state, image_name, &tag, "success", None);
                 save_build_state(&build_state);
                 continue;
@@ -301,7 +325,13 @@ pub fn run_with_force(force: bool, debug: bool) -> bool {
 
         match status {
             Ok(s) if s.success() => {
-                println!("  {}", i18n::tf("init.build.build_success", &[("name", image_name), ("tag", &tag)]));
+                println!(
+                    "  {}",
+                    i18n::tf(
+                        "init.build.build_success",
+                        &[("name", image_name), ("tag", &tag)]
+                    )
+                );
                 update_image_status(&mut build_state, image_name, &tag, "success", log_path);
                 // Prune old images after each successful build
                 prune_old_images();
@@ -309,13 +339,22 @@ pub fn run_with_force(force: bool, debug: bool) -> bool {
             Ok(s) => {
                 eprintln!(
                     "  {}",
-                    i18n::tf("init.build.build_failed", &[
-                        ("name", image_name),
-                        ("code", &s.code().unwrap_or(-1).to_string()),
-                    ])
+                    i18n::tf(
+                        "init.build.build_failed",
+                        &[
+                            ("name", image_name),
+                            ("code", &s.code().unwrap_or(-1).to_string()),
+                        ]
+                    )
                 );
                 all_success = false;
-                update_image_status(&mut build_state, image_name, &tag, "failed", log_path.clone());
+                update_image_status(
+                    &mut build_state,
+                    image_name,
+                    &tag,
+                    "failed",
+                    log_path.clone(),
+                );
                 if let Some(ref log) = log_path {
                     failed_logs.push((image_name.to_string(), log.clone()));
                 }
@@ -323,10 +362,19 @@ pub fn run_with_force(force: bool, debug: bool) -> bool {
             Err(e) => {
                 eprintln!(
                     "  {}",
-                    i18n::tf("init.build.build_error", &[("name", image_name), ("error", &e.to_string())])
+                    i18n::tf(
+                        "init.build.build_error",
+                        &[("name", image_name), ("error", &e.to_string())]
+                    )
                 );
                 all_success = false;
-                update_image_status(&mut build_state, image_name, &tag, "failed", log_path.clone());
+                update_image_status(
+                    &mut build_state,
+                    image_name,
+                    &tag,
+                    "failed",
+                    log_path.clone(),
+                );
                 if let Some(ref log) = log_path {
                     failed_logs.push((image_name.to_string(), log.clone()));
                 }
@@ -378,7 +426,10 @@ pub fn run_with_force(force: bool, debug: bool) -> bool {
         println!();
         eprintln!("  {}", i18n::t("init.build.failed_logs_header"));
         for (image_name, log_path) in &failed_logs {
-            eprintln!("\n  --- Failed build log for {} (last 10 lines) ---", image_name);
+            eprintln!(
+                "\n  --- Failed build log for {} (last 10 lines) ---",
+                image_name
+            );
             let _ = std::process::Command::new("tail")
                 .args(["-10", log_path])
                 .stdout(std::process::Stdio::inherit())
@@ -432,7 +483,10 @@ pub fn run_build_only() -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     let status = {
-        let containerfile = source_dir.join("images").join("default").join("Containerfile");
+        let containerfile = source_dir
+            .join("images")
+            .join("default")
+            .join("Containerfile");
         let context_dir = source_dir.join("images").join("default");
         tillandsias_podman::podman_cmd_sync()
             .args(["build", "--tag", &tag, "-f"])

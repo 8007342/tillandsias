@@ -434,10 +434,7 @@ mod tests {
         fs::write(project.join("Cargo.toml"), "[package]").unwrap();
 
         let config = ScannerConfig {
-            watch_paths: vec![
-                PathBuf::from("/nonexistent/path"),
-                dir.path().to_path_buf(),
-            ],
+            watch_paths: vec![PathBuf::from("/nonexistent/path"), dir.path().to_path_buf()],
             debounce: Duration::from_millis(100),
         };
 
@@ -490,9 +487,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel(16);
         let scanner = Scanner::new(config);
 
-        let handle = tokio::spawn(async move {
-            scanner.watch(tx).await
-        });
+        let handle = tokio::spawn(async move { scanner.watch(tx).await });
 
         // Give it a moment — should set up watches for the valid path without crashing
         tokio::time::sleep(Duration::from_millis(200)).await;

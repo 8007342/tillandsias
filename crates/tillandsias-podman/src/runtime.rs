@@ -14,7 +14,9 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 
 // Re-export types from client module to avoid duplication
-pub use crate::client::{ContainerInspect, ContainerListEntry, PodmanClient, PodmanError, RunOutput};
+pub use crate::client::{
+    ContainerInspect, ContainerListEntry, PodmanClient, PodmanError, RunOutput,
+};
 use crate::events::PodmanEventStream;
 
 /// Error type for Runtime operations. Wraps PodmanError into a unified enum.
@@ -68,15 +70,17 @@ pub trait Runtime: Send + Sync {
     ///
     /// On Linux/macOS: `podman stop -t <timeout_secs> <name>`.
     /// On Windows: No-op (WSL distros persist).
-    async fn container_stop(&self, container: &str, timeout_secs: u32)
-        -> Result<(), RuntimeError>;
+    async fn container_stop(&self, container: &str, timeout_secs: u32) -> Result<(), RuntimeError>;
 
     /// Kill a container with a signal.
     ///
     /// On Linux/macOS: `podman kill --signal <signal> <name>`.
     /// On Windows: No-op (WSL distros persist).
-    async fn container_kill(&self, container: &str, signal: Option<&str>)
-        -> Result<(), RuntimeError>;
+    async fn container_kill(
+        &self,
+        container: &str,
+        signal: Option<&str>,
+    ) -> Result<(), RuntimeError>;
 
     /// List all containers/distros.
     /// Returns raw output as a newline-delimited string.
@@ -188,11 +192,7 @@ impl Runtime for PodmanRuntime {
         })
     }
 
-    async fn container_stop(
-        &self,
-        container: &str,
-        timeout_secs: u32,
-    ) -> Result<(), RuntimeError> {
+    async fn container_stop(&self, container: &str, timeout_secs: u32) -> Result<(), RuntimeError> {
         self.client.stop_container(container, timeout_secs).await
     }
 
@@ -294,19 +294,31 @@ impl Runtime for WslRuntime {
         ))
     }
 
-    async fn container_run(&self, _image: &str, _args: &[String]) -> Result<RunOutput, RuntimeError> {
+    async fn container_run(
+        &self,
+        _image: &str,
+        _args: &[String],
+    ) -> Result<RunOutput, RuntimeError> {
         // Stub: Wave 5.2 will execute via wsl.exe
         Err(RuntimeError::CommandFailed(
             "WSL runtime not yet implemented".to_string(),
         ))
     }
 
-    async fn container_stop(&self, _container: &str, _timeout_secs: u32) -> Result<(), RuntimeError> {
+    async fn container_stop(
+        &self,
+        _container: &str,
+        _timeout_secs: u32,
+    ) -> Result<(), RuntimeError> {
         // Stub: no-op (WSL distros persist)
         Ok(())
     }
 
-    async fn container_kill(&self, _container: &str, _signal: Option<&str>) -> Result<(), RuntimeError> {
+    async fn container_kill(
+        &self,
+        _container: &str,
+        _signal: Option<&str>,
+    ) -> Result<(), RuntimeError> {
         // Stub: no-op (WSL distros persist)
         Ok(())
     }

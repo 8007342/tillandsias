@@ -204,7 +204,11 @@ pub fn run(wipe: bool) -> bool {
     for t in &std_targets {
         if t.exists {
             any_exists = true;
-            println!("    {GREEN}+{RESET} {} {DIM}({}){RESET}", t.path.display(), t.label);
+            println!(
+                "    {GREEN}+{RESET} {} {DIM}({}){RESET}",
+                t.path.display(),
+                t.label
+            );
         }
     }
 
@@ -232,9 +236,7 @@ pub fn run(wipe: bool) -> bool {
     println!("  Your project files will NOT be touched.");
 
     if !wipe {
-        println!(
-            "  {DIM}Cache preserved. Use --uninstall --wipe to remove everything.{RESET}"
-        );
+        println!("  {DIM}Cache preserved. Use --uninstall --wipe to remove everything.{RESET}");
     }
 
     println!();
@@ -378,7 +380,9 @@ fn remove_container_images() {
                 .lines()
                 .filter(|line| {
                     let trimmed = line.trim();
-                    IMAGE_PREFIXES.iter().any(|prefix| trimmed.starts_with(prefix))
+                    IMAGE_PREFIXES
+                        .iter()
+                        .any(|prefix| trimmed.starts_with(prefix))
                 })
                 .map(|s| s.trim().to_string())
                 .collect()

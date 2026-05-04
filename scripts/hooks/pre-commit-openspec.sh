@@ -90,7 +90,7 @@ zero_trace_check() {
         # Search the codebase for any @trace referencing this spec
         # Exclude openspec/ directory and target/ build artifacts
         local found
-        found="$(grep -rl --include='*.rs' --include='*.sh' --include='*.toml' \
+        found="$(grep -rl --include='*.rs' --include='*.sh' --include='*.toml' --include='Containerfile*' \
             "spec:${spec_name}" "$REPO_ROOT" 2>/dev/null \
             | grep -v '/openspec/' \
             | grep -v '/target/' \

@@ -495,8 +495,7 @@ mod tests {
 
     #[test]
     fn parse_git_service_container_name_valid() {
-        let project =
-            ContainerInfo::parse_git_service_container_name("tillandsias-git-my-project");
+        let project = ContainerInfo::parse_git_service_container_name("tillandsias-git-my-project");
         assert_eq!(project, Some("my-project".to_string()));
     }
 
@@ -515,8 +514,7 @@ mod tests {
         assert!(ContainerInfo::parse_git_service_container_name("tillandsias-git-").is_none());
         // Different container type
         assert!(
-            ContainerInfo::parse_git_service_container_name("tillandsias-my-project-web")
-                .is_none()
+            ContainerInfo::parse_git_service_container_name("tillandsias-my-project-web").is_none()
         );
     }
 }

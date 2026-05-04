@@ -157,10 +157,13 @@ pub fn run_stats() -> bool {
     if nix_bytes > 0 {
         println!(
             "  {}",
-            i18n::tf("stats.nix_cache_present", &[
-                ("path", &nix_path.display().to_string()),
-                ("size", &human_bytes(nix_bytes)),
-            ])
+            i18n::tf(
+                "stats.nix_cache_present",
+                &[
+                    ("path", &nix_path.display().to_string()),
+                    ("size", &human_bytes(nix_bytes)),
+                ]
+            )
         );
     } else {
         println!("  {}", i18n::t("stats.nix_cache_not_present"));
@@ -173,10 +176,13 @@ pub fn run_stats() -> bool {
     if cargo_bytes > 0 {
         println!(
             "  {}",
-            i18n::tf("stats.cargo_cache_present", &[
-                ("path", &cargo_path.display().to_string()),
-                ("size", &human_bytes(cargo_bytes)),
-            ])
+            i18n::tf(
+                "stats.cargo_cache_present",
+                &[
+                    ("path", &cargo_path.display().to_string()),
+                    ("size", &human_bytes(cargo_bytes)),
+                ]
+            )
         );
     } else {
         println!("  {}", i18n::t("stats.cargo_cache_not_present"));
@@ -189,23 +195,27 @@ pub fn run_stats() -> bool {
     if bin_bytes > 0 {
         println!(
             "  {}",
-            i18n::tf("stats.binary_present", &[
-                ("path", &bin_path.display().to_string()),
-                ("size", &human_bytes(bin_bytes)),
-            ])
+            i18n::tf(
+                "stats.binary_present",
+                &[
+                    ("path", &bin_path.display().to_string()),
+                    ("size", &human_bytes(bin_bytes)),
+                ]
+            )
         );
     } else {
         println!(
             "  {}",
-            i18n::tf("stats.binary_not_present", &[
-                ("path", &bin_path.display().to_string()),
-            ])
+            i18n::tf(
+                "stats.binary_not_present",
+                &[("path", &bin_path.display().to_string()),]
+            )
         );
     }
 
     // --- Last update ---
-    let last_update = update_log::read_last_entry()
-        .unwrap_or_else(|| i18n::t("stats.no_update_log").to_string());
+    let last_update =
+        update_log::read_last_entry().unwrap_or_else(|| i18n::t("stats.no_update_log").to_string());
     println!(
         "  {}",
         i18n::tf("stats.last_update", &[("entry", &last_update)])
@@ -242,7 +252,10 @@ pub fn run_clean() -> bool {
             anything_cleaned = true;
             println!(
                 "  {}",
-                i18n::tf("clean.images_removed", &[("count", &pruned.len().to_string())])
+                i18n::tf(
+                    "clean.images_removed",
+                    &[("count", &pruned.len().to_string())]
+                )
             );
             for line in &pruned {
                 println!("    {line}");
@@ -276,14 +289,23 @@ pub fn run_clean() -> bool {
             anything_cleaned = true;
             println!(
                 "  {}",
-                i18n::tf("clean.containers_removing", &[("count", &names.len().to_string())])
+                i18n::tf(
+                    "clean.containers_removing",
+                    &[("count", &names.len().to_string())]
+                )
             );
             for name in &names {
                 let (_, ok) = podman_run(&["rm", name]);
                 if ok {
-                    println!("  {}", i18n::tf("clean.container_removed", &[("name", name)]));
+                    println!(
+                        "  {}",
+                        i18n::tf("clean.container_removed", &[("name", name)])
+                    );
                 } else {
-                    println!("  {}", i18n::tf("clean.container_failed", &[("name", name)]));
+                    println!(
+                        "  {}",
+                        i18n::tf("clean.container_failed", &[("name", name)])
+                    );
                 }
             }
         }
@@ -300,19 +322,25 @@ pub fn run_clean() -> bool {
                 anything_cleaned = true;
                 println!(
                     "  {}",
-                    i18n::tf("clean.nix_cache_removed", &[
-                        ("path", &nix_path.display().to_string()),
-                        ("size", &human_bytes(size_before)),
-                    ])
+                    i18n::tf(
+                        "clean.nix_cache_removed",
+                        &[
+                            ("path", &nix_path.display().to_string()),
+                            ("size", &human_bytes(size_before)),
+                        ]
+                    )
                 );
             }
             Err(e) => {
                 println!(
                     "  {}",
-                    i18n::tf("clean.nix_cache_failed", &[
-                        ("path", &nix_path.display().to_string()),
-                        ("error", &e.to_string()),
-                    ])
+                    i18n::tf(
+                        "clean.nix_cache_failed",
+                        &[
+                            ("path", &nix_path.display().to_string()),
+                            ("error", &e.to_string()),
+                        ]
+                    )
                 );
             }
         }

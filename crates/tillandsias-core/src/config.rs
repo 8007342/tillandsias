@@ -70,13 +70,11 @@ impl SelectedAgent {
 }
 
 /// Agent selection configuration.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct AgentConfig {
     #[serde(default)]
     pub selected: SelectedAgent,
 }
-
 
 /// Internationalization configuration.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -463,10 +461,7 @@ pub fn container_log_dir(container_name: &str) -> PathBuf {
     let short_name = container_name
         .strip_prefix("tillandsias-")
         .unwrap_or(container_name);
-    log_dir()
-        .join("containers")
-        .join(short_name)
-        .join("logs")
+    log_dir().join("containers").join(short_name).join("logs")
 }
 
 /// Platform-aware cache directory.
@@ -786,7 +781,10 @@ mod tests {
         let toml_str = toml::to_string(&config).unwrap();
         let parsed: GlobalConfig = toml::from_str(&toml_str).unwrap();
         assert_eq!(parsed.forge.hot_path_max_mb, config.forge.hot_path_max_mb);
-        assert_eq!(parsed.forge.hot_path_inflation, config.forge.hot_path_inflation);
+        assert_eq!(
+            parsed.forge.hot_path_inflation,
+            config.forge.hot_path_inflation
+        );
 
         // Verify custom values are preserved.
         let custom = r#"
@@ -897,7 +895,10 @@ debounce_ms = 5000
             parsed.updates.check_interval_hours,
             config.updates.check_interval_hours
         );
-        assert_eq!(parsed.updates.check_on_launch, config.updates.check_on_launch);
+        assert_eq!(
+            parsed.updates.check_on_launch,
+            config.updates.check_on_launch
+        );
         assert!(parsed.security.cap_drop_all);
         assert!(parsed.security.no_new_privileges);
         assert!(parsed.security.userns_keep_id);

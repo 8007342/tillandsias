@@ -5,6 +5,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [images/inference/Containerfile#L49](../../../images/inference/Containerfile#L49)
 - [images/inference/entrypoint.sh#L41](../../../images/inference/entrypoint.sh#L41)
 - [images/inference/entrypoint.sh#L72](../../../images/inference/entrypoint.sh#L72)
 - [src-tauri/src/gpu.rs#L39](../../../src-tauri/src/gpu.rs#L39)

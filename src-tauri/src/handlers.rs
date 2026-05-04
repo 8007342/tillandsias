@@ -30,7 +30,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, instrument, warn};
@@ -66,10 +66,12 @@ pub fn build_mutex_lock() -> std::sync::MutexGuard<'static, ()> {
     })
 }
 
-use tillandsias_core::config::{GlobalConfig, SelectedAgent, cache_dir, load_global_config, load_project_config, save_selected_agent};
+use tillandsias_core::config::{GlobalConfig, cache_dir, load_global_config, load_project_config};
 use tillandsias_core::event::{AppEvent, BuildProgressEvent, ContainerState};
 use tillandsias_core::genus::GenusAllocator;
-use tillandsias_core::state::{BuildProgress, BuildStatus, ContainerInfo, ContainerType, TrayState};
+use tillandsias_core::state::{
+    BuildProgress, BuildStatus, ContainerInfo, ContainerType, TrayState,
+};
 use tillandsias_core::tools::ToolAllocator;
 use tillandsias_podman::PodmanClient;
 use tillandsias_podman::launch::{ContainerLauncher, allocate_port_range};
@@ -100,19 +102,28 @@ pub(crate) fn git_image_tag() -> String {
 /// The versioned inference image tag.
 /// @trace spec:inference-container
 pub(crate) fn inference_image_tag() -> String {
-    format!("tillandsias-inference:v{}", env!("TILLANDSIAS_FULL_VERSION"))
+    format!(
+        "tillandsias-inference:v{}",
+        env!("TILLANDSIAS_FULL_VERSION")
+    )
 }
 
 /// The chromium-core browser image tag, e.g., `tillandsias-chromium-core:v0.1.126.83`.
 /// @trace spec:browser-isolation-core
 pub(crate) fn chromium_core_image_tag() -> String {
-    format!("tillandsias-chromium-core:v{}", env!("TILLANDSIAS_FULL_VERSION"))
+    format!(
+        "tillandsias-chromium-core:v{}",
+        env!("TILLANDSIAS_FULL_VERSION")
+    )
 }
 
 /// The chromium-framework browser image tag, e.g., `tillandsias-chromium-framework:v0.1.126.83`.
 /// @trace spec:browser-isolation-framework
 pub(crate) fn chromium_framework_image_tag() -> String {
-    format!("tillandsias-chromium-framework:v{}", env!("TILLANDSIAS_FULL_VERSION"))
+    format!(
+        "tillandsias-chromium-framework:v{}",
+        env!("TILLANDSIAS_FULL_VERSION")
+    )
 }
 
 /// The fixed container name for the inference service (not project-specific).
@@ -133,8 +144,15 @@ pub(crate) async fn ensure_inference_running(
     build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<(), String> {
     // Check if already running (in our state or via podman inspect)
-    if state.running.iter().any(|c| c.name == INFERENCE_CONTAINER_NAME) {
-        debug!(spec = "inference-container", "Inference container already tracked in state");
+    if state
+        .running
+        .iter()
+        .any(|c| c.name == INFERENCE_CONTAINER_NAME)
+    {
+        debug!(
+            spec = "inference-container",
+            "Inference container already tracked in state"
+        );
         return Ok(());
     }
 
@@ -146,7 +164,10 @@ pub(crate) async fn ensure_inference_running(
         if inspect.state == "running" {
             let expected_tag = inference_image_tag();
             if inspect.image.contains(&expected_tag) {
-                debug!(spec = "inference-container", "Inference container already running (correct version)");
+                debug!(
+                    spec = "inference-container",
+                    "Inference container already running (correct version)"
+                );
                 return Ok(());
             }
             // Stale version — stop it so we can start the correct one
@@ -187,9 +208,12 @@ pub(crate) async fn ensure_inference_running(
         // User-friendly chip name — never expose "inference" or "image" to users.
         let chip_name = crate::i18n::t("menu.build.chip_inference_engine").to_string();
 
-        if build_tx.try_send(BuildProgressEvent::Started {
-            image_name: chip_name.clone(),
-        }).is_err() {
+        if build_tx
+            .try_send(BuildProgressEvent::Started {
+                image_name: chip_name.clone(),
+            })
+            .is_err()
+        {
             debug!("Build progress channel full/closed — UI may show stale state");
         }
 
@@ -200,38 +224,50 @@ pub(crate) async fn ensure_inference_running(
             Ok(Ok(())) => {
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, spec = "inference-container", "Inference image still not found after build");
-                    if build_tx.try_send(BuildProgressEvent::Failed {
-                        image_name: chip_name,
-                        reason: "Inference image not ready".to_string(),
-                    }).is_err() {
+                    if build_tx
+                        .try_send(BuildProgressEvent::Failed {
+                            image_name: chip_name,
+                            reason: "Inference image not ready".to_string(),
+                        })
+                        .is_err()
+                    {
                         debug!("Build progress channel full/closed — UI may show stale state");
                     }
                     return Err("Inference image not ready after build".into());
                 }
                 info!(tag = %tag, spec = "inference-container", "Inference image ready");
                 prune_old_images();
-                if build_tx.try_send(BuildProgressEvent::Completed {
-                    image_name: chip_name,
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Completed {
+                        image_name: chip_name,
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
             }
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, spec = "inference-container", "Inference image build failed");
-                if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: chip_name,
-                    reason: format!("Inference build failed: {e}"),
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Failed {
+                        image_name: chip_name,
+                        reason: format!("Inference build failed: {e}"),
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
                 return Err(format!("Inference image build failed: {e}"));
             }
             Err(ref e) => {
                 error!(tag = %tag, error = %e, spec = "inference-container", "Inference image build task panicked");
-                if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: chip_name,
-                    reason: format!("Inference build panicked: {e}"),
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Failed {
+                        image_name: chip_name,
+                        reason: format!("Inference build panicked: {e}"),
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
                 return Err(format!("Inference image build panicked: {e}"));
@@ -258,7 +294,7 @@ pub(crate) async fn ensure_inference_running(
         project_path: models_cache.clone(), // not meaningful for inference
         project_name: "inference".to_string(),
         cache_dir: cache.clone(),
-        port_range: (0, 0),                 // no ports exposed to host
+        port_range: (0, 0), // no ports exposed to host
         host_os: tillandsias_core::config::detect_host_os(),
         detached: true,
         is_watch_root: false,
@@ -271,7 +307,10 @@ pub(crate) async fn ensure_inference_running(
         network: if port_mapping {
             None
         } else {
-            Some(format!("{}:alias=inference", tillandsias_podman::ENCLAVE_NETWORK))
+            Some(format!(
+                "{}:alias=inference",
+                tillandsias_podman::ENCLAVE_NETWORK
+            ))
         },
         git_author_name: String::new(),
         git_author_email: String::new(),
@@ -293,10 +332,7 @@ pub(crate) async fn ensure_inference_running(
     }
 
     // Mount model cache dynamically: host models dir -> container ollama models dir
-    let model_mount = format!(
-        "{}:/home/ollama/.ollama/models:rw",
-        models_cache.display()
-    );
+    let model_mount = format!("{}:/home/ollama/.ollama/models:rw", models_cache.display());
     // Insert before the image tag (always last element)
     run_args.insert(run_args.len() - 1, "-v".to_string());
     run_args.insert(run_args.len() - 1, model_mount);
@@ -344,7 +380,10 @@ pub(crate) async fn ensure_inference_running(
                     .status()
                     .await;
                 if check.map(|s| s.success()).unwrap_or(false) {
-                    info!(spec = "inference-container", attempt, "Inference health check passed");
+                    info!(
+                        spec = "inference-container",
+                        attempt, "Inference health check passed"
+                    );
                     break;
                 }
                 if attempt < max_attempts - 1 {
@@ -460,7 +499,10 @@ pub(crate) async fn ensure_proxy_running(
 ) -> Result<(), String> {
     // Check if already running (in our state or via podman inspect)
     if state.running.iter().any(|c| c.name == PROXY_CONTAINER_NAME) {
-        debug!(spec = "proxy-container", "Proxy container already tracked in state");
+        debug!(
+            spec = "proxy-container",
+            "Proxy container already tracked in state"
+        );
         return Ok(());
     }
 
@@ -472,7 +514,10 @@ pub(crate) async fn ensure_proxy_running(
         if inspect.state == "running" {
             let expected_tag = proxy_image_tag();
             if inspect.image.contains(&expected_tag) {
-                debug!(spec = "proxy-container", "Proxy container already running (correct version)");
+                debug!(
+                    spec = "proxy-container",
+                    "Proxy container already running (correct version)"
+                );
                 return Ok(());
             }
             // Stale version — stop it so we can start the correct one
@@ -514,51 +559,65 @@ pub(crate) async fn ensure_proxy_running(
         // User-friendly chip name — never expose "proxy" or "image" to users.
         let chip_name = crate::i18n::t("menu.build.chip_enclave").to_string();
 
-        if build_tx.try_send(BuildProgressEvent::Started {
-            image_name: chip_name.clone(),
-        }).is_err() {
+        if build_tx
+            .try_send(BuildProgressEvent::Started {
+                image_name: chip_name.clone(),
+            })
+            .is_err()
+        {
             debug!("Build progress channel full/closed — UI may show stale state");
         }
 
-        let build_result =
-            tokio::task::spawn_blocking(|| run_build_image_script("proxy")).await;
+        let build_result = tokio::task::spawn_blocking(|| run_build_image_script("proxy")).await;
 
         match build_result {
             Ok(Ok(())) => {
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, spec = "proxy-container", "Proxy image still not found after build");
-                    if build_tx.try_send(BuildProgressEvent::Failed {
-                        image_name: chip_name,
-                        reason: "Proxy image not ready".to_string(),
-                    }).is_err() {
+                    if build_tx
+                        .try_send(BuildProgressEvent::Failed {
+                            image_name: chip_name,
+                            reason: "Proxy image not ready".to_string(),
+                        })
+                        .is_err()
+                    {
                         debug!("Build progress channel full/closed — UI may show stale state");
                     }
                     return Err("Proxy image not ready after build".into());
                 }
                 info!(tag = %tag, spec = "proxy-container", "Proxy image ready");
                 prune_old_images();
-                if build_tx.try_send(BuildProgressEvent::Completed {
-                    image_name: chip_name,
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Completed {
+                        image_name: chip_name,
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
             }
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, spec = "proxy-container", "Proxy image build failed");
-                if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: chip_name,
-                    reason: format!("Proxy build failed: {e}"),
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Failed {
+                        image_name: chip_name,
+                        reason: format!("Proxy build failed: {e}"),
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
                 return Err(format!("Proxy image build failed: {e}"));
             }
             Err(ref e) => {
                 error!(tag = %tag, error = %e, spec = "proxy-container", "Proxy image build task panicked");
-                if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: chip_name,
-                    reason: format!("Proxy build panicked: {e}"),
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Failed {
+                        image_name: chip_name,
+                        reason: format!("Proxy build panicked: {e}"),
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
                 return Err(format!("Proxy image build panicked: {e}"));
@@ -583,17 +642,15 @@ pub(crate) async fn ensure_proxy_running(
 
     // Create secrets for the proxy and forge containers
     // @trace spec:podman-secrets-integration, spec:secrets-management
-    crate::podman_secret::create("tillandsias-ca-root", &root_cert)
-        .map_err(|e| {
-            warn!(error = %e, spec = "secrets-management", "Failed to create root CA secret");
-            e
-        })?;
+    crate::podman_secret::create("tillandsias-ca-root", &root_cert).map_err(|e| {
+        warn!(error = %e, spec = "secrets-management", "Failed to create root CA secret");
+        e
+    })?;
 
-    crate::podman_secret::create("tillandsias-ca-cert", &intermediate_cert)
-        .map_err(|e| {
-            warn!(error = %e, spec = "secrets-management", "Failed to create CA cert secret");
-            e
-        })?;
+    crate::podman_secret::create("tillandsias-ca-cert", &intermediate_cert).map_err(|e| {
+        warn!(error = %e, spec = "secrets-management", "Failed to create CA cert secret");
+        e
+    })?;
 
     crate::podman_secret::create("tillandsias-ca-key", &intermediate_key)
         .map_err(|e| {
@@ -624,10 +681,10 @@ pub(crate) async fn ensure_proxy_running(
 
     let ctx = tillandsias_core::container_profile::LaunchContext {
         container_name: PROXY_CONTAINER_NAME.to_string(),
-        project_path: proxy_cache.clone(),  // not meaningful for proxy
+        project_path: proxy_cache.clone(), // not meaningful for proxy
         project_name: "proxy".to_string(),
-        cache_dir: proxy_cache.clone(),     // mount proxy-cache as /var/spool/squid
-        port_range: (0, 0),                 // no ports exposed to host
+        cache_dir: proxy_cache.clone(), // mount proxy-cache as /var/spool/squid
+        port_range: (0, 0),             // no ports exposed to host
         host_os: tillandsias_core::config::detect_host_os(),
         detached: true,
         is_watch_root: false,
@@ -640,7 +697,10 @@ pub(crate) async fn ensure_proxy_running(
         network: if port_mapping {
             None
         } else {
-            Some(format!("{}:alias=proxy", tillandsias_podman::ENCLAVE_NETWORK))
+            Some(format!(
+                "{}:alias=proxy",
+                tillandsias_podman::ENCLAVE_NETWORK
+            ))
         },
         git_author_name: String::new(),
         git_author_email: String::new(),
@@ -721,13 +781,22 @@ pub(crate) async fn ensure_proxy_running(
             let mut ready = false;
             for attempt in 0..max_attempts {
                 let check = tillandsias_podman::podman_cmd()
-                    .args(["exec", PROXY_CONTAINER_NAME, "sh", "-c", "nc -z localhost 3128"])
+                    .args([
+                        "exec",
+                        PROXY_CONTAINER_NAME,
+                        "sh",
+                        "-c",
+                        "nc -z localhost 3128",
+                    ])
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
                     .status()
                     .await;
                 if check.map(|s| s.success()).unwrap_or(false) {
-                    info!(spec = "proxy-container", attempt, "Proxy readiness check passed");
+                    info!(
+                        spec = "proxy-container",
+                        attempt, "Proxy readiness check passed"
+                    );
                     ready = true;
                     break;
                 }
@@ -789,11 +858,18 @@ pub(crate) async fn stop_proxy() {
 /// (to decide whether to route builds through the enclave or direct).
 ///
 /// @trace spec:proxy-container
+#[allow(dead_code)]
 pub(crate) async fn is_proxy_healthy() -> bool {
     // DISTRO: Proxy is Alpine — busybox nc (netcat) for TCP probe.
     // wget --spider returns 400 because squid rejects non-proxy HTTP requests.
     let check = tillandsias_podman::podman_cmd()
-        .args(["exec", PROXY_CONTAINER_NAME, "sh", "-c", "nc -z localhost 3128"])
+        .args([
+            "exec",
+            PROXY_CONTAINER_NAME,
+            "sh",
+            "-c",
+            "nc -z localhost 3128",
+        ])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
@@ -820,7 +896,9 @@ pub(crate) async fn cleanup_enclave_network() {
                 spec = "enclave-network",
                 "Enclave network removed"
             ),
-            Err(e) => warn!(spec = "enclave-network", error = %e, "Enclave network removal failed — zombie containers may exist"),
+            Err(e) => {
+                warn!(spec = "enclave-network", error = %e, "Enclave network removal failed — zombie containers may exist")
+            }
         }
     }
 }
@@ -842,18 +920,22 @@ pub(crate) async fn cleanup_enclave_network() {
 /// @trace spec:podman-orchestration, spec:secrets-management
 pub(crate) async fn sweep_orphan_containers() {
     let output = tillandsias_podman::podman_cmd()
-        .args(["ps", "--filter", "name=tillandsias-", "--format", "{{.Names}}"])
+        .args([
+            "ps",
+            "--filter",
+            "name=tillandsias-",
+            "--format",
+            "{{.Names}}",
+        ])
         .output()
         .await;
     let names = match output {
-        Ok(o) if o.status.success() => {
-            String::from_utf8_lossy(&o.stdout)
-                .lines()
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-                .collect::<Vec<_>>()
-        }
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
+            .lines()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .collect::<Vec<_>>(),
         Ok(o) => {
             debug!(
                 exit_code = o.status.code().unwrap_or(-1),
@@ -1077,10 +1159,7 @@ fn host_has_git() -> bool {
 /// `mounts` are `(host_path, container_path, mode)` tuples.
 ///
 /// @trace spec:git-mirror-service
-fn run_git(
-    args: &[&str],
-    mounts: &[(&str, &str, &str)],
-) -> Result<std::process::Output, String> {
+fn run_git(args: &[&str], mounts: &[(&str, &str, &str)]) -> Result<std::process::Output, String> {
     if host_has_git() {
         return std::process::Command::new("git")
             .args(args)
@@ -1093,7 +1172,8 @@ fn run_git(
     // Containerized path: run git inside the git image.
     // @trace spec:git-mirror-service
     let mut podman_args: Vec<String> = vec![
-        "run".into(), "--rm".into(),
+        "run".into(),
+        "--rm".into(),
         "--cap-drop=ALL".into(),
         "--security-opt=no-new-privileges".into(),
         "--userns=keep-id".into(),
@@ -1159,10 +1239,7 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
     let container_mirror = format!("/mirrors/{project_name}");
 
     // Common mounts for containerized git operations
-    let mounts: Vec<(&str, &str, &str)> = vec![
-        (&pp, "/project", "rw"),
-        (&md, "/mirrors", "rw"),
-    ];
+    let mounts: Vec<(&str, &str, &str)> = vec![(&pp, "/project", "rw"), (&md, "/mirrors", "rw")];
 
     // If mirror already exists, just fetch updates
     if mirror_path.join("HEAD").exists() {
@@ -1173,7 +1250,11 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
             "Mirror exists — fetching updates"
         );
 
-        let mirror_ref = if has_git { mp.as_str() } else { container_mirror.as_str() };
+        let mirror_ref = if has_git {
+            mp.as_str()
+        } else {
+            container_mirror.as_str()
+        };
         match run_git(&["-C", mirror_ref, "fetch", "--all"], &mounts) {
             Ok(o) if o.status.success() => {
                 debug!(spec = "git-mirror-service", project = %project_name, "Mirror fetch succeeded");
@@ -1213,23 +1294,36 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
         let init = run_git(&["-C", init_dir, "init"], &mounts)
             .map_err(|e| format!("git init failed: {e}"))?;
         if !init.status.success() {
-            return Err(format!("git init failed: {}", String::from_utf8_lossy(&init.stderr)));
+            return Err(format!(
+                "git init failed: {}",
+                String::from_utf8_lossy(&init.stderr)
+            ));
         }
 
         let add = run_git(&["-C", init_dir, "add", "-A"], &mounts)
             .map_err(|e| format!("git add failed: {e}"))?;
         if !add.status.success() {
-            return Err(format!("git add failed: {}", String::from_utf8_lossy(&add.stderr)));
+            return Err(format!(
+                "git add failed: {}",
+                String::from_utf8_lossy(&add.stderr)
+            ));
         }
 
         // Use explicit author identity — the host/container may not have
         // global git config, and we don't want to require --github-login
         // just to initialize a mirror.
         let commit = run_git(
-            &["-C", init_dir,
-              "-c", "user.name=Tillandsias",
-              "-c", "user.email=tillandsias@local",
-              "commit", "-m", "Initial commit"],
+            &[
+                "-C",
+                init_dir,
+                "-c",
+                "user.name=Tillandsias",
+                "-c",
+                "user.email=tillandsias@local",
+                "commit",
+                "-m",
+                "Initial commit",
+            ],
             &mounts,
         )
         .map_err(|e| format!("git commit failed: {e}"))?;
@@ -1257,11 +1351,8 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
         mirror = %mp,
         "Cloning mirror"
     );
-    let clone_output = run_git(
-        &["clone", "--mirror", &clone_source, &clone_dest],
-        &mounts,
-    )
-    .map_err(|e| format!("git clone --mirror failed: {e}"))?;
+    let clone_output = run_git(&["clone", "--mirror", &clone_source, &clone_dest], &mounts)
+        .map_err(|e| format!("git clone --mirror failed: {e}"))?;
     if !clone_output.status.success() {
         let stderr = String::from_utf8_lossy(&clone_output.stderr);
         return Err(format!("git clone --mirror failed: {stderr}"));
@@ -1293,7 +1384,11 @@ fn ensure_mirror(project_path: &Path, project_name: &str) -> Result<PathBuf, Str
     // instead of trying to push to an inaccessible local path.
     // @trace spec:git-mirror-service
     if let GitProjectState::RemoteRepo { ref remote_url } = state {
-        let mirror_ref = if has_git { mp.as_str() } else { container_mirror.as_str() };
+        let mirror_ref = if has_git {
+            mp.as_str()
+        } else {
+            container_mirror.as_str()
+        };
         match run_git(
             &["-C", mirror_ref, "remote", "set-url", "origin", remote_url],
             &mounts,
@@ -1357,7 +1452,8 @@ pub(crate) async fn ensure_git_service_running(
     state: &TrayState,
     build_tx: mpsc::Sender<BuildProgressEvent>,
 ) -> Result<(), String> {
-    let container_name = tillandsias_core::state::ContainerInfo::git_service_container_name(project_name);
+    let container_name =
+        tillandsias_core::state::ContainerInfo::git_service_container_name(project_name);
 
     // Check if already running (in our state or via podman inspect)
     if state.running.iter().any(|c| c.name == container_name) {
@@ -1416,51 +1512,65 @@ pub(crate) async fn ensure_git_service_running(
         // User-friendly chip name — never expose "git service" or "image" to users.
         let chip_name = crate::i18n::t("menu.build.chip_code_mirror").to_string();
 
-        if build_tx.try_send(BuildProgressEvent::Started {
-            image_name: chip_name.clone(),
-        }).is_err() {
+        if build_tx
+            .try_send(BuildProgressEvent::Started {
+                image_name: chip_name.clone(),
+            })
+            .is_err()
+        {
             debug!("Build progress channel full/closed — UI may show stale state");
         }
 
-        let build_result =
-            tokio::task::spawn_blocking(|| run_build_image_script("git")).await;
+        let build_result = tokio::task::spawn_blocking(|| run_build_image_script("git")).await;
 
         match build_result {
             Ok(Ok(())) => {
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, spec = "git-mirror-service", "Git service image still not found after build");
-                    if build_tx.try_send(BuildProgressEvent::Failed {
-                        image_name: chip_name,
-                        reason: "Git service image not ready".to_string(),
-                    }).is_err() {
+                    if build_tx
+                        .try_send(BuildProgressEvent::Failed {
+                            image_name: chip_name,
+                            reason: "Git service image not ready".to_string(),
+                        })
+                        .is_err()
+                    {
                         debug!("Build progress channel full/closed — UI may show stale state");
                     }
                     return Err("Git service image not ready after build".into());
                 }
                 info!(tag = %tag, spec = "git-mirror-service", "Git service image ready");
                 prune_old_images();
-                if build_tx.try_send(BuildProgressEvent::Completed {
-                    image_name: chip_name,
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Completed {
+                        image_name: chip_name,
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
             }
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, spec = "git-mirror-service", "Git service image build failed");
-                if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: chip_name,
-                    reason: format!("Git service build failed: {e}"),
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Failed {
+                        image_name: chip_name,
+                        reason: format!("Git service build failed: {e}"),
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
                 return Err(format!("Git service image build failed: {e}"));
             }
             Err(ref e) => {
                 error!(tag = %tag, error = %e, spec = "git-mirror-service", "Git service image build task panicked");
-                if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: chip_name,
-                    reason: format!("Git service build panicked: {e}"),
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Failed {
+                        image_name: chip_name,
+                        reason: format!("Git service build panicked: {e}"),
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
                 return Err(format!("Git service image build panicked: {e}"));
@@ -1517,7 +1627,10 @@ pub(crate) async fn ensure_git_service_running(
         network: if port_mapping {
             None
         } else {
-            Some(format!("{}:alias=git-service", tillandsias_podman::ENCLAVE_NETWORK))
+            Some(format!(
+                "{}:alias=git-service",
+                tillandsias_podman::ENCLAVE_NETWORK
+            ))
         },
         git_author_name: String::new(),
         git_author_email: String::new(),
@@ -1540,11 +1653,7 @@ pub(crate) async fn ensure_git_service_running(
 
     // Add the mirror volume mount dynamically (not in the profile)
     // Mirror is mounted at /srv/git/<project_name> (rw) matching the git daemon base-path
-    let mirror_mount = format!(
-        "{}:/srv/git/{}:rw",
-        mirror_path.display(),
-        project_name
-    );
+    let mirror_mount = format!("{}:/srv/git/{}:rw", mirror_path.display(), project_name);
     // Insert before the image tag (always last element)
     run_args.insert(run_args.len() - 1, "-v".to_string());
     run_args.insert(run_args.len() - 1, mirror_mount);
@@ -1781,9 +1890,7 @@ pub async fn ensure_enclave_ready(
         "Enclave ready — proxy (strict:3128) + git-service (git://9418) ready; inference (http://11434) launching async"
     );
 
-    Ok(EnclaveContext {
-        mirror_path,
-    })
+    Ok(EnclaveContext { mirror_path })
 }
 
 /// Ensure infrastructure services are ready (network + proxy), without
@@ -1833,7 +1940,10 @@ pub async fn ensure_infrastructure_ready(
             }
         }
     } else {
-        debug!(spec = "secrets-management", "No GitHub token in OS keyring, skipping GitHub token secret creation");
+        debug!(
+            spec = "secrets-management",
+            "No GitHub token in OS keyring, skipping GitHub token secret creation"
+        );
     }
 
     // @trace spec:enclave-network, spec:proxy-container
@@ -1869,14 +1979,13 @@ pub fn ensure_enclave_ready_cli(
 ) -> Result<EnclaveContext, String> {
     let (build_tx, _build_rx) =
         tokio::sync::mpsc::channel::<tillandsias_core::event::BuildProgressEvent>(4);
-    let dummy_state = tillandsias_core::state::TrayState::new(
-        tillandsias_core::state::PlatformInfo {
+    let dummy_state =
+        tillandsias_core::state::TrayState::new(tillandsias_core::state::PlatformInfo {
             os: tillandsias_core::state::Os::detect(),
             has_podman: true,
             has_podman_machine: false,
             gpu_devices: vec![],
-        },
-    );
+        });
     rt.block_on(ensure_enclave_ready(
         project_path,
         project_name,
@@ -1974,7 +2083,7 @@ pub(crate) fn prune_old_images() {
                         || normalized.starts_with("tillandsias-inference:")
                         || normalized.starts_with("tillandsias-chromium-core:")
                         || normalized.starts_with("tillandsias-chromium-framework:")
-                        || normalized.starts_with("tillandsias-router:");  // Legacy: remove old router images
+                        || normalized.starts_with("tillandsias-router:"); // Legacy: remove old router images
                     // Keep current version tags
                     let is_current = current_tags.iter().any(|tag| normalized == tag);
                     is_tillandsias && !is_current
@@ -2214,7 +2323,14 @@ fn open_terminal(command: &str, title: &str) -> Result<(), String> {
             Err(_) => {
                 // Fallback: cmd /c start (legacy, quoting may be fragile)
                 std::process::Command::new("cmd")
-                    .args(["/c", "start", &format!("\"{}\"", title), "cmd", "/k", &shell_cmd])
+                    .args([
+                        "/c",
+                        "start",
+                        &format!("\"{}\"", title),
+                        "cmd",
+                        "/k",
+                        &shell_cmd,
+                    ])
                     .stdin(std::process::Stdio::null())
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
@@ -2560,7 +2676,10 @@ fn build_launch_context(
         is_watch_root,
         custom_mounts: project_config.mounts,
         image_tag: image_tag.to_string(),
-        selected_language: tillandsias_core::config::load_global_config().i18n.language.clone(),
+        selected_language: tillandsias_core::config::load_global_config()
+            .i18n
+            .language
+            .clone(),
         // @trace spec:enclave-network
         // On Linux: forge and terminal containers join the enclave network so
         // they route through the proxy. The proxy itself gets dual-homed separately.
@@ -2707,7 +2826,9 @@ pub async fn handle_attach_here(
     // GitHub health check — gate terminal-mode launch on remote capability
     // @trace spec:simplified-tray-ux
     if !state.github_healthy {
-        return Err("Cannot start environment: GitHub not reachable (spec:simplified-tray-ux)".into());
+        return Err(
+            "Cannot start environment: GitHub not reachable (spec:simplified-tray-ux)".into(),
+        );
     }
 
     // @trace spec:opencode-web-session
@@ -2721,17 +2842,13 @@ pub async fn handle_attach_here(
     // Don't-relaunch guard: if a forge container for this project is already running,
     // notify the user and return early instead of spawning a second environment.
     // Git service containers are infrastructure — they don't count as "already running".
-    if let Some(existing) = state
-        .running
-        .iter()
-        .find(|c| {
-            c.project_name == project_name
-                && matches!(
-                    c.container_type,
-                    tillandsias_core::state::ContainerType::Forge
-                )
-        })
-    {
+    if let Some(existing) = state.running.iter().find(|c| {
+        c.project_name == project_name
+            && matches!(
+                c.container_type,
+                tillandsias_core::state::ContainerType::Forge
+            )
+    }) {
         let flower = existing.genus.flower();
         let title = format!("{flower} {project_name}");
         let msg = format!("Already running — look for '{title}' in your windows");
@@ -2799,24 +2916,29 @@ pub async fn handle_attach_here(
         info!(tag = %tag, "Ensuring forge image is up to date...");
 
         // Notify event loop: build started (menu chip: ⏳ Building forge...)
-        if build_tx.try_send(BuildProgressEvent::Started {
-            image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
-        }).is_err() {
+        if build_tx
+            .try_send(BuildProgressEvent::Started {
+                image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
+            })
+            .is_err()
+        {
             debug!("Build progress channel full/closed — UI may show stale state");
         }
 
-        let build_result =
-            tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
+        let build_result = tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
 
         match build_result {
             Ok(Ok(())) => {
                 // Verify the image actually exists now
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, "Image still not found after build completed");
-                    if build_tx.try_send(BuildProgressEvent::Failed {
-                        image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
-                        reason: "Development environment not ready yet".to_string(),
-                    }).is_err() {
+                    if build_tx
+                        .try_send(BuildProgressEvent::Failed {
+                            image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
+                            reason: "Development environment not ready yet".to_string(),
+                        })
+                        .is_err()
+                    {
                         debug!("Build progress channel full/closed — UI may show stale state");
                     }
                     state.running.retain(|c| c.name != container_name);
@@ -2827,18 +2949,24 @@ pub async fn handle_attach_here(
                 // Prune older forge images after successful build
                 prune_old_images();
                 // Notify event loop: build completed (menu chip: ✅ forge ready)
-                if build_tx.try_send(BuildProgressEvent::Completed {
-                    image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Completed {
+                        image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
             }
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, "Image build failed");
-                if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
-                    reason: "Tillandsias is setting up".to_string(),
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Failed {
+                        image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
+                        reason: "Tillandsias is setting up".to_string(),
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
                 state.running.retain(|c| c.name != container_name);
@@ -2847,10 +2975,13 @@ pub async fn handle_attach_here(
             }
             Err(ref e) => {
                 error!(tag = %tag, error = %e, "Image build task panicked");
-                if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
-                    reason: "Tillandsias is setting up".to_string(),
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Failed {
+                        image_name: crate::i18n::t("menu.build.chip_forge").to_string(),
+                        reason: "Tillandsias is setting up".to_string(),
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
                 state.running.retain(|c| c.name != container_name);
@@ -2867,7 +2998,8 @@ pub async fn handle_attach_here(
 
     // @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container
     // Single unified enclave setup: network, proxy, inference, mirror, git service.
-    let _enclave = ensure_enclave_ready(&project_path, &project_name, state, build_tx.clone()).await?;
+    let _enclave =
+        ensure_enclave_ready(&project_path, &project_name, state, build_tx.clone()).await?;
 
     // @tombstone obsolete:layered-tools-overlay
     // Tools overlay was tombstoned in c811454 — agents are now baked into the forge image.
@@ -3014,7 +3146,9 @@ pub async fn handle_attach_web(
     // GitHub health check — gate web-mode launch on remote capability
     // @trace spec:simplified-tray-ux
     if !state.github_healthy {
-        return Err("Cannot start environment: GitHub not reachable (spec:simplified-tray-ux)".into());
+        return Err(
+            "Cannot start environment: GitHub not reachable (spec:simplified-tray-ux)".into(),
+        );
     }
 
     let container_name = ContainerInfo::forge_container_name(&project_name);
@@ -3141,8 +3275,7 @@ pub async fn handle_attach_web(
             debug!("Build progress channel full/closed — UI may show stale state");
         }
 
-        let build_result =
-            tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
+        let build_result = tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
 
         match build_result {
             Ok(Ok(())) => {
@@ -3403,20 +3536,12 @@ pub async fn handle_stop_project(
 
     // Remove all stopped containers from state
     let names_to_remove: Vec<String> = containers.iter().map(|c| c.name.clone()).collect();
-    state
-        .running
-        .retain(|c| !names_to_remove.contains(&c.name));
+    state.running.retain(|c| !names_to_remove.contains(&c.name));
 
     // If no more environments remain for this project, clear the assigned genus.
-    let still_running = state
-        .running
-        .iter()
-        .any(|c| c.project_name == project_name);
+    let still_running = state.running.iter().any(|c| c.project_name == project_name);
     if !still_running
-        && let Some(project) = state
-            .projects
-            .iter_mut()
-            .find(|p| p.name == project_name)
+        && let Some(project) = state.projects.iter_mut().find(|p| p.name == project_name)
     {
         project.assigned_genus = None;
     }
@@ -3707,23 +3832,28 @@ pub async fn handle_terminal(
         info!(tag = %tag, "Ensuring forge image is up to date for maintenance terminal...");
 
         let chip_name = crate::i18n::t("menu.build.chip_forge").to_string();
-        if build_tx.try_send(BuildProgressEvent::Started {
-            image_name: chip_name.clone(),
-        }).is_err() {
+        if build_tx
+            .try_send(BuildProgressEvent::Started {
+                image_name: chip_name.clone(),
+            })
+            .is_err()
+        {
             debug!("Build progress channel full/closed — UI may show stale state");
         }
 
-        let build_result =
-            tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
+        let build_result = tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
 
         match build_result {
             Ok(Ok(())) => {
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, "Image still not found after build (maintenance terminal)");
-                    if build_tx.try_send(BuildProgressEvent::Failed {
-                        image_name: chip_name,
-                        reason: "Development environment not ready yet".to_string(),
-                    }).is_err() {
+                    if build_tx
+                        .try_send(BuildProgressEvent::Failed {
+                            image_name: chip_name,
+                            reason: "Development environment not ready yet".to_string(),
+                        })
+                        .is_err()
+                    {
                         debug!("Build progress channel full/closed — UI may show stale state");
                     }
                     allocator.release(&project_name, genus);
@@ -3732,18 +3862,24 @@ pub async fn handle_terminal(
                 }
                 info!(tag = %tag, "Forge image ready for maintenance terminal");
                 prune_old_images();
-                if build_tx.try_send(BuildProgressEvent::Completed {
-                    image_name: chip_name,
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Completed {
+                        image_name: chip_name,
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
             }
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, "Image build failed (maintenance terminal)");
-                if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: chip_name,
-                    reason: "Tillandsias is setting up".to_string(),
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Failed {
+                        image_name: chip_name,
+                        reason: "Tillandsias is setting up".to_string(),
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
                 allocator.release(&project_name, genus);
@@ -3752,10 +3888,13 @@ pub async fn handle_terminal(
             }
             Err(ref e) => {
                 error!(tag = %tag, error = %e, "Image build task panicked (maintenance terminal)");
-                if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: chip_name,
-                    reason: "Tillandsias is setting up".to_string(),
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Failed {
+                        image_name: chip_name,
+                        reason: "Tillandsias is setting up".to_string(),
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
                 allocator.release(&project_name, genus);
@@ -3771,7 +3910,8 @@ pub async fn handle_terminal(
 
     // @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container
     // Single unified enclave setup: network, proxy, inference, mirror, git service.
-    let _enclave = ensure_enclave_ready(&project_path, &project_name, state, build_tx.clone()).await?;
+    let _enclave =
+        ensure_enclave_ready(&project_path, &project_name, state, build_tx.clone()).await?;
 
     // Allocate port range — check actual podman containers for conflicts
     let mut existing_ports: Vec<(u16, u16)> = state.running.iter().map(|c| c.port_range).collect();
@@ -3820,18 +3960,24 @@ pub async fn handle_terminal(
     let title = format!("{} {}", display_emoji, project_name);
 
     // Notify event loop: maintenance setup in progress (menu chip: ⛏️ Setting up Maintenance...)
-    if build_tx.try_send(BuildProgressEvent::Started {
-        image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
-    }).is_err() {
+    if build_tx
+        .try_send(BuildProgressEvent::Started {
+            image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
+        })
+        .is_err()
+    {
         debug!("Build progress channel full/closed — UI may show stale state");
     }
 
     match open_terminal(&podman_cmd, &title) {
         Ok(()) => {
             // Terminal launched — notify completed so chip shows briefly
-            if build_tx.try_send(BuildProgressEvent::Completed {
-                image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
-            }).is_err() {
+            if build_tx
+                .try_send(BuildProgressEvent::Completed {
+                    image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
+                })
+                .is_err()
+            {
                 debug!("Build progress channel full/closed — UI may show stale state");
             }
             info!(
@@ -3862,10 +4008,13 @@ pub async fn handle_terminal(
             state.running.retain(|c| c.name != container_name);
             allocator.release(&project_name, genus);
             tool_allocator.release(&project_name, &display_emoji);
-            if build_tx.try_send(BuildProgressEvent::Failed {
-                image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
-                reason: e.clone(),
-            }).is_err() {
+            if build_tx
+                .try_send(BuildProgressEvent::Failed {
+                    image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
+                    reason: e.clone(),
+                })
+                .is_err()
+            {
                 debug!("Build progress channel full/closed — UI may show stale state");
             }
             Err(format!("Failed to open terminal: {e}"))
@@ -3920,23 +4069,28 @@ pub async fn handle_root_terminal(
         info!(tag = %tag, "Ensuring forge image is up to date for root terminal...");
 
         let chip_name = crate::i18n::t("menu.build.chip_forge").to_string();
-        if build_tx.try_send(BuildProgressEvent::Started {
-            image_name: chip_name.clone(),
-        }).is_err() {
+        if build_tx
+            .try_send(BuildProgressEvent::Started {
+                image_name: chip_name.clone(),
+            })
+            .is_err()
+        {
             debug!("Build progress channel full/closed — UI may show stale state");
         }
 
-        let build_result =
-            tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
+        let build_result = tokio::task::spawn_blocking(|| run_build_image_script("forge")).await;
 
         match build_result {
             Ok(Ok(())) => {
                 if !client.image_exists(&tag).await {
                     error!(tag = %tag, "Image still not found after build (root terminal)");
-                    if build_tx.try_send(BuildProgressEvent::Failed {
-                        image_name: chip_name,
-                        reason: "Development environment not ready yet".to_string(),
-                    }).is_err() {
+                    if build_tx
+                        .try_send(BuildProgressEvent::Failed {
+                            image_name: chip_name,
+                            reason: "Development environment not ready yet".to_string(),
+                        })
+                        .is_err()
+                    {
                         debug!("Build progress channel full/closed — UI may show stale state");
                     }
                     allocator.release(&project_name, genus);
@@ -3944,18 +4098,24 @@ pub async fn handle_root_terminal(
                 }
                 info!(tag = %tag, "Forge image ready for root terminal");
                 prune_old_images();
-                if build_tx.try_send(BuildProgressEvent::Completed {
-                    image_name: chip_name,
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Completed {
+                        image_name: chip_name,
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
             }
             Ok(Err(ref e)) => {
                 error!(tag = %tag, error = %e, "Image build failed (root terminal)");
-                if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: chip_name,
-                    reason: "Tillandsias is setting up".to_string(),
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Failed {
+                        image_name: chip_name,
+                        reason: "Tillandsias is setting up".to_string(),
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
                 allocator.release(&project_name, genus);
@@ -3963,10 +4123,13 @@ pub async fn handle_root_terminal(
             }
             Err(ref e) => {
                 error!(tag = %tag, error = %e, "Image build task panicked (root terminal)");
-                if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: chip_name,
-                    reason: "Tillandsias is setting up".to_string(),
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Failed {
+                        image_name: chip_name,
+                        reason: "Tillandsias is setting up".to_string(),
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
                 allocator.release(&project_name, genus);
@@ -4048,17 +4211,23 @@ pub async fn handle_root_terminal(
     let title = "\u{1F6E0}\u{FE0F} Root".to_string();
 
     // Notify event loop: maintenance setup in progress
-    if build_tx.try_send(BuildProgressEvent::Started {
-        image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
-    }).is_err() {
+    if build_tx
+        .try_send(BuildProgressEvent::Started {
+            image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
+        })
+        .is_err()
+    {
         debug!("Build progress channel full/closed — UI may show stale state");
     }
 
     match open_terminal(&podman_cmd, &title) {
         Ok(()) => {
-            if build_tx.try_send(BuildProgressEvent::Completed {
-                image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
-            }).is_err() {
+            if build_tx
+                .try_send(BuildProgressEvent::Completed {
+                    image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
+                })
+                .is_err()
+            {
                 debug!("Build progress channel full/closed — UI may show stale state");
             }
             info!(
@@ -4084,10 +4253,13 @@ pub async fn handle_root_terminal(
         Err(e) => {
             state.running.retain(|c| c.name != container_name);
             allocator.release(&project_name, genus);
-            if build_tx.try_send(BuildProgressEvent::Failed {
-                image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
-                reason: e.clone(),
-            }).is_err() {
+            if build_tx
+                .try_send(BuildProgressEvent::Failed {
+                    image_name: crate::i18n::t("menu.build.chip_maintenance").to_string(),
+                    reason: e.clone(),
+                })
+                .is_err()
+            {
                 debug!("Build progress channel full/closed — UI may show stale state");
             }
             Err(format!("Failed to open root terminal: {e}"))
@@ -4119,8 +4291,7 @@ pub async fn handle_github_login(
 ) -> Result<(), String> {
     info!("GitHub Login: spawning `tillandsias --github-login` in a terminal");
 
-    let exe = std::env::current_exe()
-        .map_err(|e| format!("Cannot locate own executable: {e}"))?;
+    let exe = std::env::current_exe().map_err(|e| format!("Cannot locate own executable: {e}"))?;
 
     // open_terminal takes a command string it hands to the OS's shell.
     // Quote the executable path so spaces (Program Files, username etc.) work.
@@ -4131,8 +4302,7 @@ pub async fn handle_github_login(
         format!("{exe_str} --github-login")
     };
 
-    open_terminal(&cmd, "GitHub Login")
-        .map_err(|e| format!("Failed to open terminal: {e}"))
+    open_terminal(&cmd, "GitHub Login").map_err(|e| format!("Failed to open terminal: {e}"))
 }
 
 /// Handle "Claude Reset Credentials" — remove `~/.claude/` contents so next
@@ -4159,7 +4329,10 @@ pub fn handle_claude_reset_credentials() -> Result<(), String> {
                 }
             }
             info!("Claude credentials cleared — next launch will re-authenticate");
-            send_notification("Tillandsias", crate::i18n::t("notifications.claude_credentials_cleared"));
+            send_notification(
+                "Tillandsias",
+                crate::i18n::t("notifications.claude_credentials_cleared"),
+            );
             Ok(())
         }
         Err(e) => Err(format!("Failed to read Claude credentials directory: {e}")),
@@ -4295,9 +4468,12 @@ pub async fn handle_serve_here(
     let client = PodmanClient::new();
     {
         info!(image = web_image, "Ensuring web image is up to date...");
-        if build_tx.try_send(BuildProgressEvent::Started {
-            image_name: crate::i18n::t("menu.build.chip_web_server").to_string(),
-        }).is_err() {
+        if build_tx
+            .try_send(BuildProgressEvent::Started {
+                image_name: crate::i18n::t("menu.build.chip_web_server").to_string(),
+            })
+            .is_err()
+        {
             debug!("Build progress channel full/closed — UI may show stale state");
         }
         let build_result = tokio::task::spawn_blocking(|| run_build_image_script("web")).await;
@@ -4305,37 +4481,49 @@ pub async fn handle_serve_here(
             Ok(Ok(())) => {
                 if !client.image_exists(web_image).await {
                     error!(image = web_image, "Web image still not found after build");
-                    if build_tx.try_send(BuildProgressEvent::Failed {
-                        image_name: crate::i18n::t("menu.build.chip_web_server").to_string(),
-                        reason: "Web server image not ready".to_string(),
-                    }).is_err() {
+                    if build_tx
+                        .try_send(BuildProgressEvent::Failed {
+                            image_name: crate::i18n::t("menu.build.chip_web_server").to_string(),
+                            reason: "Web server image not ready".to_string(),
+                        })
+                        .is_err()
+                    {
                         debug!("Build progress channel full/closed — UI may show stale state");
                     }
                     return Err("Web server image is not ready yet".into());
                 }
                 prune_old_images();
-                if build_tx.try_send(BuildProgressEvent::Completed {
-                    image_name: crate::i18n::t("menu.build.chip_web_server").to_string(),
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Completed {
+                        image_name: crate::i18n::t("menu.build.chip_web_server").to_string(),
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
             }
             Ok(Err(ref e)) => {
                 error!(image = web_image, error = %e, "Web image build failed");
-                if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: crate::i18n::t("menu.build.chip_web_server").to_string(),
-                    reason: "Web server image build failed".to_string(),
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Failed {
+                        image_name: crate::i18n::t("menu.build.chip_web_server").to_string(),
+                        reason: "Web server image build failed".to_string(),
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
                 return Err(strings::SETUP_ERROR.into());
             }
             Err(ref e) => {
                 error!(image = web_image, error = %e, "Web image build task panicked");
-                if build_tx.try_send(BuildProgressEvent::Failed {
-                    image_name: crate::i18n::t("menu.build.chip_web_server").to_string(),
-                    reason: "Web server image build failed".to_string(),
-                }).is_err() {
+                if build_tx
+                    .try_send(BuildProgressEvent::Failed {
+                        image_name: crate::i18n::t("menu.build.chip_web_server").to_string(),
+                        reason: "Web server image build failed".to_string(),
+                    })
+                    .is_err()
+                {
                     debug!("Build progress channel full/closed — UI may show stale state");
                 }
                 return Err(strings::SETUP_ERROR.into());
@@ -4427,7 +4615,7 @@ pub async fn handle_serve_here(
 /// * `window_type` - Either "open_safe_window" or "open_debug_window"
 /// * `state` - Mutable reference to TrayState for tracking
 ///
-/// @trace spec:browser-daemon-tracking, spec:browser-debounce, spec:browser-isolation-core
+/// @trace spec:browser-daemon-tracking, spec:browser-debounce, spec:browser-isolation-core, spec:browser-tray-notifications, spec:chromium-debug-variant
 #[cfg(target_os = "linux")]
 pub async fn handle_open_browser_window(
     project: &str,
@@ -4459,8 +4647,7 @@ pub async fn handle_open_browser_window(
 
     // Validate URL
     if window_type == "open_safe_window" {
-        if !url.contains(&format!(".{}.localhost", project))
-            && !url.contains("dashboard.localhost")
+        if !url.contains(&format!(".{}.localhost", project)) && !url.contains("dashboard.localhost")
         {
             return Err(format!(
                 "Invalid URL for safe window: '{}'. Expected <service>.<project>.localhost or dashboard.localhost",
@@ -4511,7 +4698,8 @@ pub async fn handle_open_browser_window(
     // Spawn the Chromium window with versioned image tag
     // @trace spec:browser-isolation-core
     let version = env!("TILLANDSIAS_FULL_VERSION");
-    let container_id = chromium_launcher::spawn_chromium_window(project, url, window_type, version)?;
+    let container_id =
+        chromium_launcher::spawn_chromium_window(project, url, window_type, version)?;
 
     // Update timestamp on successful spawn
     state.browser_last_launch.insert(project.to_string(), now);
@@ -4536,7 +4724,11 @@ pub async fn handle_open_browser_window(
     }
 
     // Update BuildProgress to Completed, start 5s fadeout
-    if let Some(build) = state.active_builds.iter_mut().find(|b| b.image_name == format!("Browser — {}", project)) {
+    if let Some(build) = state
+        .active_builds
+        .iter_mut()
+        .find(|b| b.image_name == format!("Browser — {}", project))
+    {
         build.status = BuildStatus::Completed;
         build.completed_at = Some(Instant::now());
     }
@@ -4569,9 +4761,12 @@ pub async fn handle_open_browser_window(
 ///
 /// Discovers all running Tillandsias containers (shared infra + project-specific)
 /// and spawns `podman logs -f` for each, with line-by-line source labels.
-pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, debug: bool) -> Result<(), String> {
-    use std::process::{Command, Stdio};
+pub async fn handle_diagnostics(
+    project_path: Option<&std::path::Path>,
+    debug: bool,
+) -> Result<(), String> {
     use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
 
     // @trace spec:cli-diagnostics, spec:default-image
     // Diagnostics mode: launch the full stack (same as attach) then stream logs.
@@ -4634,7 +4829,10 @@ pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, debug: b
         .collect();
 
     if debug {
-        eprintln!("[diagnostics:debug] Target containers: {:?}", all_containers);
+        eprintln!(
+            "[diagnostics:debug] Target containers: {:?}",
+            all_containers
+        );
     }
 
     // --- Phase 3: Wait for containers to start (with exponential backoff) ---
@@ -4660,9 +4858,15 @@ pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, debug: b
         }
 
         if !running_containers.is_empty() {
-            eprintln!("[diagnostics] SUCCESS: monitoring {} containers", running_containers.len());
+            eprintln!(
+                "[diagnostics] SUCCESS: monitoring {} containers",
+                running_containers.len()
+            );
             if debug {
-                eprintln!("[diagnostics:debug] Running containers: {:?}", running_containers);
+                eprintln!(
+                    "[diagnostics:debug] Running containers: {:?}",
+                    running_containers
+                );
             }
             break;
         }
@@ -4671,7 +4875,10 @@ pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, debug: b
             let err_msg = format!(
                 "No containers started within {max_wait_secs}s. Ensure you've launched a project with 'tillandsias /path/'"
             );
-            warn!(spec = "cli-diagnostics", "Diagnostics: timeout waiting for containers");
+            warn!(
+                spec = "cli-diagnostics",
+                "Diagnostics: timeout waiting for containers"
+            );
             eprintln!("[diagnostics] ERROR: {}", err_msg);
             return Err(err_msg);
         }
@@ -4740,7 +4947,8 @@ pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, debug: b
             if let Ok(mut child) = cmd.spawn() {
                 let stdout = child.stdout.take();
                 let stderr = child.stderr.take();
-                let prefix_out = format!("[{}:{}] @trace spec:cli-diagnostics", container_type, owner);
+                let prefix_out =
+                    format!("[{}:{}] @trace spec:cli-diagnostics", container_type, owner);
                 let prefix_err = prefix_out.clone();
 
                 // Spawn a thread for stderr to avoid deadlock from pipe buffering
@@ -4774,10 +4982,7 @@ pub async fn handle_diagnostics(project_path: Option<&std::path::Path>, debug: b
         let _ = child.join();
     }
 
-    info!(
-        spec = "cli-diagnostics",
-        "Diagnostics: stream ended"
-    );
+    info!(spec = "cli-diagnostics", "Diagnostics: stream ended");
 
     Ok(())
 }
@@ -4793,7 +4998,7 @@ pub async fn handle_opencode_project(
 ) -> Result<AppEvent, String> {
     // OpenCode terminal mode: use the standard attach-here flow
     // which defaults to terminal-based OpenCode unless overridden by config.
-    // @trace spec:tray-minimal-ux
+    // @trace spec:tray-minimal-ux, spec:forge-opencode-onboarding
     handle_attach_here(project_path, state, allocator, build_tx).await
 }
 

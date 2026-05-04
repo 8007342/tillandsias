@@ -46,7 +46,10 @@ async fn run_mock_tray_one_shot(socket_path: std::path::PathBuf, cookie: [u8; 32
     // Read the sidecar's Hello.
     let bytes = framed.next().await.unwrap().unwrap();
     let env = decode(&bytes).unwrap();
-    assert!(matches!(env.body, ControlMessage::Hello { .. }), "expected Hello");
+    assert!(
+        matches!(env.body, ControlMessage::Hello { .. }),
+        "expected Hello"
+    );
 
     // Reply HelloAck.
     let ack = ControlEnvelope {

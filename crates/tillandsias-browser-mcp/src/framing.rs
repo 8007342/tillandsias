@@ -6,7 +6,7 @@
 //! @trace spec:host-browser-mcp
 //! @cheatsheet web/mcp.md
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{self, BufRead, Write};
 use thiserror::Error;
 
@@ -54,7 +54,10 @@ impl RpcRequest {
 
         let id = obj.get("id").and_then(|i| i.as_u64());
 
-        let params = obj.get("params").cloned().unwrap_or(Value::Object(Default::default()));
+        let params = obj
+            .get("params")
+            .cloned()
+            .unwrap_or(Value::Object(Default::default()));
 
         Ok(RpcRequest { id, method, params })
     }
@@ -105,7 +108,10 @@ pub fn read_request<R: BufRead>(reader: &mut R) -> Result<RpcRequest, FramingErr
 }
 
 /// Write a single RPC response line to stdout.
-pub fn write_response<W: Write>(writer: &mut W, response: &RpcResponse) -> Result<(), FramingError> {
+pub fn write_response<W: Write>(
+    writer: &mut W,
+    response: &RpcResponse,
+) -> Result<(), FramingError> {
     let line = response.to_line()?;
     if !line.is_empty() {
         writeln!(writer, "{}", line)?;

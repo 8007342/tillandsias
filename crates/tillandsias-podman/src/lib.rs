@@ -48,9 +48,9 @@ pub fn no_window_sync(cmd: &mut std::process::Command) -> &mut std::process::Com
     cmd
 }
 
-pub use client::network_exists_sync;
 pub use client::PodmanClient;
 pub use client::RunOutput;
+pub use client::network_exists_sync;
 pub use events::PodmanEventStream;
 pub use gpu::detect_gpu_devices;
 pub use launch::ContainerLauncher;

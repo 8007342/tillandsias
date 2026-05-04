@@ -6,9 +6,9 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [scripts/install-chromium.sh#L2](../../../scripts/install-chromium.sh#L2)
-- [scripts/install.sh#L14](../../../scripts/install.sh#L14)
-- [scripts/install.sh#L245](../../../scripts/install.sh#L245)
-- [scripts/install.sh#L390](../../../scripts/install.sh#L390)
+- [scripts/install.sh#L15](../../../scripts/install.sh#L15)
+- [scripts/install.sh#L246](../../../scripts/install.sh#L246)
+- [scripts/install.sh#L391](../../../scripts/install.sh#L391)
 - [src-tauri/build.rs#L1](../../../src-tauri/build.rs#L1)
 - [src-tauri/build.rs#L47](../../../src-tauri/build.rs#L47)
 - [src-tauri/src/browser_mcp/launcher.rs#L6](../../../src-tauri/src/browser_mcp/launcher.rs#L6)

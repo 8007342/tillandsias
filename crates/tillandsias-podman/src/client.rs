@@ -16,10 +16,14 @@ pub struct RunOutput {
 /// @trace spec:cross-platform
 #[cfg(target_os = "windows")]
 async fn wsl_distro_exists_async(name: &str) -> bool {
-    let out = match { let mut __c = tokio::process::Command::new("wsl.exe"); crate::no_window_async(&mut __c); __c }
-        .args(["--list", "--quiet"])
-        .output()
-        .await
+    let out = match {
+        let mut __c = tokio::process::Command::new("wsl.exe");
+        crate::no_window_async(&mut __c);
+        __c
+    }
+    .args(["--list", "--quiet"])
+    .output()
+    .await
     {
         Ok(o) => o,
         Err(_) => return false,
@@ -303,10 +307,7 @@ impl PodmanClient {
                         .as_str()
                         .unwrap_or("unknown")
                         .to_string();
-                    let image = inspect["ImageName"]
-                        .as_str()
-                        .unwrap_or("")
-                        .to_string();
+                    let image = inspect["ImageName"].as_str().unwrap_or("").to_string();
                     Ok(ContainerInspect {
                         name: name.to_string(),
                         state,
@@ -337,16 +338,18 @@ impl PodmanClient {
     pub async fn container_list(&self) -> Result<String, PodmanError> {
         #[cfg(target_os = "windows")]
         {
-            let output = { let mut __c = tokio::process::Command::new("wsl.exe"); crate::no_window_async(&mut __c); __c }
-                .args(["--list", "--quiet"])
-                .output()
-                .await
-                .map_err(|e| PodmanError::CommandFailed(format!("wsl --list: {e}")))?;
+            let output = {
+                let mut __c = tokio::process::Command::new("wsl.exe");
+                crate::no_window_async(&mut __c);
+                __c
+            }
+            .args(["--list", "--quiet"])
+            .output()
+            .await
+            .map_err(|e| PodmanError::CommandFailed(format!("wsl --list: {e}")))?;
 
             if !output.status.success() {
-                return Err(PodmanError::CommandFailed(
-                    "wsl --list failed".to_string(),
-                ));
+                return Err(PodmanError::CommandFailed("wsl --list failed".to_string()));
             }
 
             // wsl.exe emits UTF-16 LE on Windows.
@@ -475,10 +478,8 @@ impl PodmanClient {
     pub async fn kill_container(
         &self,
         name: &str,
-        #[cfg(not(target_os = "windows"))]
-        signal: Option<&str>,
-        #[cfg(target_os = "windows")]
-        _signal: Option<&str>,
+        #[cfg(not(target_os = "windows"))] signal: Option<&str>,
+        #[cfg(target_os = "windows")] _signal: Option<&str>,
     ) -> Result<(), PodmanError> {
         #[cfg(target_os = "windows")]
         {
@@ -610,11 +611,15 @@ impl PodmanClient {
             }
 
             // Unregister the distro.
-            let output = { let mut __c = tokio::process::Command::new("wsl.exe"); crate::no_window_async(&mut __c); __c }
-                .args(["--unregister", distro])
-                .output()
-                .await
-                .map_err(|e| PodmanError::CommandFailed(format!("wsl unregister: {e}")))?;
+            let output = {
+                let mut __c = tokio::process::Command::new("wsl.exe");
+                crate::no_window_async(&mut __c);
+                __c
+            }
+            .args(["--unregister", distro])
+            .output()
+            .await
+            .map_err(|e| PodmanError::CommandFailed(format!("wsl unregister: {e}")))?;
 
             if output.status.success() {
                 info!(distro, "WSL distro unregistered successfully");
@@ -869,20 +874,24 @@ impl PodmanClient {
             // minirootfs has no bash by default.
             debug!(distro, %cmd, user, cwd, "Executing command in WSL distro");
 
-            let output = { let mut __c = tokio::process::Command::new("wsl.exe"); crate::no_window_async(&mut __c); __c }
-                .arg("-d")
-                .arg(distro)
-                .arg("--user")
-                .arg(user.to_string())
-                .arg("--cd")
-                .arg(cwd)
-                .arg("--")
-                .arg("/bin/sh")
-                .arg("-c")
-                .arg(cmd)
-                .output()
-                .await
-                .map_err(|e| PodmanError::CommandFailed(format!("wsl.exe: {e}")))?;
+            let output = {
+                let mut __c = tokio::process::Command::new("wsl.exe");
+                crate::no_window_async(&mut __c);
+                __c
+            }
+            .arg("-d")
+            .arg(distro)
+            .arg("--user")
+            .arg(user.to_string())
+            .arg("--cd")
+            .arg(cwd)
+            .arg("--")
+            .arg("/bin/sh")
+            .arg("-c")
+            .arg(cmd)
+            .output()
+            .await
+            .map_err(|e| PodmanError::CommandFailed(format!("wsl.exe: {e}")))?;
 
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -908,11 +917,11 @@ impl PodmanClient {
             debug!(image, %cmd, user, cwd, "Executing command in podman container");
 
             let args = vec![
-                "-q".to_string(),        // Quiet mode — only output the container output
-                "--rm".to_string(),      // Auto-remove the container
+                "-q".to_string(),   // Quiet mode — only output the container output
+                "--rm".to_string(), // Auto-remove the container
                 "--user".to_string(),
                 user.to_string(),
-                "-w".to_string(),        // Working directory
+                "-w".to_string(), // Working directory
                 cwd.to_string(),
                 image.to_string(),
                 "/bin/sh".to_string(),
@@ -1061,8 +1070,8 @@ async fn run_container_wsl_detached(args: &[String]) -> Result<String, PodmanErr
                 continue;
             }
             // Two-arg flags we drop entirely:
-            "-v" | "--add-host" | "--memory" | "--memory-swap"
-            | "--pids-limit" | "--stop-timeout" => {
+            "-v" | "--add-host" | "--memory" | "--memory-swap" | "--pids-limit"
+            | "--stop-timeout" => {
                 i += 2;
                 continue;
             }
@@ -1101,9 +1110,11 @@ async fn run_container_wsl_detached(args: &[String]) -> Result<String, PodmanErr
         }
     }
 
-    let tag = image_tag.ok_or_else(|| PodmanError::CommandFailed(
-        "run_container_wsl_detached: no image tag found in args".to_string(),
-    ))?;
+    let tag = image_tag.ok_or_else(|| {
+        PodmanError::CommandFailed(
+            "run_container_wsl_detached: no image tag found in args".to_string(),
+        )
+    })?;
     let distro = tag.split(':').next().unwrap_or(&tag).to_string();
     let entry = entrypoint.unwrap_or_else(|| "/bin/sh".to_string());
     let container_id = name.unwrap_or_else(|| format!("{distro}-detached"));
@@ -1112,7 +1123,10 @@ async fn run_container_wsl_detached(args: &[String]) -> Result<String, PodmanErr
     // directly (no podman -p mapping in WSL).
     if let Some(hp) = extracted_host_port {
         env_vars.push(format!("OC_EXPOSED_PORT={hp}"));
-        debug!(host_port = hp, "Injected OC_EXPOSED_PORT for WSL detached forge");
+        debug!(
+            host_port = hp,
+            "Injected OC_EXPOSED_PORT for WSL detached forge"
+        );
     }
 
     debug!(
@@ -1122,8 +1136,21 @@ async fn run_container_wsl_detached(args: &[String]) -> Result<String, PodmanErr
     );
 
     // Build the wsl.exe command: wsl.exe -d <distro> --user forge --cd /home/forge --exec env K=V ... <entrypoint> [args...]
-    let mut cmd = { let mut __c = tokio::process::Command::new("wsl.exe"); crate::no_window_async(&mut __c); __c };
-    cmd.args(["-d", &distro, "--user", "forge", "--cd", "/home/forge", "--exec", "env"]);
+    let mut cmd = {
+        let mut __c = tokio::process::Command::new("wsl.exe");
+        crate::no_window_async(&mut __c);
+        __c
+    };
+    cmd.args([
+        "-d",
+        &distro,
+        "--user",
+        "forge",
+        "--cd",
+        "/home/forge",
+        "--exec",
+        "env",
+    ]);
     for ev in &env_vars {
         cmd.arg(ev);
     }
@@ -1246,10 +1273,7 @@ mod tests {
     #[test]
     fn run_output_structure() {
         // Create an ExitStatus via Command — the simplest cross-platform approach.
-        let status = std::process::Command::new("true")
-            .output()
-            .unwrap()
-            .status;
+        let status = std::process::Command::new("true").output().unwrap().status;
 
         let output = RunOutput {
             stdout: "hello".to_string(),

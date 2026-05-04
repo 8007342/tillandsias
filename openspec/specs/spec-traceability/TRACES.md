@@ -7,4 +7,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [scripts/hooks/pre-commit-openspec.sh#L3](../../../scripts/hooks/pre-commit-openspec.sh#L3)
 - [scripts/install-hooks.sh#L3](../../../scripts/install-hooks.sh#L3)
+- [scripts/local-ci.sh#L3](../../../scripts/local-ci.sh#L3)
+- [scripts/run-litmus-test.sh#L2](../../../scripts/run-litmus-test.sh#L2)
 - [scripts/validate-traces.sh#L14](../../../scripts/validate-traces.sh#L14)

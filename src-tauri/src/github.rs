@@ -97,13 +97,26 @@ async fn fetch_repos_wsl() -> Result<Vec<RemoteRepo>, String> {
 
     info!("Fetching remote repos via gh in tillandsias-git WSL distro");
 
-    let mut child = { let mut __c = tokio::process::Command::new("wsl.exe"); tillandsias_podman::no_window_async(&mut __c); __c }
-        .args(["-d", "tillandsias-git", "--user", "git", "--exec", "/bin/sh", "-c", script])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("Failed to spawn wsl.exe: {e}"))?;
+    let mut child = {
+        let mut __c = tokio::process::Command::new("wsl.exe");
+        tillandsias_podman::no_window_async(&mut __c);
+        __c
+    }
+    .args([
+        "-d",
+        "tillandsias-git",
+        "--user",
+        "git",
+        "--exec",
+        "/bin/sh",
+        "-c",
+        script,
+    ])
+    .stdin(Stdio::piped())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn()
+    .map_err(|e| format!("Failed to spawn wsl.exe: {e}"))?;
 
     if let Some(mut stdin) = child.stdin.take() {
         stdin
@@ -247,13 +260,16 @@ async fn clone_repo_wsl(full_name: &str, target_dir: &Path) -> Result<(), String
     // Translate target_dir to /mnt/c/... so gh writes the clone on host fs.
     let target_str = target_dir.to_string_lossy();
     let bytes = target_str.as_bytes();
-    let target_mnt = if bytes.len() >= 3 && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/') {
-        let drive = (bytes[0] as char).to_ascii_lowercase();
-        let rest = target_str[2..].replace('\\', "/");
-        format!("/mnt/{drive}{rest}")
-    } else {
-        return Err(format!("target_dir is not a Windows drive path: {target_str}"));
-    };
+    let target_mnt =
+        if bytes.len() >= 3 && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/') {
+            let drive = (bytes[0] as char).to_ascii_lowercase();
+            let rest = target_str[2..].replace('\\', "/");
+            format!("/mnt/{drive}{rest}")
+        } else {
+            return Err(format!(
+                "target_dir is not a Windows drive path: {target_str}"
+            ));
+        };
 
     info!(repo = %full_name, target = %target_mnt, "Cloning repository via WSL git distro");
 
@@ -262,23 +278,42 @@ async fn clone_repo_wsl(full_name: &str, target_dir: &Path) -> Result<(), String
         "read -r GH_TOKEN; export GH_TOKEN; gh repo clone '{full_name}' '{target_mnt}' </dev/null",
     );
 
-    let mut child = { let mut __c = tokio::process::Command::new("wsl.exe"); tillandsias_podman::no_window_async(&mut __c); __c }
-        .args(["-d", "tillandsias-git", "--user", "git", "--exec", "/bin/sh", "-c", &script])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("Failed to spawn wsl.exe: {e}"))?;
+    let mut child = {
+        let mut __c = tokio::process::Command::new("wsl.exe");
+        tillandsias_podman::no_window_async(&mut __c);
+        __c
+    }
+    .args([
+        "-d",
+        "tillandsias-git",
+        "--user",
+        "git",
+        "--exec",
+        "/bin/sh",
+        "-c",
+        &script,
+    ])
+    .stdin(Stdio::piped())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn()
+    .map_err(|e| format!("Failed to spawn wsl.exe: {e}"))?;
 
     if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(token.as_bytes()).await
+        stdin
+            .write_all(token.as_bytes())
+            .await
             .map_err(|e| format!("Failed to write token to wsl stdin: {e}"))?;
-        stdin.write_all(b"\n").await
+        stdin
+            .write_all(b"\n")
+            .await
             .map_err(|e| format!("Failed to write newline to wsl stdin: {e}"))?;
         drop(stdin);
     }
 
-    let output = child.wait_with_output().await
+    let output = child
+        .wait_with_output()
+        .await
         .map_err(|e| format!("wsl.exe failed: {e}"))?;
 
     if !output.status.success() {

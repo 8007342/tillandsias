@@ -54,8 +54,8 @@ const DE_TOML: &str = include_str!("../../locales/de.toml");
 // ── Supported locales ────────────────────────────────────────────────────────
 
 const SUPPORTED_LOCALES: &[&str] = &[
-    "en", "es", "ja", "zh-Hant", "zh-Hans", "ar", "ko",
-    "hi", "ta", "te", "fr", "pt", "it", "ro", "ru", "nah", "de",
+    "en", "es", "ja", "zh-Hant", "zh-Hans", "ar", "ko", "hi", "ta", "te", "fr", "pt", "it", "ro",
+    "ru", "nah", "de",
 ];
 
 fn is_supported(lang: &str) -> bool {
@@ -124,7 +124,10 @@ fn detect_locale_from_os() -> &'static str {
                 return Box::leak(resolved.to_string().into_boxed_str());
             }
             // Strip region: "es_MX" → "es"
-            let lang = without_encoding.split('_').next().unwrap_or(without_encoding);
+            let lang = without_encoding
+                .split('_')
+                .next()
+                .unwrap_or(without_encoding);
             if is_supported(lang) {
                 // Leak to get &'static str — called once at startup.
                 return Box::leak(lang.to_ascii_lowercase().into_boxed_str());

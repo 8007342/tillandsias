@@ -87,10 +87,7 @@ async fn handle_request(mut sock: TcpStream, store: &'static OtpStore) {
 /// - `Some(true)` — cookie present + valid → 204
 /// - `Some(false)` — cookie present but invalid → 401
 /// - `None` — malformed request or missing cookie → 401
-async fn read_and_dispatch(
-    sock: &mut TcpStream,
-    store: &'static OtpStore,
-) -> Option<bool> {
+async fn read_and_dispatch(sock: &mut TcpStream, store: &'static OtpStore) -> Option<bool> {
     let head = read_head(sock).await?;
 
     // Parse request line: "GET /validate?project=<label> HTTP/1.1"
@@ -104,17 +101,14 @@ async fn read_and_dispatch(
     let project_label = parse_project_query(target)?;
 
     // Find the Cookie header (case-insensitive). Headers are CRLF-separated.
-    let cookie_header = head
-        .lines()
-        .skip(1)
-        .find_map(|l| {
-            let mut split = l.splitn(2, ':');
-            let name = split.next()?.trim();
-            if !name.eq_ignore_ascii_case("cookie") {
-                return None;
-            }
-            Some(split.next()?.trim().to_string())
-        })?;
+    let cookie_header = head.lines().skip(1).find_map(|l| {
+        let mut split = l.splitn(2, ':');
+        let name = split.next()?.trim();
+        if !name.eq_ignore_ascii_case("cookie") {
+            return None;
+        }
+        Some(split.next()?.trim().to_string())
+    })?;
 
     let cookie_b64 = parse_session_cookie(&cookie_header)?;
     let cookie_bytes = parse_cookie_value(cookie_b64)?;
@@ -226,7 +220,10 @@ mod tests {
             Some(&format!("tillandsias_session={cookie_b64}")),
         )
         .await;
-        assert!(resp.starts_with("HTTP/1.1 204"), "expected 204, got: {resp}");
+        assert!(
+            resp.starts_with("HTTP/1.1 204"),
+            "expected 204, got: {resp}"
+        );
     }
 
     #[tokio::test]
@@ -242,7 +239,10 @@ mod tests {
             Some(&format!("tillandsias_session={bogus}")),
         )
         .await;
-        assert!(resp.starts_with("HTTP/1.1 401"), "expected 401, got: {resp}");
+        assert!(
+            resp.starts_with("HTTP/1.1 401"),
+            "expected 401, got: {resp}"
+        );
     }
 
     #[tokio::test]
@@ -250,7 +250,10 @@ mod tests {
         let store: &'static OtpStore = Box::leak(Box::new(OtpStore::new()));
         let port = spawn_serve(store).await;
         let resp = curl(port, "/validate?project=opencode.demo.localhost", None).await;
-        assert!(resp.starts_with("HTTP/1.1 401"), "expected 401, got: {resp}");
+        assert!(
+            resp.starts_with("HTTP/1.1 401"),
+            "expected 401, got: {resp}"
+        );
     }
 
     #[tokio::test]
@@ -267,7 +270,10 @@ mod tests {
             Some(&format!("tillandsias_session={cookie_b64}")),
         )
         .await;
-        assert!(resp.starts_with("HTTP/1.1 401"), "expected 401, got: {resp}");
+        assert!(
+            resp.starts_with("HTTP/1.1 401"),
+            "expected 401, got: {resp}"
+        );
     }
 
     #[tokio::test]
@@ -280,7 +286,10 @@ mod tests {
         let mut buf = Vec::new();
         sock.read_to_end(&mut buf).await.unwrap();
         let resp = String::from_utf8_lossy(&buf);
-        assert!(resp.starts_with("HTTP/1.1 401"), "expected 401, got: {resp}");
+        assert!(
+            resp.starts_with("HTTP/1.1 401"),
+            "expected 401, got: {resp}"
+        );
     }
 
     #[test]
@@ -300,10 +309,7 @@ mod tests {
 
     #[test]
     fn parse_session_cookie_finds_named_value() {
-        assert_eq!(
-            parse_session_cookie("tillandsias_session=abc"),
-            Some("abc")
-        );
+        assert_eq!(parse_session_cookie("tillandsias_session=abc"), Some("abc"));
         assert_eq!(
             parse_session_cookie("foo=bar; tillandsias_session=xyz; baz=qux"),
             Some("xyz")
