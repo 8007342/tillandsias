@@ -505,6 +505,7 @@ pub fn run(
     let container_name = ContainerInfo::container_name(&project_name, genus);
 
     // Ensure cache directory exists
+    // @trace spec:forge-cache-architecture, spec:forge-cache-dual
     let cache = cache_dir();
     if let Err(e) = std::fs::create_dir_all(&cache) {
         warn!(error = %e, path = %cache.display(), "Failed to create cache directory");

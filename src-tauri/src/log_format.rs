@@ -19,7 +19,7 @@
 //! 2026-04-01T18:49:44Z  INFO secrets: Container stopped {container=tillandsias-myapp-aeranthos}
 //! ```
 //!
-//! @trace spec:logging-accountability
+//! @trace spec:logging-accountability, spec:runtime-logging
 
 use std::collections::hash_map::DefaultHasher;
 use std::fmt;

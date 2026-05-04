@@ -12,7 +12,7 @@
 //! **Authed**: Projects ▸ + divider + version + quit
 //! **NetIssue**: GitHub Login + Projects ▸ + divider + version + quit
 //!
-//! @trace spec:simplified-tray-ux, spec:tray-app
+//! @trace spec:simplified-tray-ux, spec:tray-app, spec:tray-ux
 
 use std::sync::atomic::{AtomicU64, Ordering};
 

@@ -560,7 +560,7 @@ fn common_forge_mounts() -> Vec<ProfileMount> {
     // Code comes from git mirror service, packages through proxy.
     // Mounts: pre-built tools overlay + config overlay (both read-only),
     // plus per-container log directory (RW).
-    // @trace spec:proxy-container, spec:layered-tools-overlay, spec:podman-orchestration
+    // @trace spec:proxy-container, spec:layered-tools-overlay, spec:podman-orchestration, spec:forge-cache-architecture, spec:forge-cache-dual
     vec![
         ProfileMount {
             host_key: MountSource::ToolsOverlay,

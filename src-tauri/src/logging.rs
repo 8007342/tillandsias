@@ -10,7 +10,7 @@
 //! Accountability windows (`--log-secrets-management`, etc.) are composable
 //! with `--log` and add a curated stderr layer for sensitive operations.
 //!
-//! @trace spec:logging-accountability
+//! @trace spec:logging-accountability, spec:runtime-logging
 
 use std::io::IsTerminal;
 

@@ -247,6 +247,7 @@ pub(crate) async fn ensure_inference_running(
     ensure_container_log_dir(INFERENCE_CONTAINER_NAME);
 
     // Ensure model cache dir exists
+    // @trace spec:forge-cache-architecture, spec:forge-cache-dual
     let models_cache = cache.join("models");
     std::fs::create_dir_all(&models_cache).ok();
 
@@ -615,6 +616,7 @@ pub(crate) async fn ensure_proxy_running(
     ensure_container_log_dir(PROXY_CONTAINER_NAME);
 
     // Ensure cache dir for proxy exists
+    // @trace spec:forge-cache-architecture, spec:forge-cache-dual
     let proxy_cache = cache.join("proxy-cache");
     std::fs::create_dir_all(&proxy_cache).ok();
 
@@ -2859,6 +2861,7 @@ pub async fn handle_attach_here(
     }
 
     // Ensure cache directories exist
+    // @trace spec:forge-cache-architecture, spec:forge-cache-dual
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
 
@@ -3202,6 +3205,7 @@ pub async fn handle_attach_web(
         }
     }
 
+    // @trace spec:forge-cache-architecture, spec:forge-cache-dual
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
 
@@ -3761,6 +3765,7 @@ pub async fn handle_terminal(
         }
     }
 
+    // @trace spec:forge-cache-architecture, spec:forge-cache-dual
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
 
@@ -3970,6 +3975,7 @@ pub async fn handle_root_terminal(
         }
     }
 
+    // @trace spec:forge-cache-architecture, spec:forge-cache-dual
     let cache = cache_dir();
     std::fs::create_dir_all(&cache).ok();
 

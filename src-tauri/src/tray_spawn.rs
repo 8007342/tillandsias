@@ -1,4 +1,4 @@
-//! @trace spec:tray-cli-coexistence
+//! @trace spec:tray-cli-coexistence, spec:tray-ux
 //!
 //! Spawn a detached child process running the tray, alongside a CLI mode.
 //!

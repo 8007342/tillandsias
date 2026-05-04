@@ -19,7 +19,7 @@
 //!   Quit Tillandsias         ┘
 //! ```
 //!
-//! @trace spec:tray-app
+//! @trace spec:tray-app, spec:tray-ux
 
 use std::path::PathBuf;
 use std::sync::Mutex;

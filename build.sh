@@ -21,7 +21,7 @@
 
 set -euo pipefail
 
-# @trace spec:dev-build, spec:appimage-build-pipeline
+# @trace spec:dev-build, spec:appimage-build-pipeline, spec:windows-cross-build
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLBOX_NAME="$(basename "$SCRIPT_DIR")"
