@@ -204,8 +204,12 @@ build_appimage() {
 
     # Clean stale apt locks from previous interrupted builds
     # @trace spec:appimage-build-pipeline
-    rm -f "$cache_base/apt/archives/lock" 2>/dev/null || true
-    rm -rf "$cache_base/apt/partial" 2>/dev/null || true
+    rm -f "$cache_base/apt/archives/lock" "$cache_base/apt/lists/lock" 2>/dev/null || true
+    rm -rf "$cache_base/apt/partial" "$cache_base/apt/lists/partial" 2>/dev/null || true
+    # Also clean any stray apt processes that might be holding locks
+    pkill -9 -f "apt-get|dpkg" 2>/dev/null || true
+    # Wait for process cleanup
+    sleep 1
 
     # Remove old AppImages — avoids "Text file busy" if one is still running.
     # On Linux, rm unlinks the file but running processes keep their fd.
@@ -239,22 +243,27 @@ build_appimage() {
 set -euo pipefail
 
 # System deps — apt cache and lists are persistent across builds (RW mounts)
-# apt-get update will be skipped if lists are cached (modified within last 24h)
+# apt-get update will be skipped if real package metadata exists and is recent
 echo "[appimage] Installing system dependencies..."
 should_update=true
-if [[ -d /var/lib/apt/lists ]] && [[ -n "$(ls -A /var/lib/apt/lists 2>/dev/null)" ]]; then
-    # Lists directory exists and has files — check age
-    lists_mtime="$(stat -c %Y /var/lib/apt/lists 2>/dev/null || echo 0)"
+# Check for actual package metadata files (not just empty directory)
+if [[ -f /var/lib/apt/lists/lock ]] && [[ -n "$(find /var/lib/apt/lists -name '*.gz' -o -name 'Release' 2>/dev/null | head -1)" ]]; then
+    # Real package metadata exists — check age of lock file
+    lock_mtime="$(stat -c %Y /var/lib/apt/lists/lock 2>/dev/null || echo 0)"
     current_time="$(date +%s)"
-    age_seconds=$((current_time - lists_mtime))
+    age_seconds=$((current_time - lock_mtime))
     if [[ $age_seconds -lt 86400 ]]; then
         echo "[appimage] Apt lists cached ($(( age_seconds / 3600 ))h old) — skipping update"
         should_update=false
+    else
+        echo "[appimage] Apt lists stale (>24h) — refreshing"
     fi
+else
+    echo "[appimage] No cached apt lists found — will update"
 fi
 if [[ "$should_update" == "true" ]]; then
-    echo "[appimage] Updating apt lists..."
-    apt-get update -qq || apt-get update  # Retry without -qq on failure
+    echo "[appimage] Running apt-get update (this may take 30-60s)..."
+    timeout 120 apt-get update -qq || apt-get update  # Retry without -qq, with timeout
 fi
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     build-essential \
