@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-# @trace spec:nix-builder, spec:default-image
+# @trace spec:nix-builder, spec:default-image, spec:dev-build
 
 # ---------------------------------------------------------------------------
 # macOS PATH fix: Finder-launched apps don't inherit shell PATH.

@@ -17,7 +17,7 @@
 #   0 = all secrets created successfully
 #   1 = podman unavailable or secret creation failed
 #
-# @trace spec:secrets-management, spec:podman-secrets-integration
+# @trace spec:secrets-management, spec:podman-secrets-integration, spec:gh-auth-script
 
 set -euo pipefail
 

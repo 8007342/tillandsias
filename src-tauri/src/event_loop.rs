@@ -3,7 +3,7 @@
 //! Multiplexes scanner events, podman events, menu actions, and shutdown
 //! signals into a single async loop that drives all tray state updates.
 //!
-//! @trace spec:tray-app, spec:podman-orchestration
+//! @trace spec:tray-app, spec:podman-orchestration, spec:no-terminal-flicker
 
 use std::time::{Duration, Instant};
 

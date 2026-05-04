@@ -4,7 +4,7 @@
 //! names. Used by `log_format::TillandsiasFormat` to render `@trace` lines
 //! in accountability-tagged log events.
 //!
-//! @trace spec:logging-accountability
+//! @trace spec:logging-accountability, spec:logging-levels, spec:observability-convergence, spec:runtime-logging
 
 // ---------------------------------------------------------------------------
 // Spec URL generation

@@ -1,3 +1,5 @@
+// @trace spec:forge-forward-compat
+
 use std::path::{Path, PathBuf};
 
 use tracing::{debug, warn};

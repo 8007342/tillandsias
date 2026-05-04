@@ -1,6 +1,8 @@
 <!-- @trace spec:ci-release -->
 
-## Status: active
+## Status
+
+active
 
 ## Requirements
 

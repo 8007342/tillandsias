@@ -26,7 +26,7 @@
 //!   - System directories (/etc, /var, /usr)
 //!   - Docker/Podman socket (no container-in-container)
 //!
-//! @trace spec:podman-orchestration, spec:default-image, spec:tray-app
+//! @trace spec:podman-orchestration, spec:default-image, spec:tray-app, spec:download-telemetry, spec:forge-cache-dual, spec:overlay-mount-cache, spec:persistent-git-service, spec:tools-overlay-fast-reuse
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;

@@ -1,4 +1,4 @@
-//! @trace spec:podman-orchestration
+//! @trace spec:podman-orchestration, spec:fix-podman-machine-host-aliases, spec:fix-windows-image-routing, spec:subdomain-naming-flip
 
 use tracing::{debug, info};
 

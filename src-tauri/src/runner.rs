@@ -4,7 +4,7 @@
 //! image, prints formatted progress, then execs `podman run -it --rm`
 //! with inherited stdio so the container terminal passes through.
 //!
-//! @trace spec:cli-mode, spec:podman-orchestration, spec:default-image
+//! @trace spec:cli-mode, spec:podman-orchestration, spec:default-image, spec:appimage-build-pipeline
 
 use std::path::{Path, PathBuf};
 

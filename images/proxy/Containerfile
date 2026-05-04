@@ -1,4 +1,4 @@
-# @trace spec:proxy-container
+# @trace spec:proxy-container, spec:reverse-proxy-internal
 # MITM caching HTTP/HTTPS forward proxy for Tillandsias enclave network.
 # Built on Alpine + squid — minimal footprint (~15-20MB).
 # DISTRO: Alpine 3.20 — busybox sh default, bash installed explicitly.
@@ -7,7 +7,7 @@
 #         User creation: adduser -D (NOT useradd).
 FROM docker.io/library/alpine:3.20
 
-# @trace spec:proxy-container
+# @trace spec:proxy-container, spec:reverse-proxy-internal
 # Squid + SSL for MITM proxy; squid + openssl for SSL bump support
 # ca-certificates for upstream TLS verification
 # bash: entrypoint.sh uses #!/bin/bash (busybox sh would also work but bash is explicit)

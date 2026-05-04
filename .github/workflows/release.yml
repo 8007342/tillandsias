@@ -1,4 +1,4 @@
-# @trace spec:ci-release
+# @trace spec:ci-release, spec:binary-signing, spec:windows-cross-build
 name: Release
 
 on:

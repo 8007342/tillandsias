@@ -13,7 +13,7 @@
 #   0 = all secrets removed successfully (or already absent)
 #   1 = podman unavailable
 #
-# @trace spec:secrets-management, spec:podman-secrets-integration
+# @trace spec:secrets-management, spec:podman-secrets-integration, spec:secret-rotation
 
 set -euo pipefail
 

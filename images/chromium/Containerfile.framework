@@ -1,4 +1,4 @@
-# @trace spec:browser-isolation-framework
+# @trace spec:browser-isolation-framework, spec:chromium-debug-variant
 # Extended Chromium container with SDK tools, automation libraries, and fonts.
 # Extends tillandsias-chromium-core with:
 #   - Playwright for browser automation

@@ -58,6 +58,7 @@ use updater::UpdateState;
 /// Set once during setup, never replaced.
 static TRAY_ICON: std::sync::OnceLock<Mutex<tauri::tray::TrayIcon>> = std::sync::OnceLock::new();
 
+// @trace spec:tray-ux
 fn main() {
     // Parse CLI arguments first — before any heavy initialization.
     let (cli_mode, log_config) = match cli::parse() {
