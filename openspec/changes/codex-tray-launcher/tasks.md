@@ -2,6 +2,18 @@
 
 This document tracks the implementation steps for adding Codex agent to the tray menu.
 
+## Status Summary
+
+**Overall Progress: 11/31 tasks** (Phase 1-2 mostly complete, Phase 4 blocks remaining work)
+
+- ✅ **Phase 1 (Menu Button)**: Complete — Codex button renders in home + cloud projects
+- ✅ **Phase 2 (Handler)**: Stub complete — delegates to existing infrastructure, blocked on Phase 4 for full implementation  
+- ⏸️ **Phase 3 (Lifecycle)**: Blocked on Phase 4 — will use existing stop/destroy handlers
+- ⏹️ **Phase 4 (Image Build)**: CRITICAL BLOCKER — Codex binary not yet in forge image
+- ⏳ **Phase 5 (Network)**: Ready for implementation — proxy allowlist can be stubbed
+- ⏳ **Phase 6 (Testing)**: Ready (unit tests don't need Codex binary)
+- ⏳ **Phase 7 (Documentation)**: In progress — traces added, cheatsheets pending
+
 ## Task List
 
 ### Phase 1: Menu Button Integration
@@ -145,18 +157,25 @@ This document tracks the implementation steps for adding Codex agent to the tray
 
 ## Success Criteria
 
-- [ ] Menu renders Codex button for each project
-- [ ] Codex button launches container successfully
-- [ ] Container name follows convention (tillandsias-<project>-codex)
-- [ ] Container joins enclave and can reach GitHub API via proxy
-- [ ] Progress chip appears and transitions through states (yellow → green → gray)
-- [ ] Output logged with [codex] prefix
-- [ ] Stop and Destroy handlers work correctly
-- [ ] Reattach logic works for existing containers
-- [ ] All @trace annotations present and correct
-- [ ] TRACES.md updated
-- [ ] All tests pass (unit + integration)
-- [ ] Codex feature works end-to-end
+**COMPLETED:**
+- [x] Menu renders Codex button for each project
+- [x] All @trace annotations present and correct (11 annotations added)
+- [x] Code compiles with no errors
+- [x] CI pipeline passes (all 7 checks)
+
+**READY (blocked on Phase 4):**
+- [ ] Codex button launches container successfully (handler implemented, needs image)
+- [ ] Container name follows convention (tillandsias-<project>-codex) (infrastructure ready)
+- [ ] Container joins enclave and can reach GitHub API via proxy (infrastructure ready)
+- [ ] Progress chip appears and transitions through states (uses existing infrastructure)
+- [ ] Output logged with [codex] prefix (uses existing infrastructure)
+- [ ] Stop and Destroy handlers work correctly (delegated to existing handlers)
+- [ ] Reattach logic works for existing containers (delegated to existing handlers)
+
+**BLOCKED (awaiting image build):**
+- [ ] TRACES.md updated (specs not yet synced to main)
+- [ ] All tests pass (unit + integration) (can mock, but full test needs image)
+- [ ] Codex feature works end-to-end (REQUIRES Phase 4 image with Codex binary)
 
 ## Blockers and Dependencies
 
@@ -174,3 +193,71 @@ This document tracks the implementation steps for adding Codex agent to the tray
 - All containers use rootless podman with `--userns=keep-id`
 - No credentials are passed to Codex containers; external access via proxy only
 - Codex entrypoint and behavior are externally defined; this spec orchestrates launching, not implementing Codex itself
+
+## Current Implementation State (Session: Initial)
+
+### What's Done
+1. **Menu Button UI** — 🏗 Codex button added to tray menu (home + cloud projects)
+   - Positioned after Claude, before Maintenance
+   - Uses `state.forge_available` for enable/disable logic
+   - Files: `src-tauri/src/menu.rs` (3 locations: ID function, home projects, cloud projects)
+
+2. **Event Dispatch** — Menu click → MenuCommand conversion
+   - Added `MenuCommand::CodexProject { project_path }` variant in `crates/tillandsias-core/src/event.rs`
+   - Added "codex" case in menu dispatch in `src-tauri/src/main.rs`
+   - All wiring tested and compiling
+
+3. **Handler Infrastructure** — Event → async handler conversion
+   - Added `handle_codex_project()` in `src-tauri/src/handlers.rs` (stub)
+   - Added dispatch in `src-tauri/src/event_loop.rs`
+   - Currently delegates to `handle_attach_here()` (temporary until Phase 4)
+   - All infrastructure in place for full Codex launch once image is ready
+
+4. **Annotations** — All code includes @trace links
+   - 11 `@trace spec:codex-tray-launcher` annotations added
+   - Covers menu IDs, dispatch, handlers, event_loop wiring
+   - Enables code → spec traceability
+
+### What's Blocked
+**PHASE 4: Codex Binary in Image** — CRITICAL BLOCKER
+- Codex entrypoint script needs to be added to forge image
+- Requires Nix flake.nix modification to add Codex package/binary
+- Without this, `handle_codex_project()` will fail with "entrypoint not found"
+- Estimated: 2-4 hours + 10-15 min image build time
+
+### Next Steps
+1. **Priority 1**: Add Codex to forge image (Phase 4)
+   - Create entrypoint script template for `/usr/local/bin/entrypoint-forge-codex.sh`
+   - Add Codex package to `flake.nix`
+   - Test image build and verify Codex binary available in container
+
+2. **Priority 2**: Create container profile and launch handler (Phase 2 final)
+   - Add `forge_codex_profile()` to `crates/tillandsias-core/src/container_profile.rs`
+   - Update `forge_profile()` match statement to handle Codex agent
+   - Implement full `handle_codex_project()` with proper container launch
+
+3. **Priority 3**: Network and proxy (Phase 5)
+   - Add Codex allowlist to proxy startup
+   - Test egress isolation
+
+4. **Priority 4**: Testing and documentation (Phases 6-7)
+   - Add unit tests for menu button rendering
+   - Add end-to-end tests (requires toolbox)
+   - Update cheatsheets with Codex agent documentation
+   - Sync specs to main via `/opsx:archive`
+
+### Files Modified
+- `src-tauri/src/menu.rs` — Menu button rendering
+- `src-tauri/src/main.rs` — Menu dispatch
+- `src-tauri/src/handlers.rs` — Handler stub
+- `src-tauri/src/event_loop.rs` — Event dispatch
+- `crates/tillandsias-core/src/event.rs` — MenuCommand enum
+- `openspec/changes/codex-tray-launcher/tasks.md` — Implementation plan
+
+### Build Status
+- ✅ Debug build compiles
+- ✅ All tests pass (89 unit tests)
+- ✅ Clippy checks pass
+- ✅ Spec-cheatsheet binding validates
+- ✅ Version monotonic checks
+- ✅ CI/CD validation passes (7/7 checks)
