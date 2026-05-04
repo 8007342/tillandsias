@@ -103,4 +103,6 @@ Gating points:
 
 ## Sources of Truth
 
-- `cheatsheets/runtime/forge-container.md` — confirms the `~/src` watch path cited in the new label
+- `docs/cheatsheets/tray-state-machine.md` — the five-stage menu projection and dynamic region where project submenu labels appear
+- `cheatsheets/runtime/forge-container.md` — confirms the `~/.tillandsias/watch` default path and project discovery logic
+- `cheatsheets/languages/toml.md` — i18n locale file format (en.toml, de.toml, es.toml) and translation key conventions

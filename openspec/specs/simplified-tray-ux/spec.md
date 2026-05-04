@@ -193,7 +193,9 @@ Command-line invocation (`tillandsias <path>`) MUST preserve current defaults:
 
 ## Sources of Truth
 
-- Project memory: `feedback_tray_first_ux` — tray-first architecture, zero maintenance
+- `cheatsheets/runtime/tray-state-machine.md` — the five-stage menu projection, dynamic region composition, state transitions driven by enclave/credential/remote health
+- `cheatsheets/architecture/event-driven-basics.md` — event-driven menu updates instead of polling or rebuilds
+- `cheatsheets/welcome/tray-minimal-ux.md` — minimal launch UI with four static elements and progressive disclosure as environment readies
 
 ## Litmus Tests
 

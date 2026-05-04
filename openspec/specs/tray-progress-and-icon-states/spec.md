@@ -103,4 +103,6 @@ Gating points:
 
 ## Sources of Truth
 
-- Project memory: `feedback_design_philosophy` — single line, detail in logs
+- `cheatsheets/runtime/tray-state-machine.md` — stage-driven menu transitions and the `(enclave_health, credential_health, remote_repo_fetch_status)` triple that determines which UI elements are visible
+- `cheatsheets/welcome/tray-minimal-ux.md` — progressive disclosure pattern: minimal launch state expands to full menu only after subsystems complete
+- `cheatsheets/runtime/container-lifecycle.md` — container readiness signals and health check patterns informing subsystem completion emoji sequence
