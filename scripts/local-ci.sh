@@ -217,6 +217,34 @@ echo ""
 printf '%b%s%b\n' "${BOLD}" "═════════════════════════════════════════" "${NC}"
 
 TOTAL=$((CHECKS_PASSED + CHECKS_FAILED))
+
+# Calculate and display metrics
+if [[ $TOTAL -gt 0 ]]; then
+    PASS_RATE=$((CHECKS_PASSED * 100 / TOTAL))
+else
+    PASS_RATE=0
+fi
+
+# Display success metrics
+echo ""
+printf '%b📊 Success Metrics%b\n' "${BOLD}${GREEN}" "${NC}"
+printf '   Passed:  %d\n' "$CHECKS_PASSED"
+printf '   Failed:  %d\n' "$CHECKS_FAILED"
+printf '   Skipped: %d\n' "$CHECKS_SKIPPED"
+printf '   Pass Rate: %d%% (%d/%d)\n' "$PASS_RATE" "$CHECKS_PASSED" "$TOTAL"
+echo ""
+
+# Visual progress bar
+if [[ $TOTAL -gt 0 ]]; then
+    BAR_WIDTH=30
+    FILLED=$((PASS_RATE * BAR_WIDTH / 100))
+    EMPTY=$((BAR_WIDTH - FILLED))
+    BAR=$(printf '%.*s' "$FILLED" "████████████████████████████████")
+    EMPTY_BAR=$(printf '%.*s' "$EMPTY" "                              ")
+    printf '   Progress: %b%s%b%s %d%%\n' "${GREEN}" "$BAR" "${NC}" "$EMPTY_BAR" "$PASS_RATE"
+fi
+echo ""
+
 printf '%b Results:%b %d passed, %d failed, %d skipped\n' "${BOLD}" "${NC}" \
     "$CHECKS_PASSED" "$CHECKS_FAILED" "$CHECKS_SKIPPED" >&2
 
