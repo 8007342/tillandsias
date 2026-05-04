@@ -9,7 +9,7 @@
 
 versioning_system:
   description: >
-    Tillandsias uses Calendar Versioning (CalVer) with build counter and commit hash.
+    This component defines Calendar Versioning (CalVer) with build counter and commit hash.
     This format is naturally monotonic, CRDT-safe, and human-readable. It forms the
     basis for proving monotonic convergence: every released artifact links back to
     a spec version through bidirectional tracing (@trace spec:name).
@@ -84,10 +84,10 @@ versioning_system:
 
     semantic_gap_closure:
       description: >
-        The original Tillandsias versioning (Major.Minor.ChangeCount.Build) mixed
-        semantic intent (ChangeCount = OpenSpec changes archived) with monotonic
-        count (Build = local builds). This caused ambiguity:
-        v0.1.161.258 vs v0.1.160.999 — which is newer? (Different components increased!)
+        The prior versioning scheme (Major.Minor.ChangeCount.Build) mixed semantic intent
+        (ChangeCount = spec changes archived) with monotonic count (Build = local builds).
+        This caused ambiguity: v0.1.161.258 vs v0.1.160.999 — which is newer?
+        (Different components increased!)
 
       solution: >
         CalVer system cleanly separates concerns:
@@ -96,6 +96,38 @@ versioning_system:
         - Build: monotonic counter (local, merges via LUB)
 
         Now v0.1.260101.5 is always less than v0.1.260102.1 (time is the tiebreaker).
+
+  crdt_compliance_rationale:
+    description: >
+      CalVer + Build counter enables CRDT-safe version merges. This justifies the design
+      choice over alternative schemes. The mathematical properties must hold for the
+      convergence system to work.
+
+    why_calver_is_crdt_safe: >
+      CalVer's YYMMDD component is strictly ordered by the passage of time (a total
+      order that is both monotonic and convergent). This makes it a valid element in a
+      CRDT join-semilattice: time only moves forward, so LUB(YYMMDD_A, YYMMDD_B) = max(YYMMDD).
+      Combining with Build counter via component-wise maximum preserves CRDT properties.
+
+    why_semver_fails_crdt: >
+      SemVer (Major.Minor.Patch) allows arbitrary resets: Patch can go 1→2→1 if someone
+      hotfixes a branch. There is no natural total order. Two concurrent patches to 1.0.0
+      produce 1.0.1 on both branches, and LUB(1.0.1, 1.0.1) = 1.0.1 — indistinguishable
+      from 1.0.1 on one machine. Without a temporal anchor, CRDT merge loses causality.
+
+    why_monotonic_counter_alone_fails: >
+      A simple monotonic counter (1, 2, 3...) is CRDT-safe per machine but conflicts across
+      machines: both can be at counter=12 independently, and LUB(12, 12) = 12 — indistinguishable
+      from 12 on one machine. Adding a node_id helps (12-A vs 12-B), but now versions are no
+      longer human-readable or directly comparable as numbers/strings.
+
+    why_calver_plus_build_is_optimal: >
+      YYMMDD provides the temporal anchor (total order by date, naturally monotonic).
+      Build provides per-day monotonic ordering. Together, they form a 2-component
+      join-semilattice where: LUB(v0.1.260101.5, v0.1.260102.3) = v0.1.260102.5.
+      This merge operation is commutative (order-independent), associative, idempotent,
+      and convergent — mathematically guaranteed to preserve convergence across concurrent
+      merges. This is the guarantee that was missing from the prior scheme.
 
 branch_versioning_discipline:
   description: >
@@ -289,13 +321,13 @@ artifacts_and_tracing:
     Match artifact version to spec version → proof of convergence.
 
   example:
-    artifact: "tillandsias v0.1.260103.7+g7h8i9j (AppImage, released May 3)"
+    artifact: "<project> v0.1.260103.7+g7h8i9j (binary artifact, released May 3)"
     matching_spec: "inference-container spec version v0.1.260103.7"
     proof_of_convergence: >
-      Artifact version == Spec version → The released tray is the exact implementation
+      Artifact version == Spec version → The released artifact is the exact implementation
       of the inference-container spec. They converged. git log shows the commit (g7h8i9j)
-      that produced both. Timeline proves monotonic reduction: every version bumps only
-      when a spec is archived.
+      that produced both. Timeline proves monotonic reduction: every version bump corresponds
+      to a spec integration event.
 
 metadata_tracking:
   purpose: >

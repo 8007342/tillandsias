@@ -34,7 +34,7 @@ ephemeral_work_problem:
 lamport_clock_system:
   description: >
     Lamport clocks order events causally without requiring synchronized clocks.
-    In Tillandsias, each agent maintains a local Lamport clock to timestamp
+    In this methodology, each agent maintains a local Lamport clock to timestamp
     iterations. The clock respects causality: if event A causes event B,
     then clock(A) < clock(B).
 
@@ -244,21 +244,21 @@ failure_modes_and_recovery:
   clock_desynchronization:
     description: "Agent A and B's clocks diverge; iterations out of order"
     cause: >
-      Agent B didn't fetch from main before merging; doesn't know Agent A's final clock.
+      Agent B didn't fetch from integration branch before merging; doesn't know Agent A's final clock.
     detection: "Iteration tuples (clock, agent_id) are not sorted"
     prevention: >
-      Before merge, agents fetch origin/main and update local metadata from
-      .tillandsias/ephemeral-merges.jsonl (sync clock baseline).
+      Before merge, agents fetch from the integration branch and update local metadata from
+      <ephemeral-metadata-log> (sync clock baseline).
     recovery: >
-      Re-sort iterations by (lamport_clock, agent_id), rewrite .ephemeral-merges.jsonl.
+      Re-sort iterations by (lamport_clock, agent_id), rewrite <ephemeral-metadata-log>.
       Causality is preserved by sort order.
 
   concurrent_merge_conflicts:
-    description: "Two agents try to merge to main simultaneously"
+    description: "Two agents try to merge to integration branch simultaneously"
     prevention: >
-      Git's push lock prevents this. First agent's push succeeds; second agent
-      gets rejection, must fetch and re-base (rare, short-lived).
-    recovery: "Second agent: git fetch, re-read .ephemeral-merges.jsonl, update clock, retry push"
+      VCS push lock prevents this. First agent's push succeeds; second agent gets rejection,
+      must fetch integration branch and re-base (rare, short-lived).
+    recovery: "Second agent: fetch integration branch, re-read <ephemeral-metadata-log>, update clock, retry push"
 
 implementation_phases:
   phase_1_core_library:
