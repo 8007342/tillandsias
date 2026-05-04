@@ -60,6 +60,262 @@ methodology:
     knowledge, code implements behavior, traces provide evidence, litmus tests define
     decision boundaries, and CI enforces correctness and convergence.
 
+  authority:
+    source_of_truth: methodology.yaml
+    rule: >
+      This file is the authoritative bootstrap and methodology contract for agents.
+      If another project instruction file conflicts with this methodology, agents
+      MUST follow methodology.yaml and report the conflict as drift.
+    non_authoritative_files:
+      - file: CLAUDE.md
+        role: >
+          Local project notes for Claude-compatible tools. It may summarize build
+          commands and repository layout, but it MUST NOT redefine methodology,
+          OpenSpec discipline, versioning, trace rules, bootstrap policy, or
+          agent orchestration.
+
+  bootstrap_contract:
+    purpose: >
+      Give a zero-context agent enough structure to start work without requiring
+      a long human preamble, while preventing shallow reads of the root index.
+
+    mandatory_read_closure:
+      always:
+        - methodology.yaml
+        - methodology/philosophy.yaml
+        - methodology/convergence.yaml
+        - methodology/verification.yaml
+      rule: >
+        These files are mandatory before any task classification is considered
+        complete. An agent MAY summarize them after reading, but MUST NOT skip them
+        because they appear dense, familiar, or indirectly relevant.
+
+    task_classification:
+      allowed_classes:
+        - code_change
+        - bug_fix
+        - compile_or_test
+        - spec_change
+        - litmus_change
+        - cheatsheet_change
+        - release_or_versioning
+        - batch_agent_work
+        - documentation
+        - unknown
+      rule: >
+        Classify the task after reading the mandatory closure. If classification is
+        unknown or spans multiple classes, take the union of all applicable read
+        sets. When uncertainty remains material, ask one concise clarifying question
+        before editing.
+
+    role_read_closure:
+      code_change:
+        - methodology/spec-system.yaml
+        - methodology/ci.yaml
+        - methodology/litmus.yaml
+      bug_fix:
+        - methodology/spec-system.yaml
+        - methodology/ci.yaml
+        - methodology/litmus.yaml
+      compile_or_test:
+        - methodology/ci.yaml
+        - methodology/litmus.yaml
+      spec_change:
+        - methodology/spec-system.yaml
+        - methodology/litmus.yaml
+        - methodology/cheatsheets.yaml
+      litmus_change:
+        - methodology/litmus.yaml
+        - methodology/spec-system.yaml
+        - openspec/litmus-bindings.yaml
+      cheatsheet_change:
+        - methodology/cheatsheets.yaml
+        - methodology/spec-system.yaml
+        - methodology/litmus.yaml
+      release_or_versioning:
+        - methodology/versioning.yaml
+        - methodology/ci.yaml
+      batch_agent_work:
+        - methodology/between-commits-work-discipline.yaml
+        - methodology/ci.yaml
+      documentation:
+        - methodology/spec-system.yaml
+        - methodology/cheatsheets.yaml
+        - methodology/ci.yaml
+      unknown:
+        - methodology/spec-system.yaml
+        - methodology/litmus.yaml
+        - methodology/cheatsheets.yaml
+        - methodology/ci.yaml
+        - methodology/versioning.yaml
+        - methodology/between-commits-work-discipline.yaml
+
+    concrete_reference_policy:
+      rule: >
+        After loading the task read closure, recursively read concrete local file
+        references that govern the task. Report missing concrete references as
+        methodology drift. Placeholder paths such as <project>/<metadata-dir> are
+        examples unless bound by an actual repository file.
+      missing_reference_severity:
+        governs_current_task: hard_blocker
+        unrelated_to_current_task: warning
+
+    pre_edit_receipt:
+      required_before_source_edits: true
+      fields:
+        - task_class
+        - files_read
+        - governing_specs_or_traces
+        - missing_or_conflicting_references
+        - intended_change_scope
+        - verification_plan
+      rule: >
+        Agents starting from methodology.yaml MUST emit this receipt before editing.
+        Coordinator agents may store receipts in their orchestration log instead of
+        showing all detail to the user, but the receipt must remain queryable.
+
+    compact_bootstrap_prompt: >
+      Read methodology.yaml as the authoritative bootstrap contract. Load the
+      mandatory read closure, classify the task, recursively read the task-specific
+      closure and concrete governing references, then produce a bootstrap receipt
+      before editing.
+
+  agent_observability_protocol:
+    purpose: >
+      Make agent-to-agent work visible, queryable, and compressible while preserving
+      accountability. Progress displays are UI sugar over structured events, not
+      replacement evidence.
+
+    event_stream:
+      format: jsonl
+      location_template: "<project>/<metadata-dir>/agent-events.jsonl"
+      ordering: "sort by (lamport_clock, agent_id, event_seq)"
+      required_fields:
+        - event_id
+        - parent_event_id
+        - task_id
+        - spec_id
+        - agent_id
+        - lamport_clock
+        - event_seq
+        - status
+        - progress
+        - summary
+        - evidence_refs
+        - timestamp
+      status_values:
+        - queued
+        - bootstrapping
+        - reading
+        - planning
+        - editing
+        - verifying
+        - blocked
+        - done
+        - failed
+
+    progress_semantics:
+      range: "0..100"
+      rule: >
+        Progress is a bounded estimate for coordination and display. It MUST NOT be
+        used as proof of correctness. Correctness still comes from specs, traces,
+        litmus tests, CI, and evidence bundles.
+      monotonic_within_task: true
+      allowed_regression: >
+        Progress may decrease only when the task emits a blocked, failed, or
+        scope_changed event with a root-cause summary and updated evidence_refs.
+      recommended_weights:
+        bootstrap_receipt: 10
+        governing_context_loaded: 25
+        plan_ready: 35
+        edits_complete: 65
+        local_verification_started: 75
+        verification_passed: 90
+        evidence_recorded: 100
+
+    display_hints:
+      plain_text_bar:
+        width: 20
+        filled: "#"
+        empty: "-"
+        template: "{task_name} [{bar}] {progress}% {status}"
+      rich_text_bar:
+        width: 24
+        filled: "█"
+        partial: "▒"
+        empty: " "
+        template: "{indent}{task_name} [{bar}] {progress}% {status}"
+      style_tokens:
+        queued:
+          emphasis: muted
+          background: neutral
+        bootstrapping:
+          emphasis: strong
+          background: blue
+        reading:
+          emphasis: normal
+          background: cyan
+        planning:
+          emphasis: normal
+          background: indigo
+        editing:
+          emphasis: strong
+          background: amber
+        verifying:
+          emphasis: strong
+          background: violet
+        blocked:
+          emphasis: strong
+          background: red
+        done:
+          emphasis: strong
+          background: green
+        failed:
+          emphasis: strong
+          background: red
+      background_agent_display:
+        rule: >
+          Background agents remain visible as compact rows until done, failed, or
+          stale. Collapsed rows show task name, status, progress, newest blocker,
+          and latest evidence_ref count.
+        compact_template: "{task_name} [{bar}] {progress}% {status} refs:{evidence_count}"
+      nested_display:
+        rule: >
+          Render specs as parent tasks and implementation/litmus/cheatsheet steps
+          as children. Parent progress is the weighted average of child progress,
+          capped below 100 until required evidence_refs are present.
+      examples:
+        - "browser-isolation-core [##############------] 72% verifying"
+        - "  litmus:browser-ephemeral [################--] 88% verifying"
+        - "  code trace coverage [###########---------] 55% editing"
+
+    agent_to_agent_messages:
+      rule: >
+        Agents communicate by appending events and by sending compact task handoffs.
+        A handoff must include task_id, spec_id, bootstrap_receipt_ref, current
+        status, progress, blockers, and evidence_refs. It must not depend on hidden
+        conversational memory.
+      handoff_schema:
+        task_id: string
+        spec_id: string
+        parent_task_id: string
+        bootstrap_receipt_ref: string
+        current_status: string
+        progress: integer
+        blockers: list
+        evidence_refs: list
+        next_action: string
+
+    stale_tracking_policy:
+      stale_after: "10 minutes without a new event for active work"
+      stale_action: >
+        Mark the task stale in the display and require the next agent touching it
+        to emit a fresh reading or verifying event before continuing.
+      recovery: >
+        Reconstruct current task state from the latest event per task_id, sorted
+        by Lamport order. If two latest events conflict, mark blocked and require
+        coordinator reconciliation.
+
   components:
     philosophy:
       file: methodology/philosophy.yaml

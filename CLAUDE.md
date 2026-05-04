@@ -1,5 +1,13 @@
 # CLAUDE.md
 
+## Authority
+
+`methodology.yaml` is the source of truth for project methodology, bootstrap,
+OpenSpec discipline, trace rules, versioning policy, agent orchestration, and
+agent observability. This file is only local project/tooling notes for
+Claude-compatible tools. If this file conflicts with `methodology.yaml`, follow
+`methodology.yaml` and report this file as stale.
+
 ## Project
 
 **Tillandsias** — a Linux system tray application (Rust + Tauri v2) that orchestrates containerized development environments invisibly. Users never see containers.
@@ -158,15 +166,14 @@ Both CI and Release workflows are **manual trigger only** (`workflow_dispatch`).
 
 ## Versioning
 
-Format: `v<Major>.<Minor>.<ChangeCount>.<Build>` — source of truth is the `VERSION` file at project root.
+Versioning policy is defined by `methodology.yaml` and
+`methodology/versioning.yaml`. Do not redefine it here.
 
 ```bash
 ./scripts/bump-version.sh              # Sync all files to VERSION
 ./scripts/bump-version.sh --bump-build # Increment build number
 ./scripts/bump-version.sh --bump-changes # Increment change count (after /opsx:archive)
 ```
-
-Cargo.toml and tauri.conf.json use 3-part semver (Major.Minor.ChangeCount). Git tags use full 4-part.
 
 ## Test Commands
 
@@ -260,115 +267,14 @@ nix-direnv caches flake evaluations and only re-evaluates when `flake.nix` or `f
 - `../forge` — Container images (Macuahuitl forge). Tillandsias uses these as default container images.
 - `../thinking-service` — Autonomous daemon. Architecture patterns (tokio::select!, event loop) informed Tillandsias design.
 
-## OpenSpec — Monotonic Convergence
-
-All changes go through OpenSpec (`/opsx:ff` or `/opsx:new`). No exceptions for "quick fixes".
-
-**Purpose**: OpenSpec ensures **monotonic convergence** — specs and implementation move toward each other with every change, never apart. The spec trail is the project's institutional memory and proof of work.
-
-**Workflow**: `/opsx:ff` (create artifacts) -> `/opsx:apply` (implement) -> `/opsx:archive` (archive + sync specs) -> `./scripts/bump-version.sh --bump-changes`
-
-**Rules**:
-- Spec must reflect what was built. Implementation must reflect what was spec'd.
-- Specs are source of truth — never modify specs without user approval.
-- Specs converge toward **intent**, not toward code. If code diverges from spec, the code is wrong.
-- If a spec decision is revised, update the spec before (or with) the code change.
-- Use `/opsx:verify` before archiving to confirm convergence.
-- Break large features into multiple changes — each independently convergent.
-- Each change produces: proposal.md, design.md, specs/<capability>/spec.md, tasks.md
-- Delta specs sync to main specs at archive time.
-
-## Trace Annotations — @trace spec:<name>
-
-Add `@trace spec:<name>` annotations in ALL code changes. Traces are the connective tissue between specs, code, and runtime accountability.
-
-**Where to add:**
-- Rust: `// @trace spec:<name>` near functions implementing a spec
-- Shell: `# @trace spec:<name>` near relevant code blocks
-- Docs/cheatsheets: `@trace spec:<name>` as plain text
-- Commits: include GitHub search URL for the trace
-- Log events: `spec = "<name>"` field on accountability-tagged tracing events
-- Multiple specs: `@trace spec:foo, spec:bar`
-
-**Why:** Traces create bidirectional links between specs and implementation. Power users reading logs or source should follow a trace to the spec governing that behavior. The accountability log format renders `@trace spec:name URL` lines with clickable GitHub search links.
-
-## Sources of Truth — every spec references at least one cheatsheet
-
-Every NEW spec under `openspec/changes/<change>/specs/<capability>/spec.md` and `openspec/specs/<capability>/spec.md` SHALL include a `## Sources of Truth` section at the bottom listing one or more cheatsheets from `cheatsheets/` that informed the spec's implementation guidance. Format:
-
-```markdown
-## Sources of Truth
-
-- `cheatsheets/<category>/<filename>.md` — one-line reason this cheatsheet was load-bearing
-- `cheatsheets/<category>/<filename>.md` — one-line reason
-```
-
-`<category>` is one of `runtime`, `languages`, `utils`, `build`, `web`, `test`, `agents`. Filenames are lowercase-hyphenated. The cheatsheet path SHALL resolve to a real file in the repo. Missing or unresolvable references emit a `openspec validate` warning (non-blocking).
-
-**Why**: cheatsheets pin the version of each tool the forge ships and capture the idiomatic usage patterns. When a tool ships a breaking change, the cheatsheet is the single point of update — every spec that referenced it inherits the new pin. Without explicit Sources of Truth, spec-vs-tool drift is invisible until production breaks.
-
-**Existing specs** (those present before this convention landed) are exempt until a separate retrofit sweep adds the section. New specs MUST include the section from day one.
-
 ## Cheatsheets
 
 Two distinct directories:
 - `docs/cheatsheets/` — Tillandsias-internal operational knowledge (tray state machine, secrets management, token rotation). Read by maintainers on the host.
 - `cheatsheets/` — agent-facing cheatsheets baked into the forge image at `/opt/cheatsheets/`. Read by agents inside the forge via `cat $TILLANDSIAS_CHEATSHEETS/INDEX.md | rg <topic>`.
 
-Both use `@trace` annotations and scannable tables. New tool/language references go in `cheatsheets/<category>/<topic>.md` using `cheatsheets/TEMPLATE.md`. Each new cheatsheet must also be added to `cheatsheets/INDEX.md`.
-
-### Provenance is mandatory in every cheatsheet
-
-Every cheatsheet under `cheatsheets/` SHALL include a `## Provenance` section listing at least one high-authority source URL and a `**Last updated:** YYYY-MM-DD` line. Authority hierarchy: vendor / standards body first (`python.org`, `rust-lang.org`, `oracle.com`, `aws.amazon.com`, `cloud.google.com`, `redhat.com`, IETF RFC, W3C/WHATWG), then recognised community projects (`mozilla.org/MDN`, `postgresql.org`, etc.). Stack Overflow / blogs / AI-generated docs are NEVER acceptable as primary provenance.
-
-Cheatsheets without provenance are REJECTED at review time. The `agent-cheatsheets` capability spec is the source of truth for the format and refresh cadence.
-
-### Cheatsheet citation traceability
-
-Code, log events, telemetry, and specs that derive their behaviour from a cheatsheet SHALL cite the cheatsheet by relative path:
-
-- Rust: `// @cheatsheet languages/rust.md`
-- Shell: `# @cheatsheet languages/bash.md`
-- Log events: `cheatsheet = "build/cargo.md"` field
-- OpenSpec: cite under `## Sources of Truth` (already mandated)
-
-This makes the cheatsheet → code → spec graph queryable by `git grep '@cheatsheet'` exactly like `@trace spec:`.
-
-### Cheatsheet refresh cadence and staleness detection
-
-Cheatsheets are living documents. Each cheatsheet's `**Last updated:** YYYY-MM-DD` line indicates when it was last verified against the cited authoritative sources. A soft staleness check runs periodically:
-
-**Refresh workflow:**
-1. Run `scripts/check-cheatsheet-staleness.sh` to identify cheatsheets older than 90 days (default threshold)
-2. For each flagged cheatsheet:
-   - Re-fetch the cited URLs and confirm the cheatsheet content still matches the upstream source
-   - Correct any divergences in the cheatsheet content
-   - Update the `**Last updated:**` date to today ONLY after re-verification (never blindly)
-3. Commit with message like: `chore(cheatsheets): refresh stale entries — verified against upstream sources`
-
-**Automation:**
-- Manual cadence: run `scripts/check-cheatsheet-staleness.sh --days 90` every 3 months (or as part of release prep)
-- Future enhancement: CI workflow can run this check on schedule or on-demand (`workflow_dispatch`)
-- The check is informational (non-blocking) — staleness does not fail builds. It surfaces in RUNTIME_LIMITATIONS logs and host-side monitoring
-
-**No blind bumps:** The `**Last updated:**` line is a promise that the cheatsheet was actually re-verified. Never bump the date without re-checking the cited URLs.
-
-## @tombstone — never silently delete
-
-Dead code, deprecated specs, and removed features get a `@tombstone superseded:<new>` (replacement exists) or `@tombstone obsolete:<old>` (no replacement) annotation. The block is commented out, NOT deleted, for **three releases** (since Tillandsias has a release cadence — VERSION track) before final deletion. The tombstone records the version it landed in so reviewers know when it's safe to delete.
-
-```rust
-// @tombstone superseded:tray-no-disabled-items
-// Old projection — removed in 0.1.169.226. Safe to delete after 0.1.169.229.
-//
-// fn set_stage(&self, stage: Stage) { ... }
-```
-
-This complements OpenSpec's `## REMOVED Requirements` section (which carries `**Reason**:` and `**Migration**:` — the spec-level tombstone). Together they form a complete audit of behavioural transitions.
-
-`git log -G '@tombstone'` reveals every transition; `cheatsheet = ...` and `tombstone = ...` log fields make runtime behaviour cross-reference removed code paths.
-
-Current: `logging-levels.md`, `secrets-management.md`, `token-rotation.md`, `terminal-tools.md`.
+Methodology, provenance, traceability, and refresh rules are defined by
+`methodology.yaml` and `methodology/cheatsheets.yaml`.
 
 ## Project README Discipline
 
@@ -395,30 +301,6 @@ Every Tillandsias-managed project's README.md follows a two-section contract, au
 
 Mandatory maintainer TODO: Migrate Tillandsias' own README.md to the FOR HUMANS / FOR ROBOTS structure (task 10 of this change).
 
-## Plugins & Skills
-
-Invoke installed skills proactively when their trigger fires. Order below is by expected frequency in this project.
-
-- **OpenSpec suite (`opsx:new`, `opsx:ff`, `opsx:apply`, `opsx:verify`, `opsx:archive`, `opsx:sync`, plus `openspec-*` equivalents)**: the primary workflow gate. See the **OpenSpec — Monotonic Convergence** section above for rules and sequencing. Never bypass with ad-hoc edits.
-- **`simplify`**: invoke after implementing a non-trivial change (new module, refactor, >100 LOC touched) and before `opsx:verify`. Catches duplication, leaky abstractions, and hot-path JSON (forbidden here — use `postcard`).
-- **`security-review`**: invoke before merging any branch that touches enclave containers, credential paths, proxy/git-service config, `--cap-drop`/`--security-opt`/`--userns` flags, keyring/D-Bus code, or anything under `src-tauri/` that crosses the host/forge boundary.
-- **`review`**: invoke before `gh pr create` on branches destined for `main` from `linux-next`. Complements `security-review`; run both for enclave-adjacent work.
-- **`less-permission-prompts`**: invoke opportunistically when the session has racked up repeated permission prompts for read-only commands. Scans transcripts and updates `.claude/settings.json`.
-- **`update-config`**: invoke for any settings.json / hooks change, or when the user asks for automated "from now on" behavior (memory cannot satisfy those — hooks can).
-- **`claude-api`**: invoke only if work touches Anthropic SDK code (none in-tree today; reserved for future inference-container client code).
-- **`loop` / `schedule`**: invoke only when the user explicitly asks for recurring or cron-scheduled tasks. Never for one-offs.
-- **`init`, `keybindings-help`**: not load-bearing for this project; do not invoke unless explicitly requested.
-
-## Agent Waves
-
-For batch tasks, organize parallel agents into waves by size (small first, large last). Track each group with a separate OpenSpec change. Report traces added/updated after each wave.
-
-- Wave 1: tiny/small tasks (complete in <2 min, all parallel)
-- Wave 2: medium tasks (2-5 min, parallel)
-- Wave 3: large tasks (dedicated opus agents)
-- Between waves: build + test to catch integration issues early
-- Each agent gets: full context, OpenSpec creation instructions, @trace requirements
-
 ## Linux-Only Development
 
 Tillandsias is developed exclusively on Linux (Fedora Silverblue) with the following workflow:
@@ -429,86 +311,15 @@ Tillandsias is developed exclusively on Linux (Fedora Silverblue) with the follo
 ```
 
 **Version bumps:**
-- During development: NO version bumps. Let `--bump-build` happen locally but don't commit it.
-- At merge time: `./scripts/bump-version.sh --bump-changes` once, commit, push main.
-- Release: `gh workflow run release.yml -f version="X.Y.Z.B"` from main only.
+- Follow `methodology.yaml` and `methodology/versioning.yaml`.
+- Do not commit local version churn from feature work.
+- Release workflows are manual and main-branch only.
 
 **Cargo.lock:** Committed to git (correct for binary projects). If Cargo.lock conflicts at merge time, regenerate: `cargo generate-lockfile`.
 
 ## Cloud Workflows — Conservative Usage
 
 See CI/CD section above. Both CI and Release workflows are `workflow_dispatch` only. NEVER auto-trigger. Batch changes, release deliberately.
-
-## Commit Conventions
-
-When a commit implements or fixes a spec-traced feature, include a clickable GitHub code search URL in the commit body:
-
-```
-fix: entrypoint crashes under set -e
-
-@trace spec:forge-launch
-https://github.com/8007342/tillandsias/search?q=%40trace+spec%3Aforge-launch&type=code
-
-OpenSpec change: fix-entrypoint-regression
-```
-
-The URL links to every source file implementing that spec. GitHub renders it as a clickable link in the commit view. The search is always live — no generated files to maintain.
-
-Format — replace `SPECNAME` with the actual spec name (e.g., `forge-launch`):
-```
-https://github.com/8007342/tillandsias/search?q=%40trace+spec%3ASPECNAME&type=code
-```
-
-## @tombstone — Never Silently Delete
-
-Dead code, deprecated specs, and removed features get a `@tombstone superseded:<new>` (replacement exists) or `@tombstone obsolete:<old>` (no replacement) annotation. The block is commented out, NOT deleted, for **three releases** (since Tillandsias has a release cadence — VERSION track) before final deletion. The tombstone records the version it landed in so reviewers know when it's safe to delete.
-
-**Rust example:**
-```rust
-// @tombstone superseded:tray-no-disabled-items
-// Old projection — removed in 0.1.169.226. Safe to delete after 0.1.169.229.
-// @trace spec:old-tray-menu-state
-//
-// fn set_stage(&self, stage: Stage) { ... }
-```
-
-**Shell example:**
-```bash
-# @tombstone obsolete:legacy-forge-init
-# Superseded by direct podman pull path in 0.1.37.45. Safe to delete after 0.1.37.48.
-#
-# init_forge_image() { ... }
-```
-
-**Markdown example (in CLAUDE.md or specs):**
-```markdown
-<!-- @tombstone superseded:agent-cheatsheets-v1 — kept for three releases -->
-<!-- Replaced by agent-cheatsheets-v2 in 0.1.100.1. Safe to delete after 0.1.100.4. -->
-```
-
-**Required fields:**
-- `superseded:<new-spec-name>` — replacement capability exists
-- OR `obsolete:<old-spec-name>` — entire feature gone, no replacement
-- Version landed in and safe-to-delete version (based on current VERSION file)
-- 1–3 lines of rationale
-- Optional: `@trace spec:<name>` linking to removed spec
-
-**Retention window:**
-- **Cadence-based projects** (Tillandsias — 4-part VERSION track): three releases on the same Major.Minor track
-- Example: removed in v0.1.169.226, safe to delete after v0.1.169.229
-
-**What this enables:**
-- `git log -G '@tombstone'` reveals every behavioural transition
-- Log events with `tombstone = "<name>"` field create runtime cross-references
-- Refactor history is observable without deep `git blame` spelunking
-- Reviewers know exactly when orphaned code becomes deletable
-
-**What it does NOT mean:**
-- Tombstones are not for keeping dead code forever. After the retention window the tombstoned block is deleted in a normal commit.
-- A function with no callers and no spec relationship does NOT need a tombstone — it gets deleted normally
-- Tombstones mark **transitions**, not orphans
-
-This complements OpenSpec's `## REMOVED Requirements` section (which carries `**Reason**:` and `**Migration**:` — the spec-level tombstone). Together they form a complete audit of behavioural transitions.
 
 ## Conventions
 

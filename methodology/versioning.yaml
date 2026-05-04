@@ -3,9 +3,8 @@
 # Versioning is an observability mechanism for monotonic convergence. A released
 # artifact's version number indexes the evidence bundle for the spec version it claims.
 #
-# Sources: Three-part research on versioning systems (CalVer + LUB),
-#          branch discipline (main-only bumps), and CRDT merge driver (LUB conflicts).
-#          See research summary: RESEARCH-VERSIONING-SYSTEMS.md
+# Sources: Methodology-owned synthesis of CalVer + LUB, main-only branch
+#          discipline, and CRDT merge-driver semantics.
 
 versioning_system:
   description: >
@@ -167,7 +166,8 @@ branch_versioning_discipline:
         branch or a release tag.
       implementation: >
         Extract branch name from push target. Reject if (branch != main and VERSION modified).
-        Implementation details in project CLAUDE.md (language/VCS-specific).
+        Implementation details MUST live in repository scripts, hooks, or methodology-owned
+        component files. CLAUDE.md is non-authoritative.
       exemptions: >
         Release tags may include VERSION commits in their history.
         Feature->main merges use main's VERSION as source of truth.
@@ -234,10 +234,13 @@ crdt_merge_driver:
       convergence: "All servers end at same version via distributed merges, in any order"
 
   implementation:
-    driver_script: "scripts/resolve-version-conflict.sh"
-    integration: ".gitattributes: VERSION merge=version_crdt"
+    status: "planned; no repository merge driver is currently installed"
+    planned_driver_script: "scripts/resolve-version-conflict.sh"
+    current_verification_script: "scripts/verify-version-monotonic.sh"
+    integration: ".gitattributes: VERSION merge=version_crdt (planned, not present until the driver exists)"
     configuration: >
-      git config merge.version_crdt.driver ./scripts/resolve-version-conflict.sh
+      Configure merge.version_crdt only after scripts/resolve-version-conflict.sh
+      exists and is covered by tests.
 
     pseudocode: |
       # Git passes three versions to driver:
@@ -372,4 +375,4 @@ metadata_tracking:
 references:
   - "methodology/spec-system.yaml — Spec versioning rules"
   - "methodology/between-commits-work-discipline.yaml — Agent ephemeral versioning"
-  - "Project CLAUDE.md — Implementation-specific version bumping, branching rules, CI gating"
+  - "scripts/verify-version-monotonic.sh — Current monotonicity verification script"

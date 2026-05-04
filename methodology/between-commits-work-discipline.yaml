@@ -368,7 +368,7 @@ automation_and_orchestration:
 
 references:
   - "methodology/versioning.yaml — Main versioning system and integration discipline"
-  - "Project CLAUDE.md — Implementation-specific agent orchestration, metadata storage, and lifecycle management"
+  - "methodology.yaml — Authoritative bootstrap and agent observability protocol"
   - "Lamport clocks: https://martinfowler.com/articles/patterns-of-distributed-systems/lamport-clock.html"
   - "CRDT fundamentals: https://crdt.tech/"
   - "Distributed systems: clock synchronization patterns across agent swarms"
