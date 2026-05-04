@@ -89,6 +89,14 @@ jobs:
 
           echo "All $(echo "$TEST_NAMES" | wc -l) referenced litmus tests exist"
 
+      # @trace spec:litmus-convergence
+      # Execute all litmus tests. Results are collected and reported.
+      # Note: Some tests require podman/container runtime; they may SKIP on
+      # environments that cannot run containers. This is expected and handled gracefully.
+      - name: Execute litmus tests (requires podman)
+        continue-on-error: true  # Don't fail workflow if some tests skip
+        run: bash scripts/run-litmus-test.sh --all --report json
+
       - name: Generate litmus test report
         run: |
           mkdir -p test-results

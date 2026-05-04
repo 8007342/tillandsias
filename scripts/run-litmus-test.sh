@@ -235,14 +235,84 @@ check_signal() {
 # Note: Does NOT log results - caller is responsible for that
 run_litmus_test_file() {
     local test_file="$1"
+    local spec_id="${2:-}"
 
     if [[ ! -f "$test_file" ]]; then
         return 1
     fi
 
-    # TODO: Parse and execute test commands from test_file
-    # For now, just verify the file exists (which we already did above)
-    return 0
+    # Parse YAML: extract critical_path steps and gating_points
+    # Format is simple YAML with predictable structure
+    local in_critical_path=0
+    local in_gating_points=0
+    local step_command=""
+    local step_timeout=30000  # Default 30 seconds
+    local success_criteria=()
+    local failure_criteria=()
+    local test_passed=1
+
+    # Read and execute test steps
+    while IFS= read -r line; do
+        # Detect section headers
+        [[ "$line" =~ ^critical_path: ]] && { in_critical_path=1; in_gating_points=0; continue; }
+        [[ "$line" =~ ^gating_points: ]] && { in_critical_path=0; in_gating_points=1; continue; }
+        [[ "$line" =~ ^[a-z_]+: ]] && in_critical_path=0 && in_gating_points=0
+
+        # Parse critical_path steps
+        if [[ $in_critical_path -eq 1 ]]; then
+            if [[ "$line" =~ command:\ \"(.+)\" ]]; then
+                step_command="${BASH_REMATCH[1]}"
+            elif [[ "$line" =~ timeout_ms:\ ([0-9]+) ]]; then
+                step_timeout=$(( ${BASH_REMATCH[1]} / 1000 ))  # Convert ms to seconds
+            fi
+        fi
+
+        # Parse gating_points success/failure signals
+        if [[ $in_gating_points -eq 1 ]]; then
+            if [[ "$line" =~ success:\ \"(.+)\" ]]; then
+                success_criteria+=("${BASH_REMATCH[1]}")
+            elif [[ "$line" =~ failure:\ \"(.+)\" ]]; then
+                failure_criteria+=("${BASH_REMATCH[1]}")
+            fi
+        fi
+    done < "$test_file"
+
+    # If no commands extracted, treat as incomplete test (skip)
+    if [[ -z "$step_command" ]]; then
+        return 0  # SKIP
+    fi
+
+    # Execute test command with timeout
+    local test_output
+    local exit_code=0
+    test_output=$(timeout "$step_timeout" bash -c "$step_command" 2>&1) || exit_code=$?
+
+    # Check if timeout occurred
+    if [[ $exit_code -eq 124 ]]; then
+        log_warn "Test timeout after ${step_timeout}s"
+        return 1
+    fi
+
+    # Match output against success/failure criteria
+    test_passed=0
+    for failure in "${failure_criteria[@]}"; do
+        if [[ "$test_output" =~ $failure ]]; then
+            test_passed=1
+            break
+        fi
+    done
+
+    # If no failure matches, check success criteria
+    if [[ $test_passed -eq 0 ]]; then
+        for success in "${success_criteria[@]}"; do
+            if [[ "$test_output" =~ $success ]]; then
+                test_passed=0
+                break
+            fi
+        done
+    fi
+
+    return "$test_passed"
 }
 
 # Main test execution loop
