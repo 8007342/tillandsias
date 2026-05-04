@@ -250,6 +250,12 @@ jobs:
           echo "VERSION=$FILE_VERSION" >> "$GITHUB_ENV"
           echo "Version validated: v$FILE_VERSION"
 
+      # @trace spec:versioning
+      # Enforce monotonic version increases per CRDT merge semantics.
+      # Current version MUST be >= latest released tag.
+      - name: Verify version is monotonically greater than last release
+        run: bash scripts/verify-version-monotonic.sh
+
       - name: Download all build artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
