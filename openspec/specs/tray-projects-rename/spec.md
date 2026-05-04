@@ -83,7 +83,7 @@ This MUST preserve the original code path for three releases in case the team ne
 
 ### Requirement: Documentation Update
 
-The cheatsheet `docs/cheatsheets/tray-state-machine.md` MUST be updated to reflect:
+The cheatsheet `cheatsheets/runtime/tray-state-machine.md` MUST be updated to reflect:
 
 - New static-row composition (no Language menu item)
 - New project submenu labels and their meanings
@@ -103,6 +103,6 @@ Gating points:
 
 ## Sources of Truth
 
-- `docs/cheatsheets/tray-state-machine.md` — the five-stage menu projection and dynamic region where project submenu labels appear
+- `cheatsheets/runtime/tray-state-machine.md` — the five-stage menu projection and dynamic region where project submenu labels appear
 - `cheatsheets/runtime/forge-container.md` — confirms the `~/.tillandsias/watch` default path and project discovery logic
 - `cheatsheets/languages/toml.md` — i18n locale file format (en.toml, de.toml, es.toml) and translation key conventions

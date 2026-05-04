@@ -153,7 +153,7 @@ All token lifecycle events SHALL be logged to the accountability window when `--
   ```
   [secrets] v0.1.97.76 | Token written for <container> -> /run/secrets/... (tmpfs, ro mount)
     Spec: secret-rotation
-    Cheatsheet: docs/cheatsheets/token-rotation.md
+    Cheatsheet: cheatsheets/utils/tillandsias-secrets-architecture.md
   ```
 
 #### Scenario: Token refresh logged
@@ -162,7 +162,7 @@ All token lifecycle events SHALL be logged to the accountability window when `--
   ```
   [secrets] v0.1.97.76 | Token refreshed for <container> (55min rotation)
     Spec: secret-rotation
-    Cheatsheet: docs/cheatsheets/token-rotation.md
+    Cheatsheet: cheatsheets/utils/tillandsias-secrets-architecture.md
   ```
 
 #### Scenario: Token revocation logged
@@ -171,7 +171,7 @@ All token lifecycle events SHALL be logged to the accountability window when `--
   ```
   [secrets] v0.1.97.76 | Token revoked for <container> (container stopped)
     Spec: secret-rotation
-    Cheatsheet: docs/cheatsheets/token-rotation.md
+    Cheatsheet: cheatsheets/utils/tillandsias-secrets-architecture.md
   ```
 
 #### Scenario: No secrets in accountability output

@@ -56,5 +56,5 @@ Gating points:
 
 ## Sources of Truth
 
-- `docs/cheatsheets/runtime/cache-architecture.md` — process-lifetime snapshot patterns
-- `docs/cheatsheets/build/podman-launch.md` — container argument construction and mount paths
+- `cheatsheets/runtime/cache-architecture.md` — process-lifetime snapshot patterns
+- `cheatsheets/build/podman-launch.md` — container argument construction and mount paths

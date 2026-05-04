@@ -94,8 +94,8 @@ Gating points:
 
 ## Sources of Truth
 
-- `docs/cheatsheets/build-lock-semantics.md` — process coordination via PID files to prevent concurrent builds
-- `docs/cheatsheets/container-image-tagging.md` — versioned image tag scheme and staleness detection
+- `cheatsheets/build/build-lock-semantics.md` — process coordination via PID files to prevent concurrent builds
+- `cheatsheets/build/container-image-tagging.md` — versioned image tag scheme and staleness detection
 
 ## Observability
 

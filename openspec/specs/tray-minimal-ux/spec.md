@@ -172,7 +172,7 @@ sleep 2
 
 ## Sources of Truth
 
-- `docs/cheatsheets/tray-minimal-ux.md` — Tray UX stages, menu structure, and implementation reference
+- `cheatsheets/welcome/tray-minimal-ux.md` — Tray UX stages, menu structure, and implementation reference
 - `cheatsheets/runtime/podman.md` — Container lifecycle, health checks, and cleanup patterns
 - `cheatsheets/runtime/unix-socket-ipc.md` — Tray socket mounting and browser-to-forge communication
 

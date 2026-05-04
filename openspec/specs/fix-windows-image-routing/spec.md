@@ -105,8 +105,8 @@ The Windows direct-podman build path (used when `build-image.sh` is unavailable)
 
 ## Sources of Truth
 
-- `docs/cheatsheets/build/image-building.md` — container image build routing and Containerfile selection
-- `docs/cheatsheets/runtime/enclave-services.md` — enclave service architecture and entrypoints
+- `cheatsheets/build/image-building.md` — container image build routing and Containerfile selection
+- `cheatsheets/runtime/enclave-services.md` — enclave service architecture and entrypoints
 
 ## Litmus Tests
 

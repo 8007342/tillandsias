@@ -102,8 +102,8 @@ This spec fix unblocks this flow on Windows as well.
 
 ## Sources of Truth
 
-- `docs/cheatsheets/runtime/windows-paths.md` — Windows path forms and canonicalization
-- `docs/cheatsheets/build/git-operations.md` — git clone semantics and path handling
+- `cheatsheets/runtime/windows-paths.md` — Windows path forms and canonicalization
+- `cheatsheets/build/git-operations.md` — git clone semantics and path handling
 
 ## Litmus Tests
 

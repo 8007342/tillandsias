@@ -69,8 +69,8 @@ The previous fix used `--add-host alias:127.0.0.1` with the assumption that `127
 
 ## Sources of Truth
 
-- `docs/cheatsheets/runtime/enclave-network.md` — enclave architecture and service discovery
-- `docs/cheatsheets/runtime/container-networking.md` — podman machine networking and aliases
+- `cheatsheets/runtime/enclave-network.md` — enclave architecture and service discovery
+- `cheatsheets/runtime/container-networking.md` — podman machine networking and aliases
 
 ## Litmus Tests
 

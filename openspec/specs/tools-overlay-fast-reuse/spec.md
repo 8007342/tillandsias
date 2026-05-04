@@ -95,5 +95,5 @@ Gating points:
 
 ## Sources of Truth
 
-- `docs/cheatsheets/runtime/cache-architecture.md` — process-lifetime caching patterns
-- `docs/cheatsheets/runtime/logging-levels.md` — instrumentation and observability
+- `cheatsheets/runtime/cache-architecture.md` — process-lifetime caching patterns
+- `cheatsheets/runtime/logging-levels.md` — instrumentation and observability

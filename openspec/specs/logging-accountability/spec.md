@@ -46,7 +46,7 @@ Users MUST be able to enable curated views of sensitive subsystem operations.
   ```
   [secrets] v0.1.97.76 | <human-readable summary>
     Spec: <spec-name>
-    Cheatsheet: docs/cheatsheets/secrets-management.md
+    Cheatsheet: cheatsheets/utils/tillandsias-secrets-architecture.md
   ```
 - **AND** no actual secret values (tokens, keys, passwords) MUST appear in the output
 - **AND** operations MUST include: keyring retrieval, token file writes, secret injection into containers, token rotation events
