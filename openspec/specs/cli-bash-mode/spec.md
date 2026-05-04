@@ -3,7 +3,7 @@
 
 ## Status
 
-status: active
+active
 
 ## Purpose
 TBD - created by archiving change iconography-gh-auth-bash-mode. Update Purpose after archive.

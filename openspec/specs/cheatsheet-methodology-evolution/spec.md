@@ -2,7 +2,9 @@
 
 @trace spec:cheatsheet-methodology-evolution
 
-## Status: suspended
+## Status
+
+suspended
 
 ## Why This Spec
 

@@ -1,7 +1,7 @@
 <!-- @trace spec:embedded-scripts -->
 ## Status
 
-status: active
+active
 
 ## Requirements
 

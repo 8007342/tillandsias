@@ -1,6 +1,8 @@
 <!-- @trace spec:cheatsheets-license-tiered -->
 
-## Status: active
+## Status
+
+active
 
 Promoted from: `openspec/changes/archive/cheatsheets-license-tiered/`
 Annotation count: 61

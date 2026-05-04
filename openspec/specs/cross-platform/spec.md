@@ -3,7 +3,7 @@
 
 ## Status
 
-status: suspended
+suspended
 
 ## Requirements
 

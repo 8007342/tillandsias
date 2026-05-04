@@ -2,7 +2,7 @@
 
 ## Status
 
-status: active
+active
 
 ## Purpose
 TBD - created by archiving change agent-source-of-truth. Update Purpose after archive.

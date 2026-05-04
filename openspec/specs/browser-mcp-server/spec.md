@@ -4,7 +4,7 @@
 
 ## Status
 
-status: active
+active
 annotation-count: 15
 derived-from: code annotations only (no archive)
 last-updated: 2026-05-02

@@ -3,7 +3,7 @@
 
 ## Status
 
-status: active
+active
 
 ## Purpose
 Define how the tray menu integrates with browser isolation containers to launch safe, isolated browser windows for OpenCode Web and other web-based tools.

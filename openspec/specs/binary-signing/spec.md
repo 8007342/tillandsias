@@ -1,7 +1,7 @@
 <!-- @trace spec:binary-signing -->
 ## Status
 
-status: active
+active
 
 ## Requirements
 

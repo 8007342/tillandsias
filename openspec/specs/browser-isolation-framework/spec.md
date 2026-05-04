@@ -3,7 +3,9 @@
 @trace spec:browser-isolation-framework
 @trace spec:versioning
 
-## Status: active
+## Status
+
+active
 
 ## Requirements
 

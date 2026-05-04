@@ -3,7 +3,7 @@
 
 ## Status
 
-status: active
+active
 
 ## Purpose
 TBD - created by archiving change cli-mode. Update Purpose after archive.

@@ -1,6 +1,8 @@
 <!-- @trace spec:clickable-trace-index -->
 
-## Status: active
+## Status
+
+active
 
 ## Requirements
 

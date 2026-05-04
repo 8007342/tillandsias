@@ -2,7 +2,7 @@
 
 ## Status
 
-status: active
+active
 
 ## Purpose
 TBD - created by archiving change cheatsheet-source-layer. Update Purpose after archive.

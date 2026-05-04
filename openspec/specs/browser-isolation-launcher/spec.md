@@ -2,7 +2,9 @@
 
 @trace spec:browser-isolation-launcher
 
-## Status: suspended
+## Status
+
+suspended
 
 ## Why This Spec
 

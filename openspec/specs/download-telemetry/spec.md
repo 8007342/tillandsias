@@ -2,7 +2,7 @@
 
 ## Status
 
-status: active
+active
 
 ## Purpose
 TBD - created by archiving change forge-cache-architecture. Update Purpose after archive.

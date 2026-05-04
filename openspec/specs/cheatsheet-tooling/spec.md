@@ -2,7 +2,9 @@
 
 @trace spec:cheatsheet-tooling
 
-## Status: suspended
+## Status
+
+suspended
 
 ## Why This Spec
 
