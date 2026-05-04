@@ -587,8 +587,8 @@ pub(crate) fn needs_github_login() -> bool {
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
-//! Unit tests for menu button logic and ID generation.
-//! @trace spec:codex-tray-launcher
+// Unit tests for menu button logic and ID generation.
+// @trace spec:codex-tray-launcher
 
 #[cfg(test)]
 mod tests {
