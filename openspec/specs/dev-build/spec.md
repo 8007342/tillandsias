@@ -120,6 +120,32 @@ The `--install` flag SHALL exit with code 0 (success) or 1 (failure), enabling c
 - **AND** a `[build] ERROR` message SHALL be printed to stderr
 - **AND** MUST be safe for error handling: `./build.sh --install || echo "build failed; fix errors above"`
 
+### Requirement: Transparent HTTPS caching via dev proxy
+The build script SHALL automatically set up and manage a local caching proxy (tillandsias-dev-proxy) for transparent HTTPS caching of build dependencies (apt, cargo, OCI, rustup). The proxy SHALL be idempotent and resilient.
+
+#### Scenario: First build with no proxy image
+- **WHEN** `./build.sh` runs for the first time and `tillandsias-proxy` image does not exist
+- **THEN** the build script SHALL automatically rebuild the proxy image via `scripts/build-image.sh proxy`
+- **AND** SHALL start a dev proxy container at `127.0.0.1:3129`
+- **AND** SHALL inject the HTTP_PROXY and HTTPS_PROXY env vars for all downstream build operations
+
+#### Scenario: Subsequent builds with proxy running
+- **WHEN** `./build.sh` runs and `tillandsias-dev-proxy` container is already running
+- **THEN** the build script SHALL skip container startup (idempotent)
+- **AND** SHALL verify proxy health via port 3129 check
+- **AND** SHALL proceed with build
+
+#### Scenario: Proxy startup failure
+- **WHEN** dev proxy fails to start or fails health check
+- **THEN** the build script SHALL log the failure and proxy logs
+- **AND** SHALL continue without proxy (non-fatal, builds still work but are slower)
+- **AND** SHALL NOT block the build
+
+#### Scenario: Container networking via slirp4netns
+- **WHEN** AppImage builder container runs inside rootless podman
+- **THEN** it SHALL access the host-side proxy via `host.containers.internal:3129`
+- **AND** the proxy SHALL be bound to all interfaces (`:3129`) so containers can reach it through the slirp4netns bridge
+
 
 ## Sources of Truth
 

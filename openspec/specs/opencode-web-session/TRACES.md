@@ -41,7 +41,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-forge-opencode-web.sh#L41](../../../images/default/entrypoint-forge-opencode-web.sh#L41)
 - [images/default/entrypoint-forge-opencode-web.sh#L117](../../../images/default/entrypoint-forge-opencode-web.sh#L117)
 - [images/default/entrypoint.sh#L15](../../../images/default/entrypoint.sh#L15)
-- [images/default/lib-common.sh#L440](../../../images/default/lib-common.sh#L440)
+- [images/default/lib-common.sh#L452](../../../images/default/lib-common.sh#L452)
 - [src-tauri/src/browser_mcp/allowlist.rs#L11](../../../src-tauri/src/browser_mcp/allowlist.rs#L11)
 - [src-tauri/src/browser.rs#L19](../../../src-tauri/src/browser.rs#L19)
 - [src-tauri/src/browser.rs#L32](../../../src-tauri/src/browser.rs#L32)

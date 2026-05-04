@@ -7,7 +7,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [images/git/entrypoint.sh#L21](../../../images/git/entrypoint.sh#L21)
 - [images/git/entrypoint.sh#L33](../../../images/git/entrypoint.sh#L33)
-- [images/inference/entrypoint.sh#L16](../../../images/inference/entrypoint.sh#L16)
+- [images/inference/entrypoint.sh#L27](../../../images/inference/entrypoint.sh#L27)
 - [images/proxy/entrypoint.sh#L17](../../../images/proxy/entrypoint.sh#L17)
 - [images/proxy/entrypoint.sh#L25](../../../images/proxy/entrypoint.sh#L25)
 - [scripts/cleanup-secrets.sh#L16](../../../scripts/cleanup-secrets.sh#L16)

@@ -120,15 +120,10 @@ done
 # ---------------------------------------------------------------------------
 # Transparent HTTPS caching setup (dev proxy)
 # ---------------------------------------------------------------------------
-# @trace spec:transparent-https-caching
+# @trace spec:dev-build, spec:transparent-https-caching
 ensure_dev_cache() {
     # Skip if explicitly disabled
     [[ "${TILLANDSIAS_NO_PROXY:-}" == "1" ]] && return 0
-
-    # Skip if dev proxy image hasn't been built yet (avoid blocking fresh install)
-    if ! podman images --format "{{.Repository}}" 2>/dev/null | grep -q "tillandsias-proxy"; then
-        return 0
-    fi
 
     # Ensure CA cert exists
     local ca_cert="$CACHE_DIR/ca-cert.pem"
@@ -136,31 +131,74 @@ ensure_dev_cache() {
     if [[ ! -f "$ca_cert" ]]; then
         mkdir -p "$CACHE_DIR"
         openssl req -x509 -newkey rsa:2048 -keyout "$ca_key" -out "$ca_cert" \
-            -days 3650 -nodes -subj "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=Tillandsias CA" 2>/dev/null || return 0
+            -days 3650 -nodes -subj "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=Tillandsias CA" 2>/dev/null || {
+            _warn "Failed to generate CA cert for dev proxy"
+            return 0
+        }
     fi
 
     # Ensure dev proxy cache dir exists
     mkdir -p "$CACHE_DIR/dev-proxy-cache"
 
-    # Start dev proxy if not already running
-    if ! podman inspect tillandsias-dev-proxy &>/dev/null 2>&1; then
-        local proxy_image
-        proxy_image=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep tillandsias-proxy | head -1)
-        if [[ -z "$proxy_image" ]]; then
+    # Find or rebuild the tillandsias-proxy image
+    local proxy_image
+    proxy_image=$(podman images --format "{{.Repository}}:{{.Tag}}" 2>/dev/null | grep "tillandsias-proxy" | head -1)
+
+    if [[ -z "$proxy_image" ]]; then
+        _step "No tillandsias-proxy image found — rebuilding..."
+        if [[ ! -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
+            _warn "scripts/build-image.sh not found — dev caching disabled"
             return 0
         fi
+        if ! "$SCRIPT_DIR/scripts/build-image.sh" proxy 2>&1 | tail -5; then
+            _warn "Failed to build tillandsias-proxy image — dev caching disabled"
+            return 0
+        fi
+        # Re-fetch image after building
+        proxy_image=$(podman images --format "{{.Repository}}:{{.Tag}}" 2>/dev/null | grep "tillandsias-proxy" | head -1)
+        if [[ -z "$proxy_image" ]]; then
+            _warn "tillandsias-proxy image still not found after build — dev caching disabled"
+            return 0
+        fi
+        _info "Proxy image built: $proxy_image"
+    fi
 
-        podman run \
+    # Start dev proxy if not already running
+    if ! podman inspect tillandsias-dev-proxy &>/dev/null 2>&1; then
+        _step "Starting dev proxy container..."
+
+        # Start proxy with all interface binding so containers can reach it
+        if ! podman run \
             --detach \
             --rm \
             --name tillandsias-dev-proxy \
-            --publish "127.0.0.1:3129:3129" \
+            --publish "3129:3129" \
+            --userns=keep-id \
             --volume "$CACHE_DIR/dev-proxy-cache:/var/spool/squid:rw,Z" \
             --volume "$ca_cert:/etc/squid/certs/intermediate.crt:ro,Z" \
             --volume "$ca_key:/etc/squid/certs/intermediate.key:ro,Z" \
-            "$proxy_image" >/dev/null 2>&1 || return 0
+            "$proxy_image" >/dev/null 2>&1; then
+            _warn "Failed to start dev proxy container"
+            return 0
+        fi
 
-        sleep 1  # Give proxy time to start
+        # Wait for proxy to be healthy (listening on 3129)
+        local max_retries=15
+        local retry=0
+        while [[ $retry -lt $max_retries ]]; do
+            if nc -z 127.0.0.1 3129 &>/dev/null 2>&1; then
+                _info "Dev proxy healthy on :3129"
+                break
+            fi
+            retry=$((retry + 1))
+            if [[ $retry -eq $max_retries ]]; then
+                _error "Proxy health check failed after $max_retries seconds"
+                podman logs tillandsias-dev-proxy 2>&1 | tail -20
+                podman rm -f tillandsias-dev-proxy 2>/dev/null || true
+                return 0
+            fi
+            sleep 1
+        done
     fi
 
     # Export proxy env vars for toolbox and AppImage builder

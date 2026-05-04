@@ -15,7 +15,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-core/src/container_profile.rs#L922](../../../crates/tillandsias-core/src/container_profile.rs#L922)
 - [images/default/config-overlay/mcp/git-tools.sh#L3](../../../images/default/config-overlay/mcp/git-tools.sh#L3)
 - [images/default/config-overlay/mcp/project-info.sh#L3](../../../images/default/config-overlay/mcp/project-info.sh#L3)
-- [images/default/lib-common.sh#L440](../../../images/default/lib-common.sh#L440)
+- [images/default/lib-common.sh#L452](../../../images/default/lib-common.sh#L452)
 - [src-tauri/src/embedded.rs#L137](../../../src-tauri/src/embedded.rs#L137)
 - [src-tauri/src/embedded.rs#L146](../../../src-tauri/src/embedded.rs#L146)
 - [src-tauri/src/embedded.rs#L153](../../../src-tauri/src/embedded.rs#L153)
