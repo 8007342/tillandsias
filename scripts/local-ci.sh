@@ -53,6 +53,8 @@ fi
 CHECKS_PASSED=0
 CHECKS_FAILED=0
 CHECKS_SKIPPED=0
+FAILED_CHECKS=()
+FAILED_REASONS=()
 
 # Logging
 log_section() {
@@ -68,6 +70,14 @@ log_pass() {
 log_fail() {
     printf '%b✗%b %s\n' "${RED}" "${NC}" "$*"
     CHECKS_FAILED=$((CHECKS_FAILED + 1))
+}
+
+log_fail_tracked() {
+    local check_name="$1"
+    local reason="$2"
+    log_fail "$reason"
+    FAILED_CHECKS+=("$check_name")
+    FAILED_REASONS+=("$reason")
 }
 
 log_skip() {
@@ -88,7 +98,7 @@ if [[ -f "scripts/validate-spec-cheatsheet-binding.sh" ]]; then
     if bash scripts/validate-spec-cheatsheet-binding.sh --threshold 90 2>&1 | tee /tmp/binding-check.log; then
         log_pass "Spec-cheatsheet binding coverage ≥ 90%"
     else
-        log_fail "Spec-cheatsheet binding below threshold"
+        log_fail_tracked "spec-cheatsheet-binding" "Spec-cheatsheet binding below 90% (see /tmp/binding-check.log)"
         [[ "$VERBOSE" == "1" ]] && cat /tmp/binding-check.log >&2
     fi
 else
@@ -104,7 +114,7 @@ if [[ -f "scripts/hooks/pre-commit-openspec.sh" ]]; then
     if bash scripts/hooks/pre-commit-openspec.sh --ci-mode 2>&1 | tee /tmp/drift-check.log; then
         log_pass "No ghost traces or zero-trace specs"
     else
-        log_fail "Spec-code drift detected (see details above)"
+        log_fail_tracked "spec-code-drift" "Spec-code drift detected: ghost traces or zero-trace specs found (see /tmp/drift-check.log)"
         [[ "$VERBOSE" == "1" ]] && cat /tmp/drift-check.log >&2
     fi
 else
@@ -120,7 +130,7 @@ if [[ -f "scripts/verify-version-monotonic.sh" ]]; then
     if bash scripts/verify-version-monotonic.sh 2>&1 | tee /tmp/version-check.log; then
         log_pass "Version is monotonically valid"
     else
-        log_fail "Version monotonicity violated"
+        log_fail_tracked "version-monotonicity" "Version is not monotonically greater than last release (see /tmp/version-check.log)"
         cat /tmp/version-check.log >&2
     fi
 else
@@ -137,7 +147,7 @@ log_section "Rust Code Quality (fmt, clippy, tests)"
 if cargo fmt --check --all 2>&1 | tee /tmp/fmt-check.log; then
     log_pass "Rust formatting valid"
 else
-    log_fail "Rust code not formatted (run: cargo fmt --all)"
+    log_fail_tracked "rust-formatting" "Rust code not formatted: run 'cargo fmt --all' (see /tmp/fmt-check.log)"
     [[ "$VERBOSE" == "1" ]] && cat /tmp/fmt-check.log >&2
 fi
 
@@ -145,7 +155,7 @@ fi
 if cargo clippy --workspace -- -D warnings 2>&1 | tee /tmp/clippy-check.log; then
     log_pass "Clippy checks pass (no warnings)"
 else
-    log_fail "Clippy warnings found"
+    log_fail_tracked "rust-clippy" "Clippy warnings found: run 'cargo clippy --workspace' to see details (see /tmp/clippy-check.log)"
     [[ "$VERBOSE" == "1" ]] && cat /tmp/clippy-check.log >&2
 fi
 
@@ -153,7 +163,7 @@ fi
 if cargo test --workspace 2>&1 | tee /tmp/test-check.log; then
     log_pass "All tests pass"
 else
-    log_fail "Test failures detected"
+    log_fail_tracked "rust-tests" "Test failures detected: run 'cargo test --workspace' to see details (see /tmp/test-check.log)"
     [[ "$VERBOSE" == "1" ]] && cat /tmp/test-check.log >&2
 fi
 
@@ -166,7 +176,7 @@ if [[ -f "scripts/check-cheatsheet-tiers.sh" ]]; then
     if bash scripts/check-cheatsheet-tiers.sh 2>&1 | tee /tmp/cheatsheet-tiers.log; then
         log_pass "Cheatsheet tier validation passed"
     else
-        log_fail "Cheatsheet tier errors (see details above)"
+        log_fail_tracked "cheatsheet-tiers" "Cheatsheet tier errors found (see /tmp/cheatsheet-tiers.log)"
         [[ "$VERBOSE" == "1" ]] && cat /tmp/cheatsheet-tiers.log >&2
     fi
 else
@@ -185,7 +195,7 @@ if [[ "$FAST_MODE" == "0" ]]; then
             if bash scripts/run-litmus-test.sh --all 2>&1 | tee /tmp/litmus-check.log; then
                 log_pass "All litmus tests passed"
             else
-                log_fail "Litmus test failures (see details above)"
+                log_fail_tracked "litmus-tests" "Litmus test failures detected (see /tmp/litmus-check.log)"
                 [[ "$VERBOSE" == "1" ]] && cat /tmp/litmus-check.log >&2
             fi
         else
@@ -219,12 +229,17 @@ else
     printf '%b%s%b\n' "${RED}${BOLD}" "✗ CHECKS FAILED — Fix issues before pushing" "${NC}"
     echo ""
     echo "Failed checks:"
-    [[ "$CHECKS_FAILED" -gt 0 ]] && echo "  - See details above (use --verbose for more info)"
+    for i in "${!FAILED_CHECKS[@]}"; do
+        check="${FAILED_CHECKS[$i]}"
+        reason="${FAILED_REASONS[$i]}"
+        printf '  %b[%d]%b %-30s %s\n' "${RED}" "$((i+1))" "${NC}" "$check" "$reason"
+    done
     echo ""
     echo "Next steps:"
-    echo "  1. Fix the failing checks"
-    echo "  2. Re-run: scripts/local-ci.sh"
-    echo "  3. Once all checks pass, git push is safe"
+    echo "  1. Review the failures above — each lists the root cause and log file"
+    echo "  2. Fix the issues (see actionable steps in each failure reason)"
+    echo "  3. Re-run: scripts/local-ci.sh"
+    echo "  4. Once all checks pass, git push is safe"
     echo ""
     exit 1
 fi
