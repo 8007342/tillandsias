@@ -72,4 +72,11 @@ if [[ "$main_version" != "$current_version" ]]; then
     echo "" >&2
 fi
 
+# Remind user to run local CI checks
+echo "" >&2
+echo "ℹ Reminder: Have you run local CI checks?" >&2
+echo "  scripts/local-ci.sh              # Full suite (includes litmus tests)" >&2
+echo "  scripts/local-ci.sh --fast       # Quick checks only" >&2
+echo "" >&2
+
 exit 0
