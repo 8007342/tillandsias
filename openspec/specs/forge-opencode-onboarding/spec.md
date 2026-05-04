@@ -102,8 +102,9 @@ The OpenCode `config.json` instructions list MUST include 5 files: methodology.m
 
 ## Sources of Truth
 
-- `cheatsheets/agents/opencode.md` — OpenCode IDE and development patterns
-- `cheatsheets/runtime/forge-container.md` — Forge container runtime and configuration
+- `cheatsheets/agents/opencode.md` — OpenCode IDE, development environment, and workflow best practices
+- `cheatsheets/runtime/forge-container.md` — Forge container runtime, path layout, and initialization
+- `cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md` — Cache discipline, project workspace structure, and persistent vs ephemeral paths
 
 ## Litmus Tests
 

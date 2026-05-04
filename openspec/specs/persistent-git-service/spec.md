@@ -53,7 +53,9 @@ The git-service is architecturally similar to the proxy and inference services: 
 
 ## Sources of Truth
 
-- `docs/cheatsheets/runtime/container-lifecycle.md` — container lifetime management and cleanup patterns
+- `cheatsheets/runtime/podman.md` — podman container lifecycle, state transitions, and long-lived container management
+- `cheatsheets/utils/git-workflows.md` — git repository operations, mirror repositories, and stateless git service design
+- `cheatsheets/runtime/networking.md` — enclave networking, container communication, and port exposure
 
 ## Litmus Tests
 

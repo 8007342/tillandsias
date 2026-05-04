@@ -143,8 +143,9 @@ The diagnostics process SHALL run indefinitely until the user presses Ctrl+C, al
 
 ## Sources of Truth
 
-- `docs/cheatsheets/podman-logging.md` — `podman logs` options, filtering, timestamp formats
-- `docs/cheatsheets/container-lifecycle.md` — container state transitions and cleanup
+- `cheatsheets/runtime/podman.md` — podman CLI, logs streaming, container inspection, and live output handling
+- `cheatsheets/runtime/logging-levels.md` — structured logging, log format standards, and filtering patterns
+- `cheatsheets/languages/bash.md` — shell signal handling (SIGINT), process spawning, and subprocess management
 
 ## Observability
 
