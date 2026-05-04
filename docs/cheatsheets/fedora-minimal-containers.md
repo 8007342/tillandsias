@@ -20,7 +20,7 @@ status: current
 
 **Note on Fedora release notes URL:** `https://docs.fedoraproject.org/en-US/fedora/latest/release-notes/` returned an Anubis bot-protection page (no content accessible). The microdnf GitHub repo above is the authoritative source for package manager behavior.
 
-Quick reference for Fedora Minimal (fedora-minimal:43) behavior in Tillandsias containers. Minimal images use microdnf, have ~120 packages (vs ~400 standard), and lack many tools you might assume exist.
+Quick reference for Fedora Minimal (fedora-minimal:44) behavior in Tillandsias containers. Minimal images use microdnf, have ~120 packages (vs ~400 standard), and lack many tools you might assume exist.
 
 ## Package Manager
 
@@ -43,8 +43,8 @@ dnf install -y foo    # command not found
 
 | Image | Base | Key Packages | Entrypoint | Shell |
 |-------|------|-------------|------------|-------|
-| tillandsias-forge | fedora-minimal:43 | bash, git, gh, nodejs, npm, curl, wget, fish, ripgrep, ... | entrypoint-forge-*.sh | bash |
-| tillandsias-inference | fedora-minimal:43 | bash, curl, pciutils (NOT wget) | entrypoint.sh | bash |
+| tillandsias-forge | fedora-minimal:44 | bash, git, gh, nodejs, npm, curl, wget, fish, ripgrep, ... | entrypoint-forge-*.sh | bash |
+| tillandsias-inference | fedora-minimal:44 | bash, curl, pciutils (NOT wget) | entrypoint.sh | bash |
 
 ## Health Checks (Rust -> Container)
 

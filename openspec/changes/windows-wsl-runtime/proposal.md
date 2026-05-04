@@ -115,10 +115,10 @@ Per-service base, mirroring today's Containerfile `FROM` lines:
 
 | Service       | Upstream base                       | Source                                                      |
 |---------------|-------------------------------------|-------------------------------------------------------------|
-| forge         | `fedora-minimal:43` container image | `registry.fedoraproject.org/fedora-minimal:43` via skopeo  |
+| forge         | `fedora-minimal:44` container image | `registry.fedoraproject.org/fedora-minimal:44` via skopeo  |
 | proxy         | Alpine minirootfs                   | `dl-cdn.alpinelinux.org/.../alpine-minirootfs-x.y.z-x86_64.tar.gz` (direct download) |
 | git           | Alpine minirootfs                   | direct download                                             |
-| inference     | `fedora-minimal:43` + ollama        | skopeo + ollama install (matches Linux/macOS Containerfile)|
+| inference     | `fedora-minimal:44` + ollama        | skopeo + ollama install (matches Linux/macOS Containerfile)|
 | router        | Alpine minirootfs + caddy           | direct download + `apk add caddy`                           |
 | enclave-init  | Alpine minirootfs + iptables        | direct download + `apk add iptables`                        |
 
@@ -130,8 +130,8 @@ acquisition uses:
   cites this as the recommended source).
 - **skopeo** (a single CLI binary, no daemon, ~25 MB, available for
   Windows) for Fedora-container and any other container-registry-only
-  source. `skopeo copy docker://registry.fedoraproject.org/fedora:43
-  oci:/tmp/fedora-43:latest` extracts the OCI layer set, which
+  source. `skopeo copy docker://registry.fedoraproject.org/fedora:44
+  oci:/tmp/fedora-44:latest` extracts the OCI layer set, which
   `lib-common.sh` flattens into a single rootfs tarball.
 
 Pipeline structure:

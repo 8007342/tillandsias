@@ -111,7 +111,7 @@ Or use higher-level tools:
 ## Container recipe
 
 ```dockerfile
-FROM fedora:43
+FROM fedora:44
 RUN dnf install -y chromium
 
 ENTRYPOINT ["chromium-browser", "--headless=new"]

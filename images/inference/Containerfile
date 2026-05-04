@@ -2,11 +2,11 @@
 # Local LLM inference server for Tillandsias enclave network.
 # Runs ollama — models stay cached via volume mount.
 # Built on Fedora Minimal to match the forge image.
-# DISTRO: Fedora Minimal 43 — microdnf (NOT dnf), glibc, bash default.
+# DISTRO: Fedora Minimal 44 — microdnf (NOT dnf), glibc, bash default.
 #         Health checks use curl (installed explicitly, NOT wget).
 #         User creation: useradd (NOT Alpine's adduser -D).
 #         CA bundle at /etc/pki/tls/certs/ca-bundle.crt (NOT Alpine's /etc/ssl/).
-FROM registry.fedoraproject.org/fedora-minimal:43
+FROM registry.fedoraproject.org/fedora-minimal:44
 
 # @trace spec:inference-container
 # Runtime deps for ollama, minimal deps for running ollama CPU-only

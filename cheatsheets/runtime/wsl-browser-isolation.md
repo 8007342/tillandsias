@@ -273,8 +273,8 @@ This cheatsheet documents hardened Chromium deployment in a WSL2 distro alongsid
 # Build WSL2 browser-chrome distro with Chromium hardening
 # @trace spec:chromium-browser-isolation, spec:windows-wsl-runtime
 
-# Build base distro from fedora-minimal:43 + Chromium + hardening tools
-podman create registry.fedoraproject.org/fedora-minimal:43 /bin/sh -c 'true' > "$BUILD_CONTAINER"
+# Build base distro from fedora-minimal:44 + Chromium + hardening tools
+podman create registry.fedoraproject.org/fedora-minimal:44 /bin/sh -c 'true' > "$BUILD_CONTAINER"
 
 # Layer 1: install Chromium + nftables + SELinux tools
 podman exec --user root "$BUILD_CONTAINER" microdnf install -y \

@@ -183,7 +183,7 @@ Numbers from a clean-install verification run (podman machine wiped + reinitiali
 
 | Scenario | Mode | Time | Notes |
 |----------|------|------|-------|
-| First-ever install + init | CLI `--init` | ~4 min | Downloads fedora-minimal:43 (136 MB) + alpine:3.20 (8 MB), builds 4 distinct enclave images, builds tools overlay |
+| First-ever install + init | CLI `--init` | ~4 min | Downloads fedora-minimal:44 (136 MB) + alpine:3.20 (8 MB), builds 4 distinct enclave images, builds tools overlay |
 | Cold launch (images cached, no containers) | CLI `--bash` | ~18 s | Proxy ~6 s + git-service ~6 s; inference launches async (~3 s in parallel) — does NOT add to this number |
 | Warm launch (containers up, fresh process) | CLI `--bash` | ~6.5 s | Inference snapshot-cache hit (`elapsed_secs=0.29`), but git-service still rebuilds because CLI's `EnclaveCleanupGuard` stops it on every CLI exit |
 | Warm launch (containers up, tray mode) | Tray "Attach Here" | not measured here | **persistent-git-service** keeps git-service alive across forge teardowns in tray mode → expected ~1-2 s on second + later attaches in same tray session |

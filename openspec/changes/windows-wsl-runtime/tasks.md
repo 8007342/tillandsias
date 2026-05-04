@@ -124,7 +124,7 @@ The forge tarball is 6.5 GB; build time on a fresh host is ~15 min
       Alpine via direct download from
       `dl-cdn.alpinelinux.org/alpine/v<x.y>/releases/x86_64/alpine-minirootfs-<x.y.z>-x86_64.tar.gz`
       (SHA-256 verified against Alpine's published checksums);
-      Fedora via `skopeo copy docker://registry.fedoraproject.org/fedora:43 oci:./fedora-43`
+      Fedora via `skopeo copy docker://registry.fedoraproject.org/fedora:44 oci:./fedora-44`
       then layer-flatten. Cached under `~/.cache/tillandsias/wsl-bases/`.
 - [ ] `scripts/wsl-build/build-proxy.sh` — Alpine + tinyproxy.
 - [ ] `scripts/wsl-build/build-git.sh` — Alpine + git daemon.

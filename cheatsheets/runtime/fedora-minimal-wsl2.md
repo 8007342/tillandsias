@@ -50,7 +50,7 @@ The WSL `--import` command takes a rootfs tarball. Microsoft documents two accep
 
 > "First you'll need to obtain a tar file that contains all the Linux binaries for the distribution. You can obtain a tar file in a variety of ways, two of which include: Download a provided tar file. … Find a Linux distribution container and export an instance as a tar file." — `use-custom-distro`
 
-We use the second path: `registry.fedoraproject.org/fedora-minimal:43` as the base, customize via `microdnf install`, then `podman create + podman export` the result to a tarball. The final tarball is ~250 MB compressed and lands at `images/tillandsias-distro/tillandsias-distro.tar`, ready for `wsl --import` by the installer.
+We use the second path: `registry.fedoraproject.org/fedora-minimal:44` as the base, customize via `microdnf install`, then `podman create + podman export` the result to a tarball. The final tarball is ~250 MB compressed and lands at `images/tillandsias-distro/tillandsias-distro.tar`, ready for `wsl --import` by the installer.
 
 ## Build script: `scripts/wsl-build/build-tillandsias-distro.sh`
 
@@ -60,7 +60,7 @@ This script supersedes the per-service `build-forge.sh`/`build-git.sh`/`build-pr
 #!/usr/bin/env bash
 # @trace spec:windows-wsl-runtime, spec:default-image, spec:cross-platform
 # @cheatsheet runtime/fedora-minimal-wsl2.md
-# Builds tillandsias-distro.tar from fedora-minimal:43 + podman stack.
+# Builds tillandsias-distro.tar from fedora-minimal:44 + podman stack.
 
 set -euo pipefail
 
@@ -69,7 +69,7 @@ mkdir -p "$OUT_DIR"
 
 # Build the customized rootfs in a build container we'll throw away.
 BUILD_CONTAINER="$(podman create \
-  registry.fedoraproject.org/fedora-minimal:43 \
+  registry.fedoraproject.org/fedora-minimal:44 \
   /bin/sh -c 'true')"
 
 # Layer 1: install podman + supporting userland.
@@ -241,7 +241,7 @@ wsl -d tillandsias --user forge -- \
   podman run --rm --cap-drop=ALL \
     --security-opt=no-new-privileges \
     --userns=keep-id \
-    fedora-minimal:43 echo OK
+    fedora-minimal:44 echo OK
 # Expected: OK
 ```
 
@@ -255,7 +255,7 @@ If any of the above fail, the distro tarball is broken — re-run `build-tilland
 - **`cgroup_no_v1=all` requires `wsl --shutdown`** to take effect. Tillandsias' `--init` flow detects "no current cgroup-v2" via `mount | grep cgroup2` and prompts the user; bare-metal rebooting Windows is NOT required.
 - **`crun` not `runc` is the cgroup v2 default**. Per `docs.podman.io/podman.1`. Don't `microdnf install runc` — Fedora 43 ships `crun` and `containers.conf` references it.
 - **`podman create + podman export` flattens layers**. Good for WSL `--import` (which wants a single tar), but means you can't update the distro by `podman pull` of a newer base — you re-run the build script.
-- **`registry.fedoraproject.org/fedora-minimal:43` size** is ~150 MB. Adding podman + crun + fuse-overlayfs + aardvark-dns + netavark + systemd brings the rootfs to ~250 MB compressed. The `--import` step expands to ~600 MB on first run; sparse-VHD reclaims as containers come and go.
+- **`registry.fedoraproject.org/fedora-minimal:44` size** is ~150 MB. Adding podman + crun + fuse-overlayfs + aardvark-dns + netavark + systemd brings the rootfs to ~250 MB compressed. The `--import` step expands to ~600 MB on first run; sparse-VHD reclaims as containers come and go.
 - **Don't bake images into the distro tarball.** The Containerfiles and build context go in `/opt/build/<service>/`; actual `podman build` happens at `tillandsias --init` time inside the user's installed distro. This keeps the shipped tarball small and lets the user's machine produce locally-valid images.
 - **subuid/subgid range collisions** on multi-user Windows machines: if the user already has another rootless-podman setup, the 100000-165535 range may collide with another distro's mapping. Tillandsias' `--init` flow can detect this via reading `/etc/subuid` after `--import` and shifting the range; not done in v1.
 - **No `runc` fallback** unless you ALSO `microdnf install runc` and update `containers.conf`. We don't ship runc; if cgroup v2 isn't enabled, the container start will surface a clear "cgroup v2 required" error rather than silently falling back to a less-capable runtime.
@@ -289,7 +289,7 @@ Each `podman build` produces an image stored in the distro's `containers-storage
 
 ### Source
 
-This cheatsheet documents the Fedora-minimal WSL2 distro recipe that hosts podman and all Tillandsias containers on Windows. Built from registry.fedoraproject.org/fedora-minimal:43 + podman + crun + fuse-overlayfs + aardvark-dns + netavark + systemd.
+This cheatsheet documents the Fedora-minimal WSL2 distro recipe that hosts podman and all Tillandsias containers on Windows. Built from registry.fedoraproject.org/fedora-minimal:44 + podman + crun + fuse-overlayfs + aardvark-dns + netavark + systemd.
 
 ### Materialize recipe
 
@@ -301,8 +301,8 @@ This cheatsheet documents the Fedora-minimal WSL2 distro recipe that hosts podma
 OUT_DIR="${1:-target/wsl}"
 mkdir -p "$OUT_DIR"
 
-# Create a temporary build container from fedora-minimal:43
-BUILD_CONTAINER="$(podman create registry.fedoraproject.org/fedora-minimal:43 /bin/sh -c 'true')"
+# Create a temporary build container from fedora-minimal:44
+BUILD_CONTAINER="$(podman create registry.fedoraproject.org/fedora-minimal:44 /bin/sh -c 'true')"
 
 # Install podman + ecosystem and create the forge user
 podman start --attach "$BUILD_CONTAINER" >/dev/null 2>&1 || true

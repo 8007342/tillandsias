@@ -50,7 +50,7 @@ pull_recipe: see-section-pull-on-demand
 ### Pattern 1 — Dockerfile HEALTHCHECK (HTTP)
 
 ```dockerfile
-FROM fedora:43
+FROM fedora:44
 RUN microdnf install -y curl
 COPY myapp /opt/myapp
 EXPOSE 3000
@@ -89,7 +89,7 @@ Explicitly disables health checking even if the image declares a HEALTHCHECK.
 ### Pattern 4 — TCP socket check (no curl needed)
 
 ```dockerfile
-FROM fedora:43
+FROM fedora:44
 
 # In Podman 4.1+, use `podman exec` with nc/bash to test TCP without curl:
 HEALTHCHECK --interval=10s --timeout=2s --retries=3 \
@@ -101,7 +101,7 @@ Avoids curl dependency; works for any TCP port. `<` redirect forces bash to atte
 ### Pattern 5 — Composite health check (multiple probes)
 
 ```dockerfile
-FROM fedora:43
+FROM fedora:44
 RUN microdnf install -y curl
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD curl --fail http://localhost:3000/health \
