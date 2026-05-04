@@ -22,7 +22,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-podman/src/client.rs#L1223](../../../crates/tillandsias-podman/src/client.rs#L1223)
 - [crates/tillandsias-podman/src/client.rs#L1236](../../../crates/tillandsias-podman/src/client.rs#L1236)
 - [crates/tillandsias-podman/src/lib.rs#L61](../../../crates/tillandsias-podman/src/lib.rs#L61)
-- [images/default/Containerfile#L92](../../../images/default/Containerfile#L92)
+- [images/default/Containerfile#L94](../../../images/default/Containerfile#L94)
 - [images/default/forge-welcome.sh#L132](../../../images/default/forge-welcome.sh#L132)
 - [scripts/diagnose-proxy.sh#L2](../../../scripts/diagnose-proxy.sh#L2)
 - [scripts/orchestrate-enclave.sh#L2](../../../scripts/orchestrate-enclave.sh#L2)

@@ -5,7 +5,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [flake.nix#L35](../../../flake.nix#L35)
+- [flake.nix#L36](../../../flake.nix#L36)
 - [images/default/entrypoint-forge-claude.sh#L56](../../../images/default/entrypoint-forge-claude.sh#L56)
 - [images/default/entrypoint-forge-opencode.sh#L54](../../../images/default/entrypoint-forge-opencode.sh#L54)
 - [images/default/entrypoint-forge-opencode-web.sh#L85](../../../images/default/entrypoint-forge-opencode-web.sh#L85)

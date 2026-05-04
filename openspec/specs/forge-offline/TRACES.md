@@ -5,9 +5,10 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [images/default/Containerfile#L56](../../../images/default/Containerfile#L56)
-- [images/default/Containerfile#L92](../../../images/default/Containerfile#L92)
+- [images/default/Containerfile#L58](../../../images/default/Containerfile#L58)
+- [images/default/Containerfile#L94](../../../images/default/Containerfile#L94)
 - [images/default/entrypoint-forge-claude.sh#L45](../../../images/default/entrypoint-forge-claude.sh#L45)
+- [images/default/entrypoint-forge-codex.sh#L44](../../../images/default/entrypoint-forge-codex.sh#L44)
 - [images/default/entrypoint-forge-opencode.sh#L45](../../../images/default/entrypoint-forge-opencode.sh#L45)
 - [images/default/entrypoint-forge-opencode-web.sh#L44](../../../images/default/entrypoint-forge-opencode-web.sh#L44)
 - [images/default/entrypoint-forge-opencode-web.sh#L60](../../../images/default/entrypoint-forge-opencode-web.sh#L60)

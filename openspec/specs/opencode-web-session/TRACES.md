@@ -36,7 +36,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/config-overlay/mcp/git-tools.sh#L70](../../../images/default/config-overlay/mcp/git-tools.sh#L70)
 - [images/default/config-overlay/mcp/project-info.sh#L57](../../../images/default/config-overlay/mcp/project-info.sh#L57)
 - [images/default/config-overlay/mcp/project-info.sh#L72](../../../images/default/config-overlay/mcp/project-info.sh#L72)
-- [images/default/Containerfile#L60](../../../images/default/Containerfile#L60)
+- [images/default/Containerfile#L62](../../../images/default/Containerfile#L62)
 - [images/default/entrypoint-forge-opencode-web.sh#L12](../../../images/default/entrypoint-forge-opencode-web.sh#L12)
 - [images/default/entrypoint-forge-opencode-web.sh#L41](../../../images/default/entrypoint-forge-opencode-web.sh#L41)
 - [images/default/entrypoint-forge-opencode-web.sh#L117](../../../images/default/entrypoint-forge-opencode-web.sh#L117)

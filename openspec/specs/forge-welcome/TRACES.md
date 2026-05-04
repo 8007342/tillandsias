@@ -6,6 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [images/default/entrypoint-forge-claude.sh#L42](../../../images/default/entrypoint-forge-claude.sh#L42)
+- [images/default/entrypoint-forge-codex.sh#L41](../../../images/default/entrypoint-forge-codex.sh#L41)
 - [images/default/entrypoint-forge-opencode.sh#L42](../../../images/default/entrypoint-forge-opencode.sh#L42)
 - [images/default/entrypoint-terminal.sh#L58](../../../images/default/entrypoint-terminal.sh#L58)
 - [images/default/forge-welcome.sh#L8](../../../images/default/forge-welcome.sh#L8)

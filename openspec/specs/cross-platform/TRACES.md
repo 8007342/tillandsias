@@ -39,6 +39,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-podman/src/runtime.rs#L114](../../../crates/tillandsias-podman/src/runtime.rs#L114)
 - [crates/tillandsias-podman/src/runtime.rs#L253](../../../crates/tillandsias-podman/src/runtime.rs#L253)
 - [images/default/entrypoint-forge-claude.sh#L45](../../../images/default/entrypoint-forge-claude.sh#L45)
+- [images/default/entrypoint-forge-codex.sh#L44](../../../images/default/entrypoint-forge-codex.sh#L44)
 - [images/default/entrypoint-forge-opencode.sh#L45](../../../images/default/entrypoint-forge-opencode.sh#L45)
 - [images/default/entrypoint-terminal.sh#L61](../../../images/default/entrypoint-terminal.sh#L61)
 - [images/default/lib-common.sh#L53](../../../images/default/lib-common.sh#L53)
