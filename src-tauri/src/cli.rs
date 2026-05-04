@@ -183,6 +183,7 @@ pub enum CliMode {
         /// Show verbose debug output.
         debug: bool,
         /// Drop into fish shell instead of default entrypoint (troubleshooting).
+        // @trace spec:cli-bash-mode
         bash: bool,
         /// Override the configured agent for this session.
         agent_override: Option<SelectedAgent>,

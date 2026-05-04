@@ -1,4 +1,4 @@
-# @trace spec:subdomain-routing-via-reverse-proxy, spec:fix-router-loopback-port, spec:opencode-web-session-otp
+# @trace spec:subdomain-routing-via-reverse-proxy, spec:fix-router-loopback-port, spec:opencode-web-session-otp, spec:reverse-proxy-internal
 # Tillandsias router — Caddy 2 reverse proxy that maps
 # `<service>.<project>.localhost` to enclave containers by name + port,
 # plus the tillandsias-router-sidecar binary that:

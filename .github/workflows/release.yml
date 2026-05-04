@@ -1,3 +1,4 @@
+# @trace spec:ci-release
 name: Release
 
 on:

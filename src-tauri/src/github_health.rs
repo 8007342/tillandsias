@@ -12,7 +12,7 @@
 //! - `CredentialInvalid`    — 401/403 from GitHub → `NoAuth`
 //! - `GithubUnreachable`    — DNS/timeout/5xx/transient → `NetIssue`
 //!
-//! @trace spec:simplified-tray-ux
+//! @trace spec:simplified-tray-ux, spec:github-credential-health
 
 use std::time::Duration;
 

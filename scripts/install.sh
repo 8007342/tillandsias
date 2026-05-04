@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Tillandsias Installer
 # Usage: curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
+# @trace spec:install-progress
 set -euo pipefail
 
 REPO="8007342/tillandsias"

@@ -540,6 +540,7 @@ pub fn run(
 
     // Select profile based on mode: --bash uses terminal profile, otherwise forge.
     // --opencode / --claude override the configured agent for this session.
+    // @trace spec:cli-bash-mode
     let selected_agent = agent_override.unwrap_or(global_config.agent.selected);
     let profile = if bash {
         tillandsias_core::container_profile::terminal_profile()

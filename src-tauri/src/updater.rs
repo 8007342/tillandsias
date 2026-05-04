@@ -5,7 +5,7 @@
 //! Uses Tauri's built-in updater plugin with mandatory Ed25519 signature
 //! verification. Never blocks the main event loop or the tray UI thread.
 //!
-//! @trace spec:update-system
+//! @trace spec:update-system, spec:download-telemetry
 
 use std::sync::Arc;
 
