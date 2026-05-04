@@ -5,7 +5,7 @@
 //! available. Runs entirely in a blocking context — the Tauri event loop is
 //! never constructed.
 //!
-//! @trace spec:update-system
+//! @trace spec:update-system, spec:binary-signing
 //!
 //! # Update endpoint
 //!

@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use crate::genus::TillandsiaGenus;
 
+// @trace spec:artifact-detection
+
 /// Detected project type based on standard file markers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ProjectType {

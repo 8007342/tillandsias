@@ -8,7 +8,7 @@
 //! and dies when the proxy stops. New certs every launch — overhead
 //! is milliseconds (EC P-256 key generation).
 //!
-//! @trace spec:proxy-container
+//! @trace spec:proxy-container, spec:certificate-authority
 
 use std::fs;
 use std::path::PathBuf;

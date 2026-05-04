@@ -20,7 +20,7 @@
 # otherwise. Run from any CWD — repo root is resolved via `git rev-parse`.
 #
 # OpenSpec change: cheatsheet-tooling-and-mcp
-# @trace spec:cheatsheet-tooling
+# @trace spec:cheatsheet-tooling, spec:cheatsheet-mcp-server
 
 set -euo pipefail
 
