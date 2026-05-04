@@ -615,3 +615,41 @@ specs:
   - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
+# @trace spec:chromium-debug-variant, spec:chromium-safe-variant, spec:mcp-on-demand
+# @trace spec:observability-convergence, spec:podman-secrets-integration, spec:reverse-proxy-internal
+- spec_id: chromium-debug-variant
+  status: active
+  litmus_tests:
+  - litmus:browser-ephemeral
+  coverage_ratio: 33
+  last_verified: '2026-05-03'
+- spec_id: chromium-safe-variant
+  status: active
+  litmus_tests:
+  - litmus:browser-ephemeral
+  coverage_ratio: 33
+  last_verified: '2026-05-03'
+- spec_id: mcp-on-demand
+  status: active
+  litmus_tests:
+  - litmus:enclave-isolation
+  coverage_ratio: 33
+  last_verified: '2026-05-03'
+- spec_id: observability-convergence
+  status: active
+  litmus_tests:
+  - litmus:ephemeral-guarantee
+  coverage_ratio: 30
+  last_verified: '2026-05-03'
+- spec_id: podman-secrets-integration
+  status: active
+  litmus_tests:
+  - litmus:credential-isolation
+  coverage_ratio: 33
+  last_verified: '2026-05-03'
+- spec_id: reverse-proxy-internal
+  status: active
+  litmus_tests:
+  - litmus:enclave-isolation
+  coverage_ratio: 33
+  last_verified: '2026-05-03'
