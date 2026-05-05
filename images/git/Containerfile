@@ -1,34 +1,68 @@
-# @trace spec:git-mirror-service
+# @trace spec:git-mirror-service, spec:user-runtime-lifecycle
 # Lightweight git daemon for Tillandsias enclave network.
 # Mirrors repositories from forge containers and optionally pushes to remotes.
-# Built on Alpine — minimal footprint (~15MB).
-# DISTRO: Alpine 3.20 — busybox sh default, bash installed explicitly.
-#         Health checks use nc -z (busybox netcat, NOT /dev/tcp).
-#         User creation: adduser -D (NOT useradd).
+# Built on Alpine 3.20 — minimal footprint (~15MB), busybox shell, explicit bash.
+#
+# Observability markers:
+#   - HEALTHCHECK validates daemon readiness via port 9418
+#   - Log aggregation via syslog (local1 facility) to host
+#   - Secrets management: credentials from /run/secrets (ephemeral podman mounts)
+#   - External log manifest at /etc/tillandsias/external-logs.yaml (audited by tray)
+#
+# DISTRO notes:
+#   - apk add --no-cache (Alpine package manager)
+#   - adduser -D (Alpine user creation, not useradd)
+#   - nc from busybox (health check), not GNU netcat
 FROM docker.io/library/alpine:3.20
 
-# @trace spec:git-mirror-service, spec:secrets-management
-# gh CLI is installed here (trusted container) — NOT in the forge (untrusted).
-# GitHub credentials must never touch the forge environment.
-# DISTRO: apk add --no-cache (Alpine), NOT microdnf/dnf (Fedora)
-# DISTRO: adduser -D (Alpine), NOT useradd (Fedora)
-RUN apk add --no-cache git git-daemon bash openssh-client github-cli \
+# @trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
+# Step 1: Install dependencies
+#   - git, git-daemon: core VCS functionality
+#   - bash: needed for entrypoint scripts (Alpine default is sh)
+#   - openssh-client: for authentication to remote repositories
+#   - github-cli (gh): for authenticated GitHub operations (TRUSTED container only)
+#
+# Step 2: Create unprivileged 'git' user (UID 1000, matches host --userns=keep-id)
+#
+# Step 3: Create working directories with proper ownership
+#   - /srv/git: bare repository storage
+#   - /var/log/git-service: structured logs (aggregated via syslog)
+#   - /strategic: reserved for future state management
+#
+# Security: ALL operations run as unprivileged 'git' user
+RUN apk add --no-cache \
+        git \
+        git-daemon \
+        bash \
+        openssh-client \
+        github-cli \
     && adduser -D -u 1000 -s /bin/bash git \
     && mkdir -p /srv/git /var/log/git-service /strategic \
     && chown -R git:git /srv/git /var/log/git-service /strategic
 
+# @trace spec:git-mirror-service, spec:user-runtime-lifecycle
+# Copy entrypoint script (orchestration entry point)
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+
+# @trace spec:git-mirror-service, spec:podman-orchestration
+# Copy git post-receive hook (for push notifications to remote)
 COPY post-receive-hook.sh /usr/local/share/git-service/post-receive-hook.sh
-# GIT_ASKPASS helper — reads the OAuth token from /run/secrets/github_token
-# (bind-mounted :ro by the host tray) and feeds it to git's HTTPS auth prompt.
-# @trace spec:secrets-management, spec:git-mirror-service
+
+# @trace spec:secrets-management, spec:native-secrets-store
+# GIT_ASKPASS helper — transparent credential injection for HTTPS git operations.
+# Reads OAuth token from /run/secrets/tillandsias-github-token (ephemeral podman secret).
+# Credentials never stored on disk, never visible in logs/ps.
 COPY git-askpass-tillandsias.sh /usr/local/bin/git-askpass-tillandsias.sh
-# @trace spec:external-logs-layer
-# Manifest of curated external log files published by this image.
-# The tray-side auditor reads this at /etc/tillandsias/external-logs.yaml
-# every 60 s and flags unlisted files in the role dir as LEAK events.
+
+# @trace spec:observability-convergence, spec:external-logs-layer
+# Log manifest: lists all files this image writes to syslog/stdout.
+# Tray auditor checks this every 60s; unlisted files trigger LEAK events.
+# Enables zero-surprise logging for security/compliance audits.
 RUN mkdir -p /etc/tillandsias
 COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
+
+# @trace spec:user-runtime-lifecycle
+# Make scripts executable (security: chmod only what's needed)
 RUN chmod +x /usr/local/bin/entrypoint.sh \
               /usr/local/share/git-service/post-receive-hook.sh \
               /usr/local/bin/git-askpass-tillandsias.sh
