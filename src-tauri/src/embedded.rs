@@ -114,6 +114,9 @@ pub const FORGE_ENTRYPOINT_OPENCODE_WEB: &str =
     include_str!("../../images/default/entrypoint-forge-opencode-web.sh");
 pub const FORGE_ENTRYPOINT_CLAUDE: &str =
     include_str!("../../images/default/entrypoint-forge-claude.sh");
+// @trace spec:codex-tray-launcher
+pub const FORGE_ENTRYPOINT_CODEX: &str =
+    include_str!("../../images/default/entrypoint-forge-codex.sh");
 pub const FORGE_ENTRYPOINT_TERMINAL: &str =
     include_str!("../../images/default/entrypoint-terminal.sh");
 pub const FORGE_WELCOME: &str = include_str!("../../images/default/forge-welcome.sh");
@@ -380,6 +383,12 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
         FORGE_ENTRYPOINT_CLAUDE,
     )
     .map_err(|e| format!("entrypoint-forge-claude.sh: {e}"))?;
+    // @trace spec:codex-tray-launcher
+    write_lf(
+        &default_dir.join("entrypoint-forge-codex.sh"),
+        FORGE_ENTRYPOINT_CODEX,
+    )
+    .map_err(|e| format!("entrypoint-forge-codex.sh: {e}"))?;
     write_lf(
         &default_dir.join("entrypoint-terminal.sh"),
         FORGE_ENTRYPOINT_TERMINAL,
@@ -421,6 +430,8 @@ pub fn write_image_sources() -> Result<PathBuf, String> {
             // @trace spec:opencode-web-session
             "entrypoint-forge-opencode-web.sh",
             "entrypoint-forge-claude.sh",
+            // @trace spec:codex-tray-launcher
+            "entrypoint-forge-codex.sh",
             "entrypoint-terminal.sh",
             // @trace spec:browser-mcp-server
             "mcp-server-browser.js",
