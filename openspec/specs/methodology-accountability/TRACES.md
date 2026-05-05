@@ -1,16 +1,8 @@
-# Trace Index: methodology-accountability
+# Traces for methodology-accountability
 
-Canonical search:
+Code implementing this spec (auto-generated — do not edit).
+Run `./scripts/generate-traces.sh` to regenerate.
 
-```bash
-rg -n "@trace spec:methodology-accountability|spec:methodology-accountability" methodology openspec docs cheatsheets scripts src-tauri crates images
-```
+## Annotated locations
 
-Current local trace anchors:
-
-- [methodology/provenance.yaml](../../../methodology/provenance.yaml)
-- [methodology/math-foundations.yaml](../../../methodology/math-foundations.yaml)
-- [methodology/event/index.yaml](../../../methodology/event/index.yaml)
-- [methodology/event/000-template-unpredicted.yaml](../../../methodology/event/000-template-unpredicted.yaml)
-- [methodology/proximity.yaml](../../../methodology/proximity.yaml)
-- [openspec/specs/methodology-accountability/spec.md](spec.md)
+- [scripts/validate-traces.sh#L14](../../../scripts/validate-traces.sh#L14)
