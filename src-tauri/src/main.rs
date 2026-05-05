@@ -60,6 +60,13 @@ use updater::UpdateState;
 /// Set once during setup, never replaced.
 static TRAY_ICON: std::sync::OnceLock<Mutex<tauri::tray::TrayIcon>> = std::sync::OnceLock::new();
 
+/// Synchronization signal for tray socket readiness.
+/// @trace spec:socket-container-orchestration
+/// Forge containers await this Notify before attempting to mount the socket.
+/// Prevents race where container launches before Unix socket bind completes.
+pub(crate) static TRAY_SOCK_READY: std::sync::OnceLock<Arc<tokio::sync::Notify>> =
+    std::sync::OnceLock::new();
+
 // @trace spec:tray-ux
 fn main() {
     // Parse CLI arguments first — before any heavy initialization.
@@ -1121,34 +1128,49 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
 /// The MCP server (running in forge containers) connects to this socket
 /// and sends JSON-RPC requests to open browser windows.
 ///
-/// @trace spec:browser-mcp-server
+/// @trace spec:browser-mcp-server, spec:socket-container-orchestration
 #[cfg(target_os = "linux")]
 async fn listen_browser_socket(tx: mpsc::Sender<MenuCommand>) -> Result<(), String> {
     use std::os::unix::net::UnixListener;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
-    let socket_path = "/run/tillandsias/tray.sock";
+    // Use XDG_RUNTIME_DIR (user-scoped socket per Linux convention).
+    // Matches the path logic in launch.rs:resolve_mount_source().
+    let xdg_runtime = std::env::var("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir());
+    let socket_dir = xdg_runtime.join("tillandsias");
+    std::fs::create_dir_all(&socket_dir)
+        .map_err(|e| format!("Failed to create socket directory: {}", e))?;
+    let socket_path_buf = socket_dir.join("tray.sock");
+    let socket_path = socket_path_buf.to_string_lossy().into_owned();
 
     // Remove stale socket if it exists
-    if Path::new(socket_path).exists() {
-        std::fs::remove_file(socket_path)
+    if Path::new(&socket_path).exists() {
+        std::fs::remove_file(&socket_path)
             .map_err(|e| format!("Failed to remove stale socket: {}", e))?;
     }
 
-    let listener = UnixListener::bind(socket_path)
+    let listener = UnixListener::bind(&socket_path)
         .map_err(|e| format!("Failed to bind Unix socket '{}': {}", socket_path, e))?;
 
     // Set permissions so forge containers can connect
     std::fs::set_permissions(
-        socket_path,
+        &socket_path,
         std::os::unix::fs::PermissionsExt::from_mode(0o666),
     )
     .map_err(|e| format!("Failed to set socket permissions: {}", e))?;
 
+    // Signal that the socket is ready — handlers and forge can now safely mount it.
+    // @trace spec:socket-container-orchestration
+    let notify = Arc::new(tokio::sync::Notify::new());
+    TRAY_SOCK_READY.get_or_init(|| notify.clone());
+    notify.notify_waiters();
+
     info!(
         spec = "browser-mcp-server",
         socket = socket_path,
-        "Browser socket listener started"
+        "Browser socket listener ready — handlers may proceed"
     );
 
     for stream in listener.incoming() {

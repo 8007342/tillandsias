@@ -3074,6 +3074,21 @@ pub async fn handle_attach_here(
     // @trace spec:podman-orchestration
     ensure_container_log_dir(&container_name);
 
+    // @trace spec:socket-container-orchestration
+    // Wait for tray socket to be ready before attempting mount.
+    // Prevents race where forge launches before Unix socket bind completes.
+    // select! provides a 5s timeout fallback in case socket initialization stalls.
+    if let Some(notify) = crate::TRAY_SOCK_READY.get() {
+        tokio::select! {
+            _ = notify.notified() => {
+                debug!("Tray socket ready, proceeding with forge launch");
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
+                warn!("Tray socket not ready after 5s — forge may lack browser MCP (spec:socket-container-orchestration)");
+            }
+        }
+    }
+
     // Build the full `podman run -it --rm ...` command string.
     // We open a terminal window running this command — the terminal provides
     // the TTY, podman passes it to the container, opencode gets a real terminal.
@@ -3424,6 +3439,21 @@ pub async fn handle_attach_web(
 
     // @trace spec:podman-orchestration
     ensure_container_log_dir(&container_name);
+
+    // @trace spec:socket-container-orchestration
+    // Wait for tray socket to be ready before attempting mount.
+    // Prevents race where forge launches before Unix socket bind completes.
+    // select! provides a 5s timeout fallback in case socket initialization stalls.
+    if let Some(notify) = crate::TRAY_SOCK_READY.get() {
+        tokio::select! {
+            _ = notify.notified() => {
+                debug!("Tray socket ready, proceeding with forge web launch");
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
+                warn!("Tray socket not ready after 5s — forge may lack browser MCP (spec:socket-container-orchestration)");
+            }
+        }
+    }
 
     // @trace spec:opencode-web-session
     // Build the detached / persistent launch context. `web_host_port = Some(p)`
