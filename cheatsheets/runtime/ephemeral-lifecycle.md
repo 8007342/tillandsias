@@ -1,4 +1,21 @@
+---
+tags: [ephemeral, containers, caching, lifecycle, storage]
+languages: []
+since: 260505
+last_verified: 2026-05-05
+sources: []
+authority: internal
+status: current
+tier: bundled
+pull_recipe: null
+summary_generated_by: specification
+bundled_into_image: false
+committed_for_project: false
+---
+
 # Ephemeral Lifecycle — Container Creation, Caching, and Cleanup
+
+@trace spec:user-runtime-lifecycle
 
 **Use when**: Understanding how Tillandsias manages container creation on first launch, caching across sessions, and cleanup, with the guarantee that the host filesystem remains pristine.
 

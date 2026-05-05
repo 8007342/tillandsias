@@ -1,4 +1,21 @@
+---
+tags: [images, versioning, tagging, staleness, podman]
+languages: [bash, rust]
+since: 260505
+last_verified: 2026-05-05
+sources: []
+authority: internal
+status: current
+tier: bundled
+pull_recipe: null
+summary_generated_by: specification
+bundled_into_image: false
+committed_for_project: false
+---
+
 # Container Image Tagging and Staleness Detection
+
+@trace spec:user-runtime-lifecycle
 
 **Use when**: Understanding how Tillandsias tags images with versions, detects stale images, and rebuilds on version mismatch.
 

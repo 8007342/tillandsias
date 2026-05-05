@@ -1,4 +1,21 @@
+---
+tags: [images, building, containerfile, nix, appimage, deployment]
+languages: [dockerfile, bash, nix, rust]
+since: 260505
+last_verified: 2026-05-05
+sources: []
+authority: internal
+status: current
+tier: bundled
+pull_recipe: null
+summary_generated_by: specification
+bundled_into_image: false
+committed_for_project: false
+---
+
 # Container Image Building and Embedding
+
+@trace spec:user-runtime-lifecycle
 
 **Use when**: Understanding how Tillandsias images are built (Containerfile, Nix flakes, and embedded in AppImage), and how sources make their way from development to deployed binaries.
 
