@@ -29,6 +29,8 @@ methodology:
     - evidence_bundles_bound_convergence_claims
     - unknown_events_capture_surprises_before_distillation
     - centicolons_report_residual_obligations_not_proof
+    - releases_require_validated_centicolon_projection_artifacts
+    - methodology_refinements_do_not_push_directly_to_main
 
   semantic_distillation:
     rule: >

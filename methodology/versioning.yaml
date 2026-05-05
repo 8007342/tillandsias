@@ -171,6 +171,18 @@ branch_versioning_discipline:
         Check: current branch == main, reject if false.
       enforcement: Release workflow gating (blocks with diagnostic message)
 
+    - name: methodology_refinements_branch
+      rule: >
+        Methodology work that is not already finished integration work MUST target
+        the remote methodology-refinements branch. Agents MUST NOT push methodology
+        refinements directly to main. Main receives methodology changes only by an
+        explicit integration merge after review.
+      enforcement: "pre-push hook or reviewer gate rejects direct methodology pushes to main"
+      rationale: >
+        Methodology changes alter the bootstrap contract for future agents. They
+        require their own reviewable convergence lane rather than being silently
+        injected into the integration branch.
+
   workflow_example:
     initial_state: "main at v0.1.260101.5"
     step_1: "Agent: Create feature branch from main (e.g., feature/browser-isolation)"
@@ -181,6 +193,78 @@ branch_versioning_discipline:
     step_6: "Pull request approved, squash merge back to main"
     step_7: "Main's VERSION bumps to v0.1.260102.7 (via /opsx:archive or change integration)"
     step_8: "Next agent: Fetch main → VERSION updates to v0.1.260102.7"
+
+release_snapshot_discipline:
+  description: >
+    A release is not just a main commit. It is a frozen source snapshot plus a
+    generated evidence projection that makes the release's known residual
+    uncertainty browsable and reproducible.
+
+  branch_flow:
+    - "main -> work branch"
+    - "work branch iterates and periodically integrates current main"
+    - "finished work merges to main through the integration process"
+    - "release branch is cut from the exact main commit: release/<version>"
+    - "CentiColon projection branch is generated from release branch: release/<version>-centicolon"
+    - "release branch receives generated evidence artifacts that reference the projection"
+    - "main remains the integration branch; release and projection branches are frozen"
+
+  frozen_release_branch:
+    naming: "release/<version>"
+    mutability: frozen_after_release
+    contents: >
+      Canonical source for the release plus generated release evidence artifacts:
+      evidence bundle, CentiColon metrics, trace summaries, litmus history,
+      README or dashboard summaries, and a packaged annotated-source projection.
+    rule: >
+      Release branches MUST NOT continue feature development. Post-release fixes
+      start from main or a dedicated hotfix branch and produce a new release.
+
+  centicolon_projection_branch:
+    naming: "release/<version>-centicolon"
+    mutability: generated_once_then_frozen
+    purpose: >
+      Human-browsable source projection with generated CentiColon comments. This
+      branch is never a development base and is never merged back into main or the
+      release branch.
+    source_equivalence_rule: >
+      Stripping generated CentiColon comments from the projection branch MUST
+      reproduce the canonical release source tree for behavior-bearing files.
+      Failure is a release blocker.
+    required_header_fields:
+      - release_version
+      - source_commit
+      - release_branch
+      - centicolon_projection_branch
+      - evidence_bundle_hash
+      - centicolon_signature_hash
+      - generator_version
+      - generated_at
+      - do_not_edit_or_merge
+
+  release_requirements:
+    - release_branch_exists_and_points_to_source_commit
+    - centicolon_projection_branch_exists
+    - projection_source_equivalence_validated
+    - evidence_bundle_references_release_and_projection
+    - centicolon_signature_jsonl_exists
+    - annotated_source_archive_exists_or_remote_projection_ref_is_recorded
+    - CI_CD_integration_runs_against_release_branch_with_evidence_artifacts_present
+    - release_notes_report_evidence_level_and_residual_centicolons
+
+  evidence_artifacts:
+    evidence_bundle: "target/convergence/evidence-bundle.json"
+    centicolon_signature: "target/convergence/centicolon-signature.jsonl"
+    annotated_source_archive: "target/convergence/annotated-source-<version>.zip"
+    projection_ref: "release/<version>-centicolon"
+    summary: "target/convergence/summary.md"
+
+  anti_patterns:
+    - editing_projection_branch_by_hand
+    - continuing_agent_work_from_projection_branch
+    - reporting_projection_comments_as_canonical_metrics
+    - releasing_without_source_equivalence_validation
+    - hiding_residual_centicolons_by_changing_denominator_without_scope_event
 
 crdt_merge_driver:
   description: >

@@ -117,6 +117,10 @@ verification:
       - litmus_run_ids_and_results
       - trace_coverage_summary
       - ci_run_id
+      - centicolon_signature_hash
+      - centicolon_projection_ref
+      - annotated_source_archive_hash
+      - projection_source_equivalence_result
 
     claim_strength:
       provenance: "artifact, spec, and commit can be linked"
@@ -127,6 +131,11 @@ verification:
     rule: >
       A release, annotation, or convergence report MUST cite the evidence bundle and
       its highest supported claim strength.
+
+    release_rule: >
+      A release evidence bundle MUST include validated CentiColon metrics and the
+      generated CentiColon projection reference. If projection source equivalence
+      fails, the release cannot claim structural or higher evidence strength.
 
   litmus_verification_integration:
     description: >

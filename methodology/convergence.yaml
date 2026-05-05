@@ -40,6 +40,8 @@ convergence_engine:
     - Temporary uncertainty increases require the bounded uncertainty exception
     - Unpredicted observations require methodology/event intake before closure
     - Correctness proximity must report residual CentiColons, not only aggregate convergence score
+    - Release convergence requires a validated CentiColon projection branch and evidence artifacts
+    - When convergence stalls, prioritize the highest worst-case residual CentiColon obligation
     - Mathematical convergence claims are limited by methodology/math-foundations.yaml
     - Selection pressure favors: passing tests, reduced drift, increased stability
     - Anti-pattern: Gaming metrics by hardcoding success
@@ -112,6 +114,7 @@ metrics:
     - increasing_verification: "More specs achieving S2+ status"
     - stable_invariants: "Invariants remain true over repeated test runs"
     - decreasing_centicolon_residual: "Named residual obligations trend toward 0 without denominator gaming"
+    - decreasing_worst_case_residual: "Minimax adversarial scenarios leave less maximum residual CentiColon debt"
 
 evidence_bundle:
   description: >
@@ -129,6 +132,9 @@ evidence_bundle:
     - litmus_run_ids_and_results
     - trace_coverage_summary
     - ci_run_id
+    - centicolon_signature_hash
+    - centicolon_projection_ref
+    - projection_source_equivalence_result
 
   claim_levels:
     provenance: "artifact, spec, and commit are linked"
@@ -144,6 +150,25 @@ evidence_bundle:
     - CI emits metrics after every test run
     - Metrics feed into the convergence engine's fitness function
     - Fitness function guides optimization (code changes, spec refinements)
+
+minimax_convergence_strategy:
+  description: >
+    Minimax convergence treats the strongest remaining counterexample as the next
+    target. The system should not chase easy score gains while a critical
+    requirement has high residual CentiColon debt under adversarial validation.
+  selection_rule: >
+    Pick the open obligation with the maximum residual_cc after applying the
+    adversary moves defined in methodology/proximity.yaml:minimax_validation.
+    Break ties by critical path, security boundary, user-visible contract, then
+    total downstream dependency count.
+  stopping_condition: >
+    A stall is declared when aggregate convergence does not improve and the same
+    worst-case residual remains top-ranked across the configured stability window.
+    The next action is to create or refine the litmus, trace, spec, provenance, or
+    unknown event that explains that residual.
+  anti_pattern: >
+    Raising average convergence by improving low-risk obligations while a
+    high-risk maximum residual remains unresolved.
 
 implementation_phases:
   description: >

@@ -141,9 +141,11 @@ bootstrap_router:
       read:
         - methodology/versioning.yaml
         - methodology/verification.yaml
+        - methodology/proximity.yaml
         - methodology/ci.yaml
       done_when:
         - evidence_bundle_level_named
+        - centicolon_projection_requirement_checked
         - version_or_deployment_state_is_traceable
 
     multi_agent_orchestration:

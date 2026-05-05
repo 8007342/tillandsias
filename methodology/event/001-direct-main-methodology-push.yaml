@@ -1,0 +1,77 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.001-direct-main-methodology-push@v1
+status: distilled
+observed_at: "2026-05-05T00:00:00Z"
+reporter: "human-and-agent"
+summary: >
+  Methodology refinements were committed and pushed directly to main before the
+  methodology explicitly modeled a separate review lane for methodology work.
+
+observed_signal:
+  description: >
+    A methodology bootstrap refinement commit was pushed to origin/main. The user
+    then clarified that future methodology work must target the remote
+    methodology-refinements branch, with main reserved for finished integration.
+  signal_type: "merge"
+
+expected_model:
+  description: >
+    The methodology described main as an integration branch, but did not explicitly
+    cover methodology-refinement work as a separate branch discipline or forbid
+    direct pushes of methodology changes to main.
+  source_refs:
+    - methodology/versioning.yaml:branch_versioning_discipline
+    - methodology/bootstrap/router.yaml:methodology_refinement
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - missing_methodology_refinements_branch_rule
+    - missing_release_projection_branch_rule
+  spec_requirement_ids: []
+  litmus_ids: []
+  cheatsheet_refs: []
+
+affected_artifacts:
+  specs: []
+  methodology_files:
+    - methodology.yaml
+    - methodology/versioning.yaml
+    - methodology/event/index.yaml
+  code_paths: []
+  scripts: []
+  dashboards: []
+
+evidence_refs:
+  commits:
+    - "5530e3e0 docs: codify methodology bootstrap protocol"
+  files:
+    - methodology/versioning.yaml
+    - methodology/event/001-direct-main-methodology-push.yaml
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: medium
+provisional_classification: concurrency_or_merge_anomaly
+
+next_distillation_step:
+  owner: "methodology_author"
+  action: >
+    Preserve the learned distinction in branch_versioning_discipline and release
+    snapshot discipline: methodology refinements use methodology-refinements until
+    integrated, while release CentiColon projection branches are generated evidence
+    snapshots that are never development bases.
+  target_artifact: "methodology"
+
+closure_criteria:
+  - learned_distinction_preserved_in_durable_artifact
+  - evidence_refs_are_queryable
+  - proximity_or_evidence_score_updated_if_applicable
+  - old_false_claim_tombstoned_or_superseded_if_applicable
+
+distilled_into:
+  - methodology/versioning.yaml:branch_versioning_discipline.methodology_refinements_branch
+  - methodology/versioning.yaml:release_snapshot_discipline
+  - methodology/proximity.yaml:release_projection
+  - methodology/convergence.yaml:minimax_convergence_strategy

@@ -153,3 +153,88 @@ proximity:
       - proximity_weights
       - open_unknown_events
     divergence_action: "record methodology/event entry or fix ambiguous scoring rule"
+
+  release_projection:
+    description: >
+      CentiColon comments in source code are a generated release projection, not
+      hand-maintained development source. They are valuable because they make
+      residual correctness obligations browseable beside the exact release code,
+      while the canonical metrics remain machine-readable.
+    canonical_metric_artifact: "target/convergence/centicolon-signature.jsonl"
+    human_projection_artifact: "release/<version>-centicolon branch and annotated source archive"
+    source_of_truth_order:
+      - canonical_release_commit
+      - evidence_bundle
+      - centicolon_signature_jsonl
+      - generated_annotated_source_projection
+    generated_comment_contract:
+      scope: "behavior-bearing code spans or lines with named obligations"
+      format_intent: >
+        A generated trailing or leading comment MAY cite relevant spec, methodology,
+        cheatsheet, evidence, earned_cc, residual_cc, and reason codes. The exact
+        text format is renderer-owned, but it must be reconstructable from the
+        canonical JSONL signature.
+      required_tags:
+        - cc_span_id
+        - spec_or_obligation_id
+        - earned_cc
+        - residual_cc
+        - reason_code
+        - evidence_ref
+      rule: >
+        Projection comments MUST NOT be edited by agents or treated as canonical
+        scoring input. They are a view generated from canonical metrics.
+
+    validation:
+      - strip_generated_centicolon_comments_reproduces_release_source
+      - every_projection_comment_has_matching_jsonl_record
+      - every_jsonl_record_for_behavior_span_has_projection_comment_or_explicit_no_comment_reason
+      - projection_branch_ref_and_signature_hash_are_recorded_in_evidence_bundle
+      - generator_version_is_recorded
+
+    value:
+      - human_debuggable_correctness_proximity
+      - stable_historical_evidence_per_release
+      - code_viewer_can_render_live_version_metrics_by_fetching_release_artifacts
+      - active_development_source_remains_clean
+
+  minimax_validation:
+    description: >
+      Minimax validation treats uncertainty as the adversary. A system is closer
+      to convergence when the strongest plausible counterexample, mutation,
+      environment shift, stale provenance case, or trace gap leaves less residual
+      CentiColon debt.
+    objective: >
+      Minimize the maximum residual CentiColon debt over active specs, critical
+      paths, and adversarial validation scenarios. Average improvement is secondary
+      to reducing the worst named residual that can invalidate a convergence claim.
+    adversary_moves:
+      - mutate_implementation_and_expect_bound_litmus_or_tests_to_fail
+      - generate_counterexamples_from_must_and_must_not_requirements
+      - rerun_litmus_across_compatible_environments
+      - repeat_tests_to_measure_temporal_stability_and_flakiness
+      - invalidate_or_age_cheatsheet_provenance_and_measure_caps
+      - remove_or perturb_runtime_trace_emission_and_measure_trace_gap
+      - compare_requirement_level_bindings_against_spec_level_only_traces
+    response_moves:
+      - add_or_fix_negative_litmus_signal
+      - bind_trace_to_requirement_or_invariant
+      - update_spec_to_remove_behavioral_ambiguity
+      - refresh_or_replace_stale_provenance
+      - add_runtime_trace_evidence
+      - split_overbroad_requirement_into_measurable_obligations
+      - record_unknown_event_when_the_model_cannot_explain_the_gap
+    stall_policy: >
+      When aggregate convergence stalls, choose the open obligation or spec with
+      the highest worst-case residual_cc after adversary moves. Work that target
+      before optimizing lower-residual or already-green areas.
+    score_shape:
+      per_scenario:
+        - scenario_id
+        - target_spec_or_obligation
+        - adversary_move
+        - residual_cc_before
+        - residual_cc_after
+        - evidence_refs
+        - next_response_move
+      rollup: "max_residual_cc_by_criticality_then_total_residual_cc"

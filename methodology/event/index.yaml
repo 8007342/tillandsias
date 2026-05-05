@@ -95,3 +95,11 @@ unknown_event_register:
     list_open: "rg -n 'status: open|status: triaged' methodology/event"
     list_high_delta: "rg -n 'uncertainty_delta: high' methodology/event"
     list_claim_failures: "rg -n 'methodology_claim_unproven' methodology/event"
+
+  known_events:
+    - file: methodology/event/001-direct-main-methodology-push.yaml
+      status: distilled
+      distilled_into:
+        - methodology/versioning.yaml
+        - methodology/proximity.yaml
+        - methodology/convergence.yaml
