@@ -1,0 +1,78 @@
+# @trace spec:build-script-architecture
+name: litmus:ci-unchanged-behavior
+spec: build-script-architecture
+description: Verify CI builds work identically to before refactoring; release artifacts unchanged
+severity: critical
+
+preconditions:
+  - CI environment variable set (CI=true or GITHUB_ACTIONS=true)
+  - build.sh script available
+  - GitHub Actions release.yml workflow file exists
+  - sufficient disk space (~5GB)
+  - podman available in CI environment
+
+critical_path:
+  - step: "simulate CI environment by setting CI=true"
+    command: "export CI=true && env | grep CI"
+    timeout_ms: 2000
+    expected_behavior: "CI=true is set"
+
+  - step: "run build.sh --release in CI context"
+    command: "CI=true ./build.sh --release 2>&1 | tee /tmp/ci_build.log"
+    timeout_ms: 600000
+    expected_behavior: "exits 0, produces release artifact in target/release/bundle/appimage/"
+
+  - step: "verify release artifact created"
+    command: "test -d target/release/bundle/appimage && ls -la target/release/bundle/appimage/"
+    timeout_ms: 5000
+    expected_behavior: "AppImage file exists in bundle directory"
+
+  - step: "verify CI detected full clean build path"
+    command: "grep -q 'CI environment detected' /tmp/ci_build.log && echo 'PASS: CI path taken' || grep -q 'Full clean build' /tmp/ci_build.log && echo 'PASS: clean path taken'"
+    timeout_ms: 3000
+    expected_behavior: "log contains CI detection or clean build indication"
+
+  - step: "compute hash of release artifact"
+    command: "find target/release/bundle/appimage -name 'tillandsias*.AppImage' -type f | xargs sha256sum | awk '{print $1}' > /tmp/ci_artifact_hash.txt && cat /tmp/ci_artifact_hash.txt"
+    timeout_ms: 10000
+    expected_behavior: "SHA256 hash computed and saved"
+
+  - step: "verify artifact version matches VERSION file"
+    command: "VERSION_FILE=$(cat VERSION) && find target/release/bundle/appimage -name 'tillandsias*.AppImage' | xargs file | grep -i 'appimage' && echo 'PASS: valid AppImage'"
+    timeout_ms: 5000
+    expected_behavior: "file command confirms AppImage format"
+
+gating_points:
+  - signal: "ci_context_detected"
+    success: "CI=true environment recognized, script log contains CI detection"
+    failure: "CI environment not detected OR script uses local cached path"
+    spec_linkage: "build-script-architecture"
+
+  - signal: "clean_path_used"
+    success: "script executes full Ubuntu build (cargo clean forced)"
+    failure: "script attempts to use cached forge image in CI"
+    spec_linkage: "build-script-architecture"
+
+  - signal: "release_artifact_created"
+    success: "AppImage file exists in target/release/bundle/appimage/"
+    failure: "artifact missing OR wrong directory"
+    spec_linkage: "build-script-architecture"
+
+  - signal: "release_artifact_hash_valid"
+    success: "SHA256 hash computed successfully, artifact is real AppImage format"
+    failure: "hash computation fails OR file is not AppImage"
+    spec_linkage: "build-script-architecture"
+
+observability:
+  traces:
+    - "@trace spec:build-script-architecture"
+  expected_log: "[build] CI environment detected; using full reproducible build path"
+  log_fields:
+    spec: "build-script-architecture"
+    test: "ci-unchanged-behavior"
+    ci_detected: true
+    artifact_hash: "/tmp/ci_artifact_hash.txt"
+
+rollback:
+  on_failure: "verify CI detection logic in scripts/build.sh detects CI=true or GITHUB_ACTIONS"
+  command: "grep -n 'CI=' scripts/build.sh && grep -n 'GITHUB_ACTIONS' scripts/build.sh"

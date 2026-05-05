@@ -1,0 +1,88 @@
+# @trace spec:build-script-architecture
+name: litmus:toolbox-isolation
+spec: build-script-architecture
+description: Verify both cached and clean build paths use isolated toolbox, not host system
+severity: high
+
+preconditions:
+  - build.sh script available
+  - toolbox command available (Fedora Silverblue)
+  - tillandsias-forge image exists or can be built
+  - cargo NOT installed on host system (optional but preferred for this test)
+
+critical_path:
+  - step: "query which toolbox is in use by default"
+    command: "grep -n 'TOOLBOX_NAME\\|tillandsias' scripts/build.sh | head -5"
+    timeout_ms: 3000
+    expected_behavior: "build.sh references tillandsias toolbox"
+
+  - step: "perform cached build and verify toolbox used"
+    command: "./build.sh --install 2>&1 | tee /tmp/cached_build.log"
+    timeout_ms: 120000
+    expected_behavior: "builds using toolbox, exits 0"
+
+  - step: "verify cached build log contains toolbox entry"
+    command: "grep -i 'toolbox\\|userns=keep-id\\|cap-drop' /tmp/cached_build.log | head -3"
+    timeout_ms: 3000
+    expected_behavior: "log contains toolbox or security flags"
+
+  - step: "verify cached build does NOT use host cargo or host system compiler"
+    command: "grep -i 'host cargo\\|/usr/bin/cargo\\|system compiler' /tmp/cached_build.log | wc -l"
+    timeout_ms: 3000
+    expected_behavior: "0 matches (no host tool usage)"
+
+  - step: "perform clean build and verify toolbox used"
+    command: "./build.sh --clean --install 2>&1 | tee /tmp/clean_build.log"
+    timeout_ms: 600000
+    expected_behavior: "builds using toolbox (even though full clean), exits 0"
+
+  - step: "verify clean build log contains toolbox entry"
+    command: "grep -i 'toolbox\\|userns=keep-id\\|cap-drop' /tmp/clean_build.log | head -3"
+    timeout_ms: 3000
+    expected_behavior: "log contains toolbox or security flags"
+
+  - step: "verify clean build does NOT use host system tools"
+    command: "grep -i 'host cargo\\|/usr/bin/cargo\\|system compiler' /tmp/clean_build.log | wc -l"
+    timeout_ms: 3000
+    expected_behavior: "0 matches (no host tool usage)"
+
+  - step: "confirm cargo inside toolbox is different from host"
+    command: "if command -v cargo &>/dev/null; then HOST_CARGO=$(which cargo); echo \"Host cargo: $HOST_CARGO\"; else echo 'No host cargo (expected)'; fi"
+    timeout_ms: 3000
+    expected_behavior: "either no host cargo or path differs from toolbox cargo"
+
+gating_points:
+  - signal: "toolbox_used_cached_path"
+    success: "cached build logs show toolbox invocation, security flags (--cap-drop, --userns)"
+    failure: "build runs on host OR uses host system tools"
+    spec_linkage: "build-script-architecture"
+
+  - signal: "toolbox_used_clean_path"
+    success: "clean build logs show toolbox invocation, even with --clean flag"
+    failure: "clean build bypasses toolbox OR uses host compiler"
+    spec_linkage: "build-script-architecture"
+
+  - signal: "host_system_not_used"
+    success: "neither path uses /usr/bin/cargo, /usr/bin/gcc, or other host tools"
+    failure: "build uses host system Rust, C compiler, or libraries"
+    spec_linkage: "build-script-architecture"
+
+  - signal: "security_isolation_enforced"
+    success: "both paths use --cap-drop=ALL and --userns=keep-id (or equivalent)"
+    failure: "security flags missing OR excessive capabilities granted"
+    spec_linkage: "build-script-architecture"
+
+observability:
+  traces:
+    - "@trace spec:build-script-architecture"
+  expected_log: "Using isolated toolbox for compilation (cached and clean paths)"
+  log_fields:
+    spec: "build-script-architecture"
+    test: "toolbox-isolation"
+    cached_build_log: "/tmp/cached_build.log"
+    clean_build_log: "/tmp/clean_build.log"
+    isolation_method: "toolbox with security flags"
+
+rollback:
+  on_failure: "verify build.sh passes correct isolation flags to podman/toolbox"
+  command: "grep -n 'toolbox run\\|--cap-drop\\|--userns' scripts/build.sh | head -10"

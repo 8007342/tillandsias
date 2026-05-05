@@ -80,6 +80,15 @@ specs:
   - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
+- spec_id: build-script-architecture
+  status: active
+  litmus_tests:
+  - litmus:build-cache-transparent
+  - litmus:build-clean-from-scratch-works
+  - litmus:ci-unchanged-behavior
+  - litmus:toolbox-isolation
+  coverage_ratio: 100
+  last_verified: '2026-05-04'
 - spec_id: certificate-authority
   status: active
   litmus_tests:
