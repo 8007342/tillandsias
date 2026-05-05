@@ -342,10 +342,51 @@ if [[ "$FLAG_WIPE" == true ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# AppImage build (standalone — uses podman Ubuntu container, not toolbox)
+# AppImage build — dual-path architecture (cached forge vs clean Ubuntu)
 # ---------------------------------------------------------------------------
 
-build_appimage() {
+# @trace spec:build-script-architecture
+build_appimage_forge_cached() {
+    local output_dir="$SCRIPT_DIR/target/release/bundle/appimage"
+
+    _step "Assembling AppImage using cached forge image (fast local path)..."
+
+    # Verify forge image exists
+    if ! podman image inspect tillandsias-forge:latest &>/dev/null; then
+        _warn "Forge image not found; falling back to clean Ubuntu build"
+        return 1  # Signal fallback to caller
+    fi
+
+    mkdir -p "$output_dir"
+
+    # Clean old AppImages
+    rm -f "$output_dir"/*.AppImage 2>/dev/null || true
+
+    # Ensure tauri-cli is available in toolbox
+    _toolbox_ensure_tauri_cli
+
+    # Run cargo tauri build inside the existing forge toolbox
+    if ! _run cargo tauri build --bundles appimage 2>&1; then
+        _error "cargo tauri build failed inside forge image"
+        return 1
+    fi
+
+    # Locate the AppImage
+    local appimage_path
+    appimage_path="$(find "$output_dir" -name "*.AppImage" -type f 2>/dev/null | head -1)"
+    if [[ -z "$appimage_path" ]]; then
+        _error "AppImage build failed — no .AppImage found in $output_dir"
+        return 1
+    fi
+
+    chmod +x "$appimage_path"
+    _info "AppImage ready: $appimage_path ($(du -h "$appimage_path" | cut -f1))"
+    return 0
+}
+
+# @trace spec:build-script-architecture
+# Clean Ubuntu build path — full reproducibility, slow but correct
+build_appimage_ubuntu_clean() {
     local output_dir="$SCRIPT_DIR/target/release/bundle/appimage"
     local cache_base="$ACTUAL_HOME/.cache/tillandsias/appimage-builder"
     local container_pid=""
@@ -531,6 +572,32 @@ echo "[appimage] Done: /output/$(basename "$appimage_file")"
     _info "AppImage ready: $appimage_path ($(du -h "$appimage_path" | cut -f1))"
 }
 
+# @trace spec:build-script-architecture
+# Main AppImage builder — dispatches to strategy-based path
+build_appimage() {
+    case "$APPIMAGE_STRATEGY" in
+        forge_cached)
+            if build_appimage_forge_cached; then
+                return 0
+            else
+                # Forge image missing or build failed; fall back to clean Ubuntu
+                _warn "Falling back to clean Ubuntu build..."
+                APPIMAGE_STRATEGY="clean_ubuntu"
+                build_appimage_ubuntu_clean
+                return $?
+            fi
+            ;;
+        clean_ubuntu)
+            build_appimage_ubuntu_clean
+            return $?
+            ;;
+        *)
+            _error "Unknown APPIMAGE_STRATEGY: $APPIMAGE_STRATEGY"
+            return 1
+            ;;
+    esac
+}
+
 # ---------------------------------------------------------------------------
 # Install AppImage — same layout as the curl installer
 # ---------------------------------------------------------------------------
@@ -538,6 +605,8 @@ echo "[appimage] Done: /output/$(basename "$appimage_file")"
 # @trace spec:dev-build
 install_appimage() {
     _step "Building AppImage for install..."
+    # Ensure toolbox exists before attempting forge_cached path
+    _toolbox_ensure
     build_appimage
 
     # Locate the built AppImage
@@ -640,9 +709,14 @@ if [[ "$FLAG_TOOLBOX_RESET" == true ]]; then
     fi
 fi
 
-# AppImage build (standalone — bypasses toolbox entirely)
+# AppImage build (uses toolbox for forge_cached path, podman for clean_ubuntu)
 if [[ "$FLAG_APPIMAGE" == true ]]; then
     "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
+    "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
+    # For forge_cached strategy, ensure toolbox exists first
+    if [[ "$APPIMAGE_STRATEGY" == "forge_cached" ]]; then
+        _toolbox_ensure
+    fi
     build_appimage
     # If --appimage is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE$FLAG_TOOLBOX_RESET" == "falsefalsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then
