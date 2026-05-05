@@ -78,7 +78,6 @@ _step()  { echo -e "${CYAN}[build-image]${NC} $*"; }
 IMAGE_NAME="forge"
 FLAG_FORCE=false
 FLAG_TAG=""
-FLAG_BACKEND="fedora"  # Default: Fedora minimal. Use --backend nix for Nix image.
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -92,14 +91,10 @@ while [[ $# -gt 0 ]]; do
             shift
             FLAG_TAG="$1"
             ;;
-        --backend)
-            shift
-            FLAG_BACKEND="$1"
-            ;;
         --help|-h)
-            echo "Usage: scripts/build-image.sh [forge|web|proxy|git|inference] [--force] [--tag <tag>] [--backend fedora|nix]"
+            echo "Usage: scripts/build-image.sh [forge|web|proxy|git|inference] [--force] [--tag <tag>]"
             echo ""
-            echo "Build a container image."
+            echo "Build a container image using podman (Containerfile-based, reproducible)."
             echo ""
             echo "Arguments:"
             echo "  forge              Build the forge (dev environment) image (default)"
@@ -111,7 +106,9 @@ while [[ $# -gt 0 ]]; do
             echo "  chromium-framework Build the debug browser container (with Node.js+Playwright)"
             echo "  --force            Rebuild even if sources haven't changed"
             echo "  --tag <tag>        Override the image tag (default: tillandsias-<name>:latest)"
-            echo "  --backend <type>   Build backend: fedora (default) or nix"
+            echo ""
+            echo "Note: This script uses podman build with embedded Containerfiles."
+            echo "No Nix required. Package cache is mounted for bandwidth optimization."
             exit 0
             ;;
         *)
@@ -133,11 +130,19 @@ NIX_ATTR="${IMAGE_NAME}-image"
 HASH_SUFFIX="$(echo "$IMAGE_TAG" | tr ':/' '--')"
 HASH_FILE="$CACHE_DIR/.last-build-${HASH_SUFFIX}.sha256"
 
-# Verify required files exist based on backend
-if [[ "$FLAG_BACKEND" == "nix" ]] && [[ ! -f "$ROOT/flake.nix" ]]; then
-    _error "flake.nix not found at $ROOT/"
-    _error "When installed, flake.nix should be at ~/.local/share/tillandsias/flake.nix"
-    _error "Run './build.sh --install' from the project directory to fix this."
+# Verify Containerfile exists for the image type
+case "$IMAGE_NAME" in
+    web)       CONTAINERFILE="$ROOT/images/web/Containerfile" ;;
+    proxy)     CONTAINERFILE="$ROOT/images/proxy/Containerfile" ;;
+    git)       CONTAINERFILE="$ROOT/images/git/Containerfile" ;;
+    inference) CONTAINERFILE="$ROOT/images/inference/Containerfile" ;;
+    chromium-core) CONTAINERFILE="$ROOT/images/chromium/Containerfile.core" ;;
+    chromium-framework) CONTAINERFILE="$ROOT/images/chromium/Containerfile.framework" ;;
+    *)         CONTAINERFILE="$ROOT/images/default/Containerfile" ;;
+esac
+
+if [[ ! -f "$CONTAINERFILE" ]]; then
+    _error "Containerfile not found at $CONTAINERFILE"
     exit 1
 fi
 
@@ -163,56 +168,21 @@ for _old in "$CACHE_DIR/.last-build-forge.sha256" \
 done
 unset _old
 
-_is_git_repo() {
-    git -C "$ROOT" rev-parse --is-inside-work-tree &>/dev/null
-}
-
-# @trace spec:nix-builder/git-tracked-files
-_check_untracked_image_sources() {
-    # Fail early if untracked files exist in image source dirs — they would
-    # be silently excluded from the Nix flake build, producing wrong images.
-    if ! _is_git_repo; then
-        return 0
-    fi
-    local untracked
-    untracked="$(git -C "$ROOT" ls-files --others --exclude-standard -- images/default images/web images/proxy images/git images/inference 2>/dev/null)"
-    if [[ -n "$untracked" ]]; then
-        _error "Untracked files in image sources (Nix will silently exclude them):"
-        while IFS= read -r f; do
-            _error "  $f"
-        done <<< "$untracked"
-        _error "Stage them with: git add <files>"
-        exit 1
-    fi
-}
-
 _compute_hash() {
-    # Hash the flake definition, lock file, and image source files.
-    # Uses git ls-files to match what Nix flake builds actually see.
-    # @trace spec:nix-builder/git-tracked-files
+    # Hash Containerfile and related source files in the image directory.
+    # @trace spec:user-runtime-lifecycle
+    local image_dir="$1"
     local files=()
 
-    # Flake files (always relevant)
-    [[ -f "$ROOT/flake.nix" ]]  && files+=("$ROOT/flake.nix")
-    [[ -f "$ROOT/flake.lock" ]] && files+=("$ROOT/flake.lock")
-
-    # Image source directories — use git ls-files to match Nix's view
-    if _is_git_repo; then
-        for dir in images/default images/web images/proxy images/git images/inference; do
-            while IFS= read -r f; do
-                [[ -n "$f" ]] && files+=("$ROOT/$f")
-            done < <(git -C "$ROOT" ls-files -- "$dir" 2>/dev/null)
-        done
-    else
-        _warn "Not a git repo — falling back to find (untracked file detection unavailable)"
-        for dir in "$ROOT/images/default" "$ROOT/images/web" "$ROOT/images/proxy" "$ROOT/images/git" "$ROOT/images/inference"; do
-            if [[ -d "$dir" ]]; then
-                while IFS= read -r -d '' f; do
-                    files+=("$f")
-                done < <(find "$dir" -type f -print0 2>/dev/null)
-            fi
-        done
+    if [[ ! -d "$image_dir" ]]; then
+        echo "no-sources"
+        return
     fi
+
+    # Hash all files in the image directory (Containerfile + support scripts)
+    while IFS= read -r -d '' f; do
+        [[ -n "$f" ]] && files+=("$f")
+    done < <(find "$image_dir" -type f -print0 2>/dev/null)
 
     if [[ ${#files[@]} -eq 0 ]]; then
         echo "no-sources"
@@ -222,8 +192,8 @@ _compute_hash() {
     sha256sum "${files[@]}" 2>/dev/null | sha256sum | cut -d' ' -f1
 }
 
-_check_untracked_image_sources
-CURRENT_HASH="$(_compute_hash)"
+IMAGE_DIR="${CONTAINERFILE%/*}"
+CURRENT_HASH="$(_compute_hash "$IMAGE_DIR")"
 
 if [[ "$FLAG_FORCE" == false ]] && [[ -f "$HASH_FILE" ]]; then
     LAST_HASH="$(cat "$HASH_FILE")"
@@ -243,127 +213,90 @@ if [[ "$FLAG_FORCE" == true ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step 2: Build image
+# Step 2: Build image (pure podman + cache mounting)
 # ---------------------------------------------------------------------------
+# @trace spec:user-runtime-lifecycle, spec:podman-orchestration
 BUILD_START="$(date +%s)"
 
-if [[ "$FLAG_BACKEND" == "fedora" ]]; then
-    # ── Fedora backend: podman build with Containerfile ────────
-    # Route to the correct image directory based on IMAGE_NAME.
-    # @trace spec:proxy-container
-    case "$IMAGE_NAME" in
-        web)       IMAGE_DIR="$ROOT/images/web" ;;
-        proxy)     IMAGE_DIR="$ROOT/images/proxy" ;;
-        git)       IMAGE_DIR="$ROOT/images/git" ;;
-        inference) IMAGE_DIR="$ROOT/images/inference" ;;
-        chromium-core) IMAGE_DIR="$ROOT/images/chromium" ;;
-        chromium-framework) IMAGE_DIR="$ROOT/images/chromium" ;;
-        *)         IMAGE_DIR="$ROOT/images/default" ;;
-    esac
+_step "Building ${BOLD}${IMAGE_TAG}${NC} via podman build (Containerfile)..."
 
-    # Set the correct Containerfile based on image type
-    if [[ "$IMAGE_NAME" == "chromium-core" ]]; then
-        CONTAINERFILE="$IMAGE_DIR/Containerfile.core"
-    elif [[ "$IMAGE_NAME" == "chromium-framework" ]]; then
-        CONTAINERFILE="$IMAGE_DIR/Containerfile.framework"
+# Detect distro from Containerfile for cache mounting
+# @trace spec:user-runtime-lifecycle
+_detect_distro() {
+    local containerfile="$1"
+    if grep -q "^FROM.*fedora" "$containerfile"; then
+        echo "fedora"
+    elif grep -q "^FROM.*debian\|^FROM.*ubuntu" "$containerfile"; then
+        echo "debian"
+    elif grep -q "^FROM.*alpine" "$containerfile"; then
+        echo "alpine"
     else
-        CONTAINERFILE="$IMAGE_DIR/Containerfile"
+        echo "unknown"
     fi
+}
 
-    _step "Building ${BOLD}${IMAGE_TAG}${NC} via podman build (Fedora minimal)..."
-    # @trace spec:browser-isolation-core, spec:browser-isolation-framework
-    if [[ ! -f "$CONTAINERFILE" ]]; then
-        _error "Containerfile not found at $CONTAINERFILE"
-        exit 1
+DISTRO="$(_detect_distro "$CONTAINERFILE")"
+_info "Detected base distro: ${BOLD}${DISTRO}${NC}"
+
+# Set up cache mount for distro-specific package manager
+# @trace spec:user-runtime-lifecycle
+CACHE_MOUNT_ARGS=()
+PACKAGE_CACHE="$HOME/.cache/tillandsias/packages"
+if [[ -n "$HOME" ]]; then
+    mkdir -p "$PACKAGE_CACHE"
+    case "$DISTRO" in
+        fedora)
+            CACHE_MOUNT_ARGS=("-v" "$PACKAGE_CACHE:/var/cache/dnf/packages")
+            _info "Package cache: $PACKAGE_CACHE → /var/cache/dnf/packages"
+            ;;
+        debian)
+            CACHE_MOUNT_ARGS=("-v" "$PACKAGE_CACHE:/var/cache/apt/archives")
+            _info "Package cache: $PACKAGE_CACHE → /var/cache/apt/archives"
+            ;;
+        alpine)
+            CACHE_MOUNT_ARGS=("-v" "$PACKAGE_CACHE:/var/cache/apk")
+            _info "Package cache: $PACKAGE_CACHE → /var/cache/apk"
+            ;;
+        *)
+            _warn "Unknown distro, skipping cache mount"
+            ;;
+    esac
+fi
+
+# Remove any existing tags for this image name to prevent double-tagging
+EXISTING_TAGS=$("$PODMAN" images --format "{{.Repository}}:{{.Tag}}" | grep "tillandsias-${IMAGE_NAME}:" || true)
+for old_tag in $EXISTING_TAGS; do
+    old_tag_normalized=$(echo "$old_tag" | sed 's|^localhost/||')
+    if [[ "$old_tag_normalized" != "$IMAGE_TAG" ]]; then
+        _info "  Removing old tag: $old_tag"
+        "$PODMAN" rmi -f "$old_tag" 2>/dev/null || true
     fi
+done
 
-    # Remove any existing tags for this image name to prevent double-tagging
-    # (podman adds new tag to same ID without removing old ones)
-    # Note: podman may add localhost/ prefix, so we normalize for comparison
-    EXISTING_TAGS=$("$PODMAN" images --format "{{.Repository}}:{{.Tag}}" | grep "tillandsias-${IMAGE_NAME}:" || true)
-    for old_tag in $EXISTING_TAGS; do
-        # Normalize: strip localhost/ prefix for comparison
-        old_tag_normalized=$(echo "$old_tag" | sed 's|^localhost/||')
-        if [[ "$old_tag_normalized" != "$IMAGE_TAG" ]]; then
-            _info "  Removing old tag: $old_tag"
-            "$PODMAN" rmi -f "$old_tag" 2>/dev/null || true
-        fi
-    done
+# Build args: pass CHROMIUM_CORE_TAG for framework images
+BUILD_ARGS=()
+if [[ "$IMAGE_NAME" == "chromium-framework" ]]; then
+    CHROMIUM_CORE_TAG=$(echo "$IMAGE_TAG" | sed 's/.*://')
+    BUILD_ARGS+=(--build-arg "CHROMIUM_CORE_TAG=${CHROMIUM_CORE_TAG}")
+fi
 
-    # Build args: pass CHROMIUM_CORE_TAG for framework images
-    BUILD_ARGS=()
-    if [[ "$IMAGE_NAME" == "chromium-framework" ]]; then
-        # Extract the tag from IMAGE_TAG (e.g., v0.1.160.204)
-        CHROMIUM_CORE_TAG=$(echo "$IMAGE_TAG" | sed 's/.*://')
-        BUILD_ARGS+=(--build-arg "CHROMIUM_CORE_TAG=${CHROMIUM_CORE_TAG}")
-    fi
+# Image builds do NOT go through the proxy — SSL bump requires CA trust
+# that build containers don't have. Proxy is for runtime containers only.
+# @trace spec:user-runtime-lifecycle
 
-    # Pass proxy env vars as build args if available.
-    # Image builds do NOT go through the proxy — SSL bump requires CA trust
-    # that build containers don't have. Proxy is for runtime containers only.
+"$PODMAN" build \
+    --format docker \
+    --tag "$IMAGE_TAG" \
+    "${BUILD_ARGS[@]}" \
+    "${CACHE_MOUNT_ARGS[@]}" \
+    -f "$CONTAINERFILE" \
+    "$IMAGE_DIR/"
 
-    "$PODMAN" build \
-        --format docker \
-        --tag "$IMAGE_TAG" \
-        "${BUILD_ARGS[@]}" \
-        -f "$CONTAINERFILE" \
-        "$IMAGE_DIR/"
-
-    # Remove :latest tag if it exists and differs from IMAGE_TAG
-    LATEST_TAG="tillandsias-${IMAGE_NAME}:latest"
-    if [[ "$IMAGE_TAG" != "$LATEST_TAG" ]]; then
-        _info "  Removing ${LATEST_TAG} tag if present..."
-        "$PODMAN" rmi "$LATEST_TAG" 2>/dev/null || true
-    fi
-
-else
-    # ── Nix backend: nix build inside ephemeral container ─────
-    # @trace spec:nix-builder/ephemeral-nix-build, knowledge:packaging/nix-flakes
-    OUTPUT_DIR="$CACHE_DIR/build-output"
-    mkdir -p "$OUTPUT_DIR"
-    rm -f "$OUTPUT_DIR/result.tar.gz"
-
-    _step "Running nix build .#${NIX_ATTR} inside ephemeral ${NIX_IMAGE} container..."
-
-    NIX_BUILD_CMD="nix --extra-experimental-features 'nix-command flakes' build /src#${NIX_ATTR} --print-out-paths --no-link 2>&1 | tee /dev/stderr | tail -1 | xargs -I{} cp {} /output/result.tar.gz"
-
-    # --security-opt label=disable bypasses SELinux label checks.
-    "$PODMAN" run --rm \
-        --security-opt label=disable \
-        -v "$ROOT:/src:ro" \
-        -v "$OUTPUT_DIR:/output:rw" \
-        "$NIX_IMAGE" \
-        bash -c "$NIX_BUILD_CMD"
-
-    TARBALL_PATH="$OUTPUT_DIR/result.tar.gz"
-
-    if [[ ! -f "$TARBALL_PATH" ]]; then
-        _error "Nix build failed — no tarball produced at $TARBALL_PATH"
-        exit 1
-    fi
-
-    _info "Tarball: $TARBALL_PATH"
-
-    # Load tarball into podman
-    _step "Loading image into podman..."
-    LOAD_OUTPUT="$("$PODMAN" load < "$TARBALL_PATH" 2>&1)"
-    echo "$LOAD_OUTPUT" | while IFS= read -r line; do
-        _info "  $line"
-    done
-
-    LOADED_IMAGE="$(echo "$LOAD_OUTPUT" | grep 'Loaded image' | sed 's/.*: //' | tail -1 | tr -d '[:space:]')"
-
-    if [[ -n "$LOADED_IMAGE" ]] && [[ "$LOADED_IMAGE" != "$IMAGE_TAG" ]]; then
-        _step "Tagging as ${IMAGE_TAG}..."
-        "$PODMAN" tag "$LOADED_IMAGE" "$IMAGE_TAG"
-    fi
-
-    # Remove :latest tag if it exists and differs from IMAGE_TAG
-    LATEST_TAG="tillandsias-${IMAGE_NAME}:latest"
-    if [[ "$IMAGE_TAG" != "$LATEST_TAG" ]]; then
-        _info "  Removing ${LATEST_TAG} tag if present..."
-        "$PODMAN" rmi "$LATEST_TAG" 2>/dev/null || true
-    fi
+# Remove :latest tag if it exists and differs from IMAGE_TAG
+LATEST_TAG="tillandsias-${IMAGE_NAME}:latest"
+if [[ "$IMAGE_TAG" != "$LATEST_TAG" ]]; then
+    _info "  Removing ${LATEST_TAG} tag if present..."
+    "$PODMAN" rmi "$LATEST_TAG" 2>/dev/null || true
 fi
 
     # Verify the image exists — retry briefly because podman storage may need
