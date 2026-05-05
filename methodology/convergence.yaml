@@ -41,6 +41,7 @@ convergence_engine:
     - Unpredicted observations require methodology/event intake before closure
     - Correctness proximity must report residual CentiColons, not only aggregate convergence score
     - Release convergence requires a validated CentiColon projection branch and evidence artifacts
+    - Release convergence should publish human and machine CentiColon dashboards for the last N releases
     - When convergence stalls, prioritize the highest worst-case residual CentiColon obligation
     - Mathematical convergence claims are limited by methodology/math-foundations.yaml
     - Selection pressure favors: passing tests, reduced drift, increased stability
@@ -134,6 +135,7 @@ evidence_bundle:
     - ci_run_id
     - centicolon_signature_hash
     - centicolon_projection_ref
+    - centicolon_dashboard_hash
     - projection_source_equivalence_result
 
   claim_levels:

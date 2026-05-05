@@ -248,6 +248,8 @@ release_snapshot_discipline:
     - projection_source_equivalence_validated
     - evidence_bundle_references_release_and_projection
     - centicolon_signature_jsonl_exists
+    - centicolon_dashboard_markdown_updated
+    - centicolon_dashboard_json_updated
     - annotated_source_archive_exists_or_remote_projection_ref_is_recorded
     - CI_CD_integration_runs_against_release_branch_with_evidence_artifacts_present
     - release_notes_report_evidence_level_and_residual_centicolons
@@ -256,6 +258,8 @@ release_snapshot_discipline:
     evidence_bundle: "target/convergence/evidence-bundle.json"
     centicolon_signature: "target/convergence/centicolon-signature.jsonl"
     annotated_source_archive: "target/convergence/annotated-source-<version>.zip"
+    markdown_dashboard: "docs/convergence/centicolon-dashboard.md"
+    machine_dashboard: "docs/convergence/centicolon-dashboard.json"
     projection_ref: "release/<version>-centicolon"
     summary: "target/convergence/summary.md"
 

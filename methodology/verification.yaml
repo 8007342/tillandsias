@@ -120,6 +120,7 @@ verification:
       - centicolon_signature_hash
       - centicolon_projection_ref
       - annotated_source_archive_hash
+      - centicolon_dashboard_hash
       - projection_source_equivalence_result
 
     claim_strength:
@@ -136,6 +137,11 @@ verification:
       A release evidence bundle MUST include validated CentiColon metrics and the
       generated CentiColon projection reference. If projection source equivalence
       fails, the release cannot claim structural or higher evidence strength.
+
+    dashboard_rule: >
+      A release evidence bundle SHOULD link to the generated CentiColon dashboard
+      markdown and JSON summary so humans can browse the last N releases and agents
+      can consume the same trend data deterministically.
 
   litmus_verification_integration:
     description: >

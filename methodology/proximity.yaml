@@ -92,6 +92,95 @@ proximity:
       - evidence_bundle_ref
       - open_unknown_events
 
+  release_dashboard:
+    description: >
+      Each release SHOULD publish a human-readable CentiColon dashboard that
+      GitHub can render directly while also publishing a machine-readable summary.
+      The dashboard is a release evidence view, not a substitute for the canonical
+      signature JSONL.
+    audience:
+      human: "Browse progress across releases from README-style markdown."
+      agent: "Read deterministic JSON and choose the highest residual work."
+    artifacts:
+      markdown_dashboard: "docs/convergence/centicolon-dashboard.md"
+      machine_summary: "docs/convergence/centicolon-dashboard.json"
+      per_release_summary: "target/convergence/summary.md"
+      canonical_signature: "target/convergence/centicolon-signature.jsonl"
+    retention:
+      last_n_releases_default: 10
+      rule: >
+        The dashboard lists the last N releases by default and MAY link to full
+        historical JSON. Release-specific evidence remains immutable on release
+        branches or release artifacts.
+    required_release_row_fields:
+      - release_version
+      - release_date
+      - source_commit
+      - expected_total_cc
+      - actual_earned_cc
+      - residual_cc
+      - percent_closed
+      - max_residual_spec
+      - max_residual_reason
+      - evidence_bundle_ref
+      - centicolon_projection_ref
+      - ci_result
+    expected_vs_actual:
+      expected_total_cc: >
+        The denominator for the release's active obligation scope. Denominator
+        changes MUST be marked as scope changes rather than hidden regressions or
+        improvements.
+      actual_earned_cc: >
+        The earned CentiColons from validated evidence at release time.
+      residual_cc: "expected_total_cc - actual_earned_cc after caps and penalties."
+      percent_closed: "actual_earned_cc / expected_total_cc, rendered with residual reasons."
+    markdown_bar:
+      width: 20
+      filled: "#"
+      empty: "-"
+      template: "`[{bar}] {percent_closed}%`"
+      example: "`[###############-----] 75%`"
+      rule: >
+        Use ASCII bars in committed markdown so GitHub renders consistently.
+        Rich UIs may replace them with styled bars, but the markdown remains the
+        stable fallback.
+    markdown_table_columns:
+      - Release
+      - Commit
+      - Expected cc
+      - Earned cc
+      - Residual cc
+      - Closed
+      - Worst residual
+      - Evidence
+    row_example: >
+      | v0.1.260505.13 | abc1234 | 2800 | 2778 | 22 |
+      `[###################-] 99%` | port-allocation: missing negative litmus |
+      evidence-bundle.json |
+    trend_sections:
+      - "Last N releases summary"
+      - "Largest residual by release"
+      - "Scope changes and denominator changes"
+      - "Minimax next targets"
+      - "Unknown events opened or closed"
+    minimax_next_targets:
+      rule: >
+        The dashboard MUST list the current top residual obligations by worst-case
+        residual_cc, not only the largest aggregate categories. This makes stalls
+        visible and gives agents a concrete next attack surface.
+      fields:
+        - spec_or_obligation_id
+        - residual_cc
+        - adversary_move
+        - recommended_response_move
+        - evidence_gap
+    anti_gaming:
+      - do_not_hide_denominator_growth
+      - do_not_report_percent_without_residual_cc
+      - do_not_replace_canonical_jsonl_with_markdown
+      - do_not_drop_failed_releases_from_trend_without_tombstone
+      - do_not_rank_by_easy_closure_when_high_criticality_residual_exists
+
   anti_gaming:
     rules:
       - centicolons_measure_named_obligations_not_lines_of_code
