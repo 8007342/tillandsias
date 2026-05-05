@@ -118,7 +118,15 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
     })?;
 
     let script = source_dir.join("scripts").join("build-image.sh");
-    let tag = crate::handlers::forge_image_tag();
+    // @trace spec:user-runtime-lifecycle, spec:socket-container-orchestration
+    let tag = match image_name {
+        "proxy" => crate::handlers::proxy_image_tag(),
+        "git" => crate::handlers::git_image_tag(),
+        "inference" => crate::handlers::inference_image_tag(),
+        "chromium-core" => crate::handlers::chromium_core_image_tag(),
+        "chromium-framework" => crate::handlers::chromium_framework_image_tag(),
+        _ => crate::handlers::forge_image_tag(),
+    };
 
     if debug {
         println!(
