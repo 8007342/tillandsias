@@ -156,6 +156,8 @@ git_desc = "  ✓ git        — git मिरर सेवा (बेयर र
 inference_desc = "  ✓ inference  — स्थानीय LLM (ollama)"
 tools_overlay = "सॉफ़्टवेयर परत बन रही है (Claude Code, OpenSpec, OpenCode)..."
 tools_overlay_ready = "✓ सॉफ़्टवेयर परत तैयार"
+failed_logs_header = "विफल बिल्ड लॉग (--debug):"
+skipping = "↷ {name}: {tag} (पहले से निर्मित, छोड़ा जा रहा है)"
 
 [cli.welcome]
 title = "Tillandsias v{version}"

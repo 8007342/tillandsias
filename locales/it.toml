@@ -177,6 +177,8 @@ git_desc = "  ✓ git        — servizio mirror git (repository bare + daemon)"
 inference_desc = "  ✓ inference  — LLM locale (ollama)"
 tools_overlay = "Costruzione del livello software (Claude Code, OpenSpec, OpenCode)..."
 tools_overlay_ready = "✓ Livello software pronto"
+failed_logs_header = "Log di costruzione fallita (--debug):"
+skipping = "↷ {name}: {tag} (gia costruito, saltato)"
 
 # ── CLI welcome banner ──────────────────────────────────────
 [cli.welcome]

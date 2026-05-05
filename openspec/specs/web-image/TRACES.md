@@ -5,5 +5,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [.claude/worktrees/design-chromium-browser-isolation/images/web/entrypoint.sh#L3](../../../.claude/worktrees/design-chromium-browser-isolation/images/web/entrypoint.sh#L3)
+- [images/web/Containerfile#L1](../../../images/web/Containerfile#L1)
 - [images/web/entrypoint.sh#L3](../../../images/web/entrypoint.sh#L3)

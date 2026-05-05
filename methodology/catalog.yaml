@@ -1,0 +1,84 @@
+trace: spec:methodology-accountability
+
+methodology_catalog:
+  version: v0.1
+  purpose: >
+    Component index for humans and methodology authors. Agents with concrete
+    tasks should start with methodology/bootstrap/router.yaml instead.
+
+  components:
+    bootstrap_router:
+      file: methodology/bootstrap/router.yaml
+      provides: "Exact one-intent task routing."
+    bootstrap_roles:
+      file: methodology/bootstrap/roles.yaml
+      provides: "Many-to-many role and file affordance mapping."
+    philosophy:
+      file: methodology/philosophy.yaml
+      provides: "Core principle, layers, evidence boundaries, pitfalls."
+    spec_system:
+      file: methodology/spec-system.yaml
+      provides: "Spec lifecycle, modality, ambiguity, bounded uncertainty."
+    verification:
+      file: methodology/verification.yaml
+      provides: "S-levels, L-levels, evidence bundles."
+    provenance:
+      file: methodology/provenance.yaml
+      provides: "Claim provenance, sources, limits, falsification signals."
+    math_foundations:
+      file: methodology/math-foundations.yaml
+      provides: "Formal convergence boundaries and validation program."
+    litmus:
+      file: methodology/litmus.yaml
+      provides: "Executable decision boundaries and stability."
+    cheatsheets:
+      file: methodology/cheatsheets.yaml
+      provides: "Knowledge cache operations and provenance requirements."
+    convergence:
+      file: methodology/convergence.yaml
+      provides: "Objective, metrics, drift control, convergence signals."
+    proximity:
+      file: methodology/proximity.yaml
+      provides: "CentiColon residual obligation model."
+    ci:
+      file: methodology/ci.yaml
+      provides: "Trace annotations, CI validation, runtime trace fields."
+    versioning:
+      file: methodology/versioning.yaml
+      provides: "Version evidence and release reconvergence."
+    between_commits_work_discipline:
+      file: methodology/between-commits-work-discipline.yaml
+      provides: "Ephemeral agent work and merge discipline."
+    agent_observability:
+      file: methodology/agent-observability.yaml
+      provides: "Agent event stream and handoff protocol."
+    unknown_event_register:
+      file: methodology/event/index.yaml
+      provides: "Unknown intake and semantic distillation closure."
+
+  constraints:
+    methodology_complexity_ratio:
+      rule: "methodology_yaml_lines / codebase_sloc < 0.15"
+      status: monitoring
+    component_independence:
+      rule: "Each component is independently readable."
+      status: design_enforced
+    no_duplicate_ownership:
+      rule: "Each concept has one owning component; references point to owner."
+      status: design_enforced
+
+  verification:
+    root_is_short: "wc -l methodology.yaml"
+    yaml_parses: "python3 -c 'import yaml, pathlib; [yaml.safe_load(p.read_text()) for p in pathlib.Path(\"methodology\").rglob(\"*.yaml\")]'"
+    router_exists: "test -f methodology/bootstrap/router.yaml"
+    unknown_template_exists: "test -f methodology/event/000-template-unpredicted.yaml"
+
+  supersedes:
+    old_monolithic_yaml:
+      file: monotonic-reduction-of-uncertainty-under-verifiable-constraints.yaml
+      version: v0.2
+      reason: "Split into components for readability and maintenance."
+    old_specs_rules:
+      file: specs.yaml
+      version: v0.1
+      reason: "Spec rules absorbed into methodology/spec-system.yaml."

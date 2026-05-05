@@ -1,0 +1,32 @@
+[package]
+name = "tillandsias-router-sidecar"
+version = "0.1.170"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "In-router process holding the per-project session table; subscribes to tray control socket and serves Caddy forward_auth"
+
+[[bin]]
+name = "tillandsias-router-sidecar"
+path = "src/main.rs"
+# Unix-only: runs inside Linux containers
+required-features = ["unix-only"]
+
+[dependencies]
+tillandsias-control-wire = { workspace = true }
+tillandsias-otp = { workspace = true }
+
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+futures-util = { workspace = true }
+bytes = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[features]
+# Unix-only feature required to build the binary.
+# On Windows, the binary is skipped; only lib tests run.
+unix-only = []
+
+[dev-dependencies]
+tempfile = "3"

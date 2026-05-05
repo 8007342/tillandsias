@@ -1,0 +1,11 @@
+[package]
+name = "tillandsias-control-wire"
+version = "0.1.170"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Postcard-framed wire schema for the tray-host control socket (shared by tray and consumers)"
+
+[dependencies]
+serde = { workspace = true }
+postcard = { workspace = true }

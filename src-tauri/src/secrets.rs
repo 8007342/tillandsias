@@ -48,7 +48,12 @@ const GITHUB_TOKEN_KEY: &str = "github-oauth-token";
 /// Returns `Ok(())` on success. Returns `Err` if the keyring is unavailable —
 /// the caller should refuse to proceed rather than fall back.
 pub fn store_github_token(token: &str) -> Result<(), String> {
-    let _span = info_span!("store_github_token", accountability = true, category = "secrets").entered();
+    let _span = info_span!(
+        "store_github_token",
+        accountability = true,
+        category = "secrets"
+    )
+    .entered();
     let entry = keyring::Entry::new(SERVICE, GITHUB_TOKEN_KEY)
         .map_err(|e| format!("Failed to create keyring entry: {e}"))?;
     entry
@@ -76,7 +81,12 @@ pub fn store_github_token(token: &str) -> Result<(), String> {
 ///
 /// @trace spec:native-secrets-store, spec:secrets-management
 pub fn retrieve_github_token() -> Result<Option<String>, String> {
-    let _span = info_span!("retrieve_github_token", accountability = true, category = "secrets").entered();
+    let _span = info_span!(
+        "retrieve_github_token",
+        accountability = true,
+        category = "secrets"
+    )
+    .entered();
     let entry = keyring::Entry::new(SERVICE, GITHUB_TOKEN_KEY)
         .map_err(|e| format!("Failed to create keyring entry: {e}"))?;
     match entry.get_password() {
@@ -130,7 +140,7 @@ pub fn delete_github_token() -> Result<(), String> {
 /// - Linux:   `$XDG_RUNTIME_DIR/tillandsias/tokens/` (real tmpfs)
 /// - macOS:   `$TMPDIR/tillandsias-tokens/` (per-user tmpfs under /var/folders)
 /// - Windows: `%LOCALAPPDATA%\Temp\tillandsias-tokens\` (per-user NTFS —
-///            not literal tmpfs, but user-scoped and swept on cleanup)
+///   not literal tmpfs, but user-scoped and swept on cleanup)
 fn token_file_root() -> PathBuf {
     #[cfg(target_os = "linux")]
     {
@@ -169,9 +179,8 @@ pub fn prepare_token_file(container_name: &str) -> Result<Option<PathBuf>, Strin
     let final_path = token_file_path(container_name);
     let parent = final_path.parent().expect("token path always has parent");
 
-    std::fs::create_dir_all(parent).map_err(|e| {
-        format!("Cannot create token dir {}: {e}", parent.display())
-    })?;
+    std::fs::create_dir_all(parent)
+        .map_err(|e| format!("Cannot create token dir {}: {e}", parent.display()))?;
     secure_dir(parent)?;
 
     let tmp_path = parent.join("github_token.tmp");
@@ -201,15 +210,15 @@ pub fn prepare_token_file(container_name: &str) -> Result<Option<PathBuf>, Strin
 /// @trace spec:secrets-management, spec:secret-rotation
 pub fn cleanup_token_file(container_name: &str) {
     let path = token_file_path(container_name);
-    if let Err(e) = std::fs::remove_file(&path) {
-        if e.kind() != std::io::ErrorKind::NotFound {
-            warn!(
-                spec = "secrets-management",
-                container = %container_name,
-                error = %e,
-                "Token file unlink failed — may leak briefly until app exit sweep"
-            );
-        }
+    if let Err(e) = std::fs::remove_file(&path)
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        warn!(
+            spec = "secrets-management",
+            container = %container_name,
+            error = %e,
+            "Token file unlink failed — may leak briefly until app exit sweep"
+        );
     }
     if let Some(parent) = path.parent() {
         let _ = std::fs::remove_dir(parent);

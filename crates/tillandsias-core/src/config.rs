@@ -1,3 +1,5 @@
+// @trace spec:forge-forward-compat
+
 use std::path::{Path, PathBuf};
 
 use tracing::{debug, warn};
@@ -17,6 +19,7 @@ const DEFAULT_DEBOUNCE_MS: u64 = 2000;
 /// Which AI coding agent to launch in forge containers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum SelectedAgent {
     OpenCode,
     Claude,
@@ -24,15 +27,11 @@ pub enum SelectedAgent {
     /// in an embedded Tauri webview. Default for new installs.
     /// @trace spec:opencode-web-session
     #[serde(rename = "opencode-web")]
+    #[default]
     OpenCodeWeb,
 }
 
 // @trace spec:opencode-web-session
-impl Default for SelectedAgent {
-    fn default() -> Self {
-        Self::OpenCodeWeb
-    }
-}
 
 impl SelectedAgent {
     /// The string value passed as `TILLANDSIAS_AGENT` env var.
@@ -71,18 +70,10 @@ impl SelectedAgent {
 }
 
 /// Agent selection configuration.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct AgentConfig {
     #[serde(default)]
     pub selected: SelectedAgent,
-}
-
-impl Default for AgentConfig {
-    fn default() -> Self {
-        Self {
-            selected: SelectedAgent::default(),
-        }
-    }
 }
 
 /// Internationalization configuration.
@@ -102,6 +93,62 @@ impl Default for I18nConfig {
 
 fn default_language() -> String {
     "en".to_string()
+}
+
+/// Forge container runtime configuration.
+///
+/// Controls how per-launch tmpfs budgets are computed and bounded for the
+/// project-source hot path (`/home/forge/src`).
+///
+/// @trace spec:forge-hot-cold-split, spec:cheatsheets-license-tiered
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ForgeConfig {
+    /// Maximum size (MB) for the per-launch `/home/forge/src` tmpfs.
+    /// The compute_hot_budget helper clamps its result to this ceiling.
+    /// Default: 4096 (4 GB).
+    #[serde(default = "default_hot_path_max_mb")]
+    pub hot_path_max_mb: u32,
+
+    /// Inflation multiplier applied to the git mirror's pack size when
+    /// computing the `/home/forge/src` tmpfs budget. A working tree is
+    /// typically 2–5× the pack size; 4× is a safe conservative default.
+    /// Default: 4.
+    #[serde(default = "default_hot_path_inflation")]
+    pub hot_path_inflation: u32,
+
+    /// User override (in MB) for the pull-on-demand cheatsheet cache RAM
+    /// soft-cap. When `Some`, the override wins over auto-detection from
+    /// `MemTotal`; when `None`, the host RAM tier (Modest/Normal/Plentiful)
+    /// is auto-resolved at tray startup. The resolved cap is exported into
+    /// every forge container as `TILLANDSIAS_PULL_CACHE_RAM_MB`.
+    ///
+    /// Tier table (auto-detection):
+    ///   - `MemTotal < 8 GiB`   → 64 MB
+    ///   - `8 GiB ≤ MemTotal < 32 GiB` → 128 MB
+    ///   - `MemTotal ≥ 32 GiB`  → 1024 MB
+    ///
+    /// Default: `None` (use auto-detection).
+    /// @trace spec:cheatsheets-license-tiered
+    #[serde(default)]
+    pub pull_cache_ram_mb: Option<u32>,
+}
+
+impl Default for ForgeConfig {
+    fn default() -> Self {
+        Self {
+            hot_path_max_mb: default_hot_path_max_mb(),
+            hot_path_inflation: default_hot_path_inflation(),
+            pull_cache_ram_mb: None,
+        }
+    }
+}
+
+fn default_hot_path_max_mb() -> u32 {
+    4096
+}
+
+fn default_hot_path_inflation() -> u32 {
+    4
 }
 
 /// Global configuration loaded from `~/.config/tillandsias/config.toml`.
@@ -124,6 +171,11 @@ pub struct GlobalConfig {
 
     #[serde(default)]
     pub i18n: I18nConfig,
+
+    /// Forge-container runtime tuning (tmpfs budget for hot paths).
+    /// @trace spec:forge-hot-cold-split
+    #[serde(default)]
+    pub forge: ForgeConfig,
 }
 
 /// Scanner settings.
@@ -235,6 +287,7 @@ impl Default for GlobalConfig {
             updates: UpdatesConfig::default(),
             agent: AgentConfig::default(),
             i18n: I18nConfig::default(),
+            forge: ForgeConfig::default(),
         }
     }
 }
@@ -356,6 +409,45 @@ pub fn log_dir() -> PathBuf {
     }
 }
 
+/// Platform-aware state directory root for Tillandsias.
+///
+/// This is the same root that `log_dir()` builds on:
+/// - Linux: `~/.local/state/tillandsias/`
+/// - macOS: `~/Library/Logs/tillandsias/`
+/// - Windows: `%LOCALAPPDATA%/tillandsias/logs/`
+///
+/// Exposed separately so that `external_logs_dir()` and future sibling
+/// paths can be computed without coupling to the `log` concept.
+pub fn state_dir() -> PathBuf {
+    log_dir()
+}
+
+/// Host directory for EXTERNAL logs across all producer roles.
+///
+/// Returns `<state_dir>/external-logs/` — a sibling of the
+/// `containers/<container>/logs/` INTERNAL directories.
+///
+/// The launcher bind-mounts this directory RO at
+/// `/var/log/tillandsias/external/` inside consumer containers so they
+/// see one subdirectory per active producer role.
+///
+/// @trace spec:external-logs-layer
+pub fn external_logs_dir() -> PathBuf {
+    state_dir().join("external-logs")
+}
+
+/// Host directory for a specific producer's EXTERNAL logs.
+///
+/// Returns `<state_dir>/external-logs/<role>/`.
+/// The launcher creates this directory on first launch if absent and
+/// bind-mounts it RW at `/var/log/tillandsias/external/` inside the
+/// producer container. The producer can ONLY see its own role's files.
+///
+/// @trace spec:external-logs-layer
+pub fn external_logs_role_dir(role: &str) -> PathBuf {
+    external_logs_dir().join(role)
+}
+
 /// Per-container log directory under the platform-aware log root.
 ///
 /// Returns `<log_dir>/containers/<container_name>/logs/`.
@@ -369,10 +461,7 @@ pub fn container_log_dir(container_name: &str) -> PathBuf {
     let short_name = container_name
         .strip_prefix("tillandsias-")
         .unwrap_or(container_name);
-    log_dir()
-        .join("containers")
-        .join(short_name)
-        .join("logs")
+    log_dir().join("containers").join(short_name).join("logs")
 }
 
 /// Platform-aware cache directory.
@@ -407,7 +496,12 @@ pub fn generate_verbose_config(config: &GlobalConfig) -> String {
         .scanner
         .watch_paths
         .iter()
-        .map(|p| format!("\"{}\"", p.display()))
+        .map(|p| {
+            let path_str = p.display().to_string();
+            // Escape backslashes for TOML
+            let escaped = path_str.replace('\\', "\\\\");
+            format!("\"{}\"", escaped)
+        })
         .collect();
     let watch_paths_str = watch_paths.join(", ");
 
@@ -675,6 +769,34 @@ mod tests {
         assert_eq!(config.scanner.debounce_ms, 2000);
     }
 
+    // @trace spec:forge-hot-cold-split
+    #[test]
+    fn forge_config_defaults_round_trip_through_toml() {
+        // Default ForgeConfig values round-trip through TOML correctly.
+        let config = GlobalConfig::default();
+        assert_eq!(config.forge.hot_path_max_mb, 4096);
+        assert_eq!(config.forge.hot_path_inflation, 4);
+
+        // Serialize and deserialize back.
+        let toml_str = toml::to_string(&config).unwrap();
+        let parsed: GlobalConfig = toml::from_str(&toml_str).unwrap();
+        assert_eq!(parsed.forge.hot_path_max_mb, config.forge.hot_path_max_mb);
+        assert_eq!(
+            parsed.forge.hot_path_inflation,
+            config.forge.hot_path_inflation
+        );
+
+        // Verify custom values are preserved.
+        let custom = r#"
+[forge]
+hot_path_max_mb = 2048
+hot_path_inflation = 6
+"#;
+        let parsed_custom: GlobalConfig = toml::from_str(custom).unwrap();
+        assert_eq!(parsed_custom.forge.hot_path_max_mb, 2048);
+        assert_eq!(parsed_custom.forge.hot_path_inflation, 6);
+    }
+
     #[test]
     fn merge_project_overrides_image() {
         let global = GlobalConfig::default();
@@ -773,7 +895,10 @@ debounce_ms = 5000
             parsed.updates.check_interval_hours,
             config.updates.check_interval_hours
         );
-        assert_eq!(parsed.updates.check_on_launch, config.updates.check_on_launch);
+        assert_eq!(
+            parsed.updates.check_on_launch,
+            config.updates.check_on_launch
+        );
         assert!(parsed.security.cap_drop_all);
         assert!(parsed.security.no_new_privileges);
         assert!(parsed.security.userns_keep_id);

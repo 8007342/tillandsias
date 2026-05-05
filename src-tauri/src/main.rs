@@ -1,7 +1,4 @@
-// On Windows, we use "console" subsystem (the default) so CLI output works
-// from any terminal. For tray-only mode (no args), the console window is
-// hidden via FreeConsole() after startup.
-// On non-Windows, the attribute is irrelevant.
+#![allow(clippy::collapsible_if)]
 
 mod accountability;
 mod build_lock;
@@ -14,6 +11,7 @@ mod desktop_env;
 mod embedded;
 mod event_loop;
 mod github;
+mod github_health;
 mod gpu;
 mod handlers;
 mod i18n;
@@ -22,17 +20,16 @@ mod launch;
 mod log_format;
 mod logging;
 mod menu;
+mod podman_secret;
 mod runner;
 mod secrets;
 mod singleton;
 mod strings;
-mod tools_overlay;
 mod tray_spawn;
 mod uninstall;
 mod update_cli;
 mod update_log;
 mod updater;
-mod webview;
 
 /// Chromium launcher for browser isolation.
 #[cfg(target_os = "linux")]
@@ -42,8 +39,8 @@ mod chromium_launcher;
 #[cfg(target_os = "linux")]
 mod mcp_browser;
 
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use tauri::tray::TrayIconBuilder;
 use tokio::sync::mpsc;
@@ -63,18 +60,15 @@ use updater::UpdateState;
 /// Set once during setup, never replaced.
 static TRAY_ICON: std::sync::OnceLock<Mutex<tauri::tray::TrayIcon>> = std::sync::OnceLock::new();
 
-fn main() {
-    // On Windows, hide the console window for tray-only mode (no args).
-    // CLI mode keeps the console so output is visible in any terminal.
-    #[cfg(target_os = "windows")]
-    {
-        if std::env::args().len() <= 1 {
-            unsafe {
-                windows_sys::Win32::System::Console::FreeConsole();
-            }
-        }
-    }
+/// Synchronization signal for tray socket readiness.
+/// @trace spec:socket-container-orchestration
+/// Forge containers await this Notify before attempting to mount the socket.
+/// Prevents race where container launches before Unix socket bind completes.
+pub(crate) static TRAY_SOCK_READY: std::sync::OnceLock<Arc<tokio::sync::Notify>> =
+    std::sync::OnceLock::new();
 
+// @trace spec:tray-ux
+fn main() {
     // Parse CLI arguments first — before any heavy initialization.
     let (cli_mode, log_config) = match cli::parse() {
         Some(parsed) => parsed,
@@ -91,8 +85,8 @@ fn main() {
     }
 
     // Init mode — pre-build images and exit.
-    if let cli::CliMode::Init { force, debug: _ } = cli_mode {
-        let success = init::run_with_force(force, false);
+    if let cli::CliMode::Init { force, debug } = cli_mode {
+        let success = init::run_with_force(force, debug);
         std::process::exit(if success { 0 } else { 1 });
     }
 
@@ -132,9 +126,8 @@ fn main() {
     if let cli::CliMode::Diagnostics { path, debug } = cli_mode {
         let _log_guard = logging::init(&log_config);
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let result = rt.block_on(async {
-            handlers::handle_diagnostics(path.as_deref(), debug).await
-        });
+        let result =
+            rt.block_on(async { handlers::handle_diagnostics(path.as_deref(), debug).await });
         std::process::exit(if result.is_ok() { 0 } else { 1 });
     }
 
@@ -161,7 +154,9 @@ fn main() {
             if let Err(e) = tray_spawn::spawn_detached_tray() {
                 tracing::warn!(error = %e, "Tray spawn failed — CLI continues");
             } else {
-                println!("  Tillandsias tray launched in background — open the menu for project actions.");
+                println!(
+                    "  Tillandsias tray launched in background — open the menu for project actions."
+                );
             }
         }
 
@@ -174,7 +169,6 @@ fn main() {
     // Initialize tracing — dual output (stderr if TTY + file appender) in all builds.
     // Hold the guard so the non-blocking file writer flushes on shutdown.
     let _log_guard = logging::init(&log_config);
-
 
     // AppImage desktop integration — install .desktop file and icons on first run.
     // Must happen after logging init (so we can trace) and before tray setup
@@ -244,11 +238,9 @@ fn main() {
             let app_handle = app.handle().clone();
 
             // Register the global AppHandle used by the opencode-web webview
-            // module to spawn and close WebviewWindows from non-Tauri contexts
-            // (menu command dispatch, shutdown_all). Must run before any
-            // "Attach Here" click can reach the web-session flow.
-            // @trace spec:opencode-web-session
-            crate::webview::set_app_handle(app_handle.clone());
+            // @tombstone superseded:browser-isolation-tray-integration
+            // Old webview app handle setup — removed with browser isolation transition.
+            // crate::webview::set_app_handle(app_handle.clone());
 
             // Spawn updater background tasks
             updater::spawn_update_tasks(&app_handle, update_state);
@@ -470,7 +462,8 @@ fn main() {
                 // (foundation), then forge, git, inference.
                 //
                 // Image types and their user-facing chip names:
-                const INIT_IMAGE_TYPES: &[(&str, &str, fn() -> String)] = &[
+                type InitImageDef = (&'static str, &'static str, fn() -> String);
+                const INIT_IMAGE_TYPES: &[InitImageDef] = &[
                     ("proxy",     "Enclave",          handlers::proxy_image_tag),
                     ("forge",     "Forge",            handlers::forge_image_tag),
                     ("git",       "Code Mirror",      handlers::git_image_tag),
@@ -518,63 +511,31 @@ fn main() {
                         // All images already present — go straight to ready state.
                         info!("All images present at launch — skipping builds");
 
-                        // @trace spec:layered-tools-overlay
-                        // Build tools overlay. Hard failure — no per-container
-                        // fallback. Forge stays unavailable so the real error
-                        // (missing forge image, WSL broken, etc.) is visible.
-                        let overlay_build_tx = build_tx.clone();
-                        let overlay_ok = match crate::tools_overlay::ensure_tools_overlay(overlay_build_tx).await {
-                            Ok(()) => true,
-                            Err(e) => {
-                                error!(
-                                    spec = "layered-tools-overlay",
-                                    error = %e,
-                                    "Tools overlay build failed — forge unavailable",
-                                );
-                                false
-                            }
-                        };
-
-                        if overlay_ok {
-                            {
-                                let mut s = state_for_loop.lock().unwrap();
-                                s.forge_available = true;
-                                s.tray_icon_state = TrayIconState::Mature;
-                            }
-                            if let Some(tray_lock) = TRAY_ICON.get()
-                                && let Ok(tray) = tray_lock.lock()
-                            {
-                                if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
-                                    TrayIconState::Mature,
-                                )) {
-                                    if let Err(e) = tray.set_icon(Some(icon)) {
-                                        debug!(error = %e, "Tray icon update failed (cosmetic)");
-                                    }
+                        // @tombstone obsolete:layered-tools-overlay
+                        // Tools overlay build removed — agents are now baked into the forge image.
+                        // Safe to delete after v0.1.163.
+                        // Previously: Build tools overlay with hard failure if missing.
+                        // Now: Agents are in the image, so just mark forge as available.
+                        {
+                            let mut s = state_for_loop.lock().unwrap();
+                            s.forge_available = true;
+                            s.tray_icon_state = TrayIconState::Mature;
+                        }
+                        if let Some(tray_lock) = TRAY_ICON.get()
+                            && let Ok(tray) = tray_lock.lock()
+                        {
+                            if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                                TrayIconState::Mature,
+                            )) {
+                                if let Err(e) = tray.set_icon(Some(icon)) {
+                                    debug!(error = %e, "Tray icon update failed (cosmetic)");
                                 }
                             }
-                        } else {
-                            {
-                                let mut s = state_for_loop.lock().unwrap();
-                                s.tray_icon_state = TrayIconState::Dried;
-                            }
-                            if let Some(tray_lock) = TRAY_ICON.get()
-                                && let Ok(tray) = tray_lock.lock()
-                            {
-                                if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
-                                    TrayIconState::Dried,
-                                )) {
-                                    if let Err(e) = tray.set_icon(Some(icon)) {
-                                        debug!(error = %e, "Tray icon update failed (cosmetic)");
-                                    }
-                                }
-                            }
-                            handlers::send_notification(
-                                "Tillandsias",
-                                i18n::t("notifications.infrastructure_failed"),
-                            );
                         }
                         rebuild_menu(&app_handle_for_loop, &state_for_loop);
-                    } else {
+                    }
+
+                    if !needs_build.is_empty() {
                         // Step 3: Build missing images sequentially with per-component chips.
                         // Set icon to Building and keep forge_available = false.
                         {
@@ -583,14 +544,12 @@ fn main() {
                         }
                         if let Some(tray_lock) = TRAY_ICON.get()
                             && let Ok(tray) = tray_lock.lock()
-                        {
-                            if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                            && let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
                                 TrayIconState::Building,
-                            )) {
-                                if let Err(e) = tray.set_icon(Some(icon)) {
-                                    debug!(error = %e, "Tray icon update failed (cosmetic)");
-                                }
-                            }
+                            ))
+                            && let Err(e) = tray.set_icon(Some(icon))
+                        {
+                            debug!(error = %e, "Tray icon update failed (cosmetic)");
                         }
                         rebuild_menu(&app_handle_for_loop, &state_for_loop);
 
@@ -699,27 +658,14 @@ fn main() {
 
                         // Step 4: Build tools overlay now that forge image is ready.
                         // Hard failure — no per-container fallback. Overlay
-                        // failure keeps forge_available=false so the menu
-                        // reflects the real state.
-                        // @trace spec:layered-tools-overlay
-                        let mut overlay_ok = false;
-                        if proxy_ok && forge_ok {
-                            let overlay_build_tx = build_tx.clone();
-                            match crate::tools_overlay::ensure_tools_overlay(overlay_build_tx).await {
-                                Ok(()) => overlay_ok = true,
-                                Err(e) => {
-                                    error!(
-                                        spec = "layered-tools-overlay",
-                                        error = %e,
-                                        "Tools overlay build failed — forge unavailable",
-                                    );
-                                }
-                            }
-                        }
+                        // @tombstone obsolete:layered-tools-overlay
+                        // Tools overlay check removed — agents are now baked into the forge image.
+                        // Safe to delete after v0.1.163.
+                        // Previously: Built tools overlay only if proxy + forge OK.
 
-                        // Step 5: Set forge_available only if proxy + forge built AND
-                        // tools overlay succeeded. forge_available gates menu items.
-                        if proxy_ok && forge_ok && overlay_ok {
+                        // Step 5: Set forge_available if proxy + forge built.
+                        // forge_available gates menu items.
+                        if proxy_ok && forge_ok {
                             {
                                 let mut s = state_for_loop.lock().unwrap();
                                 s.forge_available = true;
@@ -727,14 +673,12 @@ fn main() {
                             }
                             if let Some(tray_lock) = TRAY_ICON.get()
                                 && let Ok(tray) = tray_lock.lock()
-                            {
-                                if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                                && let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
                                     TrayIconState::Mature,
-                                )) {
-                                    if let Err(e) = tray.set_icon(Some(icon)) {
-                                        debug!(error = %e, "Tray icon update failed (cosmetic)");
-                                    }
-                                }
+                                ))
+                                && let Err(e) = tray.set_icon(Some(icon))
+                            {
+                                debug!(error = %e, "Tray icon update failed (cosmetic)");
                             }
                             // @trace spec:tray-app
                             // Desktop notification so the user knows the system is ready,
@@ -747,8 +691,7 @@ fn main() {
                             warn!(
                                 proxy_ok,
                                 forge_ok,
-                                overlay_ok,
-                                "Setup incomplete (images or tools overlay) — menus remain disabled"
+                                "Setup incomplete (images) — menus remain disabled"
                             );
                             {
                                 let mut s = state_for_loop.lock().unwrap();
@@ -756,14 +699,12 @@ fn main() {
                             }
                             if let Some(tray_lock) = TRAY_ICON.get()
                                 && let Ok(tray) = tray_lock.lock()
-                            {
-                                if let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
+                                && let Ok(icon) = tauri::image::Image::from_bytes(icons::tray_icon_png(
                                     TrayIconState::Dried,
-                                )) {
-                                    if let Err(e) = tray.set_icon(Some(icon)) {
-                                        debug!(error = %e, "Tray icon update failed (cosmetic)");
-                                    }
-                                }
+                                ))
+                                && let Err(e) = tray.set_icon(Some(icon))
+                            {
+                                debug!(error = %e, "Tray icon update failed (cosmetic)");
                             }
                             handlers::send_notification(
                                 "Tillandsias",
@@ -830,6 +771,47 @@ fn main() {
                     });
                 }
 
+                // @trace spec:simplified-tray-ux
+                // Blocking GitHub health check on startup (3s timeout).
+                // If authenticated, verify GitHub connectivity before starting the event loop.
+                // Results gate visibility of Home/Cloud menus.
+                if !menu::needs_github_login() {
+                    // Token exists, perform blocking health check
+                    info!("Performing GitHub connectivity check...");
+                    let github_health = match tokio::time::timeout(
+                        std::time::Duration::from_secs(3),
+                        crate::github_health::probe(),
+                    )
+                    .await
+                    {
+                        Ok(result) => {
+                            use crate::github_health::CredentialHealth;
+                            matches!(result, CredentialHealth::Authenticated)
+                        }
+                        Err(_elapsed) => {
+                            warn!("GitHub health check timed out (>3s) — treating as unreachable");
+                            false
+                        }
+                    };
+
+                    {
+                        let mut s = state_for_loop.lock().unwrap();
+                        s.github_healthy = github_health;
+                        s.github_last_check = Some(std::time::Instant::now());
+                        if github_health {
+                            info!("GitHub connectivity verified");
+                        } else {
+                            warn!(
+                                accountability = true,
+                                category = "secrets",
+                                spec = "simplified-tray-ux",
+                                "GitHub connectivity check failed — retries will begin in event loop"
+                            );
+                        }
+                    }
+                    rebuild_menu(&app_handle_for_loop, &state_for_loop);
+                }
+
                 // Run main event loop
                 let loop_state = { state_for_loop.lock().unwrap().clone() };
 
@@ -857,30 +839,34 @@ fn main() {
                                 .clone_from(&new_state.remote_repos_error);
                             s.active_builds.clone_from(&new_state.active_builds);
                             s.forge_available = new_state.forge_available;
+                            // @trace spec:simplified-tray-ux
+                            s.github_healthy = new_state.github_healthy;
+                            s.github_last_check = new_state.github_last_check;
+                            s.github_retry_count = new_state.github_retry_count;
+                            s.github_next_retry = new_state.github_next_retry;
                             old
                         };
 
                         // Update tray icon if state changed
-                        if new_icon_state != old_icon_state {
-                            if let Some(tray_lock) = TRAY_ICON.get()
-                                && let Ok(tray) = tray_lock.lock()
-                            {
-                                match tauri::image::Image::from_bytes(icons::tray_icon_png(
-                                    new_icon_state,
-                                )) {
-                                    Ok(icon) => {
-                                        if let Err(e) = tray.set_icon(Some(icon)) {
-                                            debug!(error = %e, "Tray icon update failed (cosmetic)");
-                                        }
-                                        debug!(
-                                            old = ?old_icon_state,
-                                            new = ?new_icon_state,
-                                            "Tray icon updated"
-                                        );
+                        if new_icon_state != old_icon_state
+                            && let Some(tray_lock) = TRAY_ICON.get()
+                            && let Ok(tray) = tray_lock.lock()
+                        {
+                            match tauri::image::Image::from_bytes(icons::tray_icon_png(
+                                new_icon_state,
+                            )) {
+                                Ok(icon) => {
+                                    if let Err(e) = tray.set_icon(Some(icon)) {
+                                        debug!(error = %e, "Tray icon update failed (cosmetic)");
                                     }
-                                    Err(e) => {
-                                        error!(error = %e, "Failed to build tray icon image");
-                                    }
+                                    debug!(
+                                        old = ?old_icon_state,
+                                        new = ?new_icon_state,
+                                        "Tray icon updated"
+                                    );
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "Failed to build tray icon image");
                                 }
                             }
                         }
@@ -889,17 +875,16 @@ fn main() {
                         rebuild_menu(&app_for_rebuild, &state_for_rebuild);
                     });
 
-                event_loop::run(
-                    loop_state,
-                    scanner_rx,
-                    podman_rx,
-                    menu_rx,
-                    browser_rx,
+                let channels = event_loop::EventChannels {
+                    scanner: scanner_rx,
+                    podman: podman_rx,
+                    menu: menu_rx,
+                    browser: browser_rx,
                     build_rx,
                     build_tx,
-                    on_state_change,
-                )
-                .await;
+                };
+
+                event_loop::run(loop_state, channels, on_state_change).await;
             });
 
             Ok(())
@@ -917,15 +902,14 @@ fn main() {
                 event: tauri::WindowEvent::CloseRequested { .. },
                 ..
             } = &event
+                && label.starts_with("web-")
             {
-                if label.starts_with("web-") {
-                    tracing::debug!(
-                        spec = "opencode-web-session",
-                        label = %label,
-                        "webview close intercepted — tray remains"
-                    );
-                    return;
-                }
+                tracing::debug!(
+                    spec = "opencode-web-session",
+                    label = %label,
+                    "webview close intercepted — tray remains"
+                );
+                return;
             }
 
             if let tauri::RunEvent::ExitRequested { .. } = event {
@@ -944,6 +928,11 @@ fn main() {
                         handlers::cleanup_enclave_network().await;
                     });
                 }
+
+                // @trace spec:ephemeral-guarantee
+                // Clean up ephemeral init logs from /tmp on shutdown.
+                // These are temporary artifacts that must not persist across sessions.
+                cleanup_init_logs();
 
                 singleton::release();
                 let _ = shutdown_tx.blocking_send(());
@@ -1053,6 +1042,10 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
                     "claude" => Some(MenuCommand::ClaudeProject {
                         project_path: payload.into(),
                     }),
+                    // @trace spec:codex-tray-launcher
+                    "codex" => Some(MenuCommand::CodexProject {
+                        project_path: payload.into(),
+                    }),
                     // @trace spec:tray-minimal-ux
                     "maintenance" => Some(MenuCommand::MaintenanceProject {
                         project_path: payload.into(),
@@ -1123,10 +1116,10 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
         }
     };
 
-    if let Some(cmd) = command {
-        if tx.try_send(cmd).is_err() {
-            debug!("Menu command channel full/closed — action may be dropped");
-        }
+    if let Some(cmd) = command
+        && tx.try_send(cmd).is_err()
+    {
+        debug!("Menu command channel full/closed — action may be dropped");
     }
 }
 
@@ -1135,32 +1128,49 @@ fn handle_menu_click(id: &str, tx: &mpsc::Sender<MenuCommand>, _app: &tauri::App
 /// The MCP server (running in forge containers) connects to this socket
 /// and sends JSON-RPC requests to open browser windows.
 ///
-/// @trace spec:browser-mcp-server
+/// @trace spec:browser-mcp-server, spec:socket-container-orchestration
 #[cfg(target_os = "linux")]
 async fn listen_browser_socket(tx: mpsc::Sender<MenuCommand>) -> Result<(), String> {
-    use std::os::unix::net::{UnixListener, UnixStream};
-    use std::io::{BufRead, BufReader};
-    use std::path::Path;
+    use std::os::unix::net::UnixListener;
+    use std::path::{Path, PathBuf};
 
-    let socket_path = "/run/tillandsias/tray.sock";
+    // Use XDG_RUNTIME_DIR (user-scoped socket per Linux convention).
+    // Matches the path logic in launch.rs:resolve_mount_source().
+    let xdg_runtime = std::env::var("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir());
+    let socket_dir = xdg_runtime.join("tillandsias");
+    std::fs::create_dir_all(&socket_dir)
+        .map_err(|e| format!("Failed to create socket directory: {}", e))?;
+    let socket_path_buf = socket_dir.join("tray.sock");
+    let socket_path = socket_path_buf.to_string_lossy().into_owned();
 
     // Remove stale socket if it exists
-    if Path::new(socket_path).exists() {
-        std::fs::remove_file(socket_path)
+    if Path::new(&socket_path).exists() {
+        std::fs::remove_file(&socket_path)
             .map_err(|e| format!("Failed to remove stale socket: {}", e))?;
     }
 
-    let listener = UnixListener::bind(socket_path)
+    let listener = UnixListener::bind(&socket_path)
         .map_err(|e| format!("Failed to bind Unix socket '{}': {}", socket_path, e))?;
 
     // Set permissions so forge containers can connect
-    std::fs::set_permissions(socket_path, std::os::unix::fs::PermissionsExt::from_mode(0o666))
-        .map_err(|e| format!("Failed to set socket permissions: {}", e))?;
+    std::fs::set_permissions(
+        &socket_path,
+        std::os::unix::fs::PermissionsExt::from_mode(0o666),
+    )
+    .map_err(|e| format!("Failed to set socket permissions: {}", e))?;
+
+    // Signal that the socket is ready — handlers and forge can now safely mount it.
+    // @trace spec:socket-container-orchestration
+    let notify = Arc::new(tokio::sync::Notify::new());
+    TRAY_SOCK_READY.get_or_init(|| notify.clone());
+    notify.notify_waiters();
 
     info!(
         spec = "browser-mcp-server",
         socket = socket_path,
-        "Browser socket listener started"
+        "Browser socket listener ready — handlers may proceed"
     );
 
     for stream in listener.incoming() {
@@ -1191,16 +1201,16 @@ async fn handle_browser_socket_connection(
     use std::io::{BufRead, BufReader};
 
     let reader = BufReader::new(&stream);
-    let mut lines = reader.lines();
+    let lines = reader.lines();
 
-    while let Some(line_result) = lines.next() {
+    for line_result in lines {
         let line = line_result.map_err(|e| e.to_string())?;
         let line = line.trim();
         if line.is_empty() {
             continue;
         }
 
-        match serde_json::from_str::<serde_json::Value>(&line) {
+        match serde_json::from_str::<serde_json::Value>(line) {
             Ok(request) => {
                 let method = request.get("method").and_then(|m| m.as_str());
                 let params = request.get("params");
@@ -1212,7 +1222,9 @@ async fn handle_browser_socket_connection(
                             let url = params.get("url").and_then(|u| u.as_str());
                             let window_type = params.get("window_type").and_then(|w| w.as_str());
 
-                            if let (Some(project), Some(url), Some(window_type)) = (project, url, window_type) {
+                            if let (Some(project), Some(url), Some(window_type)) =
+                                (project, url, window_type)
+                            {
                                 let cmd = MenuCommand::OpenBrowserWindow {
                                     project: project.to_string(),
                                     url: url.to_string(),
@@ -1237,4 +1249,52 @@ async fn handle_browser_socket_connection(
     }
 
     Ok(())
+}
+
+/// Clean up ephemeral init logs from /tmp on shutdown.
+///
+/// Removes all Tillandsias init log files from /tmp that were created during
+/// this session. These are temporary artifacts that must not persist across
+/// sessions per the ephemeral-first design. Failures are logged but not fatal.
+///
+/// @trace spec:ephemeral-guarantee
+fn cleanup_init_logs() {
+    use std::fs;
+
+    let temp_dir = std::env::temp_dir();
+
+    // Patterns to clean: /tmp/tillandsias-init-*.log and /tmp/tillandsias-*.log
+    // glob is not available; use read_dir + pattern matching instead
+    if let Ok(entries) = fs::read_dir(&temp_dir) {
+        for entry in entries.flatten() {
+            if let Ok(file_name) = entry.file_name().into_string() {
+                let is_init_log =
+                    file_name.starts_with("tillandsias-init-") && file_name.ends_with(".log");
+                let is_generic_log = file_name.starts_with("tillandsias-")
+                    && file_name.ends_with(".log")
+                    && !file_name.contains("init");
+
+                if is_init_log || is_generic_log {
+                    let path = temp_dir.join(&file_name);
+                    match fs::remove_file(&path) {
+                        Ok(()) => {
+                            debug!(
+                                spec = "ephemeral-guarantee",
+                                file = %file_name,
+                                "Cleaned ephemeral init log"
+                            );
+                        }
+                        Err(e) => {
+                            warn!(
+                                spec = "ephemeral-guarantee",
+                                file = %file_name,
+                                error = %e,
+                                "Failed to clean ephemeral init log (non-fatal)"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

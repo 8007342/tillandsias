@@ -1,0 +1,20 @@
+# @tombstone superseded:methodology-component-split
+#
+# This file has been refactored into component files for better maintainability.
+# All content is preserved in methodology.yaml and methodology/*.yaml
+#
+# Reason: The monolithic 701-line YAML became difficult to navigate and update.
+#         Split into 9 components (philosophy, spec-system, verification, litmus,
+#         cheatsheets, convergence, ci, versioning, between-commits work discipline)
+#         with root index methodology.yaml.
+#
+# Safe to delete after: 2026-08-03 (three releases: v0.3.X, v0.3.Y, v0.3.Z)
+#
+# Migration path:
+#   - For core principles: see methodology.yaml and methodology/philosophy.yaml
+#   - For spec definitions: see methodology/spec-system.yaml
+#   - For litmus tests: see methodology/litmus.yaml
+#   - For CI validation: see methodology/ci.yaml
+#
+# Previous version: v0.2 (701 lines)
+# Archived in git history before the methodology component split.

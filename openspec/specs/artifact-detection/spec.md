@@ -1,6 +1,10 @@
 <!-- @trace spec:artifact-detection -->
 # artifact-detection Specification
 
+## Status
+
+active
+
 ## Purpose
 TBD - created by archiving change tillandsias-bootstrap. Update Purpose after archive.
 ## Requirements
@@ -87,3 +91,25 @@ The artifact system SHALL detect project types from standard project files to in
 - **WHEN** a project directory contains no recognized project files
 - **THEN** it is classified as unknown but still eligible for "Attach Here" with the generic forge environment
 
+
+## Sources of Truth
+
+- `cheatsheets/build/cargo.md` — Cargo reference and patterns
+- `cheatsheets/utils/gh-cli.md` — Gh Cli reference and patterns
+
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked resources, persistence) are detectable
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:artifact-detection" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

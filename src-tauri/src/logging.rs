@@ -10,7 +10,7 @@
 //! Accountability windows (`--log-secrets-management`, etc.) are composable
 //! with `--log` and add a curated stderr layer for sensitive operations.
 //!
-//! @trace spec:logging-accountability
+//! @trace spec:logging-accountability, spec:runtime-logging
 
 use std::io::IsTerminal;
 
@@ -50,25 +50,13 @@ pub fn module_to_targets(module: &str) -> Vec<&'static str> {
         ],
         "scanner" => vec!["tillandsias_scanner"],
         "menu" => vec!["tillandsias::menu", "tillandsias::event_loop"],
-        "events" => vec![
-            "tillandsias::event_loop",
-            "tillandsias_podman::events",
-        ],
+        "events" => vec!["tillandsias::event_loop", "tillandsias_podman::events"],
         // @trace spec:proxy-container
-        "proxy" => vec![
-            "tillandsias::handlers",
-            "tillandsias::proxy",
-        ],
+        "proxy" => vec!["tillandsias::handlers", "tillandsias::proxy"],
         // @trace spec:enclave-network
-        "enclave" => vec![
-            "tillandsias::handlers",
-            "tillandsias::enclave",
-        ],
+        "enclave" => vec!["tillandsias::handlers", "tillandsias::enclave"],
         // @trace spec:git-mirror-service
-        "git" => vec![
-            "tillandsias::handlers",
-            "tillandsias::git",
-        ],
+        "git" => vec!["tillandsias::handlers", "tillandsias::git"],
         _ => vec![],
     }
 }
@@ -103,13 +91,16 @@ fn build_filter(config: &LogConfig) -> EnvFilter {
     // Accountability windows implicitly enable their modules at info level
     // (or trace if --log already set a higher detail level for that module).
     for window in &config.accountability {
+        // @trace spec:proxy-container
+        // @trace spec:enclave-network
+        // @trace spec:git-mirror-service
         let module_name = match window {
             AccountabilityWindow::SecretManagement => "secrets",
             AccountabilityWindow::ImageManagement => "containers",
             AccountabilityWindow::UpdateCycle => "updates",
-            AccountabilityWindow::ProxyManagement => "proxy",       // @trace spec:proxy-container
-            AccountabilityWindow::EnclaveManagement => "enclave",   // @trace spec:enclave-network
-            AccountabilityWindow::GitManagement => "git",              // @trace spec:git-mirror-service
+            AccountabilityWindow::ProxyManagement => "proxy",
+            AccountabilityWindow::EnclaveManagement => "enclave",
+            AccountabilityWindow::GitManagement => "git",
         };
 
         // Only add if not already overridden by --log.
@@ -134,8 +125,7 @@ fn build_env_filter() -> EnvFilter {
     if let Ok(val) = std::env::var("TILLANDSIAS_LOG") {
         EnvFilter::try_new(&val).unwrap_or_else(|_| EnvFilter::new("tillandsias=info"))
     } else {
-        EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("tillandsias=info"))
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("tillandsias=info"))
     }
 }
 

@@ -6,32 +6,21 @@ A tray app that makes software appear — safely, locally, reproducibly.
 
 ## Install
 
-**Linux**
+**Linux** (Fedora, Ubuntu, Debian, etc.)
 ```bash
 curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
-```
-
-**macOS**
-```bash
-curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
-```
-
-**Windows**
-```powershell
-irm https://github.com/8007342/tillandsias/releases/latest/download/install.ps1 | iex
 ```
 
 <details>
-<summary>Direct downloads</summary>
+<summary>Direct download</summary>
 
-| Platform | Download |
-|----------|----------|
-| Linux | [Tillandsias-linux-x86_64.AppImage](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-linux-x86_64.AppImage) |
-| macOS (Apple Silicon) | [Tillandsias-macos-aarch64.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-macos-aarch64.dmg) |
-| macOS (Intel) | [Tillandsias-macos-x86_64.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-macos-x86_64.dmg) |
-| Windows | [Tillandsias-windows-x86_64-setup.exe](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-windows-x86_64-setup.exe) |
+| Download |
+|----------|
+| [Tillandsias-linux-x86_64.AppImage](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias-linux-x86_64.AppImage) |
 
 </details>
+
+> **Note**: macOS and Windows support is planned via container stack. Currently, Linux is the primary platform.
 
 ## Run
 
@@ -60,11 +49,9 @@ Removes the binary, caches, container images, and all Tillandsias data.
 
 ## Requirements
 
-- [Podman](https://podman.io) (rootless)
-  - Linux: `sudo dnf install podman` / `sudo apt install podman`
-  - macOS: `brew install podman && podman machine init && podman machine start`
-  - Windows: [Podman Desktop](https://podman-desktop.io)
-- **GNOME desktop** (Linux): the [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/) must be enabled for the tray icon to appear. Install via Extension Manager or:
+- **Linux** (Fedora, Ubuntu, Debian, etc.)
+- [Podman](https://podman.io) (rootless) — `sudo dnf install podman` or `sudo apt install podman`
+- **GNOME desktop**: the [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/) must be enabled for the tray icon to appear. Install via Extension Manager or:
   ```bash
   gnome-extensions install appindicatorsupport@rgcjonas.gmail.com
   ```

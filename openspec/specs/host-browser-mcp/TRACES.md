@@ -1,0 +1,42 @@
+# Traces for host-browser-mcp
+
+Code implementing this spec (auto-generated — do not edit).
+Run `./scripts/generate-traces.sh` to regenerate.
+
+## Annotated locations
+
+- [crates/tillandsias-browser-mcp/src/framing.rs#L6](../../../crates/tillandsias-browser-mcp/src/framing.rs#L6)
+- [crates/tillandsias-browser-mcp/src/lib.rs#L6](../../../crates/tillandsias-browser-mcp/src/lib.rs#L6)
+- [crates/tillandsias-browser-mcp/src/server.rs#L3](../../../crates/tillandsias-browser-mcp/src/server.rs#L3)
+- [crates/tillandsias-browser-mcp/src/server.rs#L70](../../../crates/tillandsias-browser-mcp/src/server.rs#L70)
+- [crates/tillandsias-browser-mcp/src/server.rs#L98](../../../crates/tillandsias-browser-mcp/src/server.rs#L98)
+- [crates/tillandsias-browser-mcp/src/server.rs#L242](../../../crates/tillandsias-browser-mcp/src/server.rs#L242)
+- [crates/tillandsias-browser-mcp/src/server.rs#L271](../../../crates/tillandsias-browser-mcp/src/server.rs#L271)
+- [crates/tillandsias-browser-mcp/src/server.rs#L293](../../../crates/tillandsias-browser-mcp/src/server.rs#L293)
+- [crates/tillandsias-browser-mcp/src/server.rs#L315](../../../crates/tillandsias-browser-mcp/src/server.rs#L315)
+- [crates/tillandsias-control-wire/src/lib.rs#L45](../../../crates/tillandsias-control-wire/src/lib.rs#L45)
+- [crates/tillandsias-control-wire/src/lib.rs#L115](../../../crates/tillandsias-control-wire/src/lib.rs#L115)
+- [crates/tillandsias-control-wire/src/lib.rs#L269](../../../crates/tillandsias-control-wire/src/lib.rs#L269)
+- [crates/tillandsias-control-wire/src/lib.rs#L282](../../../crates/tillandsias-control-wire/src/lib.rs#L282)
+- [crates/tillandsias-control-wire/src/lib.rs#L295](../../../crates/tillandsias-control-wire/src/lib.rs#L295)
+- [crates/tillandsias-podman/src/peer_table.rs#L8](../../../crates/tillandsias-podman/src/peer_table.rs#L8)
+- [images/default/config-overlay/mcp/host-browser.sh#L8](../../../images/default/config-overlay/mcp/host-browser.sh#L8)
+- [src-tauri/src/browser_mcp/allowlist.rs#L11](../../../src-tauri/src/browser_mcp/allowlist.rs#L11)
+- [src-tauri/src/browser_mcp/debounce.rs#L6](../../../src-tauri/src/browser_mcp/debounce.rs#L6)
+- [src-tauri/src/browser_mcp/launcher.rs#L6](../../../src-tauri/src/browser_mcp/launcher.rs#L6)
+- [src-tauri/src/browser_mcp/launcher.rs#L38](../../../src-tauri/src/browser_mcp/launcher.rs#L38)
+- [src-tauri/src/browser_mcp/mod.rs#L6](../../../src-tauri/src/browser_mcp/mod.rs#L6)
+- [src-tauri/src/browser_mcp/mod.rs#L56](../../../src-tauri/src/browser_mcp/mod.rs#L56)
+- [src-tauri/src/browser_mcp/tools/click.rs#L5](../../../src-tauri/src/browser_mcp/tools/click.rs#L5)
+- [src-tauri/src/browser_mcp/tools/click.rs#L11](../../../src-tauri/src/browser_mcp/tools/click.rs#L11)
+- [src-tauri/src/browser_mcp/tools/close.rs#L5](../../../src-tauri/src/browser_mcp/tools/close.rs#L5)
+- [src-tauri/src/browser_mcp/tools/eval.rs#L5](../../../src-tauri/src/browser_mcp/tools/eval.rs#L5)
+- [src-tauri/src/browser_mcp/tools/list_windows.rs#L5](../../../src-tauri/src/browser_mcp/tools/list_windows.rs#L5)
+- [src-tauri/src/browser_mcp/tools/mod.rs#L5](../../../src-tauri/src/browser_mcp/tools/mod.rs#L5)
+- [src-tauri/src/browser_mcp/tools/open.rs#L6](../../../src-tauri/src/browser_mcp/tools/open.rs#L6)
+- [src-tauri/src/browser_mcp/tools/read_url.rs#L5](../../../src-tauri/src/browser_mcp/tools/read_url.rs#L5)
+- [src-tauri/src/browser_mcp/tools/screenshot.rs#L5](../../../src-tauri/src/browser_mcp/tools/screenshot.rs#L5)
+- [src-tauri/src/browser_mcp/tools/type_.rs#L5](../../../src-tauri/src/browser_mcp/tools/type_.rs#L5)
+- [src-tauri/src/browser_mcp/window_registry.rs#L6](../../../src-tauri/src/browser_mcp/window_registry.rs#L6)
+- [src-tauri/src/cdp.rs#L532](../../../src-tauri/src/cdp.rs#L532)
+- [src-tauri/src/cdp.rs#L612](../../../src-tauri/src/cdp.rs#L612)

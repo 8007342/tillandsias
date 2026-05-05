@@ -1,0 +1,25 @@
+# @trace spec:external-logs-layer
+# Manifest of curated external log files published by the git-service container.
+# The tray-side auditor reads this manifest every 60 s and flags any file in
+# ~/.local/state/tillandsias/external-logs/git-service/ that is NOT listed here
+# with a WARN+accountability "[external-logs] LEAK: ..." event.
+#
+# Format:
+#   role        — must match the profile's external_logs_role field exactly.
+#   files[]     — each entry declares one permitted file in the role dir.
+#     name        — filename relative to the role's external-logs directory.
+#     purpose     — one paragraph; consumers read this to understand intent.
+#     format      — text | jsonl (binary formats are not permitted).
+#     rotate_at_mb — hard cap enforced by the tray auditor (default 10 MB).
+#     written_by  — describe which entrypoint code emits this file.
+role: git-service
+files:
+  - name: git-push.log
+    purpose: |
+      One line per push attempt to GitHub from the bare mirror, success or
+      failure with exit code summary. CONSUMERS may parse this log to learn
+      which forge commits successfully reached origin. Each line is prefixed
+      with an ISO-8601 UTC timestamp. Format: "<timestamp> [git-mirror] <msg>".
+    format: text
+    rotate_at_mb: 10
+    written_by: post-receive hook + entrypoint retry loop

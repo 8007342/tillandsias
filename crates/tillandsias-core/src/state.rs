@@ -46,7 +46,7 @@ pub enum ContainerType {
     /// Persistent OpenCode Web forge running `opencode serve` on :4096.
     /// Named `tillandsias-<project>-forge` — no genus allocation. Distinct
     /// from `Web` (which is the static-httpd "Serve Here" feature).
-    /// @trace spec:opencode-web-session — persistent forge running 'opencode serve' on :4096.
+    /// @trace spec:opencode-web-session
     #[serde(rename = "opencode-web")]
     OpenCodeWeb,
     /// Caching HTTP/HTTPS proxy with domain allowlist.
@@ -255,7 +255,7 @@ pub struct TrayState {
     /// Starts as `false` on every launch. Set to `true` when:
     /// - The forge image is confirmed present at startup (no build needed), or
     /// - A forge build completes successfully.
-    /// Set to `false` when a forge rebuild begins (image stale or absent).
+    /// - Set to `false` when a forge rebuild begins (image stale or absent).
     ///
     /// While `false`, all forge-dependent menu actions (Attach Here, Maintenance,
     /// Root terminal, GitHub Login) are disabled so the user cannot trigger them
@@ -268,6 +268,16 @@ pub struct TrayState {
 
     /// Track debug browser PIDs (one per project, for "open_debug_window").
     pub debug_browser_pid: std::collections::HashMap<String, u32>,
+
+    /// @trace spec:simplified-tray-ux
+    /// Last known GitHub health status (true = reachable, false = unreachable or unknown).
+    pub github_healthy: bool,
+    /// When the GitHub health was last checked (None = never checked).
+    pub github_last_check: Option<Instant>,
+    /// Failed retry count (for exponential backoff).
+    pub github_retry_count: u32,
+    /// Next time to retry GitHub connectivity (with exponential backoff).
+    pub github_next_retry: Option<Instant>,
 }
 
 impl TrayState {
@@ -287,6 +297,11 @@ impl TrayState {
             forge_available: false,
             browser_last_launch: std::collections::HashMap::new(),
             debug_browser_pid: std::collections::HashMap::new(),
+            // @trace spec:simplified-tray-ux
+            github_healthy: false,
+            github_last_check: None,
+            github_retry_count: 0,
+            github_next_retry: None,
         }
     }
 
@@ -480,8 +495,7 @@ mod tests {
 
     #[test]
     fn parse_git_service_container_name_valid() {
-        let project =
-            ContainerInfo::parse_git_service_container_name("tillandsias-git-my-project");
+        let project = ContainerInfo::parse_git_service_container_name("tillandsias-git-my-project");
         assert_eq!(project, Some("my-project".to_string()));
     }
 
@@ -500,8 +514,7 @@ mod tests {
         assert!(ContainerInfo::parse_git_service_container_name("tillandsias-git-").is_none());
         // Different container type
         assert!(
-            ContainerInfo::parse_git_service_container_name("tillandsias-my-project-web")
-                .is_none()
+            ContainerInfo::parse_git_service_container_name("tillandsias-my-project-web").is_none()
         );
     }
 }

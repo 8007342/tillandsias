@@ -1,4 +1,4 @@
-# @trace spec:proxy-container
+# @trace spec:proxy-container, spec:reverse-proxy-internal
 # MITM caching HTTP/HTTPS forward proxy for Tillandsias enclave network.
 # Built on Alpine + squid — minimal footprint (~15-20MB).
 # DISTRO: Alpine 3.20 — busybox sh default, bash installed explicitly.
@@ -7,8 +7,8 @@
 #         User creation: adduser -D (NOT useradd).
 FROM docker.io/library/alpine:3.20
 
-# @trace spec:proxy-container — squid + SSL for MITM proxy
-# squid + openssl for SSL bump support
+# @trace spec:proxy-container, spec:reverse-proxy-internal
+# Squid + SSL for MITM proxy; squid + openssl for SSL bump support
 # ca-certificates for upstream TLS verification
 # bash: entrypoint.sh uses #!/bin/bash (busybox sh would also work but bash is explicit)
 # Alpine's squid package includes SSL support (--enable-ssl-crtd) by default.
@@ -24,10 +24,20 @@ RUN apk add --no-cache squid openssl bash ca-certificates \
 COPY squid.conf /etc/squid/squid.conf
 COPY allowlist.txt /etc/squid/allowlist.txt
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+# @trace spec:external-logs-layer
+# Manifest of curated external log files published by this image.
+# The tray-side auditor reads this at /etc/tillandsias/external-logs.yaml
+# every 60 s and flags unlisted files in the role dir as LEAK events.
+RUN mkdir -p /etc/tillandsias
+COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 USER proxy
 
 EXPOSE 3128 3129
+
+# @trace spec:proxy-container, spec:socket-container-orchestration
+HEALTHCHECK --interval=2s --timeout=5s --start-period=5s --retries=15 \
+    CMD nc -z 127.0.0.1 3128 || exit 1
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

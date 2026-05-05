@@ -5,18 +5,9 @@
 //!
 //! @trace spec:browser-isolation-core
 
-use std::process::{Command, Stdio};
 use std::path::PathBuf;
-use tracing::{info, error, debug};
-
-/// Window type for the Chromium instance.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChromiumWindowType {
-    /// Safe window: headless mode, no dev tools, dark theme
-    Safe,
-    /// Debug window: remote debugging enabled on port 9222
-    Debug,
-}
+use std::process::{Command, Stdio};
+use tracing::{debug, error, info};
 
 /// Spawn a Chromium window in a container.
 ///
@@ -69,19 +60,20 @@ pub fn spawn_chromium_window(
     cmd.arg(project)
         .arg(url)
         .arg(debug_port.to_string())
-        .arg(window_type)  // Pass window type to script
-        .arg(version)      // Pass version for versioned image tags
+        .arg(window_type) // Pass window type to script
+        .arg(version) // Pass version for versioned image tags
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
     // Spawn the process
-    let child = cmd.spawn()
-        .map_err(|e| format!(
+    let child = cmd.spawn().map_err(|e| {
+        format!(
             "Failed to spawn Chromium launch script '{}': {}",
             script_path.display(),
             e
-        ))?;
+        )
+    })?;
 
     let pid = child.id();
     debug!(
@@ -110,9 +102,7 @@ pub fn spawn_chromium_window(
         ));
     }
 
-    let container_id = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .to_string();
+    let container_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
     if container_id.is_empty() {
         return Err("Chromium launch script returned empty container ID".to_string());
@@ -153,7 +143,8 @@ fn get_launch_script_path() -> Result<PathBuf, String> {
     }
 
     // Try absolute path from project root
-    let abs_path = std::path::Path::new("/var/home/machiyotl/src/tillandsias/scripts/launch-chromium.sh");
+    let abs_path =
+        std::path::Path::new("/var/home/machiyotl/src/tillandsias/scripts/launch-chromium.sh");
     if abs_path.exists() {
         return Ok(abs_path.to_path_buf());
     }
@@ -169,7 +160,17 @@ mod tests {
     fn test_window_type_validation() {
         // These will fail in test environment without the script
         // but we can test the validation logic
-        assert!(spawn_chromium_window("test", "http://localhost:3000", "invalid", "0.1.160").is_err());
-        assert!(spawn_chromium_window("test", "http://localhost:3000", "open_safe_window", "0.1.160").is_err()); // Will fail without script
+        assert!(
+            spawn_chromium_window("test", "http://localhost:3000", "invalid", "0.1.160").is_err()
+        );
+        assert!(
+            spawn_chromium_window(
+                "test",
+                "http://localhost:3000",
+                "open_safe_window",
+                "0.1.160"
+            )
+            .is_err()
+        ); // Will fail without script
     }
 }

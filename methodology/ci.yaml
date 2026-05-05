@@ -1,0 +1,226 @@
+
+rust_annotations:
+  description: >
+    Rust proc macros that enforce traceability and observability in code.
+    These are not optional—they are the language layer of the convergence system.
+
+  trace:
+    syntax: |
+      #[trace(
+        spec = "...",
+        cheatsheets = ["..."],
+        verified_at = "L0|L1|L2|L3",
+        knowledge_pressure = "low|medium|high",
+        binding = "optional-language"
+      )]
+
+    semantics:
+      - declares epistemic sufficiency claim
+      - binds code to spec and cheatsheets
+      - claims evidence level L0–L3
+
+    macro_enforcement:
+      - spec_exists_and_active
+      - cheatsheets_exist
+      - binding_required_if_ambiguous
+
+    example: |
+      #[trace(
+        spec = "github-credential-health",
+        cheatsheets = ["utils/github-oauth.md"],
+        verified_at = "L2",
+        knowledge_pressure = "high"
+      )]
+      async fn retrieve_github_token() -> Result<Token> { ... }
+
+  grounded_by:
+    syntax: |
+      #[grounded_by(
+        rust = "...",
+        js = "..."
+      )]
+
+    semantics:
+      - explicit multi-api disambiguation
+      - used when same function has different implementations across languages
+
+    example: |
+      #[grounded_by(
+        rust = "std::fs::read_to_string",
+        js = "fs.promises.readFile"
+      )]
+
+  obsolete:
+    syntax: |
+      #[obsolete(
+        spec = "...",
+        replaced_by = "...",
+        sunset = "YYYY-MM-DD"
+      )]
+
+    enforcement:
+      - spec_status_must_be_deprecated_or_obsolete
+      - replacement_must_exist
+      - fail_ci_if_past_sunset
+
+    example: |
+      #[obsolete(
+        spec = "legacy-auth-v1",
+        replaced_by = "github-credential-health",
+        sunset = "2026-12-31"
+      )]
+
+  tombstone:
+    syntax: |
+      #[tombstone(
+        spec = "...",
+        reason = "...",
+        replaced_by = "..."
+      )]
+
+    semantics:
+      - preserves historical intent without dead code
+      - same as code comments @tombstone but enforced by macro
+
+    example: |
+      #[tombstone(
+        spec = "set_stage_projection",
+        reason = "Removed in favor of direct container lifecycle",
+        replaced_by = "tray-minimal-ux"
+      )]
+      // fn set_stage(&self, stage: Stage) { ... }
+
+  constraints:
+    - public_contract_boundary_requires_trace:
+        reason: >
+          Public contract boundaries, external I/O, persistence, security-sensitive
+          behavior, and spec-critical functions must reference a spec. Low-risk helper
+          functions may inherit a parent module trace when they expose no independent
+          contract.
+    - no_implicit_semantic_resolution:
+        reason: "Ambiguous function purposes must use #[grounded_by]"
+
+ci_validator:
+  description: >
+    The CI validator is the enforcement mechanism. It runs on every commit and
+    gates CI, PR merges, and spec archives.
+
+  responsibilities:
+    - validate_all_annotations: "Check syntax, spec existence, cheatsheet presence"
+    - ensure_contract_boundaries_have_trace: "No public contract boundary without #[trace] or explicit inherited trace"
+    - detect_orphan_specs: "Specs with no code annotations"
+    - enforce_obsolete_lifecycle: "Expired #[obsolete] annotations → hard error"
+    - validate_spec_graph: "No cycles in spec replacement chain"
+    - compare_declared_vs_observed_verification: "Claimed L-level vs actual evidence"
+    - trigger_revalidation_on_cheatsheet_change: "If cheatsheet updated, re-run litmus"
+    - enforce_litmus_tests: "MUST requirements have passing tests"
+
+  failure_conditions:
+    - missing_spec: "Function cites non-existent spec"
+    - invalid_binding: "Spec is deprecated or spec_id format is wrong"
+    - verification_mismatch: "Code claims L3 evidence but only provides L1"
+    - expired_obsolete_code: "Obsolete code past its sunset date still in tree"
+    - litmus_failure: "Litmus test binding fails"
+
+  modes:
+    - warn_only_initially:
+        description: >
+          During early phases, CI warnings are advisory. Teams can override.
+          Allows gradual rollout without forcing all code to be perfect immediately.
+
+    - strict_enforcement_after_stabilization:
+        description: >
+          Once the system stabilizes (all critical specs have litmus tests),
+          switch to strict mode. CI failures block all PRs.
+
+runtime_tracing:
+  description: >
+    At runtime, the system emits traces that link observed behavior to specs
+    and cheatsheets. These traces are the evidence that convergence is occurring.
+
+  output_format:
+    fn: string
+    spec: string
+    cheatsheet_hits: list
+    misses: list
+    verification_level: string
+
+  example:
+    fn: "retrieve_github_token"
+    spec: "github-credential-health"
+    cheatsheet_hits:
+      - "utils/github-oauth.md#token-storage"
+      - "utils/secret-rotation.md#ephemeral-lifetime"
+    cheatsheet_misses:
+      - "utils/github-tokens.md#legacy-pat (expected but not found)"
+    verification_level: "L2"
+
+  purpose:
+    - provide evidence for ci validation
+    - feed metrics system (cheatsheet hit/miss rates)
+    - enable root cause analysis (which cheatsheet caused a failure?)
+
+trace_binding:
+  requirements:
+    - every_spec_must_emit_trace:
+        description: >
+          Every active spec must have @trace annotations in code.
+          If a spec has no traces, it's unmapped and unvalidated.
+
+    - traces_must_include_spec_id:
+        description: >
+          Traces must cite the spec ID, not just "spec: true".
+          This enables bidirectional lookup: code→spec, spec→code.
+
+    - traces_must_be_observable_in_runtime:
+        description: >
+          Traces must emit at runtime (logs, metrics, spans) not just compile-time.
+          Observability is the evidence that the code is actually executing the spec.
+
+ci_enforcement:
+  description: >
+    CI checks that run automatically and gate progression.
+
+  checks:
+    - validate_schema: "Are spec files well-formed YAML/markdown?"
+    - validate_modality_usage: "Do specs use MUST/SHOULD/MAY correctly?"
+    - validate_litmus_binding: "Is every MUST requirement tested?"
+    - validate_trace_binding: "Does every spec have code traces?"
+    - validate_ambiguity_zero: "Is ambiguity_score == 0?"
+    - validate_invariant_coverage: "Is every invariant tested?"
+    - validate_drift_rules: "Do spec changes follow drift_control rules?"
+
+  failure_conditions:
+    - missing_litmus: "MUST requirement without litmus test"
+    - missing_trace: "Spec with zero @trace annotations"
+    - ambiguity_detected: "Ambiguity score > 0"
+    - invariant_removed: "A previously verified invariant was deleted"
+    - unverifiable_requirement: "MUST requirement with no measurable condition"
+
+  enforcement_modes:
+    - S0_S1_specs: "Warn if no litmus (specs are early)"
+    - S2_specs: "Require litmus tests; warn if incomplete"
+    - S3_specs: "Block PR if litmus fails"
+
+  triggers:
+    on_every_commit: "Syntax validation, schema checks"
+    on_every_pr: "Litmus test execution, drift detection"
+    on_spec_archive: "Complete convergence audit before archiving"
+    on_code_change_touching_spec: "Re-validate spec-code drift"
+
+workflow_integration:
+  ci_blocks_pr_when:
+    - schema_invalid: "Spec file has invalid YAML"
+    - litmus_fail: "Test binding for MUST requirement fails"
+    - drift_detected: "Spec change violates drift_control rules"
+    - ambiguity_increased: "Ambiguity score rose"
+
+  ci_warns_on:
+    - obsolete_past_sunset: "Code should be deleted (warning phase)"
+    - orphan_spec: "Spec exists but has no code traces (not yet critical)"
+    - missing_cheatsheet: "Spec has no cheatsheet binding (S0/S1 allowed)"
+
+  ci_escalates_to_human_on:
+    - persistent_litmus_failure: "Test was passing, now fails (potential regression)"
+    - flakiness_detected: "Same test produces different results"
+    - mutation_testing_failure: "Litmus test doesn't actually touch the code"

@@ -1,11 +1,39 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "autoupdate": false,
-  "model": "ollama/qwen2.5:0.5b",
-  "small_model": "ollama/qwen2.5:0.5b",
+  "default_agent": "build",
+  "permission": "allow",
+  "model": "opencode/big-pickle",
+  "small_model": "opencode/gpt-5-nano",
+  "instructions": [
+    "/home/forge/.config-overlay/opencode/instructions/methodology.md",
+    "/home/forge/.config-overlay/opencode/instructions/forge-discovery.md",
+    "/home/forge/.config-overlay/opencode/instructions/cache-discipline.md",
+    "/home/forge/.config-overlay/opencode/instructions/nix-first.md",
+    "/home/forge/.config-overlay/opencode/instructions/openspec-workflow.md",
+    "/home/forge/.config-overlay/opencode/instructions/flutter.md",
+    "/home/forge/.config-overlay/opencode/instructions/model-routing.md",
+    "/home/forge/.config-overlay/opencode/instructions/web-services.md"
+  ],
   "provider": {
     "ollama": {
-      "api_url": "http://inference:11434"
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (local)",
+      "options": {
+        "baseURL": "http://inference:11434/v1"
+      },
+      "models": {
+        "qwen2.5:0.5b": { "name": "Qwen 2.5 0.5B (local)" },
+        "qwen2.5:7b": { "name": "Qwen 2.5 7B (local)" },
+        "qwen2.5:14b": { "name": "Qwen 2.5 14B (local)" },
+        "qwen2.5-coder:7b": { "name": "Qwen 2.5 Coder 7B (local)" },
+        "qwen2.5-coder:14b": { "name": "Qwen 2.5 Coder 14B (local)" },
+        "qwen2.5-coder:32b": { "name": "Qwen 2.5 Coder 32B (local)" },
+        "llama3.2:1b": { "name": "LLaMA 3.2 1B (local)" },
+        "llama3.2:3b": { "name": "LLaMA 3.2 3B (local)" },
+        "llama3.1:8b": { "name": "LLaMA 3.1 8B (local)" },
+        "gpt-oss:20b": { "name": "GPT-OSS 20B (local)" }
+      }
     }
   },
   "mcp": {
@@ -18,17 +46,11 @@
       "type": "local",
       "command": ["/home/forge/.config-overlay/mcp/project-info.sh"],
       "enabled": true
+    },
+    "host-browser": {
+      "type": "local",
+      "command": ["/home/forge/.config-overlay/mcp/host-browser.sh"],
+      "enabled": true
     }
-  },
-  "instructions": {
-    "": "You are an AI assistant inside a Tillandsias development environment.\n\nCore Principles:\n- Monotonic Convergence: Every change moves implementation closer to spec. Never apart.\n- CRDT-Inspired: Changes should be conflict-free and independently mergeable.\n- Spec is Truth: If code diverges from spec, the code is wrong.\n- Ephemeral First: Containers are disposable. State lives in git, specs, and the host keyring.\n- Privacy First: All inference is local. No data leaves the enclave unless the user explicitly pushes.\n\nWhen starting new work:\n1. Check if an OpenSpec change exists for this work (openspec/changes/)\n2. If not, suggest creating one: proposal -> design -> spec -> tasks\n3. Add @trace spec:<name> annotations to link code to specs\n4. Keep changes small and independently convergent\n\nWhen the user says 'I want an app that...':\n- Recommend Flutter for cross-platform (mobile + web + desktop)\n- Use Material 3 design system\n- Suggest clean architecture: presentation -> domain -> data layers\n- Set up i18n from day one\n- Create an OpenSpec change to track the work\n\nCode quality:\n- Every function implementing a spec decision gets @trace spec:<name>\n- Warnings to stderr, never silently suppress errors\n- Tests for every non-trivial change\n- Use existing patterns in the codebase before inventing new ones\n\nGit workflow:\n- Small, focused commits with descriptive messages\n- Reference OpenSpec changes in commit messages\n- Never force-push to main",
-    "**/*.dart": "Flutter project. Clean Architecture: presentation (widgets) -> domain (use cases) -> data (repos). State management: Riverpod (preferred) or BLoC. Navigation: GoRouter. i18n: flutter_localizations + ARB files from day one. Prefer StatelessWidget over StatefulWidget. Use const constructors everywhere possible. Material 3 theming with ColorScheme.fromSeed(). Responsive layouts with LayoutBuilder or MediaQuery. Widget tests for all screens, unit tests for business logic, integration tests for critical flows.",
-    "**/*.rs": "Rust project. Use tracing for logging. Add @trace spec:<name> annotations. Follow existing patterns.",
-    "openspec/**": "OpenSpec directory. Never modify specs without user approval. Specs converge toward intent, not code.",
-    "**/*.sh": "Shell script. Use set -euo pipefail. Log warnings to stderr. Never silently suppress errors."
-  },
-  "permission": {
-    "allow": ["Bash(*)", "Read(*)", "Glob(*)", "Grep(*)", "Edit(*)", "Write(*)"],
-    "deny": []
   }
 }

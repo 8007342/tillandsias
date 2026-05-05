@@ -1,16 +1,61 @@
-//! @trace spec:podman-orchestration
+//! @trace spec:podman-orchestration, spec:cross-platform, spec:windows-wsl-runtime
 
 mod client;
 pub mod events;
 mod gpu;
 pub mod launch;
+pub mod peer_table;
+pub mod runtime;
 
-pub use client::network_exists_sync;
+/// Windows CREATE_NO_WINDOW process creation flag.
+/// @trace spec:cross-platform, spec:windows-wsl-runtime, spec:no-terminal-flicker
+/// @cheatsheet runtime/windows-process-creation.md
+///
+/// When std::process::Command spawns a child on Windows, the child inherits
+/// the parent's console — but if there's no console (GUI tray context) OR
+/// the child is a console program (wsl.exe, podman.exe), Windows allocates
+/// a NEW console window for the child by default. That window flashes for a
+/// few hundred ms before the child exits, producing the "flickering windows"
+/// the user sees during enclave bring-up.
+///
+/// CREATE_NO_WINDOW (0x08000000) tells CreateProcess NOT to allocate a
+/// console for the child. Documented at:
+/// https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags
+#[cfg(target_os = "windows")]
+pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Apply CREATE_NO_WINDOW to a tokio Command on Windows. No-op on other platforms.
+/// All Tillandsias background `wsl.exe` / `podman.exe` invocations should pass
+/// through this so the user never sees a console flash.
+/// @trace spec:cross-platform, spec:windows-wsl-runtime, spec:no-terminal-flicker
+pub fn no_window_async(cmd: &mut tokio::process::Command) -> &mut tokio::process::Command {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.as_std_mut().creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
+/// Apply CREATE_NO_WINDOW to a synchronous std Command on Windows. No-op elsewhere.
+/// @trace spec:cross-platform, spec:windows-wsl-runtime, spec:no-terminal-flicker
+pub fn no_window_sync(cmd: &mut std::process::Command) -> &mut std::process::Command {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 pub use client::PodmanClient;
+pub use client::RunOutput;
+pub use client::network_exists_sync;
 pub use events::PodmanEventStream;
 pub use gpu::detect_gpu_devices;
 pub use launch::ContainerLauncher;
 pub use launch::query_occupied_ports;
+pub use peer_table::{PeerTable, ProjectLabel};
 
 /// The internal podman network name for the Tillandsias enclave.
 /// @trace spec:enclave-network

@@ -49,8 +49,31 @@ while IFS= read -r line; do
             escaped=$(echo "$result" | jq -Rs .)
             echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"content":[{"type":"text","text":'"$escaped"'}]}}'
             ;;
+        "prompts/list")
+            # @trace spec:opencode-web-session
+            # MCP spec: servers must respond to prompts/list even if they
+            # declare no prompts capability. Without this, OpenCode waits 60s
+            # for a reply, timing out the UI's /command endpoint and causing
+            # a full-UI freeze on session load.
+            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"prompts":[]}}'
+            ;;
+        "resources/list")
+            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"resources":[]}}'
+            ;;
+        "resources/templates/list")
+            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"resourceTemplates":[]}}'
+            ;;
         "notifications/initialized")
             # Client acknowledgment - no response needed
+            ;;
+        *)
+            # @trace spec:opencode-web-session
+            # Unknown method — respond with MCP's standard "method not found"
+            # error instead of silently ignoring. Silence causes 60s timeouts
+            # in the client and hangs the UI.
+            if [ -n "$id" ]; then
+                echo '{"jsonrpc":"2.0","id":"'"$id"'","error":{"code":-32601,"message":"Method not found: '"$method"'"}}'
+            fi
             ;;
     esac
 done

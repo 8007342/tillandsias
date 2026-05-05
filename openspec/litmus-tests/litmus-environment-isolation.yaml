@@ -1,0 +1,63 @@
+name: litmus:environment-isolation
+spec: environment-runtime
+description: Verify forge sees ONLY minimal environment variables, no host env leakage
+severity: high
+
+preconditions:
+  - tillandsias tray running
+  - forge container available
+  - host environment has multiple env vars set
+
+critical_path:
+  - step: "baseline: count host environment variables"
+    command: "env | wc -l"
+    timeout_ms: 2000
+    expected_behavior: "host has 20+ env vars typically"
+
+  - step: "execute forge container and count env vars"
+    command: "podman run --rm tillandsias-forge env | wc -l"
+    timeout_ms: 5000
+    expected_behavior: "forge has 3-10 env vars only"
+
+  - step: "list forge environment variables"
+    command: "podman run --rm tillandsias-forge env | sort"
+    timeout_ms: 5000
+    expected_behavior: "minimal set: PATH, HOME, USER, container-specific"
+
+  - step: "verify no host-specific vars in forge"
+    command: "podman run --rm tillandsias-forge env | grep -E 'DOCKER_HOST|SESSION_MANAGER|DBUS_SESSION_BUS_ADDRESS|XDG_' | wc -l"
+    timeout_ms: 3000
+    expected_behavior: "0 matches (no host session/display vars)"
+
+  - step: "verify PATH is correctly set"
+    command: "podman run --rm tillandsias-forge which cargo"
+    timeout_ms: 5000
+    expected_behavior: "/opt/cargo/bin/cargo or /usr/local/cargo/bin/cargo"
+
+gating_points:
+  - signal: "environment isolation enforced"
+    success: "forge has 3-10 env vars, none from host session"
+    failure: "forge inherits host environment OR missing critical vars"
+    spec_linkage: "environment-runtime"
+
+  - signal: "no session/display leakage"
+    success: "no XDG, DBUS, DOCKER_HOST, or X11 vars in forge"
+    failure: "host session variables visible in forge"
+
+  - signal: "minimal necessary vars present"
+    success: "PATH, HOME, USER all set and functional"
+    failure: "required env vars missing"
+
+observability:
+  traces:
+    - "@trace spec:environment-runtime"
+    - "@trace spec:forge-launch"
+  expected_log: "Environment isolation verified: minimal env vars"
+  log_fields:
+    spec: "environment-runtime"
+    test: "environment-isolation"
+    forge_env_count: "3-10"
+
+rollback:
+  on_failure: "re-check forge image environment configuration"
+  command: "podman inspect tillandsias-forge 2>/dev/null | grep -A 20 'Env' | head -20"

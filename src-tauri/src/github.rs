@@ -61,6 +61,106 @@ struct GhRepoEntry {
 /// @trace spec:remote-projects, spec:secrets-management
 #[instrument(skip_all)]
 pub async fn fetch_repos() -> Result<Vec<RemoteRepo>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // @trace spec:cross-platform, spec:remote-projects, spec:windows-wsl-runtime
+        return fetch_repos_wsl().await;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        fetch_repos_podman().await
+    }
+}
+
+/// Fetch remote repos via the `tillandsias-git` WSL distro (Windows path).
+///
+/// The git distro has `gh` CLI installed (Alpine `github-cli` package). Token
+/// flows from the Windows Credential Manager → stdin pipe → `env GH_TOKEN=`
+/// inside the distro. The token never appears in argv. Output is JSON parsed
+/// the same way as the podman path.
+///
+/// @trace spec:cross-platform, spec:remote-projects, spec:secrets-management
+#[cfg(target_os = "windows")]
+async fn fetch_repos_wsl() -> Result<Vec<RemoteRepo>, String> {
+    use std::process::Stdio;
+    use tokio::io::AsyncWriteExt;
+
+    let token: Zeroizing<String> = match crate::secrets::retrieve_github_token() {
+        Ok(Some(t)) => Zeroizing::new(t),
+        Ok(None) => return Err("No GitHub credentials found in keyring".to_string()),
+        Err(e) => return Err(format!("Keyring unavailable: {e}")),
+    };
+
+    // The shell script reads the token from stdin's first line, exports it,
+    // then unsets stdin before running gh. Token never appears in argv.
+    let script = "read -r GH_TOKEN; export GH_TOKEN; gh repo list --json name,nameWithOwner --limit 100 </dev/null";
+
+    info!("Fetching remote repos via gh in tillandsias-git WSL distro");
+
+    let mut child = {
+        let mut __c = tokio::process::Command::new("wsl.exe");
+        tillandsias_podman::no_window_async(&mut __c);
+        __c
+    }
+    .args([
+        "-d",
+        "tillandsias-git",
+        "--user",
+        "git",
+        "--exec",
+        "/bin/sh",
+        "-c",
+        script,
+    ])
+    .stdin(Stdio::piped())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn()
+    .map_err(|e| format!("Failed to spawn wsl.exe: {e}"))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(token.as_bytes())
+            .await
+            .map_err(|e| format!("Failed to write token to wsl stdin: {e}"))?;
+        stdin
+            .write_all(b"\n")
+            .await
+            .map_err(|e| format!("Failed to write newline to wsl stdin: {e}"))?;
+        drop(stdin);
+    }
+
+    let output = child
+        .wait_with_output()
+        .await
+        .map_err(|e| format!("wsl.exe failed: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        error!(stderr = %stderr, "gh repo list failed (WSL)");
+        return Err(format!("gh repo list failed: {}", stderr.trim()));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    debug!(raw_len = stdout.len(), "gh repo list output received");
+
+    let entries: Vec<GhRepoEntry> = serde_json::from_str(stdout.trim())
+        .map_err(|e| format!("Failed to parse gh output: {e}"))?;
+
+    let repos = entries
+        .into_iter()
+        .map(|e| RemoteRepo {
+            name: e.name,
+            full_name: e.name_with_owner,
+        })
+        .collect::<Vec<_>>();
+
+    info!(count = repos.len(), "Remote repos fetched (WSL)");
+    Ok(repos)
+}
+
+#[cfg(not(target_os = "windows"))]
+async fn fetch_repos_podman() -> Result<Vec<RemoteRepo>, String> {
     // Read the token (not just check existence) so we can hand it to the
     // child podman process via env. Wrap in Zeroizing so the host-side heap
     // allocation is wiped when this function returns.
@@ -129,6 +229,105 @@ pub async fn fetch_repos() -> Result<Vec<RemoteRepo>, String> {
 /// @trace spec:remote-projects, spec:secrets-management
 #[instrument(skip_all, fields(repo = %full_name, target = %target_dir.display()))]
 pub async fn clone_repo(full_name: &str, target_dir: &Path) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        // @trace spec:cross-platform, spec:remote-projects, spec:windows-wsl-runtime
+        return clone_repo_wsl(full_name, target_dir).await;
+    }
+    #[cfg(not(target_os = "windows"))]
+    clone_repo_podman(full_name, target_dir).await
+}
+
+/// Clone a GitHub repo via the tillandsias-git WSL distro.
+///
+/// Token flows: Windows keyring → stdin pipe to wsl.exe → `read GH_TOKEN`
+/// inside the distro → `gh repo clone`. Target dir is the host Windows path
+/// translated to /mnt/c/... so the clone lands directly on host fs.
+///
+/// @trace spec:cross-platform, spec:remote-projects, spec:secrets-management,
+/// spec:windows-wsl-runtime
+#[cfg(target_os = "windows")]
+async fn clone_repo_wsl(full_name: &str, target_dir: &Path) -> Result<(), String> {
+    use std::process::Stdio;
+    use tokio::io::AsyncWriteExt;
+
+    let token: Zeroizing<String> = match crate::secrets::retrieve_github_token() {
+        Ok(Some(t)) => Zeroizing::new(t),
+        Ok(None) => return Err("No GitHub credentials found in keyring".to_string()),
+        Err(e) => return Err(format!("Keyring unavailable: {e}")),
+    };
+
+    // Translate target_dir to /mnt/c/... so gh writes the clone on host fs.
+    let target_str = target_dir.to_string_lossy();
+    let bytes = target_str.as_bytes();
+    let target_mnt =
+        if bytes.len() >= 3 && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/') {
+            let drive = (bytes[0] as char).to_ascii_lowercase();
+            let rest = target_str[2..].replace('\\', "/");
+            format!("/mnt/{drive}{rest}")
+        } else {
+            return Err(format!(
+                "target_dir is not a Windows drive path: {target_str}"
+            ));
+        };
+
+    info!(repo = %full_name, target = %target_mnt, "Cloning repository via WSL git distro");
+
+    // Token is fed via stdin to a small shell script inside the distro.
+    let script = format!(
+        "read -r GH_TOKEN; export GH_TOKEN; gh repo clone '{full_name}' '{target_mnt}' </dev/null",
+    );
+
+    let mut child = {
+        let mut __c = tokio::process::Command::new("wsl.exe");
+        tillandsias_podman::no_window_async(&mut __c);
+        __c
+    }
+    .args([
+        "-d",
+        "tillandsias-git",
+        "--user",
+        "git",
+        "--exec",
+        "/bin/sh",
+        "-c",
+        &script,
+    ])
+    .stdin(Stdio::piped())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn()
+    .map_err(|e| format!("Failed to spawn wsl.exe: {e}"))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(token.as_bytes())
+            .await
+            .map_err(|e| format!("Failed to write token to wsl stdin: {e}"))?;
+        stdin
+            .write_all(b"\n")
+            .await
+            .map_err(|e| format!("Failed to write newline to wsl stdin: {e}"))?;
+        drop(stdin);
+    }
+
+    let output = child
+        .wait_with_output()
+        .await
+        .map_err(|e| format!("wsl.exe failed: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        error!(repo = %full_name, stderr = %stderr, "Clone failed (WSL)");
+        return Err(format!("Clone failed: {}", stderr.trim()));
+    }
+
+    info!(repo = %full_name, "Clone completed (WSL)");
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+async fn clone_repo_podman(full_name: &str, target_dir: &Path) -> Result<(), String> {
     // Ensure the parent directory exists so we can mount it
     let parent = target_dir
         .parent()

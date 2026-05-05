@@ -1,12 +1,14 @@
 <!-- @trace spec:proxy-container -->
 # proxy-container Specification
 
+## Status
+
+active
+
 ## Purpose
 
 Caching HTTP/HTTPS forward proxy with domain allowlist that mediates all external traffic from forge containers. Alpine-based with squid, ~500MB disk cache. Uses ssl-bump MITM infrastructure with an ephemeral CA chain for HTTPS handling. Currently operates in splice-all mode (passthrough, no decryption) but the architecture supports selective per-domain interception for HTTPS content caching.
-
 ## Requirements
-
 ### Requirement: Caching HTTP/HTTPS proxy with ssl-bump MITM architecture
 The system SHALL build and run a `tillandsias-proxy` container that provides a caching HTTP/HTTPS proxy service. The proxy SHALL use squid configured with ssl-bump on all ports, using an ephemeral intermediate CA certificate for dynamic server certificate generation. The ssl-bump policy SHALL default to splice-all (passthrough): squid peeks at the TLS ClientHello to read the SNI for domain filtering, then splices (tunnels) the connection without decryption. The proxy cache SHALL be ~500MB disk-based, stored in a persistent volume.
 
@@ -274,6 +276,76 @@ The proxy SHALL delete the `Forwarded` (and `X-Forwarded-For`) header from outgo
 - **THEN** the `Forwarded` / `X-Forwarded-For` header SHALL be absent
 - **AND** the `Via` header SHALL be absent
 
+### Requirement: Allowlist covers OpenCode's default egress footprint
+
+The domain allowlist (`/etc/squid/allowlist.txt`, sourced from `images/proxy/allowlist.txt`) SHALL include every external domain that OpenCode Web reaches in its default configuration. At minimum the allowlist MUST contain `.models.dev` (OpenCode model registry), `.openrouter.ai` (OpenRouter aggregation gateway), and `.helicone.ai` (Helicone telemetry / gateway), in addition to the provider domains already listed (`.anthropic.com`, `.openai.com`, `.together.ai`, `.groq.com`, `.deepseek.com`, `.mistral.ai`, `.fireworks.ai`, `.cerebras.ai`, `.sambanova.ai`, `.huggingface.co`). New providers added to OpenCode MUST have their domains added to the allowlist in the same commit that introduces the provider.
+
+#### Scenario: models.dev is allowed
+- **WHEN** a forge container issues `CONNECT models.dev:443` via the proxy
+- **THEN** Squid matches `.models.dev` in the allowlist
+- **AND** responds with `TCP_TUNNEL/200` (not `TCP_DENIED`)
+
+#### Scenario: OpenRouter is allowed
+- **WHEN** a forge container issues `CONNECT openrouter.ai:443` or
+  `CONNECT api.openrouter.ai:443`
+- **THEN** Squid matches `.openrouter.ai` in the allowlist
+- **AND** the CONNECT tunnel is established
+
+### Requirement: Allowlist entries follow Squid 6.x single-entry rule
+
+Every allowlist entry SHALL be listed exactly once and SHALL use the
+leading-dot form (`.example.com`). Bare-domain duplicates of an already-listed
+subdomain pattern are prohibited because Squid 6.x treats duplicate dstdomain
+entries as a fatal startup error.
+
+#### Scenario: Proxy starts with no duplicate dstdomain errors
+- **WHEN** the proxy container boots
+- **THEN** Squid parses `allowlist.txt` without emitting
+  `FATAL: duplicate key "..."` for any entry
+- **AND** the proxy listens on port 3128 ready to serve the enclave
+
+#### Scenario: Adding a new provider appends one line
+- **WHEN** an engineer adds a new provider to OpenCode's default config
+- **THEN** they add one `.provider.example` line to `allowlist.txt`
+- **AND** do NOT add a bare `provider.example` alongside
+- **AND** the change is reviewed against the existing list to avoid subdomain
+  duplicates of already-covered domains
+
+### Requirement: Forward proxy recognises `*.localhost` as enclave-internal
+
+The Squid proxy SHALL allow `*.localhost` destinations and forward
+them to a sibling reverse-proxy container at `router:80` instead of
+attempting external resolution.
+
+This lets forge agents run `curl http://<project>.<service>.localhost/`
+through their existing `HTTP_PROXY=http://proxy:3128` and reach
+enclave-local services without any client-side configuration.
+
+`*.localhost` MUST never be forwarded externally — by RFC 6761 these
+hostnames are loopback-only, and a leak past the proxy to an external
+DNS server would itself be a violation. The Squid config MUST contain
+both an `acl localhost_subdomain dstdomain .localhost` and a
+`cache_peer router parent 80 0` directive (or equivalent), with
+`cache_peer_access router allow localhost_subdomain` and
+`never_direct allow localhost_subdomain`.
+
+#### Scenario: Forge agent reaches enclave service through proxy
+- **WHEN** an agent inside a forge container runs
+  `curl http://my-project.flutter.localhost/`
+- **THEN** the request SHALL go to `proxy:3128` (forward proxy)
+- **AND** Squid SHALL forward the request to `router:80` (reverse
+  proxy peer)
+- **AND** the router SHALL route to the right container at the right
+  internal port
+- **AND** the agent SHALL receive the dev server's response
+
+#### Scenario: External `.localhost` resolution attempt is denied
+- **WHEN** Squid receives a `.localhost` request and the router peer
+  is unreachable
+- **THEN** Squid SHALL return an error response, NOT fall through to
+  external DNS resolution
+- **AND** no `*.localhost` lookup SHALL ever leave the host
+
 ## Security implications and trust model
 
 ### What the proxy CAN do (architecturally)
@@ -294,3 +366,25 @@ The proxy SHALL delete the `Forwarded` (and `X-Forwarded-For`) header from outgo
 2. **Proxy has no credentials**: it cannot authenticate to any service on behalf of forge containers.
 3. **Key material is ephemeral**: all CA keys live on tmpfs and die with the session. There is no persistent CA that could be compromised across reboots.
 4. **Image builds are outside the trust boundary**: they fetch packages directly, never through the proxy.
+
+## Sources of Truth
+
+- `cheatsheets/runtime/networking.md` — Networking reference and patterns
+- `cheatsheets/web/http.md` — Http reference and patterns
+
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:enclave-isolation`
+
+Gating points:
+- Proxy enforces network isolation; no unauthorized egress
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:proxy-container" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

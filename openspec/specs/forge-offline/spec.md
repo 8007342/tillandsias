@@ -1,6 +1,10 @@
 <!-- @trace spec:forge-offline -->
 # forge-offline Specification
 
+## Status
+
+status: active
+
 ## Purpose
 
 Forge containers operate offline -- no credentials, no project mounts, no direct internet. Code comes from git clone, packages come through the proxy, secrets live exclusively in the git service.
@@ -50,3 +54,25 @@ Forge containers SHALL be attached to the `tillandsias-enclave` internal network
 #### Scenario: Package install through proxy works
 - **WHEN** a forge container runs `npm install` with proxy env vars
 - **THEN** the install SHALL succeed through the proxy
+
+## Sources of Truth
+
+- `cheatsheets/runtime/forge-container.md` — Forge Container reference and patterns
+- `cheatsheets/security/owasp-top-10-2021.md` — Owasp Top 10 2021 reference and patterns
+
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:credential-isolation`
+
+Gating points:
+- Forge containers have zero credentials; no token leakage through environment or files
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:forge-offline" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

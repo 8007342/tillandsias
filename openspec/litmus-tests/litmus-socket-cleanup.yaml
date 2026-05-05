@@ -1,0 +1,70 @@
+name: litmus:socket-cleanup
+spec: enclave-network, control-socket
+description: Verify no leftover Unix domain sockets after shutdown
+severity: high
+
+preconditions:
+  - tillandsias tray running
+  - enclave network active with multiple containers
+  - ~/.cache/tillandsias directory exists
+
+critical_path:
+  - step: "baseline: count active sockets"
+    command: "find ~/.cache/tillandsias -type s 2>/dev/null | wc -l"
+    timeout_ms: 3000
+    expected_behavior: "multiple sockets during operation"
+
+  - step: "list all tillandsias sockets"
+    command: "find ~/.cache/tillandsias -type s 2>/dev/null | sort"
+    timeout_ms: 3000
+    expected_behavior: "control.sock, enclave.sock, or similar"
+
+  - step: "verify sockets are functional (not orphaned)"
+    command: "for s in ~/.cache/tillandsias/*.sock; do [ -S \"$s\" ] && echo SOCKET_OK || echo ORPHANED; done"
+    timeout_ms: 5000
+    expected_behavior: "SOCKET_OK for each active socket"
+
+  - step: "shutdown tillandsias tray"
+    command: "pkill -f tillandsias 2>/dev/null && sleep 3 && echo SHUTDOWN_COMPLETE"
+    timeout_ms: 8000
+    expected_behavior: "shutdown command succeeds"
+
+  - step: "verify all sockets removed after shutdown"
+    command: "find ~/.cache/tillandsias -type s 2>/dev/null | wc -l"
+    timeout_ms: 3000
+    expected_behavior: "0 sockets"
+
+  - step: "verify no orphaned socket files"
+    command: "find ~/.cache/tillandsias -type f -name '*.sock' 2>/dev/null | wc -l"
+    timeout_ms: 3000
+    expected_behavior: "0 socket files"
+
+gating_points:
+  - signal: "sockets cleaned on shutdown"
+    success: "no tillandsias sockets remaining"
+    failure: "sockets still present in ~/.cache/tillandsias"
+    spec_linkage: "enclave-network"
+
+  - signal: "control socket lifecycle properly managed"
+    success: "control.sock deleted on shutdown"
+    failure: "control.sock remains"
+
+  - signal: "no socket leaks"
+    success: "filesystem socket count back to zero"
+    failure: "orphaned sockets left behind"
+
+observability:
+  traces:
+    - "@trace spec:enclave-network"
+    - "@trace spec:control-socket"
+    - "@trace spec:ephemeral-guarantee"
+  expected_log: "Sockets cleaned on tray shutdown"
+  log_fields:
+    spec: "enclave-network"
+    test: "socket-cleanup"
+    resource_type: "sockets"
+    location: "~/.cache/tillandsias"
+
+rollback:
+  on_failure: "manually remove orphaned sockets"
+  command: "find ~/.cache/tillandsias -type s -delete 2>/dev/null; find ~/.cache/tillandsias -type f -name '*.sock' -delete 2>/dev/null; systemctl --user restart tillandsias 2>/dev/null || true"

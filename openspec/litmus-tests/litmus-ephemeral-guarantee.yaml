@@ -1,0 +1,42 @@
+name: litmus:ephemeral-guarantee
+spec: forge-offline
+description: Verify forge container cannot reach external IP addresses
+severity: critical
+
+preconditions:
+  - tillandsias tray running
+  - forge container launched with --attach-here
+  - network connectivity on host (able to reach example.com)
+
+critical_path:
+  - step: "launch forge environment"
+    command: "podman run --rm --cap-drop=ALL --security-opt=no-new-privileges tillandsias-forge /bin/sh -c 'sleep 1'"
+    timeout_ms: 10000
+
+  - step: "attempt external network connection from forge"
+    command: "podman run --rm --cap-drop=ALL --security-opt=no-new-privileges tillandsias-forge curl --connect-timeout 5 https://example.com 2>&1"
+    timeout_ms: 8000
+    expected_behavior: "timeout or connection refused"
+
+gating_points:
+  - signal: "connection timeout"
+    success: "curl: (7) Failed to connect to example.com port 443"
+    failure: "HTTP response received OR curl succeeds"
+    spec_linkage: "forge-offline"
+
+  - signal: "no outbound route"
+    success: "timeout after ~5s OR Network unreachable"
+    failure: "responds with HTTP status"
+
+observability:
+  traces:
+    - "@trace spec:forge-offline"
+    - "@trace spec:ephemeral-guarantee"
+  expected_log: "External network request blocked (expected)"
+  log_fields:
+    spec: "forge-offline"
+    test: "ephemeral-guarantee"
+
+rollback:
+  on_failure: "kill test container and verify tray still responsive"
+  command: "podman ps -a | grep -E 'tillandsias-forge' | awk '{print $1}' | xargs -r podman rm -f"

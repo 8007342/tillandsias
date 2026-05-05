@@ -14,7 +14,7 @@ use tracing::{debug, info, warn};
 /// Detected GPU capability tier for model selection.
 ///
 /// @trace spec:inference-container
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GpuTier {
     /// No GPU detected — CPU inference only (T0-T1)
     None,
@@ -36,12 +36,29 @@ impl GpuTier {
     ///
     /// @trace spec:inference-container
     pub fn model_pair(&self) -> (&'static str, &'static str) {
+        // @trace spec:zen-default-with-ollama-analysis-pool
+        // Tool-call work stays on a Zen model (opencode/*) regardless of
+        // local hardware — Zen models follow opencode's tool-call protocol
+        // reliably. The small_model (analysis pool) is CLAMPED to what the
+        // inference image actually bakes at build time. Bigger models would
+        // benefit GPU users but we can't pull them reliably at runtime (squid
+        // SSL-bump EOF on ollama manifests, memory: project_squid_ollama_eof).
+        // Claiming a non-baked model leaves opencode pointing at a model
+        // that isn't there on fresh hosts.
+        //
+        // Baked tiers: T0 = qwen2.5:0.5b, T1 = llama3.2:3b.
+        // Users can override per-prompt with `--model ollama/<pulled>`.
+        const ZEN_PRIMARY: &str = "opencode/big-pickle";
         match self {
-            GpuTier::None => ("ollama/qwen2.5:0.5b", "ollama/qwen2.5:0.5b"),
-            GpuTier::Low => ("ollama/phi3.5:3.8b", "ollama/qwen2.5:0.5b"),
-            GpuTier::Mid => ("ollama/qwen2.5-coder:7b", "ollama/qwen2.5:0.5b"),
-            GpuTier::High => ("ollama/llama3.2:8b", "ollama/tinyllama:1.1b"),
-            GpuTier::Ultra => ("ollama/qwen2.5:13b", "ollama/qwen2.5:0.5b"),
+            // No GPU / minimal RAM — smallest baked model is enough.
+            GpuTier::None => (ZEN_PRIMARY, "ollama/qwen2.5:0.5b"),
+            // Everything with a GPU (Low through Ultra) uses the 3B baked
+            // model for analysis. Larger tiers benefit from GPU acceleration
+            // running the SAME model faster; swapping to a larger model is
+            // opt-in via per-prompt --model override.
+            GpuTier::Low | GpuTier::Mid | GpuTier::High | GpuTier::Ultra => {
+                (ZEN_PRIMARY, "ollama/llama3.2:3b")
+            }
         }
     }
 }
@@ -70,28 +87,27 @@ pub fn detect_gpu_tier() -> GpuTier {
     if let Ok(output) = std::process::Command::new("nvidia-smi")
         .args(["--query-gpu=memory.total", "--format=csv,noheader,nounits"])
         .output()
+        && output.status.success()
     {
-        if output.status.success() {
-            let vram_str = String::from_utf8_lossy(&output.stdout);
-            // nvidia-smi may report multiple GPUs (one line per GPU).
-            // Use the first GPU's VRAM for tier classification.
-            if let Some(first_line) = vram_str.lines().next() {
-                if let Ok(vram_mib) = first_line.trim().parse::<u64>() {
-                    let vram_gb = vram_mib / 1024;
-                    debug!(
-                        vram_mib = vram_mib,
-                        vram_gb = vram_gb,
-                        spec = "inference-container",
-                        "nvidia-smi reported VRAM"
-                    );
-                    return match vram_gb {
-                        0..=3 => GpuTier::Low,
-                        4..=7 => GpuTier::Mid,
-                        8..=11 => GpuTier::High,
-                        _ => GpuTier::Ultra,
-                    };
-                }
-            }
+        let vram_str = String::from_utf8_lossy(&output.stdout);
+        // nvidia-smi may report multiple GPUs (one line per GPU).
+        // Use the first GPU's VRAM for tier classification.
+        if let Some(first_line) = vram_str.lines().next()
+            && let Ok(vram_mib) = first_line.trim().parse::<u64>()
+        {
+            let vram_gb = vram_mib / 1024;
+            debug!(
+                vram_mib = vram_mib,
+                vram_gb = vram_gb,
+                spec = "inference-container",
+                "nvidia-smi reported VRAM"
+            );
+            return match vram_gb {
+                0..=3 => GpuTier::Low,
+                4..=7 => GpuTier::Mid,
+                8..=11 => GpuTier::High,
+                _ => GpuTier::Ultra,
+            };
         }
     }
 
@@ -136,13 +152,13 @@ pub fn patch_config_overlay_for_gpu(tier: GpuTier) -> Result<(), String> {
         return Ok(());
     }
 
-    let content =
-        std::fs::read_to_string(&config_path).map_err(|e| format!("Cannot read config overlay: {e}"))?;
+    let content = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("Cannot read config overlay: {e}"))?;
 
     let (primary, small) = tier.model_pair();
 
-    let mut config: serde_json::Value =
-        serde_json::from_str(&content).map_err(|e| format!("Cannot parse config overlay JSON: {e}"))?;
+    let mut config: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("Cannot parse config overlay JSON: {e}"))?;
 
     config["model"] = serde_json::Value::String(primary.to_string());
     config["small_model"] = serde_json::Value::String(small.to_string());
@@ -201,25 +217,29 @@ mod tests {
 
     #[test]
     fn gpu_tier_model_pairs() {
+        // Primary stays on Zen for tool calling regardless of local hardware.
+        // Small (analysis) model scales with available compute.
         assert_eq!(
             GpuTier::None.model_pair(),
-            ("ollama/qwen2.5:0.5b", "ollama/qwen2.5:0.5b")
+            ("opencode/big-pickle", "ollama/qwen2.5:0.5b")
         );
         assert_eq!(
             GpuTier::Low.model_pair(),
-            ("ollama/phi3.5:3.8b", "ollama/qwen2.5:0.5b")
+            ("opencode/big-pickle", "ollama/llama3.2:3b")
         );
+        // Mid/High/Ultra all resolve to the T1 baked model (llama3.2:3b)
+        // until bigger tiers get image-baked or runtime pulls are unblocked.
         assert_eq!(
             GpuTier::Mid.model_pair(),
-            ("ollama/qwen2.5-coder:7b", "ollama/qwen2.5:0.5b")
+            ("opencode/big-pickle", "ollama/llama3.2:3b")
         );
         assert_eq!(
             GpuTier::High.model_pair(),
-            ("ollama/llama3.2:8b", "ollama/tinyllama:1.1b")
+            ("opencode/big-pickle", "ollama/llama3.2:3b")
         );
         assert_eq!(
             GpuTier::Ultra.model_pair(),
-            ("ollama/qwen2.5:13b", "ollama/qwen2.5:0.5b")
+            ("opencode/big-pickle", "ollama/llama3.2:3b")
         );
     }
 
@@ -253,7 +273,11 @@ mod tests {
             "model": "ollama/qwen2.5:0.5b",
             "small_model": "ollama/qwen2.5:0.5b"
         });
-        std::fs::write(&config_path, serde_json::to_string_pretty(&initial).unwrap()).unwrap();
+        std::fs::write(
+            &config_path,
+            serde_json::to_string_pretty(&initial).unwrap(),
+        )
+        .unwrap();
 
         // Patch with a custom runtime dir pointing to our temp dir
         // We can't easily override runtime_dir() in tests, so test the JSON
@@ -268,11 +292,13 @@ mod tests {
         let patched = serde_json::to_string_pretty(&config).unwrap();
         std::fs::write(&config_path, &patched).unwrap();
 
-        // Verify
+        // Verify — primary stays Zen, small_model clamps to the baked T1
+        // (llama3.2:3b) since Mid-tier's aspirational qwen2.5-coder:7b isn't
+        // guaranteed to be in the cache.
         let result: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&config_path).unwrap()).unwrap();
-        assert_eq!(result["model"], "ollama/qwen2.5-coder:7b");
-        assert_eq!(result["small_model"], "ollama/qwen2.5:0.5b");
+        assert_eq!(result["model"], "opencode/big-pickle");
+        assert_eq!(result["small_model"], "ollama/llama3.2:3b");
         assert_eq!(result["autoupdate"], false); // Other fields preserved
     }
 
@@ -288,12 +314,12 @@ mod tests {
         ] {
             let (primary, small) = tier.model_pair();
             assert!(
-                primary.starts_with("ollama/"),
-                "Primary model for {tier:?} must start with ollama/"
+                primary.starts_with("opencode/"),
+                "Primary model for {tier:?} must be a Zen tool-caller (opencode/*)"
             );
             assert!(
                 small.starts_with("ollama/"),
-                "Small model for {tier:?} must start with ollama/"
+                "Small model for {tier:?} must be a local ollama analysis model"
             );
             // Ensure model strings are valid JSON values
             let val = serde_json::Value::String(primary.to_string());

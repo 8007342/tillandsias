@@ -1,0 +1,105 @@
+
+trace: spec:methodology-accountability
+
+unknown_event_register:
+  version: v0.1
+  purpose: >
+    Provide a first-class intake path for unknowns. Bounded uncertainty handles
+    known invariants that new evidence invalidates; unknown events handle the
+    earlier moment when the system notices "this was not predicted by the
+    methodology, spec, litmus, trace, or cheatsheet."
+
+  file_naming:
+    pattern: "NN-short-slug.yaml"
+    sequence: "two or three digit monotonically increasing integer per directory"
+    slug: "lowercase words separated by hyphen"
+    example: "001-trace-passes-but-runtime-misses.yaml"
+
+  required_fields:
+    - event_id
+    - status
+    - observed_at
+    - reporter
+    - summary
+    - observed_signal
+    - expected_model
+    - violated_or_missing_claims
+    - affected_artifacts
+    - evidence_refs
+    - uncertainty_delta
+    - provisional_classification
+    - next_distillation_step
+    - closure_criteria
+
+  status_values:
+    - open
+    - triaged
+    - distilled
+    - superseded
+    - closed
+
+  classification_values:
+    - missing_spec_requirement
+    - missing_litmus_signal
+    - stale_or_false_cheatsheet
+    - trace_without_runtime_evidence
+    - methodology_claim_unproven
+    - metric_gaming_or_false_score
+    - environment_assumption
+    - concurrency_or_merge_anomaly
+    - other
+
+  uncertainty_delta:
+    meaning: >
+      The local, explicit increase in uncertainty caused by the observation.
+      This is not a failure by itself. It becomes drift only if it is left
+      untriaged or if a prior claim remains active after contrary evidence.
+    allowed_values:
+      - none
+      - low
+      - medium
+      - high
+    rule: >
+      Medium or high uncertainty deltas MUST either create a bounded uncertainty
+      exception or update a spec, litmus test, cheatsheet, provenance claim, or
+      proximity rule before closure.
+
+  semantic_distillation:
+    rule: >
+      Closing an unknown event requires preserving the learned distinction in the
+      smallest durable artifact that prevents recurrence.
+    target_order:
+      - spec_requirement_or_invariant
+      - litmus_signal_or_negative_test
+      - methodology_provenance_claim
+      - proximity_weight_or_scoring_rule
+      - cheatsheet_entry_or_source_refresh
+      - code_trace_or_runtime_event_schema
+    closure_must_not:
+      - delete_old_context_without_tombstone
+      - hide_uncertainty_by_renaming_the_event
+      - close_with_no_artifact_change_unless_event_is_duplicate
+
+  relationship_to_bounded_uncertainty:
+    unknown_event: >
+      Captures an unexpected observation and routes it to the correct artifact.
+    bounded_uncertainty_exception: >
+      Temporarily allows a verified invariant or requirement to lose certainty
+      while stronger evidence replaces it.
+    rule: >
+      Unknown events MAY lead to bounded uncertainty exceptions. They are not the
+      same artifact: unknown events are intake records; bounded uncertainty
+      exceptions are gated change-control records.
+
+  audit_queries:
+    list_open: "rg -n 'status: open|status: triaged' methodology/event"
+    list_high_delta: "rg -n 'uncertainty_delta: high' methodology/event"
+    list_claim_failures: "rg -n 'methodology_claim_unproven' methodology/event"
+
+  known_events:
+    - file: methodology/event/001-direct-main-methodology-push.yaml
+      status: distilled
+      distilled_into:
+        - methodology/versioning.yaml
+        - methodology/proximity.yaml
+        - methodology/convergence.yaml

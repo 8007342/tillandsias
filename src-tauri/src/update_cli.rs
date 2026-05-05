@@ -5,7 +5,7 @@
 //! available. Runs entirely in a blocking context — the Tauri event loop is
 //! never constructed.
 //!
-//! @trace spec:update-system
+//! @trace spec:update-system, spec:binary-signing
 //!
 //! # Update endpoint
 //!
@@ -116,10 +116,11 @@ pub fn run() -> bool {
     let json_text = match fetch_url(UPDATE_ENDPOINT) {
         Ok(t) => t,
         Err(e) => {
-            eprintln!("  {}", i18n::tf("update.fetch_error", &[("error", &e.to_string())]));
-            update_log::append_entry(&format!(
-                "ERROR: failed to fetch update manifest: {e}"
-            ));
+            eprintln!(
+                "  {}",
+                i18n::tf("update.fetch_error", &[("error", &e.to_string())])
+            );
+            update_log::append_entry(&format!("ERROR: failed to fetch update manifest: {e}"));
             return false;
         }
     };
@@ -128,10 +129,11 @@ pub fn run() -> bool {
     let manifest: LatestJson = match serde_json::from_str(&json_text) {
         Ok(m) => m,
         Err(e) => {
-            eprintln!("  {}", i18n::tf("update.parse_error", &[("error", &e.to_string())]));
-            update_log::append_entry(&format!(
-                "ERROR: failed to parse update manifest: {e}"
-            ));
+            eprintln!(
+                "  {}",
+                i18n::tf("update.parse_error", &[("error", &e.to_string())])
+            );
+            update_log::append_entry(&format!("ERROR: failed to parse update manifest: {e}"));
             return false;
         }
     };
@@ -148,9 +150,7 @@ pub fn run() -> bool {
 
     if !is_newer(latest_compare, current) {
         println!("  {}", i18n::t("update.up_to_date"));
-        update_log::append_entry(&format!(
-            "UPDATE CHECK: v{current} — already up to date"
-        ));
+        update_log::append_entry(&format!("UPDATE CHECK: v{current} — already up to date"));
         return true;
     }
 
@@ -173,13 +173,15 @@ pub fn run() -> bool {
             );
             eprintln!(
                 "  {}",
-                i18n::tf("update.available_platforms", &[
-                    ("platforms", &format!("{:?}", manifest.platforms.keys().collect::<Vec<_>>()))
-                ])
+                i18n::tf(
+                    "update.available_platforms",
+                    &[(
+                        "platforms",
+                        &format!("{:?}", manifest.platforms.keys().collect::<Vec<_>>())
+                    )]
+                )
             );
-            update_log::append_entry(&format!(
-                "ERROR: no artifact for platform '{platform_key}'"
-            ));
+            update_log::append_entry(&format!("ERROR: no artifact for platform '{platform_key}'"));
             return false;
         }
     };
@@ -201,7 +203,10 @@ pub fn run() -> bool {
     let archive_path = match download_update(&entry.url) {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("  {}", i18n::tf("update.download_error", &[("error", &e.to_string())]));
+            eprintln!(
+                "  {}",
+                i18n::tf("update.download_error", &[("error", &e.to_string())])
+            );
             update_log::append_entry(&format!("ERROR: download failed: {e}"));
             return false;
         }
@@ -222,7 +227,10 @@ pub fn run() -> bool {
     // Apply the update — dispatches to platform-specific logic.
     println!("  {}", i18n::t("update.applying"));
     if let Err(e) = apply_update(&archive_path, &install_target, &entry.url) {
-        eprintln!("  {}", i18n::tf("update.apply_error", &[("error", &e.to_string())]));
+        eprintln!(
+            "  {}",
+            i18n::tf("update.apply_error", &[("error", &e.to_string())])
+        );
         update_log::append_entry(&format!("ERROR: failed to apply update: {e}"));
         let _ = std::fs::remove_file(&archive_path);
         return false;
@@ -368,17 +376,16 @@ fn detect_install_target() -> Option<PathBuf> {
     } else if cfg!(target_os = "windows") {
         // Windows: NSIS installer puts the exe in %LOCALAPPDATA%\Tillandsias\
         // Also try the current exe location (portable/manual install).
-        std::env::current_exe().ok().and_then(|exe| {
-            if exe.exists() {
-                Some(exe)
-            } else {
-                None
-            }
-        }).or_else(|| {
-            let local_app = std::env::var("LOCALAPPDATA").ok()?;
-            let path = PathBuf::from(local_app).join("Tillandsias").join("tillandsias.exe");
-            path.exists().then_some(path)
-        })
+        std::env::current_exe()
+            .ok()
+            .and_then(|exe| if exe.exists() { Some(exe) } else { None })
+            .or_else(|| {
+                let local_app = std::env::var("LOCALAPPDATA").ok()?;
+                let path = PathBuf::from(local_app)
+                    .join("Tillandsias")
+                    .join("tillandsias.exe");
+                path.exists().then_some(path)
+            })
     } else {
         None
     }
@@ -477,7 +484,11 @@ fn apply_windows_update(
     _install_target: &std::path::Path,
 ) -> Result<(), String> {
     // If the download IS an exe, run it directly (Tauri v2)
-    let setup_exe = if download_path.extension().map(|e| e == "exe").unwrap_or(false) {
+    let setup_exe = if download_path
+        .extension()
+        .map(|e| e == "exe")
+        .unwrap_or(false)
+    {
         download_path.to_path_buf()
     } else {
         // Extract .nsis.zip (Tauri v1 fallback)
@@ -511,7 +522,10 @@ fn apply_windows_update(
         .map_err(|e| format!("failed to run installer: {e}"))?;
 
     if !status.success() {
-        return Err(format!("installer exited with code {}", status.code().unwrap_or(-1)));
+        return Err(format!(
+            "installer exited with code {}",
+            status.code().unwrap_or(-1)
+        ));
     }
 
     // Clean up temp files
@@ -525,15 +539,15 @@ fn find_exe_in_dir(dir: &std::path::Path) -> Result<PathBuf, String> {
     for entry in std::fs::read_dir(dir).map_err(|e| format!("cannot read extract dir: {e}"))? {
         let entry = entry.map_err(|e| format!("directory read error: {e}"))?;
         let path = entry.path();
-        if let Some(ext) = path.extension() {
-            if ext.eq_ignore_ascii_case("exe") {
-                return Ok(path);
-            }
+        if let Some(ext) = path.extension()
+            && ext.eq_ignore_ascii_case("exe")
+        {
+            return Ok(path);
         }
-        if path.is_dir() {
-            if let Ok(inner) = find_exe_in_dir(&path) {
-                return Ok(inner);
-            }
+        if path.is_dir()
+            && let Ok(inner) = find_exe_in_dir(&path)
+        {
+            return Ok(inner);
         }
     }
     Err("no .exe file found in update archive".to_string())
@@ -544,12 +558,11 @@ fn find_app_bundle_in_dir(dir: &std::path::Path) -> Result<PathBuf, String> {
     for entry in std::fs::read_dir(dir).map_err(|e| format!("cannot read extract dir: {e}"))? {
         let entry = entry.map_err(|e| format!("directory read error: {e}"))?;
         let path = entry.path();
-        if path.is_dir() {
-            if let Some(ext) = path.extension() {
-                if ext.eq_ignore_ascii_case("app") {
-                    return Ok(path);
-                }
-            }
+        if path.is_dir()
+            && let Some(ext) = path.extension()
+            && ext.eq_ignore_ascii_case("app")
+        {
+            return Ok(path);
         }
     }
     Err("no .app bundle found in update archive".to_string())
@@ -627,10 +640,10 @@ fn find_appimage_in_dir(dir: &std::path::Path) -> Result<PathBuf, String> {
         {
             return Ok(path);
         }
-        if path.is_dir() {
-            if let Ok(inner) = find_appimage_in_dir(&path) {
-                return Ok(inner);
-            }
+        if path.is_dir()
+            && let Ok(inner) = find_appimage_in_dir(&path)
+        {
+            return Ok(inner);
         }
     }
     Err("no .AppImage file found in update archive".to_string())

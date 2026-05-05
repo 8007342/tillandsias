@@ -1,8 +1,16 @@
 # CLAUDE.md
 
+## Authority
+
+`methodology.yaml` is the source of truth for project methodology, bootstrap,
+OpenSpec discipline, trace rules, versioning policy, agent orchestration, and
+agent observability. This file is only local project/tooling notes for
+Claude-compatible tools. If this file conflicts with `methodology.yaml`, follow
+`methodology.yaml` and report this file as stale.
+
 ## Project
 
-**Tillandsias** — a cross-platform system tray application (Rust + Tauri v2) that orchestrates containerized development environments invisibly. Users never see containers.
+**Tillandsias** — a Linux system tray application (Rust + Tauri v2) that orchestrates containerized development environments invisibly. Users never see containers.
 
 ## Build Commands
 
@@ -20,35 +28,6 @@
 ```
 
 The build script auto-creates the `tillandsias` toolbox with all system deps on first run.
-
-### macOS Native Build
-
-```bash
-./build-osx.sh                      # Debug build (native, no toolbox)
-./build-osx.sh --release            # Release build (Tauri .dmg bundle)
-./build-osx.sh --test               # Run test suite
-./build-osx.sh --check              # Type-check only
-./build-osx.sh --clean              # Clean + rebuild
-./build-osx.sh --clean --release    # Clean release build
-./build-osx.sh --install            # Release build + install to ~/Applications/
-./build-osx.sh --remove             # Remove installed app + CLI symlink
-./build-osx.sh --wipe               # Remove target/, caches
-```
-
-Builds directly on macOS using Xcode CLT + Rust — no toolbox needed. Supports Apple Silicon (aarch64) and Intel (x86_64). Local builds are unsigned; use `xattr -cr ~/Applications/Tillandsias.app` to bypass Gatekeeper.
-
-### Windows Cross-Compilation
-
-```bash
-./build-windows.sh                  # Debug cross-build (auto-creates toolbox)
-./build-windows.sh --release        # Release cross-build (unsigned NSIS/MSI)
-./build-windows.sh --check          # Type-check for Windows target
-./build-windows.sh --test           # Compile tests (not executed on Linux)
-./build-windows.sh --clean          # Clean Windows artifacts
-./build-windows.sh --toolbox-reset  # Destroy and recreate Windows toolbox
-```
-
-Uses `cargo-xwin` in a dedicated `tillandsias-windows` toolbox. Artifacts are unsigned — for local testing only. See `docs/cross-platform-builds.md` for details and macOS build strategy.
 
 ### Manual Commands (without build.sh)
 
@@ -95,7 +74,7 @@ Tillandsias uses a multi-container enclave for security isolation. Coding contai
 - Multiple forge containers per project, each with independent git working tree
 - All operations logged via `--log-enclave`, `--log-proxy`, `--log-git` with `@trace` links
 
-**Credential flow:** GitHub tokens live exclusively in the host OS keyring (Linux: Secret Service / GNOME Keyring via D-Bus; macOS: Keychain; Windows: Credential Manager). The git service container reads the token through a D-Bus bridge and performs authenticated push/fetch against GitHub on behalf of the forge. Forge containers never see tokens — they speak plain git protocol to the enclave-local mirror.
+**Credential flow:** GitHub tokens live exclusively in the host OS keyring (Linux: Secret Service / GNOME Keyring via D-Bus). The git service container reads the token through a D-Bus bridge and performs authenticated push/fetch against GitHub on behalf of the forge. Forge containers never see tokens — they speak plain git protocol to the enclave-local mirror.
 
 **Images are built via:**
 ```bash
@@ -104,6 +83,72 @@ scripts/build-image.sh proxy      # Caching proxy
 scripts/build-image.sh git        # Git mirror service
 scripts/build-image.sh inference  # Local LLM inference
 ```
+
+### Inference Container — Lazy Model Pulling
+
+The inference container (ollama-based) supports both baked and lazy-pulled models:
+
+- **Baked (always present)**: T0/T1 models baked into image at build time
+  - T0: `qwen2.5:0.5b`
+  - T1: `llama3.2:3b`
+
+- **Lazy-pulled (background task)**: T2-T5 models pulled host-side after inference startup
+  - Triggered automatically after inference health check passes
+  - GPU VRAM tier determines which models pull: `gpu::detect_gpu_tier()`
+  - Pull via host-side `ollama` binary (bypasses proxy entirely)
+  - Models land in `~/.cache/tillandsias/models/` (bind-mounted RW)
+  - Fully automatic, no UX, no user interaction
+
+**Model Tier Mapping** (`@trace spec:inference-host-side-pull`):
+
+| Tier | VRAM | Models to Pull |
+|------|------|---|
+| None | 0GB | (none — T0/T1 sufficient) |
+| Low | ≤4GB | (none — T0/T1 sufficient) |
+| Mid | 4-8GB | qwen2.5-coder:7b |
+| High | 8-12GB | qwen2.5-coder:7b, qwen2.5-coder:14b |
+| Ultra | ≥12GB | qwen2.5-coder:7b, qwen2.5-coder:14b, qwen2.5-coder:32b |
+
+**Why host-side pull?** Per `project_squid_ollama_eof.md`: Squid 6.x manifests EOF hard on large ollama pull streams. Pulling host-side via the native `ollama` binary avoids the proxy entirely and achieves 100% success rate.
+
+**Cache-aware**: Before pulling, checks if `~/.ollama/models/manifests/registry.ollama.ai/library/<name>/<tag>` exists locally. Skips if already cached.
+
+**If ollama missing**: Logs `DEGRADED: host-side ollama not found`, skips all pulls. T0/T1 baked models are still available.
+
+## Secrets Architecture — Ephemeral-First Security
+
+@trace spec:podman-secrets-integration, spec:secrets-management
+
+Tillandsias uses **ephemeral podman secrets** for credential isolation in rootless containers. Secrets are never stored on disk and never appear in logs, ps output, or `podman inspect` output.
+
+**Flow:**
+1. **Host keyring** — GitHub tokens and CA certificates stored in Linux Secret Service (GNOME Keyring / pass)
+2. **Tray creates secrets** — At startup, `handlers::setup_secrets()` reads credentials from keyring and creates podman secrets via `podman secret create --driver=file`
+3. **Containers mount secrets** — Container launch passes `--secret <name>` flags; secrets appear at `/run/secrets/<name>` inside container with no world-readable file on disk
+4. **Cleanup on shutdown** — `scripts/cleanup-secrets.sh` removes all `tillandsias-*` secrets when tray exits
+
+**Secret names and contents:**
+- `tillandsias-github-token` — GitHub OAuth token (read by git-service container for authenticated push/fetch)
+- `tillandsias-ca-cert` — Custom CA certificate (read by proxy and inference containers for HTTPS verification)
+- `tillandsias-ca-key` — Custom CA private key (read by proxy container for TLS interception)
+
+**Security properties:**
+- Secrets are NOT visible in `podman inspect` output (no value exposure)
+- Secrets are NOT visible in `ps` output inside containers
+- Secrets are NOT visible in container logs
+- Only containers explicitly mounted with `--secret <name>` can read the secret
+- Forge containers do NOT receive any secrets (fully offline)
+- Secrets auto-cleanup prevents accidental credential leaks after tray shutdown
+
+**Implementation:**
+- Script: `scripts/create-secrets.sh` — reads from keyring, creates secrets (called by tray)
+- Script: `scripts/cleanup-secrets.sh` — removes secrets (called on shutdown)
+- Test script: `scripts/test-secrets.sh` — verifies mount, isolation, and cleanup with `--userns=keep-id`
+- Entrypoints: `images/proxy/entrypoint.sh`, `images/git/entrypoint.sh`, `images/inference/entrypoint.sh` read from `/run/secrets/`
+
+**References:**
+- `cheatsheets/utils/podman-secrets.md` — Podman secrets mechanics and rootless mode requirements
+- `cheatsheets/utils/tillandsias-secrets-architecture.md` — Tillandsias-specific credential flow and D-Bus integration
 
 ## CI/CD — Conservative Cloud Usage
 
@@ -121,15 +166,14 @@ Both CI and Release workflows are **manual trigger only** (`workflow_dispatch`).
 
 ## Versioning
 
-Format: `v<Major>.<Minor>.<ChangeCount>.<Build>` — source of truth is the `VERSION` file at project root.
+Versioning policy is defined by `methodology.yaml` and
+`methodology/versioning.yaml`. Do not redefine it here.
 
 ```bash
 ./scripts/bump-version.sh              # Sync all files to VERSION
 ./scripts/bump-version.sh --bump-build # Increment build number
 ./scripts/bump-version.sh --bump-changes # Increment change count (after /opsx:archive)
 ```
-
-Cargo.toml and tauri.conf.json use 3-part semver (Major.Minor.ChangeCount). Git tags use full 4-part.
 
 ## Test Commands
 
@@ -172,134 +216,110 @@ Build cache is stored in `.nix-output/` (gitignored).
 - The primary build path is always through `flake.nix` via `build-image.sh`
 - Rust code (`handlers.rs`, `runner.rs`) calls `build-image.sh` as a subprocess
 
+## Nix Inside the Forge
+
+The forge includes **Nix, direnv, and nix-direnv** baked into the image for reproducible development environments.
+
+### Quick Start — Using Flakes
+
+Inside a forge container, create a `flake.nix` and `.envrc` in your project:
+
+```bash
+# Create a flake for Rust development
+nix flake init -t github:NixOS/templates#rust
+
+# Create .envrc to auto-load the environment on cd
+echo 'use flake' > .envrc
+direnv allow
+```
+
+Now every time you `cd` into that directory, direnv automatically loads the flake environment.
+
+### Available Commands
+
+```bash
+nix --version           # Check Nix version (2.24.14+)
+nix flake show          # Show flake outputs
+nix flake check         # Validate flake.nix
+nix develop             # Enter dev environment (or via .envrc auto-activation)
+nix build               # Build outputs
+direnv --version        # Check direnv version (2.35.0+)
+```
+
+### Configuration
+
+- **Experimental features**: `nix-command` and `flakes` are pre-enabled in `/home/forge/.config/nix/nix.conf`
+- **NIX_PATH**: Set to `nixpkgs=flake:nixpkgs` so `nix shell nixpkgs#hello` works without `flake.lock`
+- **direnv auto-activation**: `.envrc` files activate automatically via shell hooks in bash, zsh, and fish
+
+### Performance — nix-direnv Caching
+
+nix-direnv caches flake evaluations and only re-evaluates when `flake.nix` or `flake.lock` changes. This prevents the 5-10 second delay on every `cd` that would occur with full flake re-evaluation.
+
+### Use Cases
+
+- **Multi-language projects**: Combine Rust, Python, Node, etc. in a single `flake.nix` with automatic environment isolation
+- **Pinned dependencies**: Lock tool versions in `flake.lock` — every developer uses identical versions
+- **Container-agnostic**: The same `flake.nix` works inside the forge and on your host machine
+
 ## Related Projects
 
 - `../forge` — Container images (Macuahuitl forge). Tillandsias uses these as default container images.
 - `../thinking-service` — Autonomous daemon. Architecture patterns (tokio::select!, event loop) informed Tillandsias design.
 
-## OpenSpec — Monotonic Convergence
-
-All changes go through OpenSpec (`/opsx:ff` or `/opsx:new`). No exceptions for "quick fixes".
-
-**Purpose**: OpenSpec ensures **monotonic convergence** — specs and implementation move toward each other with every change, never apart. The spec trail is the project's institutional memory and proof of work.
-
-**Workflow**: `/opsx:ff` (create artifacts) -> `/opsx:apply` (implement) -> `/opsx:archive` (archive + sync specs) -> `./scripts/bump-version.sh --bump-changes`
-
-**Rules**:
-- Spec must reflect what was built. Implementation must reflect what was spec'd.
-- Specs are source of truth — never modify specs without user approval.
-- Specs converge toward **intent**, not toward code. If code diverges from spec, the code is wrong.
-- If a spec decision is revised, update the spec before (or with) the code change.
-- Use `/opsx:verify` before archiving to confirm convergence.
-- Break large features into multiple changes — each independently convergent.
-- Each change produces: proposal.md, design.md, specs/<capability>/spec.md, tasks.md
-- Delta specs sync to main specs at archive time.
-
-## Trace Annotations — @trace spec:<name>
-
-Add `@trace spec:<name>` annotations in ALL code changes. Traces are the connective tissue between specs, code, and runtime accountability.
-
-**Where to add:**
-- Rust: `// @trace spec:<name>` near functions implementing a spec
-- Shell: `# @trace spec:<name>` near relevant code blocks
-- Docs/cheatsheets: `@trace spec:<name>` as plain text
-- Commits: include GitHub search URL for the trace
-- Log events: `spec = "<name>"` field on accountability-tagged tracing events
-- Multiple specs: `@trace spec:foo, spec:bar`
-
-**Why:** Traces create bidirectional links between specs and implementation. Power users reading logs or source should follow a trace to the spec governing that behavior. The accountability log format renders `@trace spec:name URL` lines with clickable GitHub search links.
-
 ## Cheatsheets
 
-Document operational knowledge in `docs/cheatsheets/` with `@trace` annotations and scannable tables.
+Two distinct directories:
+- `docs/cheatsheets/` — Tillandsias-internal operational knowledge (tray state machine, secrets management, token rotation). Read by maintainers on the host.
+- `cheatsheets/` — agent-facing cheatsheets baked into the forge image at `/opt/cheatsheets/`. Read by agents inside the forge via `cat $TILLANDSIAS_CHEATSHEETS/INDEX.md | rg <topic>`.
 
-Current: `logging-levels.md`, `secrets-management.md`, `token-rotation.md`, `terminal-tools.md`.
+Methodology, provenance, traceability, and refresh rules are defined by
+`methodology.yaml` and `methodology/cheatsheets.yaml`.
 
-## Plugins & Skills
+## Project README Discipline
 
-Invoke installed skills proactively when their trigger fires. Order below is by expected frequency in this project.
+@trace spec:project-bootstrap-readme
 
-- **OpenSpec suite (`opsx:new`, `opsx:ff`, `opsx:apply`, `opsx:verify`, `opsx:archive`, `opsx:sync`, plus `openspec-*` equivalents)**: the primary workflow gate. See the **OpenSpec — Monotonic Convergence** section above for rules and sequencing. Never bypass with ad-hoc edits.
-- **`simplify`**: invoke after implementing a non-trivial change (new module, refactor, >100 LOC touched) and before `opsx:verify`. Catches duplication, leaky abstractions, and hot-path JSON (forbidden here — use `postcard`).
-- **`security-review`**: invoke before merging any branch that touches enclave containers, credential paths, proxy/git-service config, `--cap-drop`/`--security-opt`/`--userns` flags, keyring/D-Bus code, or anything under `src-tauri/` that crosses the host/forge boundary.
-- **`review`**: invoke before `gh pr create` on branches destined for `main` from `linux-next`/`osx-next`/`windows-next`. Complements `security-review`; run both for enclave-adjacent work.
-- **`less-permission-prompts`**: invoke opportunistically when the session has racked up repeated permission prompts for read-only commands. Scans transcripts and updates `.claude/settings.json`.
-- **`update-config`**: invoke for any settings.json / hooks change, or when the user asks for automated "from now on" behavior (memory cannot satisfy those — hooks can).
-- **`claude-api`**: invoke only if work touches Anthropic SDK code (none in-tree today; reserved for future inference-container client code).
-- **`loop` / `schedule`**: invoke only when the user explicitly asks for recurring or cron-scheduled tasks. Never for one-offs.
-- **`init`, `keybindings-help`**: not load-bearing for this project; do not invoke unless explicitly requested.
+Every Tillandsias-managed project's README.md follows a two-section contract, auto-generated from authoritative sources (manifests, git history, agent observations). See `cheatsheets/welcome/readme-discipline.md` for the complete specification.
 
-## Agent Waves
+**Four bootstrap skills**:
+- `/startup` — Entrypoint. Detects project state and routes to empty-project, repair, or ready flow
+- `/bootstrap-readme-and-project` — Empty-project welcome with sample prompts and capability summary
+- `/bootstrap-readme` — Regenerate and validate README from source manifests
+- `/status` — Show project state (recent commits, OpenSpec items, readme.traces tail)
 
-For batch tasks, organize parallel agents into waves by size (small first, large last). Track each group with a separate OpenSpec change. Report traces added/updated after each wave.
+**Key files**:
+- `scripts/regenerate-readme.sh` — Dispatcher: walks manifests, invokes summarizers, renders FOR HUMANS + FOR ROBOTS sections
+- `scripts/check-readme-discipline.sh` — Validator: confirms structure, headers, timestamp freshness, YAML well-formedness
+- `scripts/install-readme-pre-push-hook.sh` — Pre-push hook: auto-regenerates README on every git push
+- `.tillandsias/readme.traces` — Append-only JSONL ledger of agent observations (committed to git, cross-machine)
 
-- Wave 1: tiny/small tasks (complete in <2 min, all parallel)
-- Wave 2: medium tasks (2-5 min, parallel)
-- Wave 3: large tasks (dedicated opus agents)
-- Between waves: build + test to catch integration issues early
-- Each agent gets: full context, OpenSpec creation instructions, @trace requirements
+**Telemetry events**:
+- `startup_routing` — Which branch was taken (empty / bootstrap-readme / status)
+- `readme_regen` — README regenerated; which summarizers ran
+- `readme_requires_pull` — Cheatsheet materialized from requires_cheatsheets YAML block
 
-## Cross-Platform Development — Branch-per-Machine
+Mandatory maintainer TODO: Migrate Tillandsias' own README.md to the FOR HUMANS / FOR ROBOTS structure (task 10 of this change).
 
-The project is developed across Linux (Fedora Silverblue), macOS, and Windows. To prevent cross-platform merge conflicts:
+## Linux-Only Development
 
-**Branch strategy:**
-- `main` — stable, release-ready. Only merge completed work here.
-- `linux-next` — active Linux development branch
-- `osx-next` — active macOS development branch
-- `windows-next` — active Windows development branch
+Tillandsias is developed exclusively on Linux (Fedora Silverblue) with the following workflow:
 
-**Workflow:**
-1. Work on the platform branch for your current machine (`git checkout linux-next`)
-2. Push to the platform branch freely — no conflicts with other machines
-3. When a batch of work is complete and tested: merge to main
-4. Bump version ONLY at merge-to-main time, not during feature work
-5. Push main. Trigger release from main.
-
-**Why:** Pushing from multiple machines to main simultaneously causes rebase conflicts (version numbers, Cargo.lock, platform-specific scripts). Platform branches eliminate this entirely.
-
-**Version bumps:**
-- During development: NO version bumps. Let `--bump-build` happen locally but don't commit it.
-- At merge time: `./scripts/bump-version.sh --bump-changes` once, commit, push main.
-- Release: `gh workflow run release.yml -f version="X.Y.Z.B"` from main only.
-
-**Cross-platform checks before merging to main:**
+**Build and test:**
 ```bash
-# On Linux:
 ./build.sh --test && cargo clippy --workspace
-
-# On macOS:
-./build-osx.sh --test && cargo clippy --workspace
-
-# On Windows:
-./build-windows.sh --check
 ```
 
-**Cargo.lock:** Committed to git (correct for binary projects). Platform-specific deps resolve the same on all platforms. If Cargo.lock conflicts at merge time, regenerate: `cargo generate-lockfile`.
+**Version bumps:**
+- Follow `methodology.yaml` and `methodology/versioning.yaml`.
+- Do not commit local version churn from feature work.
+- Release workflows are manual and main-branch only.
+
+**Cargo.lock:** Committed to git (correct for binary projects). If Cargo.lock conflicts at merge time, regenerate: `cargo generate-lockfile`.
 
 ## Cloud Workflows — Conservative Usage
 
 See CI/CD section above. Both CI and Release workflows are `workflow_dispatch` only. NEVER auto-trigger. Batch changes, release deliberately.
-
-## Commit Conventions
-
-When a commit implements or fixes a spec-traced feature, include a clickable GitHub code search URL in the commit body:
-
-```
-fix: entrypoint crashes under set -e
-
-@trace spec:forge-launch
-https://github.com/8007342/tillandsias/search?q=%40trace+spec%3Aforge-launch&type=code
-
-OpenSpec change: fix-entrypoint-regression
-```
-
-The URL links to every source file implementing that spec. GitHub renders it as a clickable link in the commit view. The search is always live — no generated files to maintain.
-
-Format — replace `SPECNAME` with the actual spec name (e.g., `forge-launch`):
-```
-https://github.com/8007342/tillandsias/search?q=%40trace+spec%3ASPECNAME&type=code
-```
 
 ## Conventions
 

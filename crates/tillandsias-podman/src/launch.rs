@@ -1,4 +1,4 @@
-//! @trace spec:podman-orchestration
+//! @trace spec:podman-orchestration, spec:fix-podman-machine-host-aliases, spec:fix-windows-image-routing, spec:subdomain-naming-flip
 
 use tracing::{debug, info};
 
@@ -147,8 +147,11 @@ impl ContainerLauncher {
         {
             Ok(result) => result,
             Err(_) => {
-                // Timeout — force kill
-                self.client.kill_container(container_name).await
+                // Timeout — force kill. Pass `None` so podman uses its
+                // default signal (SIGTERM); the dedicated SIGKILL escalation
+                // is the verification phase's job, not this fallback's.
+                // @trace spec:app-lifecycle, spec:podman-orchestration
+                self.client.kill_container(container_name, None).await
             }
         }
     }

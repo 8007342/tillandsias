@@ -1,0 +1,351 @@
+
+ephemeral_work_problem:
+  scenario: >
+    Agent A is assigned: "Fix 50 broken specs across browser-isolation capability.
+    Each fix requires: audit spec → propose change → implement → verify." This takes
+    500 iterations before committing. Without discipline, agent's local VCS history
+    becomes a mess of incomplete commits, merge conflicts bloom, and main's history log
+    shows 500 spec-fix commits (noise instead of signal).
+
+  constraints:
+    - Agent runs in isolated VCS worktree (one per agent, siblings in <worktree-dir>/)
+    - Agent iterates freely in local worktree; no coordination with other agents during work
+    - At batch completion, agent merges back to main
+    - Main's VCS history MUST remain clean: one squashed commit per batch, no noise
+    - Full iteration history MUST be queryable (audit trail for debugging)
+    - Concurrent agents working in parallel MUST merge metadata deterministically under declared CRDT preconditions
+
+  goal: >
+    Ephemeral work produces: (1) clean, squashed main history, (2) queryable metadata
+    of all iterations, (3) full traceability of failure root causes, (4) CRDT-style
+    concurrent metadata merges when stable IDs, idempotent merge, and deterministic
+    tie-breakers are respected.
+
+lamport_clock_system:
+  description: >
+    Lamport clocks order events causally without requiring synchronized clocks.
+    In this methodology, each agent maintains a local Lamport clock to timestamp
+    iterations. The clock respects causality: if event A causes event B,
+    then clock(A) < clock(B).
+
+  mechanics:
+    initialize: "Start with lamport_clock = 0 per agent"
+    on_local_iteration: "Increment: lamport_clock++ (before writing iteration metadata)"
+    on_fetch_from_main: "Sync: lamport_clock = max(lamport_clock, received_clock) + 1"
+    on_merge_to_main: "Final clock value becomes iteration index in merged history"
+
+  properties:
+    causality_respected: >
+      If agent A's iteration I1 caused agent B's iteration I2, then
+      clock(I1) < clock(I2) in the final merged history.
+
+    zero_coordination: >
+      Agents do NOT need to communicate during iteration. Clocks sync only at
+      merge time by reading the finalized iteration metadata from prior agents.
+
+    total_ordering: >
+      Pair each iteration timestamp with agent_id to break ties:
+      (lamport_time, agent_id). Lexicographic sort produces deterministic
+      total order across all iterations, regardless of merge order.
+
+  example:
+    iteration_sequence: |
+      Agent A iteration 1: clock = 1
+      Agent A iteration 2: clock = 2
+      Agent B iteration 1: clock = 1 (local start; A's version not yet visible)
+      [Agent A merges back to main]
+      Agent B iteration 2: Syncs from main, sees A's max_clock=2, sets own = max(1, 2) + 1 = 3
+      Agent B iteration 3: clock = 4
+      [Agent B merges back to main]
+
+      Final merged history order:
+        (1, agent-a) ← Agent A iter 1
+        (2, agent-a) ← Agent A iter 2
+        (1, agent-b) ← Agent B iter 1 (concurrent with A iter 1)
+        (3, agent-b) ← Agent B iter 2 (after seeing A)
+        (4, agent-b) ← Agent B iter 3
+
+squash_merge_pattern:
+  description: >
+    Agent iterates N times locally. At merge time, all N intermediate commits are
+    squashed into one commit to main. The squashed commit is the only artifact
+    visible in main's git log. Full iteration details live in side-band metadata.
+
+  implementation:
+    step_1_complete_iterations: "Agent completes N iterations in local worktree"
+    step_2_prepare_merge: "Agent collects all iteration metadata (local state files)"
+    step_3_squash_merge: >
+      Merge all local iterations as single commit to integration branch:
+      - Squash all N intermediate commits into one
+      - Commit message includes: batch ID, iteration count, agent ID, metadata reference
+      - Example: "batch: <change-name> — <N> iterations, <X> specs, agents: <list>"
+    step_4_side_band: "Append iteration metadata to <ephemeral-metadata-log>"
+    step_5_push: "Push squashed commit to main integration branch"
+
+  vcs_history_visibility:
+    before_merge: |
+      [local worktree only]
+      iteration A1 — spec: fix <capability> (Agent A iter 1)
+      iteration A2 — spec: fix <capability> (Agent A iter 2)
+      iteration A3 — spec: fix <capability> (Agent A iter 3)
+      ... (repeat N more times)
+      iteration AN — spec: fix <capability> (Agent A iter N)
+
+    after_squash_merge: |
+      [main integration branch]
+      commit SQUASHED — batch: <change-name>
+      (Single commit. All N intermediate states gone from history log, not deleted,
+       just aggregated. Details in <ephemeral-metadata-log>)
+
+  benefits:
+    clean_history: "main's git log is readable: one line per completed batch"
+    queryable_details: "Iteration history in JSONL file, queryable via jq"
+    failure_recovery: "If agent crashes mid-iteration, .ephemeral-state.json can resume"
+    no_merge_conflicts: "Squash commits don't conflict (one per batch)"
+
+side_band_metadata_file:
+  description: >
+    File <ephemeral-metadata-log> is append-only JSON Lines. One entry per merged batch.
+    Each entry contains full iteration metadata: timestamps, causality chain, agent
+    identifiers, intermediate artifacts, failure modes.
+
+  location: "<project>/<metadata-dir>/ephemeral-merges.jsonl"
+  format: "JSON Lines — one JSON object per line"
+  mutability: "Append-only. Never modify prior entries (immutable audit trail)"
+  storage: "Committed to VCS, cross-machine durable"
+
+  schema: |
+    {
+      "batch_id": "browser-isolation-core",
+      "agent_id": "agent-a",
+      "merge_timestamp": "2026-05-05T14:32:15Z",
+      "commit_hash": "k0l1m2n",
+      "iteration_count": 47,
+      "lamport_clock_final": 47,
+      "iteration_causal_order": [
+        {"seq": 1, "agent": "agent-a", "clock": 1, "action": "audit spec browser-isolation-core"},
+        {"seq": 2, "agent": "agent-a", "clock": 2, "action": "create delta spec"},
+        {"seq": 3, "agent": "agent-a", "clock": 3, "action": "implement auth handlers"},
+        ...
+        {"seq": 47, "agent": "agent-a", "clock": 47, "action": "final verification pass"}
+      ],
+      "concurrent_batches": ["browser-isolation-framework"],
+      "dependency_batches": [],
+      "failure_modes": [],
+      "metadata": {
+        "files_modified": 12,
+        "specs_archived": 3,
+        "tests_added": 15
+      }
+    }
+
+  querying_examples: |
+    jq '.iteration_count' <ephemeral-metadata-log> | grep <batch-id>
+    jq '.iteration_causal_order[N-1]' <ephemeral-metadata-log> | grep <batch-id>
+    jq -s 'group_by(.merge_timestamp) | map(select(length > 1))' \
+      <ephemeral-metadata-log>
+    jq '.dependency_batches[]' <ephemeral-metadata-log>
+
+  source_of_truth:
+    single_artifact: >
+      <ephemeral-metadata-log> is the source of truth for iteration history.
+      If agent's local iteration state is lost, can reconstruct from this file.
+      If this file is lost, can reconstruct from VCS commit messages (backup).
+
+    redundancy:
+      primary: "<ephemeral-metadata-log> (authoritative)"
+      backup: "VCS commit messages contain full metadata as fallback"
+      tertiary: "<agent-iteration-state> per-worktree (ephemeral, not durable)"
+
+crdt_properties_guarantee_safety:
+  description: >
+    The iteration metadata can adhere to CRDT properties if entries have stable
+    batch IDs, duplicate detection, deterministic ordering, and append-only
+    semantics. This guarantees deterministic metadata convergence, not automatic
+    conflict-free source-code merging.
+
+  mathematical_properties:
+    commutativity: >
+      merge(Agent-A-metadata, Agent-B-metadata) ==
+      merge(Agent-B-metadata, Agent-A-metadata)
+      → Metadata can merge in any order, same final metadata state.
+
+    associativity: >
+      merge(merge(A, B), C) == merge(A, merge(B, C))
+      → Partial merges are safe. If coordinator crashes mid-merge, can resume.
+
+    idempotence: >
+      merge(metadata, metadata) == metadata
+      → Re-merging the same batch is safe (no duplicates, no loss).
+
+    convergence: >
+      All servers running the merge algorithm end at the same final metadata.
+      Useful for distributed systems (multi-region deploys, offline sync).
+
+  enforcement:
+    algorithm: >
+      Merge iterations by sorting on (lamport_clock, agent_id) tuple.
+      Iteration order is deterministic regardless of arrival order.
+      Append-only JSONL plus stable batch IDs ensures no data loss or duplicates.
+
+    preconditions:
+      - every_batch_has_stable_unique_id
+      - duplicate_batch_ids_are_idempotent
+      - merge_rejects_conflicting_payloads_for_same_batch_id
+      - source_code_conflicts_are_resolved_before_metadata_merge_is_claimed_safe
+
+    verification: |
+      verify_crdt_properties() {
+        merge_ab=$(merge_metadata "$metadata_a" "$metadata_b")
+        merge_ba=$(merge_metadata "$metadata_b" "$metadata_a")
+        assert_equal "$merge_ab" "$merge_ba" "merge order independence"
+        merge_ab_c=$(merge_metadata "$(merge_metadata "$metadata_a" "$metadata_b")" "$metadata_c")
+        merge_a_bc=$(merge_metadata "$metadata_a" "$(merge_metadata "$metadata_b" "$metadata_c")")
+        assert_equal "$merge_ab_c" "$merge_a_bc" "merge grouping independence"
+        merged_once=$(merge_metadata "$metadata_a" "$metadata_a")
+        merged_twice=$(merge_metadata "$merged_once" "$metadata_a")
+        assert_equal "$merged_once" "$merged_twice" "re-merge idempotence"
+      }
+
+failure_modes_and_recovery:
+  agent_crash_mid_iteration:
+    description: "Agent process dies after writing iteration state 25, before 26"
+    detection: "Stale <agent-iteration-state> (mtime older than timeout)"
+    recovery: >
+      1. Detect stale agent (no activity for configured timeout)
+      2. Read last completed iteration from <agent-iteration-state>
+      3. Check <ephemeral-metadata-log> for prior agent context
+      4. Resume agent from iteration 26 (reuse lamport_clock baseline)
+    data_loss: "None. Iteration 25's state is in <agent-iteration-state>; resumable"
+
+  metadata_file_corruption:
+    description: "<ephemeral-metadata-log> becomes unreadable (storage error)"
+    detection: "Metadata parse fails, file integrity check fails"
+    recovery: >
+      1. Reconstruct from VCS commit messages (full metadata in message)
+      2. Regenerate <ephemeral-metadata-log> from commits
+      3. Verify reconstruction matches side-band (checksums in commit)
+    data_loss: "None. VCS is the source of truth."
+
+  clock_desynchronization:
+    description: "Agent A and B's clocks diverge; iterations out of order"
+    cause: >
+      Agent B didn't fetch from integration branch before merging; doesn't know Agent A's final clock.
+    detection: "Iteration tuples (clock, agent_id) are not sorted"
+    prevention: >
+      Before merge, agents fetch from the integration branch and update local metadata from
+      <ephemeral-metadata-log> (sync clock baseline).
+    recovery: >
+      Re-sort iterations by (lamport_clock, agent_id), rewrite <ephemeral-metadata-log>.
+      Causality is preserved by sort order.
+
+  concurrent_merge_conflicts:
+    description: "Two agents try to merge to integration branch simultaneously"
+    prevention: >
+      VCS push lock prevents this. First agent's push succeeds; second agent gets rejection,
+      must fetch integration branch and re-base (rare, short-lived).
+    recovery: "Second agent: fetch integration branch, re-read <ephemeral-metadata-log>, update clock, retry push"
+
+implementation_phases:
+  phase_1_core_library:
+    effort: "~2 hours"
+    deliverables:
+      - "EphemeralState module: load/save agent iteration metadata"
+      - "MergeCoordinator module: aggregate metadata via CRDT merge"
+      - "Lamport clock logic (sync, increment, comparison)"
+      - "Metadata log writing (idempotent append to <ephemeral-metadata-log>)"
+    tests:
+      - "Lamport monotonicity (clock always increases)"
+      - "CRDT properties (commutativity, associativity, idempotence)"
+      - "Metadata serialization roundtrip"
+
+  phase_2_orchestrator_integration:
+    effort: "~1.5 hours"
+    deliverables:
+      - "Hook in batch completion handler"
+      - "Collect <agent-iteration-state> from all agents"
+      - "Invoke MergeCoordinator.aggregate_metadata()"
+      - "Execute squash merge across all agent changes"
+    integration_points:
+      - "Batch submission handler (collect metadata)"
+      - "Agent lifecycle management (monitor stale agents)"
+
+  phase_3_testing:
+    effort: "~2-3 hours"
+    scenarios:
+      - "Single agent, 50 iterations (baseline)"
+      - "Two agents, concurrent work, verify order independence"
+      - "Three agents, cascading merges (A→main, B→main, C→main), verify CRDT"
+      - "Agent crash mid-iteration, resume from saved state"
+      - "Clock desync, re-sort, verify causality preserved"
+    failure_injection:
+      - "Terminate agent process; verify recovery"
+      - "Delete <agent-iteration-state>; verify reconstruction"
+      - "Corrupt <ephemeral-metadata-log>; verify repair"
+
+  phase_4_documentation:
+    effort: "~1 hour"
+    deliverables:
+      - "Operational guide: agent batch workflow and metadata discipline"
+      - "Example code: metadata structure, clock sync, merge algorithm"
+      - "Integration guide: how to hook orchestrator into agent lifecycle"
+
+  total_effort: "~6-8 hours"
+  blockers: "None identified"
+
+integration_with_main_versioning:
+  relationship: >
+    Main integration branch uses CalVer + LUB merge (see methodology/versioning.yaml).
+    Ephemeral work uses Lamport clocks + squash (this document).
+    The two systems are orthogonal: ephemeral work is LOCAL; main's version
+    only bumps after squash merges land.
+
+  example:
+    agent_work: |
+      Agent A:
+      - Iteration 1: lamport_clock=1, <agent-iteration-state> written
+      - Iteration 2: lamport_clock=2
+      - ...
+      - Iteration 47: lamport_clock=47
+      → Squash merge to main with single commit
+
+    main_version: |
+      Before Agent A merge: version = v0.1.260504.12
+      After Agent A merges: version unchanged (metadata updated, but version stable)
+      Later, upon change archive/integration:
+        Orchestrator creates change manifest, bumps BUILD number
+        Version now v0.1.260505.13
+        <ephemeral-metadata-log> gets new entry for agent-a's batch
+        → Evidence: agent metadata records 47 iterations before integration into v0.1.260505.13
+
+  queryable_evidence: >
+    Query <ephemeral-metadata-log> for batch ID:
+    select(batch_id == "<change-id>") | .iteration_count
+    → Output: 47
+    This records that the agent reported 47 iterations before convergence. It is
+    audit evidence, not semantic proof of correctness.
+
+automation_and_orchestration:
+  coordinator_role: >
+    Orchestrator (agent coordinator system) acts as convergence gate. When all agents
+    in a batch complete:
+    1. Collect <agent-iteration-state> from all agents
+    2. Merge metadata using deterministic CRDT-style algorithm (order-independent under preconditions)
+    3. Execute squash merge operation (one per agent)
+    4. Append merged metadata to <ephemeral-metadata-log>
+    5. Trigger version bump via change integration workflow
+    6. Clean up ephemeral agent state
+
+  safety_gates:
+    - "All metadata files present and parseable"
+    - "All iterations have monotonic Lamport clocks"
+    - "Squash merge operation succeeds with no conflicts"
+    - "Append to metadata log is atomic (temp file, then rename)"
+    - "Verification: Lamport properties still hold post-merge"
+
+references:
+  - "methodology/versioning.yaml — Main versioning system and integration discipline"
+  - "methodology.yaml — Authoritative bootstrap and agent observability protocol"
+  - "Lamport clocks: https://martinfowler.com/articles/patterns-of-distributed-systems/lamport-clock.html"
+  - "CRDT fundamentals: https://crdt.tech/"
+  - "Distributed systems: clock synchronization patterns across agent swarms"

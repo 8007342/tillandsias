@@ -1,6 +1,10 @@
 <!-- @trace spec:browser-isolation-tray-integration -->
 # browser-isolation-tray-integration Specification
 
+## Status
+
+active
+
 ## Purpose
 Define how the tray menu integrates with browser isolation containers to launch safe, isolated browser windows for OpenCode Web and other web-based tools.
 
@@ -103,3 +107,20 @@ All web-based interfaces are launched through browser isolation containers only.
 - `cheatsheets/runtime/podman-logging.md` — Debugging container startup and health issues
 - `openspec/specs/browser-isolation-core/spec.md` — Core browser isolation container requirements
 - `openspec/specs/enclave-network/spec.md` — Network isolation and enclave architecture
+
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked resources, persistence) are detectable
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:browser-isolation-tray-integration" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

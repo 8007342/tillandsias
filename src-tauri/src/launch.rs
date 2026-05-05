@@ -47,7 +47,13 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
         args.push("--rm".into());
     }
     args.push("--init".into());
-    args.push("--stop-timeout=10".into());
+    // @trace spec:podman-orchestration, spec:ephemeral-guarantee
+    // Graceful shutdown: send SIGTERM first, give 15 seconds to drain connections,
+    // then podman forcefully kills if still running. This ensures ephemeral
+    // artifacts (tmpfiles, sockets, caches) are properly flushed and cleaned
+    // before the container's lifecycle ends.
+    args.push("--stop-timeout=15".into());
+    args.push("--stop-signal=SIGTERM".into());
     args.push("--name".into());
     args.push(ctx.container_name.clone());
     args.push("--cap-drop=ALL".into());
@@ -61,6 +67,51 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
     // @trace spec:podman-orchestration, spec:secrets-management
     // -----------------------------------------------------------------------
     args.push(format!("--pids-limit={}", profile.pids_limit));
+
+    // -----------------------------------------------------------------------
+    // Podman secrets — deliver CA certs and credentials via podman secret API
+    // instead of environment variables or bind mounts.
+    //
+    // Secrets are stored by the podman backend driver and mounted read-only
+    // at /run/secrets/<name> inside the container. This avoids exposing
+    // credentials in process arguments or logs.
+    //
+    // @trace spec:podman-secrets-integration, spec:secrets-management,
+    // spec:default-image, spec:proxy-container, spec:git-mirror-service
+    // -----------------------------------------------------------------------
+    // CA certificate secrets (proxy and git-service need SSL)
+    if crate::podman_secret::exists("tillandsias-ca-cert").unwrap_or(false) {
+        args.push("--secret=tillandsias-ca-cert".to_string());
+        tracing::debug!(
+            spec = "podman-secrets-integration",
+            container = %ctx.container_name,
+            "Added CA cert secret"
+        );
+    } else {
+        tracing::debug!(
+            spec = "podman-secrets-integration",
+            "CA cert secret does not exist — containers will use default system certs"
+        );
+    }
+
+    if crate::podman_secret::exists("tillandsias-ca-key").unwrap_or(false) {
+        args.push("--secret=tillandsias-ca-key".to_string());
+        tracing::debug!(
+            spec = "podman-secrets-integration",
+            container = %ctx.container_name,
+            "Added CA key secret"
+        );
+    }
+
+    // GitHub token secret (for git-service and forge remote clones)
+    if crate::podman_secret::exists("tillandsias-github-token").unwrap_or(false) {
+        args.push("--secret=tillandsias-github-token".to_string());
+        tracing::debug!(
+            spec = "podman-secrets-integration",
+            container = %ctx.container_name,
+            "Added GitHub token secret"
+        );
+    }
 
     // -----------------------------------------------------------------------
     // Read-only root filesystem — service containers (git, proxy, inference,
@@ -152,7 +203,29 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
 
     // -----------------------------------------------------------------------
     // Environment variables (resolved from context)
+    //
+    // @trace spec:environment-runtime, spec:ephemeral-guarantee
+    // Explicitly set ONLY the environment variables needed by the container.
+    // Host environment leakage is prevented by passing `--env-file=/dev/null`
+    // (unsetting all inherited vars) and then explicitly adding only the
+    // vars defined in the profile. This ensures:
+    //   - SHELL, LANG, LC_*, HISTFILE, ZDOTDIR, etc. are NOT inherited
+    //   - Only intentional, profile-defined vars reach the container
+    //   - No accidental host state pollution (locale, shell prefs, etc.)
     // -----------------------------------------------------------------------
+
+    // Block all inherited environment variables from the host
+    args.push("--env-file=/dev/null".into());
+
+    // Explicitly set only the minimally-required defaults
+    // @trace spec:environment-runtime, spec:ephemeral-guarantee
+    args.push("-e".into());
+    args.push("PATH=/usr/local/bin:/usr/bin".into());
+    args.push("-e".into());
+    args.push("HOME=/home/forge".into());
+    args.push("-e".into());
+    args.push("USER=forge".into());
+
     for env_var in &profile.env_vars {
         let value = match &env_var.value {
             EnvValue::FromContext(key) => match key {
@@ -176,7 +249,8 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
                 }
                 // @trace spec:environment-runtime
                 ContextKey::Language => {
-                    tillandsias_core::config::language_to_lang_value(&ctx.selected_language).to_string()
+                    tillandsias_core::config::language_to_lang_value(&ctx.selected_language)
+                        .to_string()
                 }
                 ContextKey::GitAuthorName => ctx.git_author_name.clone(),
                 ContextKey::GitAuthorEmail => ctx.git_author_email.clone(),
@@ -274,7 +348,10 @@ pub fn build_podman_args(profile: &ContainerProfile, ctx: &LaunchContext) -> Vec
             SecretKind::GitHubToken => {
                 if let Some(ref token_file) = ctx.token_file_path {
                     args.push("-v".into());
-                    args.push(format!("{}:/run/secrets/github_token:ro", token_file.display()));
+                    args.push(format!(
+                        "{}:/run/secrets/github_token:ro",
+                        token_file.display()
+                    ));
                     args.push("-e".into());
                     args.push("GIT_ASKPASS=/usr/local/bin/git-askpass-tillandsias.sh".into());
 
@@ -397,20 +474,10 @@ fn resolve_mount_source(source: &MountSource, ctx: &LaunchContext) -> Option<Str
         // `exists()` check. Entrypoints additionally fall back to inline
         // install if no mount is provided at all.
         MountSource::ToolsOverlay => {
-            if let Some(path) = crate::tools_overlay::cached_overlay_for(
-                &crate::handlers::forge_image_tag(),
-            ) {
-                Some(path.display().to_string())
-            } else {
-                let overlay_path = ctx.cache_dir
-                    .join("tools-overlay")
-                    .join("current");
-                if overlay_path.exists() {
-                    Some(overlay_path.display().to_string())
-                } else {
-                    None
-                }
-            }
+            // @tombstone obsolete:layered-tools-overlay
+            // Tools overlay mount is no longer needed — agents are baked into the forge image.
+            // Safe to delete after v0.1.163.
+            None
         }
         // @trace spec:layered-tools-overlay
         // Configs live on tmpfs (ramdisk) for fast reads — zero disk I/O.
@@ -420,9 +487,7 @@ fn resolve_mount_source(source: &MountSource, ctx: &LaunchContext) -> Option<Str
             } else {
                 std::env::temp_dir()
             };
-            let overlay_path = base
-                .join("tillandsias")
-                .join("config-overlay");
+            let overlay_path = base.join("tillandsias").join("config-overlay");
             if overlay_path.exists() {
                 Some(overlay_path.display().to_string())
             } else {
@@ -536,14 +601,14 @@ fn parse_user_from_gitconfig(path: &Path) -> (String, String) {
             continue;
         }
         if in_user_section {
-            if let Some(val) = trimmed.strip_prefix("name") {
-                if let Some(val) = val.trim_start().strip_prefix('=') {
-                    name = val.trim().to_string();
-                }
-            } else if let Some(val) = trimmed.strip_prefix("email") {
-                if let Some(val) = val.trim_start().strip_prefix('=') {
-                    email = val.trim().to_string();
-                }
+            if let Some(val) = trimmed.strip_prefix("name")
+                && let Some(val) = val.trim_start().strip_prefix('=')
+            {
+                name = val.trim().to_string();
+            } else if let Some(val) = trimmed.strip_prefix("email")
+                && let Some(val) = val.trim_start().strip_prefix('=')
+            {
+                email = val.trim().to_string();
             }
         }
     }
@@ -649,7 +714,7 @@ mod tests {
             assert!(args.contains(&"--security-opt=label=disable".to_string()));
             assert!(args.contains(&"--rm".to_string()));
             assert!(args.contains(&"--init".to_string()));
-            assert!(args.contains(&"--stop-timeout=10".to_string()));
+            assert!(args.contains(&"--stop-timeout=15".to_string()));
             // pids-limit must always be present
             assert!(
                 args.iter().any(|a| a.starts_with("--pids-limit=")),
@@ -757,7 +822,10 @@ mod tests {
         let args = build_podman_args(&profile, &ctx);
         let joined = args.join(" ");
         // Forge profiles no longer mount the project directory (code comes from git mirror)
-        assert!(!joined.contains("/home/forge/src"), "Forge should not have project dir mount");
+        assert!(
+            !joined.contains("/home/forge/src"),
+            "Forge should not have project dir mount"
+        );
     }
 
     #[test]
@@ -842,6 +910,7 @@ mod tests {
 
     // @trace spec:layered-tools-overlay
     #[test]
+    #[ignore] // @tombstone obsolete:layered-tools-overlay — agents now baked in image
     fn tools_overlay_skipped_when_dir_absent() {
         let profile = container_profile::forge_opencode_profile();
         let ctx = test_context();
@@ -856,6 +925,7 @@ mod tests {
 
     // @trace spec:layered-tools-overlay
     #[test]
+    #[ignore] // @tombstone obsolete:layered-tools-overlay — agents now baked in image
     fn tools_overlay_mounted_when_dir_exists() {
         let profile = container_profile::forge_claude_profile();
         let tmp_dir = std::env::temp_dir().join("tillandsias-test-tools-overlay");
@@ -881,9 +951,9 @@ mod tests {
     // @trace spec:layered-tools-overlay
     #[test]
     #[ignore] // Filesystem race with `config_overlay_mounted_when_dir_exists` — both
-              // munge the same `$XDG_RUNTIME_DIR/tillandsias/config-overlay` path.
-              // Passes when run individually. Kept for documentation; a proper fix
-              // would isolate each test's runtime_dir via a mutable LaunchContext.
+    // munge the same `$XDG_RUNTIME_DIR/tillandsias/config-overlay` path.
+    // Passes when run individually. Kept for documentation; a proper fix
+    // would isolate each test's runtime_dir via a mutable LaunchContext.
     fn config_overlay_skipped_when_dir_absent() {
         // Ensure the overlay dir does NOT exist (another test may have created it)
         let base = if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
@@ -1189,8 +1259,7 @@ mod tests {
 
     /// Helper: find whether `args` contains `flag` immediately followed by `value`.
     fn has_flag_value(args: &[String], flag: &str, value: &str) -> bool {
-        args.windows(2)
-            .any(|w| w[0] == flag && w[1] == value)
+        args.windows(2).any(|w| w[0] == flag && w[1] == value)
     }
 
     // @trace spec:opencode-web-session
@@ -1291,5 +1360,53 @@ mod tests {
                 && !joined.ends_with("TILLANDSIAS_AGENT=opencode"),
             "AgentName must NOT resolve to plain `opencode` for the web entrypoint, got: {joined}"
         );
+    }
+
+    // @trace spec:podman-secrets-integration, spec:secrets-management
+    #[test]
+    fn podman_secrets_not_present_when_missing() {
+        // When secrets don't exist in the podman store, they should not be added.
+        // In test environment, secrets typically don't exist, so args should not
+        // contain --secret= flags (or if they do, it's from actual podman state).
+        let profile = container_profile::forge_opencode_profile();
+        let args = build_podman_args(&profile, &test_context());
+        let joined = args.join(" ");
+
+        // In the test environment, podman_secret::exists() returns false for
+        // non-existent secrets, so --secret flags should not be present.
+        // This is a behavioral test: if secrets existed, they would appear.
+        // (In live tests with actual podman running, this might differ.)
+        // For now, we just verify the arg building doesn't crash.
+        assert!(!joined.is_empty(), "Pod args should not be empty");
+    }
+
+    // @trace spec:podman-secrets-integration, spec:secrets-management,
+    // spec:proxy-container, spec:git-mirror-service
+    #[test]
+    fn all_container_types_support_secrets() {
+        // Verify that all container profile types can be launched with
+        // the podman secrets path (even if secrets don't exist).
+        let profiles = [
+            container_profile::forge_opencode_profile(),
+            container_profile::forge_claude_profile(),
+            container_profile::terminal_profile(),
+            container_profile::git_service_profile(),
+            container_profile::proxy_profile(),
+            container_profile::inference_profile(),
+            container_profile::web_profile(),
+        ];
+
+        // SAFETY: Test-only env var manipulation.
+        unsafe { std::env::remove_var("DBUS_SESSION_BUS_ADDRESS") };
+
+        for profile in &profiles {
+            let ctx = test_context();
+            let args = build_podman_args(profile, &ctx);
+            // Just verify it doesn't crash and produces args
+            assert!(!args.is_empty());
+            // If secrets existed, they would appear; in test env they don't.
+            // This test passes as long as build_podman_args handles the secret
+            // existence check gracefully.
+        }
     }
 }

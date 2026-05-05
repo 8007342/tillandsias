@@ -1,3 +1,15 @@
+---
+tags: [secrets, keyring, credentials, security, tokens]
+languages: [rust]
+since: 2024-01-01
+last_verified: 2026-04-27
+sources:
+  - https://docs.rs/keyring/latest/keyring/
+  - https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html
+authority: high
+status: current
+---
+
 # Secret Management
 
 ## Overview
@@ -214,3 +226,9 @@ See `docs/cheatsheets/enclave-architecture.md` for the full enclave design, cont
 - `docs/cheatsheets/logging-levels.md` — how to use `--log-secrets-management`
 - `docs/cheatsheets/os-vault-credentials.md` — OS keyring APIs (GNOME, KDE, macOS, Windows)
 - `docs/cheatsheets/github-credential-tools.md` — how gh, GCM, and git credential helpers store tokens
+
+## Provenance
+
+- https://docs.rs/keyring/latest/keyring/ — keyring crate v4.0.0; platform-neutral API for OS credential vaults (libsecret, Keychain, Wincred); `use_native_store()` selects the platform default
+- https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html — OWASP Secrets Management Cheat Sheet; key guidance: never hardcode secrets, encrypt at rest and in transit, audit all access, automate rotation, revoke immediately on compromise
+- **Last updated:** 2026-04-27

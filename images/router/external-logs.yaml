@@ -1,0 +1,24 @@
+# @trace spec:external-logs-layer
+# Manifest of curated external log files published by the router container.
+# The tray-side auditor reads this manifest every 60 s and flags any file in
+# ~/.local/state/tillandsias/external-logs/router/ that is NOT listed here
+# with a WARN+accountability "[external-logs] LEAK: ..." event.
+#
+# v1: manifest declared; producer code writing this file comes in a later
+# change. The Caddy router currently writes only to stdout/stderr (captured
+# via podman logs). The mount being in place enables the observability
+# contract now; the actual file content is what the producer earns.
+role: router
+files:
+  - name: caddy-access.log
+    purpose: |
+      Caddy structured access log — one JSON-lines entry per HTTP/S request
+      that passes through the reverse proxy. Fields include: timestamp, method,
+      uri, status, size, duration, remote_ip, user_agent. Only requests to
+      active project routes are included; Caddy's admin API and forward_auth
+      health probes are excluded. CONSUMERS (forge, maintenance terminal) may
+      use this log to debug routing issues, measure response times, or trace
+      which forge handled a given request.
+    format: jsonl
+    rotate_at_mb: 10
+    written_by: Caddy log directive in Caddyfile (producer code change pending)

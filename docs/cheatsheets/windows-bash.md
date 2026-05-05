@@ -1,3 +1,15 @@
+---
+tags: [windows, bash, msys2, git-for-windows, paths]
+languages: [bash, rust]
+since: 2024-01-01
+last_verified: 2026-04-27
+sources:
+  - https://www.msys2.org/docs/filesystem-paths/
+  - https://gitforwindows.org
+authority: high
+status: current
+---
+
 # Git Bash (MSYS2) on Windows
 
 How Git Bash works on Windows, how it translates paths, and the pitfalls when calling `bash.exe` from a native Windows process like a Rust binary.
@@ -258,13 +270,8 @@ dos2unix script.sh             # or: sed -i 's/\r$//' script.sh
 echo "$MSYS_NO_PATHCONV"      # empty = conversion active
 ```
 
-## Sources
+## Provenance
 
-- [MSYS2 Filesystem Paths](https://www.msys2.org/docs/filesystem-paths/) -- official path conversion documentation
-- [MSYS2 Environments](https://www.msys2.org/docs/environments/) -- MSYSTEM and environment differences
-- [Git Bash / MSYS2 Setup on Windows](https://www.pascallandau.com/blog/setting-up-git-bash-mingw-msys2-on-windows/) -- detailed architecture walkthrough
-- [Docker and Git Bash path workaround](https://gist.github.com/borekb/cb1536a3685ca6fc0ad9a028e6a959e3) -- MSYS_NO_PATHCONV examples
-- [bin\bash.exe vs usr\bin\bash.exe](https://superuser.com/questions/1819677/) -- wrapper vs actual binary
-- [Rust Command on Windows](https://doc.rust-lang.org/std/process/struct.Command.html) -- PATH resolution behavior
-- [Rust Command PATH issue #122660](https://github.com/rust-lang/rust/issues/122660) -- env variable side effects on PATH
-- [CVE-2026-24739](https://symfony.com/blog/cve-2026-24739-incorrect-argument-escaping-under-msys2-git-bash-on-windows-can-lead-to-destructive-file-operations) -- MSYS2 argument escaping security issue
+- https://www.msys2.org/docs/filesystem-paths/ — MSYS2 filesystem path conversion: `cygpath` tool, automatic Unix→Windows conversion when calling native executables, `MSYS2_ARG_CONV_EXCL` for excluding specific arguments
+- https://gitforwindows.org — Git for Windows; ships MSYS2 environment with bash, GNU tools, and MinGW toolchains; `bin\bash.exe` wrapper sets `MSYSTEM=MINGW64`
+- **Last updated:** 2026-04-27

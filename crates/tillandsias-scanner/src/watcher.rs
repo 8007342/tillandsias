@@ -128,7 +128,7 @@ impl Scanner {
             notify::Config::default(),
         )?;
 
-        // @trace spec:filesystem-scanner — graceful degradation for watch setup
+        // @trace spec:filesystem-scanner
         // Watch each configured path (non-recursive — we only care about depth 1-2).
         // Errors are logged and skipped rather than propagated — the scanner degrades
         // gracefully when paths are missing, permissions are denied, or inotify watch
@@ -411,7 +411,7 @@ mod tests {
         handle.abort();
     }
 
-    // @trace spec:filesystem-scanner — graceful degradation tests
+    // @trace spec:filesystem-scanner
 
     #[test]
     fn initial_scan_skips_nonexistent_watch_path() {
@@ -434,10 +434,7 @@ mod tests {
         fs::write(project.join("Cargo.toml"), "[package]").unwrap();
 
         let config = ScannerConfig {
-            watch_paths: vec![
-                PathBuf::from("/nonexistent/path"),
-                dir.path().to_path_buf(),
-            ],
+            watch_paths: vec![PathBuf::from("/nonexistent/path"), dir.path().to_path_buf()],
             debounce: Duration::from_millis(100),
         };
 
@@ -490,9 +487,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel(16);
         let scanner = Scanner::new(config);
 
-        let handle = tokio::spawn(async move {
-            scanner.watch(tx).await
-        });
+        let handle = tokio::spawn(async move { scanner.watch(tx).await });
 
         // Give it a moment — should set up watches for the valid path without crashing
         tokio::time::sleep(Duration::from_millis(200)).await;

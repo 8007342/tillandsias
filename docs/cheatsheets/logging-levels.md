@@ -1,3 +1,15 @@
+---
+tags: [logging, tracing, rust, debugging, observability]
+languages: [rust]
+since: 2024-01-01
+last_verified: 2026-04-27
+sources:
+  - https://docs.rs/tracing/latest/tracing/
+  - https://docs.rs/tracing-subscriber/latest/tracing_subscriber/
+authority: high
+status: current
+---
+
 # Logging Levels
 
 ## Overview
@@ -185,3 +197,9 @@ If sharing a log file for support, no scrubbing is required for credentials. Fil
 **Cheatsheets:**
 - `docs/cheatsheets/secrets-management.md` — secrets subsystem detail
 - `docs/cheatsheets/token-rotation.md` — token refresh task detail
+
+## Provenance
+
+- https://docs.rs/tracing/latest/tracing/ — tracing crate v0.1.44; spans and events framework, five log levels (trace, debug, info, warn, error)
+- https://docs.rs/tracing-subscriber/latest/tracing_subscriber/ — tracing-subscriber crate v0.3.23; EnvFilter, fmt subscriber, Layer trait, Registry for composable logging
+- **Last updated:** 2026-04-27

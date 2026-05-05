@@ -1,60 +1,95 @@
 #!/usr/bin/env bash
-# install-hooks.sh — Install OpenSpec pre-commit hook
-# @trace spec:spec-traceability
+# install-hooks.sh — Install git hooks for OpenSpec workflow
+# @trace spec:spec-traceability, spec:versioning
 #
-# Idempotent: safe to run multiple times. If a pre-commit hook already
-# exists and isn't ours, warns but does not overwrite.
+# Installs two git hooks:
+#   1. pre-commit: OpenSpec trace warnings and spec-cheatsheet drift checks
+#   2. pre-push: VERSION guard (prevents VERSION modifications on non-main branches)
+#
+# Idempotent: safe to run multiple times. If hooks already exist and aren't ours,
+# warns but does not overwrite (appends to existing).
 #
 # Usage: ./scripts/install-hooks.sh
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HOOK_SOURCE="$REPO_ROOT/scripts/hooks/pre-commit-openspec.sh"
-HOOK_TARGET="$REPO_ROOT/.git/hooks/pre-commit"
 
 # For worktrees, .git may be a file pointing to the actual git dir
+GIT_HOOKS_DIR="$REPO_ROOT/.git/hooks"
 if [[ -f "$REPO_ROOT/.git" ]]; then
     GIT_DIR="$(grep '^gitdir:' "$REPO_ROOT/.git" | cut -d' ' -f2)"
     # Resolve relative path
     if [[ ! "$GIT_DIR" = /* ]]; then
         GIT_DIR="$REPO_ROOT/$GIT_DIR"
     fi
-    HOOK_TARGET="$GIT_DIR/hooks/pre-commit"
-fi
-
-MARKER="# openspec-pre-commit-hook"
-
-if [[ ! -f "$HOOK_SOURCE" ]]; then
-    echo "error: $HOOK_SOURCE not found" >&2
-    exit 1
+    GIT_HOOKS_DIR="$GIT_DIR/hooks"
 fi
 
 # Ensure hooks directory exists
-mkdir -p "$(dirname "$HOOK_TARGET")"
+mkdir -p "$GIT_HOOKS_DIR"
 
-if [[ -f "$HOOK_TARGET" ]]; then
-    # Check if our hook is already installed
-    if grep -qF "$MARKER" "$HOOK_TARGET" 2>/dev/null; then
-        echo "OpenSpec pre-commit hook already installed — nothing to do."
-        exit 0
-    fi
+# --- Install pre-commit hook -----------------------------------------------
 
-    # Existing hook that isn't ours — append
-    echo ""
-    echo "Existing pre-commit hook found at: $HOOK_TARGET"
-    echo "Appending OpenSpec checks..."
-    echo "" >> "$HOOK_TARGET"
-    echo "$MARKER" >> "$HOOK_TARGET"
-    echo "bash \"$HOOK_SOURCE\"" >> "$HOOK_TARGET"
-    echo "OpenSpec pre-commit hook appended to existing hook."
-else
-    # No existing hook — create one
-    cat > "$HOOK_TARGET" <<HOOK
-#!/usr/bin/env bash
-$MARKER
-bash "$HOOK_SOURCE"
-HOOK
-    chmod +x "$HOOK_TARGET"
-    echo "OpenSpec pre-commit hook installed at: $HOOK_TARGET"
+PRECOMMIT_SOURCE="$REPO_ROOT/scripts/hooks/pre-commit-openspec.sh"
+PRECOMMIT_TARGET="$GIT_HOOKS_DIR/pre-commit"
+PRECOMMIT_MARKER="# openspec-pre-commit-hook"
+
+if [[ ! -f "$PRECOMMIT_SOURCE" ]]; then
+    echo "error: $PRECOMMIT_SOURCE not found" >&2
+    exit 1
 fi
+
+if [[ -f "$PRECOMMIT_TARGET" ]]; then
+    if grep -qF "$PRECOMMIT_MARKER" "$PRECOMMIT_TARGET" 2>/dev/null; then
+        echo "✓ OpenSpec pre-commit hook already installed"
+    else
+        echo "Existing pre-commit hook found — appending OpenSpec checks..."
+        echo "" >> "$PRECOMMIT_TARGET"
+        echo "$PRECOMMIT_MARKER" >> "$PRECOMMIT_TARGET"
+        echo "bash \"$PRECOMMIT_SOURCE\"" >> "$PRECOMMIT_TARGET"
+        echo "✓ OpenSpec pre-commit hook appended"
+    fi
+else
+    cat > "$PRECOMMIT_TARGET" <<HOOK
+#!/usr/bin/env bash
+$PRECOMMIT_MARKER
+bash "$PRECOMMIT_SOURCE"
+HOOK
+    chmod +x "$PRECOMMIT_TARGET"
+    echo "✓ OpenSpec pre-commit hook installed"
+fi
+
+# --- Install pre-push hook -------------------------------------------------
+
+PREPUSH_SOURCE="$REPO_ROOT/scripts/hooks/pre-push-version-guard.sh"
+PREPUSH_TARGET="$GIT_HOOKS_DIR/pre-push"
+PREPUSH_MARKER="# version-guard-hook"
+
+if [[ ! -f "$PREPUSH_SOURCE" ]]; then
+    echo "error: $PREPUSH_SOURCE not found" >&2
+    exit 1
+fi
+
+if [[ -f "$PREPUSH_TARGET" ]]; then
+    if grep -qF "$PREPUSH_MARKER" "$PREPUSH_TARGET" 2>/dev/null; then
+        echo "✓ VERSION guard pre-push hook already installed"
+    else
+        echo "Existing pre-push hook found — appending VERSION guard..."
+        echo "" >> "$PREPUSH_TARGET"
+        echo "$PREPUSH_MARKER" >> "$PREPUSH_TARGET"
+        echo "bash \"$PREPUSH_SOURCE\" \"\$@\"" >> "$PREPUSH_TARGET"
+        echo "✓ VERSION guard pre-push hook appended"
+    fi
+else
+    cat > "$PREPUSH_TARGET" <<HOOK
+#!/usr/bin/env bash
+$PREPUSH_MARKER
+bash "$PREPUSH_SOURCE" "\$@"
+HOOK
+    chmod +x "$PREPUSH_TARGET"
+    echo "✓ VERSION guard pre-push hook installed"
+fi
+
+echo ""
+echo "All git hooks installed successfully."

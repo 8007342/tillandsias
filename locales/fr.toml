@@ -177,6 +177,8 @@ git_desc = "  ✓ git        — service miroir git (depots nus + daemon)"
 inference_desc = "  ✓ inference  — LLM local (ollama)"
 tools_overlay = "Construction de la couche logicielle (Claude Code, OpenSpec, OpenCode)..."
 tools_overlay_ready = "✓ Couche logicielle prete"
+failed_logs_header = "Journaux de construction echoues (--debug) :"
+skipping = "↷ {name}: {tag} (deja construit, ignore)"
 
 # ── CLI welcome banner ──────────────────────────────────────
 [cli.welcome]

@@ -1,0 +1,56 @@
+
+trace: spec:methodology-accountability
+
+event_id: methodology.event.000-template-unpredicted@v1
+status: open
+observed_at: "YYYY-MM-DDTHH:MM:SSZ"
+reporter: "agent-or-human-id"
+summary: >
+  One sentence naming the surprise.
+
+observed_signal:
+  description: >
+    What was observed? Include concrete log lines, test names, trace IDs, commit
+    hashes, or file paths when available.
+  signal_type: "trace|litmus|ci|runtime|review|merge|cheatsheet|other"
+
+expected_model:
+  description: >
+    What did the current methodology, spec, litmus, trace, or cheatsheet imply
+    should happen instead?
+  source_refs: []
+
+violated_or_missing_claims:
+  methodology_claim_ids: []
+  spec_requirement_ids: []
+  litmus_ids: []
+  cheatsheet_refs: []
+
+affected_artifacts:
+  specs: []
+  methodology_files: []
+  code_paths: []
+  scripts: []
+  dashboards: []
+
+evidence_refs:
+  commits: []
+  files: []
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: medium
+provisional_classification: methodology_claim_unproven
+
+next_distillation_step:
+  owner: "agent-or-human-id"
+  action: >
+    Name the next artifact change that would preserve the learned distinction.
+  target_artifact: "spec|litmus|methodology|proximity|cheatsheet|code|other"
+
+closure_criteria:
+  - learned_distinction_preserved_in_durable_artifact
+  - evidence_refs_are_queryable
+  - proximity_or_evidence_score_updated_if_applicable
+  - old_false_claim_tombstoned_or_superseded_if_applicable

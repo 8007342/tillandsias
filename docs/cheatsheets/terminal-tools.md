@@ -1,3 +1,14 @@
+---
+tags: [terminal, shell, bash, tools, forge]
+languages: [bash]
+since: 2024-01-01
+last_verified: 2026-04-27
+sources:
+  - https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html
+authority: high
+status: current
+---
+
 # Terminal Tools Cheatsheet
 
 Quick reference for the Tillandsias Forge terminal environment.
@@ -160,3 +171,8 @@ All cache directories persist across container restarts via the `~/.cache/tillan
 - **Git diff with color**: `git diff | bat --language=diff`
 - **Find and open**: `fd <pattern> | fzf | xargs vim`
 - **JSON pretty-print**: `curl <api> | jq '.'`
+
+## Provenance
+
+- https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html — GNU Bash manual (The Set Builtin); `-e` (errexit), `-u` (nounset), `-o pipefail` options that govern safe script execution in forge entrypoints
+- **Last updated:** 2026-04-27

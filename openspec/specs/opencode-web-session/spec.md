@@ -2,6 +2,10 @@
 <!-- @trace spec:opencode-web-session -->
 # opencode-web-session Specification (Deprecated)
 
+## Status
+
+active
+
 ## Deprecation Notice
 
 This specification describes the webview-based approach to OpenCode Web. As of 2026-05-02,
@@ -141,3 +145,29 @@ Closing a `WebviewWindow` whose label starts with `web-` SHALL close only that w
 - **THEN** the window is destroyed
 - **AND** the Tauri runtime does NOT exit
 - **AND** the tray icon and infrastructure persist
+
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- pending — test binding required for S2→S3 progression
+
+Gating points:
+- Webview window created on localhost at dynamically allocated port (e.g., http://127.0.0.1:NNNN)
+- Window does NOT block tray operations; menu remains responsive during webview load
+- Multiple webview windows can be open simultaneously; each is independent
+- Closing one webview does not affect others or the tray
+- Closing the last webview does NOT exit Tauri runtime; tray continues running
+- Navigation to new URLs within the webview does not spawn new windows
+- Backward button works; forward button enabled when history exists
+
+## Sources of Truth
+
+- `cheatsheets/web/websocket.md` — Websocket reference and patterns
+- `cheatsheets/runtime/chromium-headless.md` — Chromium Headless reference and patterns
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:opencode-web-session" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

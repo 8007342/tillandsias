@@ -1,3 +1,15 @@
+---
+tags: [keyring, credentials, security, linux, macos, windows]
+languages: [rust]
+since: 2024-01-01
+last_verified: 2026-04-27
+sources:
+  - https://docs.rs/keyring/latest/keyring/
+  - http://specifications.freedesktop.org/secret-service/latest/
+authority: high
+status: current
+---
+
 # OS Vault / Keyring Credentials
 
 Cross-platform reference for the native credential vaults Tillandsias uses on Linux, macOS, and Windows. The host Rust process is the **sole consumer** of the OS keyring; containers never link against any keyring API and never receive a D-Bus, Keychain, or Wincred handle. This cheatsheet describes the per-OS vault, what the `keyring` crate does on top of it, and how to inspect entries from the command line.
@@ -13,13 +25,13 @@ Cross-platform reference for the native credential vaults Tillandsias uses on Li
 | Windows | Credential Manager (Wincred) | `Advapi32.dll` — `CredWriteW` / `CredReadW` / `CredDeleteW` | `%LOCALAPPDATA%\Microsoft\Credentials\` (DPAPI-encrypted to user SID) | `cmdkey` |
 
 Per-vendor canonical references:
-- Linux: [Secret Service API specification](https://specifications.freedesktop.org/secret-service/latest/) (freedesktop.org)
+- Linux: [Secret Service API specification](http://specifications.freedesktop.org/secret-service/latest/) (freedesktop.org)
 - macOS: [Keychain services](https://developer.apple.com/documentation/security/keychain-services) (Apple Developer)
 - Windows: [CREDENTIAL structure](https://learn.microsoft.com/en-us/windows/win32/api/wincred/ns-wincred-credentiala), [CredWriteW](https://learn.microsoft.com/en-us/windows/win32/api/wincred/nf-wincred-credwritew), [cmdkey](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/cmdkey) (Microsoft Learn)
 
 ## How Tillandsias uses these vaults
 
-Tillandsias talks to all three vaults through the Rust [`keyring`](https://crates.io/crates/keyring) crate. The crate exposes a single platform-neutral API:
+Tillandsias talks to all three vaults through the Rust [`keyring`](https://crates.io/crates/keyring) crate (v4.0.0). The crate exposes a single platform-neutral API:
 
 ```rust
 let entry = keyring::Entry::new("tillandsias", "github-oauth-token")?;
@@ -39,6 +51,8 @@ Source: `src-tauri/src/secrets.rs` (`store_github_token`, `retrieve_github_token
 ## Linux — Secret Service
 
 Items are stored as **attributes** (string key/value pairs, used for lookup) plus a **secret blob**. Attributes are not encrypted; the blob is. There is no per-item ACL — once the user's collection is unlocked (typically at desktop login), any process running as the same user can read every entry in it.
+
+The Secret Service specification (freedesktop.org, version 0.2 DRAFT as of 2026-04-08) defines the D-Bus interface (`org.freedesktop.secrets`) covering collections, items, sessions, and prompts. The spec uses AES-128-CBC for secret transport encryption.
 
 ```bash
 # Store a row
@@ -66,7 +80,7 @@ target      = default
 
 KWallet 5.97+ exposes the same `org.freedesktop.secrets` interface, so the crate works unchanged on Plasma desktops.
 
-> Ref: [Secret Service API specification](https://specifications.freedesktop.org/secret-service/latest/)
+> Ref: [Secret Service API specification](http://specifications.freedesktop.org/secret-service/latest/)
 
 ### Headless-Linux caveat
 
@@ -178,3 +192,9 @@ Source: `src-tauri/src/secrets.rs` (`SERVICE`, `GITHUB_TOKEN_KEY` constants).
 **Specs:**
 - `openspec/specs/native-secrets-store/spec.md`
 - `openspec/specs/secrets-management/spec.md`
+
+## Provenance
+
+- https://docs.rs/keyring/latest/keyring/ — keyring crate v4.0.0; platform-neutral credential storage API with backends for Linux (libsecret), macOS (Keychain), and Windows (Wincred)
+- http://specifications.freedesktop.org/secret-service/latest/ — Secret Service API spec v0.2 DRAFT (2026-04-08); D-Bus interface `org.freedesktop.secrets`, collections, items, sessions, AES-128-CBC secret transport
+- **Last updated:** 2026-04-27

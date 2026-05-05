@@ -1,3 +1,15 @@
+---
+tags: [windows, setup, podman, winget, wsl2]
+languages: []
+since: 2024-01-01
+last_verified: 2026-04-27
+sources:
+  - https://learn.microsoft.com/en-us/windows/package-manager/winget/
+  - https://docs.podman.io/en/stable/markdown/podman-machine.1.html
+authority: high
+status: current
+---
+
 # Windows Setup Cheatsheet
 
 @trace spec:cross-platform
@@ -24,6 +36,8 @@ Downloads the NSIS installer, runs it silently, checks for Podman, and initializ
 | Remove machine | `podman machine rm` | Destroys VM |
 | Check status | `podman machine list` | Shows Running/Stopped |
 | Machine info | `podman machine info` | Backend type, paths, etc. |
+
+Podman machine subcommands (`init`, `start`, `stop`, `list`, `rm`, `ssh`, `inspect`, `cp`, `set`) manage the Linux VM that runs containers on non-Linux hosts. Configuration is stored under `$XDG_CONFIG_HOME/containers/podman/machine/` and all operations run in rootless mode only.
 
 ### Key Differences from Linux
 
@@ -53,6 +67,8 @@ Config paths:
 | Node.js | `winget install OpenJS.NodeJS.LTS` | Tauri frontend build |
 | VS Build Tools | `winget install Microsoft.VisualStudio.2022.BuildTools` | MSVC linker, Windows SDK |
 | Podman | `winget install RedHat.Podman` | Container runtime |
+
+WinGet (Windows Package Manager) is included with Windows 11 and modern Windows 10 as part of App Installer. It supports `install`, `search`, `list`, `upgrade`, `uninstall`, `show`, `export`, and `import` commands, plus EXE, MSI, MSIX, ZIP, and NSIS installer formats.
 
 ### Native Build (PowerShell)
 
@@ -107,3 +123,9 @@ podman rmi localhost/tillandsias-forge:v<old> \
 ```
 
 After the rebuild, re-run `podman images | grep tillandsias-` and verify the four enclave tags now show **different** image IDs.
+
+## Provenance
+
+- https://learn.microsoft.com/en-us/windows/package-manager/winget/ — WinGet (Windows Package Manager) overview; `install`, `search`, `list`, `upgrade`, `uninstall`, `show`, `export`, `import` commands; available on Windows 10 1809+ and Windows 11 via App Installer
+- https://docs.podman.io/en/stable/markdown/podman-machine.1.html — podman machine reference; `init`, `start`, `stop`, `list`, `rm`, `ssh`, `inspect` subcommands; rootless-only operation; creates Linux VM for running containers on macOS/Windows
+- **Last updated:** 2026-04-27

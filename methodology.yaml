@@ -1,0 +1,38 @@
+methodology:
+  version: v0.5
+  authority:
+    source_of_truth: methodology.yaml
+    rule: >
+      This file is the authoritative methodology entry point. If another project
+      instruction conflicts with it, follow this file and report methodology drift.
+    non_authoritative_files:
+      CLAUDE.md: "May summarize local tool notes; must not redefine methodology."
+
+  bootstrap:
+    first_step: "Read methodology/bootstrap/router.yaml."
+    selection_rule: "Choose exactly one intent from bootstrap_router.intent_options."
+    role_rule: "Use methodology/bootstrap/roles.yaml for m:n role and file affordances."
+    receipt_required_before_source_edits: true
+
+  entrypoints:
+    task_router: methodology/bootstrap/router.yaml
+    role_file_matrix: methodology/bootstrap/roles.yaml
+    component_catalog: methodology/catalog.yaml
+    agent_observability: methodology/agent-observability.yaml
+    unknown_event_register: methodology/event/index.yaml
+
+  invariant_summary:
+    - specs_define_intent
+    - cheatsheets_compress_provenance_backed_knowledge
+    - code_cites_specs_and_relevant_cheatsheets
+    - traces_and_litmus_tests_provide_falsifiable_evidence
+    - evidence_bundles_bound_convergence_claims
+    - unknown_events_capture_surprises_before_distillation
+    - centicolons_report_residual_obligations_not_proof
+    - releases_require_validated_centicolon_projection_artifacts
+    - methodology_refinements_do_not_push_directly_to_main
+
+  semantic_distillation:
+    rule: >
+      Root files stay terse. Detailed rationale belongs in the owning component
+      listed in methodology/catalog.yaml.

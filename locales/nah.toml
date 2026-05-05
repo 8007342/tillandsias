@@ -156,6 +156,8 @@ git_desc = "  ✓ git        — git tēzcatl tēquitl"
 inference_desc = "  ✓ inference  — nican LLM (ollama)"
 tools_overlay = "Tēquitēquitl pētlachihualiztli mochichihua (Claude Code, OpenSpec, OpenCode)..."
 tools_overlay_ready = "✓ Tēquitēquitl pētlachihualiztli yēcauhqui"
+failed_logs_header = "Ōpōliuh chichihualiztli tlapoalli (--debug):"
+skipping = "↷ {name}: {tag} (yē ōmochiuh, ōmopanāhuīc)"
 
 [cli.welcome]
 title = "Tillandsias v{version}"

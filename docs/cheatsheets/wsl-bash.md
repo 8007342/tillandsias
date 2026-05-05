@@ -1,3 +1,14 @@
+---
+tags: [wsl, windows, linux, bash, podman, filesystems]
+languages: [bash]
+since: 2024-01-01
+last_verified: 2026-04-27
+sources:
+  - https://learn.microsoft.com/en-us/windows/wsl/filesystems
+authority: high
+status: current
+---
+
 # WSL + Bash on Windows
 
 How the Windows Subsystem for Linux works, how it maps paths, and how it interacts with Podman and native Windows processes.
@@ -81,7 +92,7 @@ wsl.exe -e bash -c "echo hello from WSL"
 
 ### Filesystem Mount Points
 
-WSL mounts Windows drives under `/mnt/`:
+WSL mounts Windows drives under `/mnt/`. Microsoft recommends against working across OS boundaries for performance: "store your files in the WSL file system if you are working in a Linux command line" and "store your files in the Windows file system" if using Windows tools.
 
 | Windows path | WSL path |
 |---|---|
@@ -309,13 +320,7 @@ podman machine list
 podman machine inspect
 ```
 
-## Sources
+## Provenance
 
-- [Comparing WSL Versions](https://learn.microsoft.com/en-us/windows/wsl/compare-versions) -- Microsoft official WSL1 vs WSL2 comparison
-- [WSL Filesystem Configuration](https://learn.microsoft.com/en-us/windows/wsl/filesystems) -- cross-OS file access and performance
-- [Advanced WSL Configuration](https://learn.microsoft.com/en-us/windows/wsl/wsl-config) -- wsl.conf and .wslconfig reference
-- [WSL Interop](https://documentation.ubuntu.com/wsl/en/latest/tutorials/interop/) -- Windows/Linux interoperability details
-- [wsl.exe vs bash.exe PATH issue #3627](https://github.com/microsoft/WSL/issues/3627) -- different PATH behavior
-- [Podman on WSL2 without machine](https://oneuptime.com/blog/post/2026-03-18-use-podman-wsl2-without-podman-machine/view) -- direct installation approach
-- [Podman Desktop Windows Install](https://podman-desktop.io/docs/installation/windows-install) -- official Podman machine setup
-- [Using Podman on WSL2](https://dev.to/bowmanjd/using-podman-on-windows-subsystem-for-linux-wsl-58ji) -- detailed WSL2 Podman walkthrough
+- https://learn.microsoft.com/en-us/windows/wsl/filesystems — Microsoft WSL filesystem guide; `/mnt/` mount points for Windows drives (`C:\` → `/mnt/c/`), 9P protocol performance cost, `\\wsl$\` UNC access, `wslpath` utility, recommendation to store files on the native side for best performance
+- **Last updated:** 2026-04-27

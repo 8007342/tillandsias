@@ -5,7 +5,7 @@
 //! Uses Tauri's built-in updater plugin with mandatory Ed25519 signature
 //! verification. Never blocks the main event loop or the tray UI thread.
 //!
-//! @trace spec:update-system
+//! @trace spec:update-system, spec:download-telemetry
 
 use std::sync::Arc;
 
@@ -195,9 +195,7 @@ pub async fn install_update(app: &AppHandle, state: &UpdateState) {
     let new_version = update.version.clone();
     if let Err(e) = update.download_and_install(|_, _| {}, || {}).await {
         error!(error = %e, "Update download/install failed");
-        update_log::append_entry(&format!(
-            "ERROR: background update install failed: {e}"
-        ));
+        update_log::append_entry(&format!("ERROR: background update install failed: {e}"));
         reset_progress(app, state).await;
         return;
     }
@@ -230,7 +228,7 @@ async fn stop_all_containers() -> Result<(), String> {
                     error = %e,
                     "Failed to stop container gracefully, force killing"
                 );
-                let _ = client.kill_container(&container.name).await;
+                let _ = client.kill_container(&container.name, None).await;
             }
         }
     }

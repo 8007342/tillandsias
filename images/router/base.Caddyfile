@@ -1,0 +1,57 @@
+# @trace spec:subdomain-routing-via-reverse-proxy, spec:fix-router-loopback-port
+# Tillandsias router — base configuration.
+#
+# This is the static portion of the Caddy config baked into the image. The
+# tray writes per-project routes to /run/router/dynamic.Caddyfile at attach
+# time and the entrypoint merges both before exec'ing caddy.
+#
+# Trust policy:
+#   - The container only has two interfaces: enclave network (10.89.0.0/24
+#     on rootless podman by default) and the loopback port-mapping from
+#     the host (-p 127.0.0.1:8080:8080).
+#   - The Caddy listener at :8080 sees source IPs from those two paths only.
+#   - The `@trusted` matcher allowlists loopback + RFC 1918 private blocks
+#     as defence-in-depth in case the container ever ends up on a different
+#     network.
+
+{
+    # Disable auto-https — we serve plain HTTP on :80 only. *.localhost is
+    # always loopback per RFC 6761; TLS would require a CA dance for
+    # hostnames that browsers already treat as secure contexts.
+    auto_https off
+
+    # Admin API on container loopback only — `caddy reload` from inside
+    # the entrypoint after the dynamic Caddyfile changes.
+    admin localhost:2019
+
+    # No telemetry, no automatic plugin downloads.
+    storage file_system /tmp/caddy-storage
+}
+
+# Default catchall. The dynamic Caddyfile prepends per-project servers
+# that match more specific hostnames (e.g., `lakanoa.flutter.localhost`);
+# anything that falls through here is either an unknown
+# <project>.<service> combination or a bogus Host header from a source
+# that shouldn't be talking to us.
+:8080 {
+    # @trace spec:subdomain-routing-via-reverse-proxy
+    # Defence-in-depth source-IP allowlist. The container can ONLY be
+    # reached from these networks anyway (enclave + host loopback port
+    # mapping), but rejecting non-allowlisted sources at the application
+    # layer means a misconfigured publish (e.g., -p 0.0.0.0:80:80
+    # somehow slipping through code review) still doesn't expose
+    # anything.
+    @untrusted not remote_ip 127.0.0.1 ::1 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+
+    handle @untrusted {
+        respond "denied (source must be loopback or enclave-internal)" 403 {
+            close
+        }
+    }
+
+    # Trusted source, no route matched in dynamic.Caddyfile. Return 404
+    # with the requested host so debugging is obvious.
+    handle {
+        respond "tillandsias-router: no route for {host}" 404
+    }
+}

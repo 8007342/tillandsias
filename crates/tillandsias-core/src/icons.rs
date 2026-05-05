@@ -83,11 +83,7 @@ mod tests {
         ];
         for state in &states {
             let bytes = tray_icon_png(*state);
-            assert!(
-                !bytes.is_empty(),
-                "Tray icon for {:?} is empty",
-                state
-            );
+            assert!(!bytes.is_empty(), "Tray icon for {:?} is empty", state);
             assert!(
                 bytes.starts_with(PNG_MAGIC),
                 "Tray icon for {:?} missing PNG magic bytes",

@@ -1,11 +1,16 @@
 <!-- @trace spec:remote-projects -->
 # remote-projects Specification
 
+## Status
+
+active
+
 ## Purpose
 TBD - created by archiving change remote-project-clone. Update Purpose after archive.
 ## Requirements
 ### Requirement: Fetch remote repository list
-The application SHALL fetch the authenticated user's GitHub repositories using the `gh` CLI inside a forge container.
+
+The application SHALL fetch the authenticated user's GitHub repositories using the `gh` CLI inside a forge container. When credentials are missing or the API call fails, the failure SHALL be reflected in the contextual status line at the top of the tray menu (per `tray-app` spec) — there SHALL NOT be a disabled placeholder row inside `Remote Projects ▸`.
 
 #### Scenario: Authenticated user with repos
 - **WHEN** the remote projects list is requested and valid GitHub credentials exist
@@ -13,11 +18,14 @@ The application SHALL fetch the authenticated user's GitHub repositories using t
 
 #### Scenario: No GitHub credentials
 - **WHEN** the remote projects list is requested and no GitHub credentials exist
-- **THEN** the list is empty and the Remote Projects submenu shows "Login to GitHub first"
+- **THEN** the list is empty
+- **AND** the `Remote Projects ▸` submenu SHALL NOT appear in the tray menu (no `Login to GitHub first` placeholder)
+- **AND** the `🔑 Sign in to GitHub` action SHALL be visible at the top of the menu (per `tray-app` spec) so the user can resolve the missing credential
 
 #### Scenario: GitHub API error
 - **WHEN** the `gh repo list` command fails (network error, token expired)
-- **THEN** the Remote Projects submenu shows "Could not fetch repos"
+- **THEN** the `Remote Projects ▸` submenu SHALL NOT appear in the tray menu (no `Could not fetch repos` placeholder)
+- **AND** the contextual status line at the top of the menu MAY surface the network/auth condition (e.g., `GitHub unreachable — using cached list` when the cause is a network failure with cached projects available)
 
 ### Requirement: Filter against local projects
 The remote repository list SHALL exclude repositories that already exist as local directories under the scanner's watched directory.
@@ -69,3 +77,25 @@ The Remote Projects submenu SHALL show a loading indicator while fetching the re
 - **WHEN** the remote repo list is being fetched for the first time or after cache expiry
 - **THEN** the submenu shows a disabled "Loading..." item
 
+
+## Sources of Truth
+
+- `cheatsheets/runtime/podman.md` — Podman reference and patterns
+- `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:ephemeral-guarantee`
+
+Gating points:
+- Remote project state is ephemeral; clones are cleaned on container stop
+- Deterministic and reproducible: test results do not depend on prior state
+- Falsifiable: failure modes (leaked state, persistence) are detectable
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:remote-projects" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+```

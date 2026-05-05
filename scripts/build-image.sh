@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-# @trace spec:nix-builder, spec:default-image
+# @trace spec:nix-builder, spec:default-image, spec:dev-build
 
 # ---------------------------------------------------------------------------
 # macOS PATH fix: Finder-launched apps don't inherit shell PATH.
@@ -303,6 +303,7 @@ if [[ "$FLAG_BACKEND" == "fedora" ]]; then
     # that build containers don't have. Proxy is for runtime containers only.
 
     "$PODMAN" build \
+        --format docker \
         --tag "$IMAGE_TAG" \
         "${BUILD_ARGS[@]}" \
         -f "$CONTAINERFILE" \

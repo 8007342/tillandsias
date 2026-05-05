@@ -156,6 +156,8 @@ git_desc = "  ✓ git        — git 鏡像服務 (裸儲存庫 + 守護程序)"
 inference_desc = "  ✓ inference  — 本機 LLM (ollama)"
 tools_overlay = "正在建置軟體層 (Claude Code, OpenSpec, OpenCode)..."
 tools_overlay_ready = "✓ 軟體層已就緒"
+failed_logs_header = "建置失敗日誌 (--debug):"
+skipping = "↷ {name}: {tag}（已建置，略過）"
 
 [cli.welcome]
 title = "Tillandsias v{version}"

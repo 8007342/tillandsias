@@ -21,13 +21,21 @@
 
 set -euo pipefail
 
-# @trace spec:dev-build
+# @trace spec:dev-build, spec:appimage-build-pipeline, spec:windows-cross-build
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLBOX_NAME="$(basename "$SCRIPT_DIR")"
-INSTALL_DIR="$HOME/.local/bin"
+
+# Get the actual user's home directory (works with sudo)
+if [[ -n "${SUDO_USER:-}" ]]; then
+    ACTUAL_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+else
+    ACTUAL_HOME="$HOME"
+fi
+
+INSTALL_DIR="$ACTUAL_HOME/.local/bin"
 INSTALL_BIN="$INSTALL_DIR/tillandsias"
-CACHE_DIR="$HOME/.cache/tillandsias"
+CACHE_DIR="$ACTUAL_HOME/.cache/tillandsias"
 
 # Colors
 RED='\033[0;31m'
@@ -54,6 +62,8 @@ FLAG_WIPE=false
 FLAG_TOOLBOX_RESET=false
 FLAG_APPIMAGE=false
 FLAG_INIT=false
+FLAG_CI=false
+FLAG_CI_FULL=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -67,6 +77,8 @@ while [[ $# -gt 0 ]]; do
         --toolbox-reset)  FLAG_TOOLBOX_RESET=true ;;
         --appimage)       FLAG_APPIMAGE=true ;;
         --init)           FLAG_INIT=true ;;
+        --ci)             FLAG_CI=true ;;
+        --ci-full)        FLAG_CI_FULL=true ;;
         --help|-h)
             cat <<'EOF'
 Tillandsias Development Build Script
@@ -75,11 +87,13 @@ Usage: ./build.sh [flags]
 
 Build flags:
   (none)            Debug build (cargo build --workspace)
-  --release         Release build (cargo tauri build)
+  --release         Release build (cargo tauri build — validates CI first)
   --test            Run test suite (cargo test --workspace)
   --check           Type-check only (cargo check --workspace)
   --clean           Clean build artifacts before building
   --appimage        Build AppImage in Ubuntu podman container (FUSE-capable)
+  --ci              Run local CI/CD validation (quick: spec binding, drift, version, fmt, clippy, tests)
+  --ci-full         Run full CI/CD validation (includes litmus tests — required for releases)
 
 Install flags:
   --install         Build AppImage + install to ~/Applications/ + symlink to ~/.local/bin/
@@ -104,6 +118,153 @@ EOF
 done
 
 # ---------------------------------------------------------------------------
+# Transparent HTTPS caching setup (dev proxy)
+# ---------------------------------------------------------------------------
+# @trace spec:dev-build, spec:transparent-https-caching
+ensure_dev_cache() {
+    # Skip if explicitly disabled
+    [[ "${TILLANDSIAS_NO_PROXY:-}" == "1" ]] && return 0
+
+    # Ensure CA cert exists
+    local ca_cert="$CACHE_DIR/ca-cert.pem"
+    local ca_key="$CACHE_DIR/ca-key.pem"
+    if [[ ! -f "$ca_cert" ]]; then
+        mkdir -p "$CACHE_DIR"
+        openssl req -x509 -newkey rsa:2048 -keyout "$ca_key" -out "$ca_cert" \
+            -days 3650 -nodes -subj "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=Tillandsias CA" 2>/dev/null || {
+            _warn "Failed to generate CA cert for dev proxy"
+            return 0
+        }
+    fi
+
+    # Ensure dev proxy cache dir exists
+    mkdir -p "$CACHE_DIR/dev-proxy-cache"
+
+    # Find or rebuild the tillandsias-proxy image
+    local proxy_image
+    proxy_image=$(podman images --format "{{.Repository}}:{{.Tag}}" 2>/dev/null | grep "tillandsias-proxy" | head -1)
+
+    if [[ -z "$proxy_image" ]]; then
+        _step "No tillandsias-proxy image found — rebuilding..."
+        if [[ ! -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
+            _warn "scripts/build-image.sh not found — dev caching disabled"
+            return 0
+        fi
+        if ! "$SCRIPT_DIR/scripts/build-image.sh" proxy 2>&1 | tail -5; then
+            _warn "Failed to build tillandsias-proxy image — dev caching disabled"
+            return 0
+        fi
+        # Re-fetch image after building
+        proxy_image=$(podman images --format "{{.Repository}}:{{.Tag}}" 2>/dev/null | grep "tillandsias-proxy" | head -1)
+        if [[ -z "$proxy_image" ]]; then
+            _warn "tillandsias-proxy image still not found after build — dev caching disabled"
+            return 0
+        fi
+        _info "Proxy image built: $proxy_image"
+    fi
+
+    # Start dev proxy if not already running
+    if ! podman inspect tillandsias-dev-proxy &>/dev/null 2>&1; then
+        _step "Starting dev proxy container..."
+
+        # Start proxy with all interface binding so containers can reach it
+        if ! podman run \
+            --detach \
+            --rm \
+            --name tillandsias-dev-proxy \
+            --publish "3129:3129" \
+            --userns=keep-id \
+            --volume "$CACHE_DIR/dev-proxy-cache:/var/spool/squid:rw,Z" \
+            --volume "$ca_cert:/etc/squid/certs/intermediate.crt:ro,Z" \
+            --volume "$ca_key:/etc/squid/certs/intermediate.key:ro,Z" \
+            "$proxy_image" >/dev/null 2>&1; then
+            _warn "Failed to start dev proxy container"
+            return 0
+        fi
+
+        # Wait for proxy to be healthy (listening on 3129)
+        local max_retries=15
+        local retry=0
+        while [[ $retry -lt $max_retries ]]; do
+            if nc -z 127.0.0.1 3129 &>/dev/null 2>&1; then
+                _info "Dev proxy healthy on :3129"
+                break
+            fi
+            retry=$((retry + 1))
+            if [[ $retry -eq $max_retries ]]; then
+                _error "Proxy health check failed after $max_retries seconds"
+                podman logs tillandsias-dev-proxy 2>&1 | tail -20
+                podman rm -f tillandsias-dev-proxy 2>/dev/null || true
+                return 0
+            fi
+            sleep 1
+        done
+    fi
+
+    # Export proxy env vars for toolbox and AppImage builder
+    export HTTP_PROXY="http://127.0.0.1:3129"
+    export HTTPS_PROXY="http://127.0.0.1:3129"
+    export http_proxy="http://127.0.0.1:3129"
+    export https_proxy="http://127.0.0.1:3129"
+    export CARGO_HTTP_PROXY="http://127.0.0.1:3129"
+    export CARGO_HTTP_CAINFO="$ca_cert"
+
+    _info "Dev proxy active: $HTTP_PROXY"
+}
+
+ensure_dev_cache
+
+# ---------------------------------------------------------------------------
+# Build context detection (local vs CI)
+# ---------------------------------------------------------------------------
+
+# @trace spec:build-script-architecture
+detect_build_context() {
+    # Local development: running on developer's machine
+    # CI environment sets CI=true and GITHUB_ACTIONS=true automatically
+    if [[ -n "${CI:-}" ]] || [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+        echo "ci"
+    else
+        echo "local"
+    fi
+}
+
+BUILD_CONTEXT=$(detect_build_context)
+
+# @trace spec:build-script-architecture
+select_appimage_strategy() {
+    local context="$1"
+    local use_clean="$2"  # true if --clean was passed
+
+    if [[ "$context" == "ci" ]]; then
+        echo "clean_ubuntu"  # CI always uses full rebuild
+    elif [[ "$use_clean" == "true" ]]; then
+        echo "clean_ubuntu"  # Local --clean also uses full rebuild
+    else
+        echo "forge_cached"  # Default local: reuse forge image
+    fi
+}
+
+APPIMAGE_STRATEGY=$(select_appimage_strategy "$BUILD_CONTEXT" "${FLAG_CLEAN:-false}")
+export APPIMAGE_STRATEGY
+
+# Report strategy to user
+# @trace spec:build-script-architecture
+case "$APPIMAGE_STRATEGY" in
+    forge_cached)
+        _info "Using cached forge image (fast local path)"
+        ;;
+    clean_ubuntu)
+        if [[ "$BUILD_CONTEXT" == "ci" ]]; then
+            _info "CI environment detected; using full reproducible build path"
+        else
+            _warn "Full clean build (reproducibility verification)"
+            _info "This path is slow (~10min); use for pre-release gates only"
+        fi
+        ;;
+esac
+
+# ---------------------------------------------------------------------------
 # Standalone operations (don't need toolbox)
 # ---------------------------------------------------------------------------
 
@@ -117,27 +278,53 @@ if [[ "$FLAG_INIT" == true ]]; then
     exit 0
 fi
 
+# CI validation (standalone — runs locally without toolbox)
+if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
+    if [[ "$FLAG_CI_FULL" == true ]]; then
+        _step "Running full CI/CD validation (including litmus tests)..."
+        CI_ARGS=""
+    else
+        _step "Running quick CI/CD validation (skipping litmus tests)..."
+        CI_ARGS="--fast"
+    fi
+
+    if bash "$SCRIPT_DIR/scripts/local-ci.sh" $CI_ARGS; then
+        if [[ "$FLAG_CI_FULL" == true ]]; then
+            _info "Full CI/CD validation passed — ready for release"
+        else
+            _info "Quick CI/CD validation passed — ready for development"
+        fi
+        # If --ci or --ci-full is the only flag, exit with success
+        if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_APPIMAGE$FLAG_WIPE$FLAG_TOOLBOX_RESET$FLAG_REMOVE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
+            exit 0
+        fi
+    else
+        _error "CI/CD validation failed — fix issues and retry"
+        exit 1
+    fi
+fi
+
 if [[ "$FLAG_REMOVE" == true ]]; then
     # Remove AppImage (new install layout)
-    rm -f "$HOME/Applications/Tillandsias.AppImage"
+    rm -f "$ACTUAL_HOME/Applications/Tillandsias.AppImage"
     # Remove CLI symlink
     rm -f "$INSTALL_BIN"
     # Remove legacy layout artifacts (old install format)
     rm -f "$INSTALL_DIR/.tillandsias-bin"
-    rm -rf "$HOME/.local/lib/tillandsias"
-    rm -rf "$HOME/.local/share/tillandsias"
+    rm -rf "$ACTUAL_HOME/.local/lib/tillandsias"
+    rm -rf "$ACTUAL_HOME/.local/share/tillandsias"
 
     # Remove desktop launcher and XDG icons
-    rm -f "$HOME/.local/share/applications/tillandsias.desktop"
+    rm -f "$ACTUAL_HOME/.local/share/applications/tillandsias.desktop"
     for size in 32x32 128x128 256x256; do
-        rm -f "$HOME/.local/share/icons/hicolor/$size/apps/tillandsias.png"
+        rm -f "$ACTUAL_HOME/.local/share/icons/hicolor/$size/apps/tillandsias.png"
     done
-    update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
-    gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+    update-desktop-database "$ACTUAL_HOME/.local/share/applications" 2>/dev/null || true
+    gtk-update-icon-cache "$ACTUAL_HOME/.local/share/icons/hicolor" 2>/dev/null || true
 
     _info "Removed tillandsias (AppImage, symlink, desktop integration)"
     # If --remove is the only flag, exit
-    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_WIPE$FLAG_TOOLBOX_RESET$FLAG_APPIMAGE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_WIPE$FLAG_TOOLBOX_RESET$FLAG_APPIMAGE$FLAG_CI$FLAG_CI_FULL" == "falsefalsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
     fi
 fi
@@ -149,53 +336,180 @@ if [[ "$FLAG_WIPE" == true ]]; then
     # Cargo registry cache inside toolbox is in the host home (shared)
     _info "Removed target/ and $CACHE_DIR"
     # If --wipe is the only remaining flag, exit
-    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_TOOLBOX_RESET$FLAG_APPIMAGE" == "falsefalsefalsefalsefalsefalsefalse" ]]; then
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_TOOLBOX_RESET$FLAG_APPIMAGE$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE" == "falsefalsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
     fi
 fi
 
 # ---------------------------------------------------------------------------
-# AppImage build (standalone — uses podman Ubuntu container, not toolbox)
+# AppImage build — dual-path architecture (cached forge vs clean Ubuntu)
 # ---------------------------------------------------------------------------
 
-build_appimage() {
+# @trace spec:build-script-architecture
+build_appimage_forge_cached() {
     local output_dir="$SCRIPT_DIR/target/release/bundle/appimage"
-    local cache_base="$HOME/.cache/tillandsias/appimage-builder"
 
+    _step "Assembling AppImage using cached forge image (fast local path)..."
+
+    # Verify forge image exists
+    if ! podman image inspect tillandsias-forge:latest &>/dev/null; then
+        _warn "Forge image not found; falling back to clean Ubuntu build"
+        return 1  # Signal fallback to caller
+    fi
+
+    mkdir -p "$output_dir"
+
+    # Clean old AppImages
+    rm -f "$output_dir"/*.AppImage 2>/dev/null || true
+
+    # Ensure tauri-cli is available in toolbox
+    _toolbox_ensure_tauri_cli
+
+    # Run cargo tauri build inside the existing forge toolbox
+    if ! _run cargo tauri build --bundles appimage 2>&1; then
+        _error "cargo tauri build failed inside forge image"
+        return 1
+    fi
+
+    # Locate the AppImage
+    local appimage_path
+    appimage_path="$(find "$output_dir" -name "*.AppImage" -type f 2>/dev/null | head -1)"
+    if [[ -z "$appimage_path" ]]; then
+        _error "AppImage build failed — no .AppImage found in $output_dir"
+        return 1
+    fi
+
+    chmod +x "$appimage_path"
+    _info "AppImage ready: $appimage_path ($(du -h "$appimage_path" | cut -f1))"
+    return 0
+}
+
+# @trace spec:build-script-architecture
+# Build AppImage in clean Ubuntu 22.04 container (full reproducibility)
+#
+# This function executes a complete from-scratch build in an isolated Ubuntu
+# container. No local artifacts or caches are reused for the final binary.
+#
+# Used by:
+#  - CI/release builds (reproducible releases, matches what GitHub Actions produces)
+#  - ./build.sh --clean (periodic verification that from-scratch builds work)
+#
+# Guarantees:
+#  - No local forge image, no toolbox dependencies
+#  - Identical to CI builds (same Ubuntu version, same dependency versions)
+#  - Slow (~10 min on first run, ~2-3 min with cached toolchain)
+#  - Hermetic: no external caches contaminate the result
+#
+# Cache strategy:
+#  - Rust toolchain + cargo registry persisted across runs (~500MB, RW mount)
+#  - apt cache persisted (RW mount, <500MB)
+#  - Source code is RO (no in-place edits)
+#  - Output AppImage extracted to host filesystem
+build_appimage_ubuntu_clean() {
+    local output_dir="$SCRIPT_DIR/target/release/bundle/appimage"
+    local cache_base="$ACTUAL_HOME/.cache/tillandsias/appimage-builder"
+    local container_pid=""
+    local BUILD_START=$SECONDS
+
+    # Trap SIGINT to kill child podman process on Ctrl+C
+    trap 'if [[ -n "$container_pid" ]]; then kill "$container_pid" 2>/dev/null || true; fi; exit 130' INT TERM
+
+    _step "Building AppImage via clean Ubuntu container..."
     _step "Preparing AppImage build directories..."
     mkdir -p "$output_dir"
     mkdir -p "$cache_base"/{cargo-registry,cargo-bin,rustup,apt}
+
+    # Clean stale apt locks from previous interrupted builds
+    # @trace spec:appimage-build-pipeline
+    rm -f "$cache_base/apt/archives/lock" "$cache_base/apt/lists/lock" 2>/dev/null || true
+    rm -rf "$cache_base/apt/partial" "$cache_base/apt/lists/partial" 2>/dev/null || true
+    # Also clean any stray apt processes that might be holding locks
+    pkill -9 -f "apt-get|dpkg" 2>/dev/null || true
+    # Wait for process cleanup
+    sleep 1
 
     # Remove old AppImages — avoids "Text file busy" if one is still running.
     # On Linux, rm unlinks the file but running processes keep their fd.
     rm -f "$output_dir"/*.AppImage 2>/dev/null || true
 
-    _info "Output dir:  $output_dir"
-    _info "Cache dir:   $cache_base"
-    _step "Starting Ubuntu 22.04 podman container for AppImage build..."
+    _info "Output directory: $output_dir"
+    _info "Cache directory:  $cache_base"
+    _step "Starting Ubuntu 22.04 podman container..."
+
+    # Report build expectation based on cache state
     if [[ -f "$cache_base/rustup/settings.toml" ]]; then
-        _info "Cached toolchain found — skipping install (~1-2 min build)"
+        _info "Cached Rust toolchain found — build will take ~2-3 minutes"
     else
         _warn "First build installs Rust + tauri-cli — expect 10-20 minutes"
     fi
 
-    podman run --rm \
-        --device /dev/fuse \
-        --cap-add SYS_ADMIN \
-        -v "$SCRIPT_DIR:/src:ro,Z" \
-        -v "$cache_base/cargo-registry:/root/.cargo/registry:rw,Z" \
-        -v "$cache_base/cargo-bin:/root/.cargo/bin:rw,Z" \
-        -v "$cache_base/rustup:/root/.rustup:rw,Z" \
-        -v "$cache_base/apt:/var/cache/apt:rw,Z" \
-        -v "$output_dir:/output:rw,Z" \
+    # Create apt lists cache directory
+    mkdir -p "$cache_base"/apt-lists
+
+    # Run podman in background so we can capture PID for signal handling
+    local podman_args=(
+        --rm
+        --device /dev/fuse
+        --cap-add SYS_ADMIN
+        -v "$SCRIPT_DIR:/src:ro,Z"
+        -v "$cache_base/cargo-registry:/root/.cargo/registry:rw,Z"
+        -v "$cache_base/cargo-bin:/root/.cargo/bin:rw,Z"
+        -v "$cache_base/rustup:/root/.rustup:rw,Z"
+        -v "$cache_base/apt:/var/cache/apt:rw,Z"
+        -v "$cache_base/apt-lists:/var/lib/apt/lists:rw,Z"
+        -v "$output_dir:/output:rw,Z"
+    )
+
+    # Add proxy and CA cert if dev proxy is running
+    if [[ -n "${HTTP_PROXY:-}" ]]; then
+        local ca_cert="$CACHE_DIR/ca-cert.pem"
+        podman_args+=(
+            --env "HTTP_PROXY=http://host.containers.internal:3129"
+            --env "HTTPS_PROXY=http://host.containers.internal:3129"
+            --env "http_proxy=http://host.containers.internal:3129"
+            --env "https_proxy=http://host.containers.internal:3129"
+            --env "CARGO_HTTP_PROXY=http://host.containers.internal:3129"
+            --env "CARGO_HTTP_CAINFO=/tmp/tillandsias-ca.crt"
+            -v "$ca_cert:/tmp/tillandsias-ca.crt:ro,Z"
+        )
+    fi
+
+    podman run "${podman_args[@]}" \
         ubuntu:22.04 \
         bash -euo pipefail -c '
 set -euo pipefail
 
-# System deps — skip if already installed (cached apt + dpkg state not preserved,
-# so we always run apt-get but it will be fast with cached packages)
+# ── Certificate Authority injection ──────────────────────────
+# @trace spec:transparent-https-caching
+if [ -f /tmp/tillandsias-ca.crt ]; then
+    mkdir -p /usr/local/share/ca-certificates
+    cp /tmp/tillandsias-ca.crt /usr/local/share/ca-certificates/tillandsias.crt
+    update-ca-certificates --fresh 2>/dev/null || true
+fi
+
+# System deps — apt cache and lists are persistent across builds (RW mounts)
+# apt-get update will be skipped if real package metadata exists and is recent
 echo "[appimage] Installing system dependencies..."
-apt-get update -qq
+should_update=true
+# Check for actual package metadata files (not just empty directory)
+if [[ -f /var/lib/apt/lists/lock ]] && [[ -n "$(find /var/lib/apt/lists -name '*.gz' -o -name 'Release' 2>/dev/null | head -1)" ]]; then
+    # Real package metadata exists — check age of lock file
+    lock_mtime="$(stat -c %Y /var/lib/apt/lists/lock 2>/dev/null || echo 0)"
+    current_time="$(date +%s)"
+    age_seconds=$((current_time - lock_mtime))
+    if [[ $age_seconds -lt 86400 ]]; then
+        echo "[appimage] Apt lists cached ($(( age_seconds / 3600 ))h old) — skipping update"
+        should_update=false
+    else
+        echo "[appimage] Apt lists stale (>24h) — refreshing"
+    fi
+else
+    echo "[appimage] No cached apt lists found — will update"
+fi
+if [[ "$should_update" == "true" ]]; then
+    echo "[appimage] Running apt-get update (this may take 30-60s)..."
+    timeout 120 apt-get update -qq || apt-get update  # Retry without -qq, with timeout
+fi
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
@@ -254,18 +568,65 @@ echo "[appimage] Copying $(basename "$appimage_file") to output mount..."
 rm -f /output/*.AppImage 2>/dev/null || true
 cp "$appimage_file" /output/
 echo "[appimage] Done: /output/$(basename "$appimage_file")"
-'
+' &
+    container_pid=$!
 
-    # Find the produced AppImage and report it
+    # Wait for container, properly handling signals
+    wait "$container_pid"
+    local build_status=$?
+
+    # Clean up trap
+    trap - INT TERM
+
+    # Check for build failure
+    if [[ $build_status -ne 0 ]]; then
+        _error "Ubuntu container build exited with status $build_status"
+        return 1
+    fi
+
+    # Verify the AppImage exists on the host
     local appimage_path
     appimage_path="$(find "$output_dir" -name "*.AppImage" -type f 2>/dev/null | head -1)"
     if [[ -z "$appimage_path" ]]; then
-        _error "AppImage build failed — no .AppImage found in $output_dir"
-        exit 1
+        _error "AppImage not created by Ubuntu builder"
+        return 1
     fi
 
+    # Make executable and report
     chmod +x "$appimage_path"
-    _info "AppImage ready: $appimage_path ($(du -h "$appimage_path" | cut -f1))"
+    local appimage_size
+    appimage_size="$(du -h "$appimage_path" | cut -f1)"
+
+    # Calculate and report timing
+    local BUILD_TIME=$((SECONDS - BUILD_START))
+    _info "AppImage built: $appimage_path ($appimage_size)"
+    _info "Build time: ${BUILD_TIME}s (full reproducible build)"
+}
+
+# @trace spec:build-script-architecture
+# Main AppImage builder — dispatches to strategy-based path
+build_appimage() {
+    case "$APPIMAGE_STRATEGY" in
+        forge_cached)
+            if build_appimage_forge_cached; then
+                return 0
+            else
+                # Forge image missing or build failed; fall back to clean Ubuntu
+                _warn "Falling back to clean Ubuntu build..."
+                APPIMAGE_STRATEGY="clean_ubuntu"
+                build_appimage_ubuntu_clean
+                return $?
+            fi
+            ;;
+        clean_ubuntu)
+            build_appimage_ubuntu_clean
+            return $?
+            ;;
+        *)
+            _error "Unknown APPIMAGE_STRATEGY: $APPIMAGE_STRATEGY"
+            return 1
+            ;;
+    esac
 }
 
 # ---------------------------------------------------------------------------
@@ -275,6 +636,8 @@ echo "[appimage] Done: /output/$(basename "$appimage_file")"
 # @trace spec:dev-build
 install_appimage() {
     _step "Building AppImage for install..."
+    # Ensure toolbox exists before attempting forge_cached path
+    _toolbox_ensure
     build_appimage
 
     # Locate the built AppImage
@@ -287,7 +650,7 @@ install_appimage() {
     fi
 
     # Install to ~/Applications/ (same location as curl installer and self-updater)
-    local app_dir="$HOME/Applications"
+    local app_dir="$ACTUAL_HOME/Applications"
     local app_path="$app_dir/Tillandsias.AppImage"
     mkdir -p "$app_dir"
     cp "$appimage_src" "$app_path"
@@ -304,12 +667,16 @@ install_appimage() {
         local full_version
         full_version="$(cat "$SCRIPT_DIR/VERSION" | tr -d '[:space:]')"
         _step "Building forge container image..."
-        "$SCRIPT_DIR/scripts/build-image.sh" forge --tag "tillandsias-forge:v${full_version}" || _warn "Forge image build failed, continuing..."
+        if ! "$SCRIPT_DIR/scripts/build-image.sh" forge --tag "tillandsias-forge:v${full_version}"; then
+            _error "ERROR: forge image build failed — install aborted"
+            return 1
+        fi
         _info "Forge image built and loaded"
     else
         _warn "scripts/build-image.sh not found, skipping image build"
     fi
 
+    _info "[build] SUCCESS: tillandsias installed and forge image ready"
     _info "Installed. Run 'tillandsias' or launch from your desktop."
     _info "Desktop integration (icons, launcher) is set up on first run."
 }
@@ -368,17 +735,22 @@ if [[ "$FLAG_TOOLBOX_RESET" == true ]]; then
     fi
     _toolbox_ensure
     # If --toolbox-reset is the only flag, exit
-    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_APPIMAGE" == "falsefalsefalsefalsefalsefalse" ]]; then
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_APPIMAGE$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
     fi
 fi
 
-# AppImage build (standalone — bypasses toolbox entirely)
+# AppImage build (uses toolbox for forge_cached path, podman for clean_ubuntu)
 if [[ "$FLAG_APPIMAGE" == true ]]; then
     "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
+    "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
+    # For forge_cached strategy, ensure toolbox exists first
+    if [[ "$APPIMAGE_STRATEGY" == "forge_cached" ]]; then
+        _toolbox_ensure
+    fi
     build_appimage
     # If --appimage is the only remaining flag, exit
-    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL" == "falsefalsefalsefalsefalse" ]]; then
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE$FLAG_TOOLBOX_RESET" == "falsefalsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
     fi
 fi
@@ -387,7 +759,10 @@ fi
 if [[ "$FLAG_INSTALL" == true ]]; then
     "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
     "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
-    install_appimage
+    if ! install_appimage; then
+        _error "[build] ERROR: install failed — check output above for which step failed"
+        exit 1
+    fi
     exit 0
 fi
 
@@ -429,6 +804,15 @@ fi
 
 # Release build (via tauri)
 if [[ "$FLAG_RELEASE" == true ]]; then
+    # Always run CI checks before release — fail if any check doesn't pass
+    # (Cloud minutes are expensive; validate locally first)
+    _step "Running CI/CD validation before release..."
+    if ! bash "$SCRIPT_DIR/scripts/local-ci.sh" --fast; then
+        _error "CI/CD validation failed — fix issues before retrying"
+        exit 1
+    fi
+    _info "CI/CD validation passed — proceeding with release build"
+
     _toolbox_ensure_tauri_cli
 
     # Skip AppImage in toolbox — linuxdeploy needs FUSE which isn't available.

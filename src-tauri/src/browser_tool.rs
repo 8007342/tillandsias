@@ -5,7 +5,7 @@
 //!
 //! Usage: tillandsias-browser-tool <project> <url> <safe|debug>
 //!
-//! @trace spec:mcp-on-demand
+//! @trace spec:mcp-on-demand, spec:cheatsheet-mcp-server
 
 #[cfg(unix)]
 use std::env;

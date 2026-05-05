@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# tillandsias-models — list ollama models loaded in the enclave inference
+# container, annotated with their planner tier. Exits 1 with a single
+# diagnostic line when the inference container is unreachable.
+#
+# Usage: tillandsias-models [--json]
+#
+# @trace spec:forge-environment-discoverability
+# @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md, runtime/forge-container.md
+
+set -euo pipefail
+
+JSON=0
+case "${1:-}" in
+    --json) JSON=1 ;;
+    -h|--help) sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    "") ;;
+    *) echo "tillandsias-models: unknown arg '$1'" >&2
+       echo "usage: tillandsias-models [--json]" >&2; exit 2 ;;
+esac
+
+INFERENCE_URL="${TILLANDSIAS_INFERENCE_URL:-http://inference:11434}"
+
+# Tier mapping mirrors the planner doc — keep in sync.
+tier_for() {
+    case "$1" in
+        qwen2.5:0.5b)         printf 'T0' ;;
+        llama3.2:3b)          printf 'T1' ;;
+        qwen2.5-coder:7b)     printf 'T2' ;;
+        qwen2.5-coder:14b)    printf 'T3' ;;
+        gpt-oss:20b)          printf 'T4' ;;
+        qwen2.5-coder:32b)    printf 'T5' ;;
+        *)                    printf '%s' '--' ;;
+    esac
+}
+
+raw="$(curl -fsS --max-time 3 "${INFERENCE_URL%/}/api/tags" 2>/dev/null || true)"
+if [ -z "$raw" ]; then
+    if [ $JSON -eq 1 ]; then
+        printf '{"error":"inference container not running","url":"%s","models":[]}\n' "$INFERENCE_URL"
+    else
+        printf 'inference container not running (%s/api/tags unreachable)\n' "$INFERENCE_URL" >&2
+    fi
+    exit 1
+fi
+
+# TSV: name<TAB>size<TAB>modified<TAB>digest
+tsv="$(printf '%s' "$raw" | jq -r '.models[] | [.name, (.size|tostring),
+    (.modified_at//""), (.digest//"")] | @tsv' 2>/dev/null || true)"
+
+if [ -z "$tsv" ]; then
+    if [ $JSON -eq 1 ]; then
+        printf '{"error":"no models loaded","url":"%s","models":[]}\n' "$INFERENCE_URL"
+    else
+        printf 'no models loaded at %s\n' "$INFERENCE_URL"
+    fi
+    exit 0
+fi
+
+if [ $JSON -eq 1 ]; then
+    annotated=""
+    while IFS=$'\t' read -r name size modified digest; do
+        [ -z "$name" ] && continue
+        annotated+="${name}"$'\t'"$(tier_for "$name")"$'\t'"${size}"$'\t'"${modified}"$'\t'"${digest}"$'\n'
+    done <<<"$tsv"
+    printf '%s' "$annotated" | jq -Rs --arg url "$INFERENCE_URL" '{
+        url: $url,
+        models: (split("\n") | map(select(length>0)) | map(split("\t") | {
+            name: .[0], tier: .[1],
+            size_bytes: (.[2]|tonumber? // 0),
+            modified_at: .[3], digest: .[4]
+        }))
+    }'
+else
+    printf 'Tillandsias inference models (%s)\n\n' "$INFERENCE_URL"
+    printf '  %-4s %-28s %-14s %s\n' TIER NAME SIZE MODIFIED
+    while IFS=$'\t' read -r name size modified digest; do
+        [ -z "$name" ] && continue
+        size_mib=$(( ${size:-0} / 1024 / 1024 ))
+        printf '  %-4s %-28s %-14s %s\n' \
+            "$(tier_for "$name")" "$name" "${size_mib} MiB" "${modified%%.*}"
+    done <<<"$tsv"
+fi

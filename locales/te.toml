@@ -156,6 +156,8 @@ git_desc = "  ✓ git        — git అద్దం సేవ (బేర్ ర
 inference_desc = "  ✓ inference  — స్థానిక LLM (ollama)"
 tools_overlay = "సాఫ్ట్‌వేర్ పొర నిర్మించబడుతోంది (Claude Code, OpenSpec, OpenCode)..."
 tools_overlay_ready = "✓ సాఫ్ట్‌వేర్ పొర సిద్ధం"
+failed_logs_header = "విఫల నిర్మాణ లాగ్‌లు (--debug):"
+skipping = "↷ {name}: {tag} (ఇప్పటికే నిర్మించబడింది, దాటవేయుచున్నాయి)"
 
 [cli.welcome]
 title = "Tillandsias v{version}"

@@ -77,6 +77,7 @@
 
 # --- AI/ML ---
 .ollama.com
+.ollama.ai
 .huggingface.co
 .openai.com
 .anthropic.com
@@ -87,6 +88,13 @@
 .mistral.ai
 .cerebras.ai
 .sambanova.ai
+# OpenCode's canonical model registry (required for any OpenCode session).
+# @trace spec:opencode-web-session
+.models.dev
+# OpenRouter + Helicone are in OpenCode's default provider set; users who pick
+# these without the allowlist entry see stuck prompts (TCP_DENIED CONNECT).
+.openrouter.ai
+.helicone.ai
 
 # --- AI search/tools (used by coding agents) ---
 .exa.ai
@@ -95,6 +103,16 @@
 .brave.com
 .perplexity.ai
 .searchapi.io
+
+# --- Code analysis services (used by Codex) ---
+# @trace spec:enclave-network, spec:proxy-egress-allowlist
+# Codex requires external access for code inspection and analysis.
+# api.github.com is covered by .github.com
+# PyPI and files.pythonhosted.org covered by .pypi.org and .pythonhosted.org
+.codeclimate.com
+.sonarcloud.io
+.codacy.com
+.deepsource.io
 
 # --- Documentation ---
 .docs.rs

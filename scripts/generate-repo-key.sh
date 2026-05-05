@@ -9,6 +9,9 @@
 #   1. Commit repo-key.gpg to the repository
 #   2. Store repo-key-private.gpg as GitHub secret REPO_GPG_PRIVATE_KEY
 #   3. DELETE repo-key-private.gpg from disk immediately
+#
+# @trace spec:binary-signing
+
 set -euo pipefail
 
 gpg --batch --gen-key <<EOF

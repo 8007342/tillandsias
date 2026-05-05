@@ -1,0 +1,26 @@
+# @trace spec:external-logs-layer
+# Manifest of curated external log files published by the inference container.
+# The tray-side auditor reads this manifest every 60 s and flags any file in
+# ~/.local/state/tillandsias/external-logs/inference/ that is NOT listed here
+# with a WARN+accountability "[external-logs] LEAK: ..." event.
+#
+# v1: manifest declared; producer code writing this file comes in a later
+# change. The inference container currently emits model-load information to
+# stdout. The mount being in place enables the observability contract now;
+# the actual file content is what the producer earns.
+role: inference
+files:
+  - name: model-load.log
+    purpose: |
+      One line per model load event from the ollama daemon — records which
+      tier (T0/T1/T2/T3/T4/T5) and model name was loaded, the load duration
+      in milliseconds, whether GPU or CPU acceleration was used, and VRAM
+      utilisation at load time. CONSUMERS (forge, maintenance terminal) may
+      parse this to understand which model tier is active, to detect
+      unexpected fallback from GPU to CPU inference, or to correlate
+      high-latency prompt responses with model-swap events.
+      Format: "<timestamp> [inference] tier=<tier> model=<name>
+      backend=<gpu|cpu> load_ms=<N> vram_used_mb=<N>".
+    format: text
+    rotate_at_mb: 10
+    written_by: entrypoint model-load telemetry (producer code change pending)

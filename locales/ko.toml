@@ -156,6 +156,8 @@ git_desc = "  ✓ git        — git 미러 서비스 (베어 저장소 + 데몬
 inference_desc = "  ✓ inference  — 로컬 LLM (ollama)"
 tools_overlay = "소프트웨어 레이어 빌드 중 (Claude Code, OpenSpec, OpenCode)..."
 tools_overlay_ready = "✓ 소프트웨어 레이어 준비 완료"
+failed_logs_header = "빌드 실패 로그 (--debug):"
+skipping = "↷ {name}: {tag} (이미 빌드됨, 건너뜀)"
 
 [cli.welcome]
 title = "Tillandsias v{version}"

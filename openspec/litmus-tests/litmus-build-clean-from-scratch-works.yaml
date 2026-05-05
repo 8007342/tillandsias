@@ -1,0 +1,83 @@
+# @trace spec:build-script-architecture
+name: litmus:build-clean-from-scratch-works
+spec: build-script-architecture
+description: Verify ./build.sh --clean produces a working AppImage from scratch, no caches
+severity: critical
+
+preconditions:
+  - build.sh script available and executable
+  - VERSION file exists at project root
+  - ~/.local/bin/ directory writable
+  - sufficient disk space for clean Ubuntu build (~5GB)
+  - cargo and podman available in path
+
+critical_path:
+  - step: "execute clean build with --install flag"
+    command: "./build.sh --clean --install"
+    timeout_ms: 600000
+    expected_behavior: "forces cargo clean, full Ubuntu build, slow but complete (~10 min), exit 0"
+
+  - step: "verify AppImage installed to ~/.local/bin/"
+    command: "test -f ~/.local/bin/tillandsias && echo 'PASS: AppImage exists'"
+    timeout_ms: 3000
+    expected_behavior: "file exists, is executable"
+
+  - step: "check AppImage is executable"
+    command: "test -x ~/.local/bin/tillandsias && echo 'PASS: executable'"
+    timeout_ms: 2000
+    expected_behavior: "executable bit set"
+
+  - step: "query version from clean-built AppImage"
+    command: "tillandsias --version"
+    timeout_ms: 5000
+    expected_behavior: "outputs version string, matches VERSION file"
+
+  - step: "verify version matches VERSION file"
+    command: "EXPECTED=$(cat VERSION) && ACTUAL=$(tillandsias --version) && test \"$EXPECTED\" = \"$ACTUAL\" && echo 'PASS: version matches'"
+    timeout_ms: 5000
+    expected_behavior: "both report identical version"
+
+  - step: "initialize with test flag to verify runtime correctness"
+    command: "tillandsias --init --test 2>&1 | head -20"
+    timeout_ms: 30000
+    expected_behavior: "launches without error, init completes successfully"
+
+  - step: "verify tray can display (test --help)"
+    command: "tillandsias --help 2>&1 | head -10"
+    timeout_ms: 5000
+    expected_behavior: "help text displayed, no runtime errors"
+
+gating_points:
+  - signal: "clean_build_completes"
+    success: "exit code 0, all steps complete"
+    failure: "exit code non-zero OR build error OR timeout"
+    spec_linkage: "build-script-architecture"
+
+  - signal: "appimage_installs_successfully"
+    success: "file exists at ~/.local/bin/tillandsias with executable bit"
+    failure: "file missing OR not executable"
+    spec_linkage: "build-script-architecture"
+
+  - signal: "version_matches_file"
+    success: "tillandsias --version equals contents of VERSION file"
+    failure: "version mismatch OR version command fails"
+    spec_linkage: "build-script-architecture"
+
+  - signal: "appimage_runs_without_error"
+    success: "tillandsias --version, --init --test, and --help all exit 0"
+    failure: "any command errors OR crashes"
+    spec_linkage: "build-script-architecture"
+
+observability:
+  traces:
+    - "@trace spec:build-script-architecture"
+  expected_log: "[build] Full clean build (reproducibility verification)"
+  log_fields:
+    spec: "build-script-architecture"
+    test: "build-clean-from-scratch-works"
+    appimage_path: "~/.local/bin/tillandsias"
+    version_source: "tillandsias --version"
+
+rollback:
+  on_failure: "verify build.sh does not skip cargo clean or uses wrong image"
+  command: "grep -n 'cargo clean' scripts/build.sh && grep -n '\\-\\-clean' scripts/build.sh"

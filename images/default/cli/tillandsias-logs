@@ -1,0 +1,199 @@
+#!/bin/sh
+# tillandsias-logs — query external logs published by enclave service containers.
+#
+# Usage:
+#   tillandsias-logs ls                   List all roles + files with size + mtime
+#   tillandsias-logs tail <role> <file>   Follow a specific log file (Ctrl-C to stop)
+#   tillandsias-logs combine              Interleave forge-internal + all external logs
+#
+# @trace spec:external-logs-layer
+# @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
+
+set -eu
+
+EXTERNAL="${TILLANDSIAS_EXTERNAL_LOGS:-/var/log/tillandsias/external}"
+INTERNAL="/var/log/tillandsias"
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_usage() {
+    printf 'tillandsias-logs — query external logs from enclave service containers\n\n'
+    printf 'Usage:\n'
+    printf '  tillandsias-logs ls                    List all roles + files (size, age)\n'
+    printf '  tillandsias-logs tail <role> <file>    Follow a log file with [role/file] prefix\n'
+    printf '  tillandsias-logs combine               Interleave internal + external logs (last 50 lines)\n'
+    printf '\n'
+    printf 'Environment:\n'
+    printf '  TILLANDSIAS_EXTERNAL_LOGS  Override external log root (default: %s)\n' "$EXTERNAL"
+    printf '\n'
+    printf 'Examples:\n'
+    printf '  tillandsias-logs ls\n'
+    printf '  tillandsias-logs tail git-service git-push.log\n'
+    printf '  tillandsias-logs combine\n'
+    exit 0
+}
+
+# Pretty-print a size in bytes as human-readable.
+_human_size() {
+    bytes="${1:-0}"
+    if [ "$bytes" -ge 1048576 ]; then
+        printf '%dM' "$(( bytes / 1048576 ))"
+    elif [ "$bytes" -ge 1024 ]; then
+        printf '%dK' "$(( bytes / 1024 ))"
+    else
+        printf '%dB' "$bytes"
+    fi
+}
+
+# Compute age from mtime using stat. Outputs "<N>s ago", "<N>m ago", etc.
+# Falls back to the raw mtime if stat --format is unavailable (BSD stat differs).
+_mtime_age() {
+    file="$1"
+    # GNU stat (Linux inside forge)
+    if mtime="$(stat -c '%Y' "$file" 2>/dev/null)"; then
+        now="$(date +%s)"
+        age=$(( now - mtime ))
+        if [ "$age" -lt 60 ]; then
+            printf '%ds ago' "$age"
+        elif [ "$age" -lt 3600 ]; then
+            printf '%dm ago' "$(( age / 60 ))"
+        elif [ "$age" -lt 86400 ]; then
+            printf '%dh ago' "$(( age / 3600 ))"
+        else
+            printf '%dd ago' "$(( age / 86400 ))"
+        fi
+    else
+        # Fallback: just print mtime from ls -l (no age arithmetic)
+        ls -l "$file" 2>/dev/null | awk '{print $6, $7, $8}' || printf '?'
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Subcommand: ls
+# ---------------------------------------------------------------------------
+
+cmd_ls() {
+    if [ ! -d "$EXTERNAL" ]; then
+        printf 'No external logs found at %s\n' "$EXTERNAL"
+        printf '(forge containers must have external_logs_consumer=true and at least one producer running)\n'
+        return 0
+    fi
+
+    found=0
+    for role_dir in "$EXTERNAL"/*/; do
+        [ -d "$role_dir" ] || continue
+        role="$(basename "$role_dir")"
+        first=1
+        for log_file in "$role_dir"*; do
+            [ -f "$log_file" ] || continue
+            found=1
+            fname="$(basename "$log_file")"
+            size="$(wc -c < "$log_file" 2>/dev/null || printf '0')"
+            size_h="$(_human_size "$size")"
+            age="$(_mtime_age "$log_file")"
+            if [ "$first" -eq 1 ]; then
+                printf '%-22s : %-28s (%s, %s)\n' "$role" "$fname" "$size_h" "$age"
+                first=0
+            else
+                printf '%-22s   %-28s (%s, %s)\n' "" "$fname" "$size_h" "$age"
+            fi
+        done
+    done
+
+    if [ "$found" -eq 0 ]; then
+        printf 'No log files found under %s\n' "$EXTERNAL"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Subcommand: tail
+# ---------------------------------------------------------------------------
+
+cmd_tail() {
+    role="${1:-}"
+    file="${2:-}"
+
+    if [ -z "$role" ] || [ -z "$file" ]; then
+        printf 'usage: tillandsias-logs tail <role> <file>\n' >&2
+        exit 2
+    fi
+
+    log_path="$EXTERNAL/$role/$file"
+
+    if [ ! -f "$log_path" ]; then
+        printf 'tillandsias-logs: %s not found\n' "$log_path" >&2
+        printf '  Run `tillandsias-logs ls` to see available roles and files.\n' >&2
+        exit 1
+    fi
+
+    prefix="[$role/$file]"
+    # Use tail -f piped through awk to prepend the prefix on every line.
+    # awk flushes after each line so output appears in real time.
+    tail -f "$log_path" | awk -v pfx="$prefix" '{ print pfx " " $0; fflush() }'
+}
+
+# ---------------------------------------------------------------------------
+# Subcommand: combine
+# ---------------------------------------------------------------------------
+
+cmd_combine() {
+    # Collect all log files from the forge's own internal dir + every external
+    # role subdir, sort by mtime (newest last), then print the last 50 lines.
+    # We use a temp file to accumulate tagged lines for sorting.
+
+    tmpfile="$(mktemp 2>/dev/null || printf '/tmp/til-logs-combine-%d' "$$")"
+    trap 'rm -f "$tmpfile"' EXIT
+
+    # Internal forge logs
+    if [ -d "$INTERNAL" ]; then
+        for f in "$INTERNAL"/*.log "$INTERNAL"/*.txt; do
+            [ -f "$f" ] || continue
+            fname="$(basename "$f")"
+            # Prefix each line with "[internal/<fname>]"
+            awk -v pfx="[internal/$fname]" '{ print pfx " " $0 }' "$f" >> "$tmpfile" 2>/dev/null || true
+        done
+    fi
+
+    # External logs
+    if [ -d "$EXTERNAL" ]; then
+        for role_dir in "$EXTERNAL"/*/; do
+            [ -d "$role_dir" ] || continue
+            role="$(basename "$role_dir")"
+            for f in "$role_dir"*; do
+                [ -f "$f" ] || continue
+                fname="$(basename "$f")"
+                awk -v pfx="[$role/$fname]" '{ print pfx " " $0 }' "$f" >> "$tmpfile" 2>/dev/null || true
+            done
+        done
+    fi
+
+    if [ ! -s "$tmpfile" ]; then
+        printf 'No log content found (internal: %s, external: %s)\n' "$INTERNAL" "$EXTERNAL"
+        return 0
+    fi
+
+    # Print the last 50 lines of the accumulated (tag-prefixed) output.
+    # Sorting by timestamp is best-effort; since lines from different files
+    # interleave arbitrarily, we just output the concatenation in file order
+    # and tail it. A full timestamp-sort would require parsing log formats.
+    tail -n 50 "$tmpfile"
+}
+
+# ---------------------------------------------------------------------------
+# Dispatch
+# ---------------------------------------------------------------------------
+
+case "${1:-}" in
+    ls)         shift; cmd_ls "$@" ;;
+    tail)       shift; cmd_tail "$@" ;;
+    combine)    shift; cmd_combine "$@" ;;
+    -h|--help)  _usage ;;
+    "")         _usage ;;
+    *)
+        printf 'tillandsias-logs: unknown subcommand: %s\n' "$1" >&2
+        printf 'Run `tillandsias-logs --help` for usage.\n' >&2
+        exit 2
+        ;;
+esac

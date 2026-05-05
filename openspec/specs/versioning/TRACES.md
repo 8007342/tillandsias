@@ -5,7 +5,11 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [.claude/worktrees/design-chromium-browser-isolation/scripts/bump-version.sh#L16](../../../.claude/worktrees/design-chromium-browser-isolation/scripts/bump-version.sh#L16)
-- [.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/handlers.rs#L162](../../../.claude/worktrees/design-chromium-browser-isolation/src-tauri/src/handlers.rs#L162)
-- [scripts/bump-version.sh#L16](../../../scripts/bump-version.sh#L16)
-- [src-tauri/src/handlers.rs#L83](../../../src-tauri/src/handlers.rs#L83)
+- [images/chromium/Containerfile.core#L1](../../../images/chromium/Containerfile.core#L1)
+- [images/chromium/Containerfile.framework#L10](../../../images/chromium/Containerfile.framework#L10)
+- [scripts/bump-version.sh#L21](../../../scripts/bump-version.sh#L21)
+- [scripts/hooks/pre-push-version-guard.sh#L3](../../../scripts/hooks/pre-push-version-guard.sh#L3)
+- [scripts/install-hooks.sh#L3](../../../scripts/install-hooks.sh#L3)
+- [scripts/local-ci.sh#L3](../../../scripts/local-ci.sh#L3)
+- [scripts/verify-version-monotonic.sh#L3](../../../scripts/verify-version-monotonic.sh#L3)
+- [src-tauri/src/handlers.rs#L86](../../../src-tauri/src/handlers.rs#L86)

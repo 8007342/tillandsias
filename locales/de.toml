@@ -19,7 +19,8 @@ name = "Tillandsias"
 [menu]
 attach_here = "Hier öffnen"
 root_terminal = "🛠️ Stammverzeichnis"
-projects = "Projekte"
+projects = "🏠 ~/src"
+cloud_projects = "☁️ Cloud"
 no_projects = "Keine Projekte erkannt"
 settings = "Einstellungen"
 quit = "Tillandsias beenden"
@@ -32,6 +33,25 @@ seedlings = "🌱 Setzlinge"
 language = "Sprache"
 credit = "von Tlatoāni"
 version = "Tillandsias v{version}"
+
+# ── tray-app menu (no disabled placeholders) ────────────────
+# @trace spec:tray-app
+sign_in_github = "🔑 GitHub-Anmeldung"
+unhealthy_environment = "🥀 Umgebung defekt"
+attach_here_with_emoji = "🌱 Hier verbinden"
+attach_another_with_emoji = "🌱 Weiteres Fenster"
+clone_and_launch = "⬇️ Klonen und Starten"
+signature_with_version = "v{version} — von Tlatoāni"
+
+[menu.status]
+verifying_environment = "Umgebung wird geprüft …"
+building_one = "Wird erstellt: {image} …"
+building_many = "Wird erstellt: {images} …"
+ready_one = "{image} OK"
+environment_ready = "✅ Umgebung bereit"
+ready = "{image} bereit"
+github_unreachable = "GitHub nicht erreichbar — verwende Cache"
+separator = " · "
 
 [menu.github]
 label = "GitHub"
@@ -55,6 +75,9 @@ in_progress = "⏳ {name} wird erstellt..."
 maintenance_setup = "⛏️ Wartung wird eingerichtet..."
 completed = "✅ {name} bereit"
 failed = "❌ {name} Erstellung fehlgeschlagen"
+chip_browser_runtime = "Browser-Laufzeit"
+chip_proxy = "Proxy"
+chip_router = "Router"
 chip_forge = "Entwicklungsumgebung"
 chip_enclave = "Enklave"
 chip_inference_engine = "Inferenzmaschine"
@@ -185,6 +208,8 @@ git_desc = "  ✓ git        — Git-Mirror-Dienst (Bare-Repos + Daemon)"
 inference_desc = "  ✓ inference  — Lokales LLM (ollama)"
 tools_overlay = "Softwareschicht wird erstellt (Claude Code, OpenSpec, OpenCode)..."
 tools_overlay_ready = "✓ Softwareschicht bereit"
+failed_logs_header = "Fehlgeschlagene Build-Logs (--debug):"
+skipping = "↷ {name}: {tag} (bereits erstellt, wird übersprungen)"
 
 # ── CLI welcome banner ──────────────────────────────────────
 [cli.welcome]

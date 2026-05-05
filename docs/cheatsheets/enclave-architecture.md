@@ -1,3 +1,14 @@
+---
+tags: [enclave, podman, networking, containers, security]
+languages: []
+since: 2024-01-01
+last_verified: 2026-04-27
+sources:
+  - https://docs.podman.io/en/stable/markdown/podman-network-create.1.html
+authority: high
+status: current
+---
+
 # Enclave Architecture
 
 ## Overview
@@ -234,3 +245,8 @@ The enclave architecture addresses three primary threats:
 - `docs/cheatsheets/secrets-management.md` — Token lifecycle and credential delivery
 - `docs/cheatsheets/token-rotation.md` — Fine-grained PAT refresh schedule
 - `docs/cheatsheets/logging-levels.md` — Full logging system reference
+
+## Provenance
+
+- https://docs.podman.io/en/stable/markdown/podman-network-create.1.html — podman network create flags including `--internal` (disables IP forwarding, aardvark-dns resolves container names only, no default route added to containers)
+- **Last updated:** 2026-04-27

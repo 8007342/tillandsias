@@ -1,0 +1,43 @@
+# Traces for simplified-tray-ux
+
+Code implementing this spec (auto-generated — do not edit).
+Run `./scripts/generate-traces.sh` to regenerate.
+
+## Annotated locations
+
+- [crates/tillandsias-core/src/state.rs#L272](../../../crates/tillandsias-core/src/state.rs#L272)
+- [crates/tillandsias-core/src/state.rs#L300](../../../crates/tillandsias-core/src/state.rs#L300)
+- [images/default/entrypoint-forge-opencode-web.sh#L12](../../../images/default/entrypoint-forge-opencode-web.sh#L12)
+- [images/default/entrypoint-forge-opencode-web.sh#L85](../../../images/default/entrypoint-forge-opencode-web.sh#L85)
+- [images/default/entrypoint-terminal.sh#L11](../../../images/default/entrypoint-terminal.sh#L11)
+- [scripts/test-git-mirror.sh#L2](../../../scripts/test-git-mirror.sh#L2)
+- [src-tauri/Cargo.toml#L89](../../../src-tauri/Cargo.toml#L89)
+- [src-tauri/src/event_loop.rs#L86](../../../src-tauri/src/event_loop.rs#L86)
+- [src-tauri/src/event_loop.rs#L419](../../../src-tauri/src/event_loop.rs#L419)
+- [src-tauri/src/github_health.rs#L15](../../../src-tauri/src/github_health.rs#L15)
+- [src-tauri/src/github_health.rs#L23](../../../src-tauri/src/github_health.rs#L23)
+- [src-tauri/src/github_health.rs#L69](../../../src-tauri/src/github_health.rs#L69)
+- [src-tauri/src/github_health.rs#L142](../../../src-tauri/src/github_health.rs#L142)
+- [src-tauri/src/github_health.rs#L275](../../../src-tauri/src/github_health.rs#L275)
+- [src-tauri/src/github_health.rs#L287](../../../src-tauri/src/github_health.rs#L287)
+- [src-tauri/src/github_health.rs#L299](../../../src-tauri/src/github_health.rs#L299)
+- [src-tauri/src/github_health.rs#L312](../../../src-tauri/src/github_health.rs#L312)
+- [src-tauri/src/github_health.rs#L332](../../../src-tauri/src/github_health.rs#L332)
+- [src-tauri/src/github_health.rs#L353](../../../src-tauri/src/github_health.rs#L353)
+- [src-tauri/src/github_health.rs#L384](../../../src-tauri/src/github_health.rs#L384)
+- [src-tauri/src/handlers.rs#L1825](../../../src-tauri/src/handlers.rs#L1825)
+- [src-tauri/src/handlers.rs#L2894](../../../src-tauri/src/handlers.rs#L2894)
+- [src-tauri/src/handlers.rs#L3232](../../../src-tauri/src/handlers.rs#L3232)
+- [src-tauri/src/main.rs#L774](../../../src-tauri/src/main.rs#L774)
+- [src-tauri/src/main.rs#L842](../../../src-tauri/src/main.rs#L842)
+- [src-tauri/src/menu.rs#L15](../../../src-tauri/src/menu.rs#L15)
+- [src-tauri/src/menu.rs#L158](../../../src-tauri/src/menu.rs#L158)
+- [src-tauri/src/menu.rs#L172](../../../src-tauri/src/menu.rs#L172)
+- [src-tauri/src/menu.rs#L181](../../../src-tauri/src/menu.rs#L181)
+- [src-tauri/src/menu.rs#L195](../../../src-tauri/src/menu.rs#L195)
+- [src-tauri/src/menu.rs#L228](../../../src-tauri/src/menu.rs#L228)
+- [src-tauri/src/menu.rs#L235](../../../src-tauri/src/menu.rs#L235)
+- [src-tauri/src/menu.rs#L244](../../../src-tauri/src/menu.rs#L244)
+- [src-tauri/src/menu.rs#L329](../../../src-tauri/src/menu.rs#L329)
+- [src-tauri/src/menu.rs#L369](../../../src-tauri/src/menu.rs#L369)
+- [src-tauri/src/menu.rs#L430](../../../src-tauri/src/menu.rs#L430)

@@ -1,3 +1,4 @@
+# @trace spec:ci-release
 name: CI
 
 on:
@@ -23,6 +24,7 @@ jobs:
         with:
           toolchain: stable
           components: clippy, rustfmt
+          targets: x86_64-unknown-linux-musl
 
       - name: Rust cache
         uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
@@ -36,6 +38,9 @@ jobs:
             librsvg2-dev \
             patchelf
 
+      - name: Build router sidecar (required by src-tauri/build.rs)
+        run: scripts/build-sidecar.sh
+
       - name: Check formatting
         run: cargo fmt --check --all
 
@@ -44,3 +49,25 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace
+
+      # @trace spec:cheatsheets-license-tiered
+      # Gating tier-aware cheatsheet validator. Unlike the pre-commit hook
+      # (non-blocking, CRDT-convergence philosophy), CI fails on validation
+      # ERRORs so a release cannot ship a cheatsheet whose pull-on-demand
+      # stub is malformed or whose CRDT override discipline is broken.
+      - name: Validate cheatsheet tier discipline
+        run: scripts/check-cheatsheet-tiers.sh
+
+      # @trace spec:spec-cheatsheet-binding
+      # Verify that every spec references at least one cheatsheet via
+      # ## Sources of Truth section. Binding creates traceability from
+      # spec intent → implementation patterns → code.
+      - name: Validate spec-cheatsheet binding completeness
+        run: scripts/validate-spec-cheatsheet-binding.sh --threshold 90
+
+      # @trace spec:spec-traceability
+      # In CI mode, spec-code drift checks fail the build. Ghost traces
+      # and zero-trace specs are alignment failures that block release.
+      # This is stricter than the pre-commit hook (non-blocking).
+      - name: Verify spec-code drift (CI mode)
+        run: bash scripts/hooks/pre-commit-openspec.sh --ci-mode

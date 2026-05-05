@@ -1,3 +1,14 @@
+---
+tags: [forge, launch, critical-path, proxy, ca, tools-overlay, enclave]
+languages: [rust, bash]
+since: 2024-01-01
+last_verified: 2026-04-27
+sources:
+  - https://docs.podman.io/en/stable/
+authority: high
+status: current
+---
+
 # Forge Launch Critical Path
 
 @trace spec:layered-tools-overlay, spec:proxy-container, spec:enclave-network
@@ -172,7 +183,7 @@ Numbers from a clean-install verification run (podman machine wiped + reinitiali
 
 | Scenario | Mode | Time | Notes |
 |----------|------|------|-------|
-| First-ever install + init | CLI `--init` | ~4 min | Downloads fedora-minimal:43 (136 MB) + alpine:3.20 (8 MB), builds 4 distinct enclave images, builds tools overlay |
+| First-ever install + init | CLI `--init` | ~4 min | Downloads fedora-minimal:44 (136 MB) + alpine:3.20 (8 MB), builds 4 distinct enclave images, builds tools overlay |
 | Cold launch (images cached, no containers) | CLI `--bash` | ~18 s | Proxy ~6 s + git-service ~6 s; inference launches async (~3 s in parallel) — does NOT add to this number |
 | Warm launch (containers up, fresh process) | CLI `--bash` | ~6.5 s | Inference snapshot-cache hit (`elapsed_secs=0.29`), but git-service still rebuilds because CLI's `EnclaveCleanupGuard` stops it on every CLI exit |
 | Warm launch (containers up, tray mode) | Tray "Attach Here" | not measured here | **persistent-git-service** keeps git-service alive across forge teardowns in tray mode → expected ~1-2 s on second + later attaches in same tray session |
@@ -195,3 +206,8 @@ Numbers from a clean-install verification run (podman machine wiped + reinitiali
 - `docs/cheatsheets/enclave-architecture.md` — Network topology and container roles
 - `openspec/specs/proxy-container/spec.md` — Proxy container spec
 - `openspec/specs/layered-tools-overlay/spec.md` — Tools overlay spec
+
+## Provenance
+
+- https://docs.podman.io/en/stable/ — Podman overview: daemonless OCI-compliant container engine, rootless operation, Docker-compatible CLI, `podman run`/`podman exec`/`podman build` commands that underpin every step in the launch sequence
+- **Last updated:** 2026-04-27

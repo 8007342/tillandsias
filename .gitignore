@@ -23,3 +23,44 @@ result
 
 # Vendored debug sources
 vendor/debug/
+
+# Staged by scripts/build-image.sh — agent-cheatsheets
+images/default/.cheatsheets/
+# Staged by scripts/build-image.sh — cheatsheets-license-tiered (bundled-tier bake + meta side-channel)
+# @trace spec:cheatsheets-license-tiered
+images/default/.cheatsheet-sources/
+images/default/.cheatsheets-meta/
+
+
+# Pre-built tillandsias-router-sidecar (musl static-pie binary).
+# Built by scripts/build-sidecar.sh; embedded into tray binary via
+# include_bytes! in src-tauri/src/embedded.rs. Not source-controlled —
+# rebuilds on every fresh clone.
+# @trace spec:opencode-web-session-otp
+images/router/tillandsias-router-sidecar
+
+# Sidecar nested-cargo target dir (avoids workspace lock deadlock).
+# @trace spec:opencode-web-session-otp
+/target-musl/
+
+# cheatsheet-sources: TOMBSTONED by cheatsheets-license-tiered (replaced by
+# image-baked /opt/cheatsheet-sources/ + per-project pull cache). The whole
+# directory is now gitignored to guard against any local cache pollution that
+# the legacy fetcher might emit during the retention window.
+# Keep cheatsheet-sources/.gitkeep-tombstone tracked (negation) so the
+# tombstone marker survives the gitignore.
+# @trace spec:cheatsheets-license-tiered, spec:cheatsheet-source-layer
+cheatsheet-sources/
+!cheatsheet-sources/.gitkeep-tombstone
+
+# Local diagnostic capture artifacts produced by manual --diagnostics smoke
+# runs (stdout/stderr redirects). Ephemeral debugging state — never source-
+# controlled. Patterns cover diag*.log/err, smoke*.log/err, err*.log,
+# out*.log when written at the workspace root.
+# @trace spec:runtime-diagnostics-stream
+/diag*.log
+/diag*.err
+/smoke*.log
+/smoke*.err
+/err*.log
+/out*.log

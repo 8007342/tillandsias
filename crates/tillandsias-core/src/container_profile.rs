@@ -264,8 +264,8 @@ pub fn forge_opencode_profile() -> ContainerProfile {
         env_vars: common_forge_env(),
         secrets: vec![],
         image_override: None,
-        pids_limit: 512,      // Compilers, language servers, AI tools
-        read_only: false,      // Forge needs mutable workspace
+        pids_limit: 512,  // Compilers, language servers, AI tools
+        read_only: false, // Forge needs mutable workspace
         tmpfs_mounts: vec![],
     }
 }
@@ -280,8 +280,8 @@ pub fn forge_claude_profile() -> ContainerProfile {
         env_vars: common_forge_env(),
         secrets: vec![],
         image_override: None,
-        pids_limit: 512,      // Compilers, language servers, AI tools
-        read_only: false,      // Forge needs mutable workspace
+        pids_limit: 512,  // Compilers, language servers, AI tools
+        read_only: false, // Forge needs mutable workspace
         tmpfs_mounts: vec![],
     }
 }
@@ -313,8 +313,8 @@ pub fn terminal_profile() -> ContainerProfile {
         // Setting -w would fail because the directory doesn't exist until after clone.
         working_dir: None,
         mounts: common_forge_mounts(),
-        pids_limit: 512,      // Same as forge (maintenance shell)
-        read_only: false,      // Terminal needs mutable workspace
+        pids_limit: 512,  // Same as forge (maintenance shell)
+        read_only: false, // Terminal needs mutable workspace
         tmpfs_mounts: vec![],
         env_vars: vec![
             ProfileEnvVar {
@@ -413,8 +413,8 @@ pub fn web_profile() -> ContainerProfile {
         env_vars: vec![],
         secrets: vec![],
         image_override: Some("tillandsias-web:latest"),
-        pids_limit: 32,        // Only httpd
-        read_only: true,       // Static file server — no writes needed
+        pids_limit: 32,  // Only httpd
+        read_only: true, // Static file server — no writes needed
         tmpfs_mounts: vec!["/tmp", "/var/run"],
     }
 }
@@ -450,7 +450,7 @@ pub fn proxy_profile() -> ContainerProfile {
         env_vars: vec![],
         secrets: vec![],
         image_override: None,
-        pids_limit: 32,        // Only squid + helpers
+        pids_limit: 32, // Only squid + helpers
         // NOT read-only: squid needs writable /var/spool/squid (cache),
         // /var/run/squid (PID), /var/log/squid (logs), /var/lib/squid (SSL DB).
         // With --read-only + --tmpfs, the tmpfs dirs are root-owned but squid
@@ -503,9 +503,9 @@ pub fn inference_profile() -> ContainerProfile {
                 value: EnvValue::Literal("http://proxy:3128"),
             },
         ],
-        secrets: vec![],  // No credentials needed
+        secrets: vec![], // No credentials needed
         image_override: None,
-        pids_limit: 128,       // Ollama server + model runners
+        pids_limit: 128, // Ollama server + model runners
         // NOT read-only: ollama needs writable home dir for runtime state,
         // model downloads, and temporary files. Same --userns=keep-id
         // tmpfs ownership issue as squid (UID 1000 can't write root-owned tmpfs).
@@ -540,14 +540,12 @@ pub fn git_service_profile() -> ContainerProfile {
             },
         ],
         env_vars: vec![],
-        secrets: vec![
-            SecretMount {
-                kind: SecretKind::GitHubToken,
-            },
-        ],
+        secrets: vec![SecretMount {
+            kind: SecretKind::GitHubToken,
+        }],
         image_override: None,
-        pids_limit: 64,        // Only git-daemon + git processes
-        read_only: true,       // Service container — immutable root FS
+        pids_limit: 64,  // Only git-daemon + git processes
+        read_only: true, // Service container — immutable root FS
         tmpfs_mounts: vec!["/tmp"],
     }
 }
@@ -560,7 +558,7 @@ fn common_forge_mounts() -> Vec<ProfileMount> {
     // Code comes from git mirror service, packages through proxy.
     // Mounts: pre-built tools overlay + config overlay (both read-only),
     // plus per-container log directory (RW).
-    // @trace spec:proxy-container, spec:layered-tools-overlay, spec:podman-orchestration
+    // @trace spec:proxy-container, spec:layered-tools-overlay, spec:podman-orchestration, spec:forge-cache-architecture, spec:forge-cache-dual
     vec![
         ProfileMount {
             host_key: MountSource::ToolsOverlay,
@@ -683,7 +681,10 @@ mod tests {
     #[test]
     fn forge_opencode_has_no_secrets() {
         let profile = forge_opencode_profile();
-        assert!(profile.secrets.is_empty(), "Forge opencode must be credential-free");
+        assert!(
+            profile.secrets.is_empty(),
+            "Forge opencode must be credential-free"
+        );
         assert_eq!(
             profile.entrypoint,
             "/usr/local/bin/entrypoint-forge-opencode.sh"
@@ -693,13 +694,19 @@ mod tests {
     #[test]
     fn forge_claude_has_no_secrets() {
         let profile = forge_claude_profile();
-        assert!(profile.secrets.is_empty(), "Forge claude must be credential-free");
+        assert!(
+            profile.secrets.is_empty(),
+            "Forge claude must be credential-free"
+        );
     }
 
     #[test]
     fn terminal_has_no_secrets() {
         let profile = terminal_profile();
-        assert!(profile.secrets.is_empty(), "Terminal must be credential-free");
+        assert!(
+            profile.secrets.is_empty(),
+            "Terminal must be credential-free"
+        );
         assert_eq!(profile.entrypoint, "/usr/local/bin/entrypoint-terminal.sh");
         // No working_dir — entrypoint clones from mirror then cd's into project
         assert!(profile.working_dir.is_none());
@@ -708,11 +715,21 @@ mod tests {
     #[test]
     fn web_has_readonly_mount_and_logs() {
         let profile = web_profile();
-        assert!(profile.secrets.is_empty(), "Web profile should have no secrets");
+        assert!(
+            profile.secrets.is_empty(),
+            "Web profile should have no secrets"
+        );
         assert!(profile.env_vars.is_empty());
-        assert_eq!(profile.mounts.len(), 2, "Web has project mount + container logs");
+        assert_eq!(
+            profile.mounts.len(),
+            2,
+            "Web has project mount + container logs"
+        );
         assert_eq!(profile.mounts[0].mode, MountMode::Ro);
-        assert!(matches!(profile.mounts[1].host_key, MountSource::ContainerLogs));
+        assert!(matches!(
+            profile.mounts[1].host_key,
+            MountSource::ContainerLogs
+        ));
         assert_eq!(profile.mounts[1].container_path, "/var/log/tillandsias");
         assert_eq!(profile.mounts[1].mode, MountMode::Rw);
         assert_eq!(profile.image_override, Some("tillandsias-web:latest"));
@@ -723,13 +740,16 @@ mod tests {
     fn forge_profiles_have_tools_overlay_mount() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
-        // Mounts: tools overlay + config overlay (both read-only) + container logs (RW)
-        // @trace spec:proxy-container, spec:layered-tools-overlay, spec:podman-orchestration
-        assert_eq!(opencode.mounts.len(), 3);
-        assert_eq!(claude.mounts.len(), 3);
+        // Mounts: tools overlay + config overlay (both read-only) + container logs (RW) + tray socket (RW)
+        // @trace spec:proxy-container, spec:layered-tools-overlay, spec:podman-orchestration, spec:mcp-on-demand
+        assert_eq!(opencode.mounts.len(), 4);
+        assert_eq!(claude.mounts.len(), 4);
         assert_eq!(opencode.mounts[0].container_path, "/home/forge/.tools");
         assert_eq!(opencode.mounts[0].mode, MountMode::Ro);
-        assert!(matches!(opencode.mounts[0].host_key, MountSource::ToolsOverlay));
+        assert!(matches!(
+            opencode.mounts[0].host_key,
+            MountSource::ToolsOverlay
+        ));
     }
 
     // @trace spec:layered-tools-overlay
@@ -739,13 +759,34 @@ mod tests {
         let claude = forge_claude_profile();
         let terminal = terminal_profile();
         // Config overlay mount is second in forge profiles, first in terminal
-        let oc_cfg = opencode.mounts.iter().find(|m| matches!(m.host_key, MountSource::ConfigOverlay));
-        let cc_cfg = claude.mounts.iter().find(|m| matches!(m.host_key, MountSource::ConfigOverlay));
-        let tm_cfg = terminal.mounts.iter().find(|m| matches!(m.host_key, MountSource::ConfigOverlay));
-        assert!(oc_cfg.is_some(), "OpenCode profile must have ConfigOverlay mount");
-        assert!(cc_cfg.is_some(), "Claude profile must have ConfigOverlay mount");
-        assert!(tm_cfg.is_some(), "Terminal profile must have ConfigOverlay mount");
-        assert_eq!(oc_cfg.unwrap().container_path, "/home/forge/.config-overlay");
+        let oc_cfg = opencode
+            .mounts
+            .iter()
+            .find(|m| matches!(m.host_key, MountSource::ConfigOverlay));
+        let cc_cfg = claude
+            .mounts
+            .iter()
+            .find(|m| matches!(m.host_key, MountSource::ConfigOverlay));
+        let tm_cfg = terminal
+            .mounts
+            .iter()
+            .find(|m| matches!(m.host_key, MountSource::ConfigOverlay));
+        assert!(
+            oc_cfg.is_some(),
+            "OpenCode profile must have ConfigOverlay mount"
+        );
+        assert!(
+            cc_cfg.is_some(),
+            "Claude profile must have ConfigOverlay mount"
+        );
+        assert!(
+            tm_cfg.is_some(),
+            "Terminal profile must have ConfigOverlay mount"
+        );
+        assert_eq!(
+            oc_cfg.unwrap().container_path,
+            "/home/forge/.config-overlay"
+        );
         assert_eq!(oc_cfg.unwrap().mode, MountMode::Ro);
     }
 
@@ -836,17 +877,11 @@ mod tests {
             "Inference should have 4 proxy env vars"
         );
         assert!(
-            profile
-                .env_vars
-                .iter()
-                .any(|e| e.name == "HTTP_PROXY"),
+            profile.env_vars.iter().any(|e| e.name == "HTTP_PROXY"),
             "Inference must have HTTP_PROXY"
         );
         assert!(
-            profile
-                .env_vars
-                .iter()
-                .any(|e| e.name == "https_proxy"),
+            profile.env_vars.iter().any(|e| e.name == "https_proxy"),
             "Inference must have https_proxy"
         );
         assert!(
@@ -861,14 +896,27 @@ mod tests {
     fn proxy_has_no_secrets_no_env_vars() {
         let profile = proxy_profile();
         assert!(profile.secrets.is_empty(), "Proxy must have no secrets");
-        assert!(profile.env_vars.is_empty(), "Proxy is a passive service — no env vars");
-        assert_eq!(profile.mounts.len(), 2, "Proxy has cache mount + container logs");
+        assert!(
+            profile.env_vars.is_empty(),
+            "Proxy is a passive service — no env vars"
+        );
+        assert_eq!(
+            profile.mounts.len(),
+            2,
+            "Proxy has cache mount + container logs"
+        );
         assert_eq!(profile.mounts[0].container_path, "/var/spool/squid");
         assert_eq!(profile.mounts[0].mode, MountMode::Rw);
-        assert!(matches!(profile.mounts[1].host_key, MountSource::ContainerLogs));
+        assert!(matches!(
+            profile.mounts[1].host_key,
+            MountSource::ContainerLogs
+        ));
         assert_eq!(profile.mounts[1].container_path, "/var/log/tillandsias");
         assert_eq!(profile.mounts[1].mode, MountMode::Rw);
-        assert!(profile.image_override.is_none(), "Proxy image tag comes from LaunchContext");
+        assert!(
+            profile.image_override.is_none(),
+            "Proxy image tag comes from LaunchContext"
+        );
     }
 
     // @trace spec:layered-tools-overlay
@@ -926,19 +974,46 @@ mod tests {
     // @trace spec:podman-orchestration, spec:secrets-management
     #[test]
     fn pids_limits_match_container_roles() {
-        assert_eq!(forge_opencode_profile().pids_limit, 512, "Forge opencode: compilers + LSP + AI");
-        assert_eq!(forge_claude_profile().pids_limit, 512, "Forge claude: compilers + LSP + AI");
-        assert_eq!(terminal_profile().pids_limit, 512, "Terminal: same as forge");
-        assert_eq!(git_service_profile().pids_limit, 64, "Git service: git-daemon + git only");
-        assert_eq!(proxy_profile().pids_limit, 32, "Proxy: squid + helpers only");
-        assert_eq!(inference_profile().pids_limit, 128, "Inference: ollama + model runners");
+        assert_eq!(
+            forge_opencode_profile().pids_limit,
+            512,
+            "Forge opencode: compilers + LSP + AI"
+        );
+        assert_eq!(
+            forge_claude_profile().pids_limit,
+            512,
+            "Forge claude: compilers + LSP + AI"
+        );
+        assert_eq!(
+            terminal_profile().pids_limit,
+            512,
+            "Terminal: same as forge"
+        );
+        assert_eq!(
+            git_service_profile().pids_limit,
+            64,
+            "Git service: git-daemon + git only"
+        );
+        assert_eq!(
+            proxy_profile().pids_limit,
+            32,
+            "Proxy: squid + helpers only"
+        );
+        assert_eq!(
+            inference_profile().pids_limit,
+            128,
+            "Inference: ollama + model runners"
+        );
         assert_eq!(web_profile().pids_limit, 32, "Web: httpd only");
     }
 
     // @trace spec:podman-orchestration
     #[test]
     fn service_containers_are_read_only() {
-        assert!(git_service_profile().read_only, "Git service must be read-only");
+        assert!(
+            git_service_profile().read_only,
+            "Git service must be read-only"
+        );
         // Proxy and inference are NOT read-only — they need writable runtime dirs.
         // With --userns=keep-id, tmpfs dirs are root-owned but process runs as UID 1000.
         assert!(web_profile().read_only, "Web must be read-only");
@@ -947,9 +1022,18 @@ mod tests {
     // @trace spec:podman-orchestration
     #[test]
     fn forge_containers_are_not_read_only() {
-        assert!(!forge_opencode_profile().read_only, "Forge opencode must NOT be read-only");
-        assert!(!forge_claude_profile().read_only, "Forge claude must NOT be read-only");
-        assert!(!terminal_profile().read_only, "Terminal must NOT be read-only");
+        assert!(
+            !forge_opencode_profile().read_only,
+            "Forge opencode must NOT be read-only"
+        );
+        assert!(
+            !forge_claude_profile().read_only,
+            "Forge claude must NOT be read-only"
+        );
+        assert!(
+            !terminal_profile().read_only,
+            "Terminal must NOT be read-only"
+        );
     }
 
     // @trace spec:podman-orchestration
@@ -963,10 +1047,7 @@ mod tests {
         ];
 
         for (name, profile) in &profiles {
-            assert!(
-                profile.read_only,
-                "Profile {name} should be read-only"
-            );
+            assert!(profile.read_only, "Profile {name} should be read-only");
             assert!(
                 profile.tmpfs_mounts.contains(&"/tmp"),
                 "Read-only profile {name} must have /tmp as tmpfs"
@@ -981,7 +1062,10 @@ mod tests {
         // /var/lib/squid. With --read-only + --tmpfs, dirs are root-owned but
         // squid runs as UID 1000 via --userns=keep-id → permission denied.
         let profile = proxy_profile();
-        assert!(!profile.read_only, "Proxy must NOT be read-only (squid needs writable runtime dirs)");
+        assert!(
+            !profile.read_only,
+            "Proxy must NOT be read-only (squid needs writable runtime dirs)"
+        );
     }
 
     // @trace spec:podman-orchestration

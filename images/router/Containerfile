@@ -1,0 +1,100 @@
+# @trace spec:subdomain-routing-via-reverse-proxy, spec:fix-router-loopback-port, spec:opencode-web-session-otp, spec:reverse-proxy-internal
+# Tillandsias router — Caddy 2 reverse proxy that maps
+# `<service>.<project>.localhost` to enclave containers by name + port,
+# plus the tillandsias-router-sidecar binary that:
+#   - subscribes to the tray's control socket (bind-mount in the rootless
+#     namespace at /run/host/tillandsias/control.sock) for IssueWebSession
+#     and EvictProject envelopes;
+#   - serves Caddy's `forward_auth` directive on 127.0.0.1:9090, replying
+#     204 (allow) or 401 (deny) per request based on cookie value
+#     membership in the per-project session list.
+#
+# The sidecar is a pre-compiled, statically-linked musl binary baked
+# from the workspace. Built by `scripts/build-sidecar.sh` (cargo
+# `--target x86_64-unknown-linux-musl`, ~2.5 MB stripped). Embedded into
+# the tray via include_bytes! and re-extracted into the per-process
+# image-sources directory at runtime, so deployed binaries can rebuild
+# this image without the workspace source on disk.
+#
+# Two access paths to the Caddy listener, both defended in depth:
+#   1. Host loopback   — `-p 127.0.0.1:8080:8080` from the tray's podman
+#                        invocation. Host kernel restricts the listener to
+#                        127.0.0.1, so the LAN/internet can't reach it at
+#                        the socket level.
+#   2. Enclave network — alias `router` on the tillandsias-enclave bridge.
+#                        Forge agents reach this through HTTP_PROXY=proxy:3128;
+#                        Squid recognises `*.localhost` and forwards to
+#                        router:8080 via cache_peer.
+#
+# Caddy ALSO enforces a `remote_ip` allowlist (127.0.0.1, ::1, RFC 1918
+# private blocks) — anything else gets a 403 before any route matches.
+# This is belt-and-suspenders on top of the binding-level loopback restriction.
+
+FROM docker.io/library/caddy:2-alpine
+
+# Runtime deps (curl for health probes from the tray + entrypoint sidecar
+# wait, libcap for setcap).
+RUN apk add --no-cache curl libcap
+
+# @trace spec:fix-router-loopback-port
+# CRITICAL: strip the cap_net_bind_service file capability from the
+# Caddy binary. The upstream caddy:2-alpine image sets `cap_net_bind_service=ep`
+# on /usr/bin/caddy so Caddy can bind port 80 even when the container's
+# USER is non-root. But Tillandsias launches every container with
+# `--security-opt=no-new-privileges` AND `--cap-drop=ALL` — under those
+# flags the kernel rejects exec() of ANY binary whose file capabilities
+# exceed the bounding set. Result: bash's `exec caddy` fails with EPERM
+# and the router container dies on startup before binding any port.
+#
+# We don't NEED the capability anyway because the in-container listener
+# moved to :8080 (an unprivileged port) per fix-router-loopback-port;
+# the host publish is `127.0.0.1:8080:8080`. Stripping the file cap means
+# Caddy runs as a fully unprivileged process, matching the rest of the
+# enclave's defence-in-depth.
+#
+# Provenance: file capabilities + no_new_privs interaction documented at
+# https://man7.org/linux/man-pages/man7/capabilities.7.html (search
+# "no_new_privs"); upstream Caddy fcaps are set in
+# https://github.com/caddyserver/caddy-docker/blob/master/2.10/alpine/Dockerfile
+RUN setcap -r /usr/bin/caddy
+
+# /run/router/ holds the dynamic Caddyfile written by the tray; create it
+# at build time so the entrypoint can rely on the directory existing
+# before any host bind-mount lands. Empty placeholder file means the
+# initial merge produces just the base config.
+RUN mkdir -p /run/router \
+    && touch /run/router/dynamic.Caddyfile
+
+# Static base config — enables admin API + gives a default 404 with the
+# trusted-source allowlist baked in. The dynamic per-project routes are
+# bind-mounted at /run/router/dynamic.Caddyfile and merged at startup.
+COPY base.Caddyfile /etc/caddy/base.Caddyfile
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY router-reload.sh /usr/local/bin/router-reload.sh
+
+# @trace spec:opencode-web-session-otp
+# Pre-built static-musl binary; lives in the build context next to the
+# Containerfile. Built by `scripts/build-sidecar.sh` (invoked by
+# `src-tauri/build.rs` so `cargo build` in the workspace handles
+# everything, OR can be run manually before `scripts/build-image.sh
+# router`).
+COPY tillandsias-router-sidecar /usr/local/bin/tillandsias-router-sidecar
+
+RUN chmod +x /usr/local/bin/entrypoint.sh \
+             /usr/local/bin/router-reload.sh \
+             /usr/local/bin/tillandsias-router-sidecar
+
+# @trace spec:external-logs-layer
+# Manifest of curated external log files published by this image.
+# The tray-side auditor reads this at /etc/tillandsias/external-logs.yaml
+# every 60 s and flags unlisted files in the role dir as LEAK events.
+RUN mkdir -p /etc/tillandsias
+COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
+
+# @trace spec:fix-router-loopback-port, spec:opencode-web-session-otp
+# Internal listener moved from :80 to :8080 — no privileged-port binding
+# needed, so we can run with the upstream image's default USER without
+# requiring capabilities or root inside the container. 9090 is the
+# sidecar validator (container-internal only; not published to the host).
+EXPOSE 8080 9090
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

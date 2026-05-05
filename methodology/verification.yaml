@@ -1,0 +1,176 @@
+
+verification:
+  s_levels:
+    description: >
+      Spec verification levels. Answer: "Is the spec stable, testable, and bound?"
+      S-levels track the spec itself, not the code implementing it.
+
+    S0:
+      name: "draft"
+      meaning: "Spec written but not yet verified"
+      characteristics:
+        - status field present
+        - requirements listed
+        - may have ambiguities
+      progression_rule: "Manual review required to move to S1"
+
+    S1:
+      name: "syntactically valid"
+      meaning: "Spec is well-formed YAML/markdown; all fields present"
+      characteristics:
+        - valid schema
+        - all required sections present
+        - modality is correct (MUST/SHOULD/MAY)
+        - ambiguity_score is 0
+      progression_rule: "Automated validator can check S1"
+
+    S2:
+      name: "litmus-bound"
+      meaning: "Spec has executable litmus tests binding requirements to observable signals"
+      characteristics:
+        - litmus tests defined and passing
+        - every MUST requirement has at least one litmus signal
+        - requirements are measurable
+        - success/failure conditions are unambiguous
+      progression_rule: "Litmus test execution validates S2"
+
+    S3:
+      name: "runtime-validated"
+      meaning: "Spec is continuously validated in production; code drifts are caught immediately"
+      characteristics:
+        - litmus tests run in CI and gate PRs
+        - runtime traces emit spec linkage
+        - convergence engine tracks spec-code drift
+        - spec-code alignment is monitored
+
+    convergence:
+      criteria:
+        - all_MUST_requirements_have_passing_litmus
+        - ambiguity_score_equals_zero
+        - invariants_stable_over_N_iterations
+      stability_window:
+        iterations: 5
+  l_levels:
+    description: >
+      Code annotation verification levels. Answer: "What evidence supports this
+
+    L0:
+      name: "spec only"
+      meaning: "Annotation cites a spec; no additional evidence yet"
+      characteristics:
+        - spec exists and is active
+        - code compiles and annotation is syntactically valid
+      claim: "This function implements the spec"
+      evidence: "Spec exists"
+
+    L1:
+      name: "spec + cheatsheet"
+      meaning: "Spec is cited; cheatsheet sources confirm the spec's requirements"
+      characteristics:
+        - spec exists
+        - at least one cheatsheet supports the implementation
+        - cheatsheet has provenance and is up-to-date
+      claim: "Implementation approach matches spec intent and tool idioms"
+      evidence: "Spec + cheatsheet sources confirm"
+
+    L2:
+      name: "spec + cheatsheet + api lookup"
+      meaning: "Spec and cheatsheets confirmed; API documentation validates signatures"
+      characteristics:
+        - spec, cheatsheet, and API docs all agree
+        - no version mismatches
+        - API calls match documented behavior
+      claim: "Implementation uses correct API with correct arguments"
+      evidence: "Spec + cheatsheet + API docs aligned"
+
+    L3:
+      name: "spec + cheatsheet + api + runtime validation"
+      meaning: "Full stack verified: spec, cheatsheets, APIs, and litmus tests all pass"
+      characteristics:
+        - spec is S2 or S3 (litmus-bound)
+        - litmus tests pass
+        - code executes the spec's critical path
+        - traces emit at runtime
+      claim: "Implementation satisfies spec under observed conditions"
+      evidence: "Spec + cheatsheet + API + litmus tests all validated"
+
+    rules:
+      - declared_level_is_claim
+      - ci_validates_against_observed_level
+      - mismatch_causes_failure_or_downgrade
+      - upward_pressure_on_failure
+      - downward_pressure_on_stability
+
+  evidence_bundle:
+    description: >
+      Evidence bundles collect the concrete artifacts behind convergence claims.
+      They prevent version numbers, annotations, or passing tests from being treated
+      as standalone proof.
+
+    required_fields:
+      - spec_ids_and_versions
+      - spec_hashes
+      - artifact_version_and_hash
+      - commit_hash
+      - dependency_lock_hash
+      - environment_profile
+      - litmus_run_ids_and_results
+      - trace_coverage_summary
+      - ci_run_id
+      - centicolon_signature_hash
+      - centicolon_projection_ref
+      - annotated_source_archive_hash
+      - centicolon_dashboard_hash
+      - projection_source_equivalence_result
+
+    claim_strength:
+      provenance: "artifact, spec, and commit can be linked"
+      structural: "schemas, annotations, bindings, and dependency locks are valid"
+      behavioral: "litmus tests exercise the claimed behavior and pass"
+      operational: "runtime traces remain stable in declared environments"
+
+    rule: >
+      A release, annotation, or convergence report MUST cite the evidence bundle and
+      its highest supported claim strength.
+
+    release_rule: >
+      A release evidence bundle MUST include validated CentiColon metrics and the
+      generated CentiColon projection reference. If projection source equivalence
+      fails, the release cannot claim structural or higher evidence strength.
+
+    dashboard_rule: >
+      A release evidence bundle SHOULD link to the generated CentiColon dashboard
+      markdown and JSON summary so humans can browse the last N releases and agents
+      can consume the same trend data deterministically.
+
+  litmus_verification_integration:
+    description: >
+      Litmus tests are the bridge between spec S-levels and code L-levels.
+      A litmus test validates that code satisfies the spec.
+
+    verification_levels_in_litmus:
+      L0_specs:
+        definition: "Litmus test defined (written but not run in CI)"
+        enforcement: "Warn if missing"
+
+      L1_specs:
+        definition: "Litmus test passes on reference implementation"
+        enforcement: "Require passing test"
+
+      L2_specs:
+        definition: "Litmus test executes in CI and gates PR merges"
+        enforcement: "Block merge on failure"
+
+      L3_specs:
+        definition: "Litmus test result drives automated remediation"
+        enforcement: "Escalate to human review if persistent failure"
+
+    progression:
+      - all_specs_must_achieve_L1
+      - critical_path_specs_must_achieve_L2
+      - convergence_requires_L2_minimum
+
+    ci_gating:
+      L0_specs: warn_if_no_litmus
+      L1_specs: require_litmus_pass
+      L2_specs: block_merge_on_failure

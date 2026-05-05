@@ -8,7 +8,7 @@
 #         CA bundle at /etc/pki/tls/certs/ca-bundle.crt.
 FROM registry.fedoraproject.org/fedora-minimal:44
 
-# @trace spec:default-image — forge system packages
+# @trace spec:default-image
 # ── System packages ────────────────────────────────────────────
 # LEAN forge: essential dev tools only. Terminal UX tools (mc, vim, nano,
 # eza, bat, fd-find, fzf, htop, tree, zoxide) removed to save ~90MB.
@@ -41,11 +41,13 @@ COPY entrypoint.sh /usr/local/bin/tillandsias-entrypoint.sh
 COPY entrypoint-forge-opencode.sh /usr/local/bin/entrypoint-forge-opencode.sh
 COPY entrypoint-forge-opencode-web.sh /usr/local/bin/entrypoint-forge-opencode-web.sh
 COPY entrypoint-forge-claude.sh /usr/local/bin/entrypoint-forge-claude.sh
+COPY entrypoint-forge-codex.sh /usr/local/bin/entrypoint-forge-codex.sh
 COPY entrypoint-terminal.sh /usr/local/bin/entrypoint-terminal.sh
 RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/entrypoint-forge-opencode.sh \
              /usr/local/bin/entrypoint-forge-opencode-web.sh \
              /usr/local/bin/entrypoint-forge-claude.sh \
+             /usr/local/bin/entrypoint-forge-codex.sh \
              /usr/local/bin/entrypoint-terminal.sh
 
 # No GIT_ASKPASS helper in the forge image — forge containers have ZERO

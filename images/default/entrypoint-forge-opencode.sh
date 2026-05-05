@@ -8,6 +8,11 @@
 
 source /usr/local/lib/tillandsias/lib-common.sh
 
+# @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
+# Populate tmpfs hot mount (/opt/cheatsheets) from image-baked lower layer.
+# The --tmpfs mount is already in place (podman establishes it before exec).
+populate_hot_paths
+
 # @trace spec:proxy-container
 # Trust the Tillandsias enclave CA chain for HTTPS proxy caching.
 # System trust store updates require root (denied under --cap-drop=ALL).
@@ -17,7 +22,8 @@ source /usr/local/lib/tillandsias/lib-common.sh
 # (set by podman env) which adds to its built-in trust store separately.
 CA_CHAIN="/run/tillandsias/ca-chain.crt"
 if [ -f "$CA_CHAIN" ]; then
-    # @trace spec:environment-runtime — CA trust: Fedora uses pki, Alpine uses ca-certificates
+    # @trace spec:environment-runtime
+    # CA trust: Fedora uses pki, Alpine uses ca-certificates
     # DISTRO: Fedora path checked first (/etc/pki/), Alpine/Debian fallback (/etc/ssl/)
     SYSTEM_CA=""
     if [ -f /etc/pki/tls/certs/ca-bundle.crt ]; then
@@ -36,70 +42,19 @@ fi
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "opencode starting"
 
-# @trace spec:git-mirror-service, spec:forge-offline
-# Clone project from git mirror (Phase 3: mirror-only, no direct mount)
-if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]]; then
-    trace_lifecycle "git-mirror" "cloning from ${TILLANDSIAS_GIT_SERVICE}"
-    MAX_RETRIES=5
-    CLONE_SUCCESS=false
-    CLONE_DIR="/home/forge/src/${TILLANDSIAS_PROJECT}"
-    for i in $(seq 1 $MAX_RETRIES); do
-        if git clone "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" "$CLONE_DIR" 2>&1; then
-            trace_lifecycle "git-mirror" "clone successful"
-            CLONE_SUCCESS=true
-            cd "$CLONE_DIR"
-            # Configure push back to mirror
-            # @trace spec:git-mirror-service
-            if ! git remote set-url --push origin "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" 2>/dev/null; then
-                echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
-            fi
-            # Set git identity from host config
-            # @trace spec:forge-offline
-            if [[ -n "${GIT_AUTHOR_NAME:-}" ]]; then
-                git config user.name "$GIT_AUTHOR_NAME"
-            fi
-            if [[ -n "${GIT_AUTHOR_EMAIL:-}" ]]; then
-                git config user.email "$GIT_AUTHOR_EMAIL"
-            fi
-            break
-        fi
-        if [[ $i -lt $MAX_RETRIES ]]; then
-            trace_lifecycle "git-mirror" "git service not ready, retrying ($i/$MAX_RETRIES)..."
-            sleep 1
-        else
-            trace_lifecycle "git-mirror" "clone failed after $MAX_RETRIES attempts"
-        fi
-    done
-    if [[ "$CLONE_SUCCESS" != "true" ]]; then
-        echo "[forge] FATAL: git clone failed from git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" >&2
-        echo "[forge] The git mirror service is unreachable or has not finished initialising." >&2
-        exit 1
-    fi
-    echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
-fi
+# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:windows-wsl-runtime
+# Clone via the shared lib-common::clone_project_from_mirror — supports both
+# filesystem (Windows/WSL) and git daemon (Linux/podman) transports with
+# wipe-before-clone for re-attach idempotency.
+clone_project_from_mirror
 
-# ── OpenCode (tools overlay only) ──────────────────────────
-# @trace spec:layered-tools-overlay
-# Hard requirement: tools overlay mounted at /home/forge/.tools. The host
-# tray builds and mounts it before launching the container. Inline install
-# fallback removed — missing overlay is a fatal error.
-TOOLS_DIR="/home/forge/.tools"
-OC_DIR="$TOOLS_DIR/opencode"
-OC_BIN="$OC_DIR/bin/opencode"
+# (Inline clone block removed — shared function above replaces it.)
 
-if [ ! -x "$OC_BIN" ]; then
-    echo "[entrypoint] FATAL: OpenCode not found in tools overlay at $OC_BIN" >&2
-    echo "[entrypoint] The tools overlay is missing or incomplete. The host tray" >&2
-    echo "[entrypoint] should have built it before launching this container." >&2
-    exit 1
-fi
-export PATH="$OC_DIR/bin:$PATH"
-trace_lifecycle "install" "opencode: overlay ($OC_BIN)"
-
-# ── OpenSpec (overlay-only, shared helper) ──────────────────
-# @trace spec:forge-shell-tools
+# ── OpenCode + OpenSpec (hard-installed) ───────────────────
+# @trace spec:default-image, spec:forge-shell-tools
+require_opencode
 require_openspec
-OS_BIN="/home/forge/.tools/openspec/bin/openspec"
+apply_opencode_config_overlay
 
 trace_lifecycle "entrypoint" "opencode ready"
 
@@ -137,6 +92,18 @@ fi
 
 # ── Banner ──────────────────────────────────────────────────
 show_banner "opencode"
+
+# ── Synthetic first prompt (startup skill) ─────────────────
+# @trace spec:project-bootstrap-readme
+# Write a synthetic first message to OpenCode's init-prompt path so the
+# routing decision (/startup) is taken inside the OpenCode session.
+# This survives OpenCode upgrades and is idempotent across container restarts.
+OPENCODE_INIT_PROMPT="/tmp/opencode-init-prompt.txt"
+if [ -w "$(dirname "$OPENCODE_INIT_PROMPT")" ]; then
+    echo "run /startup" > "$OPENCODE_INIT_PROMPT"
+    export OPENCODE_INIT_PROMPT_FILE="$OPENCODE_INIT_PROMPT"
+    trace_lifecycle "startup" "synthetic first prompt written to $OPENCODE_INIT_PROMPT"
+fi
 
 # ── Launch OpenCode ─────────────────────────────────────────
 trace_lifecycle "entrypoint" "opencode launching"

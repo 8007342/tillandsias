@@ -1,9 +1,9 @@
-# @trace spec:browser-isolation-core, spec:versioning
+# @trace spec:browser-isolation-core, spec:chromium-debug-variant, spec:versioning
 # Minimal Chromium container for isolated, headless rendering.
 # Reference: openspec/changes/chromium-browser-isolation/design.md
 # Security model: read-only root, no external network, no credentials, reduced capabilities
 
-FROM registry.fedoraproject.org/fedora-minimal:43
+FROM registry.fedoraproject.org/fedora-minimal:44
 
 # System packages (minimal set for headless rendering + locale support)
 # chromium-headless brings most dependencies; add only necessary extras

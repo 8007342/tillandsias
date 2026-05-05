@@ -1,4 +1,4 @@
-// @trace spec:podman-orchestration
+// @trace spec:podman-orchestration, spec:cross-platform, spec:wsl-daemon-orchestration
 
 use std::collections::HashSet;
 use std::time::Duration;
@@ -30,13 +30,15 @@ impl PodmanEventStream {
     }
 
     /// Start streaming events. Sends to the provided channel.
-    /// Uses `podman events --format json` as primary source.
-    /// Falls back to exponential backoff inspection when events fail.
+    /// Platform-specific dispatch:
+    /// - **Linux**: Uses `podman events --format json` as primary source.
+    /// - **Windows (WSL)**: Connects to systemd socket at `\\wsl$\<distro>\run\tillandsias\router.sock`.
+    /// - Falls back to exponential backoff inspection when events fail.
     ///
     /// The outer loop has its own exponential backoff (2s → 5min) to prevent
     /// tight retry loops when podman is persistently unavailable (e.g. machine
     /// not running on macOS/Windows).
-    // @trace spec:podman-orchestration
+    // @trace spec:podman-orchestration, spec:cross-platform, spec:wsl-daemon-orchestration
     pub async fn stream(self, tx: mpsc::Sender<PodmanEvent>) {
         let mut attempt: u32 = 0;
 
@@ -44,19 +46,24 @@ impl PodmanEventStream {
             attempt += 1;
 
             // Log every attempt initially, then only every 5th to reduce spam
-            if attempt <= 3 || attempt % 5 == 0 {
+            if attempt <= 3 || attempt.is_multiple_of(5) {
                 info!(attempt, "Starting podman events listener");
             }
 
-            // Try event-driven approach first
-            match self.stream_events(&tx).await {
+            // Try event-driven approach first (platform-specific)
+            #[cfg(target_os = "windows")]
+            let stream_result = self.stream_events_wsl(&tx).await;
+            #[cfg(not(target_os = "windows"))]
+            let stream_result = self.stream_events(&tx).await;
+
+            match stream_result {
                 Ok(()) => return, // Clean shutdown (channel closed)
                 Err(e) => {
-                    if attempt <= 3 || attempt % 5 == 0 {
+                    if attempt <= 3 || attempt.is_multiple_of(5) {
                         warn!(
                             ?e,
                             attempt,
-                            "Podman events stream failed, falling back to backoff inspection"
+                            "Podman/WSL events stream failed, falling back to backoff inspection"
                         );
                     }
                 }
@@ -74,10 +81,12 @@ impl PodmanEventStream {
         }
     }
 
-    /// Primary: stream `podman events --format json`.
+    /// Primary (Linux): stream `podman events --format json`.
     ///
     /// No container name filter on the command -- podman's `--filter container=`
     /// takes exact names, not globs. We filter by prefix in `parse_podman_event()`.
+    // @trace spec:podman-orchestration
+    #[cfg(not(target_os = "windows"))]
     async fn stream_events(&self, tx: &mpsc::Sender<PodmanEvent>) -> Result<(), PodmanEventError> {
         debug!(prefix = %self.prefix, "Starting podman events stream (no name filter, prefix matched in-process)");
 
@@ -115,6 +124,86 @@ impl PodmanEventStream {
                     }
                 }
                 Err(e) => {
+                    return Err(PodmanEventError::ReadError(e.to_string()));
+                }
+            }
+        }
+    }
+
+    /// Windows (WSL): Connect to systemd socket and listen for state change notifications.
+    ///
+    /// The router daemon in WSL runs under systemd with socket activation and sd_notify.
+    /// This method connects to the WSL socket at `\\wsl$\<distro>\run\tillandsias\router.sock`
+    /// and receives event notifications when container state changes occur in the daemon.
+    ///
+    /// Event format (newline-delimited JSON):
+    /// ```json
+    /// {"container":"tillandsias-myapp-aeranthos","state":"Running"}
+    /// {"container":"tillandsias-myapp-aeranthos","state":"Stopped"}
+    /// ```
+    ///
+    /// The daemon notifies via `sd_notify("WATCHDOG=1")` every 10s (WatchdogSec=10s in unit).
+    /// Connection drops trigger fallback to backoff inspection.
+    // @trace spec:cross-platform, spec:wsl-daemon-orchestration
+    // @cheatsheet runtime/wsl-daemon-patterns.md, runtime/systemd-socket-activation.md
+    #[cfg(target_os = "windows")]
+    async fn stream_events_wsl(
+        &self,
+        tx: &mpsc::Sender<PodmanEvent>,
+    ) -> Result<(), PodmanEventError> {
+        use tokio::fs::OpenOptions;
+
+        debug!(prefix = %self.prefix, "Starting WSL systemd socket stream");
+
+        // Construct socket path: \\wsl$\<distro>\run\tillandsias\router.sock
+        // Get distro name from TILLANDSIAS_WSL_DISTRO env var, default to "Fedora"
+        let distro =
+            std::env::var("TILLANDSIAS_WSL_DISTRO").unwrap_or_else(|_| "Fedora".to_string());
+
+        // On Windows, UNC path to WSL socket: \\wsl$\Fedora\run\tillandsias\router.sock
+        let socket_path = format!(r"\\wsl$\{}\run\tillandsias\router.sock", distro);
+
+        debug!(socket_path = %socket_path, "Connecting to WSL router socket");
+
+        // Open the socket as a named pipe (Windows treats Unix sockets as named pipes in WSL)
+        let sock_file = OpenOptions::new()
+            .read(true)
+            .open(&socket_path)
+            .await
+            .map_err(|e| {
+                debug!(socket_path = %socket_path, error = %e, "Failed to open WSL socket");
+                PodmanEventError::SpawnFailed(format!("WSL socket open failed: {}", e))
+            })?;
+
+        let mut reader = tokio::io::BufReader::new(sock_file);
+        let mut line = String::new();
+
+        loop {
+            line.clear();
+            use tokio::io::AsyncBufReadExt;
+            match reader.read_line(&mut line).await {
+                Ok(0) => {
+                    // EOF — socket closed by daemon or WSL
+                    debug!("WSL socket stream reached EOF");
+                    return Err(PodmanEventError::StreamEnded);
+                }
+                Ok(_) => {
+                    debug!(raw_json = %line.trim(), "Received WSL event line");
+
+                    // Parse WSL event format: {"container":"name","state":"Running|Stopped|Creating"}
+                    if let Some(event) = parse_wsl_event(&line, &self.prefix) {
+                        debug!(
+                            container = %event.container_name,
+                            state = ?event.new_state,
+                            "Dispatching parsed container event from WSL"
+                        );
+                        if tx.send(event).await.is_err() {
+                            return Ok(()); // Channel closed, clean shutdown
+                        }
+                    }
+                }
+                Err(e) => {
+                    debug!(error = %e, "WSL socket read error");
                     return Err(PodmanEventError::ReadError(e.to_string()));
                 }
             }
@@ -234,6 +323,7 @@ impl PodmanEventStream {
 /// {"Name": "tillandsias-tetris-aeranthos", "Status": "died", "Type": "container", ...}
 /// ```
 /// Note: This is NOT Docker's format (`Actor.Attributes.name` / `Action`).
+// @trace spec:podman-orchestration
 fn parse_podman_event(json_line: &str, prefix: &str) -> Option<PodmanEvent> {
     let value: serde_json::Value = serde_json::from_str(json_line.trim()).ok()?;
 
@@ -248,6 +338,42 @@ fn parse_podman_event(json_line: &str, prefix: &str) -> Option<PodmanEvent> {
         "create" => ContainerState::Creating,
         "stop" | "kill" => ContainerState::Stopping,
         "died" | "remove" | "cleanup" => ContainerState::Stopped,
+        _ => return None,
+    };
+
+    Some(PodmanEvent {
+        container_name: name.to_string(),
+        new_state,
+    })
+}
+
+/// Parse a JSON event line from the WSL router systemd socket.
+///
+/// The WSL daemon sends events with "container" and "state" fields:
+/// ```json
+/// {"container":"tillandsias-myapp-aeranthos","state":"Running"}
+/// {"container":"tillandsias-myapp-aeranthos","state":"Stopped"}
+/// {"container":"tillandsias-myapp-aeranthos","state":"Creating"}
+/// ```
+///
+/// State values are uppercase: Running, Stopped, Creating, Stopping.
+// @trace spec:cross-platform, spec:wsl-daemon-orchestration
+// @cheatsheet runtime/wsl-daemon-patterns.md
+#[cfg(target_os = "windows")]
+fn parse_wsl_event(json_line: &str, prefix: &str) -> Option<PodmanEvent> {
+    let value: serde_json::Value = serde_json::from_str(json_line.trim()).ok()?;
+
+    let name = value["container"].as_str()?;
+    if !name.starts_with(prefix) {
+        return None;
+    }
+
+    let state_str = value["state"].as_str()?;
+    let new_state = match state_str {
+        "Running" => ContainerState::Running,
+        "Creating" => ContainerState::Creating,
+        "Stopping" => ContainerState::Stopping,
+        "Stopped" => ContainerState::Stopped,
         _ => return None,
     };
 
@@ -358,5 +484,81 @@ mod tests {
     fn unknown_status_returns_none() {
         let json = podman_event_json("tillandsias-foo-bar", "attach");
         assert!(parse_podman_event(&json, "tillandsias-").is_none());
+    }
+
+    /// Helper: build a WSL-format JSON event line.
+    #[cfg(target_os = "windows")]
+    fn wsl_event_json(name: &str, state: &str) -> String {
+        format!(r#"{{"container":"{name}","state":"{state}"}}"#)
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn parse_wsl_running_event() {
+        let json = wsl_event_json("tillandsias-tetris-aeranthos", "Running");
+        let event = parse_wsl_event(&json, "tillandsias-").unwrap();
+        assert_eq!(event.container_name, "tillandsias-tetris-aeranthos");
+        assert_eq!(event.new_state, ContainerState::Running);
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn parse_wsl_creating_event() {
+        let json = wsl_event_json("tillandsias-myapp-ionantha", "Creating");
+        let event = parse_wsl_event(&json, "tillandsias-").unwrap();
+        assert_eq!(event.new_state, ContainerState::Creating);
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn parse_wsl_stopping_event() {
+        let json = wsl_event_json("tillandsias-tetris-aeranthos", "Stopping");
+        let event = parse_wsl_event(&json, "tillandsias-").unwrap();
+        assert_eq!(event.new_state, ContainerState::Stopping);
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn parse_wsl_stopped_event() {
+        let json = wsl_event_json("tillandsias-tetris-aeranthos", "Stopped");
+        let event = parse_wsl_event(&json, "tillandsias-").unwrap();
+        assert_eq!(event.new_state, ContainerState::Stopped);
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn wsl_prefix_filter_rejects_non_matching() {
+        let json = wsl_event_json("other-container", "Running");
+        assert!(parse_wsl_event(&json, "tillandsias-").is_none());
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn wsl_prefix_filter_accepts_matching() {
+        let json = wsl_event_json("tillandsias-foo-bar", "Running");
+        assert!(parse_wsl_event(&json, "tillandsias-").is_some());
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn wsl_malformed_json_returns_none() {
+        assert!(parse_wsl_event("not json at all", "tillandsias-").is_none());
+        assert!(parse_wsl_event("{}", "tillandsias-").is_none());
+        assert!(parse_wsl_event("", "tillandsias-").is_none());
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn wsl_unknown_state_returns_none() {
+        let json = wsl_event_json("tillandsias-foo-bar", "Unknown");
+        assert!(parse_wsl_event(&json, "tillandsias-").is_none());
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn wsl_lowercase_state_returns_none() {
+        // WSL uses uppercase state strings; lowercase should not parse
+        let json = wsl_event_json("tillandsias-foo-bar", "running");
+        assert!(parse_wsl_event(&json, "tillandsias-").is_none());
     }
 }

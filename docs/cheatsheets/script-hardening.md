@@ -1,3 +1,15 @@
+---
+tags: [bash, shell, hardening, shellcheck, security, scripts]
+languages: [bash]
+since: 2024-01-01
+last_verified: 2026-04-27
+sources:
+  - https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html
+  - https://github.com/koalaman/shellcheck/wiki
+authority: high
+status: current
+---
+
 # Script Hardening
 
 ## Overview
@@ -433,3 +445,9 @@ echo "[$var]"                  # [  hello  ]
 - [Avoid Insecure Temp Files: mktemp Fixes -- Secure Coding Practices](https://securecodingpractices.com/avoiding-insecure-temporary-file-creation-scripts-mktemp-usage/)
 - [Race Conditions and Secure File Operations -- Apple Developer](https://developer.apple.com/library/archive/documentation/Security/Conceptual/SecureCodingGuide/Articles/RaceConditions.html)
 - [ShellCheck](https://www.shellcheck.net/)
+
+## Provenance
+
+- https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html — GNU Bash manual: `set -e` (errexit), `set -u` (nounset), `set -o pipefail` descriptions; exact semantics of each flag (original `bash.html` page returned HTTP 429; this sub-page fetched successfully)
+- https://github.com/koalaman/shellcheck/wiki — ShellCheck static analysis tool wiki: SC1000–SC1145 parser/syntax checks, SC2000–SC2184+ semantic/runtime checks; 546 wiki pages covering every diagnostic code (original `www.shellcheck.net/wiki/` returned ECONNREFUSED; GitHub wiki fetched successfully)
+- **Last updated:** 2026-04-27

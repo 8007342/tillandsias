@@ -14,8 +14,8 @@ FROM docker.io/library/alpine:3.20
 # DISTRO: adduser -D (Alpine), NOT useradd (Fedora)
 RUN apk add --no-cache git git-daemon bash openssh-client github-cli \
     && adduser -D -u 1000 -s /bin/bash git \
-    && mkdir -p /srv/git /var/log/git-service \
-    && chown -R git:git /srv/git /var/log/git-service
+    && mkdir -p /srv/git /var/log/git-service /strategic \
+    && chown -R git:git /srv/git /var/log/git-service /strategic
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY post-receive-hook.sh /usr/local/share/git-service/post-receive-hook.sh
@@ -23,6 +23,12 @@ COPY post-receive-hook.sh /usr/local/share/git-service/post-receive-hook.sh
 # (bind-mounted :ro by the host tray) and feeds it to git's HTTPS auth prompt.
 # @trace spec:secrets-management, spec:git-mirror-service
 COPY git-askpass-tillandsias.sh /usr/local/bin/git-askpass-tillandsias.sh
+# @trace spec:external-logs-layer
+# Manifest of curated external log files published by this image.
+# The tray-side auditor reads this at /etc/tillandsias/external-logs.yaml
+# every 60 s and flags unlisted files in the role dir as LEAK events.
+RUN mkdir -p /etc/tillandsias
+COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
 RUN chmod +x /usr/local/bin/entrypoint.sh \
               /usr/local/share/git-service/post-receive-hook.sh \
               /usr/local/bin/git-askpass-tillandsias.sh
@@ -30,5 +36,9 @@ RUN chmod +x /usr/local/bin/entrypoint.sh \
 USER git
 
 EXPOSE 9418
+
+# @trace spec:git-mirror-service, spec:socket-container-orchestration
+HEALTHCHECK --interval=2s --timeout=5s --start-period=3s --retries=10 \
+    CMD nc -w 1 127.0.0.1 9418 </dev/null || exit 1
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

@@ -1,25 +1,35 @@
 #!/usr/bin/env bash
-# pre-commit-openspec.sh — Non-blocking OpenSpec trace warnings
-# @trace spec:spec-traceability
+# pre-commit-openspec.sh — Non-blocking OpenSpec trace warnings (default), CI-mode enforcement
+# @trace spec:spec-traceability, spec:cheatsheet-source-layer
 #
-# PHILOSOPHY: This hook ALWAYS exits 0. It NEVER blocks a commit.
+# PHILOSOPHY: This hook ALWAYS exits 0 by default. It NEVER blocks commits.
 #
 # OpenSpec follows CRDT-inspired monotonic convergence: specs and code
 # drift apart naturally, and warnings nudge them back together over time.
 # A warning today becomes a fix next week — or stays as a known gap.
 # Blocking commits would break flow and punish incremental progress.
 #
+# CI mode (--ci-mode): In CI/release workflows, exit 1 on ANY warning.
+# This ensures releases only happen when spec-code alignment is verified.
+#
 # What it checks:
 #   1. Ghost traces — @trace referencing non-existent specs
 #   2. Zero-trace specs — specs with no @trace annotations in the codebase
 #   3. Stale changes — active changes older than 7 days
+#   4. Cheatsheet source binding — INDEX.json ↔ local: path ↔ file consistency
+#      (via scripts/check-cheatsheet-sources.sh --no-sha)
+#      ERRORS from the binding check are printed as warnings.
 #
 # Usage:
 #   Installed as .git/hooks/pre-commit (via scripts/install-hooks.sh)
 #   Or run manually: bash scripts/hooks/pre-commit-openspec.sh
+#   In CI: bash scripts/hooks/pre-commit-openspec.sh --ci-mode
 
-# No set -e — we handle errors ourselves. This hook must never abort.
+# No set -e — we handle errors ourselves. This hook must never abort (except in --ci-mode).
 set -uo pipefail
+
+CI_MODE=false
+[[ "${1:-}" == "--ci-mode" ]] && CI_MODE=true
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { exit 0; }
 SPECS_DIR="$REPO_ROOT/openspec/specs"
@@ -80,7 +90,7 @@ zero_trace_check() {
         # Search the codebase for any @trace referencing this spec
         # Exclude openspec/ directory and target/ build artifacts
         local found
-        found="$(grep -rl --include='*.rs' --include='*.sh' --include='*.toml' \
+        found="$(grep -rl --include='*.rs' --include='*.sh' --include='*.toml' --include='Containerfile*' \
             "spec:${spec_name}" "$REPO_ROOT" 2>/dev/null \
             | grep -v '/openspec/' \
             | grep -v '/target/' \
@@ -133,6 +143,56 @@ staleness_check() {
     done
 }
 
+# --- 4. Cheatsheet source binding check ------------------------------------
+# Legacy verbatim source layer check — kept for the three-release retention
+# window per @tombstone discipline. The new tier validator (check 4b) is
+# the canonical replacement.
+# @trace spec:cheatsheet-source-layer
+
+cheatsheet_source_check() {
+    local checker="${REPO_ROOT}/scripts/check-cheatsheet-sources.sh"
+    [[ -f "${checker}" ]] || return 0
+    [[ -f "${REPO_ROOT}/cheatsheet-sources/INDEX.json" ]] || return 0
+
+    local output exit_code
+    output="$(bash "${checker}" --no-sha 2>&1)" || exit_code=$?
+    exit_code="${exit_code:-0}"
+
+    if [[ "${exit_code}" -ne 0 ]]; then
+        # Errors from the binding checker — surface as pre-commit warnings.
+        echo "  ⚠ cheatsheet-sources: binding errors (non-blocking):" >&2
+        while IFS= read -r line; do
+            echo "    ${line}" >&2
+        done <<< "${output}"
+        warnings=$((warnings + 1))
+    fi
+    # Warnings (UNFETCHED) are suppressed here — they appear on manual runs.
+}
+
+# --- 4b. Cheatsheet tier-aware validator (cheatsheets-license-tiered) ------
+# Runs scripts/check-cheatsheet-tiers.sh in --quiet mode. ERRORs surface as
+# non-blocking OpenSpec warnings (CRDT-convergence philosophy). The validator
+# itself is non-fatal: it exits 0 unless tier-conditional fields are missing
+# or CRDT override discipline is violated.
+# @trace spec:cheatsheets-license-tiered
+
+cheatsheet_tier_check() {
+    local checker="${REPO_ROOT}/scripts/check-cheatsheet-tiers.sh"
+    [[ -f "${checker}" ]] || return 0
+
+    local output exit_code
+    output="$(bash "${checker}" --quiet 2>&1)" || exit_code=$?
+    exit_code="${exit_code:-0}"
+
+    if [[ "${exit_code}" -ne 0 ]]; then
+        echo "  ⚠ cheatsheet-tiers: validation ERRORs (non-blocking):" >&2
+        while IFS= read -r line; do
+            echo "    ${line}" >&2
+        done <<< "${output}"
+        warnings=$((warnings + 1))
+    fi
+}
+
 # --- Run all checks ---------------------------------------------------------
 
 echo "" >&2  # Visual separator from git's own output
@@ -140,12 +200,22 @@ echo "" >&2  # Visual separator from git's own output
 ghost_check
 zero_trace_check
 staleness_check
+cheatsheet_source_check
+cheatsheet_tier_check
 
 if [[ "$warnings" -gt 0 ]]; then
     echo "" >&2
-    echo "  OpenSpec: $warnings warning(s) — not blocking commit" >&2
+    if [[ "$CI_MODE" == "true" ]]; then
+        echo "  OpenSpec: $warnings warning(s) — FAILING CI MODE" >&2
+    else
+        echo "  OpenSpec: $warnings warning(s) — not blocking commit" >&2
+    fi
     echo "" >&2
 fi
 
-# Always exit 0 — see PHILOSOPHY comment at top
+# Exit 0 by default (pre-commit hook philosophy)
+# Exit 1 in CI mode if any warnings found
+if [[ "$CI_MODE" == "true" && "$warnings" -gt 0 ]]; then
+    exit 1
+fi
 exit 0

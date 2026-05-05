@@ -16,6 +16,7 @@
         forgeLibCommon = ./images/default/lib-common.sh;
         forgeEntrypointOpencode = ./images/default/entrypoint-forge-opencode.sh;
         forgeEntrypointClaude = ./images/default/entrypoint-forge-claude.sh;
+        forgeEntrypointCodex = ./images/default/entrypoint-forge-codex.sh;
         forgeEntrypointTerminal = ./images/default/entrypoint-terminal.sh;
         forgeOpencode = ./images/default/opencode.json;
         forgeGitAskpass = ./images/default/git-askpass-tillandsias.sh;
@@ -84,6 +85,9 @@
               # The binary is cached in ~/.cache/tillandsias/opencode/
               # Nix itself (for nix develop inside container)
               nix
+              # Codex: code analysis agent (lazy-pulled if not in nixpkgs)
+              # TODO: Replace with actual Codex package once available in nixpkgs
+              # For now, a stub wrapper will be provided; Codex binary will be pulled at runtime
               # TLS certificates
               cacert
               # Make /usr/bin/env and /bin/sh work
@@ -114,9 +118,11 @@
               mkdir -p ./usr/local/bin
               cp ${forgeEntrypointOpencode} ./usr/local/bin/entrypoint-forge-opencode.sh
               cp ${forgeEntrypointClaude} ./usr/local/bin/entrypoint-forge-claude.sh
+              cp ${forgeEntrypointCodex} ./usr/local/bin/entrypoint-forge-codex.sh
               cp ${forgeEntrypointTerminal} ./usr/local/bin/entrypoint-terminal.sh
               chmod +x ./usr/local/bin/entrypoint-forge-opencode.sh
               chmod +x ./usr/local/bin/entrypoint-forge-claude.sh
+              chmod +x ./usr/local/bin/entrypoint-forge-codex.sh
               chmod +x ./usr/local/bin/entrypoint-terminal.sh
               cp ${forgeMcpBrowser} ./usr/local/bin/tillandsias-mcp-browser
               chmod +x ./usr/local/bin/tillandsias-mcp-browser

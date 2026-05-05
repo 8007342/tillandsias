@@ -57,6 +57,10 @@ done < <(
         --include="*.sh" \
         --include="*.toml" \
         --include="*.nix" \
+        --include="Containerfile*" \
+        --exclude-dir='.claude' \
+        --exclude-dir='target' \
+        --exclude-dir='target-musl' \
         . 2>/dev/null \
         | grep "spec:" \
         || true
