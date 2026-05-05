@@ -500,15 +500,14 @@ jobs:
           esac
 
           # Create the release with all artifacts
+          # Only include scripts that exist (Windows .ps1 scripts are planned, not yet available)
+          SCRIPT_FILES="release-artifacts/* scripts/install.sh scripts/uninstall.sh"
+
           gh release create "v${VERSION}" \
             --title "v${VERSION}" \
             --notes-file "${NOTES_FILE}" \
             ${PRERELEASE_FLAG} \
-            release-artifacts/* \
-            scripts/install.sh \
-            scripts/uninstall.sh \
-            scripts/install.ps1 \
-            scripts/uninstall.ps1
+            ${SCRIPT_FILES}
 
   # ---------------------------------------------------------------------------
   # Update rolling tags (stable + latest)
