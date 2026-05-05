@@ -103,3 +103,11 @@ unknown_event_register:
         - methodology/versioning.yaml
         - methodology/proximity.yaml
         - methodology/convergence.yaml
+    - file: methodology/event/002-user-runtime-lifecycle-refinement.yaml
+      status: triaged
+      spec_under_review: spec:user-runtime-lifecycle
+      blocking_issues:
+        - embedded_containerfile_user_runtime_model_not_yet_distilled_into_spec
+        - host_pristineness_violated_by_registries_setup
+        - cheatsheets_include_superseded_nix_or_oci_user_runtime_options
+        - three_runtime_residuals_not_yet_measured_separately

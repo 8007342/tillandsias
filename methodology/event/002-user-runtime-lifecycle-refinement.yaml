@@ -1,0 +1,209 @@
+trace: spec:user-runtime-lifecycle
+
+event_id: methodology.event.002-user-runtime-lifecycle-refinement@v1
+status: triaged
+observed_at: "2026-05-05T00:00:00Z"
+reporter: "claude-code"
+summary: >
+  User Runtime Lifecycle spec created; semantic distillation resolved the image
+  source model to Containerfiles embedded in the binary, built on demand at user
+  first launch with podman as the only external dependency.
+
+observed_signal:
+  description: >
+    New spec `openspec/specs/user-runtime-lifecycle/spec.md` documents the complete
+    lifecycle from binary installation through first launch, container caching, and
+    update cycles. The prior event framed image source strategy as unresolved:
+    embedded OCI image tarballs, runtime Containerfile builds, and Nix builds were
+    all listed as possible User Runtime strategies.
+
+    The distilled signal is narrower: User Runtime architecture is embedded
+    Containerfiles and supporting image source files inside the binary. The user
+    first-launch path extracts those sources to an ephemeral build directory and
+    invokes `podman build`. The binary has zero dependencies beyond podman. User
+    Runtime does not load embedded OCI tarballs and does not invoke Nix. Locally
+    cached images exist only to optimize bandwidth and startup latency during
+    repeated builds and launches; they are semantically ephemeral and must be
+    rebuildable from the binary at any time.
+  signal_type: spec
+
+expected_model:
+  description: >
+    User installation yields a single binary plus the prerequisite that podman is
+    available. On first launch, the binary initializes automatically, extracts its
+    embedded Containerfiles and image contexts, builds versioned local images with
+    podman, creates containers idempotently, and records only ephemeral metadata
+    under the cache boundary. Updates and cache deletion both converge through the
+    same rebuild path.
+
+    The three-runtime model is:
+    - Developer Runtime: toolbox/repository workflow that authors and validates
+      Containerfiles and supporting sources.
+    - Cloud Runtime: CI/release workflow that builds and validates the binary and
+      embeds the Containerfile source set; it may build images for verification,
+      but those images are not the User Runtime source of truth.
+    - User Runtime: installed binary plus podman; builds images on demand from
+      embedded Containerfiles and treats local podman images as disposable cache.
+  source_refs:
+    - spec:user-runtime-lifecycle
+    - spec:init-command
+    - spec:appimage-build-pipeline
+    - spec:default-image
+    - spec:podman-orchestration
+
+distilled_distinction:
+  durable_claim: >
+    In User Runtime, the binary-embedded Containerfile source set is the durable
+    image definition. Podman local images are cache artifacts, not release
+    artifacts, not semantic state, and not proof that the runtime is initialized.
+  excluded_models:
+    - embedded_oci_tarballs_as_user_runtime_source_of_truth
+    - nix_builds_on_user_hosts
+    - registry_or_registries_conf_state_as_source_of_truth
+    - host_configuration_as_initialization_state
+  convergence_effect: >
+    This removes a branch from the lifecycle state machine: fresh install, binary
+    update, and podman cache eviction all converge through the same source-hash
+    checked Containerfile build path.
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - ephemeral-principle
+    - zero-project-pollution
+    - no_behavioral_ambiguity_allowed
+    - convergence_claims_must_cite_evidence_bundle
+  spec_requirement_ids:
+    - user-runtime-lifecycle:binary-installation
+    - user-runtime-lifecycle:first-launch-automatic-initialization
+    - user-runtime-lifecycle:container-image-caching
+    - user-runtime-lifecycle:update-cycle-containers-recreated
+    - user-runtime-lifecycle:image-sources-no-runtime-downloads
+    - user-runtime-lifecycle:host-system-remains-pristine
+    - user-runtime-lifecycle:three-runtime-separation
+  litmus_ids:
+    - user-runtime-lifecycle:podman-only-dependency
+    - user-runtime-lifecycle:embedded-containerfile-first-launch
+    - user-runtime-lifecycle:cache-eviction-rebuild
+    - user-runtime-lifecycle:no-registry-config-touch
+    - user-runtime-lifecycle:no-user-nix
+  cheatsheet_refs:
+    - cheatsheets/runtime/container-image-tagging.md
+    - cheatsheets/build/container-image-building.md
+    - cheatsheets/runtime/ephemeral-lifecycle.md
+
+affected_artifacts:
+  specs:
+    - spec:user-runtime-lifecycle
+    - spec:init-command
+    - spec:appimage-build-pipeline
+    - spec:default-image
+    - spec:podman-orchestration
+    - spec:podman-registries-config
+  methodology_files:
+    - methodology/event/index.yaml
+    - methodology/convergence.yaml
+    - methodology/proximity.yaml
+  code_paths:
+    - src-tauri/src/embedded.rs (embedded Containerfile source manifest and extraction)
+    - src-tauri/src/init.rs (first-launch initialization and idempotent rebuild)
+    - src-tauri/src/handlers.rs (image staleness and podman build orchestration)
+    - src-tauri/src/main.rs (first-launch detection and user-facing lifecycle)
+    - crates/tillandsias-podman/src/ (podman-only runtime boundary)
+    - images/*/Containerfile (durable User Runtime image definitions)
+  scripts:
+    - scripts/setup-podman-registries.sh (must not be used by User Runtime)
+    - scripts/build-image.sh (Developer/Cloud Runtime helper only, not User Runtime contract)
+    - build.sh (Developer Runtime entrypoint only)
+  cheatsheets:
+    - cheatsheets/runtime/container-image-tagging.md
+    - cheatsheets/build/container-image-building.md
+    - cheatsheets/runtime/ephemeral-lifecycle.md
+  litmus:
+    - host-pristineness
+    - podman-only-dependency
+    - embedded-containerfile-manifest-complete
+    - first-launch-builds-from-embedded-containerfiles
+    - cache-eviction-rebuilds-from-binary
+    - update-cycle-rebuilds-from-binary
+    - runtime-state-isolation-across-developer-cloud-user
+  dashboards:
+    - docs/convergence/centicolon-dashboard.md
+    - docs/convergence/centicolon-dashboard.json
+    - target/convergence/centicolon-signature.jsonl
+
+evidence_refs:
+  commits:
+    - "5530e3e0 docs: codify methodology bootstrap protocol"
+  files:
+    - openspec/specs/user-runtime-lifecycle/spec.md
+    - src-tauri/src/embedded.rs
+    - scripts/setup-podman-registries.sh
+    - cheatsheets/build/container-image-building.md
+    - cheatsheets/runtime/container-image-tagging.md
+    - cheatsheets/runtime/ephemeral-lifecycle.md
+    - TRACES.md
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: medium
+provisional_classification: missing_spec_requirement
+
+next_distillation_step:
+  owner: "tlatoani"
+  action: >
+    Update the User Runtime durable artifacts to encode the narrowed model:
+    Containerfiles embedded in the binary are the source of truth; first launch
+    uses `podman build`; podman is the only host dependency; cached images are
+    locally useful but semantically disposable. Remove or quarantine User Runtime
+    language that permits embedded OCI tarballs, Nix builds, or host registries.conf
+    state as image source of truth. Bind the refined requirements to litmus tests,
+    traces, and CentiColon residual reasons so closure is measurable.
+  target_artifact: spec
+
+closure_criteria:
+  - spec:user-runtime-lifecycle states that User Runtime image sources are embedded Containerfiles and supporting context files, not OCI tarballs or Nix definitions.
+  - spec:user-runtime-lifecycle states that podman is the only required host dependency and that missing podman is a user-facing prerequisite failure, not an auto-install path.
+  - spec:user-runtime-lifecycle defines local podman images as semantically ephemeral cache and requires rebuild after cache deletion without loss of durable state.
+  - spec:init-command and spec:appimage-build-pipeline agree on the same embedded Containerfile manifest, extraction boundary, source hash, and version tag model.
+  - spec:podman-registries-config or equivalent requirement proves User Runtime never writes or semantically depends on host `registries.conf`; any network source used by a Containerfile is fully qualified and traceable.
+  - scripts/setup-podman-registries.sh is removed from any User Runtime path or explicitly scoped to Developer/Cloud Runtime with trace evidence.
+  - Cheatsheets listed in `cheatsheet_refs` are revised so User Runtime documentation does not present Nix or embedded OCI tarballs as active user-launch options.
+  - Litmus tests exist for podman-only dependency, embedded manifest completeness, host pristineness, first-launch idempotence, cache eviction rebuild, update rebuild, and no registry configuration mutation.
+  - Runtime traces identify `runtime_model` as one of `developer`, `cloud`, or `user`, and User Runtime image events include source manifest hash, binary version, image tag, build reason, cache hit/miss, bytes downloaded when available, and registry/config dependency status.
+  - The convergence dashboard reports residual CentiColon debt for each of the three runtimes separately and exposes the maximum residual runtime before aggregate score.
+  - Evidence bundle cites spec hash, binary hash, embedded source manifest hash, litmus results, trace coverage, and a clean-host filesystem diff for the User Runtime path.
+
+convergence_velocity_and_measurability_suggestions:
+  - >
+    Collapse User Runtime lifecycle branches into one canonical rebuild operator:
+    `ensure_user_runtime_images(binary_version, embedded_manifest_hash)`. First
+    launch, binary update, and cache eviction should differ only by `build_reason`.
+  - >
+    Add a runtime-axis obligation matrix with rows for Developer, Cloud, and User
+    Runtime and columns for source_of_truth, dependency_boundary, cache_semantics,
+    host_mutation_boundary, version/hash_signal, positive_litmus, negative_litmus,
+    runtime_trace, and residual_cc.
+  - >
+    Score convergence by minimax residual across the three runtimes before
+    reporting aggregate closure. This prevents a well-covered Developer Runtime
+    from hiding an under-measured User Runtime launch contract.
+  - >
+    Make image cache behavior measurable with counters: cache_hit, cache_miss,
+    rebuild_due_to_binary_version, rebuild_due_to_manifest_hash,
+    rebuild_due_to_missing_image, build_bytes_downloaded_when_available,
+    build_duration_ms, and host_config_writes.
+  - >
+    Treat any User Runtime Nix invocation, embedded OCI load, host config write,
+    or dependence on unqualified registry search state as a negative litmus signal
+    that reopens this event or creates a bounded uncertainty exception if the
+    architecture intentionally changes.
+
+distilled_into:
+  - openspec/specs/user-runtime-lifecycle/spec.md:pending
+  - openspec/specs/appimage-build-pipeline/spec.md:pending
+  - openspec/specs/podman-registries-config/spec.md:pending
+  - cheatsheets/build/container-image-building.md:pending
+  - cheatsheets/runtime/container-image-tagging.md:pending
+  - cheatsheets/runtime/ephemeral-lifecycle.md:pending
+  - methodology/convergence.yaml:three_runtime_residual_rollup_pending

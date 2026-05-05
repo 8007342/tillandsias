@@ -5,9 +5,9 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [build.sh#L204](../../../build.sh#L204)
-- [build.sh#L217](../../../build.sh#L217)
-- [build.sh#L235](../../../build.sh#L235)
-- [build.sh#L331](../../../build.sh#L331)
-- [build.sh#L370](../../../build.sh#L370)
-- [build.sh#L589](../../../build.sh#L589)
+- [build.sh#L210](../../../build.sh#L210)
+- [build.sh#L223](../../../build.sh#L223)
+- [build.sh#L241](../../../build.sh#L241)
+- [build.sh#L337](../../../build.sh#L337)
+- [build.sh#L376](../../../build.sh#L376)
+- [build.sh#L595](../../../build.sh#L595)
