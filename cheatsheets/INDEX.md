@@ -218,3 +218,9 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - sample-prompts.md                — Helping users understand what an in-forge agent + Flutter/Nix/Flame defaults ca… [bundled, partial-verify]
 - tray-minimal-ux.md [DRAFT]       — Understanding the tray menu structure and user interactions in the Tillandsias … [bundled, partial-verify]
 
+
+## Container Image Management
+
+- [utils/podman-registries.md](utils/podman-registries.md) — Short-name resolution, registries.conf, local vs. remote images
+- [runtime/image-lifecycle.md](runtime/image-lifecycle.md) — Build, store, run, and cleanup Tillandsias container images
+

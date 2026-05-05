@@ -195,6 +195,12 @@ ensure_dev_cache() {
     _info "Dev proxy active: $HTTP_PROXY"
 }
 
+# Setup podman registries configuration before any podman operations
+# @trace spec:podman-registries-config
+"$SCRIPT_DIR/scripts/setup-podman-registries.sh" || {
+    _warn "Failed to setup podman registries (non-fatal, build may continue)"
+}
+
 ensure_dev_cache
 
 # ---------------------------------------------------------------------------
