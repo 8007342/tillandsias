@@ -16,6 +16,62 @@ use tillandsias_core::config::{
 use tillandsias_core::genus::TillandsiaGenus;
 use tillandsias_core::state::ContainerInfo;
 
+/// Detect the base image distro from a Containerfile.
+/// Returns one of: "fedora", "debian", "alpine", or "unknown".
+/// @trace spec:user-runtime-lifecycle
+fn detect_distro_from_containerfile(containerfile_path: &Path) -> String {
+    let content = match std::fs::read_to_string(containerfile_path) {
+        Ok(c) => c,
+        Err(_) => return "unknown".to_string(),
+    };
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("FROM ") {
+            let from_spec = trimmed.strip_prefix("FROM ").unwrap_or("").trim();
+            // Extract the base image name (before any @ or :)
+            let base_image = from_spec
+                .split('@')
+                .next()
+                .unwrap_or(from_spec)
+                .split(':')
+                .next()
+                .unwrap_or(from_spec);
+
+            if base_image.contains("fedora") || base_image.contains("rhel") {
+                return "fedora".to_string();
+            } else if base_image.contains("debian") || base_image.contains("ubuntu") {
+                return "debian".to_string();
+            } else if base_image.contains("alpine") {
+                return "alpine".to_string();
+            }
+        }
+    }
+    "unknown".to_string()
+}
+
+/// Get the package cache mount point for a given distro.
+/// Returns a tuple of (host_path, container_path) for the -v flag.
+/// @trace spec:user-runtime-lifecycle
+fn get_cache_mount_for_distro(distro: &str) -> Option<(PathBuf, &'static str)> {
+    let cache_base = match std::env::var("HOME") {
+        Ok(h) => PathBuf::from(h),
+        Err(_) => return None,
+    };
+
+    let cache_path = cache_base.join(".cache/tillandsias/packages");
+
+    // Ensure cache directory exists
+    let _ = std::fs::create_dir_all(&cache_path);
+
+    match distro {
+        "fedora" => Some((cache_path, "/var/cache/dnf/packages")),
+        "debian" => Some((cache_path, "/var/cache/apt/archives")),
+        "alpine" => Some((cache_path, "/var/cache/apk")),
+        _ => None,
+    }
+}
+
 /// Drop guard that cleans up enclave service containers on any exit path
 /// (normal return, panic, SIGINT after podman forwards it, etc.) — but only
 /// when no tray was spawned alongside this CLI session. When a graphical
@@ -140,24 +196,49 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
     // Git Bash's MSYS2 doesn't initialize properly from native Windows processes.
     #[cfg(target_os = "windows")]
     {
+        // Select the correct image subdirectory based on image_name
+        let image_subdir = match image_name {
+            "proxy" => "proxy",
+            "git" => "git",
+            "inference" => "inference",
+            "web" => "web",
+            _ => "default",
+        };
+
         let containerfile = source_dir
             .join("images")
-            .join("default")
+            .join(image_subdir)
             .join("Containerfile");
-        let context_dir = source_dir.join("images").join("default");
+        let context_dir = source_dir.join("images").join(image_subdir);
+
+        // @trace spec:user-runtime-lifecycle
+        let distro = detect_distro_from_containerfile(&containerfile);
 
         if debug {
             println!(
-                "  [debug] Running podman build --tag {} -f {}",
+                "  [debug] Running podman build --tag {} -f {} (distro: {})",
                 tag,
-                containerfile.display()
+                containerfile.display(),
+                distro
             );
         }
 
-        let status = tillandsias_podman::podman_cmd_sync()
-            .args(["build", "--tag", &tag, "-f"])
+        let mut build_cmd = tillandsias_podman::podman_cmd_sync();
+        build_cmd.args(["build", "--tag", &tag, "-f"])
             .arg(&containerfile)
-            .arg(&context_dir)
+            .arg(&context_dir);
+
+        // Add cache mount if available for this distro
+        // @trace spec:user-runtime-lifecycle
+        if let Some((host_cache, container_cache_path)) = get_cache_mount_for_distro(&distro) {
+            let mount_spec = format!("{}:{}", host_cache.display(), container_cache_path);
+            build_cmd.args(["-v", &mount_spec]);
+            if debug {
+                println!("  [debug] Mounting cache: {}", mount_spec);
+            }
+        }
+
+        let status = build_cmd
             .stdin(std::process::Stdio::inherit())
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit())
@@ -195,24 +276,56 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         }
     }
 
-    // On Unix, use the build-image.sh script (handles nix + fedora backends).
+    // On Unix, use podman build directly with cache mounting (User Runtime).
+    // @trace spec:user-runtime-lifecycle, spec:podman-orchestration
     #[cfg(not(target_os = "windows"))]
     {
-        let mut cmd = std::process::Command::new(&script);
+        // Select the correct image subdirectory based on image_name
+        let image_subdir = match image_name {
+            "proxy" => "proxy",
+            "git" => "git",
+            "inference" => "inference",
+            "web" => "web",
+            _ => "default",
+        };
 
-        cmd.arg(image_name)
-            .args(["--tag", &tag, "--backend", "fedora"])
-            .current_dir(&source_dir)
-            .env_remove("LD_LIBRARY_PATH")
-            .env_remove("LD_PRELOAD")
-            // Pass the resolved podman path so build-image.sh can find podman
-            // even when launched from Finder (which has a minimal PATH).
-            .env("PODMAN_PATH", tillandsias_podman::find_podman_path());
+        let containerfile = source_dir
+            .join("images")
+            .join(image_subdir)
+            .join("Containerfile");
+        let context_dir = source_dir.join("images").join(image_subdir);
+
+        // @trace spec:user-runtime-lifecycle
+        let distro = detect_distro_from_containerfile(&containerfile);
+
+        if debug {
+            println!(
+                "  [debug] Running podman build --tag {} -f {} (distro: {})",
+                tag,
+                containerfile.display(),
+                distro
+            );
+        }
+
+        let mut build_cmd = std::process::Command::new(tillandsias_podman::find_podman_path());
+        build_cmd.args(["build", "--tag", &tag, "-f"])
+            .arg(&containerfile)
+            .arg(&context_dir);
+
+        // Add cache mount if available for this distro
+        // @trace spec:user-runtime-lifecycle
+        if let Some((host_cache, container_cache_path)) = get_cache_mount_for_distro(&distro) {
+            let mount_spec = format!("{}:{}", host_cache.display(), container_cache_path);
+            build_cmd.args(["-v", &mount_spec]);
+            if debug {
+                println!("  [debug] Mounting cache: {}", mount_spec);
+            }
+        }
 
         // Image builds do NOT go through the proxy — SSL bump requires CA trust
         // that build containers don't have. See handlers.rs for full rationale.
 
-        let status = cmd
+        let status = build_cmd
             .stdin(std::process::Stdio::inherit())
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit())
