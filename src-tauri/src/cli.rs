@@ -203,7 +203,7 @@ USAGE:
     tillandsias <path> --claude     Attach using Claude Code
     tillandsias <path> --bash       Open maintenance terminal
     tillandsias --github-login      Authenticate with GitHub
-    tillandsias --diagnostics [p]   Stream live container logs for troubleshooting
+    tillandsias --diagnostics [p]   Stream live logs for troubleshooting
     tillandsias --init              Pre-build development environments
     tillandsias --init --force      Rebuild forge image from scratch
     tillandsias --stats             Show disk usage from Tillandsias artifacts

@@ -815,7 +815,12 @@ pub(crate) async fn ensure_proxy_running(
             tokio::time::timeout(
                 Duration::from_secs(60),
                 tokio::process::Command::new("podman")
-                    .args(["wait", "--condition=healthy", "--interval=500ms", PROXY_CONTAINER_NAME])
+                    .args([
+                        "wait",
+                        "--condition=healthy",
+                        "--interval=500ms",
+                        PROXY_CONTAINER_NAME,
+                    ])
                     .status(),
             )
             .await
@@ -1702,7 +1707,12 @@ pub(crate) async fn ensure_git_service_running(
             match tokio::time::timeout(
                 Duration::from_secs(45),
                 tokio::process::Command::new("podman")
-                    .args(["wait", "--condition=healthy", "--interval=500ms", &git_container])
+                    .args([
+                        "wait",
+                        "--condition=healthy",
+                        "--interval=500ms",
+                        &git_container,
+                    ])
                     .status(),
             )
             .await

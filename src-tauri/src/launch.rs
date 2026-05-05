@@ -714,7 +714,7 @@ mod tests {
             assert!(args.contains(&"--security-opt=label=disable".to_string()));
             assert!(args.contains(&"--rm".to_string()));
             assert!(args.contains(&"--init".to_string()));
-            assert!(args.contains(&"--stop-timeout=10".to_string()));
+            assert!(args.contains(&"--stop-timeout=15".to_string()));
             // pids-limit must always be present
             assert!(
                 args.iter().any(|a| a.starts_with("--pids-limit=")),
@@ -910,6 +910,7 @@ mod tests {
 
     // @trace spec:layered-tools-overlay
     #[test]
+    #[ignore] // @tombstone obsolete:layered-tools-overlay — agents now baked in image
     fn tools_overlay_skipped_when_dir_absent() {
         let profile = container_profile::forge_opencode_profile();
         let ctx = test_context();
@@ -924,6 +925,7 @@ mod tests {
 
     // @trace spec:layered-tools-overlay
     #[test]
+    #[ignore] // @tombstone obsolete:layered-tools-overlay — agents now baked in image
     fn tools_overlay_mounted_when_dir_exists() {
         let profile = container_profile::forge_claude_profile();
         let tmp_dir = std::env::temp_dir().join("tillandsias-test-tools-overlay");

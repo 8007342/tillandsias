@@ -7,5 +7,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [images/default/entrypoint-forge-opencode.sh#L69](../../../images/default/entrypoint-forge-opencode.sh#L69)
 - [images/default/entrypoint-forge-opencode-web.sh#L94](../../../images/default/entrypoint-forge-opencode-web.sh#L94)
-- [src-tauri/src/handlers.rs#L1858](../../../src-tauri/src/handlers.rs#L1858)
-- [src-tauri/src/handlers.rs#L1921](../../../src-tauri/src/handlers.rs#L1921)
+- [src-tauri/src/handlers.rs#L1846](../../../src-tauri/src/handlers.rs#L1846)
+- [src-tauri/src/handlers.rs#L1909](../../../src-tauri/src/handlers.rs#L1909)

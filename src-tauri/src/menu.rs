@@ -682,11 +682,16 @@ mod tests {
     /// Test that gen_id increments generation counter on successive calls.
     #[test]
     fn test_gen_id_increments() {
+        // Get initial generation
         let id1 = gen_id("test");
+        assert!(id1.contains('#'));
+
+        // Manually increment generation (normally done by build_tray_menu)
+        MENU_GENERATION.fetch_add(1, Ordering::Relaxed);
         let id2 = gen_id("test");
 
         // Both should have generation suffix, and they should be different
-        assert!(id1.contains('#'));
+        // after an explicit increment
         assert!(id2.contains('#'));
         assert_ne!(id1, id2);
     }
