@@ -12,5 +12,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/inference/Containerfile#L79](../../../images/inference/Containerfile#L79)
 - [images/proxy/Containerfile#L27](../../../images/proxy/Containerfile#L27)
 - [images/router/Containerfile#L87](../../../images/router/Containerfile#L87)
-- [src-tauri/src/embedded.rs#L122](../../../src-tauri/src/embedded.rs#L122)
-- [src-tauri/src/embedded.rs#L394](../../../src-tauri/src/embedded.rs#L394)
+- [src-tauri/src/embedded.rs#L125](../../../src-tauri/src/embedded.rs#L125)
+- [src-tauri/src/embedded.rs#L403](../../../src-tauri/src/embedded.rs#L403)
