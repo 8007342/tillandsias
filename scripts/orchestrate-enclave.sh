@@ -159,7 +159,15 @@ else
 fi
 
 log_info "Git mirror container started: $GIT_CONTAINER"
-sleep 2
+
+# @trace spec:socket-container-orchestration
+log_step "Waiting for git daemon readiness..."
+if ! podman wait --condition=healthy "$GIT_CONTAINER"; then
+    log_error "Git daemon '${GIT_CONTAINER}' failed health check"
+    log_error "Image may be incomplete. Rebuild: scripts/build-image.sh git"
+    exit 1
+fi
+log_info "✓ Git daemon ready"
 
 # ===========================================================================
 # Step 4: Inference Container (non-blocking)
