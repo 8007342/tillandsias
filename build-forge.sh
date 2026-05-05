@@ -2,17 +2,19 @@
 # @trace spec:default-image, spec:user-runtime-lifecycle, spec:litmus-framework
 # Quick-start litmus test: rebuild forge image using prod code path.
 #
+# Host-level orchestrator: separates dev environment (cargo/toolbox) from
+# user runtime (podman on host).
+#
 # Usage:
 #   ./build-forge.sh              # Rebuild forge image (test mode)
 #   ./build-forge.sh --assert     # Rebuild + assert exact podman calls
-#
-# This exercises the exact ImageBuilder code that tillandsias app uses.
-# When ready, tillandsias will pick up the rebuilt tillandsias-forge:vX.Y.Z
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$SCRIPT_DIR"
+TOOLBOX_NAME="$(basename "$ROOT")"
+TMP_BUILD_LOG="/tmp/build-forge.log"
 
 # Colors
 GREEN='\033[0;32m'
@@ -25,26 +27,28 @@ _info()  { echo -e "${GREEN}[build-forge]${NC} $*"; }
 _step()  { echo -e "${CYAN}[build-forge]${NC} $*"; }
 _error() { echo -e "${RED}[build-forge]${NC} $*" >&2; }
 
-_step "Building forge image via cargo run (litmus test)..."
+trap '_error "Interrupted"; exit 130' SIGTERM SIGINT
 
+_step "Building forge image (host-level orchestrator)..."
 
-# Exercise prod code path (when ImageBuilder integrated)
-cd "$ROOT"
-if ! toolbox run cargo run --bin build-image -- forge "$@" 2>&1 | tee /tmp/build-forge.log; then
-    _error "Build failed"
-    tail -20 /tmp/build-forge.log >&2
+# Step 1: Run cargo inside dev environment (toolbox)
+_step "Preparing image metadata via cargo..."
+if ! toolbox -c "$TOOLBOX_NAME" run cargo run --bin build-image -- forge "$@" 2>&1 | tee "$TMP_BUILD_LOG"; then
+    _error "Cargo prepare failed"
+    tail -20 "$TMP_BUILD_LOG" >&2
     exit 1
 fi
 
-if grep -q "ImageBuilder trait not yet integrated" /tmp/build-forge.log; then
-    _step "ImageBuilder not yet integrated, using direct podman build..."
-
-    # Fallback: direct podman build using refactored scripts
+# Step 2: Check if ImageBuilder is integrated
+if grep -q "ImageBuilder trait not yet integrated" "$TMP_BUILD_LOG"; then
+    _step "ImageBuilder not integrated; using direct podman build (host)..."
     "$ROOT/scripts/build-image.sh" forge || exit 1
+else
+    _step "ImageBuilder integrated; executing via PodmanExecutor..."
 fi
 
 _info "Forge image rebuilt successfully"
 _info "Current image: $(podman images | grep tillandsias-forge | head -1 | awk '{print $3}')"
-_info "Next step: restart tilmandsias binary or containers to pick up new image"
+_info "Next step: restart tillandsias binary or containers to pick up new image"
 
 exit 0
