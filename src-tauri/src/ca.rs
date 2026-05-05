@@ -101,12 +101,15 @@ pub fn generate_ephemeral_certs() -> Result<PathBuf, String> {
     fs::write(dir.join("ca-chain.crt"), &chain_pem)
         .map_err(|e| format!("Write ca-chain.crt: {e}"))?;
 
-    // Key file: mode 0600
+    // Key file: mode 0644 (rw-r--r--)
+    // Readable by rootless podman mounts (ephemeral, tmpfs, dies with session).
+    // Security: key is on tmpfs (not persistent), mounted RO into containers,
+    // and directory is XDG_RUNTIME_DIR (user-scoped, not world-readable).
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let key_path = dir.join("intermediate.key");
-        if let Err(e) = fs::set_permissions(&key_path, fs::Permissions::from_mode(0o600)) {
+        if let Err(e) = fs::set_permissions(&key_path, fs::Permissions::from_mode(0o644)) {
             warn!(
                 accountability = true,
                 category = "secrets",
