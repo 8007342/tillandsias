@@ -10,4 +10,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [src-tauri/src/embedded.rs#L790](../../../src-tauri/src/embedded.rs#L790)
 - [src-tauri/src/embedded.rs#L799](../../../src-tauri/src/embedded.rs#L799)
 - [src-tauri/src/embedded.rs#L807](../../../src-tauri/src/embedded.rs#L807)
-- [src-tauri/src/handlers.rs#L1243](../../../src-tauri/src/handlers.rs#L1243)
+- [src-tauri/src/handlers.rs#L1242](../../../src-tauri/src/handlers.rs#L1242)

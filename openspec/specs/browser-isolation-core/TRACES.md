@@ -18,7 +18,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [src-tauri/src/chromium_launcher.rs#L128](../../../src-tauri/src/chromium_launcher.rs#L128)
 - [src-tauri/src/embedded.rs#L237](../../../src-tauri/src/embedded.rs#L237)
 - [src-tauri/src/embedded.rs#L669](../../../src-tauri/src/embedded.rs#L669)
-- [src-tauri/src/handlers.rs#L113](../../../src-tauri/src/handlers.rs#L113)
+- [src-tauri/src/handlers.rs#L111](../../../src-tauri/src/handlers.rs#L111)
 - [src-tauri/src/handlers.rs#L2507](../../../src-tauri/src/handlers.rs#L2507)
 - [src-tauri/src/handlers.rs#L4721](../../../src-tauri/src/handlers.rs#L4721)
 - [src-tauri/src/handlers.rs#L4801](../../../src-tauri/src/handlers.rs#L4801)

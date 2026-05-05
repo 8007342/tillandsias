@@ -8,7 +8,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-core/src/container_profile.rs#L561](../../../crates/tillandsias-core/src/container_profile.rs#L561)
 - [images/default/lib-common.sh#L278](../../../images/default/lib-common.sh#L278)
 - [src-tauri/src/handlers.rs#L29](../../../src-tauri/src/handlers.rs#L29)
-- [src-tauri/src/handlers.rs#L717](../../../src-tauri/src/handlers.rs#L717)
+- [src-tauri/src/handlers.rs#L715](../../../src-tauri/src/handlers.rs#L715)
 - [src-tauri/src/handlers.rs#L2738](../../../src-tauri/src/handlers.rs#L2738)
 - [src-tauri/src/handlers.rs#L3062](../../../src-tauri/src/handlers.rs#L3062)
 - [src-tauri/src/handlers.rs#L3121](../../../src-tauri/src/handlers.rs#L3121)

@@ -104,7 +104,10 @@ pub(crate) fn git_image_tag() -> String {
 /// The versioned inference image tag.
 /// @trace spec:inference-container
 pub(crate) fn inference_image_tag() -> String {
-    format!("tillandsias-inference:v{}", env!("TILLANDSIAS_FULL_VERSION"))
+    format!(
+        "tillandsias-inference:v{}",
+        env!("TILLANDSIAS_FULL_VERSION")
+    )
 }
 
 /// The chromium-core browser image tag, e.g., `tillandsias-chromium-core:v0.1.126.83`.
