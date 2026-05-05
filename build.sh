@@ -215,6 +215,56 @@ ensure_dev_cache() {
 ensure_dev_cache
 
 # ---------------------------------------------------------------------------
+# Build context detection (local vs CI)
+# ---------------------------------------------------------------------------
+
+# @trace spec:build-script-architecture
+detect_build_context() {
+    # Local development: running on developer's machine
+    # CI environment sets CI=true and GITHUB_ACTIONS=true automatically
+    if [[ -n "${CI:-}" ]] || [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+        echo "ci"
+    else
+        echo "local"
+    fi
+}
+
+BUILD_CONTEXT=$(detect_build_context)
+
+# @trace spec:build-script-architecture
+select_appimage_strategy() {
+    local context="$1"
+    local use_clean="$2"  # true if --clean was passed
+
+    if [[ "$context" == "ci" ]]; then
+        echo "clean_ubuntu"  # CI always uses full rebuild
+    elif [[ "$use_clean" == "true" ]]; then
+        echo "clean_ubuntu"  # Local --clean also uses full rebuild
+    else
+        echo "forge_cached"  # Default local: reuse forge image
+    fi
+}
+
+APPIMAGE_STRATEGY=$(select_appimage_strategy "$BUILD_CONTEXT" "${FLAG_CLEAN:-false}")
+export APPIMAGE_STRATEGY
+
+# Report strategy to user
+# @trace spec:build-script-architecture
+case "$APPIMAGE_STRATEGY" in
+    forge_cached)
+        _info "Using cached forge image (fast local path)"
+        ;;
+    clean_ubuntu)
+        if [[ "$BUILD_CONTEXT" == "ci" ]]; then
+            _info "CI environment detected; using full reproducible build path"
+        else
+            _warn "Full clean build (reproducibility verification)"
+            _info "This path is slow (~10min); use for pre-release gates only"
+        fi
+        ;;
+esac
+
+# ---------------------------------------------------------------------------
 # Standalone operations (don't need toolbox)
 # ---------------------------------------------------------------------------
 
