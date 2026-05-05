@@ -303,6 +303,7 @@ if [[ "$FLAG_BACKEND" == "fedora" ]]; then
     # that build containers don't have. Proxy is for runtime containers only.
 
     "$PODMAN" build \
+        --format docker \
         --tag "$IMAGE_TAG" \
         "${BUILD_ARGS[@]}" \
         -f "$CONTAINERFILE" \
