@@ -88,5 +88,9 @@ USER 1000:1000
 
 EXPOSE 11434
 
+# @trace spec:inference-container, spec:socket-container-orchestration
+HEALTHCHECK --interval=5s --timeout=10s --start-period=30s --retries=12 \
+    CMD curl -sf http://127.0.0.1:11434/api/version || exit 1
+
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 ENV HOME=/home/ollama USER=ollama

@@ -36,4 +36,8 @@ USER proxy
 
 EXPOSE 3128 3129
 
+# @trace spec:proxy-container, spec:socket-container-orchestration
+HEALTHCHECK --interval=2s --timeout=5s --start-period=5s --retries=15 \
+    CMD nc -z 127.0.0.1 3128 || exit 1
+
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

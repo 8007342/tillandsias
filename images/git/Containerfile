@@ -37,4 +37,8 @@ USER git
 
 EXPOSE 9418
 
+# @trace spec:git-mirror-service, spec:socket-container-orchestration
+HEALTHCHECK --interval=2s --timeout=5s --start-period=3s --retries=10 \
+    CMD nc -w 1 127.0.0.1 9418 </dev/null || exit 1
+
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
