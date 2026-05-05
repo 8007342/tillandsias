@@ -2766,15 +2766,14 @@ fn inject_forge_cache_mounts(run_args: &mut Vec<String>, project_name: &str, cac
 /// The volume and env args are inserted before the final image tag argument.
 ///
 /// @trace spec:proxy-container
-fn inject_ca_chain_mounts(run_args: &mut Vec<String>) {
+fn inject_ca_chain_mounts(run_args: &mut Vec<String>) -> Result<(), String> {
     let chain_path = crate::ca::proxy_certs_dir().join("ca-chain.crt");
     if !chain_path.exists() {
-        debug!(
-            spec = "proxy-container",
-            "CA chain not found at {} — skipping CA trust injection",
+        return Err(format!(
+            "CA chain cert not found at {} — ensure_proxy_running must complete \
+             before forge launch (proxy HEALTHCHECK must pass first)",
             chain_path.display()
-        );
-        return;
+        ));
     }
 
     // Insert before the last element (the image tag).
@@ -2789,7 +2788,7 @@ fn inject_ca_chain_mounts(run_args: &mut Vec<String>) {
         ),
     );
 
-    // @trace spec:proxy-container
+    // @trace spec:proxy-container, spec:socket-container-orchestration
     // Trust env vars: tell common package managers / runtimes to use the chain.
     // NODE_EXTRA_CA_CERTS: Node.js (npm, yarn, pnpm) — adds to built-in trust store
     // SSL_CERT_FILE / REQUESTS_CA_BUNDLE: handled by entrypoint scripts which
@@ -2800,12 +2799,14 @@ fn inject_ca_chain_mounts(run_args: &mut Vec<String>) {
         pos + 1,
         "-e=NODE_EXTRA_CA_CERTS=/run/tillandsias/ca-chain.crt".to_string(),
     );
+
+    Ok(())
 }
 
 /// Public wrapper for `inject_ca_chain_mounts` — used by `runner.rs` (CLI mode).
-/// @trace spec:proxy-container
-pub fn inject_ca_chain_mounts_pub(run_args: &mut Vec<String>) {
-    inject_ca_chain_mounts(run_args);
+/// @trace spec:proxy-container, spec:socket-container-orchestration
+pub fn inject_ca_chain_mounts_pub(run_args: &mut Vec<String>) -> Result<(), String> {
+    inject_ca_chain_mounts(run_args)
 }
 
 /// Remove orphaned tillandsias containers not tracked in state.
@@ -3105,8 +3106,8 @@ pub async fn handle_attach_here(
         &tag,
     );
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
-    // @trace spec:proxy-container
-    inject_ca_chain_mounts(&mut run_args);
+    // @trace spec:proxy-container, spec:socket-container-orchestration
+    inject_ca_chain_mounts(&mut run_args)?;
     // @trace spec:forge-cache-architecture, spec:forge-cache-dual
     // Add per-project dependency cache mounts so cargo, npm, pip, etc. persist across runs
     inject_forge_cache_mounts(&mut run_args, &project_name, &cache);
@@ -3476,8 +3477,8 @@ pub async fn handle_attach_web(
     ctx.web_host_port = Some(host_port);
 
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
-    // @trace spec:proxy-container
-    inject_ca_chain_mounts(&mut run_args);
+    // @trace spec:proxy-container, spec:socket-container-orchestration
+    inject_ca_chain_mounts(&mut run_args)?;
     // @trace spec:forge-cache-architecture, spec:forge-cache-dual
     // Add per-project dependency cache mounts so cargo, npm, pip, etc. persist across runs
     inject_forge_cache_mounts(&mut run_args, &project_name, &cache);
@@ -4038,8 +4039,8 @@ pub async fn handle_terminal(
         &tag,
     );
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
-    // @trace spec:proxy-container
-    inject_ca_chain_mounts(&mut run_args);
+    // @trace spec:proxy-container, spec:socket-container-orchestration
+    inject_ca_chain_mounts(&mut run_args)?;
 
     let mut podman_parts = vec![
         tillandsias_podman::find_podman_path().to_string(),
@@ -4290,8 +4291,8 @@ pub async fn handle_root_terminal(
         &tag,
     );
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
-    // @trace spec:proxy-container
-    inject_ca_chain_mounts(&mut run_args);
+    // @trace spec:proxy-container, spec:socket-container-orchestration
+    inject_ca_chain_mounts(&mut run_args)?;
 
     let mut podman_parts = vec![
         tillandsias_podman::find_podman_path().to_string(),

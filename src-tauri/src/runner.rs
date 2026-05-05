@@ -575,8 +575,11 @@ pub fn run(
         &tag,
     );
     let mut run_args = crate::launch::build_podman_args(&profile, &ctx);
-    // @trace spec:proxy-container
-    crate::handlers::inject_ca_chain_mounts_pub(&mut run_args);
+    // @trace spec:proxy-container, spec:socket-container-orchestration
+    if let Err(e) = crate::handlers::inject_ca_chain_mounts_pub(&mut run_args) {
+        eprintln!("Error: {e}");
+        return false;
+    }
 
     println!();
     if bash {
