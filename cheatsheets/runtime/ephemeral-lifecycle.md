@@ -170,22 +170,38 @@ Host cache directory: ~/.cache/tillandsias/packages/
 
 **First build (no cache):**
 ```
-podman build ... -v ~/.cache/tillandsias/packages:/var/cache/tillandsias/packages
+podman build ... -v ~/.cache/tillandsias/packages:/var/cache/dnf/packages
 ├─ Inside container: dnf install nginx
-├─ dnf checks: /var/cache/tillandsias/packages/ (empty)
+├─ dnf checks: /var/cache/dnf/packages/ (empty)
 ├─ Action: Download nginx RPM from mirror (e.g., fedora.example.com)
-├─ Result: Stored in /var/cache/tillandsias/packages/ (host-mounted)
+├─ Result: Stored in /var/cache/dnf/packages/ (host-mounted, persists in ~/.cache/tillandsias/packages/)
 └─ Time: Minutes (network-bound, downloading all packages)
 ```
 
 **Subsequent build (same versions):**
 ```
-podman build ... -v ~/.cache/tillandsias/packages:/var/cache/tillandsias/packages
+podman build ... -v ~/.cache/tillandsias/packages:/var/cache/dnf/packages
 ├─ Inside container: dnf install nginx
-├─ dnf checks: /var/cache/tillandsias/packages/ (has nginx RPM)
-├─ Action: Verify hash matches, use cached file
-├─ Result: No network request
+├─ dnf checks: /var/cache/dnf/packages/ (has nginx RPM from previous build)
+├─ Action: Hash match found, use cached file (transparent, no extra logic needed)
+├─ Result: No network request, no Containerfile config needed
 └─ Time: Seconds (local cache hit)
+```
+
+**Multi-distro support:**
+```
+# For Fedora/RHEL (dnf):
+podman build ... -v ~/.cache/tillandsias/packages:/var/cache/dnf/packages
+
+# For Debian/Ubuntu (apt):
+podman build ... -v ~/.cache/tillandsias/packages:/var/cache/apt/archives
+
+# Detection (dynamic in orchestration):
+if distro == "fedora" {
+  cache_mount = ":/var/cache/dnf/packages"
+} else if distro == "debian" {
+  cache_mount = ":/var/cache/apt/archives"
+}
 ```
 
 **After binary update (same Containerfile):**
