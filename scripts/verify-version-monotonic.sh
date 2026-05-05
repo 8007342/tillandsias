@@ -34,10 +34,12 @@ VERSION_FILE="$REPO_ROOT/VERSION"
     exit 2
 }
 
-# Parse a version string (format: Major.Minor.<component3>.Build or vMajor.Minor.<component3>.Build)
+# Parse a version string (format: Major.Minor.<component3>.Build[+hash] or vMajor.Minor.<component3>.Build[+hash])
 # Component3 can be either ChangeCount (old) or YYMMDD (new) — both are numeric.
+# Optional +hash suffix is stripped before parsing (CalVer with commit provenance).
 parse_version() {
     local version="${1#v}"  # Remove 'v' prefix if present
+    version="${version%+*}"  # Remove '+hash' suffix if present (CalVer commit provenance)
 
     # Extract components
     local major="${version%%.*}"
