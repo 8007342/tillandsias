@@ -72,12 +72,33 @@ But the check is currently **broken for the documented format**, so:
 2. Users don't know if version monotonicity is actually correct
 3. The gap between "what we document" and "what we enforce" is invisible
 
-## Next Steps for Methodology Refinement
+## Resolution
 
-1. **Update version-check script** to parse `v<M>.<m>.<YYMMDD>.<B>+<hash>` format
-2. **Support dual format** during transition period (old tags without hash, new tags with hash)
-3. **Document the check's behavior** in cheatsheets/release-discipline (e.g., `cheatsheets/build/release-versioning.md`)
-4. **Add to CI** so version-check is run and reported (currently blocks push but doesn't gate CI)
+**Fixed** (commit 61b316c): Updated `scripts/verify-version-monotonic.sh` to strip the `+<hash>` suffix before parsing version components. 
+
+The fix:
+```bash
+version="${version#v}"   # Remove 'v' prefix
+version="${version%+*}"  # Remove '+hash' suffix (new: CalVer provenance)
+```
+
+This allows the script to handle both:
+- Old format: `v0.1.184.561` (no hash)
+- New format: `v0.1.260504.32+6e8fd78d` (with commit hash)
+
+**Status**: All checks now pass (8/8). Version monotonicity is enforced correctly.
+
+## Remaining Methodology Refinement Opportunities
+
+1. **Release discipline documentation** — Create `cheatsheets/build/release-versioning.md` with:
+   - CalVer format explanation
+   - Commit hash provenance (why it's included)
+   - When version bumping happens (build auto-increment vs manual bumps)
+   - How monotonicity check works
+
+2. **Gate CI on version check** — Currently blocks local push, should also be in CI/CD pipeline to prevent non-monotonic releases from reaching GitHub
+
+3. **Document pre-flight validation** — When release workflows should validate version, when they should fail, what recovery looks like
 
 ## Observations for Release Discipline
 
