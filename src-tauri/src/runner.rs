@@ -276,56 +276,25 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         }
     }
 
-    // On Unix, use podman build directly with cache mounting (User Runtime).
+    // On Unix, use the build-image.sh script (handles nix + fedora backends).
     // @trace spec:user-runtime-lifecycle, spec:podman-orchestration
     #[cfg(not(target_os = "windows"))]
     {
-        // Select the correct image subdirectory based on image_name
-        let image_subdir = match image_name {
-            "proxy" => "proxy",
-            "git" => "git",
-            "inference" => "inference",
-            "web" => "web",
-            _ => "default",
-        };
+        let mut cmd = std::process::Command::new(&script);
 
-        let containerfile = source_dir
-            .join("images")
-            .join(image_subdir)
-            .join("Containerfile");
-        let context_dir = source_dir.join("images").join(image_subdir);
-
-        // @trace spec:user-runtime-lifecycle
-        let distro = detect_distro_from_containerfile(&containerfile);
-
-        if debug {
-            println!(
-                "  [debug] Running podman build --tag {} -f {} (distro: {})",
-                tag,
-                containerfile.display(),
-                distro
-            );
-        }
-
-        let mut build_cmd = std::process::Command::new(tillandsias_podman::find_podman_path());
-        build_cmd.args(["build", "--tag", &tag, "-f"])
-            .arg(&containerfile)
-            .arg(&context_dir);
-
-        // Add cache mount if available for this distro
-        // @trace spec:user-runtime-lifecycle
-        if let Some((host_cache, container_cache_path)) = get_cache_mount_for_distro(&distro) {
-            let mount_spec = format!("{}:{}", host_cache.display(), container_cache_path);
-            build_cmd.args(["-v", &mount_spec]);
-            if debug {
-                println!("  [debug] Mounting cache: {}", mount_spec);
-            }
-        }
+        cmd.arg(image_name)
+            .args(["--tag", &tag, "--backend", "fedora"])
+            .current_dir(&source_dir)
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            // Pass the resolved podman path so build-image.sh can find podman
+            // even when launched from Finder (which has a minimal PATH).
+            .env("PODMAN_PATH", tillandsias_podman::find_podman_path());
 
         // Image builds do NOT go through the proxy — SSL bump requires CA trust
         // that build containers don't have. See handlers.rs for full rationale.
 
-        let status = build_cmd
+        let status = cmd
             .stdin(std::process::Stdio::inherit())
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit())
