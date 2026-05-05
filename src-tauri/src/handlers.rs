@@ -661,21 +661,42 @@ pub(crate) async fn ensure_proxy_running(
                     secret = %name,
                     "Failed to remove stale CA secret during refresh"
                 );
-                return Err(e);
+                // Don't fail if removal failed — the secret might be in use by another process.
+                // Try to create anyway; if it's truly in use, creation will fail with "in use" error
+                // which is non-fatal (we'll log and continue, reusing the existing secret).
+            } else {
+                warn!(
+                    spec = "ephemeral-secret-refresh, secrets-management",
+                    secret = %name,
+                    reason = "stale secret from unclean shutdown",
+                    "Removing and refreshing podman secret"
+                );
             }
-            warn!(
-                spec = "ephemeral-secret-refresh, secrets-management",
-                secret = %name,
-                reason = "stale secret from unclean shutdown",
-                "Removing and refreshing podman secret"
-            );
         }
 
         // Create fresh secret with current CA material
-        crate::podman_secret::create(name, value).map_err(|e| {
-            warn!(error = %e, spec = "secrets-management", secret = %name, "Failed to create CA secret");
-            e
-        })?;
+        // If creation fails with "in use" error, it's from a concurrent tillandsias instance.
+        // Log and continue — the secret exists and will be used.
+        match crate::podman_secret::create(name, value) {
+            Ok(_) => {
+                debug!(spec = "secrets-management", secret = %name, "CA secret created");
+            }
+            Err(e) if e.contains("secret name in use") => {
+                warn!(
+                    error = %e,
+                    spec = "secrets-management, ephemeral-secret-refresh",
+                    secret = %name,
+                    reason = "concurrent tillandsias instance",
+                    "Secret already exists, reusing from concurrent process"
+                );
+                // Non-fatal: the secret exists and will be mounted into containers.
+                // Continue to next secret rather than failing the whole setup.
+            }
+            Err(e) => {
+                error!(error = %e, spec = "secrets-management", secret = %name, "Failed to create CA secret");
+                return Err(e);
+            }
+        }
     }
 
     info!(
