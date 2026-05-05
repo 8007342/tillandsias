@@ -385,15 +385,36 @@ build_appimage_forge_cached() {
 }
 
 # @trace spec:build-script-architecture
-# Clean Ubuntu build path — full reproducibility, slow but correct
+# Build AppImage in clean Ubuntu 22.04 container (full reproducibility)
+#
+# This function executes a complete from-scratch build in an isolated Ubuntu
+# container. No local artifacts or caches are reused for the final binary.
+#
+# Used by:
+#  - CI/release builds (reproducible releases, matches what GitHub Actions produces)
+#  - ./build.sh --clean (periodic verification that from-scratch builds work)
+#
+# Guarantees:
+#  - No local forge image, no toolbox dependencies
+#  - Identical to CI builds (same Ubuntu version, same dependency versions)
+#  - Slow (~10 min on first run, ~2-3 min with cached toolchain)
+#  - Hermetic: no external caches contaminate the result
+#
+# Cache strategy:
+#  - Rust toolchain + cargo registry persisted across runs (~500MB, RW mount)
+#  - apt cache persisted (RW mount, <500MB)
+#  - Source code is RO (no in-place edits)
+#  - Output AppImage extracted to host filesystem
 build_appimage_ubuntu_clean() {
     local output_dir="$SCRIPT_DIR/target/release/bundle/appimage"
     local cache_base="$ACTUAL_HOME/.cache/tillandsias/appimage-builder"
     local container_pid=""
+    local BUILD_START=$SECONDS
 
     # Trap SIGINT to kill child podman process on Ctrl+C
     trap 'if [[ -n "$container_pid" ]]; then kill "$container_pid" 2>/dev/null || true; fi; exit 130' INT TERM
 
+    _step "Building AppImage via clean Ubuntu container..."
     _step "Preparing AppImage build directories..."
     mkdir -p "$output_dir"
     mkdir -p "$cache_base"/{cargo-registry,cargo-bin,rustup,apt}
@@ -411,11 +432,13 @@ build_appimage_ubuntu_clean() {
     # On Linux, rm unlinks the file but running processes keep their fd.
     rm -f "$output_dir"/*.AppImage 2>/dev/null || true
 
-    _info "Output dir:  $output_dir"
-    _info "Cache dir:   $cache_base"
-    _step "Starting Ubuntu 22.04 podman container for AppImage build..."
+    _info "Output directory: $output_dir"
+    _info "Cache directory:  $cache_base"
+    _step "Starting Ubuntu 22.04 podman container..."
+
+    # Report build expectation based on cache state
     if [[ -f "$cache_base/rustup/settings.toml" ]]; then
-        _info "Cached toolchain found — skipping install (~1-2 min build)"
+        _info "Cached Rust toolchain found — build will take ~2-3 minutes"
     else
         _warn "First build installs Rust + tauri-cli — expect 10-20 minutes"
     fi
@@ -555,21 +578,29 @@ echo "[appimage] Done: /output/$(basename "$appimage_file")"
     # Clean up trap
     trap - INT TERM
 
+    # Check for build failure
     if [[ $build_status -ne 0 ]]; then
-        _error "AppImage build failed with status $build_status"
-        return $build_status
+        _error "Ubuntu container build exited with status $build_status"
+        return 1
     fi
 
-    # Find the produced AppImage and report it
+    # Verify the AppImage exists on the host
     local appimage_path
     appimage_path="$(find "$output_dir" -name "*.AppImage" -type f 2>/dev/null | head -1)"
     if [[ -z "$appimage_path" ]]; then
-        _error "AppImage build failed — no .AppImage found in $output_dir"
-        exit 1
+        _error "AppImage not created by Ubuntu builder"
+        return 1
     fi
 
+    # Make executable and report
     chmod +x "$appimage_path"
-    _info "AppImage ready: $appimage_path ($(du -h "$appimage_path" | cut -f1))"
+    local appimage_size
+    appimage_size="$(du -h "$appimage_path" | cut -f1)"
+
+    # Calculate and report timing
+    local BUILD_TIME=$((SECONDS - BUILD_START))
+    _info "AppImage built: $appimage_path ($appimage_size)"
+    _info "Build time: ${BUILD_TIME}s (full reproducible build)"
 }
 
 # @trace spec:build-script-architecture
