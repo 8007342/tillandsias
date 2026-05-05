@@ -76,8 +76,8 @@ use tillandsias_core::state::{
 use tillandsias_core::tools::ToolAllocator;
 use tillandsias_podman::PodmanClient;
 use tillandsias_podman::launch::{ContainerLauncher, allocate_port_range};
-use tillandsias_podman::query_occupied_ports;
 use tillandsias_podman::podman_cmd;
+use tillandsias_podman::query_occupied_ports;
 
 /// Derive the forge image tag from the full 4-part version.
 ///
