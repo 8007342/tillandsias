@@ -37,21 +37,29 @@ The `registries.conf` file tells podman:
 ## Example: Tillandsias registries.conf
 
 ```toml
-# Local images built with podman
-unqualified-search-registries = []  # Don't search external registries for unqualified names
+# Local images are stored at localhost (podman's default local storage)
+[[registry]]
+location = "localhost"
+insecure = true
 
-# Explicit registries for external images
+# External registries
 [[registry]]
 location = "docker.io"
-prefix = "docker.io"
+insecure = false
+
+[[registry]]
+location = "quay.io"
+insecure = false
 
 # Disable short-name resolution to prevent TTY prompts
+# With this set, unqualified names are searched in registry order without prompting
 short-name-mode = "disabled"
 ```
 
 **Result**: 
-- `podman run tillandsias-git:v0.1.x` → uses local image (no pull, no prompt)
-- `podman run docker.io/library/squid:6.1` → pulls from docker.io (explicit registry)
+- `podman run tillandsias-git:v0.1.x` → searches registries in order, finds in localhost (local storage), no TTY prompt
+- `podman run docker.io/library/squid:6.1` → explicit registry, skips search
+- `podman run unknown:v1` → searches all registries, fails with clear error (no prompt)
 
 ## Registry Configuration Directives
 
