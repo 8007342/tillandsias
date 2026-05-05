@@ -1,10 +1,3 @@
-# Tillandsias Convergence Methodology — Versioning Component
-#
-# Versioning is an observability mechanism for monotonic convergence. A released
-# artifact's version number indexes the evidence bundle for the spec version it claims.
-#
-# Sources: Methodology-owned synthesis of CalVer + LUB, main-only branch
-#          discipline, and CRDT merge-driver semantics.
 
 versioning_system:
   description: >
@@ -243,26 +236,17 @@ crdt_merge_driver:
       exists and is covered by tests.
 
     pseudocode: |
-      # Git passes three versions to driver:
-      # $1 = merged output file (current, should be updated in-place)
-      # $2 = base version (common ancestor)
-      # $3 = ours (local commit)
-      # $4 = theirs (incoming commit)
 
       parse_version() {
         local version="$1"
-        # Extract Major.Minor.YYMMDD.Build+Hash
         Major=$(echo "$version" | cut -d. -f1)
         Minor=$(echo "$version" | cut -d. -f2)
         YYMMDD=$(echo "$version" | cut -d. -f3)
         Build=$(echo "$version" | cut -d. -f4 | cut -d+ -f1)
         Hash=$(echo "$version" | cut -d+ -f2)
       }
-
-      # Parse ours and theirs, take component-wise max, write result
       parse_version "$ours_version"
       merge_major=$Major
-      # ... (repeat for all components)
       merged="v${merged_major}.${merged_minor}.${merged_yymmdd}.${merged_build}+${merged_hash}"
       echo "$merged" > "$output_file"
       exit 0
@@ -363,7 +347,6 @@ metadata_tracking:
     }
 
   querying: |
-    # Which changes are in v0.1.260105?
     jq 'select(.version | startswith("v0.1.260105"))' <version-history-log>
 
   observability_value: >

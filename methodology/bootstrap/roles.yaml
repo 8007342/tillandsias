@@ -1,0 +1,148 @@
+trace: spec:methodology-accountability
+
+bootstrap_roles:
+  version: v0.1
+  purpose: >
+    Many-to-many mapping between agent roles and methodology files. Intents choose
+    the task route; roles add focused affordances without forcing every agent to
+    read every component.
+
+  roles:
+    code_author:
+      reads:
+        - methodology/ci.yaml
+        - methodology/spec-system.yaml
+        - methodology/litmus.yaml
+    test_author:
+      reads:
+        - methodology/litmus.yaml
+        - methodology/ci.yaml
+    spec_author:
+      reads:
+        - methodology/spec-system.yaml
+        - methodology/verification.yaml
+        - methodology/litmus.yaml
+    litmus_author:
+      reads:
+        - methodology/litmus.yaml
+        - openspec/litmus-bindings.yaml
+    cheatsheet_curator:
+      reads:
+        - methodology/cheatsheets.yaml
+        - methodology/provenance.yaml
+    evidence_curator:
+      reads:
+        - methodology/provenance.yaml
+        - methodology/verification.yaml
+    release_operator:
+      reads:
+        - methodology/versioning.yaml
+        - methodology/verification.yaml
+    ci_operator:
+      reads:
+        - methodology/ci.yaml
+        - methodology/verification.yaml
+    orchestrator:
+      reads:
+        - methodology/between-commits-work-discipline.yaml
+        - methodology/agent-observability.yaml
+    event_recorder:
+      reads:
+        - methodology/agent-observability.yaml
+        - methodology/event/index.yaml
+    unknown_triager:
+      reads:
+        - methodology/event/index.yaml
+        - methodology/spec-system.yaml
+    methodology_author:
+      reads:
+        - methodology/catalog.yaml
+        - methodology/philosophy.yaml
+        - methodology/provenance.yaml
+        - methodology/math-foundations.yaml
+    math_reviewer:
+      reads:
+        - methodology/math-foundations.yaml
+        - methodology/proximity.yaml
+    investigator:
+      reads:
+        - methodology/catalog.yaml
+        - methodology/verification.yaml
+        - methodology/provenance.yaml
+    doc_author:
+      reads:
+        - methodology/spec-system.yaml
+        - methodology/cheatsheets.yaml
+
+  files:
+    methodology/philosophy.yaml:
+      useful_for:
+        - methodology_author
+        - investigator
+      affordance: "Core invariants and evidence boundaries."
+    methodology/spec-system.yaml:
+      useful_for:
+        - spec_author
+        - code_author
+        - unknown_triager
+        - doc_author
+      affordance: "Spec lifecycle, modality, ambiguity, bounded uncertainty."
+    methodology/verification.yaml:
+      useful_for:
+        - spec_author
+        - release_operator
+        - ci_operator
+        - investigator
+      affordance: "S-levels, L-levels, evidence bundles."
+    methodology/litmus.yaml:
+      useful_for:
+        - litmus_author
+        - test_author
+        - code_author
+        - spec_author
+      affordance: "Executable decision boundaries and stability rules."
+    methodology/ci.yaml:
+      useful_for:
+        - code_author
+        - test_author
+        - ci_operator
+      affordance: "Trace annotations, validator duties, failure modes."
+    methodology/cheatsheets.yaml:
+      useful_for:
+        - cheatsheet_curator
+        - doc_author
+      affordance: "Knowledge cache, provenance, scoring, compaction."
+    methodology/provenance.yaml:
+      useful_for:
+        - evidence_curator
+        - methodology_author
+        - investigator
+      affordance: "Claim IDs, sources, limits, falsification signals."
+    methodology/math-foundations.yaml:
+      useful_for:
+        - math_reviewer
+        - methodology_author
+      affordance: "Finite lattice model, ranking function, explicit non-claims."
+    methodology/proximity.yaml:
+      useful_for:
+        - math_reviewer
+        - litmus_author
+      affordance: "CentiColon budgets, caps, residuals, calibration."
+    methodology/event/index.yaml:
+      useful_for:
+        - unknown_triager
+        - event_recorder
+      affordance: "Unknown intake and semantic distillation closure."
+    methodology/agent-observability.yaml:
+      useful_for:
+        - orchestrator
+        - event_recorder
+      affordance: "Agent event stream, progress, handoff, stale recovery."
+    methodology/versioning.yaml:
+      useful_for:
+        - release_operator
+      affordance: "Version evidence and reconvergence rules."
+    methodology/between-commits-work-discipline.yaml:
+      useful_for:
+        - orchestrator
+      affordance: "Ephemeral agent work discipline and merge behavior."

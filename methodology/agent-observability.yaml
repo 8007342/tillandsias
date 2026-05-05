@@ -1,0 +1,92 @@
+trace: spec:methodology-accountability
+
+agent_observability_protocol:
+  version: v0.1
+  purpose: >
+    Make agent-to-agent work visible, queryable, and compressible while preserving
+    accountability. Progress displays are UI hints over structured events, not
+    evidence of correctness.
+
+  event_stream:
+    format: jsonl
+    location_template: "<project>/<metadata-dir>/agent-events.jsonl"
+    ordering: "sort by (lamport_clock, agent_id, event_seq)"
+    required_fields:
+      - event_id
+      - parent_event_id
+      - task_id
+      - spec_id
+      - agent_id
+      - lamport_clock
+      - event_seq
+      - status
+      - progress
+      - summary
+      - evidence_refs
+      - timestamp
+    status_values:
+      - queued
+      - bootstrapping
+      - reading
+      - planning
+      - editing
+      - verifying
+      - blocked
+      - done
+      - failed
+
+  progress_semantics:
+    range: "0..100"
+    monotonic_within_task: true
+    rule: >
+      Progress is coordination state. Correctness comes from specs, traces,
+      litmus tests, CI, and evidence bundles.
+    allowed_regression: >
+      Progress may decrease only with blocked, failed, or scope_changed events
+      that include root cause and updated evidence_refs.
+    recommended_weights:
+      bootstrap_receipt: 10
+      governing_context_loaded: 25
+      plan_ready: 35
+      edits_complete: 65
+      local_verification_started: 75
+      verification_passed: 90
+      evidence_recorded: 100
+
+  display_hints:
+    plain_text_bar:
+      width: 20
+      filled: "#"
+      empty: "-"
+      template: "{task_name} [{bar}] {progress}% {status}"
+    rich_text_bar:
+      width: 24
+      filled: "#"
+      partial: "~"
+      empty: " "
+      template: "{indent}{task_name} [{bar}] {progress}% {status}"
+    compact_template: "{task_name} [{bar}] {progress}% {status} refs:{evidence_count}"
+
+  agent_to_agent_messages:
+    rule: >
+      Agents communicate by appending events and by sending compact task handoffs.
+      Handoffs must not depend on hidden conversational memory.
+    handoff_schema:
+      task_id: string
+      spec_id: string
+      parent_task_id: string
+      bootstrap_receipt_ref: string
+      current_status: string
+      progress: integer
+      blockers: list
+      evidence_refs: list
+      next_action: string
+
+  stale_tracking_policy:
+    stale_after: "10 minutes without a new event for active work"
+    stale_action: >
+      Mark the task stale and require the next agent touching it to emit a fresh
+      reading or verifying event before continuing.
+    recovery: >
+      Reconstruct current task state from latest event per task_id, sorted by
+      Lamport order. Conflicting latest events become blocked until reconciled.

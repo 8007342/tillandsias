@@ -36,7 +36,7 @@ ANNOTATED_SPECS="$(
        --exclude-dir='.claude' \
        --exclude-dir='target' \
        --exclude-dir='target-musl' \
-       "$ROOT/src-tauri" "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" 2>/dev/null \
+       "$ROOT/src-tauri" "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" 2>/dev/null \
   | grep 'spec:' \
   | grep -oE 'spec:[a-zA-Z0-9_-]+' \
   | sed 's/^spec://' \
@@ -67,9 +67,9 @@ done <<< "$ANNOTATED_SPECS"
 for spec_dir in "$SPECS_DIR"/*/; do
   [[ -d "$spec_dir" ]] || continue
   spec_name="$(basename "$spec_dir")"
-  found="$(grep -rl --include='*.rs' --include='*.sh' --include='*.toml' \
+  found="$(grep -rl --include='*.rs' --include='*.sh' --include='*.toml' --include='*.yaml' \
       "spec:${spec_name}" \
-      "$ROOT/src-tauri" "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" 2>/dev/null \
+      "$ROOT/src-tauri" "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" 2>/dev/null \
       | head -1)" || true
   if [[ -z "$found" ]]; then
     _warn "orphaned spec '$spec_name' — no annotations"

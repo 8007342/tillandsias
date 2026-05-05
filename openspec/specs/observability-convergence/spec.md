@@ -125,6 +125,9 @@ Specs without recent implementation or test updates MUST be flagged as stale or 
 ### Requirement: Convergence scoring
 
 Compute a convergence score reflecting how well the implementation aligns with spec intent.
+This score is a coarse health indicator. Correctness-proximity residuals are
+reported separately as CentiColons by `methodology/proximity.yaml` and
+`openspec/specs/methodology-accountability/spec.md`.
 
 #### Scenario: Perfect convergence
 - **WHEN** a spec has:
@@ -262,4 +265,4 @@ Gating points:
 - `cheatsheets/runtime/logging-levels.md` — structured logging for observability events
 - `cheatsheets/runtime/cheatsheet-crdt-overrides.md` — CRDT and convergence patterns for spec↔code alignment
 - `cheatsheets/runtime/cheatsheet-architecture-v2.md` — instrumentation hooks and telemetry architecture
-
+- `openspec/specs/methodology-accountability/spec.md` — CentiColon residual proximity boundary

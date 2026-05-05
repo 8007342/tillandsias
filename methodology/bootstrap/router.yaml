@@ -1,0 +1,233 @@
+trace: spec:methodology-accountability
+
+bootstrap_router:
+  version: v0.1
+  purpose: >
+    Give an agent the shortest correct methodology read set for its immediate
+    task. The agent MUST choose exactly one intent before editing or executing a
+    nontrivial command.
+
+  entry_rule:
+    choose: exactly_one
+    source: intent_options
+    coverage: total
+    if_multiple_fit: >
+      Choose the intent that matches the requested deliverable, not every possible
+      concern. If still tied, choose the earlier option in intent_order.
+    if_none_fit: nil_noop_unsolved
+    determinism: >
+      Given the same user request, repository state, and router version, agents
+      should select the same intent. Roles add context; they do not change the
+      selected intent.
+    intent_order:
+      - code_implementation
+      - bug_fix
+      - test_or_automation
+      - spec_authoring
+      - litmus_authoring
+      - cheatsheet_authoring
+      - release_or_deployment
+      - multi_agent_orchestration
+      - documentation
+      - methodology_refinement
+      - unknown_capture
+      - investigation_only
+      - nil_noop_unsolved
+    required_first_read:
+      - methodology.yaml
+      - methodology/bootstrap/router.yaml
+
+  receipt:
+    required_before_source_edits: true
+    fields:
+      - selected_intent
+      - active_roles
+      - files_read
+      - governing_specs_or_traces
+      - missing_or_conflicting_references
+      - intended_change_scope
+      - verification_plan
+
+  intent_options:
+    code_implementation:
+      choose_when: "User asks to implement or change behavior."
+      roles:
+        - code_author
+        - spec_reader
+      read:
+        - methodology/spec-system.yaml
+        - methodology/ci.yaml
+        - methodology/litmus.yaml
+      done_when:
+        - code_change_matches_governing_spec
+        - traces_or_structured_spec_fields_updated_when_needed
+        - local_verification_attempted
+
+    bug_fix:
+      choose_when: "User asks to diagnose and fix incorrect behavior."
+      roles:
+        - code_author
+        - test_author
+        - unknown_triager
+      read:
+        - methodology/spec-system.yaml
+        - methodology/ci.yaml
+        - methodology/litmus.yaml
+        - methodology/event/index.yaml
+      done_when:
+        - root_cause_named
+        - regression_or_litmus_path_considered
+        - unknown_event_created_if_model_was_wrong
+
+    test_or_automation:
+      choose_when: "User asks to run, add, or repair tests, CI, scripts, or automation."
+      roles:
+        - test_author
+        - ci_operator
+      read:
+        - methodology/ci.yaml
+        - methodology/litmus.yaml
+      done_when:
+        - command_or_test_result_reported
+        - failures_linked_to_spec_or_unknown
+
+    spec_authoring:
+      choose_when: "User asks to create, revise, split, archive, or validate specs."
+      roles:
+        - spec_author
+        - evidence_curator
+      read:
+        - methodology/spec-system.yaml
+        - methodology/litmus.yaml
+        - methodology/verification.yaml
+        - methodology/provenance.yaml
+      done_when:
+        - requirements_are_measurable
+        - sources_of_truth_are_bound
+        - litmus_status_is_declared
+
+    litmus_authoring:
+      choose_when: "User asks to create or refine executable decision boundaries."
+      roles:
+        - litmus_author
+        - test_author
+      read:
+        - methodology/litmus.yaml
+        - methodology/spec-system.yaml
+        - methodology/proximity.yaml
+        - openspec/litmus-bindings.yaml
+      done_when:
+        - positive_and_negative_signals_considered
+        - spec_binding_updated_or_gap_declared
+
+    cheatsheet_authoring:
+      choose_when: "User asks to create, refresh, compact, or validate cheatsheets."
+      roles:
+        - cheatsheet_curator
+        - evidence_curator
+      read:
+        - methodology/cheatsheets.yaml
+        - methodology/provenance.yaml
+        - methodology/spec-system.yaml
+      done_when:
+        - provenance_is_current_or_draft_state_is_explicit
+        - spec_bindings_are_preserved
+
+    release_or_deployment:
+      choose_when: "User asks to release, version, deploy, publish, or push to prod."
+      roles:
+        - release_operator
+        - ci_operator
+      read:
+        - methodology/versioning.yaml
+        - methodology/verification.yaml
+        - methodology/ci.yaml
+      done_when:
+        - evidence_bundle_level_named
+        - version_or_deployment_state_is_traceable
+
+    multi_agent_orchestration:
+      choose_when: "User asks to coordinate background agents or batch work."
+      roles:
+        - orchestrator
+        - event_recorder
+      read:
+        - methodology/between-commits-work-discipline.yaml
+        - methodology/agent-observability.yaml
+        - methodology/ci.yaml
+      done_when:
+        - handoff_or_event_state_is_queryable
+        - agent_outputs_do_not_depend_on_hidden_memory
+
+    documentation:
+      choose_when: "User asks to update docs without changing behavior or specs."
+      roles:
+        - doc_author
+        - evidence_curator
+      read:
+        - methodology/spec-system.yaml
+        - methodology/cheatsheets.yaml
+        - methodology/provenance.yaml
+      done_when:
+        - docs_do_not_redefine_methodology
+        - source_or_spec_links_are_current
+
+    methodology_refinement:
+      choose_when: "User asks to change the methodology itself."
+      roles:
+        - methodology_author
+        - evidence_curator
+        - math_reviewer
+      read:
+        - methodology/catalog.yaml
+        - methodology/philosophy.yaml
+        - methodology/provenance.yaml
+        - methodology/math-foundations.yaml
+        - methodology/proximity.yaml
+        - methodology/event/index.yaml
+      done_when:
+        - semantics_are_preserved_or_tombstoned
+        - provenance_or_math_boundary_updated_when_needed
+        - bootstrap_router_stays_short
+
+    unknown_capture:
+      choose_when: "Task intent is unclear, surprising, or contradicts known methodology."
+      roles:
+        - unknown_triager
+        - evidence_curator
+      read:
+        - methodology/event/index.yaml
+        - methodology/provenance.yaml
+        - methodology/spec-system.yaml
+      done_when:
+        - unknown_is_recorded_or_reclassified
+        - next_distillation_target_is_named
+
+    investigation_only:
+      choose_when: "User asks for analysis, audit, review, or explanation without edits."
+      roles:
+        - investigator
+        - evidence_curator
+      read:
+        - methodology/catalog.yaml
+        - methodology/verification.yaml
+        - methodology/provenance.yaml
+      done_when:
+        - findings_are_evidence_linked
+        - edit_scope_is_not_started_without_new_request
+
+    nil_noop_unsolved:
+      choose_when: >
+        The request is empty, impossible in the current environment, unsafe to
+        execute, explicitly asks for no action, or cannot be classified after
+        reading this router.
+      roles:
+        - unknown_triager
+      read:
+        - methodology/event/index.yaml
+      done_when:
+        - no_op_or_blocker_is_reported
+        - unknown_event_created_if_the_gap_teaches_methodology_something
+        - no_source_edit_performed_without_reclassification
+
+  role_file_matrix_ref: methodology/bootstrap/roles.yaml

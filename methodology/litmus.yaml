@@ -1,11 +1,3 @@
-# Tillandsias Convergence Methodology — Litmus Tests Component
-#
-# Litmus tests are executable decision boundaries that validate code against specs.
-# This is the most comprehensive component—litmus tests are the convergence system's
-# strongest mechanism for detecting and preventing spec-code divergence.
-#
-# Source: monotonic-reduction-of-uncertainty-under-verifiable-constraints.yaml (v0.2, section: litmus_test)
-#         specs.yaml (v0.1, section: spec_system.litmus_binding)
 
 litmus_test:
   purpose: >

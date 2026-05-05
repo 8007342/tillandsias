@@ -1,10 +1,3 @@
-# Tillandsias Convergence Methodology — Philosophy Component
-#
-# Core principles, system model, invariants, layers, pitfalls, and final assertion.
-# This component defines the WHY and WHAT of the convergence system.
-#
-# Source: monotonic-reduction-of-uncertainty-under-verifiable-constraints.yaml (v0.2, sections: philosophy, layers, pitfalls, final_assertion)
-#         specs.yaml (v0.1, sections: spec_system.philosophy, spec_system.global_invariants)
 
 philosophy:
   core_principle: >
@@ -63,6 +56,23 @@ layers:
       trace coverage, environment profile, and dependency locks that supports a
       convergence claim without pretending to prove absolute correctness.
 
+  - name: provenance
+    description: >
+      Auditable source graph for methodology claims, specs, cheatsheets, and
+      evidence bundles. Provenance records why a claim is trusted, what it depends
+      on, and how it can be falsified.
+
+  - name: unknown_event
+    description: >
+      Structured intake record for observations the current methodology did not
+      predict. Unknown events preserve surprises until semantic distillation
+      updates a durable spec, litmus, cheatsheet, trace, or methodology artifact.
+
+  - name: proximity
+    description: >
+      CentiColon residual-obligation scoring. Proximity reports how much named,
+      auditable correctness work remains; it is not proof of correctness.
+
   - name: ci
     description: >
       Global validator enforcing invariants, detecting drift, and applying selection pressure.
@@ -81,6 +91,10 @@ evidence_boundaries:
   rule: >
     A convergence claim MUST name its highest supported claim strength and cite the
     evidence bundle that supports it.
+
+  methodology_rule: >
+    A methodology claim MUST cite a provenance claim or be treated as an explicit
+    assumption until proven by external source, repository evidence, or litmus signal.
 
 pitfalls:
   - cheatsheet_entropy_growth_without_bounds:
@@ -176,3 +190,5 @@ final_assertion: >
   monotonic under normal operation: once achieved, divergence must become
   detectable and recoverable. When learning invalidates prior assumptions, the
   bounded uncertainty exception records and gates the temporary loss of certainty.
+  When learning reveals a previously unmodeled unknown, methodology/event records
+  the surprise and semantic distillation preserves the learned distinction.

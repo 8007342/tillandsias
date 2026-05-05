@@ -1,0 +1,155 @@
+
+trace: spec:methodology-accountability
+
+proximity:
+  version: v0.1
+  unit:
+    name: "CentiColon"
+    symbol: "cc"
+    definition: >
+      One CentiColon is one hundredth of a normalized spec-obligation closure
+      point. It measures auditable obligation closure, not confidence, effort, or
+      proof of correctness.
+    interpretation: >
+      A score of 2778/2800 cc means 22 CentiColons of named, inspectable
+      obligations remain open or discounted. The denominator is the current
+      obligation budget derived from the spec and its evidence requirements.
+    math_basis: >
+      CentiColons are a bounded ranking function over the finite obligation-state
+      model defined in methodology/math-foundations.yaml. Monotonicity applies only
+      under fixed denominator and valid evidence-improving transitions.
+
+  obligation_budget:
+    description: >
+      Each active spec receives a denominator equal to the weighted sum of its
+      auditable obligations. Weights are explicit project policy and must be
+      reviewed after major defects or metric-gaming discoveries.
+    base_weights:
+      must_requirement: 100
+      must_not_requirement: 100
+      should_requirement: 40
+      invariant: 120
+      positive_litmus_signal: 80
+      negative_litmus_signal: 100
+      runtime_trace_signal: 60
+      cheatsheet_provenance_binding: 30
+      methodology_provenance_binding: 30
+      environment_assumption_declared: 25
+    modifiers:
+      critical_path_multiplier: 1.5
+      security_boundary_multiplier: 1.5
+      user_visible_contract_multiplier: 1.25
+      internal_helper_multiplier: 0.5
+
+  earning_rules:
+    description: >
+      Obligations earn CentiColons only when evidence is queryable and the linked
+      artifact exists at the cited revision.
+    evidence_credit:
+      spec_exists_and_active: 0.10
+      requirement_has_stable_id: 0.10
+      implementation_trace_present: 0.15
+      litmus_positive_passes: 0.20
+      litmus_negative_passes: 0.20
+      runtime_trace_observed: 0.15
+      provenance_current: 0.10
+    cap_rules:
+      - no_requirement_can_exceed_50_percent_without_litmus_signal
+      - no_requirement_can_exceed_70_percent_without_negative_case_if_must_or_must_not
+      - no_security_boundary_can_exceed_80_percent_without_runtime_trace_or_manual_evidence_bundle
+      - stale_or_missing_provenance_caps_related_obligation_at_85_percent
+      - ambiguous_requirement_caps_related_obligation_at_40_percent
+
+  penalties:
+    description: >
+      Penalties withhold or subtract CentiColons from the earned score. They are
+      intentionally named so a dashboard can show the residual gap.
+    ghost_trace: -50
+    dead_or_missing_spec: -100
+    litmus_flaky: -80
+    untested_must_requirement: -70
+    missing_negative_case: -50
+    stale_cheatsheet_provenance: -20
+    methodology_claim_without_provenance: -30
+    open_high_uncertainty_event: -60
+    metric_gaming_suspected: -120
+
+  rollup:
+    requirement_score: >
+      requirement_cc = weighted_obligation * earned_credit + penalties bounded to
+      [0, weighted_obligation].
+    spec_score: >
+      spec_cc = sum(requirement_cc, invariant_cc, signal_cc) / obligation_budget.
+    project_score: >
+      project_cc = weighted average of active spec scores, with critical-path
+      specs weighted by their obligation budgets.
+    dashboard_shape:
+      - spec_id
+      - earned_cc
+      - total_cc
+      - residual_cc
+      - top_residual_reasons
+      - evidence_bundle_ref
+      - open_unknown_events
+
+  anti_gaming:
+    rules:
+      - centicolons_measure_named_obligations_not_lines_of_code
+      - adding_trivial_requirements_must_not_inflate_project_score
+      - denominator_changes_must_be_reported_as_scope_changes
+      - deleting_obligations_requires_tombstone_or_bounded_uncertainty_exception
+      - scores_above_95_percent_require_no_open_high_uncertainty_events
+      - human_review_can_mark_metric_gaming_suspected_and_apply_penalty
+    mutation_check: >
+      High-scoring obligations SHOULD be mutation-tested or manually perturbed.
+      If violating the requirement does not reduce the score or fail a signal,
+      the obligation's scoring rule is invalid.
+
+  relationship_to_existing_scores:
+    convergence_score: >
+      Existing convergence_score remains a coarse health indicator for coverage,
+      trace completeness, staleness, and litmus binding.
+    centicolons: >
+      CentiColons are a finer residual-work unit. They explain what remains
+      missing after convergence_score says a spec is mostly covered.
+    rule: >
+      A dashboard MAY show both. It MUST NOT report convergence_score as a
+      substitute for CentiColon residuals when discussing correctness proximity.
+
+  calibration:
+    inputs:
+      - postmortems
+      - unknown_event_closures
+      - human_review_disagreements
+      - escaped_defects
+      - litmus_flakiness_history
+    rule: >
+      Weight changes are methodology changes. They MUST cite the event or evidence
+      bundle that motivated recalibration.
+
+  validation:
+    math_model_ref: "methodology/math-foundations.yaml:validation_program"
+    required_properties:
+      - earned_cc_is_bounded_between_zero_and_total_cc
+      - residual_cc_equals_total_cc_minus_earned_cc
+      - earned_cc_non_decreasing_for_valid_fixed_denominator_transitions
+      - residual_cc_non_increasing_for_valid_fixed_denominator_transitions
+      - denominator_changes_emit_scope_changed
+      - same_frozen_state_same_router_same_weights_same_score
+
+  deterministic_reproduction:
+    rule: >
+      Given the same repository state, spec set, evidence bundle, router version,
+      and proximity weights, independent agents SHOULD reproduce the same
+      CentiColon totals and residual reasons. Divergence is an unknown event unless
+      caused by an explicitly named evidence or scope difference.
+    inputs:
+      - repository_commit
+      - methodology_version
+      - bootstrap_router_version
+      - spec_hashes
+      - litmus_results
+      - trace_index
+      - proximity_weights
+      - open_unknown_events
+    divergence_action: "record methodology/event entry or fix ambiguous scoring rule"
