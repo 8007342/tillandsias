@@ -77,6 +77,7 @@ use tillandsias_core::tools::ToolAllocator;
 use tillandsias_podman::PodmanClient;
 use tillandsias_podman::launch::{ContainerLauncher, allocate_port_range};
 use tillandsias_podman::query_occupied_ports;
+use tillandsias_podman::podman_cmd;
 
 /// Derive the forge image tag from the full 4-part version.
 ///
@@ -812,9 +813,10 @@ pub(crate) async fn ensure_proxy_running(
             // Wait for squid to accept connections using podman's native HEALTHCHECK.
             // The HEALTHCHECK in images/proxy/Containerfile declares the readiness probe.
             // podman wait blocks until the health status transitions, avoiding manual polling.
+            // Use podman_cmd() to clear LD_LIBRARY_PATH and avoid libseccomp conflicts.
             tokio::time::timeout(
                 Duration::from_secs(60),
-                tokio::process::Command::new("podman")
+                podman_cmd()
                     .args([
                         "wait",
                         "--condition=healthy",
@@ -1703,10 +1705,11 @@ pub(crate) async fn ensure_git_service_running(
             // @trace spec:socket-container-orchestration, spec:git-mirror-service
             // Health check: wait for git daemon to report healthy via HEALTHCHECK.
             // Uses podman wait --condition=healthy instead of manual nc polling.
+            // Use podman_cmd() to clear LD_LIBRARY_PATH and avoid libseccomp conflicts.
             let git_container = format!("tillandsias-git-{project_name}");
             match tokio::time::timeout(
                 Duration::from_secs(45),
-                tokio::process::Command::new("podman")
+                podman_cmd()
                     .args([
                         "wait",
                         "--condition=healthy",
