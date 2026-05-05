@@ -86,40 +86,25 @@ use tillandsias_podman::query_occupied_ports;
 /// local build increment triggers a forge image rebuild.
 // @trace spec:default-image, spec:versioning
 pub(crate) fn forge_image_tag() -> String {
-    format!(
-        "localhost/tillandsias-forge:v{}",
-        env!("TILLANDSIAS_FULL_VERSION")
-    )
+    format!("tillandsias-forge:v{}", env!("TILLANDSIAS_FULL_VERSION"))
 }
 
-/// The versioned proxy image tag, e.g., `localhost/tillandsias-proxy:v0.1.126.116`.
-/// Uses localhost/ prefix to avoid podman short-name resolution TTY prompts.
+/// The versioned proxy image tag, e.g., `tillandsias-proxy:v0.1.126.116`.
 /// @trace spec:proxy-container
 pub(crate) fn proxy_image_tag() -> String {
-    format!(
-        "localhost/tillandsias-proxy:v{}",
-        env!("TILLANDSIAS_FULL_VERSION")
-    )
+    format!("tillandsias-proxy:v{}", env!("TILLANDSIAS_FULL_VERSION"))
 }
 
 /// The versioned git service image tag.
-/// Uses localhost/ prefix to avoid podman short-name resolution TTY prompts.
 /// @trace spec:git-mirror-service
 pub(crate) fn git_image_tag() -> String {
-    format!(
-        "localhost/tillandsias-git:v{}",
-        env!("TILLANDSIAS_FULL_VERSION")
-    )
+    format!("tillandsias-git:v{}", env!("TILLANDSIAS_FULL_VERSION"))
 }
 
 /// The versioned inference image tag.
-/// Uses localhost/ prefix to avoid podman short-name resolution TTY prompts.
 /// @trace spec:inference-container
 pub(crate) fn inference_image_tag() -> String {
-    format!(
-        "localhost/tillandsias-inference:v{}",
-        env!("TILLANDSIAS_FULL_VERSION")
-    )
+    format!("tillandsias-inference:v{}", env!("TILLANDSIAS_FULL_VERSION"))
 }
 
 /// The chromium-core browser image tag, e.g., `tillandsias-chromium-core:v0.1.126.83`.
