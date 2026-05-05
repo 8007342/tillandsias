@@ -11,7 +11,7 @@
 #   ./scripts/validate-traces.sh --warn-only  # Phase 1 warnings only (exit 0)
 #   ./scripts/validate-traces.sh --enforce-presence --warn-only  # Phase 2 warnings only
 #
-# @trace spec:spec-traceability
+# @trace spec:spec-traceability, spec:methodology-accountability
 # =============================================================================
 
 set -euo pipefail

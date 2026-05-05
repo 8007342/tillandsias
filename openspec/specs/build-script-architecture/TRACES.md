@@ -8,3 +8,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [build.sh#L221](../../../build.sh#L221)
 - [build.sh#L234](../../../build.sh#L234)
 - [build.sh#L252](../../../build.sh#L252)
+- [build.sh#L348](../../../build.sh#L348)
+- [build.sh#L387](../../../build.sh#L387)
+- [build.sh#L606](../../../build.sh#L606)
