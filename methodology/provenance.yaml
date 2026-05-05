@@ -1,0 +1,313 @@
+
+trace: spec:methodology-accountability
+
+methodology_provenance:
+  version: v0.1
+  purpose: >
+    Record the external and internal sources that justify methodology rules, with
+    claim strength and known limits. A methodology rule without provenance is an
+    assumption, not an invariant.
+
+  claim_strength:
+    observed_project_practice: >
+      Supported by repository history, scripts, specs, or traces, but not by an
+      external standard.
+    external_analogy: >
+      Borrowed from a related formal system or standard. The analogy must name the
+      mapping and the ways it can fail.
+    adopted_standard: >
+      Directly derived from a stable standard, RFC, or official specification.
+    project_invariant: >
+      Validated by Tillandsias litmus tests, CI checks, and repository history.
+      This is the strongest local claim and must cite an evidence bundle.
+
+  required_fields:
+    - claim_id
+    - statement
+    - applies_to
+    - provenance_refs
+    - internal_refs
+    - claim_strength
+    - inference
+    - limits
+    - falsification_signal
+    - review_cadence
+
+  provenance_refs:
+    rfc2119:
+      title: "RFC 2119: Key words for use in RFCs to Indicate Requirement Levels"
+      url: "https://www.rfc-editor.org/rfc/rfc2119"
+      relevance: >
+        Supports the methodology's use of MUST, MUST_NOT, SHOULD, SHOULD_NOT, and
+        MAY as requirement modalities.
+    w3c_prov_dm:
+      title: "PROV-DM: The PROV Data Model"
+      url: "https://www.w3.org/TR/prov-dm/"
+      relevance: >
+        Supports provenance as an explicit graph of entities, activities, agents,
+        derivations, and bundles.
+    w3c_prov_constraints:
+      title: "Constraints of the PROV Data Model"
+      url: "https://www.w3.org/TR/prov-constraints/"
+      relevance: >
+        Supports validating provenance records for consistency before using them
+        as reasoning inputs.
+    lamport_time_clocks:
+      title: "Time, Clocks, and the Ordering of Events in a Distributed System"
+      url: "https://www.microsoft.com/en-us/research/publication/time-clocks-ordering-events-distributed-system/"
+      relevance: >
+        Supports Lamport-clock ordering for agent event streams where wall-clock
+        time is insufficient for causal reconstruction.
+    crdt_shapiro:
+      title: "A comprehensive study of Convergent and Commutative Replicated Data Types"
+      url: "https://hal.inria.fr/inria-00555588"
+      relevance: >
+        Supports the limited CRDT preconditions already named in cheatsheet and
+        spec-system components: stable identifiers, deterministic joins, and
+        convergence properties.
+    opentelemetry_semconv:
+      title: "OpenTelemetry Semantic Conventions"
+      url: "https://opentelemetry.io/docs/specs/semconv/"
+      relevance: >
+        Supports structured, named telemetry attributes as a basis for correlating
+        traces, logs, metrics, resources, and events.
+    okapi_bm25:
+      title: "Okapi BM25 weighting model"
+      url: "https://dl.acm.org/doi/10.5555/3130348.3130357"
+      relevance: >
+        Used only as an analogy for weighted ranking. It does not prove
+        correctness scoring; it just supports explicit, inspectable weights.
+    tarski_1955:
+      title: "A lattice-theoretical fixpoint theorem and its applications"
+      url: "https://doi.org/10.2140/pjm.1955.5.285"
+      relevance: >
+        Supports fixed-point reasoning for monotone functions over complete
+        lattices. Tillandsias uses this as the order-theoretic backbone for
+        finite obligation-state convergence.
+    cousot_cousot_1977:
+      title: "Abstract Interpretation: A Unified Lattice Model for Static Analysis"
+      url: "https://doi.org/10.1145/512950.512973"
+      relevance: >
+        Supports treating specs and scores as abstractions of concrete program
+        behavior, with explicit soundness limits.
+    banach_1922:
+      title: "Sur les opérations dans les ensembles abstraits et leur application aux équations intégrales"
+      url: "https://doi.org/10.4064/fm-3-1-133-181"
+      relevance: >
+        Defines contraction-mapping convergence. Tillandsias cites this mainly to
+        state that Banach-style contraction is not currently claimed.
+    shafer_1976:
+      title: "A Mathematical Theory of Evidence"
+      url: "https://press.princeton.edu/books/paperback/9780691100425/a-mathematical-theory-of-evidence"
+      relevance: >
+        Supports a possible future evidence-confidence layer distinct from
+        CentiColon obligation closure.
+
+  claims:
+    - claim_id: methodology.modality.rfc2119@v1
+      statement: >
+        Normative methodology requirements use RFC 2119 modality so agents can
+        distinguish absolute gates from recommendations.
+      applies_to:
+        - methodology/spec-system.yaml
+        - openspec/specs/*/spec.md
+      provenance_refs:
+        - rfc2119
+      internal_refs:
+        - methodology/spec-system.yaml:modality
+      claim_strength: adopted_standard
+      inference: >
+        RFC modality gives the spec system a shared language for requirements.
+      limits: >
+        RFC 2119 defines words, not enforcement. CI and litmus tests provide
+        enforcement separately.
+      falsification_signal: >
+        A spec requirement uses MUST or SHOULD but lacks measurable conditions or
+        enforcement policy.
+      review_cadence: on_spec_schema_change
+
+    - claim_id: methodology.provenance.prov-bundle@v1
+      statement: >
+        Methodology, spec, and convergence claims must cite evidence bundles rather
+        than presenting annotations, test passes, or version strings as proof.
+      applies_to:
+        - methodology/verification.yaml
+        - methodology/convergence.yaml
+        - methodology/provenance.yaml
+      provenance_refs:
+        - w3c_prov_dm
+        - w3c_prov_constraints
+      internal_refs:
+        - methodology/verification.yaml:evidence_bundle
+        - methodology/convergence.yaml:evidence_bundle
+      claim_strength: external_analogy
+      inference: >
+        W3C PROV's entity/activity/agent model maps naturally onto commits,
+        specs, tests, agents, and artifacts. Evidence bundles are the local
+        representation of provenance bundles.
+      limits: >
+        Tillandsias evidence bundles are pragmatic YAML/JSON records, not complete
+        PROV serializations. They support auditability, not formal proof.
+      falsification_signal: >
+        A convergence report names no commit, spec hash, litmus result, trace
+        coverage, or environment profile.
+      review_cadence: on_release_or_convergence_report
+
+    - claim_id: methodology.events.lamport-order@v1
+      statement: >
+        Multi-agent event streams require causal ordering fields in addition to
+        timestamps.
+      applies_to:
+        - methodology/agent-observability.yaml
+        - methodology/event/index.yaml
+      provenance_refs:
+        - lamport_time_clocks
+      internal_refs:
+        - methodology/agent-observability.yaml:event_stream
+      claim_strength: external_analogy
+      inference: >
+        Lamport clocks provide a simple causal order for distributed agent events
+        without assuming synchronized clocks.
+      limits: >
+        Lamport order cannot infer real-time duration or independent concurrent
+        ordering; conflicting latest events still require reconciliation.
+      falsification_signal: >
+        Two agents emit incompatible terminal events for the same task without a
+        deterministic reconciliation record.
+      review_cadence: on_agent_event_schema_change
+
+    - claim_id: methodology.crdt.preconditions@v1
+      statement: >
+        Cheatsheet and spec merges may be called CRDT-like only when stable IDs,
+        tombstones, deterministic joins, idempotent compaction, and property tests
+        are present.
+      applies_to:
+        - methodology/cheatsheets.yaml
+        - methodology/spec-system.yaml
+      provenance_refs:
+        - crdt_shapiro
+      internal_refs:
+        - methodology/cheatsheets.yaml:crdt_model
+        - methodology/spec-system.yaml:crdt_properties
+      claim_strength: external_analogy
+      inference: >
+        CRDT literature gives sufficient conditions for convergence. Tillandsias
+        borrows those conditions but keeps the weaker label "CRDT-like" until
+        property tests exist.
+      limits: >
+        Semantic compaction is lossy and not automatically commutative. Human
+        review or property tests are required before claiming convergence safety.
+      falsification_signal: >
+        Concurrent edits merge differently by order, or compaction drops a
+        verified spec distinction.
+      review_cadence: on_merge_rule_or_compaction_change
+
+    - claim_id: methodology.telemetry.semantic-fields@v1
+      statement: >
+        Runtime and agent events should use stable semantic fields for specs,
+        cheatsheets, evidence references, and outcomes.
+      applies_to:
+        - methodology/ci.yaml
+        - methodology/event/index.yaml
+      provenance_refs:
+        - opentelemetry_semconv
+      internal_refs:
+        - methodology/ci.yaml:runtime_tracing
+        - openspec/specs/spec-traceability/spec.md
+      claim_strength: external_analogy
+      inference: >
+        OpenTelemetry semantic conventions show why common field names make
+        heterogeneous telemetry easier to correlate.
+      limits: >
+        Tillandsias field names are project-local unless mapped to OpenTelemetry
+        attributes by an exporter.
+      falsification_signal: >
+        Trace, log, or event records use incompatible names for the same evidence
+        concept, blocking joins across artifacts.
+      review_cadence: on_trace_or_event_schema_change
+
+    - claim_id: methodology.proximity.weighted-obligation-score@v1
+      statement: >
+        Correctness proximity is a weighted obligation-closure score, not proof
+        of correctness or agent confidence.
+      applies_to:
+        - methodology/proximity.yaml
+        - openspec/specs/observability-convergence/spec.md
+      provenance_refs:
+        - okapi_bm25
+      internal_refs:
+        - methodology/convergence.yaml:fitness_function
+        - openspec/specs/observability-convergence/spec.md:convergence_score
+      claim_strength: external_analogy
+      inference: >
+        Weighted ranking models justify making weights explicit and inspectable.
+        Tillandsias uses that pattern for evidence obligations, not document
+        relevance.
+      limits: >
+        Weights are project policy. They must be calibrated against defects and
+        human review, not treated as mathematically universal.
+      falsification_signal: >
+        A high proximity score coexists with an untested MUST requirement,
+        known ambiguity, or recurring production drift.
+      review_cadence: after_every_major_defect_or_scoring_change
+
+    - claim_id: methodology.math.finite-lattice-convergence@v1
+      statement: >
+        Monotonic convergence is defensible only over the finite obligation-state
+        model defined by stable IDs, explicit state order, tombstones, and scoped
+        denominator changes.
+      applies_to:
+        - methodology/math-foundations.yaml
+        - methodology/proximity.yaml
+        - methodology/convergence.yaml
+      provenance_refs:
+        - tarski_1955
+        - cousot_cousot_1977
+      internal_refs:
+        - methodology/math-foundations.yaml:formal_objects
+        - methodology/math-foundations.yaml:validation_program
+      claim_strength: external_analogy
+      inference: >
+        Complete-lattice and abstract-interpretation results justify building a
+        finite ordered abstraction of obligations and validating monotone
+        transitions over that abstraction.
+      limits: >
+        This does not prove that the obligation set is complete, or that passing
+        validators prove semantic correctness. It proves only non-regression and
+        fixed-point stability relative to declared validators.
+      falsification_signal: >
+        A valid evidence-improving transition decreases earned CentiColons under a
+        fixed denominator, or a validator-stable fixed point later reveals an
+        unrecorded obligation without opening an unknown event.
+      review_cadence: on_scoring_or_validator_change
+
+    - claim_id: methodology.math.contraction-not-claimed@v1
+      statement: >
+        Tillandsias does not claim Banach contraction until it defines a complete
+        metric space of project states and proves a contraction constant for its
+        refinement operator.
+      applies_to:
+        - methodology/math-foundations.yaml
+        - methodology/convergence.yaml
+      provenance_refs:
+        - banach_1922
+      internal_refs:
+        - methodology/math-foundations.yaml:convergence_claims
+      claim_strength: adopted_standard
+      inference: >
+        Banach contraction has stronger prerequisites than current Tillandsias
+        scoring. Naming it as a non-claim prevents inflated mathematical language.
+      limits: >
+        Decreasing residual CentiColons can indicate progress without satisfying
+        metric contraction.
+      falsification_signal: >
+        Documentation says or implies Banach-style convergence without defining a
+        metric, operator, and contraction constant.
+      review_cadence: on_convergence_language_change
+
+  rules:
+    - methodology_claims_must_have_claim_id: true
+    - adopted_standard_claims_must_link_primary_source: true
+    - external_analogy_claims_must_name_limits: true
+    - project_invariant_claims_must_cite_evidence_bundle: true
+    - falsified_claims_must_open_unknown_event: true

@@ -1,15 +1,5 @@
-# Tillandsias Convergence Methodology — Verification Component
-#
-# Two verification level systems: S0–S3 (spec validity) and L0–L3 (code evidence).
-# These are complementary scales used in different contexts.
-#
-# Source: specs.yaml (v0.1, sections: spec.structure.verification, spec.structure.convergence)
-#         monotonic-reduction-of-uncertainty-under-verifiable-constraints.yaml (v0.2, sections: verification_levels)
 
 verification:
-  # S-Level System: Spec Validity and Convergence
-  # Question: "Is this spec ready and verified?"
-  # Used in: Spec lifecycle, spec convergence gating
   s_levels:
     description: >
       Spec verification levels. Answer: "Is the spec stable, testable, and bound?"
@@ -60,14 +50,9 @@ verification:
         - invariants_stable_over_N_iterations
       stability_window:
         iterations: 5
-
-  # L-Level System: Code Annotation Evidence
-  # Question: "How well is this implementation verified?"
-  # Used in: Rust annotation claims (#[trace]), code review
   l_levels:
     description: >
       Code annotation verification levels. Answer: "What evidence supports this
-      #[trace] annotation?" L-levels track the implementation's claim level.
 
     L0:
       name: "spec only"

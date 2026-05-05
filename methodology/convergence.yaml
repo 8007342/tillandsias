@@ -1,12 +1,3 @@
-# Tillandsias Convergence Methodology — Convergence Component
-#
-# The convergence engine is the system's self-improvement mechanism. It continuously
-# measures divergence between specs, code, cheatsheets, and reality, then applies
-# selection pressure to minimize that divergence.
-#
-# Source: monotonic-reduction-of-uncertainty-under-verifiable-constraints.yaml (v0.2,
-#         sections: convergence_engine, implementation_phases, constraints)
-#         specs.yaml (v0.1, sections: spec_system.metrics, spec_system.drift_control)
 
 convergence_engine:
   objective: |
@@ -30,6 +21,7 @@ convergence_engine:
     stability_window: "time duration over which test results remain consistent"
     convergence_velocity: "rate at which drift_penalty decreases over commits"
     spec_code_alignment_drift: "measured via litmus test results"
+    centicolon_residual: "remaining named correctness obligations from methodology/proximity.yaml"
 
   fitness_function: |
     fitness =
@@ -46,6 +38,9 @@ convergence_engine:
   rules:
     - Convergence is monotonic under normal operation: once achieved, divergence must be detectable
     - Temporary uncertainty increases require the bounded uncertainty exception
+    - Unpredicted observations require methodology/event intake before closure
+    - Correctness proximity must report residual CentiColons, not only aggregate convergence score
+    - Mathematical convergence claims are limited by methodology/math-foundations.yaml
     - Selection pressure favors: passing tests, reduced drift, increased stability
     - Anti-pattern: Gaming metrics by hardcoding success
     - Anti-pattern: Ignoring temporal stability (flaky tests mask real bugs)
@@ -108,11 +103,15 @@ metrics:
         "Do verified invariants remain invariant across changes?"
     - verification_level: >
         "Distribution of specs across S0–S3 (are specs actively validated?)"
+    - centicolon_score: >
+        "Earned and residual CentiColons per spec, derived from named obligations,
+        evidence credit, caps, and penalties"
 
   convergence_signal:
     - decreasing_ambiguity: "Ambiguity score trends toward 0"
     - increasing_verification: "More specs achieving S2+ status"
     - stable_invariants: "Invariants remain true over repeated test runs"
+    - decreasing_centicolon_residual: "Named residual obligations trend toward 0 without denominator gaming"
 
 evidence_bundle:
   description: >

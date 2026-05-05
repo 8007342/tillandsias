@@ -51,14 +51,14 @@ echo "Auditing spec-to-cheatsheet binding..." >&2
 for spec_file in "${SPECS_DIR}"/*/spec.md; do
     [[ ! -f "$spec_file" ]] && continue
     spec_name="$(basename "$(dirname "$spec_file")")"
-    ((TOTAL_SPECS++))
+    ((++TOTAL_SPECS))
 
     # Skip if no "## Sources of Truth" section
     if ! grep -q "^## Sources of Truth" "$spec_file" 2>/dev/null; then
         continue
     fi
 
-    ((SPECS_WITH_SECTION++))
+    ((++SPECS_WITH_SECTION))
 
     # Extract sources section
     sources=$(sed -n '/^## Sources of Truth/,/^## /p' "$spec_file" | head -n -1)
@@ -74,8 +74,8 @@ for spec_file in "${SPECS_DIR}"/*/spec.md; do
         ref="${ref%"${ref##*[![:space:]]}"}"
         [[ -z "$ref" ]] && continue
 
-        ((total_count++))
-        [[ -f "$ref" ]] && ((valid_count++))
+        ((++total_count))
+        [[ -f "$ref" ]] && ((++valid_count))
     done < <(echo "$sources" | grep -o '`[^`]*\.md`' | sed 's/`//g')
 
     if [[ $valid_count -eq 0 && $total_count -eq 0 ]]; then
@@ -83,7 +83,7 @@ for spec_file in "${SPECS_DIR}"/*/spec.md; do
     elif [[ $valid_count -eq 0 && $total_count -gt 0 ]]; then
         INVALID_ONLY+=("$spec_name")
     elif [[ $valid_count -gt 0 ]]; then
-        ((SPECS_WITH_VALID_REFS++))
+        ((++SPECS_WITH_VALID_REFS))
     fi
 done
 

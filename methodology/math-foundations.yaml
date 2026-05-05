@@ -1,0 +1,206 @@
+
+trace: spec:methodology-accountability
+
+math_foundations:
+  version: v0.1
+  purpose: >
+    Separate the math the methodology can defend from analogies it must not
+    overclaim. Tillandsias can model specs, requirements, traces, litmus tests,
+    and evidence as finite ordered artifacts. It can prove local monotonicity of
+    validators and score transitions over that model. It cannot prove absolute
+    semantic correctness of arbitrary programs from finite tests.
+
+  formal_objects:
+    obligation:
+      definition: >
+        A named, auditable requirement, invariant, litmus signal, trace signal,
+        provenance binding, or environment assumption with a stable ID.
+    obligation_state:
+      definition: >
+        A finite state assigned to an obligation, ordered from least evidence to
+        strongest local evidence.
+      ordered_values:
+        - absent
+        - declared
+        - traced
+        - positively_tested
+        - negatively_tested
+        - runtime_observed
+        - evidence_bundled
+    spec_state:
+      definition: >
+        Product lattice of all obligation states for one spec, plus explicit
+        uncertainty events and bounded-exception flags.
+    project_state:
+      definition: >
+        Product lattice of active spec states. The order compares states
+        componentwise after aligning stable IDs and tombstones.
+    centicolon_function:
+      definition: >
+        A bounded ranking function from spec_state to earned CentiColons, with a
+        separately reported denominator and residual. It is monotone only for
+        evidence transitions that preserve obligation IDs and do not introduce
+        penalties, ambiguity, or denominator scope changes.
+
+  convergence_claims:
+    - claim_id: math.order.lattice-model@v1
+      statement: >
+        If obligation states form finite ordered sets, then a spec state formed by
+        their product is a finite lattice. Componentwise evidence refinement can
+        be checked as a monotone transition.
+      backing_refs:
+        - tarski_1955
+        - davey_priestley_2002
+      validation: >
+        Enumerate allowed state transitions and property-test that each transition
+        is order-preserving for every affected obligation.
+      limits: >
+        This proves monotonicity of the model, not truth of the modeled
+        requirement or adequacy of the chosen obligation set.
+
+    - claim_id: math.fixpoint.convergence-target@v1
+      statement: >
+        A fully closed spec can be treated as a fixed point of the local
+        refinement operator: applying validation and semantic distillation yields
+        no new obligations, penalties, or uncertainty events.
+      backing_refs:
+        - tarski_1955
+        - kleene_1952
+      validation: >
+        Define the refinement operator over a finite artifact snapshot and check
+        idempotence: refine(refine(state)) == refine(state).
+      limits: >
+        Fixed point means stable under known validators, not complete relative to
+        unknown future requirements.
+
+    - claim_id: math.abstract-interpretation.evidence-abstraction@v1
+      statement: >
+        Specs and CentiColon scores are abstractions of implementation behavior:
+        they summarize selected semantic properties and intentionally forget
+        irrelevant implementation detail.
+      backing_refs:
+        - cousot_cousot_1977
+      validation: >
+        For each score component, name the concrete behavior it abstracts and the
+        soundness condition that would make the abstraction valid.
+      limits: >
+        Tillandsias does not yet define a full Galois connection between program
+        semantics and spec obligations. Until then, this is an abstraction
+        discipline, not a formal abstract interpreter.
+
+    - claim_id: math.ranking.centicolon-progress@v1
+      statement: >
+        CentiColons are a finite bounded ranking function. Under a fixed
+        denominator, valid evidence-improving transitions should not decrease
+        earned CentiColons, and residual CentiColons should not increase.
+      backing_refs:
+        - ranking_functions_program_termination
+        - lyapunov_stability
+      validation: >
+        Property-test score monotonicity over generated obligation states while
+        holding denominator and penalties constant. Separately test that
+        denominator changes are reported as scope changes.
+      limits: >
+        Ranking functions prove progress relative to a chosen measure. A bad
+        measure can converge to the wrong target, so escaped defects and unknown
+        events must recalibrate weights.
+
+    - claim_id: math.metric.contraction-not-claimed@v1
+      statement: >
+        The methodology does not currently claim Banach-style contraction. It can
+        report decreasing residuals, but it has not proven a contraction constant
+        over a complete metric space of project states.
+      backing_refs:
+        - banach_1922
+      validation: >
+        Any future contraction claim must define a metric d, a refinement operator
+        F, and a constant 0 <= c < 1 such that d(F(x), F(y)) <= c*d(x,y).
+      limits: >
+        Without that metric proof, "monotonic convergence" means ordered
+        non-regression plus finite residual descent, not metric contraction.
+
+    - claim_id: math.evidence.uncertainty-not-probability@v1
+      statement: >
+        Evidence bundles and CentiColon scores should not be interpreted as
+        probabilities. If probabilistic or belief-function confidence is later
+        added, it must be a separate layer from obligation closure.
+      backing_refs:
+        - shafer_1976
+        - walley_1991
+      validation: >
+        Reports must label CentiColon residuals as obligation closure and keep
+        confidence or belief values in separately named fields.
+      limits: >
+        Evidence weight can guide review prioritization, but it cannot turn finite
+        litmus coverage into proof of absence of defects.
+
+  reference_catalog:
+    tarski_1955:
+      citation: "Tarski, A. A lattice-theoretical fixpoint theorem and its applications. Pacific Journal of Mathematics 5, 285-309 (1955)."
+      url: "https://doi.org/10.2140/pjm.1955.5.285"
+      use: "Order-theoretic fixed points over complete lattices."
+    kleene_1952:
+      citation: "Kleene, S. C. Introduction to Metamathematics. North-Holland (1952)."
+      url: "https://archive.org/details/introductiontome00klee"
+      use: "Iterative least-fixed-point construction for suitable ordered systems."
+    cousot_cousot_1977:
+      citation: "Cousot, P. and Cousot, R. Abstract Interpretation: A Unified Lattice Model for Static Analysis of Programs by Construction or Approximation of Fixpoints. POPL 1977."
+      url: "https://doi.org/10.1145/512950.512973"
+      use: "Lattice abstractions of program semantics and fixpoint approximation."
+    davey_priestley_2002:
+      citation: "Davey, B. A. and Priestley, H. A. Introduction to Lattices and Order. Cambridge University Press, 2nd ed. (2002)."
+      url: "https://doi.org/10.1017/CBO9780511809088"
+      use: "General lattice/order terminology for finite product orders."
+    ranking_functions_program_termination:
+      citation: "Floyd, R. W. Assigning Meanings to Programs. Proceedings of Symposia in Applied Mathematics 19, 19-32 (1967)."
+      url: "https://doi.org/10.1090/psapm/019/0235771"
+      use: "Program assertions and ranking-style reasoning about progress."
+    lyapunov_stability:
+      citation: "Lyapunov, A. M. The General Problem of the Stability of Motion (1892; English translation 1992)."
+      url: "https://doi.org/10.1201/9780203744385"
+      use: "Energy-like scalar functions for stability/progress analogy."
+    banach_1922:
+      citation: "Banach, S. Sur les opérations dans les ensembles abstraits et leur application aux équations intégrales. Fundamenta Mathematicae 3, 133-181 (1922)."
+      url: "https://doi.org/10.4064/fm-3-1-133-181"
+      use: "Contraction mapping theorem; explicitly listed as not yet claimed."
+    shafer_1976:
+      citation: "Shafer, G. A Mathematical Theory of Evidence. Princeton University Press (1976)."
+      url: "https://press.princeton.edu/books/paperback/9780691100425/a-mathematical-theory-of-evidence"
+      use: "Evidence and belief functions as a possible future confidence layer."
+    walley_1991:
+      citation: "Walley, P. Statistical Reasoning with Imprecise Probabilities. Chapman and Hall (1991)."
+      url: "https://doi.org/10.1007/978-1-4899-3472-7"
+      use: "Imprecise-probability framing for uncertainty without false precision."
+
+  validation_program:
+    phase_1_model_check:
+      goal: "Validate the finite obligation-state model."
+      checks:
+        - all_obligation_states_have_total_order_or_declared_partial_order
+        - product_order_is_componentwise
+        - allowed_evidence_transitions_are_monotone
+        - tombstone_and_scope_change_transitions_are_explicitly_non_monotone
+    phase_2_score_properties:
+      goal: "Validate CentiColon arithmetic."
+      checks:
+        - earned_cc_is_bounded_between_zero_and_total_cc
+        - residual_cc_equals_total_cc_minus_earned_cc
+        - earned_cc_non_decreasing_for_valid_fixed_denominator_transitions
+        - residual_cc_non_increasing_for_valid_fixed_denominator_transitions
+        - denominator_changes_emit_scope_changed
+        - same_frozen_state_same_router_same_weights_same_score
+    phase_3_empirical_calibration:
+      goal: "Validate that the math model is useful, not just internally consistent."
+      checks:
+        - escaped_defects_create_unknown_events
+        - high_scores_with_defects_recalibrate_weights_or_caps
+        - mutation_testing_reduces_score_or_fails_litmus
+        - human_review_disagreements_are_recorded_as_evidence
+
+  thesis_defense_position: >
+    The defensible claim is finite ordered convergence under declared validators:
+    stable obligations form a finite lattice; evidence-improving transitions are
+    checked for monotonicity; CentiColons are a bounded ranking function over that
+    model; fixed points mean validator stability; and unknown-event intake is the
+    escape hatch that prevents the model from confusing current completeness with
+    absolute truth.

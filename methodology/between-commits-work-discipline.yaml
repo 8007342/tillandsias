@@ -1,14 +1,3 @@
-# Tillandsias Convergence Methodology — Between-Commits Work Discipline
-#
-# Agents performing batch work iterate many times before committing to main.
-# This component defines versioning discipline for ephemeral, local-only work
-# that should not pollute git history or introduce merge conflicts.
-#
-# Pattern: Lamport clock (temporal ordering) + squash merge (clean history) +
-#          side-band metadata file (queryable audit trail).
-#
-# Source: Research on ephemeral agent versioning, Worktrunk, Neon branching,
-#         distributed systems consensus patterns (Lamport clocks).
 
 ephemeral_work_problem:
   scenario: >
@@ -151,17 +140,10 @@ side_band_metadata_file:
     }
 
   querying_examples: |
-    # How many iterations in a batch?
     jq '.iteration_count' <ephemeral-metadata-log> | grep <batch-id>
-
-    # What happened in iteration N?
     jq '.iteration_causal_order[N-1]' <ephemeral-metadata-log> | grep <batch-id>
-
-    # Which batches were concurrent (overlapping merge timestamps)?
     jq -s 'group_by(.merge_timestamp) | map(select(length > 1))' \
       <ephemeral-metadata-log>
-
-    # Causal chain: which batch triggered which?
     jq '.dependency_batches[]' <ephemeral-metadata-log>
 
   source_of_truth:
@@ -214,17 +196,12 @@ crdt_properties_guarantee_safety:
 
     verification: |
       verify_crdt_properties() {
-        # Commutativity: merge(A,B) == merge(B,A)
         merge_ab=$(merge_metadata "$metadata_a" "$metadata_b")
         merge_ba=$(merge_metadata "$metadata_b" "$metadata_a")
         assert_equal "$merge_ab" "$merge_ba" "merge order independence"
-
-        # Associativity
         merge_ab_c=$(merge_metadata "$(merge_metadata "$metadata_a" "$metadata_b")" "$metadata_c")
         merge_a_bc=$(merge_metadata "$metadata_a" "$(merge_metadata "$metadata_b" "$metadata_c")")
         assert_equal "$merge_ab_c" "$merge_a_bc" "merge grouping independence"
-
-        # Idempotence
         merged_once=$(merge_metadata "$metadata_a" "$metadata_a")
         merged_twice=$(merge_metadata "$merged_once" "$metadata_a")
         assert_equal "$merged_once" "$merged_twice" "re-merge idempotence"

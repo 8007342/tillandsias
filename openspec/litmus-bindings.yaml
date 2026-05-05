@@ -383,6 +383,11 @@ specs:
   - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
+- spec_id: methodology-accountability
+  status: test_required
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: null
 - spec_id: logging-levels
   status: active
   litmus_tests:

@@ -1,11 +1,3 @@
-# Tillandsias Convergence Methodology — Cheatsheets Component
-#
-# Cheatsheets are compressed, curated knowledge caches that support spec-to-code binding.
-# This component covers the structure, CRDT model, operations, and cache policies.
-#
-# Source: monotonic-reduction-of-uncertainty-under-verifiable-constraints.yaml (v0.2,
-#         sections: cheatsheets, cheatsheet_operations, crdt_model, cache_model)
-#         specs.yaml (v0.1, section: spec_system.cheatsheet_binding)
 
 cheatsheets:
   structure:

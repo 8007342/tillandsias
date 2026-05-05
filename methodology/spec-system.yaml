@@ -1,10 +1,3 @@
-# Tillandsias Convergence Methodology — Spec System Component
-#
-# Spec structure, lifecycle, modality, versioning, schema, rules, drift control,
-# ambiguity detection, CRDT properties, temporal model, and constraints.
-#
-# Source: specs.yaml (v0.1, sections: spec_system.*)
-#         monotonic-reduction-of-uncertainty-under-verifiable-constraints.yaml (v0.2, sections: spec)
 
 spec_system:
   version: v0.1

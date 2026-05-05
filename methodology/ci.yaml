@@ -1,12 +1,3 @@
-# Tillandsias Convergence Methodology — CI Component
-#
-# CI enforcement: the automated systems that validate code against specs, detect drift,
-# and gate progression on convergence criteria. Includes Rust annotations, CI validator
-# responsibilities, and runtime tracing format.
-#
-# Source: monotonic-reduction-of-uncertainty-under-verifiable-constraints.yaml (v0.2,
-#         sections: rust_annotations, ci_validator, runtime_tracing)
-#         specs.yaml (v0.1, sections: spec_system.trace_binding, spec_system.ci_enforcement)
 
 rust_annotations:
   description: >
