@@ -808,54 +808,27 @@ pub(crate) async fn ensure_proxy_running(
                 "Proxy container has CA certs only — zero credentials, pids-limit=32, read-only FS"
             );
 
-            // @trace spec:proxy-container
-            // Wait for squid to accept connections before declaring the proxy ready.
-            // Without this, containers/builds that start immediately after may fail
-            // because podman's internal DNS hasn't registered the "proxy" alias yet,
-            // or squid hasn't finished initializing its SSL cert database.
-            //
-            // DISTRO: Proxy is Alpine — uses busybox nc (netcat).
-            // wget --spider returns 400 (squid rejects non-proxy requests).
-            // nc -z is a pure TCP port probe — succeeds if squid is listening.
-            // Exponential backoff: 1s, 2s, 4s, 8s, 8s... (capped at 8s).
-            let max_attempts: u32 = 10;
-            let mut ready = false;
-            for attempt in 0..max_attempts {
-                let check = tillandsias_podman::podman_cmd()
-                    .args([
-                        "exec",
-                        PROXY_CONTAINER_NAME,
-                        "sh",
-                        "-c",
-                        "nc -z localhost 3128",
-                    ])
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .status()
-                    .await;
-                if check.map(|s| s.success()).unwrap_or(false) {
-                    info!(
-                        spec = "proxy-container",
-                        attempt, "Proxy readiness check passed"
-                    );
-                    ready = true;
-                    break;
-                }
-                if attempt < max_attempts - 1 {
-                    let delay = Duration::from_secs((1u64 << attempt).min(8));
-                    tokio::time::sleep(delay).await;
-                }
-            }
+            // @trace spec:socket-container-orchestration
+            // Wait for squid to accept connections using podman's native HEALTHCHECK.
+            // The HEALTHCHECK in images/proxy/Containerfile declares the readiness probe.
+            // podman wait blocks until the health status transitions, avoiding manual polling.
+            tokio::time::timeout(
+                Duration::from_secs(60),
+                tokio::process::Command::new("podman")
+                    .args(["wait", "--condition=healthy", "--interval=500ms", PROXY_CONTAINER_NAME])
+                    .status(),
+            )
+            .await
+            .map_err(|_| "Proxy health check timed out after 60s".to_string())?
+            .map_err(|e| format!("podman wait (proxy): {e}"))?
+            .success()
+            .then_some(())
+            .ok_or_else(|| "Proxy container did not become healthy".to_string())?;
 
-            if !ready {
-                error!(
-                    spec = "proxy-container",
-                    "Proxy readiness check failed after {max_attempts} attempts — refusing to proceed",
-                );
-                return Err(format!(
-                    "Proxy container not responding on :3128 after {max_attempts} attempts",
-                ));
-            }
+            info!(
+                spec = "socket-container-orchestration",
+                "Proxy container healthy"
+            );
 
             Ok(())
         }
@@ -1722,49 +1695,54 @@ pub(crate) async fn ensure_git_service_running(
             );
 
             // @trace spec:git-mirror-service
-            // Health check: verify git daemon is listening on port 9418.
-            // DISTRO: Git service is Alpine — busybox nc only.
-            //
-            // BusyBox `nc -z` is broken on BusyBox v1.36.1 (Alpine 3.20): it
-            // returns exit 1 even when the port is open. Use a timed connect
-            // with stdin from /dev/null instead — that works reliably on the
-            // same binary and is what nc was always happy to do.
-            // Exponential backoff: 1s, 2s, 4s, 8s, 8s... (capped at 8s).
-            let max_attempts: u32 = 10;
-            let mut ready = false;
-            for attempt in 0..max_attempts {
-                let check = tillandsias_podman::podman_cmd()
-                    .args([
-                        "exec",
-                        &container_name,
-                        "sh",
-                        "-c",
-                        "nc -w 1 127.0.0.1 9418 </dev/null",
-                    ])
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .status()
-                    .await;
-                if check.map(|s| s.success()).unwrap_or(false) {
-                    info!(spec = "git-mirror-service", project = %project_name, attempt, "Git service health check passed");
-                    ready = true;
-                    break;
+            // @trace spec:socket-container-orchestration, spec:git-mirror-service
+            // Health check: wait for git daemon to report healthy via HEALTHCHECK.
+            // Uses podman wait --condition=healthy instead of manual nc polling.
+            let git_container = format!("tillandsias-git-{project_name}");
+            match tokio::time::timeout(
+                Duration::from_secs(45),
+                tokio::process::Command::new("podman")
+                    .args(["wait", "--condition=healthy", "--interval=500ms", &git_container])
+                    .status(),
+            )
+            .await
+            {
+                Ok(Ok(status)) if status.success() => {
+                    info!(spec = "git-mirror-service", project = %project_name, "Git service healthy");
                 }
-                if attempt < max_attempts - 1 {
-                    let delay = Duration::from_secs((1u64 << attempt).min(8));
-                    tokio::time::sleep(delay).await;
+                Ok(Ok(_)) => {
+                    error!(
+                        spec = "git-mirror-service",
+                        project = %project_name,
+                        "Git service '{}' did not become healthy",
+                        git_container
+                    );
+                    return Err(format!(
+                        "Git service '{}' did not become healthy",
+                        git_container
+                    ));
                 }
-            }
-
-            if !ready {
-                error!(
-                    spec = "git-mirror-service",
-                    project = %project_name,
-                    "Git service daemon not responding on :9418 after {max_attempts} attempts — refusing to proceed",
-                );
-                return Err(format!(
-                    "Git service not responding on :9418 after {max_attempts} attempts",
-                ));
+                Ok(Err(e)) => {
+                    error!(
+                        spec = "git-mirror-service",
+                        project = %project_name,
+                        error = %e,
+                        "podman wait (git) failed"
+                    );
+                    return Err(format!("podman wait (git): {e}"));
+                }
+                Err(_) => {
+                    error!(
+                        spec = "git-mirror-service",
+                        project = %project_name,
+                        "Git service '{}' health check timed out after 45s",
+                        git_container
+                    );
+                    return Err(format!(
+                        "Git service '{}' health check timed out after 45s",
+                        git_container
+                    ));
+                }
             }
 
             Ok(())
