@@ -140,28 +140,11 @@ ensure_dev_cache() {
     # Ensure dev proxy cache dir exists
     mkdir -p "$CACHE_DIR/dev-proxy-cache"
 
-    # Find or rebuild the tillandsias-proxy image
-    local proxy_image
-    proxy_image=$(podman images --format "{{.Repository}}:{{.Tag}}" 2>/dev/null | grep "tillandsias-proxy" | head -1)
+    # Use standard squid image for dev proxy (not tillandsias-proxy, which may be under build)
+    # @trace spec:proxy-container, spec:default-image
+    local proxy_image="docker.io/library/squid:6.1"
 
-    if [[ -z "$proxy_image" ]]; then
-        _step "No tillandsias-proxy image found — rebuilding..."
-        if [[ ! -x "$SCRIPT_DIR/scripts/build-image.sh" ]]; then
-            _warn "scripts/build-image.sh not found — dev caching disabled"
-            return 0
-        fi
-        if ! "$SCRIPT_DIR/scripts/build-image.sh" proxy 2>&1 | tail -5; then
-            _warn "Failed to build tillandsias-proxy image — dev caching disabled"
-            return 0
-        fi
-        # Re-fetch image after building
-        proxy_image=$(podman images --format "{{.Repository}}:{{.Tag}}" 2>/dev/null | grep "tillandsias-proxy" | head -1)
-        if [[ -z "$proxy_image" ]]; then
-            _warn "tillandsias-proxy image still not found after build — dev caching disabled"
-            return 0
-        fi
-        _info "Proxy image built: $proxy_image"
-    fi
+    _step "Using standard squid image for dev caching: $proxy_image"
 
     # Start dev proxy if not already running
     if ! podman inspect tillandsias-dev-proxy &>/dev/null 2>&1; then
