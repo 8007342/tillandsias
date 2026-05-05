@@ -11,11 +11,6 @@ _info()  { echo -e "${GREEN}[build-web]${NC} $*"; }
 _step()  { echo -e "${CYAN}[build-web]${NC} $*"; }
 _error() { echo -e "${RED}[build-web]${NC} $*" >&2; }
 _step "Building web image via cargo run (litmus test)..."
-if ! podman ps &>/dev/null; then
-    _info "Podman state corrupted, resetting..."
-    podman system reset --force 2>/dev/null || true
-    sleep 1
-fi
 cd "$ROOT"
 if ! toolbox run cargo run --bin build-image -- web "$@" 2>&1 | tee /tmp/build-web.log; then
     _error "Build failed"

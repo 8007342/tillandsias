@@ -31,12 +31,6 @@ _error() { echo -e "${RED}[build-git]${NC} $*" >&2; }
 
 _step "Building git image via cargo run (litmus test)..."
 
-# Reset podman state if corrupted (ephemeral principle)
-if ! podman ps &>/dev/null; then
-    _info "Podman state corrupted, resetting..."
-    podman system reset --force 2>/dev/null || true
-    sleep 1
-fi
 
 # Exercise prod code path (when ImageBuilder integrated)
 cd "$ROOT"

@@ -11,11 +11,6 @@ _info()  { echo -e "${GREEN}[build-inference]${NC} $*"; }
 _step()  { echo -e "${CYAN}[build-inference]${NC} $*"; }
 _error() { echo -e "${RED}[build-inference]${NC} $*" >&2; }
 _step "Building inference image via cargo run (litmus test)..."
-if ! podman ps &>/dev/null; then
-    _info "Podman state corrupted, resetting..."
-    podman system reset --force 2>/dev/null || true
-    sleep 1
-fi
 cd "$ROOT"
 if ! toolbox run cargo run --bin build-image -- inference "$@" 2>&1 | tee /tmp/build-inference.log; then
     _error "Build failed"

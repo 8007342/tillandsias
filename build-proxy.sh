@@ -12,11 +12,6 @@ _info()  { echo -e "${GREEN}[build-proxy]${NC} $*"; }
 _step()  { echo -e "${CYAN}[build-proxy]${NC} $*"; }
 _error() { echo -e "${RED}[build-proxy]${NC} $*" >&2; }
 _step "Building proxy image via cargo run (litmus test)..."
-if ! podman ps &>/dev/null; then
-    _info "Podman state corrupted, resetting..."
-    podman system reset --force 2>/dev/null || true
-    sleep 1
-fi
 cd "$ROOT"
 if ! toolbox run cargo run --bin build-image -- proxy "$@" 2>&1 | tee /tmp/build-proxy.log; then
     _error "Build failed"
