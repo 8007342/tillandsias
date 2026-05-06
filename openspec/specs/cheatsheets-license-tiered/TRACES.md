@@ -19,7 +19,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [scripts/check-cheatsheet-tiers.sh#L30](../../../scripts/check-cheatsheet-tiers.sh#L30)
 - [scripts/check-cheatsheet-tiers.sh#L59](../../../scripts/check-cheatsheet-tiers.sh#L59)
 - [scripts/check-cheatsheet-tiers.sh#L76](../../../scripts/check-cheatsheet-tiers.sh#L76)
-- [scripts/check-cheatsheet-tiers.sh#L214](../../../scripts/check-cheatsheet-tiers.sh#L214)
+- [scripts/check-cheatsheet-tiers.sh#L215](../../../scripts/check-cheatsheet-tiers.sh#L215)
 - [scripts/fetch-cheatsheet-source.sh#L62](../../../scripts/fetch-cheatsheet-source.sh#L62)
 - [scripts/fetch-cheatsheet-source.sh#L80](../../../scripts/fetch-cheatsheet-source.sh#L80)
 - [scripts/fetch-cheatsheet-source.sh#L86](../../../scripts/fetch-cheatsheet-source.sh#L86)

@@ -1913,7 +1913,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-core"
-version = "0.1.260505"
+version = "0.1.260506"
 dependencies = [
  "async-trait",
  "dirs",
@@ -1930,7 +1930,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-headless"
-version = "0.1.260505"
+version = "0.1.260506"
 dependencies = [
  "chrono",
  "gtk4",
@@ -1960,7 +1960,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-podman"
-version = "0.1.260505"
+version = "0.1.260506"
 dependencies = [
  "async-trait",
  "libc",
@@ -1990,7 +1990,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-scanner"
-version = "0.1.260505"
+version = "0.1.260506"
 dependencies = [
  "dirs",
  "notify",
