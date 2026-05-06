@@ -8,4 +8,3 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-podman/src/lib.rs#L11](../../../crates/tillandsias-podman/src/lib.rs#L11)
 - [crates/tillandsias-podman/src/lib.rs#L30](../../../crates/tillandsias-podman/src/lib.rs#L30)
 - [crates/tillandsias-podman/src/lib.rs#L41](../../../crates/tillandsias-podman/src/lib.rs#L41)
-- [src-tauri/src/event_loop.rs#L6](../../../src-tauri/src/event_loop.rs#L6)

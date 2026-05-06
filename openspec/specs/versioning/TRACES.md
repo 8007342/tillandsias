@@ -12,4 +12,3 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [scripts/install-hooks.sh#L3](../../../scripts/install-hooks.sh#L3)
 - [scripts/local-ci.sh#L3](../../../scripts/local-ci.sh#L3)
 - [scripts/verify-version-monotonic.sh#L3](../../../scripts/verify-version-monotonic.sh#L3)
-- [src-tauri/src/handlers.rs#L87](../../../src-tauri/src/handlers.rs#L87)

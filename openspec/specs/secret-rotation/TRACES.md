@@ -7,5 +7,3 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [flake.nix#L135](../../../flake.nix#L135)
 - [scripts/cleanup-secrets.sh#L16](../../../scripts/cleanup-secrets.sh#L16)
-- [src-tauri/src/secrets.rs#L211](../../../src-tauri/src/secrets.rs#L211)
-- [src-tauri/src/secrets.rs#L249](../../../src-tauri/src/secrets.rs#L249)

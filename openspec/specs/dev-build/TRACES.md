@@ -7,5 +7,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [build.sh#L28](../../../build.sh#L28)
 - [build.sh#L123](../../../build.sh#L123)
+- [build.sh#L210](../../../build.sh#L210)
 - [scripts/build-image.sh#L17](../../../scripts/build-image.sh#L17)
 - [scripts/local-ci.sh#L146](../../../scripts/local-ci.sh#L146)

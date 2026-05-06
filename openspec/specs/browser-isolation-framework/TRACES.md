@@ -6,8 +6,3 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [images/chromium/Containerfile.framework#L1](../../../images/chromium/Containerfile.framework#L1)
-- [src-tauri/src/embedded.rs#L125](../../../src-tauri/src/embedded.rs#L125)
-- [src-tauri/src/embedded.rs#L237](../../../src-tauri/src/embedded.rs#L237)
-- [src-tauri/src/embedded.rs#L669](../../../src-tauri/src/embedded.rs#L669)
-- [src-tauri/src/handlers.rs#L123](../../../src-tauri/src/handlers.rs#L123)
-- [src-tauri/src/handlers.rs#L2510](../../../src-tauri/src/handlers.rs#L2510)
