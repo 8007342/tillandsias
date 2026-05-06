@@ -40,6 +40,27 @@ No UI. Emits JSON events on stdout for scripting. Perfect for CI/CD, automation,
 
 The binary auto-detects your environment and chooses the appropriate mode.
 
+## OpenCode: Analyze Code with LLM
+
+Analyze a project with local LLM inference (no cloud, no credentials sent):
+
+```bash
+tillandsias /path/to/project --opencode --prompt "What is the main purpose?"
+```
+
+Or in a CI/automation context:
+```bash
+tillandsias --headless /path/to/project --opencode --prompt "Analyze the architecture" --debug
+```
+
+What happens:
+1. **Project mounting**: Source code mounted read-only into isolated container
+2. **Enclave**: Proxy (security), Git mirror (auth), Inference (ollama), Forge (analysis) all run locally
+3. **LLM analysis**: Your prompt sent to local LLM model (no external API calls)
+4. **Response**: Tokens streamed and printed as they arrive
+
+Emits JSON events for integration with CI/observability systems. See [OPENCODE-INTEGRATION-COMPLETED.md](docs/OPENCODE-INTEGRATION-COMPLETED.md) for full details.
+
 ## Uninstall
 
 ```bash
