@@ -264,7 +264,7 @@ pub fn run_with_force(force: bool, debug: bool) -> bool {
         let status = if debug {
             let log = log_path.as_ref().unwrap();
             let cmd = format!(
-                "{} {} --tag {} --backend fedora 2>&1 | tee {}",
+                "{} {} --tag {} 2>&1 | tee {}",
                 script.display(),
                 image_name,
                 tag,
@@ -284,7 +284,7 @@ pub fn run_with_force(force: bool, debug: bool) -> bool {
         } else {
             std::process::Command::new(&script)
                 .arg(*image_name)
-                .args(["--tag", &tag, "--backend", "fedora"])
+                .args(["--tag", &tag])
                 .current_dir(&source_dir)
                 .env_remove("LD_LIBRARY_PATH")
                 .env_remove("LD_PRELOAD")
@@ -466,7 +466,7 @@ pub fn run_build_only() -> Result<(), String> {
     #[cfg(not(target_os = "windows"))]
     let status = std::process::Command::new(&script)
         .arg("forge")
-        .args(["--tag", &tag, "--backend", "fedora"])
+        .args(["--tag", &tag])
         .current_dir(&source_dir)
         .env_remove("LD_LIBRARY_PATH")
         .env_remove("LD_PRELOAD")

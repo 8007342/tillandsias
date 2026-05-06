@@ -92,4 +92,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [src-tauri/src/podman_secret.rs#L325](../../../src-tauri/src/podman_secret.rs#L325)
 - [src-tauri/src/podman_secret.rs#L376](../../../src-tauri/src/podman_secret.rs#L376)
 - [src-tauri/src/runner.rs#L7](../../../src-tauri/src/runner.rs#L7)
-- [src-tauri/src/runner.rs#L280](../../../src-tauri/src/runner.rs#L280)
+- [src-tauri/src/runner.rs#L283](../../../src-tauri/src/runner.rs#L283)

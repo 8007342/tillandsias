@@ -286,7 +286,7 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         let mut cmd = std::process::Command::new(&script);
 
         cmd.arg(image_name)
-            .args(["--tag", &tag, "--backend", "fedora"])
+            .args(["--tag", &tag])
             .current_dir(&source_dir)
             .env_remove("LD_LIBRARY_PATH")
             .env_remove("LD_PRELOAD")
