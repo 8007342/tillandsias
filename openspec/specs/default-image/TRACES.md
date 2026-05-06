@@ -8,7 +8,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [build-forge.sh#L2](../../../build-forge.sh#L2)
 - [build.sh#L144](../../../build.sh#L144)
 - [crates/tillandsias-core/src/container_profile.rs#L290](../../../crates/tillandsias-core/src/container_profile.rs#L290)
-- [crates/tillandsias-headless/src/main.rs#L224](../../../crates/tillandsias-headless/src/main.rs#L224)
+- [crates/tillandsias-headless/src/main.rs#L256](../../../crates/tillandsias-headless/src/main.rs#L256)
 - [images/default/config-overlay/mcp/host-browser.sh#L8](../../../images/default/config-overlay/mcp/host-browser.sh#L8)
 - [images/default/Containerfile#L4](../../../images/default/Containerfile#L4)
 - [images/default/Containerfile#L11](../../../images/default/Containerfile#L11)

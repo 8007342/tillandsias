@@ -46,6 +46,13 @@ fn main() {
     let debug = user_args.iter().any(|a| a == "--debug");
     let init = user_args.iter().any(|a| a == "--init");
     let github_login = user_args.iter().any(|a| a == "--github-login");
+    let opencode = user_args.iter().any(|a| a == "--opencode");
+
+    // @trace spec:cli-mode
+    let prompt = user_args
+        .iter()
+        .position(|a| a == "--prompt")
+        .and_then(|i| user_args.get(i + 1).map(|p| p.to_string()));
 
     let known_flags = [
         "--headless",
@@ -53,13 +60,17 @@ fn main() {
         "--debug",
         "--init",
         "--github-login",
+        "--opencode",
+        "--prompt",
     ];
     if let Some(unsupported) = user_args
         .iter()
-        .find(|a| a.starts_with('-') && !known_flags.contains(&a.as_str()))
+        .enumerate()
+        .find(|(i, a)| a.starts_with('-') && !known_flags.contains(&a.as_str()) && user_args.get(i.saturating_sub(1)).map_or(true, |prev| prev != "--prompt"))
+        .map(|(_, a)| a)
     {
-        eprintln!("Unsupported option after native headless migration: {unsupported}");
-        eprintln!("This CLI path still needs to be ported from the retired Tauri layer.");
+        eprintln!("Unsupported option: {unsupported}");
+        eprintln!("Run 'tillandsias --help' for supported options.");
         std::process::exit(2);
     }
 
@@ -84,6 +95,24 @@ fn main() {
             std::process::exit(1);
         }
         return;
+    }
+
+    if opencode {
+        if let Some(project_path) = config_path {
+            if let Some(prompt_text) = prompt {
+                if let Err(e) = run_opencode_mode(&project_path, &prompt_text, debug) {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                }
+                return;
+            } else {
+                eprintln!("Error: --opencode requires --prompt <text>");
+                std::process::exit(2);
+            }
+        } else {
+            eprintln!("Error: --opencode requires project path");
+            std::process::exit(2);
+        }
     }
 
     // Phase 3, Task 12: Auto-detection (transparent mode)
@@ -145,13 +174,16 @@ fn print_usage(version: &str) {
     println!("Usage: tillandsias [--headless|--tray] [config_path]");
     println!("       tillandsias --init [--debug]");
     println!("       tillandsias --github-login [--debug]");
-    println!("  --headless    Run in headless mode (no UI)");
-    println!("  --tray        Run in tray mode (requires GTK)");
-    println!("  --init        Build required Tillandsias container images");
+    println!("       tillandsias --opencode <project> --prompt <text> [--debug]");
+    println!("  --headless     Run in headless mode (no UI)");
+    println!("  --tray         Run in tray mode (requires GTK)");
+    println!("  --opencode     Enable LLM code analysis mode");
+    println!("  --prompt TEXT  Send prompt to LLM inference (requires --opencode)");
+    println!("  --init         Build required Tillandsias container images");
     println!("  --github-login Authenticate GitHub and create ephemeral Podman secret");
-    println!("  --debug       Show command-level diagnostics");
-    println!("  --version     Show version information");
-    println!("  --help        Show this help");
+    println!("  --debug        Show command-level diagnostics");
+    println!("  --version      Show version information");
+    println!("  --help         Show this help");
     println!();
     println!("Auto-detection: Tray mode if GTK available, headless otherwise");
 }
@@ -586,6 +618,51 @@ fn launch_tray_mode(_config_path: Option<String>) -> Result<(), String> {
     {
         Err("Tray mode requires 'tray' feature".to_string())
     }
+}
+
+/// Run in OpenCode mode — analyze code with LLM inference.
+///
+/// @trace spec:cli-mode, spec:opencode-integration
+fn run_opencode_mode(project_path: &str, prompt: &str, debug: bool) -> Result<(), String> {
+    if debug {
+        eprintln!("[tillandsias] OpenCode mode enabled");
+        eprintln!("[tillandsias] Project: {}", project_path);
+        eprintln!("[tillandsias] Prompt: {}", prompt);
+    }
+
+    // Phase 4A: Project initialization and enclave startup
+    // For now, just validate the project path exists
+    let project = std::path::Path::new(project_path);
+    if !project.exists() {
+        return Err(format!("Project not found: {}", project_path));
+    }
+
+    if debug {
+        eprintln!("[tillandsias] Project path is valid");
+    }
+
+    // Phase 4B: Create async runtime for enclave orchestration
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| format!("Failed to create async runtime: {}", e))?;
+
+    rt.block_on(async {
+        // Placeholder for Phase 4+: container orchestration, LLM communication
+        if debug {
+            eprintln!("[tillandsias] [OpenCode] Enclave orchestration pending (Phase 4+)");
+            eprintln!("[tillandsias] [OpenCode] Would send prompt to inference container");
+        }
+
+        // For now, emit success event
+        println!("{{\"event\":\"opencode.mode_enabled\",\"project\":\"{}\"}}", project_path);
+
+        // Emit a mock response for testing
+        println!("{{\"event\":\"opencode.prompt\",\"text\":\"{}\"}}", prompt.replace("\"", "\\\""));
+
+        eprintln!("[tillandsias] [OpenCode] Phase 4+ (container orchestration, inference) not yet implemented");
+        eprintln!("[tillandsias] [OpenCode] See docs/OPENCODE-INTEGRATION-TASKS.md for implementation plan");
+
+        Ok::<(), String>(())
+    })
 }
 
 // Module declarations for Phase 4+

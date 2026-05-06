@@ -17,7 +17,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-core/src/state.rs#L154](../../../crates/tillandsias-core/src/state.rs#L154)
 - [crates/tillandsias-core/src/state.rs#L161](../../../crates/tillandsias-core/src/state.rs#L161)
 - [crates/tillandsias-core/src/state.rs#L489](../../../crates/tillandsias-core/src/state.rs#L489)
-- [crates/tillandsias-headless/src/main.rs#L224](../../../crates/tillandsias-headless/src/main.rs#L224)
+- [crates/tillandsias-headless/src/main.rs#L256](../../../crates/tillandsias-headless/src/main.rs#L256)
 - [images/default/config-overlay/mcp/git-tools.sh#L3](../../../images/default/config-overlay/mcp/git-tools.sh#L3)
 - [images/default/entrypoint-forge-claude.sh#L45](../../../images/default/entrypoint-forge-claude.sh#L45)
 - [images/default/entrypoint-forge-codex.sh#L44](../../../images/default/entrypoint-forge-codex.sh#L44)
