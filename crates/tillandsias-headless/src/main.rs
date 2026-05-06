@@ -19,8 +19,8 @@
 //!   - {"event":"containers.running","count":N} — on discovery
 //!   - {"event":"app.stopped","exit_code":0,"timestamp":"<RFC3339>"} — on graceful shutdown
 
-use signal_hook::iterator::Signals;
 use signal_hook::consts::signal::*;
+use signal_hook::iterator::Signals;
 use std::process::{Command, Stdio};
 
 const VERSION: &str = include_str!("../../../VERSION");

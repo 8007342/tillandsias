@@ -5,8 +5,8 @@
 //! Task 24: Test SIGKILL fallback for containers not stopping in 30s
 
 use std::process::{Command, Stdio};
-use std::time::Instant;
 use std::time::Duration;
+use std::time::Instant;
 
 /// Phase 5, Task 23: Test SIGTERM signal handling and graceful shutdown within 30s
 #[test]
@@ -39,12 +39,16 @@ fn test_signal_handling_sigterm() {
     // On Unix, terminated-by-signal processes return None for code()
     assert!(
         status.success() || status.code() == Some(0) || status.code().is_none(),
-        "Process should exit cleanly, got: {:?}", status
+        "Process should exit cleanly, got: {:?}",
+        status
     );
 
     // Verify shutdown took less than 35 seconds (30s timeout + buffer)
-    assert!(elapsed < Duration::from_secs(35),
-        "Shutdown should complete within 30s timeout, took {:?}", elapsed);
+    assert!(
+        elapsed < Duration::from_secs(35),
+        "Shutdown should complete within 30s timeout, took {:?}",
+        elapsed
+    );
 
     println!("✓ SIGTERM shutdown completed in {:?}", elapsed);
 }
@@ -84,8 +88,11 @@ fn test_signal_handling_timeout_pattern() {
     );
 
     // Verify shutdown was reasonably fast (no long waits needed)
-    assert!(elapsed < Duration::from_secs(35),
-        "Shutdown should not take more than 35s, took {:?}", elapsed);
+    assert!(
+        elapsed < Duration::from_secs(35),
+        "Shutdown should not take more than 35s, took {:?}",
+        elapsed
+    );
 
     println!("✓ Shutdown pattern verified: completed in {:?}", elapsed);
 }
@@ -123,8 +130,11 @@ fn test_signal_handling_sigint() {
     );
 
     // Verify shutdown was fast (SIGINT should trigger immediate shutdown)
-    assert!(elapsed < Duration::from_secs(35),
-        "Shutdown should complete quickly, took {:?}", elapsed);
+    assert!(
+        elapsed < Duration::from_secs(35),
+        "Shutdown should complete quickly, took {:?}",
+        elapsed
+    );
 
     println!("✓ SIGINT shutdown completed in {:?}", elapsed);
 }

@@ -75,6 +75,15 @@ With the decision to use dedicated thin platform wrappers (macOS Virtualization.
 
 **Rollback**: Keep `src-tauri/` branch for N releases; users can downgrade if needed.
 
+## Out-of-Scope Specs
+
+This change focuses on Linux native binary. The following specs exist in the main codebase but are not traced in this change (no code annotations):
+
+- `build-script-architecture` — multi-distro build orchestration (covered by Phase 7 musl testing, not implemented in architecture spec)
+- `windows-cross-build` — Windows/macOS thin wrappers (deferred to separate changes per user design)
+
+These are noted here to avoid CI traceability warnings. They will be addressed in dedicated wrapper-specific changes.
+
 ## Open Questions
 
 1. **GTK framework choice**: Use gtk4-rs (gtk4) or iced (cross-platform)? GTK4 is more native on Linux; iced is Rust-idiomatic. Recommend GTK4 for now, defer to future refactor.

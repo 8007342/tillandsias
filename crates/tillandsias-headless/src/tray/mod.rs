@@ -7,14 +7,14 @@
 //! - Task 19: System tray icon with minimize/restore
 //! - Task 20: Clean termination of headless subprocess
 
-use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
 use gtk4::prelude::*;
-use gtk4::{Application, ApplicationWindow, Button, Box, Orientation, Label};
+use gtk4::{Application, ApplicationWindow, Box, Button, Label, Orientation};
 use libadwaita::AdwApplication;
-use tracing::{info, warn, error};
+use std::process::{Child, Command, Stdio};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+use tracing::{error, info, warn};
 
 /// Run in tray mode with headless subprocess management.
 ///
@@ -159,11 +159,13 @@ pub fn setup_signal_forwarding(child_pid: u32) {
     std::thread::spawn(move || {
         if let Ok(mut signals) = Signals::new(&[SIGTERM, SIGINT]) {
             for sig in &mut signals {
-                warn!("Received signal {}, forwarding to child PID {}", sig, child_pid);
+                warn!(
+                    "Received signal {}, forwarding to child PID {}",
+                    sig, child_pid
+                );
                 // Send signal to child process
-                if let Err(e) = unsafe {
-                    libc::kill(child_pid as libc::pid_t, sig as libc::c_int)
-                } {
+                if let Err(e) = unsafe { libc::kill(child_pid as libc::pid_t, sig as libc::c_int) }
+                {
                     error!("Failed to forward signal to child: {}", e);
                 }
             }
