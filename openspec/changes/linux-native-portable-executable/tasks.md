@@ -70,8 +70,8 @@
 
 ## 10. Documentation & Release
 
-- [ ] 10.1 Update CLAUDE.md: remove Tauri references, document `--headless` mode
-- [ ] 10.2 Update README: new build command (`cargo build --release --target x86_64-unknown-linux-musl`)
-- [ ] 10.3 Create release notes: Tauri removal, musl portability, headless mode for wrappers
-- [ ] 10.4 Tag version: `v0.1.X.Y` with musl build in releases
+- [x] 10.1 Update CLAUDE.md: remove Tauri references, document `--headless` mode
+- [x] 10.2 Update README: new build command (`cargo build --release --target x86_64-unknown-linux-musl`)
+- [x] 10.3 Create release notes: Tauri removal, musl portability, headless mode for wrappers
+- [x] 10.4 Tag version: `v0.1.X.Y` with musl build in releases
 
