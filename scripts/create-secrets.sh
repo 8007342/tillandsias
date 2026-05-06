@@ -88,56 +88,9 @@ _step "Creating ephemeral podman secrets..."
 # Create CA certificate secret (always)
 # ---------------------------------------------------------------------------
 
-# Generate a self-signed CA certificate if one doesn't exist locally.
-# This certificate is used by the proxy container to perform SSL bumping.
-# @trace spec:secrets-management, spec:proxy-container
-CA_CERT_FILE="${HOME}/.cache/tillandsias/ca-cert.pem"
-CA_KEY_FILE="${HOME}/.cache/tillandsias/ca-key.pem"
-
-mkdir -p "$(dirname "$CA_CERT_FILE")"
-
-# Only generate if not already present
-if [[ ! -f "$CA_CERT_FILE" ]] || [[ ! -f "$CA_KEY_FILE" ]]; then
-    _info "Generating self-signed CA certificate..."
-
-    # Generate private key and self-signed certificate valid for 10 years
-    openssl req -new -newkey rsa:2048 -days 3650 -nodes \
-        -x509 -keyout "$CA_KEY_FILE" -out "$CA_CERT_FILE" \
-        -subj "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=Tillandsias CA" 2>/dev/null || {
-        _error "Failed to generate CA certificate (openssl not available)"
-        exit 1
-    }
-
-    chmod 0600 "$CA_CERT_FILE" "$CA_KEY_FILE"
-    _info "  CA certificate: $CA_CERT_FILE"
-    _info "  CA private key: $CA_KEY_FILE"
-else
-    _info "Using existing CA certificate at $CA_CERT_FILE"
-fi
-
-# Create CA certificate secret in podman
-_info "Creating CA certificate podman secret..."
-SECRET_CA=$(mktemp)
-cat "$CA_CERT_FILE" > "$SECRET_CA"
-cat "$CA_KEY_FILE" >> "$SECRET_CA"
-
-# Remove old CA secret if it exists (idempotent)
-"$PODMAN" secret rm tillandsias-ca-cert 2>/dev/null || true
-
-# Create the new secret
-if "$PODMAN" secret create \
-    --driver=file \
-    tillandsias-ca-cert \
-    "$SECRET_CA" 2>/dev/null; then
-    _info "  CA certificate secret created: tillandsias-ca-cert"
-    echo "tillandsias-ca-cert"
-else
-    _error "Failed to create CA certificate secret"
-    rm -f "$SECRET_CA"
-    exit 1
-fi
-
-rm -f "$SECRET_CA"
+# @tombstone obsolete:cache-backed-ca-generation — Moved to ephemeral generation in ca.rs
+# Deleted 2026-05-05 — CA certificates are now generated on proxy startup (ephemeral,
+# tmpfs-based, no persistent cache). Safe to delete after 0.1.169.229.
 
 # ---------------------------------------------------------------------------
 # Create GitHub token secret (if available)

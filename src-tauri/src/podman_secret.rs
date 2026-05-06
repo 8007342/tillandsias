@@ -86,6 +86,7 @@
 use std::str;
 
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use tracing::{debug, error, info, instrument};
 
 /// A secret in the podman secrets store (from `podman secret ls --format json`).
@@ -109,6 +110,15 @@ pub struct Secret {
     pub updated_at: Option<String>,
 }
 
+/// Compute SHA-256 fingerprint of CA certificate bytes.
+///
+/// @trace spec:secrets-lifecycle-ca-audit-trail
+pub fn ca_cert_fingerprint(cert_pem: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(cert_pem);
+    format!("{:x}", hasher.finalize())
+}
+
 impl std::fmt::Display for Secret {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -125,6 +135,8 @@ impl std::fmt::Display for Secret {
 /// The input `value` is piped to `podman secret create` via stdin, avoiding
 /// exposure in process arguments. The secret is stored by the podman backend
 /// driver and remains until explicitly removed via [`remove`].
+///
+/// For CA certificates, computes and logs the SHA-256 fingerprint for audit.
 ///
 /// # Arguments
 ///
@@ -157,7 +169,7 @@ impl std::fmt::Display for Secret {
 /// - Tracing logs (only the secret name is logged)
 /// - Command output (podman prints only the name)
 ///
-/// @trace spec:secrets-management, spec:podman-orchestration
+/// @trace spec:secrets-management, spec:podman-orchestration, spec:secrets-lifecycle-ca-audit-trail
 #[instrument(skip_all, fields(name = %name))]
 pub fn create(name: &str, value: &[u8]) -> Result<String, String> {
     use std::io::Write;
@@ -201,12 +213,25 @@ pub fn create(name: &str, value: &[u8]) -> Result<String, String> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let secret_id = stdout.trim().to_string();
 
-    info!(
-        spec = "secrets-management",
-        safety = "Secret stored by podman backend driver, not persisted to plaintext files",
-        secret = %name,
-        "Secret created successfully"
-    );
+    // @trace spec:secrets-lifecycle-ca-audit-trail
+    // For CA certificates, compute and log the SHA-256 fingerprint for audit trail.
+    if name.contains("ca") || name.contains("cert") {
+        let fingerprint = ca_cert_fingerprint(value);
+        info!(
+            spec = "secrets-management, secrets-lifecycle-ca-audit-trail",
+            safety = "Secret stored by podman backend driver, not persisted to plaintext files",
+            secret = %name,
+            ca_fingerprint = %fingerprint,
+            "CA secret created with fingerprint audit"
+        );
+    } else {
+        info!(
+            spec = "secrets-management",
+            safety = "Secret stored by podman backend driver, not persisted to plaintext files",
+            secret = %name,
+            "Secret created successfully"
+        );
+    }
     Ok(secret_id)
 }
 

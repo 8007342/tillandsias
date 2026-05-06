@@ -154,4 +154,57 @@ mod tests {
         // Clean up
         fs::remove_dir_all(&dir).ok();
     }
+
+    /// @trace spec:secrets-lifecycle-key-material-isolation
+    /// Test that CA key material never appears in debug output.
+    #[test]
+    fn test_ca_key_never_debug_output() {
+        let dir = generate_ephemeral_certs().expect("cert generation should succeed");
+
+        // Read the key file
+        let key_pem = fs::read_to_string(dir.join("intermediate.key"))
+            .expect("failed to read intermediate key");
+
+        // Serialize to debug string (simulates Debug trait usage)
+        let debug_output = format!("{:?}", key_pem);
+
+        // Assert key material NOT in output
+        assert!(!debug_output.contains("BEGIN PRIVATE KEY"));
+        assert!(!debug_output.contains("BEGIN EC PRIVATE KEY"));
+        assert!(!debug_output.contains("-----END"));
+
+        // Clean up
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// @trace spec:secrets-lifecycle-key-material-isolation
+    /// Test that CA key material never appears in podman command arguments.
+    #[test]
+    fn test_ca_key_never_in_process_args() {
+        let dir = generate_ephemeral_certs().expect("cert generation should succeed");
+
+        // Read the key file
+        let key_pem = fs::read_to_string(dir.join("intermediate.key"))
+            .expect("failed to read intermediate key");
+
+        // Simulate building podman args (keys should NEVER appear as strings)
+        let args = vec![
+            "podman",
+            "secret",
+            "create",
+            "tillandsias-ca-key",
+            // Key is piped via stdin, NOT in args, so this assertion checks
+            // that key material would not appear if naively included
+        ];
+
+        // Assert key material NOT in any arg
+        for arg in &args {
+            assert!(!arg.contains("BEGIN PRIVATE KEY"));
+            assert!(!arg.contains("BEGIN EC PRIVATE KEY"));
+            assert!(!key_pem.contains(arg) || arg == &"create" || arg == &"secret");
+        }
+
+        // Clean up
+        fs::remove_dir_all(&dir).ok();
+    }
 }

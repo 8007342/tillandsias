@@ -73,6 +73,45 @@ pub fn store_github_token(token: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Ensure GitHub OAuth token is fresh by comparing two consecutive keyring reads.
+///
+/// Retrieves the token from keyring, waits 100ms, then retrieves again.
+/// If the values differ, logs a warning that the token may be stale.
+/// If they match, returns the token.
+///
+/// @trace spec:secrets-lifecycle-staleness-validation
+#[allow(dead_code)] // API surface — future token staleness validation
+pub async fn ensure_token_fresh() -> Result<Option<String>, String> {
+    let first_read = retrieve_github_token()?;
+
+    // Wait 100ms between reads to detect staleness
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let second_read = retrieve_github_token()?;
+
+    match (&first_read, &second_read) {
+        (Some(first), Some(second)) if first != second => {
+            warn!(
+                spec = "secrets-lifecycle-staleness-validation",
+                accountability = true,
+                category = "secrets",
+                "Token changed between reads — may indicate keyring staleness or concurrent modification"
+            );
+            Ok(second_read.clone())
+        }
+        (None, Some(_)) => {
+            warn!(
+                spec = "secrets-lifecycle-staleness-validation",
+                accountability = true,
+                category = "secrets",
+                "Token appeared in second read but not first — keyring eventual consistency"
+            );
+            Ok(second_read.clone())
+        }
+        _ => Ok(first_read),
+    }
+}
+
 /// Retrieve the GitHub OAuth token from the native keyring.
 ///
 /// Returns `Ok(Some(token))` if found, `Ok(None)` if no entry exists,
