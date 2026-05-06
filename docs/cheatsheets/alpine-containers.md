@@ -22,6 +22,22 @@ status: current
 
 Quick reference for Alpine-specific behavior in Tillandsias containers. Alpine uses busybox, musl libc, and apk -- most assumptions from Fedora/Debian break here.
 
+## Base-Image Policy
+
+Alpine is allowed only for narrow appliance containers where the runtime surface is small, no agent toolchain runs inside the image, and glibc compatibility is not required. Fedora Minimal remains the default for agent-bearing, browser, inference, and future SELinux-tuned surfaces.
+
+| Role | Decision | Reason |
+|------|----------|--------|
+| proxy | Alpine 3.20 allowed | Small Squid appliance; package/runtime assumptions are explicitly documented and health checks use busybox tools. |
+| git | Alpine 3.20 allowed with credential-boundary tests | Lightweight git mirror; credential access is via ephemeral Podman secret and askpass only, so this stays Alpine only while leak/trace tests remain active. |
+| web | Alpine 3.20 allowed | Static HTTP appliance with POSIX sh entrypoint and no credential-bearing agent process. |
+| router | Caddy Alpine allowed | Upstream Caddy appliance plus static sidecar; host exposure is loopback-bound and auth is enforced by the sidecar. |
+| forge/default | Fedora Minimal required | Agents, shells, Node/Nix/GitHub tooling, and future SELinux policy need the Fedora/glibc baseline. |
+| inference | Fedora Minimal required | Ollama/GPU/tooling compatibility relies on glibc/Fedora package behavior. |
+| chromium | Fedora Minimal required | Browser sandboxing, fonts, NSS, seccomp, and glibc assumptions are not worth optimizing away. |
+
+`scripts/check-container-bases.sh` enforces this matrix. `latest` tags are forbidden; changing a role's base image is an architecture change, not a local Containerfile tweak.
+
 ## Shell
 
 Alpine's default shell (`/bin/sh`) is busybox ash, NOT bash.
@@ -63,7 +79,7 @@ Alpine's default shell (`/bin/sh`) is busybox ash, NOT bash.
 |-------|------|-------------------|------------|-------|
 | tillandsias-proxy | alpine:3.20 | squid, openssl, bash, ca-certificates | entrypoint.sh | bash |
 | tillandsias-git | alpine:3.20 | git, git-daemon, bash, openssh-client | entrypoint.sh | bash |
-| tillandsias-web | alpine:latest | busybox-extras | entrypoint.sh | sh |
+| tillandsias-web | alpine:3.20 | busybox-extras | entrypoint.sh | sh |
 
 ## Health Checks (Rust -> Container)
 

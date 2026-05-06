@@ -1,5 +1,5 @@
 # @trace spec:linux-native-portable-executable
-# Musl build configuration for static Linux binary
+# Musl build configuration for the default static Linux headless launcher
 
 [target.x86_64-unknown-linux-musl]
 rustflags = [
@@ -8,5 +8,5 @@ rustflags = [
 ]
 
 [build]
-# Use musl target by default in development
+# Use musl target by default in development for portable launcher checks
 # target = "x86_64-unknown-linux-musl"

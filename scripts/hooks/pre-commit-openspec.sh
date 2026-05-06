@@ -82,7 +82,8 @@ ghost_check() {
 
 # --- 2. Zero-trace spec check -----------------------------------------------
 # Find specs that have zero @trace annotations anywhere in the codebase.
-# Per methodology/ci.yaml: Zero-trace specs are acceptable convergence gaps (warning-only).
+# Local pre-commit reports these as advisory notices; CI/release mode treats
+# them as blocking because methodology/ci.yaml requires trace binding.
 
 zero_trace_check() {
     [[ -d "$SPECS_DIR" ]] || return 0
@@ -215,7 +216,7 @@ if [[ "$warnings" -gt 0 ]]; then
         if [[ "$ghost_warnings" -gt 0 ]]; then
             echo "  OpenSpec: $ghost_warnings blocking error(s), $zero_trace_warnings warning(s) — FAILING CI MODE" >&2
         else
-            echo "  OpenSpec: $zero_trace_warnings warning(s) — not blocking CI (acceptable convergence gaps)" >&2
+            echo "  OpenSpec: $zero_trace_warnings blocking error(s) — FAILING CI MODE" >&2
         fi
     else
         echo "  OpenSpec: $warnings notice(s) — not blocking commit" >&2
@@ -224,9 +225,8 @@ if [[ "$warnings" -gt 0 ]]; then
 fi
 
 # Exit 0 by default (pre-commit hook philosophy)
-# Exit 1 in CI mode ONLY if ghost traces found (methodology/ci.yaml: blocking errors)
-# Zero-trace specs are acceptable convergence gaps and do not block
-if [[ "$CI_MODE" == "true" && "$ghost_warnings" -gt 0 ]]; then
+# Exit 1 in CI mode if trace binding is broken.
+if [[ "$CI_MODE" == "true" && $((ghost_warnings + zero_trace_warnings)) -gt 0 ]]; then
     exit 1
 fi
 exit 0

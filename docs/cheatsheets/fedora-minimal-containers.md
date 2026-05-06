@@ -22,6 +22,12 @@ status: current
 
 Quick reference for Fedora Minimal (fedora-minimal:44) behavior in Tillandsias containers. Minimal images use microdnf, have ~120 packages (vs ~400 standard), and lack many tools you might assume exist.
 
+## Base-Image Policy
+
+Fedora Minimal is the required baseline for containers that run agent toolchains, browser processes, inference runtimes, or anything expected to participate in future SELinux policy tuning. Alpine remains acceptable only for narrow appliance images documented in `docs/cheatsheets/alpine-containers.md`.
+
+This split keeps the security-sensitive runtime boring: Fedora/glibc for complex execution surfaces, Alpine/musl only where the container behaves like a single-purpose utility. `scripts/check-container-bases.sh` enforces the current role-to-base matrix.
+
 ## Package Manager
 
 | Tool | Available? | Notes |

@@ -89,7 +89,7 @@ for cargo_toml in \
     "$ROOT/crates/tillandsias-core/Cargo.toml" \
     "$ROOT/crates/tillandsias-scanner/Cargo.toml" \
     "$ROOT/crates/tillandsias-podman/Cargo.toml" \
-    "$ROOT/src-tauri/Cargo.toml"; do
+    "$ROOT/crates/tillandsias-headless/Cargo.toml"; do
     if [[ -f "$cargo_toml" ]]; then
         # Replace version = "x.y.z" in [package] section (first occurrence)
         # BSD sed (macOS) requires '' after -i; GNU sed does not.
@@ -102,18 +102,7 @@ for cargo_toml in \
     fi
 done
 
-# Update tauri.conf.json
-TAURI_CONF="$ROOT/src-tauri/tauri.conf.json"
-if [[ -f "$TAURI_CONF" ]]; then
-    if sed --version 2>/dev/null | grep -q GNU; then
-        sed -i "s/\"version\": \"[0-9]*\.[0-9]*\.[0-9]*\"/\"version\": \"${SEMVER}\"/" "$TAURI_CONF"
-    else
-        sed -i '' "s/\"version\": \"[0-9]*\.[0-9]*\.[0-9]*\"/\"version\": \"${SEMVER}\"/" "$TAURI_CONF"
-    fi
-fi
-
 echo "All version locations updated to $SEMVER (full: $FULL_VERSION)"
 echo ""
 echo "  VERSION file:    $FULL_VERSION"
 echo "  Cargo.toml:      $SEMVER"
-echo "  tauri.conf.json: $SEMVER"

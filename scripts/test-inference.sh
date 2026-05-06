@@ -8,7 +8,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 CONTAINER_NAME="tillandsias-diagnostic-inference"
-IMAGE="${1:-tillandsias-inference:latest}"
+DEFAULT_VERSION="$(tr -d '[:space:]' < "$PROJECT_ROOT/VERSION")"
+IMAGE="${1:-tillandsias-inference:v${DEFAULT_VERSION}}"
 
 echo "[diagnostic] Starting inference container isolation test..."
 echo "[diagnostic] Image: $IMAGE"

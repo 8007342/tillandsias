@@ -277,9 +277,11 @@ run_litmus_test_file() {
         fi
     done < "$test_file"
 
-    # If no commands extracted, treat as incomplete test (skip)
+    # If no command was extracted, the litmus file is not executable evidence.
+    # Treat it as failure rather than pass/skip so incomplete bindings cannot
+    # inflate convergence.
     if [[ -z "$step_command" ]]; then
-        return 0  # SKIP
+        return 1
     fi
 
     # Execute test command with timeout
@@ -302,8 +304,11 @@ run_litmus_test_file() {
         fi
     done
 
-    # If no failure matches, check success criteria
+    # If no failure matches, require at least one explicit success criterion
+    # to match. A non-failing command is not enough evidence that the bound
+    # requirement was exercised.
     if [[ $test_passed -eq 0 ]]; then
+        test_passed=1
         for success in "${success_criteria[@]}"; do
             if [[ "$test_output" =~ $success ]]; then
                 test_passed=0

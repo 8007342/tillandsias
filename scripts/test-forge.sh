@@ -8,7 +8,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 CONTAINER_NAME="tillandsias-diagnostic-forge"
-IMAGE="${1:-tillandsias-forge:latest}"
+DEFAULT_VERSION="$(tr -d '[:space:]' < "$PROJECT_ROOT/VERSION")"
+IMAGE="${1:-tillandsias-forge:v${DEFAULT_VERSION}}"
 WORK_DIR="${2:-.}"
 
 echo "[diagnostic] Starting forge container isolation test..."

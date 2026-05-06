@@ -9,6 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 PROJECT_PATH="${1:-.}"
 PROJECT_NAME="${2:-$(basename "$PROJECT_PATH")}"
+VERSION="$(tr -d '[:space:]' < "$PROJECT_ROOT/VERSION")"
 
 # @trace spec:enclave-network
 ENCLAVE_NET="tillandsias-enclave"
@@ -192,7 +193,7 @@ podman run \
     --env "OLLAMA_KEEP_ALIVE=24h" \
     -v "$HOME/.cache/tillandsias/models:/root/.ollama/models:rw" \
     --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
-    tillandsias-inference:latest \
+    "tillandsias-inference:v${VERSION}" \
     /usr/bin/ollama serve &>/tmp/inference-start.log &
 
 log_info "Inference container spawned (background)"
@@ -227,7 +228,7 @@ if ! podman run \
     --env "PROJECT=$PROJECT_NAME" \
     -v "$PROJECT_PATH:/home/forge/src:rw" \
     --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
-    tillandsias-forge:latest \
+    "tillandsias-forge:v${VERSION}" \
     /bin/bash; then
     log_error "Forge container exited with error"
     exit 1

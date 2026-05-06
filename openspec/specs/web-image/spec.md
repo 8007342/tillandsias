@@ -17,7 +17,7 @@ The web runtime image MUST be based on Alpine Linux and be under 10MB in total s
 
 #### Scenario: Base image
 - **WHEN** the Containerfile is inspected
-- **THEN** the FROM instruction MUST reference `docker.io/library/alpine:latest`
+- **THEN** the FROM instruction MUST reference `docker.io/library/alpine:3.20`
 
 ### Requirement: Static file serving via busybox httpd
 The image MUST serve static files from `/var/www` on port 8080 using busybox httpd with no additional packages or configuration.
@@ -79,7 +79,7 @@ Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:ephemeral-guarantee` — image size, static file serving, port exposure, shutdown grace
 
 Gating points:
-- Image size < 10MB; based on alpine:latest
+- Image size < 10MB; based on pinned Alpine 3.20
 - busybox httpd serves static files from /var/www on port 8080
 - HTML/JS/CSS/images served with appropriate MIME types
 - 404 returned for missing index.html (no directory listing)

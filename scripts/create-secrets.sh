@@ -4,7 +4,7 @@
 # This script creates secrets used by the enclave to pass credentials to
 # containers at runtime. Secrets are ephemeral and removed when the tray exits.
 #
-# Usage: scripts/create-secrets.sh [--github-token <token>]
+# Usage: scripts/create-secrets.sh [--github-token <token>|--github-token-stdin]
 #
 # Environment:
 #   GITHUB_TOKEN      GitHub OAuth token (optional, reads from keyring if not provided)
@@ -64,13 +64,18 @@ while [[ $# -gt 0 ]]; do
             GITHUB_TOKEN="$1"
             SKIP_TOKEN_READ=true
             ;;
+        --github-token-stdin)
+            IFS= read -r GITHUB_TOKEN
+            SKIP_TOKEN_READ=true
+            ;;
         --help|-h)
-            echo "Usage: scripts/create-secrets.sh [--github-token <token>]"
+            echo "Usage: scripts/create-secrets.sh [--github-token <token>|--github-token-stdin]"
             echo ""
             echo "Create ephemeral podman secrets for Tillandsias containers."
             echo ""
             echo "Options:"
             echo "  --github-token <token>  GitHub OAuth token (optional, reads from keyring if not provided)"
+            echo "  --github-token-stdin    Read GitHub OAuth token from stdin"
             echo "  --help                  Show this message"
             exit 0
             ;;

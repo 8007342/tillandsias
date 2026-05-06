@@ -3,7 +3,7 @@
 # and pull-on-demand stub completeness.
 #
 # Usage:
-#   scripts/check-cheatsheet-tiers.sh [--quiet]
+#   scripts/check-cheatsheet-tiers.sh [--quiet] [--strict]
 #
 # Validates (per cheatsheets-license-tiered spec):
 #   1. tier:             must be one of: bundled | distro-packaged | pull-on-demand
@@ -19,8 +19,8 @@
 #                        - if shadows_forge_default set → require all of override_reason +
 #                          override_consequences + override_fallback (non-empty)
 #
-# Exits 0 only if all ERROR-level checks pass.
-# Warnings are printed but do not cause a non-zero exit.
+# Exits 0 only if all ERROR-level checks pass. With --strict, warnings also
+# cause a non-zero exit and are treated as CI drift.
 #
 # Complement to scripts/check-cheatsheet-sources.sh (the legacy verbatim-source
 # validator); they overlap on cheatsheet enumeration but apply orthogonal
@@ -32,12 +32,15 @@
 set -euo pipefail
 
 QUIET=0
-if [[ "${1:-}" == "--quiet" ]]; then
-    QUIET=1
-elif [[ -n "${1:-}" ]]; then
-    echo "usage: $0 [--quiet]" >&2
-    exit 2
-fi
+STRICT=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --quiet) QUIET=1 ;;
+        --strict) STRICT=1 ;;
+        *) echo "usage: $0 [--quiet] [--strict]" >&2; exit 2 ;;
+    esac
+    shift
+done
 
 if ! REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -54,7 +57,7 @@ if [[ ! -d "${CHEATSHEETS_DIR}" ]]; then
 fi
 
 # @trace spec:cheatsheets-license-tiered
-QUIET="${QUIET}" FLAKE_NIX="${FLAKE_NIX}" CONTAINERFILE="${CONTAINERFILE}" \
+QUIET="${QUIET}" STRICT="${STRICT}" FLAKE_NIX="${FLAKE_NIX}" CONTAINERFILE="${CONTAINERFILE}" \
 python3 - "${CHEATSHEETS_DIR}" << 'PYEOF'
 import os
 import re
@@ -63,6 +66,7 @@ from pathlib import Path
 
 cheatsheets_dir = Path(sys.argv[1])
 quiet = os.environ.get("QUIET") == "1"
+strict = os.environ.get("STRICT") == "1"
 flake_path = Path(os.environ.get("FLAKE_NIX", ""))
 containerfile_path = Path(os.environ.get("CONTAINERFILE", ""))
 
@@ -115,6 +119,7 @@ IMAGE_PACKAGES = discover_image_packages()
 
 errors = []
 warnings = []
+notes = []
 checked = 0
 by_tier = {"bundled": 0, "distro-packaged": 0, "pull-on-demand": 0, "unset": 0}
 
@@ -225,9 +230,10 @@ for path in sorted(cheatsheets_dir.rglob("*.md")):
         check_pull_on_demand_section(rel, body)
     elif tier == "bundled":
         # image_baked_sha256 + structural_drift_fingerprint set at forge build
-        # — pre-build cheatsheets won't have them, so warn-only here.
+        # — pre-build cheatsheets won't have them. This is generated metadata,
+        # not source drift, so strict mode must not fail on it.
         if not fm.get("image_baked_sha256"):
-            warnings.append(f"{rel}: tier=bundled has no image_baked_sha256 yet (set at forge build)")
+            notes.append(f"{rel}: tier=bundled has no image_baked_sha256 yet (set at forge build)")
 
     # CRDT override discipline
     if fm.get("shadows_forge_default", "").strip():
@@ -244,11 +250,19 @@ if not quiet:
         print(f"\nWarnings ({len(warnings)}):")
         for w in warnings:
             print(f"  WARN: {w}")
+    if notes:
+        print(f"\nNotes ({len(notes)}):")
+        for n in notes:
+            print(f"  NOTE: {n}")
 
 if errors:
     print(f"\nErrors ({len(errors)}):")
     for e in errors:
         print(f"  ERROR: {e}")
+    sys.exit(1)
+
+if strict and warnings:
+    print(f"\nStrict mode: {len(warnings)} warning(s) treated as errors.")
     sys.exit(1)
 
 if not quiet:

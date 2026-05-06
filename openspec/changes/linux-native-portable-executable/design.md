@@ -7,17 +7,17 @@ Tillandsias currently uses Tauri (cross-platform WebKit + Rust) to provide the t
 - Deployment (AppImage on Linux with embedded Ubuntu)
 
 With the decision to use dedicated thin platform wrappers (macOS Virtualization.framework, Windows WSL2), the Linux tillandsias binary becomes the source of truth. The binary must:
-1. Work in both headless (for wrappers) and tray (for native Linux) modes
-2. Use portable musl-static linking (runs on any distro)
+1. Work in headless app-lifecycle mode for wrappers and CLI launches
+2. Use portable musl-static linking only for the default pure-Rust headless launcher
 3. Have explicit app-lifecycle semantics (not daemon-like background service)
 4. Handle container cleanup on exit via signal handling
 
 ## Goals / Non-Goals
 
 **Goals:**
-- Ship portable Linux binary (musl-static, works on Ubuntu/Arch/Fedora)
+- Ship portable Linux headless launcher (musl-static, works on Ubuntu/Arch/Fedora)
 - Support `--headless` mode (app-lifecycle, no UI, controlled by wrapper or CLI)
-- Optional GTK tray on Linux (separate subprocess, managed by main app)
+- Optional GTK tray on Linux (separate native/glibc build when GTK or platform libraries are required)
 - Clean exit semantics: SIGTERM → graceful container shutdown → cleanup → exit
 - Same binary, transparent mode selection (tray vs headless)
 - Remove Tauri, AppImage, embedded Ubuntu
@@ -29,10 +29,11 @@ With the decision to use dedicated thin platform wrappers (macOS Virtualization.
 
 ## Decisions
 
-### 1. Build Target: musl-static (x86_64-unknown-linux-musl)
-**Rationale**: Maximum portability. glibc-linked binary has version mismatches across distros. musl-static has no libc dependency, runs anywhere.
-**Alternative**: glibc-linked with min version detection. Rejected: adds version checking complexity, still breaks on older systems.
-**Implementation**: `cargo build --release --target x86_64-unknown-linux-musl`, ensure all dependencies support musl (most do; FFI crates may need flags).
+### 1. Build Target: musl-static headless launcher (x86_64-unknown-linux-musl)
+**Rationale**: The default launcher is pure Rust plus subprocess/container orchestration, so musl-static gives a small portable Linux entrypoint without host libc dependency.
+**Boundary**: Musl is not the runtime policy for tray, GTK, keyring, browser, or other host-library integrations. Those builds may use Fedora/glibc or the native platform toolchain.
+**Alternative**: glibc-linked launcher with minimum version detection. Rejected for the default headless launcher because it adds version checking complexity while the current launcher does not need host libraries.
+**Implementation**: `cargo build --release --target x86_64-unknown-linux-musl` for the default launcher. If a dependency introduces FFI/native-library requirements, split that feature into a platform-native build rather than forcing the whole app through musl.
 
 ### 2. Headless App-Lifecycle (not daemon)
 **Rationale**: User/wrapper launches tillandsias → containers start → user/wrapper closes tillandsias → containers stop + cleanup. This differs from daemon (start → background forever → kill). App-lifecycle is cleaner for resource management.
@@ -59,7 +60,7 @@ With the decision to use dedicated thin platform wrappers (macOS Virtualization.
 | Risk | Mitigation |
 |------|-----------|
 | **GTK not available on headless system** | Headless mode doesn't depend on GTK; tray is optional. If tray lib not found, log warning and continue headless. |
-| **musl libc incompatibility with native libs** | Test with libseccomp, libssl. If FFI crate fails on musl, use native feature flags or glibc variant. |
+| **musl libc incompatibility with native libs** | Keep musl scoped to the default pure-Rust headless launcher. Move native-library features into platform-native builds. |
 | **30s shutdown timeout too short for large container** | Monitor actual shutdown times; increase to 60s if needed. Configurable via env var. |
 | **Tray subprocess crash doesn't restart headless** | Headless is independent; if tray crashes, user can re-launch tray. Document this. |
 | **Signal cascade: tray receives SIGTERM, must forward to headless** | Explicit signal forwarding in tray code; test with `kill -TERM` and verify containers stop. |
@@ -69,7 +70,7 @@ With the decision to use dedicated thin platform wrappers (macOS Virtualization.
 1. **Phase 1**: Branch off from current `src-tauri/` tree; keep Tauri build working during dev
 2. **Phase 2**: Create new `src/main.rs` (no Tauri), headless + signal handling
 3. **Phase 3**: Add GTK tray as separate binary or feature
-4. **Phase 4**: Test musl-static build on Ubuntu/Arch/Fedora
+4. **Phase 4**: Test musl-static headless launcher on Ubuntu/Arch/Fedora
 5. **Phase 5**: Remove `src-tauri/`, `build-appimage.sh`, Tauri deps from `Cargo.toml`
 6. **Release**: Linux binary ships as musl-static tarball; macOS/Windows thin wrappers follow (separate design)
 
@@ -89,5 +90,4 @@ These are noted here to avoid CI traceability warnings. They will be addressed i
 1. **GTK framework choice**: Use gtk4-rs (gtk4) or iced (cross-platform)? GTK4 is more native on Linux; iced is Rust-idiomatic. Recommend GTK4 for now, defer to future refactor.
 2. **Tray protocol**: If tray and headless are separate processes, how do they communicate? (stdio, Unix socket, shared state file?) Recommend Unix socket for robustness.
 3. **Versioning**: Should headless and tray be version-matched, or independent? Recommend matched (same binary version) for now.
-4. **Minimal libc**: Can we use even smaller libc (uclibc, dietlibc)? Probably not worth it; musl is the sweet spot.
-
+4. **Portable launcher vs native tray artifact split**: Keep one CLI name, but decide whether Linux tray ships as a second binary, feature build, or distro package.

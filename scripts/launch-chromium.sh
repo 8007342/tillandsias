@@ -10,7 +10,10 @@ PROJECT="${1:?'Usage: launch-chromium.sh <project> <url> [port] [window_type] [v
 URL="${2:?'Usage: launch-chromium.sh <project> <url> [port] [window_type] [version]'}"
 PORT="${3:-9222}"
 WINDOW_TYPE="${4:-open_safe_window}"
-VERSION="${5:-latest}"  # Default to :latest for backwards compatibility, but accept version
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+DEFAULT_VERSION="$(tr -d '[:space:]' < "$PROJECT_ROOT/VERSION")"
+VERSION="${5:-$DEFAULT_VERSION}"
 
 # Detect GPU availability
 detect_gpu() {
@@ -62,20 +65,16 @@ fi
 # Add image and URL — use versioned image tags for reproducibility
 # @trace spec:browser-isolation-core
 if [[ "$VERSION" == "latest" ]]; then
-    # Backwards compatibility: if no version provided, use :latest
-    if [[ "$WINDOW_TYPE" == "open_debug_window" ]]; then
-        CMD+=("tillandsias-chromium-framework:latest" "$URL")
-    else
-        CMD+=("tillandsias-chromium-core:latest" "$URL")
-    fi
+    echo "ERROR: chromium launcher requires a concrete version, not 'latest'" >&2
+    exit 2
+fi
+
+# Use versioned tags: tillandsias-chromium-core:v0.1.160
+# @trace spec:browser-isolation-core
+if [[ "$WINDOW_TYPE" == "open_debug_window" ]]; then
+    CMD+=("tillandsias-chromium-framework:v${VERSION}" "$URL")
 else
-    # Use versioned tags: tillandsias-chromium-core:v0.1.160
-    # @trace spec:browser-isolation-core
-    if [[ "$WINDOW_TYPE" == "open_debug_window" ]]; then
-        CMD+=("tillandsias-chromium-framework:v${VERSION}" "$URL")
-    else
-        CMD+=("tillandsias-chromium-core:v${VERSION}" "$URL")
-    fi
+    CMD+=("tillandsias-chromium-core:v${VERSION}" "$URL")
 fi
 
 # Spawn container and output container ID

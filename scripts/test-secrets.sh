@@ -11,7 +11,7 @@
 #
 # Environment:
 #   PODMAN_PATH           Path to podman binary (optional, auto-detected)
-#   TEST_IMAGE            Container image to use for testing (default: alpine:latest)
+#   TEST_IMAGE            Container image to use for testing (default: alpine:3.20)
 #
 # Exit codes:
 #   0 = all tests passed
@@ -49,7 +49,7 @@ _fail()  { echo -e "${RED}[test-secrets] ✗${NC} $*" >&2; }
 
 # Argument parsing
 VERBOSE=false
-TEST_IMAGE="${TEST_IMAGE:-alpine:latest}"
+TEST_IMAGE="${TEST_IMAGE:-alpine:3.20}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in

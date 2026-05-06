@@ -173,15 +173,31 @@ else
 fi
 
 # ============================================================================
-# CHECK 5: Cheatsheet tier validation
+# CHECK 5: Container base-image policy
+# ============================================================================
+
+log_section "Container Base Image Policy"
+if [[ -f "scripts/check-container-bases.sh" ]]; then
+    if bash scripts/check-container-bases.sh 2>&1 | tee /tmp/container-bases.log; then
+        log_pass "Container base images match role policy"
+    else
+        log_fail_tracked "container-base-policy" "Container base-image policy drift found (see /tmp/container-bases.log)"
+        [[ "$VERBOSE" == "1" ]] && cat /tmp/container-bases.log >&2
+    fi
+else
+    log_skip "Container base-image checker not found"
+fi
+
+# ============================================================================
+# CHECK 6: Cheatsheet tier validation
 # ============================================================================
 
 log_section "Cheatsheet Tier Discipline"
 if [[ -f "scripts/check-cheatsheet-tiers.sh" ]]; then
-    if bash scripts/check-cheatsheet-tiers.sh 2>&1 | tee /tmp/cheatsheet-tiers.log; then
+    if bash scripts/check-cheatsheet-tiers.sh --strict 2>&1 | tee /tmp/cheatsheet-tiers.log; then
         log_pass "Cheatsheet tier validation passed"
     else
-        log_fail_tracked "cheatsheet-tiers" "Cheatsheet tier errors found (see /tmp/cheatsheet-tiers.log)"
+        log_fail_tracked "cheatsheet-tiers" "Cheatsheet tier errors or strict warnings found (see /tmp/cheatsheet-tiers.log)"
         [[ "$VERBOSE" == "1" ]] && cat /tmp/cheatsheet-tiers.log >&2
     fi
 else
@@ -189,7 +205,7 @@ else
 fi
 
 # ============================================================================
-# CHECK 6: Litmus tests (skipped in --fast mode)
+# CHECK 7: Litmus tests (skipped in --fast mode)
 # ============================================================================
 
 if [[ "$FAST_MODE" == "0" ]]; then

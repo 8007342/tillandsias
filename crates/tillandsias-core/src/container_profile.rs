@@ -34,7 +34,8 @@ pub struct ContainerProfile {
     /// Secret mounts — only present for profiles that need them.
     pub secrets: Vec<SecretMount>,
 
-    /// Override the default image tag (e.g., web uses `tillandsias-web`).
+    /// Override the default image tag only for truly static external images.
+    /// Tillandsias-owned images resolve through `LaunchContext`.
     pub image_override: Option<&'static str>,
 
     /// Process limit (`--pids-limit`). Prevents fork bombs and constrains
@@ -412,7 +413,7 @@ pub fn web_profile() -> ContainerProfile {
         ],
         env_vars: vec![],
         secrets: vec![],
-        image_override: Some("tillandsias-web:latest"),
+        image_override: None,
         pids_limit: 32,  // Only httpd
         read_only: true, // Static file server — no writes needed
         tmpfs_mounts: vec!["/tmp", "/var/run"],
@@ -732,7 +733,10 @@ mod tests {
         ));
         assert_eq!(profile.mounts[1].container_path, "/var/log/tillandsias");
         assert_eq!(profile.mounts[1].mode, MountMode::Rw);
-        assert_eq!(profile.image_override, Some("tillandsias-web:latest"));
+        assert!(
+            profile.image_override.is_none(),
+            "Web image tag comes from LaunchContext"
+        );
     }
 
     // @trace spec:layered-tools-overlay, spec:podman-orchestration

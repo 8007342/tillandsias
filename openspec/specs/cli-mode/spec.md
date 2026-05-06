@@ -28,11 +28,11 @@ The `--image` flag SHALL allow selecting which container image to use.
 
 #### Scenario: Default image
 - **WHEN** no `--image` flag is provided
-- **THEN** the "forge" image (`tillandsias-forge:latest`) SHALL be used
+- **THEN** the "forge" image for the running Tillandsias version SHALL be used
 
 #### Scenario: Custom image name
 - **WHEN** the user runs `tillandsias --image web ~/src/my-app`
-- **THEN** the `tillandsias-web:latest` image SHALL be used
+- **THEN** the `tillandsias-web:v<VERSION>` image for the running Tillandsias version SHALL be used
 
 ### Requirement: Debug flag
 The `--debug` flag SHALL enable verbose output showing podman commands and internal details.

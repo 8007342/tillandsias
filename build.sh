@@ -7,7 +7,7 @@
 #
 # @tombstone superseded:linux-native-portable-executable
 # Tauri WebKit wrapper and AppImage bundling removed 2026-05-05.
-# Replaced with GTK tray and musl-static binary for portability.
+# Replaced with native headless launcher and future platform-native tray wrappers.
 # Kept through release 0.1.271 (three releases) for traceability.
 #
 # Usage:
@@ -89,7 +89,7 @@ Usage: ./build.sh [flags]
 
 Build flags:
   (none)            Debug build (cargo build --workspace)
-  --release         Release build (musl-static binary, optimized)
+  --release         Release build (native launcher, optimized)
   --test            Run test suite (cargo test --workspace)
   --check           Type-check only (cargo check --workspace)
   --clean           Clean build artifacts before building
@@ -267,7 +267,15 @@ fi
 # Wipe cache and target directories
 if [[ "$FLAG_WIPE" == true ]]; then
     _step "Wiping build artifacts and caches..."
-    rm -rf "$SCRIPT_DIR/target" "$CACHE_DIR" /tmp/tillandsias-* 2>/dev/null || true
+    rm -rf \
+        "$SCRIPT_DIR/target" \
+        "$SCRIPT_DIR/target-musl" \
+        "$SCRIPT_DIR/.nix-output" \
+        "$CACHE_DIR" \
+        "$ACTUAL_HOME/.cache/tillandsias/build-hashes" \
+        "$ACTUAL_HOME/.cache/tillandsias/packages" \
+        /tmp/tillandsias-* \
+        2>/dev/null || true
     _info "Wipe complete"
     # If --wipe is the only flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_TOOLBOX_RESET$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE" == "falsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then
@@ -278,7 +286,7 @@ fi
 # Clean before building
 if [[ "$FLAG_CLEAN" == true ]]; then
     _step "Cleaning build artifacts..."
-    rm -rf "$SCRIPT_DIR/target"
+    rm -rf "$SCRIPT_DIR/target" "$SCRIPT_DIR/target-musl" "$SCRIPT_DIR/.nix-output"
     _info "Build artifacts cleaned"
 fi
 
@@ -287,7 +295,7 @@ fi
 # ---------------------------------------------------------------------------
 
 _toolbox_exists() {
-    toolbox list 2>/dev/null | grep -q "^$TOOLBOX_NAME$"
+    toolbox list --containers 2>/dev/null | awk 'NR > 1 { print $2 }' | grep -Fxq "$TOOLBOX_NAME"
 }
 
 _toolbox_ensure() {
@@ -328,31 +336,32 @@ fi
 # ---------------------------------------------------------------------------
 
 if [[ "$FLAG_INSTALL" == true ]]; then
-    _step "Building portable binary (musl-static) for install..."
+    _step "Building portable headless launcher (musl-static) for install..."
     "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
     "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
 
     _toolbox_ensure
     _run cargo build --workspace --release --target x86_64-unknown-linux-musl --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
 
-    # Validate musl-static binary
-    RELEASE_BIN="$SCRIPT_DIR/target/x86_64-unknown-linux-musl/release/tillandsias-headless"
+    # Validate musl-static headless launcher
+    RELEASE_BIN="$SCRIPT_DIR/target/x86_64-unknown-linux-musl/release/tillandsias"
     if [[ ! -f "$RELEASE_BIN" ]]; then
-        _error "Portable binary not found at $RELEASE_BIN"
+        _error "Portable headless launcher not found at $RELEASE_BIN"
         exit 1
     fi
 
-    _step "Validating portable binary..."
-    # Test 1: Verify musl-static (no external libc dependency)
+    _step "Validating portable headless launcher..."
+    # Test 1: Verify musl-static launcher (no external libc dependency)
     if file "$RELEASE_BIN" | grep -q "statically linked"; then
-        _info "✓ Binary is musl-static (portable)"
+        _info "✓ Headless launcher is musl-static (portable)"
     else
         _error "✗ Binary is NOT statically linked (has glibc dependency)"
         exit 1
     fi
 
     # Test 2: Verify headless mode starts
-    if timeout 5 "$RELEASE_BIN" --headless /tmp/test-install-validation 2>&1 | grep -q '"event":"app.started"'; then
+    HEADLESS_OUTPUT="$(timeout 5 "$RELEASE_BIN" --headless /tmp/test-install-validation 2>&1 || true)"
+    if grep -q '"event":"app.started"' <<<"$HEADLESS_OUTPUT" && grep -q '"event":"app.stopped"' <<<"$HEADLESS_OUTPUT"; then
         _info "✓ Headless mode works"
     else
         _error "✗ Headless mode failed to start"
@@ -363,8 +372,8 @@ if [[ "$FLAG_INSTALL" == true ]]; then
     mkdir -p "$INSTALL_DIR"
     cp "$RELEASE_BIN" "$INSTALL_BIN"
     chmod +x "$INSTALL_BIN"
-    _info "Portable binary installed: $INSTALL_BIN ($(du -h "$INSTALL_BIN" | cut -f1))"
-    _info "Binary is self-contained and ready for any Linux distro"
+    _info "Portable headless launcher installed: $INSTALL_BIN ($(du -h "$INSTALL_BIN" | cut -f1))"
+    _info "Launcher is self-contained; native tray/wrapper surfaces may use platform libraries"
 
     # If --install is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE$FLAG_TOOLBOX_RESET" == "falsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then
@@ -411,7 +420,7 @@ if [[ "$FLAG_RELEASE" == true ]]; then
     fi
     _info "CI/CD validation passed — proceeding with release build"
 
-    _step "Building release (musl-static)..."
+    _step "Building release (native launcher)..."
 
     # Clean old binaries to avoid confusion
     rm -rf "$SCRIPT_DIR/target/release/tillandsias"

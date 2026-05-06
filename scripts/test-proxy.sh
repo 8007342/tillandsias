@@ -8,7 +8,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 CONTAINER_NAME="tillandsias-diagnostic-proxy"
-IMAGE="${1:-tillandsias-proxy:latest}"
+DEFAULT_VERSION="$(tr -d '[:space:]' < "$PROJECT_ROOT/VERSION")"
+IMAGE="${1:-tillandsias-proxy:v${DEFAULT_VERSION}}"
 
 echo "[diagnostic] Starting proxy container isolation test..."
 echo "[diagnostic] Image: $IMAGE"

@@ -29,7 +29,7 @@ async fn podman_start_inspect_stop_cycle() {
     let _ = client.stop_container(container_name, 5).await;
     let _ = client.remove_container(container_name).await;
 
-    // Start a minimal alpine container that sleeps
+    // Start a pinned minimal alpine container that sleeps
     let args = vec![
         "-d".to_string(),
         "--name".to_string(),
@@ -38,7 +38,7 @@ async fn podman_start_inspect_stop_cycle() {
         "--cap-drop=ALL".to_string(),
         "--security-opt=no-new-privileges".to_string(),
         "--userns=keep-id".to_string(),
-        "docker.io/library/alpine:latest".to_string(),
+        "docker.io/library/alpine:3.20".to_string(),
         "sleep".to_string(),
         "300".to_string(),
     ];

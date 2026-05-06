@@ -17,7 +17,7 @@ Browser containers (Chromium isolation) are tracked in TrayState alongside forge
 Browser containers spawned via `chromium_launcher::spawn_chromium_window()` are added to `TrayState.running` with type `ContainerType::Browser`.
 
 #### Scenario: Browser container added on startup
-- **WHEN** a browser container (tillandsias-chromium:latest) starts successfully
+- **WHEN** a versioned browser container starts successfully
 - **THEN** it is added to `TrayState.running` with:
   - `container_type: ContainerType::Browser`
   - `port_range: (host_port, host_port)` allocated from 17000-17999 range

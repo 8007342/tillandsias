@@ -753,7 +753,7 @@ impl PodmanClient {
     /// Tag a container image with an alias.
     ///
     /// On Linux/podman, creates an image alias using `podman tag <source> <target>`.
-    /// For example, `tillandsias-forge:v0.1.170` → `tillandsias-forge:latest`.
+    /// For example, `tillandsias-forge:v0.1.170` -> `localhost/tillandsias-forge:v0.1.170`.
     ///
     /// On Windows, WSL distros don't support multiple tags — a single distro name
     /// is registered once. Tagging is a no-op; returns `Ok(())` immediately with a

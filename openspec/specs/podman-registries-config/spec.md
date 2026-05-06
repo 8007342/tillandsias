@@ -119,7 +119,7 @@ podman run tillandsias-test:v1
 
 **Test 2: Fully-qualified name works**
 ```bash
-podman run docker.io/library/alpine:latest
+podman run docker.io/library/alpine:3.20
 # Expected: Pulls from docker.io (no prompt, no ambiguity)
 ```
 
@@ -156,4 +156,3 @@ tillandsias --github-login
 - `spec:git-mirror-service` — Git service image build and deployment
 - `spec:default-image` — Forge image build process
 - `spec:inference-container` — Inference image build process
-

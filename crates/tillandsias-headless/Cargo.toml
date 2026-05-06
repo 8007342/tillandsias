@@ -4,11 +4,11 @@ version = "0.1.260505"
 edition = "2024"
 license = "GPL-3.0-or-later"
 authors = ["Tlatoani"]
-description = "Tillandsias headless mode — musl-static Linux binary"
+description = "Tillandsias native headless app lifecycle launcher"
 publish = false
 
 [[bin]]
-name = "tillandsias-headless"
+name = "tillandsias"
 path = "src/main.rs"
 
 [dependencies]

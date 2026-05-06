@@ -4,13 +4,13 @@
 #
 # This script:
 #   1. Checks if sources have changed since last build (staleness detection)
-#   2. Runs `nix build` inside an ephemeral `nixos/nix:latest` container
+#   2. Builds with podman using pinned Containerfile bases
 #   3. Loads the resulting tarball into podman and tags the image
 #
 # No toolbox dependency — works on any system with podman.
 #
 # Environment:
-#   TILLANDSIAS_BUILD_VERBOSE=1   Show nix build output
+#   TILLANDSIAS_BUILD_VERBOSE=1   Show raw podman build output
 
 set -euo pipefail
 
@@ -72,6 +72,16 @@ _warn()  { echo -e "${YELLOW}[build-image]${NC} $*"; }
 _error() { echo -e "${RED}[build-image]${NC} $*" >&2; }
 _step()  { echo -e "${CYAN}[build-image]${NC} $*"; }
 
+_verbose_enabled() {
+    [[ "${TILLANDSIAS_BUILD_VERBOSE:-0}" == "1" ]]
+}
+
+_verbose_info() {
+    if _verbose_enabled; then
+        _info "$@"
+    fi
+}
+
 # ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
@@ -105,10 +115,10 @@ while [[ $# -gt 0 ]]; do
             echo "  chromium-core      Build the secure browser container (minimal)"
             echo "  chromium-framework Build the debug browser container (with Node.js+Playwright)"
             echo "  --force            Rebuild even if sources haven't changed"
-            echo "  --tag <tag>        Override the image tag (default: tillandsias-<name>:latest)"
+            echo "  --tag <tag>        Override the image tag (default: tillandsias-<name>:v$(cat "$ROOT/VERSION"))"
             echo ""
             echo "Note: This script uses podman build with embedded Containerfiles."
-            echo "No Nix required. Package cache is mounted for bandwidth optimization."
+            echo "No Nix required. Builds use no persistent package cache."
             exit 0
             ;;
         *)
@@ -122,7 +132,12 @@ done
 if [[ -n "$FLAG_TAG" ]]; then
     IMAGE_TAG="$FLAG_TAG"
 else
-    IMAGE_TAG="tillandsias-${IMAGE_NAME}:latest"
+    IMAGE_VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
+    if [[ -z "$IMAGE_VERSION" ]]; then
+        _error "VERSION file is empty"
+        exit 1
+    fi
+    IMAGE_TAG="tillandsias-${IMAGE_NAME}:v${IMAGE_VERSION}"
 fi
 NIX_ATTR="${IMAGE_NAME}-image"
 # Version the hash file with the image tag so each version has independent
@@ -149,24 +164,44 @@ fi
 _step "Building image: ${BOLD}${IMAGE_TAG}${NC}"
 
 # ---------------------------------------------------------------------------
-# Step 1: Staleness detection
+# Step 1: Aggressive stale-state cleanup + staleness detection
 # ---------------------------------------------------------------------------
 mkdir -p "$CACHE_DIR"
 
-# Clean up old unversioned hash files (legacy format: .last-build-forge.sha256)
-# These carry over across version bumps, creating false "up to date" results.
+_remove_stale_hashes() {
+    local hash
+    shopt -s nullglob
+    for hash in "$CACHE_DIR/.last-build-${IMAGE_NAME}.sha256" \
+                "$CACHE_DIR/.last-build-tillandsias-${IMAGE_NAME}-"*.sha256; do
+        if [[ "$hash" != "$HASH_FILE" ]]; then
+            _verbose_info "Removing stale build hash: $(basename "$hash")"
+            rm -f "$hash"
+        fi
+    done
+    shopt -u nullglob
+}
+
+_remove_stale_image_tags() {
+    local tags old_tag old_tag_normalized
+    tags="$("$PODMAN" images --format "{{.Repository}}:{{.Tag}}" | grep "tillandsias-${IMAGE_NAME}:" || true)"
+    for old_tag in $tags; do
+        old_tag_normalized="$(echo "$old_tag" | sed 's|^localhost/||')"
+        if [[ "$old_tag_normalized" != "$IMAGE_TAG" ]]; then
+            _verbose_info "Removing stale image tag: $old_tag"
+            if _verbose_enabled; then
+                "$PODMAN" rmi -f "$old_tag" || true
+            else
+                "$PODMAN" rmi -f "$old_tag" >/dev/null 2>&1 || true
+            fi
+        fi
+    done
+}
+
+# Clean up old hash files before any freshness shortcut. Stale hashes carry
+# over across version bumps and create false "up to date" results.
 # @trace spec:forge-staleness
-for _old in "$CACHE_DIR/.last-build-forge.sha256" \
-            "$CACHE_DIR/.last-build-proxy.sha256" \
-            "$CACHE_DIR/.last-build-git.sha256" \
-            "$CACHE_DIR/.last-build-inference.sha256" \
-            "$CACHE_DIR/.last-build-web.sha256"; do
-    if [[ -f "$_old" ]]; then
-        _info "Removing legacy hash file: $(basename "$_old")"
-        rm -f "$_old"
-    fi
-done
-unset _old
+_remove_stale_hashes
+_remove_stale_image_tags
 
 _compute_hash() {
     # Hash Containerfile and related source files in the image directory.
@@ -238,29 +273,13 @@ _detect_distro() {
 DISTRO="$(_detect_distro "$CONTAINERFILE")"
 _info "Detected base distro: ${BOLD}${DISTRO}${NC}"
 
-# Set up cache mount for distro-specific package manager
+# Package-manager caches are intentionally not persisted by build scripts.
 # @trace spec:user-runtime-lifecycle
-# NOTE: Rootless podman does not support volume mounts during build when Alpine's apk
-# tries to access the mounted directory. Caching disabled temporarily to ensure builds complete.
-# TODO: Re-enable after resolving rootless podman + volume mount + apk permission issue.
 CACHE_MOUNT_ARGS=()
 PACKAGE_CACHE="$HOME/.cache/tillandsias/packages"
 if [[ -n "$HOME" ]]; then
-    mkdir -p "$PACKAGE_CACHE"
-    # Volume mount caching temporarily disabled for rootless podman compatibility
-    _warn "Package cache mounts disabled (rootless podman limitation with apk)"
-    # Future: restore distro-specific cache mounts here
+    rm -rf "$PACKAGE_CACHE" 2>/dev/null || true
 fi
-
-# Remove any existing tags for this image name to prevent double-tagging
-EXISTING_TAGS=$("$PODMAN" images --format "{{.Repository}}:{{.Tag}}" | grep "tillandsias-${IMAGE_NAME}:" || true)
-for old_tag in $EXISTING_TAGS; do
-    old_tag_normalized=$(echo "$old_tag" | sed 's|^localhost/||')
-    if [[ "$old_tag_normalized" != "$IMAGE_TAG" ]]; then
-        _info "  Removing old tag: $old_tag"
-        "$PODMAN" rmi -f "$old_tag" 2>/dev/null || true
-    fi
-done
 
 # Build args: pass CHROMIUM_CORE_TAG for framework images
 BUILD_ARGS=()
@@ -273,13 +292,33 @@ fi
 # that build containers don't have. Proxy is for runtime containers only.
 # @trace spec:user-runtime-lifecycle
 
-"$PODMAN" build \
-    --format docker \
-    --tag "$IMAGE_TAG" \
-    "${BUILD_ARGS[@]}" \
-    "${CACHE_MOUNT_ARGS[@]}" \
-    -f "$CONTAINERFILE" \
-    "$IMAGE_DIR/"
+BUILD_LOG="$(mktemp "${TMPDIR:-/tmp}/tillandsias-build-image.XXXXXX.log")"
+trap 'rm -f "$BUILD_LOG"' EXIT
+
+if _verbose_enabled; then
+    "$PODMAN" build \
+        --no-cache \
+        --format docker \
+        --tag "$IMAGE_TAG" \
+        "${BUILD_ARGS[@]}" \
+        "${CACHE_MOUNT_ARGS[@]}" \
+        -f "$CONTAINERFILE" \
+        "$IMAGE_DIR/"
+else
+    if ! "$PODMAN" build \
+        --no-cache \
+        --format docker \
+        --tag "$IMAGE_TAG" \
+        "${BUILD_ARGS[@]}" \
+        "${CACHE_MOUNT_ARGS[@]}" \
+        -f "$CONTAINERFILE" \
+        "$IMAGE_DIR/" >"$BUILD_LOG" 2>&1; then
+        _error "podman build failed for ${IMAGE_TAG}"
+        _error "Last build log lines:"
+        tail -80 "$BUILD_LOG" >&2 || true
+        exit 1
+    fi
+fi
 
 # Remove :latest tag if it exists and differs from IMAGE_TAG
 LATEST_TAG="tillandsias-${IMAGE_NAME}:latest"
@@ -306,17 +345,8 @@ fi
         exit 1
     fi
 
-    # Remove ANY tags for this image name that don't match IMAGE_TAG
-    # (podman may have left old tags on the same image ID)
-    # Note: podman may add localhost/ prefix, so we normalize for comparison
-    ALL_TAGS="$("$PODMAN" images --format "{{.Repository}}:{{.Tag}}" | grep "tillandsias-${IMAGE_NAME}:" || true)"
-    for old_tag in $ALL_TAGS; do
-        old_tag_normalized=$(echo "$old_tag" | sed 's|^localhost/||')
-        if [[ "$old_tag_normalized" != "$IMAGE_TAG" ]]; then
-            _info "  Removing stale tag: $old_tag"
-            "$PODMAN" rmi -f "$old_tag" 2>/dev/null || true
-        fi
-    done
+    _remove_stale_image_tags
+    "$PODMAN" image prune -f 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # Step 5: Save hash for staleness detection

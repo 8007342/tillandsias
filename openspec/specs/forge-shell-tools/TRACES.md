@@ -7,8 +7,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [flake.nix#L36](../../../flake.nix#L36)
 - [images/default/entrypoint-forge-claude.sh#L56](../../../images/default/entrypoint-forge-claude.sh#L56)
-- [images/default/entrypoint-forge-opencode.sh#L54](../../../images/default/entrypoint-forge-opencode.sh#L54)
 - [images/default/entrypoint-forge-opencode-web.sh#L85](../../../images/default/entrypoint-forge-opencode-web.sh#L85)
+- [images/default/entrypoint-forge-opencode.sh#L54](../../../images/default/entrypoint-forge-opencode.sh#L54)
 - [images/default/entrypoint-terminal.sh#L67](../../../images/default/entrypoint-terminal.sh#L67)
 - [images/default/lib-common.sh#L65](../../../images/default/lib-common.sh#L65)
 - [images/default/lib-common.sh#L278](../../../images/default/lib-common.sh#L278)
