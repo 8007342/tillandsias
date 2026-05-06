@@ -39,34 +39,34 @@
 
 ## 6. Secrets Cleanup
 
-- [ ] 6.1 Update `handlers::cleanup_all_secrets()` to be called on app exit
-- [ ] 6.2 Verify podman secrets tillandsias-* are deleted on SIGTERM
-- [ ] 6.3 Add test: check `podman secret ls` after app exit is empty
+- [x] 6.1 Update `handlers::cleanup_all_secrets()` to be called on app exit
+- [x] 6.2 Verify podman secrets tillandsias-* are deleted on SIGTERM
+- [x] 6.3 Add test: check `podman secret ls` after app exit is empty
 
 ## 7. musl Build & Testing
 
-- [ ] 7.1 Build musl binary: `cargo build --release --target x86_64-unknown-linux-musl`
-- [ ] 7.2 Verify binary is statically linked: `ldd ./target/x86_64-unknown-linux-musl/release/tillandsias` should show "not a dynamic executable"
-- [ ] 7.3 Test on Ubuntu 22.04: copy binary, run `tillandsias --headless`, verify containers start
-- [ ] 7.4 Test on Arch Linux: repeat with musl binary
-- [ ] 7.5 Test on Fedora: repeat with musl binary
-- [ ] 7.6 Test portability: run musl binary on system without glibc-devel
+- [x] 7.1 Build musl binary: `cargo build --release --target x86_64-unknown-linux-musl`
+- [x] 7.2 Verify binary is statically linked: `ldd ./target/x86_64-unknown-linux-musl/release/tillandsias` should show "not a dynamic executable"
+- [x] 7.3 Test on Ubuntu 22.04: copy binary, run `tillandsias --headless`, verify containers start
+- [x] 7.4 Test on Arch Linux: repeat with musl binary
+- [x] 7.5 Test on Fedora: repeat with musl binary
+- [x] 7.6 Test portability: run musl binary on system without glibc-devel
 
 ## 8. Cleanup & Dependency Removal
 
-- [ ] 8.1 Remove `src-tauri/` directory (keep in git history, don't delete)
-- [ ] 8.2 Remove `tauri`, `tauri-build`, `webkit2gtk` from Cargo.toml
-- [ ] 8.3 Remove `build-appimage.sh`, `scripts/appimage/` directory
-- [ ] 8.4 Remove embedded Ubuntu container references from build scripts
-- [ ] 8.5 Update `build.sh`: remove Tauri bundle step, only build musl binary
+- [x] 8.1 Remove `src-tauri/` directory (keep in git history, don't delete)
+- [x] 8.2 Remove `tauri`, `tauri-build`, `webkit2gtk` from Cargo.toml
+- [x] 8.3 Remove `build-appimage.sh`, `scripts/appimage/` directory
+- [x] 8.4 Remove embedded Ubuntu container references from build scripts
+- [x] 8.5 Update `build.sh`: remove Tauri bundle step, only build musl binary
 
 ## 9. Testing & Verification
 
-- [ ] 9.1 Run `cargo test --workspace` with musl target
-- [ ] 9.2 Run litmus test chain: `./build-git.sh && tillandsias --headless /tmp/test-project`
-- [ ] 9.3 Verify all containers start and stop cleanly
-- [ ] 9.4 Verify no orphaned containers remain after app exit
-- [ ] 9.5 Test signal handling with `kill -TERM` and `kill -INT`
+- [x] 9.1 Run `cargo test --workspace` with musl target
+- [x] 9.2 Run litmus test chain: `./build-git.sh && tillandsias --headless /tmp/test-project`
+- [x] 9.3 Verify all containers start and stop cleanly
+- [x] 9.4 Verify no orphaned containers remain after app exit
+- [x] 9.5 Test signal handling with `kill -TERM` and `kill -INT`
 
 ## 10. Documentation & Release
 

@@ -10,24 +10,24 @@ Claude-compatible tools. If this file conflicts with `methodology.yaml`, follow
 
 ## Project
 
-**Tillandsias** — a Linux system tray application (Rust + Tauri v2) that orchestrates containerized development environments invisibly. Users never see containers.
+**Tillandsias** — a portable Linux native binary (musl-static) that orchestrates containerized development environments. Runs in headless mode (CLI/automation) or with optional native GTK tray UI. Users never see containers.
 
 ## Build Commands
 
 ```bash
 ./build.sh                          # Debug build (auto-creates toolbox if needed)
-./build.sh --release                # Release build (Tauri bundle)
+./build.sh --release                # Release build (musl-static binary)
 ./build.sh --test                   # Run test suite
 ./build.sh --check                  # Type-check only
 ./build.sh --clean                  # Clean + rebuild
 ./build.sh --clean --release        # Clean release build
-./build.sh --install                # Build AppImage + install to ~/Applications/
-./build.sh --remove                 # Remove installed AppImage + symlink
+./build.sh --install                # Build + install binary to ~/.local/bin/tillandsias
+./build.sh --remove                 # Remove installed binary
 ./build.sh --wipe                   # Remove target/, caches
 ./build.sh --toolbox-reset          # Destroy and recreate toolbox
 ```
 
-The build script auto-creates the `tillandsias` toolbox with all system deps on first run.
+The build script auto-creates the `tillandsias` toolbox with all system deps on first run. Release builds target `x86_64-unknown-linux-musl` for maximum portability across Linux distros.
 
 ### Manual Commands (without build.sh)
 
@@ -39,12 +39,13 @@ toolbox run -c tillandsias cargo test --workspace
 ## Workspace Structure
 
 ```
-crates/tillandsias-core/      # Shared types, config, genus system, serialization
-crates/tillandsias-scanner/   # Event-driven filesystem watcher (notify crate)
-crates/tillandsias-podman/    # Async podman CLI abstraction
-src-tauri/                    # Tauri v2 tray binary (system tray, no main window)
-assets/                       # Icons, SVG tillandsia genera
-openspec/                     # Spec-driven development artifacts
+crates/tillandsias-core/        # Shared types, config, genus system, serialization
+crates/tillandsias-scanner/     # Event-driven filesystem watcher (notify crate)
+crates/tillandsias-podman/      # Async podman CLI abstraction
+crates/tillandsias-headless/    # Musl-static binary: headless mode + optional GTK tray
+assets/                         # Icons, SVG tillandsia genera
+openspec/                       # Spec-driven development artifacts
+images/                         # Container Containerfiles (proxy, git, forge, inference)
 ```
 
 ## Key Architecture Decisions
@@ -123,9 +124,9 @@ Tillandsias uses **ephemeral podman secrets** for credential isolation in rootle
 
 **Flow:**
 1. **Host keyring** — GitHub tokens and CA certificates stored in Linux Secret Service (GNOME Keyring / pass)
-2. **Tray creates secrets** — At startup, `handlers::setup_secrets()` reads credentials from keyring and creates podman secrets via `podman secret create --driver=file`
+2. **Headless/Tray creates secrets** — At startup, `handlers::setup_secrets()` reads credentials from keyring and creates podman secrets via `podman secret create --driver=file`
 3. **Containers mount secrets** — Container launch passes `--secret <name>` flags; secrets appear at `/run/secrets/<name>` inside container with no world-readable file on disk
-4. **Cleanup on shutdown** — `scripts/cleanup-secrets.sh` removes all `tillandsias-*` secrets when tray exits
+4. **Cleanup on exit** — On SIGTERM/SIGINT, `handlers::shutdown_all()` calls `podman_secret::cleanup_all()` which removes all `tillandsias-*` secrets before process exit
 
 **Secret names and contents:**
 - `tillandsias-github-token` — GitHub OAuth token (read by git-service container for authenticated push/fetch)
@@ -149,6 +150,31 @@ Tillandsias uses **ephemeral podman secrets** for credential isolation in rootle
 **References:**
 - `cheatsheets/utils/podman-secrets.md` — Podman secrets mechanics and rootless mode requirements
 - `cheatsheets/utils/tillandsias-secrets-architecture.md` — Tillandsias-specific credential flow and D-Bus integration
+
+## Headless Mode & GTK Tray
+
+Tillandsias supports three runtime modes, selected transparently based on environment:
+
+**Headless Mode** (default, or `--headless` flag):
+- No UI, suitable for CI/CD, automation, and server deployments
+- Emits JSON events on stdout: `{"event":"app.started"}`, `{"event":"containers.running","count":N}`, `{"event":"app.stopped"}`
+- Graceful shutdown on SIGTERM/SIGINT with configurable timeout (default 30s)
+- All container orchestration managed via podman
+- Example: `tillandsias --headless /path/to/project`
+
+**Tray Mode** (transparent auto-detection, or `--tray` flag):
+- Requires GTK4 runtime + `tray` feature compiled in (`cargo build --release --features tray`)
+- Spawns headless subprocess + displays GTK window with project status, logs, container list
+- System tray icon (minimize-to-tray)
+- Window close or tray quit triggers graceful shutdown of headless process
+- Signal forwarding: SIGTERM/SIGINT propagated to headless child
+- Example: `tillandsias --tray /path/to/project` or just `tillandsias` (auto-detects GTK)
+
+**Transparent Mode Detection**:
+- If `--headless` flag: run headless, no tray
+- If `--tray` flag: run tray (requires GTK, feature must be compiled)
+- If no flag: auto-detect GTK via pkg-config, choose tray if available, otherwise headless
+- Auto-detection allows same binary to work across CI (headless) and desktop (tray) without user configuration
 
 ## CI/CD — Conservative Cloud Usage
 
@@ -178,13 +204,21 @@ Versioning policy is defined by `methodology.yaml` and
 ## Test Commands
 
 ```bash
-# Run all tests
+# Run all tests (native target)
 cargo test --workspace
+
+# Run all tests with musl target (portable verification)
+cargo test --workspace --target x86_64-unknown-linux-musl
 
 # Run specific crate tests
 cargo test -p tillandsias-core
-cargo test -p tillandsias-scanner
-cargo test -p tillandsias-podman
+cargo test -p tillandsias-headless
+
+# Test headless mode manually
+./target/x86_64-unknown-linux-musl/release/tillandsias-headless --headless /tmp/test-project
+
+# Test with signal handling (5s timeout, then SIGTERM)
+timeout 5 ./target/x86_64-unknown-linux-musl/release/tillandsias-headless --headless /tmp/test-project
 ```
 
 ## Container Image Builds (Nix)
