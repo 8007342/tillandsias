@@ -1,4 +1,5 @@
 <!-- @trace spec:windows-cross-build -->
+<!-- @tombstone deferred:linux-native-portable-executable — Windows/macOS wrappers deferred. Linux is source of truth. -->
 # windows-cross-build Specification
 
 ## Status

@@ -85,11 +85,11 @@ fn main() {
     }
 
     // Headless mode (explicit --headless or auto-detected)
-    if headless || !cfg!(feature = "tray") {
-        if let Err(e) = run_headless(config_path) {
-            eprintln!("Error: {}", e);
-            std::process::exit(1);
-        }
+    if (headless || !cfg!(feature = "tray"))
+        && let Err(e) = run_headless(config_path)
+    {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
     }
 }
 
@@ -188,9 +188,9 @@ fn register_signal_handlers_async(
 ) -> Result<(), String> {
     // Spawn a dedicated signal handler thread that communicates via channel
     std::thread::spawn(move || {
-        if let Ok(mut signals) = Signals::new(&[SIGTERM, SIGINT]) {
-            // Use iterator protocol
-            for sig in &mut signals {
+        if let Ok(mut signals) = Signals::new([SIGTERM, SIGINT]) {
+            // Get first signal
+            if let Some(sig) = (&mut signals).into_iter().next() {
                 eprintln!("Signal handler received signal: {}", sig);
                 // Try to get the current tokio runtime handle and send shutdown signal
                 if let Ok(handle) = tokio::runtime::Handle::try_current() {
@@ -199,7 +199,6 @@ fn register_signal_handlers_async(
                         let _ = tx_clone.send(()).await;
                     });
                 }
-                break; // Only handle first signal
             }
         }
     });

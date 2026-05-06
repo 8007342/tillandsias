@@ -501,7 +501,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_podman_direct_prepares_correct_call() {
-        let builder = PodmanDirect::new("/workspace".to_string());
+        let _builder = PodmanDirect::new("/workspace".to_string());
         // This would fail in real tests because /workspace doesn't exist,
         // but demonstrates the flow. Real tests would create a temp dir.
     }
