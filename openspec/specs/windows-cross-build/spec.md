@@ -4,7 +4,7 @@
 
 ## Status
 
-status: suspended
+deferred
 
 ## Purpose
 TBD - created by archiving change local-cross-platform-builds. Update Purpose after archive.
