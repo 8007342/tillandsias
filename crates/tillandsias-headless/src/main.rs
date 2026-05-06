@@ -660,34 +660,60 @@ fn run_opencode_mode(project_path: &str, prompt: &str, debug: bool) -> Result<()
 
         // Phase B: Launch orchestration script
         // This will start proxy, git, inference, and forge containers
-        // with project mounted as /workspace inside forge
         let orchestrate_script = repo_root.join("scripts/orchestrate-enclave.sh");
-        if orchestrate_script.exists() {
-            if debug {
-                eprintln!("[tillandsias] [OpenCode] Found orchestration script");
-                eprintln!("[tillandsias] [OpenCode] Would execute: orchestrate-enclave.sh with project mount");
-            }
+        if !orchestrate_script.exists() {
+            return Err(format!("Orchestration script not found: {}", orchestrate_script.display()));
+        }
 
-            // Placeholder: actual orchestration would happen here
-            // For now, just emit events indicating what would happen
-        } else {
-            if debug {
-                eprintln!("[tillandsias] [OpenCode] Orchestration script not found at {:?}", orchestrate_script);
+        if debug {
+            eprintln!("[tillandsias] [OpenCode] Launching orchestration: {}", orchestrate_script.display());
+            eprintln!("[tillandsias] [OpenCode] Project: {}", project_path);
+        }
+
+        // Phase B: Execute orchestration script
+        // orchestrate-enclave.sh PROJECT_PATH PROJECT_NAME
+        let project_name = std::path::Path::new(project_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("opencode-project");
+
+        let mut orchestrate = Command::new(&orchestrate_script);
+        orchestrate
+            .arg(project_path)
+            .arg(project_name)
+            .current_dir(&repo_root);
+
+        if debug {
+            eprintln!("[tillandsias] [OpenCode] Running: {} {} {}",
+                     orchestrate_script.display(), project_path, project_name);
+        }
+
+        // Execute orchestration synchronously (blocks until containers are up)
+        match orchestrate.status() {
+            Ok(status) if status.success() => {
+                if debug {
+                    eprintln!("[tillandsias] [OpenCode] Enclave started successfully");
+                }
+            }
+            Ok(status) => {
+                return Err(format!("Orchestration script failed with status: {}", status));
+            }
+            Err(e) => {
+                return Err(format!("Failed to execute orchestration script: {}", e));
             }
         }
 
-        // Emit event: mode enabled
-        println!("{{\"event\":\"opencode.initialized\",\"project\":\"{}\",\"phase\":\"B-enclave-startup\"}}",
+        // Emit event: enclave online
+        println!("{{\"event\":\"opencode.enclave_online\",\"project\":\"{}\",\"containers\":\"proxy,git,inference,forge\"}}",
                  project_path.replace("\"", "\\\""));
 
-        // Emit event: prompt received
-        println!("{{\"event\":\"opencode.prompt_received\",\"text\":\"{}\"}}",
+        // Emit event: prompt received and ready to send
+        println!("{{\"event\":\"opencode.prompt_queued\",\"text\":\"{}\",\"phase\":\"C-inference\"}}",
                  prompt.replace("\"", "\\\""));
 
         if debug {
-            eprintln!("[tillandsias] [OpenCode] Phase B (container orchestration) scaffolding in place");
-            eprintln!("[tillandsias] [OpenCode] Phase C (inference integration) pending");
-            eprintln!("[tillandsias] [OpenCode] See docs/OPENCODE-INTEGRATION-TASKS.md for next steps");
+            eprintln!("[tillandsias] [OpenCode] Phase B complete: enclave online");
+            eprintln!("[tillandsias] [OpenCode] Phase C (inference integration) next");
         }
 
         Ok::<(), String>(())
