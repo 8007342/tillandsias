@@ -1,5 +1,7 @@
 <!-- @trace spec:build-script-architecture -->
 <!-- @tombstone deferred:linux-native-portable-executable — AppImage build path removed May 2026. Forge image build preserved. -->
+<!-- Implementation deferred: see linux-native-portable-executable change. -->
+@trace spec:build-script-architecture
 
 # build-script-architecture Specification
 

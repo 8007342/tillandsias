@@ -25,7 +25,7 @@
 
 set -euo pipefail
 
-# @trace spec:linux-native-portable-executable, spec:dev-build
+# @trace spec:linux-native-portable-executable, spec:dev-build, spec:build-script-architecture, spec:windows-cross-build
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLBOX_NAME="$(basename "$SCRIPT_DIR")"
