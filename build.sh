@@ -195,13 +195,24 @@ ensure_dev_cache() {
     _info "Dev proxy active: $HTTP_PROXY"
 }
 
-# Setup podman registries configuration before any podman operations
+# Setup podman registries configuration ONLY for dev builds, not portable installs
+# Portable binaries must not depend on host configuration (@trace spec:portable-linux-executable)
 # @trace spec:podman-registries-config
-"$SCRIPT_DIR/scripts/setup-podman-registries.sh" || {
-    _warn "Failed to setup podman registries (non-fatal, build may continue)"
-}
+if [[ "$FLAG_INSTALL" != true ]]; then
+    "$SCRIPT_DIR/scripts/setup-podman-registries.sh" || {
+        _warn "Failed to setup podman registries (non-fatal, build may continue)"
+    }
+else
+    _info "Skipping registries config for portable install (binary is self-contained)"
+fi
 
-ensure_dev_cache
+# Dev cache (squid proxy) is optional and skipped for portable installs
+# @trace spec:dev-build
+if [[ "$FLAG_INSTALL" != true ]]; then
+    ensure_dev_cache
+else
+    _info "Skipping dev cache for portable install"
+fi
 
 # ---------------------------------------------------------------------------
 # Standalone operations (don't need toolbox)
@@ -317,24 +328,43 @@ fi
 # ---------------------------------------------------------------------------
 
 if [[ "$FLAG_INSTALL" == true ]]; then
-    _step "Building release for install..."
+    _step "Building portable binary (musl-static) for install..."
     "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
     "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
 
     _toolbox_ensure
-    _run cargo build --workspace --release --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
+    _run cargo build --workspace --release --target x86_64-unknown-linux-musl --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
+
+    # Validate musl-static binary
+    RELEASE_BIN="$SCRIPT_DIR/target/x86_64-unknown-linux-musl/release/tillandsias-headless"
+    if [[ ! -f "$RELEASE_BIN" ]]; then
+        _error "Portable binary not found at $RELEASE_BIN"
+        exit 1
+    fi
+
+    _step "Validating portable binary..."
+    # Test 1: Verify musl-static (no external libc dependency)
+    if file "$RELEASE_BIN" | grep -q "statically linked"; then
+        _info "✓ Binary is musl-static (portable)"
+    else
+        _error "✗ Binary is NOT statically linked (has glibc dependency)"
+        exit 1
+    fi
+
+    # Test 2: Verify headless mode starts
+    if timeout 5 "$RELEASE_BIN" --headless /tmp/test-install-validation 2>&1 | grep -q '"event":"app.started"'; then
+        _info "✓ Headless mode works"
+    else
+        _error "✗ Headless mode failed to start"
+        exit 1
+    fi
 
     # Copy binary to install location
     mkdir -p "$INSTALL_DIR"
-    RELEASE_BIN="$SCRIPT_DIR/target/release/tillandsias"
-    if [[ -f "$RELEASE_BIN" ]]; then
-        cp "$RELEASE_BIN" "$INSTALL_BIN"
-        chmod +x "$INSTALL_BIN"
-        _info "Binary installed: $INSTALL_BIN ($(du -h "$INSTALL_BIN" | cut -f1))"
-    else
-        _error "Release binary not found at $RELEASE_BIN"
-        exit 1
-    fi
+    cp "$RELEASE_BIN" "$INSTALL_BIN"
+    chmod +x "$INSTALL_BIN"
+    _info "Portable binary installed: $INSTALL_BIN ($(du -h "$INSTALL_BIN" | cut -f1))"
+    _info "Binary is self-contained and ready for any Linux distro"
 
     # If --install is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE$FLAG_TOOLBOX_RESET" == "falsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then

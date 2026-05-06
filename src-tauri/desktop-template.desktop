@@ -1,9 +1,0 @@
-[Desktop Entry]
-Categories={{categories}}
-Comment=Local development environments that just work
-Exec={{exec}}
-StartupWMClass={{exec}}
-Icon={{icon}}
-Name={{name}}
-Terminal=false
-Type=Application
