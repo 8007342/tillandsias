@@ -19,6 +19,7 @@
 //!   - {"event":"containers.running","count":N} — on discovery
 //!   - {"event":"app.stopped","exit_code":0,"timestamp":"<RFC3339>"} — on graceful shutdown
 
+use futures::stream::StreamExt;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -66,7 +67,13 @@ fn main() {
     if let Some(unsupported) = user_args
         .iter()
         .enumerate()
-        .find(|(i, a)| a.starts_with('-') && !known_flags.contains(&a.as_str()) && user_args.get(i.saturating_sub(1)).map_or(true, |prev| prev != "--prompt"))
+        .find(|(i, a)| {
+            a.starts_with('-')
+                && !known_flags.contains(&a.as_str())
+                && user_args
+                    .get(i.saturating_sub(1))
+                    .is_none_or(|prev| prev != "--prompt")
+        })
         .map(|(_, a)| a)
     {
         eprintln!("Unsupported option: {unsupported}");
@@ -637,7 +644,10 @@ fn run_opencode_mode(project_path: &str, prompt: &str, debug: bool) -> Result<()
     }
 
     if debug {
-        eprintln!("[tillandsias] Project path is valid: {}", project.canonicalize().unwrap_or_default().display());
+        eprintln!(
+            "[tillandsias] Project path is valid: {}",
+            project.canonicalize().unwrap_or_default().display()
+        );
     }
 
     // Phase B: Create async runtime for enclave orchestration
@@ -713,21 +723,94 @@ fn run_opencode_mode(project_path: &str, prompt: &str, debug: bool) -> Result<()
         }
 
         // Phase C: Send prompt to inference container
-        // For now, emit placeholder event
+        // @trace spec:opencode-integration, spec:inference-container
         println!("{{\"event\":\"opencode.prompt_queued\",\"text\":\"{}\",\"phase\":\"C-inference\"}}",
                  prompt.replace("\"", "\\\""));
 
-        // Phase C: Attempt to send prompt to ollama
-        // This would require HTTP client (reqwest) to connect to inference:11434
-        // Placeholder: document what Phase C needs
         if debug {
-            eprintln!("[tillandsias] [OpenCode] Phase C: Waiting for inference container to be ready...");
-            eprintln!("[tillandsias] [OpenCode] Would POST to http://inference:11434/api/generate");
-            eprintln!("[tillandsias] [OpenCode] Ollama HTTP integration pending (requires reqwest crate)");
+            eprintln!("[tillandsias] [OpenCode] Phase C: Sending prompt to inference at http://inference:11434/api/generate");
         }
 
-        println!("{{\"event\":\"opencode.phase_c_pending\",\"reason\":\"HTTP client not yet integrated\"}}");
+        // Create HTTP client for inference container communication
+        let client = reqwest::Client::new();
+        let inference_url = "http://inference:11434/api/generate";
 
+        // Build ollama request — use a small default model if available
+        let request_body = serde_json::json!({
+            "model": "llama2",
+            "prompt": prompt,
+            "stream": true
+        });
+
+        if debug {
+            eprintln!("[tillandsias] [OpenCode] POST {} with prompt: {}", inference_url, prompt);
+        }
+
+        // Send request to inference container
+        let response = client
+            .post(inference_url)
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| {
+                format!("Failed to connect to inference container at {}: {}. Ensure containers started and network bridge is ready.", inference_url, e)
+            })?;
+
+        if debug {
+            eprintln!("[tillandsias] [OpenCode] Response status: {}", response.status());
+        }
+
+        println!("{{\"event\":\"opencode.inference_response_started\",\"status\":\"streaming\"}}");
+
+        // Stream response from ollama
+        let mut stream = response.bytes_stream();
+        let mut accumulated = String::new();
+
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(bytes) => {
+                    accumulated.push_str(&String::from_utf8_lossy(&bytes));
+
+                    // Process complete JSON lines
+                    while let Some(newline_pos) = accumulated.find('\n') {
+                        let line = accumulated[..newline_pos].to_string();
+                        accumulated = accumulated[newline_pos + 1..].to_string();
+
+                        if line.trim().is_empty() {
+                            continue;
+                        }
+
+                        // Parse JSON response from ollama
+                        if let Ok(response_obj) = serde_json::from_str::<serde_json::Value>(&line) {
+                            if let Some(token) = response_obj.get("response").and_then(|v| v.as_str()) {
+                                print!("{}", token);
+                                io::stdout().flush().ok();
+
+                                println!("{{\"event\":\"opencode.token_streamed\",\"token\":\"{}\"}}",
+                                         token.replace("\"", "\\\"").replace('\n', "\\n"));
+                            }
+
+                            if let Some(done) = response_obj.get("done").and_then(|v| v.as_bool())
+                                && done {
+                                    if debug {
+                                        eprintln!("[tillandsias] [OpenCode] Response complete");
+                                    }
+                                    println!("{{\"event\":\"opencode.inference_complete\",\"status\":\"done\"}}");
+                                    return Ok::<(), String>(());
+                                }
+                        } else if debug {
+                            eprintln!("[tillandsias] [OpenCode] Failed to parse response line: {}", line);
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Err(format!("Error reading inference response stream: {}", e));
+                }
+            }
+        }
+
+        // Emit final event
+        println!("{{\"event\":\"opencode.inference_complete\",\"status\":\"stream_closed\"}}");
         Ok::<(), String>(())
     })
 }

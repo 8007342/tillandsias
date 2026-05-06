@@ -15,6 +15,7 @@ path = "src/main.rs"
 tillandsias-core = { path = "../tillandsias-core" }
 tillandsias-podman = { path = "../tillandsias-podman" }
 tokio = { workspace = true }
+futures = "0.3"
 signal-hook = "0.3"
 libc = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
@@ -23,6 +24,7 @@ serde_json = "1"
 tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
+reqwest = { version = "0.11", features = ["json", "stream"] }
 
 # Phase 4: Tray UI (optional)
 gtk4 = { version = "0.9", optional = true }
