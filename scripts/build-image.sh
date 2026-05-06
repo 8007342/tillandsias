@@ -240,27 +240,16 @@ _info "Detected base distro: ${BOLD}${DISTRO}${NC}"
 
 # Set up cache mount for distro-specific package manager
 # @trace spec:user-runtime-lifecycle
+# NOTE: Rootless podman does not support volume mounts during build when Alpine's apk
+# tries to access the mounted directory. Caching disabled temporarily to ensure builds complete.
+# TODO: Re-enable after resolving rootless podman + volume mount + apk permission issue.
 CACHE_MOUNT_ARGS=()
 PACKAGE_CACHE="$HOME/.cache/tillandsias/packages"
 if [[ -n "$HOME" ]]; then
     mkdir -p "$PACKAGE_CACHE"
-    case "$DISTRO" in
-        fedora)
-            CACHE_MOUNT_ARGS=("-v" "$PACKAGE_CACHE:/var/cache/dnf/packages")
-            _info "Package cache: $PACKAGE_CACHE → /var/cache/dnf/packages"
-            ;;
-        debian)
-            CACHE_MOUNT_ARGS=("-v" "$PACKAGE_CACHE:/var/cache/apt/archives")
-            _info "Package cache: $PACKAGE_CACHE → /var/cache/apt/archives"
-            ;;
-        alpine)
-            CACHE_MOUNT_ARGS=("-v" "$PACKAGE_CACHE:/var/cache/apk")
-            _info "Package cache: $PACKAGE_CACHE → /var/cache/apk"
-            ;;
-        *)
-            _warn "Unknown distro, skipping cache mount"
-            ;;
-    esac
+    # Volume mount caching temporarily disabled for rootless podman compatibility
+    _warn "Package cache mounts disabled (rootless podman limitation with apk)"
+    # Future: restore distro-specific cache mounts here
 fi
 
 # Remove any existing tags for this image name to prevent double-tagging
