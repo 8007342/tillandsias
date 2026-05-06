@@ -38,10 +38,13 @@ CHANGES_DIR="$REPO_ROOT/openspec/changes"
 # Skip if openspec directory structure doesn't exist
 [[ -d "$SPECS_DIR" ]] || exit 0
 
+ghost_warnings=0
+zero_trace_warnings=0
 warnings=0
 
 # --- 1. Ghost trace check ---------------------------------------------------
 # Scan staged files for @trace spec:<name> where the spec doesn't exist.
+# Per methodology/ci.yaml: Ghost traces are BLOCKING errors.
 
 ghost_check() {
     local staged_files
@@ -68,7 +71,8 @@ ghost_check() {
             while IFS= read -r spec_ref; do
                 local spec_name="${spec_ref#spec:}"
                 if [[ ! -d "$SPECS_DIR/$spec_name" ]]; then
-                    echo "  ⚠ OpenSpec: ghost trace '$spec_ref' in $file:$lineno — no spec exists" >&2
+                    echo "  ✗ OpenSpec: ghost trace '$spec_ref' in $file:$lineno — no spec exists" >&2
+                    ghost_warnings=$((ghost_warnings + 1))
                     warnings=$((warnings + 1))
                 fi
             done <<< "$specs"
@@ -78,6 +82,7 @@ ghost_check() {
 
 # --- 2. Zero-trace spec check -----------------------------------------------
 # Find specs that have zero @trace annotations anywhere in the codebase.
+# Per methodology/ci.yaml: Zero-trace specs are acceptable convergence gaps (warning-only).
 
 zero_trace_check() {
     [[ -d "$SPECS_DIR" ]] || return 0
@@ -97,7 +102,8 @@ zero_trace_check() {
             | head -1)" || true
 
         if [[ -z "$found" ]]; then
-            echo "  ⚠ OpenSpec: spec '$spec_name' has no @trace annotations in code" >&2
+            echo "  ◌ OpenSpec: spec '$spec_name' has no @trace annotations in code" >&2
+            zero_trace_warnings=$((zero_trace_warnings + 1))
             warnings=$((warnings + 1))
         fi
     done
@@ -206,16 +212,21 @@ cheatsheet_tier_check
 if [[ "$warnings" -gt 0 ]]; then
     echo "" >&2
     if [[ "$CI_MODE" == "true" ]]; then
-        echo "  OpenSpec: $warnings warning(s) — FAILING CI MODE" >&2
+        if [[ "$ghost_warnings" -gt 0 ]]; then
+            echo "  OpenSpec: $ghost_warnings blocking error(s), $zero_trace_warnings warning(s) — FAILING CI MODE" >&2
+        else
+            echo "  OpenSpec: $zero_trace_warnings warning(s) — not blocking CI (acceptable convergence gaps)" >&2
+        fi
     else
-        echo "  OpenSpec: $warnings warning(s) — not blocking commit" >&2
+        echo "  OpenSpec: $warnings notice(s) — not blocking commit" >&2
     fi
     echo "" >&2
 fi
 
 # Exit 0 by default (pre-commit hook philosophy)
-# Exit 1 in CI mode if any warnings found
-if [[ "$CI_MODE" == "true" && "$warnings" -gt 0 ]]; then
+# Exit 1 in CI mode ONLY if ghost traces found (methodology/ci.yaml: blocking errors)
+# Zero-trace specs are acceptable convergence gaps and do not block
+if [[ "$CI_MODE" == "true" && "$ghost_warnings" -gt 0 ]]; then
     exit 1
 fi
 exit 0
