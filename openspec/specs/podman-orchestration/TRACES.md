@@ -51,6 +51,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-podman/src/lib.rs#L173](../../../crates/tillandsias-podman/src/lib.rs#L173)
 - [crates/tillandsias-podman/src/peer_table.rs#L8](../../../crates/tillandsias-podman/src/peer_table.rs#L8)
 - [crates/tillandsias-podman/src/runtime.rs#L11](../../../crates/tillandsias-podman/src/runtime.rs#L11)
+- [images/git/Containerfile#L47](../../../images/git/Containerfile#L47)
+- [scripts/build-image.sh#L218](../../../scripts/build-image.sh#L218)
 - [src-tauri/src/control_socket/path.rs#L28](../../../src-tauri/src/control_socket/path.rs#L28)
 - [src-tauri/src/event_loop.rs#L6](../../../src-tauri/src/event_loop.rs#L6)
 - [src-tauri/src/event_loop.rs#L92](../../../src-tauri/src/event_loop.rs#L92)
@@ -90,3 +92,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [src-tauri/src/podman_secret.rs#L325](../../../src-tauri/src/podman_secret.rs#L325)
 - [src-tauri/src/podman_secret.rs#L376](../../../src-tauri/src/podman_secret.rs#L376)
 - [src-tauri/src/runner.rs#L7](../../../src-tauri/src/runner.rs#L7)
+- [src-tauri/src/runner.rs#L280](../../../src-tauri/src/runner.rs#L280)

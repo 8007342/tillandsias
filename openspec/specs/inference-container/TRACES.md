@@ -5,6 +5,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [build-inference.sh#L2](../../../build-inference.sh#L2)
 - [crates/tillandsias-core/src/container_profile.rs#L359](../../../crates/tillandsias-core/src/container_profile.rs#L359)
 - [crates/tillandsias-core/src/container_profile.rs#L473](../../../crates/tillandsias-core/src/container_profile.rs#L473)
 - [crates/tillandsias-core/src/container_profile.rs#L637](../../../crates/tillandsias-core/src/container_profile.rs#L637)
@@ -60,4 +61,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [src-tauri/src/handlers.rs#L4251](../../../src-tauri/src/handlers.rs#L4251)
 - [src-tauri/src/handlers.rs#L4541](../../../src-tauri/src/handlers.rs#L4541)
 - [src-tauri/src/init.rs#L6](../../../src-tauri/src/init.rs#L6)
-- [src-tauri/src/runner.rs#L522](../../../src-tauri/src/runner.rs#L522)
+- [src-tauri/src/runner.rs#L612](../../../src-tauri/src/runner.rs#L612)

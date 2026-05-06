@@ -5,5 +5,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [build-web.sh#L2](../../../build-web.sh#L2)
 - [images/web/Containerfile#L1](../../../images/web/Containerfile#L1)
 - [images/web/entrypoint.sh#L3](../../../images/web/entrypoint.sh#L3)

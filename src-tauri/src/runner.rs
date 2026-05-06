@@ -19,6 +19,7 @@ use tillandsias_core::state::ContainerInfo;
 /// Detect the base image distro from a Containerfile.
 /// Returns one of: "fedora", "debian", "alpine", or "unknown".
 /// @trace spec:user-runtime-lifecycle
+#[cfg(target_os = "windows")]
 fn detect_distro_from_containerfile(containerfile_path: &Path) -> String {
     let content = match std::fs::read_to_string(containerfile_path) {
         Ok(c) => c,
@@ -53,6 +54,7 @@ fn detect_distro_from_containerfile(containerfile_path: &Path) -> String {
 /// Get the package cache mount point for a given distro.
 /// Returns a tuple of (host_path, container_path) for the -v flag.
 /// @trace spec:user-runtime-lifecycle
+#[cfg(target_os = "windows")]
 fn get_cache_mount_for_distro(distro: &str) -> Option<(PathBuf, &'static str)> {
     let cache_base = match std::env::var("HOME") {
         Ok(h) => PathBuf::from(h),
@@ -224,7 +226,8 @@ fn run_build_image_script(image_name: &str, debug: bool) -> Result<(), String> {
         }
 
         let mut build_cmd = tillandsias_podman::podman_cmd_sync();
-        build_cmd.args(["build", "--tag", &tag, "-f"])
+        build_cmd
+            .args(["build", "--tag", &tag, "-f"])
             .arg(&containerfile)
             .arg(&context_dir);
 

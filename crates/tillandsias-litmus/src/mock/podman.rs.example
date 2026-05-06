@@ -1,0 +1,416 @@
+// @trace spec:podman-orchestration, spec:methodology-accountability
+// Example implementation pattern for MockPodmanRuntime
+// NOT FOR COMPILATION — demonstrates the architecture pattern
+
+use std::collections::HashMap;
+use async_trait::async_trait;
+
+/// Call record from a podman subprocess interception
+#[derive(Debug, Clone)]
+pub struct CallRecord {
+    pub cmd: String,
+    pub args: Vec<String>,
+    pub env: HashMap<String, String>,
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: i32,
+    pub wall_time_ms: u64,
+    pub spec_trace: Vec<String>,
+}
+
+/// Subprocess output
+#[derive(Debug, Clone)]
+pub struct ProcessOutput {
+    pub exit_code: i32,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+/// Matcher for selecting calls to inspect or inject responses for
+#[derive(Debug, Clone)]
+pub enum CallMatcher {
+    ByCmd(String),              // "podman run" or "podman secret"
+    ByImage(String),            // "tillandsias-git:v0.1.2"
+    ByFlag(String, String),     // ("--cap-drop", "ALL")
+    ByExitCode(i32),            // 1, 2, 255
+    All(Vec<CallMatcher>),      // AND combinator
+    Any(Vec<CallMatcher>),      // OR combinator
+}
+
+/// Statistics on mocked calls
+#[derive(Debug, Clone, Default)]
+pub struct MockStats {
+    pub total_calls: usize,
+    pub total_wall_time_ms: u64,
+    pub unique_images: usize,
+    pub io_operations: usize,
+    pub flakiness_rate: f64,
+}
+
+/// In-memory mock of podman subprocess boundary
+/// Intercepts calls, records them, injects responses
+#[derive(Debug)]
+pub struct InMemoryPodmanMock {
+    recorded_calls: Vec<CallRecord>,
+    injected_responses: HashMap<String, ProcessOutput>,
+    stats: MockStats,
+}
+
+impl InMemoryPodmanMock {
+    pub fn new() -> Self {
+        Self {
+            recorded_calls: Vec::new(),
+            injected_responses: HashMap::new(),
+            stats: MockStats::default(),
+        }
+    }
+
+    /// Inject a preconfigured response for future calls matching this key
+    pub fn inject_response(&mut self, key: String, response: ProcessOutput) {
+        self.injected_responses.insert(key, response);
+    }
+
+    /// Helper: does this call match the predicate?
+    fn matches(&self, record: &CallRecord, predicate: &CallMatcher) -> bool {
+        match predicate {
+            CallMatcher::ByCmd(cmd) => {
+                // First arg is the subcommand (run, secret, kill, etc.)
+                record.args.first().map(|a| a == cmd).unwrap_or(false)
+            }
+            CallMatcher::ByImage(image) => {
+                // Look for --image flag or positional image arg
+                record.args.iter().any(|a| a.contains(image))
+            }
+            CallMatcher::ByFlag(flag, value) => {
+                // Look for --flag followed by value
+                for (i, arg) in record.args.iter().enumerate() {
+                    if arg == flag && i + 1 < record.args.len() {
+                        return record.args[i + 1] == value;
+                    }
+                }
+                false
+            }
+            CallMatcher::ByExitCode(code) => record.exit_code == *code,
+            CallMatcher::All(matchers) => matchers.iter().all(|m| self.matches(record, m)),
+            CallMatcher::Any(matchers) => matchers.iter().any(|m| self.matches(record, m)),
+        }
+    }
+
+    /// Record and execute a podman call
+    pub async fn exec(
+        &mut self,
+        cmd: &str,
+        args: &[&str],
+        env: &[(&str, &str)],
+    ) -> Result<ProcessOutput, String> {
+        let start = std::time::Instant::now();
+
+        let record = CallRecord {
+            cmd: cmd.into(),
+            args: args.iter().map(|s| s.to_string()).collect(),
+            env: env.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            stdout: String::new(),
+            stderr: String::new(),
+            exit_code: 0,
+            wall_time_ms: start.elapsed().as_millis() as u64,
+            spec_trace: vec![], // Extracted from call site in real impl
+        };
+
+        // Check if we have an injected response for this exact sequence
+        let response_key = format!("{} {:?}", cmd, record.args);
+        if let Some(response) = self.injected_responses.get(&response_key) {
+            self.recorded_calls.push(record);
+            self.stats.total_calls += 1;
+            self.stats.total_wall_time_ms += start.elapsed().as_millis() as u64;
+            return Ok(response.clone());
+        }
+
+        // Default success response
+        let response = ProcessOutput {
+            exit_code: 0,
+            stdout: format!("OK: {} executed", cmd),
+            stderr: String::new(),
+        };
+
+        self.recorded_calls.push(record);
+        self.stats.total_calls += 1;
+        self.stats.total_wall_time_ms += start.elapsed().as_millis() as u64;
+
+        Ok(response)
+    }
+
+    /// Query all recorded calls matching a predicate
+    pub fn calls_matching(&self, predicate: CallMatcher) -> Vec<&CallRecord> {
+        self.recorded_calls
+            .iter()
+            .filter(|call| self.matches(call, &predicate))
+            .collect()
+    }
+
+    /// Clear state between tests
+    pub fn reset(&mut self) {
+        self.recorded_calls.clear();
+        self.injected_responses.clear();
+        self.stats = MockStats::default();
+    }
+
+    /// Return statistics on this mock run
+    pub fn stats(&self) -> MockStats {
+        self.stats.clone()
+    }
+}
+
+// ============================================================================
+// EXAMPLE: Using the mock in a litmus signal
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_secret_creation_records_exact_call() {
+        let mut podman = InMemoryPodmanMock::new();
+
+        // Simulate what handlers::github_login_create_secret does
+        podman
+            .exec(
+                "podman",
+                &["secret", "create", "--driver", "file", "tillandsias-github-token"],
+                &[],
+            )
+            .await
+            .expect("exec failed");
+
+        // Assert: we can find the exact call
+        let matches = podman.calls_matching(CallMatcher::All(vec![
+            CallMatcher::ByCmd("secret"),
+            CallMatcher::ByFlag("--driver", "file"),
+        ]));
+
+        assert!(
+            !matches.is_empty(),
+            "Expected to find podman secret create with --driver=file"
+        );
+        assert_eq!(matches[0].args[0], "secret");
+        assert_eq!(matches[0].args[1], "create");
+        assert_eq!(matches[0].args[4], "tillandsias-github-token");
+    }
+
+    #[tokio::test]
+    async fn test_injected_failure_response() {
+        let mut podman = InMemoryPodmanMock::new();
+
+        // Inject a failure response for a specific call
+        podman.inject_response(
+            "podman [\"secret\", \"create\", ...]".into(),
+            ProcessOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "Error: secret already exists".into(),
+            },
+        );
+
+        // When we call exec with a similar call, we get the injected failure
+        // (In real impl, response matching is more sophisticated)
+        let stats = podman.stats();
+        assert_eq!(stats.total_calls, 0); // No calls yet
+    }
+}
+
+// ============================================================================
+// PATTERN: LitmusSignal using MockPodmanRuntime
+// ============================================================================
+
+use async_trait::async_trait;
+
+#[derive(Debug)]
+pub enum SignalResult {
+    Pass {
+        specs_validated: Vec<String>,
+        wall_time_ms: u64,
+    },
+    Fail {
+        reason: String,
+        spec_trace: String,
+        recovery: String,
+    },
+    Skip {
+        reason: String,
+    },
+}
+
+#[async_trait]
+pub trait LitmusSignal: Send + Sync {
+    /// Check preconditions (e.g., podman installed, image exists)
+    /// Returns Err if preconditions unmet → signal will SKIP
+    async fn preconditions_met(&self) -> Result<(), String>;
+
+    /// Execute the test logic
+    /// Must assert on exact podman calls via podman.calls_matching()
+    async fn execute(&mut self, podman: &mut InMemoryPodmanMock) -> SignalResult;
+
+    /// Which specs does this signal validate?
+    fn spec_ids(&self) -> Vec<&str>;
+
+    /// Maximum wall time for this signal (seconds)
+    fn timeout_millis(&self) -> u32 {
+        5000 // 5 seconds default
+    }
+}
+
+/// Example signal: GitHubLoginTest creates a podman secret
+pub struct CreateGitHubSecretSignal {
+    secret_name: String,
+}
+
+impl CreateGitHubSecretSignal {
+    pub fn new(secret_name: &str) -> Self {
+        Self {
+            secret_name: secret_name.into(),
+        }
+    }
+}
+
+#[async_trait]
+impl LitmusSignal for CreateGitHubSecretSignal {
+    async fn preconditions_met(&self) -> Result<(), String> {
+        // In real impl: verify podman is available, check system state
+        Ok(())
+    }
+
+    async fn execute(&mut self, podman: &mut InMemoryPodmanMock) -> SignalResult {
+        // Simulate what handlers::github_login() does
+        // In real impl: call actual handler code
+        let result = podman
+            .exec(
+                "podman",
+                &["secret", "create", "--driver", "file", &self.secret_name],
+                &[],
+            )
+            .await;
+
+        match result {
+            Err(e) => SignalResult::Fail {
+                reason: format!("podman exec failed: {}", e),
+                spec_trace: "spec:secrets-management".into(),
+                recovery: "Verify podman is installed and accessible".into(),
+            },
+            Ok(output) if output.exit_code != 0 => SignalResult::Fail {
+                reason: format!("podman secret create failed: {}", output.stderr),
+                spec_trace: "spec:secrets-management".into(),
+                recovery: "Check podman secret create error (may be duplicate)".into(),
+            },
+            Ok(_) => {
+                // Assert: exact flags were used
+                let matches = podman.calls_matching(CallMatcher::All(vec![
+                    CallMatcher::ByCmd("secret"),
+                    CallMatcher::ByFlag("--driver", "file"),
+                ]));
+
+                if matches.is_empty() {
+                    SignalResult::Fail {
+                        reason: "--driver=file flag not passed to podman secret create".into(),
+                        spec_trace: "spec:secrets-management (ephemeral secret requirement)"
+                            .into(),
+                        recovery: "Verify handlers.rs includes --driver=file in podman call"
+                            .into(),
+                    }
+                } else {
+                    SignalResult::Pass {
+                        specs_validated: vec!["secrets-management".into()],
+                        wall_time_ms: matches[0].wall_time_ms,
+                    }
+                }
+            }
+        }
+    }
+
+    fn spec_ids(&self) -> Vec<&str> {
+        vec!["secrets-management", "github-credential-health"]
+    }
+}
+
+// ============================================================================
+// CentiColon Scoring
+// ============================================================================
+
+/// Obligation from a spec
+#[derive(Debug)]
+pub struct ConvergenceObligation {
+    pub spec_id: String,
+    pub obligation_budget_cc: u32,
+    pub earned_cc: u32,
+    pub penalties_cc: i32,
+}
+
+impl ConvergenceObligation {
+    pub fn residual(&self) -> u32 {
+        (self.obligation_budget_cc as i32 - self.earned_cc as i32 + self.penalties_cc)
+            .max(0) as u32
+    }
+
+    /// Example: GitHubLoginTest passes with 2 of 4 signals failing
+    /// spec:secrets-management has:
+    ///   - 100 cc MUST (ephemeral secret)
+    ///   - 100 cc MUST_NOT (no disk write)
+    ///   - 40 cc SHOULD (rotate tokens)
+    ///   - 1.5x security boundary multiplier
+    ///   = 270 cc total
+    ///
+    /// If CreateGitHubSecretSignal passes: +80 cc (positive test)
+    /// If GitAuthenticateSignal fails: +0 cc, -70 cc (untested MUST)
+    /// Total: 80 - 70 = 10 cc earned → 260 cc residual
+    pub fn from_signal_results(
+        spec_id: &str,
+        signal_results: &[(String, SignalResult)],
+    ) -> Self {
+        // In real impl: consult spec registry for base obligation_budget
+        let obligation_budget_cc = 270; // Example
+
+        let mut earned = 0;
+        let mut penalties = 0;
+
+        for (_signal_name, result) in signal_results {
+            match result {
+                SignalResult::Pass { .. } => {
+                    earned += 80; // Per-signal credit
+                }
+                SignalResult::Fail { reason, .. } => {
+                    if reason.contains("MUST") {
+                        penalties -= 70;
+                    } else {
+                        penalties -= 50;
+                    }
+                }
+                SignalResult::Skip { .. } => {
+                    // Skip doesn't affect score
+                }
+            }
+        }
+
+        Self {
+            spec_id: spec_id.into(),
+            obligation_budget_cc,
+            earned_cc: earned.min(obligation_budget_cc),
+            penalties_cc: penalties,
+        }
+    }
+}
+
+#[cfg(test)]
+mod convergence_tests {
+    use super::*;
+
+    #[test]
+    fn test_obligation_residual() {
+        let obligation = ConvergenceObligation {
+            spec_id: "secrets-management".into(),
+            obligation_budget_cc: 270,
+            earned_cc: 80,
+            penalties_cc: -70,
+        };
+
+        assert_eq!(obligation.residual(), 260);
+    }
+}

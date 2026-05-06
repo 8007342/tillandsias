@@ -5264,12 +5264,15 @@ dependencies = [
 name = "tillandsias-core"
 version = "0.1.260505"
 dependencies = [
+ "async-trait",
  "dirs",
  "postcard",
  "resvg",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "tiny-skia",
+ "tokio",
  "toml 0.8.2",
  "tracing",
 ]

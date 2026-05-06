@@ -1,0 +1,318 @@
+trace: spec:methodology-accountability, spec:podman-orchestration
+
+litmus_centicolon_wiring:
+  purpose: >
+    Detailed specification for how litmus test results map to CentiColon obligations,
+    earned credits, penalties, and residual obligation tracking. Serves as the lookup
+    table for tillandsias-litmus convergence/ module implementation.
+
+  signal_result_types:
+    pass:
+      definition: "Signal executed, assertion succeeded"
+      base_credit: 80  # cc, per signal
+      modifiers:
+        negative_test_bonus: 0  # Already +80 for passing negative case
+        positive_test_baseline: 80
+        runtime_trace_bonus: 15  # +15cc if signal emits @trace annotation
+        flakiness_penalty: 10  # -10cc per 5% below 95% stability
+      example: "CreateGitHubSecretSignal passes → +80cc earned"
+
+    fail:
+      definition: "Signal executed, assertion failed"
+      base_credit: 0  # No credit earned if test fails
+      modifiers:
+        requirement_type_penalty:
+          must_or_must_not: -70  # If requirement is MUST/MUST_NOT
+          should: -50  # If requirement is SHOULD
+          invariant: -80  # If requirement is invariant
+        missing_negative_case_penalty: -50  # If MUST_NOT has no negative test
+      example: "GitAuthenticateSignal fails → +0cc earned, -70cc penalty (MUST untested)"
+      consequence: "Test failure halts parent test immediately"
+
+    skip:
+      definition: "Signal skipped (preconditions unmet)"
+      base_credit: 0
+      consequence: "Does not affect spec coverage score, reported separately"
+      example: "ImageExistsSignal skipped if podman unavailable"
+
+  obligation_budget_calculation:
+    formula: |
+      obligation_budget_cc =
+        sum(
+          100 × count(MUST requirements),
+          100 × count(MUST_NOT requirements),
+          40 × count(SHOULD requirements),
+          120 × count(invariants)
+        ) × base_weight
+        × critical_path_multiplier (if applicable)
+        × security_boundary_multiplier (if applicable)
+
+    requirement_weights:
+      must: 100
+      must_not: 100
+      should: 40
+      invariant: 120
+
+    multipliers:
+      critical_path: 1.5  # Specs on critical path (tray, enclave, core runtime)
+      security_boundary: 1.5  # Specs protecting security boundary (secrets, credentials, isolation)
+      user_visible_contract: 1.25  # Specs affecting user-facing behavior
+      internal_helper: 0.5  # Internal utility specs
+
+    bounds:
+      minimum_per_spec: 80  # Even small specs have baseline obligation
+      maximum_per_spec: 1200  # Prevents single spec from dominating
+
+    example: |
+      spec:secrets-management
+        100 cc (MUST: ephemeral secrets)
+        + 100 cc (MUST_NOT: no disk write)
+        + 40 cc (SHOULD: rotate tokens)
+        = 240 cc base
+        × 1.5 (security boundary)
+        = 360 cc total obligation
+
+  earned_credit_rules:
+    per_signal:
+      positive_test_passes: 0.20  # 20% of obligation for each passing positive test
+      negative_test_passes: 0.20  # 20% of obligation for each passing negative test
+      runtime_trace_observed: 0.15  # 15% of obligation for observed runtime trace
+      cap: "Earned never exceeds obligation_budget"
+
+    aggregation: |
+      earned_cc = obligation_budget × sum(signal_credits)
+      constrained to: 0 ≤ earned_cc ≤ obligation_budget
+
+    flakiness_modifier:
+      rule: "If signal flakiness > 5%, apply per-run penalty"
+      penalty_per_percent: 2  # -2cc per percent over 5%
+      example: "Signal flakes 15% → -20cc penalty"
+      threshold: 0.05  # Flakiness beyond 5% incurs penalty
+      hard_limit: 0.20  # Flakiness > 20% automatically caps earned at 50% of obligation
+
+    example: |
+      GitHubLoginTest (obligation: 270cc)
+        CreateGitHubSecretSignal PASS → +80cc (0.20 × 270)
+        GitSecretMountSignal PASS → +80cc (0.20 × 270)
+        GitAuthenticateSignal FAIL → +0cc earned
+        CleanupSecretSignal PASS → +80cc (0.20 × 270)
+      Total earned: 240cc
+
+  penalty_application:
+    penalties: |
+      Penalties subtract from earned credit to compute final score.
+      Penalties are named so dashboard shows residual obligations clearly.
+
+    penalty_catalog:
+      untested_must_requirement: -70
+        condition: "MUST requirement has no passing positive litmus test"
+        remediation: "Create LitmusSignal that validates the MUST"
+
+      missing_negative_case: -50
+        condition: "MUST_NOT requirement has no passing negative litmus test"
+        remediation: "Create error-path signal that validates MUST_NOT"
+
+      flaky_signal: -80
+        condition: "Same signal produces different results on repeated runs (≥2 differ)"
+        remediation: "Isolate non-deterministic ops, add fixtures, increase timeout"
+
+      ambiguous_spec: -30
+        condition: "Spec is marked test_required or ambiguous in litmus-bindings.yaml"
+        remediation: "Clarify spec requirements before creating litmus test"
+
+      stale_cheatsheet_provenance: -20
+        condition: "Cited cheatsheet has Last updated > 90 days old"
+        remediation: "Re-verify cheatsheet, update Last updated date"
+
+      ghost_trace: -50
+        condition: "Signal emits @trace spec:X but spec X does not exist or is deprecated"
+        remediation: "Verify spec ID is active, update @trace annotation"
+
+    application_order:
+      step_1: "Compute earned_cc from passing signals"
+      step_2: "Apply flakiness_penalty (if stability < 95%)"
+      step_3: "Apply requirement_type_penalties (untested MUST, missing negative)"
+      step_4: "Apply metadata_penalties (ambiguous spec, stale provenance, ghost trace)"
+      step_5: "Constrain to [0, obligation_budget]"
+
+    example: |
+      GitHubLoginTest:
+        earned: 240cc (from 3 passing signals)
+        - 70cc (GitAuthenticateSignal failed, MUST untested)
+        - 0cc (no flakiness penalty, 0% flakiness)
+        - 0cc (no ambiguous spec)
+        = 170cc final score
+      residual: 270cc - 170cc = 100cc
+
+  centicolon_aggregation:
+    requirement_score: |
+      requirement_cc = (base_obligation × earned_credit_rate - penalties)
+                       bounded to [0, base_obligation]
+
+    spec_score: |
+      spec_cc = sum(all_requirement_cc + invariant_cc + signal_cc)
+                / obligation_budget_cc
+      Returns score in [0, 1] where 1.0 = complete obligation satisfied
+
+    project_score: |
+      project_cc = weighted_average(all_spec_scores)
+      where weight = obligation_budget_cc for each spec
+      Example: 2 specs: spec_A (200cc, 0.85), spec_B (100cc, 1.0)
+               → (0.85 × 200 + 1.0 × 100) / 300 = 0.9
+
+    rollup_example: |
+      spec:secrets-management (270cc obligation):
+        earned: 240cc, penalties: -70cc → 170cc final
+        → score: 170 / 270 = 0.63
+
+      spec:github-credential-health (100cc obligation):
+        earned: 100cc, penalties: -0cc → 100cc final
+        → score: 100 / 100 = 1.0
+
+      project score: (0.63 × 270 + 1.0 × 100) / (270 + 100) = 0.785
+
+  residual_obligation_tracking:
+    definition: |
+      residual_cc = obligation_budget_cc - final_earned_cc
+
+    interpretation: |
+      A residual of 100cc means 100 named, auditable obligations remain open:
+      - Untested MUST requirements (70cc each)
+      - Missing negative tests (50cc each)
+      - Flaky signals (80cc each)
+      - Ambiguous specs (30cc each)
+      etc.
+
+    top_residual_reasons:
+      report: |
+        For each spec, list the top 3 residual reasons in order of impact:
+        - "Untested requirement: spec:X#MUST-Y" → 70cc gap
+        - "Flaky signal: signal_name" → 80cc gap
+        - "No negative test for: spec:X#MUST_NOT-Z" → 50cc gap
+
+      example_dashboard: |
+        spec:secrets-management (residual: 100cc)
+          1. Untested requirement: ephemeral-secret-verified [70cc]
+          2. No negative test: disk-write-prevented [30cc]
+
+        spec:github-credential-health (residual: 0cc)
+          [No residual obligations]
+
+  ci_metrics_output:
+    signature_jsonl: |
+      File: target/convergence/centicolon-signature.jsonl
+      Format: One JSON object per line (immutable, append-only, never deleted)
+      Retention: Permanent; used for historical convergence tracking
+
+      Record schema:
+      {
+        "timestamp": "ISO8601",
+        "version": "X.Y.Z.B",
+        "source_commit": "git_sha",
+        "ci_run_id": "github_run_id_or_local_timestamp",
+
+        "litmus_tests_run": number,
+        "litmus_passed": number,
+        "litmus_failed": number,
+        "litmus_skipped": number,
+        "litmus_flaky": number,
+
+        "project_cc_earned": number,
+        "project_cc_total": number,
+        "residual_cc": number,
+
+        "per_spec_results": [
+          {
+            "spec_id": "string",
+            "obligation_budget_cc": number,
+            "earned_cc": number,
+            "penalties_cc": number,
+            "residual_cc": number,
+            "status": "active|deprecated|test_required|orphaned",
+            "litmus_tests_bound": ["test_id_1", "test_id_2"],
+            "top_residual_reasons": [
+              { "reason": "Untested requirement: ...", "cc": 70 }
+            ]
+          }
+        ],
+
+        "top_project_residuals": [
+          { "reason": "Untested requirement: forge-offline#R1", "cc": 70 },
+          { "reason": "Flaky signal: ImageBuildTest", "cc": 80 }
+        ],
+
+        "critical_path_status": "PASS|FAIL",
+        "critical_path_failing_specs": ["spec_id_1", "spec_id_2"],
+
+        "cost_metrics": {
+          "total_wall_time_ms": number,
+          "ci_budget_used_percent": number,
+          "flakiness_rate": number
+        },
+
+        "evidence_urls": ["url_to_release_notes"]
+      }
+
+    delta_json: |
+      File: target/convergence/centicolon-delta.json
+      Format: Compact summary for CI report (not retained, updated each run)
+      Usage: GitHub Actions → release notes, Slack notifications, dashboards
+
+      Schema:
+      {
+        "version": "X.Y.Z.B",
+        "timestamp": "ISO8601",
+
+        "summary": {
+          "total_earned": number,
+          "total_obligation": number,
+          "residual": number,
+          "residual_percent": number,
+          "improved_from_last_release": boolean,
+          "delta_cc": number (+ or -)
+        },
+
+        "test_results": [
+          {
+            "test_id": "system.convergence.github-login@v1",
+            "test_name": "GitHubLoginTest",
+            "status": "PASS|FAIL|SKIP",
+            "specs_validated": ["spec_id_1", "spec_id_2"],
+            "earned_cc": number,
+            "total_cc": number,
+            "residual_cc": number,
+            "wall_time_ms": number,
+            "flakiness_rate": number,
+            "residual_reasons": ["reason_1", "reason_2"]
+          }
+        ],
+
+        "critical_path": {
+          "status": "PASS|FAIL",
+          "failing_tests": ["test_name_1"]
+        }
+      }
+
+  dashboard_shape:
+    file: docs/convergence/centicolon-dashboard.md
+    purpose: "Human-readable summary for README or releases"
+    audience: "Developers, product, leadership"
+    contains:
+      - Last N releases (default 10)
+      - Project score trend (earned/total per release)
+      - Top residual obligations
+      - Critical-path status
+      - Per-spec coverage grid
+
+    example_table: |
+      | Release | Earned | Total | Residual | Change | Critical Path |
+      |---------|--------|-------|----------|--------|---------------|
+      | v0.1.42 | 2650cc | 2800cc | 150cc | +50cc | PASS ✓ |
+      | v0.1.41 | 2600cc | 2800cc | 200cc | -30cc | PASS ✓ |
+      | v0.1.40 | 2630cc | 2800cc | 170cc | +10cc | FAIL ✗ |
+
+sources_of_truth:
+  - "methodology/litmus.yaml — Structure and binding rules"
+  - "methodology/convergence.yaml — Engine metrics and objective"
+  - "methodology/proximity.yaml — CentiColon model and interpretation"
+  - "crates/tillandsias-litmus/src/convergence/centicolon.rs — Implementation"

@@ -24,12 +24,21 @@ fn main() {
 
     if args.len() < 2 {
         eprintln!("Usage: {} <image_name> [--assert-calls]", args[0]);
-        eprintln!("");
+        eprintln!();
         eprintln!("Examples:");
-        eprintln!("  {} forge          # Build forge, record podman calls", args[0]);
-        eprintln!("  {} git            # Build git, record podman calls", args[0]);
-        eprintln!("  {} proxy          # Build proxy, record podman calls", args[0]);
-        eprintln!("");
+        eprintln!(
+            "  {} forge          # Build forge, record podman calls",
+            args[0]
+        );
+        eprintln!(
+            "  {} git            # Build git, record podman calls",
+            args[0]
+        );
+        eprintln!(
+            "  {} proxy          # Build proxy, record podman calls",
+            args[0]
+        );
+        eprintln!();
         eprintln!("With --assert-calls: verify exact podman invocation against spec");
         process::exit(1);
     }
@@ -38,7 +47,10 @@ fn main() {
     let assert_calls = args.len() > 2 && args[2] == "--assert-calls";
 
     println!("[litmus] Building image: {}", image_name);
-    println!("[litmus] Mode: {}", if assert_calls { "assert" } else { "record" });
+    println!(
+        "[litmus] Mode: {}",
+        if assert_calls { "assert" } else { "record" }
+    );
 
     // TODO: Replace with real ImageBuilder implementation:
     //

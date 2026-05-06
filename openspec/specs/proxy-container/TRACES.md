@@ -5,6 +5,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [build-proxy.sh#L2](../../../build-proxy.sh#L2)
 - [build.sh#L144](../../../build.sh#L144)
 - [crates/tillandsias-core/src/container_profile.rs#L204](../../../crates/tillandsias-core/src/container_profile.rs#L204)
 - [crates/tillandsias-core/src/container_profile.rs#L364](../../../crates/tillandsias-core/src/container_profile.rs#L364)
@@ -28,7 +29,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/proxy/entrypoint.sh#L3](../../../images/proxy/entrypoint.sh#L3)
 - [images/proxy/entrypoint.sh#L17](../../../images/proxy/entrypoint.sh#L17)
 - [images/proxy/entrypoint.sh#L25](../../../images/proxy/entrypoint.sh#L25)
-- [scripts/build-image.sh#L253](../../../scripts/build-image.sh#L253)
 - [scripts/create-secrets.sh#L93](../../../scripts/create-secrets.sh#L93)
 - [scripts/diagnose-proxy.sh#L2](../../../scripts/diagnose-proxy.sh#L2)
 - [scripts/orchestrate-enclave.sh#L2](../../../scripts/orchestrate-enclave.sh#L2)
@@ -84,5 +84,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [src-tauri/src/logging.rs#L94](../../../src-tauri/src/logging.rs#L94)
 - [src-tauri/src/main.rs#L455](../../../src-tauri/src/main.rs#L455)
 - [src-tauri/src/main.rs#L918](../../../src-tauri/src/main.rs#L918)
-- [src-tauri/src/runner.rs#L522](../../../src-tauri/src/runner.rs#L522)
-- [src-tauri/src/runner.rs#L578](../../../src-tauri/src/runner.rs#L578)
+- [src-tauri/src/runner.rs#L612](../../../src-tauri/src/runner.rs#L612)
+- [src-tauri/src/runner.rs#L668](../../../src-tauri/src/runner.rs#L668)

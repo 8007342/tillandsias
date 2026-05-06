@@ -5,6 +5,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [build-git.sh#L2](../../../build-git.sh#L2)
 - [crates/tillandsias-core/src/container_profile.rs#L164](../../../crates/tillandsias-core/src/container_profile.rs#L164)
 - [crates/tillandsias-core/src/container_profile.rs#L354](../../../crates/tillandsias-core/src/container_profile.rs#L354)
 - [crates/tillandsias-core/src/container_profile.rs#L528](../../../crates/tillandsias-core/src/container_profile.rs#L528)
@@ -26,9 +27,10 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/lib-common.sh#L171](../../../images/default/lib-common.sh#L171)
 - [images/default/lib-common.sh#L207](../../../images/default/lib-common.sh#L207)
 - [images/git/Containerfile#L1](../../../images/git/Containerfile#L1)
-- [images/git/Containerfile#L10](../../../images/git/Containerfile#L10)
-- [images/git/Containerfile#L24](../../../images/git/Containerfile#L24)
-- [images/git/Containerfile#L40](../../../images/git/Containerfile#L40)
+- [images/git/Containerfile#L18](../../../images/git/Containerfile#L18)
+- [images/git/Containerfile#L43](../../../images/git/Containerfile#L43)
+- [images/git/Containerfile#L47](../../../images/git/Containerfile#L47)
+- [images/git/Containerfile#L74](../../../images/git/Containerfile#L74)
 - [images/git/entrypoint.sh#L3](../../../images/git/entrypoint.sh#L3)
 - [images/git/entrypoint.sh#L21](../../../images/git/entrypoint.sh#L21)
 - [images/git/entrypoint.sh#L33](../../../images/git/entrypoint.sh#L33)
@@ -87,7 +89,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [src-tauri/src/mirror_sync.rs#L283](../../../src-tauri/src/mirror_sync.rs#L283)
 - [src-tauri/src/mirror_sync.rs#L335](../../../src-tauri/src/mirror_sync.rs#L335)
 - [src-tauri/src/mirror_sync.rs#L573](../../../src-tauri/src/mirror_sync.rs#L573)
-- [src-tauri/src/runner.rs#L522](../../../src-tauri/src/runner.rs#L522)
-- [src-tauri/src/runner.rs#L697](../../../src-tauri/src/runner.rs#L697)
-- [src-tauri/src/runner.rs#L717](../../../src-tauri/src/runner.rs#L717)
-- [src-tauri/src/runner.rs#L755](../../../src-tauri/src/runner.rs#L755)
+- [src-tauri/src/runner.rs#L612](../../../src-tauri/src/runner.rs#L612)
+- [src-tauri/src/runner.rs#L787](../../../src-tauri/src/runner.rs#L787)
+- [src-tauri/src/runner.rs#L807](../../../src-tauri/src/runner.rs#L807)
+- [src-tauri/src/runner.rs#L845](../../../src-tauri/src/runner.rs#L845)

@@ -1,0 +1,571 @@
+trace: spec:methodology-accountability, spec:podman-orchestration
+
+litmus_framework:
+  version: v0.1
+  purpose: >
+    Rust-based litmus test framework that verifies Tillandsias code produces correct podman calls.
+    Framework enables:
+    - Reproducible assertion that spec-governed behavior is implemented correctly
+    - Composable hierarchical tests (unit → integration → end-to-end)
+    - CentiColon residual obligation metrics for convergence tracking
+    - CI integration via --ci-full flag to gate releases on litmus evidence
+    - Bidirectional traceability: code → spec → test → metric
+
+  design_philosophy:
+    - "Mock at the subprocess boundary, not internals" — intercept podman_exec() calls
+    - "Assertions are spec requirements" — each test validates 1..N spec requirements
+    - "Composition over inheritance" — tests combine via dependency graph, not class hierarchy
+    - "Observable signals only" — success/failure must be externally verifiable
+    - "Costs are explicit" — wall-time, I/O, flakiness all measured and budgeted
+
+  architecture:
+    layers:
+      layer_0:
+        name: "Mock Podman Abstraction"
+        responsibility: >
+          Intercept podman CLI calls at the process boundary.
+          Record args, stdin, environment. Replicate system behavior (exit codes, stdout, stderr).
+        files:
+          - crates/tillandsias-litmus/src/mock/podman.rs
+          - crates/tillandsias-litmus/src/mock/env.rs
+        trait: "MockPodmanRuntime"
+        key_methods:
+          - "record_call(cmd, args) → CallRecord"
+          - "inject_response(exit_code, stdout, stderr)"
+          - "replay_from_fixture(fixture_name)"
+
+      layer_1:
+        name: "Atomic Litmus Signals"
+        responsibility: >
+          Validate a single observable condition. Requires: preconditions, assertion logic,
+          failure reason with spec linkage. Smallest testable unit.
+        files:
+          - crates/tillandsias-litmus/src/signal/mod.rs
+          - crates/tillandsias-litmus/src/signal/registry.rs
+        trait: "LitmusSignal"
+        key_methods:
+          - "preconditions_met(&self) → Result<()>"
+          - "execute(&mut self, runtime: &MockPodmanRuntime) → SignalResult"
+          - "spec_ids(&self) → Vec<&str>"
+          - "timeout_millis(&self) → u32"
+
+      layer_2:
+        name: "Composite Litmus Tests"
+        responsibility: >
+          Combine atomic signals into tests that exercise a subsystem or feature.
+          Example: --github-login test composes 3 signals (secret mount, git command, cleanup).
+        files:
+          - crates/tillandsias-litmus/src/test/mod.rs
+          - crates/tillandsias-litmus/src/test/graph.rs
+        trait: "LitmusTest"
+        key_methods:
+          - "child_signals(&self) → Vec<&LitmusSignal>"
+          - "execute_sequential(&mut self) → TestResult"
+          - "convergence_obligation(&self) → ConvergenceObligation"
+
+      layer_3:
+        name: "Convergence Reporting"
+        responsibility: >
+          Transform test results into CentiColon metrics and CI artifacts.
+          Example: 1 passing test → earned 80cc, zero penalty = +80cc to project score.
+        files:
+          - crates/tillandsias-litmus/src/convergence/mod.rs
+          - crates/tillandsias-litmus/src/convergence/centicolon.rs
+        data_flow: "LitmusResult → LitmusBinding → ConvergenceObligation → CentiColon"
+        outputs:
+          - "target/convergence/litmus-signature.jsonl (append-only)"
+          - "target/convergence/centicolon-delta.json (diff for this run)"
+
+  mock_podman_trait:
+    purpose: >
+      Abstract the podman subprocess boundary so litmus tests execute without requiring
+      actual podman. Tests are fast, deterministic, and don't pollute the system.
+    definition: |
+      pub trait MockPodmanRuntime {
+          /// Record a call to `podman <args>`.
+          /// Returns a CallRecord for inspection and assertion.
+          fn exec(
+              &mut self,
+              cmd: &str,
+              args: &[&str],
+              env: &[(&str, &str)],
+          ) -> Result<ProcessOutput>;
+
+          /// Inject a preconfigured response for the next call.
+          /// Used to simulate error conditions, missing images, network timeouts.
+          fn inject_response(&mut self, predicate: CallMatcher, response: ProcessOutput);
+
+          /// Return all recorded calls matching a predicate.
+          /// Used by assertions to inspect argument structure.
+          fn calls_matching(&self, predicate: CallMatcher) -> Vec<&CallRecord>;
+
+          /// Clear all recorded calls and responses (between test cases).
+          fn reset(&mut self);
+
+          /// Return call count statistics for cost modeling.
+          fn stats(&self) -> MockStats;
+      }
+
+      pub struct CallRecord {
+          cmd: String,
+          args: Vec<String>,
+          env: HashMap<String, String>,
+          stdout: String,
+          stderr: String,
+          exit_code: i32,
+          wall_time_ms: u64,
+          spec_trace: Vec<String>, // @trace annotations from the calling site
+      }
+
+      pub enum CallMatcher {
+          ByCmd(String),           // "podman run" or "podman kill"
+          ByImage(String),         // "tillandsias-git:v0.1.2"
+          ByFlag(String, String),  // ("--cap-drop", "ALL")
+          ByExitCode(i32),         // 1, 2, 255
+          All(Vec<CallMatcher>),   // AND
+          Any(Vec<CallMatcher>),   // OR
+      }
+
+      pub struct ProcessOutput {
+          exit_code: i32,
+          stdout: String,
+          stderr: String,
+      }
+
+      pub struct MockStats {
+          total_calls: usize,
+          total_wall_time_ms: u64,
+          unique_images: usize,
+          io_operations: usize,
+          flakiness_rate: f64,
+      }
+
+  atomic_signal_definition:
+    purpose: >
+      A LitmusSignal validates exactly one semantic requirement from a spec.
+      Success/failure are unambiguous. Multiple signals compose into a test.
+    example: |
+      /// Signal: "tillandsias-git image is launched with secret mount"
+      /// Spec requirement: "Credentials are read from /run/secrets/tillandsias-github-token"
+      /// @trace spec:secrets-management
+      pub struct GitSecretMountSignal;
+
+      #[async_trait]
+      impl LitmusSignal for GitSecretMountSignal {
+          async fn preconditions_met(&self, runtime: &MockPodmanRuntime) -> Result<()> {
+              // Verify: tillandsias-git image exists, secret is defined
+              runtime.image_exists("tillandsias-git")?;
+              Ok(())
+          }
+
+          async fn execute(
+              &mut self,
+              ctx: &mut LitmusContext,
+          ) -> SignalResult {
+              // Launch git-service container
+              ctx.podman.exec(
+                  "podman",
+                  &["run", "--rm", "--secret", "tillandsias-github-token",
+                    "tillandsias-git:v0.1.2", "git", "clone", "--depth=1", "..."],
+                  &[],
+              )?;
+
+              // Assert: the podman call included the secret mount
+              let calls = ctx.podman.calls_matching(
+                  CallMatcher::All(vec![
+                      CallMatcher::ByCmd("run"),
+                      CallMatcher::ByImage("tillandsias-git"),
+                      CallMatcher::ByFlag("--secret", "tillandsias-github-token"),
+                  ])
+              );
+
+              if calls.is_empty() {
+                  return SignalResult::Fail {
+                      reason: "podman run did not include --secret flag",
+                      spec_trace: "spec:secrets-management (secret mount requirement)",
+                      recovery: "Check handlers::setup_secrets() passes --secret to podman run",
+                  };
+              }
+
+              SignalResult::Pass {
+                  specs_validated: vec!["secrets-management", "credential-isolation"],
+                  wall_time_ms: calls[0].wall_time_ms,
+              }
+          }
+
+          fn spec_ids(&self) -> Vec<&str> {
+              vec!["secrets-management", "credential-isolation"]
+          }
+
+          fn timeout_millis(&self) -> u32 {
+              5000 // 5 seconds
+          }
+      }
+
+  composite_test_definition:
+    purpose: >
+      A LitmusTest combines atomic signals into a coherent feature or subsystem test.
+      Tests execute sequentially; child signal failure immediately fails parent.
+      Example: "--github-login" test with 3 signals (setup, auth, cleanup).
+    composition_rules:
+      - "A test is a directed acyclic graph (DAG) of signals."
+      - "Signals are topologically sorted by dependency: parent signals run after their dependencies complete."
+      - "Signal A depends on Signal B if A requires Signal B's effects to run."
+      - "If any signal fails, the test fails and outputs the failing spec trace."
+      - "All signals in a test must complete within the test's timeout (default 30s)."
+    example: |
+      /// Test: "GitHub login initializes credentials and launches git mirror"
+      /// @trace spec:github-credential-health, spec:git-mirror-service, spec:secrets-management
+      pub struct GitHubLoginTest {
+          signals: Vec<Box<dyn LitmusSignal>>,
+      }
+
+      impl GitHubLoginTest {
+          pub fn new() -> Self {
+              Self {
+                  signals: vec![
+                      Box::new(CreateSecretSignal::new("tillandsias-github-token")),
+                      Box::new(GitSecretMountSignal),
+                      Box::new(GitAuthenticateSignal),
+                      Box::new(CleanupSecretSignal),
+                  ],
+              }
+          }
+
+          pub async fn execute(&mut self, ctx: &mut LitmusContext) -> TestResult {
+              for signal in &mut self.signals {
+                  match signal.execute(ctx).await {
+                      SignalResult::Pass { specs_validated, .. } => {
+                          println!("[✓] {} passed, {} specs validated",
+                              std::any::type_name::<Self>(),
+                              specs_validated.len());
+                      }
+                      SignalResult::Fail { reason, spec_trace, recovery } => {
+                          println!("[✗] {} failed: {}", signal, reason);
+                          println!("    Spec: {}", spec_trace);
+                          println!("    Recovery: {}", recovery);
+                          return TestResult::Fail(spec_trace.into());
+                      }
+                  }
+              }
+              TestResult::Pass { specs_covered: 12 }
+          }
+      }
+
+  convergence_obligation_model:
+    purpose: >
+      Transform litmus test results into CentiColon obligations and residual work tracking.
+      Each test produces: earned credits, penalties, and named residual obligations.
+    flow: |
+      LitmusResult (pass/fail, specs, wall_time, flakiness)
+        ↓ (via LitmusBinding lookup)
+      ConvergenceObligation (obligation_budget, earned_credit, penalties)
+        ↓ (aggregate)
+      CentiColon (earned_cc, residual_cc, top_residual_reasons)
+        ↓ (persist)
+      target/convergence/centicolon-signature.jsonl
+      target/convergence/centicolon-delta.json (for CI report)
+
+    obligation_budget_rule: |
+      For each spec S bound to a litmus test T:
+        obligation_budget_cc = sum of:
+          + 100 cc per MUST requirement in S
+          + 100 cc per MUST_NOT requirement in S
+          +  40 cc per SHOULD requirement in S
+          + 120 cc per invariant in S
+          ×  1.5 if S is on critical path (core tray, enclave, secrets)
+          ×  1.5 if S is a security boundary (enclave, secrets, credentials)
+      cap: minimum 80 cc per spec, maximum 1200 cc per spec
+
+    earned_credit_rule: |
+      For each passed litmus test T binding to spec S:
+        earned = obligation_budget_cc × credit_earned
+      Where credit_earned =
+        + 0.20 if T is positive test (happy path)
+        + 0.20 if T is negative test (error path)
+        + 0.15 if T emits runtime trace signal
+        - 0.10 if temporal_stability < 95% (flakiness penalty)
+      cap: earned cannot exceed obligation_budget
+
+    penalty_rule: |
+      penalties applied to earned credit:
+        - 70 cc if MUST requirement is untested
+        - 50 cc if MUST_NOT requirement has no negative test
+        - 80 cc if litmus test is flaky (≥2 runs diverge)
+        - 30 cc if cited spec is ambiguous or test_required status
+      total_cc = earned - penalties, bounded to [0, obligation_budget]
+
+    residual_obligation: |
+      residual_cc = obligation_budget - total_cc
+
+      Top residual reasons (for dashboard):
+        - "Untested requirement: [requirement_id]" → 70 cc gap
+        - "Flaky signal: [signal_name]" → 80 cc gap
+        - "No negative test for MUST_NOT" → 50 cc gap
+        - "Ambiguous requirement in spec:[spec_id]" → 30 cc gap
+
+  ci_integration:
+    purpose: >
+      Litmus framework gates --ci-full releases on convergence evidence.
+      Release requires all critical-path specs to have passing tests.
+    workflow: |
+      ./build.sh --ci-full
+        ↓
+      Run all LitmusTest instances matching:
+        - status: "active" in litmus-bindings.yaml
+        - critical_path: true in spec
+        - OR (required by release policy)
+        ↓
+      Compute CentiColon deltas for each passing/failing test
+        ↓
+      If any critical-path test fails:
+        → emit spec_trace linking to the failing requirement
+        → block release with "litmus_validation_pending" status
+        ↓
+      If all critical-path tests pass:
+        → compute project_cc score
+        → persist centicolon-signature.jsonl
+        → emit release evidence bundle
+        → allow archive and GitHub release
+
+    cost_model: |
+      --ci-full litmus budget = 300 seconds total
+      Per-test budget = 30 seconds max (enforced by timeout_millis)
+      Parallel test execution: group independent tests by spec domain
+        Example: credential tests (secrets, github-health) run in parallel
+        Example: image tests (forge, proxy, git) run in parallel
+      Flakiness check: each test reruns 3 times, all must be identical
+
+  implementation_checklist:
+    framework_core:
+      - "[ ] MockPodmanRuntime trait + in-memory implementation"
+      - "[ ] CallMatcher enum with predicates (ByCmd, ByImage, ByFlag, All, Any)"
+      - "[ ] LitmusSignal trait with preconditions_met(), execute(), spec_ids()"
+      - "[ ] LitmusTest trait with child_signals(), execute_sequential()"
+      - "[ ] SignalResult enum (Pass, Fail, Skip) with spec trace"
+
+    first_atomic_signals:
+      - "[ ] CreateSecretSignal — mocks podman secret create"
+      - "[ ] GitSecretMountSignal — verifies --secret flag on git-service run"
+      - "[ ] ImageExistsSignal — verifies podman image exists"
+      - "[ ] NetworkExistsSignal — verifies enclave network exists"
+
+    first_composite_test:
+      - "[ ] GitHubLoginTest — 3 signals (secret, launch, cleanup)"
+      - "[ ] EnclaveBringUpTest — 4 signals (network, proxy, git, inference)"
+
+    convergence_reporting:
+      - "[ ] ConvergenceObligation struct with budget/earned/penalty fields"
+      - "[ ] CentiColon scoring logic (spec_cc, residual_cc, top_reasons)"
+      - "[ ] LitmusSignature JSONL writer (append-only, immutable)"
+      - "[ ] CentiColonDelta JSON emitter for CI reports"
+
+    ci_integration:
+      - "[ ] --ci-full flag handler in build.sh"
+      - "[ ] Parallel test runner with 300s budget and 30s per-test timeout"
+      - "[ ] Flakiness detector (3 runs, all identical required)"
+      - "[ ] Critical-path test gating (block release if any fail)"
+      - "[ ] Evidence bundle generation (CentiColon dashboard, JSONL signature)"
+
+  example_unit_test_to_assertion:
+    prompt: "Verify tillandsias --github-login produces `podman secret create --driver=file tillandsias-github-token`"
+
+    traditional_unit_test: |
+      #[tokio::test]
+      async fn test_github_login_creates_secret() {
+          let result = handlers::github_login().await;
+          assert!(result.is_ok());
+      }
+      // Problem: doesn't test podman calls, passes if only partial state is correct
+
+    litmus_translation: |
+      /// Litmus Signal: "GitHub login creates podman secret"
+      /// @trace spec:secrets-management, spec:github-credential-health
+      pub struct CreateGitHubSecretSignal {
+          secret_name: String,
+      }
+
+      #[async_trait]
+      impl LitmusSignal for CreateGitHubSecretSignal {
+          async fn preconditions_met(&self, runtime: &MockPodmanRuntime) -> Result<()> {
+              // Ensure no prior secret exists
+              if runtime.secret_exists(&self.secret_name)? {
+                  return Err("Secret already exists; test must clean up".into());
+              }
+              Ok(())
+          }
+
+          async fn execute(&mut self, ctx: &mut LitmusContext) -> SignalResult {
+              // Call the handler under test
+              handlers::github_login_create_secret(&self.secret_name, &ctx.podman).await?;
+
+              // Assert: exact podman command was issued
+              let calls = ctx.podman.calls_matching(
+                  CallMatcher::All(vec![
+                      CallMatcher::ByCmd("secret"),
+                      CallMatcher::ByCmd("create"),
+                      CallMatcher::ByFlag("--driver", "file"),
+                  ])
+              );
+
+              if calls.is_empty() {
+                  return SignalResult::Fail {
+                      reason: "podman secret create not called with --driver=file",
+                      spec_trace: "spec:secrets-management (ephemeral secret requirement)",
+                      recovery: "Verify handlers.rs calls podman with exact flags",
+                  };
+              }
+
+              // Assert: secret name matches
+              let secret_arg = calls[0].args.iter()
+                  .position(|a| a == &self.secret_name)
+                  .ok_or("Secret name not found in podman args")?;
+
+              SignalResult::Pass {
+                  specs_validated: vec!["secrets-management", "github-credential-health"],
+                  wall_time_ms: calls[0].wall_time_ms,
+              }
+          }
+
+          fn spec_ids(&self) -> Vec<&str> {
+              vec!["secrets-management", "github-credential-health"]
+          }
+      }
+
+      // Composition: GitHubLoginTest includes this signal + cleanup
+      pub struct GitHubLoginTest {
+          signals: vec![
+              CreateGitHubSecretSignal { secret_name: "tillandsias-github-token".into() },
+              // ... other signals
+          ],
+      }
+      // Result: Verifies the EXACT podman calls, not just "login succeeded"
+      // Earning: +80cc per passing signal, -70cc per untested MUST requirement
+
+  pseudocode_mock_podman:
+    rust_trait: |
+      /// Mock implementation of podman subprocess boundary.
+      pub struct InMemoryPodmanMock {
+          recorded_calls: Vec<CallRecord>,
+          injected_responses: HashMap<CallMatcher, ProcessOutput>,
+          stats: MockStats,
+      }
+
+      impl MockPodmanRuntime for InMemoryPodmanMock {
+          fn exec(
+              &mut self,
+              cmd: &str,
+              args: &[&str],
+              env: &[(&str, &str)],
+          ) -> Result<ProcessOutput> {
+              let start = std::time::Instant::now();
+
+              // Check injected responses
+              for (matcher, response) in &self.injected_responses {
+                  if self.matches(cmd, args, matcher) {
+                      self.stats.total_calls += 1;
+                      self.stats.total_wall_time_ms += start.elapsed().as_millis() as u64;
+                      return Ok(response.clone());
+                  }
+              }
+
+              // Default: simulate success
+              let record = CallRecord {
+                  cmd: cmd.into(),
+                  args: args.iter().map(|s| s.to_string()).collect(),
+                  env: env.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+                  stdout: "".into(),
+                  stderr: "".into(),
+                  exit_code: 0,
+                  wall_time_ms: start.elapsed().as_millis() as u64,
+                  spec_trace: self.extract_trace_from_call_site(),
+              };
+
+              self.recorded_calls.push(record.clone());
+              self.stats.total_calls += 1;
+              self.stats.total_wall_time_ms += record.wall_time_ms;
+
+              Ok(ProcessOutput {
+                  exit_code: 0,
+                  stdout: format!("default-output-for-{}-{}", cmd, args.first().unwrap_or(&"")),
+                  stderr: "".into(),
+              })
+          }
+
+          fn calls_matching(&self, predicate: CallMatcher) -> Vec<&CallRecord> {
+              self.recorded_calls
+                  .iter()
+                  .filter(|call| self.matches(&call.cmd, &call.args, &predicate))
+                  .collect()
+          }
+
+          fn reset(&mut self) {
+              self.recorded_calls.clear();
+              self.injected_responses.clear();
+          }
+      }
+
+  release_evidence_bundle:
+    description: >
+      When ./build.sh --ci-full passes all litmus tests, the release evidence bundle includes:
+    artifacts:
+      centicolon_signature: "target/convergence/centicolon-signature.jsonl"
+      delta: "target/convergence/centicolon-delta.json"
+      dashboard: "docs/convergence/centicolon-dashboard.md"
+
+    signature_entry: |
+      {
+        "timestamp": "2026-05-05T14:23:45Z",
+        "version": "0.1.42.103",
+        "source_commit": "deadbeef...",
+        "litmus_tests_run": 34,
+        "litmus_passed": 34,
+        "litmus_failed": 0,
+        "litmus_flaky": 0,
+        "project_cc_earned": 2650,
+        "project_cc_total": 2800,
+        "residual_cc": 150,
+        "top_residual_reasons": [
+          { "reason": "Untested requirement: forge-offline#R1", "cc": 70 },
+          { "reason": "Ambiguous spec: browser-isolation-core", "cc": 80 }
+        ],
+        "critical_path_status": "PASS",
+        "evidence_urls": [
+          "https://github.com/..../releases/tag/v0.1.42.103#evidence"
+        ]
+      }
+
+    delta_json: |
+      {
+        "version": "0.1.42.103",
+        "test_results": [
+          {
+            "test_id": "system.convergence.github-login@v1",
+            "test_name": "GitHubLoginTest",
+            "status": "PASS",
+            "specs_validated": ["secrets-management", "github-credential-health"],
+            "earned_cc": 160,
+            "total_cc": 200,
+            "residual_cc": 40,
+            "wall_time_ms": 1234,
+            "flakiness_rate": 0.0,
+            "residual_reasons": [
+              "Untested SHOULD requirement: secret-rotation#S2"
+            ]
+          }
+        ],
+        "project_summary": {
+          "total_earned": 2650,
+          "total_obligation": 2800,
+          "residual": 150,
+          "critical_path_pass_rate": 1.0,
+          "ci_budget_used_percent": 87
+        }
+      }
+
+sources_of_truth:
+  - "methodology/litmus.yaml — Litmus test structure and binding rules"
+  - "methodology/convergence.yaml — Convergence metrics and drift control"
+  - "methodology/proximity.yaml — CentiColon obligation model"
+  - "crates/tillandsias-podman/src/client.rs — PodmanClient abstraction"
+  - "openspec/litmus-bindings.yaml — Active spec-to-test bindings"

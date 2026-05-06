@@ -5,6 +5,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [build-forge.sh#L2](../../../build-forge.sh#L2)
 - [build.sh#L144](../../../build.sh#L144)
 - [crates/tillandsias-core/src/container_profile.rs#L289](../../../crates/tillandsias-core/src/container_profile.rs#L289)
 - [images/default/config-overlay/mcp/host-browser.sh#L8](../../../images/default/config-overlay/mcp/host-browser.sh#L8)
@@ -19,7 +20,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-terminal.sh#L67](../../../images/default/entrypoint-terminal.sh#L67)
 - [images/default/lib-common.sh#L419](../../../images/default/lib-common.sh#L419)
 - [scripts/build-image.sh#L17](../../../scripts/build-image.sh#L17)
-- [scripts/build-image.sh#L371](../../../scripts/build-image.sh#L371)
+- [scripts/build-image.sh#L304](../../../scripts/build-image.sh#L304)
 - [scripts/orchestrate-enclave.sh#L2](../../../scripts/orchestrate-enclave.sh#L2)
 - [scripts/test-forge.sh#L2](../../../scripts/test-forge.sh#L2)
 - [src-tauri/src/embedded.rs#L11](../../../src-tauri/src/embedded.rs#L11)
@@ -44,6 +45,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [src-tauri/src/image_builder.rs#L237](../../../src-tauri/src/image_builder.rs#L237)
 - [src-tauri/src/init.rs#L387](../../../src-tauri/src/init.rs#L387)
 - [src-tauri/src/runner.rs#L7](../../../src-tauri/src/runner.rs#L7)
-- [src-tauri/src/runner.rs#L91](../../../src-tauri/src/runner.rs#L91)
-- [src-tauri/src/runner.rs#L165](../../../src-tauri/src/runner.rs#L165)
-- [src-tauri/src/runner.rs#L220](../../../src-tauri/src/runner.rs#L220)
+- [src-tauri/src/runner.rs#L147](../../../src-tauri/src/runner.rs#L147)
+- [src-tauri/src/runner.rs#L254](../../../src-tauri/src/runner.rs#L254)
+- [src-tauri/src/runner.rs#L310](../../../src-tauri/src/runner.rs#L310)
