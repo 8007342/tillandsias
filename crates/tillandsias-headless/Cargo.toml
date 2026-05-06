@@ -1,0 +1,34 @@
+[package]
+name = "tillandsias-headless"
+version = "0.1.260505"
+edition = "2024"
+license = "GPL-3.0-or-later"
+authors = ["Tlatoani"]
+description = "Tillandsias headless mode — musl-static Linux binary"
+publish = false
+
+[[bin]]
+name = "tillandsias-headless"
+path = "src/main.rs"
+
+[dependencies]
+tillandsias-core = { path = "../tillandsias-core" }
+tillandsias-podman = { path = "../tillandsias-podman" }
+tokio = { workspace = true }
+signal-hook = "0.3"
+libc = "0.2"
+chrono = { version = "0.4", features = ["serde"] }
+serde = { workspace = true }
+serde_json = "1"
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Phase 4: Tray UI (optional)
+gtk4 = { version = "0.9", optional = true }
+libadwaita = { version = "0.7", optional = true }
+
+[features]
+default = []
+# @trace spec:linux-native-portable-executable, spec:tray-ui-integration
+tray = ["gtk4", "libadwaita"]

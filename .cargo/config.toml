@@ -1,20 +1,12 @@
-# Cross-compilation targets for Tillandsias
-#
-# Verified targets:
-#   - x86_64-unknown-linux-gnu   (primary, CI-tested)
-#   - aarch64-apple-darwin        (macOS Apple Silicon)
-#   - x86_64-pc-windows-msvc      (Windows)
-#
-# To cross-compile, install the target toolchain and run:
-#   rustup target add <target>
-#   cargo build --target <target>
-#
-# Note: Tauri builds for macOS and Windows require their native SDKs.
-# Use `tauri build --target <target>` for full application bundles.
+# @trace spec:linux-native-portable-executable
+# Musl build configuration for static Linux binary
 
-# Uncomment to set a specific linker for cross-compilation targets:
-# [target.aarch64-apple-darwin]
-# linker = "aarch64-apple-darwin-gcc"
-#
-# [target.x86_64-pc-windows-msvc]
-# linker = "lld-link"
+[target.x86_64-unknown-linux-musl]
+rustflags = [
+    "-C", "target-feature=+crt-static",
+    "-C", "relocation-model=static",
+]
+
+[build]
+# Use musl target by default in development
+# target = "x86_64-unknown-linux-musl"

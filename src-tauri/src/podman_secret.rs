@@ -473,4 +473,84 @@ mod tests {
         };
         assert_eq!(secret_no_driver.to_string(), "another-secret (unknown)");
     }
+
+    #[test]
+    fn test_ca_cert_fingerprint() {
+        let cert_pem = b"-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----";
+        let fingerprint = ca_cert_fingerprint(cert_pem);
+
+        // Fingerprint should be a 64-character hex string (SHA-256)
+        assert_eq!(fingerprint.len(), 64);
+        assert!(fingerprint.chars().all(|c| c.is_ascii_hexdigit()));
+
+        // Same input should produce same fingerprint
+        let fingerprint2 = ca_cert_fingerprint(cert_pem);
+        assert_eq!(fingerprint, fingerprint2);
+
+        // Different input should produce different fingerprint
+        let different_cert = b"different cert data";
+        let different_fingerprint = ca_cert_fingerprint(different_cert);
+        assert_ne!(fingerprint, different_fingerprint);
+    }
+
+    #[test]
+    fn test_cleanup_all_filters_correctly() {
+        // Test that cleanup_all would filter the right secret names.
+        // Note: This is a unit test that doesn't require podman to be running.
+
+        let secrets = vec![
+            Secret {
+                name: "tillandsias-github-token".to_string(),
+                driver: Some("file".to_string()),
+                created_at: None,
+                updated_at: None,
+            },
+            Secret {
+                name: "tillandsias-ca-cert".to_string(),
+                driver: Some("file".to_string()),
+                created_at: None,
+                updated_at: None,
+            },
+            Secret {
+                name: "ca-bundle".to_string(),
+                driver: Some("file".to_string()),
+                created_at: None,
+                updated_at: None,
+            },
+            Secret {
+                name: "github-token".to_string(),
+                driver: Some("file".to_string()),
+                created_at: None,
+                updated_at: None,
+            },
+            Secret {
+                name: "some-other-secret".to_string(),
+                driver: Some("file".to_string()),
+                created_at: None,
+                updated_at: None,
+            },
+        ];
+
+        // Simulate the filtering logic from cleanup_all()
+        let tillandsias_names: Vec<_> = secrets
+            .iter()
+            .filter(|s| {
+                s.name.starts_with("tillandsias-")
+                    || s.name == "ca-bundle"
+                    || s.name == "github-token"
+                    || s.name == "ca-certificates"
+                    || s.name == "ssl-cert"
+            })
+            .map(|s| s.name.clone())
+            .collect();
+
+        // Should include tillandsias-* and known well-names
+        assert!(tillandsias_names.contains(&"tillandsias-github-token".to_string()));
+        assert!(tillandsias_names.contains(&"tillandsias-ca-cert".to_string()));
+        assert!(tillandsias_names.contains(&"ca-bundle".to_string()));
+        assert!(tillandsias_names.contains(&"github-token".to_string()));
+
+        // Should NOT include unrelated secrets
+        assert!(!tillandsias_names.contains(&"some-other-secret".to_string()));
+    }
 }

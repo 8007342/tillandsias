@@ -1,3 +1,7 @@
+// @tombstone superseded:linux-native-portable-executable
+// Tauri WebKit wrapper removed 2026-05-05 in favor of GTK tray + musl-static binary.
+// Kept in git history through release 0.1.271 (three releases) for traceability.
+// See: crates/tillandsias-headless for replacement implementation.
 #![allow(clippy::collapsible_if)]
 
 mod accountability;
@@ -915,17 +919,24 @@ fn main() {
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 info!("Exit requested");
 
-                // @trace spec:proxy-container, spec:enclave-network
-                // Stop the proxy container and remove the enclave network on exit.
+                // @trace spec:secrets-management, spec:podman-orchestration, spec:enclave-network
+                // Graceful shutdown: stop all containers, cleanup infrastructure, and remove secrets.
                 // Uses a blocking runtime since we are in the sync RunEvent handler.
+                // shutdown_all() handles:
+                //   - Stop all user-managed containers (with state)
+                //   - Stop orphaned tillandsias-* containers
+                //   - Stop git services
+                //   - Stop inference container
+                //   - Stop proxy container
+                //   - Cleanup enclave network
+                //   - Cleanup all podman secrets (tillandsias-*)
                 if let Ok(rt) = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
                 {
                     rt.block_on(async {
-                        handlers::stop_inference().await;
-                        handlers::stop_proxy().await;
-                        handlers::cleanup_enclave_network().await;
+                        let state = state.lock().unwrap().clone();
+                        handlers::shutdown_all(&state).await;
                     });
                 }
 

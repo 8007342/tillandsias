@@ -29,7 +29,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/proxy/entrypoint.sh#L3](../../../images/proxy/entrypoint.sh#L3)
 - [images/proxy/entrypoint.sh#L17](../../../images/proxy/entrypoint.sh#L17)
 - [images/proxy/entrypoint.sh#L25](../../../images/proxy/entrypoint.sh#L25)
-- [scripts/create-secrets.sh#L93](../../../scripts/create-secrets.sh#L93)
 - [scripts/diagnose-proxy.sh#L2](../../../scripts/diagnose-proxy.sh#L2)
 - [scripts/orchestrate-enclave.sh#L2](../../../scripts/orchestrate-enclave.sh#L2)
 - [scripts/orchestrate-enclave.sh#L50](../../../scripts/orchestrate-enclave.sh#L50)

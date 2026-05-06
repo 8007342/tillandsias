@@ -3,7 +3,7 @@
 # Tillandsias — Trace Validator
 #
 # Phase 1: Detects ghost traces, orphaned specs, and format violations.
-# Phase 2: Enforces @trace presence on public functions in src-tauri.
+# Phase 2: Enforces @trace presence on public functions in crates.
 #
 # Usage:
 #   ./scripts/validate-traces.sh              # Run Phase 1 (ghost, orphan, format)
@@ -36,7 +36,7 @@ ANNOTATED_SPECS="$(
        --exclude-dir='.claude' \
        --exclude-dir='target' \
        --exclude-dir='target-musl' \
-       "$ROOT/src-tauri" "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" 2>/dev/null \
+       "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" 2>/dev/null \
   | grep 'spec:' \
   | grep -oE 'spec:[a-zA-Z0-9_-]+' \
   | sed 's/^spec://' \
@@ -69,7 +69,7 @@ for spec_dir in "$SPECS_DIR"/*/; do
   spec_name="$(basename "$spec_dir")"
   found="$(grep -rl --include='*.rs' --include='*.sh' --include='*.toml' --include='*.yaml' \
       "spec:${spec_name}" \
-      "$ROOT/src-tauri" "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" 2>/dev/null \
+      "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" 2>/dev/null \
       | head -1)" || true
   if [[ -z "$found" ]]; then
     _warn "orphaned spec '$spec_name' — no annotations"
@@ -79,7 +79,7 @@ done
 # Format violation check (lightweight)
 FMT_VIOLATIONS=$(grep -rn '@trace' --include='*.rs' --include='*.sh' \
     --exclude-dir='.claude' --exclude-dir='target' \
-    "$ROOT/src-tauri" "$ROOT/scripts" 2>/dev/null \
+    "$ROOT/scripts" "$ROOT/crates" 2>/dev/null \
   | grep 'spec:')
 
 while IFS= read -r line; do
@@ -122,14 +122,14 @@ if [[ -f "$ROOT/TRACES.md" ]]; then
 fi
 
 # ============================================================================
-# Phase 2: Enforce @trace presence on public functions in src-tauri
+# Phase 2: Enforce @trace presence on public functions in crates
 # ============================================================================
 if [[ "$ENFORCE_PRESENCE" == true ]]; then
   # @trace spec:enforce-trace-presence
-  # Scan src-tauri/src for all public function declarations
+  # Scan crates/*/src for all public function declarations
   # Check if they have @trace annotations in preceding lines
 
-  RUST_FILES=$(find "$ROOT/src-tauri/src" -name "*.rs" -type f \
+  RUST_FILES=$(find "$ROOT/crates" -name "*.rs" -type f \
     ! -path "*target*" ! -path "*.claude*" 2>/dev/null)
 
   # Temporary file to hold violations

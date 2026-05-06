@@ -3,11 +3,11 @@ members = [
     "crates/tillandsias-browser-mcp",
     "crates/tillandsias-control-wire",
     "crates/tillandsias-core",
+    "crates/tillandsias-headless",
     "crates/tillandsias-otp",
     "crates/tillandsias-podman",
     "crates/tillandsias-router-sidecar",
     "crates/tillandsias-scanner",
-    "src-tauri",
 ]
 resolver = "3"
 
@@ -32,11 +32,19 @@ dirs = "6"
 thiserror = "2"
 async-trait = "0.1"
 parking_lot = "0.12"
+signal-hook = "0.3"
+chrono = { version = "0.4", features = ["serde"] }
 
 # Internal crates
 tillandsias-browser-mcp = { path = "crates/tillandsias-browser-mcp" }
 tillandsias-control-wire = { path = "crates/tillandsias-control-wire" }
 tillandsias-core = { path = "crates/tillandsias-core" }
+tillandsias-headless = { path = "crates/tillandsias-headless" }
 tillandsias-otp = { path = "crates/tillandsias-otp" }
 tillandsias-podman = { path = "crates/tillandsias-podman" }
 tillandsias-scanner = { path = "crates/tillandsias-scanner" }
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
