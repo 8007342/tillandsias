@@ -707,14 +707,26 @@ fn run_opencode_mode(project_path: &str, prompt: &str, debug: bool) -> Result<()
         println!("{{\"event\":\"opencode.enclave_online\",\"project\":\"{}\",\"containers\":\"proxy,git,inference,forge\"}}",
                  project_path.replace("\"", "\\\""));
 
-        // Emit event: prompt received and ready to send
+        if debug {
+            eprintln!("[tillandsias] [OpenCode] Phase B complete: enclave online");
+            eprintln!("[tillandsias] [OpenCode] Phase C: sending prompt to inference...");
+        }
+
+        // Phase C: Send prompt to inference container
+        // For now, emit placeholder event
         println!("{{\"event\":\"opencode.prompt_queued\",\"text\":\"{}\",\"phase\":\"C-inference\"}}",
                  prompt.replace("\"", "\\\""));
 
+        // Phase C: Attempt to send prompt to ollama
+        // This would require HTTP client (reqwest) to connect to inference:11434
+        // Placeholder: document what Phase C needs
         if debug {
-            eprintln!("[tillandsias] [OpenCode] Phase B complete: enclave online");
-            eprintln!("[tillandsias] [OpenCode] Phase C (inference integration) next");
+            eprintln!("[tillandsias] [OpenCode] Phase C: Waiting for inference container to be ready...");
+            eprintln!("[tillandsias] [OpenCode] Would POST to http://inference:11434/api/generate");
+            eprintln!("[tillandsias] [OpenCode] Ollama HTTP integration pending (requires reqwest crate)");
         }
+
+        println!("{{\"event\":\"opencode.phase_c_pending\",\"reason\":\"HTTP client not yet integrated\"}}");
 
         Ok::<(), String>(())
     })
