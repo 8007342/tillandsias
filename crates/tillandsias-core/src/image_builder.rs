@@ -1,5 +1,7 @@
 /// ImageBuilder trait and implementations for Layer 2 build abstraction.
 ///
+/// @trace spec:runtime-logging
+///
 /// @trace spec:user-runtime-lifecycle
 ///
 /// The ImageBuilder trait defines the contract between Rust code (tray app)

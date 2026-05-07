@@ -1,3 +1,18 @@
+---
+tags: [mcp, json-rpc, protocol, tools, agents]
+languages: [bash, json]
+since: 2026-05-06
+last_verified: 2026-05-06
+sources:
+  - https://modelcontextprotocol.io/specification/2025-06-18
+  - https://modelcontextprotocol.io/specification/2025-06-18/server/tools
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # Model Context Protocol (MCP) Quick Reference
 
 **Use when**: Implementing MCP servers, debugging MCP client/server communication, or extending tool surfaces.

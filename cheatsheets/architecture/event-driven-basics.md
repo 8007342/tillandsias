@@ -94,6 +94,7 @@ Brokers (rough trade-off table):
 - **"Eventual consistency" without measurement** — eventual ≠ never. Add lag metrics, alert when consumers fall behind.
 - **Cascading failures** — one slow consumer blocks broker disk → producer back-pressures → upstream stalls. Design DLQ (dead-letter queue) and consumer-side circuit breakers.
 - **Mixing event-carried state with event sourcing** — they're orthogonal but often conflated. Event sourcing means events are the source of truth; ECST means events carry state. Pick what you actually need.
+- **Blocking the hot path** — steady-state runtime paths must stay yield-returning and event-driven. Blocking work belongs only in a named bootstrap or shutdown boundary with an explicit spec and litmus exception. No busy "noop" loops in always-on services.
 
 ## Pull on Demand
 

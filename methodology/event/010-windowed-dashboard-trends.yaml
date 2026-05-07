@@ -1,0 +1,79 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.010-windowed-dashboard-trends@v1
+status: distilled
+observed_at: "2026-05-06T00:00:00Z"
+reporter: "codex"
+summary: >
+  The CentiColon dashboard's monolithic trend strip wrapped past the screen
+  width as history grew, which reduced readability and made the visible trend
+  harder to scan at a glance.
+
+observed_signal:
+  description: >
+    The dashboard Markdown view rendered a very long single-line closed/residual
+    trend strip. The line overflowed the viewport as more records accumulated,
+    even though the underlying data was already bucketed naturally by release
+    order.
+  signal_type: "dashboard"
+
+expected_model:
+  description: >
+    The human dashboard should present trend data in small, screen-fit windows
+    ordered by natural release chronology, while preserving the full-resolution
+    trend for machine consumers in JSON.
+  source_refs:
+    - scripts/update-convergence-dashboard.sh
+    - methodology/litmus-centicolon-wiring.yaml
+    - methodology/proximity.yaml
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - dashboard_trends_must_be_screen_fit
+    - machine_full_resolution_should_remain_available
+    - visual_trend_windows_should_follow_natural_release_order
+  spec_requirement_ids:
+    - methodology-accountability.release_dashboard
+  litmus_ids: []
+  cheatsheet_refs:
+    - docs/cheatsheets/centicolon-dashboard.md
+
+affected_artifacts:
+  specs:
+    - openspec/specs/methodology-accountability/spec.md
+  methodology_files:
+    - methodology/event/index.yaml
+    - methodology/proximity.yaml
+  code_paths:
+    - scripts/update-convergence-dashboard.sh
+  scripts:
+    - scripts/update-convergence-dashboard.sh
+  dashboards:
+    - docs/convergence/centicolon-dashboard.md
+    - docs/convergence/centicolon-dashboard.json
+
+evidence_refs:
+  commits: []
+  files:
+    - scripts/update-convergence-dashboard.sh
+    - docs/convergence/centicolon-dashboard.md
+    - docs/convergence/centicolon-dashboard.json
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: low
+provisional_classification: dashboard_presentation_gap
+
+next_distillation_step:
+  owner: "codex"
+  action: >
+    Keep the Markdown dashboard windowed and compact, then verify the renderer
+    still emits the full history into JSON for downstream agents and release
+    automation.
+  target_artifact: "docs/convergence"
+
+closure_criteria:
+  - dashboard_trend_windows_fit_screen
+  - full_resolution_history_remains_in_json
+  - old_monolithic_trend_line_no_longer_rendered_in_markdown

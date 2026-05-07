@@ -2,7 +2,7 @@
 tags: [tray, ux, menu, tillandsias]
 languages: []
 since: 2026-05-03
-last_verified: 2026-05-03
+last_verified: 2026-05-06
 sources:
   - internal
 authority: internal
@@ -19,18 +19,19 @@ tier: bundled
 ## Provenance
 
 - Internal UX documentation
-- **Last updated:** 2026-05-03
+- **Last updated:** 2026-05-06
 
 ## Menu Structure
 
 The tray menu presents a minimal set of actions:
-- **Attach Here** — launch development environment for selected project
-- **OpenCode** — open web IDE for project
-- **OpenCode Web** — open isolated browser session for project
-- **Terminal** — open terminal in project environment
-- **Serve Here** — launch HTTP server for project
-- **Stop/Destroy** — manage running containers
-- **Quit** — exit tray
+- **Status chip** — current setup or readiness state
+- **Seedlings** — agent selector for `OpenCode Web`, `OpenCode`, and `Claude`
+- **Per-project submenu** — `Attach Here`, `Maintenance`, and conditional `Stop`
+- **Initialize images** — build or refresh infrastructure images
+- **Root Terminal** — open a terminal in the repo root
+- **GitHub Login** — authenticate the GitHub CLI inside the git container
+- **Version** — display the current Tillandsias version
+- **Quit Tillandsias** — exit the tray process
 
 ## Key Principles
 
@@ -49,8 +50,9 @@ Build progress and container state are communicated via:
 ## Related Specs
 
 - `spec:tray-app` - main tray orchestration
-- `spec:simplified-tray-ux` - simplified menu design
+- `spec:tray-icon-lifecycle` - icon state mapping
 - `spec:tray-progress-and-icon-states` - visual state representation
+- `cheatsheets/runtime/statusnotifier-tray.md` - D-Bus tray protocol contract
 
 ## See Also
 

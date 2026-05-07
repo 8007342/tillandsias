@@ -1,3 +1,19 @@
+---
+tags: [git, workflows, branching, commits, remotes]
+languages: [bash]
+since: 2026-05-06
+last_verified: 2026-05-06
+sources:
+  - https://git-scm.com/docs
+  - https://git-scm.com/docs/gitcredentials
+  - https://cli.github.com/manual/gh_auth_setup-git
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # git Workflows
 
 @trace spec:agent-source-of-truth

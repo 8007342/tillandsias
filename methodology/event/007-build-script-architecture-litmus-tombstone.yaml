@@ -1,0 +1,90 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.007-build-script-architecture-litmus-tombstone@v1
+status: triaged
+observed_at: "2026-05-06T00:00:00Z"
+reporter: "codex"
+summary: >
+  The build-script-architecture litmus suite still asserts an old Ubuntu
+  AppImage contract even though the implementation has moved to a native,
+  portable build path. The tests now measure removed behavior, not the live
+  product contract.
+
+observed_signal:
+  description: >
+    `litmus:build-cache-transparent`, `litmus:build-clean-from-scratch-works`,
+    `litmus:ci-unchanged-behavior`, and `litmus:toolbox-isolation` all fail
+    because they describe the retired AppImage/Ubuntu build architecture rather
+    than the current native portable build flow.
+  signal_type: "litmus"
+
+expected_model:
+  description: >
+    Retired build-path contracts should be tombstoned or removed from active
+    bindings so CI only scores behavior that still matters. The replacement
+    contract needs to be distilled from the current build system before it can
+    be made active again.
+  source_refs:
+    - openspec/specs/build-script-architecture/spec.md
+    - scripts/build.sh
+    - methodology/litmus.yaml
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - stale_litmus_must_not_stay_active
+    - retired_contracts_must_be_tombstoned
+    - build_score_must_measure_live_behavior
+  spec_requirement_ids:
+    - build-script-architecture:live-build-path
+  litmus_ids:
+    - litmus:build-cache-transparent
+    - litmus:build-clean-from-scratch-works
+    - litmus:ci-unchanged-behavior
+    - litmus:toolbox-isolation
+  cheatsheet_refs:
+    - cheatsheets/build/build-strategy.md
+
+affected_artifacts:
+  specs:
+    - openspec/specs/build-script-architecture/spec.md
+  methodology_files:
+    - methodology/event/index.yaml
+    - methodology/litmus.yaml
+  code_paths:
+    - build.sh
+    - scripts/run-litmus-test.sh
+  scripts:
+    - openspec/litmus-bindings.yaml
+  dashboards:
+    - docs/convergence/centicolon-dashboard.md
+    - docs/convergence/centicolon-dashboard.json
+
+evidence_refs:
+  commits: []
+  files:
+    - openspec/specs/build-script-architecture/spec.md
+    - openspec/litmus-tests/litmus-build-cache-transparent.yaml
+    - openspec/litmus-tests/litmus-build-clean-from-scratch-works.yaml
+    - openspec/litmus-tests/litmus-ci-unchanged-behavior.yaml
+    - openspec/litmus-tests/litmus-toolbox-isolation.yaml
+    - scripts/build.sh
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: medium
+provisional_classification: stale_litmus_suite
+
+next_distillation_step:
+  owner: "codex"
+  action: >
+    Remove the retired AppImage litmus suite from active bindings, then
+    distill the current portable build contract into a fresh spec/litmus pair
+    that describes the native local-install path.
+  target_artifact: "openspec/litmus-bindings.yaml"
+
+closure_criteria:
+  - learned_distinction_preserved_in_durable_artifact
+  - evidence_refs_are_queryable
+  - proximity_or_evidence_score_updated_if_applicable
+  - old_false_claim_tombstoned_or_superseded_if_applicable

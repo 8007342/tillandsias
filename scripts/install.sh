@@ -82,6 +82,7 @@ find_asset() {
 # ---------------------------------------------------------------------------
 # Linux: download AppImage to ~/.local/bin/
 # ---------------------------------------------------------------------------
+# @trace spec:download-telemetry, spec:chromium-safe-variant
 if [ "$PLATFORM" = "linux" ]; then
     INSTALLED=false
 
@@ -104,6 +105,7 @@ if [ "$PLATFORM" = "linux" ]; then
         # Direct write to the target fails with "Text file busy" if the
         # AppImage is currently running (common during reinstall/update).
         TMPFILE="$INSTALL_DIR/.tillandsias-download-$$"
+        # @trace spec:download-telemetry
         if curl -fsSL -o "$TMPFILE" "$APPIMAGE_URL"; then
             chmod +x "$TMPFILE"
             # Atomic rename — works even if target is running (Linux unlinks
@@ -142,6 +144,7 @@ if [ "$PLATFORM" = "macos" ]; then
 
     mkdir -p "$INSTALL_DIR"
     echo "  Downloading .dmg..."
+    # @trace spec:download-telemetry
     curl -fsSL -o /tmp/Tillandsias.dmg "$DMG_URL"
     echo "  ✓ Downloaded to /tmp/Tillandsias.dmg"
 
@@ -244,6 +247,7 @@ rm -f "$INSTALL_DIR/tillandsias-uninstall" 2>/dev/null || true
 # Chromium download (host-chromium-on-demand)
 # ---------------------------------------------------------------------------
 # @trace spec:host-chromium-on-demand
+# @trace spec:download-telemetry, spec:chromium-safe-variant
 #
 # Source the install-chromium.sh helper and run install_chromium. The
 # helper picks up the CHROMIUM_VERSION + CHROMIUM_SHA256_* variables we

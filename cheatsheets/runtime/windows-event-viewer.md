@@ -1,3 +1,18 @@
+---
+tags: [windows, event-viewer, logs, runtime, troubleshooting]
+languages: [powershell]
+since: 2026-05-06
+last_verified: 2026-05-06
+sources:
+  - https://learn.microsoft.com/en-us/windows/win32/eventlog/event-logging
+  - https://learn.microsoft.com/en-us/windows/win32/wes/windows-event-service
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # Windows Event Viewer for Tillandsias
 
 **Use when**: Diagnosing errors and warnings on Windows systems, or accessing Tillandsias application logs visible to all system users.

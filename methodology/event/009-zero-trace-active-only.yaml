@@ -1,0 +1,81 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.009-zero-trace-active-only@v1
+status: distilled
+observed_at: "2026-05-06T00:00:00Z"
+reporter: "codex"
+summary: >
+  Zero-trace scoring must only apply to active contracts. Deferred or obsolete
+  specs remain in the repository for traceability, but they must not keep
+  failing the active-contract drift gate.
+
+observed_signal:
+  description: >
+    The drift hook continued to report zero-trace failures for specs whose
+    status had already been changed to deferred. That inflated the live debt
+    score with retired contracts and obscured the remaining active gaps.
+  signal_type: "ci"
+
+expected_model:
+  description: >
+    Active-contract scoring should only count specs that still require live code
+    traces. Deferred or obsolete specs should be excluded from the active
+    drift gate while staying visible in the repository as tombstones.
+  source_refs:
+    - openspec/specs/appimage-build-pipeline/spec.md
+    - openspec/specs/cli-bash-mode/spec.md
+    - openspec/specs/cli-diagnostics/spec.md
+    - scripts/hooks/pre-commit-openspec.sh
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - active_contract_scoring_must_ignore_deferred_specs
+    - retired_contracts_should_not_count_as_live_drift
+  spec_requirement_ids:
+    - appimage-build-pipeline
+    - cli-bash-mode
+    - cli-diagnostics
+  litmus_ids: []
+  cheatsheet_refs: []
+
+affected_artifacts:
+  specs:
+    - openspec/specs/appimage-build-pipeline/spec.md
+    - openspec/specs/cli-bash-mode/spec.md
+    - openspec/specs/cli-diagnostics/spec.md
+  methodology_files:
+    - methodology/event/index.yaml
+    - scripts/hooks/pre-commit-openspec.sh
+  code_paths:
+    - scripts/hooks/pre-commit-openspec.sh
+  scripts: []
+  dashboards:
+    - docs/convergence/centicolon-dashboard.md
+    - docs/convergence/centicolon-dashboard.json
+
+evidence_refs:
+  commits: []
+  files:
+    - scripts/hooks/pre-commit-openspec.sh
+    - openspec/specs/appimage-build-pipeline/spec.md
+    - openspec/specs/cli-bash-mode/spec.md
+    - openspec/specs/cli-diagnostics/spec.md
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: low
+provisional_classification: methodology_claim_unproven
+
+next_distillation_step:
+  owner: "codex"
+  action: >
+    Keep the active-contract drift gate scoped to active specs only, then
+    rerun the trace sweep and full local CI to verify the remaining failures
+    are live implementation debt instead of retired contract residue.
+  target_artifact: "methodology"
+
+closure_criteria:
+  - retired_specs_no_longer_count_in_active_drift
+  - active_contracts_remain_visible_and_queryable
+  - zero_trace_metric_matches_live_contract_surface

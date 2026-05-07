@@ -1,3 +1,18 @@
+---
+tags: [ssh, rsync, remote, transport, files]
+languages: [bash]
+since: 2026-05-06
+last_verified: 2026-05-06
+sources:
+  - https://man.openbsd.org/ssh
+  - https://linux.die.net/man/1/rsync
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # SSH and rsync
 
 @trace spec:agent-source-of-truth

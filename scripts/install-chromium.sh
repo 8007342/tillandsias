@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace spec:host-chromium-on-demand
+# @trace spec:host-chromium-on-demand, spec:download-telemetry, spec:chromium-safe-variant
 # @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
 # @cheatsheet security/owasp-top-10-2021.md
 #
@@ -225,6 +225,7 @@ install_chromium() {
         _chromium_log "Downloading Chromium $CHROMIUM_VERSION for $platform (~150 MB)..."
         # -f: fail on HTTP errors. -L: follow redirects. --retry 3: bounded retries.
         # Custom UA so storage.googleapis.com logs identify us.
+        # @trace spec:download-telemetry
         if ! curl -fL --retry 3 \
             -H "User-Agent: tillandsias-installer/$CHROMIUM_VERSION" \
             -o "$zip_path" "$url"; then

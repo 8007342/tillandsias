@@ -1,3 +1,17 @@
+---
+tags: [podman, containers, images, runtime, cli]
+languages: [bash]
+since: 2026-05-06
+last_verified: 2026-05-06
+sources:
+  - https://podman.io/docs
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # Podman Cheatsheet
 
 ## Provenance

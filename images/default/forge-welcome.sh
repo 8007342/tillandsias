@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-# @trace spec:forge-welcome
+# @trace spec:forge-welcome, spec:forge-opencode-onboarding
 # ── Colors (bright variants for dark backgrounds) ────────────
 RST=$'\033[0m'
 BOLD=$'\033[1m'
@@ -164,7 +164,7 @@ printf "    ${B_MAGENTA}%-38s${RST} ${DIM}%s${RST}\n" "/run/user/1000"      " 64
 echo ""
 printf "  ${B_YELLOW}→${RST} Project at ${B_WHITE}/home/forge/src/%s${RST}\n" "$PROJECT"
 echo ""
-# @trace spec:forge-environment-discoverability
+# @trace spec:forge-environment-discoverability, spec:forge-opencode-onboarding
 # At-a-glance summary of the loaded runtimes by category. The full enumeration lives in
 # `tillandsias-inventory`; the welcome banner is the discovery hint.
 printf "  ${B_WHITE}Languages${RST}    ${DIM}rust, go, java 21, python 3.13, node 22, dart 3 (flutter)${RST}\n"
@@ -173,7 +173,7 @@ printf "  ${B_WHITE}Test${RST}         ${DIM}pytest, junit, cargo-test, chromium
 printf "  ${B_WHITE}Inventory${RST}    ${DIM}run ${B_CYAN}tillandsias-inventory${RST}${DIM} for the full list${RST}\n"
 echo ""
 
-# @trace spec:agent-cheatsheets
+# @trace spec:agent-cheatsheets, spec:forge-opencode-onboarding
 # Surface the cheatsheets path on every attach so agents and humans both see it before guessing tool flags.
 if [ -d "${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets}" ]; then
     printf "  📚 ${B_WHITE}Cheatsheets${RST} ${DIM}cat${RST} ${B_CYAN}%s/INDEX.md${RST} ${DIM}| rg <topic>${RST}\n" \

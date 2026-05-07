@@ -5,25 +5,26 @@
 //! Suitable for CI/CD, automation, and server deployments.
 //!
 //! Transparent Mode Detection (Phase 3):
-//! - If --headless NOT set AND GTK available, re-exec with --headless + spawn tray
+//! - If --headless NOT set AND native Linux tray support is available, spawn tray
 //! - If --headless set, run in headless mode (no tray UI)
 //! - If --tray set, explicitly run in tray mode
 //!
 //! Usage:
 //!   tillandsias                              # Auto-detect (transparent mode)
 //!   tillandsias --headless [config_path]    # Headless mode (no UI)
-//!   tillandsias --tray [config_path]        # Tray mode (requires gtk4 feature)
+//!   tillandsias --tray [config_path]        # Tray mode (requires native Linux tray feature)
 //!
 //! JSON Events:
 //!   - {"event":"app.started","timestamp":"<RFC3339>"} — at startup
 //!   - {"event":"containers.running","count":N} — on discovery
 //!   - {"event":"app.stopped","exit_code":0,"timestamp":"<RFC3339>"} — on graceful shutdown
 
-use futures::stream::StreamExt;
+use signal_hook::flag;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use tokio::signal::unix::{SignalKind, signal};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const VERSION: &str = include_str!("../../../VERSION");
 
@@ -88,20 +89,22 @@ fn main() {
         .find(|a| !a.starts_with('-'))
         .map(|p| p.to_string());
 
-    if init {
-        if let Err(e) = run_init(debug) {
-            eprintln!("Error: {}", e);
-            std::process::exit(1);
-        }
-        return;
-    }
-
     if github_login {
         if let Err(e) = run_github_login(debug) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
         return;
+    }
+
+    if init {
+        if let Err(e) = run_init(debug) {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        if !opencode {
+            return;
+        }
     }
 
     if opencode {
@@ -125,9 +128,9 @@ fn main() {
     // Phase 3, Task 12: Auto-detection (transparent mode)
     // If neither --headless nor --tray specified, auto-detect based on environment
     if !headless && !tray {
-        if is_gtk_available() {
+        if is_tray_available() {
             // @trace spec:linux-native-portable-executable, spec:transparent-mode-detection
-            // GTK is available — launch in tray mode with headless subprocess
+            // Native tray support is available — launch tray mode.
             if cfg!(feature = "tray") {
                 if let Err(e) = launch_tray_mode(config_path) {
                     eprintln!("Error launching tray mode: {}", e);
@@ -137,7 +140,7 @@ fn main() {
             } else {
                 // GTK available but tray feature not compiled — fall back to headless
                 eprintln!(
-                    "GTK detected but tray feature not compiled. \
+                    "Native tray support detected but tray feature not compiled. \
                     To use tray mode, rebuild with --features tray"
                 );
                 // Continue to headless mode below
@@ -183,7 +186,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --github-login [--debug]");
     println!("       tillandsias --opencode <project> --prompt <text> [--debug]");
     println!("  --headless     Run in headless mode (no UI)");
-    println!("  --tray         Run in tray mode (requires GTK)");
+    println!("  --tray         Run in tray mode (requires native tray support)");
     println!("  --opencode     Enable LLM code analysis mode");
     println!("  --prompt TEXT  Send prompt to LLM inference (requires --opencode)");
     println!("  --init         Build required Tillandsias container images");
@@ -192,7 +195,7 @@ fn print_usage(version: &str) {
     println!("  --version      Show version information");
     println!("  --help         Show this help");
     println!();
-    println!("Auto-detection: Tray mode if GTK available, headless otherwise");
+    println!("Auto-detection: Tray mode if native tray support is available, headless otherwise");
 }
 
 /// Locate the repository root for script-backed migration commands.
@@ -607,10 +610,10 @@ fn create_github_podman_secret(token: &str, debug: bool) -> Result<(), String> {
     }
 }
 
-/// Phase 3, Task 12: Auto-detect GTK availability.
+/// Phase 3, Task 12: Auto-detect native tray availability.
 /// @trace spec:linux-native-portable-executable, spec:transparent-mode-detection
-fn is_gtk_available() -> bool {
-    cfg!(feature = "tray")
+fn is_tray_available() -> bool {
+    cfg!(all(feature = "tray", target_os = "linux"))
 }
 
 /// Phase 3, Task 12 & Phase 4: Launch in tray mode with headless subprocess.
@@ -618,7 +621,7 @@ fn is_gtk_available() -> bool {
 fn launch_tray_mode(_config_path: Option<String>) -> Result<(), String> {
     #[cfg(feature = "tray")]
     {
-        crate::tray::run_tray_mode(config_path)
+        crate::tray::run_tray_mode(_config_path)
     }
 
     #[cfg(not(feature = "tray"))]
@@ -637,7 +640,7 @@ fn run_opencode_mode(project_path: &str, prompt: &str, debug: bool) -> Result<()
         eprintln!("[tillandsias] Prompt: {}", prompt);
     }
 
-    // Phase B: Project initialization and enclave startup
+    // Phase B: Project initialization and container startup
     let project = std::path::Path::new(project_path);
     if !project.exists() {
         return Err(format!("Project not found: {}", project_path));
@@ -650,169 +653,42 @@ fn run_opencode_mode(project_path: &str, prompt: &str, debug: bool) -> Result<()
         );
     }
 
-    // Phase B: Create async runtime for enclave orchestration
-    let rt = tokio::runtime::Runtime::new()
-        .map_err(|e| format!("Failed to create async runtime: {}", e))?;
+    let root = find_repo_root().unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+    let orchestrate_script = root.join("scripts/orchestrate-enclave.sh");
+    if !orchestrate_script.exists() {
+        return Err(format!(
+            "Orchestration script not found: {}",
+            orchestrate_script.display()
+        ));
+    }
 
-    rt.block_on(async {
-        // Phase B: Start enclave (proxy, git, inference, forge)
-        if debug {
-            eprintln!("[tillandsias] [OpenCode] Starting containerized enclave...");
-        }
+    let project_name = std::path::Path::new(project_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("opencode-project");
 
-        // Get repo root for orchestration scripts
-        let repo_root = find_repo_root()
-            .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+    if debug {
+        eprintln!("[tillandsias] [OpenCode] Repo root: {}", root.display());
+        eprintln!("[tillandsias] [OpenCode] Using OpenCode prompt mode via Big Pickle");
+    }
 
-        if debug {
-            eprintln!("[tillandsias] [OpenCode] Repo root: {}", repo_root.display());
-        }
+    let mut orchestrate = Command::new(&orchestrate_script);
+    orchestrate
+        .arg(project_path)
+        .arg(project_name)
+        .current_dir(&root)
+        .env("TILLANDSIAS_OPENCODE_PROMPT", prompt);
 
-        // Phase B: Launch orchestration script
-        // This will start proxy, git, inference, and forge containers
-        let orchestrate_script = repo_root.join("scripts/orchestrate-enclave.sh");
-        if !orchestrate_script.exists() {
-            return Err(format!("Orchestration script not found: {}", orchestrate_script.display()));
-        }
+    if debug {
+        eprintln!(
+            "[tillandsias] [OpenCode] Running: {} {} {}",
+            orchestrate_script.display(),
+            project_path,
+            project_name
+        );
+    }
 
-        if debug {
-            eprintln!("[tillandsias] [OpenCode] Launching orchestration: {}", orchestrate_script.display());
-            eprintln!("[tillandsias] [OpenCode] Project: {}", project_path);
-        }
-
-        // Phase B: Execute orchestration script
-        // orchestrate-enclave.sh PROJECT_PATH PROJECT_NAME
-        let project_name = std::path::Path::new(project_path)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("opencode-project");
-
-        let mut orchestrate = Command::new(&orchestrate_script);
-        orchestrate
-            .arg(project_path)
-            .arg(project_name)
-            .current_dir(&repo_root);
-
-        if debug {
-            eprintln!("[tillandsias] [OpenCode] Running: {} {} {}",
-                     orchestrate_script.display(), project_path, project_name);
-        }
-
-        // Execute orchestration synchronously (blocks until containers are up)
-        match orchestrate.status() {
-            Ok(status) if status.success() => {
-                if debug {
-                    eprintln!("[tillandsias] [OpenCode] Enclave started successfully");
-                }
-            }
-            Ok(status) => {
-                return Err(format!("Orchestration script failed with status: {}", status));
-            }
-            Err(e) => {
-                return Err(format!("Failed to execute orchestration script: {}", e));
-            }
-        }
-
-        // Emit event: enclave online
-        println!("{{\"event\":\"opencode.enclave_online\",\"project\":\"{}\",\"containers\":\"proxy,git,inference,forge\"}}",
-                 project_path.replace("\"", "\\\""));
-
-        if debug {
-            eprintln!("[tillandsias] [OpenCode] Phase B complete: enclave online");
-            eprintln!("[tillandsias] [OpenCode] Phase C: sending prompt to inference...");
-        }
-
-        // Phase C: Send prompt to inference container
-        // @trace spec:opencode-integration, spec:inference-container
-        println!("{{\"event\":\"opencode.prompt_queued\",\"text\":\"{}\",\"phase\":\"C-inference\"}}",
-                 prompt.replace("\"", "\\\""));
-
-        if debug {
-            eprintln!("[tillandsias] [OpenCode] Phase C: Sending prompt to inference at http://inference:11434/api/generate");
-        }
-
-        // Create HTTP client for inference container communication
-        let client = reqwest::Client::new();
-        let inference_url = "http://inference:11434/api/generate";
-
-        // Build ollama request — use a small default model if available
-        let request_body = serde_json::json!({
-            "model": "llama2",
-            "prompt": prompt,
-            "stream": true
-        });
-
-        if debug {
-            eprintln!("[tillandsias] [OpenCode] POST {} with prompt: {}", inference_url, prompt);
-        }
-
-        // Send request to inference container
-        let response = client
-            .post(inference_url)
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| {
-                format!("Failed to connect to inference container at {}: {}. Ensure containers started and network bridge is ready.", inference_url, e)
-            })?;
-
-        if debug {
-            eprintln!("[tillandsias] [OpenCode] Response status: {}", response.status());
-        }
-
-        println!("{{\"event\":\"opencode.inference_response_started\",\"status\":\"streaming\"}}");
-
-        // Stream response from ollama
-        let mut stream = response.bytes_stream();
-        let mut accumulated = String::new();
-
-        while let Some(chunk_result) = stream.next().await {
-            match chunk_result {
-                Ok(bytes) => {
-                    accumulated.push_str(&String::from_utf8_lossy(&bytes));
-
-                    // Process complete JSON lines
-                    while let Some(newline_pos) = accumulated.find('\n') {
-                        let line = accumulated[..newline_pos].to_string();
-                        accumulated = accumulated[newline_pos + 1..].to_string();
-
-                        if line.trim().is_empty() {
-                            continue;
-                        }
-
-                        // Parse JSON response from ollama
-                        if let Ok(response_obj) = serde_json::from_str::<serde_json::Value>(&line) {
-                            if let Some(token) = response_obj.get("response").and_then(|v| v.as_str()) {
-                                print!("{}", token);
-                                io::stdout().flush().ok();
-
-                                println!("{{\"event\":\"opencode.token_streamed\",\"token\":\"{}\"}}",
-                                         token.replace("\"", "\\\"").replace('\n', "\\n"));
-                            }
-
-                            if let Some(done) = response_obj.get("done").and_then(|v| v.as_bool())
-                                && done {
-                                    if debug {
-                                        eprintln!("[tillandsias] [OpenCode] Response complete");
-                                    }
-                                    println!("{{\"event\":\"opencode.inference_complete\",\"status\":\"done\"}}");
-                                    return Ok::<(), String>(());
-                                }
-                        } else if debug {
-                            eprintln!("[tillandsias] [OpenCode] Failed to parse response line: {}", line);
-                        }
-                    }
-                }
-                Err(e) => {
-                    return Err(format!("Error reading inference response stream: {}", e));
-                }
-            }
-        }
-
-        // Emit final event
-        println!("{{\"event\":\"opencode.inference_complete\",\"status\":\"stream_closed\"}}");
-        Ok::<(), String>(())
-    })
+    run_command(orchestrate, debug)
 }
 
 // Module declarations for Phase 4+
@@ -868,19 +744,33 @@ async fn run_headless_async(config_path: Option<String>) -> Result<(), String> {
     Ok(())
 }
 
-/// Phase 5, Task 22: Wait for SIGTERM/SIGINT using Tokio's Unix signal support.
-/// @trace spec:linux-native-portable-executable, spec:signal-handling
+/// Phase 5, Task 22: Wait for SIGTERM/SIGINT using signal-hook flags.
+///
+/// This loop is only reached during shutdown. It is not on the hot path for
+/// launch, prompt dispatch, or tray interaction. The atomic flag is set by the
+/// signal handler, and the async sleep yields the runtime while backing off so
+/// we do not spin aggressively while waiting for termination.
+/// @trace spec:linux-native-portable-executable, spec:signal-handling, spec:runtime-logging
 async fn wait_for_shutdown_signal() -> Result<(), String> {
-    let mut sigterm =
-        signal(SignalKind::terminate()).map_err(|e| format!("Failed to register SIGTERM: {e}"))?;
-    let mut sigint =
-        signal(SignalKind::interrupt()).map_err(|e| format!("Failed to register SIGINT: {e}"))?;
+    let terminated = Arc::new(AtomicBool::new(false));
+    flag::register(libc::SIGTERM, Arc::clone(&terminated))
+        .map_err(|e| format!("Failed to register SIGTERM: {e}"))?;
+    flag::register(libc::SIGINT, Arc::clone(&terminated))
+        .map_err(|e| format!("Failed to register SIGINT: {e}"))?;
 
-    tokio::select! {
-        _ = sigterm.recv() => {}
-        _ = sigint.recv() => {}
+    let mut poll_delay_ms = 25_u64;
+    while !terminated.load(Ordering::SeqCst) {
+        tokio::time::sleep(std::time::Duration::from_millis(poll_delay_ms)).await;
+        poll_delay_ms = next_shutdown_poll_delay_ms(poll_delay_ms);
     }
     Ok(())
+}
+
+/// Conservative shutdown polling backoff. This only governs the wait loop
+/// after shutdown has already been requested, so it cannot affect user-facing
+/// launch or tray responsiveness.
+fn next_shutdown_poll_delay_ms(current_ms: u64) -> u64 {
+    current_ms.saturating_mul(2).min(250)
 }
 
 /// Load headless configuration from TOML file.
@@ -912,4 +802,18 @@ async fn graceful_shutdown_async() -> Result<(), String> {
 
     eprintln!("Graceful shutdown completed");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::next_shutdown_poll_delay_ms;
+
+    #[test]
+    fn shutdown_poll_backoff_doubles_until_capped() {
+        assert_eq!(next_shutdown_poll_delay_ms(25), 50);
+        assert_eq!(next_shutdown_poll_delay_ms(50), 100);
+        assert_eq!(next_shutdown_poll_delay_ms(125), 250);
+        assert_eq!(next_shutdown_poll_delay_ms(250), 250);
+        assert_eq!(next_shutdown_poll_delay_ms(u64::MAX), 250);
+    }
 }

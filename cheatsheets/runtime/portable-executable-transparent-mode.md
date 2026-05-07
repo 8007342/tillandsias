@@ -1,3 +1,19 @@
+---
+tags: [portable-executable, headless, tray, gtk, runtime]
+languages: [bash, rust]
+since: 2026-05-06
+last_verified: 2026-05-06
+sources:
+  - https://github.com/tauri-apps/tauri
+  - https://man7.org/linux/man-pages/man2/kill.2.html
+  - https://gtk-rs.org/
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 ## Provenance
 
 - https://github.com/tauri-apps/tauri — Reference for multi-mode app architectures

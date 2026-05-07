@@ -9,6 +9,10 @@ sources:
   - https://lwn.net/Articles/930829/
 authority: high
 status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
 ---
 
 # Forge hot/cold filesystem split

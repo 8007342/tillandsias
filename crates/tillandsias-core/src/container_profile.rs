@@ -76,7 +76,7 @@ pub enum MountSource {
     CacheDir,
     /// Pre-built tools overlay directory (~/.cache/tillandsias/tools-overlay/current).
     /// Resolved at launch time; mount is skipped if the overlay doesn't exist yet.
-    /// @trace spec:layered-tools-overlay
+    /// @trace spec:layered-tools-overlay, spec:overlay-mount-cache, spec:tools-overlay-fast-reuse
     ToolsOverlay,
     /// Opinionated config overlay on tmpfs (ramdisk) for fast reads.
     /// Resolved at launch time from `$XDG_RUNTIME_DIR/tillandsias/config-overlay/`.
@@ -559,14 +559,14 @@ fn common_forge_mounts() -> Vec<ProfileMount> {
     // Code comes from git mirror service, packages through proxy.
     // Mounts: pre-built tools overlay + config overlay (both read-only),
     // plus per-container log directory (RW).
-    // @trace spec:proxy-container, spec:layered-tools-overlay, spec:podman-orchestration, spec:forge-cache-architecture, spec:forge-cache-dual
+    // @trace spec:proxy-container, spec:layered-tools-overlay, spec:overlay-mount-cache, spec:tools-overlay-fast-reuse, spec:podman-orchestration, spec:forge-cache-architecture, spec:forge-cache-dual
     vec![
         ProfileMount {
             host_key: MountSource::ToolsOverlay,
             container_path: "/home/forge/.tools",
             mode: MountMode::Ro,
         },
-        // @trace spec:layered-tools-overlay
+        // @trace spec:layered-tools-overlay, spec:overlay-mount-cache, spec:tools-overlay-fast-reuse
         // Opinionated configs on ramdisk — entrypoints symlink into ~/.config/
         ProfileMount {
             host_key: MountSource::ConfigOverlay,
@@ -739,13 +739,13 @@ mod tests {
         );
     }
 
-    // @trace spec:layered-tools-overlay, spec:podman-orchestration
+    // @trace spec:layered-tools-overlay, spec:overlay-mount-cache, spec:tools-overlay-fast-reuse, spec:podman-orchestration
     #[test]
     fn forge_profiles_have_tools_overlay_mount() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
         // Mounts: tools overlay + config overlay (both read-only) + container logs (RW) + tray socket (RW)
-        // @trace spec:proxy-container, spec:layered-tools-overlay, spec:podman-orchestration, spec:mcp-on-demand
+        // @trace spec:proxy-container, spec:layered-tools-overlay, spec:overlay-mount-cache, spec:tools-overlay-fast-reuse, spec:podman-orchestration, spec:mcp-on-demand
         assert_eq!(opencode.mounts.len(), 4);
         assert_eq!(claude.mounts.len(), 4);
         assert_eq!(opencode.mounts[0].container_path, "/home/forge/.tools");
@@ -923,7 +923,7 @@ mod tests {
         );
     }
 
-    // @trace spec:layered-tools-overlay
+    // @trace spec:layered-tools-overlay, spec:overlay-mount-cache, spec:tools-overlay-fast-reuse
     #[test]
     fn tools_overlay_expected_paths() {
         // These paths must match between:

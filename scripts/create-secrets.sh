@@ -121,9 +121,11 @@ if [[ -n "$GITHUB_TOKEN" ]]; then
     _info "Creating GitHub token podman secret..."
 
     # Remove old GitHub token secret if it exists (idempotent)
+    # @trace spec:ephemeral-secret-refresh
     "$PODMAN" secret rm tillandsias-github-token 2>/dev/null || true
 
     # Create the new secret
+    # @trace spec:ephemeral-secret-refresh
     if echo "$GITHUB_TOKEN" | "$PODMAN" secret create \
         --driver=file \
         tillandsias-github-token \

@@ -1,3 +1,19 @@
+---
+tags: [containers, images, podman, oci, lifecycle]
+languages: [bash]
+since: 2026-05-06
+last_verified: 2026-05-06
+sources:
+  - https://docs.podman.io/en/latest/markdown/podman-image.1.html
+  - https://github.com/opencontainers/image-spec
+  - https://docs.podman.io/en/latest/markdown/podman-storage.1.html
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # Tillandsias Container Image Lifecycle
 
 **Use when**: Understanding how images are built, stored, referenced, and cleaned up; debugging image-related issues; or designing image management workflows.
@@ -196,4 +212,3 @@ podman image tree tillandsias-forge:v0.1.260505.11
 - `cheatsheets/utils/podman-registries.md` — Short-name resolution and registries.conf configuration
 - `cheatsheets/utils/podman-secrets.md` — Credential mounting for containers
 - `cheatsheets/runtime/container-lifecycle.md` — Full container lifecycle (create → run → cleanup)
-

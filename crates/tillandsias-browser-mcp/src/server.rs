@@ -1,6 +1,6 @@
 //! Core MCP server implementation with JSON-RPC method dispatch.
 //!
-//! @trace spec:host-browser-mcp
+//! @trace spec:host-browser-mcp, spec:browser-daemon-tracking, spec:browser-tray-notifications
 //! @cheatsheet web/mcp.md
 
 use crate::framing::{RpcRequest, RpcResponse};
@@ -26,10 +26,12 @@ pub struct SessionState {
     pub session_id: u64,
     pub project_label: String,
     /// Semaphore limiting concurrent `tools/call` invocations.
+    /// @trace spec:browser-window-rate-limiting, spec:browser-debounce
     pub call_semaphore: Arc<Semaphore>,
 }
 
 /// The MCP server instance.
+/// @trace spec:browser-daemon-tracking, spec:browser-tray-notifications
 #[allow(dead_code)]
 pub struct BrowserMcpServer {
     config: McpServerConfig,
@@ -37,6 +39,7 @@ pub struct BrowserMcpServer {
 
 impl BrowserMcpServer {
     /// Create a new MCP server with the given config.
+    /// @trace spec:browser-daemon-tracking
     pub fn new(config: McpServerConfig) -> Self {
         Self { config }
     }
@@ -94,6 +97,7 @@ impl BrowserMcpServer {
     }
 
     /// Handle `tools/list` request (return all available tools).
+    /// @trace spec:browser-daemon-tracking, spec:browser-tray-notifications
     fn handle_tools_list(&self, request: &RpcRequest) -> RpcResponse {
         // @trace spec:host-browser-mcp
         let id = match request.id {

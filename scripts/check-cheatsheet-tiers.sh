@@ -251,9 +251,12 @@ if not quiet:
         for w in warnings:
             print(f"  WARN: {w}")
     if notes:
-        print(f"\nNotes ({len(notes)}):")
-        for n in notes:
-            print(f"  NOTE: {n}")
+        if os.environ.get("SHOW_NOTES") == "1":
+            print(f"\nNotes ({len(notes)}):")
+            for n in notes:
+                print(f"  NOTE: {n}")
+        else:
+            print(f"\nNotes: {len(notes)} suppressed (set SHOW_NOTES=1 to list)")
 
 if errors:
     print(f"\nErrors ({len(errors)}):")

@@ -1,3 +1,18 @@
+---
+tags: [secrets, security, ephemeral, ca, ssh, github-token]
+languages: [bash]
+since: 2026-05-06
+last_verified: 2026-05-06
+sources:
+  - https://www.redhat.com/en/blog/container-security-best-practices
+  - https://docs.podman.io/
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # Tillandsias Secrets Architecture: Ephemeral-First Security
 
 **Use when**: Understanding how secrets (CA certificates, GitHub tokens, SSH keys) flow through the Tillandsias ephemeral stack and are secured at each layer.

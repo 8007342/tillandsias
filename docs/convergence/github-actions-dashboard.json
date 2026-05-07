@@ -1,0 +1,12 @@
+{
+  "generated_at": "2026-05-07T01:39:27Z",
+  "title": "GitHub Actions Generated Only Dashboard",
+  "series_namespace": "github_actions",
+  "series_label": "GitHub Actions Generated Only",
+  "source_file": "target/convergence/github-actions-signature.jsonl",
+  "record_count": 0,
+  "sparkline_closed": "",
+  "sparkline_residual": "",
+  "latest": {},
+  "history": []
+}

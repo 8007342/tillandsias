@@ -133,6 +133,18 @@ cheatsheet_binding:
     re-validation; spec changes may invalidate cheatsheet assumptions.
 
   requirements:
+    - cheatsheet_frontmatter_required:
+        reason: >
+          Every cheatsheet MUST carry YAML frontmatter so the validator can
+          classify tier, authority, status, provenance, and lifecycle metadata
+          without relying on ad hoc filename heuristics.
+
+    - cheatsheet_tier_must_be_explicit_or_inferable:
+        reason: >
+          Tier is a measurable obligation, not optional decoration. A cheatsheet
+          may omit it only when the allowlist inference path is authoritative and
+          reproducible.
+
     - every_spec_must_reference_cheatsheet_entries:
         reason: >
           Specs must document the tools/languages/APIs they use.

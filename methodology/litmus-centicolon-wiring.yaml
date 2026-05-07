@@ -209,6 +209,7 @@ litmus_centicolon_wiring:
         "timestamp": "ISO8601",
         "version": "X.Y.Z.B",
         "source_commit": "git_sha",
+        "source_namespace": "local_development|github_actions",
         "ci_run_id": "github_run_id_or_local_timestamp",
 
         "litmus_tests_run": number,

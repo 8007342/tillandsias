@@ -15,11 +15,10 @@ specs:
   coverage_ratio: 33
   last_verified: '2026-05-03'
 - spec_id: appimage-build-pipeline
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deferred
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-06'
 - spec_id: artifact-detection
   status: active
   litmus_tests:
@@ -81,14 +80,10 @@ specs:
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: build-script-architecture
-  status: active
-  litmus_tests:
-  - litmus:build-cache-transparent
-  - litmus:build-clean-from-scratch-works
-  - litmus:ci-unchanged-behavior
-  - litmus:toolbox-isolation
-  coverage_ratio: 100
-  last_verified: '2026-05-04'
+  status: deferred
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-06'
 - spec_id: certificate-authority
   status: active
   litmus_tests:
@@ -132,17 +127,15 @@ specs:
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: cli-bash-mode
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deferred
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-06'
 - spec_id: cli-diagnostics
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deferred
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-06'
 - spec_id: cli-mode
   status: active
   litmus_tests:

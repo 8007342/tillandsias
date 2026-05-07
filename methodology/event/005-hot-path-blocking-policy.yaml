@@ -1,0 +1,90 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.005-hot-path-blocking-policy@v1
+status: triaged
+observed_at: "2026-05-06T00:00:00Z"
+reporter: "codex"
+summary: >
+  The methodology did not yet state a strong, measurable policy against
+  blocking in hot paths, even though Tillandsias' runtime model depends on
+  event-driven, yield-returning behavior for near-zero idle overhead.
+
+observed_signal:
+  description: >
+    The headless shutdown wait loop and tray/runtime discussion exposed a gap:
+    the repo needs an explicit distinction between hot-path code, where blocking
+    is prohibited, and bounded bootstrap/shutdown boundaries, where a blocking
+    wait may be justified if it is traceable and measurable. Without that rule,
+    cleanup work can accidentally normalize busy-waiting, wrapper polling, or
+    other idle-noop loops that increase CPU usage and blur centiColon scoring.
+  signal_type: "methodology"
+
+expected_model:
+  description: >
+    The methodology should say that steady-state runtime paths must be
+    event-driven and yield-returning, that blocking calls are forbidden in the
+    99%+ production path, and that any exception must be explicitly named,
+    bounded, and backed by spec/litmus justification.
+  source_refs:
+    - methodology/convergence.yaml
+    - methodology/litmus.yaml
+    - cheatsheets/architecture/event-driven-basics.md
+    - cheatsheets/runtime/event-driven-monitoring.md
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - hot_path_blocking_is_forbidden
+    - hot_path_code_must_be_event_driven
+    - shutdown_only_waits_must_be_documented
+  spec_requirement_ids:
+    - spec:linux-native-portable-executable
+    - spec:headless-mode
+    - spec:tray-app
+  litmus_ids:
+    - litmus:signal_handling
+    - litmus:tray-contract
+  cheatsheet_refs:
+    - cheatsheets/architecture/event-driven-basics.md
+    - cheatsheets/runtime/event-driven-monitoring.md
+
+affected_artifacts:
+  specs: []
+  methodology_files:
+    - methodology/convergence.yaml
+    - methodology/event/index.yaml
+  code_paths:
+    - crates/tillandsias-headless/src/main.rs
+  scripts: []
+  dashboards: []
+
+evidence_refs:
+  commits: []
+  files:
+    - crates/tillandsias-headless/src/main.rs
+    - methodology/convergence.yaml
+    - cheatsheets/architecture/event-driven-basics.md
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: medium
+provisional_classification: missing_spec_requirement
+
+next_distillation_step:
+  owner: "codex"
+  action: >
+    Keep the runtime wait loops explicitly classified as non-hot-path
+    shutdown/bootstrap boundaries, and surface the policy in cheatsheets that
+    teach event-driven architecture and runtime monitoring.
+  target_artifact: "methodology"
+
+closure_criteria:
+  - learned_distinction_preserved_in_durable_artifact
+  - evidence_refs_are_queryable
+  - proximity_or_evidence_score_updated_if_applicable
+  - old_false_claim_tombstoned_or_superseded_if_applicable
+
+distilled_into:
+  - methodology/convergence.yaml:hot_path_nonblocking_policy
+  - cheatsheets/architecture/event-driven-basics.md:common_pitfalls
+  - cheatsheets/runtime/event-driven-monitoring.md:hot_path_policy

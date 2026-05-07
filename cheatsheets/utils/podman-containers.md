@@ -1,3 +1,18 @@
+---
+tags: [podman, containers, images, cli, runtime]
+languages: [bash]
+since: 2026-05-06
+last_verified: 2026-05-06
+sources:
+  - https://docs.podman.io/
+  - https://podman.io/
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # Podman
 
 @trace spec:agent-source-of-truth

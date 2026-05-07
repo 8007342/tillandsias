@@ -1,0 +1,89 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.004-signal-handling-harness-tombstone@v1
+status: distilled
+observed_at: "2026-05-06T00:00:00Z"
+reporter: "codex"
+summary: >
+  The legacy signal-handling integration tests hang because they signal the
+  cargo wrapper instead of the compiled binary and leave stdout/stderr piped
+  without a reader.
+
+observed_signal:
+  description: >
+    Running `cargo test -p tillandsias-headless --features tray` consistently
+    reached `tests/signal_handling.rs` and then stalled on
+    `test_signal_handling_sigterm`, `test_signal_handling_timeout_pattern`, and
+    `test_signal_handling_sigint` for more than 60 seconds. The harness spawns
+    `cargo run -p tillandsias-headless -- --headless`, then sends SIGTERM/SIGINT
+    to the cargo process ID. That observes the wrapper, not the application
+    lifecycle, and is not a stable signal for the repo's metrics.
+  signal_type: "litmus"
+
+expected_model:
+  description: >
+    Signal litmus should exercise the compiled binary directly or be replaced by
+    a smaller deterministic unit test around the signal wait loop. The test
+    should measure the application's shutdown path, not cargo's wrapper
+    semantics.
+  source_refs:
+    - crates/tillandsias-headless/src/main.rs
+    - cheatsheets/test/cargo-test.md
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - litmus_tests_must_target_the_application_not_the_build_wrapper
+    - integration_harnesses_must_not_hang_the_metric_loop
+    - flakes_must_be_tombstoned_or_rewritten_before_closure
+  spec_requirement_ids:
+    - signal-handling:headless-runtime-shutdown
+    - signal-handling:binary-level-observability
+  litmus_ids:
+    - signal-handling:wrapper-vs-binary-semantics
+    - signal-handling:bounded-shutdown-time
+  cheatsheet_refs:
+    - cheatsheets/test/cargo-test.md
+
+affected_artifacts:
+  specs:
+    - openspec/specs/signal-handling/spec.md
+  methodology_files:
+    - methodology/event/index.yaml
+    - methodology/litmus.yaml
+  code_paths:
+    - crates/tillandsias-headless/tests/signal_handling.rs
+  scripts: []
+  dashboards: []
+
+evidence_refs:
+  commits: []
+  files:
+    - crates/tillandsias-headless/tests/signal_handling.rs
+    - crates/tillandsias-headless/src/main.rs
+    - cheatsheets/test/cargo-test.md
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: low
+provisional_classification: methodology_claim_unproven
+
+next_distillation_step:
+  owner: "codex"
+  action: >
+    Replace the cargo-run harness with a direct-binary shutdown litmus, or
+    leave the old file tombstoned and create a narrower unit/integration test
+    that exercises `wait_for_shutdown_signal` / `graceful_shutdown_async`
+    without wrapper interference.
+  target_artifact: "test"
+
+closure_criteria:
+  - learned_distinction_preserved_in_durable_artifact
+  - evidence_refs_are_queryable
+  - proximity_or_evidence_score_updated_if_applicable
+  - old_false_claim_tombstoned_or_superseded_if_applicable
+
+distilled_into:
+  - crates/tillandsias-headless/src/main.rs:wait_for_shutdown_signal
+  - crates/tillandsias-headless/tests/signal_handling.rs
+  - scripts/local-ci.sh

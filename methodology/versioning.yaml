@@ -260,6 +260,8 @@ release_snapshot_discipline:
     annotated_source_archive: "target/convergence/annotated-source-<version>.zip"
     markdown_dashboard: "docs/convergence/centicolon-dashboard.md"
     machine_dashboard: "docs/convergence/centicolon-dashboard.json"
+    github_actions_markdown_dashboard: "docs/convergence/github-actions-dashboard.md"
+    github_actions_machine_dashboard: "docs/convergence/github-actions-dashboard.json"
     projection_ref: "release/<version>-centicolon"
     summary: "target/convergence/summary.md"
 

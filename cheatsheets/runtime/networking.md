@@ -1,3 +1,19 @@
+---
+tags: [networking, enclave, proxy, git, inference, isolation]
+languages: [bash]
+since: 2026-05-06
+last_verified: 2026-05-06
+sources:
+  - https://github.com/8007342/tillandsias/blob/main/openspec/specs/enclave-network/spec.md
+  - https://github.com/8007342/tillandsias/blob/main/openspec/specs/proxy-container/spec.md
+  - https://squid-cache.org/Doc/config/
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # Enclave Networking
 
 @trace spec:agent-source-of-truth

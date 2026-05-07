@@ -30,16 +30,20 @@ The tray application SHALL provide clear visual feedback during first-launch set
 - **AND** the handler returns early without attempting a build
 - **AND** no silent failure occurs
 
-### Requirement: Cross-platform tray behavior
+### Requirement: Native tray behavior by platform wrapper
 - **ID**: tray-app.platform.cross-platform-native-tray@v1
 - **Modality**: MUST
 - **Measurable**: true
 - **Invariants**: [tray-app.invariant.linux-dbus-appindicator, tray-app.invariant.macos-nsstatusitem, tray-app.invariant.windows-systray]
-The tray application SHALL function correctly on Linux, macOS, and Windows using Tauri v2's native tray support.
+The tray application SHALL function correctly on Linux, macOS, and Windows through platform-native wrappers that converge on the same command surface.
 
 #### Scenario: Linux tray
 - **WHEN** the application runs on Linux
-- **THEN** the tray icon integrates with the desktop environment via DBus StatusNotifierItem (libayatana-appindicator)
+- **THEN** the tray icon integrates with the desktop environment via DBus StatusNotifierItem / AppIndicator
+
+#### Scenario: Linux tray command surface
+- **WHEN** the Linux tray menu dispatches an action
+- **THEN** it invokes the same headless command surface used by the macOS and Windows wrappers
 
 #### Scenario: macOS tray
 - **WHEN** the application runs on macOS
@@ -117,7 +121,7 @@ Clicking "Attach Here" SHALL dispatch to the web-session flow when `AgentConfig:
 
 ### Invariant: Linux uses DBus AppIndicator
 - **ID**: tray-app.invariant.linux-dbus-appindicator
-- **Expression**: `platform == linux => tray_icon_uses DBus_StatusNotifierItem`
+- **Expression**: `platform == linux => tray_icon_uses DBus_StatusNotifierItem_AppIndicator`
 - **Measurable**: true
 
 ### Invariant: macOS uses NSStatusItem
@@ -180,6 +184,7 @@ See `openspec/litmus-bindings.yaml` for full binding definitions.
 
 - `cheatsheets/runtime/systemd-socket-activation.md` — Systemd Socket Activation reference and patterns
 - `cheatsheets/utils/gh-cli.md` — Gh Cli reference and patterns
+- `cheatsheets/runtime/statusnotifier-tray.md` — Linux tray protocol contract and menu shape
 
 ## Observability
 

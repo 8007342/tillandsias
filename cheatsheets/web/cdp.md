@@ -1,3 +1,18 @@
+---
+tags: [cdp, chromium, browser-automation, websocket, debugging]
+languages: [bash, javascript, typescript]
+since: 2026-05-06
+last_verified: 2026-05-06
+sources:
+  - https://chromedevtools.github.io/devtools-protocol/
+  - https://chromedevtools.github.io/devtools-protocol/1-3/
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # Chrome DevTools Protocol (CDP) Quick Reference
 
 **Use when**: Building browser automation, remote debugging, or headless browser control via CDP.

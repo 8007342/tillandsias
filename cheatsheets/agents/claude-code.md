@@ -1,3 +1,19 @@
+---
+tags: [claude, agent, cli, code-review, orchestration]
+languages: [bash]
+since: 2026-05-06
+last_verified: 2026-05-06
+sources:
+  - https://claude.ai/code
+  - https://github.com/anthropic-ai/claude-code
+  - https://docs.anthropic.com/claude/reference/getting-started-with-the-api
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # Claude Code
 
 @trace spec:agent-source-of-truth

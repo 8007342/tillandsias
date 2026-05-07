@@ -1,4 +1,4 @@
-// @trace spec:forge-forward-compat
+// @trace spec:forge-forward-compat, spec:logging-levels, spec:runtime-logging
 
 use std::path::{Path, PathBuf};
 

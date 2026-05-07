@@ -1,0 +1,101 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.008-active-contract-trace-sweep@v1
+status: triaged
+observed_at: "2026-05-06T00:00:00Z"
+reporter: "codex"
+summary: >
+  The repo still has a small set of active specs with no trace annotations in
+  code even though their implementation seams are present. This is live-contract
+  drift, not a retired behavior problem.
+
+observed_signal:
+  description: >
+    The drift checker reports 16 active specs with no @trace annotations in
+    code. Some are obvious implementation owners (logging, credential health,
+    browser MCP, init incremental builds, overlay cache). Others may need a
+    fresh spec/litmus pair if the implementation has moved too far from the old
+    contract.
+  signal_type: "ci"
+
+expected_model:
+  description: >
+    Active contracts should have at least one trace in the owning code path,
+    and those traces should point at the live implementation seam rather than a
+    documentation stub. If the live seam no longer exists, the spec needs
+    distillation or retirement, not a fake trace.
+  source_refs:
+    - openspec/specs/runtime-logging/spec.md
+    - openspec/specs/logging-levels/spec.md
+    - openspec/specs/cli-diagnostics/spec.md
+    - openspec/specs/github-credential-health/spec.md
+    - openspec/specs/overlay-mount-cache/spec.md
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - active_contracts_must_have_code_traces
+    - stale_specs_must_be_distilled_or_retired
+    - trace_sweep_should_target_live_implementation_seams
+  spec_requirement_ids:
+    - cli-diagnostics
+    - runtime-logging
+    - logging-levels
+    - github-credential-health
+    - overlay-mount-cache
+  litmus_ids:
+    - litmus:credential-isolation
+    - litmus:browser-ephemeral
+    - litmus:toolbox-isolation
+  cheatsheet_refs:
+    - cheatsheets/runtime/logging-levels.md
+    - cheatsheets/runtime/external-logs.md
+    - cheatsheets/utils/podman.md
+
+affected_artifacts:
+  specs:
+    - openspec/specs/cli-diagnostics/spec.md
+    - openspec/specs/github-credential-health/spec.md
+    - openspec/specs/logging-levels/spec.md
+    - openspec/specs/runtime-logging/spec.md
+  methodology_files:
+    - methodology/event/index.yaml
+    - methodology/convergence.yaml
+  code_paths:
+    - crates/tillandsias-router-sidecar/src/main.rs
+    - crates/tillandsias-router-sidecar/src/http.rs
+    - crates/tillandsias-browser-mcp/src/server.rs
+    - crates/tillandsias-podman/src/client.rs
+    - crates/tillandsias-core/src/tools.rs
+  scripts: []
+  dashboards:
+    - docs/convergence/centicolon-dashboard.md
+    - docs/convergence/centicolon-dashboard.json
+
+evidence_refs:
+  commits: []
+  files:
+    - crates/tillandsias-router-sidecar/src/main.rs
+    - crates/tillandsias-router-sidecar/src/http.rs
+    - crates/tillandsias-browser-mcp/src/server.rs
+    - crates/tillandsias-podman/src/client.rs
+    - crates/tillandsias-core/src/tools.rs
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: medium
+provisional_classification: trace_coverage_gap
+
+next_distillation_step:
+  owner: "codex"
+  action: >
+    Add traces at the live implementation seams for the active specs that are
+    still represented in code, then re-run drift detection to identify the
+    remainder that need spec or litmus repair.
+  target_artifact: "code"
+
+closure_criteria:
+  - learned_distinction_preserved_in_durable_artifact
+  - evidence_refs_are_queryable
+  - proximity_or_evidence_score_updated_if_applicable
+  - old_false_claim_tombstoned_or_superseded_if_applicable

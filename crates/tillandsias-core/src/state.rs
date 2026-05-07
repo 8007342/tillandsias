@@ -63,7 +63,7 @@ pub enum ContainerType {
     Inference,
     /// Chromium browser container for safe/debug browsing.
     /// Named `tillandsias-chromium-<project>-<type>` — no genus allocation.
-    /// @trace spec:browser-isolation-core
+    /// @trace spec:browser-isolation-core, spec:chromium-safe-variant
     Browser,
 }
 
@@ -263,20 +263,25 @@ pub struct TrayState {
     pub forge_available: bool,
 
     /// Track browser launch times for debouncing (prevent rapid successive spawns).
+    /// @trace spec:browser-debounce, spec:browser-window-rate-limiting
     /// Key: project name, Value: last launch Instant.
     pub browser_last_launch: std::collections::HashMap<String, std::time::Instant>,
 
     /// Track debug browser PIDs (one per project, for "open_debug_window").
+    /// @trace spec:browser-daemon-tracking, spec:browser-tray-notifications
     pub debug_browser_pid: std::collections::HashMap<String, u32>,
 
-    /// @trace spec:simplified-tray-ux
+    /// @trace spec:simplified-tray-ux, spec:github-credential-health
     /// Last known GitHub health status (true = reachable, false = unreachable or unknown).
     pub github_healthy: bool,
     /// When the GitHub health was last checked (None = never checked).
+    /// @trace spec:github-credential-health
     pub github_last_check: Option<Instant>,
     /// Failed retry count (for exponential backoff).
+    /// @trace spec:github-credential-health
     pub github_retry_count: u32,
     /// Next time to retry GitHub connectivity (with exponential backoff).
+    /// @trace spec:github-credential-health
     pub github_next_retry: Option<Instant>,
 }
 
@@ -297,7 +302,7 @@ impl TrayState {
             forge_available: false,
             browser_last_launch: std::collections::HashMap::new(),
             debug_browser_pid: std::collections::HashMap::new(),
-            // @trace spec:simplified-tray-ux
+            // @trace spec:simplified-tray-ux, spec:browser-debounce, spec:browser-window-rate-limiting, spec:browser-daemon-tracking, spec:browser-tray-notifications
             github_healthy: false,
             github_last_check: None,
             github_retry_count: 0,

@@ -1,3 +1,18 @@
+---
+tags: [runtime, limitations, environment, isolation, constraints]
+languages: [bash]
+since: 2026-05-06
+last_verified: 2026-05-06
+sources:
+  - https://github.com/8007342/tillandsias/blob/main/openspec/changes/agent-source-of-truth/design.md
+  - https://github.com/containers/podman/docs
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # Runtime Limitations Reporting
 
 @trace spec:agent-source-of-truth

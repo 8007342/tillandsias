@@ -1,10 +1,11 @@
 <!-- @trace spec:cli-diagnostics -->
+<!-- @tombstone deferred:linux-native-portable-executable — retired Tauri-era log-tail CLI path. -->
 
 # cli-diagnostics Specification
 
 ## Status
 
-active
+deferred
 
 ## Purpose
 

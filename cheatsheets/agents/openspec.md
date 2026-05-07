@@ -1,3 +1,17 @@
+---
+tags: [openspec, agent, cli, specs, workflow]
+languages: [bash]
+since: 2026-05-06
+last_verified: 2026-05-06
+sources:
+  - https://github.com/8007342/tillandsias/tree/main/openspec
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # OpenSpec Workflow
 
 @trace spec:agent-source-of-truth

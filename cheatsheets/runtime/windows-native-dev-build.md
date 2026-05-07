@@ -9,6 +9,10 @@ sources:
   - https://docs.microsoft.com/en-us/windows/wsl/install
 authority: high
 status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
 ---
 
 # Windows native dev build

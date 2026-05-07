@@ -1,3 +1,19 @@
+---
+tags: [podman, registries, images, short-name, configuration]
+languages: [bash]
+since: 2026-05-06
+last_verified: 2026-05-06
+sources:
+  - https://docs.podman.io/en/latest/markdown/podman.1.html#registries-configuration-file
+  - https://github.com/containers/image/blob/main/docs/containers-registries.conf.5.md
+  - https://docs.podman.io/en/latest/markdown/podman.1.html#short-name-aliasing
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # Podman Registries Configuration
 
 **Use when**: Configuring which registries podman searches for image names, handling short-name resolution, or managing local vs. remote images.
@@ -113,4 +129,3 @@ podman pull docker.io/library/squid:6.1
 2. **registries.conf only affects pull/search** — `podman run` with a local image works regardless of config
 3. **Fully-qualified names bypass short-name resolution** — `docker.io/library/squid:6.1` doesn't need registries.conf, works directly
 4. **Empty unqualified-search-registries disables all short-name searches** — use this for Tillandsias to prevent accidental external pulls
-

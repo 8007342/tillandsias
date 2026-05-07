@@ -1,0 +1,59 @@
+# @trace spec:observability-convergence, spec:ci-release
+name: GitHub Actions Convergence
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-actions-convergence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  convergence:
+    name: Hosted convergence metrics
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            jq \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Hosted convergence pass
+        run: scripts/github-actions-convergence.sh
+
+      - name: Upload convergence artifacts
+        if: always()
+        uses: actions/upload-artifact@5071fdd32b17b4f3c21d4d1b5adfa4c29b73d4b2 # v4
+        with:
+          name: github-actions-convergence
+          if-no-files-found: error
+          path: |
+            docs/convergence/github-actions-dashboard.md
+            docs/convergence/github-actions-dashboard.json
+            target/convergence/github-actions-signature.jsonl
+            target/convergence/github-actions-delta.json
+            target/convergence/github-actions-evidence-bundle.json
+            target/convergence/github-actions-summary.md

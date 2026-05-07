@@ -133,6 +133,7 @@ evidence_bundle:
     - litmus_run_ids_and_results
     - trace_coverage_summary
     - ci_run_id
+    - source_namespace
     - centicolon_signature_hash
     - centicolon_projection_ref
     - centicolon_dashboard_hash
@@ -171,6 +172,26 @@ minimax_convergence_strategy:
   anti_pattern: >
     Raising average convergence by improving low-risk obligations while a
     high-risk maximum residual remains unresolved.
+
+hot_path_nonblocking_policy:
+  description: >
+    Steady-state runtime paths MUST remain event-driven and yield-returning.
+    Blocking work in the hot path is a correctness violation because it raises
+    idle CPU, hides backpressure, and weakens the architecture's monotonic
+    convergence signal.
+  rule: >
+    Blocking calls are forbidden in the 99%+ production runtime path: tray event
+    dispatch, container orchestration, request handling, and other steady-state
+    loops. A blocking wait is only acceptable in an explicitly named bootstrap or
+    shutdown boundary when the spec and litmus tests justify the exception.
+  enforcement:
+    - hot_path_code_must_use_event_driven_or_yielding_primitives
+    - blocking_loops_require_named_non_hot_path_exception
+    - shutdown_only_waits_must_be_documented_as_non_hot_path
+  scoring_effect:
+    - hot_path_blocking: "severe negative CentiColons; must be refactored or tombstoned"
+    - justified_bootstrap_or_shutdown_wait: "allowed only with explicit spec trace and litmus coverage"
+    - polling_for_idle_state: "forbidden unless it is a bounded one-shot check with an explicit exception"
 
 implementation_phases:
   description: >

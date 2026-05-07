@@ -1,9 +1,10 @@
 <!-- @trace spec:cli-bash-mode -->
+<!-- @tombstone deferred:linux-native-portable-executable — retired Tauri-era troubleshooting shell path. -->
 # cli-bash-mode Specification
 
 ## Status
 
-active
+deferred
 
 ## Purpose
 TBD - created by archiving change iconography-gh-auth-bash-mode. Update Purpose after archive.

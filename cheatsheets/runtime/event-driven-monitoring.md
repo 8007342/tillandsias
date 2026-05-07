@@ -165,6 +165,7 @@ Merges two event streams (podman + systemd) into one JSON feed. In production, r
 - **Mixing old and new APIs** — Docker v1.40 added better filters; older versions have limited event types. Use Podman or modern Docker with version checks.
 - **Timezone issues in timestamps** — podman timestamps are Unix epoch (seconds since 1970), systemd has ISO-8601. Convert consistently in your aggregation layer.
 - **Running out of event buffer** — if the event consumer is too slow, podman may drop events. Critical monitoring should use a dedicated journal sink (log to a file, not tail from socket).
+- **Treating the hot path as a polling loop** — always-on runtime code must not sit in `while true { sleep(...) }` style loops. If the path is steady-state or user-visible, it should be event-driven and yield-returning; polling is only for bounded bootstrap or shutdown checks with explicit justification.
 
 ## Comparison: events vs. polling
 
@@ -176,7 +177,7 @@ Merges two event streams (podman + systemd) into one JSON feed. In production, r
 | Complexity | Simple loop | Async select/epoll |
 | Scalability | ~10 sources max | Unlimited (kernel multiplexing) |
 
-**Conclusion:** Always event-driven. Polling is acceptable only for one-shot checks (cron jobs, CI steps) with explicit acceptance of the latency.
+**Conclusion:** Always event-driven. Polling is acceptable only for one-shot checks (cron jobs, CI steps) or bounded bootstrap/shutdown transitions with explicit acceptance of the tradeoff and a spec-backed exception.
 
 ## See also
 

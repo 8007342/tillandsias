@@ -8,6 +8,10 @@ sources:
   - https://en.wikipedia.org/wiki/Cache_(computing)#Replacement_policies
 authority: high
 status: design
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
 ---
 
 # Cheatsheet Metrics System — Phase 4 Design

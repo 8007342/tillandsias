@@ -106,6 +106,76 @@ proximity:
       machine_summary: "docs/convergence/centicolon-dashboard.json"
       per_release_summary: "target/convergence/summary.md"
       canonical_signature: "target/convergence/centicolon-signature.jsonl"
+      github_actions_dashboard: "docs/convergence/github-actions-dashboard.md"
+      github_actions_summary: "docs/convergence/github-actions-dashboard.json"
+      github_actions_signature: "target/convergence/github-actions-signature.jsonl"
+      github_actions_delta: "target/convergence/github-actions-delta.json"
+      github_actions_evidence_bundle: "target/convergence/github-actions-evidence-bundle.json"
+    renderer:
+      command: "scripts/update-convergence-dashboard.sh"
+      inputs:
+        - "target/convergence/centicolon-signature.jsonl"
+      outputs:
+        - "docs/convergence/centicolon-dashboard.md"
+        - "docs/convergence/centicolon-dashboard.json"
+        - "target/convergence/summary.md"
+    cadence:
+      local:
+        rule: >
+          The signature writer SHOULD run after every local CI invocation that
+          computes convergence metrics, including pre-release dry runs.
+        pre_commit: >
+          Pre-commit hooks MAY refresh the dashboard only when the canonical
+          signature file changes or when the commit touches convergence logic.
+      main_branch:
+        rule: >
+          Main-branch merge hooks SHOULD refresh the dashboard and append a
+          signed record for the merged state.
+        release:
+          rule: >
+            Release tags MUST refresh the dashboard, evidence bundle, and
+            machine summary so published artifacts reflect the released commit.
+      ci_cost_policy:
+        rule: >
+          Expensive litmus or full rebuilds SHOULD remain local-first; cloud
+          runners MAY publish the already-computed artifacts but SHOULD avoid
+          repeating the full convergence pass unless validating a release.
+    history_compaction:
+      raw_window:
+        preserve_last_n_records: 30
+        rule: >
+          The raw JSONL signature log SHOULD preserve the most recent 30
+          records verbatim for debugging and auditability.
+      rollup_window:
+        preserve_last_n_buckets: 20
+        bucket_span: "release or 7-day bucket, whichever is larger"
+        rule: >
+          Records older than the raw window MAY be compacted into rollup
+          buckets. Each bucket retains min/max/last residuals, mean percent
+          closed, worst residual reason, source commit range, and record count.
+      tombstone_rule: >
+        Compaction MUST NOT delete history without leaving a tombstone entry in
+        the JSONL or a rollup bucket reference in the dashboard JSON.
+      visual_rule: >
+        The dashboard SHOULD show the newest raw rows first, then compacted
+        buckets underneath with a distinct glyph or label so readers can tell
+        raw evidence from compressed history.
+    source_namespaces:
+      local_development:
+        description: >
+          Local convergence runs performed by the host developer environment.
+          These are the authoritative high-fidelity measurements.
+      github_actions:
+        description: >
+          GitHub Actions generated-only measurements collected from committed
+          code on the hosted runner. These provide an independent accountability
+          view and MUST remain separate from local records. The hosted series
+          publishes its own dashboard and artifacts, then serves as a committed-
+          code cross-check against the local development series.
+      comparison_rule: >
+        Dashboards MAY compare local and GitHub Actions series, but the source
+        namespaces MUST remain distinct so one series does not overwrite the
+        other or claim the other's evidence.
     retention:
       last_n_releases_default: 10
       rule: >
@@ -163,6 +233,20 @@ proximity:
       - "Scope changes and denominator changes"
       - "Minimax next targets"
       - "Unknown events opened or closed"
+    visual_affordances:
+      trend_strip: >
+        A sparkline or block-bar strip SHOULD summarize percent_closed and
+        residual trend across the last N releases, oldest to newest, so the
+        direction of travel is visible at a glance.
+      latest_pin: >
+        The latest release SHOULD appear first and be visually emphasized with a
+        marker or stronger glyph weight.
+      historical_rows: >
+        Each release row MAY include a compact per-release trend glyph and a
+        delta against the previous record.
+      renderer_scope: >
+        Markdown tables are the canonical human view; GitHub-compatible HTML is
+        allowed if it improves scanability without requiring JavaScript.
     minimax_next_targets:
       rule: >
         The dashboard MUST list the current top residual obligations by worst-case

@@ -8,6 +8,10 @@ sources:
   - https://docs.podman.io/en/stable/markdown/podman-run.1.html
 authority: high
 status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
 ---
 
 # External logs — cross-container observability

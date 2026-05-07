@@ -1,3 +1,18 @@
+---
+tags: [logging, tracing, runtime, observability, rust]
+languages: [bash, rust]
+since: 2026-05-06
+last_verified: 2026-05-06
+sources:
+  - https://docs.rs/tracing/latest/tracing/#levels
+  - https://docs.rs/tracing-subscriber/latest/tracing_subscriber/#filtering-spans-and-events
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # Tillandsias Logging Levels and Configuration
 
 **Use when**: Configuring log verbosity, enabling accountability windows, or troubleshooting application behavior.

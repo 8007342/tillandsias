@@ -1,8 +1,10 @@
 # appimage-build-pipeline Specification
 
+<!-- @tombstone deferred:linux-native-portable-executable — AppImage build pipeline removed in favor of the current portable build path. -->
+
 ## Status
 
-status: active
+status: deferred
 
 ## Purpose
 TBD - created by archiving change appimage-builder-source-slim. Update Purpose after archive.

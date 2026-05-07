@@ -1,0 +1,86 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.006-cheatsheet-frontmatter-normalization-gap@v1
+status: triaged
+observed_at: "2026-05-06T00:00:00Z"
+reporter: "codex"
+summary: >
+  A non-trivial subset of cheatsheets still lacks YAML frontmatter, which
+  keeps strict tier validation noisy and weakens provenance, status, and tier
+  accounting for the docs that most often feed implementation work.
+
+observed_signal:
+  description: >
+    `scripts/check-cheatsheet-tiers.sh --strict` reports a cluster of
+    "no YAML frontmatter" warnings and a smaller set of unset tier warnings.
+    These warnings are not about content quality alone; they prevent the repo
+    from treating cheatsheets as measurable, queryable cache entries with
+    explicit lifecycle metadata.
+  signal_type: "ci"
+
+expected_model:
+  description: >
+    Every cheatsheet should carry frontmatter that makes its lifecycle and
+    provenance machine-readable: tags, language scope, verification dates,
+    authority, status, and a tier that can be validated or inferred. Missing
+    frontmatter should be treated as an actionable documentation debt bucket,
+    not an unclassified warning cloud.
+  source_refs:
+    - methodology/cheatsheets.yaml
+    - methodology/spec-system.yaml
+    - cheatsheets/runtime/cheatsheet-frontmatter-spec.md
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - cheatsheet_frontmatter_must_be_machine_readable
+    - cheatsheet_tier_and_provenance_must_be_explicit_or_inferable
+    - strict_cheatsheet_validation_must_surface_metadata_debt
+  spec_requirement_ids:
+    - cheatsheets-license-tiered:frontmatter
+  litmus_ids:
+    - cheatsheet-tiers:frontmatter-present
+    - cheatsheet-tiers:tier-explicit-or-inferable
+  cheatsheet_refs:
+    - cheatsheets/runtime/cheatsheet-frontmatter-spec.md
+    - cheatsheets/observability/cheatsheet-metrics.md
+
+affected_artifacts:
+  specs:
+    - openspec/specs/cheatsheets-license-tiered/spec.md
+  methodology_files:
+    - methodology/cheatsheets.yaml
+    - methodology/event/index.yaml
+    - methodology/proximity.yaml
+  code_paths: []
+  scripts:
+    - scripts/check-cheatsheet-tiers.sh
+  dashboards:
+    - docs/convergence/centicolon-dashboard.md
+    - docs/convergence/centicolon-dashboard.json
+
+evidence_refs:
+  commits: []
+  files:
+    - scripts/check-cheatsheet-tiers.sh
+    - cheatsheets/runtime/cheatsheet-frontmatter-spec.md
+    - methodology/cheatsheets.yaml
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: medium
+provisional_classification: missing_documentation_metadata
+
+next_distillation_step:
+  owner: "codex"
+  action: >
+    Normalize missing-frontmatter cheatsheets to the shared metadata contract,
+    then tighten the validator so tier and provenance debt stays visible instead
+    of being silently tolerated.
+  target_artifact: "cheatsheets"
+
+closure_criteria:
+  - learned_distinction_preserved_in_durable_artifact
+  - evidence_refs_are_queryable
+  - proximity_or_evidence_score_updated_if_applicable
+  - old_false_claim_tombstoned_or_superseded_if_applicable

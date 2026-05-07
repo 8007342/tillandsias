@@ -199,13 +199,13 @@ _remove_stale_image_tags() {
 
 # Clean up old hash files before any freshness shortcut. Stale hashes carry
 # over across version bumps and create false "up to date" results.
-# @trace spec:forge-staleness
+# @trace spec:forge-staleness, spec:init-incremental-builds
 _remove_stale_hashes
 _remove_stale_image_tags
 
 _compute_hash() {
     # Hash Containerfile and related source files in the image directory.
-    # @trace spec:user-runtime-lifecycle
+    # @trace spec:user-runtime-lifecycle, spec:init-incremental-builds
     local image_dir="$1"
     local files=()
 
@@ -234,6 +234,7 @@ if [[ "$FLAG_FORCE" == false ]] && [[ -f "$HASH_FILE" ]]; then
     LAST_HASH="$(cat "$HASH_FILE")"
     if [[ "$CURRENT_HASH" == "$LAST_HASH" ]]; then
         # Verify the image actually exists in podman
+        # @trace spec:init-incremental-builds
         if "$PODMAN" image exists "$IMAGE_TAG" 2>/dev/null; then
             _info "Image ${BOLD}${IMAGE_TAG}${NC} is up to date (sources unchanged)"
             exit 0
@@ -250,13 +251,13 @@ fi
 # ---------------------------------------------------------------------------
 # Step 2: Build image (pure podman + cache mounting)
 # ---------------------------------------------------------------------------
-# @trace spec:user-runtime-lifecycle, spec:podman-orchestration
+# @trace spec:user-runtime-lifecycle, spec:podman-orchestration, spec:init-incremental-builds
 BUILD_START="$(date +%s)"
 
 _step "Building ${BOLD}${IMAGE_TAG}${NC} via podman build (Containerfile)..."
 
 # Detect distro from Containerfile for cache mounting
-# @trace spec:user-runtime-lifecycle
+# @trace spec:user-runtime-lifecycle, spec:init-incremental-builds
 _detect_distro() {
     local containerfile="$1"
     if grep -q "^FROM.*fedora" "$containerfile"; then
@@ -274,7 +275,7 @@ DISTRO="$(_detect_distro "$CONTAINERFILE")"
 _info "Detected base distro: ${BOLD}${DISTRO}${NC}"
 
 # Package-manager caches are intentionally not persisted by build scripts.
-# @trace spec:user-runtime-lifecycle
+# @trace spec:user-runtime-lifecycle, spec:init-incremental-builds
 CACHE_MOUNT_ARGS=()
 PACKAGE_CACHE="$HOME/.cache/tillandsias/packages"
 if [[ -n "$HOME" ]]; then
@@ -290,7 +291,7 @@ fi
 
 # Image builds do NOT go through the proxy — SSL bump requires CA trust
 # that build containers don't have. Proxy is for runtime containers only.
-# @trace spec:user-runtime-lifecycle
+# @trace spec:user-runtime-lifecycle, spec:init-incremental-builds
 
 BUILD_LOG="$(mktemp "${TMPDIR:-/tmp}/tillandsias-build-image.XXXXXX.log")"
 trap 'rm -f "$BUILD_LOG"' EXIT
@@ -323,8 +324,12 @@ fi
 # Remove :latest tag if it exists and differs from IMAGE_TAG
 LATEST_TAG="tillandsias-${IMAGE_NAME}:latest"
 if [[ "$IMAGE_TAG" != "$LATEST_TAG" ]]; then
-    _info "  Removing ${LATEST_TAG} tag if present..."
-    "$PODMAN" rmi "$LATEST_TAG" 2>/dev/null || true
+    _verbose_info "Removing ${LATEST_TAG} tag if present..."
+    if _verbose_enabled; then
+        "$PODMAN" rmi "$LATEST_TAG" || true
+    else
+        "$PODMAN" rmi "$LATEST_TAG" >/dev/null 2>&1 || true
+    fi
 fi
 
     # Verify the image exists — retry briefly because podman storage may need
@@ -350,6 +355,7 @@ fi
 
 # ---------------------------------------------------------------------------
 # Step 5: Save hash for staleness detection
+# @trace spec:init-incremental-builds
 # ---------------------------------------------------------------------------
 echo "$CURRENT_HASH" > "$HASH_FILE"
 

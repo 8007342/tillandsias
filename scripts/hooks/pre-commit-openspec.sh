@@ -92,6 +92,17 @@ zero_trace_check() {
         [[ -d "$spec_dir" ]] || continue
         local spec_name
         spec_name="$(basename "$spec_dir")"
+        local spec_file="$spec_dir/spec.md"
+
+        # Deferred or obsolete specs are retired contracts. They remain in the
+        # tree for traceability but are excluded from active zero-trace scoring.
+        if [[ -f "$spec_file" ]]; then
+            local status_block
+            status_block="$(sed -n '/^## Status$/,/^## /p' "$spec_file" 2>/dev/null | sed '1d;$d')"
+            if grep -Eq '(^status:[[:space:]]*(deferred|obsolete)$)|(^deferred$)|(^obsolete$)' <<<"$status_block"; then
+                continue
+            fi
+        fi
 
         # Search the codebase for any @trace referencing this spec
         # Exclude openspec/ directory and target/ build artifacts

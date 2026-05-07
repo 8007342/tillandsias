@@ -26,6 +26,44 @@ log_warn() { echo -e "${YELLOW}[orchestrate]${NC} $*"; }
 log_error() { echo -e "${RED}[orchestrate]${NC} $*" >&2; }
 log_step() { echo -e "${CYAN}[orchestrate]${NC} $*"; }
 
+PROMPT_MODE="${TILLANDSIAS_OPENCODE_PROMPT:-}"
+if [ -n "$PROMPT_MODE" ]; then
+    PROJECT_IMAGE="tillandsias-forge:v${VERSION}"
+    if ! podman image exists "$PROJECT_IMAGE" 2>/dev/null; then
+        log_error "Forge image not found: $PROJECT_IMAGE"
+        exit 1
+    fi
+
+    FORGE_CONTAINER="tillandsias-$PROJECT_NAME-forge"
+    podman rm -f "$FORGE_CONTAINER" 2>/dev/null || true
+
+    log_step "OpenCode prompt mode enabled; launching direct Big Pickle prompt container"
+    if ! podman run \
+        --rm \
+        --name "$FORGE_CONTAINER" \
+        --hostname "forge-$PROJECT_NAME" \
+        --cap-drop=ALL \
+        --security-opt=no-new-privileges \
+        --security-opt=label=disable \
+        --userns=keep-id \
+        --pids-limit=512 \
+        --entrypoint /usr/local/bin/entrypoint-forge-opencode.sh \
+        --env "HOME=/home/forge" \
+        --env "USER=forge" \
+        --env "PROJECT=$PROJECT_NAME" \
+        --env "TILLANDSIAS_PROJECT=$PROJECT_NAME" \
+        --env "TILLANDSIAS_OPENCODE_PROMPT=$PROMPT_MODE" \
+        -v "$PROJECT_PATH:/home/forge/src/$PROJECT_NAME:rw" \
+        "$PROJECT_IMAGE" \
+        -p "$PROMPT_MODE" -q; then
+        log_error "Forge prompt container exited with error"
+        exit 1
+    fi
+
+    log_info "OpenCode prompt completed"
+    exit 0
+fi
+
 # ===========================================================================
 # Step 1: Network Setup
 # ===========================================================================
@@ -48,7 +86,7 @@ fi
 # ===========================================================================
 # Step 1b: Certificate Authority Generation
 # ===========================================================================
-# @trace spec:transparent-https-caching, spec:proxy-container
+# @trace spec:transparent-https-caching, spec:proxy-container, spec:certificate-authority
 # Generate ephemeral 30-day CA cert for entire enclave stack.
 # Stored at /tmp/tillandsias-ca/ so it persists across container restarts
 # within a session, but is wiped on host reboot (ephemeral-first security).
@@ -126,77 +164,87 @@ for i in {1..15}; do
     sleep 1
 done
 
+PROMPT_MODE="${TILLANDSIAS_OPENCODE_PROMPT:-}"
+if [ -n "$PROMPT_MODE" ]; then
+    log_step "OpenCode prompt mode enabled; skipping git mirror and inference startup"
+fi
+
 # ===========================================================================
 # Step 3: Git Mirror Container
 # ===========================================================================
-log_step "Starting git mirror container..."
+if [ -z "$PROMPT_MODE" ]; then
+    log_step "Starting git mirror container..."
 
-GIT_CONTAINER="tillandsias-git-$PROJECT_NAME"
-GIT_IMAGE=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep "tillandsias-git" | grep -v framework | head -1)
-if [ -z "$GIT_IMAGE" ]; then
-    log_warn "Git image not found, skipping"
-else
-    podman rm -f "$GIT_CONTAINER" 2>/dev/null || true
+    GIT_CONTAINER="tillandsias-git-$PROJECT_NAME"
+    GIT_IMAGE=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep "tillandsias-git" | grep -v framework | head -1)
+    if [ -z "$GIT_IMAGE" ]; then
+        log_warn "Git image not found, skipping"
+    else
+        podman rm -f "$GIT_CONTAINER" 2>/dev/null || true
 
-    if ! podman run \
-        --detach \
-        --rm \
-        --name "$GIT_CONTAINER" \
-        --hostname "git-$PROJECT_NAME" \
-        --network "$ENCLAVE_NET" \
-        --ip "10.0.42.3" \
-        --cap-drop=ALL \
-        --security-opt=no-new-privileges \
-        --userns=keep-id \
-        --pids-limit=64 \
-        --read-only \
-        --env "PROJECT=$PROJECT_NAME" \
-        --env "GIT_TRACE=1" \
-        --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
-        "$GIT_IMAGE" \
-    /usr/bin/git daemon --verbose --listen=0.0.0.0 --base-path=/var/lib/git 2>&1 | tee /tmp/git-start.log; then
-    log_error "Failed to start git mirror container"
-    exit 1
+        if ! podman run \
+            --detach \
+            --rm \
+            --name "$GIT_CONTAINER" \
+            --hostname "git-$PROJECT_NAME" \
+            --network "$ENCLAVE_NET" \
+            --ip "10.0.42.3" \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges \
+            --userns=keep-id \
+            --pids-limit=64 \
+            --read-only \
+            --env "PROJECT=$PROJECT_NAME" \
+            --env "GIT_TRACE=1" \
+            --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
+            "$GIT_IMAGE" \
+        /usr/bin/git daemon --verbose --listen=0.0.0.0 --base-path=/var/lib/git 2>&1 | tee /tmp/git-start.log; then
+        log_error "Failed to start git mirror container"
+        exit 1
+    fi
+
+    log_info "Git mirror container started: $GIT_CONTAINER"
+
+    # @trace spec:socket-container-orchestration
+    log_step "Waiting for git daemon readiness..."
+    if ! podman wait --condition=healthy "$GIT_CONTAINER"; then
+        log_error "Git daemon '${GIT_CONTAINER}' failed health check"
+        log_error "Image may be incomplete. Rebuild: scripts/build-image.sh git"
+        exit 1
+    fi
+    log_info "✓ Git daemon ready"
 fi
-
-log_info "Git mirror container started: $GIT_CONTAINER"
-
-# @trace spec:socket-container-orchestration
-log_step "Waiting for git daemon readiness..."
-if ! podman wait --condition=healthy "$GIT_CONTAINER"; then
-    log_error "Git daemon '${GIT_CONTAINER}' failed health check"
-    log_error "Image may be incomplete. Rebuild: scripts/build-image.sh git"
-    exit 1
-fi
-log_info "✓ Git daemon ready"
 
 # ===========================================================================
 # Step 4: Inference Container (non-blocking)
 # ===========================================================================
-log_step "Starting inference container (non-blocking)..."
+if [ -z "$PROMPT_MODE" ]; then
+    log_step "Starting inference container (non-blocking)..."
 
-INFERENCE_CONTAINER="tillandsias-inference"
-podman rm -f "$INFERENCE_CONTAINER" 2>/dev/null || true
+    INFERENCE_CONTAINER="tillandsias-inference"
+    podman rm -f "$INFERENCE_CONTAINER" 2>/dev/null || true
 
-podman run \
-    --detach \
-    --rm \
-    --name "$INFERENCE_CONTAINER" \
-    --hostname inference \
-    --network "$ENCLAVE_NET" \
-    --ip "10.0.42.4" \
-    --cap-drop=ALL \
-    --security-opt=no-new-privileges \
-    --userns=keep-id \
-    --pids-limit=128 \
-    --env "OLLAMA_DEBUG=1" \
-    --env "OLLAMA_KEEP_ALIVE=24h" \
-    -v "$HOME/.cache/tillandsias/models:/root/.ollama/models:rw" \
-    --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
-    "tillandsias-inference:v${VERSION}" \
-    /usr/bin/ollama serve &>/tmp/inference-start.log &
+    podman run \
+        --detach \
+        --rm \
+        --name "$INFERENCE_CONTAINER" \
+        --hostname inference \
+        --network "$ENCLAVE_NET" \
+        --ip "10.0.42.4" \
+        --cap-drop=ALL \
+        --security-opt=no-new-privileges \
+        --userns=keep-id \
+        --pids-limit=128 \
+        --env "OLLAMA_DEBUG=1" \
+        --env "OLLAMA_KEEP_ALIVE=24h" \
+        -v "$HOME/.cache/tillandsias/models:/root/.ollama/models:rw" \
+        --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
+        "tillandsias-inference:v${VERSION}" \
+        /usr/bin/ollama serve &>/tmp/inference-start.log &
 
-log_info "Inference container spawned (background)"
+    log_info "Inference container spawned (background)"
+fi
+fi
 
 # ===========================================================================
 # Step 5: Forge Container
@@ -206,32 +254,64 @@ log_step "Starting forge container..."
 FORGE_CONTAINER="tillandsias-$PROJECT_NAME-forge"
 podman rm -f "$FORGE_CONTAINER" 2>/dev/null || true
 
-if ! podman run \
-    --interactive \
-    --tty \
-    --rm \
-    --name "$FORGE_CONTAINER" \
-    --hostname "forge-$PROJECT_NAME" \
-    --network "$ENCLAVE_NET" \
-    --cap-drop=ALL \
-    --security-opt=no-new-privileges \
-    --userns=keep-id \
-    --pids-limit=512 \
-    --env "http_proxy=http://proxy:3128" \
-    --env "https_proxy=http://proxy:3128" \
-    --env "HTTP_PROXY=http://proxy:3128" \
-    --env "HTTPS_PROXY=http://proxy:3128" \
-    --env "no_proxy=localhost,127.0.0.1,10.0.42.0/24" \
-    --env "PATH=/usr/local/bin:/usr/bin" \
-    --env "HOME=/home/forge" \
-    --env "USER=forge" \
-    --env "PROJECT=$PROJECT_NAME" \
-    -v "$PROJECT_PATH:/home/forge/src:rw" \
-    --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
-    "tillandsias-forge:v${VERSION}" \
-    /bin/bash; then
-    log_error "Forge container exited with error"
-    exit 1
+    if [ -n "$PROMPT_MODE" ]; then
+        if ! podman run \
+            --rm \
+            --name "$FORGE_CONTAINER" \
+            --hostname "forge-$PROJECT_NAME" \
+            --network "$ENCLAVE_NET" \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges \
+            --security-opt=label=disable \
+            --userns=keep-id \
+            --pids-limit=512 \
+            --entrypoint /usr/local/bin/entrypoint-forge-opencode.sh \
+            --env "http_proxy=http://proxy:3128" \
+            --env "https_proxy=http://proxy:3128" \
+            --env "HTTP_PROXY=http://proxy:3128" \
+            --env "HTTPS_PROXY=http://proxy:3128" \
+            --env "no_proxy=localhost,127.0.0.1,10.0.42.0/24" \
+            --env "PATH=/usr/local/bin:/usr/bin" \
+            --env "HOME=/home/forge" \
+            --env "USER=forge" \
+        --env "PROJECT=$PROJECT_NAME" \
+        --env "TILLANDSIAS_OPENCODE_PROMPT=$PROMPT_MODE" \
+        -v "$PROJECT_PATH:/home/forge/src/$PROJECT_NAME:rw" \
+            --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
+        "tillandsias-forge:v${VERSION}" \
+        -p "$PROMPT_MODE" -q; then
+        log_error "Forge prompt container exited with error"
+        exit 1
+    fi
+else
+    if ! podman run \
+        --interactive \
+        --tty \
+        --rm \
+        --name "$FORGE_CONTAINER" \
+        --hostname "forge-$PROJECT_NAME" \
+        --network "$ENCLAVE_NET" \
+        --cap-drop=ALL \
+        --security-opt=no-new-privileges \
+        --security-opt=label=disable \
+        --userns=keep-id \
+        --pids-limit=512 \
+        --env "http_proxy=http://proxy:3128" \
+        --env "https_proxy=http://proxy:3128" \
+        --env "HTTP_PROXY=http://proxy:3128" \
+        --env "HTTPS_PROXY=http://proxy:3128" \
+        --env "no_proxy=localhost,127.0.0.1,10.0.42.0/24" \
+        --env "PATH=/usr/local/bin:/usr/bin" \
+        --env "HOME=/home/forge" \
+        --env "USER=forge" \
+        --env "PROJECT=$PROJECT_NAME" \
+        -v "$PROJECT_PATH:/home/forge/src:rw" \
+        --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
+        "tillandsias-forge:v${VERSION}" \
+        /bin/bash; then
+        log_error "Forge container exited with error"
+        exit 1
+    fi
 fi
 
 # ===========================================================================

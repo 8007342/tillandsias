@@ -1,0 +1,96 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.003-cheatsheet-signal-coverage-gap@v1
+status: triaged
+observed_at: "2026-05-06T00:00:00Z"
+reporter: "codex"
+summary: >
+  The repository measures cheatsheet tiering, freshness, and binding, but it
+  does not yet expose a durable, queryable metric for which cheatsheets still
+  need positive or negative signals.
+
+observed_signal:
+  description: >
+    The current checks and docs identify cheatsheet presence, tier discipline,
+    staleness, and some traceability, but they do not answer the accounting
+    question "which cheatsheets are missing the signals that make their scores
+    meaningful?" There is no repo-visible coverage matrix for positive signals
+    (tests, traces, telemetry, provenance, examples) versus negative signals
+    (explicit anti-patterns, tombstones, failure litmus, drift guards).
+  signal_type: "ci"
+
+expected_model:
+  description: >
+    The methodology should let agents enumerate each cheatsheet with its signal
+    obligations, classify missing signals, and surface the result in a stable
+    report that can feed convergence metrics. Without that map, score deltas are
+    hard to interpret and can be inflated by documentation volume instead of
+    verified coverage.
+  source_refs:
+    - methodology/proximity.yaml
+    - methodology/litmus.yaml
+    - cheatsheets/runtime/cheatsheet-lifecycle.md
+    - cheatsheets/observability/cheatsheet-metrics.md
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - cheatsheet_signal_coverage_must_be_queryable
+    - positive_and_negative_signals_must_be_distinguished
+    - convergence_scores_must_be_traceable_to_obligations
+  spec_requirement_ids:
+    - cheatsheets-license-tiered:lifecycle-signals
+    - cheatsheet-telemetry:coverage-accounting
+  litmus_ids:
+    - cheatsheet-signal-coverage:missing-positive-signal
+    - cheatsheet-signal-coverage:missing-negative-signal
+  cheatsheet_refs:
+    - cheatsheets/runtime/cheatsheet-lifecycle.md
+    - cheatsheets/observability/cheatsheet-metrics.md
+    - cheatsheets/runtime/cheatsheet-shortcomings.md
+
+affected_artifacts:
+  specs:
+    - openspec/specs/cheatsheets-license-tiered/spec.md
+    - openspec/specs/tray-progress-and-icon-states/spec.md
+  methodology_files:
+    - methodology/event/index.yaml
+    - methodology/convergence.yaml
+    - methodology/proximity.yaml
+    - methodology/litmus.yaml
+  code_paths: []
+  scripts:
+    - scripts/check-cheatsheet-tiers.sh
+    - scripts/check-cheatsheet-staleness.sh
+    - scripts/validate-spec-cheatsheet-binding.sh
+  dashboards:
+    - docs/convergence/centicolon-dashboard.md
+    - docs/convergence/centicolon-dashboard.json
+
+evidence_refs:
+  commits: []
+  files:
+    - cheatsheets/runtime/cheatsheet-lifecycle.md
+    - cheatsheets/observability/cheatsheet-metrics.md
+    - cheatsheets/runtime/cheatsheet-shortcomings.md
+    - methodology/litmus.yaml
+    - methodology/proximity.yaml
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: medium
+provisional_classification: missing_litmus_signal
+
+next_distillation_step:
+  owner: "codex"
+  action: >
+    Distill a cheatsheet-signal obligation matrix into methodology, then emit a
+    repo-visible report that shows, for each cheatsheet, which positive signals
+    and negative signals are required, present, missing, and tombstoned.
+  target_artifact: "methodology"
+
+closure_criteria:
+  - learned_distinction_preserved_in_durable_artifact
+  - evidence_refs_are_queryable
+  - proximity_or_evidence_score_updated_if_applicable
+  - old_false_claim_tombstoned_or_superseded_if_applicable

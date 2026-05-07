@@ -22,6 +22,12 @@ RUN microdnf install -y \
         nodejs npm \
     && microdnf clean all
 
+# ── Agent binaries ─────────────────────────────────────────────
+# @trace spec:default-image, spec:layered-tools-overlay
+# Install the coding agents at image build time so the forge launches
+# with no runtime installer and no dependency on host cache state.
+RUN npm install -g --prefix /usr/local opencode-ai@latest @fission-ai/openspec @anthropic-ai/claude-code
+
 # ── Create forge user ──────────────────────────────────────────
 # DISTRO: useradd (Fedora shadow-utils), NOT adduser -D (Alpine)
 RUN useradd -u 1000 -m -s /bin/bash forge

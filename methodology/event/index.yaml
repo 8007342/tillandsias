@@ -111,3 +111,64 @@ unknown_event_register:
         - host_pristineness_violated_by_registries_setup
         - cheatsheets_include_superseded_nix_or_oci_user_runtime_options
         - three_runtime_residuals_not_yet_measured_separately
+    - file: methodology/event/003-cheatsheet-signal-coverage-gap.yaml
+      status: triaged
+      spec_under_review: spec:cheatsheets-license-tiered
+      blocking_issues:
+        - signal_obligation_matrix_not_yet_queryable
+        - positive_and_negative_signal_classes_not_yet_distinguished
+        - per_cheatsheet_signal_coverage_not_yet_visible_in_dashboard
+    - file: methodology/event/004-signal-handling-harness-tombstone.yaml
+      status: distilled
+      spec_under_review: spec:signal-handling
+      blocking_issues:
+        - cargo_wrapper_integration_harness_hangs
+        - compiled_binary_not_directly_exercised
+        - shutdown_litmus_not_linkable_to_real_app
+    - file: methodology/event/005-hot-path-blocking-policy.yaml
+      status: triaged
+      spec_under_review: spec:linux-native-portable-executable
+      blocking_issues:
+        - hot_path_blocking_policy_not_yet_explicit
+        - shutdown_only_waits_not_distinguished_from_hot_path
+        - event_driven_runtime_policy_not_yet_codified
+    - file: methodology/event/006-cheatsheet-frontmatter-normalization-gap.yaml
+      status: triaged
+      spec_under_review: spec:cheatsheets-license-tiered
+      blocking_issues:
+        - cheatsheet_frontmatter_missing_on_existing_docs
+        - tier_and_provenance_metadata_not_yet_queryable_for_all_docs
+        - strict_cheatsheet_validation_still_noisy
+    - file: methodology/event/007-build-script-architecture-litmus-tombstone.yaml
+      status: triaged
+      spec_under_review: spec:build-script-architecture
+      blocking_issues:
+        - retired_appimage_litmus_suite_still_active
+        - current_build_path_not_reflected_in_litmus_contract
+        - ci_score_still_counts_obsolete_failures
+    - file: methodology/event/008-active-contract-trace-sweep.yaml
+      status: triaged
+      spec_under_review: spec:runtime-logging
+      blocking_issues:
+        - live_contracts_missing_code_traces
+        - stale_specs_need_distillation_or_retirement
+        - trace_sweep_not_yet_complete
+    - file: methodology/event/009-zero-trace-active-only.yaml
+      status: distilled
+      distilled_into:
+        - scripts/hooks/pre-commit-openspec.sh
+        - openspec/specs/appimage-build-pipeline/spec.md
+        - openspec/specs/cli-bash-mode/spec.md
+        - openspec/specs/cli-diagnostics/spec.md
+    - file: methodology/event/010-windowed-dashboard-trends.yaml
+      status: distilled
+      distilled_into:
+        - scripts/update-convergence-dashboard.sh
+        - docs/convergence/centicolon-dashboard.md
+        - docs/convergence/centicolon-dashboard.json
+    - file: methodology/event/011-closed-trend-minimalism.yaml
+      status: distilled
+      distilled_into:
+        - scripts/update-convergence-dashboard.sh
+        - docs/convergence/centicolon-dashboard.md
+        - docs/convergence/centicolon-dashboard.json

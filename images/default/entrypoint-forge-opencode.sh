@@ -8,7 +8,15 @@
 
 source /usr/local/lib/tillandsias/lib-common.sh
 
-# @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
+PROMPT_MODE=0
+for arg in "$@"; do
+    if [ "$arg" = "-p" ] || [ "$arg" = "--prompt" ]; then
+        PROMPT_MODE=1
+        break
+    fi
+done
+
+# @trace spec:forge-hot-cold-split, spec:agent-cheatsheets, spec:forge-opencode-onboarding
 # Populate tmpfs hot mount (/opt/cheatsheets) from image-baked lower layer.
 # The --tmpfs mount is already in place (podman establishes it before exec).
 populate_hot_paths
@@ -46,7 +54,9 @@ trace_lifecycle "entrypoint" "opencode starting"
 # Clone via the shared lib-common::clone_project_from_mirror — supports both
 # filesystem (Windows/WSL) and git daemon (Linux/podman) transports with
 # wipe-before-clone for re-attach idempotency.
-clone_project_from_mirror
+if [ "$PROMPT_MODE" -ne 1 ]; then
+    clone_project_from_mirror
+fi
 
 # (Inline clone block removed — shared function above replaces it.)
 
@@ -88,6 +98,12 @@ if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
         echo "[entrypoint] WARNING: OpenSpec init failed — /opsx commands may not work" >&2
         echo "[entrypoint] $OS_OUTPUT" >&2
     fi
+fi
+
+if [ "$PROMPT_MODE" -eq 1 ]; then
+    trace_lifecycle "entrypoint" "opencode prompt mode"
+    trace_lifecycle "exec" "launching opencode prompt ($OC_BIN)"
+    exec "$OC_BIN" run "$PROMPT_MODE"
 fi
 
 # ── Banner ──────────────────────────────────────────────────

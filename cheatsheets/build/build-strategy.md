@@ -1,3 +1,18 @@
+---
+tags: [build, ci, reproducible-builds, local-development, release]
+languages: [bash]
+since: 2026-05-06
+last_verified: 2026-05-06
+sources:
+  - https://github.com/8007342/tillandsias/blob/main/CLAUDE.md
+  - https://github.com/8007342/tillandsias/blob/main/openspec/specs/build-script-architecture/spec.md
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # Build Strategy: Local vs Reproducible
 
 **Use when**: Deciding between `./build.sh --install` (fast) and `./build.sh --clean --install` (reproducible) during development and release workflows.
