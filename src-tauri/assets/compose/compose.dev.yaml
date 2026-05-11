@@ -1,0 +1,36 @@
+# Tillandsias enclave — DEV overlay
+#
+# @trace spec:enclave-compose-migration
+#
+# Layered on top of compose.yaml:
+#   podman-compose -f compose.yaml -f compose.dev.yaml -p <proj>-dev up -d
+#
+# Diff from prod:
+#   - forge source mount is a host bind (live edits) instead of a named volume
+#   - ~/.cache/tillandsias/nix is bind-mounted for Nix-driven dev iteration
+#   - extra logging / debug env
+#
+# Network topology and security flags are UNCHANGED — dev is still enclave-
+# isolated. For external egress from the forge use the local overlay.
+#
+# REQUIRED env vars (in addition to compose.yaml's):
+#   TILLANDSIAS_PROJECT_PATH  — absolute host path to the project working tree
+
+services:
+  forge:
+    volumes:
+      # List replacement: this REPLACES compose.yaml's volumes list.
+      - type: bind
+        source: ${TILLANDSIAS_PROJECT_PATH:?TILLANDSIAS_PROJECT_PATH must be set}
+        target: /home/forge/src/${PROJECT_ID:?PROJECT_ID must be set}
+      - type: bind
+        source: ${HOME}/.cache/tillandsias/nix
+        target: /home/forge/.cache/tillandsias/nix
+      - type: volume
+        source: cache
+        target: /home/forge/.cache/tillandsias
+    environment:
+      # Map merge: these are added on top of compose.yaml's environment.
+      STDOUT_VERBOSE: "1"
+      RUST_LOG: debug
+      RUST_BACKTRACE: "1"

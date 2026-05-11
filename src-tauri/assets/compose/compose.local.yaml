@@ -1,0 +1,53 @@
+# Tillandsias enclave — LOCAL overlay (single-forge scratchpad)
+#
+# @trace spec:enclave-compose-migration, spec:forge-standalone-launcher
+#
+# Layered on top of compose.yaml:
+#   podman-compose -f compose.yaml -f compose.local.yaml \
+#                  -p <proj>-local up -d forge
+#
+# Diff from prod:
+#   - ONLY forge starts: proxy/git/inference are moved into the "enclave"
+#     profile, which is not activated by default, so they stay down.
+#   - forge gets the default rootless network (external egress works) by
+#     setting network_mode: bridge and clearing the enclave attachment.
+#   - forge has zero secret mounts and zero proxy/inference env hints.
+#   - source code is bind-mounted from the host into /home/forge/src/<project>.
+#
+# This is the declarative equivalent of ./run-forge-standalone.sh.
+#
+# REQUIRED env vars (in addition to compose.yaml's TILLANDSIAS_VERSION /
+# PROJECT_ID):
+#   TILLANDSIAS_PROJECT_PATH  — absolute host path to the project working tree
+
+services:
+  forge:
+    # Detach from the enclave-only network and use the default rootless
+    # bridge so the forge can talk to the public internet directly.
+    networks: []
+    network_mode: bridge
+    depends_on: []                                 # nothing else is starting
+    secrets: []                                    # zero credentials
+    environment:
+      # Map-merge: we OVERRIDE the proxy/inference hints with empty strings.
+      # podman-compose preserves the keys but the values are empty, which
+      # tools like curl, gh, and cargo treat as "unset".
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      NO_PROXY: ""
+      OLLAMA_HOST: ""
+    volumes:
+      # List replacement: bind-mount the project working tree directly.
+      - type: bind
+        source: ${TILLANDSIAS_PROJECT_PATH:?TILLANDSIAS_PROJECT_PATH must be set}
+        target: /home/forge/src/${PROJECT_ID:?PROJECT_ID must be set}
+
+  # Move the other three services into an inactive profile so a plain
+  # `up` does not start them. The user must explicitly invoke `up forge`,
+  # which is also the documented invocation.
+  proxy:
+    profiles: [enclave]
+  git:
+    profiles: [enclave]
+  inference:
+    profiles: [enclave]

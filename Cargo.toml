@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/tillandsias-browser-mcp",
+    "crates/tillandsias-compose",
     "crates/tillandsias-control-wire",
     "crates/tillandsias-core",
     "crates/tillandsias-otp",
@@ -35,6 +36,7 @@ parking_lot = "0.12"
 
 # Internal crates
 tillandsias-browser-mcp = { path = "crates/tillandsias-browser-mcp" }
+tillandsias-compose = { path = "crates/tillandsias-compose" }
 tillandsias-control-wire = { path = "crates/tillandsias-control-wire" }
 tillandsias-core = { path = "crates/tillandsias-core" }
 tillandsias-otp = { path = "crates/tillandsias-otp" }
