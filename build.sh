@@ -548,6 +548,11 @@ _toolbox_ensure() {
     toolbox create --assumeyes "$TOOLBOX_NAME" 2>&1
 
     _step "Installing build dependencies..."
+    # podman-compose is included so tests under crates/tillandsias-compose/
+    # can shell out to it. The tray itself runs on the host and needs a
+    # host-side podman-compose (>= 1.5.0) — see preflight.rs and the
+    # `rpm-ostree install podman-compose` note in the project README.
+    # @trace spec:enclave-compose-migration
     toolbox run -c "$TOOLBOX_NAME" sudo dnf install -y \
         gcc \
         gtk3-devel \
@@ -557,6 +562,7 @@ _toolbox_ensure() {
         openssl-devel \
         pkg-config \
         patchelf \
+        podman-compose \
         2>&1 | tail -3
 
     _info "Toolbox '${TOOLBOX_NAME}' ready"
@@ -635,6 +641,17 @@ fi
 
 # Test
 if [[ "$FLAG_TEST" == true ]]; then
+    # Static lints on the Compose YAMLs + per-service spec READMEs run on
+    # the host (no toolbox dependency). They are cheap and fail fast.
+    # @trace spec:enclave-compose-migration
+    _step "Linting compose.yaml + overlays..."
+    bash "$SCRIPT_DIR/scripts/lint-compose.sh"
+    _info "compose lint passed"
+
+    _step "Checking per-service spec READMEs..."
+    bash "$SCRIPT_DIR/scripts/check-containerfile-docs.sh"
+    _info "spec READMEs passed"
+
     _step "Running tests..."
     _run cargo test --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
     _info "Tests complete"
