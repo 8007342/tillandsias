@@ -1,0 +1,195 @@
+# Tillandsias enclave — declarative orchestration
+#
+# @trace spec:enclave-compose-migration, spec:enclave-network,
+#         spec:forge-offline, spec:proxy-container, spec:git-mirror-service,
+#         spec:inference-container, spec:secrets-management
+#
+# This is the prod baseline. Overlay files in this directory layer dev or
+# local behavior on top:
+#   prod  : podman-compose -f compose.yaml                            -p <proj>       up -d
+#   dev   : podman-compose -f compose.yaml -f compose.dev.yaml        -p <proj>-dev   up -d
+#   local : podman-compose -f compose.yaml -f compose.local.yaml      -p <proj>-local up -d forge
+#
+# See ./README.md for the full multi-environment contract and the per-service
+# spec READMEs in ./services/<name>/README.md for security/volume/env contracts.
+#
+# REQUIRED env vars:
+#   TILLANDSIAS_VERSION  — image tag suffix, e.g. "0.1.260504.32"
+#   PROJECT_ID           — project slug; becomes the source subdir name
+#
+# REQUIRED pre-created podman secrets (see scripts/create-secrets.sh):
+#   tillandsias-github-token
+#   tillandsias-ca-cert
+#   tillandsias-ca-key
+
+networks:
+  enclave:
+    driver: bridge
+    internal: true                    # @lint — hard requirement: no external egress
+  egress:
+    driver: bridge
+    internal: false                   # proxy is the ONLY attached service
+
+secrets:
+  tillandsias-github-token:
+    external: true
+  tillandsias-ca-cert:
+    external: true
+  tillandsias-ca-key:
+    external: true
+
+volumes:
+  workdir:                            # forge working tree (clone of git mirror in prod)
+  cache:                              # forge tooling cache
+  proxy_cache:                        # squid HTTP cache
+  git_mirrors:                        # bare git repositories
+  strategic:                          # strategic-mirror workspace
+
+services:
+  # ── Forge: untrusted coding environment ─────────────────────────
+  # @trace spec:default-image, spec:forge-offline, spec:forge-shell-tools
+  forge:
+    image: tillandsias-forge:v${TILLANDSIAS_VERSION:?TILLANDSIAS_VERSION must be set}
+    build:
+      context: ./services/forge
+      dockerfile: Containerfile
+    hostname: forge
+    user: "1000:1000"
+    working_dir: /home/forge/src
+    cap_drop: [ALL]                                # @lint
+    security_opt:
+      - no-new-privileges                          # @lint
+      - label=disable
+    userns_mode: keep-id                           # @lint
+    networks:
+      - enclave                                    # @lint — MUST NOT include egress
+    environment:
+      HTTP_PROXY: http://proxy:3128
+      HTTPS_PROXY: http://proxy:3128
+      NO_PROXY: localhost,127.0.0.1,proxy,inference,git
+      OLLAMA_HOST: http://inference:11434
+      HOME: /home/forge
+      USER: forge
+    volumes:
+      - type: volume
+        source: workdir
+        target: /home/forge/src/${PROJECT_ID:?PROJECT_ID must be set}
+      - type: volume
+        source: cache
+        target: /home/forge/.cache/tillandsias
+    depends_on:
+      - proxy
+      - git
+      - inference
+    healthcheck:
+      test: ["CMD-SHELL", "test -d /home/forge/src && test -f /usr/local/bin/entrypoint-forge-claude.sh"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+
+  # ── Proxy: sole egress point (Squid MITM forward proxy) ─────────
+  # @trace spec:proxy-container, spec:reverse-proxy-internal
+  proxy:
+    image: tillandsias-proxy:v${TILLANDSIAS_VERSION:?TILLANDSIAS_VERSION must be set}
+    build:
+      context: ./services/proxy
+      dockerfile: Containerfile
+    hostname: proxy
+    user: "1000:1000"
+    cap_drop: [ALL]                                # @lint
+    security_opt:
+      - no-new-privileges                          # @lint
+      - label=disable
+    userns_mode: keep-id                           # @lint
+    networks:
+      - enclave
+      - egress                                     # @lint — proxy ONLY may have egress
+    secrets:
+      - tillandsias-ca-cert
+      - tillandsias-ca-key
+    volumes:
+      - type: volume
+        source: proxy_cache
+        target: /var/spool/squid
+    expose:
+      - "3128"
+      - "3129"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3128/ || exit 1"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+
+  # ── Git: credentialed mirror between enclave and GitHub ─────────
+  # @trace spec:git-mirror-service, spec:secrets-management
+  git:
+    image: tillandsias-git:v${TILLANDSIAS_VERSION:?TILLANDSIAS_VERSION must be set}
+    build:
+      context: ./services/git
+      dockerfile: Containerfile
+    hostname: git
+    user: "1000:1000"
+    cap_drop: [ALL]                                # @lint
+    security_opt:
+      - no-new-privileges                          # @lint
+      - label=disable
+    userns_mode: keep-id                           # @lint
+    networks:
+      - enclave                                    # @lint — MUST NOT include egress
+    secrets:
+      - tillandsias-github-token
+    environment:
+      HTTPS_PROXY: http://proxy:3128
+      HTTP_PROXY: http://proxy:3128
+      NO_PROXY: localhost,127.0.0.1,proxy,inference,forge,git
+      GIT_ASKPASS: /usr/local/bin/git-askpass-tillandsias.sh
+    volumes:
+      - type: volume
+        source: git_mirrors
+        target: /srv/git
+      - type: volume
+        source: strategic
+        target: /strategic
+    depends_on:
+      - proxy
+    expose:
+      - "9418"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 9418"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+
+  # ── Inference: local ollama with baked T0/T1 models ─────────────
+  # @trace spec:inference-container, spec:inference-host-side-pull
+  inference:
+    image: tillandsias-inference:v${TILLANDSIAS_VERSION:?TILLANDSIAS_VERSION must be set}
+    build:
+      context: ./services/inference
+      dockerfile: Containerfile
+    hostname: inference
+    user: "1000:1000"
+    cap_drop: [ALL]                                # @lint
+    security_opt:
+      - no-new-privileges                          # @lint
+      - label=disable
+    userns_mode: keep-id                           # @lint
+    networks:
+      - enclave                                    # @lint — MUST NOT include egress
+    secrets:
+      - tillandsias-ca-cert
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      HOME: /home/ollama
+      USER: ollama
+    volumes:
+      - type: bind
+        source: ${HOME}/.cache/tillandsias/models
+        target: /home/ollama/.ollama/models
+    expose:
+      - "11434"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:11434/api/tags || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 4
