@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# @trace spec:browser-isolation-launcher, spec:browser-isolation-core, spec:chromium-debug-variant
-# Launch a Chromium container with security hardening and GPU support detection.
+# @trace spec:browser-isolation-core, spec:chromium-safe-variant, spec:chromium-debug-variant
+# Launch a Chromium container with security hardening, GUI display forwarding,
+# and GPU support detection.
 # Usage: launch-chromium.sh <project> <url> [port] [window_type] [version]
 # Example: launch-chromium.sh my-project "http://localhost:3000" 9222 open_safe_window "0.1.160"
 
@@ -11,6 +12,8 @@ URL="${2:?'Usage: launch-chromium.sh <project> <url> [port] [window_type] [versi
 PORT="${3:-9222}"
 WINDOW_TYPE="${4:-open_safe_window}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/common.sh"
+require_podman
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DEFAULT_VERSION="$(tr -d '[:space:]' < "$PROJECT_ROOT/VERSION")"
 VERSION="${5:-$DEFAULT_VERSION}"
@@ -27,39 +30,91 @@ detect_gpu() {
 }
 
 GPU_TIER=$(detect_gpu)
+if [[ -n "${XDG_RUNTIME_DIR:-}" && -w "${XDG_RUNTIME_DIR:-/dev/null}" ]]; then
+    PROFILE_ROOT="${XDG_RUNTIME_DIR}/tillandsias/browser"
+else
+    PROFILE_ROOT="${TMPDIR:-/tmp}/tillandsias/browser"
+fi
+mkdir -p "$PROFILE_ROOT"
+PROFILE_DIR="$(mktemp -d "$PROFILE_ROOT/${PROJECT}-XXXXXX")"
+
+cleanup() {
+    rm -rf "$PROFILE_DIR"
+}
+
+trap cleanup EXIT INT TERM
+
+configure_display_forwarding() {
+    if [[ -n "${DISPLAY:-}" ]]; then
+        PODMAN_ARGS+=(
+            "--env=DISPLAY=${DISPLAY}"
+            "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw"
+        )
+        if [[ -n "${XAUTHORITY:-}" && -f "${XAUTHORITY}" ]]; then
+            PODMAN_ARGS+=(
+                "--env=XAUTHORITY=/home/chromium/.Xauthority"
+                "--volume=${XAUTHORITY}:/home/chromium/.Xauthority:ro"
+            )
+        fi
+        BROWSER_ARGS+=("--ozone-platform=x11")
+        return 0
+    fi
+
+    if [[ -n "${WAYLAND_DISPLAY:-}" && -n "${XDG_RUNTIME_DIR:-}" ]]; then
+        local wayland_socket="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
+        if [[ -S "$wayland_socket" ]]; then
+            PODMAN_ARGS+=(
+                "--env=XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}"
+                "--env=WAYLAND_DISPLAY=${WAYLAND_DISPLAY}"
+                "--volume=${XDG_RUNTIME_DIR}:${XDG_RUNTIME_DIR}:rw"
+            )
+            BROWSER_ARGS+=("--ozone-platform=wayland")
+            return 0
+        fi
+    fi
+
+    echo "ERROR: launch-chromium.sh requires a graphical session (DISPLAY or WAYLAND_DISPLAY)." >&2
+    return 1
+}
 
 # Build base podman command with security flags
-CMD=(
-    "podman" "run" "--rm"
+PODMAN_ARGS=(
+    "$PODMAN" "run" "--rm"
+    "--pull=never"
     "--userns=keep-id"
     "--cap-drop=ALL"
     "--cap-add=SYS_CHROOT"
-    "--network=enclave-bridge"
-    "--security-opt=seccomp=/etc/seccomp.json"
+    "--network=tillandsias-enclave"
+    "--security-opt=no-new-privileges"
+    "--security-opt=label=disable"
     "--tmpfs=/tmp:size=256m"
     "--tmpfs=/home/chromium/.cache:size=512m"
     "--tmpfs=/dev/shm:size=256m"
     "--read-only"
+    "--volume=${PROFILE_DIR}:${PROFILE_DIR}"
+)
+
+# Add Chromium command flags after the image name.
+BROWSER_ARGS=(
+    "--incognito"
+    "--no-first-run"
+    "--no-default-browser-check"
+    "--user-data-dir=${PROFILE_DIR}"
 )
 
 # Add window-type specific flags
-if [[ "$WINDOW_TYPE" == "open_safe_window" ]]; then
-    # Safe window: headless mode, no dev tools
-    CMD+=("--headless=new")
-elif [[ "$WINDOW_TYPE" == "open_debug_window" ]]; then
-    # Debug window: remote debugging enabled
-    CMD+=("--remote-debugging-port=${PORT}")
-    CMD+=("--remote-debugging-address=127.0.0.1")
-else
-    # Default: safe window
-    CMD+=("--headless=new")
+if [[ "$WINDOW_TYPE" == "open_debug_window" ]]; then
+    # Debug window: remote debugging enabled, still GUI app-mode.
+    BROWSER_ARGS+=("--remote-debugging-port=${PORT}")
+    BROWSER_ARGS+=("--remote-debugging-address=127.0.0.1")
 fi
 
-# Add GPU devices if available
-if [[ "$GPU_TIER" == "nvidia" ]]; then
-    CMD+=("--device=nvidia.com/gpu=all")
-elif [[ "$GPU_TIER" == "amd_intel" ]]; then
-    CMD+=("--device=/dev/dri/renderD128")
+configure_display_forwarding
+
+# Add GPU devices if available (optional — skip if not accessible)
+# CDI devices may not be configured in all environments
+if [[ "$GPU_TIER" == "amd_intel" && -e /dev/dri/renderD128 ]]; then
+    PODMAN_ARGS+=("--device=/dev/dri/renderD128")
 fi
 
 # Add image and URL — use versioned image tags for reproducibility
@@ -69,14 +124,13 @@ if [[ "$VERSION" == "latest" ]]; then
     exit 2
 fi
 
-# Use versioned tags: tillandsias-chromium-core:v0.1.160
+# Use versioned tags from local Podman storage explicitly.
 # @trace spec:browser-isolation-core
-if [[ "$WINDOW_TYPE" == "open_debug_window" ]]; then
-    CMD+=("tillandsias-chromium-framework:v${VERSION}" "$URL")
-else
-    CMD+=("tillandsias-chromium-core:v${VERSION}" "$URL")
-fi
+PODMAN_ARGS+=("localhost/tillandsias-chromium-framework:v${VERSION}")
+
+# Chromium app-mode URL argument follows the image and browser flags.
+BROWSER_ARGS+=("--app=${URL}")
 
 # Spawn container and output container ID
-output=$(exec "${CMD[@]}")
+output=$(exec "${PODMAN_ARGS[@]}" "${BROWSER_ARGS[@]}")
 echo "$output"
