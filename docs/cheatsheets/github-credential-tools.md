@@ -1,12 +1,14 @@
 ---
-tags: [github, credentials, keyring, secret-service, gh-cli, git-credential-manager, macos-keychain]
+tags: [github, credentials, keyring, secret-service, gh-cli, git-credential-manager, macos-keychain, deploy-key]
 languages: []
 since: 2026-04-26
-last_verified: 2026-04-27
+last_verified: 2026-05-14
 sources:
   - https://cli.github.com/manual/
   - https://cli.github.com/manual/gh_auth_login
   - https://cli.github.com/manual/gh_auth_token
+  - https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys
+  - https://specifications.freedesktop.org/secret-service/latest/
 authority: high
 status: current
 ---
@@ -22,7 +24,9 @@ How popular GitHub tools store credentials and how Tillandsias can consume them.
 - https://cli.github.com/manual/ — official GitHub CLI manual index; lists all `gh auth` subcommands (login, logout, refresh, setup-git, status, switch, token). Fetched 2026-04-27.
 - https://cli.github.com/manual/gh_auth_login — official docs for `gh auth login`; confirms "an authentication token will be stored securely in the system credential store" with plaintext fallback when no credential store is found; documents `--insecure-storage` flag. Fetched 2026-04-27.
 - https://cli.github.com/manual/gh_auth_token — official docs for `gh auth token`; confirms `-h`/`--hostname` and `-u`/`--user` flags; outputs the active token to stdout. Fetched 2026-04-27.
-- **Last updated:** 2026-04-27
+- https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys — official GitHub deploy-key guide; confirms least-privilege per-repo SSH access pattern used by `scripts/generate-repo-key.sh --mode=deploy`. Fetched 2026-05-14.
+- https://specifications.freedesktop.org/secret-service/latest/ — Freedesktop Secret Service specification; canonical D-Bus reference for libsecret / GNOME Keyring used by the Tillandsias deploy-key flow. Fetched 2026-05-14.
+- **Last updated:** 2026-05-14
 
 ## Tool Credential Storage
 
@@ -148,6 +152,100 @@ When authenticating GitHub, check in order:
 5. **Fallback: run `gh auth login`** — on host if `gh` installed, in forge container with D-Bus forwarding otherwise
 
 @trace spec:secrets-management
+
+## Tillandsias Credential Flow (Host -> D-Bus -> Git Mirror -> Forge)
+
+@trace spec:gh-auth-script, spec:secrets-management, spec:native-secrets-store
+
+Tillandsias deliberately constrains credentials to the host. The forge container
+where agents and OpenCode sessions run NEVER sees a GitHub token, deploy key, or
+keyring socket. The flow is:
+
+```
+                +----------------+
+   Host keyring | Secret Service |  (libsecret on Linux, Keychain on macOS,
+                +----------------+   Credential Manager on Windows)
+                        |
+                        | D-Bus on /run/user/$UID/bus
+                        v
+                +----------------+
+                | Git Service    |  Bare mirror + git daemon. Exec'd by the
+                | container      |  tray on demand; reads the token via
+                +----------------+   secret-tool, performs the authenticated
+                        |             push to GitHub on behalf of the forge.
+                        | git:// over the enclave network (no TLS, no auth)
+                        v
+                +----------------+
+                | Forge          |  Speaks plain git. Pushes go to the mirror,
+                | container      |   which then re-pushes upstream.
+                +----------------+
+```
+
+**Why the forge never sees credentials**:
+
+- The forge is the most-exposed surface (agent code, untrusted prompts, MCP
+  servers running arbitrary tool calls). Treat it as compromised.
+- A compromised forge that cannot read the keyring cannot exfiltrate the
+  token even via D-Bus, because the forge has no D-Bus bind-mount.
+- Defence-in-depth: even if a single forge boundary fails, the credential
+  blast radius is capped at the project's git mirror, not the whole GitHub
+  account.
+
+See `cheatsheets/utils/podman-secrets.md` and
+`cheatsheets/utils/tillandsias-secrets-architecture.md` for the deeper
+mechanics (ephemeral podman secrets, cleanup-on-shutdown, no world-readable
+files on disk).
+
+## SSH Deploy Keys via `scripts/generate-repo-key.sh`
+
+@trace spec:gh-auth-script
+
+For projects that prefer per-repo SSH deploy keys (the GitHub recommendation
+for least-privilege CI / agent access), Tillandsias provides:
+
+```bash
+./scripts/generate-repo-key.sh --mode=deploy [--project NAME] [--dry-run]
+```
+
+**What it does**:
+
+1. Generates a fresh ed25519 key pair via `ssh-keygen -t ed25519 -N ''`.
+2. Stores the **private key** in the host keyring via Secret Service:
+   - Service: `tillandsias`
+   - Account: `tillandsias-deploy-key:<project>`
+3. Performs a round-trip read to confirm the key landed.
+4. Writes a `[deploy_key]` section to `.tillandsias/config.toml` with:
+   - Algorithm (`ed25519`)
+   - Public-key fingerprint (`SHA256:...`)
+   - The public key itself (paste this into GitHub repo settings)
+   - The `keyring_service` / `keyring_account` pointers so the tray /
+     headless can re-fetch the private key by name on subsequent attaches.
+
+**What it deliberately does NOT do**:
+
+- It does NOT write the private key to any file inside the project tree.
+- It does NOT pass the private key to a forge container directly. The git
+  service container fetches it from the host keyring at push time.
+- It does NOT replace `gh auth login` — both modes coexist. Use the deploy
+  key for non-interactive push paths (CI, scheduled agent loops) and the
+  `gh` OAuth flow for interactive humans.
+
+**Reading the key back** (host-side):
+
+```bash
+secret-tool lookup service tillandsias \
+    account tillandsias-deploy-key:<project>
+```
+
+**Detection priority** (extended): in addition to the five steps above, if
+`.tillandsias/config.toml` contains a `[deploy_key]` section with a
+`keyring_service` pointer, the tray will prefer that key for non-interactive
+git operations on the project.
+
+**Legacy mode**: `scripts/generate-repo-key.sh --mode=gpg` (the default for
+backward compatibility) still generates the RSA-4096 GPG key for APT/RPM
+repository signing. The active release pipeline uses Cosign, so this path is
+exercised only by historical scripts.
 
 ## git credential.helper Options
 
