@@ -2488,6 +2488,7 @@ dependencies = [
  "tempfile",
  "tillandsias-control-wire",
  "tillandsias-otp",
+ "tillandsias-podman",
  "tokio",
  "tokio-util",
  "tracing",
