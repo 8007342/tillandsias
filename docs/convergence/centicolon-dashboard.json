@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-05-14T19:47:07Z",
+  "generated_at": "2026-05-14T19:53:08Z",
   "title": "Progression Trends",
   "series_namespace": "local_development",
   "series_label": "Local Development",
   "source_file": "target/convergence/centicolon-signature.jsonl",
-  "record_count": 89,
-  "sparkline_closed": "█████████████████████████████████████████▆▆███▇█████████████████████████████████▆▇█▇▇██▇▇",
-  "sparkline_residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▃▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▂▁▂▂▁▁▂▂",
+  "record_count": 92,
+  "sparkline_closed": "█████████████████████████████████████████▆▆███▇█████████████████████████████████▆▇█▇▇██▇▇▅▅▅",
+  "sparkline_residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▃▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▂▁▂▂▁▁▂▂▄▄▄",
   "alert_level": "red",
   "alert_thresholds": {
     "red_below_percent_closed": 90,
@@ -14,8 +14,9 @@
   },
   "trend_metrics": {
     "pass_rate_7d_percent": 14.285714285714285,
-    "coverage_avg_7d_percent": 89.30453604366649
+    "coverage_avg_7d_percent": 76.46187146187147
   },
+  "metrics": {"cpu_percent":0.0,"memory_percent":0.0,"disk_percent":0.0,"sample_timestamp":"1970-01-01T00:00:00Z","source":"tillandsias-metrics::DashboardSnapshot"},
   "dashboard_contract": {
   "signature_format": {
     "description": "Each CentiColon signature record is an append-only entry in target/convergence/centicolon-signature.jsonl. The dashboard projects these into the .md and .json artefacts below.",
@@ -83,26 +84,26 @@
     "start_release": "0.1.260513.3",
     "start_commit": "43a8615f2378",
     "end_release": "0.1.260513.6",
-    "end_commit": "98ebe92eb70a",
-    "count": 25,
-    "closed": "████████████████▆▇█▇▇██▇▇",
-    "residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▂▁▂▂▁▁▂▂"
+    "end_commit": "f4e5d991af9e",
+    "count": 28,
+    "closed": "████████████████▆▇█▇▇██▇▇▅▅▅",
+    "residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▂▁▂▂▁▁▂▂▄▄▄"
   }
 ],
   "latest": {
   "release": "0.1.260513.6",
-  "date": "2026-05-14T17:49:49Z",
-  "commit": "98ebe92eb70a",
-  "total_cc": 560,
-  "earned_cc": 460,
-  "residual_cc": 100,
-  "percent_closed": 82.14285714285714,
-  "worst_spec": "spec:dev-build",
-  "worst_reason": "Clippy warnings found: run 'cargo clippy --workspace' to see details (see /tmp/clippy-check.log)",
+  "date": "2026-05-14T19:48:25Z",
+  "commit": "f4e5d991af9e",
+  "total_cc": 650,
+  "earned_cc": 380,
+  "residual_cc": 270,
+  "percent_closed": 58.46153846153847,
+  "worst_spec": "spec:methodology-accountability",
+  "worst_reason": "Spec trace coverage below 90% (see /tmp/trace-coverage.log)",
   "evidence": "target/convergence/evidence-bundle.json",
   "projection": "docs/convergence/centicolon-dashboard.md",
   "ci_result": "FAIL",
-  "ci_run_id": "local-ci-20260514T174949Z",
+  "ci_run_id": "local-ci-20260514T194825Z",
   "trend_glyph": ""
 },
   "history": [
@@ -1528,6 +1529,54 @@
     "projection": "docs/convergence/centicolon-dashboard.md",
     "ci_result": "FAIL",
     "ci_run_id": "local-ci-20260514T174949Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.1.260513.6",
+    "date": "2026-05-14T19:46:58Z",
+    "commit": "d2deb243ce45",
+    "total_cc": 650,
+    "earned_cc": 380,
+    "residual_cc": 270,
+    "percent_closed": 58.46153846153847,
+    "worst_spec": "spec:methodology-accountability",
+    "worst_reason": "Spec trace coverage below 90% (see /tmp/trace-coverage.log)",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "FAIL",
+    "ci_run_id": "local-ci-20260514T194658Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.1.260513.6",
+    "date": "2026-05-14T19:47:41Z",
+    "commit": "f4e5d991af9e",
+    "total_cc": 650,
+    "earned_cc": 380,
+    "residual_cc": 270,
+    "percent_closed": 58.46153846153847,
+    "worst_spec": "spec:methodology-accountability",
+    "worst_reason": "Spec trace coverage below 90% (see /tmp/trace-coverage.log)",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "FAIL",
+    "ci_run_id": "local-ci-20260514T194741Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.1.260513.6",
+    "date": "2026-05-14T19:48:25Z",
+    "commit": "f4e5d991af9e",
+    "total_cc": 650,
+    "earned_cc": 380,
+    "residual_cc": 270,
+    "percent_closed": 58.46153846153847,
+    "worst_spec": "spec:methodology-accountability",
+    "worst_reason": "Spec trace coverage below 90% (see /tmp/trace-coverage.log)",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "FAIL",
+    "ci_run_id": "local-ci-20260514T194825Z",
     "trend_glyph": ""
   }
 ]

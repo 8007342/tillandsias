@@ -2818,7 +2818,7 @@ fn run_headless(config_path: Option<String>) -> Result<(), String> {
 }
 
 /// Phase 5: Async implementation of headless mode.
-/// @trace spec:linux-native-portable-executable, spec:headless-mode, spec:signal-handling
+/// @trace spec:linux-native-portable-executable, spec:headless-mode, spec:signal-handling, spec:resource-metric-collection
 async fn run_headless_async(config_path: Option<String>) -> Result<(), String> {
     // Emit startup event with timestamp
     let now = chrono::Local::now();
@@ -2838,9 +2838,22 @@ async fn run_headless_async(config_path: Option<String>) -> Result<(), String> {
     // - Start monitoring containers
     // - Initialize enclave network
 
+    // Wave 13 Gap #3: spawn background resource-metric sampler.
+    // @trace spec:resource-metric-collection, spec:observability-metrics
+    // @cheatsheet observability/cheatsheet-metrics.md
+    let metrics_handle = spawn_metrics_sampler();
+
     // Main event loop: wait for application shutdown signal.
     wait_for_shutdown_signal().await?;
     eprintln!("Received shutdown signal");
+
+    // Cancel background metric sampler before invoking the rest of the
+    // shutdown sequence so it does not race with container teardown logs.
+    if let Some(handle) = metrics_handle {
+        handle.abort();
+        // Drain the join future; aborted tasks yield JoinError(cancelled).
+        let _ = handle.await;
+    }
 
     // Phase 5, Task 21: Graceful shutdown with timeout
     graceful_shutdown_async().await?;
@@ -2852,6 +2865,28 @@ async fn run_headless_async(config_path: Option<String>) -> Result<(), String> {
         now.to_rfc3339()
     );
     Ok(())
+}
+
+/// Spawn the resource-metric sampler in the background.
+///
+/// Returns the JoinHandle so the caller can cancel the loop on shutdown.
+/// Sampling cadence is 5s, matching the convergence dashboard's projection
+/// rhythm. Returning `None` is reserved for future feature-gating; today the
+/// sampler is unconditionally spawned in headless mode.
+///
+/// @trace spec:resource-metric-collection, spec:observability-metrics
+/// @cheatsheet observability/cheatsheet-metrics.md
+fn spawn_metrics_sampler() -> Option<tokio::task::JoinHandle<()>> {
+    use tillandsias_metrics::MetricsSampler;
+    let interval = Duration::from_secs(5);
+    if MetricsSampler::validate_interval(interval).is_err() {
+        return None;
+    }
+    let handle = tokio::spawn(async move {
+        let mut sampler = MetricsSampler::new();
+        sampler.collect_continuous(interval).await;
+    });
+    Some(handle)
 }
 
 /// Phase 5, Task 22: Wait for SIGTERM/SIGINT using signal-hook flags.

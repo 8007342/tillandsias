@@ -13,6 +13,11 @@ TARGET_DIR="$REPO_ROOT/target/convergence"
 MD_OUT="${MD_OUT:-$DOC_DIR/centicolon-dashboard.md}"
 JSON_OUT="${JSON_OUT:-$DOC_DIR/centicolon-dashboard.json}"
 SUMMARY_OUT="${SUMMARY_OUT:-$TARGET_DIR/summary.md}"
+# Latest resource sample emitted by tillandsias-metrics (Wave 13 Gap #3).
+# Schema: { "cpu_percent": f64, "memory_percent": f64, "disk_percent": f64, "sample_timestamp": iso8601 }
+# @trace spec:resource-metric-collection, spec:observability-metrics
+# @cheatsheet observability/cheatsheet-metrics.md
+METRICS_SAMPLE="${METRICS_SAMPLE:-$TARGET_DIR/resource-metrics.json}"
 TITLE="${TITLE:-Progression Trends}"
 SERIES_NAMESPACE="${SERIES_NAMESPACE:-local_development}"
 SERIES_LABEL="${SERIES_LABEL:-Local Development}"
@@ -265,6 +270,23 @@ else
     latest_alert='"unknown"'
 fi
 
+# Wave 13 Gap #3: include latest resource-metric sample if the sampler has
+# written one. The sampler (tillandsias-metrics) emits a small JSON blob to
+# $METRICS_SAMPLE on each cycle. Absent file => zeroed defaults so the
+# downstream JSON schema is stable for consumers.
+# @trace spec:resource-metric-collection, spec:observability-metrics
+if [[ -s "$METRICS_SAMPLE" ]]; then
+    metrics_block_json=$(jq -c '{
+        cpu_percent: (.cpu_percent // 0.0),
+        memory_percent: (.memory_percent // 0.0),
+        disk_percent: (.disk_percent // 0.0),
+        sample_timestamp: (.sample_timestamp // "1970-01-01T00:00:00Z"),
+        source: "tillandsias-metrics::DashboardSnapshot"
+    }' "$METRICS_SAMPLE" 2>/dev/null || printf '%s' '{"cpu_percent":0.0,"memory_percent":0.0,"disk_percent":0.0,"sample_timestamp":"1970-01-01T00:00:00Z","source":"tillandsias-metrics::DashboardSnapshot"}')
+else
+    metrics_block_json='{"cpu_percent":0.0,"memory_percent":0.0,"disk_percent":0.0,"sample_timestamp":"1970-01-01T00:00:00Z","source":"tillandsias-metrics::DashboardSnapshot"}'
+fi
+
 dashboard_contract_json=$(cat <<'CONTRACT'
 {
   "signature_format": {
@@ -326,6 +348,7 @@ cat >"$JSON_OUT" <<EOF
     "pass_rate_7d_percent": $pass_rate_7d,
     "coverage_avg_7d_percent": $coverage_avg_7d
   },
+  "metrics": $metrics_block_json,
   "dashboard_contract": $dashboard_contract_json,
   "trend_windows": $trend_windows_json,
   "latest": $latest_json,

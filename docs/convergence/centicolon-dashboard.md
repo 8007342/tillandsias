@@ -3,9 +3,9 @@
 
 # Progression Trends
 
-_Generated at 2026-05-14T19:47:07Z for series `Local Development` (`local_development`)._
+_Generated at 2026-05-14T19:53:08Z for series `Local Development` (`local_development`)._
 
-_Source: `target/convergence/centicolon-signature.jsonl` · 89 signature records · latest release `0.1.260513.6` at commit `98ebe92eb70a`._
+_Source: `target/convergence/centicolon-signature.jsonl` · 92 signature records · latest release `0.1.260513.6` at commit `f4e5d991af9e`._
 
 ## Trend Sparklines
 
@@ -14,7 +14,7 @@ Each glyph below represents one signature record. The top strip is closed cc (ta
 ```text
 ████████████████████████████████
 █████████▆▆███▇█████████████████
-████████████████▆▇█▇▇██▇▇
+████████████████▆▇█▇▇██▇▇▅▅▅
 ```
 
 ## Latest Signature
@@ -22,11 +22,11 @@ Each glyph below represents one signature record. The top strip is closed cc (ta
 | Field | Value |
 |---|---|
 | Release | `0.1.260513.6` |
-| Commit | `98ebe92eb70a` |
-| Closed | `82.1%` |
-| Residual cc | `100` |
-| Worst spec | `spec:dev-build` |
-| Worst reason | `Clippy warnings found: run 'cargo clippy --workspace' to see details (see /tmp/clippy-check.log)` |
+| Commit | `f4e5d991af9e` |
+| Closed | `58.5%` |
+| Residual cc | `270` |
+| Worst spec | `spec:methodology-accountability` |
+| Worst reason | `Spec trace coverage below 90% (see /tmp/trace-coverage.log)` |
 | CI result | `FAIL` |
 | Alert level | `red` (red < 90%, yellow < 95%) |
 

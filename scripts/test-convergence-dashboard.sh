@@ -136,6 +136,22 @@ if [ "$RECORD_COUNT" -gt 0 ]; then
     done
 fi
 
+# --- Group 5b: resource metrics block (Wave 13 Gap #3) -----------------------
+# @trace spec:resource-metric-collection, spec:observability-metrics
+printf '\n  [group] resource metrics block\n'
+assert_true "json has metrics block" \
+    "jq -e '.metrics | type == \"object\"' '$JSON_PATH' >/dev/null"
+assert_true "metrics has cpu_percent" \
+    "jq -e '.metrics.cpu_percent | type == \"number\"' '$JSON_PATH' >/dev/null"
+assert_true "metrics has memory_percent" \
+    "jq -e '.metrics.memory_percent | type == \"number\"' '$JSON_PATH' >/dev/null"
+assert_true "metrics has disk_percent" \
+    "jq -e '.metrics.disk_percent | type == \"number\"' '$JSON_PATH' >/dev/null"
+assert_true "metrics has sample_timestamp" \
+    "jq -e '.metrics.sample_timestamp | type == \"string\"' '$JSON_PATH' >/dev/null"
+assert_true "metrics declares its source crate" \
+    "jq -e '.metrics.source == \"tillandsias-metrics::DashboardSnapshot\"' '$JSON_PATH' >/dev/null"
+
 # --- Group 6: source-of-truth integration ------------------------------------
 printf '\n  [group] source-of-truth integration\n'
 assert_true "source-of-truth spec exists and is active" \

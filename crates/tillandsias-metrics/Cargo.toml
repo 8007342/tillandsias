@@ -1,0 +1,23 @@
+[package]
+name = "tillandsias-metrics"
+version = "0.1.260513"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Resource metric sampling (CPU, memory, disk) for predictive saturation observability"
+
+# @trace spec:observability-metrics, spec:resource-metric-collection
+
+[dependencies]
+tokio = { workspace = true, features = ["full"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = "1"
+chrono = { workspace = true, features = ["serde"] }
+anyhow = "1"
+thiserror = { workspace = true }
+tracing = { workspace = true }
+sysinfo = { version = "0.30", default-features = false }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util", "macros"] }
+tempfile = "3"
