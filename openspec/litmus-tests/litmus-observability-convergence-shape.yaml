@@ -2,28 +2,46 @@
 name: litmus:observability-convergence-shape
 spec: observability-convergence
 phase: pre-build
-description: Verify observability convergence scripts keep their spec trace hooks
+description: Verify observability convergence scripts keep their spec trace hooks, dashboard contract is present in spec body and rendered artefacts, and source-of-truth integration is preserved.
 severity: medium
 
 preconditions:
   - workspace contains scripts/github-actions-convergence.sh
   - workspace contains scripts/update-convergence-dashboard.sh
-  - shell utilities are available in PATH
+  - workspace contains docs/convergence/centicolon-dashboard.md
+  - workspace contains docs/convergence/centicolon-dashboard.json
+  - shell utilities are available in PATH (grep, jq)
 
 critical_path:
-  - step: "verify convergence instrumentation remains annotated"
+  - step: "verify convergence instrumentation remains annotated and the convergence score machinery is present in the spec"
     command: "grep -F '@trace spec:observability-convergence' scripts/github-actions-convergence.sh && grep -F '@trace spec:observability-convergence' scripts/update-convergence-dashboard.sh && grep -F 'convergence_score' openspec/specs/observability-convergence/spec.md"
     timeout_ms: 5000
     expected_behavior: "observability-convergence"
 
+  - step: "verify dashboard-projection requirements are present in the spec"
+    command: "grep -F 'Dashboard is a read-only projection' openspec/specs/observability-convergence/spec.md && grep -F 'Dashboard alert thresholds' openspec/specs/observability-convergence/spec.md && grep -F 'Dashboard trend metrics' openspec/specs/observability-convergence/spec.md"
+    timeout_ms: 3000
+
+  - step: "verify rendered .md dashboard carries the auto-generation header and source-of-truth pointer"
+    command: "grep -F 'THIS FILE IS AUTO-GENERATED' docs/convergence/centicolon-dashboard.md && grep -F 'openspec/specs/knowledge-source-of-truth/spec.md' docs/convergence/centicolon-dashboard.md"
+    timeout_ms: 3000
+
+  - step: "verify rendered .json dashboard exposes the dashboard contract, alert thresholds, and trend metrics"
+    command: "jq -e '.dashboard_contract.integration.source_of_truth == \"openspec/specs/knowledge-source-of-truth/spec.md\"' docs/convergence/centicolon-dashboard.json >/dev/null && jq -e '.alert_thresholds.red_below_percent_closed and .alert_thresholds.yellow_below_percent_closed' docs/convergence/centicolon-dashboard.json >/dev/null && jq -e 'has(\"trend_metrics\") and has(\"alert_level\")' docs/convergence/centicolon-dashboard.json >/dev/null"
+    timeout_ms: 5000
+
+  - step: "verify dashboard cheatsheet provenance is preserved"
+    command: "grep -F '@trace spec:observability-convergence' docs/cheatsheets/centicolon-dashboard.md && grep -F 'Anti-Gaming Rules' docs/cheatsheets/centicolon-dashboard.md"
+    timeout_ms: 3000
+
 observability:
   traces:
     - "@trace spec:observability-convergence"
-  expected_log: "Convergence instrumentation remains tied to the dashboard scripts"
+  expected_log: "Convergence instrumentation remains tied to the dashboard scripts; dashboard contract and source-of-truth integration are present in spec body and rendered artefacts"
   log_fields:
     spec: "observability-convergence"
     test: "observability-convergence-shape"
 
 rollback:
-  on_failure: "inspect scripts/github-actions-convergence.sh and scripts/update-convergence-dashboard.sh for drift"
-  command: "sed -n '1,40p' scripts/github-actions-convergence.sh && sed -n '1,40p' scripts/update-convergence-dashboard.sh"
+  on_failure: "inspect scripts/github-actions-convergence.sh, scripts/update-convergence-dashboard.sh, and docs/convergence/ for drift; re-run scripts/update-convergence-dashboard.sh if the rendered artefacts are missing the contract sections"
+  command: "sed -n '1,40p' scripts/update-convergence-dashboard.sh && printf '\\n---\\n' && sed -n '1,40p' docs/convergence/centicolon-dashboard.md && printf '\\n---\\n' && jq '.dashboard_contract // \"missing\"' docs/convergence/centicolon-dashboard.json"

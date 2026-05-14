@@ -81,7 +81,7 @@ Each spec's Litmus Test section MUST reference Requirements by name, creating a 
 
 ### Requirement: Implementation latency — time from spec to code
 
-Track how long a spec takes to move from "written" to "implementation merged".
+The tray MUST track how long a spec takes to move from "written" to "implementation merged".
 
 #### Scenario: Spec created
 - **WHEN** a new spec file is committed under `openspec/specs/`
@@ -124,7 +124,7 @@ Specs without recent implementation or test updates MUST be flagged as stale or 
 
 ### Requirement: Convergence scoring
 
-Compute a convergence score reflecting how well the implementation aligns with spec intent.
+The tray MUST compute a convergence score reflecting how well the implementation aligns with spec intent.
 This score is a coarse health indicator. Correctness-proximity residuals are
 reported separately as CentiColons by `methodology/proximity.yaml` and
 `openspec/specs/methodology-accountability/spec.md`.
@@ -154,9 +154,60 @@ reported separately as CentiColons by `methodology/proximity.yaml` and
   Warning: spec:forge-launch has low convergence (35%). Review requirements and traces.
   ```
 
+### Requirement: Dashboard is a read-only projection
+
+The CentiColon dashboard (`docs/convergence/centicolon-dashboard.md` and `docs/convergence/centicolon-dashboard.json`) SHALL be a read-only projection of the signature log. Hand-edits SHALL be considered drift and SHALL be reverted on the next regeneration.
+
+#### Scenario: Dashboard regenerated from signature log
+- **WHEN** `scripts/update-convergence-dashboard.sh` runs
+- **THEN** both `.md` and `.json` artefacts SHALL be overwritten from `target/convergence/centicolon-signature.jsonl`
+- **AND** the `.md` SHALL include the auto-generation header `<!-- THIS FILE IS AUTO-GENERATED ... DO NOT EDIT. -->`
+- **AND** the `.json` SHALL include a `dashboard_contract` object describing signature format, refresh policy, alert thresholds, and the source-of-truth integration
+
+#### Scenario: Dashboard cites the source-of-truth spec
+- **WHEN** the dashboard is rendered
+- **THEN** the `.md` SHALL include a section pointing to `openspec/specs/knowledge-source-of-truth/spec.md`
+- **AND** the `.json` SHALL include `dashboard_contract.integration.source_of_truth = "openspec/specs/knowledge-source-of-truth/spec.md"`
+
+#### Scenario: Dashboard staleness
+- **WHEN** a downstream consumer reads the dashboard
+- **THEN** it MAY treat the snapshot as stale if `generated_at` is more than `dashboard_contract.refresh_policy.staleness_threshold_hours` (default 24h) older than the consumer's current time
+- **AND** stale snapshots SHALL NOT be cited as authoritative evidence for spec convergence
+
+### Requirement: Dashboard alert thresholds
+
+The dashboard SHALL classify the latest signature into one of three alert levels based on its `percent_closed` value. Thresholds SHALL match those declared in the renderer (default: red < 90%, yellow < 95%, green otherwise).
+
+#### Scenario: Red alert
+- **WHEN** the latest signature's `percent_closed` is less than the red threshold
+- **THEN** the `.json` SHALL set `alert_level = "red"`
+- **AND** the `.md` SHALL display the alert level under "Latest Signature"
+
+#### Scenario: Yellow alert
+- **WHEN** the latest signature's `percent_closed` is between the red and yellow thresholds
+- **THEN** the `.json` SHALL set `alert_level = "yellow"`
+
+#### Scenario: Green alert
+- **WHEN** the latest signature's `percent_closed` is at or above the yellow threshold
+- **THEN** the `.json` SHALL set `alert_level = "green"`
+
+### Requirement: Dashboard trend metrics
+
+The dashboard `.json` SHALL include trend metrics over the most recent 7 signature records: a `pass_rate_7d_percent` (share of records whose `ci_result` is PASS) and a `coverage_avg_7d_percent` (mean `percent_closed`). These metrics enable downstream CI/CD systems to consume convergence trends without re-parsing the signature log.
+
+#### Scenario: Trend metrics computed
+- **WHEN** the dashboard is regenerated and at least one signature record exists
+- **THEN** `.json` SHALL contain `trend_metrics.pass_rate_7d_percent` and `trend_metrics.coverage_avg_7d_percent` as numbers
+- **AND** the values SHALL be computed over the last 7 records (or fewer if the log is shorter)
+
+#### Scenario: Empty signature log
+- **WHEN** the signature log is empty
+- **THEN** `trend_metrics.pass_rate_7d_percent` and `trend_metrics.coverage_avg_7d_percent` MAY be `null`
+- **AND** the `.md` SHALL display the "no signature records yet" hint
+
 ### Requirement: Litmus test — observability instrumentation
 
-Critical verification paths:
+The following critical verification paths MUST be reproducible against the tray and the dashboard renderer:
 
 #### Test: Spec coverage computation
 ```bash
@@ -261,4 +312,6 @@ Gating points:
 - `cheatsheets/runtime/logging-levels.md` — structured logging for observability events
 - `cheatsheets/runtime/cheatsheet-crdt-overrides.md` — CRDT and convergence patterns for spec↔code alignment
 - `cheatsheets/runtime/cheatsheet-architecture-v2.md` — instrumentation hooks and telemetry architecture
+- `docs/cheatsheets/centicolon-dashboard.md` — visual contract, tail compression, and anti-gaming rules for the dashboard
+- `openspec/specs/knowledge-source-of-truth/spec.md` — upstream epistemology: authority hierarchy, CRDT semantics, evidence bundles
 - `openspec/specs/methodology-accountability/spec.md` — CentiColon residual proximity boundary

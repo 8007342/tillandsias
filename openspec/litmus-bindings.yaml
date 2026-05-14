@@ -365,7 +365,7 @@ specs:
   litmus_tests:
   - litmus:knowledge-source-of-truth-shape
   coverage_ratio: 100
-  last_verified: '2026-05-12'
+  last_verified: '2026-05-14'
 - spec_id: layered-tools-overlay
   status: obsolete
   litmus_tests: []
@@ -670,8 +670,8 @@ specs:
   status: active
   litmus_tests:
   - litmus:observability-convergence-shape
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  coverage_ratio: 60
+  last_verified: '2026-05-14'
 - spec_id: podman-secrets-integration
   status: active
   litmus_tests:

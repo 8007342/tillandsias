@@ -1,12 +1,59 @@
 {
-  "generated_at": "2026-05-14T17:50:21Z",
+  "generated_at": "2026-05-14T18:54:48Z",
   "title": "Progression Trends",
   "series_namespace": "local_development",
   "series_label": "Local Development",
   "source_file": "target/convergence/centicolon-signature.jsonl",
-  "record_count": 88,
-  "sparkline_closed": "█████████████████████████████████████████▆▆███▇█████████████████████████████████▆▇█▇▇██▇",
-  "sparkline_residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▃▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▂▁▂▂▁▁▂",
+  "record_count": 89,
+  "sparkline_closed": "█████████████████████████████████████████▆▆███▇█████████████████████████████████▆▇█▇▇██▇▇",
+  "sparkline_residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▃▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▂▁▂▂▁▁▂▂",
+  "alert_level": "red",
+  "alert_thresholds": {
+    "red_below_percent_closed": 90,
+    "yellow_below_percent_closed": 95
+  },
+  "trend_metrics": {
+    "pass_rate_7d_percent": 14.285714285714285,
+    "coverage_avg_7d_percent": 89.30453604366649
+  },
+  "dashboard_contract": {
+  "signature_format": {
+    "description": "Each CentiColon signature record is an append-only entry in target/convergence/centicolon-signature.jsonl. The dashboard projects these into the .md and .json artefacts below.",
+    "fields": [
+      "release_version (semver)",
+      "release_date (UTC ISO 8601)",
+      "source_commit (git sha)",
+      "expected_total_cc (integer)",
+      "actual_earned_cc (integer)",
+      "residual_cc (integer)",
+      "max_residual_spec (spec id)",
+      "max_residual_reason (string)",
+      "evidence_bundle_ref (path or hash)",
+      "ci_result (PASS|FAIL)"
+    ]
+  },
+  "refresh_policy": {
+    "cadence": "Local CI may regenerate after every metrics-producing run. Main-branch merges should append a new signature and refresh the dashboard. Releases publish dashboard + signature log + delta + evidence bundle together.",
+    "staleness_threshold_hours": 24,
+    "stale_marker": "If generated_at is older than staleness_threshold_hours from now, downstream readers SHOULD treat the snapshot as stale and refuse to use it as authoritative."
+  },
+  "alert_thresholds": {
+    "red_below_percent_closed": 90,
+    "yellow_below_percent_closed": 95,
+    "rationale": "Red signals the implementation has drifted materially from spec; yellow signals an emerging gap; green confirms the residual cc budget is within acceptable bounds."
+  },
+  "integration": {
+    "source_of_truth": "openspec/specs/knowledge-source-of-truth/spec.md",
+    "interpretation": "This dashboard is a read-only projection of the evidence semantics defined by knowledge-source-of-truth. The dashboard MUST NOT be hand-edited. To change what is reported, change the upstream signature log, the renderer (scripts/update-convergence-dashboard.sh), or the methodology files (methodology/proximity.yaml, methodology/litmus-centicolon-wiring.yaml).",
+    "spec_traceability": "openspec/specs/spec-traceability/spec.md",
+    "observability_convergence": "openspec/specs/observability-convergence/spec.md",
+    "methodology_accountability": "openspec/specs/methodology-accountability/spec.md"
+  },
+  "trend_metrics": {
+    "pass_rate_7d_description": "Percentage of the most recent 7 signature records whose ci_result is PASS.",
+    "coverage_avg_7d_description": "Average percent_closed across the most recent 7 signature records."
+  }
+},
   "trend_windows": [
   {
     "index": 1,
@@ -36,26 +83,26 @@
     "start_release": "0.1.260513.3",
     "start_commit": "43a8615f2378",
     "end_release": "0.1.260513.6",
-    "end_commit": "9ba7563a0791",
-    "count": 24,
-    "closed": "████████████████▆▇█▇▇██▇",
-    "residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▂▁▂▂▁▁▂"
+    "end_commit": "98ebe92eb70a",
+    "count": 25,
+    "closed": "████████████████▆▇█▇▇██▇▇",
+    "residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▂▁▂▂▁▁▂▂"
   }
 ],
   "latest": {
   "release": "0.1.260513.6",
-  "date": "2026-05-14T17:25:58Z",
-  "commit": "9ba7563a0791",
-  "total_cc": 660,
-  "earned_cc": 560,
+  "date": "2026-05-14T17:49:49Z",
+  "commit": "98ebe92eb70a",
+  "total_cc": 560,
+  "earned_cc": 460,
   "residual_cc": 100,
-  "percent_closed": 84.84848484848484,
-  "worst_spec": "spec:podman-orchestration",
-  "worst_reason": "Pre-build litmus failures detected (see /tmp/litmus-pre-build.log)",
+  "percent_closed": 82.14285714285714,
+  "worst_spec": "spec:dev-build",
+  "worst_reason": "Clippy warnings found: run 'cargo clippy --workspace' to see details (see /tmp/clippy-check.log)",
   "evidence": "target/convergence/evidence-bundle.json",
   "projection": "docs/convergence/centicolon-dashboard.md",
   "ci_result": "FAIL",
-  "ci_run_id": "local-ci-20260514T172558Z",
+  "ci_run_id": "local-ci-20260514T174949Z",
   "trend_glyph": ""
 },
   "history": [
@@ -1465,6 +1512,22 @@
     "projection": "docs/convergence/centicolon-dashboard.md",
     "ci_result": "FAIL",
     "ci_run_id": "local-ci-20260514T172558Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.1.260513.6",
+    "date": "2026-05-14T17:49:49Z",
+    "commit": "98ebe92eb70a",
+    "total_cc": 560,
+    "earned_cc": 460,
+    "residual_cc": 100,
+    "percent_closed": 82.14285714285714,
+    "worst_spec": "spec:dev-build",
+    "worst_reason": "Clippy warnings found: run 'cargo clippy --workspace' to see details (see /tmp/clippy-check.log)",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "FAIL",
+    "ci_run_id": "local-ci-20260514T174949Z",
     "trend_glyph": ""
   }
 ]
