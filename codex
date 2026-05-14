@@ -112,7 +112,7 @@ repeat_ensure_renderer() {
 if [[ -n "$REPEAT_INTERVAL" ]]; then
   REPEAT_WINDOW="${CODEX_REPEAT_TREND_WINDOW:-5}"
   REPEAT_REFRESH_SECS="${CODEX_REPEAT_REFRESH_SECS:-2}"
-  REPEAT_PROMPT_PREFIX=$'Repeat-mode automation contract:\n- Return exactly one compact JSON object as the final response.\n- Do not stream file-by-file diffs, chain-of-thought, or raw tool chatter.\n- Use the repo-local plan and methodology as the source of truth.\n- While working, file refinement notes or ambiguity updates in ./methodology/events/ or ./plan/issues/ as soon as a meaningful substep completes or a blocker appears.\n- Each refinement note must be idempotent and cold-start readable; assume a different agent may pick up the next step.\n- Provide before_progress, after_progress, delta_progress, trend_window, milestone_label, milestone_timestamp, next_action, blockers, checkpoint_commit, status, session_id, focus_task_id, ready_count, blocked_count, loop_state, and a compact task_tree if available.\n- Keep the answer minimal, tree-friendly, and cold-start readable.\n'
+  REPEAT_PROMPT_PREFIX=$'Repeat-mode automation contract:\n- Return exactly one compact JSON object as the final response.\n- Do not stream file-by-file diffs, chain-of-thought, or raw tool chatter.\n- Use the repo-local plan and methodology as the source of truth.\n- While working, file refinement notes or ambiguity updates in ./methodology/events/ or ./plan/issues/ as soon as a meaningful substep completes or a blocker appears.\n- Each refinement note must be idempotent and cold-start readable; assume a different agent may pick up the next step.\n- If cheaply available from existing metadata, include tokens_spent, prompt_tokens, completion_tokens, tokens_remaining_percent, and rate_limit_remaining_percent in the final report and in any relevant task-tree nodes.\n- Provide before_progress, after_progress, delta_progress, trend_window, milestone_label, milestone_timestamp, next_action, blockers, checkpoint_commit, status, session_id, focus_task_id, ready_count, blocked_count, loop_state, and a compact task_tree if available.\n- Keep the answer minimal, tree-friendly, and cold-start readable.\n'
   REPEAT_STATE_ROOT="${CODEX_REPEAT_STATE_DIR:-${PWD}/plan/localwork/codex-repeat}"
   mkdir -p "$REPEAT_STATE_ROOT"
   REPEAT_STATE_DIR="$(mktemp -d "$REPEAT_STATE_ROOT/session.XXXXXX")"
@@ -141,6 +141,11 @@ if [[ -n "$REPEAT_INTERVAL" ]]; then
     "next_action",
     "blockers",
     "checkpoint_commit",
+    "tokens_spent",
+    "prompt_tokens",
+    "completion_tokens",
+    "tokens_remaining_percent",
+    "rate_limit_remaining_percent",
     "output_mode"
   ],
   "properties": {
@@ -170,6 +175,11 @@ if [[ -n "$REPEAT_INTERVAL" ]]; then
     "focus_task_id": { "type": "string" },
     "ready_count": { "type": "integer" },
     "blocked_count": { "type": "integer" },
+    "tokens_spent": { "type": "integer" },
+    "prompt_tokens": { "type": "integer" },
+    "completion_tokens": { "type": "integer" },
+    "tokens_remaining_percent": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "rate_limit_remaining_percent": { "type": "integer", "minimum": 0, "maximum": 100 },
     "task_tree": { "type": "array" },
     "loop_state": { "type": "string" },
     "output_mode": { "type": "string" }

@@ -89,3 +89,4 @@ plan:
     - "plan/localwork is disposable scratch, not canonical state."
     - "Repeat-mode agents should end with a compact JSON progress report, not a raw reasoning stream."
     - "Repeat-mode output must distinguish between waiting on the agent process and sleeping until the next iteration."
+    - "If existing metadata already exposes it, repeat-mode dashboards may include per-task token spend and remaining-rate-limit percentage, but they must not make extra API calls to fetch it."

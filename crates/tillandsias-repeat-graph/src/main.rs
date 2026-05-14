@@ -88,6 +88,16 @@ struct EventRecord {
     #[serde(default)]
     progress: Option<i64>,
     #[serde(default)]
+    tokens_spent: Option<i64>,
+    #[serde(default)]
+    prompt_tokens: Option<i64>,
+    #[serde(default)]
+    completion_tokens: Option<i64>,
+    #[serde(default)]
+    tokens_remaining_percent: Option<i64>,
+    #[serde(default)]
+    rate_limit_remaining_percent: Option<i64>,
+    #[serde(default)]
     summary: Option<String>,
     #[serde(default)]
     timestamp: Option<String>,
@@ -131,6 +141,16 @@ struct RepeatReport {
     #[serde(default)]
     blocked_count: Option<i64>,
     #[serde(default)]
+    tokens_spent: Option<i64>,
+    #[serde(default)]
+    prompt_tokens: Option<i64>,
+    #[serde(default)]
+    completion_tokens: Option<i64>,
+    #[serde(default)]
+    tokens_remaining_percent: Option<i64>,
+    #[serde(default)]
+    rate_limit_remaining_percent: Option<i64>,
+    #[serde(default)]
     task_tree: Option<JsonValue>,
     #[serde(default)]
     loop_state: Option<String>,
@@ -151,6 +171,11 @@ struct Overlay {
     status: Option<String>,
     progress: Option<i64>,
     summary: Option<String>,
+    tokens_spent: Option<i64>,
+    prompt_tokens: Option<i64>,
+    completion_tokens: Option<i64>,
+    tokens_remaining_percent: Option<i64>,
+    rate_limit_remaining_percent: Option<i64>,
 }
 
 fn clamp(value: i64) -> i64 {
@@ -356,6 +381,26 @@ fn node_summary(node_id: &str, index: &BTreeMap<String, NodeInfo>, overlay: &BTr
         .unwrap_or_default()
 }
 
+fn token_suffix(overlay: &Overlay) -> String {
+    let mut parts = Vec::new();
+    if let Some(tokens_spent) = overlay.tokens_spent {
+        parts.push(format!("tokens={tokens_spent}"));
+    }
+    if let Some(prompt_tokens) = overlay.prompt_tokens {
+        parts.push(format!("prompt={prompt_tokens}"));
+    }
+    if let Some(completion_tokens) = overlay.completion_tokens {
+        parts.push(format!("completion={completion_tokens}"));
+    }
+    if let Some(tokens_remaining_percent) = overlay.tokens_remaining_percent {
+        parts.push(format!("tokens-left={tokens_remaining_percent}%"));
+    }
+    if let Some(rate_limit_remaining_percent) = overlay.rate_limit_remaining_percent {
+        parts.push(format!("rate-limit={rate_limit_remaining_percent}%"));
+    }
+    parts.join(" ")
+}
+
 fn render_node(
     node_id: &str,
     index: &BTreeMap<String, NodeInfo>,
@@ -391,8 +436,18 @@ fn render_node(
         .and_then(|o| o.status.clone())
         .unwrap_or_else(|| node.status.clone());
     let summary = node_summary(node_id, index, overlay);
+    let token_suffix = overlay
+        .get(node_id)
+        .map(token_suffix)
+        .filter(|text| !text.is_empty())
+        .unwrap_or_default();
+    let suffix = if token_suffix.is_empty() {
+        String::new()
+    } else {
+        format!(" · {token_suffix}")
+    };
     out.push(format!(
-        "{prefix}{connector} {label:<44} [{}] {:3}% {status} · {summary}",
+        "{prefix}{connector} {label:<44} [{}] {:3}% {status} · {summary}{suffix}",
         progress_bar(progress, 12),
         progress
     ));
@@ -442,6 +497,21 @@ fn build_overlay(
         if let Some(progress) = event.progress {
             entry.progress = Some(progress);
         }
+        if let Some(tokens_spent) = event.tokens_spent {
+            entry.tokens_spent = Some(tokens_spent);
+        }
+        if let Some(prompt_tokens) = event.prompt_tokens {
+            entry.prompt_tokens = Some(prompt_tokens);
+        }
+        if let Some(completion_tokens) = event.completion_tokens {
+            entry.completion_tokens = Some(completion_tokens);
+        }
+        if let Some(tokens_remaining_percent) = event.tokens_remaining_percent {
+            entry.tokens_remaining_percent = Some(tokens_remaining_percent);
+        }
+        if let Some(rate_limit_remaining_percent) = event.rate_limit_remaining_percent {
+            entry.rate_limit_remaining_percent = Some(rate_limit_remaining_percent);
+        }
         if let Some(summary) = &event.summary {
             entry.summary = Some(summary.clone());
         }
@@ -462,6 +532,21 @@ fn build_overlay(
             }
             if let Some(progress) = report.after_progress {
                 entry.progress = Some(progress);
+            }
+            if let Some(tokens_spent) = report.tokens_spent {
+                entry.tokens_spent = Some(tokens_spent);
+            }
+            if let Some(prompt_tokens) = report.prompt_tokens {
+                entry.prompt_tokens = Some(prompt_tokens);
+            }
+            if let Some(completion_tokens) = report.completion_tokens {
+                entry.completion_tokens = Some(completion_tokens);
+            }
+            if let Some(tokens_remaining_percent) = report.tokens_remaining_percent {
+                entry.tokens_remaining_percent = Some(tokens_remaining_percent);
+            }
+            if let Some(rate_limit_remaining_percent) = report.rate_limit_remaining_percent {
+                entry.rate_limit_remaining_percent = Some(rate_limit_remaining_percent);
             }
             if let Some(summary) = &report.next_action {
                 entry.summary = Some(summary.clone());
@@ -575,6 +660,11 @@ fn main() {
     let checkpoint = report.checkpoint_commit.clone().unwrap_or_default();
     let ready_count = report.ready_count.unwrap_or(0);
     let blocked_count = report.blocked_count.unwrap_or(0);
+    let tokens_spent = report.tokens_spent;
+    let prompt_tokens = report.prompt_tokens;
+    let completion_tokens = report.completion_tokens;
+    let tokens_remaining_percent = report.tokens_remaining_percent;
+    let rate_limit_remaining_percent = report.rate_limit_remaining_percent;
     let branch = report.branch.clone().unwrap_or_else(|| "linux-next".to_string());
     let status = report.status.clone().unwrap_or_else(|| "running".to_string());
     let loop_state_label = match loop_state.as_str() {
@@ -648,6 +738,31 @@ fn main() {
         if focus_hint.is_empty() { "n/a" } else { &focus_hint },
         events.len()
     );
+    if tokens_spent.is_some()
+        || prompt_tokens.is_some()
+        || completion_tokens.is_some()
+        || tokens_remaining_percent.is_some()
+        || rate_limit_remaining_percent.is_some()
+    {
+        println!(
+            "[codex-repeat] tokens   spent={} prompt={} completion={} left={} rate-limit={}",
+            tokens_spent
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "n/a".to_string()),
+            prompt_tokens
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "n/a".to_string()),
+            completion_tokens
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "n/a".to_string()),
+            tokens_remaining_percent
+                .map(|value| format!("{value}%"))
+                .unwrap_or_else(|| "n/a".to_string()),
+            rate_limit_remaining_percent
+                .map(|value| format!("{value}%"))
+                .unwrap_or_else(|| "n/a".to_string())
+        );
+    }
     println!(
         "[codex-repeat] milestone {}  next={}  blockers={}",
         milestone_stamp,

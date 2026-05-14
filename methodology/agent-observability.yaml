@@ -30,6 +30,12 @@ agent_observability_protocol:
       - graph_node_id
       - owned_file_scope
       - checkpoint_commit
+    optional_metadata_fields:
+      - tokens_spent
+      - prompt_tokens
+      - completion_tokens
+      - tokens_remaining_percent
+      - rate_limit_remaining_percent
     status_values:
       - queued
       - bootstrapping
@@ -138,6 +144,11 @@ agent_observability_protocol:
       focus_task_id: string
       ready_count: integer
       blocked_count: integer
+      tokens_spent: integer
+      prompt_tokens: integer
+      completion_tokens: integer
+      tokens_remaining_percent: integer
+      rate_limit_remaining_percent: integer
       task_tree: list
       loop_state: string
       output_mode: "compact-json"
@@ -148,6 +159,8 @@ agent_observability_protocol:
       - "Render only active work and its dependency tail as a compact tree with one line per node."
       - "Treat anonymous stream events as evidence only; they may advance the current focus bar but must not become standalone tree nodes."
       - "Ask agents to file refinement notes to ./methodology/events/ or ./plan/issues/ so live progress can keep moving even when the session has not finished."
+      - "Show token-spend metadata only when cheaply available from existing metadata; do not issue extra API calls to fetch it."
+      - "If token metadata exists, surface both per-task token spend and the remaining percentage until rate limiting."
       - "Do not stream file-by-file changes in repeat mode unless explicitly requested."
       - "Keep the live refresh minimal: headers, tree, trend, milestone, blockers."
       - "Repaint when the running agent emits a new progress record; do not repaint on a blind timer."
