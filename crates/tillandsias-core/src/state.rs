@@ -292,6 +292,10 @@ pub struct BrowserWindowMetadata {
     pub window_id: String,
     /// Container ID running this browser window (from podman inspect)
     pub container_id: String,
+    /// Project label extracted from container name (e.g., "my-app" from "tillandsias-my-app-aeranthos")
+    /// Used for routing rule generation and request-path-based project identification.
+    /// @trace spec:browser-routing-allowlist
+    pub project_label: String,
     /// When the window was launched
     pub launch_time: Instant,
     /// Last heartbeat timestamp (used for stale detection)
@@ -312,12 +316,32 @@ pub enum BrowserWindowStatus {
     Closed,
 }
 
+/// Callback type for window registry mutations.
+/// Called when a window is registered or unregistered.
+/// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
+pub type RegistryMutationHook = Box<dyn Fn(&str, Option<&str>, Option<&str>) + Send + Sync>;
+
 /// Thread-safe registry of active browser windows.
 /// @trace spec:browser-isolation-tray-integration, spec:browser-window-rate-limiting
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BrowserWindowRegistry {
     /// HashMap of window_id -> BrowserWindowMetadata, protected by Mutex
     windows: Arc<Mutex<std::collections::HashMap<String, BrowserWindowMetadata>>>,
+    /// Optional hook called on window registration/unregistration.
+    /// Signature: (window_id, container_id_opt, project_label_opt)
+    /// For registration: both container_id and project_label are Some(_)
+    /// For unregistration: both are None
+    /// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
+    mutation_hook: Arc<Mutex<Option<RegistryMutationHook>>>,
+}
+
+impl std::fmt::Debug for BrowserWindowRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BrowserWindowRegistry")
+            .field("windows", &self.windows)
+            .field("mutation_hook", &"<closure>")
+            .finish()
+    }
 }
 
 /// Cache TTL for remote repository list (5 minutes).
@@ -329,21 +353,49 @@ impl BrowserWindowRegistry {
     pub fn new() -> Self {
         Self {
             windows: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            mutation_hook: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Set a mutation hook to be called when windows are registered or unregistered.
+    /// The hook receives (window_id, container_id_opt, project_label_opt).
+    /// For registration: both optional parameters are Some(_)
+    /// For unregistration: both optional parameters are None
+    /// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
+    pub fn set_mutation_hook(&self, hook: RegistryMutationHook) -> Result<(), String> {
+        let mut hook_slot = self
+            .mutation_hook
+            .lock()
+            .map_err(|_| "mutation hook lock poisoned".to_string())?;
+        *hook_slot = Some(hook);
+        Ok(())
+    }
+
+    /// Helper to invoke the mutation hook if set.
+    #[allow(clippy::collapsible_if)]
+    fn call_mutation_hook(&self, window_id: &str, container_id_opt: Option<&str>, project_label_opt: Option<&str>) {
+        if let Ok(hook_slot) = self.mutation_hook.lock() {
+            if let Some(hook) = hook_slot.as_ref() {
+                hook(window_id, container_id_opt, project_label_opt);
+            }
         }
     }
 
     /// Register a new browser window in the registry.
+    /// Calls the mutation hook if one is set.
     /// Returns the registered metadata.
-    /// @trace spec:browser-isolation-tray-integration
+    /// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
     pub fn register_window(
         &self,
         window_id: String,
         container_id: String,
+        project_label: String,
     ) -> Result<BrowserWindowMetadata, String> {
         let now = Instant::now();
         let metadata = BrowserWindowMetadata {
             window_id: window_id.clone(),
-            container_id,
+            container_id: container_id.clone(),
+            project_label: project_label.clone(),
             launch_time: now,
             last_heartbeat: now,
             status: BrowserWindowStatus::Launching,
@@ -354,20 +406,32 @@ impl BrowserWindowRegistry {
             .lock()
             .map_err(|_| "browser window registry lock poisoned".to_string())?;
 
-        windows.insert(window_id, metadata.clone());
+        windows.insert(window_id.clone(), metadata.clone());
+
+        // Call mutation hook after successful registration
+        self.call_mutation_hook(&window_id, Some(&container_id), Some(&project_label));
+
         Ok(metadata)
     }
 
     /// Unregister a browser window from the registry.
+    /// Calls the mutation hook if one is set.
     /// Returns the unregistered metadata if it existed.
-    /// @trace spec:browser-isolation-tray-integration
+    /// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
     pub fn unregister_window(&self, window_id: &str) -> Result<Option<BrowserWindowMetadata>, String> {
         let mut windows = self
             .windows
             .lock()
             .map_err(|_| "browser window registry lock poisoned".to_string())?;
 
-        Ok(windows.remove(window_id))
+        let removed = windows.remove(window_id);
+
+        // Call mutation hook after successful unregistration
+        if removed.is_some() {
+            self.call_mutation_hook(window_id, None, None);
+        }
+
+        Ok(removed)
     }
 
     /// Get a snapshot of all active browser windows.
@@ -427,6 +491,31 @@ impl BrowserWindowRegistry {
         } else {
             Err(format!("window {} not found in registry", window_id))
         }
+    }
+
+    /// Get a snapshot of active windows grouped by project label.
+    /// Returns HashMap<project_label, Vec<BrowserWindowMetadata>>
+    /// Used by Caddyfile generation to build dynamic routing rules.
+    /// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
+    pub fn get_active_windows_by_project(
+        &self,
+    ) -> Result<std::collections::HashMap<String, Vec<BrowserWindowMetadata>>, String> {
+        let windows = self
+            .windows
+            .lock()
+            .map_err(|_| "browser window registry lock poisoned".to_string())?;
+
+        let mut by_project: std::collections::HashMap<String, Vec<BrowserWindowMetadata>> =
+            std::collections::HashMap::new();
+
+        for metadata in windows.values() {
+            by_project
+                .entry(metadata.project_label.clone())
+                .or_default()
+                .push(metadata.clone());
+        }
+
+        Ok(by_project)
     }
 }
 
@@ -1098,12 +1187,14 @@ mod tests {
         let result = registry.register_window(
             "project1-window-1".to_string(),
             "container-abc123".to_string(),
+            "project1".to_string(),
         );
 
         assert!(result.is_ok());
         let metadata = result.unwrap();
         assert_eq!(metadata.window_id, "project1-window-1");
         assert_eq!(metadata.container_id, "container-abc123");
+        assert_eq!(metadata.project_label, "project1");
         assert_eq!(metadata.status, BrowserWindowStatus::Launching);
 
         // Get the window back
@@ -1118,7 +1209,11 @@ mod tests {
         let registry = BrowserWindowRegistry::new();
 
         registry
-            .register_window("project1-window-1".to_string(), "container-abc123".to_string())
+            .register_window(
+                "project1-window-1".to_string(),
+                "container-abc123".to_string(),
+                "project1".to_string(),
+            )
             .unwrap();
 
         let unregistered = registry.unregister_window("project1-window-1");
@@ -1147,13 +1242,25 @@ mod tests {
         let registry = BrowserWindowRegistry::new();
 
         registry
-            .register_window("project1-window-1".to_string(), "container-1".to_string())
+            .register_window(
+                "project1-window-1".to_string(),
+                "container-1".to_string(),
+                "project1".to_string(),
+            )
             .unwrap();
         registry
-            .register_window("project1-window-2".to_string(), "container-2".to_string())
+            .register_window(
+                "project1-window-2".to_string(),
+                "container-2".to_string(),
+                "project1".to_string(),
+            )
             .unwrap();
         registry
-            .register_window("project2-window-1".to_string(), "container-3".to_string())
+            .register_window(
+                "project2-window-1".to_string(),
+                "container-3".to_string(),
+                "project2".to_string(),
+            )
             .unwrap();
 
         let windows = registry.get_windows().unwrap();
@@ -1172,7 +1279,11 @@ mod tests {
         let registry = BrowserWindowRegistry::new();
 
         registry
-            .register_window("project1-window-1".to_string(), "container-abc123".to_string())
+            .register_window(
+                "project1-window-1".to_string(),
+                "container-abc123".to_string(),
+                "project1".to_string(),
+            )
             .unwrap();
 
         // Initial status should be Launching
@@ -1210,7 +1321,11 @@ mod tests {
         let registry = BrowserWindowRegistry::new();
 
         registry
-            .register_window("project1-window-1".to_string(), "container-abc123".to_string())
+            .register_window(
+                "project1-window-1".to_string(),
+                "container-abc123".to_string(),
+                "project1".to_string(),
+            )
             .unwrap();
 
         let window1 = registry.get_window("project1-window-1").unwrap().unwrap();
@@ -1255,7 +1370,8 @@ mod tests {
             let handle = thread::spawn(move || {
                 let window_id = format!("window-{}", i);
                 let container_id = format!("container-{}", i);
-                reg.register_window(window_id, container_id)
+                let project = format!("project{}", i % 2);
+                reg.register_window(window_id, container_id, project)
                     .expect("register should succeed")
             });
             handles.push(handle);
@@ -1289,7 +1405,202 @@ mod tests {
         let result = state.browser_windows.register_window(
             "test-window".to_string(),
             "test-container".to_string(),
+            "test-project".to_string(),
         );
         assert!(result.is_ok());
+    }
+
+    // @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
+    #[test]
+    fn browser_window_registry_mutation_hook_on_register() {
+        use std::sync::{Arc as StdArc, atomic::{AtomicBool, Ordering}};
+
+        let registry = BrowserWindowRegistry::new();
+        let hook_called = StdArc::new(AtomicBool::new(false));
+        let hook_called_clone = StdArc::clone(&hook_called);
+
+        let hook: RegistryMutationHook = Box::new(move |window_id, container_id_opt, project_label_opt| {
+            assert_eq!(window_id, "project1-window-1");
+            assert_eq!(container_id_opt, Some("container-abc123"));
+            assert_eq!(project_label_opt, Some("project1"));
+            hook_called_clone.store(true, Ordering::SeqCst);
+        });
+
+        registry.set_mutation_hook(hook).unwrap();
+
+        registry
+            .register_window(
+                "project1-window-1".to_string(),
+                "container-abc123".to_string(),
+                "project1".to_string(),
+            )
+            .unwrap();
+
+        assert!(hook_called.load(Ordering::SeqCst));
+    }
+
+    // @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
+    #[test]
+    fn browser_window_registry_mutation_hook_on_unregister() {
+        use std::sync::{Arc as StdArc, atomic::{AtomicBool, Ordering}};
+
+        let registry = BrowserWindowRegistry::new();
+        let hook_called = StdArc::new(AtomicBool::new(false));
+        let hook_called_clone = StdArc::clone(&hook_called);
+
+        let hook: RegistryMutationHook = Box::new(move |window_id, container_id_opt, project_label_opt| {
+            if window_id == "project1-window-1" && container_id_opt.is_none() && project_label_opt.is_none() {
+                hook_called_clone.store(true, Ordering::SeqCst);
+            }
+        });
+
+        registry.set_mutation_hook(hook).unwrap();
+
+        registry
+            .register_window(
+                "project1-window-1".to_string(),
+                "container-abc123".to_string(),
+                "project1".to_string(),
+            )
+            .unwrap();
+
+        // Reset flag
+        hook_called.store(false, Ordering::SeqCst);
+
+        registry.unregister_window("project1-window-1").unwrap();
+
+        assert!(hook_called.load(Ordering::SeqCst));
+    }
+
+    // @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
+    #[test]
+    fn browser_window_registry_mutation_hook_concurrent_calls() {
+        use std::sync::{Arc as StdArc, atomic::{AtomicUsize, Ordering}};
+
+        let registry = StdArc::new(BrowserWindowRegistry::new());
+        let call_count = StdArc::new(AtomicUsize::new(0));
+        let call_count_clone = StdArc::clone(&call_count);
+
+        let hook: RegistryMutationHook = Box::new(move |_window_id, _container_id_opt, _project_label_opt| {
+            call_count_clone.fetch_add(1, Ordering::SeqCst);
+        });
+
+        registry.set_mutation_hook(hook).unwrap();
+
+        // Register multiple windows concurrently
+        let mut handles = vec![];
+        for i in 0..5 {
+            let reg = StdArc::clone(&registry);
+            let handle = std::thread::spawn(move || {
+                reg.register_window(
+                    format!("window-{}", i),
+                    format!("container-{}", i),
+                    format!("project{}", i),
+                )
+                .unwrap()
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all registrations
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        // All 5 registrations should have called the hook
+        assert_eq!(call_count.load(Ordering::SeqCst), 5);
+    }
+
+    // @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
+    #[test]
+    fn browser_window_registry_get_active_windows_by_project() {
+        let registry = BrowserWindowRegistry::new();
+
+        registry
+            .register_window(
+                "project1-window-1".to_string(),
+                "container-1".to_string(),
+                "project1".to_string(),
+            )
+            .unwrap();
+        registry
+            .register_window(
+                "project1-window-2".to_string(),
+                "container-2".to_string(),
+                "project1".to_string(),
+            )
+            .unwrap();
+        registry
+            .register_window(
+                "project2-window-1".to_string(),
+                "container-3".to_string(),
+                "project2".to_string(),
+            )
+            .unwrap();
+
+        let by_project = registry.get_active_windows_by_project().unwrap();
+
+        assert_eq!(by_project.len(), 2);
+        assert_eq!(by_project.get("project1").unwrap().len(), 2);
+        assert_eq!(by_project.get("project2").unwrap().len(), 1);
+
+        // Verify window IDs are correct
+        let project1_window_ids: std::collections::HashSet<_> = by_project
+            .get("project1")
+            .unwrap()
+            .iter()
+            .map(|w| w.window_id.as_str())
+            .collect();
+        assert!(project1_window_ids.contains("project1-window-1"));
+        assert!(project1_window_ids.contains("project1-window-2"));
+
+        let project2_window_ids: std::collections::HashSet<_> = by_project
+            .get("project2")
+            .unwrap()
+            .iter()
+            .map(|w| w.window_id.as_str())
+            .collect();
+        assert!(project2_window_ids.contains("project2-window-1"));
+    }
+
+    // @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
+    #[test]
+    fn browser_window_registry_get_active_windows_by_project_empty() {
+        let registry = BrowserWindowRegistry::new();
+
+        let by_project = registry.get_active_windows_by_project().unwrap();
+
+        assert_eq!(by_project.len(), 0);
+    }
+
+    // @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
+    #[test]
+    fn browser_window_registry_get_active_windows_by_project_after_unregister() {
+        let registry = BrowserWindowRegistry::new();
+
+        registry
+            .register_window(
+                "project1-window-1".to_string(),
+                "container-1".to_string(),
+                "project1".to_string(),
+            )
+            .unwrap();
+        registry
+            .register_window(
+                "project1-window-2".to_string(),
+                "container-2".to_string(),
+                "project1".to_string(),
+            )
+            .unwrap();
+
+        let by_project = registry.get_active_windows_by_project().unwrap();
+        assert_eq!(by_project.get("project1").unwrap().len(), 2);
+
+        // Unregister one window
+        registry.unregister_window("project1-window-1").unwrap();
+
+        let by_project = registry.get_active_windows_by_project().unwrap();
+        assert_eq!(by_project.get("project1").unwrap().len(), 1);
+        assert_eq!(by_project.get("project1").unwrap()[0].window_id, "project1-window-2");
     }
 }
