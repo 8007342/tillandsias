@@ -903,6 +903,32 @@ async fn ensure_router_running(
     Ok(())
 }
 
+/// Generate dynamic Caddy configuration for OpenCode Web routes.
+///
+/// Takes a list of (subdomain, container_id, port) tuples and generates
+/// Caddy configuration blocks for reverse-proxy routes mapping
+/// `<subdomain>.localhost` to `http://127.0.0.1:<port>`.
+///
+/// @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-dynamic-routes
+fn generate_dynamic_caddyfile(windows: &[(String, String, u16)]) -> String {
+    if windows.is_empty() {
+        return String::new();
+    }
+
+    let mut routes = String::new();
+    for (subdomain, _container_id, port) in windows {
+        // Generate Caddy block for each route: subdomain.localhost -> localhost:port
+        // Format: subdomain.localhost {
+        //   reverse_proxy 127.0.0.1:port
+        // }
+        routes.push_str(&format!(
+            "{}.localhost {{\n    reverse_proxy 127.0.0.1:{}\n}}\n",
+            subdomain, port
+        ));
+    }
+    routes
+}
+
 fn forge_container_name(project_name: &str) -> String {
     format!("tillandsias-{project_name}-forge")
 }
@@ -2311,6 +2337,7 @@ pub(crate) fn run_opencode_web_mode(
         "chromium-core",
         "chromium-framework",
         "forge",
+        "router",
     ];
     ensure_versioned_images(&root, &images, version, debug)?;
 
@@ -2384,6 +2411,32 @@ pub(crate) fn run_opencode_web_mode(
             .await
             .map_err(|e| e.to_string())?;
         emit_opencode_web_event(project_name, "forge", "started", Some("opencode-web"))?;
+
+        // @trace spec:subdomain-routing-via-reverse-proxy
+        // After forge starts, ensure router is running and write dynamic routes.
+        let router_image = versioned_image_tag("router", version);
+        ensure_router_running(&client, &certs_dir, &router_image, debug).await
+            .unwrap_or_else(|e| {
+                if debug {
+                    eprintln!("[tillandsias] Warning: router degraded: {e}");
+                }
+            });
+
+        // Write dynamic Caddyfile with OpenCode Web routes.
+        // For now, a single route mapping opencode.<project>.localhost to the web service.
+        let windows = vec![(
+            format!("opencode.{}", project_name),
+            format!("tillandsias-{}-forge", project_name),
+            8080u16,
+        )];
+        let dynamic_config = generate_dynamic_caddyfile(&windows);
+        let dyn_file = router_dynamic_caddyfile_host_path().join("dynamic.Caddyfile");
+        std::fs::write(&dyn_file, &dynamic_config)
+            .unwrap_or_else(|e| {
+                if debug {
+                    eprintln!("[tillandsias] Warning: failed to write dynamic Caddyfile: {e}");
+                }
+            });
 
         Ok::<(), String>(())
     })?;
@@ -2708,5 +2761,45 @@ mod tests {
 
         // Image is the last argument
         assert_eq!(args.last().map(|s| s.as_str()), Some("tillandsias-router:v1.2.3"));
+    }
+
+    // @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-dynamic-routes
+    #[test]
+    fn dynamic_caddyfile_routes_opencode_service() {
+        let windows = vec![
+            ("opencode.visual-chess".to_string(), "tillandsias-visual-chess-forge".to_string(), 8080u16),
+        ];
+        let config = generate_dynamic_caddyfile(&windows);
+
+        // Verify Caddy block syntax is present
+        assert!(config.contains("opencode.visual-chess.localhost"));
+        assert!(config.contains("reverse_proxy"));
+        assert!(config.contains("127.0.0.1:8080"));
+
+        // Verify structure has opening and closing braces
+        assert!(config.contains("{"));
+        assert!(config.contains("}"));
+    }
+
+    #[test]
+    fn dynamic_caddyfile_multiple_routes() {
+        let windows = vec![
+            ("opencode.alpha".to_string(), "tillandsias-alpha-forge".to_string(), 8080u16),
+            ("opencode.beta".to_string(), "tillandsias-beta-forge".to_string(), 8081u16),
+        ];
+        let config = generate_dynamic_caddyfile(&windows);
+
+        // Verify both routes are present
+        assert!(config.contains("opencode.alpha.localhost"));
+        assert!(config.contains("opencode.beta.localhost"));
+        assert!(config.contains("127.0.0.1:8080"));
+        assert!(config.contains("127.0.0.1:8081"));
+    }
+
+    #[test]
+    fn dynamic_caddyfile_empty_routes_returns_empty_string() {
+        let windows: Vec<(String, String, u16)> = vec![];
+        let config = generate_dynamic_caddyfile(&windows);
+        assert!(config.is_empty());
     }
 }
