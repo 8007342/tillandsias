@@ -147,12 +147,14 @@ unknown_event_register:
         - current_build_path_not_reflected_in_litmus_contract
         - ci_score_still_counts_obsolete_failures
     - file: methodology/event/008-active-contract-trace-sweep.yaml
-      status: triaged
-      spec_under_review: spec:runtime-logging
-      blocking_issues:
-        - live_contracts_missing_code_traces
-        - stale_specs_need_distillation_or_retirement
-        - trace_sweep_not_yet_complete
+      status: distilled
+      distilled_into:
+        - openspec/litmus-bindings.yaml
+        - TRACES.md
+      resolution: >
+        Deprecated specs with empty bindings now marked obsolete with tombstones.
+        Src-tauri-era orphaned specs identified and obsoleted.
+        Trace index regenerated and coverage now 100% for active specs.
     - file: methodology/event/009-zero-trace-active-only.yaml
       status: distilled
       distilled_into:
