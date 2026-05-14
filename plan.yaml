@@ -85,6 +85,7 @@ plan:
     - "Repeat-mode dashboards should show only active work and repaint when the running agent emits a new update."
     - "The repeat-mode dashboard is rendered by the compiled Rust helper at `crates/tillandsias-repeat-graph`."
     - "Anonymous stream events may advance the current focus bar, but they must not create standalone tasks in the tree."
+    - "When a task uncovers ambiguity or a useful refinement, file a note in `./plan/issues/` or `./methodology/events/` so future agents can pick up the thread without chat history."
     - "plan/localwork is disposable scratch, not canonical state."
     - "Repeat-mode agents should end with a compact JSON progress report, not a raw reasoning stream."
     - "Repeat-mode output must distinguish between waiting on the agent process and sleeping until the next iteration."

@@ -112,7 +112,7 @@ repeat_ensure_renderer() {
 if [[ -n "$REPEAT_INTERVAL" ]]; then
   REPEAT_WINDOW="${CODEX_REPEAT_TREND_WINDOW:-5}"
   REPEAT_REFRESH_SECS="${CODEX_REPEAT_REFRESH_SECS:-2}"
-  REPEAT_PROMPT_PREFIX=$'Repeat-mode automation contract:\n- Return exactly one compact JSON object as the final response.\n- Do not stream file-by-file diffs, chain-of-thought, or raw tool chatter.\n- Use the repo-local plan and methodology as the source of truth.\n- Provide before_progress, after_progress, delta_progress, trend_window, milestone_label, milestone_timestamp, next_action, blockers, checkpoint_commit, status, session_id, focus_task_id, ready_count, blocked_count, loop_state, and a compact task_tree if available.\n- Keep the answer minimal, tree-friendly, and cold-start readable.\n'
+  REPEAT_PROMPT_PREFIX=$'Repeat-mode automation contract:\n- Return exactly one compact JSON object as the final response.\n- Do not stream file-by-file diffs, chain-of-thought, or raw tool chatter.\n- Use the repo-local plan and methodology as the source of truth.\n- While working, file refinement notes or ambiguity updates in ./methodology/events/ or ./plan/issues/ as soon as a meaningful substep completes or a blocker appears.\n- Each refinement note must be idempotent and cold-start readable; assume a different agent may pick up the next step.\n- Provide before_progress, after_progress, delta_progress, trend_window, milestone_label, milestone_timestamp, next_action, blockers, checkpoint_commit, status, session_id, focus_task_id, ready_count, blocked_count, loop_state, and a compact task_tree if available.\n- Keep the answer minimal, tree-friendly, and cold-start readable.\n'
   REPEAT_STATE_ROOT="${CODEX_REPEAT_STATE_DIR:-${PWD}/plan/localwork/codex-repeat}"
   mkdir -p "$REPEAT_STATE_ROOT"
   REPEAT_STATE_DIR="$(mktemp -d "$REPEAT_STATE_ROOT/session.XXXXXX")"
@@ -209,11 +209,18 @@ JSON
   }
 
   repeat_event_signature() {
+    local event_sig="0"
     if [[ -f "$REPEAT_EVENT_LOG_FILE" ]]; then
-      stat -c '%s:%Y' "$REPEAT_EVENT_LOG_FILE" 2>/dev/null || wc -l <"$REPEAT_EVENT_LOG_FILE" 2>/dev/null || printf '0'
-    else
-      printf '0'
+      event_sig="$(stat -c '%s:%Y' "$REPEAT_EVENT_LOG_FILE" 2>/dev/null || wc -l <"$REPEAT_EVENT_LOG_FILE" 2>/dev/null || printf '0')"
     fi
+    local refinement_sig="0"
+    refinement_sig="$(
+      {
+        [[ -d "$PWD/methodology/events" ]] && find "$PWD/methodology/events" -type f -printf '%T@:%s:%p\n' 2>/dev/null || true
+        [[ -d "$PWD/plan/issues" ]] && find "$PWD/plan/issues" -type f -printf '%T@:%s:%p\n' 2>/dev/null || true
+      } | sort | tail -n 1
+    )"
+    printf '%s|%s' "$event_sig" "$refinement_sig"
   }
 
   cleanup_repeat() {

@@ -33,6 +33,11 @@ plan_index:
     update_rule: >
       Reapplying the same graph node update_id is a no-op. Stale updates are
       preserved as history but must not change the current canonical state.
+    refinement_notes: >
+      If a task uncovers ambiguity, write the refinement note to
+      ./plan/issues/<graph-node-id>.md or ./methodology/events/<event-id>.yaml
+      instead of keeping it only in chat. Those files are the durable handoff
+      queue for future agents.
     scratch_root: plan/localwork
     step_file_template: plan/steps/README.md
 
@@ -150,7 +155,7 @@ plan_index:
             - crates/tillandsias-headless/src/main.rs
             - images/chromium/chromium-framework-launch.sh
           checkpoint_required: true
-          handoff_note: "Cold-start note: launcher contract and repeat prompt behavior are the first dependency tail."
+          handoff_note: "Cold-start note: launcher contract and repeat prompt behavior are the first dependency tail. If anything is unclear, file a refinement note under plan/issues/browser-launcher-contract.md or methodology/events/."
         - id: browser/window-registry
           status: pending
           depends_on:

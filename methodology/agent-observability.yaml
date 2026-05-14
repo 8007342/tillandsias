@@ -91,6 +91,9 @@ agent_observability_protocol:
     rule: >
       Agents communicate by appending events and by sending compact task handoffs.
       Handoffs must not depend on hidden conversational memory.
+      If a meaningful substep completes or a blocker appears, write a compact
+      refinement note under ./methodology/events/ or ./plan/issues/ so the next
+      agent can resume without chat history.
     handoff_schema:
       lease_id: string
       task_id: string
@@ -144,6 +147,7 @@ agent_observability_protocol:
       - "Show the last N progress points as a trend bar and an average delta."
       - "Render only active work and its dependency tail as a compact tree with one line per node."
       - "Treat anonymous stream events as evidence only; they may advance the current focus bar but must not become standalone tree nodes."
+      - "Ask agents to file refinement notes to ./methodology/events/ or ./plan/issues/ so live progress can keep moving even when the session has not finished."
       - "Do not stream file-by-file changes in repeat mode unless explicitly requested."
       - "Keep the live refresh minimal: headers, tree, trend, milestone, blockers."
       - "Repaint when the running agent emits a new progress record; do not repaint on a blind timer."
