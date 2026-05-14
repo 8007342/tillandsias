@@ -1073,6 +1073,63 @@ list_projects() {
     fi
 }
 
+# ── SSH key auto-discovery ─────────────────────────────
+# @trace gap:ON-007
+# Auto-discover SSH keys from the host's ~/.ssh/ directory and make them
+# available inside the forge without requiring manual bind-mount configuration.
+# Supports three modes:
+#   1. SSH agent socket (SSH_AUTH_SOCK) — preferred if agent is running
+#   2. Traditional SSH key files — fallback if agent not available
+#   3. Both — auto-detect and use whichever is available
+#
+# The forge container is mounted RO to prevent accidental key modification.
+# Returns 0 on success, 1 if no SSH keys detected (non-fatal).
+export_ssh_env() {
+    local ssh_host_dir="${HOME}/.ssh"
+
+    # No SSH directory on host — nothing to do.
+    [ -d "$ssh_host_dir" ] || return 1
+
+    # Check for SSH agent socket (most secure, preferred).
+    # Priority: SSH_AUTH_SOCK > /run/user/1000/ssh-agent (common on systemd)
+    local ssh_agent_socket=""
+    if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -S "$SSH_AUTH_SOCK" ]; then
+        ssh_agent_socket="$SSH_AUTH_SOCK"
+    elif [ -S "/run/user/$(id -u)"/ssh-agent.sock ]; then
+        ssh_agent_socket="/run/user/$(id -u)"/ssh-agent.sock
+    elif [ -S "/run/user/1000/ssh-agent.sock" ]; then
+        ssh_agent_socket="/run/user/1000/ssh-agent.sock"
+    fi
+
+    # If agent socket is available, prefer it (no keys on disk needed).
+    if [ -n "$ssh_agent_socket" ] && [ -S "$ssh_agent_socket" ]; then
+        export SSH_AUTH_SOCK="$ssh_agent_socket"
+        trace_lifecycle "ssh" "SSH_AUTH_SOCK=$SSH_AUTH_SOCK"
+        return 0
+    fi
+
+    # Fallback: SSH key files. Check if ~/.ssh/ contains readable keys.
+    # Look for common key file patterns (id_rsa, id_ed25519, id_ecdsa, etc).
+    # The container will have RO access to these files.
+    if [ -f "$ssh_host_dir/id_rsa" ] || \
+       [ -f "$ssh_host_dir/id_ed25519" ] || \
+       [ -f "$ssh_host_dir/id_ecdsa" ] || \
+       [ -f "$ssh_host_dir/id_dsa" ] || \
+       [ -f "$ssh_host_dir/id_ecdsa_sk" ] || \
+       [ -f "$ssh_host_dir/id_ed25519_sk" ]; then
+        # At least one key file exists. Export SSH_KEY_PATH so scripts can discover
+        # the location, and ensure ~/.ssh is in place inside the forge (even though
+        # it's bind-mounted RO by the orchestrator).
+        export SSH_KEY_PATH="$ssh_host_dir"
+        trace_lifecycle "ssh" "SSH_KEY_PATH=$SSH_KEY_PATH (key files detected)"
+        return 0
+    fi
+
+    # No keys or agent found.
+    trace_lifecycle "ssh" "no SSH keys or agent detected"
+    return 1
+}
+
 # ── Banner ──────────────────────────────────────────────────
 show_banner() {
     local agent_name="${1:-terminal}"

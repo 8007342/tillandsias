@@ -8,6 +8,14 @@
 
 source /usr/local/lib/tillandsias/lib-common.sh
 
+# @trace gap:ON-008
+# Load agent profile configuration from config overlay.
+# This exports AGENT_PROFILE, AGENT_SUPPORTS_WEB, and related variables
+# based on the user's preferred agent (claude, opencode, opencode-web).
+if [ -f /opt/config-overlay/mcp/agent-profile.sh ]; then
+    source /opt/config-overlay/mcp/agent-profile.sh
+fi
+
 # @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
 # Populate tmpfs hot mount (/opt/cheatsheets) from image-baked lower layer.
 # The --tmpfs mount is already in place (podman establishes it before exec).
@@ -64,6 +72,12 @@ if [ -d "$HOME/.claude" ]; then
 else
     trace_lifecycle "credentials" "claude: ~/.claude/ NOT FOUND (first auth will prompt)"
 fi
+
+# ── SSH key auto-discovery ──────────────────────────────────
+# @trace gap:ON-007
+# Automatically discover and export SSH keys/agent from the host.
+# This enables SSH-based git operations without manual configuration.
+export_ssh_env || true
 
 # ── Find project directory ──────────────────────────────────
 find_project_dir

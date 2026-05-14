@@ -70,9 +70,16 @@ clone_project_from_mirror
 require_openspec
 apply_opencode_config_overlay
 
+# ── SSH key auto-discovery ──────────────────────────────────
+# @trace gap:ON-007
+# Automatically discover and export SSH keys/agent from the host.
+# This enables SSH-based git operations without manual configuration.
+export_ssh_env || true
+
 # ── Find project directory ──────────────────────────────────
 find_project_dir
-\n# ── Export project environment ───────────────────────────────
+
+# ── Export project environment ───────────────────────────────
 # @trace spec:forge-environment-discoverability
 # Export discovery env vars: TILLANDSIAS_PROJECT_PATH, TILLANDSIAS_PROJECT_GENUS
 export_project_env
