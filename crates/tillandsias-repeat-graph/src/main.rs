@@ -769,6 +769,11 @@ fn main() {
         next_action,
         blockers_text
     );
+    if events.is_empty() && overlay_active_count == 0 {
+        println!(
+            "[codex-repeat] bootstrap pending: no refinement notes yet; awaiting first observable substep"
+        );
+    }
     if !checkpoint.is_empty() {
         println!("[codex-repeat] checkpoint {}", checkpoint);
     }

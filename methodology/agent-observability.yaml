@@ -164,6 +164,7 @@ agent_observability_protocol:
       - "Do not stream file-by-file changes in repeat mode unless explicitly requested."
       - "The repeat path is tokio-driven: child output, note-file changes, and heartbeat ticks should wake the live tree without a shell polling loop."
       - "Keep the live refresh minimal: headers, tree, trend, milestone, blockers."
+      - "If no refinement note has arrived yet, render a bootstrap-pending line so cold-start silence is explicit instead of looking like completed work."
       - "Repaint when the running agent emits a new progress record; do not repaint on a blind timer."
       - "Distinguish between waiting on the agent process, agent working, and sleeping between iterations."
 

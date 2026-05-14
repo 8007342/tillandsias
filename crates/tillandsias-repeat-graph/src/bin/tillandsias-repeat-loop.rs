@@ -23,6 +23,7 @@ const PROMPT_PREFIX: &str = "Repeat-mode automation contract:\n\
 - Emit an immediate bootstrap refinement note in ./methodology/events/ or ./plan/issues/ before making edits.\n\
 - Refresh that note after each meaningful substep, blocker, or verification milestone.\n\
 - Do not wait until the end of the session to produce the first update.\n\
+- Do not finalize the session until you have created at least one visible bootstrap note or documented a blocking reason with the chosen graph node.\n\
 - While working, file refinement notes or ambiguity updates in ./methodology/events/ or ./plan/issues/ as soon as a meaningful substep completes or a blocker appears.\n\
 - Each refinement note must be idempotent and cold-start readable; assume a different agent may pick up the next step.\n\
 - If you are actively working but have nothing new to say, update the existing note rather than remaining silent.\n\
