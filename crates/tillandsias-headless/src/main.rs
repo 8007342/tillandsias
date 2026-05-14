@@ -37,6 +37,7 @@ use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION, en
 use tillandsias_podman::{
     ContainerSpec, MountMode, PodmanClient, detect_gpu_devices, podman_cmd_sync,
 };
+use tracing::{info, error, debug};
 
 use serde::{Deserialize, Serialize};
 
@@ -588,6 +589,7 @@ fn ensure_enclave_network(debug: bool) -> Result<(), String> {
 }
 
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
+    // @trace spec:secrets-management, spec:secret-rotation
     let certs_dir = PathBuf::from(CA_DIR);
     let crt = certs_dir.join("intermediate.crt");
     let key = certs_dir.join("intermediate.key");
@@ -603,6 +605,17 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     };
 
     if should_refresh {
+        // @trace spec:secret-rotation
+        info!(
+            accountability = true,
+            category = "secrets",
+            spec = "secret-rotation",
+            secret_type = "ca-certificate",
+            operation = "rotation_start",
+            location = %crt.display(),
+            "CA certificate rotation starting"
+        );
+
         let mut command = Command::new("openssl");
         command.args([
             "req",
@@ -622,16 +635,63 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
             "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=Tillandsias CA",
         ]);
         command.stdout(Stdio::null()).stderr(Stdio::null());
-        run_command_silent(command, debug)?;
+
+        if let Err(e) = run_command_silent(command, debug) {
+            error!(
+                accountability = true,
+                category = "secrets",
+                spec = "secret-rotation",
+                secret_type = "ca-certificate",
+                operation = "rotation_failed",
+                location = %crt.display(),
+                error = %e,
+                "CA certificate rotation failed"
+            );
+            return Err(e);
+        }
 
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&crt, std::fs::Permissions::from_mode(0o644))
-                .map_err(|e| format!("Failed to set cert permissions: {e}"))?;
+                .map_err(|e| {
+                    error!(
+                        accountability = true,
+                        category = "secrets",
+                        spec = "secret-rotation",
+                        secret_type = "ca-certificate",
+                        operation = "rotation_failed",
+                        location = %crt.display(),
+                        error = %e,
+                        "Failed to set CA certificate permissions"
+                    );
+                    format!("Failed to set cert permissions: {e}")
+                })?;
             std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o600))
-                .map_err(|e| format!("Failed to set key permissions: {e}"))?;
+                .map_err(|e| {
+                    error!(
+                        accountability = true,
+                        category = "secrets",
+                        spec = "secret-rotation",
+                        secret_type = "ca-key",
+                        operation = "rotation_failed",
+                        location = %key.display(),
+                        error = %e,
+                        "Failed to set CA key permissions"
+                    );
+                    format!("Failed to set key permissions: {e}")
+                })?;
         }
+
+        info!(
+            accountability = true,
+            category = "secrets",
+            spec = "secret-rotation",
+            secret_type = "ca-certificate",
+            operation = "rotation_complete",
+            location = %crt.display(),
+            "CA certificate rotation completed successfully"
+        );
 
         if debug {
             eprintln!("[tillandsias] refreshed CA bundle at {}", crt.display());
@@ -1637,8 +1697,17 @@ fn podman_command() -> Command {
 /// image; the host only captures the token in memory and creates the Podman
 /// secret over stdin.
 ///
-/// @trace spec:gh-auth-script, spec:secrets-management, spec:podman-secrets-integration
+/// @trace spec:gh-auth-script, spec:secrets-management, spec:podman-secrets-integration, spec:secret-rotation
 fn run_github_login(debug: bool) -> Result<(), String> {
+    // @trace spec:secret-rotation, spec:secrets-management
+    info!(
+        accountability = true,
+        category = "secrets",
+        spec = "secret-rotation",
+        operation = "gh_auth_start",
+        "GitHub authentication and secret rotation starting"
+    );
+
     let root = find_checkout_root()?;
     let version = VERSION.trim();
     let image = versioned_image_tag("git", version);
@@ -1699,11 +1768,36 @@ fn run_github_login(debug: bool) -> Result<(), String> {
     ]);
     let token = command_output(token_cmd, debug)?;
     if token.is_empty() {
+        error!(
+            accountability = true,
+            category = "secrets",
+            spec = "secret-rotation",
+            operation = "gh_auth_failed",
+            reason = "empty-token",
+            "GitHub authentication produced empty token"
+        );
         return Err("containerized gh auth token returned an empty token".to_string());
     }
 
+    info!(
+        accountability = true,
+        category = "secrets",
+        spec = "secret-rotation",
+        operation = "gh_auth_success",
+        "GitHub token retrieved successfully; initiating secret rotation"
+    );
+
     create_github_podman_secret(&token, debug)?;
     drop(cleanup);
+
+    info!(
+        accountability = true,
+        category = "secrets",
+        spec = "secret-rotation",
+        operation = "gh_auth_complete",
+        "GitHub authentication and secret rotation completed successfully"
+    );
+
     Ok(())
 }
 
@@ -1857,9 +1951,23 @@ impl Drop for LoginContainerCleanup {
 }
 
 fn create_github_podman_secret(token: &str, debug: bool) -> Result<(), String> {
+    // @trace spec:secrets-management, spec:secret-rotation, spec:podman-secrets-integration
+    info!(
+        accountability = true,
+        category = "secrets",
+        spec = "secret-rotation",
+        secret_type = "github-token",
+        operation = "rotation_start",
+        secret_name = "tillandsias-github-token",
+        "GitHub token secret rotation starting"
+    );
+
     let mut remove = podman_command();
     remove.args(["secret", "rm", "tillandsias-github-token"]);
-    let _ = run_command_silent(remove, debug);
+    if let Err(e) = run_command_silent(remove, debug) {
+        // Secret may not exist yet; this is not an error
+        debug!("Existing GitHub secret removal attempt: {}", e);
+    }
 
     let mut child = podman_command()
         .args([
@@ -1873,7 +1981,19 @@ fn create_github_podman_secret(token: &str, debug: bool) -> Result<(), String> {
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("Failed to create GitHub Podman secret: {e}"))?;
+        .map_err(|e| {
+            error!(
+                accountability = true,
+                category = "secrets",
+                spec = "secret-rotation",
+                secret_type = "github-token",
+                operation = "rotation_failed",
+                secret_name = "tillandsias-github-token",
+                error = %e,
+                "Failed to spawn podman secret create process"
+            );
+            format!("Failed to create GitHub Podman secret: {e}")
+        })?;
 
     if debug {
         eprintln!(
@@ -1885,24 +2005,92 @@ fn create_github_podman_secret(token: &str, debug: bool) -> Result<(), String> {
         let stdin = child
             .stdin
             .as_mut()
-            .ok_or_else(|| "Failed to open podman secret stdin".to_string())?;
+            .ok_or_else(|| {
+                error!(
+                    accountability = true,
+                    category = "secrets",
+                    spec = "secret-rotation",
+                    secret_type = "github-token",
+                    operation = "rotation_failed",
+                    secret_name = "tillandsias-github-token",
+                    error = "stdin pipe not available",
+                    "Failed to access podman secret create stdin"
+                );
+                "Failed to open podman secret stdin".to_string()
+            })?;
         stdin
             .write_all(token.as_bytes())
-            .map_err(|e| format!("Failed to write token to podman secret stdin: {e}"))?;
+            .map_err(|e| {
+                error!(
+                    accountability = true,
+                    category = "secrets",
+                    spec = "secret-rotation",
+                    secret_type = "github-token",
+                    operation = "rotation_failed",
+                    secret_name = "tillandsias-github-token",
+                    error = %e,
+                    "Failed to write token to podman secret stdin"
+                );
+                format!("Failed to write token to podman secret stdin: {e}")
+            })?;
         stdin
             .write_all(b"\n")
-            .map_err(|e| format!("Failed to finish token input: {e}"))?;
+            .map_err(|e| {
+                error!(
+                    accountability = true,
+                    category = "secrets",
+                    spec = "secret-rotation",
+                    secret_type = "github-token",
+                    operation = "rotation_failed",
+                    secret_name = "tillandsias-github-token",
+                    error = %e,
+                    "Failed to finalize token input to podman secret"
+                );
+                format!("Failed to finish token input: {e}")
+            })?;
     }
     drop(child.stdin.take());
 
     let output = child
         .wait_with_output()
-        .map_err(|e| format!("Failed waiting for podman secret create: {e}"))?;
+        .map_err(|e| {
+            error!(
+                accountability = true,
+                category = "secrets",
+                spec = "secret-rotation",
+                secret_type = "github-token",
+                operation = "rotation_failed",
+                secret_name = "tillandsias-github-token",
+                error = %e,
+                "Failed to wait for podman secret create completion"
+            );
+            format!("Failed waiting for podman secret create: {e}")
+        })?;
     if output.status.success() {
+        info!(
+            accountability = true,
+            category = "secrets",
+            spec = "secret-rotation",
+            secret_type = "github-token",
+            operation = "rotation_complete",
+            secret_name = "tillandsias-github-token",
+            "GitHub token secret rotation completed successfully"
+        );
         println!("GitHub token secret created: tillandsias-github-token");
         Ok(())
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        error!(
+            accountability = true,
+            category = "secrets",
+            spec = "secret-rotation",
+            secret_type = "github-token",
+            operation = "rotation_failed",
+            secret_name = "tillandsias-github-token",
+            exit_code = output.status.code().unwrap_or(-1),
+            stderr = ?stderr,
+            "Podman secret create failed"
+        );
         if stderr.is_empty() {
             Err(format!(
                 "podman secret create exited with status {}",
