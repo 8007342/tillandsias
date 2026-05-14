@@ -692,13 +692,13 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Cold-start note: tray gaps follow the browser tail."
         - id: implementation-gaps/onboarding
-          status: pending
+          status: completed
           depends_on:
             - implementation-gaps/tray
           owned_files:
             - plan/steps/04-onboarding-docs.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: onboarding gaps are a separate leaf from tray work."
+          handoff_note: "Wave 10 completed: onboarding gaps documented in plan/steps/04-onboarding-docs.md (Implementation Gaps section) and plan/issues/onboarding-gaps-2026-05-14.md. 11 gaps modelled as a DAG across 5 categories (i18n, cold-start, multi-workspace, agent-bootstrap, auth-lifecycle). No fixes; pure documentation pass."
         - id: implementation-gaps/observability
           status: pending
           depends_on:
