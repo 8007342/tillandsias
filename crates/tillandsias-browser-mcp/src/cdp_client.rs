@@ -6,6 +6,7 @@
 //! @trace spec:host-browser-mcp, spec:browser-isolation-core
 //! @cheatsheet web/cdp.md
 
+use base64::Engine;
 use serde_json::{json, Value};
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -38,7 +39,9 @@ pub enum CdpError {
 pub struct CdpSession {
     stream: TcpStream,
     session_id: String,
+    #[allow(dead_code)]
     port: u16,
+    #[allow(dead_code)]
     target_id: String,
     request_id: u64,
 }
@@ -159,7 +162,8 @@ impl CdpSession {
             .and_then(|v| v.as_str())
             .ok_or_else(|| CdpError::ScreenshotFailed("no data in response".to_string()))?;
 
-        base64::decode(base64_data)
+        base64::engine::general_purpose::STANDARD
+            .decode(base64_data)
             .map_err(|e| CdpError::ScreenshotFailed(format!("base64 decode error: {e}")))
     }
 

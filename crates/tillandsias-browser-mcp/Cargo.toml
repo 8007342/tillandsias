@@ -18,6 +18,7 @@ tracing = { workspace = true }
 parking_lot = "0.12"
 url = "2"
 uuid = { version = "1", features = ["v4"] }
+base64 = { workspace = true }
 
 # Internal crates
 tillandsias-core = { workspace = true }

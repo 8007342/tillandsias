@@ -3,6 +3,7 @@
 //! @trace spec:host-browser-mcp, spec:browser-isolation-tray-integration
 //! @cheatsheet web/mcp.md, web/cdp.md
 
+use base64::Engine;
 use crate::allowlist;
 use crate::cdp_client::{CdpError, CdpSession};
 use crate::framing::{RpcRequest, RpcResponse};
@@ -335,9 +336,9 @@ impl BrowserMcpServer {
             "browser.open" => self.handle_browser_open(id, args),
             "browser.list_windows" => self.handle_browser_list_windows(id),
             "browser.read_url" => self.handle_browser_read_url(id, args),
-            "browser.screenshot" => Self::tool_error(id, "BROWSER_OPERATION_UNIMPLEMENTED: browser.screenshot requires the CDP bridge follow-up"),
-            "browser.click" => Self::tool_error(id, "BROWSER_OPERATION_UNIMPLEMENTED: browser.click requires the CDP bridge follow-up"),
-            "browser.type" => Self::tool_error(id, "BROWSER_OPERATION_UNIMPLEMENTED: browser.type requires the CDP bridge follow-up"),
+            "browser.screenshot" => self.handle_browser_screenshot(id, args).await,
+            "browser.click" => self.handle_browser_click(id, args).await,
+            "browser.type" => self.handle_browser_type(id, args).await,
             "browser.eval" => Self::tool_error(id, "EVAL_DISABLED: browser.eval is disabled in v1; see follow-up change"),
             "browser.close" => self.handle_browser_close(id, args),
             other => Self::tool_error(id, format!("TOOL_NOT_FOUND: {other}")),
@@ -460,6 +461,131 @@ impl BrowserMcpServer {
             result: json!({
                 "ok": true
             }),
+        }
+    }
+
+    async fn handle_browser_screenshot(&self, id: u64, args: &serde_json::Value) -> RpcResponse {
+        // @trace spec:host-browser-mcp, spec:browser-isolation-core
+        let Some(window_id) = args.get("window_id").and_then(|value| value.as_str()) else {
+            return Self::json_rpc_error(id, -32602, "browser.screenshot requires arguments.window_id");
+        };
+
+        let full_page = args
+            .get("full_page")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let (cdp_port, target_id) = match self.windows.get_entry(window_id) {
+            Some((port, tid)) => (port, tid),
+            None => {
+                return Self::tool_error(id, format!("WINDOW_NOT_FOUND: {window_id}"));
+            }
+        };
+
+        match CdpSession::connect(cdp_port, &target_id) {
+            Ok(mut session) => match session.screenshot(full_page) {
+                Ok(png_bytes) => {
+                    let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
+                    RpcResponse::Success {
+                        id,
+                        result: json!({
+                            "data": b64
+                        }),
+                    }
+                }
+                Err(CdpError::WindowNotRunning(msg)) => {
+                    Self::tool_error(id, format!("WINDOW_NOT_RUNNING: {msg}"))
+                }
+                Err(e) => Self::tool_error(id, format!("SCREENSHOT_FAILED: {e}")),
+            },
+            Err(CdpError::WindowNotRunning(msg)) => {
+                Self::tool_error(id, format!("WINDOW_NOT_RUNNING: {msg}"))
+            }
+            Err(e) => Self::tool_error(id, format!("SCREENSHOT_FAILED: {e}")),
+        }
+    }
+
+    async fn handle_browser_click(&self, id: u64, args: &serde_json::Value) -> RpcResponse {
+        // @trace spec:host-browser-mcp, spec:browser-isolation-core
+        let Some(window_id) = args.get("window_id").and_then(|value| value.as_str()) else {
+            return Self::json_rpc_error(id, -32602, "browser.click requires arguments.window_id");
+        };
+
+        let Some(selector) = args.get("selector").and_then(|value| value.as_str()) else {
+            return Self::json_rpc_error(id, -32602, "browser.click requires arguments.selector");
+        };
+
+        let (cdp_port, target_id) = match self.windows.get_entry(window_id) {
+            Some((port, tid)) => (port, tid),
+            None => {
+                return Self::tool_error(id, format!("WINDOW_NOT_FOUND: {window_id}"));
+            }
+        };
+
+        match CdpSession::connect(cdp_port, &target_id) {
+            Ok(mut session) => match session.click(selector) {
+                Ok(_) => RpcResponse::Success {
+                    id,
+                    result: json!({
+                        "ok": true
+                    }),
+                },
+                Err(CdpError::ElementNotFound { selector }) => {
+                    Self::tool_error(id, format!("ELEMENT_NOT_FOUND: {selector}"))
+                }
+                Err(CdpError::WindowNotRunning(msg)) => {
+                    Self::tool_error(id, format!("WINDOW_NOT_RUNNING: {msg}"))
+                }
+                Err(e) => Self::tool_error(id, format!("CLICK_FAILED: {e}")),
+            },
+            Err(CdpError::WindowNotRunning(msg)) => {
+                Self::tool_error(id, format!("WINDOW_NOT_RUNNING: {msg}"))
+            }
+            Err(e) => Self::tool_error(id, format!("CLICK_FAILED: {e}")),
+        }
+    }
+
+    async fn handle_browser_type(&self, id: u64, args: &serde_json::Value) -> RpcResponse {
+        // @trace spec:host-browser-mcp, spec:browser-isolation-core
+        let Some(window_id) = args.get("window_id").and_then(|value| value.as_str()) else {
+            return Self::json_rpc_error(id, -32602, "browser.type requires arguments.window_id");
+        };
+
+        let Some(selector) = args.get("selector").and_then(|value| value.as_str()) else {
+            return Self::json_rpc_error(id, -32602, "browser.type requires arguments.selector");
+        };
+
+        let Some(text) = args.get("text").and_then(|value| value.as_str()) else {
+            return Self::json_rpc_error(id, -32602, "browser.type requires arguments.text");
+        };
+
+        let (cdp_port, target_id) = match self.windows.get_entry(window_id) {
+            Some((port, tid)) => (port, tid),
+            None => {
+                return Self::tool_error(id, format!("WINDOW_NOT_FOUND: {window_id}"));
+            }
+        };
+
+        match CdpSession::connect(cdp_port, &target_id) {
+            Ok(mut session) => match session.type_text(selector, text) {
+                Ok(_) => RpcResponse::Success {
+                    id,
+                    result: json!({
+                        "ok": true
+                    }),
+                },
+                Err(CdpError::ElementNotFound { selector }) => {
+                    Self::tool_error(id, format!("ELEMENT_NOT_FOUND: {selector}"))
+                }
+                Err(CdpError::WindowNotRunning(msg)) => {
+                    Self::tool_error(id, format!("WINDOW_NOT_RUNNING: {msg}"))
+                }
+                Err(e) => Self::tool_error(id, format!("TYPE_FAILED: {e}")),
+            },
+            Err(CdpError::WindowNotRunning(msg)) => {
+                Self::tool_error(id, format!("WINDOW_NOT_RUNNING: {msg}"))
+            }
+            Err(e) => Self::tool_error(id, format!("TYPE_FAILED: {e}")),
         }
     }
 
@@ -856,6 +982,148 @@ mod tests {
                 assert!(result["windows"].as_array().unwrap().is_empty());
             }
             other => panic!("expected success, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn browser_screenshot_requires_window_id() {
+        let server = test_server(None);
+        let response = server
+            .handle_request(RpcRequest {
+                id: Some(50),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.screenshot",
+                    "arguments": {}
+                }),
+            })
+            .await;
+
+        match response {
+            RpcResponse::Error { code, .. } => {
+                assert_eq!(code, -32602);
+            }
+            other => panic!("expected error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn browser_screenshot_rejects_missing_window() {
+        let server = test_server(None);
+        let response = server
+            .handle_request(RpcRequest {
+                id: Some(51),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.screenshot",
+                    "arguments": {
+                        "window_id": "nonexistent"
+                    }
+                }),
+            })
+            .await;
+
+        match response {
+            RpcResponse::Success { result, .. } => {
+                assert_eq!(result["isError"], true);
+                let text = result["content"][0]["text"].as_str().unwrap();
+                assert!(text.contains("WINDOW_NOT_FOUND"));
+            }
+            other => panic!("expected tool error success, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn browser_click_requires_selector() {
+        let server = test_server(None);
+        let response = server
+            .handle_request(RpcRequest {
+                id: Some(52),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.click",
+                    "arguments": {
+                        "window_id": "win-test"
+                    }
+                }),
+            })
+            .await;
+
+        match response {
+            RpcResponse::Error { code, .. } => {
+                assert_eq!(code, -32602);
+            }
+            other => panic!("expected error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn browser_type_requires_text() {
+        let server = test_server(None);
+        let response = server
+            .handle_request(RpcRequest {
+                id: Some(53),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.type",
+                    "arguments": {
+                        "window_id": "win-test",
+                        "selector": "#input"
+                    }
+                }),
+            })
+            .await;
+
+        match response {
+            RpcResponse::Error { code, .. } => {
+                assert_eq!(code, -32602);
+            }
+            other => panic!("expected error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn browser_screenshot_fake_launch_mode_errors() {
+        let server = test_server_fake_launch(None);
+        let response = server
+            .handle_request(RpcRequest {
+                id: Some(54),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.open",
+                    "arguments": {
+                        "url": "http://web.acme.localhost:8080/"
+                    }
+                }),
+            })
+            .await;
+
+        let window_id = match response {
+            RpcResponse::Success { result, .. } => result["window_id"].as_str().unwrap().to_string(),
+            other => panic!("expected success, got {other:?}"),
+        };
+
+        // Fake launch mode has port=0, so CDP connection should fail gracefully
+        let screenshot_response = server
+            .handle_request(RpcRequest {
+                id: Some(55),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.screenshot",
+                    "arguments": {
+                        "window_id": window_id
+                    }
+                }),
+            })
+            .await;
+
+        match screenshot_response {
+            RpcResponse::Success { result, .. } => {
+                assert_eq!(result["isError"], true);
+                let text = result["content"][0]["text"].as_str().unwrap();
+                assert!(text.contains("WINDOW_NOT_RUNNING") || text.contains("SCREENSHOT_FAILED"));
+            }
+            other => panic!("expected tool error success, got {other:?}"),
         }
     }
 }
