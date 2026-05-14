@@ -373,7 +373,12 @@ impl BrowserWindowRegistry {
 
     /// Helper to invoke the mutation hook if set.
     #[allow(clippy::collapsible_if)]
-    fn call_mutation_hook(&self, window_id: &str, container_id_opt: Option<&str>, project_label_opt: Option<&str>) {
+    fn call_mutation_hook(
+        &self,
+        window_id: &str,
+        container_id_opt: Option<&str>,
+        project_label_opt: Option<&str>,
+    ) {
         if let Ok(hook_slot) = self.mutation_hook.lock() {
             if let Some(hook) = hook_slot.as_ref() {
                 hook(window_id, container_id_opt, project_label_opt);
@@ -418,7 +423,10 @@ impl BrowserWindowRegistry {
     /// Calls the mutation hook if one is set.
     /// Returns the unregistered metadata if it existed.
     /// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
-    pub fn unregister_window(&self, window_id: &str) -> Result<Option<BrowserWindowMetadata>, String> {
+    pub fn unregister_window(
+        &self,
+        window_id: &str,
+    ) -> Result<Option<BrowserWindowMetadata>, String> {
         let mut windows = self
             .windows
             .lock()
@@ -1291,14 +1299,16 @@ mod tests {
         assert_eq!(window.status, BrowserWindowStatus::Launching);
 
         // Update to Active
-        let update_result = registry.update_status("project1-window-1", BrowserWindowStatus::Active);
+        let update_result =
+            registry.update_status("project1-window-1", BrowserWindowStatus::Active);
         assert!(update_result.is_ok());
 
         let window = registry.get_window("project1-window-1").unwrap().unwrap();
         assert_eq!(window.status, BrowserWindowStatus::Active);
 
         // Update to Closed
-        let update_result = registry.update_status("project1-window-1", BrowserWindowStatus::Closed);
+        let update_result =
+            registry.update_status("project1-window-1", BrowserWindowStatus::Closed);
         assert!(update_result.is_ok());
 
         let window = registry.get_window("project1-window-1").unwrap().unwrap();
@@ -1358,8 +1368,8 @@ mod tests {
     // @trace spec:browser-isolation-tray-integration, spec:browser-window-rate-limiting
     #[test]
     fn browser_window_registry_concurrent_operations() {
-        use std::thread;
         use std::sync::Arc as StdArc;
+        use std::thread;
 
         let registry = StdArc::new(BrowserWindowRegistry::new());
         let mut handles = vec![];
@@ -1413,18 +1423,22 @@ mod tests {
     // @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
     #[test]
     fn browser_window_registry_mutation_hook_on_register() {
-        use std::sync::{Arc as StdArc, atomic::{AtomicBool, Ordering}};
+        use std::sync::{
+            Arc as StdArc,
+            atomic::{AtomicBool, Ordering},
+        };
 
         let registry = BrowserWindowRegistry::new();
         let hook_called = StdArc::new(AtomicBool::new(false));
         let hook_called_clone = StdArc::clone(&hook_called);
 
-        let hook: RegistryMutationHook = Box::new(move |window_id, container_id_opt, project_label_opt| {
-            assert_eq!(window_id, "project1-window-1");
-            assert_eq!(container_id_opt, Some("container-abc123"));
-            assert_eq!(project_label_opt, Some("project1"));
-            hook_called_clone.store(true, Ordering::SeqCst);
-        });
+        let hook: RegistryMutationHook =
+            Box::new(move |window_id, container_id_opt, project_label_opt| {
+                assert_eq!(window_id, "project1-window-1");
+                assert_eq!(container_id_opt, Some("container-abc123"));
+                assert_eq!(project_label_opt, Some("project1"));
+                hook_called_clone.store(true, Ordering::SeqCst);
+            });
 
         registry.set_mutation_hook(hook).unwrap();
 
@@ -1442,17 +1456,24 @@ mod tests {
     // @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
     #[test]
     fn browser_window_registry_mutation_hook_on_unregister() {
-        use std::sync::{Arc as StdArc, atomic::{AtomicBool, Ordering}};
+        use std::sync::{
+            Arc as StdArc,
+            atomic::{AtomicBool, Ordering},
+        };
 
         let registry = BrowserWindowRegistry::new();
         let hook_called = StdArc::new(AtomicBool::new(false));
         let hook_called_clone = StdArc::clone(&hook_called);
 
-        let hook: RegistryMutationHook = Box::new(move |window_id, container_id_opt, project_label_opt| {
-            if window_id == "project1-window-1" && container_id_opt.is_none() && project_label_opt.is_none() {
-                hook_called_clone.store(true, Ordering::SeqCst);
-            }
-        });
+        let hook: RegistryMutationHook =
+            Box::new(move |window_id, container_id_opt, project_label_opt| {
+                if window_id == "project1-window-1"
+                    && container_id_opt.is_none()
+                    && project_label_opt.is_none()
+                {
+                    hook_called_clone.store(true, Ordering::SeqCst);
+                }
+            });
 
         registry.set_mutation_hook(hook).unwrap();
 
@@ -1475,15 +1496,19 @@ mod tests {
     // @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
     #[test]
     fn browser_window_registry_mutation_hook_concurrent_calls() {
-        use std::sync::{Arc as StdArc, atomic::{AtomicUsize, Ordering}};
+        use std::sync::{
+            Arc as StdArc,
+            atomic::{AtomicUsize, Ordering},
+        };
 
         let registry = StdArc::new(BrowserWindowRegistry::new());
         let call_count = StdArc::new(AtomicUsize::new(0));
         let call_count_clone = StdArc::clone(&call_count);
 
-        let hook: RegistryMutationHook = Box::new(move |_window_id, _container_id_opt, _project_label_opt| {
-            call_count_clone.fetch_add(1, Ordering::SeqCst);
-        });
+        let hook: RegistryMutationHook =
+            Box::new(move |_window_id, _container_id_opt, _project_label_opt| {
+                call_count_clone.fetch_add(1, Ordering::SeqCst);
+            });
 
         registry.set_mutation_hook(hook).unwrap();
 
@@ -1601,6 +1626,9 @@ mod tests {
 
         let by_project = registry.get_active_windows_by_project().unwrap();
         assert_eq!(by_project.get("project1").unwrap().len(), 1);
-        assert_eq!(by_project.get("project1").unwrap()[0].window_id, "project1-window-2");
+        assert_eq!(
+            by_project.get("project1").unwrap()[0].window_id,
+            "project1-window-2"
+        );
     }
 }

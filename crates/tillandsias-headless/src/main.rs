@@ -846,10 +846,7 @@ fn build_router_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
         // Dynamic Caddyfile written by the runtime for per-project routes.
         // Bind-mounted read-write so router-reload.sh can atomically replace it.
         "-v".into(),
-        format!(
-            "{}:/run/router/dynamic.Caddyfile:rw",
-            dyn_file.display()
-        ),
+        format!("{}:/run/router/dynamic.Caddyfile:rw", dyn_file.display()),
         "--mount".into(),
         format!(
             "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
@@ -884,7 +881,10 @@ async fn ensure_router_running(
         }
         // Container exists but is stopped — remove it so a fresh one can start.
         if debug {
-            eprintln!("[tillandsias] router container found but not running (state={}); removing", inspect.state);
+            eprintln!(
+                "[tillandsias] router container found but not running (state={}); removing",
+                inspect.state
+            );
         }
         let _ = client.remove_container(ROUTER_NAME).await;
     }
@@ -2178,8 +2178,14 @@ fn launch_opencode_web_browser(
     let project_label = format!("opencode.{project_name}.localhost");
     let otp = tillandsias_otp::issue_session(&project_label);
     let login_url = tillandsias_otp::build_login_data_url(&url, &otp);
-    let spec =
-        build_opencode_web_browser_spec(&login_url, version, &profile_path, certs_dir, &display, project_name)?;
+    let spec = build_opencode_web_browser_spec(
+        &login_url,
+        version,
+        &profile_path,
+        certs_dir,
+        &display,
+        project_name,
+    )?;
     let args = spec.build_run_args();
 
     emit_opencode_web_event(project_name, "browser", "launch", Some("podman-run"))?;
@@ -2237,10 +2243,7 @@ fn rt_block_on_podman_run(args: Vec<String>, debug: bool) -> Result<(), String> 
 /// @trace spec:browser-isolation-core, spec:host-chromium-on-demand
 /// Monitor a detached browser container for exit and clean up resources.
 /// Launches the container, waits for it to exit, then removes it.
-async fn monitor_and_cleanup_browser(
-    container_name: &str,
-    debug: bool,
-) -> Result<(), String> {
+async fn monitor_and_cleanup_browser(container_name: &str, debug: bool) -> Result<(), String> {
     // Wait for container to exit by polling its state periodically.
     // In a full implementation, this would use `podman events` for more efficient monitoring.
     let mut poll_interval = Duration::from_millis(100);
@@ -2271,9 +2274,7 @@ async fn monitor_and_cleanup_browser(
             break;
         }
 
-        let is_running = String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .eq("true");
+        let is_running = String::from_utf8_lossy(&output.stdout).trim().eq("true");
         if !is_running {
             if debug {
                 eprintln!("[tillandsias] browser container exited: {container_name}");
@@ -2415,7 +2416,8 @@ pub(crate) fn run_opencode_web_mode(
         // @trace spec:subdomain-routing-via-reverse-proxy
         // After forge starts, ensure router is running and write dynamic routes.
         let router_image = versioned_image_tag("router", version);
-        ensure_router_running(&client, &certs_dir, &router_image, debug).await
+        ensure_router_running(&client, &certs_dir, &router_image, debug)
+            .await
             .unwrap_or_else(|e| {
                 if debug {
                     eprintln!("[tillandsias] Warning: router degraded: {e}");
@@ -2431,12 +2433,11 @@ pub(crate) fn run_opencode_web_mode(
         )];
         let dynamic_config = generate_dynamic_caddyfile(&windows);
         let dyn_file = router_dynamic_caddyfile_host_path().join("dynamic.Caddyfile");
-        std::fs::write(&dyn_file, &dynamic_config)
-            .unwrap_or_else(|e| {
-                if debug {
-                    eprintln!("[tillandsias] Warning: failed to write dynamic Caddyfile: {e}");
-                }
-            });
+        std::fs::write(&dyn_file, &dynamic_config).unwrap_or_else(|e| {
+            if debug {
+                eprintln!("[tillandsias] Warning: failed to write dynamic Caddyfile: {e}");
+            }
+        });
 
         Ok::<(), String>(())
     })?;
@@ -2755,20 +2756,26 @@ mod tests {
 
         // CA cert mount
         assert!(
-            args.iter().any(|arg| arg.contains("intermediate.crt")
-                && arg.contains("/etc/tillandsias/ca.crt"))
+            args.iter()
+                .any(|arg| arg.contains("intermediate.crt")
+                    && arg.contains("/etc/tillandsias/ca.crt"))
         );
 
         // Image is the last argument
-        assert_eq!(args.last().map(|s| s.as_str()), Some("tillandsias-router:v1.2.3"));
+        assert_eq!(
+            args.last().map(|s| s.as_str()),
+            Some("tillandsias-router:v1.2.3")
+        );
     }
 
     // @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-dynamic-routes
     #[test]
     fn dynamic_caddyfile_routes_opencode_service() {
-        let windows = vec![
-            ("opencode.visual-chess".to_string(), "tillandsias-visual-chess-forge".to_string(), 8080u16),
-        ];
+        let windows = vec![(
+            "opencode.visual-chess".to_string(),
+            "tillandsias-visual-chess-forge".to_string(),
+            8080u16,
+        )];
         let config = generate_dynamic_caddyfile(&windows);
 
         // Verify Caddy block syntax is present
@@ -2784,8 +2791,16 @@ mod tests {
     #[test]
     fn dynamic_caddyfile_multiple_routes() {
         let windows = vec![
-            ("opencode.alpha".to_string(), "tillandsias-alpha-forge".to_string(), 8080u16),
-            ("opencode.beta".to_string(), "tillandsias-beta-forge".to_string(), 8081u16),
+            (
+                "opencode.alpha".to_string(),
+                "tillandsias-alpha-forge".to_string(),
+                8080u16,
+            ),
+            (
+                "opencode.beta".to_string(),
+                "tillandsias-beta-forge".to_string(),
+                8081u16,
+            ),
         ];
         let config = generate_dynamic_caddyfile(&windows);
 

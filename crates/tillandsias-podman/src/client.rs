@@ -1423,22 +1423,17 @@ mod tests {
 
         // Transient: CommandFailed with "connection refused"
         assert!(
-            PodmanError::CommandFailed("connection refused to podman socket".into())
-                .is_transient()
+            PodmanError::CommandFailed("connection refused to podman socket".into()).is_transient()
         );
 
         // Permanent: NotFound
         assert!(!PodmanError::NotFound("tillandsias-foo".into()).is_transient());
 
         // Permanent: ParseError
-        assert!(
-            !PodmanError::ParseError("invalid JSON in podman output".into()).is_transient()
-        );
+        assert!(!PodmanError::ParseError("invalid JSON in podman output".into()).is_transient());
 
         // Permanent: CommandFailed with "permission denied"
-        assert!(
-            !PodmanError::CommandFailed("permission denied".into()).is_transient()
-        );
+        assert!(!PodmanError::CommandFailed("permission denied".into()).is_transient());
 
         // Permanent: CommandFailed with other message
         assert!(
