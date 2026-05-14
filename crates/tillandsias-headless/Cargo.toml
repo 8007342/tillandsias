@@ -29,6 +29,7 @@ tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 tempfile = "3"
+reqwest = { workspace = true }
 
 # Phase 4: Native tray UI (optional)
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }

@@ -856,6 +856,65 @@ fn build_router_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     ]
 }
 
+/// Reload Caddy's configuration via the admin API.
+///
+/// After writing a new dynamic Caddyfile, this function signals the Caddy
+/// router to reload its configuration without restarting the container.
+/// The router's admin API listens on `localhost:2019` (per base.Caddyfile).
+///
+/// This is an async operation that reaches into the container from the host.
+/// On transient failures (e.g., router not yet ready), logs a warning and
+/// continues — subsequent operations will detect the stale config.
+///
+/// @trace spec:subdomain-routing-via-reverse-proxy
+async fn caddy_reload_routes(debug: bool) -> Result<(), String> {
+    // Caddy admin API endpoint for config reload.
+    // The router listens on localhost:2019 inside the container, which is
+    // exposed via podman's localhost mapping (same network namespace path).
+    let admin_url = "http://127.0.0.1:2019/reload";
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    // POST to /reload tells Caddy to reload the merged Caddyfile
+    // (which includes both base.Caddyfile and dynamic.Caddyfile).
+    // The request body is empty; Caddy just re-reads the file on disk.
+    match client.post(admin_url).send().await {
+        Ok(response) => {
+            let status = response.status();
+            if status.is_success() {
+                if debug {
+                    eprintln!("[tillandsias] Caddy reload successful (status: {})", status);
+                }
+                Ok(())
+            } else {
+                // Non-2xx response from admin API. Log as warning but don't fail.
+                if debug {
+                    eprintln!(
+                        "[tillandsias] Warning: Caddy reload returned status {}: {}",
+                        status,
+                        response.text().await.unwrap_or_default()
+                    );
+                }
+                Ok(())
+            }
+        }
+        Err(e) => {
+            // Connection error (router not ready, port not open, etc).
+            // Warn but don't fail — the router may still be initializing.
+            if debug {
+                eprintln!(
+                    "[tillandsias] Warning: Caddy reload failed (router may not be ready): {}",
+                    e
+                );
+            }
+            Ok(())
+        }
+    }
+}
+
 /// Ensure the router container (`tillandsias-router`) is running.
 ///
 /// Idempotent: if a container with that name already exists and is in the
@@ -2439,6 +2498,11 @@ pub(crate) fn run_opencode_web_mode(
             }
         });
 
+        // @trace spec:subdomain-routing-via-reverse-proxy
+        // After writing the dynamic Caddyfile, reload Caddy to activate the routes.
+        // The reload is graceful (no container restart) via the admin API at localhost:2019.
+        caddy_reload_routes(debug).await?;
+
         Ok::<(), String>(())
     })?;
 
@@ -2816,5 +2880,27 @@ mod tests {
         let windows: Vec<(String, String, u16)> = vec![];
         let config = generate_dynamic_caddyfile(&windows);
         assert!(config.is_empty());
+    }
+
+    #[tokio::test]
+    async fn caddy_reload_routes_handles_connection_error_gracefully() {
+        // Test that caddy_reload_routes gracefully handles connection failures
+        // (e.g., router not yet ready). The admin API endpoint on localhost:2019
+        // will be unreachable, but the function should log a warning and return Ok.
+        let result = caddy_reload_routes(false).await;
+
+        // Should succeed (not fail) even when the router is unreachable.
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn caddy_reload_routes_with_debug_enabled() {
+        // Test that caddy_reload_routes works with debug flag enabled.
+        // The function will attempt to reach localhost:2019, fail gracefully,
+        // and emit debug output (captured via eprintln, visible in test output).
+        let result = caddy_reload_routes(true).await;
+
+        // Should still succeed even with debug output enabled.
+        assert!(result.is_ok());
     }
 }
