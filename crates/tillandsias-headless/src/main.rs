@@ -3216,6 +3216,15 @@ async fn run_headless_async(config_path: Option<String>) -> Result<(), String> {
     // Wave 19c Gap OBS-005: Run metrics retention check before starting sampler
     // @trace gap:OBS-005
     run_metrics_retention();
+
+    // Wave 20d Gap OBS-012: Run evidence bundle retention check before metrics
+    // @trace gap:OBS-012
+    run_evidence_bundle_retention();
+
+    // Wave 20c Gap OBS-010: Run log field cardinality analysis
+    // @trace gap:OBS-010
+    run_log_cardinality_analysis().await;
+
     let metrics_handle = spawn_metrics_sampler();
 
     // Main event loop: wait for application shutdown signal.
@@ -3269,6 +3278,208 @@ fn run_metrics_retention() {
                 gap = "OBS-005",
                 error = %e,
                 "metrics retention check failed (non-blocking)"
+            );
+        }
+    }
+}
+
+/// Run evidence bundle retention to delete bundles older than 30 days.
+///
+/// This implements gap:OBS-012. Evidence bundles (JSON snapshots and tar.gz
+/// archives) are deleted from target/convergence/ if they exceed the 30-day
+/// retention window. Runs synchronously on startup (lightweight operation) to
+/// prevent unbounded growth of convergence artifacts.
+///
+/// Deletion is non-blocking; if any bundle fails to delete, a warning is logged
+/// and startup continues. User is notified of cleanup count and dates via stderr.
+///
+/// @trace gap:OBS-012, spec:observability-convergence
+fn run_evidence_bundle_retention() {
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH, Duration};
+
+    let repo_root = std::env::current_dir()
+        .ok()
+        .and_then(|p| if p.join("VERSION").exists() { Some(p) } else { None })
+        .or_else(|| {
+            // Fallback: assume CARGO_MANIFEST_DIR-relative path if invoked from workspace
+            std::env::var("CARGO_MANIFEST_DIR")
+                .ok()
+                .and_then(|m| {
+                    let p = std::path::PathBuf::from(&m);
+                    let root = p.ancestors().find(|a| a.join("VERSION").exists())?;
+                    Some(root.to_path_buf())
+                })
+        });
+
+    let convergence_dir = match repo_root {
+        Some(root) => root.join("target/convergence"),
+        None => {
+            tracing::warn!(
+                gap = "OBS-012",
+                "could not determine repo root; skipping evidence bundle retention"
+            );
+            return;
+        }
+    };
+
+    // Ensure convergence directory exists
+    if !convergence_dir.is_dir() {
+        debug!(
+            gap = "OBS-012",
+            path = ?convergence_dir,
+            "convergence directory does not exist; skipping retention"
+        );
+        return;
+    }
+
+    // Calculate cutoff time (now - 30 days)
+    let retention_days = 30u64;
+    let cutoff = SystemTime::now()
+        .checked_sub(Duration::from_secs(retention_days * 24 * 60 * 60))
+        .unwrap_or(UNIX_EPOCH);
+
+    let mut deleted_count = 0;
+    let mut deleted_names = Vec::new();
+
+    // Find and delete evidence bundle files (JSON and tar.gz)
+    if let Ok(entries) = fs::read_dir(&convergence_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let file_name = match path.file_name() {
+                Some(name) => name.to_string_lossy().to_string(),
+                None => continue,
+            };
+
+            // Match evidence-bundle*.json and evidence-bundle*.tar.gz
+            if !file_name.starts_with("evidence-bundle") {
+                continue;
+            }
+            if !file_name.ends_with(".json") && !file_name.ends_with(".tar.gz") {
+                continue;
+            }
+
+            // Skip the "evidence-bundle.json" symbolic/current bundle link
+            if file_name == "evidence-bundle.json" {
+                continue;
+            }
+
+            // Check modification time
+            if let Ok(metadata) = fs::metadata(&path) {
+                if let Ok(modified) = metadata.modified() {
+                    if modified < cutoff {
+                        // Bundle is older than retention window; delete it
+                        if let Ok(()) = fs::remove_file(&path) {
+                            deleted_count += 1;
+                            deleted_names.push(file_name);
+                            debug!(
+                                gap = "OBS-012",
+                                bundle = ?path,
+                                "deleted old evidence bundle"
+                            );
+                        } else {
+                            tracing::warn!(
+                                gap = "OBS-012",
+                                bundle = ?path,
+                                "failed to delete evidence bundle (continuing)"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // User notification (stderr)
+    if deleted_count > 0 {
+        eprintln!(
+            "[headless] evidence bundle retention cleanup: deleted {} bundle(s) older than {} days",
+            deleted_count, retention_days
+        );
+        for name in deleted_names {
+            eprintln!("  - {}", name);
+        }
+        tracing::info!(
+            gap = "OBS-012",
+            spec = "observability-convergence",
+            deleted_count = deleted_count,
+            retention_days = retention_days,
+            "evidence bundle retention cleanup completed"
+        );
+    }
+}
+
+/// Analyze log field cardinality and warn if high-cardinality fields are detected.
+///
+/// This implements gap:OBS-010. Scans recent log entries to detect fields with
+/// unbounded cardinality that could cause log explosion. Runs asynchronously on
+/// startup without blocking the main event loop.
+///
+/// High-cardinality fields (> 1000 unique values) are reported to the user with
+/// sample values to help identify problematic logging patterns.
+///
+/// @trace gap:OBS-010, spec:runtime-logging
+async fn run_log_cardinality_analysis() {
+    use tillandsias_logging::CardinalityAnalyzer;
+    use tillandsias_core::config;
+
+    let log_dir = config::log_dir();
+    let log_file = log_dir.join("tillandsias.log");
+
+    if !log_file.exists() {
+        debug!(
+            gap = "OBS-010",
+            "tillandsias.log does not exist; skipping cardinality analysis"
+        );
+        return;
+    }
+
+    let analyzer = CardinalityAnalyzer::default();
+    match analyzer.analyze_log_file(&log_file).await {
+        Ok(report) => {
+            if !report.high_cardinality_fields.is_empty() {
+                analyzer.warn_high_cardinality(&report);
+
+                // User notification (stderr) with actionable message
+                eprintln!(
+                    "[headless] log cardinality analysis: {} high-cardinality field(s) detected",
+                    report.high_cardinality_fields.len()
+                );
+                for field in report.high_cardinality_fields.iter().take(3) {
+                    eprintln!(
+                        "  - {}: {} unique values (examples: {:?})",
+                        field.field_name,
+                        field.unique_count,
+                        field.sample_values.iter().take(2).collect::<Vec<_>>()
+                    );
+                }
+                if report.high_cardinality_fields.len() > 3 {
+                    eprintln!(
+                        "  ... and {} more high-cardinality field(s)",
+                        report.high_cardinality_fields.len() - 3
+                    );
+                }
+
+                tracing::warn!(
+                    gap = "OBS-010",
+                    spec = "runtime-logging",
+                    count = report.high_cardinality_fields.len(),
+                    "high-cardinality fields detected in log stream (could lead to log explosion)"
+                );
+            } else {
+                debug!(
+                    gap = "OBS-010",
+                    entries_scanned = report.total_entries,
+                    "log cardinality analysis: no high-cardinality fields detected"
+                );
+            }
+        }
+        Err(e) => {
+            // Non-critical error; don't fail startup
+            tracing::warn!(
+                gap = "OBS-010",
+                error = %e,
+                "log cardinality analysis failed (non-blocking)"
             );
         }
     }

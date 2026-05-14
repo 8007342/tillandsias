@@ -9,6 +9,7 @@
 //! - TILLANDSIAS_LOG environment variable for runtime filtering
 //! - Accountability event tagging with spec trace links
 
+pub mod cardinality;
 pub mod config;
 pub mod error;
 pub mod formatter;
@@ -16,6 +17,7 @@ pub mod log_entry;
 pub mod logger;
 pub mod rotation;
 
+pub use cardinality::{CardinalityAnalyzer, CardinalityReport};
 pub use error::{LoggingError, Result};
 pub use log_entry::LogEntry;
 pub use logger::Logger;

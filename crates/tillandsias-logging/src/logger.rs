@@ -189,6 +189,14 @@ impl Logger {
     pub fn is_git_logging_enabled(&self) -> bool {
         self.config.log_git
     }
+
+    /// Analyze cardinality of fields in the main log file
+    /// @trace gap:OBS-010
+    pub async fn analyze_cardinality(&self) -> Result<crate::cardinality::CardinalityReport> {
+        let analyzer = crate::cardinality::CardinalityAnalyzer::default();
+        let log_file = self.config.log_dir.join("tillandsias.log");
+        analyzer.analyze_log_file(&log_file).await
+    }
 }
 
 impl Drop for Logger {
