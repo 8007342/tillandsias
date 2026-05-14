@@ -1,3 +1,4 @@
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::event::ContainerState;
@@ -283,8 +284,157 @@ pub struct RemoteRepoInfo {
     pub full_name: String,
 }
 
+/// Metadata for a browser window tracked in the registry.
+/// @trace spec:browser-isolation-tray-integration
+#[derive(Debug, Clone)]
+pub struct BrowserWindowMetadata {
+    /// Unique window identifier (e.g., "project-name-window-1")
+    pub window_id: String,
+    /// Container ID running this browser window (from podman inspect)
+    pub container_id: String,
+    /// When the window was launched
+    pub launch_time: Instant,
+    /// Last heartbeat timestamp (used for stale detection)
+    pub last_heartbeat: Instant,
+    /// Current status of the window
+    pub status: BrowserWindowStatus,
+}
+
+/// Status of a browser window.
+/// @trace spec:browser-isolation-tray-integration
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum BrowserWindowStatus {
+    /// Window is launching, waiting for container to be ready
+    Launching,
+    /// Window is active and responsive
+    Active,
+    /// Window is closing or has been closed
+    Closed,
+}
+
+/// Thread-safe registry of active browser windows.
+/// @trace spec:browser-isolation-tray-integration, spec:browser-window-rate-limiting
+#[derive(Debug, Clone)]
+pub struct BrowserWindowRegistry {
+    /// HashMap of window_id -> BrowserWindowMetadata, protected by Mutex
+    windows: Arc<Mutex<std::collections::HashMap<String, BrowserWindowMetadata>>>,
+}
+
 /// Cache TTL for remote repository list (5 minutes).
 const REMOTE_REPOS_TTL_SECS: u64 = 300;
+
+impl BrowserWindowRegistry {
+    /// Create a new empty browser window registry.
+    /// @trace spec:browser-isolation-tray-integration
+    pub fn new() -> Self {
+        Self {
+            windows: Arc::new(Mutex::new(std::collections::HashMap::new())),
+        }
+    }
+
+    /// Register a new browser window in the registry.
+    /// Returns the registered metadata.
+    /// @trace spec:browser-isolation-tray-integration
+    pub fn register_window(
+        &self,
+        window_id: String,
+        container_id: String,
+    ) -> Result<BrowserWindowMetadata, String> {
+        let now = Instant::now();
+        let metadata = BrowserWindowMetadata {
+            window_id: window_id.clone(),
+            container_id,
+            launch_time: now,
+            last_heartbeat: now,
+            status: BrowserWindowStatus::Launching,
+        };
+
+        let mut windows = self
+            .windows
+            .lock()
+            .map_err(|_| "browser window registry lock poisoned".to_string())?;
+
+        windows.insert(window_id, metadata.clone());
+        Ok(metadata)
+    }
+
+    /// Unregister a browser window from the registry.
+    /// Returns the unregistered metadata if it existed.
+    /// @trace spec:browser-isolation-tray-integration
+    pub fn unregister_window(&self, window_id: &str) -> Result<Option<BrowserWindowMetadata>, String> {
+        let mut windows = self
+            .windows
+            .lock()
+            .map_err(|_| "browser window registry lock poisoned".to_string())?;
+
+        Ok(windows.remove(window_id))
+    }
+
+    /// Get a snapshot of all active browser windows.
+    /// @trace spec:browser-isolation-tray-integration
+    pub fn get_windows(&self) -> Result<Vec<BrowserWindowMetadata>, String> {
+        let windows = self
+            .windows
+            .lock()
+            .map_err(|_| "browser window registry lock poisoned".to_string())?;
+
+        Ok(windows.values().cloned().collect())
+    }
+
+    /// Get a specific window by ID.
+    /// @trace spec:browser-isolation-tray-integration
+    pub fn get_window(&self, window_id: &str) -> Result<Option<BrowserWindowMetadata>, String> {
+        let windows = self
+            .windows
+            .lock()
+            .map_err(|_| "browser window registry lock poisoned".to_string())?;
+
+        Ok(windows.get(window_id).cloned())
+    }
+
+    /// Update the status of a window.
+    /// @trace spec:browser-isolation-tray-integration
+    pub fn update_status(
+        &self,
+        window_id: &str,
+        status: BrowserWindowStatus,
+    ) -> Result<(), String> {
+        let mut windows = self
+            .windows
+            .lock()
+            .map_err(|_| "browser window registry lock poisoned".to_string())?;
+
+        if let Some(metadata) = windows.get_mut(window_id) {
+            metadata.status = status;
+            metadata.last_heartbeat = Instant::now();
+            Ok(())
+        } else {
+            Err(format!("window {} not found in registry", window_id))
+        }
+    }
+
+    /// Update the last heartbeat time for a window.
+    /// @trace spec:browser-isolation-tray-integration
+    pub fn heartbeat(&self, window_id: &str) -> Result<(), String> {
+        let mut windows = self
+            .windows
+            .lock()
+            .map_err(|_| "browser window registry lock poisoned".to_string())?;
+
+        if let Some(metadata) = windows.get_mut(window_id) {
+            metadata.last_heartbeat = Instant::now();
+            Ok(())
+        } else {
+            Err(format!("window {} not found in registry", window_id))
+        }
+    }
+}
+
+impl Default for BrowserWindowRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Full tray state rebuilt on every event.
 #[derive(Debug, Clone)]
@@ -354,6 +504,10 @@ pub struct TrayState {
     /// Next time to retry GitHub connectivity (with exponential backoff).
     /// @trace spec:github-credential-health
     pub github_next_retry: Option<Instant>,
+
+    /// Registry of active browser windows.
+    /// @trace spec:browser-isolation-tray-integration, spec:browser-window-rate-limiting
+    pub browser_windows: BrowserWindowRegistry,
 }
 
 impl TrayState {
@@ -381,6 +535,8 @@ impl TrayState {
             github_last_check: None,
             github_retry_count: 0,
             github_next_retry: None,
+            // @trace spec:browser-isolation-tray-integration
+            browser_windows: BrowserWindowRegistry::new(),
         }
     }
 
@@ -932,5 +1088,208 @@ mod tests {
 
         state.lifecycle_state = TrayAppLifecycleState::Error;
         assert!(state.is_shutting_down());
+    }
+
+    // @trace spec:browser-isolation-tray-integration, spec:browser-window-rate-limiting
+    #[test]
+    fn browser_window_registry_register_and_get() {
+        let registry = BrowserWindowRegistry::new();
+
+        let result = registry.register_window(
+            "project1-window-1".to_string(),
+            "container-abc123".to_string(),
+        );
+
+        assert!(result.is_ok());
+        let metadata = result.unwrap();
+        assert_eq!(metadata.window_id, "project1-window-1");
+        assert_eq!(metadata.container_id, "container-abc123");
+        assert_eq!(metadata.status, BrowserWindowStatus::Launching);
+
+        // Get the window back
+        let retrieved = registry.get_window("project1-window-1");
+        assert!(retrieved.is_ok());
+        assert!(retrieved.unwrap().is_some());
+    }
+
+    // @trace spec:browser-isolation-tray-integration
+    #[test]
+    fn browser_window_registry_unregister() {
+        let registry = BrowserWindowRegistry::new();
+
+        registry
+            .register_window("project1-window-1".to_string(), "container-abc123".to_string())
+            .unwrap();
+
+        let unregistered = registry.unregister_window("project1-window-1");
+        assert!(unregistered.is_ok());
+        assert!(unregistered.unwrap().is_some());
+
+        // Window should no longer exist
+        let retrieved = registry.get_window("project1-window-1");
+        assert!(retrieved.is_ok());
+        assert!(retrieved.unwrap().is_none());
+    }
+
+    // @trace spec:browser-isolation-tray-integration
+    #[test]
+    fn browser_window_registry_unregister_nonexistent() {
+        let registry = BrowserWindowRegistry::new();
+
+        let unregistered = registry.unregister_window("nonexistent");
+        assert!(unregistered.is_ok());
+        assert!(unregistered.unwrap().is_none());
+    }
+
+    // @trace spec:browser-isolation-tray-integration
+    #[test]
+    fn browser_window_registry_get_all_windows() {
+        let registry = BrowserWindowRegistry::new();
+
+        registry
+            .register_window("project1-window-1".to_string(), "container-1".to_string())
+            .unwrap();
+        registry
+            .register_window("project1-window-2".to_string(), "container-2".to_string())
+            .unwrap();
+        registry
+            .register_window("project2-window-1".to_string(), "container-3".to_string())
+            .unwrap();
+
+        let windows = registry.get_windows().unwrap();
+        assert_eq!(windows.len(), 3);
+
+        let window_ids: std::collections::HashSet<_> =
+            windows.iter().map(|w| w.window_id.as_str()).collect();
+        assert!(window_ids.contains("project1-window-1"));
+        assert!(window_ids.contains("project1-window-2"));
+        assert!(window_ids.contains("project2-window-1"));
+    }
+
+    // @trace spec:browser-isolation-tray-integration
+    #[test]
+    fn browser_window_registry_update_status() {
+        let registry = BrowserWindowRegistry::new();
+
+        registry
+            .register_window("project1-window-1".to_string(), "container-abc123".to_string())
+            .unwrap();
+
+        // Initial status should be Launching
+        let window = registry.get_window("project1-window-1").unwrap().unwrap();
+        assert_eq!(window.status, BrowserWindowStatus::Launching);
+
+        // Update to Active
+        let update_result = registry.update_status("project1-window-1", BrowserWindowStatus::Active);
+        assert!(update_result.is_ok());
+
+        let window = registry.get_window("project1-window-1").unwrap().unwrap();
+        assert_eq!(window.status, BrowserWindowStatus::Active);
+
+        // Update to Closed
+        let update_result = registry.update_status("project1-window-1", BrowserWindowStatus::Closed);
+        assert!(update_result.is_ok());
+
+        let window = registry.get_window("project1-window-1").unwrap().unwrap();
+        assert_eq!(window.status, BrowserWindowStatus::Closed);
+    }
+
+    // @trace spec:browser-isolation-tray-integration
+    #[test]
+    fn browser_window_registry_update_status_nonexistent() {
+        let registry = BrowserWindowRegistry::new();
+
+        let result = registry.update_status("nonexistent", BrowserWindowStatus::Active);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
+    }
+
+    // @trace spec:browser-isolation-tray-integration
+    #[test]
+    fn browser_window_registry_heartbeat() {
+        let registry = BrowserWindowRegistry::new();
+
+        registry
+            .register_window("project1-window-1".to_string(), "container-abc123".to_string())
+            .unwrap();
+
+        let window1 = registry.get_window("project1-window-1").unwrap().unwrap();
+        let heartbeat1 = window1.last_heartbeat;
+
+        // Small delay to ensure time passes
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        // Send heartbeat
+        let heartbeat_result = registry.heartbeat("project1-window-1");
+        assert!(heartbeat_result.is_ok());
+
+        let window2 = registry.get_window("project1-window-1").unwrap().unwrap();
+        let heartbeat2 = window2.last_heartbeat;
+
+        // Heartbeat should be updated
+        assert!(heartbeat2 >= heartbeat1);
+    }
+
+    // @trace spec:browser-isolation-tray-integration
+    #[test]
+    fn browser_window_registry_heartbeat_nonexistent() {
+        let registry = BrowserWindowRegistry::new();
+
+        let result = registry.heartbeat("nonexistent");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
+    }
+
+    // @trace spec:browser-isolation-tray-integration, spec:browser-window-rate-limiting
+    #[test]
+    fn browser_window_registry_concurrent_operations() {
+        use std::thread;
+        use std::sync::Arc as StdArc;
+
+        let registry = StdArc::new(BrowserWindowRegistry::new());
+        let mut handles = vec![];
+
+        // Spawn multiple threads registering windows concurrently
+        for i in 0..5 {
+            let reg = StdArc::clone(&registry);
+            let handle = thread::spawn(move || {
+                let window_id = format!("window-{}", i);
+                let container_id = format!("container-{}", i);
+                reg.register_window(window_id, container_id)
+                    .expect("register should succeed")
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all threads to complete
+        let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+
+        // All registrations should succeed
+        assert_eq!(results.len(), 5);
+
+        // All windows should be in registry
+        let windows = registry.get_windows().unwrap();
+        assert_eq!(windows.len(), 5);
+    }
+
+    // @trace spec:browser-isolation-tray-integration
+    #[test]
+    fn tray_state_initializes_browser_window_registry() {
+        let state = TrayState::new(PlatformInfo {
+            os: Os::Linux,
+            has_podman: true,
+            has_podman_machine: false,
+            gpu_devices: Vec::new(),
+        });
+
+        let windows = state.browser_windows.get_windows().unwrap();
+        assert_eq!(windows.len(), 0);
+
+        // Registry should be usable immediately
+        let result = state.browser_windows.register_window(
+            "test-window".to_string(),
+            "test-container".to_string(),
+        );
+        assert!(result.is_ok());
     }
 }

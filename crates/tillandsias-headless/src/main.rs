@@ -1866,12 +1866,16 @@ fn build_opencode_web_browser_spec(
     profile_dir: &Path,
     certs_dir: &Path,
     display: &BrowserDisplayContext,
+    project_name: &str,
 ) -> Result<ContainerSpec, String> {
+    let container_name = format!("tillandsias-browser-{project_name}");
     let mut spec = ContainerSpec::new(format!("tillandsias-chromium-framework:v{version}"))
         .pull_never()
         .read_only()
         .cap_add("SYS_CHROOT")
         .network("host")
+        .name(&container_name)
+        .detached()
         .volume(
             profile_dir.display().to_string(),
             profile_dir.display().to_string(),
@@ -2027,7 +2031,7 @@ fn launch_opencode_web_browser(
     let otp = tillandsias_otp::issue_session(&project_label);
     let login_url = tillandsias_otp::build_login_data_url(&url, &otp);
     let spec =
-        build_opencode_web_browser_spec(&login_url, version, &profile_path, certs_dir, &display)?;
+        build_opencode_web_browser_spec(&login_url, version, &profile_path, certs_dir, &display, project_name)?;
     let args = spec.build_run_args();
 
     emit_opencode_web_event(project_name, "browser", "launch", Some("podman-run"))?;
@@ -2042,6 +2046,23 @@ fn launch_opencode_web_browser(
         {
             eprintln!("[tillandsias] Warning: failed to notify router of web session: {e}");
         }
+
+        // @trace spec:browser-isolation-core, spec:host-chromium-on-demand
+        // Spawn background task to monitor container exit and cleanup.
+        // The browser is now running detached; this task waits for it to exit.
+        let container_name = format!("tillandsias-browser-{project_name}");
+        std::thread::spawn(move || {
+            let rt = match tokio::runtime::Runtime::new() {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("[tillandsias] Failed to create runtime for browser cleanup: {e}");
+                    return;
+                }
+            };
+            if let Err(e) = rt.block_on(monitor_and_cleanup_browser(&container_name, debug)) {
+                eprintln!("[tillandsias] Browser cleanup error: {e}");
+            }
+        });
     } else if let Err(ref err) = result {
         let _ = emit_opencode_web_event(project_name, "browser", "launch_failed", Some(err));
     }
@@ -2063,6 +2084,68 @@ fn rt_block_on_podman_run(args: Vec<String>, debug: bool) -> Result<(), String> 
             eprintln!("[tillandsias] browser container launch failed: {err}");
         }
     })
+}
+
+/// @trace spec:browser-isolation-core, spec:host-chromium-on-demand
+/// Monitor a detached browser container for exit and clean up resources.
+/// Launches the container, waits for it to exit, then removes it.
+async fn monitor_and_cleanup_browser(
+    container_name: &str,
+    debug: bool,
+) -> Result<(), String> {
+    // Wait for container to exit by polling its state periodically.
+    // In a full implementation, this would use `podman events` for more efficient monitoring.
+    let mut poll_interval = Duration::from_millis(100);
+    let max_poll_interval = Duration::from_secs(1);
+    let timeout = Duration::from_secs(3600); // 1-hour timeout
+    let start = std::time::Instant::now();
+
+    loop {
+        if start.elapsed() > timeout {
+            if debug {
+                eprintln!("[tillandsias] browser container timeout after 1 hour: {container_name}");
+            }
+            break;
+        }
+
+        // Poll container state
+        let mut cmd = podman_command();
+        cmd.args(["inspect", "--format=.State.Running", container_name]);
+        let output = cmd
+            .output()
+            .map_err(|e| format!("Failed to inspect browser container: {e}"))?;
+
+        if !output.status.success() {
+            // Container not found or error — assume it exited
+            if debug {
+                eprintln!("[tillandsias] browser container not running: {container_name}");
+            }
+            break;
+        }
+
+        let is_running = String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .eq("true");
+        if !is_running {
+            if debug {
+                eprintln!("[tillandsias] browser container exited: {container_name}");
+            }
+            break;
+        }
+
+        tokio::time::sleep(poll_interval).await;
+        poll_interval = (poll_interval * 2).min(max_poll_interval);
+    }
+
+    // Clean up the container
+    let mut cleanup = podman_command();
+    cleanup.args(["rm", "-f", container_name]);
+    let _ = run_command_silent(cleanup, debug);
+
+    if debug {
+        eprintln!("[tillandsias] cleaned up browser container: {container_name}");
+    }
+    Ok(())
 }
 
 pub(crate) fn run_opencode_web_mode(
@@ -2431,6 +2514,7 @@ mod tests {
             &profile_dir,
             &certs_dir,
             &display,
+            "visual-chess",
         )
         .expect("browser spec");
         let args = spec.build_run_args();
@@ -2441,6 +2525,9 @@ mod tests {
         assert!(has_arg(&args, "SYS_CHROOT"));
         assert!(has_arg(&args, "--network"));
         assert!(has_arg(&args, "host"));
+        assert!(has_arg(&args, "-d"));
+        assert!(has_arg(&args, "--name"));
+        assert!(has_arg(&args, "tillandsias-browser-visual-chess"));
         assert!(
             args.iter().any(|arg| {
                 arg == "type=bind,source=/tmp/tillandsias/ca/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true"

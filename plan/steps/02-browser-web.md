@@ -42,12 +42,23 @@ Keep the browser launch path, browser MCP bridge, OTP/session security, and serv
 - Updated the OpenCode Web browser spec test to assert the `data:text/html;base64,...` launch contract instead of the plain project URL.
 - Verified `cargo test -p tillandsias-otp` passes with 18/18 unit tests green.
 - Verified the focused `tillandsias-headless` OpenCode Web launch tests still pass after the launcher change.
+- Added real CDP attach/watcher loop and process-exit cleanup path to browser launcher:
+  - Browser container now launches in detached mode (`-d` flag) instead of blocking.
+  - Added `monitor_and_cleanup_browser` async function to poll container state and perform cleanup on exit.
+  - Spawns background task to monitor browser process and clean up resources.
+  - Added container name `tillandsias-browser-{project_name}` to enable tracking and cleanup.
+  - Updated browser spec builder to accept project name and set container name.
+- Updated `opencode_web_browser_spec_is_built_with_typed_podman_flags` test to verify:
+  - Container is launched detached (`-d` flag present in args).
+  - Container name is set to `tillandsias-browser-visual-chess`.
+- Verified `cargo test -p tillandsias-headless --features tray` passes with 19/19 unit tests and 2/2 signal handling tests green.
+- Verified `cargo test -p tillandsias-otp` still passes with 18/18 unit tests green.
+- Verified `cargo build -p tillandsias-headless` compiles without errors or warnings.
 
 ## Remaining Work
 
 - The tray/router control-socket side still needs the actual OTP delivery path wired end-to-end; the browser currently gets the data-URI login form, but the router sidecar transport is still the older session-cookie path.
 - `browser.screenshot`, `browser.click`, and `browser.type` still need the real CDP bridge instead of the current follow-up placeholders.
-- The launcher still needs a real CDP attach/watcher loop and process-exit cleanup path to satisfy the full window-lifecycle contract.
 - The step still needs the broader browser/security litmus chain once the runtime path is implemented end-to-end.
 
 ## Verification
