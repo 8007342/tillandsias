@@ -1935,9 +1935,18 @@ fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Resul
         .unwrap_or_else(|_| format!("/run/user/{}", unsafe { libc::getuid() }));
     let socket_path = format!("{}/tillandsias/control.sock", runtime_dir);
 
-    // Connect to the socket.
+    // Connect to the socket with 5-second timeout for graceful fallback.
     let mut stream = UnixStream::connect(&socket_path)
         .map_err(|e| format!("Failed to connect to control socket {}: {}", socket_path, e))?;
+
+    // Set read/write timeouts to 5 seconds to prevent hanging if tray is unresponsive.
+    let timeout = Duration::from_secs(5);
+    stream
+        .set_read_timeout(Some(timeout))
+        .map_err(|e| format!("Failed to set read timeout: {}", e))?;
+    stream
+        .set_write_timeout(Some(timeout))
+        .map_err(|e| format!("Failed to set write timeout: {}", e))?;
 
     // Prepare and send the IssueWebSession message.
     let envelope = ControlEnvelope {
