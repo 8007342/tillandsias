@@ -461,6 +461,36 @@ impl InitBuildState {
         Ok(cached_version == version)
     }
 
+    /// Get the last recorded Containerfile mtime for an image.
+    /// @trace spec:containerfile-staleness
+    fn get_last_containerfile_mtime(image: &str) -> Result<Option<u64>, String> {
+        let cache_dir = init_cache_dir()?;
+        let mtime_file = cache_dir.join(format!("{}-containerfile-mtime", image));
+
+        if !mtime_file.exists() {
+            return Ok(None);
+        }
+
+        let mtime_str = fs::read_to_string(&mtime_file)
+            .map_err(|e| format!("Failed to read mtime file: {e}"))?
+            .trim()
+            .to_string();
+
+        mtime_str.parse::<u64>()
+            .ok()
+            .map(Some)
+            .ok_or_else(|| "Failed to parse mtime".to_string())
+    }
+
+    /// Save the current Containerfile mtime for an image.
+    /// @trace spec:containerfile-staleness
+    fn save_containerfile_mtime(image: &str, mtime: u64) -> Result<(), String> {
+        let cache_dir = init_cache_dir()?;
+        let mtime_file = cache_dir.join(format!("{}-containerfile-mtime", image));
+        fs::write(&mtime_file, mtime.to_string())
+            .map_err(|e| format!("Failed to write mtime file: {e}"))
+    }
+
     /// Save current VERSION to cache for future staleness detection.
     /// @trace spec:forge-staleness, spec:forge-cache-dual
     fn save_version(version: &str) -> Result<(), String> {
@@ -617,6 +647,58 @@ fn versioned_image_tag(image_name: &str, version: &str) -> String {
 
 fn forge_image_tag(version: &str) -> String {
     versioned_image_tag("forge", version)
+}
+
+/// Check if Containerfile has been modified since last successful build.
+/// @trace spec:containerfile-staleness
+fn containerfile_is_stale(root: &Path, image_name: &str, debug: bool) -> Result<bool, String> {
+    let (containerfile, _) = image_specs(root, image_name)?;
+
+    // Get current mtime
+    let metadata = fs::metadata(&containerfile)
+        .map_err(|e| format!("Failed to read Containerfile metadata: {e}"))?;
+
+    let modified = metadata.modified()
+        .map_err(|e| format!("Failed to get modification time: {e}"))?;
+
+    let current_mtime = modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("Failed to compute mtime: {e}"))?
+        .as_secs();
+
+    // Get last recorded mtime
+    match InitBuildState::get_last_containerfile_mtime(image_name)? {
+        Some(last_mtime) if last_mtime >= current_mtime => {
+            // Containerfile not modified since last build
+            Ok(false)
+        }
+        _ => {
+            // Containerfile modified or no record exists
+            if debug {
+                eprintln!("[tillandsias] Containerfile for {} has been modified or updated", image_name);
+            }
+            Ok(true)
+        }
+    }
+}
+
+/// Capture and record the current Containerfile mtime after a successful build.
+/// @trace spec:containerfile-staleness
+fn capture_containerfile_mtime(root: &Path, image_name: &str) -> Result<(), String> {
+    let (containerfile, _) = image_specs(root, image_name)?;
+
+    let metadata = fs::metadata(&containerfile)
+        .map_err(|e| format!("Failed to read Containerfile metadata: {e}"))?;
+
+    let modified = metadata.modified()
+        .map_err(|e| format!("Failed to get modification time: {e}"))?;
+
+    let mtime = modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("Failed to compute mtime: {e}"))?
+        .as_secs();
+
+    InitBuildState::save_containerfile_mtime(image_name, mtime)
 }
 
 fn ensure_image_exists(
@@ -1460,11 +1542,23 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         // Check if image exists and was previously successful
         let should_skip = rt.block_on(async { client.image_exists(&tag).await });
 
-        if should_skip && state.was_successful(image) && !force {
+        // @trace spec:containerfile-staleness
+        // Check if Containerfile has been modified since last build
+        let containerfile_stale = if should_skip && state.was_successful(image) && !force {
+            containerfile_is_stale(&root, image, debug).unwrap_or(false)
+        } else {
+            false
+        };
+
+        if should_skip && state.was_successful(image) && !force && !containerfile_stale {
             if debug {
                 println!("SKIP {} (cached)", image);
             }
             continue;
+        }
+
+        if containerfile_stale && debug {
+            eprintln!("REBUILD {} (Containerfile modified)", image);
         }
 
         if !should_skip && state.was_successful(image) {
@@ -1489,6 +1583,13 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
             failed_images.push((image.to_string(), e));
         } else {
             state.mark_success(image);
+            // @trace spec:containerfile-staleness
+            // Record Containerfile mtime after successful build
+            if let Err(e) = capture_containerfile_mtime(&root, image) {
+                if debug {
+                    eprintln!("WARNING: Failed to record Containerfile mtime for {}: {}", image, e);
+                }
+            }
             if debug {
                 println!("SUCCESS {}", image);
             }
