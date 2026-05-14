@@ -81,6 +81,60 @@ get_project_metadata() {
 EOF
 }
 
+# ── Workspace discovery (sibling projects) ───────────────────
+# @trace gap:ON-006
+# Discovers sibling git projects in the parent directory of the current project.
+# Returns JSON array of projects with basic metadata (name, description, managed).
+discover_sibling_projects() {
+    local current_project_dir="${1:-.}"
+    local parent_dir
+    parent_dir=$(dirname "$current_project_dir")
+
+    local projects_json=""
+
+    # Scan parent directory for git projects
+    if [ -d "$parent_dir" ]; then
+        for project_dir in "$parent_dir"/*; do
+            # Skip if not a directory or doesn't have .git
+            if [ ! -d "$project_dir" ] || [ ! -d "$project_dir/.git" ]; then
+                continue
+            fi
+
+            # Skip the current project itself
+            if [ "$(realpath "$project_dir")" = "$(realpath "$current_project_dir")" ]; then
+                continue
+            fi
+
+            local project_name
+            project_name=$(basename "$project_dir")
+
+            # Extract description from README
+            local description=""
+            if [ -f "$project_dir/README.md" ]; then
+                description=$(head -1 "$project_dir/README.md" | sed 's/^# //' | sed 's/^## //' | head -c 100)
+            fi
+
+            # Check if Tillandsias-managed
+            local is_managed="false"
+            [ -f "$project_dir/.tillandsias/config.toml" ] && is_managed="true"
+
+            # Build JSON object for this project
+            if [ -z "$projects_json" ]; then
+                projects_json="{\"name\":\"$project_name\",\"path\":\"$project_dir\",\"description\":\"$description\",\"managed\":$is_managed}"
+            else
+                projects_json="$projects_json,{\"name\":\"$project_name\",\"path\":\"$project_dir\",\"description\":\"$description\",\"managed\":$is_managed}"
+            fi
+        done
+    fi
+
+    # Return as JSON array
+    if [ -n "$projects_json" ]; then
+        echo "[$projects_json]"
+    else
+        echo "[]"
+    fi
+}
+
 # Read JSON-RPC requests from stdin, respond on stdout
 while IFS= read -r line; do
     method=$(echo "$line" | jq -r '.method // empty')
@@ -91,7 +145,7 @@ while IFS= read -r line; do
             echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"project-info","version":"1.0.0"}}}'
             ;;
         "tools/list")
-            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"tools":[{"name":"project_structure","description":"List project files (max depth 3, max 100 files)","inputSchema":{"type":"object","properties":{"depth":{"type":"number","default":3}}}},{"name":"file_summary","description":"Show line count and first lines of a file","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"lines":{"type":"number","default":5}},"required":["path"]}},{"name":"search_code","description":"Search for a pattern across source files","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"glob":{"type":"string","default":"*"}},"required":["pattern"]}},{"name":"project_list","description":"Discover available projects in ~/src/ (git repos)","inputSchema":{"type":"object","properties":{}}},{"name":"project_info","description":"Get detailed info about a project at a path","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_type","description":"Detect project type from marker files","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_metadata","description":"Get structured metadata about a project","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."},"name":{"type":"string"}},"required":[]}}]}}'
+            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"tools":[{"name":"project_structure","description":"List project files (max depth 3, max 100 files)","inputSchema":{"type":"object","properties":{"depth":{"type":"number","default":3}}}},{"name":"file_summary","description":"Show line count and first lines of a file","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"lines":{"type":"number","default":5}},"required":["path"]}},{"name":"search_code","description":"Search for a pattern across source files","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"glob":{"type":"string","default":"*"}},"required":["pattern"]}},{"name":"project_list","description":"Discover available projects in ~/src/ (git repos)","inputSchema":{"type":"object","properties":{}}},{"name":"sibling_projects","description":"Discover sibling projects in parent directory","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_info","description":"Get detailed info about a project at a path","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_type","description":"Detect project type from marker files","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_metadata","description":"Get structured metadata about a project","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."},"name":{"type":"string"}},"required":[]}}]}}'
             ;;
         "tools/call")
             tool=$(echo "$line" | jq -r '.params.name')
@@ -148,6 +202,12 @@ ${preview}"
                         [ -n "$projects_json" ] && project_data="[$projects_json]"
                     fi
                     result="$project_data"
+                    ;;
+                "sibling_projects")
+                    # @trace gap:ON-006
+                    # Discover sibling projects in the parent directory
+                    path=$(echo "$args" | jq -r '.path // "."')
+                    result=$(discover_sibling_projects "$path")
                     ;;
                 "project_type")
                     # @trace spec:forge-environment-discoverability

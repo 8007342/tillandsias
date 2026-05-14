@@ -41,4 +41,4 @@ mod sampler;
 pub use dashboard::{DashboardSnapshot, emit_dashboard_metric};
 pub use error::MetricsError;
 pub use models::{CpuMetric, DiskIoMetric, DiskMetric, MemoryMetric, PsiMetric};
-pub use sampler::MetricsSampler;
+pub use sampler::{MetricsSampler, archive_old_metrics};

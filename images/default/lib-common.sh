@@ -959,6 +959,120 @@ export_project_env() {
     fi
 }
 
+# ── Multi-workspace discovery ───────────────────────────────
+# @trace gap:ON-006
+# Discovers sibling projects in the parent directory and exports
+# TILLANDSIAS_SIBLING_PROJECTS as a colon-separated list of project names.
+# Also exports TILLANDSIAS_WORKSPACE_COUNT for easy checking.
+export_workspace_env() {
+    # PROJECT_DIR must be set by find_project_dir() or export_project_env()
+    local project_path="${TILLANDSIAS_PROJECT_PATH:-${PROJECT_DIR:-}}"
+
+    if [ -z "$project_path" ] || [ ! -d "$project_path" ]; then
+        export TILLANDSIAS_SIBLING_PROJECTS=""
+        export TILLANDSIAS_WORKSPACE_COUNT=0
+        return 0
+    fi
+
+    local parent_dir
+    parent_dir=$(dirname "$project_path")
+
+    local sibling_names=""
+    local count=0
+
+    # Scan parent directory for git projects
+    if [ -d "$parent_dir" ]; then
+        for project_dir in "$parent_dir"/*; do
+            # Skip if not a directory or doesn't have .git
+            if [ ! -d "$project_dir" ] || [ ! -d "$project_dir/.git" ]; then
+                continue
+            fi
+
+            # Skip the current project itself
+            if [ "$(realpath "$project_dir")" = "$(realpath "$project_path")" ]; then
+                continue
+            fi
+
+            local project_name
+            project_name=$(basename "$project_dir")
+
+            # Add to colon-separated list
+            if [ -z "$sibling_names" ]; then
+                sibling_names="$project_name"
+            else
+                sibling_names="$sibling_names:$project_name"
+            fi
+
+            count=$((count + 1))
+        done
+    fi
+
+    export TILLANDSIAS_SIBLING_PROJECTS="$sibling_names"
+    export TILLANDSIAS_WORKSPACE_COUNT=$count
+
+    if [ $count -gt 0 ]; then
+        trace_lifecycle "workspace-env" "TILLANDSIAS_WORKSPACE_COUNT=$count TILLANDSIAS_SIBLING_PROJECTS=$TILLANDSIAS_SIBLING_PROJECTS"
+    fi
+}
+
+# ── Quick-switch to sibling project ────────────────────────
+# @trace gap:ON-006
+# Shell function to quickly cd to a sibling project directory.
+# Usage: switch-project <project-name>
+switch_project() {
+    local target_project="${1:-}"
+
+    if [ -z "$target_project" ]; then
+        echo "Usage: switch-project <project-name>"
+        if [ "$TILLANDSIAS_WORKSPACE_COUNT" -gt 0 ]; then
+            echo ""
+            echo "Available projects:"
+            IFS=':' read -ra projects <<< "$TILLANDSIAS_SIBLING_PROJECTS"
+            for proj in "${projects[@]}"; do
+                echo "  • $proj"
+            done
+        else
+            echo "No sibling projects found."
+        fi
+        return 1
+    fi
+
+    # Get the parent directory from current project path
+    local parent_dir
+    parent_dir=$(dirname "${TILLANDSIAS_PROJECT_PATH:-$(pwd)}")
+
+    # Check if the target project exists
+    local target_path="$parent_dir/$target_project"
+    if [ ! -d "$target_path" ] || [ ! -d "$target_path/.git" ]; then
+        echo "ERROR: Project '$target_project' not found in $parent_dir"
+        return 1
+    fi
+
+    # Change to the target project directory
+    cd "$target_path" || return 1
+    echo "Switched to: $target_project"
+
+    # Update environment variables for the new project
+    PROJECT_DIR="$target_path"
+    export_project_env
+    export_workspace_env
+
+    return 0
+}
+
+# Alias for convenience
+list_projects() {
+    echo "Available projects in $(dirname "${TILLANDSIAS_PROJECT_PATH:-$(pwd)}"):"
+    if [ "$TILLANDSIAS_WORKSPACE_COUNT" -gt 0 ]; then
+        IFS=':' read -ra projects <<< "$TILLANDSIAS_SIBLING_PROJECTS"
+        for proj in "${projects[@]}"; do
+            echo "  • $proj"
+        done
+    else
+        echo "  (none)"
+    fi
+}
+
 # ── Banner ──────────────────────────────────────────────────
 show_banner() {
     local agent_name="${1:-terminal}"

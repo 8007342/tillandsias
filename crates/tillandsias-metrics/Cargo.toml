@@ -21,3 +21,4 @@ sysinfo = { version = "0.30", default-features = false }
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util", "macros"] }
 tempfile = "3"
+filetime = "0.2"

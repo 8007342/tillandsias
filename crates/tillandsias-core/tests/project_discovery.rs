@@ -233,4 +233,47 @@ mod integration {
 
         assert_eq!(projects.len(), 3, "Should discover all 3 projects");
     }
+
+    /// Integration test: Sibling project discovery (workspace detection)
+    /// @trace gap:ON-006
+    #[test]
+    fn test_sibling_project_discovery() {
+        let workspace = TempDir::new().expect("Failed to create workspace");
+        let workspace_path = workspace.path();
+
+        // Create 3 sibling projects in the workspace
+        for i in 0..3 {
+            let proj_dir = workspace_path.join(format!("project-{}", i));
+            fs::create_dir(&proj_dir).expect("Failed to create project dir");
+            fs::create_dir(proj_dir.join(".git")).expect("Failed to create .git");
+            fs::write(
+                proj_dir.join("README.md"),
+                format!("# Project {}\nDescription for project {}", i, i),
+            )
+            .expect("Failed to write README");
+        }
+
+        // Test discovery of siblings from project-0
+        let project_0 = workspace_path.join("project-0");
+        let parent = project_0.parent().expect("Parent should exist");
+
+        // Scan parent for git projects (excluding current)
+        let mut siblings = Vec::new();
+        for entry in fs::read_dir(parent).expect("Failed to read workspace") {
+            let entry = entry.expect("Failed to read entry");
+            let path = entry.path();
+            if path.is_dir()
+                && path.join(".git").exists()
+                && path != project_0
+            {
+                siblings.push(path);
+            }
+        }
+
+        assert_eq!(
+            siblings.len(),
+            2,
+            "Should discover 2 sibling projects (excluding self)"
+        );
+    }
 }

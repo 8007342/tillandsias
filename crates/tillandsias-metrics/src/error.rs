@@ -18,4 +18,9 @@ pub enum MetricsError {
     /// Serialization of a dashboard snapshot failed.
     #[error("dashboard snapshot serialization failed: {0}")]
     Serde(#[from] serde_json::Error),
+
+    /// Metrics retention/archival operation failed.
+    /// @trace gap:OBS-005
+    #[error("metrics retention failed: {0}")]
+    RetentionFailed(String),
 }

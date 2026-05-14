@@ -1680,8 +1680,9 @@ fn build_image_with_logging(
     image_name: &str,
     image_tag: &str,
     log_file: &Option<PathBuf>,
-    debug: bool,
+    _debug: bool,
 ) -> Result<(), String> {
+    // @trace gap:ON-005 — show progress % during image pull
     let (containerfile, context_dir) = image_specs(root, image_name)?;
     let build_args = image_build_args(image_name, image_tag);
 
@@ -1703,35 +1704,87 @@ fn build_image_with_logging(
             .ok_or_else(|| "Context path contains invalid UTF-8".to_string())?,
     );
 
-    if let Some(log_path) = log_file {
-        // Redirect stdout and stderr to log file
-        if debug {
-            eprintln!(
-                "[tillandsias] logging build output to {}",
-                log_path.display()
-            );
+    // @trace gap:ON-005 — capture stdout/stderr for progress parsing
+    command.stdout(Stdio::piped());
+    command.stderr(Stdio::piped());
+
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("Failed to spawn build process: {e}"))?;
+
+    let stdout = child.stdout.take();
+    let _stderr = child.stderr.take();
+
+    // Open log file for writing all output
+    let mut log_handle = if let Some(log_path) = log_file {
+        Some(
+            fs::OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .open(log_path)
+                .map_err(|e| format!("Failed to open log file: {e}"))?,
+        )
+    } else {
+        None
+    };
+
+    // @trace gap:ON-005 — read and parse output for progress tracking
+    // Process stdout to catch layer pull progress
+    use std::io::BufRead;
+
+    let mut progress_percent = 0;
+    let mut last_reported = 0;
+
+    if let Some(stdout_reader) = stdout {
+        let buf_reader = std::io::BufReader::new(stdout_reader);
+        for line in buf_reader.lines() {
+            if let Ok(line) = line {
+                // Write to log file if present
+                if let Some(ref mut log) = log_handle {
+                    let _ = writeln!(log, "{}", line);
+                }
+
+                // @trace gap:ON-005 — parse podman progress indicators
+                // Look for "Pulling" and percentage indicators to compute progress
+                if line.contains("Pulling") || line.contains("Digest:") || line.contains("Loaded image") {
+                    // Estimate progress based on visible output
+                    if line.contains("Pulling") && progress_percent < 50 {
+                        progress_percent = 50;
+                    } else if line.contains("Digest:") && progress_percent < 75 {
+                        progress_percent = 75;
+                    } else if line.contains("Loaded image") || line.contains("Commit") {
+                        progress_percent = 100;
+                    }
+
+                    // Emit progress update if it changed significantly
+                    if progress_percent > last_reported + 10 || progress_percent == 100 {
+                        println!(
+                            "Pulling image {} [{}{}] {}%",
+                            image_name,
+                            "█".repeat(progress_percent / 10),
+                            "░".repeat(10 - (progress_percent / 10)),
+                            progress_percent
+                        );
+                        last_reported = progress_percent;
+                    }
+                }
+            }
         }
-
-        let log_file_handle = fs::OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(log_path)
-            .map_err(|e| format!("Failed to open log file: {e}"))?;
-
-        command.stdout(
-            log_file_handle
-                .try_clone()
-                .map_err(|e| format!("Failed to clone log file handle: {e}"))?,
-        );
-        command.stderr(log_file_handle);
     }
 
-    let status = command
-        .status()
-        .map_err(|e| format!("Failed to execute build: {e}"))?;
+    let status = child
+        .wait()
+        .map_err(|e| format!("Failed to wait for build process: {e}"))?;
 
     if status.success() {
+        if progress_percent < 100 {
+            println!(
+                "Pulling image {} [{}] 100%",
+                image_name,
+                "█".repeat(10)
+            );
+        }
         Ok(())
     } else {
         Err(format!("Build exited with status {}", status))
@@ -3159,6 +3212,10 @@ async fn run_headless_async(config_path: Option<String>) -> Result<(), String> {
     // Wave 13 Gap #3: spawn background resource-metric sampler.
     // @trace spec:resource-metric-collection, spec:observability-metrics
     // @cheatsheet observability/cheatsheet-metrics.md
+    //
+    // Wave 19c Gap OBS-005: Run metrics retention check before starting sampler
+    // @trace gap:OBS-005
+    run_metrics_retention();
     let metrics_handle = spawn_metrics_sampler();
 
     // Main event loop: wait for application shutdown signal.
@@ -3183,6 +3240,38 @@ async fn run_headless_async(config_path: Option<String>) -> Result<(), String> {
         now.to_rfc3339()
     );
     Ok(())
+}
+
+/// Run metrics retention check to archive files older than 30 days.
+///
+/// This implements gap:OBS-005. Files are moved from ~/.cache/tillandsias/logs/
+/// to ~/.cache/tillandsias/metrics-archive/ if they exceed the 30-day retention
+/// window. Runs synchronously on startup (lightweight operation).
+///
+/// @trace gap:OBS-005, spec:observability-metrics
+fn run_metrics_retention() {
+    use tillandsias_core::config;
+    use tillandsias_metrics::archive_old_metrics;
+
+    let cache_dir = config::cache_dir();
+    let metrics_dir = cache_dir.join("logs");
+    let retention_days = 30;
+
+    match archive_old_metrics(&metrics_dir, retention_days) {
+        Ok(()) => {
+            // Success; retention check completed (may have archived 0 or more files).
+            // Detailed logging happens inside archive_old_metrics.
+        }
+        Err(e) => {
+            // Log the error but don't fail startup — retention is non-critical.
+            tracing::warn!(
+                spec = "observability-metrics",
+                gap = "OBS-005",
+                error = %e,
+                "metrics retention check failed (non-blocking)"
+            );
+        }
+    }
 }
 
 /// Spawn the resource-metric sampler in the background.

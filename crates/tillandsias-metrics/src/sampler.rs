@@ -14,8 +14,9 @@ use crate::error::MetricsError;
 use crate::models::{CpuMetric, DiskIoMetric, DiskMetric, MemoryMetric, PsiMetric};
 use chrono::Utc;
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use sysinfo::{Disks, MINIMUM_CPU_UPDATE_INTERVAL, System};
 use tracing::{debug, info, warn};
 
@@ -475,6 +476,168 @@ fn aggregate_disk_io(metrics: &[DiskIoMetric]) -> (f64, f64, f64, f64) {
     (read, write, iops, worst)
 }
 
+/// Archive metrics files older than 30 days into a rolling-window archive.
+///
+/// This function implements the metrics retention policy (gap:OBS-005) by:
+/// 1. Checking all metrics files in the metrics directory
+/// 2. Identifying files with mtime > 30 days old
+/// 3. Moving them to `.cache/tillandsias/metrics-archive/`
+/// 4. Logging the retention action
+///
+/// The archive directory is created on-demand if it doesn't exist.
+/// Files that cannot be moved are logged but do not error — the function
+/// continues processing remaining files.
+///
+/// @trace gap:OBS-005, spec:observability-metrics
+pub fn archive_old_metrics(metrics_dir: &Path, retention_days: u64) -> Result<(), MetricsError> {
+    // Ensure metrics directory exists
+    if !metrics_dir.is_dir() {
+        debug!(
+            spec = "observability-metrics",
+            gap = "OBS-005",
+            path = ?metrics_dir,
+            "metrics directory does not exist; skipping retention"
+        );
+        return Ok(());
+    }
+
+    // Create archive directory path (~/.cache/tillandsias/metrics-archive/)
+    let archive_dir = if let Some(cache_parent) = metrics_dir.parent() {
+        cache_parent.join("metrics-archive")
+    } else {
+        return Err(MetricsError::RetentionFailed(
+            "metrics directory has no parent".to_string(),
+        ));
+    };
+
+    // Create archive directory if it doesn't exist
+    if !archive_dir.is_dir() {
+        fs::create_dir_all(&archive_dir).map_err(|e| {
+            MetricsError::RetentionFailed(format!("failed to create archive directory: {e}"))
+        })?;
+    }
+
+    // Calculate cutoff time (now - retention_days)
+    let cutoff = SystemTime::now()
+        .checked_sub(Duration::from_secs(retention_days * 24 * 60 * 60))
+        .unwrap_or(SystemTime::UNIX_EPOCH);
+
+    let mut archived_count = 0;
+    let mut oldest_days = 0u64;
+
+    // Scan metrics directory for files older than cutoff
+    let entries = fs::read_dir(metrics_dir).map_err(|e| {
+        MetricsError::RetentionFailed(format!("failed to read metrics directory: {e}"))
+    })?;
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => {
+                debug!(
+                    spec = "observability-metrics",
+                    gap = "OBS-005",
+                    error = %e,
+                    "failed to read directory entry during retention; skipping"
+                );
+                continue;
+            }
+        };
+
+        let path = entry.path();
+
+        // Skip directories; only process files
+        if path.is_dir() {
+            continue;
+        }
+
+        // Check file modification time
+        let metadata = match fs::metadata(&path) {
+            Ok(m) => m,
+            Err(e) => {
+                debug!(
+                    spec = "observability-metrics",
+                    gap = "OBS-005",
+                    path = ?path,
+                    error = %e,
+                    "failed to stat file during retention; skipping"
+                );
+                continue;
+            }
+        };
+
+        let mtime = match metadata.modified() {
+            Ok(t) => t,
+            Err(e) => {
+                debug!(
+                    spec = "observability-metrics",
+                    gap = "OBS-005",
+                    path = ?path,
+                    error = %e,
+                    "failed to get mtime during retention; skipping"
+                );
+                continue;
+            }
+        };
+
+        // If file is older than cutoff, archive it
+        if mtime < cutoff {
+            // Calculate age in days for logging
+            if let Ok(elapsed) = SystemTime::now().duration_since(mtime) {
+                let days = elapsed.as_secs() / (24 * 60 * 60);
+                if days > oldest_days {
+                    oldest_days = days;
+                }
+            }
+
+            let filename = path.file_name().unwrap_or_default();
+            let archive_path = archive_dir.join(filename);
+
+            match fs::rename(&path, &archive_path) {
+                Ok(()) => {
+                    archived_count += 1;
+                    debug!(
+                        spec = "observability-metrics",
+                        gap = "OBS-005",
+                        from = ?path,
+                        to = ?archive_path,
+                        "archived old metrics file"
+                    );
+                }
+                Err(e) => {
+                    debug!(
+                        spec = "observability-metrics",
+                        gap = "OBS-005",
+                        path = ?path,
+                        error = %e,
+                        "failed to archive metrics file; skipping"
+                    );
+                }
+            }
+        }
+    }
+
+    // Log retention action if any files were archived
+    if archived_count > 0 {
+        info!(
+            spec = "observability-metrics",
+            gap = "OBS-005",
+            archived_count = archived_count,
+            oldest_days = oldest_days,
+            "metrics retention: archived old metrics files"
+        );
+    } else {
+        debug!(
+            spec = "observability-metrics",
+            gap = "OBS-005",
+            "no metrics files older than {} days found",
+            retention_days
+        );
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -792,5 +955,62 @@ mod tests {
         assert_eq!(w, 0.0);
         assert_eq!(ops, 0.0);
         assert_eq!(worst, 0.0);
+    }
+
+    // ---- metrics retention (OBS-005) ----------------------------------------
+
+    #[test]
+    fn archive_old_metrics_nonexistent_dir_is_ok() {
+        // @trace gap:OBS-005
+        let result = archive_old_metrics(Path::new("/nonexistent/metrics"), 30);
+        // Should degrade gracefully rather than error
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn archive_old_metrics_with_old_files() {
+        // @trace gap:OBS-005
+        let dir = tempfile::tempdir().unwrap();
+        let metrics_dir = dir.path().join("metrics");
+        fs::create_dir_all(&metrics_dir).unwrap();
+
+        // Create test files
+        let recent_file = metrics_dir.join("recent.metrics");
+        let old_file = metrics_dir.join("old.metrics");
+
+        fs::write(&recent_file, "recent data").unwrap();
+        fs::write(&old_file, "old data").unwrap();
+
+        // Set old file's mtime to 45 days ago
+        let now = SystemTime::now();
+        let old_time = now
+            .checked_sub(Duration::from_secs(45 * 24 * 60 * 60))
+            .unwrap();
+        filetime::set_file_mtime(&old_file, old_time.into())
+            .expect("set mtime on old file");
+
+        // Run retention with 30-day window
+        let result = archive_old_metrics(&metrics_dir, 30);
+        assert!(result.is_ok());
+
+        // Old file should be archived, recent should remain
+        assert!(!old_file.exists(), "old file should be archived");
+        assert!(recent_file.exists(), "recent file should remain");
+
+        // Check archive directory exists and contains old file
+        let archive_dir = dir.path().join("metrics-archive");
+        assert!(archive_dir.is_dir(), "archive dir should exist");
+        assert!(archive_dir.join("old.metrics").exists(), "archived file should exist");
+    }
+
+    #[test]
+    fn archive_old_metrics_empty_dir_is_ok() {
+        // @trace gap:OBS-005
+        let dir = tempfile::tempdir().unwrap();
+        let metrics_dir = dir.path().join("metrics");
+        fs::create_dir_all(&metrics_dir).unwrap();
+
+        let result = archive_old_metrics(&metrics_dir, 30);
+        assert!(result.is_ok(), "empty directory should not error");
     }
 }

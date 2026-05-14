@@ -77,6 +77,11 @@ find_project_dir
 # Export discovery env vars: TILLANDSIAS_PROJECT_PATH, TILLANDSIAS_PROJECT_GENUS
 export_project_env
 
+# ── Multi-workspace discovery ───────────────────────────────
+# @trace gap:ON-006
+# Discover and export sibling projects in parent directory
+export_workspace_env
+
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
@@ -86,6 +91,21 @@ if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
         echo "[entrypoint] WARNING: OpenSpec init failed — /opsx commands may not work" >&2
         echo "[entrypoint] $OS_OUTPUT" >&2
     fi
+fi
+
+# ── Multi-workspace quick-switch menu ──────────────────────
+# @trace gap:ON-006
+# Display available sibling projects and provide quick-switch function
+if [ "$TILLANDSIAS_WORKSPACE_COUNT" -gt 0 ]; then
+    echo ""
+    echo "Available projects in $(dirname "$TILLANDSIAS_PROJECT_PATH"):"
+    IFS=':' read -ra projects <<< "$TILLANDSIAS_SIBLING_PROJECTS"
+    for proj in "${projects[@]}"; do
+        echo "  • $proj"
+    done
+    echo ""
+    echo "Quick switch: switch-project <name>"
+    echo ""
 fi
 
 # ── Welcome banner ──────────────────────────────────────────

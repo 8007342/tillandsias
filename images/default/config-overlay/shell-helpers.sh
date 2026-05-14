@@ -81,6 +81,59 @@ git-status-all() {
     done
 }
 
+# switch-project: Quick-switch to a sibling project in the same workspace
+# @trace gap:ON-006
+# Usage: switch-project <project-name>
+switch-project() {
+    local target_project="${1:-}"
+
+    if [ -z "$target_project" ]; then
+        echo "Usage: switch-project <project-name>" >&2
+        if [ "$TILLANDSIAS_WORKSPACE_COUNT" -gt 0 ]; then
+            echo "" >&2
+            echo "Available sibling projects:" >&2
+            IFS=':' read -ra projects <<< "$TILLANDSIAS_SIBLING_PROJECTS"
+            for proj in "${projects[@]}"; do
+                echo "  • $proj" >&2
+            done
+        else
+            echo "No sibling projects found." >&2
+        fi
+        return 1
+    fi
+
+    # Get the parent directory from current project path
+    local parent_dir
+    parent_dir=$(dirname "${TILLANDSIAS_PROJECT_PATH:-.}")
+
+    # Check if the target project exists
+    local target_path="$parent_dir/$target_project"
+    if [ ! -d "$target_path" ] || [ ! -d "$target_path/.git" ]; then
+        echo "ERROR: Project '$target_project' not found in $parent_dir" >&2
+        return 1
+    fi
+
+    # Change to the target project directory
+    cd "$target_path" || return 1
+    echo "Switched to: $target_project"
+
+    return 0
+}
+
+# list-projects: List available sibling projects (projects in same parent directory)
+# @trace gap:ON-006
+list-projects() {
+    echo "Available projects in $(dirname "${TILLANDSIAS_PROJECT_PATH:-.}"):"
+    if [ "$TILLANDSIAS_WORKSPACE_COUNT" -gt 0 ]; then
+        IFS=':' read -ra projects <<< "$TILLANDSIAS_SIBLING_PROJECTS"
+        for proj in "${projects[@]}"; do
+            echo "  • $proj"
+        done
+    else
+        echo "  (none)"
+    fi
+}
+
 # cheatsheet: Search cheatsheets by topic
 cheatsheet() {
     # @trace spec:agent-cheatsheets, spec:forge-environment-discoverability
@@ -216,6 +269,8 @@ Tillandsias shell helpers:
 
   Project navigation:
     ls-projects          List all projects in ~/src/ with descriptions
+    list-projects        List sibling projects in current workspace
+    switch-project <p>   Switch to a sibling project
     clone-fresh <proj>   Clone a project from the git mirror (offline)
     git-status-all       Show git status for all projects
     cheatsheet <topic>   Search cheatsheets for a topic
