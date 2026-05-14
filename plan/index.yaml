@@ -700,13 +700,13 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Wave 10 completed: onboarding gaps documented in plan/steps/04-onboarding-docs.md (Implementation Gaps section) and plan/issues/onboarding-gaps-2026-05-14.md. 11 gaps modelled as a DAG across 5 categories (i18n, cold-start, multi-workspace, agent-bootstrap, auth-lifecycle). No fixes; pure documentation pass."
         - id: implementation-gaps/observability
-          status: pending
+          status: completed
           depends_on:
             - implementation-gaps/onboarding
           owned_files:
             - plan/steps/05-observability.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: observability gaps should remain graph-shaped, not linear guesswork."
+          handoff_note: "Wave 10 completed: observability gaps documented in plan/steps/05-observability.md (Implementation Gaps section) and plan/issues/observability-gaps-2026-05-14.md. 23 gaps modelled as a DAG across 7 categories (log-schema-stability, trace-coverage, dashboard-freshness, external-log-aggregation, resource-metric-collection, evidence-bundle-discipline, observability-surface-completeness). Per the handoff guidance, gaps remain graph-shaped, not linear guesswork. No fixes; pure documentation pass."
         - id: implementation-gaps/cross-platform
           status: obsoleted
           depends_on:
