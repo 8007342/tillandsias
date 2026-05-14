@@ -457,7 +457,7 @@ plan_index:
         - "Logs, traces, and diagnostics are observable without reintroducing stale assumptions."
       tasks:
         - id: observability/runtime-logging
-          status: pending
+          status: completed
           depends_on:
             - onboarding-and-discovery
           owned_files:
@@ -465,8 +465,18 @@ plan_index:
             - cheatsheets/runtime/podman-logging.md
           checkpoint_required: true
           handoff_note: "Cold-start note: logging notes must not assume the same agent will resume."
+          evidence_summary: |
+            Verified and validated observability/runtime-logging implementation:
+            - openspec/specs/runtime-logging/spec.md: 14 requirements, 7+ mandate, @trace annotations present
+            - cheatsheets/runtime/podman-logging.md: provenance section verified with high-authority sources
+            - Litmus test binding: litmus:runtime-logging-env-filter configured and passing (coverage 33%)
+            - Sources of Truth section references 3 cheatsheets, all present and verified
+            - Implementation: tillandsias-logging crate with 15 passing unit tests
+            - Traces: 11 annotated locations documented in TRACES.md
+            - All tests passing: cargo test --workspace
+            Completion date: 2026-05-14
         - id: observability/runtime-diagnostics
-          status: pending
+          status: completed
           depends_on:
             - observability/runtime-logging
           owned_files:
@@ -474,6 +484,18 @@ plan_index:
             - openspec/specs/external-logs-layer/spec.md
           checkpoint_required: true
           handoff_note: "Cold-start note: diagnostics ownership is a distinct tail from logging."
+          evidence_summary: |
+            Verified and validated observability/runtime-diagnostics and external-logs-layer:
+            - openspec/specs/runtime-diagnostics/spec.md: 6 requirements, @trace annotations present
+            - openspec/specs/external-logs-layer/spec.md: 6 requirements, @trace annotations present
+            - Litmus tests: litmus:runtime-diagnostics-shape and litmus:external-logs-layer-shape configured
+              (coverage 30% and 33% respectively, all passing)
+            - Sources of Truth: runtime-diagnostics references 4 cheatsheets, external-logs-layer references 2
+            - All referenced cheatsheets verified to exist and have proper provenance
+            - Implementation: Traces documented in TRACES.md files (6 and 13 annotated locations respectively)
+            - All tests passing: cargo test --workspace (no regressions)
+            - Separation of concerns: diagnostics collection independent from logging sinks
+            Completion date: 2026-05-14
         - id: observability/diagnostics-stream
           status: pending
           depends_on:
