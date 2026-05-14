@@ -1,8 +1,21 @@
 <!-- @trace spec:clickable-trace-index -->
 
+# clickable-trace-index Specification
+
 ## Status
 
 active
+
+## Purpose
+
+Generate a searchable, clickable index of all `@trace spec:<name>` annotations in the codebase, enabling developers and agents to navigate from any spec to all code locations that implement it. The index lives in `TRACES.md` at the repository root (GitHub-renderable Markdown with clickable links) and per-spec back-link files at `openspec/specs/<name>/TRACES.md`. The index is auto-generated on every build and stays current without manual intervention.
+
+This spec ensures:
+- Every spec has a searchable link to code locations implementing it
+- Links are clickable on GitHub without plugins (relative Markdown links with `#L<line>` anchors)
+- The index is deterministic and reproducible (no external dependencies, POSIX shell only)
+- Builds automatically regenerate the index on every run (except test/check-only invocations)
+- A local observatorium provides a three-pane viewer (specs, code, cheatsheets) with live cross-referencing
 
 ## Requirements
 

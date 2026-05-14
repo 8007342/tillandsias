@@ -5,6 +5,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [crates/tillandsias-core/tests/forge_shell_tools.rs#L2](../../../crates/tillandsias-core/tests/forge_shell_tools.rs#L2)
+- [crates/tillandsias-core/tests/forge_shell_tools.rs#L114](../../../crates/tillandsias-core/tests/forge_shell_tools.rs#L114)
 - [flake.nix#L115](../../../flake.nix#L115)
 - [flake.nix#L185](../../../flake.nix#L185)
 - [images/default/config-overlay/mcp/git-tools.sh#L3](../../../images/default/config-overlay/mcp/git-tools.sh#L3)

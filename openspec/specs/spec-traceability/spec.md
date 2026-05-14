@@ -1,7 +1,19 @@
 <!-- @trace spec:spec-traceability -->
+# spec-traceability Specification
+
 ## Status
 
 active
+
+## Purpose
+
+Enable bidirectional navigation between code and specs through `@trace` annotations and structured logging fields. When a spec is applied, the implementation SHALL reference the spec with `// @trace spec:<name>` comments in code and `spec = "<name>"` fields in log events. This creates a queryable graph: code → spec, spec → code, log → code → spec. Developers and troubleshooting agents can follow a single line of code or log event back to the authoritative spec that governs it.
+
+This spec ensures:
+- Every implementation decision has a traceable link to its governing spec
+- Specs are never silent — a broken or stale spec becomes visible through code drift
+- Concurrent development can merge without trace conflicts (comments on separate lines)
+- Cheatsheet knowledge is also traced (via `@cheatsheet <category>/<filename>.md`) as a peer of spec traces
 
 ## Requirements
 
