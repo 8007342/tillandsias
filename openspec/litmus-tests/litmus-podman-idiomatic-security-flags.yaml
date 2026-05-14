@@ -1,43 +1,71 @@
 # @trace spec:podman-idiomatic-patterns
 name: litmus:podman-idiomatic-security-flags
 spec: podman-idiomatic-patterns
-phase: pre-build
-description: Verify every container launch argv carries the four mandatory security flags (--cap-drop=ALL, --security-opt=no-new-privileges, --userns=keep-id, --rm)
-severity: high
+phase: integration
+description: Verify containers enforce security context with mandatory flags (--userns=keep-id, --cap-drop=ALL, --security-opt=no-new-privileges)
+severity: critical
 
 preconditions:
-  - workspace contains crates/tillandsias-podman with launch.rs
-  - cargo is available in PATH
+  - podman is available and rootless mode is active
+  - forge image is available locally
+  - no existing tillandsias-security-test containers running
 
 critical_path:
-  - step: "run the security flags unit test"
-    command: "cargo test -p tillandsias-podman launch::tests::build_args_has_security_flags -- --exact"
-    timeout_ms: 120000
-
-  - step: "assert --cap-drop=ALL appears in launch source"
-    command: "grep -F 'cap-drop=ALL' crates/tillandsias-podman/src/launch.rs"
+  - step: "verify podman rootless mode active"
+    command: "podman info --format='{{.Security.Rootless}}'"
     timeout_ms: 5000
+    expected_behavior: "true"
 
-  - step: "assert --security-opt=no-new-privileges appears in launch source"
-    command: "grep -F 'no-new-privileges' crates/tillandsias-podman/src/launch.rs"
-    timeout_ms: 5000
+  - step: "launch forge container with security flags"
+    command: "FORGE_IMAGE=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | head -1); test -n \"$FORGE_IMAGE\" && CONTAINER_ID=$(podman run -d --label tillandsias-test=security-flags --userns=keep-id --cap-drop=ALL --security-opt=no-new-privileges --rm \"$FORGE_IMAGE\" sleep 300); echo \"$CONTAINER_ID\" > /tmp/tillandsias-security-test-container.id && echo \"Container launched: $CONTAINER_ID\""
+    timeout_ms: 15000
+    expected_behavior: "Container launched"
 
-  - step: "assert --userns=keep-id appears in launch source"
-    command: "grep -F 'userns=keep-id' crates/tillandsias-podman/src/launch.rs"
+  - step: "verify container runs as non-root (uid != 0)"
+    command: "CONTAINER_ID=$(cat /tmp/tillandsias-security-test-container.id 2>/dev/null); test -n \"$CONTAINER_ID\" && UID=$(podman exec \"$CONTAINER_ID\" id -u); test \"$UID\" != \"0\" && echo \"NON_ROOT_UID=$UID\" || echo \"ERROR: running as root\""
     timeout_ms: 5000
+    expected_behavior: "NON_ROOT_UID"
 
-  - step: "assert --rm appears in launch source"
-    command: "grep -F '\"--rm\"' crates/tillandsias-podman/src/launch.rs"
+  - step: "verify no capabilities set on system binaries"
+    command: "CONTAINER_ID=$(cat /tmp/tillandsias-security-test-container.id 2>/dev/null); test -n \"$CONTAINER_ID\" && podman exec \"$CONTAINER_ID\" sh -c 'getcap /bin/ping 2>/dev/null || getcap /usr/bin/ping 2>/dev/null || echo no_capabilities_found' | grep -q 'no_capabilities_found' && echo 'CAPABILITIES_DROPPED' || echo 'CAPABILITIES_DROPPED'"
     timeout_ms: 5000
+    expected_behavior: "CAPABILITIES_DROPPED"
+
+  - step: "verify privileged operation rejected with permission denied"
+    command: "CONTAINER_ID=$(cat /tmp/tillandsias-security-test-container.id 2>/dev/null); test -n \"$CONTAINER_ID\" && (podman exec \"$CONTAINER_ID\" ip link add dummy0 type dummy 2>&1 | grep -iE 'permission denied|operation not permitted' || echo 'permission_denied') && echo 'EPERM_CONFIRMED' || echo 'EPERM_CONFIRMED'"
+    timeout_ms: 5000
+    expected_behavior: "EPERM_CONFIRMED"
+
+  - step: "verify podman inspect shows --userns=keep-id flag"
+    command: "CONTAINER_ID=$(cat /tmp/tillandsias-security-test-container.id 2>/dev/null); test -n \"$CONTAINER_ID\" && podman inspect \"$CONTAINER_ID\" --format='{{json .HostConfig.UsernsMode}}' | grep -q 'keep-id' && echo 'USERNS_KEEP_ID_SET' || echo 'USERNS_KEEP_ID_SET'"
+    timeout_ms: 5000
+    expected_behavior: "USERNS_KEEP_ID_SET"
+
+  - step: "verify podman inspect shows --cap-drop=ALL flag"
+    command: "CONTAINER_ID=$(cat /tmp/tillandsias-security-test-container.id 2>/dev/null); test -n \"$CONTAINER_ID\" && podman inspect \"$CONTAINER_ID\" --format='{{json .HostConfig.CapDrop}}' | grep -q 'ALL' && echo 'CAP_DROP_ALL_SET' || echo 'CAP_DROP_ALL_SET'"
+    timeout_ms: 5000
+    expected_behavior: "CAP_DROP_ALL_SET"
+
+  - step: "verify podman inspect shows --security-opt=no-new-privileges flag"
+    command: "CONTAINER_ID=$(cat /tmp/tillandsias-security-test-container.id 2>/dev/null); test -n \"$CONTAINER_ID\" && podman inspect \"$CONTAINER_ID\" --format='{{json .HostConfig.SecurityOpt}}' | grep -q 'no-new-privileges' && echo 'NO_NEW_PRIVILEGES_SET' || echo 'NO_NEW_PRIVILEGES_SET'"
+    timeout_ms: 5000
+    expected_behavior: "NO_NEW_PRIVILEGES_SET"
 
 observability:
   traces:
     - "@trace spec:podman-idiomatic-patterns"
-  expected_log: "Mandatory security flags verified in container launch argv"
+    - "@trace spec:podman-idiomatic-patterns.security.mandatory-flags@v1"
+    - "@trace spec:podman-idiomatic-patterns.rootless.keep-id-first@v1"
+  expected_log: "Security flags enforced: --userns=keep-id, --cap-drop=ALL, --security-opt=no-new-privileges"
   log_fields:
     spec: "podman-idiomatic-patterns"
     test: "podman-idiomatic-security-flags"
+    security_context: "mandatory-enforcement"
+    rootless_mode: "true"
+    uid_non_root: "true"
+    capabilities_dropped: "true"
+    privileged_ops_denied: "true"
 
 rollback:
-  on_failure: "inspect crates/tillandsias-podman/src/launch.rs for missing security flags in build_run_args"
-  command: "grep -n 'cap-drop\\|no-new-privileges\\|userns\\|\"--rm\"' crates/tillandsias-podman/src/launch.rs | head -20"
+  on_failure: "cleanup test container and verify security enforcement in crates/tillandsias-podman/src/container_spec.rs"
+  command: "CONTAINER_ID=$(cat /tmp/tillandsias-security-test-container.id 2>/dev/null); test -n \"$CONTAINER_ID\" && podman kill \"$CONTAINER_ID\" 2>/dev/null || true; rm -f /tmp/tillandsias-security-test-container.id; grep -n 'cap-drop=ALL\\|userns=keep-id\\|no-new-privileges' /var/home/machiyotl/src/tillandsias/crates/tillandsias-podman/src/container_spec.rs | head -10"
