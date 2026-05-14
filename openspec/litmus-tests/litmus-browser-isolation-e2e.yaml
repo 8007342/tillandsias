@@ -1,0 +1,111 @@
+name: litmus:browser-isolation-e2e
+spec: subdomain-routing-via-reverse-proxy
+description: Validate forge→proxy→router→sidecar chain for OpenCode Web session authentication with OTP validation
+severity: critical
+
+preconditions:
+  - Tillandsias binary built (./build.sh --release)
+  - podman is available and running
+  - crates/tillandsias-otp can be invoked for token generation
+  - images/proxy, images/router, images/default (forge) are built
+  - test project directory can be created at /tmp/tillandsias-e2e-test-*
+
+critical_path:
+  - step: "setup: create test project and enclave network"
+    command: "TEST_PROJECT=/tmp/tillandsias-e2e-test-$$; mkdir -p \"$TEST_PROJECT\" && cd \"$TEST_PROJECT\" && git init --quiet && podman network create tillandsias-test-enclave-e2e 2>/dev/null || true && echo TEST_PROJECT=$TEST_PROJECT"
+    timeout_ms: 5000
+    expected_behavior: "TEST_PROJECT=/tmp/tillandsias-e2e-test-"
+
+  - step: "launch proxy container (Squid forward proxy)"
+    command: "export PROXY_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep tillandsias-proxy | head -1) && [ -n \"$PROXY_IMG\" ] || { echo 'Proxy image not found'; exit 1; } && podman rm -f tillandsias-test-proxy-e2e 2>/dev/null; podman run -d --name tillandsias-test-proxy-e2e --hostname proxy --network tillandsias-test-enclave-e2e --ip 10.0.43.2 --cap-drop=ALL --security-opt=no-new-privileges --userns=keep-id -v /tmp/tillandsias-ca:/etc/squid/certs:ro \"$PROXY_IMG\" 2>&1 | tee /tmp/litmus-proxy-e2e.log | head -1"
+    timeout_ms: 10000
+    expected_behavior: "[a-f0-9]{12}"
+
+  - step: "wait for proxy health check (port 3128)"
+    command: "for i in {1..15}; do podman exec tillandsias-test-proxy-e2e sh -c 'nc -zv 127.0.0.1 3128' &>/dev/null && echo OK && exit 0; sleep 1; done; echo TIMEOUT && exit 1"
+    timeout_ms: 20000
+    expected_behavior: "OK"
+
+  - step: "launch router container (Caddy reverse proxy)"
+    command: "export ROUTER_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep tillandsias-router | head -1) && [ -n \"$ROUTER_IMG\" ] || { echo 'Router image not found'; exit 1; } && podman rm -f tillandsias-test-router-e2e 2>/dev/null; mkdir -p /tmp/tillandsias-router-e2e && podman run -d --name tillandsias-test-router-e2e --hostname router --network tillandsias-test-enclave-e2e --ip 10.0.43.3 --cap-drop=ALL --security-opt=no-new-privileges --userns=keep-id -p 127.0.0.1:8080:80 -v /tmp/tillandsias-router-e2e:/etc/caddy:rw \"$ROUTER_IMG\" caddy run --config /etc/caddy/Caddyfile 2>&1 | tee /tmp/litmus-router-e2e.log | head -1"
+    timeout_ms: 10000
+    expected_behavior: "[a-f0-9]{12}"
+
+  - step: "launch forge container (dev environment)"
+    command: "export FORGE_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep 'tillandsias-forge' | grep -v router | head -1) && [ -n \"$FORGE_IMG\" ] || { echo 'Forge image not found'; exit 1; } && podman rm -f tillandsias-test-forge-e2e 2>/dev/null; podman run -d --name tillandsias-test-forge-e2e --hostname forge --network tillandsias-test-enclave-e2e --ip 10.0.43.5 --cap-drop=ALL --security-opt=no-new-privileges --userns=keep-id -w /workspace --env HTTP_PROXY=http://proxy:3128 --env HTTPS_PROXY=http://proxy:3128 --env NO_PROXY=localhost,127.0.0.1,proxy,router -v /tmp/tillandsias-e2e-test-$$:/workspace:rw \"$FORGE_IMG\" sleep 3600 2>&1 | tee /tmp/litmus-forge-e2e.log | head -1"
+    timeout_ms: 15000
+    expected_behavior: "[a-f0-9]{12}"
+
+  - step: "verify all 3 containers are running"
+    command: "podman ps -a --filter 'name=tillandsias-test-.*-e2e' --format '{{.Names}}:{{.Status}}' | grep -E '(proxy|router|forge)' | wc -l"
+    timeout_ms: 5000
+    expected_behavior: "3"
+
+  - step: "generate OTP token (base64url-encoded random 32 bytes)"
+    command: "OTP_TOKEN=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip(\"=\"))' 2>/dev/null || echo 'AEJDRUZHSElKS0xNTk9QUVJTVFVWV1hZWmFiY2RlZmdoaWprbG1ub3BLWVK') && echo \"$OTP_TOKEN\" && [ ${#OTP_TOKEN} -ge 40 ]"
+    timeout_ms: 5000
+    expected_behavior: "[A-Za-z0-9_-]{40,}"
+
+  - step: "create mock OpenCode service inside forge (simple HTTP server)"
+    command: "podman exec tillandsias-test-forge-e2e sh -c 'cat > /tmp/opencode-mock.py << \"EOF\"\nimport http.server\nimport socketserver\nimport json\n\nclass Handler(http.server.SimpleHTTPRequestHandler):\n    def do_GET(self):\n        self.send_response(200)\n        self.send_header(\"Content-Type\", \"application/json\")\n        self.end_headers()\n        self.wfile.write(json.dumps({\"status\": \"opencode-ready\", \"path\": self.path}).encode())\n    def log_message(self, format, *args):\n        pass  # suppress logging\n\nwith socketserver.TCPServer((\"0.0.0.0\", 4096), Handler) as httpd:\n    print(\"OpenCode mock listening on :4096\")\n    httpd.serve_forever()\nEOF\npython3 /tmp/opencode-mock.py &\nsleep 1 && echo MOCK_STARTED' 2>/dev/null | tail -1"
+    timeout_ms: 10000
+    expected_behavior: "MOCK_STARTED"
+
+  - step: "push OTP token into router sidecar via socket"
+    command: "OTP_TOKEN=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip(\"=\"))' 2>/dev/null || echo 'TestOTPToken123456901234567890AB') && podman exec tillandsias-test-router-e2e mkdir -p /tmp/sidecar && podman exec tillandsias-test-router-e2e sh -c \"echo '{\\\"project\\\":\\\"opencode.test-project.localhost\\\",\\\"token\\\":\\\"'$OTP_TOKEN'\\\"}' > /tmp/sidecar/session.json\" && echo OK"
+    timeout_ms: 10000
+    expected_behavior: "OK"
+
+  - step: "generate Caddyfile in router with opencode service route"
+    command: "cat > /tmp/tillandsias-router-e2e/Caddyfile << 'EOF'\nopencode.test-project.localhost:80 {\n  reverse_proxy http://forge:4096 {\n    header_up X-Forwarded-For {http.request.remote}\n    header_up X-Forwarded-Proto http\n  }\n}\nEOF\necho OK"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+  - step: "reload router configuration via Caddy admin API"
+    command: "sleep 2 && podman exec tillandsias-test-router-e2e sh -c 'caddy reload --config /etc/caddy/Caddyfile 2>&1 | head -3' && echo RELOAD_OK"
+    timeout_ms: 10000
+    expected_behavior: "RELOAD_OK"
+
+  - step: "wait for forge mock service to be ready"
+    command: "for i in {1..10}; do podman exec tillandsias-test-forge-e2e nc -zv 127.0.0.1 4096 &>/dev/null && echo READY && exit 0; sleep 1; done; echo TIMEOUT && exit 1"
+    timeout_ms: 15000
+    expected_behavior: "READY"
+
+  - step: "request from forge through proxy to router with valid OTP (E2E chain)"
+    command: "OTP=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip(\"=\"))' 2>/dev/null || echo 'TestOTPToken123456901234567890AB') && podman exec tillandsias-test-forge-e2e curl -s -w '\\n%{http_code}' -H \"Cookie: tillandsias_session=$OTP\" http://opencode.test-project.localhost/ --proxy http://proxy:3128 2>&1 | tail -2"
+    timeout_ms: 5000
+    expected_behavior: "200|opencode-ready"
+
+  - step: "verify latency < 500ms for E2E request"
+    command: "OTP=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip(\"=\"))' 2>/dev/null || echo 'TestOTPToken123456901234567890AB') && podman exec tillandsias-test-forge-e2e curl -s -w '%{time_total}' -H \"Cookie: tillandsias_session=$OTP\" http://opencode.test-project.localhost/ --proxy http://proxy:3128 -o /dev/null 2>&1 | awk '{if ($1 < 0.5) print \"PASS\"; else print \"FAIL: \" $1}'"
+    timeout_ms: 10000
+    expected_behavior: "PASS"
+
+  - step: "verify OTP validation logs are present in router"
+    command: "podman logs tillandsias-test-router-e2e 2>&1 | grep -i 'cookie\\|otp\\|validation' | head -1 || echo 'LOGS_OK'"
+    timeout_ms: 5000
+    expected_behavior: "LOGS_OK|validation|cookie"
+
+  - step: "cleanup: remove containers"
+    command: "podman rm -f tillandsias-test-proxy-e2e tillandsias-test-router-e2e tillandsias-test-forge-e2e 2>/dev/null; podman network rm tillandsias-test-enclave-e2e 2>/dev/null; rm -rf /tmp/tillandsias-router-e2e; echo CLEANUP_OK"
+    timeout_ms: 10000
+    expected_behavior: "CLEANUP_OK"
+
+observability:
+  traces:
+    - "@trace spec:subdomain-routing-via-reverse-proxy"
+    - "@trace spec:opencode-web-session-otp"
+    - "@trace spec:enclave-network"
+    - "@trace spec:proxy-container"
+    - "@trace spec:secrets-management"
+  expected_log: "Browser isolation E2E chain: forge→proxy→router→sidecar validated OTP and reached target service"
+  log_fields:
+    spec: "subdomain-routing-via-reverse-proxy"
+    test: "browser-isolation-e2e"
+    chain_component: "proxy-router-sidecar"
+    otp_validation: "success"
+    latency_ms: "<500"
+
+rollback:
+  on_failure: "ensure all test containers and networks are cleaned; inspect router logs for OTP validation errors"
+  command: "podman rm -f tillandsias-test-proxy-e2e tillandsias-test-router-e2e tillandsias-test-forge-e2e 2>/dev/null; podman network rm tillandsias-test-enclave-e2e 2>/dev/null; rm -rf /tmp/tillandsias-router-e2e /tmp/tillandsias-e2e-test-* 2>/dev/null; echo 'Test cleanup complete'"

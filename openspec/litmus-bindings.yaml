@@ -467,11 +467,15 @@ specs:
 - spec_id: podman-idiomatic-patterns
   status: active
   litmus_tests:
+  - litmus:podman-idiomatic-enclave-network
+  - litmus:podman-idiomatic-error-classification
   - litmus:podman-idiomatic-security-flags
   - litmus:podman-idiomatic-storage-isolation
   - litmus:podman-idiomatic-events-no-polling
+  - litmus:podman-idiomatic-event-driven
+  - litmus:podman-idiomatic-storage-isolation-runtime
   - litmus:podman-idiomatic-error-discrimination
-  coverage_ratio: 57
+  coverage_ratio: 86
   last_verified: '2026-05-14'
 - spec_id: project-bootstrap-readme
   status: active
@@ -549,9 +553,10 @@ specs:
   last_verified: '2026-05-03'
 - spec_id: subdomain-routing-via-reverse-proxy
   status: active
-  litmus_tests: null
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  litmus_tests:
+  - litmus:browser-isolation-e2e
+  coverage_ratio: 60
+  last_verified: '2026-05-14'
 - spec_id: tools-overlay-fast-reuse
   status: obsolete
   litmus_tests: []
