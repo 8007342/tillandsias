@@ -37,5 +37,8 @@ progress report that can be rendered into a small graph:
 - a recent trend window
 - the latest milestone label and timestamp
 - next action and blockers
+- focus task, ready count, blocked count, and compact task tree if available
+- loop state so the wrapper can distinguish "waiting on agent" from
+  "sleeping until next iteration"
 
 The wrapper will use that report to print the human-facing graph.

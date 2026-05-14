@@ -79,6 +79,13 @@ agent_observability_protocol:
     repeat_milestone_template: "milestone {label}@{timestamp} elapsed={elapsed}"
     repeat_minimal_template: "{session_id} #{cycle} {status} {repeat_before_after_template} {repeat_trend_template} {repeat_milestone_template}"
     milestone_timestamp_template: "{label}@{hhmmss}"
+    repeat_tree_header_template: "{session_id} #{cycle} {status} branch={branch} elapsed={elapsed}"
+    repeat_tree_node_template: "{indent}{connector} {label} [{bar}] {progress}% {status}"
+    repeat_tree_leaf_template: "{indent}{connector} {label} [{bar}] {progress}% {status} · {summary}"
+    repeat_tree_footer_template: "trend {trend_bar} latest={latest} prev={previous} avg={average}"
+    repeat_loop_state_waiting: "waiting on agent"
+    repeat_loop_state_sleeping: "sleeping until next iteration"
+    repeat_loop_state_running: "agent working"
 
   agent_to_agent_messages:
     rule: >
@@ -104,7 +111,7 @@ agent_observability_protocol:
   repeat_progress_report:
     purpose: >
       Provide a minimal machine-readable progress record for noninteractive repeat
-      loops. The wrapper can render this into a human-friendly graph without
+      loops. The wrapper can render this into a human-friendly tree graph without
       exposing file-change chatter or reasoning traces.
     schema:
       session_id: string
@@ -124,12 +131,20 @@ agent_observability_protocol:
       next_action: string
       blockers: list
       checkpoint_commit: string
+      focus_task_id: string
+      ready_count: integer
+      blocked_count: integer
+      task_tree: list
+      loop_state: string
       output_mode: "compact-json"
     rendering_notes:
       - "Show before/after as blocky progress bars."
       - "Show the latest milestone timestamp in absolute time and elapsed time."
       - "Show the last N progress points as a trend bar and an average delta."
+      - "Render the active dependency tail as a compact tree with one line per node."
       - "Do not stream file-by-file changes in repeat mode unless explicitly requested."
+      - "Keep the live refresh minimal: headers, tree, trend, milestone, blockers."
+      - "Distinguish between waiting on the agent process and sleeping between iterations."
 
   lease_protocol:
     purpose: >
