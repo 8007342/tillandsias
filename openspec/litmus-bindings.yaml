@@ -471,9 +471,10 @@ specs:
   last_verified: '2026-05-14'
 - spec_id: project-bootstrap-readme
   status: active
-  litmus_tests: null
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  litmus_tests:
+  - litmus:project-bootstrap-readme-shape
+  coverage_ratio: 60
+  last_verified: '2026-05-14'
 - spec_id: project-summarizers
   status: active
   litmus_tests: null

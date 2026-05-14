@@ -1,0 +1,51 @@
+name: litmus:project-bootstrap-readme-shape
+spec: project-bootstrap-readme
+description: Verify the README discipline cheatsheet and bootstrap dispatcher remain
+  bound to the FOR HUMANS / FOR ROBOTS contract and the readme.traces JSONL ledger.
+severity: medium
+phase: pre-build
+
+preconditions:
+  - workspace contains cheatsheets/welcome/readme-discipline.md
+  - workspace contains docs/OPENCODE-INTEGRATION-COMPLETED.md
+  - workspace contains scripts/regenerate-readme.sh
+  - workspace contains scripts/check-readme-discipline.sh
+  - bash is available in PATH
+
+critical_path:
+  - step: "verify the readme-discipline cheatsheet declares the two-section contract"
+    command: "grep -Fq '# FOR HUMANS' cheatsheets/welcome/readme-discipline.md && grep -Fq '# FOR ROBOTS' cheatsheets/welcome/readme-discipline.md && grep -Fq 'readme.traces' cheatsheets/welcome/readme-discipline.md && grep -Fq '@trace spec:project-bootstrap-readme' cheatsheets/welcome/readme-discipline.md && echo 'readme-discipline contract present'"
+    timeout_ms: 10000
+    expected_behavior: "readme-discipline contract present"
+
+  - step: "verify the cheatsheet documents the summarizer interface and validator exit codes"
+    command: "grep -Fq 'summarize-cargo.sh' cheatsheets/welcome/readme-discipline.md && grep -Fq 'check-readme-discipline.sh' cheatsheets/welcome/readme-discipline.md && grep -Fq 'requires_cheatsheets' cheatsheets/welcome/readme-discipline.md && echo 'readme-discipline interface present'"
+    timeout_ms: 10000
+    expected_behavior: "readme-discipline interface present"
+
+  - step: "verify the cheatsheet carries provenance metadata"
+    command: "grep -Fq 'Provenance' cheatsheets/welcome/readme-discipline.md && grep -Fq 'Last updated:' cheatsheets/welcome/readme-discipline.md && echo 'readme-discipline provenance present'"
+    timeout_ms: 10000
+    expected_behavior: "readme-discipline provenance present"
+
+  - step: "verify the dispatcher and validator scripts are present and executable"
+    command: "test -x scripts/regenerate-readme.sh && test -x scripts/check-readme-discipline.sh && echo 'readme bootstrap scripts present'"
+    timeout_ms: 10000
+    expected_behavior: "readme bootstrap scripts present"
+
+  - step: "verify the OpenCode integration narrative captures the onboarding handoff"
+    command: "grep -Fq 'OpenCode' docs/OPENCODE-INTEGRATION-COMPLETED.md && grep -Fq 'Phase' docs/OPENCODE-INTEGRATION-COMPLETED.md && echo 'opencode integration narrative present'"
+    timeout_ms: 10000
+    expected_behavior: "opencode integration narrative present"
+
+observability:
+  traces:
+    - "@trace spec:project-bootstrap-readme"
+  expected_log: "Project README discipline (FOR HUMANS/FOR ROBOTS, summarizers, traces ledger) remains bound to the cheatsheet"
+  log_fields:
+    spec: "project-bootstrap-readme"
+    test: "project-bootstrap-readme-shape"
+
+rollback:
+  on_failure: "inspect cheatsheets/welcome/readme-discipline.md and scripts/regenerate-readme.sh for README discipline drift"
+  command: "grep -Fq '# FOR HUMANS' cheatsheets/welcome/readme-discipline.md && grep -Fq '# FOR ROBOTS' cheatsheets/welcome/readme-discipline.md"

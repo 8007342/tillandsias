@@ -157,5 +157,51 @@ Throughout the OpenCode flow, JSON events are emitted for monitoring and logging
 
 ---
 
+## Onboarding Handoff (added 2026-05-14)
+
+This document is the canonical narrative for the OpenCode integration that
+underlies plan step `order:4 onboarding-and-discovery`. Subsequent agents who
+need to understand "how does an OpenCode session reach the forge?" should read
+this end-to-end before touching the entrypoints.
+
+**The integration surface, by container:**
+
+| Container | Concern | Owned files |
+|-----------|---------|-------------|
+| **Tray** | OpenCode session menu, OTP delivery, tray-host control socket | `crates/tillandsias-headless/src/main.rs`, `crates/tillandsias-headless/src/tray/mod.rs` |
+| **Router** | Subdomain routing, Caddy reload, sidecar OTP validation | `images/router/`, `crates/tillandsias-headless/src/router.rs` |
+| **Proxy** | Egress allowlist (Squid), CA chain | `images/proxy/` |
+| **Forge** | OpenCode CLI/Web entrypoints, MCP overlay, shell-tool overlay | `images/default/entrypoint-forge-opencode*.sh`, `images/default/config-overlay/` |
+| **Git mirror** | Authenticated push/pull on behalf of forge | `images/git/` |
+
+**What this enables (onboarding flow perspective):**
+
+1. A first-touch agent runs `/startup`. The skill reads `.tillandsias/readme.traces`
+   and the project state to route to one of three downstream skills.
+2. If the project is empty, `/bootstrap-readme-and-project` runs the welcome
+   banner (`images/default/forge-welcome.sh`), seeds the README via
+   `scripts/regenerate-readme.sh`, and writes an initial `readme.traces` entry.
+3. If the project exists but the README is stale, `/bootstrap-readme` regenerates
+   from manifests (Cargo.toml, package.json, etc.) and validates with
+   `scripts/check-readme-discipline.sh`.
+4. The discovered project context (`TILLANDSIAS_PROJECT_PATH`,
+   `TILLANDSIAS_PROJECT_GENUS`) is exported by `lib-common.sh::export_project_env()`
+   so every agent — CLI, OpenCode web session, MCP tool — sees the same view.
+5. The shell-tool overlay (`tgs` / `tgp` / `cache-report`, see
+   `images/default/config-overlay/shell-helpers.sh`) gives interactive humans
+   the same surface the MCP `git-tools` server gives agents.
+6. The auth path is fully host-mediated: tokens never reach the forge. The
+   forge talks plain git over the enclave network to the git-mirror container,
+   which holds the credentials extracted via `scripts/create-secrets.sh`.
+
+**For the next agent**: the onboarding capabilities are documented as specs
+(`forge-welcome`, `forge-shell-tools`, `forge-environment-discoverability`,
+`project-bootstrap-readme`, `gh-auth-script`), with litmus tests under
+`openspec/litmus-tests/litmus-<name>-shape.yaml` and bindings in
+`openspec/litmus-bindings.yaml`. To extend onboarding behaviour, write a new
+spec, add a litmus test, then implement.
+
+@trace spec:project-bootstrap-readme, spec:forge-opencode-onboarding
+
 **Implementation by**: Claude Code (autonomous convergence)
 **Methodology**: OpenSpec-driven development with @trace annotations

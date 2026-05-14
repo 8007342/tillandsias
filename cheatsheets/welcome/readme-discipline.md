@@ -217,8 +217,39 @@ requires_cheatsheets:
 - For `pull-on-demand`: agent materializes via cheatsheet recipe system
 - For `missing`: emit WARN and continue
 
+## When to trigger regeneration
+
+A README is regenerated under any of these conditions, in priority order:
+
+1. **Pre-push hook fires**: `scripts/install-readme-pre-push-hook.sh` placed a
+   hook that runs `regenerate-readme.sh` before each `git push`. This is the
+   common, automatic case.
+2. **`/bootstrap-readme` skill is invoked**: human or agent runs the slash
+   command. Used for first-time setup, repair flow, or when an agent has
+   reason to re-derive the README without a push.
+3. **A `severity: regen-trigger` line lands in `readme.traces`**: the next
+   `/startup` invocation will regenerate even when the current README passes
+   validation. Used by summarizers that detect "drift that wouldn't fail the
+   validator" (e.g., new optional dependency, refactored architecture).
+4. **Validator emits a non-zero exit code**: structural problems (missing H1,
+   malformed YAML, etc.) require regeneration. The validator's WARN-level
+   staleness signal does not block, but should still be acted on.
+
+The dispatcher is idempotent: running it twice on the same manifest state
+produces the byte-identical README, so agents may call it speculatively.
+
+## Bootstrap skills (entry points)
+
+| Skill | When it runs | What it produces |
+|-------|--------------|------------------|
+| `/startup` | First touch on a project. Routes to one of the other three skills based on detected state. | A "what to do next" message (empty / bootstrap / status). |
+| `/bootstrap-readme-and-project` | Empty project — no README, no config, no traces. | Welcome banner, sample prompts, capability summary, initial README. |
+| `/bootstrap-readme` | Project exists but README is missing, stale, or invalid. | Regenerated README + validator pass. |
+| `/status` | Healthy project. | Recent commits, OpenSpec items, traces ledger tail, README validator output. |
+
 ## See also
 
 - `welcome/sample-prompts.md` — curated prompts displayed in empty-project flow
 - `agents/opencode.md` — OpenCode skill file convention used by `/startup`, `/bootstrap-readme-and-project`, `/bootstrap-readme`, `/status`
 - `runtime/agent-startup-skills.md` — four skills and their routing matrix
+- `docs/OPENCODE-INTEGRATION-COMPLETED.md` — onboarding flow narrative across forge, routing, session, and bootstrap surfaces (handoff doc)
