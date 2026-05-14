@@ -34,9 +34,11 @@ Keep logs, diagnostics, traceability, and evidence bundles visible without reint
 ## Granular Tasks
 
 - `observability/runtime-logging`
+- `observability/runtime-diagnostics`
 - `observability/diagnostics-stream`
 - `observability/trace-index`
-- `observability/knowledge-source`
+- `observability/source-of-truth`
+- `observability/dashboard`
 
 ## Handoff
 

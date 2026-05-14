@@ -27,6 +27,11 @@ Once the spec surface is clean, convert the remaining active specs into concrete
 
 ## Granular Tasks
 
+- `implementation-gaps/browser`
+- `implementation-gaps/tray`
+- `implementation-gaps/onboarding`
+- `implementation-gaps/observability`
+- `implementation-gaps/cross-platform`
 - `implementation-gaps/residual-backlog`
 
 ## Handoff

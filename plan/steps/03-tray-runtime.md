@@ -46,9 +46,11 @@ Converge the tray menu, startup path, cache behavior, and container lifecycle ar
 
 ## Granular Tasks
 
-- `tray/icon-lifecycle`
-- `tray/menu-and-ux`
-- `tray/init-and-cache`
+- `tray/state-machine`
+- `tray/icon-transitions`
+- `tray/menu-layout`
+- `tray/init-command`
+- `tray/cache-semantics`
 - `tray/legacy-cache-tombstones`
 
 ## Handoff

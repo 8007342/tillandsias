@@ -40,38 +40,244 @@ common_args=(
   -c 'profiles.tillandsias.writable_roots=["/run/user/1000","/var/home/machiyotl"]'
 )
 
+progress_bar() {
+  local value="${1:-0}"
+  local width="${2:-10}"
+  local filled=$(( value * width / 100 ))
+  local empty=$(( width - filled ))
+  local bar=""
+  local i
+  for ((i = 0; i < filled; i++)); do
+    bar+="█"
+  done
+  for ((i = 0; i < empty; i++)); do
+    bar+="░"
+  done
+  printf '%s' "$bar"
+}
+
+sparkline_char() {
+  local value="${1:-0}"
+  case $(( value * 7 / 100 )) in
+    0) printf '▁' ;;
+    1) printf '▂' ;;
+    2) printf '▃' ;;
+    3) printf '▄' ;;
+    4) printf '▅' ;;
+    5) printf '▆' ;;
+    6) printf '▇' ;;
+    *) printf '█' ;;
+  esac
+}
+
+sparkline_for_values() {
+  local value
+  for value in "$@"; do
+    sparkline_char "$value"
+  done
+}
+
+format_elapsed() {
+  local total="${1:-0}"
+  local hours=$(( total / 3600 ))
+  local minutes=$(( (total % 3600) / 60 ))
+  local seconds=$(( total % 60 ))
+  if [[ "$hours" -gt 0 ]]; then
+    printf '%02d:%02d:%02d' "$hours" "$minutes" "$seconds"
+  else
+    printf '%02d:%02d' "$minutes" "$seconds"
+  fi
+}
+
+format_timestamp() {
+  local epoch="${1:-0}"
+  date -d "@$epoch" '+%H:%M:%S'
+}
+
+repeat_render_report() {
+  local cycle="$1"
+  local start_epoch="$2"
+  local end_epoch="$3"
+  local report_json="$4"
+  shift 4
+  local history=("$@")
+  local session_id before after delta status milestone_label milestone_timestamp next_action checkpoint_commit blockers_text trend_bar trend_avg before_bar after_bar elapsed_total previous latest trend_delta milestone_stamp
+
+  session_id="$(jq -r '.session_id // "repeat"' <<<"$report_json")"
+  before="$(jq -r '.before_progress // 0' <<<"$report_json")"
+  after="$(jq -r '.after_progress // 0' <<<"$report_json")"
+  delta="$(jq -r '.delta_progress // (.after_progress - .before_progress) // 0' <<<"$report_json")"
+  status="$(jq -r '.status // "unknown"' <<<"$report_json")"
+  milestone_label="$(jq -r '.milestone_label // "milestone"' <<<"$report_json")"
+  milestone_timestamp="$(jq -r '.milestone_timestamp // empty' <<<"$report_json")"
+  next_action="$(jq -r '.next_action // "continue"' <<<"$report_json")"
+  checkpoint_commit="$(jq -r '.checkpoint_commit // empty' <<<"$report_json")"
+  blockers_text="$(jq -r '[.blockers[]?] | if length == 0 then "none" else join(", ") end' <<<"$report_json")"
+
+  if [[ "${#history[@]}" -eq 0 ]]; then
+    history=("$after")
+  fi
+  latest="${history[-1]}"
+  if [[ "${#history[@]}" -ge 2 ]]; then
+    previous="${history[-2]}"
+  else
+    previous="$before"
+  fi
+
+  trend_bar="$(sparkline_for_values "${history[@]}")"
+  trend_avg="$(printf '%s\n' "${history[@]}" | awk '{sum+=$1;n++} END { if (n==0) print "0.0"; else printf "%.1f", sum/n }')"
+  trend_delta=$(( after - previous ))
+  before_bar="$(progress_bar "$before" 10)"
+  after_bar="$(progress_bar "$after" 10)"
+  elapsed_total=$(( end_epoch - start_epoch ))
+  milestone_stamp="$milestone_label"
+  if [[ -n "$milestone_timestamp" ]]; then
+    milestone_stamp+="@$milestone_timestamp"
+  fi
+
+  printf '[codex-repeat] cycle %02d | session=%s | status=%s | elapsed=%s\n' \
+    "$cycle" "$session_id" "$status" "$(format_elapsed "$elapsed_total")"
+  printf '[codex-repeat]   before %3s%% [%s]  after %3s%% [%s]  delta %+d\n' \
+    "$before" "$before_bar" "$after" "$after_bar" "$delta"
+  printf '[codex-repeat]   trend  %s  latest=%s prev=%s Δprev=%+d avg=%s\n' \
+    "$trend_bar" "$latest" "$previous" "$trend_delta" "$trend_avg"
+  printf '[codex-repeat]   milestone %s  next: %s  blockers: %s\n' \
+    "$milestone_stamp" "$next_action" "$blockers_text"
+  if [[ -n "$checkpoint_commit" && "$checkpoint_commit" != "null" ]]; then
+    printf '[codex-repeat]   checkpoint %s\n' "$checkpoint_commit"
+  fi
+}
+
 if [[ -n "$REPEAT_INTERVAL" ]]; then
+  REPEAT_WINDOW="${CODEX_REPEAT_TREND_WINDOW:-5}"
+  REPEAT_PROMPT_PREFIX=$'Repeat-mode automation contract:\n- Return exactly one compact JSON object as the final response.\n- Do not stream file-by-file diffs, chain-of-thought, or raw tool chatter.\n- Use the repo-local plan and methodology as the source of truth.\n- Provide before_progress, after_progress, delta_progress, trend_window, milestone_label, milestone_timestamp, next_action, blockers, checkpoint_commit, status, and session_id.\n- Keep the answer minimal and graph-friendly.\n'
+  REPEAT_STATE_ROOT="${CODEX_REPEAT_STATE_DIR:-${PWD}/plan/localwork/codex-repeat}"
+  mkdir -p "$REPEAT_STATE_ROOT"
+  REPEAT_STATE_DIR="$(mktemp -d "$REPEAT_STATE_ROOT/session.XXXXXX")"
+  REPEAT_SCHEMA_FILE="$REPEAT_STATE_DIR/report-schema.json"
+  REPEAT_LAST_MESSAGE_FILE="$REPEAT_STATE_DIR/last-message.json"
+  REPEAT_STDOUT_FILE="$REPEAT_STATE_DIR/stdout.log"
+  REPEAT_STDERR_FILE="$REPEAT_STATE_DIR/stderr.log"
+  cat >"$REPEAT_SCHEMA_FILE" <<'JSON'
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "cycle",
+    "branch",
+    "status",
+    "before_progress",
+    "after_progress",
+    "delta_progress",
+    "trend_window",
+    "elapsed_seconds",
+    "elapsed_human",
+    "milestone_label",
+    "milestone_timestamp",
+    "next_action",
+    "blockers",
+    "checkpoint_commit",
+    "output_mode"
+  ],
+  "properties": {
+    "session_id": { "type": "string" },
+    "cycle": { "type": "integer", "minimum": 1 },
+    "branch": { "type": "string" },
+    "status": { "type": "string" },
+    "before_progress": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "after_progress": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "delta_progress": { "type": "integer" },
+    "trend_window": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 0, "maximum": 100 }
+    },
+    "current_bar": { "type": "string" },
+    "trend_bar": { "type": "string" },
+    "elapsed_seconds": { "type": "integer", "minimum": 0 },
+    "elapsed_human": { "type": "string" },
+    "milestone_label": { "type": "string" },
+    "milestone_timestamp": { "type": "string" },
+    "next_action": { "type": "string" },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "checkpoint_commit": { "type": "string" },
+    "output_mode": { "type": "string" }
+  }
+}
+JSON
+  repeat_prompt="${codex_args[*]}"
+  repeat_history=()
+  repeat_start_epoch="$(date +%s)"
+  repeat_session_id="repeat-$(date +%Y%m%dT%H%M%S)-$$"
+  cycle=0
   SLEEP_PID=""
+
   cleanup_repeat() {
     if [[ -n "$SLEEP_PID" ]]; then
       kill "$SLEEP_PID" 2>/dev/null || true
     fi
+    rm -rf "$REPEAT_STATE_DIR" 2>/dev/null || true
     exit 130
   }
   trap cleanup_repeat INT TERM
-  cycle=0
+
   while true; do
     cycle=$((cycle + 1))
-    printf '[codex-repeat] cycle %d start (%s)\n' "$cycle" "$REPEAT_INTERVAL" >&2
+    cycle_start_epoch="$(date +%s)"
+    printf '[codex-repeat] cycle %02d start | session=%s | interval=%s | elapsed=%s\n' \
+      "$cycle" "$repeat_session_id" "$REPEAT_INTERVAL" "$(format_elapsed $((cycle_start_epoch - repeat_start_epoch)))"
+
     set +e
-    "$CODEX_BIN" \
+    {
+      printf '%s\n\n%s\n' "$REPEAT_PROMPT_PREFIX" "$repeat_prompt"
+    } | "$CODEX_BIN" \
       exec \
+      --ephemeral \
+      --ignore-user-config \
       --color never \
+      --output-schema "$REPEAT_SCHEMA_FILE" \
+      --output-last-message "$REPEAT_LAST_MESSAGE_FILE" \
       "${common_args[@]}" \
-      "${codex_args[@]}"
+      >"$REPEAT_STDOUT_FILE" \
+      2>"$REPEAT_STDERR_FILE"
     status=$?
     set -e
-    printf '[codex-repeat] cycle %d done (exit=%d)\n' "$cycle" "$status" >&2
+
+    cycle_end_epoch="$(date +%s)"
+    if [[ -s "$REPEAT_LAST_MESSAGE_FILE" ]]; then
+      report_json="$(cat "$REPEAT_LAST_MESSAGE_FILE")"
+    else
+      report_json='{"session_id":"'"$repeat_session_id"'","cycle":'"$cycle"',"branch":"linux-next","status":"failed","before_progress":0,"after_progress":0,"delta_progress":0,"trend_window":[],"elapsed_seconds":0,"elapsed_human":"00:00","milestone_label":"fallback","milestone_timestamp":"","next_action":"inspect stderr log","blockers":["no structured report emitted"],"checkpoint_commit":"","output_mode":"compact-json"}'
+    fi
+    if ! jq -e . >/dev/null 2>&1 <<<"$report_json"; then
+      report_json='{"session_id":"'"$repeat_session_id"'","cycle":'"$cycle"',"branch":"linux-next","status":"failed","before_progress":0,"after_progress":0,"delta_progress":0,"trend_window":[],"elapsed_seconds":0,"elapsed_human":"00:00","milestone_label":"invalid-json","milestone_timestamp":"","next_action":"inspect stderr log","blockers":["structured report parse failed"],"checkpoint_commit":"","output_mode":"compact-json"}'
+    fi
+
+    repeat_after="$(jq -r '.after_progress // 0' <<<"$report_json")"
+    repeat_history+=("$repeat_after")
+    while [[ "${#repeat_history[@]}" -gt "$REPEAT_WINDOW" ]]; do
+      repeat_history=("${repeat_history[@]:1}")
+    done
+
+    repeat_render_report "$cycle" "$repeat_start_epoch" "$cycle_end_epoch" "$report_json" "${repeat_history[@]}"
+    printf '[codex-repeat] cycle %02d done | exit=%d | sleeping=%s\n' \
+      "$cycle" "$status" "$REPEAT_INTERVAL"
+
     if [[ "$status" -eq 130 || "$status" -eq 143 ]]; then
+      rm -rf "$REPEAT_STATE_DIR" 2>/dev/null || true
       exit "$status"
     fi
-    printf '[codex-repeat] sleeping %s\n' "$REPEAT_INTERVAL" >&2
+
     sleep "$REPEAT_INTERVAL" &
     SLEEP_PID=$!
     wait "$SLEEP_PID"
     sleep_status=$?
     SLEEP_PID=""
     if [[ "$sleep_status" -ne 0 ]]; then
+      rm -rf "$REPEAT_STATE_DIR" 2>/dev/null || true
       exit "$sleep_status"
     fi
   done

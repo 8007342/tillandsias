@@ -33,8 +33,11 @@ Retire or narrow the remaining Windows-specific drift after the Linux path is st
 ## Granular Tasks
 
 - `cross-platform/windows-routing`
+- `cross-platform/windows-logging`
 - `cross-platform/wsl-runtime`
-- `cross-platform/versioning-and-image`
+- `cross-platform/versioning`
+- `cross-platform/image`
+- `cross-platform/zen-pool`
 
 ## Handoff
 

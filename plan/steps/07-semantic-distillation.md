@@ -34,7 +34,10 @@ Finish the compaction pass: every stale spec is either tombstoned, obsolete, dep
 
 ## Granular Tasks
 
-- `distillation/tombstone-sweep`
+- `distillation/spec-empty-bindings`
+- `distillation/history-only-specs`
+- `distillation/event-register`
+- `distillation/frontier-prune`
 
 ## Handoff
 

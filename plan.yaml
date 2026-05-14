@@ -20,7 +20,7 @@ plan:
   current_state:
     last_completed_step: security-substrate-closure
     next_step: browser-and-web-security
-    next_graph_node: browser/launch-path
+    next_graph_node: browser/launcher-contract
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next
@@ -82,3 +82,4 @@ plan:
     - "Local work is ephemeral; remote origin is the durable copy."
     - "The `./codex --repeat <duration> \"<prompt>\"` wrapper contract is the default autonomous entrypoint."
     - "plan/localwork is disposable scratch, not canonical state."
+    - "Repeat-mode agents should end with a compact JSON progress report, not a raw reasoning stream."

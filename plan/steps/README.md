@@ -11,6 +11,7 @@ Each step file should be written as a cold-start handoff document.
 - Next action
 - Checkpoint and push expectation
 - Handoff note for the next agent
+- Repeat-mode progress report shape, if the step is intended to run under `./codex --repeat`
 
 ## Writing Rules
 
@@ -25,3 +26,16 @@ Each step file should be written as a cold-start handoff document.
 - Temporary notes belong under `plan/localwork/<step-id>/`.
 - Those notes are disposable and may be evicted by age.
 - Canonical progress lives in `plan.yaml`, `plan/index.yaml`, and the step file itself.
+
+## Repeat Output
+
+When a step is run under repeat mode, the agent should end with a compact JSON
+progress report that can be rendered into a small graph:
+
+- current progress before and after the run
+- delta for the run
+- a recent trend window
+- the latest milestone label and timestamp
+- next action and blockers
+
+The wrapper will use that report to print the human-facing graph.

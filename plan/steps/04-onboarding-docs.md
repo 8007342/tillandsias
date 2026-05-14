@@ -38,9 +38,11 @@ Keep the first-turn forge experience validator-clean and make project discovery 
 
 ## Granular Tasks
 
-- `onboarding/welcome`
+- `onboarding/welcome-banner`
+- `onboarding/project-discovery`
 - `onboarding/shell-tools`
-- `onboarding/bootstrap-docs`
+- `onboarding/bootstrap-readme`
+- `onboarding/remote-projects`
 - `onboarding/auth-script`
 
 ## Handoff

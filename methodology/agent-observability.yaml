@@ -74,6 +74,11 @@ agent_observability_protocol:
       empty: " "
       template: "{indent}{task_name} [{bar}] {progress}% {status}"
     compact_template: "{task_name} [{bar}] {progress}% {status} refs:{evidence_count}"
+    repeat_before_after_template: "before {before_bar} → after {after_bar} Δ{delta}"
+    repeat_trend_template: "trend {trend_bar} avg={trend_average} latest={trend_latest}"
+    repeat_milestone_template: "milestone {label}@{timestamp} elapsed={elapsed}"
+    repeat_minimal_template: "{session_id} #{cycle} {status} {repeat_before_after_template} {repeat_trend_template} {repeat_milestone_template}"
+    milestone_timestamp_template: "{label}@{hhmmss}"
 
   agent_to_agent_messages:
     rule: >
@@ -95,6 +100,36 @@ agent_observability_protocol:
       worktree_path: string
       owned_file_scope: list
       checkpoint_commit: string
+
+  repeat_progress_report:
+    purpose: >
+      Provide a minimal machine-readable progress record for noninteractive repeat
+      loops. The wrapper can render this into a human-friendly graph without
+      exposing file-change chatter or reasoning traces.
+    schema:
+      session_id: string
+      cycle: integer
+      branch: string
+      status: string
+      before_progress: integer
+      after_progress: integer
+      delta_progress: integer
+      trend_window: list
+      current_bar: string
+      trend_bar: string
+      elapsed_seconds: integer
+      elapsed_human: string
+      milestone_label: string
+      milestone_timestamp: string
+      next_action: string
+      blockers: list
+      checkpoint_commit: string
+      output_mode: "compact-json"
+    rendering_notes:
+      - "Show before/after as blocky progress bars."
+      - "Show the latest milestone timestamp in absolute time and elapsed time."
+      - "Show the last N progress points as a trend bar and an average delta."
+      - "Do not stream file-by-file changes in repeat mode unless explicitly requested."
 
   lease_protocol:
     purpose: >

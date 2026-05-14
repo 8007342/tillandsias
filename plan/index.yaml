@@ -142,39 +142,56 @@ plan_index:
         - "Browser/session control path is coherent end-to-end."
         - "Any superseded browser/session contract is tombstoned."
       tasks:
-        - id: browser/launch-path
+        - id: browser/launcher-contract
           status: in_progress
           depends_on:
             - security-substrate-closure
           owned_files:
             - crates/tillandsias-headless/src/main.rs
-            - crates/tillandsias-headless/src/tray/mod.rs
             - images/chromium/chromium-framework-launch.sh
           checkpoint_required: true
-          handoff_note: "Cold-start note: the next agent may continue the launch path or hand off to the MCP bridge."
-        - id: browser/mcp-bridge
+          handoff_note: "Cold-start note: launcher contract and repeat prompt behavior are the first dependency tail."
+        - id: browser/window-registry
           status: pending
           depends_on:
-            - browser/launch-path
+            - browser/launcher-contract
+          owned_files:
+            - crates/tillandsias-core/src/state.rs
+            - crates/tillandsias-headless/src/tray/mod.rs
+          checkpoint_required: true
+          handoff_note: "Cold-start note: window registry state should be owned by one agent at a time."
+        - id: browser/cdp-bridge
+          status: pending
+          depends_on:
+            - browser/window-registry
           owned_files:
             - crates/tillandsias-browser-mcp/src/server.rs
-            - crates/tillandsias-core/src/state.rs
+            - images/chromium/chromium-framework-launch.sh
           checkpoint_required: true
-          handoff_note: "Cold-start note: keep the MCP bridge independent from launcher-only changes."
+          handoff_note: "Cold-start note: CDP bridge work is separate from launcher and registry work."
         - id: browser/session-otp
           status: pending
           depends_on:
-            - browser/launch-path
+            - browser/launcher-contract
           owned_files:
             - openspec/specs/opencode-web-session-otp/spec.md
             - images/default/entrypoint-forge-opencode-web.sh
             - images/default/entrypoint-forge-opencode.sh
           checkpoint_required: true
           handoff_note: "Cold-start note: session ownership is a separate task from browser transport."
-        - id: browser/legacy-session-tombstone
+        - id: browser/routing-allowlist
           status: pending
           depends_on:
             - browser/session-otp
+          owned_files:
+            - openspec/specs/subdomain-naming-flip/spec.md
+            - openspec/specs/subdomain-routing-via-reverse-proxy/spec.md
+          checkpoint_required: true
+          handoff_note: "Cold-start note: routing and allowlists are a separate dependency tail from browser transport."
+        - id: browser/legacy-session-tombstone
+          status: pending
+          depends_on:
+            - browser/routing-allowlist
           owned_files:
             - openspec/specs/opencode-web-session/spec.md
             - openspec/litmus-bindings.yaml
@@ -209,7 +226,7 @@ plan_index:
         - "Tray behavior is consolidated around the current runtime model."
         - "Legacy cache and UX variants are either retired or reduced to active minimal boundaries."
       tasks:
-        - id: tray/icon-lifecycle
+        - id: tray/state-machine
           status: pending
           depends_on:
             - browser-and-web-security
@@ -217,31 +234,51 @@ plan_index:
             - crates/tillandsias-core/src/state.rs
             - crates/tillandsias-headless/src/tray/mod.rs
           checkpoint_required: true
-          handoff_note: "Cold-start note: icon state must remain coherent across agent handoff."
-        - id: tray/menu-and-ux
+          handoff_note: "Cold-start note: tray state should be explicit before UX or init changes."
+        - id: tray/icon-transitions
           status: pending
           depends_on:
-            - tray/icon-lifecycle
+            - tray/state-machine
+          owned_files:
+            - crates/tillandsias-headless/src/tray/mod.rs
+            - openspec/specs/tray-icon-lifecycle/spec.md
+          checkpoint_required: true
+          handoff_note: "Cold-start note: icon transitions need their own dependency tail."
+        - id: tray/menu-layout
+          status: pending
+          depends_on:
+            - tray/icon-transitions
           owned_files:
             - openspec/specs/tray-ux/spec.md
             - openspec/specs/tray-minimal-ux/spec.md
             - openspec/specs/tray-progress-and-icon-states/spec.md
           checkpoint_required: true
           handoff_note: "Cold-start note: keep tray UX minimal, explicit, and resumable."
-        - id: tray/init-and-cache
+        - id: tray/init-command
           status: pending
           depends_on:
-            - tray/menu-and-ux
+            - tray/menu-layout
           owned_files:
             - images/default/entrypoint.sh
+            - openspec/specs/init-command/spec.md
+            - openspec/specs/init-incremental-builds/spec.md
+          checkpoint_required: true
+          handoff_note: "Cold-start note: init orchestration should be checkpointed before cache work."
+        - id: tray/cache-semantics
+          status: pending
+          depends_on:
+            - tray/init-command
+          owned_files:
             - images/default/lib-common.sh
             - scripts/install.sh
+            - openspec/specs/forge-cache-dual/spec.md
+            - openspec/specs/forge-staleness/spec.md
           checkpoint_required: true
           handoff_note: "Cold-start note: cache semantics should be checkpointed before they are widened."
         - id: tray/legacy-cache-tombstones
           status: pending
           depends_on:
-            - tray/init-and-cache
+            - tray/cache-semantics
           owned_files:
             - openspec/specs/overlay-mount-cache/spec.md
             - openspec/specs/tools-overlay-fast-reuse/spec.md
@@ -268,25 +305,34 @@ plan_index:
         - "The first-turn story is coherent and validator-clean."
         - "Retrofit specs are either live, bounded, or tombstoned if historical."
       tasks:
-        - id: onboarding/welcome
+        - id: onboarding/welcome-banner
           status: pending
           depends_on:
             - tray-runtime-and-cache
           owned_files:
             - images/default/forge-welcome.sh
-            - images/default/config-overlay/mcp/project-info.sh
+            - openspec/specs/forge-welcome/spec.md
           checkpoint_required: true
           handoff_note: "Cold-start note: welcome output and discoverability need to remain in sync."
+        - id: onboarding/project-discovery
+          status: pending
+          depends_on:
+            - onboarding/welcome-banner
+          owned_files:
+            - images/default/config-overlay/mcp/project-info.sh
+            - openspec/specs/forge-environment-discoverability/spec.md
+          checkpoint_required: true
+          handoff_note: "Cold-start note: project discovery must be independent of shell helpers."
         - id: onboarding/shell-tools
           status: pending
           depends_on:
-            - onboarding/welcome
+            - onboarding/project-discovery
           owned_files:
             - images/default/config-overlay/mcp/git-tools.sh
             - images/default/config-overlay/opencode/instructions/cache-discipline.md
           checkpoint_required: true
           handoff_note: "Cold-start note: shell tools should be discoverable without hidden state."
-        - id: onboarding/bootstrap-docs
+        - id: onboarding/bootstrap-readme
           status: pending
           depends_on:
             - onboarding/shell-tools
@@ -295,10 +341,19 @@ plan_index:
             - docs/OPENCODE-INTEGRATION-COMPLETED.md
           checkpoint_required: true
           handoff_note: "Cold-start note: bootstrap docs should explain the flow to a different next agent."
+        - id: onboarding/remote-projects
+          status: pending
+          depends_on:
+            - onboarding/bootstrap-readme
+          owned_files:
+            - openspec/specs/remote-projects/spec.md
+            - scripts/claude-mcp.sh
+          checkpoint_required: true
+          handoff_note: "Cold-start note: remote project discovery is a separate leaf from auth scripts."
         - id: onboarding/auth-script
           status: pending
           depends_on:
-            - onboarding/bootstrap-docs
+            - onboarding/remote-projects
           owned_files:
             - scripts/generate-repo-key.sh
             - docs/cheatsheets/github-credential-tools.md
@@ -332,12 +387,20 @@ plan_index:
             - cheatsheets/runtime/podman-logging.md
           checkpoint_required: true
           handoff_note: "Cold-start note: logging notes must not assume the same agent will resume."
-        - id: observability/diagnostics-stream
+        - id: observability/runtime-diagnostics
           status: pending
           depends_on:
             - observability/runtime-logging
           owned_files:
             - openspec/specs/runtime-diagnostics/spec.md
+            - openspec/specs/external-logs-layer/spec.md
+          checkpoint_required: true
+          handoff_note: "Cold-start note: diagnostics ownership is a distinct tail from logging."
+        - id: observability/diagnostics-stream
+          status: pending
+          depends_on:
+            - observability/runtime-diagnostics
+          owned_files:
             - openspec/specs/runtime-diagnostics-stream/spec.md
           checkpoint_required: true
           handoff_note: "Cold-start note: keep stream semantics separate from logging sinks."
@@ -347,18 +410,26 @@ plan_index:
             - observability/diagnostics-stream
           owned_files:
             - openspec/specs/spec-traceability/spec.md
-            - docs/convergence/centicolon-dashboard.md
+            - openspec/specs/clickable-trace-index/spec.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: trace indices should let another agent resume without rediscovery."
-        - id: observability/knowledge-source
+          handoff_note: "Cold-start note: trace index work should be separable from dashboard layout."
+        - id: observability/source-of-truth
           status: pending
           depends_on:
             - observability/trace-index
           owned_files:
             - openspec/specs/knowledge-source-of-truth/spec.md
-            - openspec/specs/clickable-trace-index/spec.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: source-of-truth specs should be idempotent under repeated updates."
+          handoff_note: "Cold-start note: source-of-truth semantics are a different leaf from traces."
+        - id: observability/dashboard
+          status: pending
+          depends_on:
+            - observability/source-of-truth
+          owned_files:
+            - docs/convergence/centicolon-dashboard.md
+            - docs/convergence/centicolon-dashboard.json
+          checkpoint_required: true
+          handoff_note: "Cold-start note: dashboard rendering should be the last observability leaf."
 
     - id: cross-platform-leftovers
       order: 6
@@ -387,25 +458,47 @@ plan_index:
             - openspec/specs/windows-event-logging/spec.md
           checkpoint_required: true
           handoff_note: "Cold-start note: do not assume the same agent will carry the Windows tail."
-        - id: cross-platform/wsl-runtime
+        - id: cross-platform/windows-logging
           status: pending
           depends_on:
             - cross-platform/windows-routing
+          owned_files:
+            - openspec/specs/windows-event-logging/spec.md
+          checkpoint_required: true
+          handoff_note: "Cold-start note: Windows logging is separable from image routing."
+        - id: cross-platform/wsl-runtime
+          status: pending
+          depends_on:
+            - cross-platform/windows-logging
           owned_files:
             - openspec/specs/wsl-runtime/spec.md
             - openspec/specs/wsl-daemon-orchestration/spec.md
           checkpoint_required: true
           handoff_note: "Cold-start note: WSL work is a separate dependency tail from Windows routing."
-        - id: cross-platform/versioning-and-image
+        - id: cross-platform/versioning
           status: pending
           depends_on:
             - cross-platform/wsl-runtime
           owned_files:
             - openspec/specs/versioning/spec.md
+          checkpoint_required: true
+          handoff_note: "Cold-start note: versioning is a stable leaf and should be checkpointed explicitly."
+        - id: cross-platform/image
+          status: pending
+          depends_on:
+            - cross-platform/versioning
+          owned_files:
             - openspec/specs/web-image/spec.md
+          checkpoint_required: true
+          handoff_note: "Cold-start note: image contracts are separate from versioning."
+        - id: cross-platform/zen-pool
+          status: pending
+          depends_on:
+            - cross-platform/image
+          owned_files:
             - openspec/specs/zen-default-with-ollama-analysis-pool/spec.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: keep versioning and image concerns checkpointed together if touched."
+          handoff_note: "Cold-start note: model routing is the last cross-platform tail."
 
     - id: semantic-distillation-sweep
       order: 7
@@ -426,7 +519,7 @@ plan_index:
         - "All stale specs are obsoleted or tombstoned."
         - "Only intentional implementation gaps remain active."
       tasks:
-        - id: distillation/tombstone-sweep
+        - id: distillation/spec-empty-bindings
           status: pending
           depends_on:
             - security-substrate-closure
@@ -436,10 +529,34 @@ plan_index:
             - observability-and-diagnostics
             - cross-platform-leftovers
           owned_files:
+            - openspec/litmus-bindings.yaml
+          checkpoint_required: true
+          handoff_note: "Cold-start note: empty bindings should be the first sweep target."
+        - id: distillation/history-only-specs
+          status: pending
+          depends_on:
+            - distillation/spec-empty-bindings
+          owned_files:
             - openspec/specs
+          checkpoint_required: true
+          handoff_note: "Cold-start note: history-only specs should be tombstoned with replacement refs."
+        - id: distillation/event-register
+          status: pending
+          depends_on:
+            - distillation/history-only-specs
+          owned_files:
             - methodology/event/index.yaml
           checkpoint_required: true
-          handoff_note: "Cold-start note: semantic distillation should preserve tombstones and replacement refs."
+          handoff_note: "Cold-start note: methodology event intake is the tail after spec tombstones."
+        - id: distillation/frontier-prune
+          status: pending
+          depends_on:
+            - distillation/event-register
+          owned_files:
+            - plan/index.yaml
+            - plan.yaml
+          checkpoint_required: true
+          handoff_note: "Cold-start note: pruning the frontier should be the final distillation leaf."
 
     - id: implementation-gaps-backlog
       order: 8
@@ -453,10 +570,50 @@ plan_index:
         - "The plan switches from cleanup mode to pure implementation mode."
         - "Each remaining active spec has a concrete next patch or test task."
       tasks:
-        - id: implementation-gaps/residual-backlog
+        - id: implementation-gaps/browser
           status: pending
           depends_on:
             - semantic-distillation-sweep
+          owned_files:
+            - plan/steps/02-browser-web.md
+          checkpoint_required: true
+          handoff_note: "Cold-start note: browser implementation gaps should be split before execution."
+        - id: implementation-gaps/tray
+          status: pending
+          depends_on:
+            - implementation-gaps/browser
+          owned_files:
+            - plan/steps/03-tray-runtime.md
+          checkpoint_required: true
+          handoff_note: "Cold-start note: tray gaps follow the browser tail."
+        - id: implementation-gaps/onboarding
+          status: pending
+          depends_on:
+            - implementation-gaps/tray
+          owned_files:
+            - plan/steps/04-onboarding-docs.md
+          checkpoint_required: true
+          handoff_note: "Cold-start note: onboarding gaps are a separate leaf from tray work."
+        - id: implementation-gaps/observability
+          status: pending
+          depends_on:
+            - implementation-gaps/onboarding
+          owned_files:
+            - plan/steps/05-observability.md
+          checkpoint_required: true
+          handoff_note: "Cold-start note: observability gaps should remain graph-shaped, not linear guesswork."
+        - id: implementation-gaps/cross-platform
+          status: pending
+          depends_on:
+            - implementation-gaps/observability
+          owned_files:
+            - plan/steps/06-cross-platform.md
+          checkpoint_required: true
+          handoff_note: "Cold-start note: cross-platform gaps come after the Linux-first tails."
+        - id: implementation-gaps/residual-backlog
+          status: pending
+          depends_on:
+            - implementation-gaps/cross-platform
           owned_files:
             - plan/steps/08-implementation-gaps.md
             - plan/localwork
