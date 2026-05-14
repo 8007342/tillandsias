@@ -2,11 +2,12 @@
 name: litmus:knowledge-source-of-truth-shape
 spec: knowledge-source-of-truth
 phase: pre-build
-description: Verify debug-source fetching, vendor/debug isolation, and gitignore coverage
+description: Verify debug-source fetching, vendor/debug isolation, gitignore coverage, and the source-of-truth epistemology contract (authority hierarchy, CRDT semantics, divergence resolution, evidence bundles, staleness signals).
 severity: medium
 
 preconditions:
   - workspace contains scripts/ and .gitignore
+  - workspace contains openspec/specs/knowledge-source-of-truth/spec.md
   - bash and grep are available in PATH
 
 critical_path:
@@ -22,14 +23,38 @@ critical_path:
     command: "bash scripts/fetch-debug-source.sh | grep -F 'Available debug sources' && bash scripts/fetch-debug-source.sh | grep -F 'Usage:'"
     timeout_ms: 5000
 
+  - step: "verify the authority hierarchy clause is present in the spec body"
+    command: "grep -F 'code > specs > cheatsheets > docs' openspec/specs/knowledge-source-of-truth/spec.md"
+    timeout_ms: 3000
+
+  - step: "verify the CRDT-inspired convergence requirement is present"
+    command: "grep -F 'CRDT-inspired monotonic convergence' openspec/specs/knowledge-source-of-truth/spec.md"
+    timeout_ms: 3000
+
+  - step: "verify the spec-vs-code divergence resolution requirement is present"
+    command: "grep -F 'Spec-vs-code divergence resolution' openspec/specs/knowledge-source-of-truth/spec.md"
+    timeout_ms: 3000
+
+  - step: "verify the convergence evidence bundle requirement is present"
+    command: "grep -F 'Convergence evidence bundles' openspec/specs/knowledge-source-of-truth/spec.md"
+    timeout_ms: 3000
+
+  - step: "verify the staleness detection requirement is present"
+    command: "grep -F 'Staleness detection' openspec/specs/knowledge-source-of-truth/spec.md"
+    timeout_ms: 3000
+
+  - step: "verify the spec cites CRDT external provenance"
+    command: "grep -F 'inria-00609399' openspec/specs/knowledge-source-of-truth/spec.md && grep -F 'Conflict-free_replicated_data_type' openspec/specs/knowledge-source-of-truth/spec.md"
+    timeout_ms: 3000
+
 observability:
   traces:
     - "@trace spec:knowledge-source-of-truth"
-  expected_log: "Knowledge source-of-truth boundaries remain manifest-driven and offline-safe"
+  expected_log: "Knowledge source-of-truth boundaries remain manifest-driven and offline-safe; epistemology contract (authority, CRDT, divergence, evidence, staleness) is present in spec body"
   log_fields:
     spec: "knowledge-source-of-truth"
     test: "knowledge-source-of-truth-shape"
 
 rollback:
   on_failure: "inspect scripts/fetch-debug-source.sh, .gitignore, and openspec/specs/knowledge-source-of-truth/spec.md for drift"
-  command: "sed -n '1,220p' scripts/fetch-debug-source.sh && printf '\\n---\\n' && grep -n 'vendor/debug/' .gitignore"
+  command: "sed -n '1,260p' openspec/specs/knowledge-source-of-truth/spec.md && printf '\\n---\\n' && grep -n 'vendor/debug/' .gitignore"
