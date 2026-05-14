@@ -29,6 +29,12 @@ if command -v direnv &>/dev/null
     direnv hook fish | source
 end
 
+# ── Shell helper functions (ls-projects, clone-fresh, cheatsheet, etc.) ─
+# @trace spec:forge-shell-tools, spec:forge-environment-discoverability
+if test -f /etc/tillandsias/shell-helpers.sh
+    source /etc/tillandsias/shell-helpers.sh
+end
+
 # Welcome message on interactive login
 if status is-interactive
     and not set -q TILLANDSIAS_WELCOME_SHOWN

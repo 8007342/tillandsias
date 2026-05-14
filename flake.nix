@@ -32,6 +32,8 @@
         forgeWelcome = ./images/default/forge-welcome.sh;
         forgeLocales = ./images/default/locales;
         forgeMcpBrowser = ./images/default/tillandsias-mcp-browser;
+        forgeCliCommands = ./images/default/cli;
+        forgeShellHelpers = ./images/default/config-overlay/shell-helpers.sh;
         webEntrypoint = ./images/web/entrypoint.sh;
         forgeImageRoot = pkgs.buildEnv {
           name = "tillandsias-forge-root";
@@ -167,6 +169,23 @@
               mkdir -p ./usr/local/share/tillandsias
               cp ${forgeWelcome} ./usr/local/share/tillandsias/forge-welcome.sh
               chmod +x ./usr/local/share/tillandsias/forge-welcome.sh
+
+              # CLI commands (inventory, services, models, logs)
+              # @trace spec:forge-environment-discoverability
+              cp ${forgeCliCommands}/tillandsias-inventory ./usr/local/bin/tillandsias-inventory
+              cp ${forgeCliCommands}/tillandsias-services ./usr/local/bin/tillandsias-services
+              cp ${forgeCliCommands}/tillandsias-models ./usr/local/bin/tillandsias-models
+              cp ${forgeCliCommands}/tillandsias-logs ./usr/local/bin/tillandsias-logs
+              chmod +x ./usr/local/bin/tillandsias-inventory
+              chmod +x ./usr/local/bin/tillandsias-services
+              chmod +x ./usr/local/bin/tillandsias-models
+              chmod +x ./usr/local/bin/tillandsias-logs
+
+              # Shell helper functions
+              # @trace spec:forge-shell-tools, spec:forge-environment-discoverability
+              mkdir -p ./etc/tillandsias
+              cp ${forgeShellHelpers} ./etc/tillandsias/shell-helpers.sh
+              chmod +x ./etc/tillandsias/shell-helpers.sh
 
               # Locale files — sourced by lib-common.sh for i18n
               mkdir -p ./etc/tillandsias/locales

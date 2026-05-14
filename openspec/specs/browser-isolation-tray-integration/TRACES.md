@@ -6,7 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [crates/tillandsias-browser-mcp/src/server.rs#L3](../../../crates/tillandsias-browser-mcp/src/server.rs#L3)
-- [crates/tillandsias-browser-mcp/src/server.rs#L39](../../../crates/tillandsias-browser-mcp/src/server.rs#L39)
+- [crates/tillandsias-browser-mcp/src/server.rs#L40](../../../crates/tillandsias-browser-mcp/src/server.rs#L40)
 - [crates/tillandsias-core/src/config.rs#L28](../../../crates/tillandsias-core/src/config.rs#L28)
 - [crates/tillandsias-core/src/config.rs#L34](../../../crates/tillandsias-core/src/config.rs#L34)
 - [crates/tillandsias-core/src/config.rs#L66](../../../crates/tillandsias-core/src/config.rs#L66)

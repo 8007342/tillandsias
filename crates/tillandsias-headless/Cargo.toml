@@ -14,6 +14,7 @@ path = "src/main.rs"
 [dependencies]
 tillandsias-core = { path = "../tillandsias-core" }
 tillandsias-control-wire = { path = "../tillandsias-control-wire" }
+tillandsias-logging = { path = "../tillandsias-logging" }
 tillandsias-otp = { path = "../tillandsias-otp" }
 tillandsias-podman = { path = "../tillandsias-podman" }
 tokio = { workspace = true }

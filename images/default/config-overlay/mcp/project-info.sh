@@ -17,7 +17,7 @@ while IFS= read -r line; do
             echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"project-info","version":"1.0.0"}}}'
             ;;
         "tools/list")
-            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"tools":[{"name":"project_structure","description":"List project files (max depth 3, max 100 files)","inputSchema":{"type":"object","properties":{"depth":{"type":"number","default":3}}}},{"name":"file_summary","description":"Show line count and first lines of a file","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"lines":{"type":"number","default":5}},"required":["path"]}},{"name":"search_code","description":"Search for a pattern across source files","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"glob":{"type":"string","default":"*"}},"required":["pattern"]}}]}}'
+            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"tools":[{"name":"project_structure","description":"List project files (max depth 3, max 100 files)","inputSchema":{"type":"object","properties":{"depth":{"type":"number","default":3}}}},{"name":"file_summary","description":"Show line count and first lines of a file","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"lines":{"type":"number","default":5}},"required":["path"]}},{"name":"search_code","description":"Search for a pattern across source files","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"glob":{"type":"string","default":"*"}},"required":["pattern"]}},{"name":"project_list","description":"Discover available projects in ~/src/ (git repos)","inputSchema":{"type":"object","properties":{}}}]}}'
             ;;
         "tools/call")
             tool=$(echo "$line" | jq -r '.params.name')
@@ -44,6 +44,36 @@ ${preview}"
                     pattern=$(echo "$args" | jq -r '.pattern')
                     file_glob=$(echo "$args" | jq -r '.glob // "*"')
                     result=$(grep -rn "$pattern" --include="$file_glob" . 2>&1 | head -50 || echo "No matches found")
+                    ;;
+                "project_list")
+                    # @trace spec:forge-environment-discoverability
+                    # Discover projects in ~/src/ by scanning for .git/ directories
+                    # Return JSON array of projects with metadata
+                    project_data="[]"
+                    if [ -d "$HOME/src" ]; then
+                        projects_json=""
+                        for project_dir in "$HOME/src"/*; do
+                            if [ -d "$project_dir" ] && [ -d "$project_dir/.git" ]; then
+                                project_name=$(basename "$project_dir")
+                                description=""
+                                # Try to extract first line of README as description
+                                if [ -f "$project_dir/README.md" ]; then
+                                    description=$(head -1 "$project_dir/README.md" | sed 's/^# //' | sed 's/^## //')
+                                fi
+                                # Check if Tillandsias-managed
+                                is_managed="false"
+                                [ -f "$project_dir/.tillandsias/config.toml" ] && is_managed="true"
+
+                                if [ -z "$projects_json" ]; then
+                                    projects_json="{\"name\":\"$project_name\",\"description\":\"$description\",\"managed\":$is_managed}"
+                                else
+                                    projects_json="$projects_json,{\"name\":\"$project_name\",\"description\":\"$description\",\"managed\":$is_managed}"
+                                fi
+                            fi
+                        done
+                        [ -n "$projects_json" ] && project_data="[$projects_json]"
+                    fi
+                    result="$project_data"
                     ;;
                 *)
                     result="Unknown tool: $tool"

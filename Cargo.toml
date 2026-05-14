@@ -4,6 +4,7 @@ members = [
     "crates/tillandsias-control-wire",
     "crates/tillandsias-core",
     "crates/tillandsias-headless",
+    "crates/tillandsias-logging",
     "crates/tillandsias-otp",
     "crates/tillandsias-podman",
     "crates/tillandsias-repeat-graph",
@@ -43,6 +44,7 @@ tillandsias-browser-mcp = { path = "crates/tillandsias-browser-mcp" }
 tillandsias-control-wire = { path = "crates/tillandsias-control-wire" }
 tillandsias-core = { path = "crates/tillandsias-core" }
 tillandsias-headless = { path = "crates/tillandsias-headless" }
+tillandsias-logging = { path = "crates/tillandsias-logging" }
 tillandsias-otp = { path = "crates/tillandsias-otp" }
 tillandsias-podman = { path = "crates/tillandsias-podman" }
 tillandsias-scanner = { path = "crates/tillandsias-scanner" }

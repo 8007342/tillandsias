@@ -1994,6 +1994,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "tillandsias-logging",
  "tiny-skia",
  "tokio",
  "toml",
@@ -2015,6 +2016,7 @@ dependencies = [
  "tempfile",
  "tillandsias-control-wire",
  "tillandsias-core",
+ "tillandsias-logging",
  "tillandsias-otp",
  "tillandsias-podman",
  "tokio",
@@ -2023,6 +2025,23 @@ dependencies = [
  "tracing-subscriber",
  "zbus",
  "zvariant",
+]
+
+[[package]]
+name = "tillandsias-logging"
+version = "0.1.260513"
+dependencies = [
+ "chrono",
+ "dirs",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
 ]
 
 [[package]]

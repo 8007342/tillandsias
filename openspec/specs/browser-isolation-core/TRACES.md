@@ -5,6 +5,10 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [crates/tillandsias-browser-mcp/src/cdp_client.rs#L6](../../../crates/tillandsias-browser-mcp/src/cdp_client.rs#L6)
+- [crates/tillandsias-browser-mcp/src/server.rs#L467](../../../crates/tillandsias-browser-mcp/src/server.rs#L467)
+- [crates/tillandsias-browser-mcp/src/server.rs#L508](../../../crates/tillandsias-browser-mcp/src/server.rs#L508)
+- [crates/tillandsias-browser-mcp/src/server.rs#L548](../../../crates/tillandsias-browser-mcp/src/server.rs#L548)
 - [crates/tillandsias-core/src/state.rs#L66](../../../crates/tillandsias-core/src/state.rs#L66)
 - [images/chromium/Containerfile.core#L1](../../../images/chromium/Containerfile.core#L1)
 - [scripts/check-container-bases.sh#L8](../../../scripts/check-container-bases.sh#L8)

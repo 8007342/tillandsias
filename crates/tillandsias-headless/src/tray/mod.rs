@@ -1,4 +1,4 @@
-// @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states, spec:tray-icon-lifecycle, spec:security-privacy-isolation, spec:browser-isolation-tray-integration, spec:host-browser-mcp, spec:runtime-logging, spec:logging-levels
+// @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states, spec:tray-icon-lifecycle, spec:security-privacy-isolation, spec:browser-isolation-tray-integration, spec:host-browser-mcp, spec:runtime-logging, spec:logging-levels, spec:remote-projects
 // @trace spec:podman-container-spec, spec:podman-orchestration
 //! Native Linux tray service backed by StatusNotifierItem and DBusMenu.
 //!
@@ -22,6 +22,7 @@ use zvariant::{OwnedObjectPath, OwnedValue, Value};
 use crate::ENCLAVE_NO_PROXY;
 use tillandsias_core::config::{self, SelectedAgent};
 use tillandsias_core::genus::TrayIconState;
+use tillandsias_core::remote_projects;
 use tillandsias_podman::{ContainerSpec, MountMode};
 
 #[cfg(unix)]
@@ -513,7 +514,7 @@ fn launch_project_action(
 }
 
 fn run_init_action() -> Result<(), String> {
-    super::run_init(false)
+    super::run_init(false, false)
 }
 
 fn run_root_terminal(root: &Path, version: &str) -> Result<(), String> {
@@ -585,6 +586,52 @@ fn handle_github_login(service: Arc<TrayService>) {
     });
 }
 
+// @trace spec:remote-projects
+fn handle_clone_project(service: Arc<TrayService>, repo_url: String, repo_name: String) {
+    let service_for_emit = service.clone();
+    thread::spawn(move || {
+        let home = match std::env::var("HOME") {
+            Ok(h) => PathBuf::from(h),
+            Err(_) => {
+                warn!("clone_project: HOME not set");
+                return;
+            }
+        };
+        let target_path = home.join("src").join(&repo_name);
+
+        // Update status to show cloning
+        let _ = futures::executor::block_on(service_for_emit.set_status(
+            format!("⏳ Cloning {} ...", repo_name),
+            TrayIconState::Building,
+            None,
+        ));
+
+        // Clone the project
+        match remote_projects::clone_project_from_github(&repo_url, &target_path) {
+            Ok(()) => {
+                info!("clone_project: successfully cloned {} to {:?}", repo_name, target_path);
+                let _ = futures::executor::block_on(service_for_emit.set_status(
+                    format!("✓ Cloned {}", repo_name),
+                    TrayIconState::Mature,
+                    None,
+                ));
+            }
+            Err(err) => {
+                warn!("clone_project: failed to clone {}: {}", repo_name, err);
+                let _ = futures::executor::block_on(service_for_emit.set_status(
+                    format!("🥀 Clone failed: {}", err),
+                    TrayIconState::Dried,
+                    None,
+                ));
+            }
+        }
+
+        // Refresh menu after a short delay to show results
+        thread::sleep(std::time::Duration::from_secs(2));
+        let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
+    });
+}
+
 // @trace spec:tray-minimal-ux
 fn build_separator_item(id: i32) -> MenuNode {
     node(
@@ -635,6 +682,58 @@ fn build_seedlings_submenu(state: &TrayUiState) -> MenuNode {
         props(vec![
             ("label".to_string(), ov_str("Seedlings")),
             ("enabled".to_string(), ov(Value::from(true))),
+            ("visible".to_string(), ov(Value::from(true))),
+            ("children-display".to_string(), ov_str("submenu")),
+        ]),
+        children,
+    )
+}
+
+// @trace spec:remote-projects
+fn build_clone_project_submenu(state: &TrayUiState) -> MenuNode {
+    let mut children = Vec::new();
+    let clone_enabled = state.forge_available && state.podman_available;
+
+    // Discover GitHub projects (cached)
+    let projects = remote_projects::discover_github_projects();
+
+    // Show top 5 projects
+    for (idx, project) in projects.iter().take(5).enumerate() {
+        let item_id = 2000 + idx as i32;
+        let label = format!(
+            "{} {}",
+            &project.owner,
+            &project.name
+        );
+        children.push(child(node(
+            item_id,
+            props(vec![
+                ("label".to_string(), ov_str(label)),
+                ("enabled".to_string(), ov(Value::from(clone_enabled))),
+                ("visible".to_string(), ov(Value::from(true))),
+            ]),
+            Vec::new(),
+        )));
+    }
+
+    // If no projects, show placeholder
+    if projects.is_empty() {
+        children.push(child(node(
+            2100,
+            props(vec![
+                ("label".to_string(), ov_str("(No projects discovered)")),
+                ("enabled".to_string(), ov(Value::from(false))),
+                ("visible".to_string(), ov(Value::from(true))),
+            ]),
+            Vec::new(),
+        )));
+    }
+
+    node(
+        20,
+        props(vec![
+            ("label".to_string(), ov_str("Clone Project")),
+            ("enabled".to_string(), ov(Value::from(clone_enabled))),
             ("visible".to_string(), ov(Value::from(true))),
             ("children-display".to_string(), ov_str("submenu")),
         ]),
@@ -776,6 +875,9 @@ fn build_menu(state: &TrayUiState) -> MenuNode {
         for project in &state.projects {
             children.push(child(build_project_submenu(state, project)));
         }
+
+        // Clone Project submenu
+        children.push(child(build_clone_project_submenu(state)));
 
         // GitHub login button
         children.push(child(node(
@@ -1120,7 +1222,20 @@ impl DbusMenuIface {
                             handle_select_agent(self.0.clone(), agent);
                         }
                     }
-                    _ => {}
+                    _ => {
+                        // Check if this is a clone project item (format: "owner repo-name")
+                        // Clone project items have IDs in range 2000-2099
+                        if id >= 2000 && id < 2100 {
+                            // Parse the label to get owner and repo name
+                            let parts: Vec<&str> = label.split_whitespace().collect();
+                            if parts.len() >= 2 {
+                                let owner = parts[0];
+                                let repo_name = parts[1];
+                                let repo_url = format!("https://github.com/{}/{}", owner, repo_name);
+                                handle_clone_project(self.0.clone(), repo_url, repo_name.to_string());
+                            }
+                        }
+                    }
                 }
             }
         }

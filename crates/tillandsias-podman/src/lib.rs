@@ -1,6 +1,7 @@
 //! @trace spec:podman-orchestration, spec:cross-platform, spec:windows-wsl-runtime
 
 mod client;
+pub mod cache_semantics;
 pub mod container_spec;
 pub mod events;
 mod gpu;

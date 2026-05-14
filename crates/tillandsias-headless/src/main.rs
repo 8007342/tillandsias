@@ -1,4 +1,4 @@
-// @trace spec:linux-native-portable-executable
+// @trace spec:linux-native-portable-executable, spec:runtime-logging
 //! Tillandsias native headless app lifecycle launcher.
 //!
 //! Runs containerized development environments without a graphical interface.
@@ -18,6 +18,10 @@
 //!   - {"event":"app.started","timestamp":"<RFC3339>"} — at startup
 //!   - {"event":"containers.running","count":N} — on discovery
 //!   - {"event":"app.stopped","exit_code":0,"timestamp":"<RFC3339>"} — on graceful shutdown
+//!
+//! Logging Integration:
+//! See `crates/tillandsias-logging/INTEGRATION.md` for structured logging setup,
+//! including container lifecycle events, accountability windows, and log rotation.
 
 use signal_hook::flag;
 use std::fs;

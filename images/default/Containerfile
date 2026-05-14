@@ -85,6 +85,12 @@ RUN mkdir -p /usr/local/share/tillandsias
 COPY forge-welcome.sh /usr/local/share/tillandsias/forge-welcome.sh
 RUN chmod +x /usr/local/share/tillandsias/forge-welcome.sh || true
 
+# ── Shell helper functions ─────────────────────────────────────
+# @trace spec:forge-shell-tools, spec:forge-environment-discoverability
+RUN mkdir -p /etc/tillandsias
+COPY config-overlay/shell-helpers.sh /etc/tillandsias/shell-helpers.sh
+RUN chmod +x /etc/tillandsias/shell-helpers.sh || true
+
 # ── Locale files ───────────────────────────────────────────────
 # @trace spec:environment-runtime
 RUN mkdir -p /etc/tillandsias/locales
