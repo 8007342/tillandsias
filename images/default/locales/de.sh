@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @trace spec:shell-prompt-localization-fr, spec:shell-prompt-localization-ja
 # Tillandsias Forge — Deutsches Sprachpaket
 # Wird von entrypoint.sh und forge-welcome.sh nach der Spracherkennung eingebunden.
 # Variablen mit L_ als Präfix zur Vermeidung von Kollisionen.
@@ -89,3 +90,25 @@ L_TIP_17="Jederzeit zu bash wechseln: tippe bash"
 L_TIP_18="Jederzeit zu zsh wechseln: tippe zsh"
 L_TIP_19="Git-Status prüfen mit git status"
 L_TIP_20="GitHub CLI: gh repo view, gh pr list"
+
+# ── Spickzettel ────────────────────────────────────────────────
+# Hinweis: Der Spickzettel-Zeiger ist derzeit in forge-welcome.sh codiert
+# und verwendet keine Locale-Variablen. Dies wird für zukünftige Lokalisierung
+# beibehalten, wenn wir das Banner vollständig Locale-fähig machen.
+L_WELCOME_CHEATSHEETS="📚 Spickzettel"
+
+# ── Fehlermeldungen (lib-localized-errors.sh) ──────────────────
+L_ERROR_CONTAINER_FAILED="FEHLER: Container konnte nicht gestartet werden"
+L_ERROR_CONTAINER_HINT="Versuchen Sie, den Container neu zu starten oder überprüfen Sie die Protokolle."
+
+L_ERROR_IMAGE_MISSING="FEHLER: Container-Image nicht gefunden"
+L_ERROR_IMAGE_HINT="Erstellen Sie das Image neu oder vergewissern Sie sich, dass es existiert. Prüfen Sie den verfügbaren Speicherplatz."
+
+L_ERROR_NETWORK="FEHLER: Netzwerkfehler"
+L_ERROR_NETWORK_HINT="Überprüfen Sie die Proxy-Einstellungen (HTTPS_PROXY env) und dass Netzwerkdienste laufen."
+
+L_ERROR_GIT_CLONE="FEHLER: Git-Klon fehlgeschlagen"
+L_ERROR_GIT_HINT="Überprüfen Sie Anmeldedaten, SSH-Schlüssel oder starten Sie den git-Dienst neu. Prüfen Sie git config."
+
+L_ERROR_AUTH="FEHLER: Authentifizierung fehlgeschlagen"
+L_ERROR_AUTH_HINT="Richten Sie Anmeldedaten neu ein mit 'gh auth login' oder prüfen Sie git config."

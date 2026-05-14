@@ -41,6 +41,8 @@ RUN mkdir -p /home/forge/src \
 # ── Shared library ─────────────────────────────────────────────
 RUN mkdir -p /usr/local/lib/tillandsias
 COPY lib-common.sh /usr/local/lib/tillandsias/lib-common.sh
+# @trace spec:error-message-localization
+COPY lib-localized-errors.sh /usr/local/lib/tillandsias/lib-localized-errors.sh
 
 # ── Entrypoints ────────────────────────────────────────────────
 COPY entrypoint.sh /usr/local/bin/tillandsias-entrypoint.sh
@@ -84,6 +86,15 @@ COPY shell/config.fish /home/forge/.config/fish/conf.d/tillandsias.fish
 RUN mkdir -p /usr/local/share/tillandsias
 COPY forge-welcome.sh /usr/local/share/tillandsias/forge-welcome.sh
 RUN chmod +x /usr/local/share/tillandsias/forge-welcome.sh || true
+
+# ── Help system (locale-aware) ─────────────────────────────────
+# @trace spec:help-system-localization
+COPY ../../scripts/help.sh /usr/local/share/tillandsias/help.sh
+COPY ../../scripts/help-es.sh /usr/local/share/tillandsias/help-es.sh
+COPY ../../scripts/help-fr.sh /usr/local/share/tillandsias/help-fr.sh
+COPY ../../scripts/help-de.sh /usr/local/share/tillandsias/help-de.sh
+COPY ../../scripts/help-ja.sh /usr/local/share/tillandsias/help-ja.sh
+RUN chmod +x /usr/local/share/tillandsias/help*.sh || true
 
 # ── Shell helper functions ─────────────────────────────────────
 # @trace spec:forge-shell-tools, spec:forge-environment-discoverability

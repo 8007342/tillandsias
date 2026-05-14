@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @trace spec:shell-prompt-localization-fr, spec:shell-prompt-localization-ja
 # Tillandsias Forge — paquete de localización en español
 # Se importa con source en entrypoint.sh y forge-welcome.sh.
 # Traducción por: Tlatoāni (hablante nativo)
@@ -95,3 +96,19 @@ L_TIP_20="GitHub CLI: gh repo view, gh pr list"
 # and does not use locale variables. This is kept for future localization
 # if we make the banner fully locale-aware.
 L_WELCOME_CHEATSHEETS="📚 Libro de consultas"
+
+# ── Mensajes de error (lib-localized-errors.sh) ──────────────
+L_ERROR_CONTAINER_FAILED="ERROR: No se pudo iniciar el contenedor"
+L_ERROR_CONTAINER_HINT="Intenta reiniciar el contenedor o revisa los registros para obtener detalles."
+
+L_ERROR_IMAGE_MISSING="ERROR: Imagen de contenedor no encontrada"
+L_ERROR_IMAGE_HINT="Reconstruye la imagen o verifica que exista. Verifica el espacio en disco."
+
+L_ERROR_NETWORK="ERROR: Error de red"
+L_ERROR_NETWORK_HINT="Verifica la configuración del proxy (env HTTPS_PROXY) y que los servicios de red estén ejecutándose."
+
+L_ERROR_GIT_CLONE="ERROR: No se pudo clonar git"
+L_ERROR_GIT_HINT="Verifica credenciales, claves SSH, o reinicia el servicio git. Revisa la configuración de git."
+
+L_ERROR_AUTH="ERROR: Error de autenticación"
+L_ERROR_AUTH_HINT="Reconfigura credenciales con 'gh auth login' o revisa la configuración de git."

@@ -185,6 +185,29 @@ cache-report() {
     printf '%s\n' "Read more: \$TILLANDSIAS_CHEATSHEETS/runtime/forge-paths-ephemeral-vs-persistent.md"
 }
 
+# help: Display Tillandsias Forge help system
+# Locale-aware: sources help-{es,fr,de,ja}.sh if available
+# @trace spec:help-system-localization
+help() {
+    # Detect locale
+    local locale_raw="${LC_ALL:-${LC_MESSAGES:-${LANG:-en}}}"
+    local locale="${locale_raw%%_*}"
+    locale="${locale%%.*}"
+
+    # Try localized help script
+    local help_script="/usr/local/share/tillandsias/help-${locale}.sh"
+    if [ ! -f "$help_script" ]; then
+        help_script="/usr/local/share/tillandsias/help.sh"
+    fi
+
+    if [ -f "$help_script" ]; then
+        bash "$help_script" | ${PAGER:-less -R}
+    else
+        echo "Help system not found at $help_script" >&2
+        return 1
+    fi
+}
+
 # Helper: Show all available shell helper functions
 tillandsias-shell-help() {
     # @trace spec:forge-shell-tools
@@ -207,6 +230,7 @@ Tillandsias shell helpers:
                          (shared / project / workspace / ephemeral)
 
   Discovery commands:
+    help                             Display Tillandsias Forge help (locale-aware)
     tillandsias-inventory [--json]   List installed toolchains
     tillandsias-services [--json]    List enclave services
     tillandsias-models [--json]      List inference models
