@@ -81,6 +81,7 @@ plan:
     - "If a step becomes stale because another step obsoleted its dependency, mark it obsoleted rather than completing it."
     - "Local work is ephemeral; remote origin is the durable copy."
     - "The `./codex --repeat <duration> \"<prompt>\"` wrapper contract is the default autonomous entrypoint."
+    - "The repeat interval is the sleep between sessions; each session should show live agent-work updates while running."
     - "plan/localwork is disposable scratch, not canonical state."
     - "Repeat-mode agents should end with a compact JSON progress report, not a raw reasoning stream."
     - "Repeat-mode output must distinguish between waiting on the agent process and sleeping until the next iteration."

@@ -163,6 +163,13 @@ def load_jsonl(path: str) -> list[dict]:
     return rows
 
 
+def parse_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
 def clamp(value: float, lo: int = 0, hi: int = 100) -> int:
     return max(lo, min(hi, int(round(value))))
 
@@ -295,6 +302,60 @@ def merge_task_tree(index, state, nodes):
     return state
 
 
+def build_event_forest(events):
+    latest_by_task = {}
+    event_task_by_id = {}
+    parent_task_by_task = {}
+    order_by_task = {}
+
+    def score(ev, fallback_index):
+        lamport = parse_int(ev.get("lamport_clock"), -1)
+        seq = parse_int(ev.get("event_seq"), -1)
+        timestamp = str(ev.get("timestamp") or "")
+        return (lamport, seq, timestamp, fallback_index)
+
+    for idx, ev in enumerate(events or []):
+        if not isinstance(ev, dict):
+            continue
+        event_id = str(ev.get("event_id") or f"event-{idx}")
+        task_key = str(ev.get("task_id") or ev.get("graph_node_id") or ev.get("spec_id") or event_id)
+        event_task_by_id[event_id] = task_key
+
+        parent_event_id = str(ev.get("parent_event_id") or "")
+        parent_task = event_task_by_id.get(parent_event_id)
+        if parent_task:
+            parent_task_by_task[task_key] = parent_task
+
+        current = latest_by_task.get(task_key)
+        if current is None or score(ev, idx) >= score(current, order_by_task.get(task_key, idx)):
+            latest_by_task[task_key] = ev
+            order_by_task[task_key] = idx
+
+    children = {task_key: [] for task_key in latest_by_task}
+    for task_key, parent_task in parent_task_by_task.items():
+        if parent_task in children and task_key not in children[parent_task]:
+            children[parent_task].append(task_key)
+
+    roots = [
+        task_key for task_key in latest_by_task
+        if parent_task_by_task.get(task_key) not in latest_by_task
+    ]
+
+    def sort_key(task_key):
+        ev = latest_by_task[task_key]
+        return (
+            parse_int(ev.get("lamport_clock"), 0),
+            parse_int(ev.get("event_seq"), 0),
+            order_by_task.get(task_key, 0),
+        )
+
+    roots.sort(key=sort_key)
+    for task_key in children:
+        children[task_key].sort(key=sort_key)
+
+    return latest_by_task, children, roots
+
+
 def read_history(path: str) -> list[int]:
     values = []
     try:
@@ -369,6 +430,49 @@ def render_tree(index, children_map, state, focus_task_id):
     return lines
 
 
+def render_event_tree(events):
+    latest_by_task, children_map, roots = build_event_forest(events)
+    lines = []
+
+    def event_progress(ev):
+        progress = ev.get("progress")
+        if progress is None:
+            progress = progress_for_status(ev.get("status"))
+        return clamp(parse_int(progress, 0))
+
+    def node_label(task_key, ev):
+        agent = ev.get("agent_id")
+        summary = ev.get("summary") or ev.get("status") or task_key
+        label = summarize(summary, 44)
+        if agent:
+            label = f"{label} @ {agent}"
+        return label
+
+    def node_status(ev):
+        return str(ev.get("status") or "unknown")
+
+    def walk(task_key, prefix="", last=True):
+        ev = latest_by_task[task_key]
+        progress = event_progress(ev)
+        status = node_status(ev)
+        summary = summarize(ev.get("summary") or task_key, 56)
+        children = children_map.get(task_key, [])
+        connector = "└─" if last else "├─"
+        label = node_label(task_key, ev)
+        if children:
+            lines.append(f"{prefix}{connector} {label:<44} [{bar(progress, 12)}] {progress:3d}% {status} · {summary}")
+            next_prefix = prefix + ("   " if last else "│  ")
+            for idx, child_key in enumerate(children):
+                walk(child_key, next_prefix, idx == len(children) - 1)
+        else:
+            lines.append(f"{prefix}{connector} {label:<44} [{bar(progress, 12)}] {progress:3d}% {status} · {summary}")
+
+    for idx, task_key in enumerate(roots):
+        walk(task_key, "", idx == len(roots) - 1)
+
+    return lines, latest_by_task
+
+
 def main() -> int:
     if len(sys.argv) < 10:
         sys.stderr.write("[codex-repeat] renderer received too few arguments\n")
@@ -418,27 +522,38 @@ def main() -> int:
     status = str(report.get("status") or "running")
 
     tree_lines = render_tree(index, children_map, state, focus_task_id)
+    event_lines = []
+    live_event_count = len(events)
+    if events:
+        event_lines, latest_by_task = render_event_tree(events)
+        if event_lines:
+            tree_lines = event_lines
 
     if sys.stdout.isatty():
         sys.stdout.write("\033[H\033[2J")
 
     header_state = {
         "waiting_on_agent": "waiting on agent",
+        "agent_working": "agent working",
         "sleeping_until_next_iteration": "sleeping until next iteration",
     }.get(loop_state, loop_state.replace("_", " ") if loop_state else "waiting on agent")
 
     print(f"[codex-repeat] cycle {cycle:02d} | {header_state} | session={session_id} | branch={branch} | elapsed={elapsed_total:02d}s")
     print(f"[codex-repeat] progress {after:3d}% [{bar(after, 18)}]  before={before:3d}%  delta={delta:+d}  status={status}")
     print(f"[codex-repeat] trend    {trend_bar or '·'}  latest={latest} prev={previous} avg={trend_avg:.1f}")
-    print(f"[codex-repeat] tree     ready={ready_count} blocked={blocked_count} focus={focus_task_id or 'n/a'}")
+    print(f"[codex-repeat] tree     ready={ready_count} blocked={blocked_count} focus={focus_task_id or 'n/a'} events={live_event_count}")
     print(f"[codex-repeat] milestone {milestone_stamp}  next={next_action}  blockers={blockers_text}")
     if checkpoint:
         print(f"[codex-repeat] checkpoint {checkpoint}")
     if sleep_interval and loop_state == "sleeping_until_next_iteration":
         print(f"[codex-repeat] next wake in {sleep_interval} | exit={exit_code}")
-    print("[codex-repeat] plan")
+    print("[codex-repeat] tree")
     for line in tree_lines:
         print(f"[codex-repeat]   {line}")
+    if event_lines and event_lines != tree_lines:
+        print("[codex-repeat] events")
+        for line in event_lines[:16]:
+            print(f"[codex-repeat]   {line}")
 
     return 0
 
@@ -563,7 +678,7 @@ JSON
     printf '[codex-repeat] cycle %02d start | waiting on agent | session=%s | interval=%s | elapsed=%s\n' \
       "$cycle" "$repeat_session_id" "$REPEAT_INTERVAL" "$(format_elapsed $((cycle_start_epoch - repeat_start_epoch)))"
 
-    repeat_render_snapshot "waiting_on_agent" "$cycle" "$cycle_start_epoch" 0
+    repeat_render_snapshot "agent_working" "$cycle" "$cycle_start_epoch" 0
 
     set +e
     {
@@ -585,7 +700,7 @@ JSON
     while kill -0 "$REPEAT_CHILD_PID" 2>/dev/null; do
       now_epoch="$(date +%s)"
       if [[ $((now_epoch - last_render_epoch)) -ge "$REPEAT_REFRESH_SECS" ]]; then
-        repeat_render_snapshot "waiting_on_agent" "$cycle" "$now_epoch" 0
+        repeat_render_snapshot "agent_working" "$cycle" "$now_epoch" 0
         last_render_epoch="$now_epoch"
       fi
       sleep 0.2
