@@ -258,7 +258,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Wave 1b completed: 4 litmus tests written and passing (security-flags, storage-isolation, events-no-polling, error-discrimination). Coverage: 57%."
         - id: podman-idiomatic/gap-closure
-          status: ready
+          status: completed
           depends_on:
             - podman-idiomatic/crate-audit
           owned_files:
@@ -266,7 +266,7 @@ plan_index:
             - crates/tillandsias-podman/src/client.rs
           checkpoint_required: true
           build_verification: "cargo test -p tillandsias-podman && ./build.sh --ci --filter podman-idiomatic-patterns --strict"
-          handoff_note: "4 gaps in plan/issues/podman-crate-audit.md: (1) per-project graphroot, (2) secret() builder on ContainerSpec, (3) is_transient() on PodmanError, (4) per-project enclave name fn. Address GAP-3 and GAP-4 first (simpler). GAP-1 and GAP-2 are larger."
+          handoff_note: "Wave 2a completed (47e1a5da): GAP-3 is_transient() + GAP-4 enclave_network_name() implemented. 69 tests passing. Also completed Wave 2b (c7b9f2c9): router wiring into opencode web launch, generate_dynamic_caddyfile(), 23 tests passing. Remaining gaps (GAP-1 graphroot, GAP-2 secret builder) are larger refactors for separate PR."
         - id: podman-idiomatic/router-lifecycle
           status: completed
           depends_on:
@@ -274,7 +274,7 @@ plan_index:
           owned_files:
             - crates/tillandsias-headless/src/main.rs
           checkpoint_required: true
-          handoff_note: "Wave 1c completed: ensure_router_running() + build_router_run_args() added. Loopback-only port, enclave network with router alias, security flags. 20/20 tests passing. Not yet wired into OpenCode Web launch path."
+          handoff_note: "Wave 1c + Wave 2b completed: ensure_router_running() + build_router_run_args() implemented. Router wired into opencode web launch path (c7b9f2c9), dynamic caddyfile generation added. 23/23 tests passing."
 
     - id: tray-runtime-and-cache
       order: 3
