@@ -68,6 +68,8 @@ fn main() {
     let github_login = user_args.iter().any(|a| a == "--github-login");
     let opencode = user_args.iter().any(|a| a == "--opencode");
     let opencode_web = user_args.iter().any(|a| a == "--opencode-web");
+    let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
+    let cache_verify = user_args.iter().any(|a| a == "--cache-verify");
 
     // @trace spec:cli-mode, spec:runtime-diagnostics-stream
     // --diagnostics implies --debug
@@ -91,6 +93,8 @@ fn main() {
         "--opencode",
         "--opencode-web",
         "--prompt",
+        "--cache-clear",
+        "--cache-verify",
     ];
     if let Some(unsupported) = user_args
         .iter()
@@ -118,6 +122,22 @@ fn main() {
 
     if github_login {
         if let Err(e) = run_github_login(debug) {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    if cache_clear {
+        if let Err(e) = run_cache_clear(debug) {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    if cache_verify {
+        if let Err(e) = run_cache_verify(debug) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -232,6 +252,8 @@ fn print_usage(version: &str) {
     println!("       tillandsias --init [--force] [--debug]");
     println!("       tillandsias --status-check [--debug]");
     println!("       tillandsias --github-login [--debug]");
+    println!("       tillandsias --cache-verify [--debug]");
+    println!("       tillandsias --cache-clear [--debug]");
     println!("       tillandsias --opencode <project> [--prompt <text>] [--debug|--diagnostics]");
     println!(
         "       tillandsias --opencode-web <project> [--prompt <text>] [--debug|--diagnostics]"
@@ -243,13 +265,14 @@ fn print_usage(version: &str) {
     println!("  --prompt TEXT  Send prompt to LLM inference (requires --opencode)");
     println!("  --init         Pre-build container images");
     println!("  --force        Rebuild all images even if cached (use with --init)");
+    println!("  --cache-verify Check cache integrity and report status");
+    println!("  --cache-clear  Clear the initialization cache and build state");
     println!("  --status-check Verify services are online through a representative stack smoke");
     println!("  --github-login Authenticate GitHub and create ephemeral Podman secret");
     println!("  --debug        Show command-level diagnostics and capture build logs");
     println!(
         "  --diagnostics  Stream real-time logs from all enclave containers (implies --debug)"
     );
-    println!("  --debug        Show command-level diagnostics and capture build logs");
     println!("  --version      Show version information");
     println!("  --help         Show this help");
     println!();
@@ -418,6 +441,83 @@ impl InitBuildState {
             .map(|s| s == "success")
             .unwrap_or(false)
     }
+
+    /// Check if cache version matches current VERSION.
+    /// @trace spec:forge-staleness, spec:forge-cache-dual
+    #[allow(dead_code)]
+    fn is_version_current(version: &str) -> Result<bool, String> {
+        let cache_dir = init_cache_dir()?;
+        let version_file = cache_dir.join("cache_version");
+
+        if !version_file.exists() {
+            return Ok(false);
+        }
+
+        let cached_version = fs::read_to_string(&version_file)
+            .map_err(|e| format!("Failed to read cached version: {e}"))?
+            .trim()
+            .to_string();
+
+        Ok(cached_version == version)
+    }
+
+    /// Save current VERSION to cache for future staleness detection.
+    /// @trace spec:forge-staleness, spec:forge-cache-dual
+    fn save_version(version: &str) -> Result<(), String> {
+        let cache_dir = init_cache_dir()?;
+        let version_file = cache_dir.join("cache_version");
+        fs::write(&version_file, version)
+            .map_err(|e| format!("Failed to write cache version: {e}"))
+    }
+}
+
+// @trace spec:forge-staleness, spec:forge-cache-dual
+/// Cache integrity check result
+#[derive(Debug, Clone)]
+struct CacheIntegrityStatus {
+    is_valid: bool,
+    version_mismatch: bool,
+    cache_dir: PathBuf,
+    current_version: String,
+    cached_version: Option<String>,
+    missing_state_file: bool,
+}
+
+/// Check cache integrity: version match, state file presence, file accessibility.
+/// @trace spec:forge-staleness, spec:forge-cache-dual
+fn check_cache_integrity(version: &str) -> Result<CacheIntegrityStatus, String> {
+    let cache_dir = init_cache_dir()?;
+    let version_file = cache_dir.join("cache_version");
+    let state_file = cache_dir.join("init-build-state.json");
+
+    let cached_version = if version_file.exists() {
+        Some(
+            fs::read_to_string(&version_file)
+                .map_err(|e| format!("Failed to read cached version file: {e}"))?
+                .trim()
+                .to_string(),
+        )
+    } else {
+        None
+    };
+
+    let version_mismatch = cached_version
+        .as_ref()
+        .map(|v| v != version)
+        .unwrap_or(true);
+
+    let missing_state_file = !state_file.exists();
+
+    let is_valid = !version_mismatch && !missing_state_file;
+
+    Ok(CacheIntegrityStatus {
+        is_valid,
+        version_mismatch,
+        cache_dir,
+        current_version: version.to_string(),
+        cached_version,
+        missing_state_file,
+    })
 }
 
 fn init_cache_dir() -> Result<PathBuf, String> {
@@ -1325,6 +1425,21 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         "forge",
     ];
 
+    // @trace spec:forge-staleness, spec:forge-cache-dual
+    // Check cache integrity before loading state
+    let cache_status = check_cache_integrity(version)?;
+    if !force && cache_status.version_mismatch {
+        eprintln!("WARNING: Cache version mismatch detected");
+        if let Some(cached) = &cache_status.cached_version {
+            eprintln!("  Cached version: {}", cached);
+        } else {
+            eprintln!("  No cached version found");
+        }
+        eprintln!("  Current version: {}", version);
+        eprintln!("  Suggestion: Use --force to rebuild, or --cache-clear to start fresh");
+        return Err("Cache version mismatch. Run with --force or --cache-clear.".to_string());
+    }
+
     // Load existing build state or create new one
     let mut state = InitBuildState::load()?.unwrap_or_else(InitBuildState::new);
     let rt = podman_runtime()?;
@@ -1382,6 +1497,13 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
 
     // Save updated state
     state.save()?;
+
+    // @trace spec:forge-staleness, spec:forge-cache-dual
+    // Save current version to cache for future staleness detection
+    if let Err(e) = InitBuildState::save_version(version) {
+        eprintln!("WARNING: Failed to save cache version: {}", e);
+        // Non-fatal; continue with init
+    }
 
     // Display failed build logs if debug mode and there are failures
     if debug && !failed_images.is_empty() {
@@ -1517,6 +1639,101 @@ fn cleanup_init_logs() {
         let log_path = PathBuf::from(format!("/tmp/tillandsias-init-{}.log", image));
         let _ = fs::remove_file(&log_path);
     }
+}
+
+/// Clear the initialization cache and build state.
+/// @trace spec:forge-staleness, spec:forge-cache-dual
+fn run_cache_clear(debug: bool) -> Result<(), String> {
+    let cache_dir = init_cache_dir()?;
+    let state_file = cache_dir.join("init-build-state.json");
+    let version_file = cache_dir.join("cache_version");
+    let temp_file = cache_dir.join(".init-build-state.json.tmp");
+
+    let mut cleared = Vec::new();
+
+    if state_file.exists() {
+        fs::remove_file(&state_file)
+            .map_err(|e| format!("Failed to remove build state file: {e}"))?;
+        cleared.push("init-build-state.json");
+    }
+
+    if version_file.exists() {
+        fs::remove_file(&version_file)
+            .map_err(|e| format!("Failed to remove cache version file: {e}"))?;
+        cleared.push("cache_version");
+    }
+
+    if temp_file.exists() {
+        let _ = fs::remove_file(&temp_file);
+        cleared.push(".init-build-state.json.tmp (temp)");
+    }
+
+    if debug || !cleared.is_empty() {
+        println!("Cache cleared. Removed:");
+        for item in cleared {
+            println!("  - {}", item);
+        }
+        println!("\nNext --init will rebuild all images from scratch.");
+    }
+
+    Ok(())
+}
+
+/// Verify cache integrity and report status.
+/// @trace spec:forge-staleness, spec:forge-cache-dual
+fn run_cache_verify(debug: bool) -> Result<(), String> {
+    let version = VERSION.trim();
+    let status = check_cache_integrity(version)?;
+
+    println!("Cache Integrity Status");
+    println!("======================");
+    println!("Cache directory: {}", status.cache_dir.display());
+    println!("Current version: {}", status.current_version);
+    println!(
+        "Cached version:  {}",
+        status
+            .cached_version
+            .as_ref()
+            .map(|s| s.as_str())
+            .unwrap_or("<not set>")
+    );
+    println!();
+
+    if status.is_valid {
+        println!("✅ Cache is VALID");
+        println!("  - Version matches current build");
+        println!("  - Build state file present and readable");
+    } else {
+        println!("❌ Cache is INVALID");
+
+        if status.version_mismatch {
+            println!("  - Version mismatch detected");
+            if let Some(cached) = &status.cached_version {
+                println!("    Cached: {}, Current: {}", cached, status.current_version);
+            } else {
+                println!("    No cached version found");
+            }
+            println!("    Suggestion: Run 'tillandsias --init --force' to rebuild");
+        }
+
+        if status.missing_state_file {
+            println!("  - Build state file is missing or corrupted");
+            println!("    Suggestion: Run 'tillandsias --cache-clear' then 'tillandsias --init'");
+        }
+    }
+
+    println!();
+    if debug {
+        println!("Debug Info:");
+        println!("  Version mismatch: {}", status.version_mismatch);
+        println!("  Missing state file: {}", status.missing_state_file);
+    }
+
+    if !status.is_valid {
+        return Err("Cache integrity check failed. See suggestions above.".to_string());
+    }
+
+    Ok(())
 }
 
 /// Run the representative end-to-end stack smoke after images exist.
