@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 # Tillandsias Installer
 # Usage: curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
+# @trace spec:forge-cache-dual, spec:forge-staleness
+#
+# Cache paths created during installation:
+#   ~/.cache/tillandsias/<project>/          - per-project cache (RW, bind-mounted into container)
+#   ~/.cache/tillandsias/<project>/VERSION   - image version marker for staleness detection
+#   ~/.cache/tillandsias/<project>/cargo/    - cargo artifacts
+#   ~/.cache/tillandsias/<project>/go/       - go modules
+#   ~/.cache/tillandsias/<project>/npm/      - npm packages
+#   ~/.cache/tillandsias/<project>/maven/    - maven artifacts
+#   ~/.cache/tillandsias/<project>/gradle/   - gradle cache
+#   ... (one per language tool)
+#
+# See images/default/lib-common.sh for complete cache architecture and staleness rules.
 set -euo pipefail
 
 REPO="8007342/tillandsias"

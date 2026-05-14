@@ -274,23 +274,89 @@ clone_project_from_mirror() {
     return 0
 }
 
-# ── Package manager cache strategy (dual-cache architecture) ──────
-# @trace spec:forge-cache-dual, spec:forge-shell-tools
+# ── Cache directory structure and staleness rules ─────────────────
+# @trace spec:forge-cache-dual, spec:forge-staleness, spec:forge-shell-tools
 # @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
 #
-# Per-project cache lives at /home/forge/.cache/tillandsias-project/
-# (RW bind-mount from the host's per-project cache directory). Built
-# artifacts that are expensive to rebuild for THIS project go here.
-# Project A's container CANNOT see project B's cache.
+# Forge containers use four distinct path categories. Each has a defined
+# staleness policy and isolation guarantee:
 #
-# Shared cache lives at /nix/store/ (RO bind-mount from the host's
-# nix store). Single entry point: nix flakes only — other tools never
-# write here. See runtime/forge-shared-cache-via-nix.md for why.
+# 1. SHARED CACHE (RO): /nix/store/
+#    - Built into image at build time via Nix (reproducible, content-addressed)
+#    - Read-only bind-mount from host nix store
+#    - Populated only by nix-managed processes (single entry point)
+#    - NEVER stale: versioned by image tag, updated only at image rebuild
+#    - Isolation: N/A (all projects share the same nix store)
 #
-# Project workspace (/home/forge/src/<project>/) is for SOURCE only —
-# build artifacts redirect via the env vars below to the per-project
-# cache. Treat /tmp/ and unmounted ~/.<dotdirs> as ephemeral scratch.
+# 2. PER-PROJECT CACHE (RW): /home/forge/.cache/tillandsias-project/
+#    - Bind-mount from host at ~/.cache/tillandsias/<project>/
+#    - Populated by package managers (cargo, go, npm, maven, gradle, etc.)
+#    - Expensive artifacts cached across container restarts within same project
+#    - STALENESS RULE: compare ~/.cache/tillandsias/<project>/VERSION vs running image tag
+#      If versions differ, cache is stale; recommend cache clear and rebuild
+#    - Isolation: per-project only; project A cannot read project B's cache
+#
+# 3. PROJECT WORKSPACE: /home/forge/src/<project>/
+#    - User's git repo (bind-mount from host working tree)
+#    - SOURCE CODE ONLY — no build artifacts
+#    - User-managed; tray never touches this directory
+#    - Persistence: committed to git; survives container stop
+#
+# 4. EPHEMERAL: /tmp, /run/user/1000, and unmounted home dirs
+#    - Kernel-enforced size caps: /tmp=256MB, /run/user/1000=64MB
+#    - Container's overlayfs upper-dir for other writes (unbounded, backed by host disk)
+#    - Lost on container stop (by design)
+#    - Non-persistent: working space only
+#
+# The cache staleness check happens at container launch. Per the spec,
+# stale caches are flagged but do NOT block attachment (user can clear manually
+# or rebuild to refresh). The VERSION marker is placed by the tray at initial
+# attach and compared on subsequent attaches.
+#
+# @trace spec:forge-cache-dual
+export TILLANDSIAS_SHARED_CACHE="/nix/store"
 PROJECT_CACHE="/home/forge/.cache/tillandsias-project"
+export TILLANDSIAS_PROJECT_CACHE="$PROJECT_CACHE"
+export TILLANDSIAS_WORKSPACE="/home/forge/src"
+export TILLANDSIAS_EPHEMERAL="/tmp"
+
+# Helper: check if per-project cache is stale relative to the running image.
+# Usage: cache_is_stale <project_name> <image_version>
+# Returns 0 (true) if stale, 1 (false) if fresh.
+# @trace spec:forge-staleness
+cache_is_stale() {
+    local project="$1" image_version="$2"
+    [ -z "$project" ] || [ -z "$image_version" ] && return 1
+
+    local cache_version_file="$HOME/.cache/tillandsias/${project}/VERSION"
+    if [ ! -f "$cache_version_file" ]; then
+        # Cache version file does not exist — cache is stale.
+        return 0
+    fi
+
+    local cache_version
+    cache_version="$(cat "$cache_version_file" 2>/dev/null || echo "")"
+    [ -z "$cache_version" ] && return 0
+
+    # Compare versions. If they differ, cache is stale.
+    [ "$cache_version" != "$image_version" ]
+}
+
+# Helper: record the image version in the per-project cache directory.
+# Called once at first attach to establish the staleness baseline.
+# Usage: record_cache_version <project_name> <image_version>
+# @trace spec:forge-staleness
+record_cache_version() {
+    local project="$1" image_version="$2"
+    [ -z "$project" ] || [ -z "$image_version" ] && return 1
+
+    local cache_dir="$HOME/.cache/tillandsias/${project}"
+    mkdir -p "$cache_dir" 2>/dev/null || return 1
+
+    echo "$image_version" > "$cache_dir/VERSION" 2>/dev/null || return 1
+    trace_lifecycle "cache" "recorded version ${image_version} for project ${project}"
+    return 0
+}
 
 # @tombstone superseded:forge-cache-architecture — kept for three releases
 # (until 0.1.169.232). Old paths pointed at $CACHE/<lang>/ which was the
