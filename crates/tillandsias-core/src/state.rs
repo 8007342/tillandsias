@@ -318,11 +318,11 @@ pub enum BrowserWindowStatus {
 
 /// Callback type for window registry mutations.
 /// Called when a window is registered or unregistered.
-/// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
+/// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist, spec:subdomain-routing-via-reverse-proxy
 pub type RegistryMutationHook = Box<dyn Fn(&str, Option<&str>, Option<&str>) + Send + Sync>;
 
 /// Thread-safe registry of active browser windows.
-/// @trace spec:browser-isolation-tray-integration, spec:browser-window-rate-limiting
+/// @trace spec:browser-isolation-tray-integration, spec:browser-window-rate-limiting, spec:subdomain-routing-via-reverse-proxy
 #[derive(Clone)]
 pub struct BrowserWindowRegistry {
     /// HashMap of window_id -> BrowserWindowMetadata, protected by Mutex
@@ -361,7 +361,7 @@ impl BrowserWindowRegistry {
     /// The hook receives (window_id, container_id_opt, project_label_opt).
     /// For registration: both optional parameters are Some(_)
     /// For unregistration: both optional parameters are None
-    /// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
+    /// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist, spec:subdomain-routing-via-reverse-proxy
     pub fn set_mutation_hook(&self, hook: RegistryMutationHook) -> Result<(), String> {
         let mut hook_slot = self
             .mutation_hook
@@ -372,6 +372,7 @@ impl BrowserWindowRegistry {
     }
 
     /// Helper to invoke the mutation hook if set.
+    /// @trace spec:subdomain-routing-via-reverse-proxy
     #[allow(clippy::collapsible_if)]
     fn call_mutation_hook(
         &self,
@@ -389,7 +390,7 @@ impl BrowserWindowRegistry {
     /// Register a new browser window in the registry.
     /// Calls the mutation hook if one is set.
     /// Returns the registered metadata.
-    /// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
+    /// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist, spec:subdomain-routing-via-reverse-proxy
     pub fn register_window(
         &self,
         window_id: String,
@@ -422,7 +423,7 @@ impl BrowserWindowRegistry {
     /// Unregister a browser window from the registry.
     /// Calls the mutation hook if one is set.
     /// Returns the unregistered metadata if it existed.
-    /// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
+    /// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist, spec:subdomain-routing-via-reverse-proxy
     pub fn unregister_window(
         &self,
         window_id: &str,
@@ -1420,7 +1421,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    // @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
+    // @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist, spec:subdomain-routing-via-reverse-proxy
     #[test]
     fn browser_window_registry_mutation_hook_on_register() {
         use std::sync::{
@@ -1453,7 +1454,7 @@ mod tests {
         assert!(hook_called.load(Ordering::SeqCst));
     }
 
-    // @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
+    // @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist, spec:subdomain-routing-via-reverse-proxy
     #[test]
     fn browser_window_registry_mutation_hook_on_unregister() {
         use std::sync::{
@@ -1493,7 +1494,7 @@ mod tests {
         assert!(hook_called.load(Ordering::SeqCst));
     }
 
-    // @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist
+    // @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist, spec:subdomain-routing-via-reverse-proxy
     #[test]
     fn browser_window_registry_mutation_hook_concurrent_calls() {
         use std::sync::{
