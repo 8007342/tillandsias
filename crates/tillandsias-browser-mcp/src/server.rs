@@ -1136,4 +1136,297 @@ mod tests {
             other => panic!("expected tool error success, got {other:?}"),
         }
     }
+
+    #[tokio::test]
+    async fn browser_click_requires_window_id() {
+        let server = test_server(None);
+        let response = server
+            .handle_request(RpcRequest {
+                id: Some(56),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.click",
+                    "arguments": {
+                        "selector": "button"
+                    }
+                }),
+            })
+            .await;
+
+        match response {
+            RpcResponse::Error { code, .. } => {
+                assert_eq!(code, -32602);
+            }
+            other => panic!("expected error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn browser_click_rejects_missing_window() {
+        let server = test_server(None);
+        let response = server
+            .handle_request(RpcRequest {
+                id: Some(57),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.click",
+                    "arguments": {
+                        "window_id": "nonexistent",
+                        "selector": "button"
+                    }
+                }),
+            })
+            .await;
+
+        match response {
+            RpcResponse::Success { result, .. } => {
+                assert_eq!(result["isError"], true);
+                let text = result["content"][0]["text"].as_str().unwrap();
+                assert!(text.contains("WINDOW_NOT_FOUND"));
+            }
+            other => panic!("expected tool error success, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn browser_click_fake_launch_mode_errors() {
+        let server = test_server_fake_launch(None);
+        let response = server
+            .handle_request(RpcRequest {
+                id: Some(58),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.open",
+                    "arguments": {
+                        "url": "http://web.acme.localhost:8080/"
+                    }
+                }),
+            })
+            .await;
+
+        let window_id = match response {
+            RpcResponse::Success { result, .. } => {
+                result["window_id"].as_str().unwrap().to_string()
+            }
+            other => panic!("expected success, got {other:?}"),
+        };
+
+        // Fake launch mode has port=0, so CDP connection should fail gracefully
+        let click_response = server
+            .handle_request(RpcRequest {
+                id: Some(59),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.click",
+                    "arguments": {
+                        "window_id": window_id,
+                        "selector": "button"
+                    }
+                }),
+            })
+            .await;
+
+        match click_response {
+            RpcResponse::Success { result, .. } => {
+                assert_eq!(result["isError"], true);
+                let text = result["content"][0]["text"].as_str().unwrap();
+                assert!(text.contains("WINDOW_NOT_RUNNING") || text.contains("CLICK_FAILED"));
+            }
+            other => panic!("expected tool error success, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn browser_type_requires_window_id() {
+        let server = test_server(None);
+        let response = server
+            .handle_request(RpcRequest {
+                id: Some(60),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.type",
+                    "arguments": {
+                        "selector": "#input",
+                        "text": "hello"
+                    }
+                }),
+            })
+            .await;
+
+        match response {
+            RpcResponse::Error { code, .. } => {
+                assert_eq!(code, -32602);
+            }
+            other => panic!("expected error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn browser_type_rejects_missing_window() {
+        let server = test_server(None);
+        let response = server
+            .handle_request(RpcRequest {
+                id: Some(61),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.type",
+                    "arguments": {
+                        "window_id": "nonexistent",
+                        "selector": "#input",
+                        "text": "hello"
+                    }
+                }),
+            })
+            .await;
+
+        match response {
+            RpcResponse::Success { result, .. } => {
+                assert_eq!(result["isError"], true);
+                let text = result["content"][0]["text"].as_str().unwrap();
+                assert!(text.contains("WINDOW_NOT_FOUND"));
+            }
+            other => panic!("expected tool error success, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn browser_type_fake_launch_mode_errors() {
+        let server = test_server_fake_launch(None);
+        let response = server
+            .handle_request(RpcRequest {
+                id: Some(62),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.open",
+                    "arguments": {
+                        "url": "http://web.acme.localhost:8080/"
+                    }
+                }),
+            })
+            .await;
+
+        let window_id = match response {
+            RpcResponse::Success { result, .. } => {
+                result["window_id"].as_str().unwrap().to_string()
+            }
+            other => panic!("expected success, got {other:?}"),
+        };
+
+        // Fake launch mode has port=0, so CDP connection should fail gracefully
+        let type_response = server
+            .handle_request(RpcRequest {
+                id: Some(63),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.type",
+                    "arguments": {
+                        "window_id": window_id,
+                        "selector": "#input",
+                        "text": "test"
+                    }
+                }),
+            })
+            .await;
+
+        match type_response {
+            RpcResponse::Success { result, .. } => {
+                assert_eq!(result["isError"], true);
+                let text = result["content"][0]["text"].as_str().unwrap();
+                assert!(text.contains("WINDOW_NOT_RUNNING") || text.contains("TYPE_FAILED"));
+            }
+            other => panic!("expected tool error success, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn browser_screenshot_with_full_page_true() {
+        let server = test_server_fake_launch(None);
+        let response = server
+            .handle_request(RpcRequest {
+                id: Some(64),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.open",
+                    "arguments": {
+                        "url": "http://web.acme.localhost:8080/"
+                    }
+                }),
+            })
+            .await;
+
+        let window_id = match response {
+            RpcResponse::Success { result, .. } => {
+                result["window_id"].as_str().unwrap().to_string()
+            }
+            other => panic!("expected success, got {other:?}"),
+        };
+
+        // Test with full_page=true (should pass through to CDP)
+        let screenshot_response = server
+            .handle_request(RpcRequest {
+                id: Some(65),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.screenshot",
+                    "arguments": {
+                        "window_id": window_id,
+                        "full_page": true
+                    }
+                }),
+            })
+            .await;
+
+        match screenshot_response {
+            RpcResponse::Success { result, .. } => {
+                // In fake launch mode, should error
+                assert_eq!(result["isError"], true);
+            }
+            other => panic!("expected tool error success, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn browser_read_url_works_with_registered_window() {
+        let server = test_server_fake_launch(None);
+        let open_response = server
+            .handle_request(RpcRequest {
+                id: Some(66),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.open",
+                    "arguments": {
+                        "url": "http://web.acme.localhost:8080/path"
+                    }
+                }),
+            })
+            .await;
+
+        let window_id = match open_response {
+            RpcResponse::Success { result, .. } => {
+                result["window_id"].as_str().unwrap().to_string()
+            }
+            other => panic!("expected success, got {other:?}"),
+        };
+
+        let read_response = server
+            .handle_request(RpcRequest {
+                id: Some(67),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.read_url",
+                    "arguments": {
+                        "window_id": window_id
+                    }
+                }),
+            })
+            .await;
+
+        match read_response {
+            RpcResponse::Success { result, .. } => {
+                assert_eq!(result["url"], "http://web.acme.localhost:8080/path");
+                assert_eq!(result["title"], "web.acme.localhost");
+            }
+            other => panic!("expected success, got {other:?}"),
+        }
+    }
 }
