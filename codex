@@ -317,8 +317,10 @@ def build_event_forest(events):
     for idx, ev in enumerate(events or []):
         if not isinstance(ev, dict):
             continue
+        task_key = str(ev.get("task_id") or ev.get("graph_node_id") or ev.get("spec_id") or "")
+        if not task_key:
+            continue
         event_id = str(ev.get("event_id") or f"event-{idx}")
-        task_key = str(ev.get("task_id") or ev.get("graph_node_id") or ev.get("spec_id") or event_id)
         event_task_by_id[event_id] = task_key
 
         parent_event_id = str(ev.get("parent_event_id") or "")
@@ -336,10 +338,7 @@ def build_event_forest(events):
         if parent_task in children and task_key not in children[parent_task]:
             children[parent_task].append(task_key)
 
-    roots = [
-        task_key for task_key in latest_by_task
-        if parent_task_by_task.get(task_key) not in latest_by_task
-    ]
+    roots = [task_key for task_key in latest_by_task if parent_task_by_task.get(task_key) not in latest_by_task]
 
     def sort_key(task_key):
         ev = latest_by_task[task_key]
@@ -354,6 +353,19 @@ def build_event_forest(events):
         children[task_key].sort(key=sort_key)
 
     return latest_by_task, children, roots
+
+
+def load_plan_focus(plan_path):
+    plan = load_yaml(plan_path)
+    current_state = plan.get("current_state") or {}
+    focus = str(current_state.get("next_graph_node") or current_state.get("next_step") or "")
+    return plan, focus
+
+
+def plan_steps_root(plan):
+    if not isinstance(plan, dict):
+        return {}
+    return plan.get("plan_index") or plan.get("plan") or plan
 
 
 def read_history(path: str) -> list[int]:
@@ -489,8 +501,8 @@ def main() -> int:
     exit_code = sys.argv[9]
     sleep_interval = sys.argv[10] if len(sys.argv) > 10 else ""
 
-    plan = load_yaml(plan_path)
-    steps = plan.get("steps") or []
+    plan, plan_focus = load_plan_focus(plan_path)
+    steps = (plan_steps_root(plan).get("steps") or [])
     index, children_map = make_tree_index(steps)
     events = load_jsonl(events_path)
     report = load_json(report_path)
@@ -515,7 +527,7 @@ def main() -> int:
     blockers = report.get("blockers") or []
     blockers_text = "none" if not blockers else ", ".join(summarize(item, 28) for item in blockers)
     checkpoint = str(report.get("checkpoint_commit") or "")
-    focus_task_id = str(report.get("focus_task_id") or "")
+    focus_task_id = str(report.get("focus_task_id") or plan_focus or "")
     ready_count = int(report.get("ready_count") or 0)
     blocked_count = int(report.get("blocked_count") or 0)
     branch = str(report.get("branch") or "linux-next")
@@ -526,8 +538,10 @@ def main() -> int:
     live_event_count = len(events)
     if events:
         event_lines, latest_by_task = render_event_tree(events)
-        if event_lines:
+        if event_lines and any(line.strip() for line in event_lines):
             tree_lines = event_lines
+        else:
+            event_lines = []
 
     if sys.stdout.isatty():
         sys.stdout.write("\033[H\033[2J")

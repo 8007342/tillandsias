@@ -142,6 +142,7 @@ agent_observability_protocol:
       - "Show the latest milestone timestamp in absolute time and elapsed time."
       - "Show the last N progress points as a trend bar and an average delta."
       - "Render the active dependency tail as a compact tree with one line per node."
+      - "Treat anonymous stream events as evidence only; do not promote them into tree nodes."
       - "Do not stream file-by-file changes in repeat mode unless explicitly requested."
       - "Keep the live refresh minimal: headers, tree, trend, milestone, blockers."
       - "Distinguish between waiting on the agent process, agent working, and sleeping between iterations."
