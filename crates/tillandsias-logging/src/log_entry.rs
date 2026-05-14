@@ -5,8 +5,12 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 /// Structured log entry with accountability metadata and spec tracing.
+// @trace spec:runtime-logging, spec:log-schema-versioning
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LogEntry {
+    /// Schema version for backwards compatibility. Immutable.
+    pub schema_version: String,
+
     /// RFC3339 timestamp
     pub timestamp: DateTime<Utc>,
 
@@ -41,6 +45,9 @@ pub struct LogEntry {
 }
 
 impl LogEntry {
+    /// Current schema version for all log entries (immutable).
+    const SCHEMA_VERSION: &'static str = "1.0";
+
     /// Create a new log entry
     pub fn new(
         timestamp: DateTime<Utc>,
@@ -49,6 +56,7 @@ impl LogEntry {
         message: String,
     ) -> Self {
         Self {
+            schema_version: Self::SCHEMA_VERSION.to_string(),
             timestamp,
             level,
             component,
@@ -125,6 +133,7 @@ mod tests {
         .with_context("url", json!("api.github.com/repos/..."))
         .with_spec_trace("spec:enclave-network");
 
+        assert_eq!(entry.schema_version, "1.0");
         assert_eq!(entry.level, "INFO");
         assert_eq!(entry.component, "proxy");
         assert!(entry.context.is_some());
@@ -159,7 +168,29 @@ mod tests {
         .with_context("model", json!("qwen2.5-coder:7b"));
 
         let json = entry.to_json().unwrap();
+        assert!(json.contains("\"schema_version\":\"1.0\""));
         assert!(json.contains("\"level\":\"ERROR\""));
         assert!(json.contains("\"component\":\"inference\""));
+    }
+
+    #[test]
+    fn test_schema_version_immutable() {
+        let entry1 = LogEntry::new(
+            Utc::now(),
+            "INFO".to_string(),
+            "forge".to_string(),
+            "container started".to_string(),
+        );
+
+        let entry2 = LogEntry::new(
+            Utc::now(),
+            "WARN".to_string(),
+            "git-service".to_string(),
+            "push delayed".to_string(),
+        );
+
+        // All entries must have the same immutable schema version
+        assert_eq!(entry1.schema_version, entry2.schema_version);
+        assert_eq!(entry1.schema_version, "1.0");
     }
 }

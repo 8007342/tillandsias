@@ -5,6 +5,14 @@
   "last_updated": "2026-05-14",
   "maintainer": "Tillandsias observability team",
   "core_fields": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0"],
+      "required": true,
+      "description": "Schema version for backwards compatibility. Immutable. Incremented only on breaking changes.",
+      "example": "1.0",
+      "immutable": true
+    },
     "timestamp": {
       "type": "string",
       "format": "ISO8601",
@@ -82,6 +90,7 @@
     "level",
     "message",
     "safety",
+    "schema_version",
     "spec_trace",
     "timestamp"
   ],
@@ -106,6 +115,7 @@
   },
   "examples": {
     "regular_event": {
+      "schema_version": "1.0",
       "timestamp": "2026-05-14T12:34:56.789012345Z",
       "level": "INFO",
       "component": "git-service",
@@ -116,6 +126,7 @@
       }
     },
     "accountability_event": {
+      "schema_version": "1.0",
       "timestamp": "2026-05-14T12:34:57.123456789Z",
       "level": "INFO",
       "component": "proxy",
@@ -130,6 +141,7 @@
       }
     },
     "error_event": {
+      "schema_version": "1.0",
       "timestamp": "2026-05-14T12:34:58.456789012Z",
       "level": "ERROR",
       "component": "inference",

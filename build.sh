@@ -569,6 +569,13 @@ if [[ "$FLAG_INSTALL" == true ]]; then
             _error "Runtime residual litmus failed"
             exit 1
         fi
+
+        _step "Generating evidence bundle..."
+        if bash "$SCRIPT_DIR/scripts/generate-evidence-bundle.sh"; then
+            _info "Evidence bundle generated for convergence validation"
+        else
+            _warn "Evidence bundle generation failed (non-fatal)"
+        fi
     fi
 
     # If --install is the only remaining flag, exit
