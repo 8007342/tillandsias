@@ -55,11 +55,41 @@ Keep the browser launch path, browser MCP bridge, OTP/session security, and serv
 - Verified `cargo test -p tillandsias-otp` still passes with 18/18 unit tests green.
 - Verified `cargo build -p tillandsias-headless` compiles without errors or warnings.
 
+## Wave 2 Evidence (Iteration 5)
+
+### browser/window-registry (Wave 2a)
+- Implemented thread-safe `BrowserWindowRegistry` in tillandsias-core/src/state.rs.
+- Added `BrowserWindowMetadata` with fields: window_id, container_id, launch_time, last_heartbeat, status.
+- Added `BrowserWindowStatus` enum: Launching, Active, Closed.
+- Implemented registry methods: `new()`, `register_window()`, `unregister_window()`, `get_windows()`, `update_status()`, `heartbeat()`.
+- Integrated into TrayState with automatic initialization.
+- Added 10 unit tests covering register/unregister, status transitions, concurrent access, error handling.
+- Verified `cargo test -p tillandsias-core` passes with 124 tests, all workspace tests pass (275+), zero clippy warnings.
+
+### browser/session-otp (Wave 2b)
+- End-to-end OTP delivery path wired: tray → router sidecar → OpenCode Web.
+- OTP generation via 256-bit OS CSPRNG (getrandom(2)), base64url encoding.
+- Single-use enforcement via Pending → Active lifecycle tracking.
+- Constant-time comparison to prevent timing attacks; zeroize on drop.
+- Router sidecar HTTP validator for Caddy forward_auth integration.
+- Per-window OTP and session cookie independence; multiple windows supported.
+- Verified `cargo test --workspace` passes with 491 tests, zero clippy warnings.
+
+### browser/routing-allowlist (Wave 2c Design)
+- Comprehensive design document created: plan/issues/browser-routing-design.md.
+- Three-layer architecture documented: forward-proxy (Squid) → reverse-proxy (Caddy) → router-sidecar.
+- Architecture gaps identified: port mismatch (spec :80 vs impl :8080), Squid .localhost forwarding missing.
+- Wave 3 task ordering with dependency analysis: 6 tasks prioritized by dependency.
+- Security analysis: DNS rebinding, port escape, router compromise, session hijacking mitigations.
+- Spec-code alignment verified (26 port references, no TODOs untagged).
+
 ## Remaining Work
 
-- The tray/router control-socket side still needs the actual OTP delivery path wired end-to-end; the browser currently gets the data-URI login form, but the router sidecar transport is still the older session-cookie path.
 - `browser.screenshot`, `browser.click`, and `browser.type` still need the real CDP bridge instead of the current follow-up placeholders.
-- The step still needs the broader browser/security litmus chain once the runtime path is implemented end-to-end.
+- browser/cdp-bridge task (depends on window-registry, pending).
+- browser/legacy-session-tombstone task (depends on routing-allowlist, pending).
+- The step still needs the broader browser/security litmus chain once routing is implemented end-to-end.
+- Wave 3: Implement browser routing (6 tasks, order documented in routing-design.md).
 
 ## Verification
 

@@ -148,23 +148,23 @@ plan_index:
         - "Any superseded browser/session contract is tombstoned."
       tasks:
         - id: browser/launcher-contract
-          status: in_progress
+          status: completed
           depends_on:
             - security-substrate-closure
           owned_files:
             - crates/tillandsias-headless/src/main.rs
             - images/chromium/chromium-framework-launch.sh
           checkpoint_required: true
-          handoff_note: "Cold-start note: launcher contract and repeat prompt behavior are the first dependency tail. If anything is unclear, file a refinement note under plan/issues/browser-launcher-contract.md or methodology/events/."
+          handoff_note: "Wave 2a completed: CDP attach/watcher loop, exponential backoff polling, automatic container cleanup. All 21 tests passing."
         - id: browser/window-registry
-          status: pending
+          status: completed
           depends_on:
             - browser/launcher-contract
           owned_files:
             - crates/tillandsias-core/src/state.rs
             - crates/tillandsias-headless/src/tray/mod.rs
           checkpoint_required: true
-          handoff_note: "Cold-start note: window registry state should be owned by one agent at a time."
+          handoff_note: "Wave 2a completed: Thread-safe BrowserWindowRegistry with Launching→Active→Closed state machine. 10 unit tests, 275+ workspace tests passing."
         - id: browser/cdp-bridge
           status: pending
           depends_on:
@@ -173,9 +173,9 @@ plan_index:
             - crates/tillandsias-browser-mcp/src/server.rs
             - images/chromium/chromium-framework-launch.sh
           checkpoint_required: true
-          handoff_note: "Cold-start note: CDP bridge work is separate from launcher and registry work."
+          handoff_note: "Cold-start note: CDP bridge work is separate from launcher and registry work. Next task after routing-allowlist."
         - id: browser/session-otp
-          status: pending
+          status: completed
           depends_on:
             - browser/launcher-contract
           owned_files:
@@ -183,16 +183,17 @@ plan_index:
             - images/default/entrypoint-forge-opencode-web.sh
             - images/default/entrypoint-forge-opencode.sh
           checkpoint_required: true
-          handoff_note: "Cold-start note: session ownership is a separate task from browser transport."
+          handoff_note: "Wave 2b completed: End-to-end OTP delivery with router sidecar integration, constant-time comparison, per-window independence. 491 tests passing."
         - id: browser/routing-allowlist
-          status: pending
+          status: in_progress
           depends_on:
             - browser/session-otp
           owned_files:
             - openspec/specs/subdomain-naming-flip/spec.md
             - openspec/specs/subdomain-routing-via-reverse-proxy/spec.md
+            - plan/issues/browser-routing-design.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: routing and allowlists are a separate dependency tail from browser transport."
+          handoff_note: "Wave 2c completed design phase: Three-layer architecture (Squid → Caddy → router-sidecar), gap analysis, Wave 3 task ordering. Ready for Wave 3 implementation."
         - id: browser/legacy-session-tombstone
           status: pending
           depends_on:
