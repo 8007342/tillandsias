@@ -2053,9 +2053,11 @@ dependencies = [
 name = "tillandsias-repeat-graph"
 version = "0.1.0"
 dependencies = [
+ "notify",
  "serde",
  "serde_json",
  "serde_yaml",
+ "tokio",
 ]
 
 [[package]]

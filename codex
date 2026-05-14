@@ -94,228 +94,25 @@ format_timestamp() {
   date -d "@$epoch" '+%H:%M:%S'
 }
 
-repeat_renderer_binary() {
-  printf '%s/target/debug/tillandsias-repeat-graph' "$PWD"
-}
-
-repeat_ensure_renderer() {
-  local renderer_bin="$1"
-  if [[ ! -x "$renderer_bin" ]]; then
+if [[ -n "$REPEAT_INTERVAL" ]]; then
+  REPEAT_SUPERVISOR_BIN="$PWD/target/debug/tillandsias-repeat-loop"
+  REPEAT_RENDERER_BIN="$PWD/target/debug/tillandsias-repeat-graph"
+  if [[ ! -x "$REPEAT_SUPERVISOR_BIN" || ! -x "$REPEAT_RENDERER_BIN" ]]; then
     cargo build --quiet --offline --manifest-path "$PWD/crates/tillandsias-repeat-graph/Cargo.toml"
   fi
-  if [[ ! -x "$renderer_bin" ]]; then
-    printf '[codex-repeat] unable to locate repeat renderer binary: %s\n' "$renderer_bin" >&2
+  if [[ ! -x "$REPEAT_SUPERVISOR_BIN" ]]; then
+    printf '[codex-repeat] unable to locate repeat supervisor binary: %s\n' "$REPEAT_SUPERVISOR_BIN" >&2
     exit 2
   fi
-}
-
-if [[ -n "$REPEAT_INTERVAL" ]]; then
-  REPEAT_WINDOW="${CODEX_REPEAT_TREND_WINDOW:-5}"
-  REPEAT_REFRESH_SECS="${CODEX_REPEAT_REFRESH_SECS:-2}"
-  REPEAT_PROMPT_PREFIX=$'Repeat-mode automation contract:\n- Return exactly one compact JSON object as the final response.\n- Do not stream file-by-file diffs, chain-of-thought, or raw tool chatter.\n- Use the repo-local plan and methodology as the source of truth.\n- While working, file refinement notes or ambiguity updates in ./methodology/events/ or ./plan/issues/ as soon as a meaningful substep completes or a blocker appears.\n- Each refinement note must be idempotent and cold-start readable; assume a different agent may pick up the next step.\n- If cheaply available from existing metadata, include tokens_spent, prompt_tokens, completion_tokens, tokens_remaining_percent, and rate_limit_remaining_percent in the final report and in any relevant task-tree nodes.\n- Provide before_progress, after_progress, delta_progress, trend_window, milestone_label, milestone_timestamp, next_action, blockers, checkpoint_commit, status, session_id, focus_task_id, ready_count, blocked_count, loop_state, and a compact task_tree if available.\n- Keep the answer minimal, tree-friendly, and cold-start readable.\n'
-  REPEAT_STATE_ROOT="${CODEX_REPEAT_STATE_DIR:-${PWD}/plan/localwork/codex-repeat}"
-  mkdir -p "$REPEAT_STATE_ROOT"
-  REPEAT_STATE_DIR="$(mktemp -d "$REPEAT_STATE_ROOT/session.XXXXXX")"
-  REPEAT_SCHEMA_FILE="$REPEAT_STATE_DIR/report-schema.json"
-  REPEAT_LAST_MESSAGE_FILE="$REPEAT_STATE_DIR/last-message.json"
-  REPEAT_EVENT_LOG_FILE="$REPEAT_STATE_DIR/events.jsonl"
-  REPEAT_STDERR_FILE="$REPEAT_STATE_DIR/stderr.log"
-  REPEAT_HISTORY_FILE="$REPEAT_STATE_DIR/history.txt"
-  cat >"$REPEAT_SCHEMA_FILE" <<'JSON'
-{
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "session_id",
-    "cycle",
-    "branch",
-    "status",
-    "before_progress",
-    "after_progress",
-    "delta_progress",
-    "trend_window",
-    "elapsed_seconds",
-    "elapsed_human",
-    "milestone_label",
-    "milestone_timestamp",
-    "next_action",
-    "blockers",
-    "checkpoint_commit",
-    "tokens_spent",
-    "prompt_tokens",
-    "completion_tokens",
-    "tokens_remaining_percent",
-    "rate_limit_remaining_percent",
-    "output_mode"
-  ],
-  "properties": {
-    "session_id": { "type": "string" },
-    "cycle": { "type": "integer", "minimum": 1 },
-    "branch": { "type": "string" },
-    "status": { "type": "string" },
-    "before_progress": { "type": "integer", "minimum": 0, "maximum": 100 },
-    "after_progress": { "type": "integer", "minimum": 0, "maximum": 100 },
-    "delta_progress": { "type": "integer" },
-    "trend_window": {
-      "type": "array",
-      "items": { "type": "integer", "minimum": 0, "maximum": 100 }
-    },
-    "current_bar": { "type": "string" },
-    "trend_bar": { "type": "string" },
-    "elapsed_seconds": { "type": "integer", "minimum": 0 },
-    "elapsed_human": { "type": "string" },
-    "milestone_label": { "type": "string" },
-    "milestone_timestamp": { "type": "string" },
-    "next_action": { "type": "string" },
-    "blockers": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
-    "checkpoint_commit": { "type": "string" },
-    "focus_task_id": { "type": "string" },
-    "ready_count": { "type": "integer" },
-    "blocked_count": { "type": "integer" },
-    "tokens_spent": { "type": "integer" },
-    "prompt_tokens": { "type": "integer" },
-    "completion_tokens": { "type": "integer" },
-    "tokens_remaining_percent": { "type": "integer", "minimum": 0, "maximum": 100 },
-    "rate_limit_remaining_percent": { "type": "integer", "minimum": 0, "maximum": 100 },
-    "task_tree": { "type": "array" },
-    "loop_state": { "type": "string" },
-    "output_mode": { "type": "string" }
-  }
-}
-JSON
-  repeat_prompt="${codex_args[*]}"
-  repeat_start_epoch="$(date +%s)"
-  repeat_session_id="repeat-$(date +%Y%m%dT%H%M%S)-$$"
-  cycle=0
-  SLEEP_PID=""
-  if command -v stdbuf >/dev/null 2>&1; then
-    REPEAT_LINE_BUFFER=(stdbuf -oL -eL)
-  else
-    REPEAT_LINE_BUFFER=()
-  fi
-  REPEAT_RENDERER_BIN="$(repeat_renderer_binary)"
-  repeat_ensure_renderer "$REPEAT_RENDERER_BIN"
-  repeat_render_snapshot() {
-    local loop_state="$1"
-    local cycle_value="$2"
-    local end_epoch="$3"
-    local exit_code="$4"
-    local sleep_interval="${5:-}"
-    repeat_ensure_renderer "$REPEAT_RENDERER_BIN"
-    "$REPEAT_RENDERER_BIN" \
-      "$PWD/plan/index.yaml" \
-      "$REPEAT_EVENT_LOG_FILE" \
-      "$REPEAT_LAST_MESSAGE_FILE" \
-      "$REPEAT_HISTORY_FILE" \
-      "$repeat_session_id" \
-      "$cycle_value" \
-      "$repeat_start_epoch" \
-      "$loop_state" \
-      "$exit_code" \
-      "$sleep_interval"
-  }
-
-  repeat_event_signature() {
-    local event_sig="0"
-    if [[ -f "$REPEAT_EVENT_LOG_FILE" ]]; then
-      event_sig="$(stat -c '%s:%Y' "$REPEAT_EVENT_LOG_FILE" 2>/dev/null || wc -l <"$REPEAT_EVENT_LOG_FILE" 2>/dev/null || printf '0')"
-    fi
-    local refinement_sig="0"
-    refinement_sig="$(
-      {
-        [[ -d "$PWD/methodology/events" ]] && find "$PWD/methodology/events" -type f -printf '%T@:%s:%p\n' 2>/dev/null || true
-        [[ -d "$PWD/plan/issues" ]] && find "$PWD/plan/issues" -type f -printf '%T@:%s:%p\n' 2>/dev/null || true
-      } | sort | tail -n 1
-    )"
-    printf '%s|%s' "$event_sig" "$refinement_sig"
-  }
-
-  cleanup_repeat() {
-    if [[ -n "$SLEEP_PID" ]]; then
-      kill "$SLEEP_PID" 2>/dev/null || true
-    fi
-    rm -rf "$REPEAT_STATE_DIR" 2>/dev/null || true
-    exit 130
-  }
-  trap cleanup_repeat INT TERM
-
-  while true; do
-    cycle=$((cycle + 1))
-    cycle_start_epoch="$(date +%s)"
-    : >"$REPEAT_EVENT_LOG_FILE"
-    printf '[codex-repeat] cycle %02d start | waiting on agent | session=%s | interval=%s | elapsed=%s\n' \
-      "$cycle" "$repeat_session_id" "$REPEAT_INTERVAL" "$(format_elapsed $((cycle_start_epoch - repeat_start_epoch)))"
-
-    repeat_render_snapshot "agent_working" "$cycle" "$cycle_start_epoch" 0
-
-    set +e
-    {
-      printf '%s\n\n%s\n' "$REPEAT_PROMPT_PREFIX" "$repeat_prompt" | \
-        "${REPEAT_LINE_BUFFER[@]}" \
-        "$CODEX_BIN" \
-          exec \
-          --ephemeral \
-          --ignore-user-config \
-          --color never \
-          --json \
-          --output-schema "$REPEAT_SCHEMA_FILE" \
-          --output-last-message "$REPEAT_LAST_MESSAGE_FILE" \
-          "${common_args[@]}"
-    } >"$REPEAT_EVENT_LOG_FILE" 2>"$REPEAT_STDERR_FILE" &
-    REPEAT_CHILD_PID=$!
-    status=0
-    last_event_signature=""
-    while kill -0 "$REPEAT_CHILD_PID" 2>/dev/null; do
-      current_signature="$(repeat_event_signature)"
-      if [[ "$current_signature" != "$last_event_signature" ]]; then
-        repeat_render_snapshot "agent_working" "$cycle" "$(date +%s)" 0
-        last_event_signature="$current_signature"
-      fi
-      sleep 0.5
-    done
-    wait "$REPEAT_CHILD_PID"
-    status=$?
-    set -e
-
-    cycle_end_epoch="$(date +%s)"
-    if [[ -s "$REPEAT_LAST_MESSAGE_FILE" ]]; then
-      report_json="$(cat "$REPEAT_LAST_MESSAGE_FILE")"
-    else
-      report_json='{"session_id":"'"$repeat_session_id"'","cycle":'"$cycle"',"branch":"linux-next","status":"failed","before_progress":0,"after_progress":0,"delta_progress":0,"trend_window":[],"elapsed_seconds":0,"elapsed_human":"00:00","milestone_label":"fallback","milestone_timestamp":"","next_action":"inspect stderr log","blockers":["no structured report emitted"],"checkpoint_commit":"","focus_task_id":"","ready_count":0,"blocked_count":0,"task_tree":[],"loop_state":"running","output_mode":"compact-json"}'
-    fi
-    if ! jq -e . >/dev/null 2>&1 <<<"$report_json"; then
-      report_json='{"session_id":"'"$repeat_session_id"'","cycle":'"$cycle"',"branch":"linux-next","status":"failed","before_progress":0,"after_progress":0,"delta_progress":0,"trend_window":[],"elapsed_seconds":0,"elapsed_human":"00:00","milestone_label":"invalid-json","milestone_timestamp":"","next_action":"inspect stderr log","blockers":["structured report parse failed"],"checkpoint_commit":"","focus_task_id":"","ready_count":0,"blocked_count":0,"task_tree":[],"loop_state":"running","output_mode":"compact-json"}'
-    fi
-
-    repeat_after="$(jq -r '.after_progress // 0' <<<"$report_json")"
-    printf '%s\n' "$repeat_after" >>"$REPEAT_HISTORY_FILE"
-    while [[ "$(wc -l <"$REPEAT_HISTORY_FILE" 2>/dev/null || echo 0)" -gt "$REPEAT_WINDOW" ]]; do
-      tail -n "$REPEAT_WINDOW" "$REPEAT_HISTORY_FILE" >"$REPEAT_HISTORY_FILE.tmp"
-      mv "$REPEAT_HISTORY_FILE.tmp" "$REPEAT_HISTORY_FILE"
-    done
-
-    repeat_render_snapshot "sleeping_until_next_iteration" "$cycle" "$cycle_end_epoch" "$status" "$REPEAT_INTERVAL"
-    printf '[codex-repeat] cycle %02d sleeping until next iteration | exit=%d | sleep=%s\n' \
-      "$cycle" "$status" "$REPEAT_INTERVAL"
-
-    if [[ "$status" -eq 130 || "$status" -eq 143 ]]; then
-      rm -rf "$REPEAT_STATE_DIR" 2>/dev/null || true
-      exit "$status"
-    fi
-
-    sleep "$REPEAT_INTERVAL" &
-    SLEEP_PID=$!
-    wait "$SLEEP_PID"
-    sleep_status=$?
-    SLEEP_PID=""
-    if [[ "$sleep_status" -ne 0 ]]; then
-      rm -rf "$REPEAT_STATE_DIR" 2>/dev/null || true
-      exit "$sleep_status"
-    fi
-  done
+  exec "$REPEAT_SUPERVISOR_BIN" \
+    --prompt "${codex_args[*]}" \
+    --interval "$REPEAT_INTERVAL" \
+    --codex-bin "$CODEX_BIN" \
+    --renderer-bin "$REPEAT_RENDERER_BIN" \
+    --state-root "${CODEX_REPEAT_STATE_DIR:-${PWD}/plan/localwork/codex-repeat}" \
+    --plan-root "$PWD/plan" \
+    --trend-window "${CODEX_REPEAT_TREND_WINDOW:-5}" \
+    --refresh-secs "${CODEX_REPEAT_REFRESH_SECS:-2}"
 fi
 
 if [[ "$QUIET" -eq 1 ]]; then

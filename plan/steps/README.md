@@ -32,6 +32,8 @@ Each step file should be written as a cold-start handoff document.
 When a step is run under repeat mode, the agent should end with a compact JSON
 progress report that can be rendered into a small graph:
 
+- The agent should also emit an immediate bootstrap refinement note before edits begin.
+- The agent should refresh the same task note after each meaningful substep or blocker.
 - current progress before and after the run
 - delta for the run
 - a recent trend window
