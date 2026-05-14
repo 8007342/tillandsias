@@ -3,7 +3,7 @@
 //! @trace spec:host-browser-mcp, spec:browser-isolation-tray-integration
 //! @cheatsheet web/mcp.md, web/cdp.md
 
-use crate::allowlist;
+use crate::allowlist::{self, BrowserAllowlist};
 use crate::cdp_client::{CdpError, CdpSession};
 use crate::framing::{RpcRequest, RpcResponse};
 use crate::launcher::{self, LaunchError};
@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
+use url;
 
 /// Configuration for the MCP server.
 pub struct McpServerConfig {
@@ -138,6 +139,27 @@ impl BrowserMcpServer {
 
     fn browser_binary(&self) -> Option<PathBuf> {
         self.browser_binary_override.clone()
+    }
+
+    /// Build the active routes allowlist from the current window registry.
+    /// @trace spec:host-browser-mcp
+    fn build_active_routes_allowlist(&self) -> BrowserAllowlist {
+        let windows = self.windows.list_for_project(&self.project_label);
+        let active_hosts: Vec<String> = windows
+            .iter()
+            .filter_map(|window| {
+                // Parse the URL to extract host and port
+                if let Ok(parsed) = url::Url::parse(&window.url) {
+                    if let Some(host) = parsed.host_str() {
+                        let port = parsed.port().unwrap_or(8080);
+                        return Some(format!("{}:{}", host, port));
+                    }
+                }
+                None
+            })
+            .collect();
+
+        BrowserAllowlist::new(&active_hosts)
     }
 
     /// Handle `initialize` request (first call after connection).
@@ -355,12 +377,24 @@ impl BrowserMcpServer {
             return Self::json_rpc_error(id, -32602, "browser.open requires arguments.url");
         };
 
+        // Layer 1: Basic format validation
+        // @trace spec:host-browser-mcp
         let allowed = match allowlist::validate(url, &self.project_label) {
             Ok(allowed) => allowed,
             Err(reason) => {
                 return Self::tool_error(id, format!("URL_NOT_ALLOWED: {reason}"));
             }
         };
+
+        // Layer 2: Defense-in-depth allowlist enforcement against active routes
+        // @trace spec:host-browser-mcp
+        let route_allowlist = self.build_active_routes_allowlist();
+        if !route_allowlist.is_allowed(url) {
+            return Self::tool_error(
+                id,
+                format!("URL_NOT_ALLOWED: not in active routes for project '{}'", self.project_label),
+            );
+        }
 
         if let Some((elapsed, existing_window_id)) =
             self.debounce.get(&self.project_label, &allowed.host)
@@ -1428,5 +1462,71 @@ mod tests {
             }
             other => panic!("expected success, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn allowlist_allows_properly_formatted_localhost_when_no_active_routes() {
+        // @trace spec:host-browser-mcp
+        let server = test_server_fake_launch(None);
+
+        // Even with no windows registered (no active routes), properly formatted
+        // localhost URLs should be allowed. The network-layer router validates
+        // actual requests to ensure routes exist.
+        let response = server
+            .handle_request(RpcRequest {
+                id: Some(70),
+                method: "tools/call".to_string(),
+                params: json!({
+                    "name": "browser.open",
+                    "arguments": {
+                        "url": "http://web.acme.localhost:8080/"
+                    }
+                }),
+            })
+            .await;
+
+        match response {
+            RpcResponse::Success { result, .. } => {
+                // Should succeed at the app layer; network layer validates routing
+                let window_id = result["window_id"].as_str();
+                assert!(window_id.is_some(), "expected window_id in result");
+            }
+            other => panic!("expected success, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn allowlist_allows_localhost_ip_testing() {
+        // @trace spec:host-browser-mcp
+        let server = test_server_fake_launch(None);
+
+        // 127.0.0.1 should always be allowed for localhost testing
+        // (even though format validation will reject it normally)
+        // This test verifies the allowlist layer independently
+        let allowlist = server.build_active_routes_allowlist();
+        assert!(allowlist.is_allowed("http://127.0.0.1:8080/"));
+        assert!(allowlist.is_allowed("http://127.0.0.1:80/"));
+    }
+
+    #[tokio::test]
+    async fn allowlist_blocks_external_domains() {
+        // @trace spec:host-browser-mcp
+        let server = test_server_fake_launch(None);
+
+        let allowlist = server.build_active_routes_allowlist();
+        assert!(!allowlist.is_allowed("http://google.com/"));
+        assert!(!allowlist.is_allowed("https://github.com/"));
+        assert!(!allowlist.is_allowed("http://example.com:8080/"));
+    }
+
+    #[tokio::test]
+    async fn allowlist_blocks_opencode_self_reference() {
+        // @trace spec:host-browser-mcp
+        let server = test_server_fake_launch(None);
+
+        let allowlist = server.build_active_routes_allowlist();
+        // Even if opencode.acme.localhost is in routes, it should be blocked
+        // to prevent recursive OpenCode Web launches
+        assert!(!allowlist.is_allowed("http://opencode.acme.localhost:8080/"));
     }
 }

@@ -5,6 +5,15 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [crates/tillandsias-headless/src/main.rs#L787](../../../crates/tillandsias-headless/src/main.rs#L787)
+- [crates/tillandsias-headless/src/main.rs#L804](../../../crates/tillandsias-headless/src/main.rs#L804)
+- [crates/tillandsias-headless/src/main.rs#L822](../../../crates/tillandsias-headless/src/main.rs#L822)
+- [crates/tillandsias-headless/src/main.rs#L845](../../../crates/tillandsias-headless/src/main.rs#L845)
+- [crates/tillandsias-headless/src/main.rs#L866](../../../crates/tillandsias-headless/src/main.rs#L866)
+- [crates/tillandsias-headless/src/main.rs#L912](../../../crates/tillandsias-headless/src/main.rs#L912)
+- [crates/tillandsias-headless/src/main.rs#L2416](../../../crates/tillandsias-headless/src/main.rs#L2416)
+- [crates/tillandsias-headless/src/main.rs#L2732](../../../crates/tillandsias-headless/src/main.rs#L2732)
+- [crates/tillandsias-headless/src/main.rs#L2771](../../../crates/tillandsias-headless/src/main.rs#L2771)
 - [crates/tillandsias-router-sidecar/src/http.rs#L19](../../../crates/tillandsias-router-sidecar/src/http.rs#L19)
 - [crates/tillandsias-router-sidecar/src/http.rs#L34](../../../crates/tillandsias-router-sidecar/src/http.rs#L34)
 - [crates/tillandsias-router-sidecar/src/http.rs#L92](../../../crates/tillandsias-router-sidecar/src/http.rs#L92)

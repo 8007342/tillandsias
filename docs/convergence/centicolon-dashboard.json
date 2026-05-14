@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-05-14T17:25:09Z",
+  "generated_at": "2026-05-14T17:33:31Z",
   "title": "Progression Trends",
   "series_namespace": "local_development",
   "series_label": "Local Development",
   "source_file": "target/convergence/centicolon-signature.jsonl",
-  "record_count": 85,
-  "sparkline_closed": "█████████████████████████████████████████▆▆███▇█████████████████████████████████▆▇█▇▇",
-  "sparkline_residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▃▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▂▁▂▂",
+  "record_count": 87,
+  "sparkline_closed": "█████████████████████████████████████████▆▆███▇█████████████████████████████████▆▇█▇▇██",
+  "sparkline_residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▃▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▂▁▂▂▁▁",
   "trend_windows": [
   {
     "index": 1,
@@ -36,26 +36,26 @@
     "start_release": "0.1.260513.3",
     "start_commit": "43a8615f2378",
     "end_release": "0.1.260513.6",
-    "end_commit": "b58ac03d2e33",
-    "count": 21,
-    "closed": "████████████████▆▇█▇▇",
-    "residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▂▁▂▂"
+    "end_commit": "9ba7563a0791",
+    "count": 23,
+    "closed": "████████████████▆▇█▇▇██",
+    "residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▂▁▂▂▁▁"
   }
 ],
   "latest": {
   "release": "0.1.260513.6",
-  "date": "2026-05-14T16:59:59Z",
-  "commit": "b58ac03d2e33",
-  "total_cc": 920,
-  "earned_cc": 740,
-  "residual_cc": 180,
-  "percent_closed": 80.43478260869566,
-  "worst_spec": "spec:testing",
-  "worst_reason": "Test failures detected: run 'cargo test --workspace --lib' to see details (see /tmp/test-check.log)",
+  "date": "2026-05-14T17:25:32Z",
+  "commit": "9ba7563a0791",
+  "total_cc": 560,
+  "earned_cc": 560,
+  "residual_cc": 0,
+  "percent_closed": 100,
+  "worst_spec": "n/a",
+  "worst_reason": "n/a",
   "evidence": "target/convergence/evidence-bundle.json",
   "projection": "docs/convergence/centicolon-dashboard.md",
-  "ci_result": "FAIL",
-  "ci_run_id": "local-ci-20260514T165959Z",
+  "ci_result": "PASS",
+  "ci_run_id": "local-ci-20260514T172532Z",
   "trend_glyph": ""
 },
   "history": [
@@ -1417,6 +1417,38 @@
     "projection": "docs/convergence/centicolon-dashboard.md",
     "ci_result": "FAIL",
     "ci_run_id": "local-ci-20260514T165959Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.1.260513.6",
+    "date": "2026-05-14T17:24:48Z",
+    "commit": "c7b9f2c94f0b",
+    "total_cc": 560,
+    "earned_cc": 520,
+    "residual_cc": 40,
+    "percent_closed": 92.85714285714286,
+    "worst_spec": "spec:dev-build",
+    "worst_reason": "Rust code not formatted: run 'cargo fmt --all' (see /tmp/fmt-check.log)",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "FAIL",
+    "ci_run_id": "local-ci-20260514T172448Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.1.260513.6",
+    "date": "2026-05-14T17:25:32Z",
+    "commit": "9ba7563a0791",
+    "total_cc": 560,
+    "earned_cc": 560,
+    "residual_cc": 0,
+    "percent_closed": 100,
+    "worst_spec": "n/a",
+    "worst_reason": "n/a",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "PASS",
+    "ci_run_id": "local-ci-20260514T172532Z",
     "trend_glyph": ""
   }
 ]
