@@ -166,14 +166,14 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Wave 2a completed: Thread-safe BrowserWindowRegistry with Launching→Active→Closed state machine. 10 unit tests, 275+ workspace tests passing."
         - id: browser/cdp-bridge
-          status: pending
+          status: completed
           depends_on:
             - browser/window-registry
           owned_files:
             - crates/tillandsias-browser-mcp/src/server.rs
-            - images/chromium/chromium-framework-launch.sh
+            - crates/tillandsias-browser-mcp/src/cdp_client.rs
           checkpoint_required: true
-          handoff_note: "Cold-start note: CDP bridge work is separate from launcher and registry work. Next task after routing-allowlist."
+          handoff_note: "Wave 3 completed: CDP client with screenshot/click/type, 40/40 tests passing, 0 clippy warnings. Enables programmatic browser control."
         - id: browser/session-otp
           status: completed
           depends_on:

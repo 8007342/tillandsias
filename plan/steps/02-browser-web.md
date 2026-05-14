@@ -2,7 +2,7 @@
 
 ## Status
 
-in_progress
+in_progress — Waves 1–3 complete (5 of 6 tasks); routing implementation pending (Wave 4)
 
 ## Objective
 
@@ -55,7 +55,7 @@ Keep the browser launch path, browser MCP bridge, OTP/session security, and serv
 - Verified `cargo test -p tillandsias-otp` still passes with 18/18 unit tests green.
 - Verified `cargo build -p tillandsias-headless` compiles without errors or warnings.
 
-## Wave 2 Evidence (Iteration 5)
+## Waves 1–3 Evidence (Iteration 5)
 
 ### browser/window-registry (Wave 2a)
 - Implemented thread-safe `BrowserWindowRegistry` in tillandsias-core/src/state.rs.
@@ -82,6 +82,17 @@ Keep the browser launch path, browser MCP bridge, OTP/session security, and serv
 - Wave 3 task ordering with dependency analysis: 6 tasks prioritized by dependency.
 - Security analysis: DNS rebinding, port escape, router compromise, session hijacking mitigations.
 - Spec-code alignment verified (26 port references, no TODOs untagged).
+
+### browser/cdp-bridge (Wave 3)
+- Implemented complete CDP client (cdp_client.rs) with TCP connection management.
+- Added `screenshot(full_page)` via Page.captureScreenshot CDP command with base64 encoding.
+- Added `click(selector)` with JavaScript element finding and mouse event dispatch.
+- Added `type_text(selector, text)` with focus and keyboard event dispatch.
+- Integrated into MCP server: handle_browser_screenshot/click/type with WindowRegistry lookup.
+- Proper error handling: 9 error variants covering connection, selector, element-not-found scenarios.
+- Comprehensive unit tests: 8 CDP client tests + 18 server handler tests; 40/40 passing.
+- Verified `cargo test -p tillandsias-browser-mcp` passes with zero clippy warnings.
+- Enables agents in forge containers to programmatically interact with browser windows.
 
 ## Remaining Work
 
