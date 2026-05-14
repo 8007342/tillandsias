@@ -1,4 +1,4 @@
-//! @trace spec:podman-orchestration, spec:cross-platform, spec:windows-wsl-runtime
+//! @trace spec:podman-orchestration, spec:cross-platform, spec:windows-wsl-runtime, spec:podman-idiomatic-patterns
 
 pub mod cache_semantics;
 mod client;

@@ -1,5 +1,5 @@
 //! @trace spec:podman-orchestration, spec:security-privacy-isolation, spec:fix-podman-machine-host-aliases, spec:fix-windows-image-routing, spec:subdomain-naming-flip
-//! @trace spec:podman-container-spec, spec:podman-container-handle
+//! @trace spec:podman-container-spec, spec:podman-container-handle, spec:podman-idiomatic-patterns
 
 use tracing::{debug, info};
 

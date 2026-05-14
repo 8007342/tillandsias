@@ -1,4 +1,4 @@
-// @trace spec:security-privacy-isolation
+// @trace spec:security-privacy-isolation, spec:podman-idiomatic-patterns
 use tracing::{debug, info, instrument, warn};
 
 /// Output from executing a command in a container (podman or WSL).
