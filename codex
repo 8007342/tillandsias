@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CODEX_BIN="${CODEX_BIN:-${HOME}/.npm-global/bin/codex}"
+if [[ ! -x "$CODEX_BIN" ]]; then
+  CODEX_BIN="$(command -v codex)"
+fi
+
+QUIET=0
+REPEAT_INTERVAL=""
+codex_args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --quiet|-q)
+      QUIET=1
+      shift
+      ;;
+    --repeat)
+      if [[ $# -lt 2 ]]; then
+        printf 'codex: --repeat requires an interval such as 30m or 2h30m\n' >&2
+        exit 2
+      fi
+      REPEAT_INTERVAL="$2"
+      shift 2
+      ;;
+    --)
+      shift
+      codex_args+=("$@")
+      break
+      ;;
+    *)
+      codex_args+=("$1")
+      shift
+      ;;
+  esac
+done
+
+common_args=(
+  -p tillandsias
+  -c 'profiles.tillandsias.writable_roots=["/run/user/1000","/var/home/machiyotl"]'
+)
+
+if [[ -n "$REPEAT_INTERVAL" ]]; then
+  SLEEP_PID=""
+  cleanup_repeat() {
+    if [[ -n "$SLEEP_PID" ]]; then
+      kill "$SLEEP_PID" 2>/dev/null || true
+    fi
+    exit 130
+  }
+  trap cleanup_repeat INT TERM
+  cycle=0
+  while true; do
+    cycle=$((cycle + 1))
+    printf '[codex-repeat] cycle %d start (%s)\n' "$cycle" "$REPEAT_INTERVAL" >&2
+    set +e
+    "$CODEX_BIN" \
+      exec \
+      --color never \
+      "${common_args[@]}" \
+      "${codex_args[@]}"
+    status=$?
+    set -e
+    printf '[codex-repeat] cycle %d done (exit=%d)\n' "$cycle" "$status" >&2
+    if [[ "$status" -eq 130 || "$status" -eq 143 ]]; then
+      exit "$status"
+    fi
+    printf '[codex-repeat] sleeping %s\n' "$REPEAT_INTERVAL" >&2
+    sleep "$REPEAT_INTERVAL" &
+    SLEEP_PID=$!
+    wait "$SLEEP_PID"
+    sleep_status=$?
+    SLEEP_PID=""
+    if [[ "$sleep_status" -ne 0 ]]; then
+      exit "$sleep_status"
+    fi
+  done
+fi
+
+if [[ "$QUIET" -eq 1 ]]; then
+  exec "$CODEX_BIN" \
+    exec \
+    --color never \
+    "${common_args[@]}" \
+    "${codex_args[@]}"
+fi
+
+exec "$CODEX_BIN" \
+  "${common_args[@]}" \
+  "${codex_args[@]}"

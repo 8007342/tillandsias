@@ -1,0 +1,209 @@
+plan_index:
+  version: v1
+  root: plan/
+  default_status_values:
+    - pending
+    - ready
+    - in_progress
+    - blocked
+    - needs_clarification
+    - completed
+    - obsoleted
+
+  selection_policy:
+    primary_rule: "Pick the earliest step whose status is ready."
+    fallback_rule: >
+      If the selected step is blocked or needs clarification, pick the next
+      independent ready step instead of waiting on the blocker.
+    update_rule: >
+      When a step completes, update its status, write the evidence summary to
+      its deliverable, checkpoint the current state to origin/linux-next, and
+      then promote the next eligible pending step to ready.
+
+  checkpoint_policy:
+    branch: linux-next
+    cadence: "after every meaningful batch, before context switches, and before stopping for the day"
+    allowed_state: "incomplete work is acceptable if the checkpoint is coherent"
+    commit_message:
+      subject: "checkpoint(<scope>): <specific progress>"
+      body:
+        - what changed
+        - what remains incomplete
+        - what was verified
+        - what is blocked
+        - next intended action
+    push_rule: "push each checkpoint to origin/linux-next immediately after commit when possible"
+
+  steps:
+    - id: wrapper-contract
+      order: 0
+      title: Wrapper contract and repo-local launch defaults
+      status: completed
+      deliverable: plan/steps/00-wrapper-contract.md
+      depends_on: []
+      resume_prompt: './codex "Look at ./plan.yaml and continue implementation using ./methodology.yaml"'
+      outcome: >
+        The repository already ships a `./codex` wrapper that defaults to the
+        Tillandsias profile. Keep that contract stable, and extend it with
+        repeatable noninteractive checkpoint runs for automation.
+
+    - id: security-substrate-closure
+      order: 1
+      title: Security substrate and Podman layer closure
+      status: completed
+      deliverable: plan/steps/01-security-substrate.md
+      depends_on: [wrapper-contract]
+      specs:
+        - security-privacy-isolation
+        - enclave-network
+        - proxy-container
+        - podman-container-spec
+        - podman-container-handle
+        - podman-orchestration
+        - podman-secrets-integration
+        - secrets-management
+        - native-secrets-store
+        - secret-rotation
+        - git-mirror-service
+        - inference-container
+        - reverse-proxy-internal
+      exit_criteria:
+        - "Any stale security/substrate spec is tombstoned or marked obsolete with a replacement reference."
+        - "Live specs are bound to executable litmuses or a justified minimal boundary."
+        - "A narrow strict CI pass and install pass are run for the selected bundle."
+
+    - id: browser-and-web-security
+      order: 2
+      title: Browser isolation and secure OpenCode Web
+      status: in_progress
+      deliverable: plan/steps/02-browser-web.md
+      depends_on: [security-substrate-closure]
+      specs:
+        - browser-isolation-core
+        - browser-isolation-framework
+        - browser-isolation-tray-integration
+        - host-browser-mcp
+        - host-chromium-on-demand
+        - chromium-safe-variant
+        - opencode-web-session-otp
+        - mcp-on-demand
+        - subdomain-naming-flip
+        - subdomain-routing-via-reverse-proxy
+      exit_criteria:
+        - "Browser/session control path is coherent end-to-end."
+        - "Any superseded browser/session contract is tombstoned."
+
+    - id: tray-runtime-and-cache
+      order: 3
+      title: Tray lifecycle, init path, and cache semantics
+      status: pending
+      deliverable: plan/steps/03-tray-runtime.md
+      depends_on: [browser-and-web-security]
+      specs:
+        - tray-app
+        - tray-ux
+        - tray-minimal-ux
+        - tray-progress-and-icon-states
+        - tray-icon-lifecycle
+        - tray-cli-coexistence
+        - tray-host-control-socket
+        - tray-projects-rename
+        - simplified-tray-ux
+        - no-terminal-flicker
+        - singleton-guard
+        - init-command
+        - init-incremental-builds
+        - forge-cache-dual
+        - forge-staleness
+        - overlay-mount-cache
+        - tools-overlay-fast-reuse
+      exit_criteria:
+        - "Tray behavior is consolidated around the current runtime model."
+        - "Legacy cache and UX variants are either retired or reduced to active minimal boundaries."
+
+    - id: onboarding-and-discovery
+      order: 4
+      title: Onboarding, discoverability, and repo bootstrap docs
+      status: pending
+      deliverable: plan/steps/04-onboarding-docs.md
+      depends_on: [tray-runtime-and-cache]
+      specs:
+        - forge-welcome
+        - forge-shell-tools
+        - forge-environment-discoverability
+        - forge-opencode-onboarding
+        - default-image
+        - project-bootstrap-readme
+        - project-summarizers
+        - remote-projects
+        - gh-auth-script
+      exit_criteria:
+        - "The first-turn story is coherent and validator-clean."
+        - "Retrofit specs are either live, bounded, or tombstoned if historical."
+
+    - id: observability-and-diagnostics
+      order: 5
+      title: Observability, logging, and evidence surfaces
+      status: pending
+      deliverable: plan/steps/05-observability.md
+      depends_on: [onboarding-and-discovery]
+      specs:
+        - runtime-logging
+        - runtime-diagnostics
+        - runtime-diagnostics-stream
+        - external-logs-layer
+        - observability-convergence
+        - spec-traceability
+        - knowledge-source-of-truth
+        - clickable-trace-index
+      exit_criteria:
+        - "Logs, traces, and diagnostics are observable without reintroducing stale assumptions."
+
+    - id: cross-platform-leftovers
+      order: 6
+      title: Windows and other cross-platform leftovers
+      status: pending
+      deliverable: plan/steps/06-cross-platform.md
+      depends_on: [observability-and-diagnostics]
+      specs:
+        - fix-windows-image-routing
+        - windows-event-logging
+        - wsl-runtime
+        - wsl-daemon-orchestration
+        - update-system
+        - versioning
+        - web-image
+        - zen-default-with-ollama-analysis-pool
+      exit_criteria:
+        - "Windows-specific drift is either retired or narrowed to a live implementation gap."
+
+    - id: semantic-distillation-sweep
+      order: 7
+      title: Semantic distillation and tombstone sweep
+      status: pending
+      deliverable: plan/steps/07-semantic-distillation.md
+      depends_on:
+        - security-substrate-closure
+        - browser-and-web-security
+        - tray-runtime-and-cache
+        - onboarding-and-discovery
+        - observability-and-diagnostics
+        - cross-platform-leftovers
+      specs:
+        - active-specs-with-empty-bindings
+        - active-specs-with-historical-purpose-only
+      exit_criteria:
+        - "All stale specs are obsoleted or tombstoned."
+        - "Only intentional implementation gaps remain active."
+
+    - id: implementation-gaps-backlog
+      order: 8
+      title: Remaining implementation gaps after spec cleanup
+      status: pending
+      deliverable: plan/steps/08-implementation-gaps.md
+      depends_on: [semantic-distillation-sweep]
+      specs:
+        - remaining_active_specs
+      exit_criteria:
+        - "The plan switches from cleanup mode to pure implementation mode."
+        - "Each remaining active spec has a concrete next patch or test task."

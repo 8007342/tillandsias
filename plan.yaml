@@ -1,0 +1,65 @@
+plan:
+  version: v1
+  name: tillandsias-hourly-autonomy
+  repo_root: .
+
+  launcher:
+    wrapper: ./codex
+    default_profile: tillandsias
+    current_directory: true
+    prompt_template: './codex "Look at ./plan.yaml and continue implementation using ./methodology.yaml"'
+    repeat_template: './codex --repeat 30m "Look at ./plan.yaml and continue implementation using ./methodology.yaml"'
+
+  methodology:
+    root: methodology.yaml
+    router: methodology/bootstrap/router.yaml
+    convergence: methodology/convergence.yaml
+    spec_system: methodology/spec-system.yaml
+    verification: methodology/verification.yaml
+
+  current_state:
+    last_completed_step: security-substrate-closure
+    next_step: browser-and-web-security
+    plan_index: plan/index.yaml
+    step_directory: plan/steps
+    checkpoint_branch: linux-next
+
+  continuation_policy:
+    selection_rule: >
+      Read plan.yaml, plan/index.yaml, and methodology.yaml first. Then choose
+      the highest-priority step whose status is ready. If the current step is
+      blocked, promote the next independent ready step instead of stalling.
+    update_order:
+      - "Update the step file with the latest evidence, blockers, and next action."
+      - "Update plan/index.yaml status and next_step pointers."
+      - "Update plan.yaml current_state only after the step index is updated."
+    clarification_rule: >
+      If a step needs a decision that cannot be derived locally, mark it
+      needs_clarification, write the exact question and recommended default in
+      the step file, and continue with another ready step if one exists.
+    checkpoint_rule: >
+      Every meaningful batch ends with a checkpoint commit and push to origin/linux-next.
+      It is acceptable for that checkpoint to contain incomplete work if the state is coherent.
+      Use a meaningful checkpoint-style commit message that records remaining work and the next action.
+
+  status_values:
+    - pending
+    - ready
+    - in_progress
+    - blocked
+    - needs_clarification
+    - completed
+    - obsoleted
+
+  completion_criteria:
+    - "Every step is either completed, obsoleted, or explicitly blocked with a recorded question."
+    - "No active step lacks a deliverable file under plan/steps/."
+    - "Each hourly invocation can resume from plan/index.yaml without rereading prior chat context."
+    - "The wrapper contract remains `./codex <prompt>` with the Tillandsias profile selected by default."
+
+  notes:
+    - "This plan is intentionally biased toward the highest-residual active specs first."
+    - "Retired specs stay tombstoned or obsolete; do not revive them in later passes."
+    - "If a step becomes stale because another step obsoleted its dependency, mark it obsoleted rather than completing it."
+    - "Local work is ephemeral; remote origin is the durable copy."
+    - "The `./codex --repeat <duration> \"<prompt>\"` wrapper contract is the default autonomous entrypoint."

@@ -4,13 +4,15 @@ ephemeral_work_problem:
     Agent A is assigned: "Fix 50 broken specs across browser-isolation capability.
     Each fix requires: audit spec → propose change → implement → verify." This takes
     500 iterations before committing. Without discipline, agent's local VCS history
-    becomes a mess of incomplete commits, merge conflicts bloom, and main's history log
-    shows 500 spec-fix commits (noise instead of signal).
+    becomes a mess of incomplete commits, merge conflicts bloom, and the durable
+    remote copy never receives the real work before an ephemeral host is lost.
 
   constraints:
     - Agent runs in isolated VCS worktree (one per agent, siblings in <worktree-dir>/)
     - Agent iterates freely in local worktree; no coordination with other agents during work
-    - At batch completion, agent merges back to main
+    - Agents checkpoint frequently to the active integration branch before the host or worktree can be lost
+    - The active integration branch for this repository is `linux-next` unless a task explicitly says otherwise
+    - Checkpoint commits may be incomplete, failing, or temporary as long as they preserve a coherent state
     - Main's VCS history MUST remain clean: one squashed commit per batch, no noise
     - Full iteration history MUST be queryable (audit trail for debugging)
     - Concurrent agents working in parallel MUST merge metadata deterministically under declared CRDT preconditions
@@ -19,7 +21,52 @@ ephemeral_work_problem:
     Ephemeral work produces: (1) clean, squashed main history, (2) queryable metadata
     of all iterations, (3) full traceability of failure root causes, (4) CRDT-style
     concurrent metadata merges when stable IDs, idempotent merge, and deterministic
-    tie-breakers are respected.
+    tie-breakers are respected, and (5) frequent remote checkpoints so local state
+    is recoverable if the host disappears.
+
+checkpoint_and_push_policy:
+  purpose: >
+    Keep the durable copy on origin ahead of the ephemeral machine state. Commit and
+    push small, meaningful checkpoints often enough that a crash only loses a short
+    window of local edits.
+
+  branch_policy:
+    active_checkpoint_branch: linux-next
+    release_branch: main
+    rule: >
+      Use `linux-next` for incomplete or temporary work, and reserve `main` for
+      release-grade squashed merges. Do not let a useful local state live only on disk.
+
+  cadence:
+    commit_when:
+      - after_each_meaningful_batch
+      - before_context_switching_tasks
+      - before_long_running_verification
+      - before_signing_off_for_the_day
+    push_when:
+      - immediately_after_commit_if_network_is_available
+      - after_recovering_from_an_interrupt
+      - after_any_checkpoint_that_might_be_lost
+
+  commit_message_policy:
+    subject_style: "checkpoint(<scope>): <specific progress>"
+    body_sections:
+      - "what changed"
+      - "what remains incomplete"
+      - "what was verified"
+      - "what is blocked"
+      - "next intended action"
+    note: >
+      It is acceptable and preferred to commit incomplete work if the checkpoint is
+      coherent. The commit message must say that it is a checkpoint or WIP so nobody
+      mistakes it for finished work.
+
+  remote_policy:
+    default_remote: origin
+    first_push: "git push -u origin <branch>"
+    expectation: >
+      Treat local state as ephemeral. Remote origin is the durable backup of current
+      progress, not just the place for finished code.
 
 lamport_clock_system:
   description: >
