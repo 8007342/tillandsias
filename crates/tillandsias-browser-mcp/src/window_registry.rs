@@ -57,6 +57,10 @@ impl WindowRegistry {
         })
     }
 
+    pub fn get_entry(&self, window_id: &str) -> Option<(u16, String)> {
+        self.windows.lock().get(window_id).map(|entry| (entry.cdp_port, entry.target_id.clone()))
+    }
+
     pub fn get_entry_mut(&self, window_id: &str) -> Option<WindowEntry> {
         self.windows.lock().remove(window_id)
     }

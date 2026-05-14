@@ -1,4 +1,8 @@
-<!-- @tombstone superseded:browser-isolation-tray-integration -->
+<!-- @tombstone superseded:opencode-web-session-otp
+     Last live in: v0.1.260513
+     Safe to delete after: v0.1.260513+2
+     Replacement: opencode-web-session-otp spec with OTP authentication flow
+-->
 <!-- @trace spec:opencode-web-session -->
 # opencode-web-session Specification (Deprecated)
 

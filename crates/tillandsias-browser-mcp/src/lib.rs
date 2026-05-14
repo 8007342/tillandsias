@@ -11,8 +11,10 @@ pub mod allowlist;
 pub mod launcher;
 pub mod server;
 pub mod window_registry;
+pub mod cdp_client;
 
 pub use server::{BrowserMcpServer, McpServerConfig};
+pub use cdp_client::CdpSession;
 
 /// Default per-session concurrent call limit (16 tools can run in parallel).
 pub const DEFAULT_CONCURRENT_CALLS: usize = 16;

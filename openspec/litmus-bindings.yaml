@@ -409,7 +409,8 @@ specs:
   status: obsolete
   litmus_tests: []
   coverage_ratio: 0
-  last_verified: '2026-05-13'
+  last_verified: '2026-05-14'
+  tombstone: superseded:opencode-web-session-otp
 - spec_id: opencode-web-session-otp
   status: active
   litmus_tests:

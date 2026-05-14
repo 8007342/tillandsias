@@ -1,6 +1,6 @@
 //! URL allowlist enforcement for `browser.open`.
 //!
-//! @trace spec:host-browser-mcp, spec:opencode-web-session
+//! @trace spec:host-browser-mcp, spec:opencode-web-session-otp
 //! @cheatsheet web/http.md
 
 use std::fmt;

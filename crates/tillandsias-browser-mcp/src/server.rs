@@ -4,6 +4,7 @@
 //! @cheatsheet web/mcp.md, web/cdp.md
 
 use crate::allowlist;
+use crate::cdp_client::{CdpError, CdpSession};
 use crate::framing::{RpcRequest, RpcResponse};
 use crate::launcher::{self, LaunchError};
 use crate::window_registry::{close_window, DebounceTable, WindowRegistry};
