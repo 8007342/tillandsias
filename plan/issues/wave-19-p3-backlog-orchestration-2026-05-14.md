@@ -130,11 +130,11 @@ No overlapping file ownership — safe for parallel execution.
 
 ## Progress (Updated by agents)
 
-- [ ] Team A (ON-005): First-time image pull progress
+- [x] Team A (ON-005): First-time image pull progress — COMPLETE (commit 6e10965a)
 - [x] Team B (ON-006): Multi-workspace detection — COMPLETE (commit cf668dc4)
 - [x] Team C (OBS-005): Metrics retention policy — COMPLETE (commit cf668dc4)
 - [x] Team D (OBS-008): Dashboard refresh auto-detection — COMPLETE (commit 457c6d6b)
-- [ ] CI verification: Pending all teams
+- [x] CI verification: All teams passed `./build.sh --test`
 - [ ] Manual smoke test (Day 2): Running in parallel
 
 ---
