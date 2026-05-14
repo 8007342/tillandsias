@@ -7,7 +7,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [scripts/install-chromium.sh#L2](../../../scripts/install-chromium.sh#L2)
 - [scripts/install-chromium.sh#L228](../../../scripts/install-chromium.sh#L228)
-- [scripts/install.sh#L157](../../../scripts/install.sh#L157)
-- [scripts/install.sh#L184](../../../scripts/install.sh#L184)
-- [scripts/install.sh#L230](../../../scripts/install.sh#L230)
-- [scripts/install.sh#L333](../../../scripts/install.sh#L333)
+- [scripts/install.sh#L170](../../../scripts/install.sh#L170)
+- [scripts/install.sh#L197](../../../scripts/install.sh#L197)
+- [scripts/install.sh#L243](../../../scripts/install.sh#L243)
+- [scripts/install.sh#L346](../../../scripts/install.sh#L346)

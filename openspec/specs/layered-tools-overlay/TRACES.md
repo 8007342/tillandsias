@@ -16,4 +16,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/config-overlay/mcp/git-tools.sh#L3](../../../images/default/config-overlay/mcp/git-tools.sh#L3)
 - [images/default/config-overlay/mcp/project-info.sh#L3](../../../images/default/config-overlay/mcp/project-info.sh#L3)
 - [images/default/Containerfile#L26](../../../images/default/Containerfile#L26)
-- [images/default/lib-common.sh#L429](../../../images/default/lib-common.sh#L429)
+- [images/default/lib-common.sh#L495](../../../images/default/lib-common.sh#L495)

@@ -6,7 +6,12 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [crates/tillandsias-headless/src/main.rs#L325](../../../crates/tillandsias-headless/src/main.rs#L325)
-- [crates/tillandsias-headless/src/main.rs#L1106](../../../crates/tillandsias-headless/src/main.rs#L1106)
+- [crates/tillandsias-headless/src/main.rs#L1206](../../../crates/tillandsias-headless/src/main.rs#L1206)
+- [crates/tillandsias-headless/src/main.rs#L1373](../../../crates/tillandsias-headless/src/main.rs#L1373)
+- [crates/tillandsias-headless/src/main.rs#L3011](../../../crates/tillandsias-headless/src/main.rs#L3011)
+- [crates/tillandsias-headless/src/main.rs#L3031](../../../crates/tillandsias-headless/src/main.rs#L3031)
+- [crates/tillandsias-headless/src/main.rs#L3055](../../../crates/tillandsias-headless/src/main.rs#L3055)
+- [crates/tillandsias-headless/src/main.rs#L3227](../../../crates/tillandsias-headless/src/main.rs#L3227)
 - [scripts/build-image.sh#L201](../../../scripts/build-image.sh#L201)
 - [scripts/build-image.sh#L206](../../../scripts/build-image.sh#L206)
 - [scripts/build-image.sh#L291](../../../scripts/build-image.sh#L291)

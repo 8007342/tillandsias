@@ -46,7 +46,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/lib-common.sh#L121](../../../images/default/lib-common.sh#L121)
 - [images/default/lib-common.sh#L171](../../../images/default/lib-common.sh#L171)
 - [images/default/lib-common.sh#L207](../../../images/default/lib-common.sh#L207)
-- [images/default/lib-common.sh#L373](../../../images/default/lib-common.sh#L373)
+- [images/default/lib-common.sh#L439](../../../images/default/lib-common.sh#L439)
 - [images/git/post-receive-hook.sh#L2](../../../images/git/post-receive-hook.sh#L2)
 - [images/git/post-receive-hook.sh#L16](../../../images/git/post-receive-hook.sh#L16)
 - [images/git/post-receive-hook.sh#L47](../../../images/git/post-receive-hook.sh#L47)
