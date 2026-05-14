@@ -781,6 +781,128 @@ fn build_inference_run_args(
     args
 }
 
+/// Path on host to the dynamic Caddyfile written by the headless runtime,
+/// bind-mounted into the router container at `/run/router/dynamic.Caddyfile`.
+///
+/// @trace spec:subdomain-routing-via-reverse-proxy
+fn router_dynamic_caddyfile_host_path() -> PathBuf {
+    let base = if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+        PathBuf::from(xdg).join("tillandsias")
+    } else {
+        std::env::temp_dir().join("tillandsias-embedded")
+    };
+    base.join("router")
+}
+
+/// Build `podman run` args for the Caddy reverse-proxy router container.
+///
+/// The router runs on the enclave network with DNS alias `router` so Squid's
+/// `cache_peer` directive can resolve it for `.localhost` subdomain traffic.
+/// It also publishes `127.0.0.1:8080:8080` so the host browser can reach
+/// OpenCode Web at `http://<service>.<project>.localhost:8080/`.
+///
+/// @trace spec:subdomain-routing-via-reverse-proxy, spec:fix-router-loopback-port, spec:enclave-network
+fn build_router_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
+    let dyn_dir = router_dynamic_caddyfile_host_path();
+    let dyn_file = dyn_dir.join("dynamic.Caddyfile");
+    // Ensure the directory and placeholder file exist before the container
+    // starts so the bind-mount succeeds even on first run.
+    let _ = std::fs::create_dir_all(&dyn_dir);
+    if !dyn_file.exists() {
+        let _ = std::fs::write(&dyn_file, "");
+    }
+
+    vec![
+        "--detach".into(),
+        "--rm".into(),
+        "--name".into(),
+        "tillandsias-router".into(),
+        "--hostname".into(),
+        "router".into(),
+        // @trace spec:subdomain-routing-via-reverse-proxy, spec:enclave-network
+        // Dual-homed: enclave alias `router` for Squid cache_peer + proxy agents,
+        // plus host loopback publish for the browser.
+        "--network-alias".into(),
+        "router".into(),
+        "--network".into(),
+        ENCLAVE_NET.into(),
+        "--cap-drop=ALL".into(),
+        "--security-opt=no-new-privileges".into(),
+        "--security-opt=label=disable".into(),
+        "--userns=keep-id".into(),
+        "--pids-limit=64".into(),
+        "--read-only".into(),
+        "--tmpfs".into(),
+        "/tmp:size=64m".into(),
+        "--tmpfs".into(),
+        "/run/router:size=8m".into(),
+        // @trace spec:fix-router-loopback-port
+        // Host publish on loopback ONLY. Both host and container ports are 8080
+        // because rootless podman cannot bind ports below 1024 under
+        // --cap-drop=ALL. The base.Caddyfile listener is already on :8080.
+        "-p".into(),
+        "127.0.0.1:8080:8080".into(),
+        // @trace spec:subdomain-routing-via-reverse-proxy
+        // Dynamic Caddyfile written by the runtime for per-project routes.
+        // Bind-mounted read-write so router-reload.sh can atomically replace it.
+        "-v".into(),
+        format!(
+            "{}:/run/router/dynamic.Caddyfile:rw",
+            dyn_file.display()
+        ),
+        "--mount".into(),
+        format!(
+            "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
+            certs_dir.join("intermediate.crt").display()
+        ),
+        image.into(),
+    ]
+}
+
+/// Ensure the router container (`tillandsias-router`) is running.
+///
+/// Idempotent: if a container with that name already exists and is in the
+/// `running` state, this is a no-op. If the container exists but is stopped
+/// (e.g., left over from a previous run), it is removed first. If it does
+/// not exist, it is started with `build_router_run_args`.
+///
+/// @trace spec:subdomain-routing-via-reverse-proxy, spec:enclave-network
+async fn ensure_router_running(
+    client: &PodmanClient,
+    certs_dir: &Path,
+    image: &str,
+    debug: bool,
+) -> Result<(), String> {
+    const ROUTER_NAME: &str = "tillandsias-router";
+
+    if let Ok(inspect) = client.inspect_container(ROUTER_NAME).await {
+        if inspect.state == "running" {
+            if debug {
+                eprintln!("[tillandsias] router already running");
+            }
+            return Ok(());
+        }
+        // Container exists but is stopped — remove it so a fresh one can start.
+        if debug {
+            eprintln!("[tillandsias] router container found but not running (state={}); removing", inspect.state);
+        }
+        let _ = client.remove_container(ROUTER_NAME).await;
+    }
+
+    if debug {
+        eprintln!("[tillandsias] starting router container");
+    }
+    client
+        .run_container(&build_router_run_args(certs_dir, image))
+        .await
+        .map_err(|e| format!("Failed to start router: {e}"))?;
+
+    if debug {
+        eprintln!("[tillandsias] router container started");
+    }
+    Ok(())
+}
+
 fn forge_container_name(project_name: &str) -> String {
     format!("tillandsias-{project_name}-forge")
 }
@@ -2551,5 +2673,40 @@ mod tests {
                 .any(|arg| arg == "--user-data-dir=/tmp/tillandsias/browser/test-profile")
         );
         assert!(has_arg(&args, "--ozone-platform=x11"));
+    }
+
+    // @trace spec:subdomain-routing-via-reverse-proxy, spec:fix-router-loopback-port
+    #[test]
+    fn router_run_args_encode_expected_container_shape() {
+        let certs_dir = PathBuf::from("/tmp/ca");
+        let args = build_router_run_args(&certs_dir, "tillandsias-router:v1.2.3");
+
+        // Security flags
+        assert!(has_arg(&args, "--detach"));
+        assert!(has_arg(&args, "--rm"));
+        assert!(has_arg(&args, "--read-only"));
+        assert!(has_arg(&args, "--cap-drop=ALL"));
+        assert!(has_arg(&args, "--security-opt=no-new-privileges"));
+        assert!(has_arg(&args, "--userns=keep-id"));
+
+        // Naming and network
+        assert!(has_arg(&args, "tillandsias-router"));
+        assert!(has_arg(&args, "router"));
+        assert!(has_arg(&args, ENCLAVE_NET));
+
+        // Loopback-only host publish (fix-router-loopback-port)
+        assert!(has_arg(&args, "127.0.0.1:8080:8080"));
+
+        // Dynamic Caddyfile bind-mount present
+        assert!(args.iter().any(|arg| arg.contains("dynamic.Caddyfile")));
+
+        // CA cert mount
+        assert!(
+            args.iter().any(|arg| arg.contains("intermediate.crt")
+                && arg.contains("/etc/tillandsias/ca.crt"))
+        );
+
+        // Image is the last argument
+        assert_eq!(args.last().map(|s| s.as_str()), Some("tillandsias-router:v1.2.3"));
     }
 }
