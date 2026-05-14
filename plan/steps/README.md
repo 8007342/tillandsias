@@ -20,6 +20,7 @@ Each step file should be written as a cold-start handoff document.
 - Include stable step or graph node IDs so repeated updates are idempotent.
 - Mention the current branch, checkpoint commit, blocker state, and residual risk.
 - Do not depend on scratch notes for canonical meaning.
+- Use plain repo paths in step notes; avoid `@`-style file references so the handoff stays readable outside the current harness.
 
 ## Scratch Notes
 

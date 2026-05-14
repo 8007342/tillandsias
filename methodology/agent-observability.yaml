@@ -159,6 +159,7 @@ agent_observability_protocol:
       - "Render only active work and its dependency tail as a compact tree with one line per node."
       - "Treat anonymous stream events as evidence only; they may advance the current focus bar but must not become standalone tree nodes."
       - "Ask agents to file an immediate bootstrap refinement note to ./methodology/events/ or ./plan/issues/ before edits begin, then refresh it after each meaningful substep so live progress is visible before the session ends."
+      - "Keep progress notes modest and portable; use plain repo paths instead of @-prefixed file references."
       - "Show token-spend metadata only when cheaply available from existing metadata; do not issue extra API calls to fetch it."
       - "If token metadata exists, surface both per-task token spend and the remaining percentage until rate limiting."
       - "Do not stream file-by-file changes in repeat mode unless explicitly requested."

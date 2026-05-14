@@ -10,3 +10,4 @@ Guidelines:
 - Refresh the note after each meaningful substep, blocker, or verification milestone.
 - If a task needs clarification, include the exact question and the recommended default decision.
 - Treat these notes as durable handoff artifacts for a different future agent.
+- Use plain repo paths in notes; avoid `@`-style file references so the content is portable across agents and wrappers.

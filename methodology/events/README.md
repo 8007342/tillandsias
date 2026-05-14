@@ -10,3 +10,4 @@ Guidelines:
 - Refresh the same task note after each meaningful substep or blocker instead of waiting for completion.
 - Keep entries cold-start readable and safe to replay.
 - If a task is ambiguous, record the question and a recommended default instead of stalling in chat.
+- Use plain repo paths in notes; avoid `@`-style file references so the handoff stays readable outside any one harness.

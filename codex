@@ -7,12 +7,17 @@ if [[ ! -x "$CODEX_BIN" ]]; then
 fi
 
 QUIET=0
+VERBOSE=0
 REPEAT_INTERVAL=""
 codex_args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --quiet|-q)
       QUIET=1
+      shift
+      ;;
+    --verbose|-v)
+      VERBOSE=1
       shift
       ;;
     --repeat)
@@ -93,6 +98,12 @@ format_timestamp() {
   local epoch="${1:-0}"
   date -d "@$epoch" '+%H:%M:%S'
 }
+
+if [[ "$VERBOSE" -eq 1 ]]; then
+  exec "$CODEX_BIN" \
+    "${common_args[@]}" \
+    "${codex_args[@]}"
+fi
 
 if [[ -n "$REPEAT_INTERVAL" ]]; then
   REPEAT_SUPERVISOR_BIN="$PWD/target/debug/tillandsias-repeat-loop"
