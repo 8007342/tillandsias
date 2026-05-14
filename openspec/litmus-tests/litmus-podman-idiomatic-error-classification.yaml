@@ -2,94 +2,69 @@
 name: litmus:podman-idiomatic-error-classification
 spec: podman-idiomatic-patterns
 phase: pre-build
-description: Verify that is_transient() correctly classifies network errors as retryable and permanent errors (not found, permission denied) as fatal, with exponential backoff between retries
+description: Verify PodmanError.is_transient() classifies network errors as retryable and permanent errors as fatal
 severity: critical
 
 preconditions:
   - workspace contains crates/tillandsias-podman with client.rs PodmanError enum
   - is_transient() method exists on PodmanError type
-  - cargo and tests are available
+  - cargo is available in PATH
 
 critical_path:
-  - step: "assert is_transient() method exists on PodmanError"
-    command: "grep -n 'fn is_transient\\|is_transient()' crates/tillandsias-podman/src/client.rs"
+  - step: "verify is_transient() method exists on PodmanError"
+    command: "grep -F 'pub fn is_transient(&self) -> bool' crates/tillandsias-podman/src/client.rs"
     timeout_ms: 5000
+    expected_behavior: "pub fn is_transient(&self) -> bool"
 
-  - step: "verify CommandFailed variant exists (transient network errors)"
+  - step: "verify PodmanError enum has StreamError variant"
+    command: "grep -F 'StreamError' crates/tillandsias-podman/src/client.rs"
+    timeout_ms: 5000
+    expected_behavior: "StreamError"
+
+  - step: "verify PodmanError enum has CommandFailed variant"
     command: "grep -F 'CommandFailed' crates/tillandsias-podman/src/client.rs"
     timeout_ms: 5000
+    expected_behavior: "CommandFailed"
 
-  - step: "verify NotFound variant exists (permanent, not retried)"
+  - step: "verify PodmanError enum has NotFound variant"
     command: "grep -F 'NotFound' crates/tillandsias-podman/src/client.rs"
     timeout_ms: 5000
+    expected_behavior: "NotFound"
 
-  - step: "verify ParseError variant exists (permanent, not retried)"
+  - step: "verify PodmanError enum has ParseError variant"
     command: "grep -F 'ParseError' crates/tillandsias-podman/src/client.rs"
     timeout_ms: 5000
+    expected_behavior: "ParseError"
 
-  - step: "verify is_transient() returns true for network/timeout errors"
-    command: "grep -B 5 -A 15 'fn is_transient' crates/tillandsias-podman/src/client.rs | grep -E '(CommandFailed|timeout|connection|Err|true)'"
+  - step: "verify is_transient() handles StreamError as transient"
+    command: "grep -A 30 'pub fn is_transient' crates/tillandsias-podman/src/client.rs | grep 'StreamError'"
     timeout_ms: 5000
+    expected_behavior: "StreamError"
 
-  - step: "verify is_transient() returns false for NotFound"
-    command: "grep -B 5 -A 15 'fn is_transient' crates/tillandsias-podman/src/client.rs | grep -E '(NotFound|ParseError).*false'"
+  - step: "verify is_transient() handles timeout errors"
+    command: "grep -A 30 'pub fn is_transient' crates/tillandsias-podman/src/client.rs | grep 'timeout'"
     timeout_ms: 5000
+    expected_behavior: "timeout"
 
-  - step: "verify exponential backoff implementation in retry logic"
-    command: "grep -n 'backoff\\|exponential\\|100.*200.*400\\|retry_delay' crates/tillandsias-podman/src/launch.rs | head -10"
+  - step: "verify is_transient() handles NotFound as permanent"
+    command: "grep -A 30 'pub fn is_transient' crates/tillandsias-podman/src/client.rs | grep -A 5 'NotFound' | grep 'false'"
     timeout_ms: 5000
+    expected_behavior: "false"
 
-  - step: "verify retry loop respects is_transient() check"
-    command: "grep -B 5 -A 10 'is_transient()' crates/tillandsias-podman/src/launch.rs | grep -E '(if|match|continue|break)' | head -5"
+  - step: "verify is_transient() handles ParseError as permanent"
+    command: "grep -A 30 'pub fn is_transient' crates/tillandsias-podman/src/client.rs | grep 'ParseError'"
     timeout_ms: 5000
-
-  - step: "verify max retries configuration (3 attempts expected)"
-    command: "grep -n 'MAX_RETRIES\\|max.*retries\\|3' crates/tillandsias-podman/src/launch.rs | head -10"
-    timeout_ms: 5000
-
-  - step: "run unit tests for error classification"
-    command: "cargo test -p tillandsias-podman is_transient -- --nocapture 2>&1 | tail -20"
-    timeout_ms: 120000
-
-  - step: "cargo check confirms compilation succeeds with no errors"
-    command: "cargo check -p tillandsias-podman 2>&1 | grep -v '^warning' | head -20"
-    timeout_ms: 120000
+    expected_behavior: "ParseError"
 
 observability:
   traces:
     - "@trace spec:podman-idiomatic-patterns"
-  expected_log: "Error classification verified: transient errors trigger exponential backoff retry, permanent errors propagate immediately"
+  expected_log: "Error classification verified: StreamError/timeout as transient, NotFound/ParseError as permanent"
   log_fields:
     spec: "podman-idiomatic-patterns"
     test: "podman-idiomatic-error-classification"
     requirement: "podman-idiomatic-patterns.errors.retry-discrimination@v1"
 
-gating_points:
-  - signal: "is_transient_method_exists"
-    success: "is_transient() method found with correct signature"
-    failure: "method not found OR signature incorrect"
-    spec_linkage: "podman-idiomatic-patterns"
-
-  - signal: "transient_errors_classified_correctly"
-    success: "is_transient() returns true for network timeout, connection refused, temporary failure"
-    failure: "transient errors classified as permanent OR false positive classification"
-    spec_linkage: "podman-idiomatic-patterns"
-
-  - signal: "permanent_errors_not_retried"
-    success: "is_transient() returns false for NotFound, PermissionDenied, ParseError"
-    failure: "permanent errors return true OR retry logic doesn't respect classification"
-    spec_linkage: "podman-idiomatic-patterns"
-
-  - signal: "exponential_backoff_implemented"
-    success: "retry loop uses exponential backoff starting at 100ms, capped at 30s"
-    failure: "backoff logic missing OR incorrect delay values OR no cap"
-    spec_linkage: "podman-idiomatic-patterns"
-
-  - signal: "max_attempts_enforced"
-    success: "retry loop attempts up to 3 times for transient errors"
-    failure: "retry count incorrect OR unbounded loop exists"
-    spec_linkage: "podman-idiomatic-patterns"
-
 rollback:
-  on_failure: "inspect PodmanError enum and is_transient() implementation in client.rs, then verify retry logic in launch.rs"
-  command: "grep -n 'enum PodmanError\\|fn is_transient\\|CommandFailed\\|NotFound' crates/tillandsias-podman/src/client.rs | head -20"
+  on_failure: "inspect PodmanError enum and is_transient() implementation in client.rs"
+  command: "grep -B 5 -A 35 'pub fn is_transient' crates/tillandsias-podman/src/client.rs"

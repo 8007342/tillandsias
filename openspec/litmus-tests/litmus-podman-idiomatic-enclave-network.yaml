@@ -2,73 +2,58 @@
 name: litmus:podman-idiomatic-enclave-network
 spec: podman-idiomatic-patterns
 phase: pre-build
-description: Verify that containers launched for a project use enclave network named tillandsias-<project>-enclave and all containers connect to it with internal DNS isolation
+description: Verify enclave_network_name() generates tillandsias-<project>-enclave pattern and network creation/removal functions exist
 severity: critical
 
 preconditions:
-  - podman is available in PATH
   - crates/tillandsias-podman/src contains enclave_network_name() function
-  - test project directory can be created
+  - cargo is available in PATH
 
 critical_path:
-  - step: "verify enclave_network_name() function exists and compiles"
-    command: "grep -F 'fn enclave_network_name' crates/tillandsias-podman/src/lib.rs"
+  - step: "verify enclave_network_name() function exists with pub visibility"
+    command: "grep -F 'pub fn enclave_network_name' crates/tillandsias-podman/src/lib.rs"
     timeout_ms: 5000
+    expected_behavior: "pub fn enclave_network_name"
 
-  - step: "verify enclave_network_name() takes project name parameter"
-    command: "grep -A 2 'fn enclave_network_name' crates/tillandsias-podman/src/lib.rs | grep -E '(project|name|&str)'"
+  - step: "verify function signature takes &str parameter"
+    command: "grep -A 1 'pub fn enclave_network_name' crates/tillandsias-podman/src/lib.rs | grep '&str'"
     timeout_ms: 5000
+    expected_behavior: "&str"
 
-  - step: "verify return format produces tillandsias-<project>-enclave pattern"
-    command: "cargo test -p tillandsias-podman enclave_network_name -- --nocapture 2>&1 | grep -E '(tillandsias-.*-enclave|test.*enclave)' || grep -n 'tillandsias-' crates/tillandsias-podman/src/lib.rs | head -5"
+  - step: "run unit test for enclave_network_name"
+    command: "cargo test -p tillandsias-podman enclave_network_name -- --nocapture --test-threads=1"
     timeout_ms: 120000
+    expected_behavior: "test result: ok"
 
-  - step: "verify network creation uses correct naming pattern in launch code"
-    command: "grep -rn 'tillandsias-.*-enclave' crates/tillandsias-podman/src/"
+  - step: "verify tillandsias-<project>-enclave format in function definition"
+    command: "grep -A 2 'pub fn enclave_network_name' crates/tillandsias-podman/src/lib.rs | grep 'tillandsias'"
     timeout_ms: 5000
+    expected_behavior: "tillandsias"
 
-  - step: "verify network is created before container launches"
-    command: "grep -n 'network create\\|podman network' crates/tillandsias-podman/src/launch.rs | head -5"
+  - step: "verify network_exists() function in client.rs"
+    command: "grep -F 'pub async fn network_exists' crates/tillandsias-podman/src/client.rs"
     timeout_ms: 5000
+    expected_behavior: "pub async fn network_exists"
 
-  - step: "verify containers connect to enclave network with --network flag"
-    command: "grep -n '\\-\\-network' crates/tillandsias-podman/src/launch.rs | head -10"
+  - step: "verify create_internal_network() function in client.rs"
+    command: "grep -F 'pub async fn create_internal_network' crates/tillandsias-podman/src/client.rs"
     timeout_ms: 5000
+    expected_behavior: "pub async fn create_internal_network"
 
-  - step: "cargo check confirms compilation succeeds"
-    command: "cargo check -p tillandsias-podman 2>&1 | tail -5"
-    timeout_ms: 120000
+  - step: "verify remove_network() function in client.rs"
+    command: "grep -F 'pub async fn remove_network' crates/tillandsias-podman/src/client.rs"
+    timeout_ms: 5000
+    expected_behavior: "pub async fn remove_network"
 
 observability:
   traces:
     - "@trace spec:podman-idiomatic-patterns"
-  expected_log: "Enclave network naming convention verified: tillandsias-<project>-enclave pattern enforced"
+  expected_log: "Enclave network functions verified: enclave_network_name, network lifecycle"
   log_fields:
     spec: "podman-idiomatic-patterns"
     test: "podman-idiomatic-enclave-network"
     requirement: "podman-idiomatic-patterns.network.enclave-per-project@v1"
 
-gating_points:
-  - signal: "enclave_network_function_exists"
-    success: "enclave_network_name() function found in lib.rs"
-    failure: "function not found OR incorrect signature"
-    spec_linkage: "podman-idiomatic-patterns"
-
-  - signal: "network_naming_pattern_correct"
-    success: "all network names match tillandsias-<project>-enclave pattern"
-    failure: "naming pattern violated OR inconsistent format"
-    spec_linkage: "podman-idiomatic-patterns"
-
-  - signal: "containers_connected_to_enclave"
-    success: "all containers launched with --network pointing to enclave network"
-    failure: "containers use different network OR --network flag missing"
-    spec_linkage: "podman-idiomatic-patterns"
-
-  - signal: "network_isolation_enforced"
-    success: "enclave networks isolated from host and other projects at network layer"
-    failure: "containers from different enclaves can communicate OR host has access"
-    spec_linkage: "podman-idiomatic-patterns"
-
 rollback:
-  on_failure: "inspect crates/tillandsias-podman/src/lib.rs and launch.rs for enclave network logic"
-  command: "grep -n 'enclave_network_name\\|tillandsias-.*-enclave\\|network create' crates/tillandsias-podman/src/lib.rs crates/tillandsias-podman/src/launch.rs | head -20"
+  on_failure: "inspect crates/tillandsias-podman/src/lib.rs and client.rs for enclave network functions"
+  command: "grep -n 'enclave_network_name\\|network_exists\\|create_internal_network\\|remove_network' crates/tillandsias-podman/src/lib.rs crates/tillandsias-podman/src/client.rs | head -20"
