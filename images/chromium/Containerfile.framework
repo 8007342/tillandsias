@@ -1,4 +1,4 @@
-# @trace spec:browser-isolation-framework, spec:chromium-debug-variant
+# @trace spec:browser-isolation-framework, spec:chromium-debug-variant, spec:chromium-safe-variant
 # Extended Chromium container with SDK tools, automation libraries, and a
 # visible GUI browser path.
 # Extends tillandsias-chromium-core with:
@@ -9,6 +9,7 @@
 #
 # The chromium-core version is parameterized via ARG so the build is
 # non-interactive and tracks the exact same version as the running binary.
+# ARG is resolved at build time by scripts/build-image.sh using podman build --build-arg
 # @trace spec:versioning
 
 ARG CHROMIUM_CORE_IMAGE
