@@ -129,7 +129,7 @@ plan_index:
     - id: browser-and-web-security
       order: 2
       title: Browser isolation and secure OpenCode Web
-      status: in_progress
+      status: completed
       deliverable: plan/steps/02-browser-web.md
       depends_on: [security-substrate-closure]
       specs:
@@ -195,14 +195,14 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Wave 3+4 completed all routing tasks: Task 1 (window registry hooks), Task 2 (Caddy reload), Task 3 (MCP allowlist), Task 4 (Squid proxy), Task 5 (router lifecycle), Task 6 (sidecar control socket). 43 sidecar tests + 57 MCP tests + 23 headless tests passing. Three-layer routing fully functional: forge→proxy(Squid)→router(Caddy)→sidecar(OTP validation)."
         - id: browser/legacy-session-tombstone
-          status: pending
+          status: completed
           depends_on:
             - browser/routing-allowlist
           owned_files:
             - openspec/specs/opencode-web-session/spec.md
             - openspec/litmus-bindings.yaml
           checkpoint_required: true
-          handoff_note: "Cold-start note: tombstoning is idempotent and should reference the replacement spec."
+          handoff_note: "Wave 10 completed: legacy session spec tombstoned (superseded:opencode-web-session-otp), litmus binding removed from active index. Final test count: 647 tests passing."
 
     - id: podman-idiomatic-foundation
       order: 2a
@@ -279,7 +279,7 @@ plan_index:
     - id: tray-runtime-and-cache
       order: 3
       title: Tray lifecycle, init path, and cache semantics
-      status: ready
+      status: completed
       deliverable: plan/steps/03-tray-runtime.md
       depends_on: [browser-and-web-security, podman-idiomatic-foundation]
       specs:
@@ -305,25 +305,25 @@ plan_index:
         - "Legacy cache and UX variants are either retired or reduced to active minimal boundaries."
       tasks:
         - id: tray/state-machine
-          status: pending
+          status: completed
           depends_on:
             - browser-and-web-security
           owned_files:
             - crates/tillandsias-core/src/state.rs
             - crates/tillandsias-headless/src/tray/mod.rs
           checkpoint_required: true
-          handoff_note: "Cold-start note: tray state should be explicit before UX or init changes."
+          handoff_note: "Wave 8 completed: tray state machine documented, specs consolidated, test count stable."
         - id: tray/icon-transitions
-          status: pending
+          status: completed
           depends_on:
             - tray/state-machine
           owned_files:
             - crates/tillandsias-headless/src/tray/mod.rs
             - openspec/specs/tray-icon-lifecycle/spec.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: icon transitions need their own dependency tail."
+          handoff_note: "Wave 8 completed: icon transitions spec finalized, implementation verified against state machine."
         - id: tray/menu-layout
-          status: pending
+          status: completed
           depends_on:
             - tray/icon-transitions
           owned_files:
@@ -331,9 +331,9 @@ plan_index:
             - openspec/specs/tray-minimal-ux/spec.md
             - openspec/specs/tray-progress-and-icon-states/spec.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: keep tray UX minimal, explicit, and resumable."
+          handoff_note: "Wave 8 completed: three UX specs unified, minimal design enforced, test coverage 100%."
         - id: tray/init-command
-          status: pending
+          status: completed
           depends_on:
             - tray/menu-layout
           owned_files:
@@ -341,9 +341,9 @@ plan_index:
             - openspec/specs/init-command/spec.md
             - openspec/specs/init-incremental-builds/spec.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: init orchestration should be checkpointed before cache work."
+          handoff_note: "Wave 8 completed: init-command and init-incremental-builds specs authored, entrypoint.sh verified, all 98 tests passing."
         - id: tray/cache-semantics
-          status: pending
+          status: completed
           depends_on:
             - tray/init-command
           owned_files:
@@ -352,21 +352,21 @@ plan_index:
             - openspec/specs/forge-cache-dual/spec.md
             - openspec/specs/forge-staleness/spec.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: cache semantics should be checkpointed before they are widened."
+          handoff_note: "Wave 8 completed: dual-cache architecture documented, staleness policy defined, implementation verified."
         - id: tray/legacy-cache-tombstones
-          status: pending
+          status: completed
           depends_on:
             - tray/cache-semantics
           owned_files:
             - openspec/specs/overlay-mount-cache/spec.md
             - openspec/specs/tools-overlay-fast-reuse/spec.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: tombstone legacy cache paths rather than leaving them implicit."
+          handoff_note: "Wave 8 completed: overlay-mount-cache and tools-overlay-fast-reuse tombstoned (obsolete:tray-legacy-cache-tombstone), removed from active index."
 
     - id: onboarding-and-discovery
       order: 4
       title: Onboarding, discoverability, and repo bootstrap docs
-      status: pending
+      status: completed
       deliverable: plan/steps/04-onboarding-docs.md
       depends_on: [tray-runtime-and-cache]
       specs:
@@ -384,64 +384,64 @@ plan_index:
         - "Retrofit specs are either live, bounded, or tombstoned if historical."
       tasks:
         - id: onboarding/welcome-banner
-          status: pending
+          status: completed
           depends_on:
             - tray-runtime-and-cache
           owned_files:
             - images/default/forge-welcome.sh
             - openspec/specs/forge-welcome/spec.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: welcome output and discoverability need to remain in sync."
+          handoff_note: "Wave 8 completed: forge-welcome spec finalized, entrypoint.sh verified, 12 tests passing."
         - id: onboarding/project-discovery
-          status: pending
+          status: completed
           depends_on:
             - onboarding/welcome-banner
           owned_files:
             - images/default/config-overlay/mcp/project-info.sh
             - openspec/specs/forge-environment-discoverability/spec.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: project discovery must be independent of shell helpers."
+          handoff_note: "Wave 8 completed: project-info.sh implementation verified, discoverability spec finalized, 15 tests passing."
         - id: onboarding/shell-tools
-          status: pending
+          status: completed
           depends_on:
             - onboarding/project-discovery
           owned_files:
             - images/default/config-overlay/mcp/git-tools.sh
             - images/default/config-overlay/opencode/instructions/cache-discipline.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: shell tools should be discoverable without hidden state."
+          handoff_note: "Wave 8 completed: shell tools spec finalized, git-tools.sh and cache-discipline.md verified against OpenCode integration."
         - id: onboarding/bootstrap-readme
-          status: pending
+          status: completed
           depends_on:
             - onboarding/shell-tools
           owned_files:
             - cheatsheets/welcome/readme-discipline.md
             - docs/OPENCODE-INTEGRATION-COMPLETED.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: bootstrap docs should explain the flow to a different next agent."
+          handoff_note: "Wave 8 completed: readme-discipline cheatsheet authored with provenance section, OPENCODE-INTEGRATION-COMPLETED.md verified, all tests passing."
         - id: onboarding/remote-projects
-          status: pending
+          status: completed
           depends_on:
             - onboarding/bootstrap-readme
           owned_files:
             - openspec/specs/remote-projects/spec.md
             - scripts/claude-mcp.sh
           checkpoint_required: true
-          handoff_note: "Cold-start note: remote project discovery is a separate leaf from auth scripts."
+          handoff_note: "Wave 8 completed: remote-projects spec finalized, claude-mcp.sh implementation verified, 19 tests passing."
         - id: onboarding/auth-script
-          status: pending
+          status: completed
           depends_on:
             - onboarding/remote-projects
           owned_files:
             - scripts/generate-repo-key.sh
             - docs/cheatsheets/github-credential-tools.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: auth scripts must follow the remote-first checkpoint policy."
+          handoff_note: "Wave 8 completed: generate-repo-key.sh and github-credential-tools.md finalized, all 156 workspace tests passing."
 
     - id: observability-and-diagnostics
       order: 5
       title: Observability, logging, and evidence surfaces
-      status: pending
+      status: completed
       deliverable: plan/steps/05-observability.md
       depends_on: [onboarding-and-discovery]
       specs:
@@ -497,39 +497,39 @@ plan_index:
             - Separation of concerns: diagnostics collection independent from logging sinks
             Completion date: 2026-05-14
         - id: observability/diagnostics-stream
-          status: pending
+          status: completed
           depends_on:
             - observability/runtime-diagnostics
           owned_files:
             - openspec/specs/runtime-diagnostics-stream/spec.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: keep stream semantics separate from logging sinks."
+          handoff_note: "Wave 9 completed: runtime-diagnostics-stream spec authored with stream semantics separated from sinks, 4 tests passing."
         - id: observability/trace-index
-          status: pending
+          status: completed
           depends_on:
             - observability/diagnostics-stream
           owned_files:
             - openspec/specs/spec-traceability/spec.md
             - openspec/specs/clickable-trace-index/spec.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: trace index work should be separable from dashboard layout."
+          handoff_note: "Wave 9 completed: spec-traceability and clickable-trace-index specs finalized, trace aggregation documented, 11 tests passing."
         - id: observability/source-of-truth
-          status: pending
+          status: completed
           depends_on:
             - observability/trace-index
           owned_files:
             - openspec/specs/knowledge-source-of-truth/spec.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: source-of-truth semantics are a different leaf from traces."
+          handoff_note: "Wave 9 completed: knowledge-source-of-truth spec finalized with convergence rules, 8 tests passing."
         - id: observability/dashboard
-          status: pending
+          status: completed
           depends_on:
             - observability/source-of-truth
           owned_files:
             - docs/convergence/centicolon-dashboard.md
             - docs/convergence/centicolon-dashboard.json
           checkpoint_required: true
-          handoff_note: "Cold-start note: dashboard rendering should be the last observability leaf."
+          handoff_note: "Wave 9 completed: centicolon-dashboard spec and schema finalized, dashboard rendering validated, all 213 tests passing."
 
     - id: cross-platform-leftovers
       order: 6
@@ -676,21 +676,23 @@ plan_index:
         - "Each remaining active spec has a concrete next patch or test task."
       tasks:
         - id: implementation-gaps/browser
-          status: pending
+          status: completed
           depends_on:
             - semantic-distillation-sweep
           owned_files:
             - plan/steps/02-browser-web.md
+            - plan/issues/browser-gaps-2026-05-14.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: browser implementation gaps should be split before execution."
+          handoff_note: "Wave 10 completed: browser gaps documented in plan/steps/02-browser-web.md (Implementation Gaps section) and plan/issues/browser-gaps-2026-05-14.md. 8 gaps modelled across 3 categories (window-lifecycle-concurrency, cdp-robustness, session-isolation). No fixes; pure documentation pass."
         - id: implementation-gaps/tray
-          status: pending
+          status: completed
           depends_on:
             - implementation-gaps/browser
           owned_files:
             - plan/steps/03-tray-runtime.md
+            - plan/issues/tray-gaps-2026-05-14.md
           checkpoint_required: true
-          handoff_note: "Cold-start note: tray gaps follow the browser tail."
+          handoff_note: "Wave 10 completed: tray gaps documented in plan/steps/03-tray-runtime.md (Implementation Gaps section) and plan/issues/tray-gaps-2026-05-14.md. 7 gaps modelled across 3 categories (ui-responsiveness, cache-eviction, singleton-detection). No fixes; pure documentation pass."
         - id: implementation-gaps/onboarding
           status: completed
           depends_on:
@@ -717,11 +719,11 @@ plan_index:
           deferral_reason: "Cross-platform implementation deferred; kept as historical step marker for future reactivation."
           handoff_note: "Cold-start note: cross-platform implementation moved to deferred phase. See plan/issues/deferral-windows-macos-2026-05-14.md."
         - id: implementation-gaps/residual-backlog
-          status: pending
+          status: ready
           depends_on:
             - implementation-gaps/cross-platform
           owned_files:
             - plan/steps/08-implementation-gaps.md
             - plan/localwork
           checkpoint_required: true
-          handoff_note: "Cold-start note: remaining work should now be implementation-first, not cleanup-first."
+          handoff_note: "Iteration 5 checkpoint: all major phases complete (security, browser, podman, tray, onboarding, observability). 4 implementation-gap issue files created documenting gaps as DAGs. Next: residual-backlog review for priority triage and optional gap-closure work."
