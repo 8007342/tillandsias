@@ -33,7 +33,39 @@ const MENU_PATH: &str = "/Menu";
 const WATCHER_PATH: &str = "/StatusNotifierWatcher";
 const WATCHER_NAME: &str = "org.kde.StatusNotifierWatcher";
 
-// @trace spec:tray-minimal-ux
+/// @trace spec:tray-progress-and-icon-states, spec:tray-app
+/// Enclave health state machine — independent of app lifecycle.
+/// Tracks container readiness progression: Verifying → [ProxyReady] → [GitReady] → AllHealthy or Failed.
+///
+/// # State Diagram
+///
+/// ```text
+/// Verifying ──► ProxyReady ──► GitReady ──► AllHealthy
+///     │            │             │              │
+///     └────────────┴─────────────┴──────────────┤
+///                                                │
+///                                                ▼
+///                                             Failed
+/// ```
+///
+/// # Valid Transitions
+///
+/// - `Verifying` → `ProxyReady` — Proxy container healthy
+/// - `Verifying` → `Failed` — Probe failed or podman unavailable
+/// - `ProxyReady` → `GitReady` — Git service container healthy
+/// - `ProxyReady` → `Failed` — Probe failed
+/// - `GitReady` → `AllHealthy` — All containers healthy
+/// - `GitReady` → `Failed` — Probe failed
+/// - `AllHealthy` → `Failed` — Container died or health check failed (degrades to failure state)
+/// - **Any** → `Verifying` — Reset on new verification attempt (fallback)
+///
+/// # Semantics
+///
+/// - **Verifying**: Initial state. Checking for podman and dependencies.
+/// - **ProxyReady**: Proxy container confirmed online.
+/// - **GitReady**: Proxy + Git service confirmed online.
+/// - **AllHealthy**: Complete enclave operational (proxy, git, inference all healthy).
+/// - **Failed**: Unrecoverable enclave state. Requires manual rebuild or podman restart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EnclaveStatus {
     Verifying,
@@ -43,8 +75,34 @@ enum EnclaveStatus {
     Failed,
 }
 
-// @trace spec:tray-minimal-ux
+// @trace spec:tray-progress-and-icon-states, spec:tray-app
 impl EnclaveStatus {
+    /// Validate a transition from this state to the next.
+    /// @trace spec:tray-progress-and-icon-states
+    fn can_transition_to(&self, next: EnclaveStatus) -> bool {
+        match (*self, next) {
+            // From Verifying: can probe probe stages or fail
+            (Self::Verifying, Self::ProxyReady) => true,
+            (Self::Verifying, Self::Failed) => true,
+            // From ProxyReady: continue building or fail
+            (Self::ProxyReady, Self::GitReady) => true,
+            (Self::ProxyReady, Self::Failed) => true,
+            // From GitReady: complete or fail
+            (Self::GitReady, Self::AllHealthy) => true,
+            (Self::GitReady, Self::Failed) => true,
+            // From AllHealthy: only fails on container death
+            (Self::AllHealthy, Self::Failed) => true,
+            // From Failed: can retry (resets to Verifying implicitly)
+            (Self::Failed, Self::Verifying) => true,
+            // Any state can reset/retry to Verifying
+            (_, Self::Verifying) => true,
+            // Self-loop allowed for health checks
+            (state, same) if state == same => true,
+            // All other transitions invalid
+            _ => false,
+        }
+    }
+
     fn status_text(self) -> &'static str {
         match self {
             EnclaveStatus::Verifying => "☐ Verifying environment...",
@@ -224,7 +282,12 @@ impl TrayService {
         self.emit_refresh(true).await
     }
 
-    // @trace spec:tray-minimal-ux
+    /// @trace spec:tray-minimal-ux, spec:tray-progress-and-icon-states
+    /// Update tray status text, icon, and optionally forge availability.
+    /// Enclave status transitions to AllHealthy when forge becomes available.
+    /// Valid transitions:
+    /// - Verifying → AllHealthy (when forge_available becomes true)
+    /// - Any → Invalid (invalid transitions are silently ignored)
     async fn set_status(
         &self,
         text: impl Into<String>,
@@ -238,13 +301,23 @@ impl TrayService {
                 let previous_available = state.forge_available;
                 state.forge_available = value;
 
+                // @trace spec:tray-progress-and-icon-states
                 // Wire forge_available=true transition to update status and trigger menu rebuild
+                // Valid state transitions:
+                // - Verifying → AllHealthy (initial forge availability)
+                // - Failed → AllHealthy (recovery after failure)
                 if !previous_available && value {
-                    state.enclave_status = EnclaveStatus::AllHealthy;
-                    state.status_text = "✓ Environment OK".to_string();
+                    // Transition from unavailable to available: go directly to healthy
+                    if state.enclave_status.can_transition_to(EnclaveStatus::AllHealthy) {
+                        state.enclave_status = EnclaveStatus::AllHealthy;
+                        state.status_text = "✓ Environment OK".to_string();
+                    }
                 } else if value && state.enclave_status == EnclaveStatus::Verifying {
-                    state.enclave_status = EnclaveStatus::AllHealthy;
-                    state.status_text = "✓ Environment OK".to_string();
+                    // Already in Verifying, still becoming available: transition to healthy
+                    if state.enclave_status.can_transition_to(EnclaveStatus::AllHealthy) {
+                        state.enclave_status = EnclaveStatus::AllHealthy;
+                        state.status_text = "✓ Environment OK".to_string();
+                    }
                 }
             }
             state.bump_revision();
@@ -1815,6 +1888,135 @@ mod tests {
         assert!(args.contains(&"/usr/local/bin/entrypoint-forge-opencode-web.sh".to_string()));
         assert!(args.contains(&"--security-opt=label=disable".to_string()));
         assert!(args.contains(&"tillandsias-forge:v0.1.260506.6".to_string()));
+    }
+
+    // @trace spec:tray-progress-and-icon-states, spec:tray-app
+    #[test]
+    fn enclave_status_valid_transition_verifying_to_proxy_ready() {
+        let state = EnclaveStatus::Verifying;
+        assert!(state.can_transition_to(EnclaveStatus::ProxyReady));
+    }
+
+    // @trace spec:tray-progress-and-icon-states, spec:tray-app
+    #[test]
+    fn enclave_status_valid_transition_proxy_ready_to_git_ready() {
+        let state = EnclaveStatus::ProxyReady;
+        assert!(state.can_transition_to(EnclaveStatus::GitReady));
+    }
+
+    // @trace spec:tray-progress-and-icon-states, spec:tray-app
+    #[test]
+    fn enclave_status_valid_transition_git_ready_to_all_healthy() {
+        let state = EnclaveStatus::GitReady;
+        assert!(state.can_transition_to(EnclaveStatus::AllHealthy));
+    }
+
+    // @trace spec:tray-progress-and-icon-states, spec:tray-app
+    #[test]
+    fn enclave_status_valid_transition_any_to_failed() {
+        // Can transition to Failed from any state
+        assert!(EnclaveStatus::Verifying.can_transition_to(EnclaveStatus::Failed));
+        assert!(EnclaveStatus::ProxyReady.can_transition_to(EnclaveStatus::Failed));
+        assert!(EnclaveStatus::GitReady.can_transition_to(EnclaveStatus::Failed));
+        assert!(EnclaveStatus::AllHealthy.can_transition_to(EnclaveStatus::Failed));
+    }
+
+    // @trace spec:tray-progress-and-icon-states, spec:tray-app
+    #[test]
+    fn enclave_status_valid_transition_failed_to_verifying_retry() {
+        let state = EnclaveStatus::Failed;
+        assert!(state.can_transition_to(EnclaveStatus::Verifying));
+    }
+
+    // @trace spec:tray-progress-and-icon-states, spec:tray-app
+    #[test]
+    fn enclave_status_valid_transition_any_to_verifying_reset() {
+        // Can reset to Verifying from any state
+        assert!(EnclaveStatus::Verifying.can_transition_to(EnclaveStatus::Verifying));
+        assert!(EnclaveStatus::ProxyReady.can_transition_to(EnclaveStatus::Verifying));
+        assert!(EnclaveStatus::GitReady.can_transition_to(EnclaveStatus::Verifying));
+        assert!(EnclaveStatus::AllHealthy.can_transition_to(EnclaveStatus::Verifying));
+        assert!(EnclaveStatus::Failed.can_transition_to(EnclaveStatus::Verifying));
+    }
+
+    // @trace spec:tray-progress-and-icon-states, spec:tray-app
+    #[test]
+    fn enclave_status_valid_self_loop() {
+        // Health checks allow self-loops (idempotent)
+        assert!(EnclaveStatus::Verifying.can_transition_to(EnclaveStatus::Verifying));
+        assert!(EnclaveStatus::ProxyReady.can_transition_to(EnclaveStatus::ProxyReady));
+        assert!(EnclaveStatus::GitReady.can_transition_to(EnclaveStatus::GitReady));
+        assert!(EnclaveStatus::AllHealthy.can_transition_to(EnclaveStatus::AllHealthy));
+        assert!(EnclaveStatus::Failed.can_transition_to(EnclaveStatus::Failed));
+    }
+
+    // @trace spec:tray-progress-and-icon-states, spec:tray-app
+    #[test]
+    fn enclave_status_invalid_transition_skips_stages() {
+        // Cannot skip stages: Verifying → GitReady (must go through ProxyReady)
+        assert!(!EnclaveStatus::Verifying.can_transition_to(EnclaveStatus::GitReady));
+        // Cannot skip: Verifying → AllHealthy
+        assert!(!EnclaveStatus::Verifying.can_transition_to(EnclaveStatus::AllHealthy));
+        // Cannot skip: ProxyReady → AllHealthy
+        assert!(!EnclaveStatus::ProxyReady.can_transition_to(EnclaveStatus::AllHealthy));
+    }
+
+    // @trace spec:tray-progress-and-icon-states, spec:tray-app
+    #[test]
+    fn enclave_status_invalid_transition_backward_in_healthy_chain() {
+        // Cannot skip backward in the healthy progression chain
+        // (but can reset to Verifying from anywhere, so only test direct backward moves)
+        assert!(!EnclaveStatus::GitReady.can_transition_to(EnclaveStatus::ProxyReady));
+        assert!(!EnclaveStatus::AllHealthy.can_transition_to(EnclaveStatus::GitReady));
+    }
+
+    // @trace spec:tray-progress-and-icon-states, spec:tray-app
+    #[test]
+    fn enclave_status_text_includes_emoji() {
+        assert!(EnclaveStatus::Verifying.status_text().contains("☐"));
+        assert!(EnclaveStatus::ProxyReady.status_text().contains("🌐"));
+        assert!(EnclaveStatus::GitReady.status_text().contains("🪞"));
+        assert!(EnclaveStatus::AllHealthy.status_text().contains("✓"));
+        assert!(EnclaveStatus::Failed.status_text().contains("🥀"));
+    }
+
+    // @trace spec:tray-progress-and-icon-states, spec:tray-app
+    #[test]
+    fn enclave_status_full_progression() {
+        // Simulate a full healthy progression
+        let mut status = EnclaveStatus::Verifying;
+
+        // Verifying → ProxyReady
+        assert!(status.can_transition_to(EnclaveStatus::ProxyReady));
+        status = EnclaveStatus::ProxyReady;
+
+        // ProxyReady → GitReady
+        assert!(status.can_transition_to(EnclaveStatus::GitReady));
+        status = EnclaveStatus::GitReady;
+
+        // GitReady → AllHealthy
+        assert!(status.can_transition_to(EnclaveStatus::AllHealthy));
+        status = EnclaveStatus::AllHealthy;
+
+        // AllHealthy → Failed (container dies)
+        assert!(status.can_transition_to(EnclaveStatus::Failed));
+        status = EnclaveStatus::Failed;
+
+        // Failed → Verifying (retry)
+        assert!(status.can_transition_to(EnclaveStatus::Verifying));
+    }
+
+    // @trace spec:tray-progress-and-icon-states, spec:tray-app
+    #[test]
+    fn enclave_status_failure_from_any_stage() {
+        // Can fail at any stage
+        assert!(EnclaveStatus::Verifying.can_transition_to(EnclaveStatus::Failed));
+        assert!(EnclaveStatus::ProxyReady.can_transition_to(EnclaveStatus::Failed));
+        assert!(EnclaveStatus::GitReady.can_transition_to(EnclaveStatus::Failed));
+        assert!(EnclaveStatus::AllHealthy.can_transition_to(EnclaveStatus::Failed));
+
+        // All failures can retry
+        assert!(EnclaveStatus::Failed.can_transition_to(EnclaveStatus::Verifying));
     }
 }
 

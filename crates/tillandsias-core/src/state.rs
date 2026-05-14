@@ -5,13 +5,63 @@ use crate::event::ContainerState;
 use crate::genus::{PlantLifecycle, TillandsiaGenus, TrayIconState};
 use crate::project::Project;
 
-/// @trace spec:tray-app, spec:app-lifecycle
+/// @trace spec:tray-app, spec:app-lifecycle, spec:tray-progress-and-icon-states
 /// Explicit lifecycle states for tray application.
 /// Guards prevent invalid state transitions (e.g., can't run two projects simultaneously).
+///
+/// # State Diagram
+///
+/// ```text
+/// ┌─────────────────────────────────────────────────────────────────┐
+/// │                                                                 │
+/// │                                                                 │
+/// ├──────────► Idle ──────────────────┐                           │
+/// │             ▲                      │                           │
+/// │             │                      ▼                           │
+/// │             │               Initializing                       │
+/// │             │                      │                           │
+/// │             │                      ├─ Success ──┐              │
+/// │             │                      │            │              │
+/// │             │                      ├─ Failure ──┤              │
+/// │             │                      │            │              │
+/// │  Restart    │                      │            ▼              │
+/// │   (manual)  │                      └──────► Running            │
+/// │             │                               │                 │
+/// │             │                               ├──► Stopping ────┤
+/// │             │                               │                 │
+/// │             │                               │ (on user quit)  │
+/// │             └───────────────────────────────┘                 │
+/// │                                                                 │
+/// │  Any state ────────────► Error (unrecoverable)               │
+/// │                          │                                    │
+/// │                          └─────────────────────────────────  ┘
+/// │                                                                 │
+/// └─────────────────────────────────────────────────────────────────┘
+/// ```
+///
+/// # Valid Transitions
+///
+/// - `Idle` → `Initializing` — Dependency checks initiated
+/// - `Idle` → `Running` — Probes passed, ready immediately
+/// - `Idle` → `Error` — Startup dependency missing
+/// - `Initializing` → `Running` — Setup succeeded
+/// - `Initializing` → `Error` — Setup failed (podman, enclave, etc)
+/// - `Running` → `Stopping` — User quit or container exit
+/// - `Stopping` → `Idle` — Grace period elapsed, cleanup complete
+/// - `Error` → `Idle` — Manual restart (user invokes again)
+/// - **Any** → `Error` — Unrecoverable error from any state
+///
+/// # Lifecycle Semantics
+///
+/// - **Idle**: Ready for user action. Tray is responsive. No work in progress.
+/// - **Initializing**: Blocking work in progress. Menu shows status. Tray may ignore user clicks.
+/// - **Running**: Project active. Can launch containers. Responsive.
+/// - **Stopping**: Graceful shutdown. Reject new container launches. Wait for cleanup.
+/// - **Error**: Unrecoverable (e.g., podman missing). Tray may be non-functional. Requires restart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TrayAppLifecycleState {
     /// Tray is starting up, checking infrastructure dependencies.
-    /// Valid transitions: → Initializing (if deps missing), → Running (if ready)
+    /// Valid transitions: → Initializing (if deps missing), → Running (if ready), → Error
     /// @trace spec:app-lifecycle
     Idle,
     /// Setting up enclave, pulling images, ensuring forge is available.
