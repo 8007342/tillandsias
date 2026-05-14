@@ -180,13 +180,10 @@ impl TrayUiState {
             EnclaveStatus::Verifying
         };
 
-        let (status_text, tray_icon_state) = if !podman_available {
-            ("🥀 Podman unavailable".to_string(), TrayIconState::Dried)
-        } else if forge_available {
-            ("✓ Environment OK".to_string(), TrayIconState::Mature)
-        } else {
-            ("☐ Verifying environment...".to_string(), TrayIconState::Pup)
-        };
+        // @trace spec:tray-icon-lifecycle
+        // Map enclave status to icon state for consistent lifecycle representation
+        let tray_icon_state = enclave_status_to_icon(enclave_status);
+        let status_text = enclave_status.status_text().to_string();
 
         // Compute hash of projects list for change detection
         let projects_hash = Self::hash_projects(&projects);
@@ -282,7 +279,24 @@ impl TrayService {
         self.emit_refresh(true).await
     }
 
-    /// @trace spec:tray-minimal-ux, spec:tray-progress-and-icon-states
+    /// @trace spec:tray-icon-lifecycle
+    /// Update icon to reflect current enclave status.
+    /// Called whenever enclave status changes.
+    fn update_icon_from_status(&self, status: EnclaveStatus) {
+        let new_icon = enclave_status_to_icon(status);
+        self.with_state(|state| {
+            if state.tray_icon_state != new_icon {
+                info!(
+                    "icon_transition enclave_status={:?} icon={:?}→{:?}",
+                    status, state.tray_icon_state, new_icon
+                );
+                state.tray_icon_state = new_icon;
+                state.bump_revision();
+            }
+        });
+    }
+
+    /// @trace spec:tray-minimal-ux, spec:tray-progress-and-icon-states, spec:tray-icon-lifecycle
     /// Update tray status text, icon, and optionally forge availability.
     /// Enclave status transitions to AllHealthy when forge becomes available.
     /// Valid transitions:
@@ -294,6 +308,7 @@ impl TrayService {
         icon: TrayIconState,
         forge_available: Option<bool>,
     ) -> zbus::Result<()> {
+        let mut status_changed = false;
         self.with_state(|state| {
             state.status_text = text.into();
             state.tray_icon_state = icon;
@@ -301,7 +316,7 @@ impl TrayService {
                 let previous_available = state.forge_available;
                 state.forge_available = value;
 
-                // @trace spec:tray-progress-and-icon-states
+                // @trace spec:tray-progress-and-icon-states, spec:tray-icon-lifecycle
                 // Wire forge_available=true transition to update status and trigger menu rebuild
                 // Valid state transitions:
                 // - Verifying → AllHealthy (initial forge availability)
@@ -311,17 +326,26 @@ impl TrayService {
                     if state.enclave_status.can_transition_to(EnclaveStatus::AllHealthy) {
                         state.enclave_status = EnclaveStatus::AllHealthy;
                         state.status_text = "✓ Environment OK".to_string();
+                        status_changed = true;
                     }
                 } else if value && state.enclave_status == EnclaveStatus::Verifying {
                     // Already in Verifying, still becoming available: transition to healthy
                     if state.enclave_status.can_transition_to(EnclaveStatus::AllHealthy) {
                         state.enclave_status = EnclaveStatus::AllHealthy;
                         state.status_text = "✓ Environment OK".to_string();
+                        status_changed = true;
                     }
                 }
             }
             state.bump_revision();
         });
+
+        // Update icon if status changed
+        if status_changed {
+            let status = self.snapshot().enclave_status;
+            self.update_icon_from_status(status);
+        }
+
         self.rebuild_after_state_change().await
     }
 
@@ -349,6 +373,24 @@ impl TrayService {
             SelectedAgent::Claude => LaunchKind::Claude,
             SelectedAgent::OpenCodeWeb => LaunchKind::OpenCodeWeb,
         }
+    }
+}
+
+/// @trace spec:tray-icon-lifecycle
+/// Map enclave health state to tray icon lifecycle state.
+/// Reflects the plant lifecycle metaphor:
+/// - Verifying → Pup (initializing, green sprout)
+/// - ProxyReady → Pup (still initializing)
+/// - GitReady → Pup (still initializing)
+/// - AllHealthy → Mature (full plant, healthy)
+/// - Failed → Dried (error, wilted)
+fn enclave_status_to_icon(status: EnclaveStatus) -> TrayIconState {
+    match status {
+        EnclaveStatus::Verifying => TrayIconState::Pup,
+        EnclaveStatus::ProxyReady => TrayIconState::Pup,
+        EnclaveStatus::GitReady => TrayIconState::Pup,
+        EnclaveStatus::AllHealthy => TrayIconState::Mature,
+        EnclaveStatus::Failed => TrayIconState::Dried,
     }
 }
 
@@ -1542,11 +1584,8 @@ mod tests {
 
         fn forge_available(mut self, available: bool) -> Self {
             self.forge_available = available;
-            if available {
-                self.enclave_status = EnclaveStatus::AllHealthy;
-            } else {
-                self.enclave_status = EnclaveStatus::Verifying;
-            }
+            // Don't auto-set enclave_status here; use enclave_status() method for explicit control
+            // This allows tests to independently set forge_available and enclave_status
             self
         }
 
@@ -1563,15 +1602,14 @@ mod tests {
         fn build(self) -> TrayUiState {
             let status_text = self.enclave_status.status_text().to_string();
             let projects_hash = TrayUiState::hash_projects(&self.projects);
+            // @trace spec:tray-icon-lifecycle
+            // Icon should reflect enclave status, not just forge_available
+            let tray_icon_state = enclave_status_to_icon(self.enclave_status);
             TrayUiState {
                 root: std::path::PathBuf::from("/tmp/tillandsias-test-root"),
                 version: "0.1.260506.6".to_string(),
                 status_text,
-                tray_icon_state: if self.forge_available {
-                    TrayIconState::Mature
-                } else {
-                    TrayIconState::Pup
-                },
+                tray_icon_state,
                 projects: self.projects,
                 selected_agent: self.agent,
                 forge_available: self.forge_available,
@@ -2017,6 +2055,126 @@ mod tests {
 
         // All failures can retry
         assert!(EnclaveStatus::Failed.can_transition_to(EnclaveStatus::Verifying));
+    }
+
+    // @trace spec:tray-icon-lifecycle
+    #[test]
+    fn icon_transitions_on_enclave_status_change() {
+        // Verifying should map to Pup
+        assert_eq!(
+            enclave_status_to_icon(EnclaveStatus::Verifying),
+            TrayIconState::Pup
+        );
+        // ProxyReady should map to Pup
+        assert_eq!(
+            enclave_status_to_icon(EnclaveStatus::ProxyReady),
+            TrayIconState::Pup
+        );
+        // GitReady should map to Pup
+        assert_eq!(
+            enclave_status_to_icon(EnclaveStatus::GitReady),
+            TrayIconState::Pup
+        );
+        // AllHealthy should map to Mature
+        assert_eq!(
+            enclave_status_to_icon(EnclaveStatus::AllHealthy),
+            TrayIconState::Mature
+        );
+        // Failed should map to Dried
+        assert_eq!(
+            enclave_status_to_icon(EnclaveStatus::Failed),
+            TrayIconState::Dried
+        );
+    }
+
+    // @trace spec:tray-icon-lifecycle
+    #[test]
+    fn icon_reflects_enclave_status_on_init() {
+        // When forge_available=false (Verifying), icon should be Pup
+        let verifying_state =
+            TrayStateBuilder::new()
+                .enclave_status(EnclaveStatus::Verifying)
+                .forge_available(false)
+                .build();
+        assert_eq!(verifying_state.tray_icon_state, TrayIconState::Pup);
+
+        // When forge_available=true (AllHealthy), icon should be Mature
+        let healthy_state = TrayStateBuilder::new()
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .forge_available(true)
+            .build();
+        assert_eq!(healthy_state.tray_icon_state, TrayIconState::Mature);
+
+        // When podman unavailable (Failed), icon should be Dried
+        let failed_state = TrayStateBuilder::new()
+            .enclave_status(EnclaveStatus::Failed)
+            .forge_available(false)
+            .build();
+        assert_eq!(failed_state.tray_icon_state, TrayIconState::Dried);
+    }
+
+    // @trace spec:tray-icon-lifecycle
+    #[test]
+    fn icon_matches_enclave_status_through_progression() {
+        // Simulate progression: Verifying → ProxyReady → GitReady → AllHealthy
+        let verifying = TrayStateBuilder::new()
+            .enclave_status(EnclaveStatus::Verifying)
+            .build();
+        assert_eq!(verifying.tray_icon_state, TrayIconState::Pup);
+
+        let proxy_ready = TrayStateBuilder::new()
+            .enclave_status(EnclaveStatus::ProxyReady)
+            .build();
+        assert_eq!(proxy_ready.tray_icon_state, TrayIconState::Pup);
+
+        let git_ready = TrayStateBuilder::new()
+            .enclave_status(EnclaveStatus::GitReady)
+            .build();
+        assert_eq!(git_ready.tray_icon_state, TrayIconState::Pup);
+
+        let all_healthy = TrayStateBuilder::new()
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .forge_available(true)
+            .build();
+        assert_eq!(all_healthy.tray_icon_state, TrayIconState::Mature);
+    }
+
+    // @trace spec:tray-icon-lifecycle
+    #[test]
+    fn icon_transitions_to_dried_on_failure() {
+        // Start healthy
+        let healthy = TrayStateBuilder::new()
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .forge_available(true)
+            .build();
+        assert_eq!(healthy.tray_icon_state, TrayIconState::Mature);
+
+        // Fail
+        let failed = TrayStateBuilder::new()
+            .enclave_status(EnclaveStatus::Failed)
+            .forge_available(true)
+            .build();
+        assert_eq!(failed.tray_icon_state, TrayIconState::Dried);
+    }
+
+    // @trace spec:tray-icon-lifecycle
+    #[test]
+    fn icon_mapping_is_deterministic() {
+        // Same status should always map to same icon
+        for _ in 0..5 {
+            assert_eq!(
+                enclave_status_to_icon(EnclaveStatus::AllHealthy),
+                TrayIconState::Mature
+            );
+            assert_eq!(
+                enclave_status_to_icon(EnclaveStatus::Failed),
+                TrayIconState::Dried
+            );
+            assert_eq!(
+                enclave_status_to_icon(EnclaveStatus::Verifying),
+                TrayIconState::Pup
+            );
+        }
     }
 }
 
