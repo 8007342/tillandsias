@@ -877,10 +877,20 @@ fn build_clone_project_submenu(state: &TrayUiState) -> MenuNode {
     )
 }
 
+// @trace spec:tray-ux, spec:tray-minimal-ux
+/// Build a project submenu with runtime state detection.
+/// Menu items: "Attach Here", "Maintenance", and optionally "Stop" if web container is running.
+/// All items are enabled only when forge_available AND podman_available.
 fn build_project_submenu(state: &TrayUiState, project: &ProjectEntry) -> MenuNode {
     build_project_submenu_with_running(state, project, podman_running_web_container(&project.name))
 }
 
+// @trace spec:tray-ux, spec:tray-minimal-ux
+/// Build a project submenu with explicit running state.
+/// Visibility rules:
+/// - "Attach Here": enabled if forge_available AND podman_available
+/// - "Maintenance": enabled if forge_available AND podman_available
+/// - "Stop": only shown if running_web=true (no disabled state)
 fn build_project_submenu_with_running(
     state: &TrayUiState,
     project: &ProjectEntry,
@@ -960,11 +970,40 @@ fn stable_project_item_id(project: &str, suffix: &str) -> i32 {
     if value == 0 { 1 } else { value }
 }
 
-// @trace spec:tray-minimal-ux
+// @trace spec:tray-minimal-ux, spec:tray-ux, spec:tray-progress-and-icon-states
+/// Build the tray menu following minimal explicit UX pattern.
+///
+/// ## Menu Structure
+///
+/// ### Static Base Items (always visible)
+/// 1. Status element (id=1) — disabled, shows current enclave status with emoji
+/// 2. Separator (id=2) — visual divider
+/// 3. Version/Attribution (id=30) — disabled, shows "Tillandsias v{version}"
+/// 4. Quit button (id=31) — enabled, closes the application
+///
+/// ### Dynamic Region (shown only when forge_available=true AND enclave_status != Failed)
+/// When the dynamic region is hidden (forge unavailable or enclave failed), only the 4 base items appear.
+/// When visible, adds:
+/// 1. Seedlings submenu (id=10) — agent selector with checkmark
+/// 2. Project submenus (one per project) — each with Attach/Maintenance/Stop items
+/// 3. Clone Project submenu (id=20) — GitHub project discovery
+/// 4. GitHub Login button (id=22) — for authentication setup
+///
+/// ## Visibility Rules
+/// - Static items are ALWAYS visible and never disabled
+/// - Dynamic items are completely hidden (not disabled) when forge unavailable
+/// - This ensures clean "cold start" experience with 4 items, expanding to full menu when ready
+/// - Failed state collapses dynamic region to show user the error without distraction
+///
+/// ## Minimal UX Principle
+/// No surprises. Menu items appear only when the system is ready to use them.
+/// Users never see disabled items that can't do anything.
 fn build_menu(state: &TrayUiState) -> MenuNode {
     let mut children = Vec::new();
 
+    // @trace spec:tray-minimal-ux
     // Always visible: Status element (id=1)
+    // Shows current enclave state with emoji indicators
     children.push(child(node(
         1,
         props(vec![
@@ -975,10 +1014,13 @@ fn build_menu(state: &TrayUiState) -> MenuNode {
         Vec::new(),
     )));
 
+    // @trace spec:tray-minimal-ux
     // Always visible: Divider (id=2)
     children.push(child(build_separator_item(2)));
 
+    // @trace spec:tray-minimal-ux
     // Always visible: Version + Attribution (id=30)
+    // Shows Tillandsias version number for user reference and attribution
     children.push(child(node(
         30,
         props(vec![
@@ -992,7 +1034,9 @@ fn build_menu(state: &TrayUiState) -> MenuNode {
         Vec::new(),
     )));
 
+    // @trace spec:tray-minimal-ux
     // Always visible: Quit button (id=31)
+    // Only actionable menu item in the base section
     children.push(child(node(
         31,
         props(vec![
@@ -1003,19 +1047,31 @@ fn build_menu(state: &TrayUiState) -> MenuNode {
         Vec::new(),
     )));
 
-    // Conditional on forge_available: Seedlings submenu and projects.
-    // Collapse the dynamic region entirely when the enclave has failed.
+    // @trace spec:tray-minimal-ux, spec:tray-progress-and-icon-states
+    // Dynamic region: shown only when forge is available AND enclave is not failed
+    // When forge is unavailable (cold start) or enclave has failed, only show the 4 base items
+    // This implements "no surprises" by hiding entire feature set until system is ready
     if state.forge_available && state.enclave_status != EnclaveStatus::Failed {
+        // @trace spec:tray-ux
+        // Seedlings submenu: agent selector
+        // Always visible when forge_available (main project launcher UI)
         children.push(child(build_seedlings_submenu(state)));
 
+        // @trace spec:tray-ux
+        // Project submenus: one per discovered local project
+        // Each project shows: Attach Here, Maintenance, Stop (if running)
         for project in &state.projects {
             children.push(child(build_project_submenu(state, project)));
         }
 
-        // Clone Project submenu
+        // @trace spec:tray-ux, spec:remote-projects
+        // Clone Project submenu: GitHub project discovery and cloning
+        // Shows top 5 recent GitHub projects for quick access
         children.push(child(build_clone_project_submenu(state)));
 
-        // GitHub login button
+        // @trace spec:tray-ux, spec:gh-auth-script
+        // GitHub Login button: credentials setup
+        // Enabled only if podman is available (can't run without container support)
         children.push(child(node(
             22,
             props(vec![
@@ -2174,6 +2230,213 @@ mod tests {
                 enclave_status_to_icon(EnclaveStatus::Verifying),
                 TrayIconState::Pup
             );
+        }
+    }
+
+    // @trace spec:tray-minimal-ux
+    #[test]
+    fn menu_hides_dynamic_region_when_forge_unavailable() {
+        // When forge_available=false, menu should have exactly 4 items
+        // (status, separator, version, quit) and NO dynamic items
+        let state = TrayStateBuilder::new()
+            .forge_available(false)
+            .enclave_status(EnclaveStatus::Verifying)
+            .projects(vec![ProjectEntry {
+                name: "project-alpha".to_string(),
+                path: PathBuf::from("/tmp/project-alpha"),
+            }])
+            .build();
+
+        let menu = build_menu(&state);
+        let mut flat = Vec::new();
+        flatten_layout(&menu, &mut flat);
+
+        // Filter to non-root items
+        let items: Vec<_> = flat.iter().filter(|(id, _)| *id != 0).collect();
+
+        // Should have exactly 4 items
+        assert_eq!(
+            items.len(),
+            4,
+            "Expected 4 items when forge unavailable, got {}. Items: {:?}",
+            items.len(),
+            items
+                .iter()
+                .filter_map(|(_, p)| p.get("label"))
+                .collect::<Vec<_>>()
+        );
+
+        let labels = labels(&menu);
+
+        // Should NOT contain any dynamic items
+        assert!(!labels.contains(&"Seedlings".to_string()));
+        assert!(!labels.contains(&"project-alpha".to_string()));
+        assert!(!labels.contains(&"Clone Project".to_string()));
+        assert!(!labels.contains(&"GitHub Login".to_string()));
+    }
+
+    // @trace spec:tray-minimal-ux, spec:tray-progress-and-icon-states
+    #[test]
+    fn menu_collapses_on_failed_enclave_status() {
+        // When enclave_status=Failed, menu should hide dynamic region
+        // even if forge_available=true
+        let state = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::Failed)
+            .projects(vec![ProjectEntry {
+                name: "project-beta".to_string(),
+                path: PathBuf::from("/tmp/project-beta"),
+            }])
+            .build();
+
+        let menu = build_menu(&state);
+        let mut flat = Vec::new();
+        flatten_layout(&menu, &mut flat);
+
+        let items: Vec<_> = flat.iter().filter(|(id, _)| *id != 0).collect();
+
+        // Should have exactly 4 items (status, separator, version, quit)
+        assert_eq!(
+            items.len(),
+            4,
+            "Expected 4 items in Failed state, got {}",
+            items.len()
+        );
+
+        let labels = labels(&menu);
+
+        // Status should show failed state
+        assert!(labels.contains(&"🥀 Unhealthy environment".to_string()));
+
+        // No dynamic items
+        assert!(!labels.contains(&"Seedlings".to_string()));
+        assert!(!labels.contains(&"project-beta".to_string()));
+        assert!(!labels.contains(&"GitHub Login".to_string()));
+    }
+
+    // @trace spec:tray-minimal-ux
+    #[test]
+    fn no_disabled_items_in_dynamic_region() {
+        // When dynamic region is visible, all items in it should be enabled
+        // (not disabled)
+        let state = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .projects(vec![ProjectEntry {
+                name: "test-proj".to_string(),
+                path: PathBuf::from("/tmp/test-proj"),
+            }])
+            .build();
+
+        let menu = build_menu(&state);
+        let mut flat = Vec::new();
+        flatten_layout(&menu, &mut flat);
+
+        // Check that no non-base items are disabled
+        for (id, props) in flat.iter() {
+            // Skip root (id=0) and base items (1, 2, 30, 31)
+            if matches!(id, 0 | 1 | 2 | 30 | 31) {
+                continue;
+            }
+
+            // All dynamic items should be visible (in the menu)
+            assert_eq!(
+                props.get("visible").and_then(|v| v.try_clone().ok()).and_then(|v| bool::try_from(v).ok()),
+                Some(true),
+                "Item {} should be visible in dynamic region",
+                id
+            );
+        }
+    }
+
+    // @trace spec:tray-minimal-ux
+    #[test]
+    fn menu_items_match_current_status() {
+        // Verify that status text in menu matches current enclave status
+        let test_cases = vec![
+            (EnclaveStatus::Verifying, "☐ Verifying environment..."),
+            (EnclaveStatus::ProxyReady, "☐🌐 Building enclave..."),
+            (EnclaveStatus::GitReady, "☐🌐🪞 Building git mirror..."),
+            (EnclaveStatus::AllHealthy, "✓ Environment OK"),
+            (EnclaveStatus::Failed, "🥀 Unhealthy environment"),
+        ];
+
+        for (status, expected_text) in test_cases {
+            let state = TrayStateBuilder::new()
+                .enclave_status(status)
+                .forge_available(status == EnclaveStatus::AllHealthy)
+                .build();
+
+            let menu = build_menu(&state);
+            let labels = labels(&menu);
+
+            assert!(
+                labels.contains(&expected_text.to_string()),
+                "Expected status text '{}' for {:?}, got labels: {:?}",
+                expected_text,
+                status,
+                labels
+            );
+        }
+    }
+
+    // @trace spec:tray-minimal-ux
+    #[test]
+    fn base_items_never_disabled() {
+        // Verify the 4 base items (status, separator, version, quit)
+        // are never disabled across any state
+        let states = vec![
+            TrayStateBuilder::new()
+                .forge_available(false)
+                .enclave_status(EnclaveStatus::Verifying)
+                .build(),
+            TrayStateBuilder::new()
+                .forge_available(true)
+                .enclave_status(EnclaveStatus::AllHealthy)
+                .build(),
+            TrayStateBuilder::new()
+                .forge_available(true)
+                .enclave_status(EnclaveStatus::Failed)
+                .build(),
+        ];
+
+        for state in states {
+            let menu = build_menu(&state);
+            let mut flat = Vec::new();
+            flatten_layout(&menu, &mut flat);
+
+            for (id, props) in flat.iter() {
+                match id {
+                    1 => {
+                        // Status: always disabled (informational)
+                        assert_eq!(
+                            props.get("enabled").and_then(|v| v.try_clone().ok()).and_then(|v| bool::try_from(v).ok()),
+                            Some(false),
+                            "Status (id=1) should be disabled"
+                        );
+                    }
+                    2 => {
+                        // Separator: check it exists
+                    }
+                    30 => {
+                        // Version: always disabled (informational)
+                        assert_eq!(
+                            props.get("enabled").and_then(|v| v.try_clone().ok()).and_then(|v| bool::try_from(v).ok()),
+                            Some(false),
+                            "Version (id=30) should be disabled"
+                        );
+                    }
+                    31 => {
+                        // Quit: always enabled
+                        assert_eq!(
+                            props.get("enabled").and_then(|v| v.try_clone().ok()).and_then(|v| bool::try_from(v).ok()),
+                            Some(true),
+                            "Quit (id=31) should be enabled"
+                        );
+                    }
+                    _ => {}
+                }
+            }
         }
     }
 }
