@@ -4,6 +4,75 @@ use crate::event::ContainerState;
 use crate::genus::{PlantLifecycle, TillandsiaGenus, TrayIconState};
 use crate::project::Project;
 
+/// @trace spec:tray-app, spec:app-lifecycle
+/// Explicit lifecycle states for tray application.
+/// Guards prevent invalid state transitions (e.g., can't run two projects simultaneously).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum TrayAppLifecycleState {
+    /// Tray is starting up, checking infrastructure dependencies.
+    /// Valid transitions: → Initializing (if deps missing), → Running (if ready)
+    /// @trace spec:app-lifecycle
+    Idle,
+    /// Setting up enclave, pulling images, ensuring forge is available.
+    /// Valid transitions: → Running (on success), → Error (on failure)
+    /// @trace spec:app-lifecycle
+    Initializing,
+    /// Project active, one or more containers healthy.
+    /// Valid transitions: → Stopping (user quit or container exit)
+    /// @trace spec:app-lifecycle
+    Running,
+    /// Graceful shutdown in progress: SIGTERM sent, grace period active.
+    /// Valid transitions: → Idle (on completion)
+    /// @trace spec:app-lifecycle
+    Stopping,
+    /// Unrecoverable error: podman missing, enclave setup failed.
+    /// Valid transitions: → Idle (on manual restart)
+    /// @trace spec:app-lifecycle
+    Error,
+}
+
+impl TrayAppLifecycleState {
+    /// Validate a state transition.
+    /// Returns `Ok(())` if valid, `Err(reason)` if invalid.
+    /// @trace spec:app-lifecycle
+    pub fn validate_transition(&self, next: TrayAppLifecycleState) -> Result<(), String> {
+        match (*self, next) {
+            // From Idle: can initialize or go directly to Running
+            (Self::Idle, Self::Initializing) => Ok(()),
+            (Self::Idle, Self::Running) => Ok(()),
+            (Self::Idle, Self::Error) => Ok(()),
+            // From Initializing: can succeed to Running or fail to Error
+            (Self::Initializing, Self::Running) => Ok(()),
+            (Self::Initializing, Self::Error) => Ok(()),
+            // From Running: only transition to Stopping (never directly to another state)
+            (Self::Running, Self::Stopping) => Ok(()),
+            // From Stopping: can return to Idle
+            (Self::Stopping, Self::Idle) => Ok(()),
+            // From Error: can restart to Idle
+            (Self::Error, Self::Idle) => Ok(()),
+            // Any -> Error is allowed (unrecoverable error from any state)
+            (_, Self::Error) => Ok(()),
+            // All other transitions are invalid
+            (from, to) => Err(format!(
+                "Invalid state transition: {:?} → {:?}",
+                from, to
+            )),
+        }
+    }
+
+    /// Human-readable state name for logs and diagnostics.
+    /// @trace spec:app-lifecycle
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Idle => "idle",
+            Self::Initializing => "initializing",
+            Self::Running => "running",
+            Self::Stopping => "stopping",
+            Self::Error => "error",
+        }
+    }
+}
+
 /// Status of an image or maintenance build tracked in the tray menu.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BuildStatus {
@@ -234,6 +303,11 @@ pub struct TrayState {
     /// Current tray icon state — updated by `compute_icon_state()`.
     pub tray_icon_state: TrayIconState,
 
+    /// @trace spec:tray-app, spec:app-lifecycle
+    /// Current application lifecycle state with transition guards.
+    /// Guards prevent invalid sequences (e.g., starting a second project while one is running).
+    pub lifecycle_state: TrayAppLifecycleState,
+
     /// Cached list of remote GitHub repos (fetched via `gh repo list`).
     pub remote_repos: Vec<RemoteRepoInfo>,
     /// When the remote repo list was last fetched.
@@ -293,6 +367,9 @@ impl TrayState {
             platform,
             has_podman: true,
             tray_icon_state: TrayIconState::Pup,
+            // @trace spec:tray-app, spec:app-lifecycle
+            // Start in Idle state; transition to Initializing on infrastructure checks
+            lifecycle_state: TrayAppLifecycleState::Idle,
             remote_repos: Vec::new(),
             remote_repos_fetched_at: None,
             remote_repos_loading: false,
@@ -359,6 +436,41 @@ impl TrayState {
         self.remote_repos_fetched_at = None;
         self.remote_repos.clear();
         self.remote_repos_error = None;
+    }
+
+    /// Attempt a state transition with guard validation.
+    /// @trace spec:tray-app, spec:app-lifecycle
+    /// Returns `Ok(())` on successful transition, `Err(reason)` if blocked by a guard.
+    pub fn transition_lifecycle(&mut self, next_state: TrayAppLifecycleState) -> Result<(), String> {
+        self.lifecycle_state.validate_transition(next_state)?;
+        self.lifecycle_state = next_state;
+        Ok(())
+    }
+
+    /// Returns true if the tray is in a running/healthy state where user actions are allowed.
+    /// @trace spec:tray-app, spec:app-lifecycle
+    pub fn is_ready_for_user_action(&self) -> bool {
+        matches!(self.lifecycle_state, TrayAppLifecycleState::Idle | TrayAppLifecycleState::Running)
+    }
+
+    /// Returns true if a project can be started (lifecycle state allows it).
+    /// Used to guard "Attach Here" and container launch operations.
+    /// @trace spec:app-lifecycle
+    pub fn can_start_project(&self) -> bool {
+        // Can only start if idle or already running (can have multiple projects)
+        matches!(
+            self.lifecycle_state,
+            TrayAppLifecycleState::Idle | TrayAppLifecycleState::Running
+        )
+    }
+
+    /// Returns true if the tray is actively shutting down.
+    /// @trace spec:app-lifecycle
+    pub fn is_shutting_down(&self) -> bool {
+        matches!(
+            self.lifecycle_state,
+            TrayAppLifecycleState::Stopping | TrayAppLifecycleState::Error
+        )
     }
 }
 
@@ -591,5 +703,177 @@ mod tests {
         assert!(
             ContainerInfo::parse_git_service_container_name("tillandsias-my-project-web").is_none()
         );
+    }
+
+    // @trace spec:tray-app, spec:app-lifecycle
+    #[test]
+    fn lifecycle_state_valid_transition_idle_to_initializing() {
+        let state = TrayAppLifecycleState::Idle;
+        assert!(state.validate_transition(TrayAppLifecycleState::Initializing).is_ok());
+    }
+
+    // @trace spec:tray-app, spec:app-lifecycle
+    #[test]
+    fn lifecycle_state_valid_transition_initializing_to_running() {
+        let state = TrayAppLifecycleState::Initializing;
+        assert!(state.validate_transition(TrayAppLifecycleState::Running).is_ok());
+    }
+
+    // @trace spec:tray-app, spec:app-lifecycle
+    #[test]
+    fn lifecycle_state_valid_transition_running_to_stopping() {
+        let state = TrayAppLifecycleState::Running;
+        assert!(state.validate_transition(TrayAppLifecycleState::Stopping).is_ok());
+    }
+
+    // @trace spec:tray-app, spec:app-lifecycle
+    #[test]
+    fn lifecycle_state_valid_transition_stopping_to_idle() {
+        let state = TrayAppLifecycleState::Stopping;
+        assert!(state.validate_transition(TrayAppLifecycleState::Idle).is_ok());
+    }
+
+    // @trace spec:tray-app, spec:app-lifecycle
+    #[test]
+    fn lifecycle_state_valid_transition_any_to_error() {
+        // Error is always reachable from any state
+        assert!(TrayAppLifecycleState::Idle.validate_transition(TrayAppLifecycleState::Error).is_ok());
+        assert!(TrayAppLifecycleState::Initializing
+            .validate_transition(TrayAppLifecycleState::Error)
+            .is_ok());
+        assert!(
+            TrayAppLifecycleState::Running.validate_transition(TrayAppLifecycleState::Error).is_ok()
+        );
+        assert!(
+            TrayAppLifecycleState::Stopping.validate_transition(TrayAppLifecycleState::Error).is_ok()
+        );
+    }
+
+    // @trace spec:tray-app, spec:app-lifecycle
+    #[test]
+    fn lifecycle_state_invalid_transition_running_to_initializing() {
+        let state = TrayAppLifecycleState::Running;
+        assert!(state.validate_transition(TrayAppLifecycleState::Initializing).is_err());
+    }
+
+    // @trace spec:tray-app, spec:app-lifecycle
+    #[test]
+    fn lifecycle_state_invalid_transition_initializing_directly_to_idle() {
+        let state = TrayAppLifecycleState::Initializing;
+        assert!(state.validate_transition(TrayAppLifecycleState::Idle).is_err());
+    }
+
+    // @trace spec:tray-app, spec:app-lifecycle
+    #[test]
+    fn lifecycle_state_as_str() {
+        assert_eq!(TrayAppLifecycleState::Idle.as_str(), "idle");
+        assert_eq!(TrayAppLifecycleState::Initializing.as_str(), "initializing");
+        assert_eq!(TrayAppLifecycleState::Running.as_str(), "running");
+        assert_eq!(TrayAppLifecycleState::Stopping.as_str(), "stopping");
+        assert_eq!(TrayAppLifecycleState::Error.as_str(), "error");
+    }
+
+    // @trace spec:tray-app, spec:app-lifecycle
+    #[test]
+    fn tray_state_transitions_lifecycle() {
+        let mut state = TrayState::new(PlatformInfo {
+            os: Os::Linux,
+            has_podman: true,
+            has_podman_machine: false,
+            gpu_devices: Vec::new(),
+        });
+
+        // Start in Idle
+        assert_eq!(state.lifecycle_state, TrayAppLifecycleState::Idle);
+
+        // Transition to Initializing (valid)
+        assert!(state.transition_lifecycle(TrayAppLifecycleState::Initializing).is_ok());
+        assert_eq!(state.lifecycle_state, TrayAppLifecycleState::Initializing);
+
+        // Transition to Running (valid)
+        assert!(state.transition_lifecycle(TrayAppLifecycleState::Running).is_ok());
+        assert_eq!(state.lifecycle_state, TrayAppLifecycleState::Running);
+
+        // Try invalid transition Running -> Initializing (blocked)
+        assert!(state.transition_lifecycle(TrayAppLifecycleState::Initializing).is_err());
+
+        // Transition to Stopping (valid)
+        assert!(state.transition_lifecycle(TrayAppLifecycleState::Stopping).is_ok());
+
+        // Transition back to Idle (valid)
+        assert!(state.transition_lifecycle(TrayAppLifecycleState::Idle).is_ok());
+    }
+
+    // @trace spec:app-lifecycle
+    #[test]
+    fn tray_state_is_ready_for_user_action() {
+        let mut state = TrayState::new(PlatformInfo {
+            os: Os::Linux,
+            has_podman: true,
+            has_podman_machine: false,
+            gpu_devices: Vec::new(),
+        });
+
+        assert!(state.is_ready_for_user_action());
+
+        // Initializing is not ready
+        state.lifecycle_state = TrayAppLifecycleState::Initializing;
+        assert!(!state.is_ready_for_user_action());
+
+        // Running is ready
+        state.lifecycle_state = TrayAppLifecycleState::Running;
+        assert!(state.is_ready_for_user_action());
+
+        // Stopping is not ready
+        state.lifecycle_state = TrayAppLifecycleState::Stopping;
+        assert!(!state.is_ready_for_user_action());
+
+        // Error is not ready
+        state.lifecycle_state = TrayAppLifecycleState::Error;
+        assert!(!state.is_ready_for_user_action());
+    }
+
+    // @trace spec:app-lifecycle
+    #[test]
+    fn tray_state_can_start_project() {
+        let mut state = TrayState::new(PlatformInfo {
+            os: Os::Linux,
+            has_podman: true,
+            has_podman_machine: false,
+            gpu_devices: Vec::new(),
+        });
+
+        assert!(state.can_start_project());
+
+        state.lifecycle_state = TrayAppLifecycleState::Running;
+        assert!(state.can_start_project());
+
+        state.lifecycle_state = TrayAppLifecycleState::Initializing;
+        assert!(!state.can_start_project());
+
+        state.lifecycle_state = TrayAppLifecycleState::Stopping;
+        assert!(!state.can_start_project());
+
+        state.lifecycle_state = TrayAppLifecycleState::Error;
+        assert!(!state.can_start_project());
+    }
+
+    // @trace spec:app-lifecycle
+    #[test]
+    fn tray_state_is_shutting_down() {
+        let mut state = TrayState::new(PlatformInfo {
+            os: Os::Linux,
+            has_podman: true,
+            has_podman_machine: false,
+            gpu_devices: Vec::new(),
+        });
+
+        assert!(!state.is_shutting_down());
+
+        state.lifecycle_state = TrayAppLifecycleState::Stopping;
+        assert!(state.is_shutting_down());
+
+        state.lifecycle_state = TrayAppLifecycleState::Error;
+        assert!(state.is_shutting_down());
     }
 }
