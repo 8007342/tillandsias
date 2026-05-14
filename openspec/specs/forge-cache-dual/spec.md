@@ -6,6 +6,11 @@ status: active
 
 ## Purpose
 Define the live cache discipline for forge containers: shared Nix store populated by build-time Nix-managed processes, per-project cache, and per-language env var routing.
+
+## Supersedes
+
+- `overlay-mount-cache` — Process-lifetime overlay snapshot optimization (reduced out of contract)
+- `tools-overlay-fast-reuse` — Process-lifetime overlay snapshot proposal (not kept as live contract)
 ## Requirements
 ### Requirement: Forge containers see exactly four path categories
 
