@@ -1,10 +1,12 @@
 # Step 8: Implementation Gaps Assessment & Finalization
 
-**Status:** READY FOR IMPLEMENTATION
+**Status:** WAVE PLAN SYNTHESISED — READY FOR WAVE 12 EXECUTION
 
-**Current Branch:** linux-next (commit 0b898def)
+**Current Branch:** linux-next
 
-**Checkpoint:** Step 7 (semantic-distillation-sweep) completed successfully. All stale specs obsoleted, 76 active specs with full trace coverage regenerated.
+**Checkpoint:** Step 7 (semantic-distillation-sweep) completed successfully. All stale specs obsoleted, 76 active specs with full trace coverage regenerated. Wave 10 (gap audits) complete; Wave 11 (this synthesis) produces the residual-backlog wave plan handing off to Wave 12+ implementation-first mode.
+
+**Authoritative wave plan**: `plan/issues/residual-backlog-wave-plan-2026-05-14.md` — Waves 12 (P0), 13–14 (P1), 15–17 (P2), 18+ (P3) with effort estimates, parallelism guidance, and release-readiness gates.
 
 ---
 
@@ -436,25 +438,80 @@ All 49 documented gaps across browser, tray, onboarding, and observability have 
 
 ---
 
-## Next Steps (If Continuing)
+## Gap-Closure Strategy (Wave 11.2 Synthesis — 2026-05-14)
 
-1. **Commit triage matrix** (this change: `plan/issues/gap-triage-matrix-2026-05-14.md`)
-2. **Implement P0 Linux diagnostics stream** (already planned; use next agent slot or `/opsx:ff`)
-3. **Implement P1 quick wins** (4 items, ~5 hours) before ship
-4. **Run final test suite** before shipping
-5. **Tag release:** `git tag -a v0.1.X -m "Linux MVP: browser, tray, onboarding complete; 49 gaps triaged"`
+The 49 triaged gaps are now organised into a wave plan: `plan/issues/residual-backlog-wave-plan-2026-05-14.md`. This step (08-implementation-gaps) is the parent of that plan; the plan is the durable handoff queue for Waves 12+.
+
+### Wave Plan Summary
+
+| Wave | Iteration | Scope | Gap Count | Aggregate Effort | Release Status |
+|------|-----------|-------|-----------|------------------|----------------|
+| **12** | 6 | P0 verification + P1 quick wins (BR-003, ON-011, OBS-021) | 3 P1 + 1 P0 verify | ~3h | Ship-eligible |
+| **13** | 7 | P1 remainder (OBS-004, ON-004, OBS-014/015) | 3 P1 | ~9h | Recommended release |
+| **14** | 8 | P2 routing tests + reliability (BR-001/002/007/008, TR-003, OBS-001) | 6 P2 | ~10h | Polish |
+| **15** | 9 | P2 observability extensions (OBS-003/018/016/017, TR-001) | 5 P2 | ~8h | Polish |
+| **16** | 10 | P2 polish remainder (TR-002/004, BR-004/006) | 4 P2 | ~4h | Polish |
+| **17+** | 11+ | P3 backlog (27 leaves across 7 clusters) | 27 P3 | ~20h | Backlog |
+
+### Transition: Cleanup → Implementation
+
+Wave 11.2 (this synthesis) marks the formal transition from cleanup-first to implementation-first mode. Implementation-first invariants:
+
+- Each closed gap MUST add a litmus binding OR a `@trace spec:<name>` annotation; pure code changes are not "closed".
+- No new specs unless required to bind a closure (the spec set is now stable at 76 active).
+- Wave 12 begins with a **P0 verification pass** (commit `70cfc617` already landed `runtime-diagnostics-stream`); if verified, P1 work begins immediately.
+- Parallelism: each wave runs 3–6 Haiku agents on independent leaves; Opus reserved for new-crate scaffolding (Wave 13 metrics).
+
+### Critical Path
+
+```
+Wave 12 P0 verify  ─►  Wave 12 P1 quick wins (BR-003 + ON-011 + OBS-021)
+                                                │
+                                                ▼
+                                  Wave 13 (OBS-004 + ON-004 + Opus: tillandsias-metrics)
+                                                │
+                                                ▼
+                                  Wave 14 (routing tests; BR-008 unblocked by BR-003)
+                                                │
+                                                ▼
+                                  Wave 15 (observability extensions; depends on Wave 13 metrics crate)
+                                                │
+                                                ▼
+                                  Wave 16 (polish leaves)
+                                                │
+                                                ▼
+                                  Waves 17+ (P3 backlog, opportunistic)
+```
+
+### Parallel Opportunities
+
+- Wave 12: 3 fully parallel Haiku agents (no cross-deps).
+- Wave 13: 2 Haiku + 1 Opus parallel (Opus owns metrics crate scaffold).
+- Wave 14: 4 Haiku parallel day 1, 2 Haiku day 2 (BR-001 waits on BR-002; BR-008 waits on BR-003 confirmation).
+- Wave 15: 3 agents parallel (metrics extensions are not parallel within themselves but parallel with non-metrics leaves).
+- Wave 16: 4 Haiku parallel.
+
+### Release Readiness Gates
+
+| Gate | After Wave | Condition |
+|------|-----------|-----------|
+| **Minimum viable** | 12 | P0 verified + 3 P1 quick wins closed; trace coverage intact |
+| **Recommended** | 13 | All P1 closed; CPU/memory metric foundation present |
+| **Nice-to-have** | 16 | All P0+P1+P2 closed; only P3 backlog remains |
+
+See `plan/issues/residual-backlog-wave-plan-2026-05-14.md` for per-wave parallelism plans, owned files, effort budgets, and risk callouts.
 
 ---
 
-## Handoff Notes for Next Agent
+## Handoff Notes for Wave 12 Coordinator
 
-- **Current state:** Step 8 assessment + gap triage complete; project at 97% implementation (75/76 specs complete)
-- **Gap analysis:** 49 gaps documented, zero blockers except P0 diagnostics stream
-- **Next phase:** P0 Linux diagnostics stream (1.5 hours), then ship-ready
-- **Wave 11 backlog:** All 49 gaps prioritized and ready for parallel assignment
-- **Branch:** `linux-next` (main branch contains old src-tauri code; linux-next is canonical)
-- **Build:** `./build.sh --release` produces musl-static binary
-- **Test:** `cargo test --workspace` passes; 22 browser tests, 13 tray state tests, 38 total
-- **Risk:** None identified; all dependencies resolved
-- **Recommendation:** Implement P0 (diagnostics) + P1 quick wins (5 hrs), then cut release tag
+- **Current state**: Step 8 closes the cleanup-first phase. 49 gaps triaged (gap-triage-matrix-2026-05-14.md). Wave plan published (residual-backlog-wave-plan-2026-05-14.md). All Wave 1–10 work intact.
+- **Next phase**: Wave 12 (Iteration 6) — verify P0 (`runtime-diagnostics-stream` commit `70cfc617`); spawn 3 parallel Haiku on BR-003, ON-011, OBS-021.
+- **Branch**: `linux-next` (canonical; `main` contains old src-tauri code).
+- **Build**: `./build.sh --release` produces musl-static binary.
+- **Test**: `cargo test --workspace` passes baseline.
+- **Risk**: None identified; Wave 12 is small and self-contained.
+- **Cadence**: Per `plan/index.yaml`, checkpoint after each gap closure (3 commits + integration commit minimum for Wave 12).
+- **Verification per closure**: each closed gap MUST add a litmus binding OR a `@trace spec:<name>` annotation; pure code without either is not "closed" under the convergence policy.
+- **Recommendation**: Ship Linux MVP after Wave 12 (minimum-viable gate). Wave 13 strengthens release; Waves 14–16 polish.
 
