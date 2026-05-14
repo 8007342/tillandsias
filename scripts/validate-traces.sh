@@ -204,6 +204,51 @@ fi
 
 echo ""
 echo "validate-traces: $errors error(s), $warnings warning(s)"
+
+# ============================================================================
+# Coverage threshold check (new functionality)
+# ============================================================================
+# @trace spec:spec-trace-coverage-threshold, spec:methodology-accountability
+
+if [[ "${1:-}" == "--coverage-threshold" ]]; then
+  # Calculate coverage: (specs-with-traces / total-active-specs) * 100
+  TOTAL_ACTIVE_SPECS=$(find "$SPECS_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l)
+
+  # Count specs with at least one @trace annotation in codebase
+  SPECS_WITH_TRACES=0
+  while IFS= read -r spec_name; do
+    [[ -z "$spec_name" ]] && continue
+    # Check if this spec has at least one trace annotation
+    if grep -rl --include='*.rs' --include='*.sh' --include='*.toml' --include='*.yaml' \
+        "spec:${spec_name}" \
+        "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" 2>/dev/null \
+        | grep -q . 2>/dev/null; then
+      SPECS_WITH_TRACES=$((SPECS_WITH_TRACES + 1))
+    fi
+  done < <(find "$SPECS_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)
+
+  # Calculate percentage (avoid division by zero)
+  if [[ $TOTAL_ACTIVE_SPECS -eq 0 ]]; then
+    COVERAGE_PCT=0
+  else
+    COVERAGE_PCT=$(( (SPECS_WITH_TRACES * 100) / TOTAL_ACTIVE_SPECS ))
+  fi
+
+  # Output JSON for CI dashboard
+  cat <<EOF
+{
+  "coverage_percentage": $COVERAGE_PCT,
+  "specs_with_traces": $SPECS_WITH_TRACES,
+  "total_active_specs": $TOTAL_ACTIVE_SPECS,
+  "threshold": 90,
+  "status": "$([ $COVERAGE_PCT -ge 90 ] && echo 'PASS' || echo 'FAIL')"
+}
+EOF
+
+  # Return exit code based on threshold
+  [[ $COVERAGE_PCT -ge 90 ]] && exit 0 || exit 1
+fi
+
 if [[ "$WARN_ONLY" == true ]]; then
   exit 0
 fi

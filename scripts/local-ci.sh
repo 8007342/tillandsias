@@ -224,6 +224,7 @@ CI_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 CHECK_IDS=(
     spec-cheatsheet-binding
     spec-code-drift
+    spec-trace-coverage
     version-monotonicity
     rust-formatting
     rust-clippy
@@ -239,6 +240,7 @@ case "$CI_PHASE" in
             CHECK_IDS=(
                 spec-cheatsheet-binding
                 spec-code-drift
+                spec-trace-coverage
                 version-monotonicity
                 rust-formatting
                 rust-clippy
@@ -250,6 +252,7 @@ case "$CI_PHASE" in
             CHECK_IDS=(
                 spec-cheatsheet-binding
                 spec-code-drift
+                spec-trace-coverage
                 version-monotonicity
                 rust-formatting
                 rust-clippy
@@ -274,6 +277,7 @@ case "$CI_PHASE" in
         CHECK_IDS=(
             spec-cheatsheet-binding
             spec-code-drift
+            spec-trace-coverage
             version-monotonicity
             rust-formatting
             rust-clippy
@@ -295,6 +299,7 @@ check_weight() {
     case "$1" in
         spec-cheatsheet-binding) echo 100 ;;
         spec-code-drift) echo 120 ;;
+        spec-trace-coverage) echo 90 ;;
         version-monotonicity) echo 40 ;;
         rust-formatting) echo 40 ;;
         rust-clippy) echo 60 ;;
@@ -313,6 +318,7 @@ check_spec_ref() {
     case "$1" in
         spec-cheatsheet-binding) echo "spec:spec-traceability" ;;
         spec-code-drift) echo "spec:spec-traceability" ;;
+        spec-trace-coverage) echo "spec:methodology-accountability" ;;
         version-monotonicity) echo "spec:versioning" ;;
         rust-formatting) echo "spec:dev-build" ;;
         rust-clippy) echo "spec:dev-build" ;;
@@ -332,6 +338,7 @@ failed_reason_for_check() {
     case "$check_name" in
         spec-cheatsheet-binding) echo "Spec-cheatsheet binding below 90% (see /tmp/binding-check.log)" ;;
         spec-code-drift) echo "Spec-code drift detected: ghost traces or zero-trace specs found (see /tmp/drift-check.log)" ;;
+        spec-trace-coverage) echo "Spec trace coverage below 90% (see /tmp/trace-coverage.log)" ;;
         version-monotonicity) echo "Version is not monotonically greater than last release (see /tmp/version-check.log)" ;;
         rust-formatting) echo "Rust code not formatted: run 'cargo fmt --all' (see /tmp/fmt-check.log)" ;;
         rust-clippy) echo "Clippy warnings found: run 'cargo clippy --workspace' to see details (see /tmp/clippy-check.log)" ;;
@@ -775,7 +782,29 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # ============================================================================
-    # CHECK 3: Version monotonicity enforcement
+    # CHECK 3: Spec trace coverage threshold (90%)
+    # ============================================================================
+
+    log_section "Spec Trace Coverage (90% threshold)"
+    if [[ -f "scripts/validate-traces.sh" ]]; then
+        coverage_output=$(bash scripts/validate-traces.sh --coverage-threshold 2>&1 | tee /tmp/trace-coverage.log)
+        if [[ $? -eq 0 ]]; then
+            # Extract coverage percentage from JSON output
+            coverage_pct=$(echo "$coverage_output" | jq -r '.coverage_percentage // 0' 2>/dev/null || echo "unknown")
+            log_pass "Spec trace coverage: $coverage_pct% (≥ 90%)"
+            archive_check_log "spec-trace-coverage" "pass" /tmp/trace-coverage.log
+        else
+            log_fail_tracked "spec-trace-coverage" "Spec trace coverage below 90% (see /tmp/trace-coverage.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/trace-coverage.log >&2
+            archive_check_log "spec-trace-coverage" "fail" /tmp/trace-coverage.log
+        fi
+    else
+        log_skip "Trace coverage validator not found"
+        archive_check_log "spec-trace-coverage" "skipped"
+    fi
+
+    # ============================================================================
+    # CHECK 4: Version monotonicity enforcement
     # ============================================================================
 
     log_section "Version Monotonicity Check"
@@ -794,7 +823,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # ============================================================================
-    # CHECK 4: Cargo checks (formatting, clippy, tests)
+    # CHECK 5: Cargo checks (formatting, clippy, tests)
     # ============================================================================
 
     log_section "Rust Code Quality (fmt, clippy, tests)"
@@ -857,7 +886,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # ============================================================================
-    # CHECK 5: Container base-image policy
+    # CHECK 6: Container base-image policy
     # ============================================================================
 
     log_section "Container Base Image Policy"
@@ -876,7 +905,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # ============================================================================
-    # CHECK 6: Cheatsheet tier validation
+    # CHECK 7: Cheatsheet tier validation
     # ============================================================================
 
     log_section "Cheatsheet Tier Discipline"

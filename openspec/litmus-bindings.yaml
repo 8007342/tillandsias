@@ -377,10 +377,11 @@ specs:
   coverage_ratio: 0
   last_verified: '2026-05-12'
 - spec_id: methodology-accountability
-  status: test_required
-  litmus_tests: []
-  coverage_ratio: 0
-  last_verified: null
+  status: active
+  litmus_tests:
+  - litmus:spec-trace-coverage-threshold
+  coverage_ratio: 100
+  last_verified: '2026-05-14'
 - spec_id: logging-levels
   status: obsolete
   litmus_tests: []
