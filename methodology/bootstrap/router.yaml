@@ -33,9 +33,57 @@ bootstrap_router:
       - unknown_capture
       - investigation_only
       - nil_noop_unsolved
-    required_first_read:
+  required_first_read:
       - methodology.yaml
       - methodology/bootstrap/router.yaml
+
+  bootstrap_runbook:
+    purpose: >
+      Minimal entry sequence for an autonomous session. A scheduler or user may
+      start the loop with "/skills bootstrap"; the agent then reads methodology.yaml,
+      selects one intent, and follows the convergence loop until the highest
+      residual obligation is reduced or the spec needs clarification.
+    steps:
+      - step: "Read methodology.yaml first."
+        why: "It is the authoritative bootstrap entry point and names the router."
+      - step: "Read methodology/bootstrap/router.yaml second."
+        why: "It selects exactly one intent and prevents scattershot work."
+      - step: "If present, read plan.yaml and plan/index.yaml next."
+        why: "The repo-local plan queue is the current work graph, claim map, and checkpoint contract."
+      - step: "If present, read plan/steps/README.md before any step file."
+        why: "The step template defines the cold-start handoff format and idempotent update expectations."
+      - step: "Read the intent-specific methodology files listed below."
+        why: "This narrows context to the governing rules for the task."
+      - step: "Audit the active spec against bound cheatsheets and referenced docs."
+        why: "Specs are the source of intent; cheatsheets and docs validate the intent."
+      - step: "Check tombstones and obsolete requirements before changing code."
+        why: "Do not resurrect retired behavior or keep dead requirements alive."
+      - step: "Identify the minimal failing chain."
+        why: "Prefer the shortest useful sequence, such as `--ci-full`, `--install`, `--init --debug`, or `--status-check`, that reproduces the offender and emits a traceable log trail."
+      - step: "Select the largest residual obligation or worst drift signal."
+        why: "Prioritize minimax convergence, not easy wins."
+      - step: "Make the smallest change that reduces that residual."
+        why: "Minimize uncertainty while preserving verified invariants."
+      - step: "Run the failing chain again, then the nearest adjacent litmus."
+        why: "Validate that the change reduced drift without opening a new gap and keep the log chain intact for troubleshooting."
+      - step: "If the spec is incomplete or ambiguous, refine the spec/methodology first."
+        why: "Intent changes belong in spec and methodology, not ad hoc code guesses."
+      - step: "Repeat until the residual plateaus or the next highest obligation changes."
+        why: "Autonomy should be iterative, observable, and monotonic."
+
+  autonomous_session_contract:
+    bootstrap_command: "/skills bootstrap"
+    operator_note: >
+      The command is intentionally minimal. The agent should use the bootstrap
+      router to expand into the smallest correct read set, then proceed with the
+      convergence loop without re-deriving host configuration or intent.
+    schedule_ready: true
+  human_async_mode: >
+    Humans may update specs asynchronously while the loop runs; the next
+    scheduled session should re-read methodology.yaml and the affected specs
+    before resuming work. The session should preserve the troubleshooting chain
+    from `--init --debug` and `--status-check` so the next pass can continue from
+    the last meaningful failure boundary.
 
   receipt:
     required_before_source_edits: true
@@ -157,6 +205,9 @@ bootstrap_router:
         - methodology/between-commits-work-discipline.yaml
         - methodology/agent-observability.yaml
         - methodology/ci.yaml
+        - plan.yaml
+        - plan/index.yaml
+        - plan/steps/README.md
       done_when:
         - handoff_or_event_state_is_queryable
         - agent_outputs_do_not_depend_on_hidden_memory

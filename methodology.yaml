@@ -9,16 +9,21 @@ methodology:
       CLAUDE.md: "May summarize local tool notes; must not redefine methodology."
 
   bootstrap:
+    command: "/skills bootstrap"
     first_step: "Read methodology/bootstrap/router.yaml."
     selection_rule: "Choose exactly one intent from bootstrap_router.intent_options."
     role_rule: "Use methodology/bootstrap/roles.yaml for m:n role and file affordances."
     receipt_required_before_source_edits: true
+    autonomous_loop: "After bootstrap, iterate via methodology/bootstrap/router.yaml and methodology/convergence.yaml until the selected residual obligation stops decreasing or the spec itself needs refinement."
 
   entrypoints:
     task_router: methodology/bootstrap/router.yaml
     role_file_matrix: methodology/bootstrap/roles.yaml
     component_catalog: methodology/catalog.yaml
     agent_observability: methodology/agent-observability.yaml
+    plan_root: plan.yaml
+    plan_index: plan/index.yaml
+    plan_step_notes: plan/steps/README.md
     unknown_event_register: methodology/event/index.yaml
 
   invariant_summary:
@@ -31,6 +36,9 @@ methodology:
     - centicolons_report_residual_obligations_not_proof
     - releases_require_validated_centicolon_projection_artifacts
     - methodology_refinements_do_not_push_directly_to_main
+    - plan_updates_are_idempotent_and_cold_start_friendly
+    - agents_assume_next_step_may_be_claimed_by_a_different_agent
+    - remote_checkpoints_are_durable_and_local_state_is_ephemeral
 
   semantic_distillation:
     rule: >

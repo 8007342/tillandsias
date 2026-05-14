@@ -20,15 +20,29 @@ plan:
   current_state:
     last_completed_step: security-substrate-closure
     next_step: browser-and-web-security
+    next_graph_node: browser/launch-path
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next
 
+  coordination:
+    selection_model: dependency_graph
+    claim_model: lease
+    handoff_assumption: >
+      The next agent may be different from the current one, so every note must
+      be self-contained and cold-start readable.
+    idempotence_rule: >
+      Repeated plan updates with the same step or graph node ID and update ID
+      must converge to the same state.
+    scratch_root: plan/localwork
+    remote_durability: origin
+
   continuation_policy:
     selection_rule: >
       Read plan.yaml, plan/index.yaml, and methodology.yaml first. Then choose
-      the highest-priority step whose status is ready. If the current step is
-      blocked, promote the next independent ready step instead of stalling.
+      the highest-priority dependency-graph node whose status is ready and whose
+      file scope is not claimed. If the current node is blocked, promote the next
+      independent ready node instead of stalling.
     update_order:
       - "Update the step file with the latest evidence, blockers, and next action."
       - "Update plan/index.yaml status and next_step pointers."
@@ -41,6 +55,10 @@ plan:
       Every meaningful batch ends with a checkpoint commit and push to origin/linux-next.
       It is acceptable for that checkpoint to contain incomplete work if the state is coherent.
       Use a meaningful checkpoint-style commit message that records remaining work and the next action.
+    handoff_rule: >
+      Write every checkpoint as if the next reader will be a fresh agent with no
+      conversational memory. Include the current branch, file scope, residual
+      risks, checkpoint SHA, and dependency tail.
 
   status_values:
     - pending
@@ -63,3 +81,4 @@ plan:
     - "If a step becomes stale because another step obsoleted its dependency, mark it obsoleted rather than completing it."
     - "Local work is ephemeral; remote origin is the durable copy."
     - "The `./codex --repeat <duration> \"<prompt>\"` wrapper contract is the default autonomous entrypoint."
+    - "plan/localwork is disposable scratch, not canonical state."

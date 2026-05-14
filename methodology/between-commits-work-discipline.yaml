@@ -13,6 +13,8 @@ ephemeral_work_problem:
     - Agents checkpoint frequently to the active integration branch before the host or worktree can be lost
     - The active integration branch for this repository is `linux-next` unless a task explicitly says otherwise
     - Checkpoint commits may be incomplete, failing, or temporary as long as they preserve a coherent state
+    - Commit notes and plan updates MUST be written for a different future agent, not for the same process returning
+    - Commit and plan updates MUST be idempotent: repeating the same checkpoint event or step update must not create semantic drift
     - Main's VCS history MUST remain clean: one squashed commit per batch, no noise
     - Full iteration history MUST be queryable (audit trail for debugging)
     - Concurrent agents working in parallel MUST merge metadata deterministically under declared CRDT preconditions
@@ -23,6 +25,48 @@ ephemeral_work_problem:
     concurrent metadata merges when stable IDs, idempotent merge, and deterministic
     tie-breakers are respected, and (5) frequent remote checkpoints so local state
     is recoverable if the host disappears.
+
+handoff_contract:
+  audience: >
+    Every checkpoint commit, plan update, and task handoff note is written for a
+    cold start. The next actor may be a different agent on a different terminal,
+    with no access to hidden conversational memory.
+  required_fields:
+    - current_branch
+    - worktree_path
+    - owned_file_scope
+    - checkpoint_commit
+    - residual_risks
+    - blockers
+    - next_action
+    - dependency_tail
+  writing_rules:
+    - "State what is true now, not what the same agent will remember later."
+    - "Assume the next reader has only the repo, the plan files, and the last pushed commit."
+    - "Mark incomplete work honestly; use checkpoint/WIP language when appropriate."
+    - "Reference stable step and task IDs so repeated updates are no-ops instead of duplicate meaning."
+
+plan_update_model:
+  shape: >
+    Plan updates are monotonic upserts keyed by stable plan node or step IDs plus
+    an update identifier. Reapplying the same update must be idempotent. If two
+    agents emit the same semantic update, the later one should converge to the
+    same canonical state instead of multiplying records.
+  rules:
+    - stable_ids_before_text
+    - update_ids_are_deduplicated
+    - file_scope_conflicts_are_blocked_not_silently_merged
+    - stale_or_superseded_notes_are_marked_not_deleted
+
+scratch_notes_policy:
+  root: plan/localwork
+  purpose: >
+    Disposable working notes, local sketches, and dead-end experiments that are
+    useful for the current agent but are not canonical state.
+  rules:
+    - "Files under plan/localwork are ephemeral and may be evicted by age."
+    - "Scratch notes do not replace plan.yaml, plan/index.yaml, or step files."
+    - "Do not rely on scratch notes being present for the next agent."
 
 checkpoint_and_push_policy:
   purpose: >
@@ -67,6 +111,31 @@ checkpoint_and_push_policy:
     expectation: >
       Treat local state as ephemeral. Remote origin is the durable backup of current
       progress, not just the place for finished code.
+
+  trusted_authority_baseline:
+    github:
+      summary: >
+        GitHub’s guidance favors pushing commits to the remote branch, using branch
+        protection on important branches, and relying on upstream tracking rather
+        than ad hoc history rewrites.
+    azure:
+      summary: >
+        Azure Repos guidance favors feature branches, protected high-quality main
+        branches, branch policies, and up-to-date tracking relationships.
+    aws:
+      summary: >
+        AWS CodeCommit guidance treats branches as the way to isolate work without
+        affecting other branches and uses normal Git push/pull flows.
+    google:
+      summary: >
+        Google Cloud repository guidance also uses standard Git push/pull/clone/log
+        flows for collaborative work.
+    distilled_best_practices:
+      - "Use branches to isolate concurrent work."
+      - "Keep protected integration branches high quality."
+      - "Push checkpoints frequently so durable remote state stays ahead of host loss."
+      - "Prefer upstream tracking and normal pushes."
+      - "Use force-with-lease, not blind force, if a rewrite is unavoidable."
 
 lamport_clock_system:
   description: >

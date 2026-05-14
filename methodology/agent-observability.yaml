@@ -24,14 +24,22 @@ agent_observability_protocol:
       - summary
       - evidence_refs
       - timestamp
+      - branch
+      - worktree_path
+      - lease_id
+      - graph_node_id
+      - owned_file_scope
+      - checkpoint_commit
     status_values:
       - queued
       - bootstrapping
       - reading
       - planning
+      - claimed
       - editing
       - verifying
       - blocked
+      - stale
       - done
       - failed
 
@@ -72,8 +80,10 @@ agent_observability_protocol:
       Agents communicate by appending events and by sending compact task handoffs.
       Handoffs must not depend on hidden conversational memory.
     handoff_schema:
+      lease_id: string
       task_id: string
       spec_id: string
+      graph_node_id: string
       parent_task_id: string
       bootstrap_receipt_ref: string
       current_status: string
@@ -81,6 +91,35 @@ agent_observability_protocol:
       blockers: list
       evidence_refs: list
       next_action: string
+      branch: string
+      worktree_path: string
+      owned_file_scope: list
+      checkpoint_commit: string
+
+  lease_protocol:
+    purpose: >
+      Make claims over tasks and file scopes explicit, idempotent, and recoverable.
+      A later agent may reclaim a stale claim, but it must do so from the latest
+      observable plan state rather than hidden memory.
+    claim_rules:
+      - "Claim by stable graph node ID and file scope hash."
+      - "Repeated claim events with the same lease_id are no-ops."
+      - "A conflicting claim on the same file scope becomes blocked until reconciled."
+      - "A claim that goes stale must be revalidated by the next agent before editing."
+    lease_fields:
+      - lease_id
+      - claimant_agent_id
+      - graph_node_id
+      - owned_file_scope
+      - branch
+      - worktree_path
+      - claimed_at
+      - expires_at
+      - last_heartbeat_at
+      - checkpoint_commit
+    stale_recovery:
+      - "A stale lease is not a failure; it is a cue to reload the plan and emit a fresh reading event."
+      - "If two agents believe they own the same claim, the later one yields and reclaims a disjoint node."
 
   stale_tracking_policy:
     stale_after: "10 minutes without a new event for active work"
