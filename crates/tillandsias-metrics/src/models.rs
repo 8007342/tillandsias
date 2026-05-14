@@ -104,6 +104,91 @@ impl DiskMetric {
     }
 }
 
+/// Per-block-device disk I/O sample, expressed as rates.
+///
+/// Rates are computed by differencing the kernel's monotonic counters in
+/// `/proc/diskstats` between two consecutive samples — the first sample after
+/// [`MetricsSampler::new`](crate::MetricsSampler::new) reports zeros because
+/// no previous snapshot exists yet (mirrors the CPU warm-up convention).
+///
+/// @trace spec:resource-metric-collection
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DiskIoMetric {
+    /// Kernel block-device name (e.g., `nvme0n1`, `sda`, `zram0`).
+    pub device: String,
+    /// Bytes read per second over the interval between this sample and the
+    /// previous one.
+    pub read_bytes_per_sec: f64,
+    /// Bytes written per second over the interval.
+    pub write_bytes_per_sec: f64,
+    /// Combined read+write operations per second (IOPS).
+    pub io_ops_per_sec: f64,
+    /// Disk utilisation percent (0.0..=100.0): fraction of wall-clock time
+    /// the device had I/O in flight. Derived from the `io_ticks` column in
+    /// `/proc/diskstats`, which the kernel already exposes in milliseconds.
+    pub io_util_percent: f64,
+    /// When the sample was taken.
+    pub timestamp: DateTime<Utc>,
+}
+
+impl DiskIoMetric {
+    /// True if all rates are non-negative and utilisation is in [0, 100].
+    pub fn is_valid(&self) -> bool {
+        self.read_bytes_per_sec >= 0.0
+            && self.write_bytes_per_sec >= 0.0
+            && self.io_ops_per_sec >= 0.0
+            && (0.0..=100.0).contains(&self.io_util_percent)
+    }
+}
+
+/// Cgroup / system-wide Pressure Stall Information sample.
+///
+/// PSI tracks the percentage of time at least one task was stalled waiting
+/// for the corresponding resource over a rolling 10-second window (`avg10`),
+/// the value most useful for predictive saturation alerts. Older kernels
+/// without `/proc/pressure` are signalled by `available = false` and zeroed
+/// metrics.
+///
+/// @trace spec:resource-metric-collection
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PsiMetric {
+    /// CPU pressure (10s window) percent, 0.0..=100.0.
+    pub cpu_psi_percent: f64,
+    /// Memory pressure (10s window) percent, 0.0..=100.0.
+    pub memory_psi_percent: f64,
+    /// I/O pressure (10s window) percent, 0.0..=100.0.
+    pub io_psi_percent: f64,
+    /// `false` on kernels without `/proc/pressure` (pre-4.20 or PSI disabled
+    /// at build time); all percent fields are 0.0 in that case.
+    pub available: bool,
+    /// When the sample was taken.
+    pub timestamp: DateTime<Utc>,
+}
+
+impl PsiMetric {
+    /// Zero-valued sentinel used when `/proc/pressure` is missing.
+    pub fn unavailable() -> Self {
+        Self {
+            cpu_psi_percent: 0.0,
+            memory_psi_percent: 0.0,
+            io_psi_percent: 0.0,
+            available: false,
+            timestamp: Utc::now(),
+        }
+    }
+
+    /// True if every percent field is finite and within [0, 100].
+    pub fn is_valid(&self) -> bool {
+        [
+            self.cpu_psi_percent,
+            self.memory_psi_percent,
+            self.io_psi_percent,
+        ]
+        .iter()
+        .all(|v| v.is_finite() && (0.0..=100.0).contains(v))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,5 +274,90 @@ mod tests {
         };
         assert_eq!(m.used_bytes(), 750_000);
         assert_eq!(m.used_percent(), 75.0);
+    }
+
+    #[test]
+    fn disk_io_metric_valid_range() {
+        let m = DiskIoMetric {
+            device: "nvme0n1".into(),
+            read_bytes_per_sec: 1_048_576.0,
+            write_bytes_per_sec: 524_288.0,
+            io_ops_per_sec: 42.0,
+            io_util_percent: 17.5,
+            timestamp: now(),
+        };
+        assert!(m.is_valid());
+    }
+
+    #[test]
+    fn disk_io_metric_invalid_negative_rate() {
+        let m = DiskIoMetric {
+            device: "sda".into(),
+            read_bytes_per_sec: -1.0,
+            write_bytes_per_sec: 0.0,
+            io_ops_per_sec: 0.0,
+            io_util_percent: 0.0,
+            timestamp: now(),
+        };
+        assert!(!m.is_valid());
+    }
+
+    #[test]
+    fn disk_io_metric_invalid_over_100_percent() {
+        let m = DiskIoMetric {
+            device: "sda".into(),
+            read_bytes_per_sec: 0.0,
+            write_bytes_per_sec: 0.0,
+            io_ops_per_sec: 0.0,
+            io_util_percent: 250.0,
+            timestamp: now(),
+        };
+        assert!(!m.is_valid());
+    }
+
+    #[test]
+    fn psi_metric_unavailable_is_valid_zero() {
+        let m = PsiMetric::unavailable();
+        assert!(!m.available);
+        assert_eq!(m.cpu_psi_percent, 0.0);
+        assert_eq!(m.memory_psi_percent, 0.0);
+        assert_eq!(m.io_psi_percent, 0.0);
+        assert!(m.is_valid());
+    }
+
+    #[test]
+    fn psi_metric_valid_in_range() {
+        let m = PsiMetric {
+            cpu_psi_percent: 12.3,
+            memory_psi_percent: 0.0,
+            io_psi_percent: 99.9,
+            available: true,
+            timestamp: now(),
+        };
+        assert!(m.is_valid());
+    }
+
+    #[test]
+    fn psi_metric_invalid_out_of_range() {
+        let m = PsiMetric {
+            cpu_psi_percent: 150.0,
+            memory_psi_percent: 0.0,
+            io_psi_percent: 0.0,
+            available: true,
+            timestamp: now(),
+        };
+        assert!(!m.is_valid());
+    }
+
+    #[test]
+    fn psi_metric_invalid_nan() {
+        let m = PsiMetric {
+            cpu_psi_percent: f64::NAN,
+            memory_psi_percent: 0.0,
+            io_psi_percent: 0.0,
+            available: true,
+            timestamp: now(),
+        };
+        assert!(!m.is_valid());
     }
 }

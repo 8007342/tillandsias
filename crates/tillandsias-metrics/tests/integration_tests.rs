@@ -9,7 +9,9 @@
 //! zero values; the assertions are deliberately permissive about that.
 
 use std::time::Duration;
-use tillandsias_metrics::{DashboardSnapshot, MetricsSampler, emit_dashboard_metric};
+use tillandsias_metrics::{
+    DashboardSnapshot, DiskIoMetric, MetricsSampler, PsiMetric, emit_dashboard_metric,
+};
 
 #[test]
 fn sampler_survives_rapid_burst() {
@@ -90,4 +92,78 @@ fn sysinfo_min_interval() -> Duration {
     // sysinfo::MINIMUM_CPU_UPDATE_INTERVAL is ~200ms in 0.30. Re-export it
     // here so integration tests do not depend on sysinfo directly.
     Duration::from_millis(250)
+}
+
+#[test]
+fn sample_disk_io_returns_reasonable_rates() {
+    // First call establishes a baseline (empty); second after a short sleep
+    // produces real rates. On stripped CI containers without /proc/diskstats
+    // both calls return empty — both behaviours are acceptable.
+    let mut s = MetricsSampler::new();
+    let first = s.sample_disk_io();
+    assert!(first.is_empty(), "first sample should be a baseline");
+
+    // Generate at least some disk activity so the second sample is likely
+    // non-empty on a real host. Even if not, the asserts below tolerate it.
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(tmp.path(), vec![0u8; 64 * 1024]).unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    let _ = std::fs::read(tmp.path());
+
+    let second: Vec<DiskIoMetric> = s.sample_disk_io();
+    for m in &second {
+        assert!(m.is_valid(), "disk-io sample invalid: {m:?}");
+        assert!(m.read_bytes_per_sec >= 0.0);
+        assert!(m.write_bytes_per_sec >= 0.0);
+        assert!(m.io_ops_per_sec >= 0.0);
+        assert!((0.0..=100.0).contains(&m.io_util_percent));
+    }
+}
+
+#[test]
+fn sample_psi_runs_on_any_kernel() {
+    // PSI is widely available on 5.x+ but may be disabled at build time.
+    // Either result is fine — we only assert the metric is structurally
+    // valid and never panics.
+    let s = MetricsSampler::new();
+    let psi: PsiMetric = s.sample_psi();
+    assert!(psi.is_valid(), "PSI out of range: {psi:?}");
+    if !psi.available {
+        // On a host without PSI all fields must be 0 by contract.
+        assert_eq!(psi.cpu_psi_percent, 0.0);
+        assert_eq!(psi.memory_psi_percent, 0.0);
+        assert_eq!(psi.io_psi_percent, 0.0);
+    }
+}
+
+#[test]
+fn dashboard_snapshot_includes_disk_io_and_psi() {
+    let mut s = MetricsSampler::new();
+    let _ = s.sample_cpu();
+    let _ = s.sample_disk_io();
+    std::thread::sleep(sysinfo_min_interval());
+    let cpu = s.sample_cpu();
+    let mem = s.sample_memory();
+    let disks = s.sample_disk();
+    let disk_io = s.sample_disk_io();
+    let psi = s.sample_psi();
+    let snap = DashboardSnapshot::from_samples(&cpu, &mem, &disks)
+        .with_disk_io(&disk_io)
+        .with_psi(&psi);
+
+    // Aggregated rates must be non-negative.
+    assert!(snap.disk_read_bytes_per_sec >= 0.0);
+    assert!(snap.disk_write_bytes_per_sec >= 0.0);
+    assert!(snap.disk_iops >= 0.0);
+    assert!((0.0..=100.0).contains(&snap.disk_io_percent));
+    // PSI percentages must always be in [0, 100] regardless of availability.
+    assert!((0.0..=100.0).contains(&snap.cpu_psi_percent));
+    assert!((0.0..=100.0).contains(&snap.memory_psi_percent));
+    assert!((0.0..=100.0).contains(&snap.io_psi_percent));
+
+    let json = snap.to_json();
+    let s = serde_json::to_string(&json).unwrap();
+    assert!(s.contains("disk_read_bytes_per_sec"));
+    assert!(s.contains("cpu_psi_percent"));
+    assert!(s.contains("psi_available"));
 }

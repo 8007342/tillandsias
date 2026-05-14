@@ -1,31 +1,66 @@
-//! Sysinfo-backed sampler for CPU, memory, and disk metrics.
+//! Sysinfo-backed sampler for CPU, memory, disk-usage, disk-I/O, and PSI metrics.
 //!
 //! The sampler holds a [`sysinfo::System`] and a [`sysinfo::Disks`] handle
 //! and refreshes only the components it needs for each sample call. This
 //! keeps individual samples cheap (sub-millisecond on Linux for memory; CPU
 //! requires the documented minimum interval between two refreshes to be
-//! accurate).
+//! accurate). Disk-I/O rates are derived by differencing `/proc/diskstats`
+//! between two consecutive samples; PSI is parsed from `/proc/pressure/*`.
 //!
 //! @trace spec:observability-metrics, spec:resource-metric-collection
 //! @cheatsheet observability/cheatsheet-metrics.md
 
 use crate::error::MetricsError;
-use crate::models::{CpuMetric, DiskMetric, MemoryMetric};
+use crate::models::{CpuMetric, DiskIoMetric, DiskMetric, MemoryMetric, PsiMetric};
 use chrono::Utc;
-use std::time::Duration;
+use std::collections::BTreeMap;
+use std::path::Path;
+use std::time::{Duration, Instant};
 use sysinfo::{Disks, MINIMUM_CPU_UPDATE_INTERVAL, System};
 use tracing::{debug, info, warn};
 
-/// Sampler for CPU, memory, and disk resource metrics.
+/// Path to the kernel's per-device I/O counter file. Configurable for tests.
+const PROC_DISKSTATS: &str = "/proc/diskstats";
+/// Directory holding PSI pseudo-files (`cpu`, `memory`, `io`). Configurable
+/// for tests.
+const PROC_PRESSURE_DIR: &str = "/proc/pressure";
+/// Sector size assumed for `/proc/diskstats` sector counts. The kernel always
+/// reports in 512-byte sectors regardless of the underlying physical sector
+/// size (see kernel Documentation/admin-guide/iostats.rst).
+const DISKSTATS_SECTOR_BYTES: u64 = 512;
+
+/// One row of `/proc/diskstats`, used as the previous-snapshot baseline for
+/// rate computation. Only the columns we need are kept (sectors and ticks).
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct DiskstatsRow {
+    sectors_read: u64,
+    sectors_written: u64,
+    reads_completed: u64,
+    writes_completed: u64,
+    /// Total milliseconds spent doing I/O (the `io_ticks` column). Wraps the
+    /// kernel's `part_stat_read` busy time; used for utilisation.
+    io_ticks_ms: u64,
+}
+
+/// Sampler for CPU, memory, disk-usage, disk-I/O, and cgroup PSI metrics.
 ///
 /// `MetricsSampler` owns a [`sysinfo::System`] that is refreshed on demand.
 /// CPU sampling requires the sampler to be alive long enough between calls
 /// to satisfy sysinfo's [`MINIMUM_CPU_UPDATE_INTERVAL`] — the first call may
-/// return zeros, which is documented and not an error.
+/// return zeros, which is documented and not an error. Disk-I/O rates work
+/// the same way: the first [`Self::sample_disk_io`] call after construction
+/// records a baseline and returns an empty vector.
 #[derive(Debug)]
 pub struct MetricsSampler {
     system: System,
     disks: Disks,
+    /// Previous `/proc/diskstats` snapshot used for rate computation.
+    /// `None` until the first `sample_disk_io` call.
+    previous_diskstats: Option<(Instant, BTreeMap<String, DiskstatsRow>)>,
+    /// Override for `/proc/diskstats` location (testing only).
+    diskstats_path: String,
+    /// Override for `/proc/pressure` directory (testing only).
+    pressure_dir: String,
 }
 
 impl MetricsSampler {
@@ -34,7 +69,27 @@ impl MetricsSampler {
     pub fn new() -> Self {
         let system = System::new();
         let disks = Disks::new_with_refreshed_list();
-        Self { system, disks }
+        Self {
+            system,
+            disks,
+            previous_diskstats: None,
+            diskstats_path: PROC_DISKSTATS.to_string(),
+            pressure_dir: PROC_PRESSURE_DIR.to_string(),
+        }
+    }
+
+    /// Construct a sampler with custom `/proc/diskstats` and `/proc/pressure`
+    /// paths. Intended for unit tests that drive the parser from fixture
+    /// files; production callers use [`Self::new`].
+    #[doc(hidden)]
+    pub fn with_proc_paths(
+        diskstats_path: impl Into<String>,
+        pressure_dir: impl Into<String>,
+    ) -> Self {
+        let mut s = Self::new();
+        s.diskstats_path = diskstats_path.into();
+        s.pressure_dir = pressure_dir.into();
+        s
     }
 
     /// Sample current CPU usage (aggregate and per-core).
@@ -94,6 +149,86 @@ impl MetricsSampler {
             .collect()
     }
 
+    /// Sample disk I/O rates across every block device known to the kernel.
+    ///
+    /// Returns an empty vector on the first call (baseline-only) and on
+    /// kernels that do not expose `/proc/diskstats`. Subsequent calls
+    /// compute byte/op rates by differencing against the prior snapshot.
+    /// Devices that appear or disappear between samples are silently
+    /// skipped — the kernel handles hot-plug without our help.
+    ///
+    /// @trace spec:resource-metric-collection
+    pub fn sample_disk_io(&mut self) -> Vec<DiskIoMetric> {
+        let now = Instant::now();
+        let timestamp = Utc::now();
+        let current = match read_diskstats(Path::new(&self.diskstats_path)) {
+            Ok(rows) => rows,
+            Err(e) => {
+                debug!(
+                    spec = "resource-metric-collection",
+                    error = %e,
+                    path = %self.diskstats_path,
+                    "diskstats unavailable; skipping disk-IO sample"
+                );
+                return Vec::new();
+            }
+        };
+
+        let result = match self.previous_diskstats.as_ref() {
+            None => Vec::new(),
+            Some((prev_instant, prev)) => {
+                let elapsed = now.saturating_duration_since(*prev_instant).as_secs_f64();
+                if elapsed <= 0.0 {
+                    Vec::new()
+                } else {
+                    current
+                        .iter()
+                        .filter_map(|(device, row)| {
+                            let prev_row = prev.get(device)?;
+                            Some(diff_diskstats(device, prev_row, row, elapsed, timestamp))
+                        })
+                        .collect()
+                }
+            }
+        };
+
+        self.previous_diskstats = Some((now, current));
+        result
+    }
+
+    /// Sample cgroup Pressure Stall Information.
+    ///
+    /// Reads the `avg10` column from `/proc/pressure/{cpu,memory,io}` and
+    /// returns a [`PsiMetric`]. On kernels without PSI support (pre-4.20 or
+    /// `CONFIG_PSI=n`), returns [`PsiMetric::unavailable`] with `available =
+    /// false` and zeroed fields. Partial availability (e.g., `cpu` present
+    /// but `io` missing) is collapsed to the per-file default of 0.0.
+    ///
+    /// @trace spec:resource-metric-collection
+    pub fn sample_psi(&self) -> PsiMetric {
+        let dir = Path::new(&self.pressure_dir);
+        if !dir.is_dir() {
+            debug!(
+                spec = "resource-metric-collection",
+                path = %self.pressure_dir,
+                "/proc/pressure missing; PSI unavailable"
+            );
+            return PsiMetric::unavailable();
+        }
+
+        let cpu = read_psi_avg10(&dir.join("cpu")).unwrap_or(0.0);
+        let mem = read_psi_avg10(&dir.join("memory")).unwrap_or(0.0);
+        let io = read_psi_avg10(&dir.join("io")).unwrap_or(0.0);
+
+        PsiMetric {
+            cpu_psi_percent: clamp_percent(cpu),
+            memory_psi_percent: clamp_percent(mem),
+            io_psi_percent: clamp_percent(io),
+            available: true,
+            timestamp: Utc::now(),
+        }
+    }
+
     /// Run a continuous sampling loop that emits tracing events at the given
     /// interval. Intended to be spawned as a background tokio task.
     ///
@@ -101,6 +236,10 @@ impl MetricsSampler {
     /// separated by [`MINIMUM_CPU_UPDATE_INTERVAL`] before emitting its
     /// first dashboard-bound event. Cancellation is via `JoinHandle::abort`
     /// — the loop is cancellation-safe at every `await` point.
+    ///
+    /// PSI is sampled at half the frequency of CPU/memory/disk (every second
+    /// loop iteration) because the underlying counters are themselves smoothed
+    /// over a 10-second window — oversampling produces no new information.
     ///
     /// @trace spec:resource-metric-collection
     pub async fn collect_continuous(&mut self, interval: Duration) {
@@ -112,15 +251,19 @@ impl MetricsSampler {
             return;
         }
 
-        // Warm-up: prime CPU counters before the first emit.
+        // Warm-up: prime CPU counters and disk-IO baseline before the first emit.
         let _ = self.sample_cpu();
+        let _ = self.sample_disk_io();
         tokio::time::sleep(MINIMUM_CPU_UPDATE_INTERVAL).await;
 
         let mut ticker = tokio::time::interval(interval);
         // Skip the immediate first tick — interval() fires once at t=0.
         ticker.tick().await;
+        let mut iteration: u64 = 0;
         loop {
             ticker.tick().await;
+            iteration = iteration.wrapping_add(1);
+
             let cpu = self.sample_cpu();
             let mem = self.sample_memory();
             // Disk sampling is comparatively expensive (one syscall per
@@ -132,20 +275,52 @@ impl MetricsSampler {
                 .map(|d| d.used_percent())
                 .fold(0.0_f64, f64::max);
 
+            // Disk I/O is sampled every iteration so byte-rate windows match
+            // the user's chosen cadence.
+            let disk_io = self.sample_disk_io();
+            let (read_bps, write_bps, iops, worst_io_util) = aggregate_disk_io(&disk_io);
+
             info!(
                 spec = "resource-metric-collection",
                 cheatsheet = "observability/cheatsheet-metrics.md",
                 cpu_percent = format!("{:.1}", cpu.system_percent),
                 mem_percent = format!("{:.1}", mem.used_percent()),
                 disk_worst_percent = format!("{:.1}", worst_disk_percent),
+                disk_read_bps = format!("{read_bps:.0}"),
+                disk_write_bps = format!("{write_bps:.0}"),
+                disk_iops = format!("{iops:.0}"),
+                disk_io_percent = format!("{worst_io_util:.1}"),
                 "resource sample"
             );
             debug!(
                 spec = "resource-metric-collection",
                 cores = cpu.per_core_percent.len(),
                 mount_count = disks.len(),
+                device_count = disk_io.len(),
                 "resource sample detail"
             );
+
+            // PSI is smoothed kernel-side over 10s — emit on every second
+            // iteration so we honour the "low-frequency" guidance without a
+            // second timer.
+            if iteration.is_multiple_of(2) {
+                let psi = self.sample_psi();
+                if psi.available {
+                    info!(
+                        spec = "resource-metric-collection",
+                        cheatsheet = "observability/cheatsheet-metrics.md",
+                        cpu_psi_percent = format!("{:.2}", psi.cpu_psi_percent),
+                        memory_psi_percent = format!("{:.2}", psi.memory_psi_percent),
+                        io_psi_percent = format!("{:.2}", psi.io_psi_percent),
+                        "psi sample"
+                    );
+                } else {
+                    debug!(
+                        spec = "resource-metric-collection",
+                        "psi unavailable (older kernel or PSI disabled)"
+                    );
+                }
+            }
         }
     }
 
@@ -170,6 +345,134 @@ fn clamp_percent(v: f64) -> f64 {
         return 0.0;
     }
     v.clamp(0.0, 100.0)
+}
+
+/// Parse `/proc/diskstats`. Documented column order (kernel
+/// `Documentation/admin-guide/iostats.rst`): the device name is the third
+/// whitespace-separated field; counters follow starting at field 4. We only
+/// keep the few columns relevant to rate computation.
+fn read_diskstats(path: &Path) -> std::io::Result<BTreeMap<String, DiskstatsRow>> {
+    let contents = std::fs::read_to_string(path)?;
+    let mut rows = BTreeMap::new();
+    for line in contents.lines() {
+        if let Some((device, row)) = parse_diskstats_line(line) {
+            rows.insert(device, row);
+        }
+    }
+    Ok(rows)
+}
+
+/// Parse a single `/proc/diskstats` line. Returns `None` for malformed lines
+/// instead of failing the whole sample — the kernel is allowed to emit new
+/// columns at the end without warning.
+fn parse_diskstats_line(line: &str) -> Option<(String, DiskstatsRow)> {
+    let mut tokens = line.split_whitespace();
+    // Columns 1-2: major:minor (skip). Column 3: device name. Columns 4-7:
+    // reads_completed, reads_merged, sectors_read, ms_reading. Columns 8-11:
+    // writes_completed, writes_merged, sectors_written, ms_writing. Column 13:
+    // io_ticks (ms).
+    let _major = tokens.next()?;
+    let _minor = tokens.next()?;
+    let device = tokens.next()?.to_string();
+    let reads_completed: u64 = tokens.next()?.parse().ok()?;
+    let _reads_merged: u64 = tokens.next()?.parse().ok()?;
+    let sectors_read: u64 = tokens.next()?.parse().ok()?;
+    let _ms_reading: u64 = tokens.next()?.parse().ok()?;
+    let writes_completed: u64 = tokens.next()?.parse().ok()?;
+    let _writes_merged: u64 = tokens.next()?.parse().ok()?;
+    let sectors_written: u64 = tokens.next()?.parse().ok()?;
+    let _ms_writing: u64 = tokens.next()?.parse().ok()?;
+    let _ios_in_flight: u64 = tokens.next()?.parse().ok()?;
+    let io_ticks_ms: u64 = tokens.next()?.parse().ok()?;
+    Some((
+        device,
+        DiskstatsRow {
+            sectors_read,
+            sectors_written,
+            reads_completed,
+            writes_completed,
+            io_ticks_ms,
+        },
+    ))
+}
+
+/// Compute the per-device delta between two diskstats snapshots, expressed as
+/// rates over `elapsed_secs` seconds.
+fn diff_diskstats(
+    device: &str,
+    prev: &DiskstatsRow,
+    curr: &DiskstatsRow,
+    elapsed_secs: f64,
+    timestamp: chrono::DateTime<chrono::Utc>,
+) -> DiskIoMetric {
+    let read_sectors = curr.sectors_read.saturating_sub(prev.sectors_read);
+    let write_sectors = curr.sectors_written.saturating_sub(prev.sectors_written);
+    let read_ops = curr.reads_completed.saturating_sub(prev.reads_completed);
+    let write_ops = curr.writes_completed.saturating_sub(prev.writes_completed);
+    let io_ticks = curr.io_ticks_ms.saturating_sub(prev.io_ticks_ms);
+
+    let read_bytes_per_sec = (read_sectors * DISKSTATS_SECTOR_BYTES) as f64 / elapsed_secs;
+    let write_bytes_per_sec = (write_sectors * DISKSTATS_SECTOR_BYTES) as f64 / elapsed_secs;
+    let io_ops_per_sec = (read_ops + write_ops) as f64 / elapsed_secs;
+
+    // io_ticks is in milliseconds. Utilisation = busy_ms / wall_clock_ms.
+    let wall_clock_ms = elapsed_secs * 1000.0;
+    let io_util_percent = if wall_clock_ms > 0.0 {
+        clamp_percent((io_ticks as f64 / wall_clock_ms) * 100.0)
+    } else {
+        0.0
+    };
+
+    DiskIoMetric {
+        device: device.to_string(),
+        read_bytes_per_sec: read_bytes_per_sec.max(0.0),
+        write_bytes_per_sec: write_bytes_per_sec.max(0.0),
+        io_ops_per_sec: io_ops_per_sec.max(0.0),
+        io_util_percent,
+        timestamp,
+    }
+}
+
+/// Read the `avg10` field from a single PSI file. Returns `None` on missing
+/// files or malformed contents — callers default to 0.0 for partial coverage.
+fn read_psi_avg10(path: &Path) -> Option<f64> {
+    let contents = std::fs::read_to_string(path).ok()?;
+    parse_psi_avg10(&contents)
+}
+
+/// Parse a PSI file body. The "some" line is the canonical signal — at least
+/// one task was stalled. Format: `some avg10=X.XX avg60=Y.YY avg300=Z.ZZ
+/// total=N`. We only need `avg10`.
+fn parse_psi_avg10(body: &str) -> Option<f64> {
+    for line in body.lines() {
+        let mut tokens = line.split_whitespace();
+        if tokens.next()? != "some" {
+            continue;
+        }
+        for tok in tokens {
+            if let Some(v) = tok.strip_prefix("avg10=") {
+                return v.parse::<f64>().ok();
+            }
+        }
+    }
+    None
+}
+
+/// Aggregate per-device disk-IO metrics into single read-bps/write-bps/iops
+/// values plus a worst-case utilisation percent. Returned as a tuple to keep
+/// the call-site terse in the hot logging path.
+fn aggregate_disk_io(metrics: &[DiskIoMetric]) -> (f64, f64, f64, f64) {
+    let mut read = 0.0;
+    let mut write = 0.0;
+    let mut iops = 0.0;
+    let mut worst = 0.0_f64;
+    for m in metrics {
+        read += m.read_bytes_per_sec;
+        write += m.write_bytes_per_sec;
+        iops += m.io_ops_per_sec;
+        worst = worst.max(m.io_util_percent);
+    }
+    (read, write, iops, worst)
 }
 
 #[cfg(test)]
@@ -264,5 +567,237 @@ mod tests {
         tokio::time::timeout(Duration::from_secs(2), s.collect_continuous(Duration::ZERO))
             .await
             .expect("collect_continuous should return on zero interval, not hang");
+    }
+
+    // ---- diskstats parsing ------------------------------------------------
+
+    /// Real /proc/diskstats line captured from a Fedora 41 host. Contains
+    /// the trailing flush columns introduced in kernel 5.5 — our parser must
+    /// ignore them gracefully.
+    const REAL_DISKSTATS_LINE: &str =
+        " 259       0 nvme0n1 100 0 200 50 300 0 400 60 0 1234 110 0 0 0 0 0 0";
+
+    #[test]
+    fn parse_diskstats_line_extracts_columns() {
+        let (dev, row) = parse_diskstats_line(REAL_DISKSTATS_LINE)
+            .expect("should parse a well-formed kernel line");
+        assert_eq!(dev, "nvme0n1");
+        assert_eq!(row.reads_completed, 100);
+        assert_eq!(row.sectors_read, 200);
+        assert_eq!(row.writes_completed, 300);
+        assert_eq!(row.sectors_written, 400);
+        assert_eq!(row.io_ticks_ms, 1234);
+    }
+
+    #[test]
+    fn parse_diskstats_line_rejects_garbage() {
+        assert!(parse_diskstats_line("not a real line").is_none());
+        assert!(parse_diskstats_line("").is_none());
+        assert!(parse_diskstats_line(" 1 2 ").is_none());
+    }
+
+    #[test]
+    fn diff_diskstats_computes_rates() {
+        let prev = DiskstatsRow {
+            sectors_read: 0,
+            sectors_written: 0,
+            reads_completed: 0,
+            writes_completed: 0,
+            io_ticks_ms: 0,
+        };
+        let curr = DiskstatsRow {
+            sectors_read: 2048, // 2048 * 512 = 1 MiB
+            sectors_written: 1024, // 1024 * 512 = 512 KiB
+            reads_completed: 10,
+            writes_completed: 5,
+            io_ticks_ms: 500, // 500ms busy over 1s window = 50%
+        };
+        let m = diff_diskstats("sda", &prev, &curr, 1.0, Utc::now());
+        assert!(m.is_valid(), "diffed metric out of range: {m:?}");
+        assert_eq!(m.read_bytes_per_sec, 1_048_576.0);
+        assert_eq!(m.write_bytes_per_sec, 524_288.0);
+        assert_eq!(m.io_ops_per_sec, 15.0);
+        assert!(
+            (m.io_util_percent - 50.0).abs() < 0.01,
+            "expected ~50% util, got {}",
+            m.io_util_percent
+        );
+    }
+
+    #[test]
+    fn diff_diskstats_handles_counter_wrap() {
+        // Saturating sub means a counter that appears to go "backwards"
+        // (e.g., device hot-replug) does not produce negative rates.
+        let prev = DiskstatsRow {
+            sectors_read: 1_000_000,
+            sectors_written: 1_000_000,
+            reads_completed: 1000,
+            writes_completed: 1000,
+            io_ticks_ms: 1000,
+        };
+        let curr = DiskstatsRow {
+            sectors_read: 0,
+            sectors_written: 0,
+            reads_completed: 0,
+            writes_completed: 0,
+            io_ticks_ms: 0,
+        };
+        let m = diff_diskstats("sda", &prev, &curr, 1.0, Utc::now());
+        assert!(m.is_valid());
+        assert_eq!(m.read_bytes_per_sec, 0.0);
+        assert_eq!(m.write_bytes_per_sec, 0.0);
+        assert_eq!(m.io_ops_per_sec, 0.0);
+    }
+
+    #[test]
+    fn sample_disk_io_returns_empty_on_first_call() {
+        // The very first call has no baseline to diff against, mirroring
+        // sysinfo's CPU semantics.
+        let mut s = MetricsSampler::new();
+        let v = s.sample_disk_io();
+        assert!(v.is_empty(), "first sample should be empty, got {v:?}");
+        assert!(s.previous_diskstats.is_some());
+    }
+
+    #[test]
+    fn sample_disk_io_from_fixture() {
+        // Drive the sampler from two fixture files to exercise the rate
+        // computation end-to-end without touching the real /proc.
+        let dir = tempfile::tempdir().unwrap();
+        let stats_path = dir.path().join("diskstats");
+        std::fs::write(
+            &stats_path,
+            " 8       0 sda 0 0 0 0 0 0 0 0 0 0 0\n",
+        )
+        .unwrap();
+        let mut s = MetricsSampler::with_proc_paths(
+            stats_path.to_string_lossy().to_string(),
+            dir.path().join("pressure").to_string_lossy().to_string(),
+        );
+        let first = s.sample_disk_io();
+        assert!(first.is_empty());
+
+        // Bump the counters and re-read.
+        std::fs::write(
+            &stats_path,
+            " 8       0 sda 10 0 4096 0 5 0 2048 0 0 100 0\n",
+        )
+        .unwrap();
+        // Sleep a tiny bit so the elapsed delta is non-zero.
+        std::thread::sleep(Duration::from_millis(20));
+        let second = s.sample_disk_io();
+        assert_eq!(second.len(), 1);
+        let m = &second[0];
+        assert_eq!(m.device, "sda");
+        assert!(m.read_bytes_per_sec > 0.0);
+        assert!(m.write_bytes_per_sec > 0.0);
+        assert!(m.io_ops_per_sec > 0.0);
+        assert!(m.is_valid());
+    }
+
+    #[test]
+    fn sample_disk_io_missing_file_returns_empty() {
+        let mut s = MetricsSampler::with_proc_paths(
+            "/var/empty/nonexistent-diskstats",
+            "/var/empty/nonexistent-pressure",
+        );
+        assert!(s.sample_disk_io().is_empty());
+        // Second call must also stay empty (no baseline established).
+        assert!(s.sample_disk_io().is_empty());
+    }
+
+    // ---- PSI parsing ------------------------------------------------------
+
+    const REAL_PSI_BODY: &str = "some avg10=1.23 avg60=4.56 avg300=7.89 total=123456\n\
+                                  full avg10=0.50 avg60=2.00 avg300=3.00 total=98765\n";
+
+    #[test]
+    fn parse_psi_avg10_extracts_some_line() {
+        let v = parse_psi_avg10(REAL_PSI_BODY).unwrap();
+        assert!((v - 1.23).abs() < 1e-9);
+    }
+
+    #[test]
+    fn parse_psi_avg10_returns_none_on_garbage() {
+        assert!(parse_psi_avg10("").is_none());
+        assert!(parse_psi_avg10("nothing here").is_none());
+        assert!(parse_psi_avg10("full avg10=1.0\n").is_none());
+    }
+
+    #[test]
+    fn sample_psi_missing_dir_unavailable() {
+        let s = MetricsSampler::with_proc_paths(
+            "/dev/null",
+            "/var/empty/nonexistent-pressure",
+        );
+        let psi = s.sample_psi();
+        assert!(!psi.available);
+        assert!(psi.is_valid());
+    }
+
+    #[test]
+    fn sample_psi_from_fixture() {
+        let dir = tempfile::tempdir().unwrap();
+        let pdir = dir.path().join("pressure");
+        std::fs::create_dir_all(&pdir).unwrap();
+        std::fs::write(
+            pdir.join("cpu"),
+            "some avg10=2.50 avg60=3.0 avg300=4.0 total=1\nfull avg10=0 avg60=0 avg300=0 total=0\n",
+        )
+        .unwrap();
+        std::fs::write(
+            pdir.join("memory"),
+            "some avg10=0.75 avg60=0 avg300=0 total=1\nfull avg10=0 avg60=0 avg300=0 total=0\n",
+        )
+        .unwrap();
+        // Intentionally omit `io` to exercise the partial-coverage path.
+
+        let s = MetricsSampler::with_proc_paths(
+            "/dev/null",
+            pdir.to_string_lossy().to_string(),
+        );
+        let psi = s.sample_psi();
+        assert!(psi.available);
+        assert!(psi.is_valid());
+        assert!((psi.cpu_psi_percent - 2.50).abs() < 1e-9);
+        assert!((psi.memory_psi_percent - 0.75).abs() < 1e-9);
+        assert_eq!(psi.io_psi_percent, 0.0, "missing io file should default to 0");
+    }
+
+    #[test]
+    fn aggregate_disk_io_sums_devices() {
+        let now = Utc::now();
+        let metrics = vec![
+            DiskIoMetric {
+                device: "sda".into(),
+                read_bytes_per_sec: 100.0,
+                write_bytes_per_sec: 200.0,
+                io_ops_per_sec: 3.0,
+                io_util_percent: 25.0,
+                timestamp: now,
+            },
+            DiskIoMetric {
+                device: "sdb".into(),
+                read_bytes_per_sec: 50.0,
+                write_bytes_per_sec: 60.0,
+                io_ops_per_sec: 2.0,
+                io_util_percent: 75.0,
+                timestamp: now,
+            },
+        ];
+        let (r, w, ops, worst) = aggregate_disk_io(&metrics);
+        assert_eq!(r, 150.0);
+        assert_eq!(w, 260.0);
+        assert_eq!(ops, 5.0);
+        assert_eq!(worst, 75.0);
+    }
+
+    #[test]
+    fn aggregate_disk_io_empty_is_zero() {
+        let (r, w, ops, worst) = aggregate_disk_io(&[]);
+        assert_eq!(r, 0.0);
+        assert_eq!(w, 0.0);
+        assert_eq!(ops, 0.0);
+        assert_eq!(worst, 0.0);
     }
 }

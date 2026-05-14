@@ -274,17 +274,27 @@ fi
 # written one. The sampler (tillandsias-metrics) emits a small JSON blob to
 # $METRICS_SAMPLE on each cycle. Absent file => zeroed defaults so the
 # downstream JSON schema is stable for consumers.
-# @trace spec:resource-metric-collection, spec:observability-metrics
+# Wave 15 (OBS-016/OBS-017): also project disk-IO rates and cgroup PSI.
+# @trace spec:resource-metric-collection, spec:observability-metrics, spec:observability-convergence
+metrics_block_default='{"cpu_percent":0.0,"memory_percent":0.0,"disk_percent":0.0,"disk_read_bytes_per_sec":0.0,"disk_write_bytes_per_sec":0.0,"disk_iops":0.0,"disk_io_percent":0.0,"cpu_psi_percent":0.0,"memory_psi_percent":0.0,"io_psi_percent":0.0,"psi_available":false,"sample_timestamp":"1970-01-01T00:00:00Z","source":"tillandsias-metrics::DashboardSnapshot"}'
 if [[ -s "$METRICS_SAMPLE" ]]; then
     metrics_block_json=$(jq -c '{
         cpu_percent: (.cpu_percent // 0.0),
         memory_percent: (.memory_percent // 0.0),
         disk_percent: (.disk_percent // 0.0),
+        disk_read_bytes_per_sec: (.disk_read_bytes_per_sec // 0.0),
+        disk_write_bytes_per_sec: (.disk_write_bytes_per_sec // 0.0),
+        disk_iops: (.disk_iops // 0.0),
+        disk_io_percent: (.disk_io_percent // 0.0),
+        cpu_psi_percent: (.cpu_psi_percent // 0.0),
+        memory_psi_percent: (.memory_psi_percent // 0.0),
+        io_psi_percent: (.io_psi_percent // 0.0),
+        psi_available: (.psi_available // false),
         sample_timestamp: (.sample_timestamp // "1970-01-01T00:00:00Z"),
         source: "tillandsias-metrics::DashboardSnapshot"
-    }' "$METRICS_SAMPLE" 2>/dev/null || printf '%s' '{"cpu_percent":0.0,"memory_percent":0.0,"disk_percent":0.0,"sample_timestamp":"1970-01-01T00:00:00Z","source":"tillandsias-metrics::DashboardSnapshot"}')
+    }' "$METRICS_SAMPLE" 2>/dev/null || printf '%s' "$metrics_block_default")
 else
-    metrics_block_json='{"cpu_percent":0.0,"memory_percent":0.0,"disk_percent":0.0,"sample_timestamp":"1970-01-01T00:00:00Z","source":"tillandsias-metrics::DashboardSnapshot"}'
+    metrics_block_json="$metrics_block_default"
 fi
 
 dashboard_contract_json=$(cat <<'CONTRACT'

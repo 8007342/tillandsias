@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-14T19:53:08Z",
+  "generated_at": "2026-05-14T20:24:30Z",
   "title": "Progression Trends",
   "series_namespace": "local_development",
   "series_label": "Local Development",
@@ -16,7 +16,7 @@
     "pass_rate_7d_percent": 14.285714285714285,
     "coverage_avg_7d_percent": 76.46187146187147
   },
-  "metrics": {"cpu_percent":0.0,"memory_percent":0.0,"disk_percent":0.0,"sample_timestamp":"1970-01-01T00:00:00Z","source":"tillandsias-metrics::DashboardSnapshot"},
+  "metrics": {"cpu_percent":0.0,"memory_percent":0.0,"disk_percent":0.0,"disk_read_bytes_per_sec":0.0,"disk_write_bytes_per_sec":0.0,"disk_iops":0.0,"disk_io_percent":0.0,"cpu_psi_percent":0.0,"memory_psi_percent":0.0,"io_psi_percent":0.0,"psi_available":false,"sample_timestamp":"1970-01-01T00:00:00Z","source":"tillandsias-metrics::DashboardSnapshot"},
   "dashboard_contract": {
   "signature_format": {
     "description": "Each CentiColon signature record is an append-only entry in target/convergence/centicolon-signature.jsonl. The dashboard projects these into the .md and .json artefacts below.",

@@ -1,10 +1,11 @@
 //! Resource metric sampling for Tillandsias observability.
 //!
-//! This crate provides CPU, memory, and disk sampling primitives used to
-//! detect predictive saturation events (e.g., a forge container climbing
-//! toward memory pressure before being OOM-killed). The crate is a scaffold
-//! — Wave 13 lands CPU + memory; Wave 15/16 will extend with disk IO and
-//! cgroup PSI.
+//! This crate provides CPU, memory, disk-usage, disk-I/O, and cgroup-PSI
+//! sampling primitives used to detect predictive saturation events (e.g., a
+//! forge container climbing toward memory pressure before being OOM-killed).
+//! Wave 13 landed CPU + memory; Wave 15 (OBS-016/OBS-017) extends with disk
+//! I/O rates derived from `/proc/diskstats` and Pressure Stall Information
+//! parsed from `/proc/pressure`.
 //!
 //! @trace spec:observability-metrics, spec:resource-metric-collection
 //! @cheatsheet observability/cheatsheet-metrics.md
@@ -39,5 +40,5 @@ mod sampler;
 
 pub use dashboard::{DashboardSnapshot, emit_dashboard_metric};
 pub use error::MetricsError;
-pub use models::{CpuMetric, DiskMetric, MemoryMetric};
+pub use models::{CpuMetric, DiskIoMetric, DiskMetric, MemoryMetric, PsiMetric};
 pub use sampler::MetricsSampler;
