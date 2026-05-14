@@ -1025,6 +1025,40 @@ debounce_ms = 5000
         let cfg = AgentConfig::default();
         assert_eq!(cfg.selected, SelectedAgent::OpenCodeWeb);
     }
+
+    // @trace gap:ON-008
+    #[test]
+    fn agent_profile_auto_load_from_config() {
+        // Test that global config correctly loads agent preference
+        let config = GlobalConfig::default();
+        assert_eq!(config.agent.selected, SelectedAgent::OpenCodeWeb);
+
+        // Test round-trip: parse and serialize agent selection
+        let dir = std::env::temp_dir().join("tillandsias-test-agent");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+
+        // Test Claude agent selection
+        std::fs::write(&path, "[agent]\nselected = \"claude\"").unwrap();
+        let loaded = load_global_config_from(&path);
+        assert_eq!(loaded.agent.selected, SelectedAgent::Claude);
+        assert_eq!(loaded.agent.selected.as_env_str(), "claude");
+
+        // Test OpenCode agent selection
+        std::fs::write(&path, "[agent]\nselected = \"opencode\"").unwrap();
+        let loaded = load_global_config_from(&path);
+        assert_eq!(loaded.agent.selected, SelectedAgent::OpenCode);
+        assert_eq!(loaded.agent.selected.as_env_str(), "opencode");
+
+        // Test OpenCode Web agent selection
+        std::fs::write(&path, "[agent]\nselected = \"opencode-web\"").unwrap();
+        let loaded = load_global_config_from(&path);
+        assert_eq!(loaded.agent.selected, SelectedAgent::OpenCodeWeb);
+        assert_eq!(loaded.agent.selected.as_env_str(), "opencode-web");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }
 
 /// Detect the host operating system.

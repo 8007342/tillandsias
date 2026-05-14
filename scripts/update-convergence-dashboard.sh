@@ -467,4 +467,53 @@ if [[ "$TERMINAL_PREVIEW" == "1" ]]; then
     fi
 fi
 
+# @trace gap:OBS-012 — evidence bundle retention cleanup
+# Auto-delete evidence bundles older than 30 days while maintaining convergence history
+cleanup_old_evidence_bundles() {
+    local convergence_dir="${1:-.}"
+    local retention_days="${2:-30}"
+
+    # Find JSON evidence bundle files (evidence-bundle.json, evidence-bundle-<timestamp>.json)
+    # and tar.gz bundles (evidence-bundle-<timestamp>.tar.gz)
+    mapfile -t old_bundles < <(
+        find "$convergence_dir" \
+            -type f \
+            \( -name "evidence-bundle*.json" -o -name "evidence-bundle*.tar.gz" \) \
+            -mtime "+$retention_days" 2>/dev/null
+    )
+
+    if [[ ${#old_bundles[@]} -eq 0 ]]; then
+        # No old bundles to clean up
+        return 0
+    fi
+
+    local deleted_count=0
+    local deleted_list=""
+
+    for bundle in "${old_bundles[@]}"; do
+        local bundle_name="$(basename "$bundle")"
+        local bundle_mtime=$(stat -c %y "$bundle" 2>/dev/null | cut -d' ' -f1 || echo "unknown")
+
+        if rm -f "$bundle"; then
+            deleted_count=$((deleted_count + 1))
+            deleted_list="${deleted_list}  - ${bundle_name} (${bundle_mtime})\\n"
+            printf '[dashboard] deleted old evidence bundle: %s (%s)\n' "$bundle_name" "$bundle_mtime" >&2
+        else
+            printf '[dashboard] failed to delete: %s\n' "$bundle" >&2
+        fi
+    done
+
+    if [[ $deleted_count -gt 0 ]]; then
+        printf '[dashboard] evidence bundle retention cleanup: deleted %d bundle(s) older than %d days\n' \
+            "$deleted_count" "$retention_days" >&2
+        printf '%s' "$deleted_list" >&2
+    fi
+
+    return 0
+}
+
+# @trace gap:OBS-012
+# Run evidence bundle retention cleanup before regenerating dashboard
+cleanup_old_evidence_bundles "$TARGET_DIR" 30
+
 printf 'CentiColon dashboard regenerated: %s\n' "$MD_OUT"
