@@ -27,7 +27,7 @@
 //! - **Sidecar crash**: entrypoint.sh restarts it (chunk 4 wires the loop).
 //!   Caddy keeps running; `forward_auth` 502s during the gap.
 //!
-//! @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
+//! @trace spec:opencode-web-session-otp, spec:tray-host-control-socket, spec:subdomain-naming-flip, spec:subdomain-routing-via-reverse-proxy
 
 use std::env;
 use std::path::PathBuf;
