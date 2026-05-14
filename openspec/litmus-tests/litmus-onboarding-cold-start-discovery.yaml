@@ -1,0 +1,83 @@
+name: litmus:onboarding-cold-start-discovery
+spec: forge-welcome, forge-environment-discoverability, forge-shell-tools, project-bootstrap-readme
+description: Verify cold-start agents find essential discoverability signals on first forge entry without prior state
+severity: medium
+phase: post-build
+
+preconditions:
+  - workspace contains images/default/forge-welcome.sh
+  - workspace contains images/default/entrypoint-terminal.sh
+  - workspace contains images/default/cli/tillandsias-inventory
+  - workspace contains images/default/cli/tillandsias-services
+  - workspace contains images/default/cli/tillandsias-models
+  - workspace contains cheatsheets/welcome/readme-discipline.md
+  - podman is available in PATH
+  - tillandsias-forge image is built and available
+
+critical_path:
+  - step: "verify welcome banner script and entry-point are in place"
+    command: "test -f images/default/forge-welcome.sh && test -f images/default/entrypoint-terminal.sh && echo 'forge welcome and entrypoint present'"
+    timeout_ms: 5000
+    expected_behavior: "forge welcome and entrypoint present"
+
+  - step: "verify welcome banner includes project context detection"
+    command: "grep -Fq 'L_WELCOME_PROJECT=' images/default/forge-welcome.sh && grep -Fq 'TILLANDSIAS_PROJECT' images/default/forge-welcome.sh && grep -Fq 'TILLANDSIAS_HOST_OS' images/default/forge-welcome.sh && echo 'project context detection present'"
+    timeout_ms: 5000
+    expected_behavior: "project context detection present"
+
+  - step: "verify welcome banner surfaces cheatsheet path"
+    command: "grep -Fq 'Cheatsheets' images/default/forge-welcome.sh && grep -Fq 'TILLANDSIAS_CHEATSHEETS' images/default/forge-welcome.sh && grep -Fq 'INDEX.md' images/default/forge-welcome.sh && echo 'cheatsheet discovery signal present'"
+    timeout_ms: 5000
+    expected_behavior: "cheatsheet discovery signal present"
+
+  - step: "verify discovery commands are advertised in welcome banner"
+    command: "grep -Fq 'tillandsias-inventory' images/default/forge-welcome.sh && grep -Fq 'tillandsias-services' images/default/forge-welcome.sh && grep -Fq 'tillandsias-models' images/default/forge-welcome.sh && echo 'discovery commands advertised'"
+    timeout_ms: 5000
+    expected_behavior: "discovery commands advertised"
+
+  - step: "verify shell tools are mentioned in welcome banner"
+    command: "grep -Fq 'Try Midnight Commander with mc' images/default/forge-welcome.sh && grep -Fq 'Browse files with eza' images/default/forge-welcome.sh && grep -Fq 'Preview files with bat' images/default/forge-welcome.sh && echo 'shell tool hints present'"
+    timeout_ms: 5000
+    expected_behavior: "shell tool hints present"
+
+  - step: "verify the discovery scripts themselves exist and are executable"
+    command: "test -x images/default/cli/tillandsias-inventory && test -x images/default/cli/tillandsias-services && test -x images/default/cli/tillandsias-models && echo 'discovery scripts present and executable'"
+    timeout_ms: 5000
+    expected_behavior: "discovery scripts present and executable"
+
+  - step: "verify discovery scripts advertise JSON capability"
+    command: "grep -Fq '[--json]' images/default/cli/tillandsias-inventory && grep -Fq '[--json]' images/default/cli/tillandsias-services && grep -Fq '[--json]' images/default/cli/tillandsias-models && echo 'discovery json capability advertised'"
+    timeout_ms: 5000
+    expected_behavior: "discovery json capability advertised"
+
+  - step: "verify readme discipline cheatsheet exists with onboarding contract"
+    command: "test -f cheatsheets/welcome/readme-discipline.md && grep -Fq 'FOR HUMANS' cheatsheets/welcome/readme-discipline.md && grep -Fq 'FOR ROBOTS' cheatsheets/welcome/readme-discipline.md && grep -Fq 'readme.traces' cheatsheets/welcome/readme-discipline.md && echo 'readme discipline onboarding contract present'"
+    timeout_ms: 5000
+    expected_behavior: "readme discipline onboarding contract present"
+
+  - step: "verify welcome banner once-per-session gating is active"
+    command: "grep -Fq 'TILLANDSIAS_WELCOME_SHOWN' images/default/entrypoint-terminal.sh && echo 'welcome gating mechanism present'"
+    timeout_ms: 5000
+    expected_behavior: "welcome gating mechanism present"
+
+  - step: "verify shell startup files still call the banner script"
+    command: "grep -Fq 'forge-welcome.sh' images/default/shell/bashrc && grep -Fq 'forge-welcome.sh' images/default/shell/zshrc && grep -Fq 'forge-welcome.sh' images/default/shell/config.fish && echo 'welcome shell hooks present'"
+    timeout_ms: 5000
+    expected_behavior: "welcome shell hooks present"
+
+observability:
+  traces:
+    - "@trace spec:forge-welcome"
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace spec:forge-shell-tools"
+    - "@trace spec:project-bootstrap-readme"
+  expected_log: "Cold-start agent finds essential discoverability signals: welcome banner, environment context, cheatsheet path, discovery commands, and shell tools"
+  log_fields:
+    spec: "forge-welcome, forge-environment-discoverability, forge-shell-tools, project-bootstrap-readme"
+    test: "onboarding-cold-start-discovery"
+    cold_start: "true"
+    phase: "post-build"
+
+rollback:
+  on_failure: "inspect forge-welcome.sh, entrypoint-terminal.sh, discovery scripts, and shell rc files for onboarding drift"
+  command: "grep -Fq 'L_WELCOME_PROJECT=' images/default/forge-welcome.sh && grep -Fq 'tillandsias-inventory' images/default/forge-welcome.sh && test -x images/default/cli/tillandsias-inventory"

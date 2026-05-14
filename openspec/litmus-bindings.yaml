@@ -247,8 +247,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-environment-discoverability-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:onboarding-cold-start-discovery
+  coverage_ratio: 50
+  last_verified: '2026-05-14'
 - spec_id: forge-forward-compat
   status: deprecated
   litmus_tests: []
@@ -276,8 +277,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-shell-tools-shape
-  coverage_ratio: 30
-  last_verified: '2026-05-12'
+  - litmus:onboarding-cold-start-discovery
+  coverage_ratio: 50
+  last_verified: '2026-05-14'
 - spec_id: forge-staleness
   status: active
   litmus_tests:
@@ -294,8 +296,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-welcome-shape
-  coverage_ratio: 30
-  last_verified: '2026-05-12'
+  - litmus:onboarding-cold-start-discovery
+  coverage_ratio: 50
+  last_verified: '2026-05-14'
 - spec_id: gh-auth-script
   status: active
   litmus_tests:
@@ -474,7 +477,8 @@ specs:
   status: active
   litmus_tests:
   - litmus:project-bootstrap-readme-shape
-  coverage_ratio: 60
+  - litmus:onboarding-cold-start-discovery
+  coverage_ratio: 75
   last_verified: '2026-05-14'
 - spec_id: project-summarizers
   status: active
