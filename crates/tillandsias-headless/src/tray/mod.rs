@@ -516,10 +516,6 @@ fn run_init_action() -> Result<(), String> {
     super::run_init(false)
 }
 
-fn run_github_login_action() -> Result<(), String> {
-    super::run_github_login(false)
-}
-
 fn run_root_terminal(root: &Path, version: &str) -> Result<(), String> {
     let image = format!("tillandsias-forge:v{}", version);
     let project = ProjectEntry {
@@ -578,10 +574,12 @@ fn handle_init(service: Arc<TrayService>) {
 }
 
 fn handle_github_login(service: Arc<TrayService>) {
+    // @trace spec:gh-auth-script, spec:tray-app
     let service_for_emit = service.clone();
     thread::spawn(move || {
-        if let Err(err) = run_github_login_action() {
-            warn!("GitHub login failed: {err}");
+        let args = vec!["--github-login".to_string()];
+        if let Err(err) = launch_in_terminal("GitHub Login", "tillandsias", &args) {
+            warn!("GitHub login terminal spawn failed: {err}");
         }
         let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
     });
