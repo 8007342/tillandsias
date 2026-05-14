@@ -111,8 +111,9 @@ agent_observability_protocol:
   repeat_progress_report:
     purpose: >
       Provide a minimal machine-readable progress record for noninteractive repeat
-      loops. The wrapper can render this into a human-friendly tree graph without
-      exposing file-change chatter or reasoning traces.
+      loops. The wrapper's compiled Rust helper can render this into a
+      human-friendly tree graph without exposing file-change chatter or
+      reasoning traces.
     schema:
       session_id: string
       cycle: integer
@@ -141,10 +142,11 @@ agent_observability_protocol:
       - "Show before/after as blocky progress bars."
       - "Show the latest milestone timestamp in absolute time and elapsed time."
       - "Show the last N progress points as a trend bar and an average delta."
-      - "Render the active dependency tail as a compact tree with one line per node."
-      - "Treat anonymous stream events as evidence only; do not promote them into tree nodes."
+      - "Render only active work and its dependency tail as a compact tree with one line per node."
+      - "Treat anonymous stream events as evidence only; they may advance the current focus bar but must not become standalone tree nodes."
       - "Do not stream file-by-file changes in repeat mode unless explicitly requested."
       - "Keep the live refresh minimal: headers, tree, trend, milestone, blockers."
+      - "Repaint when the running agent emits a new progress record; do not repaint on a blind timer."
       - "Distinguish between waiting on the agent process, agent working, and sleeping between iterations."
 
   lease_protocol:

@@ -94,488 +94,19 @@ format_timestamp() {
   date -d "@$epoch" '+%H:%M:%S'
 }
 
-repeat_write_renderer() {
-  cat >"$REPEAT_RENDERER_FILE" <<'PY'
-#!/usr/bin/env python3
-from __future__ import annotations
-
-import json
-import math
-import os
-import sys
-from pathlib import Path
-
-try:
-    import yaml
-except Exception as exc:  # pragma: no cover
-    sys.stderr.write(f"[codex-repeat] renderer requires PyYAML: {exc}\n")
-    sys.exit(2)
-
-
-STATUS_PROGRESS = {
-    "completed": 100,
-    "done": 100,
-    "obsoleted": 100,
-    "stale": 20,
-    "failed": 10,
-    "blocked": 15,
-    "needs_clarification": 12,
-    "verifying": 78,
-    "editing": 64,
-    "claimed": 48,
-    "planning": 40,
-    "reading": 30,
-    "bootstrapping": 18,
-    "queued": 8,
-    "pending": 8,
-    "ready": 26,
-    "running": 52,
+repeat_renderer_binary() {
+  printf '%s/target/debug/tillandsias-repeat-graph' "$PWD"
 }
 
-
-def load_yaml(path: str) -> dict:
-    with open(path, "r", encoding="utf-8") as fh:
-        return yaml.safe_load(fh) or {}
-
-
-def load_json(path: str) -> dict:
-    try:
-        with open(path, "r", encoding="utf-8") as fh:
-            return json.load(fh)
-    except Exception:
-        return {}
-
-
-def load_jsonl(path: str) -> list[dict]:
-    rows = []
-    try:
-        with open(path, "r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rows.append(json.loads(line))
-                except Exception:
-                    continue
-    except FileNotFoundError:
-        pass
-    return rows
-
-
-def parse_int(value, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
-def clamp(value: float, lo: int = 0, hi: int = 100) -> int:
-    return max(lo, min(hi, int(round(value))))
-
-
-def bar(value: int, width: int = 12) -> str:
-    value = clamp(value)
-    filled = clamp((value / 100) * width, 0, width)
-    return "█" * filled + "░" * (width - filled)
-
-
-def spark(value: int) -> str:
-    value = clamp(value)
-    if value < 13:
-        return "▁"
-    if value < 25:
-        return "▂"
-    if value < 38:
-        return "▃"
-    if value < 50:
-        return "▄"
-    if value < 63:
-        return "▅"
-    if value < 75:
-        return "▆"
-    if value < 88:
-        return "▇"
-    return "█"
-
-
-def summarize(text: str, limit: int = 48) -> str:
-    text = " ".join(str(text).split())
-    if len(text) <= limit:
-        return text
-    return text[: max(0, limit - 1)] + "…"
-
-
-def progress_for_status(status: str) -> int:
-    return STATUS_PROGRESS.get(str(status), 0)
-
-
-def build_tree(nodes, parent_id=None, depth=0, collector=None):
-    if collector is None:
-        collector = []
-    for node in nodes or []:
-        if not isinstance(node, dict):
-            continue
-        node_id = str(node.get("id") or node.get("task_id") or node.get("graph_node_id") or node.get("title") or f"node-{len(collector)}")
-        record = {
-            "id": node_id,
-            "title": str(node.get("title") or node_id),
-            "status": str(node.get("status") or "pending"),
-            "parent_id": parent_id,
-            "depth": depth,
-            "summary": node.get("handoff_note") or node.get("outcome") or node.get("resume_prompt") or node.get("deliverable") or node.get("next_action") or "",
-            "children": [],
-            "raw": node,
-        }
-        collector.append(record)
-        record["children"] = build_tree(node.get("tasks") or [], node_id, depth + 1, collector)
-    return [record["id"] for record in collector if record["parent_id"] == parent_id and record["depth"] == depth]
-
-
-def make_tree_index(nodes):
-    index = {}
-    children = {}
-
-    def walk(node, parent_id=None, depth=0):
-        if not isinstance(node, dict):
-            return
-        node_id = str(node.get("id") or node.get("task_id") or node.get("graph_node_id") or node.get("title") or f"node-{len(index)}")
-        index[node_id] = {
-            "id": node_id,
-            "title": str(node.get("title") or node_id),
-            "status": str(node.get("status") or "pending"),
-            "parent_id": parent_id,
-            "depth": depth,
-            "summary": node.get("handoff_note") or node.get("outcome") or node.get("resume_prompt") or node.get("deliverable") or node.get("next_action") or "",
-            "raw": node,
-        }
-        children.setdefault(node_id, [])
-        for child in node.get("tasks") or []:
-            if not isinstance(child, dict):
-                continue
-            child_id = str(child.get("id") or child.get("task_id") or child.get("graph_node_id") or child.get("title") or f"node-{len(index)}")
-            children[node_id].append(child_id)
-            walk(child, node_id, depth + 1)
-
-    for node in nodes or []:
-        walk(node)
-    return index, children
-
-
-def merge_event_state(index, events, report):
-    state = {node_id: {} for node_id in index}
-    for event in events:
-        key = str(event.get("task_id") or event.get("graph_node_id") or event.get("spec_id") or event.get("event_id") or "")
-        if not key:
-            continue
-        if key not in state:
-            continue
-        state[key].update(event)
-    if isinstance(report, dict):
-        focus = str(report.get("focus_task_id") or "")
-        if focus:
-            state.setdefault(focus, {}).update({
-                "status": report.get("status") or "running",
-                "progress": report.get("after_progress"),
-                "summary": report.get("next_action") or report.get("milestone_label") or "",
-                "checkpoint_commit": report.get("checkpoint_commit") or "",
-            })
-    return state
-
-
-def merge_task_tree(index, state, nodes):
-    def walk(node, parent_id=None):
-        if not isinstance(node, dict):
-            return
-        key = str(node.get("task_id") or node.get("graph_node_id") or node.get("id") or node.get("spec_id") or "")
-        if key in index:
-            state.setdefault(key, {}).update({
-                k: node.get(k)
-                for k in ("status", "progress", "summary", "checkpoint_commit", "branch", "worktree_path")
-                if node.get(k) is not None
-            })
-        for child in node.get("children") or node.get("task_tree") or []:
-            walk(child, key)
-
-    for node in nodes or []:
-        walk(node)
-    return state
-
-
-def build_event_forest(events):
-    latest_by_task = {}
-    event_task_by_id = {}
-    parent_task_by_task = {}
-    order_by_task = {}
-
-    def score(ev, fallback_index):
-        lamport = parse_int(ev.get("lamport_clock"), -1)
-        seq = parse_int(ev.get("event_seq"), -1)
-        timestamp = str(ev.get("timestamp") or "")
-        return (lamport, seq, timestamp, fallback_index)
-
-    for idx, ev in enumerate(events or []):
-        if not isinstance(ev, dict):
-            continue
-        task_key = str(ev.get("task_id") or ev.get("graph_node_id") or ev.get("spec_id") or "")
-        if not task_key:
-            continue
-        event_id = str(ev.get("event_id") or f"event-{idx}")
-        event_task_by_id[event_id] = task_key
-
-        parent_event_id = str(ev.get("parent_event_id") or "")
-        parent_task = event_task_by_id.get(parent_event_id)
-        if parent_task:
-            parent_task_by_task[task_key] = parent_task
-
-        current = latest_by_task.get(task_key)
-        if current is None or score(ev, idx) >= score(current, order_by_task.get(task_key, idx)):
-            latest_by_task[task_key] = ev
-            order_by_task[task_key] = idx
-
-    children = {task_key: [] for task_key in latest_by_task}
-    for task_key, parent_task in parent_task_by_task.items():
-        if parent_task in children and task_key not in children[parent_task]:
-            children[parent_task].append(task_key)
-
-    roots = [task_key for task_key in latest_by_task if parent_task_by_task.get(task_key) not in latest_by_task]
-
-    def sort_key(task_key):
-        ev = latest_by_task[task_key]
-        return (
-            parse_int(ev.get("lamport_clock"), 0),
-            parse_int(ev.get("event_seq"), 0),
-            order_by_task.get(task_key, 0),
-        )
-
-    roots.sort(key=sort_key)
-    for task_key in children:
-        children[task_key].sort(key=sort_key)
-
-    return latest_by_task, children, roots
-
-
-def load_plan_focus(plan_path):
-    plan = load_yaml(plan_path)
-    current_state = plan.get("current_state") or {}
-    focus = str(current_state.get("next_graph_node") or current_state.get("next_step") or "")
-    return plan, focus
-
-
-def plan_steps_root(plan):
-    if not isinstance(plan, dict):
-        return {}
-    return plan.get("plan_index") or plan.get("plan") or plan
-
-
-def read_history(path: str) -> list[int]:
-    values = []
-    try:
-        with open(path, "r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    values.append(int(line))
-                except Exception:
-                    continue
-    except FileNotFoundError:
-        pass
-    return values
-
-
-def render_progress_line(label: str, value: int, width: int = 18) -> str:
-    return f"{label:<9} {value:3d}% [{bar(value, width)}]"
-
-
-def render_tree(index, children_map, state, focus_task_id):
-    lines = []
-    root_ids = [node_id for node_id, item in index.items() if item["parent_id"] is None]
-
-    def node_progress(node_id: str) -> int:
-        item = index[node_id]
-        local = state.get(node_id, {})
-        raw_progress = local.get("progress")
-        if raw_progress is None:
-            raw_progress = item["raw"].get("progress")
-        if raw_progress is None:
-            raw_progress = progress_for_status(local.get("status") or item["status"])
-        children = children_map.get(node_id, [])
-        if children:
-            child_values = [node_progress(child_id) for child_id in children]
-            if child_values:
-                raw_progress = sum(child_values) / len(child_values)
-        return clamp(raw_progress)
-
-    def node_status(node_id: str) -> str:
-        item = index[node_id]
-        local = state.get(node_id, {})
-        return str(local.get("status") or item["status"] or "pending")
-
-    def node_summary(node_id: str) -> str:
-        item = index[node_id]
-        local = state.get(node_id, {})
-        summary = local.get("summary") or item["summary"] or item["title"]
-        return summarize(summary, 56)
-
-    def walk(node_id: str, prefix: str = "", last: bool = True):
-        item = index[node_id]
-        progress = node_progress(node_id)
-        status = node_status(node_id)
-        summary = node_summary(node_id)
-        children = children_map.get(node_id, [])
-        connector = "└─" if last else "├─"
-        label = item["title"]
-        if focus_task_id and focus_task_id == node_id:
-            label = f"▶ {label}"
-        if children:
-            lines.append(f"{prefix}{connector} {label:<44} [{bar(progress, 12)}] {progress:3d}% {status} · {summary}")
-            next_prefix = prefix + ("   " if last else "│  ")
-            for idx, child_id in enumerate(children):
-                walk(child_id, next_prefix, idx == len(children) - 1)
-        else:
-            lines.append(f"{prefix}{connector} {label:<44} [{bar(progress, 12)}] {progress:3d}% {status} · {summary}")
-
-    for idx, node_id in enumerate(root_ids):
-        walk(node_id, "", idx == len(root_ids) - 1)
-    return lines
-
-
-def render_event_tree(events):
-    latest_by_task, children_map, roots = build_event_forest(events)
-    lines = []
-
-    def event_progress(ev):
-        progress = ev.get("progress")
-        if progress is None:
-            progress = progress_for_status(ev.get("status"))
-        return clamp(parse_int(progress, 0))
-
-    def node_label(task_key, ev):
-        agent = ev.get("agent_id")
-        summary = ev.get("summary") or ev.get("status") or task_key
-        label = summarize(summary, 44)
-        if agent:
-            label = f"{label} @ {agent}"
-        return label
-
-    def node_status(ev):
-        return str(ev.get("status") or "unknown")
-
-    def walk(task_key, prefix="", last=True):
-        ev = latest_by_task[task_key]
-        progress = event_progress(ev)
-        status = node_status(ev)
-        summary = summarize(ev.get("summary") or task_key, 56)
-        children = children_map.get(task_key, [])
-        connector = "└─" if last else "├─"
-        label = node_label(task_key, ev)
-        if children:
-            lines.append(f"{prefix}{connector} {label:<44} [{bar(progress, 12)}] {progress:3d}% {status} · {summary}")
-            next_prefix = prefix + ("   " if last else "│  ")
-            for idx, child_key in enumerate(children):
-                walk(child_key, next_prefix, idx == len(children) - 1)
-        else:
-            lines.append(f"{prefix}{connector} {label:<44} [{bar(progress, 12)}] {progress:3d}% {status} · {summary}")
-
-    for idx, task_key in enumerate(roots):
-        walk(task_key, "", idx == len(roots) - 1)
-
-    return lines, latest_by_task
-
-
-def main() -> int:
-    if len(sys.argv) < 10:
-        sys.stderr.write("[codex-repeat] renderer received too few arguments\n")
-        return 2
-
-    plan_path = sys.argv[1]
-    events_path = sys.argv[2]
-    report_path = sys.argv[3]
-    history_path = sys.argv[4]
-    session_id = sys.argv[5]
-    cycle = int(sys.argv[6])
-    start_epoch = int(sys.argv[7])
-    loop_state = sys.argv[8]
-    exit_code = sys.argv[9]
-    sleep_interval = sys.argv[10] if len(sys.argv) > 10 else ""
-
-    plan, plan_focus = load_plan_focus(plan_path)
-    steps = (plan_steps_root(plan).get("steps") or [])
-    index, children_map = make_tree_index(steps)
-    events = load_jsonl(events_path)
-    report = load_json(report_path)
-    state = merge_event_state(index, events, report)
-    if isinstance(report, dict) and report.get("task_tree"):
-        state = merge_task_tree(index, state, report.get("task_tree") or [])
-    history = read_history(history_path)
-
-    before = int(report.get("before_progress") or 0)
-    after = int(report.get("after_progress") or 0)
-    delta = int(report.get("delta_progress") or (after - before))
-    trend_values = history[-12:] if history else [after]
-    trend_bar = "".join(spark(v) for v in trend_values)
-    trend_avg = sum(trend_values) / len(trend_values) if trend_values else 0.0
-    latest = trend_values[-1] if trend_values else after
-    previous = trend_values[-2] if len(trend_values) >= 2 else before
-    elapsed_total = max(0, int(report.get("elapsed_seconds") or (int(__import__("time").time()) - start_epoch)))
-    milestone_label = str(report.get("milestone_label") or "milestone")
-    milestone_timestamp = str(report.get("milestone_timestamp") or "")
-    milestone_stamp = milestone_label if not milestone_timestamp else f"{milestone_label}@{milestone_timestamp}"
-    next_action = summarize(report.get("next_action") or "continue", 72)
-    blockers = report.get("blockers") or []
-    blockers_text = "none" if not blockers else ", ".join(summarize(item, 28) for item in blockers)
-    checkpoint = str(report.get("checkpoint_commit") or "")
-    focus_task_id = str(report.get("focus_task_id") or plan_focus or "")
-    ready_count = int(report.get("ready_count") or 0)
-    blocked_count = int(report.get("blocked_count") or 0)
-    branch = str(report.get("branch") or "linux-next")
-    status = str(report.get("status") or "running")
-
-    tree_lines = render_tree(index, children_map, state, focus_task_id)
-    event_lines = []
-    live_event_count = len(events)
-    if events:
-        event_lines, latest_by_task = render_event_tree(events)
-        if event_lines and any(line.strip() for line in event_lines):
-            tree_lines = event_lines
-        else:
-            event_lines = []
-
-    if sys.stdout.isatty():
-        sys.stdout.write("\033[H\033[2J")
-
-    header_state = {
-        "waiting_on_agent": "waiting on agent",
-        "agent_working": "agent working",
-        "sleeping_until_next_iteration": "sleeping until next iteration",
-    }.get(loop_state, loop_state.replace("_", " ") if loop_state else "waiting on agent")
-
-    print(f"[codex-repeat] cycle {cycle:02d} | {header_state} | session={session_id} | branch={branch} | elapsed={elapsed_total:02d}s")
-    print(f"[codex-repeat] progress {after:3d}% [{bar(after, 18)}]  before={before:3d}%  delta={delta:+d}  status={status}")
-    print(f"[codex-repeat] trend    {trend_bar or '·'}  latest={latest} prev={previous} avg={trend_avg:.1f}")
-    print(f"[codex-repeat] tree     ready={ready_count} blocked={blocked_count} focus={focus_task_id or 'n/a'} events={live_event_count}")
-    print(f"[codex-repeat] milestone {milestone_stamp}  next={next_action}  blockers={blockers_text}")
-    if checkpoint:
-        print(f"[codex-repeat] checkpoint {checkpoint}")
-    if sleep_interval and loop_state == "sleeping_until_next_iteration":
-        print(f"[codex-repeat] next wake in {sleep_interval} | exit={exit_code}")
-    print("[codex-repeat] tree")
-    for line in tree_lines:
-        print(f"[codex-repeat]   {line}")
-    if event_lines and event_lines != tree_lines:
-        print("[codex-repeat] events")
-        for line in event_lines[:16]:
-            print(f"[codex-repeat]   {line}")
-
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-PY
-  chmod +x "$REPEAT_RENDERER_FILE"
+repeat_ensure_renderer() {
+  local renderer_bin="$1"
+  if [[ ! -x "$renderer_bin" ]]; then
+    cargo build --quiet --offline --manifest-path "$PWD/crates/tillandsias-repeat-graph/Cargo.toml"
+  fi
+  if [[ ! -x "$renderer_bin" ]]; then
+    printf '[codex-repeat] unable to locate repeat renderer binary: %s\n' "$renderer_bin" >&2
+    exit 2
+  fi
 }
 
 if [[ -n "$REPEAT_INTERVAL" ]]; then
@@ -590,7 +121,6 @@ if [[ -n "$REPEAT_INTERVAL" ]]; then
   REPEAT_EVENT_LOG_FILE="$REPEAT_STATE_DIR/events.jsonl"
   REPEAT_STDERR_FILE="$REPEAT_STATE_DIR/stderr.log"
   REPEAT_HISTORY_FILE="$REPEAT_STATE_DIR/history.txt"
-  REPEAT_RENDERER_FILE="$REPEAT_STATE_DIR/render-repeat-frame.py"
   cat >"$REPEAT_SCHEMA_FILE" <<'JSON'
 {
   "type": "object",
@@ -650,20 +180,22 @@ JSON
   repeat_start_epoch="$(date +%s)"
   repeat_session_id="repeat-$(date +%Y%m%dT%H%M%S)-$$"
   cycle=0
-  repeat_write_renderer
   SLEEP_PID=""
   if command -v stdbuf >/dev/null 2>&1; then
     REPEAT_LINE_BUFFER=(stdbuf -oL -eL)
   else
     REPEAT_LINE_BUFFER=()
   fi
+  REPEAT_RENDERER_BIN="$(repeat_renderer_binary)"
+  repeat_ensure_renderer "$REPEAT_RENDERER_BIN"
   repeat_render_snapshot() {
     local loop_state="$1"
     local cycle_value="$2"
     local end_epoch="$3"
     local exit_code="$4"
     local sleep_interval="${5:-}"
-    python3 "$REPEAT_RENDERER_FILE" \
+    repeat_ensure_renderer "$REPEAT_RENDERER_BIN"
+    "$REPEAT_RENDERER_BIN" \
       "$PWD/plan/index.yaml" \
       "$REPEAT_EVENT_LOG_FILE" \
       "$REPEAT_LAST_MESSAGE_FILE" \
@@ -674,6 +206,14 @@ JSON
       "$loop_state" \
       "$exit_code" \
       "$sleep_interval"
+  }
+
+  repeat_event_signature() {
+    if [[ -f "$REPEAT_EVENT_LOG_FILE" ]]; then
+      stat -c '%s:%Y' "$REPEAT_EVENT_LOG_FILE" 2>/dev/null || wc -l <"$REPEAT_EVENT_LOG_FILE" 2>/dev/null || printf '0'
+    else
+      printf '0'
+    fi
   }
 
   cleanup_repeat() {
@@ -710,14 +250,14 @@ JSON
     } >"$REPEAT_EVENT_LOG_FILE" 2>"$REPEAT_STDERR_FILE" &
     REPEAT_CHILD_PID=$!
     status=0
-    last_render_epoch="$cycle_start_epoch"
+    last_event_signature=""
     while kill -0 "$REPEAT_CHILD_PID" 2>/dev/null; do
-      now_epoch="$(date +%s)"
-      if [[ $((now_epoch - last_render_epoch)) -ge "$REPEAT_REFRESH_SECS" ]]; then
-        repeat_render_snapshot "agent_working" "$cycle" "$now_epoch" 0
-        last_render_epoch="$now_epoch"
+      current_signature="$(repeat_event_signature)"
+      if [[ "$current_signature" != "$last_event_signature" ]]; then
+        repeat_render_snapshot "agent_working" "$cycle" "$(date +%s)" 0
+        last_event_signature="$current_signature"
       fi
-      sleep 0.2
+      sleep 0.5
     done
     wait "$REPEAT_CHILD_PID"
     status=$?

@@ -6,6 +6,7 @@ members = [
     "crates/tillandsias-headless",
     "crates/tillandsias-otp",
     "crates/tillandsias-podman",
+    "crates/tillandsias-repeat-graph",
     "crates/tillandsias-router-sidecar",
     "crates/tillandsias-scanner",
 ]
@@ -21,6 +22,7 @@ tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["codec"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
 postcard = { version = "1", features = ["alloc"] }
 bytes = "1"
 notify = "8"
@@ -34,6 +36,7 @@ async-trait = "0.1"
 parking_lot = "0.12"
 signal-hook = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
+base64 = "0.22"
 
 # Internal crates
 tillandsias-browser-mcp = { path = "crates/tillandsias-browser-mcp" }

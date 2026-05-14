@@ -1,0 +1,13 @@
+[package]
+name = "tillandsias-repeat-graph"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Repeat-mode progress tree renderer for Tillandsias"
+publish = false
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = "1"
+serde_yaml = { workspace = true }
