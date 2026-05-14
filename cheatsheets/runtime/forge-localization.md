@@ -1,3 +1,7 @@
+---
+tier: bundled
+---
+
 <!-- @trace spec:shell-prompt-localization-fr, spec:shell-prompt-localization-ja, spec:help-system-localization, spec:error-message-localization -->
 # Forge Localization
 

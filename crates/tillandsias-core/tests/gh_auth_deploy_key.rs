@@ -84,7 +84,11 @@ fn deploy_mode_generates_key_and_writes_config() {
     // (no chmod needed: bash invokes via #! and the script is rx in repo)
 
     let keystore = tmp.path().join("keystore");
-    let path_env = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
+    let path_env = format!(
+        "{}:{}",
+        bin.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
 
     let output = Command::new("bash")
         .arg(&script)
@@ -200,11 +204,7 @@ fn generate_repo_key_traces_secrets_specs() {
         "spec:secrets-management",
         "spec:native-secrets-store",
     ] {
-        assert!(
-            src.contains(trace),
-            "script must @trace {}",
-            trace
-        );
+        assert!(src.contains(trace), "script must @trace {}", trace);
     }
 }
 

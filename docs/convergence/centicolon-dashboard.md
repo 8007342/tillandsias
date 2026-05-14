@@ -3,9 +3,9 @@
 
 # Progression Trends
 
-_Generated at 2026-05-14T20:24:30Z for series `Local Development` (`local_development`)._
+_Generated at 2026-05-14T22:10:09Z for series `Local Development` (`local_development`)._
 
-_Source: `target/convergence/centicolon-signature.jsonl` · 92 signature records · latest release `0.1.260513.6` at commit `f4e5d991af9e`._
+_Source: `target/convergence/centicolon-signature.jsonl` · 97 signature records · latest release `0.1.260513.6` at commit `b85f156a1272`._
 
 ## Trend Sparklines
 
@@ -14,7 +14,8 @@ Each glyph below represents one signature record. The top strip is closed cc (ta
 ```text
 ████████████████████████████████
 █████████▆▆███▇█████████████████
-████████████████▆▇█▇▇██▇▇▅▅▅
+████████████████▆▇█▇▇██▇▇▅▅▅▅▅▄▄
+▅
 ```
 
 ## Latest Signature
@@ -22,11 +23,11 @@ Each glyph below represents one signature record. The top strip is closed cc (ta
 | Field | Value |
 |---|---|
 | Release | `0.1.260513.6` |
-| Commit | `f4e5d991af9e` |
-| Closed | `58.5%` |
-| Residual cc | `270` |
-| Worst spec | `spec:methodology-accountability` |
-| Worst reason | `Spec trace coverage below 90% (see /tmp/trace-coverage.log)` |
+| Commit | `b85f156a1272` |
+| Closed | `50.7%` |
+| Residual cc | `370` |
+| Worst spec | `spec:podman-orchestration` |
+| Worst reason | `Pre-build litmus failures detected (see /tmp/litmus-pre-build.log)` |
 | CI result | `FAIL` |
 | Alert level | `red` (red < 90%, yellow < 95%) |
 

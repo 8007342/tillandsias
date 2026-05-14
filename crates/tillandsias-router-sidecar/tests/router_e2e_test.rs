@@ -14,9 +14,7 @@
 //!
 //! @trace spec:opencode-web-session-otp, spec:secrets-management
 
-use tillandsias_otp::{
-    OtpStore, generate_session_token, format_cookie_value, parse_cookie_value,
-};
+use tillandsias_otp::{OtpStore, format_cookie_value, generate_session_token, parse_cookie_value};
 
 // ============================================================================
 // Test Suite 1: Basic OTP Issuance and Validation
@@ -184,7 +182,10 @@ fn otp_issued_token_is_pending() {
     assert_eq!(store.session_count(project), 1, "token must be stored");
 
     // Token is immediately valid (validation promotes to Active)
-    assert!(store.validate(project, &token), "Pending token must validate");
+    assert!(
+        store.validate(project, &token),
+        "Pending token must validate"
+    );
 }
 
 /// Test: Validating a Pending token promotes it to Active.
@@ -234,7 +235,11 @@ fn otp_expired_pending_token_evicted() {
 
     // Issue a Pending token
     store.push(project, token);
-    assert_eq!(store.session_count(project), 1, "entry must exist before eviction");
+    assert_eq!(
+        store.session_count(project),
+        1,
+        "entry must exist before eviction"
+    );
 
     // Immediately validate to promote to Active
     store.validate(project, &token);
@@ -350,7 +355,11 @@ fn otp_multiple_sessions_per_project() {
         store.push(project, *t);
     }
 
-    assert_eq!(store.session_count(project), 5, "all 5 tokens must be stored");
+    assert_eq!(
+        store.session_count(project),
+        5,
+        "all 5 tokens must be stored"
+    );
 
     // All tokens must validate independently
     for t in &tokens {
@@ -378,7 +387,11 @@ fn otp_project_eviction_clears_all_sessions() {
     // Evict the entire project (container stack stopped)
     store.evict_project(project);
 
-    assert_eq!(store.session_count(project), 0, "all sessions must be cleared");
+    assert_eq!(
+        store.session_count(project),
+        0,
+        "all sessions must be cleared"
+    );
 }
 
 // ============================================================================
@@ -413,7 +426,10 @@ fn otp_constant_time_validation() {
 
     // Validate an unknown token (all comparisons fail)
     let unknown = generate_session_token();
-    assert!(!store.validate(project, &unknown), "unknown token must fail");
+    assert!(
+        !store.validate(project, &unknown),
+        "unknown token must fail"
+    );
 
     // If the implementation were not constant-time, the first case might
     // be measurably faster than the second. A proper timing-attack test
@@ -444,16 +460,28 @@ fn otp_set_cookie_header_attributes() {
     let token = generate_session_token();
     let header = format_set_cookie_header(&token, "opencode.demo.localhost");
 
-    assert!(header.contains("tillandsias_session="), "must have cookie name");
+    assert!(
+        header.contains("tillandsias_session="),
+        "must have cookie name"
+    );
     assert!(header.contains("HttpOnly"), "must have HttpOnly");
     assert!(
         header.contains("SameSite=Strict"),
         "must have SameSite=Strict"
     );
     assert!(header.contains("Path=/"), "must have Path=/");
-    assert!(header.contains("Max-Age=86400"), "must have 24-hour Max-Age");
-    assert!(!header.contains("Secure"), "must NOT have Secure (loopback only)");
-    assert!(!header.contains("Domain="), "must NOT have Domain attribute");
+    assert!(
+        header.contains("Max-Age=86400"),
+        "must have 24-hour Max-Age"
+    );
+    assert!(
+        !header.contains("Secure"),
+        "must NOT have Secure (loopback only)"
+    );
+    assert!(
+        !header.contains("Domain="),
+        "must NOT have Domain attribute"
+    );
 }
 
 // ============================================================================

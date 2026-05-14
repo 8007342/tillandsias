@@ -606,7 +606,7 @@ mod tests {
             io_ticks_ms: 0,
         };
         let curr = DiskstatsRow {
-            sectors_read: 2048, // 2048 * 512 = 1 MiB
+            sectors_read: 2048,    // 2048 * 512 = 1 MiB
             sectors_written: 1024, // 1024 * 512 = 512 KiB
             reads_completed: 10,
             writes_completed: 5,
@@ -665,11 +665,7 @@ mod tests {
         // computation end-to-end without touching the real /proc.
         let dir = tempfile::tempdir().unwrap();
         let stats_path = dir.path().join("diskstats");
-        std::fs::write(
-            &stats_path,
-            " 8       0 sda 0 0 0 0 0 0 0 0 0 0 0\n",
-        )
-        .unwrap();
+        std::fs::write(&stats_path, " 8       0 sda 0 0 0 0 0 0 0 0 0 0 0\n").unwrap();
         let mut s = MetricsSampler::with_proc_paths(
             stats_path.to_string_lossy().to_string(),
             dir.path().join("pressure").to_string_lossy().to_string(),
@@ -726,10 +722,7 @@ mod tests {
 
     #[test]
     fn sample_psi_missing_dir_unavailable() {
-        let s = MetricsSampler::with_proc_paths(
-            "/dev/null",
-            "/var/empty/nonexistent-pressure",
-        );
+        let s = MetricsSampler::with_proc_paths("/dev/null", "/var/empty/nonexistent-pressure");
         let psi = s.sample_psi();
         assert!(!psi.available);
         assert!(psi.is_valid());
@@ -752,16 +745,16 @@ mod tests {
         .unwrap();
         // Intentionally omit `io` to exercise the partial-coverage path.
 
-        let s = MetricsSampler::with_proc_paths(
-            "/dev/null",
-            pdir.to_string_lossy().to_string(),
-        );
+        let s = MetricsSampler::with_proc_paths("/dev/null", pdir.to_string_lossy().to_string());
         let psi = s.sample_psi();
         assert!(psi.available);
         assert!(psi.is_valid());
         assert!((psi.cpu_psi_percent - 2.50).abs() < 1e-9);
         assert!((psi.memory_psi_percent - 0.75).abs() < 1e-9);
-        assert_eq!(psi.io_psi_percent, 0.0, "missing io file should default to 0");
+        assert_eq!(
+            psi.io_psi_percent, 0.0,
+            "missing io file should default to 0"
+        );
     }
 
     #[test]

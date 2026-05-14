@@ -17,7 +17,9 @@ use tillandsias_podman::PodmanClient;
 /// Parse a URL into host, port, and path components.
 fn parse_url(url: &str) -> Result<(String, u16, String), String> {
     // Simple URL parser for http://host:port/path
-    let url = url.strip_prefix("http://").ok_or("URL must start with http://")?;
+    let url = url
+        .strip_prefix("http://")
+        .ok_or("URL must start with http://")?;
     let (netloc, path) = url.split_once('/').unwrap_or((url, "/"));
 
     let (host, port_str) = netloc.split_once(':').unwrap_or((netloc, "80"));
@@ -54,20 +56,13 @@ impl SimpleHttpClient {
             .ok_or("no status code")?
             .parse::<u16>()?;
 
-        let body = response
-            .split("\r\n\r\n")
-            .nth(1)
-            .unwrap_or("")
-            .to_string();
+        let body = response.split("\r\n\r\n").nth(1).unwrap_or("").to_string();
 
         Ok((status, body))
     }
 
     /// POST a body to a URL and return status code.
-    async fn post(
-        url: &str,
-        body: &str,
-    ) -> Result<(u16, String), Box<dyn std::error::Error>> {
+    async fn post(url: &str, body: &str) -> Result<(u16, String), Box<dyn std::error::Error>> {
         let (host, port, path) = parse_url(url)?;
 
         let stream = tokio::net::TcpStream::connect((&host[..], port)).await?;
@@ -75,7 +70,9 @@ impl SimpleHttpClient {
 
         let request = format!(
             "POST {} HTTP/1.1\r\nHost: {}:{}\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{}",
-            path, host, port,
+            path,
+            host,
+            port,
             body.len(),
             body
         );
@@ -92,11 +89,7 @@ impl SimpleHttpClient {
             .ok_or("no status code")?
             .parse::<u16>()?;
 
-        let body = response
-            .split("\r\n\r\n")
-            .nth(1)
-            .unwrap_or("")
-            .to_string();
+        let body = response.split("\r\n\r\n").nth(1).unwrap_or("").to_string();
 
         Ok((status, body))
     }
@@ -139,8 +132,7 @@ async fn router_caddy_admin_api_reload() {
 
     // Write an empty initial dynamic Caddyfile
     {
-        let mut f = std::fs::File::create(&dynamic_caddyfile)
-            .expect("create dynamic.Caddyfile");
+        let mut f = std::fs::File::create(&dynamic_caddyfile).expect("create dynamic.Caddyfile");
         writeln!(f, "# Initial empty dynamic config").expect("write dynamic.Caddyfile");
     }
 
@@ -195,16 +187,21 @@ async fn router_caddy_admin_api_reload() {
         }
     }
 
-    eprintln!("[caddy_reload] Step 1: verify Caddy admin API responds on {}:{}", "127.0.0.1", admin_port);
-    let (status, _body) = SimpleHttpClient::get(&format!("{}/config/apps/http/servers", &admin_url))
-        .await
-        .expect("admin API GET");
+    eprintln!(
+        "[caddy_reload] Step 1: verify Caddy admin API responds on {}:{}",
+        "127.0.0.1", admin_port
+    );
+    let (status, _body) =
+        SimpleHttpClient::get(&format!("{}/config/apps/http/servers", &admin_url))
+            .await
+            .expect("admin API GET");
     assert_eq!(status, 200, "Expected 200 from admin API");
 
     eprintln!("[caddy_reload] Step 2: GET initial server config");
-    let (status, initial_config) = SimpleHttpClient::get(&format!("{}/config/apps/http/servers", &admin_url))
-        .await
-        .expect("admin API GET");
+    let (status, initial_config) =
+        SimpleHttpClient::get(&format!("{}/config/apps/http/servers", &admin_url))
+            .await
+            .expect("admin API GET");
     assert_eq!(status, 200, "Expected 200 from admin API");
     assert!(
         !initial_config.is_empty(),
@@ -218,8 +215,8 @@ async fn router_caddy_admin_api_reload() {
     eprintln!("[caddy_reload] Step 3: write updated dynamic Caddyfile");
     // Write a new dynamic Caddyfile with a test route
     {
-        let mut f = std::fs::File::create(&dynamic_caddyfile)
-            .expect("create updated dynamic.Caddyfile");
+        let mut f =
+            std::fs::File::create(&dynamic_caddyfile).expect("create updated dynamic.Caddyfile");
         writeln!(
             f,
             "# Test route for caddy reload integration\n\
@@ -246,9 +243,10 @@ async fn router_caddy_admin_api_reload() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     eprintln!("[caddy_reload] Step 5: verify new routes are present after reload");
-    let (status, updated_config) = SimpleHttpClient::get(&format!("{}/config/apps/http/servers", &admin_url))
-        .await
-        .expect("admin API GET after reload");
+    let (status, updated_config) =
+        SimpleHttpClient::get(&format!("{}/config/apps/http/servers", &admin_url))
+            .await
+            .expect("admin API GET after reload");
     assert_eq!(status, 200, "Expected 200 from admin API");
 
     // The updated config should reflect the new route. We can't easily parse
@@ -265,11 +263,12 @@ async fn router_caddy_admin_api_reload() {
     eprintln!("[caddy_reload] Step 6: verify reload didn't drop existing connections");
     // Attempt several rapid requests to verify the admin API is still responsive
     for i in 0..5 {
-        let (status, _) = SimpleHttpClient::get(&format!("{}/config/apps/http/servers", &admin_url))
-            .await
-            .unwrap_or_else(|e| {
-                panic!("Request {} failed after reload: {}", i, e);
-            });
+        let (status, _) =
+            SimpleHttpClient::get(&format!("{}/config/apps/http/servers", &admin_url))
+                .await
+                .unwrap_or_else(|e| {
+                    panic!("Request {} failed after reload: {}", i, e);
+                });
         assert_eq!(status, 200, "Request {} got status {}", i, status);
     }
     eprintln!("[caddy_reload] All post-reload requests succeeded");
@@ -388,12 +387,11 @@ async fn router_caddy_reload_no_blocking() {
     tokio::time::sleep(Duration::from_millis(50)).await;
     eprintln!("[concurrent] Triggering reload");
     {
-        let mut f = std::fs::File::create(&dynamic_caddyfile)
-            .expect("create updated dynamic.Caddyfile");
+        let mut f =
+            std::fs::File::create(&dynamic_caddyfile).expect("create updated dynamic.Caddyfile");
         writeln!(f, "# Updated during concurrent load").expect("write");
     }
-    let _ = SimpleHttpClient::post(&format!("{}/reload", &admin_url), "{}")
-        .await;
+    let _ = SimpleHttpClient::post(&format!("{}/reload", &admin_url), "{}").await;
 
     // Wait for all request tasks to complete
     for handle in handles {

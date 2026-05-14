@@ -149,11 +149,11 @@ impl BrowserMcpServer {
             .iter()
             .filter_map(|window| {
                 // Parse the URL to extract host and port
-                if let Ok(parsed) = url::Url::parse(&window.url) {
-                    if let Some(host) = parsed.host_str() {
-                        let port = parsed.port().unwrap_or(8080);
-                        return Some(format!("{}:{}", host, port));
-                    }
+                if let Ok(parsed) = url::Url::parse(&window.url)
+                    && let Some(host) = parsed.host_str()
+                {
+                    let port = parsed.port().unwrap_or(8080);
+                    return Some(format!("{}:{}", host, port));
                 }
                 None
             })
@@ -392,7 +392,10 @@ impl BrowserMcpServer {
         if !route_allowlist.is_allowed(url) {
             return Self::tool_error(
                 id,
-                format!("URL_NOT_ALLOWED: not in active routes for project '{}'", self.project_label),
+                format!(
+                    "URL_NOT_ALLOWED: not in active routes for project '{}'",
+                    self.project_label
+                ),
             );
         }
 

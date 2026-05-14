@@ -6,7 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [images/chromium/Containerfile.core#L1](../../../images/chromium/Containerfile.core#L1)
-- [images/chromium/Containerfile.framework#L12](../../../images/chromium/Containerfile.framework#L12)
+- [images/chromium/Containerfile.framework#L13](../../../images/chromium/Containerfile.framework#L13)
 - [scripts/bump-version.sh#L21](../../../scripts/bump-version.sh#L21)
 - [scripts/hooks/pre-push-version-guard.sh#L3](../../../scripts/hooks/pre-push-version-guard.sh#L3)
 - [scripts/install-hooks.sh#L3](../../../scripts/install-hooks.sh#L3)

@@ -19,8 +19,8 @@
 //! by layer: format validation (Layer 1), then allowlist enforcement (Layer 2).
 
 use serde_json::json;
-use tillandsias_browser_mcp::server::{BrowserMcpServer, McpServerConfig};
 use tillandsias_browser_mcp::framing::{RpcRequest, RpcResponse};
+use tillandsias_browser_mcp::server::{BrowserMcpServer, McpServerConfig};
 
 /// Test helper: create a server with fake launch mode (no real browser spawning).
 fn test_server(project: &str) -> BrowserMcpServer {
@@ -35,9 +35,10 @@ fn test_server(project: &str) -> BrowserMcpServer {
 /// Check if response is a tool-level error (Success with isError=true)
 fn is_tool_error(response: &RpcResponse) -> bool {
     match response {
-        RpcResponse::Success { result, .. } => {
-            result.get("isError").and_then(|v| v.as_bool()).unwrap_or(false)
-        }
+        RpcResponse::Success { result, .. } => result
+            .get("isError")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
         _ => false,
     }
 }
@@ -45,15 +46,13 @@ fn is_tool_error(response: &RpcResponse) -> bool {
 /// Extract error message from tool-level error response
 fn get_tool_error_message(response: &RpcResponse) -> Option<String> {
     match response {
-        RpcResponse::Success { result, .. } if is_tool_error(response) => {
-            result
-                .get("content")
-                .and_then(|c| c.as_array())
-                .and_then(|arr| arr.first())
-                .and_then(|obj| obj.get("text"))
-                .and_then(|t| t.as_str())
-                .map(|s| s.to_string())
-        }
+        RpcResponse::Success { result, .. } if is_tool_error(response) => result
+            .get("content")
+            .and_then(|c| c.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|obj| obj.get("text"))
+            .and_then(|t| t.as_str())
+            .map(|s| s.to_string()),
         _ => None,
     }
 }
@@ -149,7 +148,10 @@ async fn format_validation_rejects_missing_project_label() {
         })
         .await;
 
-    assert!(is_tool_error(&response), "missing project should be rejected");
+    assert!(
+        is_tool_error(&response),
+        "missing project should be rejected"
+    );
 }
 
 #[tokio::test]
@@ -170,7 +172,10 @@ async fn format_validation_rejects_bare_localhost() {
         })
         .await;
 
-    assert!(is_tool_error(&response), "bare localhost should be rejected");
+    assert!(
+        is_tool_error(&response),
+        "bare localhost should be rejected"
+    );
 }
 
 #[tokio::test]
@@ -306,7 +311,10 @@ async fn allowlist_blocks_unregistered_route_with_active_routes() {
     );
     let message = get_tool_error_message(&attempt);
     assert!(
-        message.as_ref().map(|m| m.contains("URL_NOT_ALLOWED")).unwrap_or(false),
+        message
+            .as_ref()
+            .map(|m| m.contains("URL_NOT_ALLOWED"))
+            .unwrap_or(false),
         "error should indicate URL not allowed"
     );
 }
@@ -375,7 +383,10 @@ async fn format_validation_rejects_non_loopback_ipv4() {
         })
         .await;
 
-    assert!(is_tool_error(&response), "non-loopback IPv4 should be rejected");
+    assert!(
+        is_tool_error(&response),
+        "non-loopback IPv4 should be rejected"
+    );
 }
 
 #[tokio::test]
@@ -396,7 +407,10 @@ async fn format_validation_rejects_non_loopback_ipv6() {
         })
         .await;
 
-    assert!(is_tool_error(&response), "non-loopback IPv6 should be rejected");
+    assert!(
+        is_tool_error(&response),
+        "non-loopback IPv6 should be rejected"
+    );
 }
 
 // ============================================================================
@@ -511,7 +525,10 @@ async fn format_validation_blocks_all_external_domains() {
             })
             .await;
 
-        assert!(is_tool_error(&response), "external domain {url} should be blocked");
+        assert!(
+            is_tool_error(&response),
+            "external domain {url} should be blocked"
+        );
     }
 }
 
@@ -538,7 +555,10 @@ async fn format_validation_blocks_localhost_lookalikes() {
             })
             .await;
 
-        assert!(is_tool_error(&response), "localhost lookalike {url} should be blocked");
+        assert!(
+            is_tool_error(&response),
+            "localhost lookalike {url} should be blocked"
+        );
     }
 }
 
@@ -569,7 +589,10 @@ async fn format_validation_blocks_opencode_self_references() {
             })
             .await;
 
-        assert!(is_tool_error(&response), "opencode URL {url} should be blocked");
+        assert!(
+            is_tool_error(&response),
+            "opencode URL {url} should be blocked"
+        );
     }
 }
 
@@ -698,7 +721,12 @@ async fn format_validation_blocks_malformed_urls() {
     // @trace spec:host-browser-mcp
     let server = test_server("acme");
 
-    for url in &["not a url", "http://", "", "http://web.acme.localhost:8080:extra"] {
+    for url in &[
+        "not a url",
+        "http://",
+        "",
+        "http://web.acme.localhost:8080:extra",
+    ] {
         let response = server
             .handle_request(RpcRequest {
                 id: Some(310),
@@ -712,7 +740,10 @@ async fn format_validation_blocks_malformed_urls() {
             })
             .await;
 
-        assert!(is_tool_error(&response), "malformed URL '{url}' should be rejected");
+        assert!(
+            is_tool_error(&response),
+            "malformed URL '{url}' should be rejected"
+        );
     }
 }
 
@@ -787,7 +818,11 @@ async fn allowlist_allows_both_http_and_https_for_same_host() {
     let is_error = is_tool_error(&https_response);
     let message = get_tool_error_message(&https_response);
     assert!(
-        !is_error || !message.as_ref().map(|m| m.contains("scheme")).unwrap_or(false),
+        !is_error
+            || !message
+                .as_ref()
+                .map(|m| m.contains("scheme"))
+                .unwrap_or(false),
         "HTTPS should be allowed for same hostname (error should not be about scheme)"
     );
 }
@@ -822,9 +857,18 @@ async fn allowlist_ignores_paths_and_query_params() {
 
     // Paths and query parameters should not affect allowlist decision
     for (description, url) in &[
-        ("with path", "http://web.acme.localhost:8080/long/path/to/page"),
-        ("with query params", "http://web.acme.localhost:8080/?key=value&foo=bar"),
-        ("with path and query", "http://web.acme.localhost:8080/path?query=value#fragment"),
+        (
+            "with path",
+            "http://web.acme.localhost:8080/long/path/to/page",
+        ),
+        (
+            "with query params",
+            "http://web.acme.localhost:8080/?key=value&foo=bar",
+        ),
+        (
+            "with path and query",
+            "http://web.acme.localhost:8080/path?query=value#fragment",
+        ),
     ] {
         let response = server
             .handle_request(RpcRequest {

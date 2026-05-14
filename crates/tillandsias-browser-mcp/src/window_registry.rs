@@ -9,7 +9,7 @@ use std::process::Child;
 use std::time::Instant;
 
 use parking_lot::Mutex;
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 /// Stable browser window identifier.
 pub type WindowId = String;
@@ -67,11 +67,7 @@ impl WindowEntry {
     pub fn seconds_until_idle_timeout(&self) -> u64 {
         const IDLE_TIMEOUT_SECS: u64 = 24 * 60 * 60;
         let elapsed = self.last_activity.elapsed().as_secs();
-        if elapsed > IDLE_TIMEOUT_SECS {
-            0
-        } else {
-            IDLE_TIMEOUT_SECS - elapsed
-        }
+        IDLE_TIMEOUT_SECS.saturating_sub(elapsed)
     }
 }
 

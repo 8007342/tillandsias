@@ -72,7 +72,10 @@ fn test_window_created_not_immediately_timed_out() {
     // @trace spec:browser-window-timeout
     let window = TestWindowEntry::new("win-1", "test-proj");
 
-    assert!(!window.is_idle_timeout(), "Newly created window should not be idle");
+    assert!(
+        !window.is_idle_timeout(),
+        "Newly created window should not be idle"
+    );
     assert!(
         !window.is_lifetime_exceeded(),
         "Newly created window should not exceed lifetime"
@@ -86,7 +89,10 @@ fn test_window_seconds_until_timeout_decreases() {
     let initial = window.seconds_until_idle_timeout();
 
     // Simulate time passage (we'll just trust the calculation is correct)
-    assert!(initial > 0, "Newly created window should have time until timeout");
+    assert!(
+        initial > 0,
+        "Newly created window should have time until timeout"
+    );
     assert!(initial <= 24 * 60 * 60, "Should not exceed 24 hour timeout");
 }
 
@@ -154,14 +160,20 @@ fn test_window_tracks_creation_and_activity_times() {
     let window = TestWindowEntry::new("win-4", "test-proj");
 
     // Both timestamps should be set to current time
-    assert!(window.created_at.elapsed().as_secs() < 1, "Creation time should be recent");
+    assert!(
+        window.created_at.elapsed().as_secs() < 1,
+        "Creation time should be recent"
+    );
     assert!(
         window.last_activity.elapsed().as_secs() < 1,
         "Activity time should be recent"
     );
 
     // They should be approximately equal
-    let time_diff = window.created_at.elapsed().as_secs()
+    let time_diff = window
+        .created_at
+        .elapsed()
+        .as_secs()
         .abs_diff(window.last_activity.elapsed().as_secs());
     assert!(time_diff < 1, "Creation and activity times should be close");
 }

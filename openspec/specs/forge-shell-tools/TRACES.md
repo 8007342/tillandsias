@@ -6,7 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [crates/tillandsias-core/tests/forge_shell_tools.rs#L2](../../../crates/tillandsias-core/tests/forge_shell_tools.rs#L2)
-- [crates/tillandsias-core/tests/forge_shell_tools.rs#L114](../../../crates/tillandsias-core/tests/forge_shell_tools.rs#L114)
+- [crates/tillandsias-core/tests/forge_shell_tools.rs#L120](../../../crates/tillandsias-core/tests/forge_shell_tools.rs#L120)
 - [flake.nix#L115](../../../flake.nix#L115)
 - [flake.nix#L185](../../../flake.nix#L185)
 - [images/default/config-overlay/mcp/git-tools.sh#L3](../../../images/default/config-overlay/mcp/git-tools.sh#L3)
@@ -22,8 +22,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/config-overlay/shell-helpers.sh#L130](../../../images/default/config-overlay/shell-helpers.sh#L130)
 - [images/default/config-overlay/shell-helpers.sh#L143](../../../images/default/config-overlay/shell-helpers.sh#L143)
 - [images/default/config-overlay/shell-helpers.sh#L159](../../../images/default/config-overlay/shell-helpers.sh#L159)
-- [images/default/config-overlay/shell-helpers.sh#L190](../../../images/default/config-overlay/shell-helpers.sh#L190)
-- [images/default/Containerfile#L89](../../../images/default/Containerfile#L89)
+- [images/default/config-overlay/shell-helpers.sh#L213](../../../images/default/config-overlay/shell-helpers.sh#L213)
+- [images/default/Containerfile#L100](../../../images/default/Containerfile#L100)
 - [images/default/entrypoint-forge-claude.sh#L56](../../../images/default/entrypoint-forge-claude.sh#L56)
 - [images/default/entrypoint-forge-opencode.sh#L54](../../../images/default/entrypoint-forge-opencode.sh#L54)
 - [images/default/entrypoint-forge-opencode-web.sh#L85](../../../images/default/entrypoint-forge-opencode-web.sh#L85)

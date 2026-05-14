@@ -323,14 +323,20 @@ impl TrayService {
                 // - Failed → AllHealthy (recovery after failure)
                 if !previous_available && value {
                     // Transition from unavailable to available: go directly to healthy
-                    if state.enclave_status.can_transition_to(EnclaveStatus::AllHealthy) {
+                    if state
+                        .enclave_status
+                        .can_transition_to(EnclaveStatus::AllHealthy)
+                    {
                         state.enclave_status = EnclaveStatus::AllHealthy;
                         state.status_text = "✓ Environment OK".to_string();
                         status_changed = true;
                     }
                 } else if value && state.enclave_status == EnclaveStatus::Verifying {
                     // Already in Verifying, still becoming available: transition to healthy
-                    if state.enclave_status.can_transition_to(EnclaveStatus::AllHealthy) {
+                    if state
+                        .enclave_status
+                        .can_transition_to(EnclaveStatus::AllHealthy)
+                    {
                         state.enclave_status = EnclaveStatus::AllHealthy;
                         state.status_text = "✓ Environment OK".to_string();
                         status_changed = true;
@@ -2147,11 +2153,10 @@ mod tests {
     #[test]
     fn icon_reflects_enclave_status_on_init() {
         // When forge_available=false (Verifying), icon should be Pup
-        let verifying_state =
-            TrayStateBuilder::new()
-                .enclave_status(EnclaveStatus::Verifying)
-                .forge_available(false)
-                .build();
+        let verifying_state = TrayStateBuilder::new()
+            .enclave_status(EnclaveStatus::Verifying)
+            .forge_available(false)
+            .build();
         assert_eq!(verifying_state.tray_icon_state, TrayIconState::Pup);
 
         // When forge_available=true (AllHealthy), icon should be Mature
@@ -2341,7 +2346,10 @@ mod tests {
 
             // All dynamic items should be visible (in the menu)
             assert_eq!(
-                props.get("visible").and_then(|v| v.try_clone().ok()).and_then(|v| bool::try_from(v).ok()),
+                props
+                    .get("visible")
+                    .and_then(|v| v.try_clone().ok())
+                    .and_then(|v| bool::try_from(v).ok()),
                 Some(true),
                 "Item {} should be visible in dynamic region",
                 id
@@ -2410,7 +2418,10 @@ mod tests {
                     1 => {
                         // Status: always disabled (informational)
                         assert_eq!(
-                            props.get("enabled").and_then(|v| v.try_clone().ok()).and_then(|v| bool::try_from(v).ok()),
+                            props
+                                .get("enabled")
+                                .and_then(|v| v.try_clone().ok())
+                                .and_then(|v| bool::try_from(v).ok()),
                             Some(false),
                             "Status (id=1) should be disabled"
                         );
@@ -2421,7 +2432,10 @@ mod tests {
                     30 => {
                         // Version: always disabled (informational)
                         assert_eq!(
-                            props.get("enabled").and_then(|v| v.try_clone().ok()).and_then(|v| bool::try_from(v).ok()),
+                            props
+                                .get("enabled")
+                                .and_then(|v| v.try_clone().ok())
+                                .and_then(|v| bool::try_from(v).ok()),
                             Some(false),
                             "Version (id=30) should be disabled"
                         );
@@ -2429,7 +2443,10 @@ mod tests {
                     31 => {
                         // Quit: always enabled
                         assert_eq!(
-                            props.get("enabled").and_then(|v| v.try_clone().ok()).and_then(|v| bool::try_from(v).ok()),
+                            props
+                                .get("enabled")
+                                .and_then(|v| v.try_clone().ok())
+                                .and_then(|v| bool::try_from(v).ok()),
                             Some(true),
                             "Quit (id=31) should be enabled"
                         );

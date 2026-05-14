@@ -32,7 +32,8 @@ fn test_detect_node_project() {
 fn test_detect_python_project() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let pyproject = temp_dir.path().join("pyproject.toml");
-    fs::write(&pyproject, "[tool.poetry]\nname = \"test\"").expect("Failed to write pyproject.toml");
+    fs::write(&pyproject, "[tool.poetry]\nname = \"test\"")
+        .expect("Failed to write pyproject.toml");
 
     assert!(pyproject.exists(), "pyproject.toml should exist");
 }
@@ -48,7 +49,10 @@ fn test_detect_polyglot_project() {
     fs::write(&pkg_json, r#"{"name":"test","version":"1.0.0"}"#)
         .expect("Failed to write package.json");
 
-    assert!(cargo_toml.exists() && pkg_json.exists(), "Both files should exist");
+    assert!(
+        cargo_toml.exists() && pkg_json.exists(),
+        "Both files should exist"
+    );
 }
 
 /// Test: Project with README extraction
@@ -62,7 +66,10 @@ fn test_extract_readme_description() {
     assert!(readme.exists(), "README.md should exist");
 
     let content = fs::read_to_string(&readme).expect("Failed to read README");
-    assert!(content.contains("My Awesome Project"), "README should contain title");
+    assert!(
+        content.contains("My Awesome Project"),
+        "README should contain title"
+    );
 }
 
 /// Test: Tillandsias-managed project detection
@@ -96,8 +103,14 @@ fn test_project_env_export() {
     const SHARED_CACHE: &str = "/nix/store";
     const WORKSPACE: &str = "/home/forge/src";
 
-    assert_eq!(SHARED_CACHE, "/nix/store", "Shared cache path should be /nix/store");
-    assert_eq!(WORKSPACE, "/home/forge/src", "Workspace should be /home/forge/src");
+    assert_eq!(
+        SHARED_CACHE, "/nix/store",
+        "Shared cache path should be /nix/store"
+    );
+    assert_eq!(
+        WORKSPACE, "/home/forge/src",
+        "Workspace should be /home/forge/src"
+    );
 }
 
 /// Test: Cold-start project discovery
@@ -112,7 +125,10 @@ fn test_cold_start_discovery() {
     // 2. Project type via marker files
     // 3. Cached metadata (if available)
 
-    assert!(git_dir.exists(), ".git directory should exist for discovery");
+    assert!(
+        git_dir.exists(),
+        ".git directory should exist for discovery"
+    );
 }
 
 /// Test: Project type detection is independent
@@ -197,11 +213,8 @@ mod integration {
             let proj_dir = src_dir.join(format!("project{}", i));
             fs::create_dir(&proj_dir).expect("Failed to create project dir");
             fs::create_dir(proj_dir.join(".git")).expect("Failed to create .git");
-            fs::write(
-                proj_dir.join("README.md"),
-                format!("# Project {}", i),
-            )
-            .expect("Failed to write README");
+            fs::write(proj_dir.join("README.md"), format!("# Project {}", i))
+                .expect("Failed to write README");
         }
 
         // Should be able to discover all projects

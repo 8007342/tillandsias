@@ -96,6 +96,7 @@ impl BrowserAllowlist {
     /// - Any external domains
     /// - `opencode.*` (prevents recursive OpenCode Web launch)
     /// - Non-standard ports
+    ///
     /// @trace spec:host-browser-mcp
     pub fn is_allowed(&self, url: &str) -> bool {
         let parsed = match Url::parse(url) {

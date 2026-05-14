@@ -24,8 +24,14 @@ fn read_helper(path: &str) -> String {
 fn shell_helpers_defines_tgs_tgp_and_cache_report() {
     let src = read_helper("images/default/config-overlay/shell-helpers.sh");
 
-    assert!(src.contains("tgs()"), "shell-helpers.sh should define `tgs()`");
-    assert!(src.contains("tgp()"), "shell-helpers.sh should define `tgp()`");
+    assert!(
+        src.contains("tgs()"),
+        "shell-helpers.sh should define `tgs()`"
+    );
+    assert!(
+        src.contains("tgp()"),
+        "shell-helpers.sh should define `tgp()`"
+    );
     assert!(
         src.contains("tgpull()"),
         "shell-helpers.sh should define `tgpull()`"
@@ -120,7 +126,8 @@ fn forge_shell_tools_trace_present() {
 /// Cache discipline doc surfaces both the shell shortcut and the MCP tool.
 #[test]
 fn cache_discipline_mentions_cache_report() {
-    let src = read_helper("images/default/config-overlay/opencode/instructions/cache-discipline.md");
+    let src =
+        read_helper("images/default/config-overlay/opencode/instructions/cache-discipline.md");
 
     assert!(
         src.contains("cache-report"),

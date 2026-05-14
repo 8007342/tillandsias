@@ -37,7 +37,7 @@ use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION, en
 use tillandsias_podman::{
     ContainerSpec, MountMode, PodmanClient, detect_gpu_devices, podman_cmd_sync,
 };
-use tracing::{info, error, debug};
+use tracing::{debug, error, info};
 
 use serde::{Deserialize, Serialize};
 
@@ -476,7 +476,8 @@ impl InitBuildState {
             .trim()
             .to_string();
 
-        mtime_str.parse::<u64>()
+        mtime_str
+            .parse::<u64>()
             .ok()
             .map(Some)
             .ok_or_else(|| "Failed to parse mtime".to_string())
@@ -496,8 +497,7 @@ impl InitBuildState {
     fn save_version(version: &str) -> Result<(), String> {
         let cache_dir = init_cache_dir()?;
         let version_file = cache_dir.join("cache_version");
-        fs::write(&version_file, version)
-            .map_err(|e| format!("Failed to write cache version: {e}"))
+        fs::write(&version_file, version).map_err(|e| format!("Failed to write cache version: {e}"))
     }
 }
 
@@ -658,7 +658,8 @@ fn containerfile_is_stale(root: &Path, image_name: &str, debug: bool) -> Result<
     let metadata = fs::metadata(&containerfile)
         .map_err(|e| format!("Failed to read Containerfile metadata: {e}"))?;
 
-    let modified = metadata.modified()
+    let modified = metadata
+        .modified()
         .map_err(|e| format!("Failed to get modification time: {e}"))?;
 
     let current_mtime = modified
@@ -675,7 +676,10 @@ fn containerfile_is_stale(root: &Path, image_name: &str, debug: bool) -> Result<
         _ => {
             // Containerfile modified or no record exists
             if debug {
-                eprintln!("[tillandsias] Containerfile for {} has been modified or updated", image_name);
+                eprintln!(
+                    "[tillandsias] Containerfile for {} has been modified or updated",
+                    image_name
+                );
             }
             Ok(true)
         }
@@ -690,7 +694,8 @@ fn capture_containerfile_mtime(root: &Path, image_name: &str) -> Result<(), Stri
     let metadata = fs::metadata(&containerfile)
         .map_err(|e| format!("Failed to read Containerfile metadata: {e}"))?;
 
-    let modified = metadata.modified()
+    let modified = metadata
+        .modified()
         .map_err(|e| format!("Failed to get modification time: {e}"))?;
 
     let mtime = modified
@@ -835,8 +840,8 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&crt, std::fs::Permissions::from_mode(0o644))
-                .map_err(|e| {
+            std::fs::set_permissions(&crt, std::fs::Permissions::from_mode(0o644)).map_err(
+                |e| {
                     error!(
                         accountability = true,
                         category = "secrets",
@@ -848,9 +853,10 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                         "Failed to set CA certificate permissions"
                     );
                     format!("Failed to set cert permissions: {e}")
-                })?;
-            std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o600))
-                .map_err(|e| {
+                },
+            )?;
+            std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o600)).map_err(
+                |e| {
                     error!(
                         accountability = true,
                         category = "secrets",
@@ -862,7 +868,8 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                         "Failed to set CA key permissions"
                     );
                     format!("Failed to set key permissions: {e}")
-                })?;
+                },
+            )?;
         }
 
         info!(
@@ -1585,10 +1592,13 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
             state.mark_success(image);
             // @trace spec:containerfile-staleness
             // Record Containerfile mtime after successful build
-            if let Err(e) = capture_containerfile_mtime(&root, image) {
-                if debug {
-                    eprintln!("WARNING: Failed to record Containerfile mtime for {}: {}", image, e);
-                }
+            if let Err(e) = capture_containerfile_mtime(&root, image)
+                && debug
+            {
+                eprintln!(
+                    "WARNING: Failed to record Containerfile mtime for {}: {}",
+                    image, e
+                );
             }
             if debug {
                 println!("SUCCESS {}", image);
@@ -1792,11 +1802,7 @@ fn run_cache_verify(debug: bool) -> Result<(), String> {
     println!("Current version: {}", status.current_version);
     println!(
         "Cached version:  {}",
-        status
-            .cached_version
-            .as_ref()
-            .map(|s| s.as_str())
-            .unwrap_or("<not set>")
+        status.cached_version.as_deref().unwrap_or("<not set>")
     );
     println!();
 
@@ -1810,7 +1816,10 @@ fn run_cache_verify(debug: bool) -> Result<(), String> {
         if status.version_mismatch {
             println!("  - Version mismatch detected");
             if let Some(cached) = &status.cached_version {
-                println!("    Cached: {}, Current: {}", cached, status.current_version);
+                println!(
+                    "    Cached: {}, Current: {}",
+                    cached, status.current_version
+                );
             } else {
                 println!("    No cached version found");
             }
@@ -2320,58 +2329,20 @@ fn create_github_podman_secret(token: &str, debug: bool) -> Result<(), String> {
     }
 
     {
-        let stdin = child
-            .stdin
-            .as_mut()
-            .ok_or_else(|| {
-                error!(
-                    accountability = true,
-                    category = "secrets",
-                    spec = "secret-rotation",
-                    secret_type = "github-token",
-                    operation = "rotation_failed",
-                    secret_name = "tillandsias-github-token",
-                    error = "stdin pipe not available",
-                    "Failed to access podman secret create stdin"
-                );
-                "Failed to open podman secret stdin".to_string()
-            })?;
-        stdin
-            .write_all(token.as_bytes())
-            .map_err(|e| {
-                error!(
-                    accountability = true,
-                    category = "secrets",
-                    spec = "secret-rotation",
-                    secret_type = "github-token",
-                    operation = "rotation_failed",
-                    secret_name = "tillandsias-github-token",
-                    error = %e,
-                    "Failed to write token to podman secret stdin"
-                );
-                format!("Failed to write token to podman secret stdin: {e}")
-            })?;
-        stdin
-            .write_all(b"\n")
-            .map_err(|e| {
-                error!(
-                    accountability = true,
-                    category = "secrets",
-                    spec = "secret-rotation",
-                    secret_type = "github-token",
-                    operation = "rotation_failed",
-                    secret_name = "tillandsias-github-token",
-                    error = %e,
-                    "Failed to finalize token input to podman secret"
-                );
-                format!("Failed to finish token input: {e}")
-            })?;
-    }
-    drop(child.stdin.take());
-
-    let output = child
-        .wait_with_output()
-        .map_err(|e| {
+        let stdin = child.stdin.as_mut().ok_or_else(|| {
+            error!(
+                accountability = true,
+                category = "secrets",
+                spec = "secret-rotation",
+                secret_type = "github-token",
+                operation = "rotation_failed",
+                secret_name = "tillandsias-github-token",
+                error = "stdin pipe not available",
+                "Failed to access podman secret create stdin"
+            );
+            "Failed to open podman secret stdin".to_string()
+        })?;
+        stdin.write_all(token.as_bytes()).map_err(|e| {
             error!(
                 accountability = true,
                 category = "secrets",
@@ -2380,10 +2351,39 @@ fn create_github_podman_secret(token: &str, debug: bool) -> Result<(), String> {
                 operation = "rotation_failed",
                 secret_name = "tillandsias-github-token",
                 error = %e,
-                "Failed to wait for podman secret create completion"
+                "Failed to write token to podman secret stdin"
             );
-            format!("Failed waiting for podman secret create: {e}")
+            format!("Failed to write token to podman secret stdin: {e}")
         })?;
+        stdin.write_all(b"\n").map_err(|e| {
+            error!(
+                accountability = true,
+                category = "secrets",
+                spec = "secret-rotation",
+                secret_type = "github-token",
+                operation = "rotation_failed",
+                secret_name = "tillandsias-github-token",
+                error = %e,
+                "Failed to finalize token input to podman secret"
+            );
+            format!("Failed to finish token input: {e}")
+        })?;
+    }
+    drop(child.stdin.take());
+
+    let output = child.wait_with_output().map_err(|e| {
+        error!(
+            accountability = true,
+            category = "secrets",
+            spec = "secret-rotation",
+            secret_type = "github-token",
+            operation = "rotation_failed",
+            secret_name = "tillandsias-github-token",
+            error = %e,
+            "Failed to wait for podman secret create completion"
+        );
+        format!("Failed waiting for podman secret create: {e}")
+    })?;
     if output.status.success() {
         info!(
             accountability = true,
@@ -3556,10 +3556,16 @@ mod tests {
         // by detecting VERSION file and images/ directory.
         // This validates the repository structure requirements.
         let root = find_checkout_root();
-        assert!(root.is_ok(), "find_checkout_root should succeed in a valid repo");
+        assert!(
+            root.is_ok(),
+            "find_checkout_root should succeed in a valid repo"
+        );
 
         let root = root.unwrap();
-        assert!(root.join("VERSION").exists(), "VERSION file must exist at repo root");
+        assert!(
+            root.join("VERSION").exists(),
+            "VERSION file must exist at repo root"
+        );
         assert!(
             root.join("images").is_dir(),
             "images directory must exist at repo root"
@@ -3638,26 +3644,26 @@ mod tests {
         let root = find_checkout_root().expect("should find repo root");
 
         // Test forge image (uses "images/default/Containerfile")
-        let (containerfile, context) = image_specs(&root, "forge")
-            .expect("forge image specs should be resolvable");
+        let (containerfile, context) =
+            image_specs(&root, "forge").expect("forge image specs should be resolvable");
         assert!(containerfile.ends_with("images/default/Containerfile"));
         assert!(context.ends_with("images/default"));
 
         // Test proxy image
-        let (containerfile, context) = image_specs(&root, "proxy")
-            .expect("proxy image specs should be resolvable");
+        let (containerfile, context) =
+            image_specs(&root, "proxy").expect("proxy image specs should be resolvable");
         assert!(containerfile.ends_with("images/proxy/Containerfile"));
         assert!(context.ends_with("images/proxy"));
 
         // Test git image
-        let (containerfile, context) = image_specs(&root, "git")
-            .expect("git image specs should be resolvable");
+        let (containerfile, context) =
+            image_specs(&root, "git").expect("git image specs should be resolvable");
         assert!(containerfile.ends_with("images/git/Containerfile"));
         assert!(context.ends_with("images/git"));
 
         // Test inference image
-        let (containerfile, context) = image_specs(&root, "inference")
-            .expect("inference image specs should be resolvable");
+        let (containerfile, context) =
+            image_specs(&root, "inference").expect("inference image specs should be resolvable");
         assert!(containerfile.ends_with("images/inference/Containerfile"));
         assert!(context.ends_with("images/inference"));
 
@@ -3711,7 +3717,10 @@ mod tests {
         // Test that image_build_args correctly passes CHROMIUM_CORE_TAG
         // when building chromium-framework.
         // @trace spec:init-command
-        let args = image_build_args("chromium-framework", "tillandsias-chromium-framework:v1.0.0");
+        let args = image_build_args(
+            "chromium-framework",
+            "tillandsias-chromium-framework:v1.0.0",
+        );
 
         assert_eq!(args.len(), 2, "should have 2 args (--build-arg and value)");
         assert_eq!(args[0], "--build-arg");
@@ -3747,7 +3756,10 @@ mod tests {
         );
 
         let path = log_path.unwrap();
-        assert!(path.to_string_lossy().contains("tillandsias-init-proxy.log"));
+        assert!(
+            path.to_string_lossy()
+                .contains("tillandsias-init-proxy.log")
+        );
     }
 
     #[test]
@@ -3799,10 +3811,7 @@ mod tests {
         assert!(images.iter().any(|&i| i == "forge"), "forge must be last");
 
         // Verify build order: chromium-framework comes AFTER chromium-core
-        let core_idx = images
-            .iter()
-            .position(|&i| i == "chromium-core")
-            .unwrap();
+        let core_idx = images.iter().position(|&i| i == "chromium-core").unwrap();
         let framework_idx = images
             .iter()
             .position(|&i| i == "chromium-framework")
