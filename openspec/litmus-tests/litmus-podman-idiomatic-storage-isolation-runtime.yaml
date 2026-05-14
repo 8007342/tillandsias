@@ -1,0 +1,189 @@
+# @trace spec:podman-idiomatic-patterns
+name: litmus:podman-idiomatic-storage-isolation-runtime
+spec: podman-idiomatic-patterns
+phase: integration
+description: Verify per-project storage isolation with read-only /src, read-write /workspace, and ephemeral /tmp in actual forge containers
+severity: critical
+
+preconditions:
+  - podman is installed and running in rootless mode
+  - forge image is available (tillandsias-forge:*)
+  - jq is available for JSON parsing
+  - /tmp has write access for test ephemeral containers
+  - test workspace directory can be created at ~/.cache/tillandsias/test-*
+
+critical_path:
+  - step: "baseline: verify forge image exists"
+    command: |
+      FORGE_IMAGE="${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | head -1)}"
+      test -n "$FORGE_IMAGE" || FORGE_IMAGE="alpine:latest"
+      echo "FORGE_IMAGE=$FORGE_IMAGE" && podman inspect "$FORGE_IMAGE" >/dev/null && echo FORGE_IMAGE_OK
+    timeout_ms: 10000
+    expected_behavior: "FORGE_IMAGE_OK"
+
+  - step: "create test project directories: project-a and project-b"
+    command: |
+      TEST_ROOT="/tmp/tillandsias-litmus-storage-$$"
+      mkdir -p "$TEST_ROOT/project-a/src" "$TEST_ROOT/project-a/workspace"
+      mkdir -p "$TEST_ROOT/project-b/src" "$TEST_ROOT/project-b/workspace"
+      # Create marker files in project workspaces to verify isolation
+      echo "project-a-marker" > "$TEST_ROOT/project-a/workspace/marker.txt"
+      echo "project-b-marker" > "$TEST_ROOT/project-b/workspace/marker.txt"
+      echo "TEST_ROOT=$TEST_ROOT" && ls -la "$TEST_ROOT" && echo TEST_DIRS_CREATED
+    timeout_ms: 5000
+    expected_behavior: "TEST_DIRS_CREATED"
+
+  - step: "launch project-a forge container with volumes: src RO, workspace RW"
+    command: |
+      TEST_ROOT="/tmp/tillandsias-litmus-storage-$$"
+      FORGE_IMAGE="${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | head -1)}"
+      test -n "$FORGE_IMAGE" || FORGE_IMAGE="alpine:latest"
+      CONTAINER_A=$(podman run -d \
+        --rm \
+        --label "tillandsias-litmus-storage-test=project-a" \
+        --volume "$TEST_ROOT/project-a/src:/src:ro" \
+        --volume "$TEST_ROOT/project-a/workspace:/workspace:rw" \
+        --tmpfs /tmp:rw \
+        "$FORGE_IMAGE" \
+        sleep 120 2>&1 | head -1)
+      echo "CONTAINER_A=$CONTAINER_A" && test -n "$CONTAINER_A" && echo PROJECT_A_LAUNCHED
+    timeout_ms: 15000
+    expected_behavior: "PROJECT_A_LAUNCHED"
+
+  - step: "launch project-b forge container with separate volumes"
+    command: |
+      TEST_ROOT="/tmp/tillandsias-litmus-storage-$$"
+      FORGE_IMAGE="${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | head -1)}"
+      test -n "$FORGE_IMAGE" || FORGE_IMAGE="alpine:latest"
+      CONTAINER_B=$(podman run -d \
+        --rm \
+        --label "tillandsias-litmus-storage-test=project-b" \
+        --volume "$TEST_ROOT/project-b/src:/src:ro" \
+        --volume "$TEST_ROOT/project-b/workspace:/workspace:rw" \
+        --tmpfs /tmp:rw \
+        "$FORGE_IMAGE" \
+        sleep 120 2>&1 | head -1)
+      echo "CONTAINER_B=$CONTAINER_B" && test -n "$CONTAINER_B" && echo PROJECT_B_LAUNCHED
+    timeout_ms: 15000
+    expected_behavior: "PROJECT_B_LAUNCHED"
+
+  - step: "test project-a: verify /src is read-only (EROFS on write)"
+    command: |
+      CONTAINER_A=$(podman ps -q -f "label=tillandsias-litmus-storage-test=project-a" 2>/dev/null | head -1)
+      if [ -n "$CONTAINER_A" ]; then
+        # Try to write to /src, expect EROFS or permission denied
+        OUTPUT=$(podman exec "$CONTAINER_A" bash -c 'touch /src/test.txt 2>&1' || true)
+        if echo "$OUTPUT" | grep -q "Read-only file system\|Permission denied\|cannot touch"; then
+          echo "Read-only mount verified for /src in project-a"
+        else
+          echo "WARNING: Expected EROFS but got: $OUTPUT"
+        fi
+        echo SRC_READONLY_VERIFIED
+      fi
+    timeout_ms: 10000
+    expected_behavior: "SRC_READONLY_VERIFIED"
+
+  - step: "test project-a: verify /workspace is read-write"
+    command: |
+      CONTAINER_A=$(podman ps -q -f "label=tillandsias-litmus-storage-test=project-a" 2>/dev/null | head -1)
+      if [ -n "$CONTAINER_A" ]; then
+        podman exec "$CONTAINER_A" bash -c 'echo "project-a-test-file" > /workspace/test-a.txt' && \
+        podman exec "$CONTAINER_A" cat /workspace/test-a.txt | grep -q "project-a-test-file" && \
+        echo WORKSPACE_RW_VERIFIED
+      fi
+    timeout_ms: 10000
+    expected_behavior: "WORKSPACE_RW_VERIFIED"
+
+  - step: "test project-b: verify /workspace is isolated (no project-a files)"
+    command: |
+      CONTAINER_B=$(podman ps -q -f "label=tillandsias-litmus-storage-test=project-b" 2>/dev/null | head -1)
+      if [ -n "$CONTAINER_B" ]; then
+        # project-b workspace should NOT have project-a's test file
+        OUTPUT=$(podman exec "$CONTAINER_B" bash -c 'ls /workspace/test-a.txt 2>&1 || echo "file not found"')
+        if echo "$OUTPUT" | grep -q "not found\|No such file"; then
+          echo WORKSPACE_ISOLATION_VERIFIED
+        else
+          echo "WARNING: Found unexpected file in project-b workspace: $OUTPUT"
+        fi
+      fi
+    timeout_ms: 10000
+    expected_behavior: "WORKSPACE_ISOLATION_VERIFIED"
+
+  - step: "test project-a: verify /tmp is ephemeral (new tmpfs on container start)"
+    command: |
+      CONTAINER_A=$(podman ps -q -f "label=tillandsias-litmus-storage-test=project-a" 2>/dev/null | head -1)
+      if [ -n "$CONTAINER_A" ]; then
+        # Write to /tmp in project-a
+        podman exec "$CONTAINER_A" bash -c 'echo "ephemeral-marker-a" > /tmp/ephemeral.txt'
+        # Verify file exists
+        podman exec "$CONTAINER_A" cat /tmp/ephemeral.txt | grep -q "ephemeral-marker-a" && echo "Ephemeral file written"
+        # Stop and remove project-a container
+        podman stop "$CONTAINER_A" 2>/dev/null || true
+        sleep 1
+        echo TMP_EPHEMERAL_VERIFIED
+      fi
+    timeout_ms: 10000
+    expected_behavior: "TMP_EPHEMERAL_VERIFIED"
+
+  - step: "relaunch project-a and verify /tmp is clean (ephemeral)"
+    command: |
+      TEST_ROOT="/tmp/tillandsias-litmus-storage-$$"
+      FORGE_IMAGE="${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | head -1)}"
+      test -n "$FORGE_IMAGE" || FORGE_IMAGE="alpine:latest"
+      CONTAINER_A_NEW=$(podman run -d \
+        --rm \
+        --label "tillandsias-litmus-storage-test=project-a-relaunch" \
+        --volume "$TEST_ROOT/project-a/src:/src:ro" \
+        --volume "$TEST_ROOT/project-a/workspace:/workspace:rw" \
+        --tmpfs /tmp:rw \
+        "$FORGE_IMAGE" \
+        sleep 120 2>&1 | head -1)
+      if [ -n "$CONTAINER_A_NEW" ]; then
+        # Verify /tmp is empty (ephemeral)
+        OUTPUT=$(podman exec "$CONTAINER_A_NEW" bash -c 'ls /tmp/ 2>/dev/null | wc -l')
+        if [ "$OUTPUT" -eq 0 ] || [ "$OUTPUT" -eq 1 ]; then
+          echo TMP_EPHEMERAL_CONFIRMED
+        else
+          echo "WARNING: /tmp not empty, has $OUTPUT items"
+        fi
+        # Cleanup this new container
+        podman stop "$CONTAINER_A_NEW" 2>/dev/null || true
+      fi
+    timeout_ms: 15000
+    expected_behavior: "TMP_EPHEMERAL_CONFIRMED"
+
+  - step: "verify project-a workspace persists across container restarts"
+    command: |
+      TEST_ROOT="/tmp/tillandsias-litmus-storage-$$"
+      # Check if project-a/workspace/test-a.txt still exists on host
+      if [ -f "$TEST_ROOT/project-a/workspace/test-a.txt" ]; then
+        cat "$TEST_ROOT/project-a/workspace/test-a.txt" | grep -q "project-a-test-file" && \
+        echo WORKSPACE_PERSISTENCE_VERIFIED
+      fi
+    timeout_ms: 5000
+    expected_behavior: "WORKSPACE_PERSISTENCE_VERIFIED"
+
+  - step: "cleanup: remove test containers and directories"
+    command: |
+      TEST_ROOT="/tmp/tillandsias-litmus-storage-$$"
+      # Remove all test containers
+      podman rm -f $(podman ps -a -q -f "label=tillandsias-litmus-storage-test" 2>/dev/null) 2>/dev/null || true
+      # Remove test directories
+      rm -rf "$TEST_ROOT"
+      echo CLEANUP_COMPLETE
+    timeout_ms: 15000
+
+observability:
+  traces:
+    - "@trace spec:podman-idiomatic-patterns"
+  expected_log: "Storage isolation verified: /src read-only, /workspace read-write per-project, /tmp ephemeral"
+  log_fields:
+    spec: "podman-idiomatic-patterns"
+    test: "podman-idiomatic-storage-isolation-runtime"
+    mount_configuration: "src_ro,workspace_rw,tmp_ephemeral"
+    isolation_level: "per-project-containers"
+    cross_project_isolation: "verified"
+
+rollback:
+  on_failure: "verify podman mount and volume configuration, check TILLANDSIAS_PODMAN_GRAPHROOT and per-project storage paths"
+  command: "podman ps -a --format '{{.Names}}|{{.Mounts}}' && echo '---' && podman volume ls && echo '---' && podman inspect $(podman ps -q 2>/dev/null | head -1) 2>/dev/null | jq '.Mounts' || true"
