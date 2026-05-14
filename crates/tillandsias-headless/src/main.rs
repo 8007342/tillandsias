@@ -3296,20 +3296,24 @@ fn run_metrics_retention() {
 /// @trace gap:OBS-012, spec:observability-convergence
 fn run_evidence_bundle_retention() {
     use std::fs;
-    use std::time::{SystemTime, UNIX_EPOCH, Duration};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     let repo_root = std::env::current_dir()
         .ok()
-        .and_then(|p| if p.join("VERSION").exists() { Some(p) } else { None })
+        .and_then(|p| {
+            if p.join("VERSION").exists() {
+                Some(p)
+            } else {
+                None
+            }
+        })
         .or_else(|| {
             // Fallback: assume CARGO_MANIFEST_DIR-relative path if invoked from workspace
-            std::env::var("CARGO_MANIFEST_DIR")
-                .ok()
-                .and_then(|m| {
-                    let p = std::path::PathBuf::from(&m);
-                    let root = p.ancestors().find(|a| a.join("VERSION").exists())?;
-                    Some(root.to_path_buf())
-                })
+            std::env::var("CARGO_MANIFEST_DIR").ok().and_then(|m| {
+                let p = std::path::PathBuf::from(&m);
+                let root = p.ancestors().find(|a| a.join("VERSION").exists())?;
+                Some(root.to_path_buf())
+            })
         });
 
     let convergence_dir = match repo_root {
@@ -3420,8 +3424,8 @@ fn run_evidence_bundle_retention() {
 ///
 /// @trace gap:OBS-010, spec:runtime-logging
 async fn run_log_cardinality_analysis() {
-    use tillandsias_logging::CardinalityAnalyzer;
     use tillandsias_core::config;
+    use tillandsias_logging::CardinalityAnalyzer;
 
     let log_dir = config::log_dir();
     let log_file = log_dir.join("tillandsias.log");
