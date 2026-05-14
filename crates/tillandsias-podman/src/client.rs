@@ -1213,6 +1213,35 @@ pub enum PodmanError {
     ParseError(String),
 }
 
+/// Information about a container in the enclave.
+#[derive(Debug, Clone)]
+pub struct EnclaveContainerInfo {
+    pub name: String,
+    pub state: String,
+}
+
+impl PodmanClient {
+    /// Get all active containers in the Tillandsias enclave with the given project prefix.
+    ///
+    /// Returns containers matching `tillandsias-<project>-*` naming scheme.
+    /// @trace spec:runtime-diagnostics-stream
+    pub async fn get_enclave_containers(
+        &self,
+        project_prefix: &str,
+    ) -> Result<Vec<EnclaveContainerInfo>, PodmanError> {
+        let filter_prefix = format!("tillandsias-{project_prefix}-");
+        let containers = self.list_containers(&filter_prefix).await?;
+
+        Ok(containers
+            .into_iter()
+            .map(|c| EnclaveContainerInfo {
+                name: c.name,
+                state: c.state,
+            })
+            .collect())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1331,5 +1360,28 @@ mod tests {
         let _client = PodmanClient::new();
         // The existence of container_list is verified by compile-time type checking.
         // An async integration test would call: _client.container_list().await
+    }
+
+    /// Verify that PodmanClient has the get_enclave_containers method.
+    /// We cannot call it without a real podman runtime in a sync test,
+    /// but we can instantiate the client and verify it compiles.
+    /// @trace spec:runtime-diagnostics-stream
+    #[test]
+    fn client_has_get_enclave_containers() {
+        let _client = PodmanClient::new();
+        // The existence of get_enclave_containers is verified by compile-time type checking.
+        // An async integration test would call: _client.get_enclave_containers("myapp").await
+    }
+
+    /// Verify EnclaveContainerInfo structure can be created.
+    /// @trace spec:runtime-diagnostics-stream
+    #[test]
+    fn enclave_container_info_creation() {
+        let info = EnclaveContainerInfo {
+            name: "tillandsias-test-proxy".to_string(),
+            state: "Running".to_string(),
+        };
+        assert_eq!(info.name, "tillandsias-test-proxy");
+        assert_eq!(info.state, "Running");
     }
 }

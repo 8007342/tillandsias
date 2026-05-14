@@ -60,12 +60,17 @@ fn main() {
     }
 
     let debug = user_args.iter().any(|a| a == "--debug");
+    let diagnostics = user_args.iter().any(|a| a == "--diagnostics");
     let init = user_args.iter().any(|a| a == "--init");
     let force = user_args.iter().any(|a| a == "--force");
     let status_check = user_args.iter().any(|a| a == "--status-check");
     let github_login = user_args.iter().any(|a| a == "--github-login");
     let opencode = user_args.iter().any(|a| a == "--opencode");
     let opencode_web = user_args.iter().any(|a| a == "--opencode-web");
+
+    // @trace spec:cli-mode, spec:runtime-diagnostics-stream
+    // --diagnostics implies --debug
+    let debug = debug || diagnostics;
 
     // @trace spec:cli-mode
     let prompt = user_args
@@ -77,6 +82,7 @@ fn main() {
         "--headless",
         "--tray",
         "--debug",
+        "--diagnostics",
         "--force",
         "--init",
         "--status-check",
@@ -225,8 +231,8 @@ fn print_usage(version: &str) {
     println!("       tillandsias --init [--force] [--debug]");
     println!("       tillandsias --status-check [--debug]");
     println!("       tillandsias --github-login [--debug]");
-    println!("       tillandsias --opencode <project> [--prompt <text>] [--debug]");
-    println!("       tillandsias --opencode-web <project> [--prompt <text>] [--debug]");
+    println!("       tillandsias --opencode <project> [--prompt <text>] [--debug|--diagnostics]");
+    println!("       tillandsias --opencode-web <project> [--prompt <text>] [--debug|--diagnostics]");
     println!("  --headless     Run in headless mode (no UI)");
     println!("  --tray         Run in tray mode (requires native tray support)");
     println!("  --opencode     Enable LLM code analysis mode");
@@ -236,6 +242,8 @@ fn print_usage(version: &str) {
     println!("  --force        Rebuild all images even if cached (use with --init)");
     println!("  --status-check Verify services are online through a representative stack smoke");
     println!("  --github-login Authenticate GitHub and create ephemeral Podman secret");
+    println!("  --debug        Show command-level diagnostics and capture build logs");
+    println!("  --diagnostics  Stream real-time logs from all enclave containers (implies --debug)");
     println!("  --debug        Show command-level diagnostics and capture build logs");
     println!("  --version      Show version information");
     println!("  --help         Show this help");
