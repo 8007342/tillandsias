@@ -515,7 +515,7 @@ plan_index:
     - id: semantic-distillation-sweep
       order: 7
       title: Semantic distillation and tombstone sweep
-      status: pending
+      status: completed
       deliverable: plan/steps/07-semantic-distillation.md
       depends_on:
         - security-substrate-closure
@@ -531,7 +531,7 @@ plan_index:
         - "Only intentional implementation gaps remain active."
       tasks:
         - id: distillation/spec-empty-bindings
-          status: pending
+          status: completed
           depends_on:
             - security-substrate-closure
             - browser-and-web-security
@@ -543,7 +543,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Cold-start note: empty bindings should be the first sweep target."
         - id: distillation/history-only-specs
-          status: pending
+          status: completed
           depends_on:
             - distillation/spec-empty-bindings
           owned_files:
@@ -551,7 +551,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Cold-start note: history-only specs should be tombstoned with replacement refs."
         - id: distillation/event-register
-          status: pending
+          status: completed
           depends_on:
             - distillation/history-only-specs
           owned_files:
@@ -559,7 +559,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Cold-start note: methodology event intake is the tail after spec tombstones."
         - id: distillation/frontier-prune
-          status: pending
+          status: completed
           depends_on:
             - distillation/event-register
           owned_files:
@@ -571,7 +571,7 @@ plan_index:
     - id: implementation-gaps-backlog
       order: 8
       title: Remaining implementation gaps after spec cleanup
-      status: pending
+      status: ready
       deliverable: plan/steps/08-implementation-gaps.md
       depends_on: [semantic-distillation-sweep]
       specs:
