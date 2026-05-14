@@ -207,7 +207,7 @@ plan_index:
     - id: podman-idiomatic-foundation
       order: 2a
       title: Podman idiomatic patterns foundation
-      status: pending
+      status: in_progress
       deliverable: plan/steps/02a-podman-idiomatic.md
       depends_on: [security-substrate-closure]
       specs:
@@ -222,15 +222,15 @@ plan_index:
         - "No conflict with live podman-orchestration contract; any conflict filed as refinement note."
       tasks:
         - id: podman-idiomatic/spec-authoring
-          status: pending
+          status: completed
           depends_on:
             - security-substrate-closure
           owned_files:
             - openspec/specs/podman-idiomatic-patterns/spec.md
           checkpoint_required: true
-          handoff_note: "Read cheatsheets/runtime/podman-idiomatic-patterns.md first; it is the authoritative input for the spec."
+          handoff_note: "Completed: 7 requirements written from cheatsheet. Verification: ./build.sh --ci --filter podman-idiomatic-patterns"
         - id: podman-idiomatic/crate-audit
-          status: pending
+          status: completed
           depends_on:
             - podman-idiomatic/spec-authoring
           owned_files:
@@ -238,16 +238,43 @@ plan_index:
             - crates/tillandsias-podman/src/launch.rs
             - crates/tillandsias-podman/src/client.rs
           checkpoint_required: true
-          handoff_note: "Audit the podman crate against the authored spec; file gaps in plan/issues/ rather than silently skipping."
+          handoff_note: "Wave 1a completed: 4/7 conforming. 4 gaps in plan/issues/podman-crate-audit.md (storage, secret builder, retry, enclave naming). @trace added to all 3 files."
         - id: podman-idiomatic/trace-annotations
-          status: pending
+          status: completed
           depends_on:
             - podman-idiomatic/crate-audit
           owned_files:
             - crates/tillandsias-podman/src/lib.rs
             - crates/tillandsias-podman/src/launch.rs
           checkpoint_required: true
-          handoff_note: "Add @trace spec:podman-idiomatic-patterns at entry points; confirm cargo test -p tillandsias-podman passes."
+          handoff_note: "Wave 1a completed: @trace spec:podman-idiomatic-patterns added to lib.rs, launch.rs, client.rs. cargo test -p tillandsias-podman passes (67 tests)."
+        - id: podman-idiomatic/litmus-tests
+          status: completed
+          depends_on:
+            - podman-idiomatic/spec-authoring
+          owned_files:
+            - openspec/litmus-bindings.yaml
+            - openspec/litmus-tests/litmus-podman-idiomatic-*.yaml
+          checkpoint_required: true
+          handoff_note: "Wave 1b completed: 4 litmus tests written and passing (security-flags, storage-isolation, events-no-polling, error-discrimination). Coverage: 57%."
+        - id: podman-idiomatic/gap-closure
+          status: pending
+          depends_on:
+            - podman-idiomatic/crate-audit
+          owned_files:
+            - crates/tillandsias-podman/src/lib.rs
+            - crates/tillandsias-podman/src/client.rs
+          checkpoint_required: true
+          build_verification: "cargo test -p tillandsias-podman && ./build.sh --ci --filter podman-idiomatic-patterns --strict"
+          handoff_note: "4 gaps in plan/issues/podman-crate-audit.md: (1) per-project graphroot, (2) secret() builder on ContainerSpec, (3) is_transient() on PodmanError, (4) per-project enclave name fn. Address GAP-3 and GAP-4 first (simpler). GAP-1 and GAP-2 are larger."
+        - id: podman-idiomatic/router-lifecycle
+          status: completed
+          depends_on:
+            - podman-idiomatic/spec-authoring
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+          checkpoint_required: true
+          handoff_note: "Wave 1c completed: ensure_router_running() + build_router_run_args() added. Loopback-only port, enclave network with router alias, security flags. 20/20 tests passing. Not yet wired into OpenCode Web launch path."
 
     - id: tray-runtime-and-cache
       order: 3
