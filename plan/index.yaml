@@ -204,12 +204,57 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Cold-start note: tombstoning is idempotent and should reference the replacement spec."
 
+    - id: podman-idiomatic-foundation
+      order: 2a
+      title: Podman idiomatic patterns foundation
+      status: pending
+      deliverable: plan/steps/02a-podman-idiomatic.md
+      depends_on: [security-substrate-closure]
+      specs:
+        - podman-idiomatic-patterns
+        - podman-orchestration
+        - podman-container-spec
+        - podman-container-handle
+      exit_criteria:
+        - "podman-idiomatic-patterns spec.md is authored and non-empty."
+        - "tillandsias-podman crate annotated with @trace spec:podman-idiomatic-patterns at entry points."
+        - "All storage-isolation unit tests (three env-var paths) are confirmed passing."
+        - "No conflict with live podman-orchestration contract; any conflict filed as refinement note."
+      tasks:
+        - id: podman-idiomatic/spec-authoring
+          status: pending
+          depends_on:
+            - security-substrate-closure
+          owned_files:
+            - openspec/specs/podman-idiomatic-patterns/spec.md
+          checkpoint_required: true
+          handoff_note: "Read cheatsheets/runtime/podman-idiomatic-patterns.md first; it is the authoritative input for the spec."
+        - id: podman-idiomatic/crate-audit
+          status: pending
+          depends_on:
+            - podman-idiomatic/spec-authoring
+          owned_files:
+            - crates/tillandsias-podman/src/lib.rs
+            - crates/tillandsias-podman/src/launch.rs
+            - crates/tillandsias-podman/src/client.rs
+          checkpoint_required: true
+          handoff_note: "Audit the podman crate against the authored spec; file gaps in plan/issues/ rather than silently skipping."
+        - id: podman-idiomatic/trace-annotations
+          status: pending
+          depends_on:
+            - podman-idiomatic/crate-audit
+          owned_files:
+            - crates/tillandsias-podman/src/lib.rs
+            - crates/tillandsias-podman/src/launch.rs
+          checkpoint_required: true
+          handoff_note: "Add @trace spec:podman-idiomatic-patterns at entry points; confirm cargo test -p tillandsias-podman passes."
+
     - id: tray-runtime-and-cache
       order: 3
       title: Tray lifecycle, init path, and cache semantics
       status: pending
       deliverable: plan/steps/03-tray-runtime.md
-      depends_on: [browser-and-web-security]
+      depends_on: [browser-and-web-security, podman-idiomatic-foundation]
       specs:
         - tray-app
         - tray-ux

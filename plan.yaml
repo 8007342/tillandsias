@@ -78,6 +78,7 @@ plan:
     - "The wrapper contract remains `./codex <prompt>` with the Tillandsias profile selected by default."
 
   notes:
+    - "Step 02a (podman-idiomatic-foundation) was inserted 2026-05-14 between browser-and-web-security and tray-runtime-and-cache. It depends on security-substrate-closure and can run in parallel with browser-and-web-security. tray-runtime-and-cache now depends on both 02 and 02a."
     - "This plan is intentionally biased toward the highest-residual active specs first."
     - "Retired specs stay tombstoned or obsolete; do not revive them in later passes."
     - "If a step becomes stale because another step obsoleted its dependency, mark it obsoleted rather than completing it."
