@@ -343,6 +343,13 @@ impl InitBuildState {
     fn load() -> Result<Option<Self>, String> {
         let cache_dir = init_cache_dir()?;
         let state_file = cache_dir.join("init-build-state.json");
+        let temp_file = cache_dir.join(".init-build-state.json.tmp");
+
+        // Clean up any leftover temp file from a crashed write
+        if temp_file.exists() {
+            let _ = fs::remove_file(&temp_file);
+        }
+
         if !state_file.exists() {
             return Ok(None);
         }
@@ -358,8 +365,18 @@ impl InitBuildState {
         let state_file = cache_dir.join("init-build-state.json");
         let contents = serde_json::to_string_pretty(self)
             .map_err(|e| format!("Failed to serialize state: {e}"))?;
-        fs::write(&state_file, contents)
-            .map_err(|e| format!("Failed to write init build state: {e}"))?;
+
+        // Atomic write: write to temp file, then rename.
+        // This prevents corruption if the process is killed mid-write.
+        let temp_file = cache_dir.join(".init-build-state.json.tmp");
+        fs::write(&temp_file, contents)
+            .map_err(|e| format!("Failed to write temporary state file: {e}"))?;
+
+        fs::rename(&temp_file, &state_file).map_err(|e| {
+            let _ = fs::remove_file(&temp_file);
+            format!("Failed to rename state file atomically: {e}")
+        })?;
+
         Ok(())
     }
 

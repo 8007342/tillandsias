@@ -83,6 +83,8 @@ struct TrayUiState {
     podman_available: bool,
     enclave_status: EnclaveStatus,
     revision: u32,
+    /// Hash of projects list to detect when menu needs rebuild
+    projects_hash: u64,
 }
 
 type IconPixmap = (i32, i32, Vec<u8>);
@@ -128,6 +130,9 @@ impl TrayUiState {
             ("☐ Verifying environment...".to_string(), TrayIconState::Pup)
         };
 
+        // Compute hash of projects list for change detection
+        let projects_hash = Self::hash_projects(&projects);
+
         Self {
             root,
             version,
@@ -139,12 +144,29 @@ impl TrayUiState {
             podman_available,
             enclave_status,
             revision: 1,
+            projects_hash,
         }
     }
 
     fn bump_revision(&mut self) -> u32 {
         self.revision = self.revision.saturating_add(1);
         self.revision
+    }
+
+    /// Simple hash of projects list for detecting menu-relevant changes
+    fn hash_projects(projects: &[ProjectEntry]) -> u64 {
+        let mut hash = 0u64;
+        for (i, project) in projects.iter().enumerate() {
+            hash = hash
+                .wrapping_mul(31)
+                .wrapping_add((i as u64) ^ (project.name.len() as u64));
+        }
+        hash
+    }
+
+    /// Check if projects list has changed since last menu build
+    fn projects_changed(&self, new_projects: &[ProjectEntry]) -> bool {
+        Self::hash_projects(new_projects) != self.projects_hash
     }
 }
 
@@ -1386,6 +1408,11 @@ mod tests {
         } else {
             EnclaveStatus::Verifying
         };
+        let projects = vec![ProjectEntry {
+            name: "alpha".to_string(),
+            path: PathBuf::from("/tmp/alpha"),
+        }];
+        let projects_hash = TrayUiState::hash_projects(&projects);
         TrayUiState {
             root: PathBuf::from("/tmp/tillandsias-test-root"),
             version: "0.1.260506.6".to_string(),
@@ -1395,15 +1422,13 @@ mod tests {
             } else {
                 TrayIconState::Pup
             },
-            projects: vec![ProjectEntry {
-                name: "alpha".to_string(),
-                path: PathBuf::from("/tmp/alpha"),
-            }],
+            projects,
             selected_agent,
             forge_available,
             podman_available: true,
             enclave_status,
             revision: 1,
+            projects_hash,
         }
     }
 
