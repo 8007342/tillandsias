@@ -559,26 +559,24 @@ never_direct allow localhost_subdomain
 
 **Depends on**: proxy-container (already complete)
 
-**Status**: DESIGN ONLY. Router container launch logic not yet wired.
+**Status**: ✅ COMPLETE (commit 96950743, Wave 1c of podman-idiomatic step)
 
-**Files to modify**:
-- `crates/tillandsias-headless/src/handlers.rs` — Add `ensure_router_running()` function
+**Files modified** (completed):
+- `crates/tillandsias-headless/src/main.rs` — Added `ensure_router_running()` and `build_router_run_args()`
 
-**Implementation**:
-- Check if `tillandsias-router` container is running
-- If not, start it with:
+**Implementation** (completed):
+- `ensure_router_running()`: Checks if `tillandsias-router` container is running; starts if missing
   - Image: `tillandsias-router:v<VERSION>` (built by `build-image.sh router` in flake.nix)
   - Network: `--network=tillandsias-enclave --network=bridge` (dual-homed)
   - Port: `-p 127.0.0.1:8080:8080` (loopback only, matches base.Caddyfile)
   - Alias: `--network-alias=router` (on enclave network so Squid can reach it)
-  - Mounts:
-    - Bind `/run/host/tillandsias/control.sock` → `/run/host/tillandsias/control.sock:ro` (control socket for router-sidecar)
-    - Bind dynamic Caddyfile or tmpfs `/run/router/` (config directory)
-  - Entrypoint: Merge base.Caddyfile + dynamic.Caddyfile, then run `caddy run`
-- Log container start with `@trace spec:reverse-proxy-internal`
-- Verify health: `curl http://localhost:2019/config/ | jq .` (check admin API)
+  - Mounts: Control socket and config directory
+  - Security flags: `--cap-drop=ALL --userns=keep-id --security-opt=no-new-privileges --rm`
+  - Logging: `@trace spec:reverse-proxy-internal` annotations added
+- `build_router_run_args()`: Constructs typed podman run argument list
+- Health verification: Post-launch health check via admin API
 
-**Deliverable**: Router container lifecycle management.
+**Deliverable**: Router container lifecycle management (completed; integration into OpenCode Web launch pending).
 
 ### Task 6: Router Sidecar Control Socket Integration
 

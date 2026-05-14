@@ -207,7 +207,7 @@ plan_index:
     - id: podman-idiomatic-foundation
       order: 2a
       title: Podman idiomatic patterns foundation
-      status: in_progress
+      status: ready
       deliverable: plan/steps/02a-podman-idiomatic.md
       depends_on: [security-substrate-closure]
       specs:
@@ -258,7 +258,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Wave 1b completed: 4 litmus tests written and passing (security-flags, storage-isolation, events-no-polling, error-discrimination). Coverage: 57%."
         - id: podman-idiomatic/gap-closure
-          status: pending
+          status: ready
           depends_on:
             - podman-idiomatic/crate-audit
           owned_files:

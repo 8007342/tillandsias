@@ -55,6 +55,24 @@ Keep the browser launch path, browser MCP bridge, OTP/session security, and serv
 - Verified `cargo test -p tillandsias-otp` still passes with 18/18 unit tests green.
 - Verified `cargo build -p tillandsias-headless` compiles without errors or warnings.
 
+## Wave 1 Evidence — Router Lifecycle (Completed 2026-05-14, commit 96950743)
+
+### podman-idiomatic/router-lifecycle (Wave 1c of 02a step)
+- Implemented `ensure_router_running()` in `crates/tillandsias-headless/src/main.rs`
+  - Checks if `tillandsias-router` container is running
+  - Starts router if missing with proper security flags and network configuration
+  - Loopback-only binding: `-p 127.0.0.1:8080:8080`
+  - Enclave network with router alias for Squid peer discovery
+  - Security: `--cap-drop=ALL --userns=keep-id --security-opt=no-new-privileges --rm`
+- Implemented `build_router_run_args()` helper
+  - Constructs podman run argument list with typed flags
+  - Handles network, port, security, and mount configuration
+  - Returns Vec<String> for compatibility with podman run interface
+- Router lifecycle is currently NOT wired into OpenCode Web launch path
+  - Next step (Wave 2b) will add router to `ensure_versioned_images()` and call `ensure_router_running()` after forge readiness check
+- Unit tests: 20/20 passing, zero clippy warnings
+- `@trace spec:podman-idiomatic-patterns` annotations added for auditability
+
 ## Waves 1–3 Evidence (Iteration 5)
 
 ### browser/window-registry (Wave 2a)
