@@ -1211,6 +1211,32 @@ pub enum PodmanError {
     NotFound(String),
     #[error("Parse error: {0}")]
     ParseError(String),
+    #[error("Stream error: {0}")]
+    StreamError(String),
+}
+
+impl PodmanError {
+    /// Classify whether this error is transient (retry-safe) or permanent (propagate).
+    ///
+    /// Transient errors (should retry):
+    /// - `StreamError` — EOF or connection loss on event stream
+    /// - `CommandFailed` containing "timeout" or "connection refused"
+    ///
+    /// Permanent errors (propagate immediately):
+    /// - `NotFound` — container/image does not exist
+    /// - `ParseError` — malformed JSON or other unrecoverable parse failure
+    /// - `CommandFailed` with exit code 125 or containing "permission denied"
+    ///
+    /// @trace spec:podman-idiomatic-patterns
+    pub fn is_transient(&self) -> bool {
+        match self {
+            PodmanError::StreamError(_) => true,
+            PodmanError::CommandFailed(msg) => {
+                msg.contains("timeout") || msg.contains("connection refused")
+            }
+            PodmanError::NotFound(_) | PodmanError::ParseError(_) => false,
+        }
+    }
 }
 
 /// Information about a container in the enclave.
@@ -1383,5 +1409,41 @@ mod tests {
         };
         assert_eq!(info.name, "tillandsias-test-proxy");
         assert_eq!(info.state, "Running");
+    }
+
+    /// Verify PodmanError::is_transient() correctly classifies errors.
+    /// @trace spec:podman-idiomatic-patterns
+    #[test]
+    fn podman_error_transient_classification() {
+        // Transient: StreamError
+        assert!(PodmanError::StreamError("EOF on event stream".into()).is_transient());
+
+        // Transient: CommandFailed with "timeout"
+        assert!(PodmanError::CommandFailed("operation timeout".into()).is_transient());
+
+        // Transient: CommandFailed with "connection refused"
+        assert!(
+            PodmanError::CommandFailed("connection refused to podman socket".into())
+                .is_transient()
+        );
+
+        // Permanent: NotFound
+        assert!(!PodmanError::NotFound("tillandsias-foo".into()).is_transient());
+
+        // Permanent: ParseError
+        assert!(
+            !PodmanError::ParseError("invalid JSON in podman output".into()).is_transient()
+        );
+
+        // Permanent: CommandFailed with "permission denied"
+        assert!(
+            !PodmanError::CommandFailed("permission denied".into()).is_transient()
+        );
+
+        // Permanent: CommandFailed with other message
+        assert!(
+            !PodmanError::CommandFailed("image build failed: some other error".into())
+                .is_transient()
+        );
     }
 }

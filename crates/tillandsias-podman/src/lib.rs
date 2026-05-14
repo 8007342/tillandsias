@@ -78,6 +78,14 @@ pub use peer_table::{PeerTable, ProjectLabel};
 /// @trace spec:enclave-network
 pub const ENCLAVE_NETWORK: &str = "tillandsias-enclave";
 
+/// Generate the enclave network name for a given project label.
+/// Returns a network name in the format `tillandsias-<project_label>-enclave`.
+///
+/// @trace spec:podman-idiomatic-patterns
+pub fn enclave_network_name(project_label: &str) -> String {
+    format!("tillandsias-{}-enclave", project_label)
+}
+
 fn resolve_podman_bin() -> PathBuf {
     if let Some(bin) = env::var_os("TILLANDSIAS_PODMAN_BIN") {
         return PathBuf::from(bin);
@@ -494,5 +502,23 @@ mod tests {
             std::env::remove_var("TILLANDSIAS_PODMAN_RUNTIME_DIR");
             std::env::remove_var("TILLANDSIAS_PODMAN_STORAGE_CONF");
         }
+    }
+
+    /// Verify enclave_network_name follows the spec pattern: tillandsias-<project>-enclave
+    /// @trace spec:podman-idiomatic-patterns
+    #[test]
+    fn enclave_network_name_follows_spec_pattern() {
+        assert_eq!(
+            enclave_network_name("my-project"),
+            "tillandsias-my-project-enclave"
+        );
+        assert_eq!(
+            enclave_network_name("visual-chess"),
+            "tillandsias-visual-chess-enclave"
+        );
+        assert_eq!(enclave_network_name("test"), "tillandsias-test-enclave");
+
+        // Verify it doesn't inadvertently produce the old constant
+        assert_ne!(enclave_network_name("undefined"), ENCLAVE_NETWORK);
     }
 }
