@@ -20,7 +20,7 @@ interfaces now launch via `tillandsias-chromium-core` containers for improved se
 
 Kept only as a tombstone for history. There is no backwards-compatibility commitment.
 
-## Purpose (Legacy)
+## Purpose
 
 How Tillandsias runs a persistent OpenCode Web server per project, maps it to a local-only host port, and renders it in an embedded Tauri webview — including multi-session reattach semantics and shutdown guarantees.
 
