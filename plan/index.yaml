@@ -185,7 +185,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Wave 2b completed: End-to-end OTP delivery with router sidecar integration, constant-time comparison, per-window independence. 491 tests passing."
         - id: browser/routing-allowlist
-          status: in_progress
+          status: completed
           depends_on:
             - browser/session-otp
           owned_files:
@@ -193,7 +193,7 @@ plan_index:
             - openspec/specs/subdomain-routing-via-reverse-proxy/spec.md
             - plan/issues/browser-routing-design.md
           checkpoint_required: true
-          handoff_note: "Wave 2c completed design phase: Three-layer architecture (Squid → Caddy → router-sidecar), gap analysis, Wave 3 task ordering. Ready for Wave 3 implementation."
+          handoff_note: "Wave 3+4 completed all routing tasks: Task 1 (window registry hooks), Task 2 (Caddy reload), Task 3 (MCP allowlist), Task 4 (Squid proxy), Task 5 (router lifecycle), Task 6 (sidecar control socket). 43 sidecar tests + 57 MCP tests + 23 headless tests passing. Three-layer routing fully functional: forge→proxy(Squid)→router(Caddy)→sidecar(OTP validation)."
         - id: browser/legacy-session-tombstone
           status: pending
           depends_on:
@@ -207,7 +207,7 @@ plan_index:
     - id: podman-idiomatic-foundation
       order: 2a
       title: Podman idiomatic patterns foundation
-      status: ready
+      status: completed
       deliverable: plan/steps/02a-podman-idiomatic.md
       depends_on: [security-substrate-closure]
       specs:
@@ -279,7 +279,7 @@ plan_index:
     - id: tray-runtime-and-cache
       order: 3
       title: Tray lifecycle, init path, and cache semantics
-      status: pending
+      status: ready
       deliverable: plan/steps/03-tray-runtime.md
       depends_on: [browser-and-web-security, podman-idiomatic-foundation]
       specs:
