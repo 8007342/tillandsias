@@ -986,8 +986,7 @@ mod tests {
         let old_time = now
             .checked_sub(Duration::from_secs(45 * 24 * 60 * 60))
             .unwrap();
-        filetime::set_file_mtime(&old_file, old_time.into())
-            .expect("set mtime on old file");
+        filetime::set_file_mtime(&old_file, old_time.into()).expect("set mtime on old file");
 
         // Run retention with 30-day window
         let result = archive_old_metrics(&metrics_dir, 30);
@@ -1000,7 +999,10 @@ mod tests {
         // Check archive directory exists and contains old file
         let archive_dir = dir.path().join("metrics-archive");
         assert!(archive_dir.is_dir(), "archive dir should exist");
-        assert!(archive_dir.join("old.metrics").exists(), "archived file should exist");
+        assert!(
+            archive_dir.join("old.metrics").exists(),
+            "archived file should exist"
+        );
     }
 
     #[test]

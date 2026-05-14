@@ -262,10 +262,7 @@ mod integration {
         for entry in fs::read_dir(parent).expect("Failed to read workspace") {
             let entry = entry.expect("Failed to read entry");
             let path = entry.path();
-            if path.is_dir()
-                && path.join(".git").exists()
-                && path != project_0
-            {
+            if path.is_dir() && path.join(".git").exists() && path != project_0 {
                 siblings.push(path);
             }
         }

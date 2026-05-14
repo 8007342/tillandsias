@@ -9,7 +9,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [build.sh#L247](../../../build.sh#L247)
 - [crates/tillandsias-core/src/container_profile.rs#L290](../../../crates/tillandsias-core/src/container_profile.rs#L290)
 - [crates/tillandsias-headless/src/main.rs#L1455](../../../crates/tillandsias-headless/src/main.rs#L1455)
-- [crates/tillandsias-headless/src/main.rs#L1851](../../../crates/tillandsias-headless/src/main.rs#L1851)
+- [crates/tillandsias-headless/src/main.rs#L1904](../../../crates/tillandsias-headless/src/main.rs#L1904)
 - [images/default/config-overlay/mcp/host-browser.sh#L8](../../../images/default/config-overlay/mcp/host-browser.sh#L8)
 - [images/default/Containerfile#L4](../../../images/default/Containerfile#L4)
 - [images/default/Containerfile#L11](../../../images/default/Containerfile#L11)
