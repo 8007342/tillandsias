@@ -168,6 +168,8 @@ agent_observability_protocol:
       - "If no refinement note has arrived yet, render a bootstrap-pending line so cold-start silence is explicit instead of looking like completed work."
       - "Repaint when the running agent emits a new progress record; do not repaint on a blind timer."
       - "Distinguish between waiting on the agent process, agent working, and sleeping between iterations."
+      - "Treat ./codex --quiet as noninteractive output, ./codex --quit as the one-shot TUI path, and ./codex --repeat ... --times N as a bounded repeat loop."
+      - "When repeat mode is cycling, a graph-summary build pass such as ./build.sh --ci-full --graphs may run between iterations and should stay compact."
 
   lease_protocol:
     purpose: >

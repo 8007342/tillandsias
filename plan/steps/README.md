@@ -12,6 +12,7 @@ Each step file should be written as a cold-start handoff document.
 - Checkpoint and push expectation
 - Handoff note for the next agent
 - Repeat-mode progress report shape, if the step is intended to run under `./codex --repeat`
+- Clarify whether the step expects `./codex --quiet`, `./codex --quit`, or bounded repeat cycles with `--times`
 
 ## Writing Rules
 

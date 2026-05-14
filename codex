@@ -7,8 +7,9 @@ if [[ ! -x "$CODEX_BIN" ]]; then
 fi
 
 QUIET=0
-VERBOSE=0
+QUIT=0
 REPEAT_INTERVAL=""
+REPEAT_TIMES=""
 codex_args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -16,9 +17,17 @@ while [[ $# -gt 0 ]]; do
       QUIET=1
       shift
       ;;
-    --verbose|-v)
-      VERBOSE=1
+    --quit|-v|--verbose)
+      QUIT=1
       shift
+      ;;
+    --times)
+      if [[ $# -lt 2 ]]; then
+        printf 'codex: --times requires a count such as 10\n' >&2
+        exit 2
+      fi
+      REPEAT_TIMES="$2"
+      shift 2
       ;;
     --repeat)
       if [[ $# -lt 2 ]]; then
@@ -99,13 +108,21 @@ format_timestamp() {
   date -d "@$epoch" '+%H:%M:%S'
 }
 
-if [[ "$VERBOSE" -eq 1 ]]; then
-  exec "$CODEX_BIN" \
+run_tui_once() {
+  "$CODEX_BIN" \
     "${common_args[@]}" \
     "${codex_args[@]}"
-fi
+}
 
-if [[ -n "$REPEAT_INTERVAL" ]]; then
+run_quiet_once() {
+  "$CODEX_BIN" \
+    exec \
+    --color never \
+    "${common_args[@]}" \
+    "${codex_args[@]}"
+}
+
+run_repeat_quiet() {
   REPEAT_SUPERVISOR_BIN="$PWD/target/debug/tillandsias-repeat-loop"
   REPEAT_RENDERER_BIN="$PWD/target/debug/tillandsias-repeat-graph"
   if [[ ! -x "$REPEAT_SUPERVISOR_BIN" || ! -x "$REPEAT_RENDERER_BIN" ]]; then
@@ -115,25 +132,102 @@ if [[ -n "$REPEAT_INTERVAL" ]]; then
     printf '[codex-repeat] unable to locate repeat supervisor binary: %s\n' "$REPEAT_SUPERVISOR_BIN" >&2
     exit 2
   fi
-  exec "$REPEAT_SUPERVISOR_BIN" \
-    --prompt "${codex_args[*]}" \
-    --interval "$REPEAT_INTERVAL" \
-    --codex-bin "$CODEX_BIN" \
-    --renderer-bin "$REPEAT_RENDERER_BIN" \
-    --state-root "${CODEX_REPEAT_STATE_DIR:-${PWD}/plan/localwork/codex-repeat}" \
-    --plan-root "$PWD/plan" \
-    --trend-window "${CODEX_REPEAT_TREND_WINDOW:-5}" \
+  local repeat_args=(
+    --prompt "${codex_args[*]}"
+    --interval "$REPEAT_INTERVAL"
+    --codex-bin "$CODEX_BIN"
+    --renderer-bin "$REPEAT_RENDERER_BIN"
+    --state-root "${CODEX_REPEAT_STATE_DIR:-${PWD}/plan/localwork/codex-repeat}"
+    --plan-root "$PWD/plan"
+    --trend-window "${CODEX_REPEAT_TREND_WINDOW:-5}"
     --refresh-secs "${CODEX_REPEAT_REFRESH_SECS:-2}"
+  )
+  if [[ -n "$REPEAT_TIMES" ]]; then
+    repeat_args+=(--times "$REPEAT_TIMES")
+  fi
+  exec "$REPEAT_SUPERVISOR_BIN" "${repeat_args[@]}"
+}
+
+run_repeat_quit() {
+  local cycle=0
+  local max_cycles="${REPEAT_TIMES:-0}"
+  while :; do
+    cycle=$((cycle + 1))
+    printf '[codex-repeat] cycle %02d start | waiting on agent | interval=%s | elapsed=%s\n' \
+      "$cycle" "$REPEAT_INTERVAL" "$(format_elapsed 0)"
+    run_tui_once
+    local status=$?
+    printf '[codex-repeat] cycle %02d complete | exit=%d\n' "$cycle" "$status"
+    if [[ "$status" -ne 0 ]]; then
+      exit "$status"
+    fi
+    if [[ -n "$REPEAT_INTERVAL" ]]; then
+      if [[ "${CODEX_REPEAT_SKIP_BUILD:-0}" != 1 && -x "$PWD/build.sh" ]]; then
+        build_log="$(mktemp /tmp/codex-repeat-build.XXXXXX)"
+        if "$PWD/build.sh" --ci-full --graphs >"$build_log" 2>&1; then
+          if [[ -f "$PWD/docs/convergence/centicolon-dashboard.md" ]]; then
+            cat "$PWD/docs/convergence/centicolon-dashboard.md"
+          else
+            cat "$build_log"
+          fi
+        else
+          cat "$build_log" >&2 || true
+          rm -f "$build_log"
+          exit 1
+        fi
+        rm -f "$build_log"
+      fi
+      if [[ "$max_cycles" -gt 0 && "$cycle" -ge "$max_cycles" ]]; then
+        exit 0
+      fi
+      printf '[codex-repeat] cycle %02d sleeping until next iteration | sleep=%s\n' "$cycle" "$REPEAT_INTERVAL"
+      sleep "$REPEAT_INTERVAL"
+    else
+      exit 0
+    fi
+  done
+}
+
+if [[ -n "$REPEAT_INTERVAL" ]]; then
+  if [[ "$QUIET" -eq 1 ]]; then
+    if [[ -n "$REPEAT_TIMES" ]]; then
+      cycle=0
+      while :; do
+        cycle=$((cycle + 1))
+        run_quiet_once
+        status=$?
+        if [[ "$status" -ne 0 ]]; then
+          exit "$status"
+        fi
+        if [[ "${CODEX_REPEAT_SKIP_BUILD:-0}" != 1 && -x "$PWD/build.sh" ]]; then
+          build_log="$(mktemp /tmp/codex-repeat-build.XXXXXX)"
+          if "$PWD/build.sh" --ci-full --graphs >"$build_log" 2>&1; then
+            if [[ -f "$PWD/docs/convergence/centicolon-dashboard.md" ]]; then
+              cat "$PWD/docs/convergence/centicolon-dashboard.md"
+            else
+              cat "$build_log"
+            fi
+          else
+            cat "$build_log" >&2 || true
+            rm -f "$build_log"
+            exit 1
+          fi
+          rm -f "$build_log"
+        fi
+        if [[ "$cycle" -ge "$REPEAT_TIMES" ]]; then
+          exit 0
+        fi
+        sleep "$REPEAT_INTERVAL"
+      done
+    fi
+    run_repeat_quiet
+  fi
+  run_repeat_quit
 fi
 
 if [[ "$QUIET" -eq 1 ]]; then
-  exec "$CODEX_BIN" \
-    exec \
-    --color never \
-    "${common_args[@]}" \
-    "${codex_args[@]}"
+  run_quiet_once
+  exit $?
 fi
 
-exec "$CODEX_BIN" \
-  "${common_args[@]}" \
-  "${codex_args[@]}"
+run_tui_once

@@ -35,6 +35,7 @@ const PROMPT_PREFIX: &str = "Repeat-mode automation contract:\n\
 struct RepeatArgs {
     prompt: String,
     interval: String,
+    times: Option<usize>,
     codex_bin: PathBuf,
     renderer_bin: PathBuf,
     state_root: PathBuf,
@@ -56,6 +57,9 @@ fn parse_args() -> Result<RepeatArgs, AnyError> {
     let mut renderer_bin = None;
     let mut state_root = env::var_os("CODEX_REPEAT_STATE_DIR").map(PathBuf::from);
     let mut plan_root = env::current_dir()?.join("plan");
+    let mut times = env::var("CODEX_REPEAT_TIMES")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok());
     let mut trend_window = env::var("CODEX_REPEAT_TREND_WINDOW")
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
@@ -73,6 +77,9 @@ fn parse_args() -> Result<RepeatArgs, AnyError> {
             "--codex-bin" => codex_bin = args.next().map(PathBuf::from),
             "--renderer-bin" => renderer_bin = args.next().map(PathBuf::from),
             "--state-root" => state_root = args.next().map(PathBuf::from),
+            "--times" => {
+                times = args.next().and_then(|value| value.parse::<usize>().ok());
+            }
             "--plan-root" => plan_root = PathBuf::from(args.next().unwrap_or_else(|| "plan".to_string())),
             "--trend-window" => {
                 trend_window = args
@@ -101,6 +108,7 @@ fn parse_args() -> Result<RepeatArgs, AnyError> {
     Ok(RepeatArgs {
         prompt,
         interval,
+        times,
         codex_bin,
         renderer_bin,
         state_root,
@@ -356,6 +364,10 @@ async fn run() -> Result<(), AnyError> {
     let start_epoch = current_epoch();
     let mut cycle: i64 = 0;
     let mut history_values: Vec<i64> = Vec::new();
+    let cycle_limit = args.times.map(|value| value as i64);
+    if env::var_os("CODEX_REPEAT_DEBUG").is_some() {
+        eprintln!("[codex-repeat] debug cycle_limit={:?}", cycle_limit);
+    }
 
     loop {
         cycle += 1;
@@ -556,6 +568,9 @@ async fn run() -> Result<(), AnyError> {
         .await?;
         print_sleeping(cycle, child_exit, &args.interval);
 
+        if cycle_limit.is_some() && cycle >= cycle_limit.unwrap_or_default() {
+            return Ok(());
+        }
         time::sleep(interval).await;
     }
 }
