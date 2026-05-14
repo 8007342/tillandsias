@@ -3,10 +3,11 @@ description: Tillandsias Spec-to-Litmus Test Bindings Registry
 generated: '2026-05-03T12:36:39.186138'
 specs:
 - spec_id: agent-cheatsheets
-  status: deprecated
+  status: obsolete
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-12'
+  tombstone: superseded:cheatsheet-source-layer
 - spec_id: app-lifecycle
   status: active
   litmus_tests:
@@ -19,7 +20,7 @@ specs:
   coverage_ratio: 0
   last_verified: '2026-05-06'
 - spec_id: artifact-detection
-  status: deprecated
+  status: active
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-12'
@@ -48,10 +49,11 @@ specs:
   coverage_ratio: 33
   last_verified: '2026-05-03'
 - spec_id: browser-isolation-launcher
-  status: deprecated
+  status: obsolete
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-12'
+  tombstone: superseded:browser-isolation-core
 - spec_id: browser-isolation-tray-integration
   status: active
   litmus_tests:
@@ -60,20 +62,22 @@ specs:
   coverage_ratio: 67
   last_verified: '2026-05-12'
 - spec_id: browser-mcp-server
-  status: deprecated
+  status: obsolete
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-12'
+  tombstone: superseded:host-browser-mcp
 - spec_id: browser-window-rate-limiting
   status: deprecated
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-12'
 - spec_id: build-lock
-  status: deprecated
+  status: obsolete
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-12'
+  tombstone: superseded:build-script-architecture
 - spec_id: build-script-architecture
   status: obsolete
   litmus_tests: []
@@ -85,15 +89,17 @@ specs:
   coverage_ratio: 0
   last_verified: '2026-05-12'
 - spec_id: cheatsheet-mcp-server
-  status: deprecated
+  status: obsolete
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-12'
+  tombstone: superseded:cheatsheet-tooling
 - spec_id: cheatsheet-methodology-evolution
-  status: deprecated
+  status: obsolete
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-12'
+  tombstone: superseded:cheatsheet-source-layer
 - spec_id: cheatsheet-source-layer
   status: active
   litmus_tests:
@@ -161,10 +167,11 @@ specs:
   coverage_ratio: 50
   last_verified: '2026-05-07'
 - spec_id: direct-podman-calls
-  status: deprecated
+  status: obsolete
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-07'
+  tombstone: superseded:podman-orchestration
 - spec_id: download-telemetry
   status: deprecated
   litmus_tests: []
@@ -183,10 +190,11 @@ specs:
   coverage_ratio: 67
   last_verified: '2026-05-12'
 - spec_id: enforce-trace-presence
-  status: deprecated
+  status: obsolete
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-12'
+  tombstone: superseded:methodology-accountability
 - spec_id: environment-runtime
   status: active
   litmus_tests:
@@ -206,15 +214,17 @@ specs:
   coverage_ratio: 33
   last_verified: '2026-05-12'
 - spec_id: fix-podman-machine-host-aliases
-  status: deprecated
+  status: obsolete
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-12'
+  tombstone: obsolete:cross-platform-deferred
 - spec_id: fix-windows-extended-path
-  status: deprecated
+  status: obsolete
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-12'
+  tombstone: obsolete:cross-platform-deferred
 - spec_id: fix-windows-image-routing
   status: active
   litmus_tests:
@@ -222,10 +232,11 @@ specs:
   coverage_ratio: 33
   last_verified: '2026-05-12'
 - spec_id: forge-cache-architecture
-  status: deprecated
+  status: obsolete
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-12'
+  tombstone: superseded:forge-cache-dual
 - spec_id: forge-cache-dual
   status: active
   litmus_tests:
