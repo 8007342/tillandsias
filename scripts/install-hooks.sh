@@ -91,5 +91,37 @@ HOOK
     echo "✓ VERSION guard pre-push hook installed"
 fi
 
+# --- Install post-commit hook -----------------------------------------------
+# @trace gap:OBS-008
+
+POSTCOMMIT_SOURCE="$REPO_ROOT/scripts/hooks/post-commit-dashboard-refresh.sh"
+POSTCOMMIT_TARGET="$GIT_HOOKS_DIR/post-commit"
+POSTCOMMIT_MARKER="# dashboard-refresh-hook"
+
+if [[ ! -f "$POSTCOMMIT_SOURCE" ]]; then
+    echo "error: $POSTCOMMIT_SOURCE not found" >&2
+    exit 1
+fi
+
+if [[ -f "$POSTCOMMIT_TARGET" ]]; then
+    if grep -qF "$POSTCOMMIT_MARKER" "$POSTCOMMIT_TARGET" 2>/dev/null; then
+        echo "✓ Dashboard refresh post-commit hook already installed"
+    else
+        echo "Existing post-commit hook found — appending dashboard refresh..."
+        echo "" >> "$POSTCOMMIT_TARGET"
+        echo "$POSTCOMMIT_MARKER" >> "$POSTCOMMIT_TARGET"
+        echo "bash \"$POSTCOMMIT_SOURCE\"" >> "$POSTCOMMIT_TARGET"
+        echo "✓ Dashboard refresh post-commit hook appended"
+    fi
+else
+    cat > "$POSTCOMMIT_TARGET" <<HOOK
+#!/usr/bin/env bash
+$POSTCOMMIT_MARKER
+bash "$POSTCOMMIT_SOURCE"
+HOOK
+    chmod +x "$POSTCOMMIT_TARGET"
+    echo "✓ Dashboard refresh post-commit hook installed"
+fi
+
 echo ""
 echo "All git hooks installed successfully."
