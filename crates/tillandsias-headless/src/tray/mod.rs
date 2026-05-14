@@ -1489,6 +1489,7 @@ mod tests {
 
         fn build(self) -> TrayUiState {
             let status_text = self.enclave_status.status_text().to_string();
+            let projects_hash = TrayUiState::hash_projects(&self.projects);
             TrayUiState {
                 root: std::path::PathBuf::from("/tmp/tillandsias-test-root"),
                 version: "0.1.260506.6".to_string(),
@@ -1504,6 +1505,7 @@ mod tests {
                 podman_available: true,
                 enclave_status: self.enclave_status,
                 revision: 1,
+                projects_hash,
             }
         }
     }

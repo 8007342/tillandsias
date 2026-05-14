@@ -122,6 +122,9 @@ TESTS_RUN=0
 declare -A SPEC_RESULTS
 declare -A SPEC_TEST_COUNT
 
+# Global deduplication for cross-spec litmus tests
+declare -A LITMUS_GLOBAL_SEEN
+
 # Color output (respects NO_COLOR env var)
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -627,6 +630,15 @@ run_tests_for_spec() {
     local spec_skipped=0
     while IFS= read -r test_name; do
         [[ -z "$test_name" ]] && continue
+
+        # Skip if already executed globally (same test bound to multiple specs)
+        if [[ -n "${LITMUS_GLOBAL_SEEN[$test_name]+x}" ]]; then
+            log_test_result "$spec_id" "$test_name" "SKIP" "Already executed (bound to multiple specs)"
+            spec_skipped=1
+            test_count=$((test_count+1))
+            continue
+        fi
+        LITMUS_GLOBAL_SEEN[$test_name]=1
 
         # Convert colon to hyphen for file lookup (litmus:ephemeral-guarantee -> litmus-ephemeral-guarantee)
         local test_file="${LITMUS_TESTS_DIR}/${test_name//:/-}.yaml"
