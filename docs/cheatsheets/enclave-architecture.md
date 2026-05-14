@@ -63,7 +63,7 @@ Tillandsias isolates development environments using a 4-container enclave behind
 
 **Lifetime model:**
 
-- **Tray mode**: `proxy` / `inference` are shared singletons for the tray-app's lifetime. `tillandsias-git-<project>` persists per project within a tray session — it does NOT shut down when the last forge for that project exits, so the next `Attach Here` to the same project skips git-service startup entirely (see `spec:persistent-git-service`). All services are torn down on tray exit via `EnclaveCleanupGuard`.
+- **Tray mode**: `proxy` / `inference` are shared singletons for the tray-app's lifetime. `tillandsias-git-<project>` is project-scoped within a tray session and starts on the first attach for that project; it stops when the last forge for that project exits, matching `spec:git-mirror-service`. All services are torn down on tray exit via `EnclaveCleanupGuard`.
 - **CLI mode** (`tillandsias --attach`): one-shot. `EnclaveCleanupGuard` stops proxy / inference / git-service and removes the enclave network on process exit (clean, panic, or Ctrl-C).
 - **Crash recovery**: `TerminateProcess` / SIGKILL bypass Drop. Next tray startup runs `handlers::sweep_orphan_containers()` + `secrets::cleanup_all_token_files()` to reap anything left behind.
 

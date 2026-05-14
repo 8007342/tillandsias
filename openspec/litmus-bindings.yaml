@@ -3,11 +3,10 @@ description: Tillandsias Spec-to-Litmus Test Bindings Registry
 generated: '2026-05-03T12:36:39.186138'
 specs:
 - spec_id: agent-cheatsheets
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deprecated
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: app-lifecycle
   status: active
   litmus_tests:
@@ -15,28 +14,27 @@ specs:
   coverage_ratio: 33
   last_verified: '2026-05-03'
 - spec_id: appimage-build-pipeline
-  status: deferred
+  status: obsolete
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-06'
 - spec_id: artifact-detection
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deprecated
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: async-inference-launch
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
+  - litmus:inference-readiness-probe-shape
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: binary-signing
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:release-artifact-integrity
+  coverage_ratio: 100
+  last_verified: '2026-05-12'
 - spec_id: browser-isolation-core
   status: active
   litmus_tests:
@@ -50,84 +48,78 @@ specs:
   coverage_ratio: 33
   last_verified: '2026-05-03'
 - spec_id: browser-isolation-launcher
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deprecated
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: browser-isolation-tray-integration
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:browser-tray-launch-profile
+  - litmus:opencode-web-startup-sequence
+  coverage_ratio: 67
+  last_verified: '2026-05-12'
 - spec_id: browser-mcp-server
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deprecated
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: browser-window-rate-limiting
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deprecated
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: build-lock
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deprecated
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: build-script-architecture
-  status: deferred
+  status: obsolete
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-06'
 - spec_id: certificate-authority
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deprecated
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: cheatsheet-mcp-server
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deprecated
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: cheatsheet-methodology-evolution
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deprecated
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: cheatsheet-source-layer
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:cheatsheet-source-layer-validation
+  coverage_ratio: 33
+  last_verified: '2026-05-12'
 - spec_id: cheatsheet-tooling
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:cheatsheet-tooling-structure
+  coverage_ratio: 100
+  last_verified: '2026-05-12'
 - spec_id: cheatsheets-license-tiered
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:cheatsheet-tier-discipline
+  coverage_ratio: 33
+  last_verified: '2026-05-12'
 - spec_id: ci-release
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:ci-release-node24-policy
+  coverage_ratio: 33
+  last_verified: '2026-05-12'
 - spec_id: cli-bash-mode
-  status: deferred
+  status: obsolete
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-06'
@@ -139,63 +131,62 @@ specs:
 - spec_id: cli-mode
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:cli-mode-shape
+  coverage_ratio: 33
+  last_verified: '2026-05-12'
 - spec_id: clickable-trace-index
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:clickable-trace-index-generation
+  - litmus:clickable-trace-index-observatorium-skeleton
+  coverage_ratio: 67
+  last_verified: '2026-05-12'
 - spec_id: cross-platform
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deprecated
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: default-image
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:forge-standalone-traceability
+  coverage_ratio: 33
+  last_verified: '2026-05-12'
 - spec_id: dev-build
   status: active
   litmus_tests:
   - litmus:environment-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:headless-init-status-check-command-shape
+  - litmus:status-check-stack-verification
+  coverage_ratio: 50
+  last_verified: '2026-05-07'
 - spec_id: direct-podman-calls
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deprecated
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-07'
 - spec_id: download-telemetry
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deprecated
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: embedded-scripts
-  status: active
+  status: obsolete
   litmus_tests:
-  - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: enclave-network
   status: active
   litmus_tests:
   - litmus:enclave-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:socket-cleanup
+  coverage_ratio: 67
+  last_verified: '2026-05-12'
 - spec_id: enforce-trace-presence
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deprecated
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: environment-runtime
   status: active
   litmus_tests:
@@ -205,63 +196,59 @@ specs:
 - spec_id: external-logs-layer
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:external-logs-layer-shape
+  coverage_ratio: 33
+  last_verified: '2026-05-12'
 - spec_id: filesystem-scanner
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:filesystem-scanner-shape
+  coverage_ratio: 33
+  last_verified: '2026-05-12'
 - spec_id: fix-podman-machine-host-aliases
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deprecated
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: fix-windows-extended-path
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deprecated
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: fix-windows-image-routing
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:fix-windows-image-routing-shape
+  coverage_ratio: 33
+  last_verified: '2026-05-12'
 - spec_id: forge-cache-architecture
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deprecated
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: forge-cache-dual
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:forge-cache-dual-shape
+  coverage_ratio: 33
+  last_verified: '2026-05-12'
 - spec_id: forge-environment-discoverability
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:forge-environment-discoverability-shape
+  coverage_ratio: 33
+  last_verified: '2026-05-12'
 - spec_id: forge-forward-compat
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: deprecated
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: forge-hot-cold-split
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:forge-hot-cold-split-shape
+  coverage_ratio: 33
+  last_verified: '2026-05-12'
 - spec_id: forge-offline
   status: active
   litmus_tests:
@@ -271,33 +258,39 @@ specs:
 - spec_id: forge-opencode-onboarding
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
+  - litmus:forge-opencode-onboarding-shape
   coverage_ratio: 30
-  last_verified: '2026-05-03'
+  last_verified: '2026-05-12'
 - spec_id: forge-shell-tools
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
+  - litmus:forge-shell-tools-shape
   coverage_ratio: 30
-  last_verified: '2026-05-03'
+  last_verified: '2026-05-12'
 - spec_id: forge-staleness
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
+  - litmus:forge-staleness-shape
   coverage_ratio: 30
-  last_verified: '2026-05-03'
+  last_verified: '2026-05-12'
+- spec_id: forge-standalone
+  status: active
+  litmus_tests:
+  - litmus:forge-standalone-traceability
+  coverage_ratio: 33
+  last_verified: '2026-05-12'
 - spec_id: forge-welcome
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
+  - litmus:forge-welcome-shape
   coverage_ratio: 30
-  last_verified: '2026-05-03'
+  last_verified: '2026-05-12'
 - spec_id: gh-auth-script
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
+  - litmus:gh-auth-script-smoke
   coverage_ratio: 30
-  last_verified: '2026-05-03'
+  last_verified: '2026-05-12'
 - spec_id: git-mirror-service
   status: active
   litmus_tests:
@@ -313,15 +306,14 @@ specs:
 - spec_id: host-browser-mcp
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:host-browser-mcp-shape
+  coverage_ratio: 33
+  last_verified: '2026-05-12'
 - spec_id: host-chromium
-  status: active
+  status: obsolete
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: host-chromium-on-demand
   status: active
   litmus_tests:
@@ -332,14 +324,14 @@ specs:
   status: active
   litmus_tests:
   - litmus:enclave-isolation
+  - litmus:inference-readiness-probe-shape
   coverage_ratio: 33
   last_verified: '2026-05-03'
 - spec_id: inference-host-side-pull
-  status: active
+  status: obsolete
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: init-command
   status: active
   litmus_tests:
@@ -353,40 +345,36 @@ specs:
   coverage_ratio: 33
   last_verified: '2026-05-03'
 - spec_id: install-progress
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: obsolete
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: knowledge-source-of-truth
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:knowledge-source-of-truth-shape
+  coverage_ratio: 100
+  last_verified: '2026-05-12'
 - spec_id: layered-tools-overlay
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: obsolete
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: logging-accountability
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: obsolete
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: methodology-accountability
   status: test_required
   litmus_tests: []
   coverage_ratio: 0
   last_verified: null
 - spec_id: logging-levels
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: obsolete
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-12'
 - spec_id: native-secrets-store
   status: active
   litmus_tests:
@@ -394,58 +382,79 @@ specs:
   - litmus:socket-cleanup
   coverage_ratio: 66
   last_verified: '2026-05-03'
+- spec_id: security-privacy-isolation
+  status: active
+  litmus_tests:
+  - litmus:credential-isolation
+  - litmus:environment-isolation
+  - litmus:enclave-isolation
+  - litmus:socket-cleanup
+  - litmus:podman-build-command-shape
+  - litmus:podman-web-launch-profile
+  - litmus:podman-path-availability
+  coverage_ratio: 77
+  last_verified: '2026-05-12'
 - spec_id: nix-builder
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:nix-builder-shape
+  coverage_ratio: 100
+  last_verified: '2026-05-13'
 - spec_id: no-terminal-flicker
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: opencode-web-session
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: obsolete
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-13'
 - spec_id: opencode-web-session-otp
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
+  - litmus:credential-isolation
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: overlay-mount-cache
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: obsolete
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-13'
 - spec_id: persistent-git-service
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: obsolete
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-13'
 - spec_id: podman-orchestration
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:podman-build-command-shape
+  - litmus:podman-web-launch-profile
+  - litmus:container-naming
+  - litmus:podman-path-availability
+  coverage_ratio: 100
+  last_verified: '2026-05-12'
+- spec_id: podman-container-spec
+  status: active
+  litmus_tests:
+  - litmus:podman-container-spec-shape
+  coverage_ratio: 33
+  last_verified: '2026-05-12'
+- spec_id: podman-container-handle
+  status: active
+  litmus_tests:
+  - litmus:podman-container-handle-shape
+  coverage_ratio: 33
+  last_verified: '2026-05-12'
 - spec_id: project-bootstrap-readme
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: project-summarizers
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: proxy-container
@@ -457,31 +466,29 @@ specs:
 - spec_id: remote-projects
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: runtime-diagnostics
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
+  - litmus:runtime-diagnostics-shape
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: runtime-diagnostics-stream
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
+  - litmus:runtime-diagnostics-stream-shape
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: runtime-logging
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:runtime-logging-env-filter
+  coverage_ratio: 33
+  last_verified: '2026-05-13'
 - spec_id: secret-rotation
   status: active
   litmus_tests:
-  - litmus:token-file-cleanup
   coverage_ratio: 33
   last_verified: '2026-05-03'
 - spec_id: secrets-management
@@ -493,133 +500,124 @@ specs:
 - spec_id: simplified-tray-ux
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: singleton-guard
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: spec-traceability
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: subdomain-naming-flip
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: subdomain-routing-via-reverse-proxy
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: tools-overlay-fast-reuse
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: obsolete
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-13'
 - spec_id: tray-app
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:first-launch-feedback
+  - litmus:cross-platform-tray
+  - litmus:agent-selection-menu
+  - litmus:web-container-stop
+  coverage_ratio: 100
+  last_verified: '2026-05-13'
 - spec_id: tray-cli-coexistence
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: tray-host-control-socket
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: tray-icon-lifecycle
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:tray-icon-five-state-enum
+  - litmus:icon-png-generation
+  - litmus:icon-state-computation
+  - litmus:tray-icon-initialization
+  coverage_ratio: 100
+  last_verified: '2026-05-13'
 - spec_id: tray-minimal-ux
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:tray-minimal-ux-contract-shape
+  coverage_ratio: 33
+  last_verified: '2026-05-12'
 - spec_id: tray-progress-and-icon-states
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:tray-menu-lifecycle
+  coverage_ratio: 100
+  last_verified: '2026-05-13'
 - spec_id: tray-projects-rename
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: tray-ux
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:tray-menu-lifecycle
+  coverage_ratio: 100
+  last_verified: '2026-05-13'
 - spec_id: update-system
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: versioning
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: web-image
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: windows-cross-build
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  status: obsolete
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-13'
 - spec_id: windows-event-logging
-  status: active
-  litmus_tests:
-  - litmus:ephemeral-guarantee
-  coverage_ratio: 30
+  status: suspended
+  litmus_tests: []
+  coverage_ratio: 0
   last_verified: '2026-05-03'
 - spec_id: wsl-daemon-orchestration
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
+  - litmus:wsl-daemon-orchestration-shape
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: wsl-runtime
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
+  - litmus:wsl-runtime-shape
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: zen-default-with-ollama-analysis-pool
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
   coverage_ratio: 30
   last_verified: '2026-05-03'
 # @trace spec:chromium-debug-variant, spec:chromium-safe-variant, spec:mcp-on-demand
@@ -639,13 +637,13 @@ specs:
 - spec_id: mcp-on-demand
   status: active
   litmus_tests:
-  - litmus:enclave-isolation
+  - litmus:mcp-on-demand-shape
   coverage_ratio: 33
-  last_verified: '2026-05-03'
+  last_verified: '2026-05-13'
 - spec_id: observability-convergence
   status: active
   litmus_tests:
-  - litmus:ephemeral-guarantee
+  - litmus:observability-convergence-shape
   coverage_ratio: 30
   last_verified: '2026-05-03'
 - spec_id: podman-secrets-integration

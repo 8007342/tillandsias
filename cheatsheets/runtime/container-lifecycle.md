@@ -10,7 +10,7 @@ summary_generated_by: hand-curated
 
 # Container Lifecycle — Startup, Health Checks, Shutdown
 
-@trace spec:persistent-git-service, spec:tray-ux, spec:browser-isolation-tray-integration
+@trace spec:git-mirror-service, spec:tray-ux, spec:browser-isolation-tray-integration
 
 **Version baseline**: Podman 4.5+ (Fedora 43+)  
 **Use when**: Launching containers and waiting for readiness, implementing health checks, cleaning up containers on shutdown, managing container state transitions.
@@ -231,7 +231,7 @@ podman secret rm tillandsias-ca-cert 2>/dev/null || true
 podman volume prune --force
 ```
 
-@trace spec:persistent-git-service
+@trace spec:git-mirror-service
 
 ## Common pitfalls
 
