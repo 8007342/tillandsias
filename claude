@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CODEX_BIN="${CODEX_BIN:-${HOME}/.npm-global/bin/codex}"
-if [[ ! -x "$CODEX_BIN" ]]; then
-  CODEX_BIN="$(command -v codex)"
+CLAUDE_BIN="${CLAUDE_BIN:-${HOME}/.local/bin/claude}"
+if [[ ! -x "$CLAUDE_BIN" ]]; then
+  CLAUDE_BIN="$(command -v claude)"
 fi
 
 QUIET=0
 QUIT=0
 REPEAT_INTERVAL=""
 REPEAT_TIMES=""
-codex_args=()
+claude_args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --quiet|-q)
@@ -23,7 +23,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --times)
       if [[ $# -lt 2 ]]; then
-        printf 'codex: --times requires a count such as 10\n' >&2
+        printf 'claude: --times requires a count such as 10\n' >&2
         exit 2
       fi
       REPEAT_TIMES="$2"
@@ -31,7 +31,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --repeat)
       if [[ $# -lt 2 ]]; then
-        printf 'codex: --repeat requires an interval such as 30m or 2h30m\n' >&2
+        printf 'claude: --repeat requires an interval such as 30m or 2h30m\n' >&2
         exit 2
       fi
       REPEAT_INTERVAL="$2"
@@ -39,20 +39,17 @@ while [[ $# -gt 0 ]]; do
       ;;
     --)
       shift
-      codex_args+=("$@")
+      claude_args+=("$@")
       break
       ;;
     *)
-      codex_args+=("$1")
+      claude_args+=("$1")
       shift
       ;;
   esac
 done
 
-common_args=(
-  -p tillandsias
-  -c 'profiles.tillandsias.writable_roots=["/run/user/1000","/var/home/machiyotl"]'
-)
+common_args=()
 
 progress_bar() {
   local value="${1:-0}"
@@ -109,17 +106,17 @@ format_timestamp() {
 }
 
 run_tui_once() {
-  "$CODEX_BIN" \
+  "$CLAUDE_BIN" \
     "${common_args[@]}" \
-    "${codex_args[@]}"
+    "${claude_args[@]}"
 }
 
 run_quiet_once() {
-  "$CODEX_BIN" \
-    exec \
-    --color never \
+  "$CLAUDE_BIN" \
+    --print \
+    --output-format text \
     "${common_args[@]}" \
-    "${codex_args[@]}"
+    "${claude_args[@]}"
 }
 
 run_repeat_quiet() {
@@ -129,18 +126,18 @@ run_repeat_quiet() {
     cargo build --quiet --offline --manifest-path "$PWD/crates/tillandsias-repeat-graph/Cargo.toml"
   fi
   if [[ ! -x "$REPEAT_SUPERVISOR_BIN" ]]; then
-    printf '[codex-repeat] unable to locate repeat supervisor binary: %s\n' "$REPEAT_SUPERVISOR_BIN" >&2
+    printf '[claude-repeat] unable to locate repeat supervisor binary: %s\n' "$REPEAT_SUPERVISOR_BIN" >&2
     exit 2
   fi
   local repeat_args=(
-    --prompt "${codex_args[*]}"
+    --prompt "${claude_args[*]}"
     --interval "$REPEAT_INTERVAL"
-    --codex-bin "$CODEX_BIN"
+    --codex-bin "$CLAUDE_BIN"
     --renderer-bin "$REPEAT_RENDERER_BIN"
     --state-root "${AGENT_STATE_DIR:-${PWD}/plan/localwork/agents}"
     --plan-root "$PWD/plan"
-    --trend-window "${CODEX_REPEAT_TREND_WINDOW:-5}"
-    --refresh-secs "${CODEX_REPEAT_REFRESH_SECS:-2}"
+    --trend-window "${CLAUDE_REPEAT_TREND_WINDOW:-5}"
+    --refresh-secs "${CLAUDE_REPEAT_REFRESH_SECS:-2}"
   )
   if [[ -n "$REPEAT_TIMES" ]]; then
     repeat_args+=(--times "$REPEAT_TIMES")
@@ -153,17 +150,17 @@ run_repeat_quit() {
   local max_cycles="${REPEAT_TIMES:-0}"
   while :; do
     cycle=$((cycle + 1))
-    printf '[codex-repeat] cycle %02d start | waiting on agent | interval=%s | elapsed=%s\n' \
+    printf '[claude-repeat] cycle %02d start | waiting on agent | interval=%s | elapsed=%s\n' \
       "$cycle" "$REPEAT_INTERVAL" "$(format_elapsed 0)"
     run_tui_once
     local status=$?
-    printf '[codex-repeat] cycle %02d complete | exit=%d\n' "$cycle" "$status"
+    printf '[claude-repeat] cycle %02d complete | exit=%d\n' "$cycle" "$status"
     if [[ "$status" -ne 0 ]]; then
       exit "$status"
     fi
     if [[ -n "$REPEAT_INTERVAL" ]]; then
-      if [[ "${CODEX_REPEAT_SKIP_BUILD:-0}" != 1 && -x "$PWD/build.sh" ]]; then
-        build_log="$(mktemp /tmp/codex-repeat-build.XXXXXX)"
+      if [[ "${CLAUDE_REPEAT_SKIP_BUILD:-0}" != 1 && -x "$PWD/build.sh" ]]; then
+        build_log="$(mktemp /tmp/claude-repeat-build.XXXXXX)"
         if "$PWD/build.sh" --ci-full --graphs >"$build_log" 2>&1; then
           if [[ -f "$PWD/docs/convergence/centicolon-dashboard.md" ]]; then
             cat "$PWD/docs/convergence/centicolon-dashboard.md"
@@ -180,7 +177,7 @@ run_repeat_quit() {
       if [[ "$max_cycles" -gt 0 && "$cycle" -ge "$max_cycles" ]]; then
         exit 0
       fi
-      printf '[codex-repeat] cycle %02d sleeping until next iteration | sleep=%s\n' "$cycle" "$REPEAT_INTERVAL"
+      printf '[claude-repeat] cycle %02d sleeping until next iteration | sleep=%s\n' "$cycle" "$REPEAT_INTERVAL"
       sleep "$REPEAT_INTERVAL"
     else
       exit 0
@@ -199,8 +196,8 @@ if [[ -n "$REPEAT_INTERVAL" ]]; then
         if [[ "$status" -ne 0 ]]; then
           exit "$status"
         fi
-        if [[ "${CODEX_REPEAT_SKIP_BUILD:-0}" != 1 && -x "$PWD/build.sh" ]]; then
-          build_log="$(mktemp /tmp/codex-repeat-build.XXXXXX)"
+        if [[ "${CLAUDE_REPEAT_SKIP_BUILD:-0}" != 1 && -x "$PWD/build.sh" ]]; then
+          build_log="$(mktemp /tmp/claude-repeat-build.XXXXXX)"
           if "$PWD/build.sh" --ci-full --graphs >"$build_log" 2>&1; then
             if [[ -f "$PWD/docs/convergence/centicolon-dashboard.md" ]]; then
               cat "$PWD/docs/convergence/centicolon-dashboard.md"
