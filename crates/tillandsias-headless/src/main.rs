@@ -21,12 +21,14 @@
 
 use signal_hook::flag;
 use std::io::{self, Write};
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tempfile::Builder as TempDirBuilder;
+use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION, encode};
 use tillandsias_podman::{
     ContainerSpec, MountMode, PodmanClient, detect_gpu_devices, podman_cmd_sync,
 };
@@ -1634,6 +1636,46 @@ fn build_opencode_web_browser_spec(
     Ok(spec)
 }
 
+/// Send IssueWebSession message to tray's control socket.
+///
+/// @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
+fn send_issue_web_session(
+    project_label: &str,
+    cookie_value: &[u8; 32],
+) -> Result<(), String> {
+    // Get control socket path from XDG_RUNTIME_DIR or default.
+    let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
+        .unwrap_or_else(|_| format!("/run/user/{}", unsafe { libc::getuid() }));
+    let socket_path = format!("{}/tillandsias/control.sock", runtime_dir);
+
+    // Connect to the socket.
+    let mut stream = UnixStream::connect(&socket_path)
+        .map_err(|e| format!("Failed to connect to control socket {}: {}", socket_path, e))?;
+
+    // Prepare and send the IssueWebSession message.
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq: 1, // seq number is not critical for this fire-and-forget usage
+        body: ControlMessage::IssueWebSession {
+            project_label: project_label.to_string(),
+            cookie_value: *cookie_value,
+        },
+    };
+
+    // Encode and write with length prefix (4-byte big-endian).
+    let encoded = encode(&envelope)
+        .map_err(|e| format!("Failed to encode control message: {}", e))?;
+    let len = encoded.len() as u32;
+    let mut frame = len.to_be_bytes().to_vec();
+    frame.extend_from_slice(&encoded);
+
+    stream
+        .write_all(&frame)
+        .map_err(|e| format!("Failed to write control message: {}", e))?;
+
+    Ok(())
+}
+
 fn launch_opencode_web_browser(
     project_name: &str,
     certs_dir: &Path,
@@ -1666,7 +1708,10 @@ fn launch_opencode_web_browser(
             )
         })?;
     let profile_path = profile_dir.path().to_path_buf();
-    let otp = tillandsias_otp::generate_session_token();
+    // @trace spec:opencode-web-session-otp
+    // Issue a session token for the project and register it with the router.
+    let project_label = format!("opencode.{project_name}.localhost");
+    let otp = tillandsias_otp::issue_session(&project_label);
     let login_url = tillandsias_otp::build_login_data_url(&url, &otp);
     let spec = build_opencode_web_browser_spec(
         &login_url,
@@ -1681,6 +1726,14 @@ fn launch_opencode_web_browser(
     let result = rt_block_on_podman_run(args, debug);
     if result.is_ok() {
         emit_opencode_web_event(project_name, "browser", "launched", Some("gui"))?;
+        // @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
+        // Notify router (via control socket) that a web session has been issued.
+        // This is non-critical; if the tray is down, we skip the notification gracefully.
+        if let Err(e) = send_issue_web_session(&project_label, &otp) {
+            if debug {
+                eprintln!("[tillandsias] Warning: failed to notify router of web session: {e}");
+            }
+        }
     } else if let Err(ref err) = result {
         let _ = emit_opencode_web_event(project_name, "browser", "launch_failed", Some(err));
     }

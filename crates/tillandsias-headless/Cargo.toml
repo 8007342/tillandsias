@@ -13,9 +13,11 @@ path = "src/main.rs"
 
 [dependencies]
 tillandsias-core = { path = "../tillandsias-core" }
+tillandsias-control-wire = { path = "../tillandsias-control-wire" }
 tillandsias-otp = { path = "../tillandsias-otp" }
 tillandsias-podman = { path = "../tillandsias-podman" }
 tokio = { workspace = true }
+bytes = { workspace = true }
 futures = "0.3"
 signal-hook = "0.3"
 libc = "0.2"

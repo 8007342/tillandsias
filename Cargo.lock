@@ -2003,6 +2003,7 @@ dependencies = [
 name = "tillandsias-headless"
 version = "0.1.260513"
 dependencies = [
+ "bytes",
  "chrono",
  "futures",
  "image",
@@ -2011,6 +2012,7 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "tempfile",
+ "tillandsias-control-wire",
  "tillandsias-core",
  "tillandsias-otp",
  "tillandsias-podman",
