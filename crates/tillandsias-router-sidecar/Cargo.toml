@@ -30,3 +30,4 @@ unix-only = []
 
 [dev-dependencies]
 tempfile = "3"
+tillandsias-podman = { workspace = true }
