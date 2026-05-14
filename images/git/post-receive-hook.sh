@@ -11,7 +11,7 @@
 #   - Windows/WSL : hook runs in the forge distro's process context against the
 #     bare mirror on /mnt/c/...; /var/log/tillandsias/ does NOT exist there.
 # We try the canonical log path first, fall back to a writable location, and
-# always echo to stderr so --diagnostics catches every line.
+# always echo to stderr so the runtime-diagnostics stream can capture it.
 
 # @trace spec:cross-platform, spec:runtime-diagnostics-stream
 LOG_CANDIDATES="/var/log/tillandsias/git-push.log $HOME/.cache/tillandsias/git-push.log /tmp/git-push.log"
@@ -31,7 +31,7 @@ log_msg() {
     if [ -n "$LOG_FILE" ]; then
         echo "$timestamp $1" >> "$LOG_FILE" 2>/dev/null
     fi
-    # Always to stderr so diagnostics streams pick it up.
+    # Always to stderr so runtime-diagnostics streams pick it up.
     echo "$1" >&2
     # Also stdout so the forge's `git push` shows it.
     echo "$1"

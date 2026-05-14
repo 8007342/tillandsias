@@ -9,6 +9,29 @@ active
 
 Structured logging system with compact formatting, accountability windows for sensitive operations, and spec traceability via `@trace` links.
 ## Requirements
+### Requirement: Logging is observational only
+The logging system SHALL not change business logic, control flow, or success criteria. Logging MAY be disabled, redirected, or fail independently of the operation it observes.
+
+#### Scenario: Sink failure does not alter outcomes
+- **WHEN** stderr is closed or a file sink is backpressured
+- **THEN** the underlying operation SHALL still complete according to its own result
+- **AND** logging failures SHALL remain observational, not gating
+
+### Requirement: Logging transport is non-blocking and failure-tolerant
+The logging system MUST use a non-blocking writer path for file output and MUST NOT make business operations depend on sink success.
+
+#### Scenario: Stderr closes during terminal launch
+- **WHEN** the application is launched from a terminal and stderr becomes a broken pipe
+- **THEN** the application MUST continue running
+- **AND** file logging MUST continue independently
+- **AND** the logging layer MUST silently degrade the broken stderr sink instead of aborting the operation
+
+#### Scenario: File writer is slow or backpressured
+- **WHEN** the file sink cannot flush immediately
+- **THEN** the underlying operation MUST still proceed according to its own result
+- **AND** the logging layer MAY buffer or drop excess events rather than stall the runtime
+- **AND** any buffering guard MUST stay alive until shutdown so buffered events can flush
+
 ### Requirement: Terminal log output when launched from CLI
 The application MUST output structured logs to stderr when launched from a terminal, using a custom compact format that separates accountability metadata from regular event fields.
 
@@ -87,6 +110,14 @@ Accountability tagging fields MUST NOT appear as inline key=value pairs in the l
 - **WHEN** an event has fields `accountability = true, category = "secrets", safety = "...", spec = "..."`
 - **THEN** none of these four fields MUST appear in the `{key=val}` suffix of the log line
 - **AND** any other fields (e.g., `container`, `error`) SHOULD appear in the suffix
+
+### Requirement: No PII in logs
+The logging system MUST NOT emit personally identifiable information unless a separate spec explicitly requires a redacted accountability window and the field is necessary for the contract.
+
+#### Scenario: PII is omitted or redacted
+- **WHEN** a log event would include a person's name, email address, phone number, or embedded account identifier
+- **THEN** the value MUST be omitted or redacted
+- **AND** the event MUST keep only the minimum information needed to diagnose the behavior
 
 ### Requirement: Proxy accountability window
 The system MUST provide a `--log-proxy` accountability flag that enables a curated view of proxy operations. Events MUST include domain, request size, allow/deny status, and cache hit/miss. No request content, credentials, or context parameters MUST appear in proxy logs. Each event MUST include a clickable `@trace spec:proxy-container` link.
@@ -181,11 +212,21 @@ Tillandsias MUST distinguish two log tiers per container: INTERNAL (existing per
 
 - `cheatsheets/runtime/logging-levels.md` — Logging Levels reference and patterns
 - `cheatsheets/runtime/external-logs.md` — External Logs reference and patterns
+- `cheatsheets/runtime/runtime-logging.md` — Runtime logging behavior, transport, and redaction rules
 
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
+- `litmus:runtime-logging-env-filter` — env filter setup and fallback initialization
+
+Current verification is indirect via sibling specs such as `logging-accountability`,
+`proxy-container`, `enclave-network`, and `ephemeral-guarantee`. That is enough to
+validate adjacent behavior, but it is not yet a direct runtime-logging contract.
+
+Unit and module tests SHOULD prefer captured or instrumented sinks over runtime
+container launches. Use mock appenders or subscriber capture when the claim is
+about formatting, redaction, or field presence; reserve live runtime tests for
+the actual container/network boundary.
 
 Gating points:
 - Runtime logs are ephemeral; logs don't persist beyond container lifetime

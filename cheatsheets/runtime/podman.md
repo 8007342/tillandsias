@@ -2,7 +2,7 @@
 tags: [podman, containers, images, runtime, cli]
 languages: [bash]
 since: 2026-05-06
-last_verified: 2026-05-06
+last_verified: 2026-05-12
 sources:
   - https://podman.io/docs
 authority: high
@@ -18,6 +18,12 @@ committed_for_project: false
 
 - **URL**: https://podman.io/docs
 - **Last updated**: 2026-04-29
+
+## Source-backed notes
+
+- Rootless Podman defaults to `${XDG_RUNTIME_DIR}/podman/podman.sock` for the service socket.
+- `podman --remote` can connect over Unix sockets, SSH, or TCP endpoints.
+- Rootless Podman stores temporary configuration data under `${XDG_RUNTIME_DIR}/containers`.
 
 ## Basic Commands
 
@@ -70,3 +76,5 @@ podman system df
 
 - `docs/cross-platform-builds.md` — Cross-platform build strategy
 - `openspec/specs/init-command/spec.md` — Init command specification
+- `test/podman-testing.md` — how to split Podman-related tests between fake subprocess checks and real runtime checks
+- `runtime/podman-service-testing.md` — how to test the Podman API / socket seam

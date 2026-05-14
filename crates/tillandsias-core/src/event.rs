@@ -68,8 +68,8 @@ pub enum MenuCommand {
         genus: TillandsiaGenus,
     },
 
-    /// Stop a per-project OpenCode Web container (and close all its webviews).
-    /// @trace spec:opencode-web-session, spec:tray-app
+    /// Stop a per-project OpenCode Web container (and close all its browser sessions).
+    /// @trace spec:browser-isolation-tray-integration, spec:tray-app
     StopProject { project_path: PathBuf },
 
     /// Destroy an environment (requires 5s hold confirmation)

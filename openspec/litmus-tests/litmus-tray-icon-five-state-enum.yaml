@@ -1,0 +1,27 @@
+# @trace spec:tray-icon-lifecycle
+name: litmus:tray-icon-five-state-enum
+spec: tray-icon-lifecycle
+phase: pre-build
+description: Verify the five tray icon lifecycle states exist and render valid PNGs
+severity: high
+
+preconditions:
+  - workspace contains crates/tillandsias-core
+  - cargo is available in PATH
+
+critical_path:
+  - step: "run the tray icon state coverage test"
+    command: "cargo test -p tillandsias-core all_five_tray_icon_states_valid -- --exact"
+    timeout_ms: 120000
+
+observability:
+  traces:
+    - "@trace spec:tray-icon-lifecycle"
+  expected_log: "All five tray icon states render valid PNGs"
+  log_fields:
+    spec: "tray-icon-lifecycle"
+    test: "tray-icon-five-state-enum"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-core/src/icons.rs for tray icon enum drift"
+  command: "sed -n '1,140p' crates/tillandsias-core/src/icons.rs"

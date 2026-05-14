@@ -50,7 +50,7 @@ while IFS= read -r line; do
             echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"content":[{"type":"text","text":'"$escaped"'}]}}'
             ;;
         "prompts/list")
-            # @trace spec:opencode-web-session
+            # @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
             # MCP spec: servers must respond to prompts/list even if they
             # declare no prompts capability. Without this, OpenCode waits 60s
             # for a reply, timing out the UI's /command endpoint and causing
@@ -67,7 +67,7 @@ while IFS= read -r line; do
             # Client acknowledgment - no response needed
             ;;
         *)
-            # @trace spec:opencode-web-session
+            # @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
             # Unknown method — respond with MCP's standard "method not found"
             # error instead of silently ignoring. Silence causes 60s timeouts
             # in the client and hangs the UI.

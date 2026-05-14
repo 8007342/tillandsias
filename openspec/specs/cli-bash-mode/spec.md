@@ -1,59 +1,21 @@
+<!-- @tombstone superseded:forge-welcome+forge-shell-tools+forge-standalone -->
 <!-- @trace spec:cli-bash-mode -->
-<!-- @tombstone deferred:linux-native-portable-executable — retired Tauri-era troubleshooting shell path. -->
 # cli-bash-mode Specification
 
 ## Status
 
-deferred
+status: obsolete
 
-## Purpose
-TBD - created by archiving change iconography-gh-auth-bash-mode. Update Purpose after archive.
-## Requirements
-### Requirement: Bash troubleshooting mode
-The CLI SHALL accept a `--bash` flag that overrides the container entrypoint with `/bin/bash` for troubleshooting.
+## Tombstone
 
-#### Scenario: Attach with bash
-- **WHEN** `tillandsias ../project/ --bash` is run
-- **THEN** a container SHALL start for the project with `/bin/bash` as the entrypoint instead of the default
+`cli-bash-mode` described the old bash-troubleshooting launch path. The live
+interactive shell experience now lives in `forge-welcome`, `forge-shell-tools`,
+and `forge-standalone`.
 
-#### Scenario: Bash mode with other flags
-- **WHEN** `tillandsias ../project/ --bash --debug` is run
-- **THEN** the container SHALL start with `/bin/bash` and debug output SHALL be shown
+Historical trace links are retained for archive consumers only.
 
-#### Scenario: Help includes bash flag
-- **WHEN** `tillandsias --help` is run
-- **THEN** the `--bash` flag SHALL be listed with a description like "Drop into bash shell for troubleshooting"
+## Superseded By
 
-### Requirement: --bash launches fish with welcome
-The `--bash` CLI flag SHALL launch fish (not bash) with the welcome message.
-
-#### Scenario: CLI bash mode shows welcome
-- **WHEN** `tillandsias ../project/ --bash` is run
-- **THEN** fish SHALL start with the welcome message, landing in the project directory
-
-#### Scenario: Host OS passed to container
-- **WHEN** the container starts
-- **THEN** the host OS info MUST be available via `TILLANDSIAS_HOST_OS` environment variable for the welcome script to display
-
-
-## Sources of Truth
-
-- `cheatsheets/languages/bash.md` — Bash reference and patterns
-- `cheatsheets/runtime/cmd.md` — Cmd reference and patterns
-
-## Litmus Tests
-
-Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
-
-Gating points:
-- Bash mode launches without persistence; environment and history are session-only
-- Deterministic and reproducible: test results do not depend on prior state
-- Falsifiable: failure modes (leaked state, persistence) are detectable
-
-## Observability
-
-Annotations referencing this spec can be found by:
-```bash
-grep -rn "@trace spec:cli-bash-mode" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
-```
+- `openspec/specs/forge-welcome/spec.md`
+- `openspec/specs/forge-shell-tools/spec.md`
+- `openspec/specs/forge-standalone/spec.md`

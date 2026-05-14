@@ -1,54 +1,114 @@
 #!/usr/bin/env bash
-# @trace spec:default-image, spec:user-runtime-lifecycle, spec:litmus-framework
-# Quick-start litmus test: rebuild forge image using prod code path.
+# @trace spec:default-image, spec:user-runtime-lifecycle, spec:litmus-framework, spec:forge-standalone
+# Quick-start litmus test: rebuild forge image using the direct image builder.
 #
-# Host-level orchestrator: separates dev environment (cargo/toolbox) from
-# user runtime (podman on host).
+# Host-level orchestrator: keeps the user runtime path separate from any
+# development toolchain wrapper and delegates to the source-of-truth image
+# builder directly.
 #
 # Usage:
-#   ./build-forge.sh              # Rebuild forge image (test mode)
-#   ./build-forge.sh --assert     # Rebuild + assert exact podman calls
+#   ./build-forge.sh              # Rebuild forge image
+#   ./build-forge.sh --assert     # Rebuild + assert a forge image exists
+#   ./build-forge.sh --force      # Force rebuild even if sources are fresh
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$SCRIPT_DIR"
-TOOLBOX_NAME="$(basename "$ROOT")"
-TMP_BUILD_LOG="/tmp/build-forge.log"
 
 # Colors
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
+YELLOW='\033[0;33m'
 RED='\033[0;31m'
 BOLD='\033[1m'
 NC='\033[0m'
 
 _info()  { echo -e "${GREEN}[build-forge]${NC} $*"; }
 _step()  { echo -e "${CYAN}[build-forge]${NC} $*"; }
+_warn()  { echo -e "${YELLOW}[build-forge]${NC} $*"; }
 _error() { echo -e "${RED}[build-forge]${NC} $*" >&2; }
 
-trap '_error "Interrupted"; exit 130' SIGTERM SIGINT
+FLAG_ASSERT=false
+FLAG_FORCE=false
+FLAG_TAG=""
 
-_step "Building forge image (host-level orchestrator)..."
+usage() {
+    cat <<'EOF'
+Usage: ./build-forge.sh [--assert] [--force] [--tag <tag>]
 
-# Step 1: Run cargo inside dev environment (toolbox)
-_step "Preparing image metadata via cargo..."
-if ! toolbox -c "$TOOLBOX_NAME" run cargo run --bin build-image -- forge "$@" 2>&1 | tee "$TMP_BUILD_LOG"; then
-    _error "Cargo prepare failed"
-    tail -20 "$TMP_BUILD_LOG" >&2
+Rebuild the forge image by delegating to scripts/build-image.sh forge.
+
+Flags:
+  --assert        Verify a forge image tag exists after the build
+  --force         Force a rebuild even when the source hash matches
+  --tag <tag>     Override the canonical image tag
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --assert)
+            FLAG_ASSERT=true
+            ;;
+        --force)
+            FLAG_FORCE=true
+            ;;
+        --tag)
+            shift
+            FLAG_TAG="${1:-}"
+            ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        *)
+            _error "Unknown argument: $1"
+            usage >&2
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+build_args=(forge)
+if [[ "$FLAG_FORCE" == true ]]; then
+    build_args+=(--force)
+fi
+if [[ -n "$FLAG_TAG" ]]; then
+    build_args+=(--tag "$FLAG_TAG")
+fi
+
+if [[ -z "${TILLANDSIAS_PODMAN_REMOTE_URL:-}" ]]; then
+    runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    remote_socket="$runtime_dir/podman/podman.sock"
+    if [[ -S "$remote_socket" ]]; then
+        if podman --remote --url "unix://$remote_socket" info >/dev/null 2>&1; then
+            export TILLANDSIAS_PODMAN_REMOTE_URL="unix://$remote_socket"
+            _step "Using Podman remote socket: $TILLANDSIAS_PODMAN_REMOTE_URL"
+        else
+            _warn "Podman socket exists but is not reachable from this session; falling back to local Podman"
+        fi
+    fi
+fi
+
+_step "Building forge image via scripts/build-image.sh forge..."
+if ! "$ROOT/scripts/build-image.sh" "${build_args[@]}"; then
+    _error "Forge image build failed"
     exit 1
 fi
 
-# Step 2: Check if ImageBuilder is integrated
-if grep -q "ImageBuilder trait not yet integrated" "$TMP_BUILD_LOG"; then
-    _step "ImageBuilder not integrated; using direct podman build (host)..."
-    "$ROOT/scripts/build-image.sh" forge || exit 1
-else
-    _step "ImageBuilder integrated; executing via PodmanExecutor..."
+if [[ "$FLAG_ASSERT" == true ]]; then
+    _step "Asserting forge image exists after build..."
+    if ! podman images --format '{{.Repository}}:{{.Tag}}' | grep -Eq '^(localhost/)?tillandsias-forge:'; then
+        _error "Forge image assertion failed"
+        exit 1
+    fi
 fi
 
 _info "Forge image rebuilt successfully"
-_info "Current image: $(podman images | grep tillandsias-forge | head -1 | awk '{print $3}')"
+_info "Current forge image tags:"
+podman images --format '{{.Repository}}:{{.Tag}} {{.ID}}' | grep -E '^(localhost/)?tillandsias-forge:' | head -n 5 || true
 _info "Next step: restart tillandsias binary or containers to pick up new image"
 
 exit 0

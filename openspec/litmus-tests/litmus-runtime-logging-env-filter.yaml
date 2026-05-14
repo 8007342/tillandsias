@@ -1,0 +1,27 @@
+# @trace spec:runtime-logging
+name: litmus:runtime-logging-env-filter
+spec: runtime-logging
+phase: pre-build
+description: Verify runtime logging respects TILLANDSIAS_LOG and defaults to info filtering
+severity: medium
+
+preconditions:
+  - workspace contains crates/tillandsias-router-sidecar
+  - cargo is available in PATH
+
+critical_path:
+  - step: "verify the logging init code uses the TILLANDSIAS_LOG env filter"
+    command: "grep -F 'EnvFilter::try_from_env(\"TILLANDSIAS_LOG\")' crates/tillandsias-router-sidecar/src/main.rs && grep -F 'EnvFilter::new(\"info\")' crates/tillandsias-router-sidecar/src/main.rs"
+    timeout_ms: 5000
+
+observability:
+  traces:
+    - "@trace spec:runtime-logging"
+  expected_log: "Runtime logging initializes from TILLANDSIAS_LOG with info fallback"
+  log_fields:
+    spec: "runtime-logging"
+    test: "runtime-logging-env-filter"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-router-sidecar/src/main.rs for logging init drift"
+  command: "sed -n '242,252p' crates/tillandsias-router-sidecar/src/main.rs"

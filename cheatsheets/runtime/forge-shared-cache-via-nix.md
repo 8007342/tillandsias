@@ -6,7 +6,6 @@ last_verified: 2026-04-27
 sources:
   - https://nixos.org/manual/nix/stable/store/
   - https://nix.dev/concepts/nix-language
-  - https://github.com/8007342/tillandsias/blob/main/openspec/changes/forge-cache-architecture/proposal.md
 authority: high
 status: current
 
@@ -20,14 +19,13 @@ pull_recipe: see-section-pull-on-demand
 
 # Forge shared cache via nix (the only shared-write surface)
 
-@trace spec:forge-cache-architecture, spec:forge-cache-dual
+@trace spec:forge-cache-dual
 @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md, build/nix-flake-basics.md
 
 ## Provenance
 
 - Official Nix manual, "Nix store": <https://nixos.org/manual/nix/stable/store/> — the canonical reference for content-addressed storage
 - nix.dev, "The Nix language": <https://nix.dev/concepts/nix-language> — concept page
-- Tillandsias OpenSpec change `forge-cache-architecture`: <https://github.com/8007342/tillandsias/blob/main/openspec/changes/forge-cache-architecture/proposal.md>
 - **Last updated:** 2026-04-25
 
 ## Use when

@@ -1,0 +1,30 @@
+# @trace spec:tray-minimal-ux
+name: litmus:tray-minimal-ux-contract-shape
+spec: tray-minimal-ux
+phase: pre-build
+description: Verify the tray minimal UX code shape exposes Seedlings and tombstoned launch/cleanup boundaries
+severity: medium
+
+preconditions:
+  - repo checkout contains the tray module, tray spec, and trace file
+
+critical_path:
+  - step: "confirm tray spec traces and menu contract names"
+    command: "grep -F '@trace spec:tray-minimal-ux' openspec/specs/tray-minimal-ux/spec.md openspec/specs/tray-minimal-ux/TRACES.md crates/tillandsias-headless/src/tray/mod.rs && grep -F 'Seedlings' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'Attach Here' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'Maintenance' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'Stop' crates/tillandsias-headless/src/tray/mod.rs"
+    timeout_ms: 5000
+
+  - step: "confirm tray spec tombstones launch and cleanup ownership"
+    command: "grep -F 'MUST_NOT' openspec/specs/tray-minimal-ux/spec.md && grep -F 'browser-isolation-tray-integration' openspec/specs/tray-minimal-ux/spec.md && grep -F 'tray/runtime lifecycle' openspec/specs/tray-minimal-ux/spec.md"
+    timeout_ms: 5000
+
+observability:
+  traces:
+    - "@trace spec:tray-minimal-ux"
+  expected_log: "Tray minimal UX uses Seedlings plus per-project submenus and tombstones browser/cleanup ownership"
+  log_fields:
+    spec: "tray-minimal-ux"
+    test: "tray-minimal-ux-contract-shape"
+
+rollback:
+  on_failure: "inspect the tray spec, trace file, and tray module for stale Home/Cloud/login or launch/cleanup ownership"
+  command: "grep -n 'Seedlings\\|Attach Here\\|Maintenance\\|Stop\\|browser-isolation-tray-integration\\|tray/runtime lifecycle' openspec/specs/tray-minimal-ux/spec.md openspec/specs/tray-minimal-ux/TRACES.md crates/tillandsias-headless/src/tray/mod.rs"

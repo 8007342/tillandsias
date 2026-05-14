@@ -84,8 +84,8 @@ the project label SHOULD show status emojis (🔧 for maintenance, 🌸 for forg
 #### Scenario: Click OpenCode Web action
 - **WHEN** user clicks 🌐 OpenCode Web button
 - **THEN** an OpenCode Web container MUST be launched for the project
-- **AND** once healthy, a safe browser window MUST open via `tillandsias-chromium-core` container
-- **AND** the browser MUST communicate with OpenCode Web via the project's enclave network
+- **AND** once healthy, a safe browser window MUST open via the browser isolation launcher
+- **AND** the browser MUST communicate with OpenCode Web through the project-local host route
 
 #### Scenario: Click Claude action
 - **WHEN** user clicks 👽 Claude button
@@ -105,7 +105,7 @@ the project label SHOULD show status emojis (🔧 for maintenance, 🌸 for forg
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee` — menu composition at each lifecycle stage, container action launch and cleanup
+- `litmus:tray-menu-lifecycle` — menu composition at each lifecycle stage, container action launch and failure collapse
 
 Gating points:
 - Tray starts with exactly 4 menu items (status, divider, version, quit)

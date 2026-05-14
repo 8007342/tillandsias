@@ -17,7 +17,7 @@ committed_for_project: false
 
 @trace spec:user-runtime-lifecycle
 
-**Use when**: Understanding how Tillandsias images are built (Containerfile, Nix flakes, and embedded in AppImage), and how sources make their way from development to deployed binaries.
+**Use when**: Understanding how Tillandsias images are built from Containerfiles, direct podman builds, and embedded release assets, and how sources make their way from development to deployed binaries.
 
 ## Provenance
 
@@ -47,15 +47,13 @@ build.sh:
     8. Runs: scripts/build-image.sh chromium-core
     9. Runs: scripts/build-image.sh chromium-framework
     ↓
-scripts/build-image.sh logic:
+    scripts/build-image.sh logic:
     1. Check: Does image already exist? Have sources changed?
-    2. If unchanged → skip (layer cache wins)
+    2. If unchanged → skip (content hash wins)
     3. If changed → rebuild:
-       a. Read flake.nix and flake.lock (Nix definitions)
-       b. Run: nix build .#images.proxy (or .git, .forge, etc.)
-       c. Result: OCI tarball (e.g., proxy-v0.1.37.25.tar.gz)
-       d. Load into podman: podman load < proxy-v0.1.37.25.tar.gz
-       e. Tag: tillandsias-proxy:v0.1.37.25
+       a. Hash the image source tree under images/<name>/
+       b. Run: podman build -f images/proxy/Containerfile (or equivalent)
+       c. Tag: tillandsias-proxy:v0.1.37.25
     ↓
 Images stored in: Toolbox's podman storage
     ~/.local/share/containers/ (inside toolbox namespace)
@@ -78,20 +76,17 @@ GitHub Actions triggers (manual workflow_dispatch):
     ↓
 Actions setup:
     1. Install podman
-    2. Install nix
-    3. Checkout repo (sources available)
-    4. Run: scripts/build-image.sh proxy git forge inference chromium-core chromium-framework
-    5. Run: cargo build --release --target x86_64-unknown-linux-gnu
+    2. Checkout repo (sources available)
+    3. Run: scripts/build-image.sh proxy git forge inference chromium-core chromium-framework
+    4. Run: cargo build --release --target x86_64-unknown-linux-gnu
     ↓
 Build output:
-    1. OCI tarballs for all images (proxy, git, forge, etc.)
+    1. Built local images for all services (proxy, git, forge, etc.)
     2. Release binary (Linux AppImage)
     ↓
 Bundling (Tauri AppImage build):
-    1. Extract OCI tarballs
-    2. Embed in AppImage:
-       AppImage = [binary] + [OCI tarballs] + [Containerfiles] + [nix defs]
-    3. Create: Tillandsias-v0.1.37.25.AppImage (~500MB-1GB, depending on embedded images)
+    1. Embed the binary plus any runtime assets required by the release artifact
+    2. Create: Tillandsias-v0.1.37.25.AppImage (~500MB-1GB, depending on embedded images)
     ↓
 Artifact published: GitHub Releases (AppImage available for download)
     ↓
@@ -155,26 +150,23 @@ Package cache staleness:
     Cache growth: Packages accumulate; user can clean with staleness metrics
 ```
 
-## Developer Build System (Nix) — Not User Runtime
+## Developer Build System - Direct Podman, Not Nix
 
-**IMPORTANT**: Nix is used ONLY in Developer Runtime (toolbox) and Cloud Runtime (CI) to build images and validate Containerfiles. User Runtime uses only `podman build` with embedded Containerfiles.
+**IMPORTANT**: `scripts/build-image.sh` uses direct `podman build` with embedded Containerfiles. The build is source-hash based and does not require Nix.
 
-### Developer Build with Nix
+### Developer Build with Podman
 ```bash
-# Developer toolbox only (NOT user runtime):
+# Developer toolbox / checkout flow:
 
 scripts/build-image.sh proxy
 # Internally:
-#   1. nix build .#images.proxy
-#   2. podman load < result/
+#   1. Hash the files under images/proxy/
+#   2. Run podman build -f images/proxy/Containerfile
 #   3. Tag: tillandsias-proxy:v0.1.37.25
-
-# User runtime does NOT invoke Nix:
-#   podman build -f images/proxy/Containerfile -t tillandsias-proxy:v0.1.37.25 .
 ```
 
-### Why Nix for Developer, Not User Runtime
-- **Developer/CI**: Nix provides reproducible builds, bit-identical images from flake.lock
+### Why Podman Here
+- **Developer/CI**: Direct podman build matches the user-facing build path and keeps the source of truth in Containerfiles
 - **User Runtime**: Only podman + Containerfiles; zero external dependencies beyond podman
 - **Distribution**: Binary contains Containerfiles (durable) and sources, not Nix definitions or OCI tarballs
 
@@ -205,17 +197,17 @@ podman build -f images/proxy/Containerfile \
   -t tillandsias-proxy:v0.1.37.25 .
 ```
 
-### Containerfile Model (User Runtime) vs Nix Model (Developer Only)
+### Containerfile Model vs Historical Nix Notes
 
-| Aspect | Containerfile (User Runtime) | Nix (Developer Runtime) |
+| Aspect | Containerfile build path | Historical Nix path |
 |--------|-----|-----|
-| **Scope** | User first-launch, binary updates, binary contains them | Developer builds, CI validation, not shipped to users |
-| **Dependency** | Only podman (already on user's system) | Requires Nix (developer-only, in toolbox) |
-| **Portability** | Universal; runs on any podman setup | Developer/CI-only; not for user distribution |
-| **User Experience** | Transparent: `podman build`, cached locally | Not exposed to users |
-| **Reproducibility** | Base image tag can drift; not bit-identical | Locked by flake.lock; bit-identical across machines |
+| **Scope** | User first-launch, binary updates, binary contains them | Archived idea, not the live build path |
+| **Dependency** | Only podman (already on user's system) | Would require Nix, but that is not how the current script builds |
+| **Portability** | Universal; runs on any podman setup | Not part of the current runtime contract |
+| **User Experience** | Transparent: `podman build`, cached locally | Not exposed in the live path |
+| **Reproducibility** | Content-hash based source set plus pinned Containerfile base images | Locked by flake.lock, but not used here |
 
-**Correctness Rule**: User Runtime ONLY uses Containerfiles (not Nix). If Nix appears in User Runtime code path, it's a bug.
+**Correctness Rule**: The live build path uses direct `podman build` against Containerfiles. If a doc or script says `nix build` is required for `scripts/build-image.sh`, that claim is stale.
 
 ## AppImage Embedding Strategy
 
@@ -238,7 +230,7 @@ On first launch:
 Startup time: ~30 seconds (IO-bound, extracting tarballs)
 ```
 
-### Option 2: Embed Containerfiles + Nix Definitions (Flexible)
+### Option 2: Embed Containerfiles + Additional Source Files (Flexible)
 ```
 AppImage contents:
 ├── Tauri binary (20-50 MB)
@@ -247,15 +239,13 @@ AppImage contents:
 │   ├── images/git/Containerfile
 │   ├── images/forge/Containerfile
 │   └── ...
-├── flake.nix
-├── flake.lock
 ├── scripts/build-image.sh
 └── Total AppImage: 50-100 MB
 
 On first launch:
   for image in proxy git forge:
-    nix build .#images.$image
-    podman load < result-$image/
+    podman build -f images/$image/Containerfile
+    podman tag <content-hash> tillandsias-$image:vX
   
 Startup time: ~3-10 minutes (building from sources)
 ```
@@ -285,33 +275,29 @@ Startup time: ~30 seconds to ready (proxy + forge), inference loads in backgroun
 
 ## Source Staleness in Development
 
-### Git Add Requirement (Nix Builds Only Source Files in git)
+### Working Tree Requirement
 
-**IMPORTANT**: `scripts/build-image.sh` uses `nix build`, which only includes files that are staged in git.
+**IMPORTANT**: `scripts/build-image.sh` hashes the image source files from the working tree under `images/<name>/`. It does not read the git index.
 
 ```bash
 # Developer edits images/forge/entrypoint.sh
-# But forgets to: git add images/forge/entrypoint.sh
 
 # Next rebuild:
 scripts/build-image.sh forge
   ↓
-nix build .#images.forge
+hash images/forge/
   ↓
-Nix only sees committed sources!
+podman build uses the extracted image sources
   ↓
-Result: Old entrypoint.sh is used, changes silently dropped!
-  ↓
-Solution: git add before building
+Result: the local file change is picked up on the next build
 ```
 
 ### Verify Sources Included
 ```bash
-# Show what files nix sees:
-git ls-files | grep images/
+# Show the current image source files on disk:
+find images/forge -type f
 
-# Rebuild after staging:
-git add images/
+# Rebuild after editing files in the working tree:
 scripts/build-image.sh forge --force
 ```
 

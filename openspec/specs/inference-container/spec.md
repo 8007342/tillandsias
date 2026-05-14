@@ -132,10 +132,12 @@ above.
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:enclave-isolation` — Verify inference container is enclave-only with no external network access
+- `litmus:inference-readiness-probe-shape` — Verify the stack uses container health plus a forge-side `/api/version` probe
 
 Gating points:
 - Container named `tillandsias-inference` starts from `tillandsias-inference` image
 - Container attaches to `tillandsias-enclave` network only; no default bridge access
+- Container exposes the friendly alias `inference` on the enclave network
 - ollama listens on `http://127.0.0.1:11434` (localhost only, not accessible from forge)
 - Forge containers reach ollama via proxy at `http://ollama-proxy:3128` with `OLLAMA_HOST=http://inference:11434`
 - GPU tier detection runs on startup and logs `tier=<none|low|mid|high|ultra>`

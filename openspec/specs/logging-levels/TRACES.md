@@ -5,8 +5,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [src-tauri/src/accountability.rs#L7](../../../src-tauri/src/accountability.rs#L7)
-- [src-tauri/src/embedded.rs#L212](../../../src-tauri/src/embedded.rs#L212)
-- [src-tauri/src/embedded.rs#L229](../../../src-tauri/src/embedded.rs#L229)
-- [src-tauri/src/embedded.rs#L603](../../../src-tauri/src/embedded.rs#L603)
-- [src-tauri/src/embedded.rs#L662](../../../src-tauri/src/embedded.rs#L662)
+- [crates/tillandsias-core/src/config.rs#L1](../../../crates/tillandsias-core/src/config.rs#L1)
+- [crates/tillandsias-headless/src/tray/mod.rs#L1](../../../crates/tillandsias-headless/src/tray/mod.rs#L1)

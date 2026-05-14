@@ -2,69 +2,34 @@ name: litmus:token-file-cleanup
 spec: secrets-management
 description: Verify token files cleaned on container exit, no secrets left on disk
 severity: critical
+phase: retired
+status: retired
 
 preconditions:
-  - tillandsias tray running
-  - git-service container launched
-  - /tmp/tillandsias-tokens/ directory does not exist initially
+  - retired contract retained for traceability only
 
 critical_path:
-  - step: "baseline: verify no token files exist"
-    command: "find /tmp -maxdepth 1 -type d -name 'tillandsias-tokens' 2>/dev/null | wc -l"
-    timeout_ms: 3000
-    expected_behavior: "0 directories"
-
-  - step: "launch git-service container with token mount"
-    command: "podman ps | grep tillandsias-git"
-    timeout_ms: 5000
-    expected_behavior: "git-service container listed"
-
-  - step: "verify token directory exists in git-service"
-    command: "podman exec tillandsias-git-* find /tmp -maxdepth 1 -type d -name 'tillandsias-tokens' 2>/dev/null | wc -l"
-    timeout_ms: 3000
-    expected_behavior: "1 directory found"
-
-  - step: "verify token files are present"
-    command: "podman exec tillandsias-git-* find /tmp/tillandsias-tokens -type f 2>/dev/null | wc -l"
-    timeout_ms: 3000
-    expected_behavior: "1 or more token files"
-
-  - step: "verify token files are readable"
-    command: "podman exec tillandsias-git-* stat -c '%A %s' /tmp/tillandsias-tokens/* 2>/dev/null | head -1"
-    timeout_ms: 3000
-    expected_behavior: "readable file with size > 0"
-
-  - step: "stop git-service container"
-    command: "podman stop tillandsias-git-* 2>/dev/null && sleep 2 && echo STOP_COMPLETE"
-    timeout_ms: 8000
-    expected_behavior: "container stops gracefully"
-
-  - step: "verify token files deleted after container stop"
-    command: "find /tmp/tillandsias-tokens -type f 2>/dev/null | wc -l || echo DIRECTORY_NOT_FOUND"
-    timeout_ms: 3000
-    expected_behavior: "DIRECTORY_NOT_FOUND or 0 files"
+  - step: "retired"
+    command: "true"
+    timeout_ms: 1000
+    expected_behavior: "no active validation"
 
 gating_points:
-  - signal: "token files cleaned on container exit"
-    success: "no token files remaining OR directory deleted"
-    failure: "token files still on disk"
-    spec_linkage: "secrets-management"
-
-  - signal: "no secrets persistence on disk"
-    success: "/tmp/tillandsias-tokens fully cleaned"
-    failure: "sensitive data left behind"
+  - signal: "retired token-file contract"
+    success: "retained only for traceability"
+    failure: "old token-file cleanup path still counted as active coverage"
 
 observability:
   traces:
     - "@trace spec:secrets-management"
-    - "@trace spec:ephemeral-guarantee"
-  expected_log: "Token files cleaned on git-service shutdown"
+    - "@trace spec:podman-secrets-integration"
+  expected_log: "Token-file cleanup contract retired"
   log_fields:
     spec: "secrets-management"
     test: "token-file-cleanup"
     resource_type: "credentials"
-    cleanup_status: "success"
+    cleanup_status: "retired"
 
 rollback:
-  on_failure: "securely delete any remaining token files"
-  command: "shred -vfz -n 10 /tmp/tillandsias-tokens/* 2>/dev/null; rm -rf /tmp/tillandsias-tokens 2>/dev/null; podman restart tillandsias-git-* 2>/dev/null || true"
+  on_failure: "no-op; retained only for traceability"
+  command: "true"

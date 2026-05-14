@@ -1,0 +1,40 @@
+# @trace spec:tray-app
+name: litmus:first-launch-feedback
+spec: tray-app
+phase: pre-build
+description: Verify first-launch readiness feedback and unhealthy failure collapse in the tray menu
+severity: high
+
+preconditions:
+  - workspace contains crates/tillandsias-headless
+  - cargo is available in PATH
+
+critical_path:
+  - step: "run the cold-start tray menu test"
+    command: "cargo test -p tillandsias-headless --features tray tray::tests::minimal_menu_has_exactly_4_items_at_launch -- --exact"
+    timeout_ms: 120000
+
+  - step: "run the enclave status text test"
+    command: "cargo test -p tillandsias-headless --features tray tray::tests::status_text_reflects_enclave_status -- --exact"
+    timeout_ms: 120000
+
+  - step: "run the tray state transition test"
+    command: "cargo test -p tillandsias-headless --features tray tray::tests::state_transition_forge_false_to_true -- --exact"
+    timeout_ms: 120000
+
+  - step: "run the unhealthy failure collapse test"
+    command: "cargo test -p tillandsias-headless --features tray tray::tests::failed_state_collapses_dynamic_region -- --exact"
+    timeout_ms: 120000
+
+observability:
+  traces:
+    - "@trace spec:tray-app"
+    - "@trace spec:tray-progress-and-icon-states"
+  expected_log: "Tray shows the cold-start four-item menu, updates status text, and collapses on failure"
+  log_fields:
+    spec: "tray-app"
+    test: "first-launch-feedback"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-headless/src/tray/mod.rs for stale menu expansion or failure-collapse drift"
+  command: "sed -n '1360,1565p' crates/tillandsias-headless/src/tray/mod.rs"

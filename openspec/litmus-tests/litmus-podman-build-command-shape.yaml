@@ -1,0 +1,36 @@
+# @trace spec:podman-orchestration
+name: litmus:podman-build-command-shape
+spec: podman-orchestration
+phase: pre-build
+description: Verify build-image emits the expected podman command shape without requiring real containers
+severity: medium
+
+preconditions:
+  - build-image.sh script available and executable
+  - VERSION file exists at project root
+
+critical_path:
+  - step: "assert build-image uses a direct podman build invocation"
+    command: "grep -F 'build --no-cache --format docker --tag' scripts/build-image.sh && grep -F 'podman build' scripts/build-image.sh"
+    timeout_ms: 30000
+
+  - step: "assert image existence probe happens before the build"
+    command: "grep -F 'image exists' scripts/build-image.sh"
+    timeout_ms: 2000
+
+  - step: "assert human aliases are refreshed after build"
+    command: "grep -F 'podman tag' scripts/build-image.sh && grep -F 'podman rmi' scripts/build-image.sh"
+    timeout_ms: 2000
+
+observability:
+  traces:
+    - "@trace spec:podman-orchestration"
+  expected_log: "[litmus] fake podman backend recorded build-image command shape"
+  log_fields:
+    spec: "podman-orchestration"
+    test: "podman-build-command-shape"
+    backend: "fake"
+
+rollback:
+  on_failure: "verify scripts/run-litmus-test.sh prepends the wrapper directory to PATH and fake mode switches to scripts/test-support/podman-mock.sh"
+  command: "grep -n 'LITMUS_PODMAN_MODE\\|PATH=\\\"\\$LITMUS_RUNTIME_DIR/bin:\\$PATH\\\"\\|podman-mock' scripts/run-litmus-test.sh scripts/test-support/podman-mock.sh"

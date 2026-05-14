@@ -7,7 +7,7 @@ status: active
 
 ## Purpose
 
-Per-project bare mirror repositories with git daemon serving clones over the enclave network. Post-receive hooks auto-push to remote. D-Bus forwarding provides host keyring access for credentials.
+Per-project bare mirror repositories with git daemon serving clones over the enclave network. Post-receive hooks auto-push to remote. GitHub credentials arrive only as an ephemeral host-side token file mounted read-only into the git service container.
 ## Requirements
 ### Requirement: Bare mirror repository management
 The system SHALL create and maintain a bare mirror repository for each project at `~/.cache/tillandsias/mirrors/<project>/`. The mirror SHALL be initialized from the project directory on first launch and updated from remote (if configured) on subsequent launches.
@@ -75,21 +75,31 @@ The bare mirror SHALL contain a `post-receive` hook that automatically pushes to
 - **AND** the commits SHALL remain safe in the local mirror
 - **AND** the user can refresh credentials via "GitHub Login" in the tray
 
-### Requirement: D-Bus forwarding for host keyring access
-The git service container SHALL have the host's D-Bus session bus socket forwarded so that `gh` CLI can access the host OS keyring for GitHub credentials. Credentials SHALL never be written to disk inside the container.
+### Requirement: GitHub token delivery via host-side secret pipeline
+The git service container SHALL receive GitHub credentials only as a read-only
+`/run/secrets/github_token` bind mount materialized by the host secrets
+pipeline. The container SHALL use `GIT_ASKPASS=/usr/local/bin/git-askpass-tillandsias.sh`
+for HTTPS pushes to `origin`. No D-Bus socket, keyring API, or other credential
+artifact SHALL cross the enclave boundary.
 
-@trace spec:git-mirror-service, spec:secrets-management
+@trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
 
-#### Scenario: gh auth uses host keyring
-- **WHEN** the git service container runs `gh auth token`
-- **THEN** it SHALL retrieve the token from the host OS keyring via D-Bus
-- **AND** no token SHALL be written to any file inside the container
+#### Scenario: Token file mount on launch
+- **WHEN** the git service container is launched and the host keyring contains a GitHub token
+- **THEN** the host SHALL materialize the token file before `build_podman_args`
+- **AND** the container SHALL receive `-v <path>:/run/secrets/github_token:ro`
+- **AND** the container SHALL set `GIT_ASKPASS=/usr/local/bin/git-askpass-tillandsias.sh`
 
-#### Scenario: D-Bus unavailable
-- **WHEN** the D-Bus session bus is not available (headless/SSH)
-- **THEN** the git service container SHALL start without credential access
-- **AND** remote push operations SHALL fail with an authentication error until the user re-authenticates via "GitHub Login" in an environment with a reachable keyring
-- **AND** the system SHALL log a warning via `--log-git`
+#### Scenario: No token means no credential mount
+- **WHEN** the host keyring has no GitHub token
+- **THEN** the git service container SHALL start without a token mount
+- **AND** authenticated pushes SHALL fail loudly until the user re-authenticates via "GitHub Login"
+
+#### Scenario: Askpass reads the mounted token file
+- **WHEN** the git service's post-receive hook pushes to an HTTPS origin
+- **THEN** `git` SHALL invoke the askpass helper
+- **AND** the helper SHALL print `x-access-token` for the username prompt
+- **AND** the helper SHALL print the contents of `/run/secrets/github_token` for the password prompt
 
 ### Requirement: Git service container lifecycle
 The git service container SHALL be started per-project when the first forge container launches and stopped when all forge containers for that project stop. The container name SHALL be `tillandsias-git-<project>`.

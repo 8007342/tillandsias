@@ -22,9 +22,6 @@ RUN useradd -u 1000 -m chromium
 RUN mkdir -p /home/chromium/.cache /home/chromium/.config
 RUN chown chromium:chromium /home/chromium/.cache /home/chromium/.config
 
-# Directory for shared memory (will be mounted as tmpfs at runtime)
-RUN mkdir -p /dev/shm && chmod 1777 /dev/shm
-
 # Directory for telemetry logs (external-logs.yaml to follow)
 RUN mkdir -p /etc/tillandsias
 RUN mkdir -p /strategic

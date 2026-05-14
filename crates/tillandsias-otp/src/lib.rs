@@ -20,6 +20,7 @@ use std::time::{Duration, Instant};
 
 use rand::TryRngCore;
 use rand::rngs::OsRng;
+use base64::Engine;
 use subtle::ConstantTimeEq;
 use tracing::{debug, info};
 use zeroize::Zeroize;
@@ -336,6 +337,49 @@ pub fn format_set_cookie_header(token: &[u8; COOKIE_LEN], host: &str) -> String 
     )
 }
 
+/// Build the canonical OpenCode Web OTP login HTML for a project URL.
+///
+/// The form auto-submits to `/_auth/login` with the provided OTP value in a
+/// hidden field. The returned HTML is plain text; callers wrap it in a
+/// `data:text/html;base64,...` URL before launching Chromium.
+///
+/// @trace spec:opencode-web-session-otp
+pub fn build_login_form_html(project_url: &str, otp_value: &str) -> String {
+    let action = format!("{}/_auth/login", project_url.trim_end_matches('/'));
+    format!(
+        r#"<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="refresh" content="0;url={action}">
+  </head>
+  <body>
+    <form id="login" method="post" action="{action}">
+      <input type="hidden" name="otp" value="{otp_value}">
+      <noscript><button type="submit">Continue</button></noscript>
+    </form>
+    <script>
+      document.getElementById('login').submit();
+    </script>
+  </body>
+</html>
+"#
+    )
+}
+
+/// Build the Chromium `data:` URL for the OpenCode Web OTP login flow.
+///
+/// The HTML form is base64-encoded so Chromium can launch directly into the
+/// auto-submit document without persisting a temporary file.
+///
+/// @trace spec:opencode-web-session-otp
+pub fn build_login_data_url(project_url: &str, otp_token: &[u8; COOKIE_LEN]) -> String {
+    let otp_value = format_cookie_value(otp_token);
+    let html = build_login_form_html(project_url, &otp_value);
+    let encoded = base64::engine::general_purpose::STANDARD.encode(html.as_bytes());
+    format!("data:text/html;base64,{encoded}")
+}
+
 /// Spawn a background task that evicts expired pending sessions every 1 s.
 /// Returns the [`tokio::task::JoinHandle`] so callers can keep it alive.
 ///
@@ -490,6 +534,36 @@ mod tests {
         assert!(h.contains("Max-Age=86400"), "missing Max-Age=86400: {h}");
         assert!(!h.contains("Secure"), "must NOT contain Secure: {h}");
         assert!(!h.contains("Domain="), "must NOT contain Domain=: {h}");
+    }
+
+    #[test]
+    fn login_form_html_targets_auth_endpoint_and_posts_otp() {
+        let html = build_login_form_html(
+            "http://opencode.demo.localhost:8080",
+            "abc123_OTP",
+        );
+
+        assert!(html.contains("method=\"post\""));
+        assert!(html.contains("action=\"http://opencode.demo.localhost:8080/_auth/login\""));
+        assert!(html.contains("name=\"otp\" value=\"abc123_OTP\""));
+        assert!(html.contains("document.getElementById('login').submit();"));
+    }
+
+    #[test]
+    fn login_data_url_wraps_base64_encoded_html() {
+        let token = [7u8; COOKIE_LEN];
+        let data_url = build_login_data_url("http://opencode.demo.localhost:8080", &token);
+
+        assert!(data_url.starts_with("data:text/html;base64,"));
+        let encoded = data_url
+            .strip_prefix("data:text/html;base64,")
+            .expect("data url prefix");
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .expect("decode html");
+        let html = String::from_utf8(decoded).expect("utf8");
+        assert!(html.contains("http://opencode.demo.localhost:8080/_auth/login"));
+        assert!(html.contains(&format_cookie_value(&token)));
     }
 
     #[test]

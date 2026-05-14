@@ -101,6 +101,34 @@ verification:
       - upward_pressure_on_failure
       - downward_pressure_on_stability
 
+  cheatsheet_intent_audit:
+    description: >
+      Cheatsheets are the operational memory of intent. They should record both
+      recommended implementation idioms and anti-patterns observed in upstream
+      APIs, docs, or runtime behavior.
+    required_content:
+      good_centipawns:
+        - "stable variable names that match spec terminology"
+        - "command shapes and flag combinations that are known-good"
+        - "narrow, explicit API usage with verified signatures"
+        - "short-circuit boundaries and entry-gate checks"
+      bad_centipawns:
+        - "runtime path discovery / location probing"
+        - "blocking work in hot paths"
+        - "implicit retries or polling without explicit gating"
+        - "host-specific assumptions hidden behind fallback logic"
+        - "obsolete API calls or deprecated flags"
+    rule: >
+      If an upstream API or docs source names a bad practice, the corresponding
+      cheatsheet SHOULD record it as a bad centipawn and the spec SHOULD forbid
+      it when it affects behavior, safety, or convergence.
+    audit_flow:
+      - spec_clause_to_cheatsheet_entry
+      - cheatsheet_positive_idiom
+      - cheatsheet_negative_idiom
+      - api_doc_validation
+      - litmus_binding_or_tombstone_update
+
   evidence_bundle:
     description: >
       Evidence bundles collect the concrete artifacts behind convergence claims.
@@ -116,12 +144,15 @@ verification:
       - environment_profile
       - litmus_run_ids_and_results
       - trace_coverage_summary
+      - litmus_chain_reference
       - ci_run_id
       - centicolon_signature_hash
       - centicolon_projection_ref
       - annotated_source_archive_hash
       - centicolon_dashboard_hash
       - projection_source_equivalence_result
+      - failing_boundary_chain
+      - troubleshooting_log_refs
 
     claim_strength:
       provenance: "artifact, spec, and commit can be linked"
@@ -142,6 +173,19 @@ verification:
       A release evidence bundle SHOULD link to the generated CentiColon dashboard
       markdown and JSON summary so humans can browse the last N releases and agents
       can consume the same trend data deterministically.
+
+  troubleshooting_chain:
+    description: >
+      The evidence bundle should preserve enough chain-of-failure information to
+      resume an interrupted convergence loop. `--init --debug` and `--status-check`
+      are examples of useful chained boundaries because they surface the stack
+      setup, the failing layer, and the runtime smoke in one traceable sequence.
+    required_properties:
+      - failing_boundary_is_named
+      - logs_are_linked
+      - next_pass_can_resume_from_last_boundary
+      - unchanged_observation_window_is_recorded
+      - chain_reference_is_present
 
   litmus_verification_integration:
     description: >
@@ -168,6 +212,7 @@ verification:
     progression:
       - all_specs_must_achieve_L1
       - critical_path_specs_must_achieve_L2
+      - new_or_updated_specs_must_include_chain_reference
       - convergence_requires_L2_minimum
 
     ci_gating:

@@ -1,0 +1,32 @@
+name: litmus:external-logs-layer-shape
+spec: external-logs-layer
+description: Verify the external log path helpers stay tied to the state root and append roles deterministically
+severity: medium
+phase: pre-build
+
+preconditions:
+  - workspace contains crates/tillandsias-core/src/config.rs
+  - cargo is available in PATH
+
+critical_path:
+  - step: "verify the external logs root helper is stable"
+    command: "cargo test -p tillandsias-core config::tests::external_logs_dir_points_to_state_sibling -- --exact"
+    timeout_ms: 30000
+    expected_behavior: "external_logs_dir_points_to_state_sibling"
+
+  - step: "verify the role-specific helper appends the role directory"
+    command: "cargo test -p tillandsias-core config::tests::external_logs_role_dir_appends_role -- --exact"
+    timeout_ms: 30000
+    expected_behavior: "external_logs_role_dir_appends_role"
+
+observability:
+  traces:
+    - "@trace spec:external-logs-layer"
+  expected_log: "external logs path helpers remain deterministic"
+  log_fields:
+    spec: "external-logs-layer"
+    test: "external-logs-layer-shape"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-core/src/config.rs and openspec/specs/external-logs-layer/spec.md for path drift"
+  command: "cargo test -p tillandsias-core config::tests::external_logs_dir_points_to_state_sibling config::tests::external_logs_role_dir_appends_role -- --exact"

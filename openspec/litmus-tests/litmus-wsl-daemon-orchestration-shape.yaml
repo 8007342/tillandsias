@@ -1,0 +1,28 @@
+# @trace spec:wsl-daemon-orchestration
+name: litmus:wsl-daemon-orchestration-shape
+spec: wsl-daemon-orchestration
+phase: pre-build
+description: Verify the WSL daemon orchestration path keeps its socket and watchdog wiring
+severity: medium
+
+preconditions:
+  - workspace contains crates/tillandsias-podman/src/events.rs
+  - cargo is available in PATH
+
+critical_path:
+  - step: "verify WSL daemon orchestration hooks"
+    command: "grep -F 'spec:wsl-daemon-orchestration' crates/tillandsias-podman/src/events.rs && grep -F 'router.sock' crates/tillandsias-podman/src/events.rs && grep -F 'WATCHDOG=1' crates/tillandsias-podman/src/events.rs"
+    timeout_ms: 5000
+    expected_behavior: "wsl-daemon-orchestration"
+
+observability:
+  traces:
+    - "@trace spec:wsl-daemon-orchestration"
+  expected_log: "WSL daemon orchestration remains wired to the runtime event stream"
+  log_fields:
+    spec: "wsl-daemon-orchestration"
+    test: "wsl-daemon-orchestration-shape"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-podman/src/events.rs for WSL daemon drift"
+  command: "sed -n '1,220p' crates/tillandsias-podman/src/events.rs"

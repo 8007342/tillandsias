@@ -26,6 +26,12 @@ cheatsheets:
       - "official docs"
       - "standards"
       - "trusted sources"
+    rule: >
+      Cheatsheet provenance MUST come from remote authoritative sources owned by
+      the technology provider or from stable standards bodies. Project-local
+      inference is not provenance; it is a derived note and MUST be labeled as
+      such. Derived notes SHOULD be minimized and, when possible, moved into the
+      owning spec instead of staying in the cheatsheet cache.
 
   versioning:
     tied_to_environment_hash: true
@@ -154,6 +160,12 @@ cheatsheet_binding:
         reason: >
           All entries must cite authoritative sources (vendor docs, standards, etc).
           Without provenance, outdated entries can't be detected.
+
+    - project_local_inference_must_be_separated:
+        reason: >
+          Local Tillandsias guidance is allowed only as a clearly labeled
+          derivation from the upstream sources. It cannot replace the upstream
+          provenance chain.
 
     - cheatsheet_usage_must_be_measurable:
         reason: >

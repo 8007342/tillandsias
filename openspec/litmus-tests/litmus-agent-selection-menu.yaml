@@ -1,0 +1,32 @@
+# @trace spec:tray-app
+name: litmus:agent-selection-menu
+spec: tray-app
+phase: pre-build
+description: Verify Seedlings ordering, agent selection persistence, and stop-item gating
+severity: medium
+
+preconditions:
+  - workspace contains crates/tillandsias-headless
+  - cargo is available in PATH
+
+critical_path:
+  - step: "run the Seedlings ordering test"
+    command: "cargo test -p tillandsias-headless --features tray tray::tests::seedlings_menu_keeps_default_order_and_active_choice -- --exact"
+    timeout_ms: 120000
+
+  - step: "run the per-project stop gating test"
+    command: "cargo test -p tillandsias-headless --features tray tray::tests::project_menu_only_shows_stop_when_web_is_running -- --exact"
+    timeout_ms: 120000
+
+observability:
+  traces:
+    - "@trace spec:tray-app"
+    - "@trace spec:tray-ux"
+  expected_log: "Seedlings ordering and project stop gating remain stable"
+  log_fields:
+    spec: "tray-app"
+    test: "agent-selection-menu"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-headless/src/tray/mod.rs for Seedlings ordering or stop-item regressions"
+  command: "sed -n '1540,1605p' crates/tillandsias-headless/src/tray/mod.rs"

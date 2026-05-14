@@ -1,0 +1,42 @@
+name: litmus:forge-opencode-onboarding-shape
+spec: forge-opencode-onboarding
+description: Verify the OpenCode onboarding bundle, OpenSpec init, and startup bootstrap stay wired together
+severity: medium
+phase: pre-build
+
+preconditions:
+  - workspace contains images/default/config-overlay/opencode/config.json
+  - workspace contains images/default/config-overlay/opencode/instructions/methodology.md
+  - workspace contains images/default/config-overlay/opencode/instructions/forge-discovery.md
+  - workspace contains images/default/config-overlay/opencode/instructions/cache-discipline.md
+  - workspace contains images/default/config-overlay/opencode/instructions/nix-first.md
+  - workspace contains images/default/config-overlay/opencode/instructions/openspec-workflow.md
+  - workspace contains images/default/entrypoint-forge-opencode.sh
+
+critical_path:
+  - step: "verify the bundled instruction list keeps the onboarding files first"
+    command: "grep -Fq /home/forge/.config-overlay/opencode/instructions/methodology.md images/default/config-overlay/opencode/config.json && grep -Fq /home/forge/.config-overlay/opencode/instructions/forge-discovery.md images/default/config-overlay/opencode/config.json && grep -Fq /home/forge/.config-overlay/opencode/instructions/cache-discipline.md images/default/config-overlay/opencode/config.json && grep -Fq /home/forge/.config-overlay/opencode/instructions/nix-first.md images/default/config-overlay/opencode/config.json && grep -Fq /home/forge/.config-overlay/opencode/instructions/openspec-workflow.md images/default/config-overlay/opencode/config.json && echo 'opencode onboarding instruction bundle present'"
+    timeout_ms: 10000
+    expected_behavior: "opencode onboarding instruction bundle present"
+
+  - step: "verify methodology.md remains the index file"
+    command: "grep -Fq 'forge-discovery.md' images/default/config-overlay/opencode/instructions/methodology.md && grep -Fq 'cache-discipline.md' images/default/config-overlay/opencode/instructions/methodology.md && grep -Fq 'nix-first.md' images/default/config-overlay/opencode/instructions/methodology.md && grep -Fq 'openspec-workflow.md' images/default/config-overlay/opencode/instructions/methodology.md && echo 'methodology index present'"
+    timeout_ms: 10000
+    expected_behavior: "methodology index present"
+
+  - step: "verify the launcher still bootstraps OpenSpec and /startup"
+    command: "grep -Fq apply_opencode_config_overlay images/default/entrypoint-forge-opencode.sh && grep -Fq 'init --tools opencode' images/default/entrypoint-forge-opencode.sh && grep -Fq 'run /startup' images/default/entrypoint-forge-opencode.sh && echo 'opencode bootstrap present'"
+    timeout_ms: 10000
+    expected_behavior: "opencode bootstrap present"
+
+observability:
+  traces:
+    - "@trace spec:forge-opencode-onboarding"
+  expected_log: "OpenCode onboarding bundle and bootstrap remain visible in the forge launch path"
+  log_fields:
+    spec: "forge-opencode-onboarding"
+    test: "forge-opencode-onboarding-shape"
+
+rollback:
+  on_failure: "inspect images/default/config-overlay/opencode/config.json, images/default/config-overlay/opencode/instructions/methodology.md, and images/default/entrypoint-forge-opencode.sh for onboarding drift"
+  command: "grep -Fq instructions/methodology.md images/default/config-overlay/opencode/config.json && grep -Fq 'run /startup' images/default/entrypoint-forge-opencode.sh"

@@ -1,0 +1,43 @@
+# @trace spec:forge-standalone, spec:default-image
+name: litmus:forge-standalone-traceability
+spec: forge-standalone
+phase: pre-build
+description: Verify forge standalone runner and image definitions stay aligned line-by-line
+severity: medium
+
+preconditions:
+  - repo checkout contains the forge runner, Containerfile, and build wrapper
+
+critical_path:
+  - step: "validate shell syntax"
+    command: "bash -n build-forge.sh run-forge-standalone.sh"
+    timeout_ms: 2000
+
+  - step: "validate build-forge help path"
+    command: "./build-forge.sh --help | grep -F 'Usage: ./build-forge.sh [--assert] [--force] [--tag <tag>]'"
+    timeout_ms: 5000
+
+  - step: "validate canonical forge trace annotations"
+    command: "grep -F '@trace spec:forge-standalone' build-forge.sh run-forge-standalone.sh images/default/Containerfile openspec/specs/forge-standalone/spec.md openspec/specs/forge-standalone/TRACES.md"
+    timeout_ms: 5000
+
+  - step: "validate the standalone launcher fails fast on missing image"
+    command: "grep -F 'No local forge image found' run-forge-standalone.sh && grep -F 'Build one first with ./build-forge.sh or scripts/build-image.sh forge' run-forge-standalone.sh && ! grep -Fq 'latest' run-forge-standalone.sh"
+    timeout_ms: 5000
+
+  - step: "validate build-forge delegates directly to the image builder"
+    command: "grep -F 'scripts/build-image.sh forge' build-forge.sh && ! grep -Fq 'cargo run --bin build-image' build-forge.sh"
+    timeout_ms: 5000
+
+observability:
+  traces:
+    - "@trace spec:forge-standalone"
+    - "@trace spec:default-image"
+  expected_log: "Forge standalone traceability ties the runner, Containerfile, and build wrapper to the canonical forge contract"
+  log_fields:
+    spec: "forge-standalone"
+    test: "forge-standalone-traceability"
+
+rollback:
+  on_failure: "inspect build-forge.sh, run-forge-standalone.sh, and the forge trace files for stale runner naming or helper hops"
+  command: "grep -n 'cargo run --bin build-image\\|latest\\|forge-standalone-runner\\|scripts/build-image.sh forge' build-forge.sh run-forge-standalone.sh openspec/specs/forge-standalone/spec.md images/default/Containerfile"

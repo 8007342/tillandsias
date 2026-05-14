@@ -49,7 +49,7 @@ The inference container's entrypoint SHALL pre-pull tool-capable models bucketed
 | T4 | GPU ≥16GB | `qwen2.5:14b` | 9GB | yes | Pulled at runtime |
 | T5 | GPU ≥32GB | `qwen2.5-coder:32b` | 20GB | yes | Pulled at runtime |
 
-T0 and T1 are baked into the inference image at build time so the first attach has a usable analysis model with zero network overhead. T2+ pull at runtime via the host-side ollama pull mechanism.
+T0 and T1 are baked into the inference image at build time so the first attach has a usable analysis model with zero network overhead. T2+ pull at runtime in the inference container entrypoint.
 
 #### Scenario: CPU-only system gets T0/T1 without network
 
@@ -70,7 +70,7 @@ T0 and T1 are baked into the inference image at build time so the first attach h
 Until the Squid SSL-bump EOF failure on ollama manifest pulls is root-caused, the spec documents a fallback:
 
 1. Image builds (build-time) pull directly without proxy (sidestep EOF entirely)
-2. Runtime pulls via host-side `ollama` binary (per `inference-host-side-pull` spec), which also bypasses proxy
+2. Runtime pulls happen in the inference container entrypoint, which remains non-blocking for attach
 
 The spec SHALL NOT block on a Squid fix — it acknowledges the issue and provides the bypass path.
 
@@ -80,17 +80,17 @@ The spec SHALL NOT block on a Squid fix — it acknowledges the issue and provid
 - **THEN** the pull commands run directly on the host (not through Squid)
 - **AND** the Squid SSL-bump EOF does not affect the build
 
-#### Scenario: Runtime pulls use host-side ollama
+#### Scenario: Runtime pulls happen in the inference entrypoint
 
 - **WHEN** a T2+ model is selected at inference startup
-- **THEN** the tray spawns a host-side `ollama pull` (per `inference-host-side-pull`)
-- **AND** does NOT route through Squid
+- **THEN** the inference entrypoint spawns a background `ollama pull`
+- **AND** it does NOT block attach
 - **AND** the model lands in `~/.cache/tillandsias/models/` and is discovered by the container
 
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee` — default model routing, tier-tagged pre-pulls, Squid proxy bypass
+- `litmus:inference-readiness-probe-shape` — default model routing, tier-tagged pre-pulls, Squid proxy bypass
 
 Gating points:
 - Default config ships `opencode/big-pickle` as primary Zen model (not ollama)

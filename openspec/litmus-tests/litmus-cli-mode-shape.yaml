@@ -1,0 +1,27 @@
+# @trace spec:cli-mode
+name: litmus:cli-mode-shape
+spec: cli-mode
+phase: pre-build
+description: Verify cli-mode command-shape seams stay deterministic in unit tests
+severity: medium
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/
+  - cargo is available in PATH
+
+critical_path:
+  - step: "run exact cli-mode unit seams"
+    command: "cargo test -p tillandsias-headless --bin tillandsias tests::opencode_args_mount_workspace_and_prompt -- --exact && cargo test -p tillandsias-headless --bin tillandsias tests::status_check_args_probe_proxy_git_and_inference_from_forge -- --exact && cargo test -p tillandsias-headless --bin tillandsias tests::shutdown_poll_backoff_doubles_until_capped -- --exact"
+    timeout_ms: 60000
+
+observability:
+  traces:
+    - "@trace spec:cli-mode"
+  expected_log: "cli-mode command-shape seams pass in isolation"
+  log_fields:
+    spec: "cli-mode"
+    test: "cli-mode-shape"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-headless/src/main.rs for command-shape drift"
+  command: "cargo test -p tillandsias-headless --lib"

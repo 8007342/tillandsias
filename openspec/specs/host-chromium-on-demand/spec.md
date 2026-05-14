@@ -9,7 +9,7 @@ annotation-count: 25
 
 ## Purpose
 
-Provide an isolated, on-demand Chromium runtime for tray-launched browser windows. Downloads Chrome for Testing into a shared host cache on first launch, verifies integrity via SHA-256, and launches windows with per-session incognito profiles isolated from the user's daily browser. Enables CDP (remote debugging protocol) for programmatic browser control without interference.
+Provide an isolated, on-demand Chromium runtime for tray-launched browser windows and the secure OpenCode Web attach flow. Downloads Chrome for Testing into a shared host cache on first launch, verifies integrity via SHA-256, and launches windows with per-session incognito profiles isolated from the user's daily browser. Enables CDP (remote debugging protocol) for programmatic browser control without interference.
 
 ## Requirements
 
@@ -55,7 +55,7 @@ The `browser.rs::detect_browser()` function SHALL return `BundledChromium { bin:
 
 ### Requirement: Download Telemetry
 
-The host SHALL emit telemetry on first-launch download per the `forge-cache-architecture` spec:
+The host SHALL emit telemetry on first-launch download per the `forge-cache-dual` spec:
 
 - Event: `category="download", source="host-tray", target="~/.cache/tillandsias/chromium/<version>/"`
 - Timestamp and binary size (bytes downloaded) are recorded
@@ -78,3 +78,5 @@ Gating points:
 
 - `cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md` — confirms `~/.cache/tillandsias/chromium/` is host-managed shared state, never bind-mounted into forge
 - Chrome for Testing official channel: `googlechromelabs.github.io/chrome-for-testing/` — the canonical download manifest and SHA-256 verification reference
+- `openspec/specs/browser-isolation-tray-integration/spec.md` — tray-driven browser launch contract for OpenCode Web
+- `openspec/specs/opencode-web-session-otp/spec.md` — secure OpenCode Web session and cookie gate

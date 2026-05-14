@@ -121,6 +121,16 @@ All daemon events MUST be logged to:
 2. **Daemon never blocks on I/O**: All socket reads/writes use non-blocking or async I/O to prevent startup hangs.
 3. **Systemd unit is immutable post-install**: Service unit definition is part of the installer; users cannot corrupt it via edit.
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:wsl-daemon-orchestration-shape`
+
+Gating points:
+- The daemon event stream still carries the WSL daemon trace annotation
+- Socket path and watchdog wiring remain present in source
+- Falsifiable: missing trace, socket path, or watchdog marker fails the source-shape check
+
 ---
 
 ## Litmus Tests

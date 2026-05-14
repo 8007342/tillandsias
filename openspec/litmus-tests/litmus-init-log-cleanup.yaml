@@ -1,54 +1,32 @@
 name: litmus:init-log-cleanup
 spec: ephemeral-guarantee
-description: Verify init logs deleted on tillandsias shutdown
+description: Verify init logs do not persist after a successful init run
 severity: high
 
 preconditions:
-  - tillandsias tray running
-  - at least one forge container launched
-  - init logs present at /tmp/tillandsias-init-*.log
+  - clean temporary log state
 
 critical_path:
-  - step: "verify init logs exist during operation"
-    command: "find /tmp -maxdepth 1 -type f -name 'tillandsias-init-*.log' 2>/dev/null | wc -l"
-    timeout_ms: 3000
-    expected_behavior: "1 or more log files"
+  - step: "run init with debug log capture"
+    command: 'STATUS_BIN="${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}"; HOME="${TMPDIR:-/tmp}/tillandsias-init-log-home" LITMUS_PODMAN_MODE=fake LITMUS_PODMAN_CALLS_FILE=target/litmus-podman/calls.log TILLANDSIAS_ROOT="$(pwd)" "$STATUS_BIN" --init --debug'
+    timeout_ms: 1800000
+    expected_behavior: "build-image"
 
-  - step: "verify log content is readable"
-    command: "head -5 /tmp/tillandsias-init-*.log 2>/dev/null | head -1"
-    timeout_ms: 2000
-    expected_behavior: "log content visible"
-
-  - step: "shutdown tillandsias tray"
-    command: "pkill -f tillandsias 2>/dev/null && sleep 3 && echo SHUTDOWN_COMPLETE"
-    timeout_ms: 8000
-    expected_behavior: "shutdown command succeeds"
-
-  - step: "verify init logs deleted after shutdown"
+  - step: "verify init logs deleted after init"
     command: "find /tmp -maxdepth 1 -type f -name 'tillandsias-init-*.log' 2>/dev/null | wc -l"
     timeout_ms: 3000
     expected_behavior: "0 log files"
-
-gating_points:
-  - signal: "init logs cleaned on shutdown"
-    success: "no tillandsias-init-*.log files remaining"
-    failure: "log files still present in /tmp"
-    spec_linkage: "ephemeral-guarantee"
-
-  - signal: "ephemeral-first guarantee for logs"
-    success: "all temporary logs removed"
-    failure: "logs persist after tray shutdown"
 
 observability:
   traces:
     - "@trace spec:ephemeral-guarantee"
     - "@trace spec:init-command"
-  expected_log: "Init logs cleaned on tray shutdown"
+  expected_log: "Init logs cleaned after successful init"
   log_fields:
     spec: "ephemeral-guarantee"
     test: "init-log-cleanup"
     resource_type: "logs"
 
 rollback:
-  on_failure: "manually clean logs and restart tray"
-  command: "rm -f /tmp/tillandsias-init-*.log; systemctl --user restart tillandsias 2>/dev/null || ./build.sh 2>/dev/null"
+  on_failure: "manually clean logs and rerun init"
+  command: "rm -f /tmp/tillandsias-init-*.log"

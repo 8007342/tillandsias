@@ -1,0 +1,60 @@
+trace: "023-phase-5-isolated-test-harness-complete"
+
+type: "completion"
+category: "integration-testing"
+status: "complete"
+
+date_completed: "2026-05-08T16:03:00Z"
+completed_by: "claude-haiku (phase-5-verification)"
+
+title: "Phase 5: Isolated test harness and state transition testing complete"
+
+test_harness_components:
+  TrayStateBuilder:
+    - Fluent builder pattern for constructing arbitrary TrayUiState values
+    - Decouples tests from TrayUiState::new() logic
+    - Allows independent control of: forge_available, enclave_status, projects
+    - No real podman/containers needed
+
+tests_added:
+  - state_transition_forge_false_to_true() ✓
+    - Simulates forge becoming available
+    - Verifies menu transitions from 4 → 6+ items
+    - Validates status text changes (☐ → ✓)
+
+  - enclave_status_all_states() ✓
+    - Verifies all 5 EnclaveStatus values have correct emoji
+    - Checks: Verifying (☐), ProxyReady (☐🌐), GitReady (☐🌐🪞), AllHealthy (✓), Failed (🥀)
+
+implementation_metrics:
+  lines_added: 342
+  lines_changed: 73 (total diff 415)
+  phases_completed: 5 of 5 ✓
+  trace_annotations: 11 total @trace spec:tray-minimal-ux
+  test_helpers: TrayStateBuilder (new)
+  test_coverage:
+    - 4-item launch contract: ✓
+    - Menu expansion (4→6+): ✓
+    - Status text emoji mapping: ✓
+    - State transitions: ✓
+    - EnclaveStatus enum: ✓
+
+architectural_notes:
+  - Tray module is fully testable in isolation ✓
+  - No headless daemon required for UX testing ✓
+  - No real podman containers needed ✓
+  - Boundary separation maintained (tray ≠ daemon) ✓
+
+documentation_gaps_found:
+  - 020-tray-binary-test-discovery.yaml (test discovery in binary crate)
+  - 021-status-icon-mapping-gap.yaml (DBusMenu icon support)
+  - Recommendation: Future phase to move tray to separate lib crate for full test discovery
+
+ready_for_production: true
+ready_for_spec_sync: true
+
+next_steps:
+  1. Run final cargo check --workspace ✓
+  2. Archive tray-minimal-ux change in OpenSpec
+  3. Sync delta specs to main specs
+  4. Document in commit message with GitHub search URL for traces

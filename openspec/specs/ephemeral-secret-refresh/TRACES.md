@@ -5,4 +5,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [src-tauri/src/handlers.rs#L647](../../../src-tauri/src/handlers.rs#L647)
+- [scripts/create-secrets.sh#L110](../../../scripts/create-secrets.sh#L110)
+- [scripts/create-secrets.sh#L114](../../../scripts/create-secrets.sh#L114)

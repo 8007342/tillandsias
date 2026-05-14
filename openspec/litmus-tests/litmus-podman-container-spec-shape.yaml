@@ -1,0 +1,35 @@
+# @trace spec:podman-container-spec
+name: litmus:podman-container-spec-shape
+spec: podman-container-spec
+phase: pre-build
+description: Verify the typed Podman container-spec builder remains pure and deterministic
+severity: medium
+
+preconditions:
+  - workspace contains crates/tillandsias-podman
+  - cargo is available in PATH
+
+critical_path:
+  - step: "run immutable hardening defaults test"
+    command: "cargo test -p tillandsias-podman default_spec_includes_immutable_hardening_flags -- --exact"
+    timeout_ms: 120000
+
+  - step: "run detached persistent profile test"
+    command: "cargo test -p tillandsias-podman persistent_web_profile_is_detached_and_not_auto_removed -- --exact"
+    timeout_ms: 120000
+
+  - step: "run mount serialization test"
+    command: "cargo test -p tillandsias-podman bind_and_volume_mounts_are_serialized_deterministically -- --exact"
+    timeout_ms: 120000
+
+observability:
+  traces:
+    - "@trace spec:podman-container-spec"
+  expected_log: "Typed container specs serialize to deterministic podman argv"
+  log_fields:
+    spec: "podman-container-spec"
+    test: "podman-container-spec-shape"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-podman/src/container_spec.rs for builder regressions"
+  command: "sed -n '1,260p' crates/tillandsias-podman/src/container_spec.rs"

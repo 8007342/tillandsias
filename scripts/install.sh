@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # Tillandsias Installer
 # Usage: curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
-# @trace spec:install-progress
 set -euo pipefail
 
 REPO="8007342/tillandsias"
 INSTALL_DIR="$HOME/.local/bin"
 LIB_DIR="$HOME/.local/lib/tillandsias"
 DATA_DIR="$HOME/.local/share/tillandsias"
+SERVICE_USER="tillandsias"
+SERVICE_GROUP="tillandsias"
+SERVICE_HOME="/var/lib/tillandsias"
+SYSTEMD_USER_UNIT_DIR="/etc/systemd/user"
+SYSUSERS_DIR="/etc/sysusers.d"
+TMPFILES_DIR="/etc/tmpfiles.d"
 
 # ---------------------------------------------------------------------------
 # Chromium pin (host-chromium-on-demand)
@@ -54,6 +59,14 @@ case "$ARCH" in
     *)       echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
+IS_ROOT=false
+if [ "$PLATFORM" = "linux" ] && [ "${EUID:-$(id -u)}" -eq 0 ]; then
+    IS_ROOT=true
+    INSTALL_DIR="/usr/local/bin"
+    LIB_DIR="$SERVICE_HOME/lib"
+    DATA_DIR="$SERVICE_HOME"
+fi
+
 echo ""
 echo "  Tillandsias Installer"
 echo "  ====================="
@@ -79,8 +92,67 @@ find_asset() {
     echo "$RELEASE_JSON" | sed -n 's/.*"browser_download_url": *"//p' | sed 's/".*//' | grep "$1" | head -1
 }
 
+install_service_account_artifacts() {
+    local service_uid service_home
+    service_uid="$(id -u "$SERVICE_USER" 2>/dev/null || echo "")"
+    service_home="$SERVICE_HOME"
+
+    mkdir -p "$SYSTEMD_USER_UNIT_DIR" "$SYSUSERS_DIR" "$TMPFILES_DIR"
+
+    cat > "$SYSTEMD_USER_UNIT_DIR/tillandsias.service" <<'EOF'
+[Unit]
+Description=Tillandsias Headless Orchestrator
+Documentation=man:systemd.service(5)
+After=podman.socket
+Wants=podman.socket
+
+[Service]
+Type=simple
+Environment="TILLANDSIAS_PODMAN_REMOTE_URL=unix://%t/podman/podman.sock"
+Environment="TILLANDSIAS_ROOT=/var/lib/tillandsias/src/tillandsias"
+ExecStart=/usr/local/bin/tillandsias --headless /var/lib/tillandsias/src/tillandsias
+Restart=always
+RestartSec=1s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+EOF
+
+    cat > "$SYSUSERS_DIR/tillandsias.conf" <<'EOF'
+# Create the dedicated service account used for the supervised headless runtime.
+# This mirrors the guidance in cheatsheets/runtime/dedicated-service-account-podman.md.
+u tillandsias - "Tillandsias service account" /var/lib/tillandsias /usr/sbin/nologin
+g tillandsias -
+EOF
+
+    cat > "$TMPFILES_DIR/tillandsias.conf" <<'EOF'
+# Runtime directories for the dedicated service account.
+# The user runtime dir is managed by systemd; these paths keep service-owned
+# state and logs deterministic and removable.
+d /var/lib/tillandsias 0700 tillandsias tillandsias -
+d /var/lib/tillandsias/.cache 0700 tillandsias tillandsias -
+d /var/lib/tillandsias/.local/state/tillandsias 0700 tillandsias tillandsias -
+EOF
+
+    systemd-sysusers 2>/dev/null || true
+    systemd-tmpfiles --create 2>/dev/null || true
+
+    if command -v loginctl >/dev/null 2>&1; then
+        loginctl enable-linger "$SERVICE_USER" 2>/dev/null || true
+    fi
+
+    if [[ -n "$service_uid" ]] && command -v runuser >/dev/null 2>&1; then
+        runuser -u "$SERVICE_USER" -- env HOME="$service_home" XDG_RUNTIME_DIR="/run/user/$service_uid" \
+            systemctl --user daemon-reload 2>/dev/null || true
+        runuser -u "$SERVICE_USER" -- env HOME="$service_home" XDG_RUNTIME_DIR="/run/user/$service_uid" \
+            systemctl --user enable --now podman.socket 2>/dev/null || true
+    fi
+}
+
 # ---------------------------------------------------------------------------
-# Linux: download AppImage to ~/.local/bin/
+# Linux: download AppImage to the appropriate location
 # ---------------------------------------------------------------------------
 # @trace spec:download-telemetry, spec:chromium-safe-variant
 if [ "$PLATFORM" = "linux" ]; then
@@ -92,7 +164,11 @@ if [ "$PLATFORM" = "linux" ]; then
         echo ""
     fi
 
-    echo "  Installing AppImage to ~/.local/bin/ (no root required)..."
+    if [ "$IS_ROOT" = true ]; then
+        echo "  Installing AppImage to /usr/local/bin/ for the dedicated service account..."
+    else
+        echo "  Installing AppImage to ~/.local/bin/ (no root required)..."
+    fi
     APPIMAGE_URL=$(find_asset "linux-x86_64\\.AppImage")
     if [ -z "$APPIMAGE_URL" ]; then
         # Try old versioned name as fallback
@@ -122,6 +198,13 @@ if [ "$PLATFORM" = "linux" ]; then
         echo "  Download failed."
         echo "  Try downloading manually from: ${RELEASE_URL}"
         exit 1
+    fi
+
+    if [ "$IS_ROOT" = true ]; then
+        install_service_account_artifacts
+        echo "  ✓ Installed service account artifacts for $SERVICE_USER"
+        echo "  ✓ Enabled linger for $SERVICE_USER"
+        echo "  ! Service checkout path must exist at /var/lib/tillandsias/src/tillandsias before the headless unit is started."
     fi
 fi
 
@@ -185,9 +268,9 @@ if [ "$PLATFORM" = "macos" ]; then
 
     # ---- Ensure Podman runtime is installed (via MacPorts) ----
     # Tillandsias requires the Podman runtime CLI, NOT Podman Desktop.
-    # On macOS we install via MacPorts (not Homebrew) — MacPorts puts podman
-    # at /opt/local/bin/podman which find_podman_path() already detects.
-    if ! command -v podman &>/dev/null && [ ! -x /opt/local/bin/podman ]; then
+    # On macOS we install via MacPorts (not Homebrew). Podman must still end up
+    # on PATH for the stack to use it.
+    if ! command -v podman &>/dev/null; then
         echo ""
         if command -v port &>/dev/null; then
             echo "  Podman runtime not found. Installing via MacPorts..."
@@ -213,8 +296,8 @@ if [ "$PLATFORM" = "macos" ]; then
     # ---- Initialize Podman Machine if needed ----
     # Podman on macOS requires a Linux VM (the "machine"). Auto-init + start
     # so the user doesn't have to know about this Podman implementation detail.
-    if command -v podman &>/dev/null || [ -x /opt/local/bin/podman ]; then
-        PODMAN_BIN="$(command -v podman || echo /opt/local/bin/podman)"
+    if command -v podman &>/dev/null; then
+        PODMAN_BIN="$(command -v podman)"
         # Check if a machine exists
         if ! "$PODMAN_BIN" machine list --format '{{.Name}}' 2>/dev/null | grep -q .; then
             echo ""
@@ -303,8 +386,8 @@ if [ "$PLATFORM" = "linux" ]; then
 fi
 echo ""
 
-# Linux desktop integration
-if [[ "$PLATFORM" == "linux" ]]; then
+# Linux desktop integration for user installs only
+if [[ "$PLATFORM" == "linux" && "$IS_ROOT" != true ]]; then
     DESKTOP_DIR="$HOME/.local/share/applications"
     ICON_DIR="$HOME/.local/share/icons/hicolor"
 
@@ -382,10 +465,9 @@ if [ "$PLATFORM" = "linux" ] && ! command -v podman &>/dev/null; then
 fi
 
 # Pre-build container images in the background (only if we have a working
-# terminal — not when piped from curl).
-# Detect podman in PATH or at MacPorts location (/opt/local/bin/podman).
-if [ -t 0 ] && [ -x "$INSTALL_DIR/tillandsias" ] && \
-   { command -v podman &>/dev/null || [ -x /opt/local/bin/podman ]; }; then
+# terminal — not when piped from curl, and only for user installs).
+# Detect podman in PATH.
+if [ -t 0 ] && [ "$IS_ROOT" != true ] && [ -x "$INSTALL_DIR/tillandsias" ] && command -v podman &>/dev/null; then
     echo "  Building container images in the background..."
     nohup "$INSTALL_DIR/tillandsias" --init >/tmp/tillandsias-init.log 2>&1 &
     echo "  (Progress: tail -f /tmp/tillandsias-init.log)"

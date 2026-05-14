@@ -1,0 +1,27 @@
+# @trace spec:cheatsheet-source-layer
+name: litmus:cheatsheet-source-layer-validation
+spec: cheatsheet-source-layer
+phase: pre-build
+description: Verify the cheatsheet source validator stays callable on a fresh workspace
+severity: medium
+
+preconditions:
+  - workspace contains scripts/ and cheatsheets/
+  - bash is available in PATH
+
+critical_path:
+  - step: "run the source validator in no-sha mode"
+    command: "bash scripts/check-cheatsheet-sources.sh --no-sha"
+    timeout_ms: 5000
+
+observability:
+  traces:
+    - "@trace spec:cheatsheet-source-layer"
+  expected_log: "cheatsheet source validation completes without fatal errors"
+  log_fields:
+    spec: "cheatsheet-source-layer"
+    test: "cheatsheet-source-layer-validation"
+
+rollback:
+  on_failure: "inspect scripts/check-cheatsheet-sources.sh and openspec/specs/cheatsheet-source-layer/spec.md for drift"
+  command: "bash scripts/check-cheatsheet-sources.sh --no-sha"

@@ -98,11 +98,55 @@ spec_system:
       - spec_change_must_reduce_ambiguity
       - spec_change_must_not_remove_validated_invariant_without_exception
       - spec_change_must_increase_or_preserve_verification_level
+      - code_changes_must_follow_verified_spec_intent
+      - spec_soundness_must_be_audited_before_code_change
     detection:
       - compare_previous_and_current_spec
       - flag_if_uncertainty_increases
     action:
       - reject_change_or_require_bounded_uncertainty_exception
+
+  spec_to_code_workflow:
+    purpose: >
+      Specs are the source of intent. Code is the artifact produced by the
+      intersection of active specs, validated cheatsheets, and verified API docs.
+    stages:
+      - stage: intent_audit
+        question: "What does the active spec actually require?"
+        inputs:
+          - active_spec
+          - spec_tombstones
+          - related_cheatsheets
+          - referenced_api_docs
+        output: "verified intent statement"
+      - stage: soundness_check
+        question: "Is the spec complete, non-ambiguous, and tombstone-consistent?"
+        inputs:
+          - active_spec
+          - methodology
+          - verification_rules
+        output: "soundness verdict"
+      - stage: minimax_target_selection
+        question: "What is the largest remaining residual obligation?"
+        inputs:
+          - ci_full_signal
+          - litmus_failures
+          - centicolon_residuals
+        output: "next target"
+      - stage: minimal_reduction
+        question: "What is the smallest code or spec change that reduces the target?"
+        inputs:
+          - current_code
+          - verified_intent
+          - cheatsheet_idioms
+        output: "candidate patch"
+      - stage: revalidation
+        question: "Did the patch reduce drift without introducing new uncertainty?"
+        inputs:
+          - same_litmus
+          - adjacent_litmus
+          - traceability_check
+        output: "pass/fail and residual delta"
 
   ambiguity_detection:
     rule: >

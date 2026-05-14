@@ -1,49 +1,106 @@
-# Cheatsheet Tooling Spec
+# Cheatsheet Tooling Specification
 
 @trace spec:cheatsheet-tooling
 
 ## Status
 
-suspended
+active
 
-## Why This Spec
-
-Multiple @trace annotations reference this spec name, but the spec was never formally created during OpenSpec artifact generation. This is a placeholder to eliminate ghost trace errors during validation.
+## Purpose
+Define the repository-side cheatsheet structure, template, and generated index
+contract. This spec owns the cheatsheet tree layout and the authoring/indexing
+tooling that keeps the cache queryable.
 
 ## Requirements
 
-### Requirement: Spec is placeholder — RFC 2119 revision pending
+### Requirement: Cheatsheet tree structure is fixed
 
-This spec is created retroactively as part of the traces-audit refactor. The placeholder text below SHALL be replaced with formal RFC 2119 requirements once usage patterns are confirmed.
+The repository SHALL maintain a top-level `cheatsheets/` directory with the
+seven canonical categories used by Tillandsias agents:
+`runtime/`, `languages/`, `utils/`, `build/`, `web/`, `test/`, and `agents/`.
+Each cheatsheet SHALL live in exactly one category directory and use a
+lowercase, hyphenated `<topic>.md` filename.
 
-**Pending clarification:** Actual requirements are to be determined based on usage patterns in `@trace spec:cheatsheet-tooling` annotations. Upon clarification, all requirement statements MUST use RFC 2119 keywords (MUST, SHOULD, MAY, MUST_NOT, SHOULD_NOT).
+#### Scenario: Category placement is unambiguous
+- **WHEN** a new cheatsheet is added
+- **THEN** its path SHALL match its primary topic category
+- **AND** the filename SHALL use the same hyphenation as the topic name
 
-## Implementation Notes
+### Requirement: Cheatsheet template is standardized
 
-This spec is created retroactively as part of the traces-audit refactor. It may represent:
-- An abandoned initiative that was never fully spec'd
-- A feature whose spec was lost or mishandled
-- A trace annotation that should have been corrected instead
+Every cheatsheet SHALL follow the repository template in `cheatsheets/TEMPLATE.md`.
+The template SHALL require, in order: title heading, `@trace spec:cheatsheet-tooling`
+annotation, optional DRAFT banner, `**Version baseline**:` line, `**Use when**:` line,
+`## Provenance`, `## Quick reference`, `## Common patterns`, `## Common pitfalls`,
+and `## See also`.
+
+#### Scenario: New cheatsheet follows the template
+- **WHEN** an author copies `cheatsheets/TEMPLATE.md`
+- **THEN** the resulting cheatsheet SHALL preserve the required headings and order
+- **AND** `## Provenance` SHALL be populated before the file is considered complete
+
+### Requirement: INDEX.md is generated, not hand-edited
+
+`cheatsheets/INDEX.md` SHALL be regenerated from cheatsheet frontmatter by
+`scripts/regenerate-cheatsheet-index.sh`. The file MUST NOT be hand-edited.
+The header comment in `INDEX.md` SHALL state that it is auto-generated.
+
+#### Scenario: Regeneration is idempotent
+- **WHEN** `scripts/regenerate-cheatsheet-index.sh` runs twice without input changes
+- **THEN** the second run SHALL produce zero diff
+
+#### Scenario: Manual edits are overwritten
+- **WHEN** a contributor hand-edits `cheatsheets/INDEX.md`
+- **THEN** the next regeneration run SHALL restore the generated form
+
+### Requirement: Cheatsheet authoring stays toolable
+
+The repository SHALL expose lightweight tooling for cheatsheet indexing and
+validation so agents can discover, regenerate, and verify the cheatsheet cache
+without rediscovering the workflow.
+
+#### Scenario: Agent discovers the index path first
+- **WHEN** an agent starts work in a forge container
+- **THEN** it SHALL be able to use `$TILLANDSIAS_CHEATSHEETS/INDEX.md` as the
+primary entry point for cheatsheet discovery
+- **AND** the generated index SHALL remain compatible with `rg` and `cut` workflows
 
 ## Sources of Truth
 
-- `cheatsheets/runtime/podman.md` — Podman reference and patterns
-- `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+- `cheatsheets/TEMPLATE.md` — canonical cheatsheet authoring template
+- `scripts/regenerate-cheatsheet-index.sh` — generated index contract
+- `openspec/specs/cheatsheet-source-layer/spec.md` — source binding and verification
+- `openspec/specs/cheatsheets-license-tiered/spec.md` — frontmatter/tier contract
+- `openspec/specs/spec-traceability/spec.md` — trace binding and drift enforcement
+
+## Litmus Chain
+
+Smallest actionable boundary:
+- `./scripts/regenerate-cheatsheet-index.sh --check`
+
+Sibling tests:
+- `./scripts/check-cheatsheet-sources.sh --no-sha`
+- `./scripts/check-cheatsheet-tiers.sh --strict`
+
+Scoped follow-up:
+```bash
+./build.sh --ci-full --install --filter cheatsheet-tooling --strict cheatsheet-tooling
+./build.sh --ci-full --install --strict-all
+```
 
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
+- `litmus:cheatsheet-tooling-structure`
 
 Gating points:
-- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
-- Deterministic and reproducible: test results do not depend on prior state
-- Falsifiable: failure modes (leaked resources, persistence) are detectable
+- Repository cheatsheet tree is canonical and queryable
+- Generated index is deterministic and reproducible
+- Template and index contracts are falsifiable through file-system checks
 
 ## Observability
 
 ```bash
-git log --all --grep="cheatsheet-tooling" --oneline
 git grep -n "@trace spec:cheatsheet-tooling"
+git grep -n "AUTO-GENERATED by \`scripts/regenerate-cheatsheet-index.sh\`" cheatsheets/INDEX.md
 ```
-

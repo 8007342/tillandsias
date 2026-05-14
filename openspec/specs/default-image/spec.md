@@ -45,16 +45,28 @@ The container entrypoint SHALL bootstrap the environment and launch OpenCode as 
 - **WHEN** the container starts with existing cache
 - **THEN** bootstrap MAY be skipped and OpenCode SHALL launch immediately
 
-### Requirement: Declarative image definition via flake.nix
-The default forge image SHALL be defined declaratively in flake.nix using Nix's dockerTools, replacing the Containerfile as the primary build path.
+### Requirement: Declarative image definition via embedded Containerfiles
+The default forge image SHALL be built from the embedded Containerfiles and supporting image sources using direct `podman build` calls. Containerfiles are the primary build path.
 
 #### Scenario: Build forge image
 - **WHEN** `scripts/build-image.sh forge` is run
-- **THEN** the image SHALL be built via `nix build .#forge-image` inside the builder toolbox
+- **THEN** the image SHALL be built via direct `podman build` using `images/forge/Containerfile`
 
 #### Scenario: Build web image
 - **WHEN** `scripts/build-image.sh web` is run
-- **THEN** the image SHALL be built via `nix build .#web-image` inside the builder toolbox
+- **THEN** the image SHALL be built via direct `podman build` using `images/web/Containerfile`
+
+### Requirement: Image identity is content-hash based with human aliases
+
+The default forge image SHALL use a content-hash canonical tag derived from the image source set.
+
+- Canonical tag MUST be `tillandsias-forge:<CONTENT_HASH>`
+- `v<Major>.<Minor>.<YYMMDD>.<Build>` and `:latest` MAY be maintained as human-facing aliases
+
+#### Scenario: Build forge image refreshes hash identity
+- **WHEN** `scripts/build-image.sh forge` is run
+- **THEN** the resulting image SHALL be tagged with the canonical content hash
+- **AND** the version and latest aliases SHALL be refreshed to point at the same image
 
 ### Requirement: Forge image ships an OpenCode Web entrypoint
 

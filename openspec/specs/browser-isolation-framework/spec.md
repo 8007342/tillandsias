@@ -9,21 +9,21 @@ active
 
 ## Requirements
 
-### Requirement: Image versioning with explicit tags
+### Requirement: Content-hash image identity with human aliases
 
-The `chromium-framework` image MUST use versioned tags that match the Tillandsias binary version:
+The `chromium-framework` image MUST use a content-hash tag derived from the image source set as its canonical identity:
 
-- Tag format MUST be `tillandsias-chromium-framework:v<Major>.<Minor>.<ChangeCount>.<Build>`
-- Tags MUST be derived from the `VERSION` file at the project root
-- NO `:latest` tags ARE allowed
+- Canonical tag MUST be `tillandsias-chromium-framework:<CONTENT_HASH>`
+- The hash MUST be computed from the image source set by `scripts/build-image.sh`
+- Human-facing `v<Major>.<Minor>.<YYMMDD>.<Build>` and `:latest` tags MAY exist only as aliases to the canonical hash tag
 
 ### Requirement: Image hierarchy locked to chromium-core
 
-The `chromium-framework` image MUST extend `chromium-core` using the same version tag:
+The `chromium-framework` image MUST extend `chromium-core` using the same canonical hash identity:
 
-- The Dockerfile MUST use `ARG CHROMIUM_CORE_TAG`
-- The FROM statement MUST be `FROM tillandsias-chromium-core:${CHROMIUM_CORE_TAG}`
-- Version tags MUST be locked together between framework and core images
+- The Dockerfile MUST use an ARG that carries the resolved local core image reference
+- The FROM statement MUST resolve that reference directly, currently `FROM ${CHROMIUM_CORE_IMAGE}` in Podman builds
+- The build script SHOULD pass the canonical chromium-core hash tag so the hierarchy stays content-addressed
 
 ### Requirement: Security model inheritance and framework-specific isolation
 
@@ -36,24 +36,23 @@ The image build MUST be invoked via `scripts/build-image.sh chromium-framework` 
 - MUST resolve the core tag and pass it as a build argument
 - MUST use `images/chromium/Containerfile.framework` as the build definition
 
-## Image Versioning
+## Image Identity
 
-The `chromium-framework` image MUST use versioned tags that match the Tillandsias binary version:
+The `chromium-framework` image MUST use a content-hash canonical tag derived from the image source set.
 
-- Tag format: `tillandsias-chromium-framework:v<Major>.<Minor>.<ChangeCount>.<Build>`
-- Tags are derived from the `VERSION` file at the project root
-- NO `:latest` tags are allowed
+- Canonical tag: `tillandsias-chromium-framework:<CONTENT_HASH>`
+- Human-facing `v<Major>.<Minor>.<YYMMDD>.<Build>` and `:latest` tags are aliases only and MAY be refreshed on rebuild
 
 ## Image Hierarchy
 
-The `chromium-framework` image MUST extend `chromium-core` using the same version tag:
+The `chromium-framework` image MUST extend `chromium-core` using the same canonical hash identity:
 
 ```dockerfile
-ARG CHROMIUM_CORE_TAG
-FROM tillandsias-chromium-core:${CHROMIUM_CORE_TAG}
+ARG CHROMIUM_CORE_IMAGE
+FROM ${CHROMIUM_CORE_IMAGE}
 ```
 
-This ensures the framework and core images are version-locked together.
+This ensures the framework and core images remain content-addressed together while human aliases remain available for operators.
 
 ## Security Model
 
@@ -67,7 +66,7 @@ The image is built using:
 images/chromium/Containerfile.framework
 ```
 
-Build is invoked via `scripts/build-image.sh chromium-framework` which resolves the core tag and passes it as a build argument.
+Build is invoked via `scripts/build-image.sh chromium-framework` which resolves the core canonical hash tag and passes it as a build argument.
 
 ## Sources of Truth
 

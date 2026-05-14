@@ -1,0 +1,29 @@
+# @trace spec:observability-convergence
+name: litmus:observability-convergence-shape
+spec: observability-convergence
+phase: pre-build
+description: Verify observability convergence scripts keep their spec trace hooks
+severity: medium
+
+preconditions:
+  - workspace contains scripts/github-actions-convergence.sh
+  - workspace contains scripts/update-convergence-dashboard.sh
+  - shell utilities are available in PATH
+
+critical_path:
+  - step: "verify convergence instrumentation remains annotated"
+    command: "grep -F '@trace spec:observability-convergence' scripts/github-actions-convergence.sh && grep -F '@trace spec:observability-convergence' scripts/update-convergence-dashboard.sh && grep -F 'convergence_score' openspec/specs/observability-convergence/spec.md"
+    timeout_ms: 5000
+    expected_behavior: "observability-convergence"
+
+observability:
+  traces:
+    - "@trace spec:observability-convergence"
+  expected_log: "Convergence instrumentation remains tied to the dashboard scripts"
+  log_fields:
+    spec: "observability-convergence"
+    test: "observability-convergence-shape"
+
+rollback:
+  on_failure: "inspect scripts/github-actions-convergence.sh and scripts/update-convergence-dashboard.sh for drift"
+  command: "sed -n '1,40p' scripts/github-actions-convergence.sh && sed -n '1,40p' scripts/update-convergence-dashboard.sh"

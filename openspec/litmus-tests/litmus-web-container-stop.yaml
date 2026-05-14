@@ -1,0 +1,32 @@
+# @trace spec:tray-app
+name: litmus:web-container-stop
+spec: tray-app
+phase: pre-build
+description: Verify attach-here launch arguments and detached OpenCode Web persistence
+severity: medium
+
+preconditions:
+  - workspace contains crates/tillandsias-headless
+  - cargo is available in PATH
+
+critical_path:
+  - step: "run the forge launch argument test"
+    command: "cargo test -p tillandsias-headless --features tray tray::tests::launch_command_targets_the_forge_image_and_project_mount -- --exact"
+    timeout_ms: 120000
+
+  - step: "run the detached OpenCode Web launch test"
+    command: "cargo test -p tillandsias-headless --features tray tray::tests::launch_command_opencode_web_is_detached_and_persistent -- --exact"
+    timeout_ms: 120000
+
+observability:
+  traces:
+    - "@trace spec:tray-app"
+    - "@trace spec:browser-isolation-tray-integration"
+  expected_log: "Attach Here uses the forge image and OpenCode Web remains detached and persistent"
+  log_fields:
+    spec: "tray-app"
+    test: "web-container-stop"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-headless/src/tray/mod.rs for launch-profile drift"
+  command: "sed -n '1585,1635p' crates/tillandsias-headless/src/tray/mod.rs"

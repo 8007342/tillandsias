@@ -5,7 +5,7 @@
 status: active
 
 ## Purpose
-TBD - created by archiving change forge-hot-cold-split. Update Purpose after archive.
+Define the forge storage split between HOT tmpfs mounts, COLD disk-backed state, and the runtime banner that makes those boundaries visible to agents and humans.
 ## Requirements
 ### Requirement: HOT tier — RAM-backed tmpfs for finely curated paths
 
@@ -234,7 +234,7 @@ The resolved cap MUST be passed into the forge container via the env var `TILLAN
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
+- `litmus:forge-hot-cold-split-shape`
 
 Gating points:
 - Hot/cold split is ephemeral; hot paths are tmpfs; cold paths are read-only

@@ -5,7 +5,7 @@
 status: active
 
 ## Purpose
-TBD - created by archiving change forge-cache-architecture. Update Purpose after archive.
+Define the live cache discipline for forge containers: shared Nix store populated by build-time Nix-managed processes, per-project cache, and per-language env var routing.
 ## Requirements
 ### Requirement: Forge containers see exactly four path categories
 
@@ -113,7 +113,7 @@ This means: `target/`, `node_modules/`, `build/`, `dist/`, `.gradle/`, `.dart_to
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
+- `litmus:forge-cache-dual-shape`
 
 Gating points:
 - Dual-layer cache is ephemeral; RW layer is cleaned up; RO layer immutable

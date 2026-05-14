@@ -7,7 +7,10 @@
 //! @cheatsheet web/mcp.md, web/cdp.md
 
 pub mod framing;
+pub mod allowlist;
+pub mod launcher;
 pub mod server;
+pub mod window_registry;
 
 pub use server::{BrowserMcpServer, McpServerConfig};
 

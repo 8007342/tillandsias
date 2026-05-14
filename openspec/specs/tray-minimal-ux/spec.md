@@ -4,9 +4,9 @@
 
 active
 
-**Version:** v1.0
+**Version:** v1.1 (supersedes v1.0)
 
-**Purpose:** Define the minimalistic tray UX flow for Tillandsias, showing only essential elements at each stage of the application lifecycle and enabling dynamic project launches.
+**Purpose:** Define the minimalistic tray UX flow for Tillandsias, showing only essential elements at each stage of the application lifecycle and exposing the Seedlings plus per-project submenus once the enclave is ready.
 
 <!-- @trace spec:tray-minimal-ux -->
 
@@ -21,7 +21,7 @@ The tray MUST display exactly four elements when Tillandsias starts:
 3. Version attribution: `Tillandsias vX.Y.Z + Attributions` (disabled, non-clickable)
 4. Quit action: `Quit Tillandsias` (enabled, terminates tray gracefully)
 
-**Measurable:** Menu item count = 4; no project submenu items visible; no cloud items visible; no GitHub login button visible.
+**Measurable:** Menu item count = 4; no Seedlings submenu visible; no project submenu items visible; no cloud items visible; no GitHub login button visible.
 
 **Scenario:** When tray launches on a fresh or cold-start state, verify `podman ps` contains no tillandsias containers and observe that only the four elements render in the menu.
 
@@ -51,44 +51,35 @@ The first tray element MUST update dynamically as enclave containers transition 
 
 Once all enclave images are healthy (`enclave_status == OK`), the tray MUST conditionally add menu items:
 
-- If local projects exist: `<Home> ~/src >` submenu (lists local projects)
-- If GitHub authenticated AND remote projects readable: `<Cloud> Cloud >` submenu (lists remote projects)
-- If NOT authenticated: `<Key> GitHub login` action button
+- `Seedlings` submenu listing `OpenCode Web`, `OpenCode`, and `Claude` in that order, with the active choice preserved from `SelectedAgent`
+- One submenu per local project, labeled with the project name
+- `GitHub Login` action button
 
-**Measurable:** Menu grows from 4 items to 6–7 items (local projects, cloud projects, and/or GitHub login); items appear only when conditions are met; state transitions logged with `spec = "tray-minimal-ux"`.
+**Measurable:** Menu grows from 4 items to 5+ items; the dynamic region appears only when conditions are met; the Seedlings submenu preserves its stable order and active choice; state transitions are logged with `spec = "tray-minimal-ux"`.
 
-**Scenario:** Start tray, wait for "Environment OK" status, then verify local projects appear in the menu. Add GitHub credentials (via login action) and verify `<Cloud>` submenu appears within 3 seconds.
+**Scenario:** Start tray, wait for "Environment OK" status, then verify the `Seedlings` submenu appears first in the dynamic region, followed by per-project submenus and the `GitHub Login` action.
 
 ---
 
 ### Requirement 4: Project launch flow
-**Modality:** MUST
+**Modality:** MUST_NOT
 
-When a user clicks a project in the tray menu, Tillandsias MUST:
-1. If project is remote (not cloned): clone it locally to the watch directory first
-2. Launch an OpenCode Web container (`tillandsias-<project>-opencode-web`) with the project directory
-3. Monitor container health via port 4096 readiness check
-4. Once healthy, launch a safe browser window via `tillandsias-chromium-core` container
-5. Browser MUST communicate with OpenCode Web through the tray socket mount (`/run/tillandsias/tray.sock`)
+This spec MUST NOT own project launch, browser session wiring, or tray socket behavior. Those behaviors are owned by `spec:tray-app` and `spec:browser-isolation-tray-integration`.
 
-**Measurable:** Git clone completes (0 exit code); container becomes healthy within 30 seconds; browser window PID is logged with `spec = "tray-minimal-ux"`; tray socket is mounted into browser container.
+**Measurable:** No assertion in this spec requires container launch, browser launch, or tray socket mounting.
 
-**Scenario:** Click a local project; verify OpenCode Web container starts. Click a remote project; verify git clone happens, then container starts. In both cases, verify safe browser window opens with correct OpenCode Web URL.
+**Scenario:** N/A. Use the owning specs for project-launch behavior.
 
 ---
 
 ### Requirement 5: Stale container cleanup
-**Modality:** MUST
+**Modality:** MUST_NOT
 
-On tray startup, Tillandsias MUST:
-1. List all containers matching `tillandsias-*` pattern
-2. Compare against `TrayState::containers` (tracked containers)
-3. Remove any stopped or orphaned containers
-4. Log cleanup actions with `spec = "tray-minimal-ux"`, `action = "cleanup"`
+This spec MUST NOT own stale-container cleanup at tray startup. Cleanup is owned by the tray/runtime lifecycle contract, not the minimal tray menu contract.
 
-**Measurable:** Cleanup log entries appear in startup phase; `podman ps -a | grep tillandsias` shows only actively tracked containers after startup completes.
+**Measurable:** No assertion in this spec requires container enumeration or removal on startup.
 
-**Scenario:** Manually create an orphaned container with `podman run --name tillandsias-orphan ...`, then start the tray. Verify the container is removed during startup.
+**Scenario:** N/A. Use the runtime lifecycle and tray-app specs for cleanup behavior.
 
 ---
 
@@ -97,7 +88,7 @@ On tray startup, Tillandsias MUST:
 
 All code implementing this spec MUST be annotated with `@trace spec:tray-minimal-ux` near the relevant function or block.
 
-**Measurable:** `git grep -n '@trace spec:tray-minimal-ux'` returns at least one hit per major code path (menu builder, status updater, project launcher, cleanup handler).
+**Measurable:** `git grep -n '@trace spec:tray-minimal-ux'` returns at least one hit per major code path (menu builder, status updater, Seedlings submenu, per-project submenu).
 
 ---
 
@@ -107,8 +98,6 @@ All code implementing this spec MUST be annotated with `@trace spec:tray-minimal
 
 1. **Menu is never empty**: The quit button is always visible, even if enclave initialization fails.
 2. **Status is always updated**: The status element updates atomically; no partial states are rendered.
-3. **Project directory is always local**: Remote projects are cloned before container launch; forge container always has a valid project directory.
-4. **Tray socket is always mounted**: Browser containers always receive the tray socket; no browser launch happens without it.
 
 ---
 
@@ -124,7 +113,7 @@ sleep 2
 
 # Verify menu has 4 items (via tray RPC or inspect)
 # Expected: [Status, Divider, Version, Quit]
-# NOT expected: [Status, Divider, Version, Quit, Project1, Project2, ...]
+# NOT expected: [Status, Divider, Version, Quit, Seedlings, Project1, ...]
 ```
 
 ### Test 2: Status updates as containers initialize
@@ -140,41 +129,33 @@ sleep 2
 ### Test 3: Projects appear after initialization
 ```bash
 # Wait for status = OK
-# Verify ~/src submenu now shows local projects
-# Verify Cloud submenu shows if authenticated
-# Count: menu should have 6–7 items (not 4)
+# Verify Seedlings submenu now shows OpenCode Web, OpenCode, and Claude in that order
+# Verify per-project submenus appear by project name
+# Count: menu should have 5+ items (not 4)
 ```
 
-### Test 4: Clicking a local project launches browser
+### Test 4: Seedlings submenu keeps stable order
 ```bash
-# Click a local project in tray menu
-# Wait 5 seconds
-# Verify: OpenCode Web container running AND browser window visible with OpenCode Web URL
+# Verify the Seedlings submenu exists and the items are ordered:
+# OpenCode Web -> OpenCode -> Claude
+# Verify the active selection stays on the configured agent
 ```
 
-### Test 5: Clicking a remote project clones then launches
+### Test 5: Per-project submenus are present after readiness
 ```bash
-# Click a remote project that doesn't exist locally
-# Monitor: git clone should complete within 30 seconds
-# Verify: Project now exists in ~/src
-# Verify: OpenCode Web container running AND browser window visible
-```
-
-### Test 6: Stale containers are cleaned on startup
-```bash
-# Manually create: podman run --name tillandsias-stale alpine sleep 3600
-# Start tray
-# Verify: tillandsias-stale container is removed during startup
-# Verify: Actively tracked containers (proxy, git, forge) are preserved
+# Wait for Environment OK
+# Verify each local project appears under its own submenu label
+# Verify GitHub Login remains available in the dynamic region
 ```
 
 ---
 
 ## Sources of Truth
 
-- `cheatsheets/welcome/tray-minimal-ux.md` — Tray UX stages, menu structure, and implementation reference
-- `cheatsheets/runtime/podman.md` — Container lifecycle, health checks, and cleanup patterns
-- `cheatsheets/runtime/unix-socket-ipc.md` — Tray socket mounting and browser-to-forge communication
+- `openspec/specs/tray-app/spec.md` — current tray menu ownership for Seedlings and per-project submenus
+- `cheatsheets/runtime/tray-state-machine.md` — stage transitions and menu visibility rules
+- `cheatsheets/runtime/statusnotifier-tray.md` — Linux tray protocol contract and menu shape
+- `openspec/specs/browser-isolation-tray-integration/spec.md` — owning spec for the tombstoned browser/session flow
 
 ---
 
@@ -182,6 +163,6 @@ sleep 2
 
 - **Menu builder**: `src-tauri/src/menu.rs` → `build_tray_menu()`
 - **Status updater**: `src-tauri/src/handlers.rs` → `update_environment_status()`
-- **Project launcher**: `src-tauri/src/handlers.rs` → `handle_*_project()` functions
-- **Cleanup logic**: `src-tauri/src/handlers.rs` → `cleanup_stale_containers()`
+- **Seedlings submenu**: `crates/tillandsias-headless/src/tray/mod.rs` → `build_seedlings_submenu()`
+- **Per-project submenu**: `crates/tillandsias-headless/src/tray/mod.rs` → `build_project_submenu()`
 - **Events**: `crates/tillandsias-core/src/event.rs` → `MenuCommand` enum

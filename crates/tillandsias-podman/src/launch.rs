@@ -1,7 +1,9 @@
-//! @trace spec:podman-orchestration, spec:fix-podman-machine-host-aliases, spec:fix-windows-image-routing, spec:subdomain-naming-flip
+//! @trace spec:podman-orchestration, spec:security-privacy-isolation, spec:fix-podman-machine-host-aliases, spec:fix-windows-image-routing, spec:subdomain-naming-flip
+//! @trace spec:podman-container-spec, spec:podman-container-handle
 
 use tracing::{debug, info};
 
+use crate::container_spec::{ContainerHandle, ContainerSpec, MountMode};
 use tillandsias_core::config::ResolvedConfig;
 #[cfg(test)]
 use tillandsias_core::config::SecurityConfig;
@@ -21,74 +23,88 @@ impl ContainerLauncher {
         Self { client }
     }
 
+    /// Build the typed podman launch spec for a forge container.
+    pub fn build_container_spec(
+        &self,
+        project_name: &str,
+        container_name: &str,
+        config: &ResolvedConfig,
+        project_path: &std::path::Path,
+        cache_dir: &std::path::Path,
+        port_range: (u16, u16),
+    ) -> ContainerSpec {
+        let mut spec = ContainerSpec::new(config.image.clone())
+            .name(container_name)
+            .hostname(format!("forge-{project_name}"))
+            .detached()
+            .pids_limit(512);
+
+        // GPU passthrough (Linux only, silent when absent)
+        if cfg!(target_os = "linux") {
+            for device_flag in detect_gpu_devices() {
+                spec = spec.option(device_flag);
+            }
+        }
+
+        let port_mapping = format!(
+            "{}-{}:{}-{}",
+            port_range.0, port_range.1, port_range.0, port_range.1
+        );
+        spec = spec.publish(port_mapping);
+
+        let project_mount = crate::container_spec::path_to_string(project_path);
+        spec = spec.volume(project_mount, "/var/home/forge/src", MountMode::ReadWrite);
+
+        let cache_mount = crate::container_spec::path_to_string(cache_dir);
+        spec = spec.volume(
+            cache_mount,
+            "/var/home/forge/.cache/tillandsias",
+            MountMode::ReadWrite,
+        );
+
+        let nix_cache = cache_dir.join("nix");
+        if nix_cache.exists() || cfg!(target_os = "linux") {
+            spec = spec.volume(
+                nix_cache.display().to_string(),
+                "/var/home/forge/.cache/tillandsias/nix",
+                MountMode::ReadWrite,
+            );
+        }
+
+        for mount in &config.mounts {
+            spec = spec.volume(
+                mount.host.clone(),
+                mount.container.clone(),
+                match mount.mode.as_str() {
+                    "ro" => MountMode::ReadOnly,
+                    "rw" => MountMode::ReadWrite,
+                    other => MountMode::Custom(other.to_string()),
+                },
+            );
+        }
+
+        spec
+    }
+
     /// Build the full argument list for `podman run`.
     pub fn build_run_args(
         &self,
+        project_name: &str,
         container_name: &str,
         config: &ResolvedConfig,
         project_path: &std::path::Path,
         cache_dir: &std::path::Path,
         port_range: (u16, u16),
     ) -> Vec<String> {
-        let mut args = vec![
-            "-d".to_string(),
-            "--rm".to_string(),
-            "--name".to_string(),
-            container_name.to_string(),
-            "--userns=keep-id".to_string(),
-            "--cap-drop=ALL".to_string(),
-            "--security-opt=no-new-privileges".to_string(),
-            "--security-opt=label=disable".to_string(),
-        ];
-
-        // GPU passthrough (Linux only, silent when absent)
-        if cfg!(target_os = "linux") {
-            for device_flag in detect_gpu_devices() {
-                args.push(device_flag);
-            }
-        }
-
-        // Port range mapping
-        let port_mapping = format!(
-            "{}-{}:{}-{}",
-            port_range.0, port_range.1, port_range.0, port_range.1
-        );
-        args.push("-p".to_string());
-        args.push(port_mapping);
-
-        // Volume mounts
-        // Project directory → container workspace (rw)
-        let project_mount = format!("{}:/var/home/forge/src", project_path.display());
-        args.push("-v".to_string());
-        args.push(project_mount);
-
-        // Cache directory → container cache
-        let cache_mount = format!("{}:/var/home/forge/.cache/tillandsias", cache_dir.display());
-        args.push("-v".to_string());
-        args.push(cache_mount);
-
-        // Shared Nix cache
-        let nix_cache = cache_dir.join("nix");
-        if nix_cache.exists() || cfg!(target_os = "linux") {
-            let nix_mount = format!(
-                "{}:/var/home/forge/.cache/tillandsias/nix",
-                nix_cache.display()
-            );
-            args.push("-v".to_string());
-            args.push(nix_mount);
-        }
-
-        // Custom mounts from project config
-        for mount in &config.mounts {
-            let mount_str = format!("{}:{}:{}", mount.host, mount.container, mount.mode);
-            args.push("-v".to_string());
-            args.push(mount_str);
-        }
-
-        // Container image (always last)
-        args.push(config.image.clone());
-
-        args
+        self.build_container_spec(
+            project_name,
+            container_name,
+            config,
+            project_path,
+            cache_dir,
+            port_range,
+        )
+        .build_run_args()
     }
 
     /// Launch a container environment for a project.
@@ -100,7 +116,7 @@ impl ContainerLauncher {
         project_path: &std::path::Path,
         cache_dir: &std::path::Path,
         port_range: (u16, u16),
-    ) -> Result<ContainerInfo, PodmanError> {
+    ) -> Result<ContainerHandle, PodmanError> {
         let container_name = ContainerInfo::container_name(project_name, genus);
 
         info!(
@@ -120,12 +136,19 @@ impl ContainerLauncher {
         std::fs::create_dir_all(cache_dir).ok();
         std::fs::create_dir_all(cache_dir.join("nix")).ok();
 
-        let args =
-            self.build_run_args(&container_name, config, project_path, cache_dir, port_range);
+        let spec = self.build_container_spec(
+            project_name,
+            &container_name,
+            config,
+            project_path,
+            cache_dir,
+            port_range,
+        );
+        let args = spec.build_run_args();
 
         self.client.run_container(&args).await?;
 
-        Ok(ContainerInfo {
+        let info = ContainerInfo {
             name: container_name,
             project_name: project_name.to_string(),
             genus,
@@ -133,7 +156,9 @@ impl ContainerLauncher {
             port_range,
             container_type: tillandsias_core::state::ContainerType::Forge,
             display_emoji: genus.flower().to_string(),
-        })
+        };
+
+        Ok(ContainerHandle::new(info, spec))
     }
 
     /// Graceful stop: SIGTERM → 10s grace → SIGKILL.
@@ -239,18 +264,29 @@ pub const DEFAULT_WEB_PORT_END: u16 = 17999;
 /// The TCP probe binds a `TcpListener` within a short-lived scope and drops it
 /// immediately, releasing the port before returning. Returns `None` if no port
 /// in the range satisfies both conditions.
-// @trace spec:opencode-web-session
-pub fn allocate_single_port(range_start: u16, range_end: u16, occupied: &[u16]) -> Option<u16> {
+fn allocate_single_port_with_probe(
+    range_start: u16,
+    range_end: u16,
+    occupied: &[u16],
+    mut probe: impl FnMut(u16) -> bool,
+) -> Option<u16> {
     for port in range_start..=range_end {
         if occupied.contains(&port) {
             continue;
         }
-        // Short-lived TCP bind probe — dropped immediately on scope exit.
-        if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
+        if probe(port) {
             return Some(port);
         }
     }
     None
+}
+
+// @trace spec:browser-isolation-tray-integration, spec:host-chromium-on-demand
+pub fn allocate_single_port(range_start: u16, range_end: u16, occupied: &[u16]) -> Option<u16> {
+    allocate_single_port_with_probe(range_start, range_end, occupied, |port| {
+        // Short-lived TCP bind probe — dropped immediately on scope exit.
+        std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()
+    })
 }
 
 /// Allocate a non-overlapping port range for a new environment.
@@ -297,6 +333,7 @@ mod tests {
         };
 
         let args = launcher.build_run_args(
+            "test",
             "tillandsias-test-aeranthos",
             &config,
             std::path::Path::new("/tmp/test-project"),
@@ -308,6 +345,7 @@ mod tests {
         assert!(args.contains(&"--security-opt=no-new-privileges".to_string()));
         assert!(args.contains(&"--userns=keep-id".to_string()));
         assert!(args.contains(&"--security-opt=label=disable".to_string()));
+        assert!(args.contains(&"--init".to_string()));
         assert!(args.contains(&"--rm".to_string()));
         assert!(args.contains(&"-d".to_string()));
     }
@@ -324,6 +362,7 @@ mod tests {
         };
 
         let args = launcher.build_run_args(
+            "my-app",
             "tillandsias-my-app-aeranthos",
             &config,
             std::path::Path::new("/tmp/test"),
@@ -347,6 +386,7 @@ mod tests {
         };
 
         let args = launcher.build_run_args(
+            "test",
             "test",
             &config,
             std::path::Path::new("/tmp/test"),
@@ -418,14 +458,14 @@ mod tests {
 
     #[test]
     fn allocate_single_port_first_free() {
-        let p = allocate_single_port(DEFAULT_WEB_PORT_START, DEFAULT_WEB_PORT_END, &[])
+        let p = allocate_single_port_with_probe(17000, 17000, &[], |_| true)
             .expect("expected a free port in the default web range");
-        assert!(p >= DEFAULT_WEB_PORT_START && p <= DEFAULT_WEB_PORT_END);
+        assert_eq!(p, 17000);
     }
 
     #[test]
     fn allocate_single_port_skips_occupied() {
-        let p = allocate_single_port(17000, 17010, &[17000, 17001, 17002])
+        let p = allocate_single_port_with_probe(17000, 17010, &[17000, 17001, 17002], |_| true)
             .expect("expected a free port above the occupied prefix");
         assert!(p >= 17003, "port {p} should be >= 17003");
     }
@@ -433,10 +473,10 @@ mod tests {
     #[test]
     fn allocate_single_port_distinct() {
         let mut occupied: Vec<u16> = Vec::new();
-        let first = allocate_single_port(DEFAULT_WEB_PORT_START, DEFAULT_WEB_PORT_END, &occupied)
+        let first = allocate_single_port_with_probe(17000, 17010, &occupied, |_| true)
             .expect("first allocation should succeed");
         occupied.push(first);
-        let second = allocate_single_port(DEFAULT_WEB_PORT_START, DEFAULT_WEB_PORT_END, &occupied)
+        let second = allocate_single_port_with_probe(17000, 17010, &occupied, |_| true)
             .expect("second allocation should succeed");
         assert_ne!(
             first, second,
@@ -446,7 +486,7 @@ mod tests {
 
     #[test]
     fn allocate_single_port_exhausted() {
-        let result = allocate_single_port(17000, 17000, &[17000]);
+        let result = allocate_single_port_with_probe(17000, 17000, &[17000], |_| true);
         assert!(
             result.is_none(),
             "single-port range fully occupied should yield None"

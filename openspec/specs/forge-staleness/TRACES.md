@@ -5,4 +5,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [scripts/build-image.sh#L202](../../../scripts/build-image.sh#L202)
+- [crates/tillandsias-core/src/config.rs#L1](../../../crates/tillandsias-core/src/config.rs#L1)
+- [scripts/build-image.sh#L201](../../../scripts/build-image.sh#L201)

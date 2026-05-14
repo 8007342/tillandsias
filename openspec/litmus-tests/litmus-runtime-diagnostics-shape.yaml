@@ -1,0 +1,28 @@
+# @trace spec:runtime-diagnostics
+name: litmus:runtime-diagnostics-shape
+spec: runtime-diagnostics
+phase: pre-build
+description: Verify the git entrypoint keeps the runtime-diagnostics trace and service log wiring
+severity: medium
+
+preconditions:
+  - workspace contains images/git/entrypoint.sh
+  - shell utilities are available in PATH
+
+critical_path:
+  - step: "verify the git entrypoint still exposes diagnostics wiring"
+    command: "grep -F '@trace spec:runtime-diagnostics' images/git/entrypoint.sh && grep -F 'SLOG=/strategic/service.log' images/git/entrypoint.sh && grep -F 'daemon ready' images/git/entrypoint.sh"
+    timeout_ms: 5000
+    expected_behavior: "runtime-diagnostics"
+
+observability:
+  traces:
+    - "@trace spec:runtime-diagnostics"
+  expected_log: "Git entrypoint keeps its diagnostics trace and startup service log"
+  log_fields:
+    spec: "runtime-diagnostics"
+    test: "runtime-diagnostics-shape"
+
+rollback:
+  on_failure: "inspect images/git/entrypoint.sh for diagnostics drift"
+  command: "sed -n '1,80p' images/git/entrypoint.sh"

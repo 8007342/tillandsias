@@ -1,4 +1,8 @@
 # @trace spec:build-script-architecture
+# @tombstone retired:build-script-architecture-litmus-suite
+# Superseded by the portable install / phased CI contract.
+phase: retired
+status: retired
 name: litmus:toolbox-isolation
 spec: build-script-architecture
 description: Verify both cached and clean build paths use isolated toolbox, not host system

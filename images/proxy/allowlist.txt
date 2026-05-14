@@ -89,7 +89,7 @@
 .cerebras.ai
 .sambanova.ai
 # OpenCode's canonical model registry (required for any OpenCode session).
-# @trace spec:opencode-web-session
+# @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
 .models.dev
 # OpenRouter + Helicone are in OpenCode's default provider set; users who pick
 # these without the allowlist entry see stuck prompts (TCP_DENIED CONNECT).

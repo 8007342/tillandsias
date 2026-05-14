@@ -1,0 +1,31 @@
+# @trace spec:podman-orchestration
+name: litmus:podman-web-launch-profile
+spec: podman-orchestration
+phase: pre-build
+description: Verify web-mode podman launch stays detached and keeps the mount/security contract
+severity: medium
+
+preconditions:
+  - workspace contains crates/tillandsias-headless and the tray feature compiles
+  - cargo is available in PATH
+
+critical_path:
+  - step: "run the web-mode launch command shape test"
+    command: "cargo test -p tillandsias-headless --features tray launch_command_opencode_web_is_detached_and_persistent -- --exact"
+    timeout_ms: 120000
+
+  - step: "confirm the tray launcher still has the non-web rm contract"
+    command: "cargo test -p tillandsias-headless --features tray launch_command_targets_the_forge_image_and_project_mount -- --exact"
+    timeout_ms: 120000
+
+observability:
+  traces:
+    - "@trace spec:podman-orchestration"
+  expected_log: "OpenCode Web launch command stays detached and keeps SELinux-disabled rw bind mounts"
+  log_fields:
+    spec: "podman-orchestration"
+    test: "podman-web-launch-profile"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-headless/src/tray/mod.rs for launch-mode regressions"
+  command: "sed -n '364,430p' crates/tillandsias-headless/src/tray/mod.rs && printf '\\n---\\n' && sed -n '1568,1620p' crates/tillandsias-headless/src/tray/mod.rs"

@@ -1,0 +1,47 @@
+trace: "021-status-icon-mapping-gap"
+
+type: "gap"
+category: "icon-design"
+status: "open"
+
+date_discovered: "2026-05-08T15:54:00Z"
+discovered_by: "claude-haiku (phase-3-implementation)"
+
+title: "Status text uses Unicode emoji but DBusMenu doesn't carry per-item icons natively"
+
+description: |
+  Phase 3 implemented EnclaveStatus enum with dynamic status text mapping:
+  - Verifying → "☐ Verifying environment..."
+  - ProxyReady → "☐🌐 Building enclave..."
+  - GitReady → "☐🌐🪞 Building git mirror..."
+  - AllHealthy → "✓ Environment OK"
+  - Failed → "🥀 Unhealthy environment"
+
+  These use Unicode emoji as transitional solution (works in all menu renderers).
+
+  However, spec-minimal-ux requires FreeDesktop named icon support for:
+  - Icon-per-menu-item in the menu
+  - Proper icon fallback chain
+  - Theming support (symbolic vs. colored icons)
+
+issue: |
+  DBusMenu protocol (org.kde.dbusmenu) doesn't natively carry icon-name per menu item.
+  Current StatusNotifierItem icon is set globally (via icon_pixmaps property).
+
+  Options for per-item icons:
+  1. Extend DBusMenu item properties with custom "icon-name" (non-standard)
+  2. Use icon-name in label prefix like "🔍 Setting up" (current approach, fragile)
+  3. Wait for next StatusNotifierItem spec update (slow path)
+  4. Use application-specific extension properties (implementation-specific)
+
+recommendation: |
+  For now, emoji in status_text is acceptable. Status is a single top-level menu item,
+  not a list, so per-item icon support is lower priority.
+
+  For Phase 4+: Investigate gtk4-rs icon theme support to find best-match FreeDesktop
+  icon for each status and verify rendering in GNOME, KDE, Xfce taskbars.
+
+future_work: |
+  - Verify emoji rendering on common Linux desktops (GNOME, KDE, Xfce)
+  - Consider adding icon-name property as custom DBusMenu extension
+  - Document icon fallback chain in cheatsheets/runtime/tray-status-icons.md

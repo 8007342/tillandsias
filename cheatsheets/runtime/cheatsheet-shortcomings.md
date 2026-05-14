@@ -19,7 +19,7 @@ pull_recipe: see-section-pull-on-demand
 
 # Cheatsheet system — shortcomings noticed during the v2 sweep
 
-@trace spec:agent-cheatsheets, spec:cheatsheet-methodology-evolution
+@trace spec:cheatsheet-tooling, spec:cheatsheet-source-layer, spec:cheatsheets-license-tiered, spec:spec-traceability
 @cheatsheet runtime/cheatsheet-architecture-v2.md, runtime/cheatsheet-frontmatter-spec.md
 
 ## Provenance
@@ -65,7 +65,7 @@ I cited `https://www.reactive-streams.org/` claiming it's the official spec — 
 
 I wrote `**Last updated:** 2026-04-25` in 10 files. Tomorrow they're "current". 90 days later they'd be "stale" by spec — but nothing surfaces this. The MCP design promises a `cheatsheet.stale_check()` tool; until it exists, staleness is invisible.
 
-**Fix:** Same `scripts/check-cheatsheet-staleness.sh` already enumerated in `cheatsheet-methodology-evolution`'s tasks.md §11.1. Just hasn't been written yet. Half a day.
+**Fix:** Same `scripts/check-cheatsheet-staleness.sh` now belongs to the cheatsheet tooling/source-layer split. Just hasn't been fully wired everywhere yet. Half a day.
 
 ### 6. Granularity guideline is fuzzy ("split when approaching 200 lines")
 
@@ -116,7 +116,7 @@ Despite all the above, the v2 sweep delivered something that didn't exist 30 min
 - 10 **exemplar fine-grained cheatsheets** with proper provenance, demonstrating the new style across 7 categories: algorithms, patterns, architecture, languages/java, security, data, build.
 - This **honest gap inventory** so future work is targeted, not speculative.
 
-The 60 legacy DRAFT cheatsheets remain DRAFT — their retrofit is its own scoped sweep (`cheatsheet-methodology-evolution`'s tasks.md §3-9) and ships independently. The new v2 ones ship `status: current` because they were written under the new methodology.
+The 60 legacy DRAFT cheatsheets remain DRAFT — their retrofit is its own scoped sweep under the cheatsheet tooling + source-layer split and ships independently. The new v2 ones ship `status: current` because they were written under the new methodology.
 
 ## Pull on Demand
 

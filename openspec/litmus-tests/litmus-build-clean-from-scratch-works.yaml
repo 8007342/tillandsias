@@ -1,4 +1,8 @@
 # @trace spec:build-script-architecture
+# @tombstone retired:build-script-architecture-litmus-suite
+# Superseded by the portable install / phased CI contract.
+phase: retired
+status: retired
 name: litmus:build-clean-from-scratch-works
 spec: build-script-architecture
 description: Verify ./build.sh --clean produces a working AppImage from scratch, no caches

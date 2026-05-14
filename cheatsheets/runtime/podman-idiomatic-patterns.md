@@ -1,3 +1,19 @@
+---
+tags: [podman, containers, runtime, events]
+languages: [bash, rust]
+since: 2026-05-12
+last_verified: 2026-05-12
+sources:
+  - https://docs.podman.io/en/stable/
+  - https://www.redhat.com/en/blog/rootless-podman
+  - https://github.com/opencontainers/runtime-spec
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # Podman Idiomatic Patterns
 
 **Use when**: Building container orchestration logic, integrating container events, optimizing performance, securing container deployments

@@ -116,8 +116,8 @@ export TILLANDSIAS_EXTERNAL_LOGS="/var/log/tillandsias/external"
 # (Linux/podman tolerated it before because of slightly different sourcing
 # order; WSL exec surfaces the dispatch-time bug.)
 # Format: [lifecycle] <phase> | <detail>
-# Mirrors output to /tmp/forge-lifecycle.log so the host's --diagnostics
-# tail can stream lifecycle events back to the calling terminal.
+# Mirrors output to /tmp/forge-lifecycle.log so runtime-diagnostics-stream
+# can surface lifecycle events back to the calling terminal.
 # @trace spec:cross-platform, spec:windows-wsl-runtime, spec:runtime-diagnostics-stream
 trace_lifecycle() {
     # Only emit lifecycle traces when TILLANDSIAS_DEBUG is set.
@@ -275,7 +275,7 @@ clone_project_from_mirror() {
 }
 
 # ── Package manager cache strategy (dual-cache architecture) ──────
-# @trace spec:forge-cache-architecture, spec:forge-cache-dual, spec:forge-shell-tools
+# @trace spec:forge-cache-dual, spec:forge-shell-tools
 # @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
 #
 # Per-project cache lives at /home/forge/.cache/tillandsias-project/
@@ -392,29 +392,6 @@ find_project_dir() {
     return 0
 }
 
-# ── Progress indicator ──────────────────────────────────────
-# @trace spec:install-progress
-# Usage: spin "message" command [args...]
-# Prints a status message, runs the command, prints dots while waiting.
-# Uses newline-based output (no \r) to avoid PTY buffering issues on
-# Windows terminals attached through podman.
-spin() {
-    local msg="$1"; shift
-    printf '  %s' "$msg" >&2
-    local spin_pid
-    ( trap 'exit 0' TERM
-      while true; do
-          sleep 2
-          printf '.' >&2
-      done ) &
-    spin_pid=$!
-    local rc=0
-    "$@" </dev/null >/dev/null 2>&1 || rc=$?
-    kill "$spin_pid" 2>/dev/null; wait "$spin_pid" 2>/dev/null
-    echo "" >&2
-    return $rc
-}
-
 # ── Coding agents (hard-installed in image) ─────────────────
 # @trace spec:default-image, spec:forge-shell-tools
 # OpenCode, Claude Code, and OpenSpec are baked into /opt/agents/ at image
@@ -449,7 +426,7 @@ require_openspec() {
 }
 
 # ── OpenCode config overlay ─────────────────────────────────
-# @trace spec:opencode-web-session, spec:layered-tools-overlay
+# @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp, spec:layered-tools-overlay
 # The Containerfile bakes a minimal stub at ~/.config/opencode/config.json
 # (just `{ "autoupdate": false }`). Replace it with the host-mounted overlay
 # so MCPs, instructions, dark theme, and the enclave-local ollama baseURL

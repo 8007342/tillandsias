@@ -10,7 +10,6 @@
 # Usage: scripts/test-secrets.sh [--verbose]
 #
 # Environment:
-#   PODMAN_PATH           Path to podman binary (optional, auto-detected)
 #   TEST_IMAGE            Container image to use for testing (default: alpine:3.20)
 #
 # Exit codes:
@@ -21,16 +20,9 @@
 
 set -euo pipefail
 
-# Resolve the podman binary
-if [[ -n "${PODMAN_PATH:-}" ]] && [[ -x "$PODMAN_PATH" ]]; then
-    PODMAN="$PODMAN_PATH"
-elif [[ -x /usr/bin/podman ]]; then
-    PODMAN=/usr/bin/podman
-elif [[ -x /usr/local/bin/podman ]]; then
-    PODMAN=/usr/local/bin/podman
-else
-    PODMAN=podman
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/common.sh"
+require_podman
 
 # Colors
 RED='\033[0;31m'
@@ -73,12 +65,6 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
-
-# Verify podman is available
-if ! command -v "$PODMAN" &>/dev/null; then
-    _error "podman not found at $PODMAN"
-    exit 1
-fi
 
 _step "Testing podman secrets (rootless mode: --userns=keep-id)"
 

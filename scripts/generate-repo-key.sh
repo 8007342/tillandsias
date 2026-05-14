@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Generate GPG key for APT/RPM repo signing
+# Legacy GPG key generation helper for historical APT/RPM repo signing.
+# This script is not part of the active Cosign bundle release contract.
 # Run once, then store private key as REPO_GPG_PRIVATE_KEY GitHub secret
 #
 # Usage:
@@ -10,8 +11,6 @@
 #   2. Store repo-key-private.gpg as GitHub secret REPO_GPG_PRIVATE_KEY
 #   3. DELETE repo-key-private.gpg from disk immediately
 #
-# @trace spec:binary-signing
-
 set -euo pipefail
 
 gpg --batch --gen-key <<EOF

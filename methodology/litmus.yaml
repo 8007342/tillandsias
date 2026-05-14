@@ -340,6 +340,28 @@ litmus_test:
       - when_parent_test_changes: "child_tests_inherit_new_constraints_if_compatible"
       - incompatible_changes: "emit_error_and_block_until_manually_resolved"
 
+  chain_protocol:
+    purpose: >
+      Canonical litmus chain guidance for agents and specs. Start with the
+      smallest actionable failure boundary, then expand to sibling tests, then
+      scoped CI, phased CI/install, and finally the runtime entry boundary.
+    canonical_order:
+      - smallest_focused_litmus
+      - sibling_litmus_set
+      - scoped_ci_filter_and_strict
+      - phased_ci_full_install_filter_and_strict
+      - runtime_entry_boundary
+    canonical_commands:
+      scoped_ci: "./build.sh --ci --strict --filter <spec-id(s)>"
+      phased_ci_full_install: "./build.sh --ci-full --install --strict --filter <spec-id(s)>"
+      runtime_entry_boundary: "tillandsias --init --debug"
+    rules:
+      - new_or_updated_specs_should_include_chain_reference
+      - chain_reference_should_name_shortest_boundary
+      - chain_reference_should_name_sibling_tests
+      - chain_reference_should_name_scoped_ci_commands
+      - chain_reference_should_name_runtime_entry_boundary
+
   spec_litmus_versioning_enforcement:
     rule: >
       When a spec changes semantically, all bound litmus tests MUST be re-evaluated.

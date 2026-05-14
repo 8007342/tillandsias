@@ -1,0 +1,58 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.024-agentic-litmus-chain-distillation@v1
+type: distillation
+category: methodology
+status: distilled
+
+date_observed: "2026-05-12T00:00:00Z"
+observed_by: "codex"
+
+title: "Agentic litmus-chain distillation for targeted convergence loops"
+
+observed_signal:
+  - "Scoped --filter/--strict litmus runs converged quickly on the podman orchestration slice"
+  - "Agents had to rediscover the chain ladder manually when specs lacked a chain reference"
+  - "Legacy webview/browser and podman runtime seams still carried stale or superseded intent"
+
+expected_model:
+  - "Specs expose an immediate, short litmus chain that agents can execute without rediscovery"
+  - "Methodology records the canonical chain order and the evidence bundle for each pass"
+  - "New or updated specs include a litmus-chain subsection with scoped CI commands"
+
+violated_or_missing_claims:
+  - "methodology/litmus.yaml lacked a first-class chain protocol"
+  - "methodology/verification.yaml did not require chain references in new or updated specs"
+  - "methodology/convergence.yaml did not explicitly preserve chain references in evidence resume points"
+  - "Several stale specs still described superseded browser/session architecture (notably opencode-web-session, now tombstoned)"
+
+affected_artifacts:
+  - methodology/ci.yaml
+  - methodology/litmus.yaml
+  - methodology/verification.yaml
+  - methodology/convergence.yaml
+  - methodology/event/index.yaml
+  - openspec/specs/spec-traceability/spec.md
+  - openspec/specs/browser-isolation-tray-integration/spec.md
+  - openspec/specs/forge-standalone/spec.md
+  - openspec/specs/security-privacy-isolation/spec.md
+
+evidence_refs:
+  - "build.sh --ci-full --install --filter dev-build:direct-podman-calls:podman-orchestration:default-image:forge-standalone --strict dev-build:direct-podman-calls:podman-orchestration:default-image:forge-standalone"
+  - "./scripts/run-litmus-test.sh podman-orchestration"
+  - "openspec/litmus-tests/litmus-podman-web-launch-profile.yaml"
+  - "openspec/specs/browser-isolation-tray-integration/spec.md"
+  - "openspec/specs/opencode-web-session/spec.md"
+
+uncertainty_delta: low
+provisional_classification: methodology_claim_unproven
+next_distillation_step:
+  - "Refresh cheatsheets with canonical chain examples and zero-tolerance security boundaries"
+  - "Tombstone or narrow stale compatibility specs that no longer own current behavior"
+  - "Add chain-reference blocks to updated security and isolation specs"
+
+closure_criteria:
+  - "Methodology defines the canonical litmus chain and chain reference contract"
+  - "At least one security/privacy/isolation umbrella spec points at the chain"
+  - "Updated specs expose a short path from litmus failure to actionable repair"
+  - "Cheatsheets mirror the same chain discipline"

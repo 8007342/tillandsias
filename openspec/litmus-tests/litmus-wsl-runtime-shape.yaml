@@ -1,0 +1,28 @@
+# @trace spec:wsl-runtime
+name: litmus:wsl-runtime-shape
+spec: wsl-runtime
+phase: pre-build
+description: Verify the WSL runtime stub remains explicit and traceable
+severity: medium
+
+preconditions:
+  - workspace contains crates/tillandsias-podman/src/runtime.rs
+  - cargo is available in PATH
+
+critical_path:
+  - step: "verify the WSL runtime stub is still annotated"
+    command: "grep -F 'spec:wsl-runtime' crates/tillandsias-podman/src/runtime.rs && grep -F 'WSL runtime not yet implemented' crates/tillandsias-podman/src/runtime.rs"
+    timeout_ms: 5000
+    expected_behavior: "wsl-runtime"
+
+observability:
+  traces:
+    - "@trace spec:wsl-runtime"
+  expected_log: "WSL runtime stub remains explicit"
+  log_fields:
+    spec: "wsl-runtime"
+    test: "wsl-runtime-shape"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-podman/src/runtime.rs for WSL runtime drift"
+  command: "sed -n '240,290p' crates/tillandsias-podman/src/runtime.rs"

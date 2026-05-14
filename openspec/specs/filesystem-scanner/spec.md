@@ -72,6 +72,15 @@ The scanner MUST debounce rapid filesystem events into batched project state upd
 - **Pass**: Blocked on OS event wait (inotify, FSEvents, ReadDirectoryChangesW)
 - **Fail**: Polling loop detected; CPU >1% sustained
 
+## Litmus Chain
+
+Start with the smallest executable boundary:
+
+1. `cargo test -p tillandsias-scanner detect::tests::scan_project_full -- --exact`
+2. `cargo test -p tillandsias-scanner watcher::tests::initial_scan_finds_projects -- --exact`
+3. `cargo test -p tillandsias-scanner watcher::tests::watch_survives_nonexistent_watch_path -- --exact`
+4. `./build.sh --ci-full --install --strict-all --filter filesystem-scanner --strict filesystem-scanner`
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns
@@ -81,5 +90,5 @@ The scanner MUST debounce rapid filesystem events into batched project state upd
 
 Annotations referencing this spec can be found by:
 ```bash
-grep -rn "@trace spec:filesystem-scanner" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+grep -rn "@trace spec:filesystem-scanner" scripts/ crates/ images/ methodology/ --include="*.rs" --include="*.sh"
 ```

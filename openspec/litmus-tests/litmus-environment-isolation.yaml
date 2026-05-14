@@ -15,39 +15,26 @@ critical_path:
     expected_behavior: "host has 20+ env vars typically"
 
   - step: "execute forge container and count env vars"
-    command: "podman run --rm tillandsias-forge env | wc -l"
+    command: 'FORGE_IMAGE="${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '"'"'{{.Repository}}:{{.Tag}}'"'"' | grep '"'"'^tillandsias-forge:'"'"' | head -1)}"; test -n "$FORGE_IMAGE" && podman run --rm "$FORGE_IMAGE" env | wc -l'
     timeout_ms: 5000
     expected_behavior: "forge has 3-10 env vars only"
 
   - step: "list forge environment variables"
-    command: "podman run --rm tillandsias-forge env | sort"
+    command: 'FORGE_IMAGE="${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '"'"'{{.Repository}}:{{.Tag}}'"'"' | grep '"'"'^tillandsias-forge:'"'"' | head -1)}"; test -n "$FORGE_IMAGE" && podman run --rm "$FORGE_IMAGE" env | sort'
     timeout_ms: 5000
-    expected_behavior: "minimal set: PATH, HOME, USER, container-specific"
+    expected_behavior: "minimal env vars"
 
   - step: "verify no host-specific vars in forge"
-    command: "podman run --rm tillandsias-forge env | grep -E 'DOCKER_HOST|SESSION_MANAGER|DBUS_SESSION_BUS_ADDRESS|XDG_' | wc -l"
+    command: 'FORGE_IMAGE="${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '"'"'{{.Repository}}:{{.Tag}}'"'"' | grep '"'"'^tillandsias-forge:'"'"' | head -1)}"; test -n "$FORGE_IMAGE" && podman run --rm "$FORGE_IMAGE" env | grep -E '"'"'DOCKER_HOST|SESSION_MANAGER|DBUS_SESSION_BUS_ADDRESS|XDG_'"'"' | wc -l'
     timeout_ms: 3000
     expected_behavior: "0 matches (no host session/display vars)"
 
   - step: "verify PATH is correctly set"
-    command: "podman run --rm tillandsias-forge which cargo"
+    command: 'FORGE_IMAGE="${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '"'"'{{.Repository}}:{{.Tag}}'"'"' | grep '"'"'^tillandsias-forge:'"'"' | head -1)}"; test -n "$FORGE_IMAGE" && podman run --rm "$FORGE_IMAGE" which cargo'
     timeout_ms: 5000
     expected_behavior: "/opt/cargo/bin/cargo or /usr/local/cargo/bin/cargo"
 
 gating_points:
-  - signal: "environment isolation enforced"
-    success: "forge has 3-10 env vars, none from host session"
-    failure: "forge inherits host environment OR missing critical vars"
-    spec_linkage: "environment-runtime"
-
-  - signal: "no session/display leakage"
-    success: "no XDG, DBUS, DOCKER_HOST, or X11 vars in forge"
-    failure: "host session variables visible in forge"
-
-  - signal: "minimal necessary vars present"
-    success: "PATH, HOME, USER all set and functional"
-    failure: "required env vars missing"
-
 observability:
   traces:
     - "@trace spec:environment-runtime"

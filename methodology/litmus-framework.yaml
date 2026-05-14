@@ -12,11 +12,26 @@ litmus_framework:
     - Bidirectional traceability: code → spec → test → metric
 
   design_philosophy:
-    - "Mock at the subprocess boundary, not internals" — intercept podman_exec() calls
-    - "Assertions are spec requirements" — each test validates 1..N spec requirements
-    - "Composition over inheritance" — tests combine via dependency graph, not class hierarchy
-    - "Observable signals only" — success/failure must be externally verifiable
-    - "Costs are explicit" — wall-time, I/O, flakiness all measured and budgeted
+    - "Mock at the subprocess boundary, not internals - intercept podman_exec() calls"
+    - "Assertions are spec requirements - each test validates 1..N spec requirements"
+    - "Composition over inheritance - tests combine via dependency graph, not class hierarchy"
+    - "Observable signals only - success/failure must be externally verifiable"
+    - "Costs are explicit - wall-time, I/O, flakiness all measured and budgeted"
+    - "A shell shim is acceptable as the first mock runtime - the fake backend may live in scripts before the Rust crate lands, but it still owns the subprocess boundary"
+    - "Phase boundaries are explicit - pre-build litmus gates cheap static claims, post-build smoke gates the representative end-to-end path, runtime litmus remains a separate debt surface"
+    - "Host tool presence is a litmus precondition - if a stack requires `podman` on PATH, validate that with a pre-build litmus such as `podman -v` and let implementation assume the contract rather than rediscovering locations"
+
+  secret_lifecycle_architecture:
+    purpose: >
+      Secret-bearing flows need an additional split so we do not mix command
+      shape, runtime completion, and cleanup in one gate.
+    rules:
+      - "Use synthetic identity values and temp HOME directories in fixtures."
+      - "Keep pre-build tests focused on the fake Podman command shape and recorded calls."
+      - "Move full login completion smokes to post-build or runtime phases."
+      - "Keep runtime cleanup assertions as separate residual litmus tests."
+      - "Do not encode host PII or host-specific account data in repo fixtures."
+      - "Helper scripts that own the secret transport should be repo-local and path-resolved, so CI and local runs execute the same command boundary."
 
   architecture:
     layers:
@@ -28,6 +43,8 @@ litmus_framework:
         files:
           - crates/tillandsias-litmus/src/mock/podman.rs
           - crates/tillandsias-litmus/src/mock/env.rs
+          - scripts/run-litmus-test.sh
+          - scripts/test-support/podman-mock.sh
         trait: "MockPodmanRuntime"
         key_methods:
           - "record_call(cmd, args) → CallRecord"
@@ -48,6 +65,7 @@ litmus_framework:
           - "execute(&mut self, runtime: &MockPodmanRuntime) → SignalResult"
           - "spec_ids(&self) → Vec<&str>"
           - "timeout_millis(&self) → u32"
+          - "phase(&self) → LitmusPhase"
 
       layer_2:
         name: "Composite Litmus Tests"
@@ -62,6 +80,7 @@ litmus_framework:
           - "child_signals(&self) → Vec<&LitmusSignal>"
           - "execute_sequential(&mut self) → TestResult"
           - "convergence_obligation(&self) → ConvergenceObligation"
+          - "phase(&self) → LitmusPhase"
 
       layer_3:
         name: "Convergence Reporting"
@@ -308,29 +327,37 @@ litmus_framework:
     purpose: >
       Litmus framework gates --ci-full releases on convergence evidence.
       Release requires all critical-path specs to have passing tests.
+      The build pipeline is phase-aware so cheap checks can gate build/install
+      and the representative E2E smoke can run after the artifact exists.
     workflow: |
       ./build.sh --ci-full
         ↓
-      Run all LitmusTest instances matching:
-        - status: "active" in litmus-bindings.yaml
-        - critical_path: true in spec
-        - OR (required by release policy)
+      Run pre-build LitmusTest instances matching the pre-build phase
+        ↓
+      Build/install the artifact
+        ↓
+      Run post-build representative smoke matching the post-build phase
+        ↓
+      Run runtime residual litmus matching the runtime phase
         ↓
       Compute CentiColon deltas for each passing/failing test
         ↓
-      If any critical-path test fails:
+      If any phase fails:
         → emit spec_trace linking to the failing requirement
         → block release with "litmus_validation_pending" status
         ↓
-      If all critical-path tests pass:
+      If all phases pass:
         → compute project_cc score
         → persist centicolon-signature.jsonl
         → emit release evidence bundle
         → allow archive and GitHub release
 
     cost_model: |
-      --ci-full litmus budget = 300 seconds total
-      Per-test budget = 30 seconds max (enforced by timeout_millis)
+      --ci-full budget is split by phase:
+        pre-build: 90 seconds total
+        post-build smoke: 180 seconds total
+        runtime residual suite: 300 seconds total
+      Per-test budget remains 30 seconds max (enforced by timeout_millis)
       Parallel test execution: group independent tests by spec domain
         Example: credential tests (secrets, github-health) run in parallel
         Example: image tests (forge, proxy, git) run in parallel

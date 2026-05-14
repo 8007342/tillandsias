@@ -72,6 +72,7 @@ All enclave network operations MUST be logged to the `--log-enclave` accountabil
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:enclave-isolation`
+- `litmus:socket-cleanup`
 
 Gating points:
 - Enclave network is isolated; no egress to host network without proxy

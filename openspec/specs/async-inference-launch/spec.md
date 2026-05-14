@@ -69,9 +69,9 @@ This prevents the user from being surprised that inference is not immediately av
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:ephemeral-guarantee`
+- `litmus:inference-readiness-probe-shape`
 
 Gating points:
 - Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
 - Deterministic and reproducible: test results do not depend on prior state
 - Falsifiable: failure modes (leaked resources, persistence) are detectable
-

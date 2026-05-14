@@ -1,0 +1,37 @@
+name: litmus:filesystem-scanner-shape
+spec: filesystem-scanner
+description: Verify the scanner still resolves projects from the existing unit-test seams and keeps its event-driven contract
+severity: medium
+phase: pre-build
+
+preconditions:
+  - workspace contains crates/tillandsias-scanner/src/
+  - cargo is available in PATH
+
+critical_path:
+  - step: "verify the scanner can discover normal projects"
+    command: "cargo test -p tillandsias-scanner detect::tests::scan_project_full -- --exact"
+    timeout_ms: 30000
+    expected_behavior: "scan_project_full"
+
+  - step: "verify watcher startup finds projects"
+    command: "cargo test -p tillandsias-scanner watcher::tests::initial_scan_finds_projects -- --exact"
+    timeout_ms: 30000
+    expected_behavior: "initial_scan_finds_projects"
+
+  - step: "verify missing watch paths are skipped cleanly"
+    command: "cargo test -p tillandsias-scanner watcher::tests::watch_survives_nonexistent_watch_path -- --exact"
+    timeout_ms: 30000
+    expected_behavior: "watch_survives_nonexistent_watch_path"
+
+observability:
+  traces:
+    - "@trace spec:filesystem-scanner"
+  expected_log: "filesystem scanner remains event-driven and resilient to missing watch paths"
+  log_fields:
+    spec: "filesystem-scanner"
+    test: "filesystem-scanner-shape"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-scanner/src/detect.rs, crates/tillandsias-scanner/src/watcher.rs, and openspec/specs/filesystem-scanner/spec.md"
+  command: "cargo test -p tillandsias-scanner detect::tests::scan_project_full watcher::tests::initial_scan_finds_projects watcher::tests::watch_survives_nonexistent_watch_path -- --exact"

@@ -1,94 +1,20 @@
+<!-- @tombstone superseded:default-image+nix-builder -->
+<!-- @trace spec:appimage-build-pipeline -->
 # appimage-build-pipeline Specification
-
-<!-- @tombstone deferred:linux-native-portable-executable — AppImage build pipeline removed in favor of the current portable build path. -->
 
 ## Status
 
-status: deferred
+status: obsolete
 
-## Purpose
-TBD - created by archiving change appimage-builder-source-slim. Update Purpose after archive.
-## Requirements
-### Requirement: Source copy into the AppImage builder SHALL exclude artefact directories
+## Tombstone
 
-The host-to-builder source copy step in `build.sh --install` SHALL omit
-all directories that are not consumed by the in-builder `cargo tauri
-build` invocation. The exclude list MUST include at minimum:
-`./target`, `./.git`, `./.nix-output`, `./.claude`, `./.opencode`,
-`./node_modules`, and `./*.AppImage`. The script SHALL declare the
-exclude list ONCE in a single bash array (`BUILDER_COPY_EXCLUDES`) and
-reuse it for every consumer of the list.
+`appimage-build-pipeline` was the old AppImage-oriented source-copy and size-cap
+spec. The live build contract now lives in `default-image`, `nix-builder`, and
+the current `build.sh` / `scripts/build-image.sh` flow.
 
-#### Scenario: 47 GB target/ does not get copied
+Historical trace links are retained for archive consumers only.
 
-- **WHEN** `./build.sh --install` runs against a workspace whose
-  `target/` is multi-gigabyte
-- **THEN** the in-container `/build` directory is populated WITHOUT a
-  `target/` subdirectory
-- **AND** the wall-clock time of the source-copy step is under 30 seconds
-  on a developer workstation with NVMe storage
+## Superseded By
 
-#### Scenario: .git is not copied
-
-- **WHEN** the source copy completes
-- **THEN** `/build/.git` does not exist
-- **AND** the build proceeds (cargo does not require .git)
-
-### Requirement: Source copy size SHALL be capped at 150 MB
-
-Immediately after the source-copy step, the script SHALL measure the
-size of the copied tree and abort the build if it exceeds 150 MB
-(157 286 400 bytes). The error message SHALL identify the three largest
-top-level directories so the offender is obvious.
-
-#### Scenario: Tree under 150 MB proceeds
-
-- **GIVEN** the workspace source (excluding artefact directories) is 17 MB
-- **WHEN** `./build.sh --install` runs
-- **THEN** the size check passes silently and the cargo build proceeds
-
-#### Scenario: Tree over 150 MB aborts with a helpful error
-
-- **GIVEN** someone has committed a 200 MB binary blob to the workspace
-- **WHEN** `./build.sh --install` runs
-- **THEN** the script aborts with exit code != 0 BEFORE invoking cargo
-- **AND** the error names the top-3 largest top-level dirs in `/build`
-- **AND** the error mentions the 150 MB cap and the spec name
-
-### Requirement: Source copy SHALL use a builder-image-default tool
-
-The copy mechanism SHALL rely only on tools present in the upstream
-`ubuntu:22.04` image without additional `apt-get install` steps. `tar`
-satisfies this; `rsync` does not (would require an install step that
-costs cold-cache wall-clock time and a network fetch). The script
-SHALL use a `tar … --exclude=… -cf - | tar -xf -` pipe so the source
-bytes stream from reader to writer in a single pass.
-
-#### Scenario: rsync is not invoked
-
-- **WHEN** the source-copy step runs in a freshly-pulled `ubuntu:22.04`
-  container with no extra packages
-- **THEN** the step succeeds without `apt-get install rsync`
-
-
-## Sources of Truth
-
-- `cheatsheets/build/cargo.md` — Cargo reference and patterns
-- `cheatsheets/build/nix-flake-basics.md` — Nix Flake Basics reference and patterns
-
-## Litmus Tests
-
-Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
-
-Gating points:
-- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
-- Deterministic and reproducible: test results do not depend on prior state
-- Falsifiable: failure modes (leaked resources, persistence) are detectable
-
-## Observability
-
-Annotations referencing this spec can be found by:
-```bash
-grep -rn "@trace spec:appimage-build-pipeline" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
-```
+- `openspec/specs/default-image/spec.md`
+- `openspec/specs/nix-builder/spec.md`

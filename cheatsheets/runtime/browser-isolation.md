@@ -167,15 +167,37 @@ Tillandsias tray checks via: `curl http://<container>:9222/json/version` before 
 2. Poll CDP on `http://<container>:9222` until healthy
 3. Connect tray's MCP client to browser's CDP WebSocket
 4. On window close → `podman stop <container>` (ephemeral cleanup)
+5. If the browser image tag or launch contract changed, drop the container and recreate it; do not reuse browser cache or state between runs
+6. If rootless Podman reports stale storage or uid-map metadata, repair the host runtime once with `podman system migrate`, then recreate the ephemeral browser container
+7. If `podman` is missing, fail fast with an actionable `Podman not installed` error and do not attempt a degraded browser path
 
 **Network architecture**:
 - Browser container: on `tillandsias-enclave` network, restricted to proxy + git service
 - Host→container: tray communicates via CDP JSON (http://localhost:9222)
 - Container→external: all HTTP/HTTPS through proxy; proxy enforces domain allowlist
 
+**Logging and cleanup**
+- Browser container logs are observable through the normal runtime logging pipeline and Podman diagnostics.
+- Logging is side-channel evidence only; browser launch success must not depend on a log sink succeeding.
+- Temporary browser artifacts are cleaned up with container removal and tmpfs teardown, not by mutating an existing browser container in place.
+
+## Litmus Chain
+
+Browser isolation work should start with the core image boundary, then widen to
+tray integration only after the core seam is stable:
+
+1. `./scripts/run-litmus-test.sh browser-isolation-core`
+1. `./scripts/run-litmus-test.sh browser-isolation-tray-integration`
+1. `./scripts/run-litmus-test.sh security-privacy-isolation`
+1. `./build.sh --ci --strict --filter browser-isolation-core:browser-isolation-tray-integration:security-privacy-isolation`
+1. `./build.sh --ci-full --install --strict --filter browser-isolation-core:browser-isolation-tray-integration:browser-mcp-server:security-privacy-isolation`
+1. `tillandsias --init --debug`
+
 ## See also
 
 - `runtime/container-lifecycle.md` — Container startup phases and health checks
+- `runtime/podman-logging.md` — Podman diagnostics, lifecycle recovery, and host maintenance
+- `runtime/runtime-logging.md` — Runtime logging and tracing best practices
 - `runtime/container-gpu.md` — GPU passthrough for rendering
 - `runtime/chromium-headless.md` — Headless rendering and automation
 - `openspec/specs/browser-isolation-core/spec.md` — Core browser isolation requirements

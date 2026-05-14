@@ -112,6 +112,24 @@ Together these form a navigable cheatsheet→code→spec→log graph that lets r
 - **WHEN** an `info!` / `warn!` / `error!` event emits with `accountability = true` because of cheatsheet-derived behaviour
 - **THEN** the event SHALL include both `spec = "<name>"` and `cheatsheet = "<category>/<filename>.md"` as structured fields
 
+### Requirement: Litmus chain references are explicit in updated specs
+- **ID**: spec-traceability.litmus.chain-reference@v1
+- **Modality**: SHOULD
+- **Measurable**: true
+- **Invariants**: [spec-traceability.invariant.litmus-chain-reference-present]
+
+When a spec is newly authored or semantically updated, the spec SHOULD include a
+`## Litmus Chain` section that starts with the smallest actionable boundary,
+names sibling tests, and records the scoped `--filter` / `--strict` commands
+that resume the convergence loop without rediscovery.
+
+#### Scenario: Updated spec includes a chain reference
+- **WHEN** a spec is added or materially edited
+- **THEN** the spec SHOULD name the shortest litmus chain for the affected
+  boundary
+- **AND** the chain SHOULD include a scoped CI step and a runtime entry boundary
+- **AND** the chain SHOULD be actionable by an agent without additional context
+
 ## Invariants
 
 ### Invariant: Architectural decisions are annotated
@@ -167,6 +185,11 @@ Together these form a navigable cheatsheet→code→spec→log graph that lets r
 ### Invariant: Cheatsheet log field is queryable
 - **ID**: spec-traceability.invariant.cheatsheet-log-field-queryable
 - **Expression**: `log_event.cheatsheet_field => rg 'cheatsheet = "..."' finds_all_events`
+- **Measurable**: true
+
+### Invariant: Litmus chain reference is present
+- **ID**: spec-traceability.invariant.litmus-chain-reference-present
+- **Expression**: `updated_spec HAS '## Litmus Chain' AND chain_mentions_filter_strict_and_runtime_entry`
 - **Measurable**: true
 
 ## Litmus Tests

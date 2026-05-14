@@ -1,14 +1,14 @@
 trace: spec:methodology-accountability
 
 event_id: methodology.event.007-build-script-architecture-litmus-tombstone@v1
-status: triaged
+status: distilled
 observed_at: "2026-05-06T00:00:00Z"
 reporter: "codex"
 summary: >
-  The build-script-architecture litmus suite still asserts an old Ubuntu
-  AppImage contract even though the implementation has moved to a native,
-  portable build path. The tests now measure removed behavior, not the live
-  product contract.
+  The build-script-architecture litmus suite asserted an old Ubuntu AppImage
+  contract even though the implementation moved to a native portable build
+  path. The stale tests were tombstoned and the learned distinction was
+  preserved in the spec and litmus documentation.
 
 observed_signal:
   description: >
@@ -75,13 +75,20 @@ evidence_refs:
 uncertainty_delta: medium
 provisional_classification: stale_litmus_suite
 
+distilled_into:
+  - openspec/specs/build-script-architecture/spec.md
+  - openspec/litmus-tests/README.md
+  - openspec/litmus-tests/litmus-build-cache-transparent.yaml
+  - openspec/litmus-tests/litmus-build-clean-from-scratch-works.yaml
+  - openspec/litmus-tests/litmus-ci-unchanged-behavior.yaml
+  - openspec/litmus-tests/litmus-toolbox-isolation.yaml
+
 next_distillation_step:
   owner: "codex"
   action: >
-    Remove the retired AppImage litmus suite from active bindings, then
-    distill the current portable build contract into a fresh spec/litmus pair
-    that describes the native local-install path.
-  target_artifact: "openspec/litmus-bindings.yaml"
+    Continue refining the runtime litmus residuals now that the retired
+    AppImage suite is explicitly tombstoned and excluded from active scoring.
+  target_artifact: "openspec/litmus-tests"
 
 closure_criteria:
   - learned_distinction_preserved_in_durable_artifact

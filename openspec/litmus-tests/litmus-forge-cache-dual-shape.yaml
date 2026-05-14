@@ -1,0 +1,38 @@
+name: litmus:forge-cache-dual-shape
+spec: forge-cache-dual
+description: Verify cache discipline stays wired to the active dual-cache contract and the runtime env routing helpers
+severity: medium
+phase: pre-build
+
+preconditions:
+  - workspace contains images/default/config-overlay/opencode/instructions/cache-discipline.md
+  - workspace contains images/default/lib-common.sh
+  - workspace contains openspec/specs/forge-cache-dual/spec.md
+
+critical_path:
+  - step: "verify the cache discipline instruction traces the active cache spec"
+    command: "grep -Fq '@trace spec:forge-cache-dual' images/default/config-overlay/opencode/instructions/cache-discipline.md && echo 'cache-discipline traces forge-cache-dual'"
+    timeout_ms: 10000
+    expected_behavior: "cache-discipline traces forge-cache-dual"
+
+  - step: "verify the shared cache helper uses the per-project cache root"
+    command: "grep -Fq 'PROJECT_CACHE=' images/default/lib-common.sh && grep -Fq '/home/forge/.cache/tillandsias-project' images/default/lib-common.sh && echo 'project cache root present'"
+    timeout_ms: 10000
+    expected_behavior: "project cache root present"
+
+  - step: "verify the runtime env routing exports still point into the per-project cache"
+    command: "grep -Fq 'export CARGO_TARGET_DIR=' images/default/lib-common.sh && grep -Fq '$PROJECT_CACHE/cargo/target' images/default/lib-common.sh && grep -Fq 'export GOMODCACHE=' images/default/lib-common.sh && grep -Fq '$PROJECT_CACHE/go/pkg/mod' images/default/lib-common.sh && grep -Fq 'export GRADLE_USER_HOME=' images/default/lib-common.sh && grep -Fq '$PROJECT_CACHE/gradle' images/default/lib-common.sh && echo 'per-language cache envs present'"
+    timeout_ms: 10000
+    expected_behavior: "per-language cache envs present"
+
+observability:
+  traces:
+    - "@trace spec:forge-cache-dual"
+  expected_log: "cache discipline remains bound to the dual-cache contract"
+  log_fields:
+    spec: "forge-cache-dual"
+    test: "forge-cache-dual-shape"
+
+rollback:
+  on_failure: "inspect images/default/config-overlay/opencode/instructions/cache-discipline.md, images/default/lib-common.sh, and openspec/specs/forge-cache-dual/spec.md for drift"
+  command: "grep -n '@trace spec:forge-cache-dual' images/default/config-overlay/opencode/instructions/cache-discipline.md && grep -n 'PROJECT_CACHE=\"/home/forge/.cache/tillandsias-project\"' images/default/lib-common.sh"

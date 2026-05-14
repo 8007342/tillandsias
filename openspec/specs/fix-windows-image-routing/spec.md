@@ -68,7 +68,7 @@ The routing logic MUST be encapsulated in a small `image_build_paths(image_name:
 
 - The helper returns the tuple `(Containerfile, context_dir)` for the given `image_name`
 - The helper is used by the Windows direct-podman build path
-- The helper is available for reuse if/when a unified Phase-2 path from `direct-podman-calls` lands
+- The helper is available for reuse if/when a unified typed Podman layer path lands
 
 ### Requirement: Defensive Integration Test or Self-Check
 
@@ -111,9 +111,26 @@ The Windows direct-podman build path (used when `build-image.sh` is unavailable)
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
+- `litmus:fix-windows-image-routing-shape`
 
 Gating points:
 - Image routing state is ephemeral; WSL containers are cleaned up
 - Deterministic and reproducible: test results do not depend on prior state
 - Falsifiable: failure modes (leaked state, persistence) are detectable
+
+## Litmus Chain
+
+Start with the smallest executable boundary:
+
+1. `cargo test -p tillandsias-core build_routing_uses_type_specific_containerfiles -- --exact`
+2. `./build.sh --ci-full --install --strict-all --filter fix-windows-image-routing --strict fix-windows-image-routing`
+
+The unit test proves the build helper routes each image type to its own Containerfile.
+The strict CI step keeps the spec inside the global frontier sweep.
+
+## Observability
+
+Annotations referencing this spec can be found by:
+```bash
+grep -rn "@trace spec:fix-windows-image-routing" crates scripts images methodology --include="*.rs" --include="*.sh"
+```

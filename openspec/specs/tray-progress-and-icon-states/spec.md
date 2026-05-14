@@ -91,7 +91,7 @@ The "Sign in to GitHub" menu item MUST be renamed:
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee` — progress chip state transitions and menu collapsing on failure
+- `litmus:tray-menu-lifecycle` — progress chip state transitions and menu collapsing on failure
 
 Gating points:
 - Status chip starts with `✅ Verifying environment …` on cold start

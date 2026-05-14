@@ -1,0 +1,86 @@
+trace: spec:methodology-accountability, spec:observability-convergence
+
+event_id: methodology.event.018-podman-maintenance-and-runtime-logging-distillation@v1
+status: triaged
+observed_at: "2026-05-07T00:00:00Z"
+reporter: "codex"
+summary: >
+  Podman ownership and runtime logging are separate but coupled concerns. The
+  stack should recreate ephemeral containers on mismatch, attempt host-side
+  rootless repair only when Podman storage metadata is stale and recoverable,
+  and fail fast when Podman is missing. Logging should remain observational,
+  non-blocking, privacy-safe, and independent from business-logic success.
+
+observed_signal:
+  description: >
+    The browser/container cleanup path and the logging path were both still
+    partly documented as ad hoc implementation details. The user clarified that
+    both concerns need vendor-backed best practices and explicit cheat-sheet
+    provenance so they can be treated as stable ownership rules.
+  signal_type: "methodology"
+
+expected_model:
+  description: >
+    Podman lifecycle docs should distinguish host maintenance from app
+    lifecycle, and logging docs should distinguish non-blocking observability
+    from the business operation being logged. Browser containers should be
+    recreated on mismatch with no shared cache or state.
+  source_refs:
+    - cheatsheets/runtime/podman-logging.md
+    - cheatsheets/runtime/runtime-logging.md
+    - cheatsheets/runtime/browser-isolation.md
+    - openspec/specs/browser-isolation-tray-integration/spec.md
+    - openspec/specs/runtime-logging/spec.md
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - podman_maintenance_should_be_transparent_but_not_app_lifecycle
+    - browser_containers_should_be_recreated_on_mismatch
+    - logging_must_not_gate_business_logic
+  spec_requirement_ids:
+    - browser-isolation-tray-integration.browser.lifecycle.recreate-on-mismatch
+    - runtime-logging.transport.nonblocking
+  cheatsheet_refs:
+    - cheatsheets/runtime/podman-logging.md
+    - cheatsheets/runtime/runtime-logging.md
+    - cheatsheets/runtime/browser-isolation.md
+  litmus_ids: []
+
+affected_artifacts:
+  specs:
+    - openspec/specs/browser-isolation-tray-integration/spec.md
+    - openspec/specs/runtime-logging/spec.md
+  methodology_files:
+    - methodology/event/index.yaml
+  cheatsheets:
+    - cheatsheets/runtime/podman-logging.md
+    - cheatsheets/runtime/runtime-logging.md
+    - cheatsheets/runtime/browser-isolation.md
+
+evidence_refs:
+  commits: []
+  files:
+    - cheatsheets/runtime/podman-logging.md
+    - cheatsheets/runtime/runtime-logging.md
+    - cheatsheets/runtime/browser-isolation.md
+    - openspec/specs/browser-isolation-tray-integration/spec.md
+    - openspec/specs/runtime-logging/spec.md
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: medium
+provisional_classification: methodology_claim_unproven
+
+next_distillation_step:
+  owner: "codex"
+  action: >
+    Tie the browser-ephemeral litmus and the runtime logging litmus to the
+    updated lifecycle and transport claims so the next ci-full run measures the
+    new boundaries instead of stale wrapper behavior.
+  target_artifact: "openspec/litmus-tests"
+
+closure_criteria:
+  - browser_lifecycle_recreates_containers_on_mismatch
+  - podman_maintenance_is_documented_as_host_side_recovery_only
+  - runtime_logging_is_explicitly_non_blocking_and_non_intrusive

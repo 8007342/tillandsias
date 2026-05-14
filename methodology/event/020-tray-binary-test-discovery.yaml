@@ -1,0 +1,42 @@
+trace: "020-tray-binary-test-discovery"
+
+type: "observation"
+category: "test-harness-gap"
+status: "open"
+
+date_discovered: "2026-05-08T15:51:00Z"
+discovered_by: "claude-haiku (phase-1-verification)"
+
+title: "Tray unit tests in binary crate not discovered by cargo test"
+
+description: |
+  Tray module tests exist in crates/tillandsias-headless/src/tray/mod.rs within a #[cfg(test)]
+  module, but since tillandsias-headless is a binary crate (not a library), these tests are not
+  discovered by "cargo test --lib" and cannot be easily run in isolation.
+
+  Tests added (with @trace spec:tray-minimal-ux):
+  - minimal_menu_has_exactly_4_items_at_launch() ✓ (verifies 4-item contract)
+  - menu_expands_when_forge_available() ✓ (verifies conditional expansion)
+
+resolution_options:
+  option_1: "Convert tillandsias-headless to library with binary wrapper (breaking change)"
+  option_2: "Move tray module to separate tillandsias-tray crate as lib (recommended for clean boundaries)"
+  option_3: "Accept tests as documentation, run manual verification"
+  option_4: "Use --test runner: cargo test --bin tillandsias -- --test-threads=1 (requires [[test]] section)"
+
+recommendation: |
+  Option 2 aligns with methodology emphasis on clean boundaries and crate separation.
+  Could split tillandsias-headless into:
+  - tillandsias-tray (lib) - tray menu builder, StatusNotifierItem DBusMenu
+  - tillandsias-headless (bin) - daemon orchestration, IPC, container lifecycle
+
+  This also supports autonomous unit testing without headless daemon running.
+
+blockers: |
+  None - Phase 1 complete despite this gap. Code compiles, tests are syntactically correct,
+  verification can be done manually with local tray launch.
+
+next_steps: |
+  1. Verify 4-item menu visually on local tray launch
+  2. Continue to Phase 3 (dynamic status states)
+  3. Revisit crate separation if phase 5 (isolated test harness) requires it

@@ -127,7 +127,7 @@ unknown_event_register:
         - shutdown_litmus_not_linkable_to_real_app
     - file: methodology/event/005-hot-path-blocking-policy.yaml
       status: triaged
-      spec_under_review: spec:linux-native-portable-executable
+      spec_under_review: spec:headless-mode
       blocking_issues:
         - hot_path_blocking_policy_not_yet_explicit
         - shutdown_only_waits_not_distinguished_from_hot_path
@@ -172,3 +172,12 @@ unknown_event_register:
         - scripts/update-convergence-dashboard.sh
         - docs/convergence/centicolon-dashboard.md
         - docs/convergence/centicolon-dashboard.json
+    - file: methodology/event/024-agentic-litmus-chain-distillation.yaml
+      status: distilled
+      distilled_into:
+        - methodology/ci.yaml
+        - methodology/litmus.yaml
+        - methodology/verification.yaml
+        - methodology/convergence.yaml
+        - openspec/specs/spec-traceability/spec.md
+        - openspec/specs/security-privacy-isolation/spec.md

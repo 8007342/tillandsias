@@ -171,6 +171,8 @@ printf "  ${B_WHITE}Languages${RST}    ${DIM}rust, go, java 21, python 3.13, nod
 printf "  ${B_WHITE}Build${RST}        ${DIM}cargo, maven, gradle, npm/yarn/pnpm, nix, make, cmake, ninja${RST}\n"
 printf "  ${B_WHITE}Test${RST}         ${DIM}pytest, junit, cargo-test, chromium-headless, firefox, drivers${RST}\n"
 printf "  ${B_WHITE}Inventory${RST}    ${DIM}run ${B_CYAN}tillandsias-inventory${RST}${DIM} for the full list${RST}\n"
+printf "  ${B_WHITE}Services${RST}     ${DIM}run ${B_CYAN}tillandsias-services${RST}${DIM} for enclave endpoints${RST}\n"
+printf "  ${B_WHITE}Models${RST}       ${DIM}run ${B_CYAN}tillandsias-models${RST}${DIM} for inference tiers${RST}\n"
 echo ""
 
 # @trace spec:agent-cheatsheets, spec:forge-opencode-onboarding

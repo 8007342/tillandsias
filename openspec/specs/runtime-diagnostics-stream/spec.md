@@ -254,12 +254,12 @@ ls $XDG_RUNTIME_DIR/tillandsias-*.stream 2>&1
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
+- `litmus:runtime-diagnostics-stream-shape`
 
 Gating points:
-- Diagnostic streams are ephemeral; streamed data is not persisted
-- Deterministic and reproducible: test results do not depend on prior state
-- Falsifiable: failure modes (leaked state, persistence) are detectable
+- Stderr-facing stream hooks remain traceable
+- Diagnostics stream annotations remain attached to the expected scripts
+- Falsifiable: missing trace or stderr hook fails the source-shape check
 
 ## Observability
 
@@ -282,4 +282,3 @@ Log events SHALL include:
 - `cheatsheets/observability/cheatsheet-metrics.md` — structured event format and timestamping
 - `cheatsheets/runtime/logging-levels.md` — debug level control and filtering
 - `cheatsheets/runtime/cheatsheet-shortcomings.md` — backpressure patterns and flow control for high-throughput streams
-

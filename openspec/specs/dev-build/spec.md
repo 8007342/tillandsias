@@ -6,7 +6,9 @@
 active
 
 ## Purpose
-TBD - created by archiving change dev-build-script. Update Purpose after archive.
+Define the build pipeline for local development, install, and CI gating. The
+pipeline MUST keep cheap pre-build validation separate from the expensive
+post-build smoke so measurable debt is visible instead of folded into one blob.
 ## Requirements
 ### Requirement: Toolbox auto-creation
 The build script SHALL auto-create the `tillandsias` toolbox with all build dependencies if it does not exist.
@@ -14,6 +16,7 @@ The build script SHALL auto-create the `tillandsias` toolbox with all build depe
 #### Scenario: First run on fresh checkout
 - **WHEN** `./build.sh` is run and no `tillandsias` toolbox exists
 - **THEN** the toolbox SHALL be created, system dependencies SHALL be installed, and the build SHALL proceed
+- **AND** the host Podman runtime wrapper SHALL be initialized before the first toolbox command so the wrapper owns writable runtime state on immutable hosts
 
 #### Scenario: Subsequent runs
 - **WHEN** `./build.sh` is run and the `tillandsias` toolbox already exists
@@ -59,6 +62,38 @@ The `--install` flag SHALL build a release binary and copy it to `~/.local/bin/`
 - **THEN** the binary and runtime libraries SHALL be installed to `~/.local/bin/` and `~/.local/lib/tillandsias/`
 - **AND** icons SHALL be installed for the desktop launcher
 - **AND** no shell scripts, flake files, or image sources MUST be copied to `~/.local/share/tillandsias/`
+
+### Requirement: CI full runs in explicit phases
+The `--ci-full` path SHALL run in named phases so pre-build contract checks, the
+post-build smoke, and the runtime residual litmus suite remain separately
+measurable.
+
+#### Scenario: Pre-build phase
+- **WHEN** `./build.sh --ci-full --install` starts
+- **THEN** pre-build litmus SHALL run before the install/build boundary
+- **AND** command-shape and static contract tests SHALL be gated there
+
+#### Scenario: Post-build phase
+- **WHEN** the build/install boundary completes successfully
+- **THEN** the post-build smoke SHALL run against the installed binary
+- **AND** it SHALL exercise the representative end-to-end stack exactly once
+
+#### Scenario: Runtime residual phase
+- **WHEN** the post-build smoke passes
+- **THEN** the runtime residual litmus suite MAY run as a separate phase
+- **AND** its failures SHALL remain visible and not be conflated with the pre-build or smoke phases
+
+### Requirement: Post-build status check smoke
+The installed binary SHALL support a `--status-check` smoke path that launches
+the enclave stack, runs an embedded in-container health probe, and prints
+verifiable service-online evidence before cleaning up.
+
+#### Scenario: Status check after init
+- **WHEN** the user runs `tillandsias --init --debug --status-check`
+- **THEN** image builds SHALL complete first
+- **AND** the orchestrated stack SHALL start
+- **AND** the embedded health probe SHALL report online services from inside the container
+- **AND** the command SHALL exit cleanly after cleanup
 
 ### Requirement: Remove installed binary
 The `--remove` flag SHALL remove the installed binary from `~/.local/bin/`.
@@ -112,7 +147,7 @@ The `--install` flag SHALL exit with code 0 (success) or 1 (failure), enabling c
 - **THEN** the command SHALL exit with code 0
 - **AND** critical images SHALL be built and binary SHALL be installed
 - **AND** a `[build] SUCCESS` message SHALL be printed to stdout
-- **AND** MUST be safe to chain: `./build.sh --install && tillandsias --init --debug && tillandsias /path --diagnostics`
+- **AND** MUST be safe to chain: `./build.sh --install && tillandsias --init --debug && tillandsias /path`
 
 #### Scenario: Install fails
 - **WHEN** `./build.sh --install` fails (image build failed or binary copy failed)
@@ -155,6 +190,8 @@ The build script SHALL automatically set up and manage a local caching proxy (ti
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:podman-build-command-shape` — Validate pre-build command-shape contract for build-image.sh
+- `litmus:status-check-stack-verification` — Validate post-build smoke launches the stack and reports service-online evidence
 - `litmus:environment-isolation`
 
 Gating points:

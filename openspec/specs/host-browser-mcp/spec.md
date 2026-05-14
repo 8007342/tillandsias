@@ -5,7 +5,11 @@
 status: active
 
 ## Purpose
-TBD - created by archiving change host-browser-mcp. Update Purpose after archive.
+Define the host-resident MCP browser bridge that lets forge agents request
+allowlisted project-local browser windows over the tray control socket. The
+live implementation is the Rust `tillandsias-browser-mcp` crate plus the
+forge-side `host-browser.sh` stdio bridge, and it exists to launch isolated
+Chromium windows for mapped `<service>.<project>.localhost` routes.
 ## Requirements
 ### Requirement: Host MCP server exposes browser-control tools to forge agents
 
@@ -35,7 +39,7 @@ The eight v1 tools are:
 | `browser.eval` | `{ window_id: string, expression: string }` | `{ result: any }` |
 | `browser.close` | `{ window_id: string }` | `{ ok: boolean }` |
 
-@trace spec:host-browser-mcp, spec:opencode-web-session
+@trace spec:host-browser-mcp, spec:browser-isolation-tray-integration
 
 #### Scenario: tools/list returns exactly the v1 surface
 
@@ -117,7 +121,7 @@ downloading, `browser.open` SHALL return MCP tool error
 `{ isError: true, content: [{ type: "text", text: "BROWSER_UNAVAILABLE: bundled chromium not yet downloaded" }] }`
 without launching anything.
 
-@trace spec:host-browser-mcp, spec:opencode-web-session
+@trace spec:host-browser-mcp, spec:browser-isolation-tray-integration
 
 #### Scenario: System Chrome is never invoked
 
@@ -228,9 +232,10 @@ the request iff ALL of the following are true:
    below — the agent does NOT supply it).
 4. The host's left-most label is NOT `opencode` (the agent's own UI
    per the proposal's critical rule).
-5. Port is exactly `8080` (the host-side router publish port per
-   `opencode-web-session`).
-6. The URL contains no userinfo segment (`user:pass@` form).
+5. The URL contains no userinfo segment (`user:pass@` form).
+6. The URL does not require a literal service port; the project-local
+   hostname mapping handles routing and the browser launch should use
+   the hostname form directly.
 
 Any URL failing any rule SHALL be rejected with a tool result of
 `{ isError: true, content: [{ type: "text", text: "URL_NOT_ALLOWED: <reason>" }] }`
@@ -238,12 +243,12 @@ where `<reason>` names which rule failed. The chromium process SHALL
 NOT be spawned. An accountability log entry SHALL record the rejection
 with the failing rule and the project label.
 
-@trace spec:host-browser-mcp, spec:opencode-web-session
+@trace spec:host-browser-mcp, spec:browser-isolation-tray-integration
 
 #### Scenario: opencode.<project>.localhost is rejected
 
 - **WHEN** an agent in project `acme` calls
-  `browser.open({ url: "http://opencode.acme.localhost:8080/" })`
+  `browser.open({ url: "http://opencode.acme.localhost/" })`
 - **THEN** the tool result is `isError: true` containing
   `URL_NOT_ALLOWED`
 - **AND** the rejection reason names the `opencode-self` rule
@@ -252,7 +257,7 @@ with the failing rule and the project label.
 #### Scenario: Cross-project host is rejected
 
 - **WHEN** an agent bound to project `acme` calls
-  `browser.open({ url: "http://web.beta.localhost:8080/" })`
+  `browser.open({ url: "http://web.beta.localhost/" })`
 - **THEN** the tool result is `isError: true` containing
   `URL_NOT_ALLOWED`
 - **AND** the rejection reason names the project-suffix mismatch
@@ -261,8 +266,8 @@ with the failing rule and the project label.
 #### Scenario: Loopback IP literal is rejected
 
 - **WHEN** an agent calls
-  `browser.open({ url: "http://127.0.0.1:8080/" })` or
-  `browser.open({ url: "http://[::1]:8080/" })`
+  `browser.open({ url: "http://127.0.0.1/" })` or
+  `browser.open({ url: "http://[::1]/" })`
 - **THEN** the tool result is `isError: true` containing
   `URL_NOT_ALLOWED`
 - **AND** no chromium process is spawned
@@ -270,16 +275,16 @@ with the failing rule and the project label.
 #### Scenario: Allowlisted sibling service opens normally
 
 - **WHEN** an agent in project `acme` calls
-  `browser.open({ url: "http://web.acme.localhost:8080/" })`
+  `browser.open({ url: "http://web.acme.localhost/" })`
 - **THEN** the tool result is `{ window_id: "win-<uuid>" }` (no
   `isError`)
-- **AND** a chromium process spawns with `--app=http://web.acme.localhost:8080/`
+- **AND** a chromium process spawns with `--app=http://web.acme.localhost/`
 - **AND** the `WindowRegistry` contains the new entry
 
 #### Scenario: URL with userinfo is rejected
 
 - **WHEN** an agent calls
-  `browser.open({ url: "http://user:pass@web.acme.localhost:8080/" })`
+  `browser.open({ url: "http://user:pass@web.acme.localhost/" })`
 - **THEN** the tool result is `isError: true` containing
   `URL_NOT_ALLOWED`
 - **AND** the rejection reason names the `userinfo` rule
@@ -352,9 +357,9 @@ note.
 
 #### Scenario: Rapid duplicate open returns existing window
 
-- **WHEN** an agent calls `browser.open({ url: "http://web.acme.localhost:8080/foo" })`
+- **WHEN** an agent calls `browser.open({ url: "http://web.acme.localhost/foo" })`
   at t=0 and the call succeeds with `window_id = win-A`
-- **AND** the agent calls `browser.open({ url: "http://web.acme.localhost:8080/bar" })`
+- **AND** the agent calls `browser.open({ url: "http://web.acme.localhost/bar" })`
   at t=200 ms (different path, same host)
 - **THEN** the second call returns
   `{ window_id: "win-A", debounced: true }`
@@ -459,7 +464,7 @@ the rules above.
 #### Scenario: browser.open log entry contains host but not query
 
 - **WHEN** an agent calls
-  `browser.open({ url: "http://web.acme.localhost:8080/foo?secret=xyz" })`
+  `browser.open({ url: "http://web.acme.localhost/foo?secret=xyz" })`
 - **THEN** the audit log line contains `host = "web.acme.localhost"`
 - **AND** does NOT contain the substring `secret=xyz`
 - **AND** does NOT contain the path `/foo`
@@ -515,13 +520,17 @@ risk note.
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- pending — test binding required for S2→S3 progression
+- `litmus:host-browser-mcp-shape`
 
 Gating points:
 - MCP server responds to `initialize` with proper protocol version
 - `tools/list` returns exactly eight tools with correct names and JSON schemas
 - `prompts/list` and `resources/list` return empty arrays within 100ms
 - Unknown MCP methods return JSON-RPC error `-32601 Method not found`
+- `images/default/config-overlay/opencode/config.json` still points the forge
+  MCP runtime at `/home/forge/.config-overlay/mcp/host-browser.sh`
+- `images/default/entrypoint-forge-opencode-web.sh` still launches
+  `tillandsias-mcp-browser` for the OpenCode Web path
 - `browser.open` with valid URL returns a `window_id`
 - `browser.screenshot` captures PNG and returns base64 with width/height
 - `browser.click` and `browser.type` modify DOM and return `{ ok: boolean }`
@@ -530,8 +539,12 @@ Gating points:
 
 ## Sources of Truth
 
-- `cheatsheets/runtime/chromium-isolation.md` — Chromium Isolation reference and patterns
-- `cheatsheets/web/cdp.md` — Cdp reference and patterns
+- `openspec/specs/browser-isolation-tray-integration/spec.md` — Tray-driven browser launch contract
+- `openspec/specs/host-chromium-on-demand/spec.md` — Bundled Chromium download and launch contract
+- `openspec/specs/tray-host-control-socket/spec.md` — Host control socket transport and framing
+- `cheatsheets/runtime/chromium-isolation.md` — Chromium isolation reference and patterns
+- `cheatsheets/web/cdp.md` — CDP reference and patterns
+- `cheatsheets/web/mcp.md` — MCP transport and JSON-RPC conventions
 
 ## Observability
 

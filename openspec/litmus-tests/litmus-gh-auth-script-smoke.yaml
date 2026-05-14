@@ -1,0 +1,29 @@
+name: litmus:gh-auth-script-smoke
+spec: gh-auth-script
+description: Verify the GitHub login flow still exercises the fake ephemeral Podman harness
+severity: medium
+phase: pre-build
+
+preconditions:
+  - workspace contains scripts/test-support/github-login-fake.sh
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - workspace contains scripts/create-secrets.sh
+  - bash is available in PATH
+
+critical_path:
+  - step: "verify the fake login harness exercises the ephemeral podman flow"
+    command: "bash scripts/test-support/github-login-fake.sh && echo 'github login smoke completed'"
+    timeout_ms: 30000
+    expected_behavior: "github login smoke completed"
+
+observability:
+  traces:
+    - "@trace spec:gh-auth-script"
+  expected_log: "GitHub login smoke remains observable through the fake Podman harness"
+  log_fields:
+    spec: "gh-auth-script"
+    test: "gh-auth-script-smoke"
+
+rollback:
+  on_failure: "inspect scripts/test-support/github-login-fake.sh, crates/tillandsias-headless/src/main.rs, and scripts/create-secrets.sh for login-flow drift"
+  command: "bash scripts/test-support/github-login-fake.sh"

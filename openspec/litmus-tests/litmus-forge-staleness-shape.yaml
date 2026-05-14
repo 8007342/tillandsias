@@ -1,0 +1,39 @@
+name: litmus:forge-staleness-shape
+spec: forge-staleness
+description: Verify forge image freshness checks, alias refresh, and pruning still match the live build script contract
+severity: medium
+phase: pre-build
+
+preconditions:
+  - workspace contains scripts/build-image.sh
+  - workspace contains crates/tillandsias-core/src/config.rs
+  - workspace contains crates/tillandsias-core/src/image_builder.rs
+  - workspace contains openspec/specs/forge-staleness/spec.md
+
+critical_path:
+  - step: "verify the build script still keys freshness off the source hash file"
+    command: "grep -Fq '.last-build-${IMAGE_NAME}.sha256' scripts/build-image.sh && grep -Fq 'is up to date' scripts/build-image.sh && echo 'forge staleness hash contract present'"
+    timeout_ms: 10000
+    expected_behavior: "forge staleness hash contract present"
+
+  - step: "verify the build script still prunes stale forge images after rebuild"
+    command: "grep -Fq 'image prune -f' scripts/build-image.sh && grep -Fq 'Removing stale image tag' scripts/build-image.sh && echo 'forge staleness prune contract present'"
+    timeout_ms: 10000
+    expected_behavior: "forge staleness prune contract present"
+
+  - step: "verify the live staleness trace surface remains attached"
+    command: "grep -Fq '@trace spec:forge-staleness' scripts/build-image.sh && grep -Fq '@trace spec:forge-staleness' crates/tillandsias-core/src/config.rs && echo 'forge staleness trace surface present'"
+    timeout_ms: 10000
+    expected_behavior: "forge staleness trace surface present"
+
+observability:
+  traces:
+    - "@trace spec:forge-staleness"
+  expected_log: "Forge image freshness checks remain visible in the build script and config trace surface"
+  log_fields:
+    spec: "forge-staleness"
+    test: "forge-staleness-shape"
+
+rollback:
+  on_failure: "inspect scripts/build-image.sh and crates/tillandsias-core/src/config.rs for source-hash or prune drift"
+  command: "grep -Fq .last-build-forge.sha256 scripts/build-image.sh && grep -Fq 'podman image prune -f' scripts/build-image.sh"

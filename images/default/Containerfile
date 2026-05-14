@@ -65,7 +65,7 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
 
 # ── OpenCode config ────────────────────────────────────────────
 COPY opencode.json /home/forge/.config/opencode/config.json
-# @trace spec:opencode-web-session, spec:default-image
+# @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp, spec:default-image
 # Default UI theme (tokyonight) — applies to both `opencode` TUI and
 # `opencode serve` web UI. Overrideable per-project by mounting a different
 # tui.json into ~/.config/opencode/ (project workspace bind takes precedence
@@ -95,6 +95,10 @@ RUN chown -R 1000:1000 /home/forge
 
 USER 1000:1000
 WORKDIR /home/forge/src
+# @trace spec:default-image, spec:forge-standalone
+# Default steady-state attach path launches the Claude-oriented agent entrypoint.
+# The standalone troubleshooting shell overrides this with `--entrypoint /bin/bash`
+# so operators can inspect the forge image layers without starting the agent.
 ENTRYPOINT ["/usr/local/bin/entrypoint-forge-claude.sh"]
 # No EXPOSE — forge containers live on the enclave network only.
 # @trace spec:forge-offline, spec:enclave-network

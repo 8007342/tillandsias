@@ -239,12 +239,12 @@ pub struct LaunchContext {
     /// @trace spec:enclave-network
     pub use_port_mapping: bool,
 
-    /// @trace spec:opencode-web-session
+    /// @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     /// If true, skip `--rm` so the container persists after its originating
     /// click. Used by OpenCode Web forge containers.
     pub persistent: bool,
 
-    /// @trace spec:opencode-web-session
+    /// @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     /// If Some(host_port), publish `127.0.0.1:<host_port>:4096` and override
     /// the enclave-only port-skip logic. Mutually exclusive with the legacy
     /// port_range publish — when Some, port_range is ignored.
@@ -287,7 +287,7 @@ pub fn forge_claude_profile() -> ContainerProfile {
     }
 }
 
-// @trace spec:opencode-web-session, spec:default-image
+// @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp, spec:default-image
 /// Forge container for OpenCode Web (headless HTTP server on :4096; no TTY).
 /// Reuses the same mounts and env vars as the CLI OpenCode profile; only the
 /// entrypoint differs. `TILLANDSIAS_AGENT` is set to `opencode-web` by the
@@ -754,6 +754,18 @@ mod tests {
             opencode.mounts[0].host_key,
             MountSource::ToolsOverlay
         ));
+    }
+
+    // @trace spec:mcp-on-demand
+    #[test]
+    fn common_forge_mounts_include_tray_socket_mount() {
+        let mounts = common_forge_mounts();
+        let tray_mount = mounts
+            .iter()
+            .find(|m| matches!(m.host_key, MountSource::TraySocket))
+            .expect("TraySocket mount missing from forge profile");
+        assert_eq!(tray_mount.container_path, "/run/tillandsias/tray.sock");
+        assert_eq!(tray_mount.mode, MountMode::Rw);
     }
 
     // @trace spec:layered-tools-overlay

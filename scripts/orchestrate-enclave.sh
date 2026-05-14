@@ -7,6 +7,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+source "$SCRIPT_DIR/common.sh"
 PROJECT_PATH="${1:-.}"
 PROJECT_NAME="${2:-$(basename "$PROJECT_PATH")}"
 VERSION="$(tr -d '[:space:]' < "$PROJECT_ROOT/VERSION")"
@@ -27,41 +28,10 @@ log_error() { echo -e "${RED}[orchestrate]${NC} $*" >&2; }
 log_step() { echo -e "${CYAN}[orchestrate]${NC} $*"; }
 
 PROMPT_MODE="${TILLANDSIAS_OPENCODE_PROMPT:-}"
+STATUS_CHECK_MODE="${TILLANDSIAS_STATUS_CHECK:-}"
+ENCLAVE_NO_PROXY="localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service,10.0.42.0/24"
 if [ -n "$PROMPT_MODE" ]; then
-    PROJECT_IMAGE="tillandsias-forge:v${VERSION}"
-    if ! podman image exists "$PROJECT_IMAGE" 2>/dev/null; then
-        log_error "Forge image not found: $PROJECT_IMAGE"
-        exit 1
-    fi
-
-    FORGE_CONTAINER="tillandsias-$PROJECT_NAME-forge"
-    podman rm -f "$FORGE_CONTAINER" 2>/dev/null || true
-
-    log_step "OpenCode prompt mode enabled; launching direct Big Pickle prompt container"
-    if ! podman run \
-        --rm \
-        --name "$FORGE_CONTAINER" \
-        --hostname "forge-$PROJECT_NAME" \
-        --cap-drop=ALL \
-        --security-opt=no-new-privileges \
-        --security-opt=label=disable \
-        --userns=keep-id \
-        --pids-limit=512 \
-        --entrypoint /usr/local/bin/entrypoint-forge-opencode.sh \
-        --env "HOME=/home/forge" \
-        --env "USER=forge" \
-        --env "PROJECT=$PROJECT_NAME" \
-        --env "TILLANDSIAS_PROJECT=$PROJECT_NAME" \
-        --env "TILLANDSIAS_OPENCODE_PROMPT=$PROMPT_MODE" \
-        -v "$PROJECT_PATH:/home/forge/src/$PROJECT_NAME:rw" \
-        "$PROJECT_IMAGE" \
-        -p "$PROMPT_MODE" -q; then
-        log_error "Forge prompt container exited with error"
-        exit 1
-    fi
-
-    log_info "OpenCode prompt completed"
-    exit 0
+    log_step "OpenCode prompt seed provided; launching the full enclave stack"
 fi
 
 # ===========================================================================
@@ -128,16 +98,15 @@ podman rm -f "$PROXY_CONTAINER" 2>/dev/null || true
 
 if ! podman run \
     --detach \
-    --rm \
     --name "$PROXY_CONTAINER" \
     --hostname proxy \
     --network "$ENCLAVE_NET" \
     --ip "10.0.42.2" \
     --cap-drop=ALL \
     --security-opt=no-new-privileges \
+    --security-opt=label=disable \
     --userns=keep-id \
     --pids-limit=32 \
-    --read-only \
     --env "DEBUG_PROXY=1" \
     -v "$CERTS_DIR/intermediate.crt:/etc/squid/certs/intermediate.crt:ro" \
     -v "$CERTS_DIR/intermediate.key:/etc/squid/certs/intermediate.key:ro" \
@@ -166,14 +135,13 @@ done
 
 PROMPT_MODE="${TILLANDSIAS_OPENCODE_PROMPT:-}"
 if [ -n "$PROMPT_MODE" ]; then
-    log_step "OpenCode prompt mode enabled; skipping git mirror and inference startup"
+    log_step "OpenCode prompt seed provided; continuing with standard enclave startup"
 fi
 
 # ===========================================================================
 # Step 3: Git Mirror Container
 # ===========================================================================
-if [ -z "$PROMPT_MODE" ]; then
-    log_step "Starting git mirror container..."
+log_step "Starting git mirror container..."
 
     GIT_CONTAINER="tillandsias-git-$PROJECT_NAME"
     GIT_IMAGE=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep "tillandsias-git" | grep -v framework | head -1)
@@ -187,12 +155,14 @@ if [ -z "$PROMPT_MODE" ]; then
             --rm \
             --name "$GIT_CONTAINER" \
             --hostname "git-$PROJECT_NAME" \
+            --network-alias git-service \
             --network "$ENCLAVE_NET" \
             --ip "10.0.42.3" \
-            --cap-drop=ALL \
-            --security-opt=no-new-privileges \
-            --userns=keep-id \
-            --pids-limit=64 \
+        --cap-drop=ALL \
+        --security-opt=no-new-privileges \
+        --security-opt=label=disable \
+        --userns=keep-id \
+        --pids-limit=64 \
             --read-only \
             --env "PROJECT=$PROJECT_NAME" \
             --env "GIT_TRACE=1" \
@@ -218,33 +188,59 @@ fi
 # ===========================================================================
 # Step 4: Inference Container (non-blocking)
 # ===========================================================================
-if [ -z "$PROMPT_MODE" ]; then
-    log_step "Starting inference container (non-blocking)..."
+log_step "Starting inference container (non-blocking)..."
 
     INFERENCE_CONTAINER="tillandsias-inference"
+    mkdir -p "$HOME/.cache/tillandsias/models"
     podman rm -f "$INFERENCE_CONTAINER" 2>/dev/null || true
+    inference_env_args=()
+    if [ -n "$STATUS_CHECK_MODE" ]; then
+        inference_env_args+=(--env "TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1")
+    fi
 
-    podman run \
+    if ! podman run \
         --detach \
         --rm \
         --name "$INFERENCE_CONTAINER" \
         --hostname inference \
+        --network-alias inference \
         --network "$ENCLAVE_NET" \
         --ip "10.0.42.4" \
         --cap-drop=ALL \
         --security-opt=no-new-privileges \
+        --security-opt=label=disable \
         --userns=keep-id \
         --pids-limit=128 \
         --env "OLLAMA_DEBUG=1" \
         --env "OLLAMA_KEEP_ALIVE=24h" \
-        -v "$HOME/.cache/tillandsias/models:/root/.ollama/models:rw" \
+        "${inference_env_args[@]}" \
+        -v "$HOME/.cache/tillandsias/models:/home/ollama/.ollama/models:rw" \
         --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
         "tillandsias-inference:v${VERSION}" \
-        /usr/bin/ollama serve &>/tmp/inference-start.log &
+        /usr/bin/ollama serve >/tmp/inference-start.log 2>&1; then
+        log_error "Failed to start inference container"
+        exit 1
+    fi
 
     log_info "Inference container spawned (background)"
-fi
-fi
+
+    if [ -n "$STATUS_CHECK_MODE" ]; then
+        log_step "Waiting for inference container health..."
+        if ! podman inspect "$INFERENCE_CONTAINER" >/dev/null 2>&1; then
+            for _ in {1..10}; do
+                if podman inspect "$INFERENCE_CONTAINER" >/dev/null 2>&1; then
+                    break
+                fi
+                sleep 1
+            done
+        fi
+        if ! podman wait --condition=healthy "$INFERENCE_CONTAINER"; then
+            log_error "Inference container '$INFERENCE_CONTAINER' failed health check"
+            podman logs "$INFERENCE_CONTAINER" 2>&1 | tail -30
+            exit 1
+        fi
+        log_info "✓ Inference container healthy"
+    fi
 
 # ===========================================================================
 # Step 5: Forge Container
@@ -254,7 +250,8 @@ log_step "Starting forge container..."
 FORGE_CONTAINER="tillandsias-$PROJECT_NAME-forge"
 podman rm -f "$FORGE_CONTAINER" 2>/dev/null || true
 
-    if [ -n "$PROMPT_MODE" ]; then
+    if [ -n "$STATUS_CHECK_MODE" ]; then
+        log_step "Status-check mode enabled; probing service health from inside forge container"
         if ! podman run \
             --rm \
             --name "$FORGE_CONTAINER" \
@@ -265,25 +262,76 @@ podman rm -f "$FORGE_CONTAINER" 2>/dev/null || true
             --security-opt=label=disable \
             --userns=keep-id \
             --pids-limit=512 \
-            --entrypoint /usr/local/bin/entrypoint-forge-opencode.sh \
+            --entrypoint /bin/bash \
             --env "http_proxy=http://proxy:3128" \
             --env "https_proxy=http://proxy:3128" \
             --env "HTTP_PROXY=http://proxy:3128" \
             --env "HTTPS_PROXY=http://proxy:3128" \
-            --env "no_proxy=localhost,127.0.0.1,10.0.42.0/24" \
+            --env "no_proxy=$ENCLAVE_NO_PROXY" \
+            --env "NO_PROXY=$ENCLAVE_NO_PROXY" \
             --env "PATH=/usr/local/bin:/usr/bin" \
             --env "HOME=/home/forge" \
             --env "USER=forge" \
-        --env "PROJECT=$PROJECT_NAME" \
-        --env "TILLANDSIAS_OPENCODE_PROMPT=$PROMPT_MODE" \
-        -v "$PROJECT_PATH:/home/forge/src/$PROJECT_NAME:rw" \
+            --env "PROJECT=$PROJECT_NAME" \
+            -v "$PROJECT_PATH:/home/forge/src/$PROJECT_NAME:rw" \
             --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
-        "tillandsias-forge:v${VERSION}" \
-        -p "$PROMPT_MODE" -q; then
-        log_error "Forge prompt container exited with error"
-        exit 1
-    fi
-else
+            "tillandsias-forge:v${VERSION}" \
+            -lc '
+                set -euo pipefail
+                check_port() {
+                    local host="$1"
+                    local port="$2"
+                    local label="$3"
+                    local attempt=0
+                    local max_attempts=20
+                    while [ "$attempt" -lt "$max_attempts" ]; do
+                        if command -v nc >/dev/null 2>&1; then
+                            if nc -z -w 1 "$host" "$port" >/dev/null 2>&1; then
+                                echo "[status-check] $label online"
+                                return 0
+                            fi
+                        elif (exec 3<>"/dev/tcp/$host/$port") >/dev/null 2>&1; then
+                            exec 3<&- 3>&-
+                            echo "[status-check] $label online"
+                            return 0
+                        fi
+                        attempt=$((attempt + 1))
+                        sleep 1
+                    done
+                    echo "[status-check] $label offline after ${max_attempts}s" >&2
+                    return 1
+                }
+
+                check_inference() {
+                    local attempt=0
+                    local max_attempts=20
+                    while [ "$attempt" -lt "$max_attempts" ]; do
+                        if command -v curl >/dev/null 2>&1; then
+                            if curl -fsS -m 2 "http://inference:11434/api/version" >/dev/null 2>&1; then
+                                echo "[status-check] inference online"
+                                return 0
+                            fi
+                        elif (exec 3<>"/dev/tcp/inference/11434") >/dev/null 2>&1; then
+                            exec 3<&- 3>&-
+                            echo "[status-check] inference online"
+                            return 0
+                        fi
+                        attempt=$((attempt + 1))
+                        sleep 1
+                    done
+                    echo "[status-check] inference offline after ${max_attempts}s" >&2
+                    return 1
+                }
+
+                echo "[status-check] running inside forge container"
+                check_port proxy 3128 proxy
+                check_port git-service 9418 git
+                check_inference
+                echo "[status-check] forge online"
+            '; then
+            log_error "Status check container exited with error"
+            exit 1
+        fi
     if ! podman run \
         --interactive \
         --tty \
@@ -300,11 +348,13 @@ else
         --env "https_proxy=http://proxy:3128" \
         --env "HTTP_PROXY=http://proxy:3128" \
         --env "HTTPS_PROXY=http://proxy:3128" \
-        --env "no_proxy=localhost,127.0.0.1,10.0.42.0/24" \
+        --env "no_proxy=$ENCLAVE_NO_PROXY" \
+        --env "NO_PROXY=$ENCLAVE_NO_PROXY" \
         --env "PATH=/usr/local/bin:/usr/bin" \
         --env "HOME=/home/forge" \
         --env "USER=forge" \
         --env "PROJECT=$PROJECT_NAME" \
+        --env "TILLANDSIAS_OPENCODE_PROMPT=$PROMPT_MODE" \
         -v "$PROJECT_PATH:/home/forge/src:rw" \
         --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
         "tillandsias-forge:v${VERSION}" \

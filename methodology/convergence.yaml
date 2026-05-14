@@ -154,6 +154,60 @@ evidence_bundle:
     - Metrics feed into the convergence engine's fitness function
     - Fitness function guides optimization (code changes, spec refinements)
 
+  iterative_minimax_loop:
+    purpose: >
+      Drive autonomous work by repeatedly selecting the highest residual
+      obligation, verifying the source of intent, and applying the smallest
+      change that monotonically reduces uncertainty. Each pass must preserve an
+      observable log chain so the next pass can continue from the last meaningful
+      failure boundary.
+    steps:
+      - step: gather_evidence
+        description: >
+          Run the current top-level CI boundary (for example `--ci-full --install`)
+          plus the highest-signal litmus for the domain under review. Prefer the
+          shortest failing chain that still explains the offender and record the
+          exact chain reference (`small_test`, sibling set, scoped `--filter` /
+          `--strict`, `--ci-full --install`, `--init --debug`) so the next pass
+          can resume without rediscovery.
+      - step: verify_intent
+        description: >
+          Read the active spec, its bound cheatsheets, tombstones, and referenced
+          API docs before changing code. If the spec is ambiguous or incomplete,
+          refine the spec or methodology first.
+      - step: classify_centipawns
+        description: >
+          Mark implementation details that align with the intent as good
+          centipawns and blocking calls, rediscovery of host paths, or other
+          anti-patterns as bad centipawns.
+      - step: select_max_residual
+        description: >
+          Choose the open obligation with the highest residual debt or the
+          largest observed gap from the current CI/litmus evidence. Use the
+          failure chain to decide whether the gap is spec, methodology, or code.
+      - step: minimize_delta
+        description: >
+          Make the smallest change that reduces the selected residual while
+          preserving verified invariants and tombstone state.
+      - step: revalidate
+        description: >
+          Re-run the same litmus and adjacent litmus to confirm the residual
+          fell and no new ambiguity was introduced. Preserve the troubleshooting
+          log trail so future passes can reuse the same boundary.
+      - step: repeat
+        description: >
+          Continue until the residual plateau shifts to a different highest-risk
+          obligation or the spec itself needs clarification.
+    selection_rule: >
+      Prefer the worst residual in the current evidence bundle, not the easiest
+      passing test. If a spec or cheatsheet is wrong, fix the source of intent
+      before further code minimization.
+    invariants:
+      - no_code_change_before_intent_audit
+      - no_spec_change_without_ambiguity_review
+      - no_new_host_probe_if_entry_gate_exists
+      - tombstones_must_be_updated_when_requirements_are_retired
+
 minimax_convergence_strategy:
   description: >
     Minimax convergence treats the strongest remaining counterexample as the next

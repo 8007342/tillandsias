@@ -67,7 +67,7 @@ The functions `store_github_token`, `retrieve_github_token`, and `delete_github_
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:credential-isolation` — Verify token is stored in native keyring and never written to disk outside keyring
-- `litmus:socket-cleanup` — Verify D-Bus sockets are cleaned up after keyring operations
+- `litmus:socket-cleanup` — Proxy for transient socket cleanup on host-side stack operations; the keyring-specific socket lifecycle remains a separate follow-up split
 
 Gating points:
 - `store_github_token(token)` writes to OS native keyring (GNOME Keyring on Linux, Keychain on macOS, Credential Manager on Windows)
@@ -75,7 +75,7 @@ Gating points:
 - `retrieve_github_token()` reads from keyring; returns `None` if no entry exists
 - `delete_github_token()` removes entry from keyring; idempotent (no error if missing)
 - No token file written to `~/.config/` or `~/.ssh/` or any host filesystem
-- D-Bus/IPC sockets used for keyring access are cleaned up after operation
+- D-Bus/IPC sockets used for keyring access are transient and do not persist after the host-side operation completes
 - Container cannot access host keyring directly; only via D-Bus bridge
 
 ## Sources of Truth

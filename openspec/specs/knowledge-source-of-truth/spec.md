@@ -69,7 +69,7 @@ The project MUST provide `scripts/fetch-debug-source.sh` for on-demand fetching 
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- pending — test binding required for S2→S3 progression
+- `litmus:knowledge-source-of-truth-shape`
 
 Gating points:
 - Cloned repository contains ONLY `openspec/vendor/` (no `vendor/debug/`)

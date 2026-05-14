@@ -63,6 +63,15 @@ cat $TILLANDSIAS_CHEATSHEETS/INDEX.md | rg python
 cat $TILLANDSIAS_CHEATSHEETS/languages/python.md
 ```
 
+**Launching a standalone forge shell:**
+```bash
+./run-forge-standalone.sh --src ~/src/tillandsias
+```
+
+That runner mounts only the requested project tree into `/home/forge/src/<project>`
+and drops you into bash inside the forge image. Use it when you want the forge
+itself as the debugging surface rather than the full enclave stack.
+
 **Understanding the mutable overlay:**
 ```bash
 # Your workspace — safe to edit, committed to git
@@ -95,3 +104,4 @@ pip install --cache-dir $HOME/.cache/pip-deps numpy
 - `runtime/networking.md` — Network isolation, proxy, git mirror, inference service
 - `runtime/runtime-limitations.md` — How to report missing tools
 - `agents/claude-code.md` — Claude Code launcher and config
+- `runtime/forge-standalone.md` — single-container forge troubleshooting shell

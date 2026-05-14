@@ -1,0 +1,39 @@
+# @trace spec:nix-builder
+name: litmus:nix-builder-shape
+spec: nix-builder
+description: Verify the live Nix build contract uses git-tracked files and copyToRoot
+severity: medium
+phase: pre-build
+
+preconditions:
+  - workspace contains flake.nix
+  - workspace contains scripts/build-image.sh
+  - workspace contains openspec/specs/nix-builder/spec.md
+
+critical_path:
+  - step: "assert flake uses copyToRoot for forge and web images"
+    command: "grep -Fq 'copyToRoot = forgeImageRoot;' flake.nix && grep -Fq 'copyToRoot = webImageRoot;' flake.nix && echo 'nix builder copyToRoot present'"
+    timeout_ms: 10000
+    expected_behavior: "nix builder copyToRoot present"
+
+  - step: "assert build-image uses git ls-files for tracked source hashing"
+    command: "grep -Fq 'ls-files --others --exclude-standard' scripts/build-image.sh && grep -Fq 'ls-files -z --' scripts/build-image.sh && grep -Fq 'Untracked files detected under' scripts/build-image.sh && echo 'nix builder git-tracked hash present'"
+    timeout_ms: 10000
+    expected_behavior: "nix builder git-tracked hash present"
+
+  - step: "assert the spec states the build-time-only boundary"
+    command: "grep -Fq 'Build-time Nix only' openspec/specs/nix-builder/spec.md && grep -Fq 'copyToRoot' openspec/specs/nix-builder/spec.md && echo 'nix builder spec tightened'"
+    timeout_ms: 10000
+    expected_behavior: "nix builder spec tightened"
+
+observability:
+  traces:
+    - "@trace spec:nix-builder"
+  expected_log: "Nix builder contract remains build-time only and uses copyToRoot plus git-tracked sources"
+  log_fields:
+    spec: "nix-builder"
+    test: "nix-builder-shape"
+
+rollback:
+  on_failure: "inspect flake.nix, scripts/build-image.sh, and openspec/specs/nix-builder/spec.md for stale Nix build semantics"
+  command: "grep -F 'copyToRoot' flake.nix && grep -F 'git ls-files' scripts/build-image.sh && grep -F 'Build-time Nix only' openspec/specs/nix-builder/spec.md"

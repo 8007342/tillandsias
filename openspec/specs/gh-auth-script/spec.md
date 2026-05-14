@@ -88,17 +88,20 @@ The login container MUST be destroyed on every exit path so no `gh` on-disk stat
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee` — Verify login container is destroyed on all exit paths
+- `litmus:gh-auth-script-smoke` — Verify the fake login harness exercises the same ephemeral Podman flow
 
 Gating points:
-- Container named `tillandsias-gh-login` does not exist after login flow exits (success or failure)
-- Token is stored in native keyring and not written to any host file outside keyring
-- No leftover `gh` configuration files in container filesystem after cleanup
+- The login harness runs the same ephemeral Podman flow as the CLI implementation
+- The token capture and keyring write path remain observable in the fake harness
+- Cleanup still removes the container on all exit paths
 
 ## Sources of Truth
 
-- `cheatsheets/runtime/podman.md` — Podman reference and patterns
-- `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+- `crates/tillandsias-headless/src/main.rs` — the single Rust implementation for `--github-login`
+- `scripts/test-support/github-login-fake.sh` — deterministic smoke harness for the login flow
+- `scripts/create-secrets.sh` — the host-side login bootstrap and secret creation path
+- `openspec/specs/secrets-management/spec.md` — keyring and secret lifetime contract
+- `openspec/specs/git-mirror-service/spec.md` — ephemeral git-service container and gh auth integration
 
 ## Observability
 

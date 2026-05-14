@@ -496,13 +496,28 @@ The lifecycle SHALL be a CRDT, not a state machine: a single cheatsheet MAY simu
 - `cheatsheets/runtime/external-logs.md` — EXTERNAL-tier producer/consumer contract that the new `cheatsheet-telemetry` role implements.
 - `cheatsheets/utils/jq.md` — JSON Lines processing for `lookups.jsonl` events; the schema is `jq -c`-friendly.
 - `cheatsheets/build/nix-flake-basics.md` — `dockerTools.buildLayeredImage` `contents` path that lands `/opt/cheatsheet-sources/` in the image and discovers the package manifest for distro-packaged validation.
+
+## Litmus Chain
+
+Smallest actionable boundary:
+- `bash scripts/check-cheatsheet-tiers.sh --strict`
+
+Sibling tests:
+- `bash scripts/check-cheatsheet-sources.sh --no-sha`
+- `bash scripts/regenerate-cheatsheet-index.sh --check`
+
+Scoped follow-up:
+```bash
+./build.sh --ci-full --install --filter cheatsheets-license-tiered --strict cheatsheets-license-tiered
+./build.sh --ci-full --install --strict-all
+```
+
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
+- `litmus:cheatsheet-tier-discipline`
 
 Gating points:
-- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
-- Deterministic and reproducible: test results do not depend on prior state
-- Falsifiable: failure modes (leaked resources, persistence) are detectable
-
+- Tier validation stays deterministic and reproducible
+- Missing or inconsistent tier metadata is surfaced before build-time bake
+- The tier contract remains falsifiable through CLI validation

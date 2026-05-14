@@ -1,0 +1,32 @@
+# @trace spec:mcp-on-demand
+name: litmus:mcp-on-demand-shape
+spec: mcp-on-demand
+phase: pre-build
+description: Verify the MCP on-demand tray socket mount remains wired into the forge profile
+severity: medium
+
+preconditions:
+  - workspace contains crates/tillandsias-core
+  - cargo, grep, and bash are available in PATH
+
+critical_path:
+  - step: "run the tray socket mount unit test"
+    command: "cargo test -p tillandsias-core container_profile::tests::common_forge_mounts_include_tray_socket_mount -- --exact"
+    timeout_ms: 120000
+
+  - step: "verify the TraySocket mount trace stays present"
+    command: "grep -Fq 'spec:mcp-on-demand' crates/tillandsias-core/src/container_profile.rs && grep -Fq 'MountSource::TraySocket' crates/tillandsias-core/src/container_profile.rs && grep -Fq '/run/tillandsias/tray.sock' crates/tillandsias-core/src/container_profile.rs && echo 'mcp-on-demand shape present'"
+    timeout_ms: 5000
+    expected_behavior: "mcp-on-demand shape present"
+
+observability:
+  traces:
+    - "@trace spec:mcp-on-demand"
+  expected_log: "MCP on-demand tray socket mount remains wired into the forge container profile"
+  log_fields:
+    spec: "mcp-on-demand"
+    test: "mcp-on-demand-shape"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-core/src/container_profile.rs for TraySocket mount drift"
+  command: "sed -n '560,620p' crates/tillandsias-core/src/container_profile.rs"

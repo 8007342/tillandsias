@@ -54,7 +54,7 @@ ${preview}"
             echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"content":[{"type":"text","text":'"$escaped"'}]}}'
             ;;
         "prompts/list")
-            # @trace spec:opencode-web-session
+            # @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
             # MCP spec: respond to prompts/list even when no prompts exist.
             # Silence here hangs OpenCode's /command endpoint for 60s.
             echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"prompts":[]}}'
@@ -69,7 +69,7 @@ ${preview}"
             # Client acknowledgment - no response needed
             ;;
         *)
-            # @trace spec:opencode-web-session
+            # @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
             # Respond to unknown methods with MCP's "method not found" error
             # so OpenCode doesn't stall 60s waiting for a reply that never
             # comes.

@@ -37,6 +37,9 @@ else
 fi
 mkdir -p "$PROFILE_ROOT"
 PROFILE_DIR="$(mktemp -d "$PROFILE_ROOT/${PROJECT}-XXXXXX")"
+CHROMIUM_CONFIG_DIR="${PROFILE_ROOT}/chromium-config"
+CHROMIUM_CACHE_DIR="${PROFILE_ROOT}/chromium-cache"
+mkdir -p "$CHROMIUM_CONFIG_DIR" "$CHROMIUM_CACHE_DIR"
 
 cleanup() {
     rm -rf "$PROFILE_DIR"
@@ -84,11 +87,12 @@ PODMAN_ARGS=(
     "--userns=keep-id"
     "--cap-drop=ALL"
     "--cap-add=SYS_CHROOT"
-    "--network=tillandsias-enclave"
+    "--network=${TILLANDSIAS_BROWSER_NETWORK:-host}"
     "--security-opt=no-new-privileges"
     "--security-opt=label=disable"
     "--tmpfs=/tmp:size=256m"
-    "--tmpfs=/home/chromium/.cache:size=512m"
+    "--tmpfs=/tmp/chromium-config:size=128m"
+    "--tmpfs=/tmp/chromium-cache:size=512m"
     "--tmpfs=/dev/shm:size=256m"
     "--read-only"
     "--volume=${PROFILE_DIR}:${PROFILE_DIR}"
@@ -100,6 +104,11 @@ BROWSER_ARGS=(
     "--no-first-run"
     "--no-default-browser-check"
     "--user-data-dir=${PROFILE_DIR}"
+)
+
+PODMAN_ARGS+=(
+    "--env=XDG_CONFIG_HOME=/tmp/chromium-config"
+    "--env=XDG_CACHE_HOME=/tmp/chromium-cache"
 )
 
 # Add window-type specific flags
@@ -124,9 +133,9 @@ if [[ "$VERSION" == "latest" ]]; then
     exit 2
 fi
 
-# Use versioned tags from local Podman storage explicitly.
+# Use versioned tags from the local wrapper storage.
 # @trace spec:browser-isolation-core
-PODMAN_ARGS+=("localhost/tillandsias-chromium-framework:v${VERSION}")
+PODMAN_ARGS+=("tillandsias-chromium-framework:v${VERSION}")
 
 # Chromium app-mode URL argument follows the image and browser flags.
 BROWSER_ARGS+=("--app=${URL}")

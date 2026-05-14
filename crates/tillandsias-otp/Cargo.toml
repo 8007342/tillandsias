@@ -10,6 +10,7 @@ description = "Per-window session-cookie store + OTP issuance for OpenCode Web (
 # CSPRNG via OsRng for per-window session-cookie / OTP minting.
 # @trace spec:opencode-web-session-otp
 rand = "0.9"
+base64 = { workspace = true }
 # In-place wipe of cookie bytes on Drop / after issuance.
 # @trace spec:secrets-management
 zeroize = "1"

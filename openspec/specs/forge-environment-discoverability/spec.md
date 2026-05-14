@@ -6,7 +6,7 @@ active
 
 ## Overview
 
-Define the runtime discovery interface for the forge container, allowing agents and developers to query the installed toolchains, available models, and environment capabilities. This spec ensures discoverable, self-documenting forge environments.
+Define the runtime discovery interface for the forge container, allowing agents and developers to query the installed toolchains, available services, and available inference models. This spec keeps the forge self-documenting without assuming a richer command tree than the current scripts expose.
 
 @trace spec:forge-environment-discoverability
 
@@ -17,13 +17,13 @@ Define the runtime discovery interface for the forge container, allowing agents 
 The forge MUST provide a `tillandsias-inventory` command that outputs a structured list of all installed programming language toolchains and their versions.
 
 #### Scenario: User queries installed languages
-- **WHEN** a user runs `tillandsias-inventory languages` inside the forge
+- **WHEN** a user runs `tillandsias-inventory` inside the forge
 - **THEN** the command outputs a machine-readable list of installed toolchains with versions
 - **AND** includes: Rust (+ cargo), Go, Python, Node.js, Java (Maven/Gradle), C/C++ (gcc/clang), Nix, etc.
 - **AND** each entry includes the canonical version identifier (e.g., `rust: 1.75.0, rustc`)
 
 #### Scenario: Verbose inventory with paths
-- **WHEN** a user runs `tillandsias-inventory languages --verbose`
+- **WHEN** a user runs `tillandsias-inventory --json`
 - **THEN** the output includes the path to each binary (e.g., `/usr/bin/rustc`, `/nix/store/.../python`)
 - **AND** optional: last-updated date if applicable
 
@@ -38,7 +38,7 @@ The forge MUST provide a `tillandsias-services` command that queries the enclave
 - **AND** each entry includes network endpoint (host:port or unix socket)
 
 #### Scenario: Service discovery for inference
-- **WHEN** an agent runs `tillandsias-services inference`
+- **WHEN** an agent runs `tillandsias-services --json`
 - **THEN** the command outputs the ollama API endpoint (e.g., `http://inference:11434`)
 - **AND** a list of available models (output from `ollama list`)
 
@@ -52,9 +52,9 @@ The forge MUST provide a `tillandsias-models` command that queries the inference
 - **AND** includes: baked models (T0: qwen2.5:0.5b, T1: llama3.2:3b) and any lazy-pulled models
 - **AND** each entry includes model name, size, tier classification
 
-#### Scenario: Model filtering by capability
-- **WHEN** a user runs `tillandsias-models --coding`
-- **THEN** the output is filtered to only show models optimized for code generation
+#### Scenario: Models CLI stays machine-readable
+- **WHEN** a user runs `tillandsias-models --json`
+- **THEN** the output is machine-readable JSON
 - **AND** includes tier classification (T0 = instant, T1 = fast, T2-T5 = larger/slower)
 
 ### Requirement: Welcome banner on terminal entry
@@ -73,16 +73,16 @@ All discovery commands MUST support `--help` and provide usage examples.
 
 #### Scenario: User discovers available commands
 - **WHEN** a user runs `tillandsias-inventory --help`
-- **THEN** the output includes subcommands (`languages`, `tools`, etc.) with brief descriptions
-- **AND** includes example usage: `tillandsias-inventory languages --verbose`
+- **THEN** the output includes the command purpose and `--json`
+- **AND** includes example usage for the flat command shape
 
 ## Litmus Tests
 
-### Test: tillandsias-inventory languages completeness
+### Test: tillandsias-inventory command completeness
 - **Setup**: Launch forge container
-- **Action**: Run `tillandsias-inventory languages`
+- **Action**: Run `tillandsias-inventory --help` and `tillandsias-inventory --json`
 - **Signal**: Output lists installed toolchains (rust, go, python, node, java, c/c++)
-- **Pass**: All 6+ toolchains listed with versions; format is parseable (tab-delimited or JSON)
+- **Pass**: Help mentions `--json`; JSON output is parseable and includes 6+ toolchains with versions
 - **Fail**: Missing toolchains, malformed output, or version query fails
 
 ### Test: tillandsias-services enclave discovery
@@ -94,10 +94,10 @@ All discovery commands MUST support `--help` and provide usage examples.
 
 ### Test: tillandsias-models inference availability
 - **Setup**: Launch inference container with T0/T1 models baked; optionally lazy-pull T2
-- **Action**: Run `tillandsias-models` and `tillandsias-models --coding`
+- **Action**: Run `tillandsias-models` and `tillandsias-models --json`
 - **Signal**: T0 (qwen2.5:0.5b), T1 (llama3.2:3b) always listed; T2+ shown if available
-- **Pass**: Correct models listed by tier; `--coding` filters correctly
-- **Fail**: Models missing, incorrect tier, or filter has no effect
+- **Pass**: Correct models listed by tier; JSON output is parseable
+- **Fail**: Models missing or incorrect tier
 
 ### Test: Welcome banner on terminal entry
 - **Setup**: Attach forge with `tillandsias attach /path/to/project --terminal`
@@ -131,4 +131,3 @@ This spec is created retroactively as part of the traces-audit refactor. It may 
 git log --all --grep="forge-environment-discoverability" --oneline
 git grep -n "@trace spec:forge-environment-discoverability"
 ```
-

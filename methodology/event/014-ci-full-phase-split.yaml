@@ -1,0 +1,103 @@
+trace: spec:methodology-accountability, spec:dev-build, spec:ci-release, spec:observability-convergence
+
+event_id: methodology.event.014-ci-full-phase-split@v1
+status: triaged
+observed_at: "2026-05-06T00:00:00Z"
+reporter: "codex"
+summary: >
+  The current CI loop still conflates cheap contract checks, the expensive
+  build/install boundary, and the representative end-to-end stack smoke.
+  Tillandsias should split the flow into explicit pre-build, post-build, and
+  runtime phases so each category can be scored, reported, and tightened
+  independently without hiding residual debt.
+
+observed_signal:
+  description: >
+    `./build.sh --ci-full --install` currently has a single monolithic validation
+    path. The user needs a cheaper pre-build gate, a single post-build smoke
+    path that exercises the built artifact end-to-end, and a way to report the
+    remaining runtime litmus debt without mixing it into the wrong phase.
+  signal_type: "methodology"
+
+expected_model:
+  description: >
+    The CI pipeline should separate:
+      - pre-build litmus for command-shape and static contract claims
+      - post-build smoke for one representative stack execution
+      - runtime residual litmus for the expensive container-backed cases
+    Each phase should emit its own visible evidence so the dashboard can show
+    where convergence is improving and where runtime debt remains open.
+  source_refs:
+    - methodology/litmus-framework.yaml
+    - methodology/litmus-centicolon-wiring.yaml
+    - openspec/specs/dev-build/spec.md
+    - openspec/specs/ci-release/spec.md
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - phase_boundaries_are_explicit
+    - pre_build_gates_before_install
+    - post_build_smoke_after_install
+    - runtime_litmus_remains_separate
+  spec_requirement_ids:
+    - dev-build.ci-full-phase-split
+    - dev-build.post-build-status-check
+    - ci-release.nodejs24
+    - observability-convergence.phase_metrics
+  litmus_ids:
+    - litmus:podman-build-command-shape
+    - litmus:status-check-stack-verification
+  cheatsheet_refs:
+    - cheatsheets/test/podman-testing.md
+    - cheatsheets/runtime/podman-service-testing.md
+
+affected_artifacts:
+  specs:
+    - openspec/specs/dev-build/spec.md
+    - openspec/specs/ci-release/spec.md
+  methodology_files:
+    - methodology/litmus-framework.yaml
+    - methodology/litmus-centicolon-wiring.yaml
+    - methodology/event/index.yaml
+  code_paths:
+    - build.sh
+    - scripts/local-ci.sh
+    - scripts/run-litmus-test.sh
+    - crates/tillandsias-headless/src/main.rs
+    - scripts/orchestrate-enclave.sh
+  scripts:
+    - build.sh
+    - scripts/local-ci.sh
+    - scripts/run-litmus-test.sh
+    - scripts/orchestrate-enclave.sh
+  dashboards:
+    - docs/convergence/centicolon-dashboard.md
+    - docs/convergence/centicolon-dashboard.json
+
+evidence_refs:
+  commits: []
+  files:
+    - build.sh
+    - scripts/local-ci.sh
+    - scripts/run-litmus-test.sh
+    - crates/tillandsias-headless/src/main.rs
+    - scripts/orchestrate-enclave.sh
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: medium
+provisional_classification: methodology_claim_unproven
+
+next_distillation_step:
+  owner: "codex"
+  action: >
+    Distill the phase split into the build spec and the launcher, then bind the
+    new pre-build and post-build litmus files so CI can emit separate evidence
+    for each phase.
+  target_artifact: "spec_and_code"
+
+closure_criteria:
+  - ci_phases_are_named_and_documented
+  - pre_build_litmus_and_post_build_smoke_are_callable_separately
+  - runtime_litmus_debt_remains_visible_but_not_conflated

@@ -1,0 +1,27 @@
+# @trace spec:ci-release
+name: litmus:ci-release-node24-policy
+spec: ci-release
+phase: pre-build
+description: Verify CI and release workflows enforce the Node 24 policy
+severity: medium
+
+preconditions:
+  - repository contains .github/workflows/ci.yml and .github/workflows/release.yml
+  - grep is available in PATH
+
+critical_path:
+  - step: "verify release workflow Node 24 policy"
+    command: "grep -F 'node-version: 24' .github/workflows/release.yml"
+    timeout_ms: 5000
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "Release workflow pins GitHub Actions to Node 24"
+  log_fields:
+    spec: "ci-release"
+    test: "ci-release-node24-policy"
+
+rollback:
+  on_failure: "inspect .github/workflows/release.yml for Node 24 drift"
+  command: "grep -n 'node-version: 24' .github/workflows/release.yml"

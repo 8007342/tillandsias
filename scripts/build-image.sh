@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Build container images using Nix inside an ephemeral podman container.
+# Build container images directly with podman and source-hash caching.
 # Usage: scripts/build-image.sh [forge|web|proxy|git|inference] [--force]
 #
 # This script:
 #   1. Checks if sources have changed since last build (staleness detection)
 #   2. Builds with podman using pinned Containerfile bases
-#   3. Loads the resulting tarball into podman and tags the image
+#   3. Tags the resulting image with a content hash and human aliases
 #
 # No toolbox dependency — works on any system with podman.
 #
@@ -14,49 +14,28 @@
 
 set -euo pipefail
 
-# @trace spec:nix-builder, spec:default-image, spec:dev-build
-
-# ---------------------------------------------------------------------------
-# macOS PATH fix: Finder-launched apps don't inherit shell PATH.
-# Ensure common tool directories are reachable (Homebrew, MacPorts, etc.)
-# Linux is unaffected — this block is a no-op there.
-# ---------------------------------------------------------------------------
-if [[ "$(uname -s)" == "Darwin" ]]; then
-    for _dir in /opt/homebrew/bin /opt/local/bin /usr/local/bin; do
-        [[ -d "$_dir" ]] && [[ ":$PATH:" != *":$_dir:"* ]] && export PATH="$_dir:$PATH"
-    done
-    unset _dir
-fi
-
-# Resolve the podman binary: prefer PODMAN_PATH from Rust caller, then
-# check known absolute paths, then fall back to bare "podman" (PATH lookup).
-if [[ -n "${PODMAN_PATH:-}" ]] && [[ -x "$PODMAN_PATH" ]]; then
-    PODMAN="$PODMAN_PATH"
-elif [[ -x /opt/homebrew/bin/podman ]]; then
-    PODMAN=/opt/homebrew/bin/podman
-elif [[ -x /opt/local/bin/podman ]]; then
-    PODMAN=/opt/local/bin/podman
-elif [[ -x /usr/local/bin/podman ]]; then
-    PODMAN=/usr/local/bin/podman
-elif [[ -x /usr/bin/podman ]]; then
-    PODMAN=/usr/bin/podman
-else
-    PODMAN=podman
-fi
+# @trace spec:default-image, spec:dev-build, spec:podman-orchestration, spec:nix-builder
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/common.sh"
+require_podman
+
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-# Pinned for reproducibility. Update: podman pull docker.io/nixos/nix:<new-version>
-NIX_IMAGE="docker.io/nixos/nix:2.34.4"
-# Hash file must survive temp dir cleanup. When the app invokes this script,
-# $ROOT is a temp dir that gets deleted after the build completes. Store the
-# staleness hash in the user's cache dir so it persists across launches.
-if [[ -d "$HOME/Library/Caches/tillandsias" ]]; then
-    CACHE_DIR="$HOME/Library/Caches/tillandsias/build-hashes"
-elif [[ -d "$HOME/.cache/tillandsias" ]]; then
-    CACHE_DIR="$HOME/.cache/tillandsias/build-hashes"
-else
-    CACHE_DIR="$ROOT/.nix-output"
+# Hash file must survive temp dir cleanup. Prefer a writable user cache, but
+# fall back to the repo-local cache if the host cache is read-only.
+CACHE_DIR=""
+for _candidate_cache in \
+    "$HOME/Library/Caches/tillandsias/build-hashes" \
+    "$HOME/.cache/tillandsias/build-hashes" \
+    "$ROOT/.nix-output"; do
+    if mkdir -p "$_candidate_cache" 2>/dev/null && [[ -w "$_candidate_cache" ]]; then
+        CACHE_DIR="$_candidate_cache"
+        break
+    fi
+done
+if [[ -z "$CACHE_DIR" ]]; then
+    _error "Unable to create a writable build hash cache directory"
+    exit 1
 fi
 
 # Colors
@@ -115,7 +94,8 @@ while [[ $# -gt 0 ]]; do
             echo "  chromium-core      Build the secure browser container (minimal)"
             echo "  chromium-framework Build the debug browser container (with Node.js+Playwright)"
             echo "  --force            Rebuild even if sources haven't changed"
-            echo "  --tag <tag>        Override the image tag (default: tillandsias-<name>:v$(cat "$ROOT/VERSION"))"
+            echo "  --tag <tag>        Override the canonical image tag (default: content hash)"
+            echo "                     Human aliases still track v$(cat "$ROOT/VERSION") and :latest"
             echo ""
             echo "Note: This script uses podman build with embedded Containerfiles."
             echo "No Nix required. Builds use no persistent package cache."
@@ -129,21 +109,24 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-if [[ -n "$FLAG_TAG" ]]; then
-    IMAGE_TAG="$FLAG_TAG"
-else
-    IMAGE_VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
-    if [[ -z "$IMAGE_VERSION" ]]; then
-        _error "VERSION file is empty"
-        exit 1
-    fi
-    IMAGE_TAG="tillandsias-${IMAGE_NAME}:v${IMAGE_VERSION}"
+IMAGE_VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
+if [[ -z "$IMAGE_VERSION" ]]; then
+    _error "VERSION file is empty"
+    exit 1
 fi
-NIX_ATTR="${IMAGE_NAME}-image"
-# Version the hash file with the image tag so each version has independent
-# staleness state. Sanitize tag for filename (replace : and / with -).
-HASH_SUFFIX="$(echo "$IMAGE_TAG" | tr ':/' '--')"
-HASH_FILE="$CACHE_DIR/.last-build-${HASH_SUFFIX}.sha256"
+IMAGE_LABEL_PREFIX="tillandsias-${IMAGE_NAME}"
+IMAGE_VERSION_TAG="${IMAGE_LABEL_PREFIX}:v${IMAGE_VERSION}"
+IMAGE_LATEST_TAG="${IMAGE_LABEL_PREFIX}:latest"
+USE_HUMAN_ALIASES=true
+if [[ -n "$FLAG_TAG" ]]; then
+    IMAGE_CANONICAL_TAG="$FLAG_TAG"
+    USE_HUMAN_ALIASES=false
+else
+    IMAGE_CANONICAL_TAG=""
+fi
+# Staleness state is keyed by image name, not version, so version bumps do not
+# force rebuilds when the source hash is unchanged.
+HASH_FILE="$CACHE_DIR/.last-build-${IMAGE_NAME}.sha256"
 
 # Verify Containerfile exists for the image type
 case "$IMAGE_NAME" in
@@ -161,8 +144,6 @@ if [[ ! -f "$CONTAINERFILE" ]]; then
     exit 1
 fi
 
-_step "Building image: ${BOLD}${IMAGE_TAG}${NC}"
-
 # ---------------------------------------------------------------------------
 # Step 1: Aggressive stale-state cleanup + staleness detection
 # ---------------------------------------------------------------------------
@@ -175,10 +156,28 @@ _remove_stale_hashes() {
                 "$CACHE_DIR/.last-build-tillandsias-${IMAGE_NAME}-"*.sha256; do
         if [[ "$hash" != "$HASH_FILE" ]]; then
             _verbose_info "Removing stale build hash: $(basename "$hash")"
-            rm -f "$hash"
+            rm -f "$hash" 2>/dev/null || true
         fi
     done
     shopt -u nullglob
+}
+
+_is_kept_image_tag() {
+    local candidate="$1"
+    if [[ "$USE_HUMAN_ALIASES" == true ]]; then
+        case "$candidate" in
+            "$IMAGE_TAG"|"$IMAGE_VERSION_TAG"|"$IMAGE_LATEST_TAG")
+                return 0
+                ;;
+        esac
+    else
+        case "$candidate" in
+            "$IMAGE_TAG")
+                return 0
+                ;;
+        esac
+    fi
+    return 1
 }
 
 _remove_stale_image_tags() {
@@ -186,7 +185,7 @@ _remove_stale_image_tags() {
     tags="$("$PODMAN" images --format "{{.Repository}}:{{.Tag}}" | grep "tillandsias-${IMAGE_NAME}:" || true)"
     for old_tag in $tags; do
         old_tag_normalized="$(echo "$old_tag" | sed 's|^localhost/||')"
-        if [[ "$old_tag_normalized" != "$IMAGE_TAG" ]]; then
+        if ! _is_kept_image_tag "$old_tag_normalized"; then
             _verbose_info "Removing stale image tag: $old_tag"
             if _verbose_enabled; then
                 "$PODMAN" rmi -f "$old_tag" || true
@@ -201,46 +200,106 @@ _remove_stale_image_tags() {
 # over across version bumps and create false "up to date" results.
 # @trace spec:forge-staleness, spec:init-incremental-builds
 _remove_stale_hashes
-_remove_stale_image_tags
 
 _compute_hash() {
     # Hash Containerfile and related source files in the image directory.
-    # @trace spec:user-runtime-lifecycle, spec:init-incremental-builds
+    # @trace spec:user-runtime-lifecycle, spec:init-incremental-builds, spec:nix-builder
     local image_dir="$1"
-    local files=()
+    local image_rel
+    local -a file_list=() tracked_rel=() untracked_rel=()
 
     if [[ ! -d "$image_dir" ]]; then
         echo "no-sources"
         return
     fi
 
-    # Hash all files in the image directory (Containerfile + support scripts)
-    while IFS= read -r -d '' f; do
-        [[ -n "$f" ]] && files+=("$f")
-    done < <(find "$image_dir" -type f -print0 2>/dev/null)
+    image_rel="${image_dir#"$ROOT"/}"
 
-    if [[ ${#files[@]} -eq 0 ]]; then
+    if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        mapfile -d '' -t untracked_rel < <(git -C "$ROOT" ls-files --others --exclude-standard -z -- "$image_rel" 2>/dev/null || true)
+        if [[ ${#untracked_rel[@]} -gt 0 ]]; then
+            _error "Untracked files detected under ${image_rel}:"
+            printf '  %s\n' "${untracked_rel[@]}" >&2
+            _error "Run git add before rebuilding image sources."
+            exit 1
+        fi
+
+        mapfile -d '' -t tracked_rel < <(git -C "$ROOT" ls-files -z -- "$image_rel" 2>/dev/null || true)
+        for rel in "${tracked_rel[@]}"; do
+            [[ -n "$rel" ]] && file_list+=("$ROOT/$rel")
+        done
+    else
+        _warn "Not in a git repository; falling back to find-based source enumeration for ${image_rel}"
+        while IFS= read -r -d '' f; do
+            [[ -n "$f" ]] && file_list+=("$f")
+        done < <(find "$image_dir" -type f -print0 2>/dev/null | sort -z)
+    fi
+
+    if [[ ${#file_list[@]} -eq 0 ]]; then
         echo "no-sources"
         return
     fi
 
-    sha256sum "${files[@]}" 2>/dev/null | sha256sum | cut -d' ' -f1
+    sha256sum "${file_list[@]}" 2>/dev/null | sha256sum | cut -d' ' -f1
 }
 
 IMAGE_DIR="${CONTAINERFILE%/*}"
 CURRENT_HASH="$(_compute_hash "$IMAGE_DIR")"
 
+if [[ -z "$FLAG_TAG" ]]; then
+    IMAGE_CANONICAL_TAG="${IMAGE_LABEL_PREFIX}:${CURRENT_HASH}"
+fi
+IMAGE_TAG="$IMAGE_CANONICAL_TAG"
+
+_remove_stale_image_tags
+
+_step "Building image: ${BOLD}${IMAGE_TAG}${NC}"
+
+_source_tag=""
+for _candidate in "$IMAGE_TAG" "$IMAGE_VERSION_TAG" "$IMAGE_LATEST_TAG"; do
+    if "$PODMAN" image exists "$_candidate" 2>/dev/null; then
+        _source_tag="$_candidate"
+        break
+    fi
+done
+
+_apply_alias_tags() {
+    local source_tag="$1"
+    [[ "$USE_HUMAN_ALIASES" == true ]] || return 0
+    if [[ "$source_tag" != "$IMAGE_VERSION_TAG" ]]; then
+        if "$PODMAN" image exists "$IMAGE_VERSION_TAG" 2>/dev/null; then
+            _verbose_info "Removing stale version tag: $IMAGE_VERSION_TAG"
+            "$PODMAN" rmi "$IMAGE_VERSION_TAG" >/dev/null 2>&1 || true
+        fi
+        _verbose_info "Tagging ${source_tag} -> ${IMAGE_VERSION_TAG}"
+        "$PODMAN" tag "$source_tag" "$IMAGE_VERSION_TAG" >/dev/null 2>&1 || true
+    fi
+    if [[ "$source_tag" != "$IMAGE_LATEST_TAG" ]]; then
+        if "$PODMAN" image exists "$IMAGE_LATEST_TAG" 2>/dev/null; then
+            _verbose_info "Removing stale latest tag: $IMAGE_LATEST_TAG"
+            "$PODMAN" rmi "$IMAGE_LATEST_TAG" >/dev/null 2>&1 || true
+        fi
+        _verbose_info "Tagging ${source_tag} -> ${IMAGE_LATEST_TAG}"
+        "$PODMAN" tag "$source_tag" "$IMAGE_LATEST_TAG" >/dev/null 2>&1 || true
+    fi
+}
+
 if [[ "$FLAG_FORCE" == false ]] && [[ -f "$HASH_FILE" ]]; then
     LAST_HASH="$(cat "$HASH_FILE")"
     if [[ "$CURRENT_HASH" == "$LAST_HASH" ]]; then
-        # Verify the image actually exists in podman
+        # Verify the image actually exists in podman.
         # @trace spec:init-incremental-builds
-        if "$PODMAN" image exists "$IMAGE_TAG" 2>/dev/null; then
+        if [[ -n "$_source_tag" ]]; then
+            if [[ "$_source_tag" != "$IMAGE_TAG" ]]; then
+                _verbose_info "Tagging ${_source_tag} -> ${IMAGE_TAG}"
+                "$PODMAN" tag "$_source_tag" "$IMAGE_TAG" >/dev/null 2>&1 || true
+            fi
+            _apply_alias_tags "$_source_tag"
+            _remove_stale_image_tags
             _info "Image ${BOLD}${IMAGE_TAG}${NC} is up to date (sources unchanged)"
             exit 0
-        else
-            _warn "Hash matches but image not found in podman, rebuilding..."
         fi
+        _warn "Hash matches but image not found in podman, rebuilding..."
     fi
 fi
 
@@ -282,12 +341,59 @@ if [[ -n "$HOME" ]]; then
     rm -rf "$PACKAGE_CACHE" 2>/dev/null || true
 fi
 
-# Build args: pass CHROMIUM_CORE_TAG for framework images
+# Build args: pass a resolved chromium-core image reference for framework images
 BUILD_ARGS=()
 if [[ "$IMAGE_NAME" == "chromium-framework" ]]; then
-    CHROMIUM_CORE_TAG=$(echo "$IMAGE_TAG" | sed 's/.*://')
-    BUILD_ARGS+=(--build-arg "CHROMIUM_CORE_TAG=${CHROMIUM_CORE_TAG}")
+    resolve_chromium_core_image() {
+        local candidate
+        for candidate in \
+            "tillandsias-chromium-core:${CURRENT_HASH}" \
+            "tillandsias-chromium-core:v${IMAGE_VERSION}" \
+            "tillandsias-chromium-core:latest" \
+            "localhost/tillandsias-chromium-core:${CURRENT_HASH}" \
+            "localhost/tillandsias-chromium-core:v${IMAGE_VERSION}" \
+            "localhost/tillandsias-chromium-core:latest"; do
+            if "$PODMAN" image exists "$candidate" 2>/dev/null; then
+                echo "$candidate"
+                return 0
+            fi
+        done
+        return 1
+    }
+
+    CHROMIUM_CORE_IMAGE="$(resolve_chromium_core_image || true)"
+    if [[ -z "$CHROMIUM_CORE_IMAGE" ]]; then
+        _error "No local chromium-core image found for the framework build."
+        _error "Build chromium-core first, or ensure a matching local image tag is available."
+        exit 1
+    fi
+    BUILD_ARGS+=(--build-arg "CHROMIUM_CORE_IMAGE=${CHROMIUM_CORE_IMAGE}")
 fi
+BUILD_ISOLATION="${TILLANDSIAS_BUILD_ISOLATION:-chroot}"
+# Reuse the host user namespace for the build container itself. This avoids
+# rootless build startup depending on newuidmap on hosts where /run/user/* is
+# constrained, while keeping the build runtime native Podman.
+BUILD_USERNS="${TILLANDSIAS_BUILD_USERNS:-host}"
+
+_podman_rootless_diagnostic() {
+    local probe_log="$1"
+    local current_user current_uid current_gid subuid_lines subgid_lines
+    current_user="${USER:-$(id -un 2>/dev/null || echo unknown)}"
+    current_uid="$(id -u 2>/dev/null || echo unknown)"
+    current_gid="$(id -g 2>/dev/null || echo unknown)"
+    subuid_lines="$(grep "^${current_user}:" /etc/subuid /etc/subgid 2>/dev/null || true)"
+
+    _error "Rootless Podman namespace setup failed before image build completed."
+    _error "The subordinate UID/GID mapping is present and overlap-safe, but the host refused to write the rootless uid_map."
+    _error "User: ${current_user} uid=${current_uid} gid=${current_gid}"
+    if [[ -n "$subuid_lines" ]]; then
+        _info "subuid/subgid entries:"
+        printf '%s\n' "$subuid_lines" >&2
+    else
+        _warn "No subuid/subgid entries found for ${current_user}"
+    fi
+    _error "Probe log: $probe_log"
+}
 
 # Image builds do NOT go through the proxy — SSL bump requires CA trust
 # that build containers don't have. Proxy is for runtime containers only.
@@ -300,6 +406,8 @@ if _verbose_enabled; then
     "$PODMAN" build \
         --no-cache \
         --format docker \
+        --isolation "$BUILD_ISOLATION" \
+        --userns "$BUILD_USERNS" \
         --tag "$IMAGE_TAG" \
         "${BUILD_ARGS[@]}" \
         "${CACHE_MOUNT_ARGS[@]}" \
@@ -309,11 +417,16 @@ else
     if ! "$PODMAN" build \
         --no-cache \
         --format docker \
+        --isolation "$BUILD_ISOLATION" \
+        --userns "$BUILD_USERNS" \
         --tag "$IMAGE_TAG" \
         "${BUILD_ARGS[@]}" \
         "${CACHE_MOUNT_ARGS[@]}" \
         -f "$CONTAINERFILE" \
         "$IMAGE_DIR/" >"$BUILD_LOG" 2>&1; then
+        if grep -Eqi 'newuidmap|read-only file system|cannot set up namespace|uid_map' "$BUILD_LOG"; then
+            _podman_rootless_diagnostic "$BUILD_LOG"
+        fi
         _error "podman build failed for ${IMAGE_TAG}"
         _error "Last build log lines:"
         tail -80 "$BUILD_LOG" >&2 || true
@@ -321,16 +434,8 @@ else
     fi
 fi
 
-# Remove :latest tag if it exists and differs from IMAGE_TAG
-LATEST_TAG="tillandsias-${IMAGE_NAME}:latest"
-if [[ "$IMAGE_TAG" != "$LATEST_TAG" ]]; then
-    _verbose_info "Removing ${LATEST_TAG} tag if present..."
-    if _verbose_enabled; then
-        "$PODMAN" rmi "$LATEST_TAG" || true
-    else
-        "$PODMAN" rmi "$LATEST_TAG" >/dev/null 2>&1 || true
-    fi
-fi
+_apply_alias_tags "$IMAGE_TAG"
+_remove_stale_image_tags
 
     # Verify the image exists — retry briefly because podman storage may need
     # a moment to flush after a build completes (prevents false negatives).
@@ -359,7 +464,7 @@ fi
 # ---------------------------------------------------------------------------
 echo "$CURRENT_HASH" > "$HASH_FILE"
 
-# Clean up the build output tarball (Nix backend only)
+# Clean up any transient tarball emitted by future build backends.
 if [[ -n "${TARBALL_PATH:-}" ]]; then
     rm -f "$TARBALL_PATH"
 fi
@@ -382,6 +487,9 @@ fi
 echo ""
 _info "----------------------------------------------"
 _info "Image:    ${BOLD}${IMAGE_TAG}${NC}"
+if [[ "$USE_HUMAN_ALIASES" == true ]]; then
+    _info "Aliases:  ${IMAGE_VERSION_TAG}, ${IMAGE_LATEST_TAG}"
+fi
 _info "Size:     ${SIZE_DISPLAY}"
 _info "Time:     ${BUILD_DURATION}s"
 _info "----------------------------------------------"

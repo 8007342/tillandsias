@@ -46,7 +46,7 @@ pub enum ContainerType {
     /// Persistent OpenCode Web forge running `opencode serve` on :4096.
     /// Named `tillandsias-<project>-forge` — no genus allocation. Distinct
     /// from `Web` (which is the static-httpd "Serve Here" feature).
-    /// @trace spec:opencode-web-session
+    /// @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     #[serde(rename = "opencode-web")]
     OpenCodeWeb,
     /// Caching HTTP/HTTPS proxy with domain allowlist.
@@ -133,14 +133,14 @@ impl ContainerInfo {
 
     /// Name for persistent OpenCode Web forge containers: `tillandsias-<project>-forge`.
     /// Distinct from `web_container_name` (Serve Here's static httpd).
-    /// @trace spec:opencode-web-session, spec:podman-orchestration
+    /// @trace spec:browser-isolation-tray-integration, spec:podman-orchestration
     pub fn forge_container_name(project_name: &str) -> String {
         format!("tillandsias-{}-forge", project_name)
     }
 
     /// Parse `tillandsias-<project>-forge` → Some(project). None for any other shape.
     /// Rejects names ending in `-web` (Serve Here) and names that look like `tillandsias-<genus>` with no project.
-    /// @trace spec:opencode-web-session
+    /// @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     pub fn parse_forge_container_name(name: &str) -> Option<String> {
         let stripped = name.strip_prefix("tillandsias-")?;
         let project = stripped.strip_suffix("-forge")?;
@@ -262,13 +262,13 @@ pub struct TrayState {
     /// before the image is ready.
     pub forge_available: bool,
 
-    /// Track browser launch times for debouncing (prevent rapid successive spawns).
-    /// @trace spec:browser-debounce, spec:browser-window-rate-limiting
+    /// Track browser launch times for per-project safe-window gating.
+    /// @trace spec:host-browser-mcp
     /// Key: project name, Value: last launch Instant.
     pub browser_last_launch: std::collections::HashMap<String, std::time::Instant>,
 
     /// Track debug browser PIDs (one per project, for "open_debug_window").
-    /// @trace spec:browser-daemon-tracking, spec:browser-tray-notifications
+    /// @trace spec:host-browser-mcp, spec:browser-isolation-tray-integration
     pub debug_browser_pid: std::collections::HashMap<String, u32>,
 
     /// @trace spec:simplified-tray-ux, spec:github-credential-health
@@ -302,7 +302,7 @@ impl TrayState {
             forge_available: false,
             browser_last_launch: std::collections::HashMap::new(),
             debug_browser_pid: std::collections::HashMap::new(),
-            // @trace spec:simplified-tray-ux, spec:browser-debounce, spec:browser-window-rate-limiting, spec:browser-daemon-tracking, spec:browser-tray-notifications
+            // @trace spec:simplified-tray-ux, spec:host-browser-mcp, spec:browser-isolation-tray-integration
             github_healthy: false,
             github_last_check: None,
             github_retry_count: 0,
@@ -365,6 +365,8 @@ impl TrayState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Instant;
+
     use crate::genus::TillandsiaGenus;
 
     #[test]
@@ -453,14 +455,82 @@ mod tests {
         assert_eq!(project, Some("frontend".to_string()));
     }
 
-    // @trace spec:opencode-web-session
+    #[test]
+    fn tray_state_new_starts_with_pup_icon() {
+        let state = TrayState::new(PlatformInfo {
+            os: Os::Linux,
+            has_podman: true,
+            has_podman_machine: false,
+            gpu_devices: Vec::new(),
+        });
+        assert_eq!(state.tray_icon_state, TrayIconState::Pup);
+    }
+
+    #[test]
+    fn compute_icon_state_returns_dried_when_podman_missing() {
+        let mut state = TrayState::new(PlatformInfo {
+            os: Os::Linux,
+            has_podman: false,
+            has_podman_machine: false,
+            gpu_devices: Vec::new(),
+        });
+        state.has_podman = false;
+        assert_eq!(state.compute_icon_state(), TrayIconState::Dried);
+    }
+
+    #[test]
+    fn compute_icon_state_returns_building_when_build_in_progress() {
+        let mut state = TrayState::new(PlatformInfo {
+            os: Os::Linux,
+            has_podman: true,
+            has_podman_machine: false,
+            gpu_devices: Vec::new(),
+        });
+        state.active_builds.push(BuildProgress {
+            image_name: "forge".to_string(),
+            status: BuildStatus::InProgress,
+            started_at: Instant::now(),
+            completed_at: None,
+        });
+        assert_eq!(state.compute_icon_state(), TrayIconState::Building);
+    }
+
+    #[test]
+    fn compute_icon_state_returns_blooming_for_recent_completion() {
+        let mut state = TrayState::new(PlatformInfo {
+            os: Os::Linux,
+            has_podman: true,
+            has_podman_machine: false,
+            gpu_devices: Vec::new(),
+        });
+        state.active_builds.push(BuildProgress {
+            image_name: "forge".to_string(),
+            status: BuildStatus::Completed,
+            started_at: Instant::now(),
+            completed_at: Some(Instant::now()),
+        });
+        assert_eq!(state.compute_icon_state(), TrayIconState::Blooming);
+    }
+
+    #[test]
+    fn compute_icon_state_returns_mature_when_idle() {
+        let state = TrayState::new(PlatformInfo {
+            os: Os::Linux,
+            has_podman: true,
+            has_podman_machine: false,
+            gpu_devices: Vec::new(),
+        });
+        assert_eq!(state.compute_icon_state(), TrayIconState::Mature);
+    }
+
+    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     #[test]
     fn forge_container_name_format() {
         let name = ContainerInfo::forge_container_name("my-project");
         assert_eq!(name, "tillandsias-my-project-forge");
     }
 
-    // @trace spec:opencode-web-session
+    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     #[test]
     fn parse_forge_container_name_valid() {
         let name = ContainerInfo::forge_container_name("my-project");
@@ -468,14 +538,14 @@ mod tests {
         assert_eq!(parsed, Some("my-project".to_string()));
     }
 
-    // @trace spec:opencode-web-session
+    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     #[test]
     fn parse_forge_container_name_rejects_web() {
         // Wrong suffix — Serve Here container, not OpenCode Web forge.
         assert!(ContainerInfo::parse_forge_container_name("tillandsias-my-app-web").is_none());
     }
 
-    // @trace spec:opencode-web-session
+    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     #[test]
     fn parse_forge_container_name_rejects_genus() {
         // Genus-suffixed container is not a forge-named container.
@@ -484,7 +554,7 @@ mod tests {
         );
     }
 
-    // @trace spec:opencode-web-session
+    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     #[test]
     fn parse_forge_container_name_hyphenated_project() {
         let parsed = ContainerInfo::parse_forge_container_name("tillandsias-cool-project-forge");

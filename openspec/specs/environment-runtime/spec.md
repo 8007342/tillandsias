@@ -42,6 +42,29 @@ The uninstall script MUST:
 - Confirm that project files were NOT touched
 - Support `--wipe` for cache and container image removal
 
+### Requirement: Dedicated service account runtime
+
+Linux installs that provision the headless orchestrator MUST create and track a dedicated `tillandsias` service account, its group, its systemd user unit, and its writable state directories. The runtime MUST be supervised by systemd in the foreground and MUST use the rootless Podman socket owned by that user.
+
+#### Scenario: Install provisions the service account stack
+- **WHEN** the installer runs with elevated privileges on Linux
+- **THEN** it MUST install the `tillandsias` sysusers entry, tmpfiles entry, and systemd user unit
+- **AND** it MUST create the `tillandsias` user and group
+- **AND** it MUST enable linger for `tillandsias`
+- **AND** it MUST place the supervised headless binary in the system path expected by that unit
+
+#### Scenario: Uninstall removes service-account traces in order
+- **WHEN** the uninstaller runs with elevated privileges on Linux
+- **THEN** it MUST stop and disable the `tillandsias` user service and socket before removing account metadata
+- **AND** it MUST remove the systemd user unit, sysusers entry, and tmpfiles entry
+- **AND** it MUST remove the `tillandsias` account and group
+- **AND** it MUST remove the service-account state tree only after the account has been torn down
+
+#### Scenario: Headless runtime uses the user-owned socket
+- **WHEN** the supervised headless service starts under the `tillandsias` account
+- **THEN** it MUST talk to Podman through `unix://%t/podman/podman.sock`
+- **AND** it MUST remain a foreground process under systemd supervision
+
 
 ### Requirement: TILLANDSIAS_AGENT accepts opencode-web
 
@@ -93,6 +116,18 @@ The runtime environment contract MUST recognise `TILLANDSIAS_AGENT=opencode-web`
 **Signal**: Script removes cache and container images in addition to standard cleanup
 **Pass**: Cache directories and image artifacts deleted; user can verify with `podman images | grep tillandsias` returns empty
 **Fail**: Cache or images still present after `--wipe`
+
+### test_service_account_artifacts_created (binding: litmus:enclave-isolation)
+**Setup**: Run the installer with elevated privileges on Linux
+**Signal**: Service-account packaging files and linger state
+**Pass**: `tillandsias` sysusers/tmpfiles/unit files exist, the account and group are present, and linger is enabled
+**Fail**: Installer does not create the dedicated service account stack or leaves unit/policy files missing
+
+### test_service_account_artifacts_removed_in_order (binding: litmus:enclave-isolation)
+**Setup**: Run uninstall with elevated privileges on Linux
+**Signal**: Teardown order and residual traces
+**Pass**: The user service and socket are stopped before unit files are deleted, linger is disabled, and the account/group/state tree are gone
+**Fail**: Teardown leaves a live service, lingering enabled, or residual files under `/etc/systemd/user`, `/etc/sysusers.d`, `/etc/tmpfiles.d`, or `/var/lib/tillandsias`
 
 ### test_tillandsias_agent_opencode_web_value (binding: litmus:ephemeral-guarantee)
 **Setup**: Launch a forge container with `TILLANDSIAS_AGENT=opencode-web`

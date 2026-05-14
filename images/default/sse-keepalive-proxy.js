@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @trace spec:opencode-web-session
+// @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
 //
 // SSE keepalive proxy. Fronts opencode serve so Bun's default 10s idleTimeout
 // doesn't drop `/event` and `/global/event` streams when the session is idle.
@@ -20,7 +20,7 @@ const KEEPALIVE_MS = Number(process.env.KEEPALIVE_MS || 5000);
 
 const SSE_PATHS = new Set(['/event', '/global/event']);
 
-// @trace spec:opencode-web-session
+// @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
 // Paths that get a hard 404 at the proxy to disable PWA "Install as app"
 // and service-worker registration. Upstream opencode ships a web manifest
 // and an installable icon set; the ephemeral contract forbids installed
@@ -36,13 +36,13 @@ const PWA_KILL_PATHS = new Set([
     '/worker.js',
 ]);
 
-// @trace spec:opencode-web-session
+// @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
 // Bootstrap script injected as the first child of <head> on every HTML
 // response. Seeds `localStorage.opencode-color-scheme = 'dark'` before
 // opencode's `/oc-theme-preload.js` external script reads localStorage,
 // so the dark palette paints on first frame with no light flash.
 //
-// Constraints per spec/opencode-web-session:
+// Constraints per browser-isolation-tray-integration + opencode-web-session-otp:
 //   - Classic script only (no type=module, defer, async) — must run
 //     synchronously before any other script on the page.
 //   - Side-effect-only. Do NOT override Notification.permission or
@@ -52,7 +52,7 @@ const PWA_KILL_PATHS = new Set([
 //     sha256 computation that feeds the CSP.
 const BOOTSTRAP_SCRIPT = ";(function(){try{if(!localStorage.getItem('opencode-color-scheme')){localStorage.setItem('opencode-color-scheme','dark');}}catch(_){}})();";
 
-// @trace spec:opencode-web-session
+// @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
 // CSP-hash injector for opencode's index.html. Upstream opencode ships a
 // strict Content-Security-Policy of `script-src 'self' 'wasm-unsafe-eval'`
 // but also emits an inline <script id="oc-theme-preload-script"> in the
@@ -92,7 +92,7 @@ function injectCspHashesInHtml(htmlBuffer, cspHeader, extraHashes) {
     return `${cspHeader.replace(/;?\s*$/, '')}; script-src 'self' ${hashList}`;
 }
 
-// @trace spec:opencode-web-session
+// @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
 // Rewrite an HTML body: strip <link rel="manifest">, then inject the
 // bootstrap <script> as the first child of <head>. Returns the new body
 // as a Buffer. We do this in two regexes instead of parsing HTML; the
@@ -114,7 +114,7 @@ function rewriteHtmlBody(htmlBuffer) {
     return Buffer.from(html, 'utf8');
 }
 
-// @trace spec:opencode-web-session
+// @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
 // Precomputed sha256 for our bootstrap script body — this is the hash
 // the browser expects to see in `script-src` for the <script>BOOTSTRAP</script>
 // we inject. Computed once at module load; if BOOTSTRAP_SCRIPT ever changes
@@ -130,7 +130,7 @@ function log(level, msg, extra) {
 }
 
 const server = http.createServer((req, res) => {
-    // @trace spec:opencode-web-session
+    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     // PWA-kill short-circuit: 404 the manifest and service-worker entry
     // points BEFORE forwarding upstream. Avoids any chance of the browser
     // installing or registering them, even if opencode's response changed.
@@ -148,7 +148,7 @@ const server = http.createServer((req, res) => {
     delete headers['connection'];
     delete headers['keep-alive'];
     delete headers['transfer-encoding'];
-    // @trace spec:opencode-web-session
+    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     // Drop the `Origin` header so opencode's CorsMiddleware (strict-exact
     // allowlist: localhost:<port>, 127.0.0.1:<port>, app.opencode.ai) never
     // sees our `*.localhost:<port>` origin. Without this the proxy would
@@ -156,7 +156,7 @@ const server = http.createServer((req, res) => {
     // — fragile and per-attach. Dropping Origin sidesteps the allowlist
     // entirely and is how the upstream proxied path handles it too.
     delete headers['origin'];
-    // @trace spec:opencode-web-session
+    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     // Strip Accept-Encoding so opencode sends plain UTF-8 HTML (no gzip,
     // no brotli). Otherwise our HTML rewrite (manifest-link strip +
     // bootstrap-script inject) operates on compressed bytes and produces
@@ -171,7 +171,7 @@ const server = http.createServer((req, res) => {
     const upReq = http.request(
         { host: UP_HOST, port: UP_PORT, method: req.method, path: req.url, headers },
         (upRes) => {
-            // @trace spec:opencode-web-session
+            // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
             // HTML rewrite branch: buffer the body so we can compute the
             // sha256 of each inline <script> and add it to the
             // Content-Security-Policy header. Opencode's DEFAULT_CSP blocks
@@ -188,7 +188,7 @@ const server = http.createServer((req, res) => {
                 upRes.on('data', (c) => chunks.push(c));
                 upRes.on('end', () => {
                     const originalBody = Buffer.concat(chunks);
-                    // @trace spec:opencode-web-session
+                    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
                     // Strip <link rel=manifest> + inject bootstrap <script>
                     // as first child of <head>. The bootstrap's sha256 is
                     // added to script-src so the browser executes it under
@@ -202,13 +202,13 @@ const server = http.createServer((req, res) => {
                     const outHeaders = { ...upRes.headers };
                     outHeaders['content-security-policy'] = patchedCsp;
                     outHeaders['content-length'] = String(newBody.length);
-                    // @trace spec:opencode-web-session
+                    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
                     // Belt-and-braces: even if opencode adds a service-worker
                     // registration script in a future release, this header
                     // causes the browser to reject any SW scope.
                     outHeaders['service-worker-allowed'] = 'none';
                     delete outHeaders['transfer-encoding'];
-                    // @trace spec:opencode-web-session
+                    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
                     // Strip content-encoding from the rewritten HTML response:
                     // our body is always plain UTF-8. Accept-Encoding was
                     // dropped on the upstream request so opencode should be
@@ -231,7 +231,7 @@ const server = http.createServer((req, res) => {
             res.writeHead(upRes.statusCode, upRes.headers);
 
             if (sse && upRes.statusCode === 200) {
-                // @trace spec:opencode-web-session
+                // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
                 // Keep-alive injector: if the upstream has been silent for
                 // KEEPALIVE_MS, write a `:\n\n` SSE comment to the client.
                 // This is a WHATWG-compliant SSE comment and is invisible to

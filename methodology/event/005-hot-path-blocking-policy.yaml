@@ -37,7 +37,6 @@ violated_or_missing_claims:
     - hot_path_code_must_be_event_driven
     - shutdown_only_waits_must_be_documented
   spec_requirement_ids:
-    - spec:linux-native-portable-executable
     - spec:headless-mode
     - spec:tray-app
   litmus_ids:

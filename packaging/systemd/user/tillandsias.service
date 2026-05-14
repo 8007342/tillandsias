@@ -1,0 +1,18 @@
+[Unit]
+Description=Tillandsias Headless Orchestrator
+Documentation=man:systemd.service(5)
+After=podman.socket
+Wants=podman.socket
+
+[Service]
+Type=simple
+Environment="TILLANDSIAS_PODMAN_REMOTE_URL=unix://%t/podman/podman.sock"
+Environment="TILLANDSIAS_ROOT=/var/lib/tillandsias/src/tillandsias"
+ExecStart=/usr/local/bin/tillandsias --headless /var/lib/tillandsias/src/tillandsias
+Restart=always
+RestartSec=1s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

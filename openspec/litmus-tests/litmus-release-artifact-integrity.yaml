@@ -1,0 +1,39 @@
+# @trace spec:binary-signing
+name: litmus:release-artifact-integrity
+spec: binary-signing
+phase: pre-build
+description: Verify release signing and verification use Cosign bundle artifacts
+severity: high
+
+preconditions:
+  - workspace contains .github/workflows/release.yml, scripts/verify.sh, and docs/VERIFICATION.md
+  - grep is available in PATH
+
+critical_path:
+  - step: "verify release workflow signs artifacts with Cosign bundles"
+    command: "grep -F 'cosign sign-blob' .github/workflows/release.yml && grep -F -- '--bundle \"${artifact}.cosign.bundle\"' .github/workflows/release.yml && grep -F 'SHA256SUMS' .github/workflows/release.yml"
+    timeout_ms: 3000
+
+  - step: "verify release workflow release notes instruct bundle verification"
+    command: "grep -F 'cosign verify-blob' .github/workflows/release.yml && grep -F '.cosign.bundle' .github/workflows/release.yml && grep -F 'Rekor transparency log' .github/workflows/release.yml"
+    timeout_ms: 3000
+
+  - step: "verify local verifier script enforces bundle mode"
+    command: "grep -F 'BUNDLE_FILE=\"${ARTIFACT}.cosign.bundle\"' scripts/verify.sh && grep -F 'cosign verify-blob' scripts/verify.sh && grep -F -- '--bundle \"${BUNDLE_FILE}\"' scripts/verify.sh"
+    timeout_ms: 3000
+
+  - step: "verify verification docs advertise bundle verification"
+    command: "grep -F '.cosign.bundle' docs/VERIFICATION.md && grep -F 'cosign verify-blob' docs/VERIFICATION.md && grep -F 'Rekor' docs/VERIFICATION.md"
+    timeout_ms: 3000
+
+observability:
+  traces:
+    - "@trace spec:binary-signing"
+  expected_log: "Release signing and verification stay on the Cosign bundle contract"
+  log_fields:
+    spec: "binary-signing"
+    test: "release-artifact-integrity"
+
+rollback:
+  on_failure: "inspect .github/workflows/release.yml, scripts/verify.sh, and docs/VERIFICATION.md for stale Cosign contract references"
+  command: "grep -n 'cosign sign-blob\\|cosign verify-blob\\|.cosign.bundle\\|Rekor transparency log' .github/workflows/release.yml scripts/verify.sh docs/VERIFICATION.md"

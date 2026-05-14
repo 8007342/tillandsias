@@ -100,8 +100,8 @@ Clicking "Attach Here" SHALL dispatch to the web-session flow when `AgentConfig:
 #### Scenario: Web flow on default install
 - **WHEN** `agent.selected = opencode-web` and the user clicks "Attach Here"
 - **THEN** no terminal emulator is spawned
-- **AND** a detached web container is started (if not already running)
-- **AND** a `WebviewWindow` opens against the mapped host port
+- **AND** a detached OpenCode Web container is started (if not already running)
+- **AND** a GUI browser window opens via the safe browser wrapper against the mapped host route
 
 #### Scenario: Terminal flow preserved for opt-in users
 - **WHEN** `agent.selected = opencode` or `claude` and the user clicks "Attach Here"
@@ -161,7 +161,7 @@ Clicking "Attach Here" SHALL dispatch to the web-session flow when `AgentConfig:
 
 ### Invariant: Web flow on OpenCode Web
 - **ID**: tray-app.invariant.web-flow-on-opencode-web
-- **Expression**: `agent.selected == opencode-web AND click_attach_here => web_flow_runs && NO_terminal`
+- **Expression**: `agent.selected == opencode-web AND click_attach_here => web_flow_runs && NO_terminal && GUI_browser_window`
 - **Measurable**: true
 
 ### Invariant: Terminal flow preserved

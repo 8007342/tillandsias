@@ -4,12 +4,20 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
     flake-utils.url = "github:numtide/flake-utils";
+    rust-overlay.url = "github:oxalica/rust-overlay";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
+        overlays = [ rust-overlay.overlays.default ];
+        pkgs = import nixpkgs {
+          inherit system overlays;
+        };
+        rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+          extensions = [ "rust-src" "clippy" "rustfmt" "rust-analyzer" ];
+          targets = [ "x86_64-unknown-linux-musl" ];
+        };
 
         # Local files — changing these triggers rebuild
         forgeEntrypoint = ./images/default/entrypoint.sh;
@@ -25,6 +33,75 @@
         forgeLocales = ./images/default/locales;
         forgeMcpBrowser = ./images/default/tillandsias-mcp-browser;
         webEntrypoint = ./images/web/entrypoint.sh;
+        forgeImageRoot = pkgs.buildEnv {
+          name = "tillandsias-forge-root";
+          paths = with pkgs; [
+            # Shell and core utils
+            bash
+            coreutils
+            diffutils
+            findutils
+            gnugrep
+            gnumake
+            gnused
+            gawk
+            gnutar
+            gzip
+            less
+            patch
+            unzip
+            which
+            xz
+            # Alternative shells
+            fish
+            zsh
+            # Dev tools
+            file
+            git
+            gh
+            curl
+            wget
+            jq
+            openssh
+            ripgrep
+            strace
+            # Terminal tools
+            mc
+            vim
+            nano
+            eza
+            bat
+            fd
+            fzf
+            zoxide
+            htop
+            tree
+            # System tools
+            iproute2
+            procps
+            # Node.js + npm (for OpenSpec deferred install)
+            nodejs_22
+            nodePackages.npm
+            # Nix itself (for build-time developer workflows inside the image)
+            nix
+            # TLS certificates and shell support
+            cacert
+            dockerTools.usrBinEnv
+            dockerTools.binSh
+          ];
+          pathsToLink = [ "/bin" "/etc" "/lib" "/lib64" "/share" "/usr/bin" "/usr/local/bin" ];
+        };
+        webImageRoot = pkgs.buildEnv {
+          name = "tillandsias-web-root";
+          paths = with pkgs; [
+            bash
+            coreutils
+            busybox
+            dockerTools.usrBinEnv
+            dockerTools.binSh
+          ];
+          pathsToLink = [ "/bin" "/lib" "/lib64" "/share" "/usr/bin" ];
+        };
 
       in {
         packages = {
@@ -34,66 +111,7 @@
             maxLayers = 100;
 
             # @trace spec:forge-shell-tools
-            contents = with pkgs; [
-              # Shell and core utils
-              bash
-              coreutils
-              diffutils       # diff, cmp
-              findutils
-              gnugrep
-              gnumake         # make
-              gnused
-              gawk
-              gnutar
-              gzip
-              less            # pager
-              patch           # apply patches
-              unzip           # extract archives
-              which           # find executables
-              xz
-              # Alternative shells
-              fish
-              zsh
-              # Dev tools
-              file            # identify file types
-              git
-              gh
-              curl
-              wget
-              jq
-              openssh         # ssh client
-              ripgrep
-              strace          # syscall tracing
-              # Terminal tools
-              mc            # midnight commander
-              vim
-              nano
-              eza           # modern ls
-              bat           # modern cat
-              fd            # modern find
-              fzf           # fuzzy finder
-              zoxide        # smart cd
-              htop          # process viewer
-              tree          # directory tree
-              # System tools
-              iproute2        # ip, ss (network)
-              procps          # ps, free, vmstat
-              # Node.js + npm (for OpenSpec deferred install)
-              nodejs_22
-              nodePackages.npm
-              # OpenCode: installed at runtime via official installer (curl | bash)
-              # The binary is cached in ~/.cache/tillandsias/opencode/
-              # Nix itself (for nix develop inside container)
-              nix
-              # Codex: code analysis agent (lazy-pulled if not in nixpkgs)
-              # TODO: Replace with actual Codex package once available in nixpkgs
-              # For now, a stub wrapper will be provided; Codex binary will be pulled at runtime
-              # TLS certificates
-              cacert
-              # Make /usr/bin/env and /bin/sh work
-              dockerTools.usrBinEnv
-              dockerTools.binSh
-            ];
+            copyToRoot = forgeImageRoot;
 
             fakeRootCommands = ''
               # FHS compatibility: pre-built binaries (OpenCode, etc.) expect
@@ -204,13 +222,7 @@
             tag = "latest";
             maxLayers = 20;
 
-            contents = with pkgs; [
-              bash
-              coreutils
-              busybox
-              dockerTools.usrBinEnv
-              dockerTools.binSh
-            ];
+            copyToRoot = webImageRoot;
 
             fakeRootCommands = ''
               mkdir -p ./var/www
@@ -228,6 +240,86 @@
               };
             };
           };
+        };
+
+        devShells.default = pkgs.mkShell {
+          packages = with pkgs; [
+            # Shell and core utilities
+            bash
+            coreutils
+            diffutils
+            findutils
+            gnugrep
+            gnumake
+            gnused
+            gawk
+            gnutar
+            gzip
+            less
+            patch
+            unzip
+            which
+            xz
+            # General-purpose CLI tooling
+            fish
+            zsh
+            file
+            git
+            gh
+            curl
+            wget
+            jq
+            openssh
+            ripgrep
+            strace
+            mc
+            vim
+            nano
+            eza
+            bat
+            fd
+            fzf
+            zoxide
+            htop
+            tree
+            iproute2
+            procps
+            # Rust toolchain (Nix-managed, edition-2024-capable)
+            rustToolchain
+            # Native build helpers
+            stdenv.cc
+            pkg-config
+            cmake
+            ninja
+            autoconf
+            automake
+            libtool
+            clang
+            lld
+            llvm
+            # Runtime/native libraries used by the project and its tooling
+            openssl
+            gtk3
+            webkitgtk_4_1
+            libappindicator-gtk3
+            librsvg
+            glib
+            # Miscellaneous language/tooling support
+            nodejs_22
+            nodePackages.npm
+            python3
+            python3Packages.pip
+            perl
+            go
+            jdk21
+            nix
+            cacert
+          ];
+
+          shellHook = ''
+            export NIX_SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+            export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+          '';
         };
       }
     );

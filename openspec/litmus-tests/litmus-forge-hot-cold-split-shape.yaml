@@ -1,0 +1,33 @@
+name: litmus:forge-hot-cold-split-shape
+spec: forge-hot-cold-split
+description: Verify the forge hot/cold split remains wired to the config budget seam and the visible hot-path banner
+severity: medium
+phase: pre-build
+
+preconditions:
+  - workspace contains crates/tillandsias-core/src/config.rs
+  - workspace contains images/default/forge-welcome.sh
+  - cargo is available in PATH
+
+critical_path:
+  - step: "verify the forge config defaults round-trip through TOML"
+    command: "cargo test -p tillandsias-core config::tests::forge_config_defaults_round_trip_through_toml -- --exact && echo 'forge config defaults round trip'"
+    timeout_ms: 30000
+    expected_behavior: "forge config defaults round trip"
+
+  - step: "verify the welcome banner surfaces the RAM-backed hot mounts"
+    command: "grep -Fq 'RAM mounts' images/default/forge-welcome.sh && grep -Fq '/opt/cheatsheets' images/default/forge-welcome.sh && grep -Fq '/run/user/1000' images/default/forge-welcome.sh && grep -Fq 'TILLANDSIAS_HOT_PATH_MB' images/default/forge-welcome.sh && echo 'hot-cold banner present'"
+    timeout_ms: 10000
+    expected_behavior: "hot-cold banner present"
+
+observability:
+  traces:
+    - "@trace spec:forge-hot-cold-split"
+  expected_log: "forge hot/cold split remains visible at startup"
+  log_fields:
+    spec: "forge-hot-cold-split"
+    test: "forge-hot-cold-split-shape"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-core/src/config.rs, images/default/forge-welcome.sh, and openspec/specs/forge-hot-cold-split/spec.md for drift"
+  command: "cargo test -p tillandsias-core config::tests::forge_config_defaults_round_trip_through_toml -- --exact"

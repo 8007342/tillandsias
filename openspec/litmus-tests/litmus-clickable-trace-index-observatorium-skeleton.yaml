@@ -1,0 +1,35 @@
+# @trace spec:clickable-trace-index
+name: litmus:clickable-trace-index-observatorium-skeleton
+spec: clickable-trace-index
+phase: pre-build
+description: Verify the local observatorium launcher serves the current checkout and exposes the minimal three-pane shell
+severity: medium
+
+preconditions:
+  - workspace contains scripts/run-observatorium.sh and observatorium/index.html
+  - podman, curl, and bash are available in PATH
+
+critical_path:
+  - step: "launch observatorium without browser automation"
+    command: "OBSERVATORIUM_BROWSER=none ./scripts/run-observatorium.sh --recreate"
+    timeout_ms: 120000
+
+  - step: "verify the page is reachable"
+    command: "curl -fsS http://127.0.0.1:8787/observatorium/ | grep -F 'Observatorium' && curl -fsS http://127.0.0.1:8787/observatorium/ | grep -F 'Specs' && curl -fsS http://127.0.0.1:8787/observatorium/ | grep -F 'Cheatsheets'"
+    timeout_ms: 120000
+
+  - step: "verify the launcher stays idempotent"
+    command: "OBSERVATORIUM_BROWSER=none ./scripts/run-observatorium.sh"
+    timeout_ms: 120000
+
+observability:
+  traces:
+    - "@trace spec:clickable-trace-index"
+  expected_log: "Observatorium launcher reuses or recreates the container and serves the current checkout"
+  log_fields:
+    spec: "clickable-trace-index"
+    test: "clickable-trace-index-observatorium-skeleton"
+
+rollback:
+  on_failure: "inspect scripts/run-observatorium.sh and observatorium/index.html for regressions"
+  command: "sed -n '1,260p' scripts/run-observatorium.sh && sed -n '1,260p' observatorium/index.html"

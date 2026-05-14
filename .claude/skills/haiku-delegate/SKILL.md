@@ -28,9 +28,12 @@ scripts/claude-delegate.sh patch-draft "Draft a minimal patch for build.sh help 
 scripts/claude-delegate.sh json "Summarize /tmp/litmus-check.log into top failure classes."
 ```
 
+For MCP clients, use `scripts/claude-mcp.sh` as the stdio server. It exposes
+`claude.audit`, `claude.patch_draft`, and `claude.json` by delegating to the
+same wrapper above.
+
 Modes:
 
 - `audit`: read-only repository analysis, text output.
 - `patch-draft`: read-only repository analysis that outputs a proposed diff, not edits.
 - `json`: read-only repository analysis with JSON output.
-

@@ -7,21 +7,21 @@ created: 2026-05-05
 
 ## Purpose
 
-Define the three-layer build system that separates concerns between Nix (binary compilation), podman (container image construction), and shell scripts (integration testing). This architecture enables reproducible, deterministic builds while keeping the test harness lightweight and atomic.
+Define the build-time and runtime split used by Tillandsias: Nix provides reproducible build inputs for Rust/package materialization, Podman constructs and runs containers, and shell scripts remain test harnesses. This architecture keeps build determinism high without leaking Nix into user runtime orchestration.
 
 ## Overview
 
-Tillandsias uses a three-layer build architecture:
+Tillandsias uses a build-time Nix / runtime Podman / test-harness shell split:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ Layer 1: Nix → Rust Binary                                       │
+│ Layer 1: Build-time Nix → Rust Artifacts                         │
 │ ─────────────────────────────────────────────────────────────────│
 │ Command: cargo build --workspace (via build.sh)                  │
 │ Input: src-tauri/, crates/                                       │
 │ Output: ./target/debug|release/tillandsias (binary)              │
-│ Embedded: Containerfiles (text, baked into binary)               │
-│ Nix builds ONLY the binary. Never touches container images.      │
+│ Embedded: tracked Containerfile sources remain versioned inputs   │
+│ Nix builds only build inputs and Rust artifacts.                  │
 └─────────────────────────────────────────────────────────────────┘
               │
               └─► tillandsias binary (with embedded Containerfiles)
@@ -32,7 +32,7 @@ Tillandsias uses a three-layer build architecture:
 │ ─────────────────────────────────────────────────────────────────│
 │ Trigger: tillandsias --init (tray app) or ./build.sh --init     │
 │ Process:                                                          │
-│   1. Binary extracts embedded Containerfile to temp dir          │
+│   1. Binary resolves the tracked Containerfile source            │
 │   2. Calls podman build -f <Containerfile> -t <image-tag>       │
 │   3. Distro-aware cache mounting (dnf/apt/apk) for performance  │
 │   4. Staleness detection: hash Containerfile sources, skip if    │
@@ -62,25 +62,25 @@ Tillandsias uses a three-layer build architecture:
 
 ## Three-Layer Separation
 
-### Layer 1: Nix → Rust Binary
+### Layer 1: Build-time Nix → Rust Artifacts
 
-**Responsibility**: Compile Rust code, embed Containerfiles as text, produce AppImage or binary artifact.
+**Responsibility**: Provide reproducible build inputs and compile Rust artifacts. Nix does not participate in runtime launch, browser launch, or container orchestration.
 
 **What Nix does**:
 - Runs `cargo build --workspace`
-- Embeds `images/*/Containerfile` as const strings in `src-tauri/src/embedded.rs`
-- Produces: `target/release/tillandsias` binary (or AppImage via Tauri bundler)
+- Produces reproducible Rust binaries and build-time inputs
+- Supports flake-based developer tooling and package pinning
 
 **What Nix does NOT do**:
 - Does not call `podman build`
 - Does not create container images
 - Does not run containers
+- Does not launch browser sessions or tray runtime containers
 
-**Exit condition**: Binary artifact ready for Layer 2.
+**Exit condition**: Build artifact ready for Podman/runtime image construction.
 
 **File references**:
-- `src-tauri/src/embedded.rs` — Containerfile embedding (const strings, write helpers)
-- `scripts/build-image.sh` — Layer 2 entry point (called by binary at runtime)
+- `scripts/build-image.sh` — runtime image build entry point used by the compiled binary
 
 ---
 
@@ -162,20 +162,20 @@ echo "PASS: tillandsias-git image builds and boots correctly"
 
 ## Requirements
 
-### Requirement: Nix builds ONLY the binary, never container images
+### Requirement: Nix is build-time only, never runtime orchestration
 
 ```yaml
 Description: >
-  Nix flake (flake.nix) SHALL invoke only `cargo build` and
-  the Tauri bundler. It SHALL NOT call `podman build`, pull
-  images, or modify podman storage.
+  Nix flake (flake.nix) SHALL invoke only build-time Rust/package
+  materialization. It SHALL NOT call `podman build`, pull images,
+  modify podman storage, or participate in user-facing runtime
+  orchestration.
 Pattern: MUST NOT
 Rationale: >
-  Container image construction is a runtime, user-facing step.
-  Embedding the build logic in the binary (Layer 1) creates
-  reproducible, portable artifacts that work identically
-  across dev/cloud/user machines. Nix's role is to compile
-  the orchestrator, not to orchestrate itself.
+  Container image construction and runtime launch are Podman
+  responsibilities. Nix's role is to provide reproducible build
+  inputs and build-time tooling, not to orchestrate runtime
+  containers or browser sessions.
 Scope: build.sh, flake.nix, src-tauri/
 ```
 

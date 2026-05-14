@@ -172,7 +172,10 @@ impl PodmanDirect {
 
     /// Compute cache mount arguments based on detected distro.
     fn cache_mount_args(&self, distro: &str) -> Result<Vec<(String, String)>, ImageBuilderError> {
-        let cache_dir = std::path::Path::new(env!("HOME")).join(".cache/tillandsias/packages");
+        let home_dir = std::env::var_os("HOME")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from(env!("HOME")));
+        let cache_dir = home_dir.join(".cache/tillandsias/packages");
         std::fs::create_dir_all(&cache_dir)
             .map_err(|e| ImageBuilderError::Io(format!("create cache dir: {e}")))?;
 
@@ -500,6 +503,20 @@ impl ImageBuilder for PodmanMock {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn temp_image_root() -> PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("tillandsias-image-routing-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        for image in ["default", "proxy", "git", "inference", "web"] {
+            let dir = root.join("images").join(image);
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("Containerfile"), "FROM alpine\n").unwrap();
+        }
+        root
+    }
 
     #[tokio::test]
     async fn test_podman_direct_prepares_correct_call() {
@@ -523,5 +540,45 @@ mod tests {
 
         // Assertion: "did you mount the cache?"
         // capture.has_cache_mount("/var/cache/apt/archives");
+    }
+
+    #[test]
+    fn build_routing_uses_type_specific_containerfiles() {
+        let root = temp_image_root();
+        unsafe {
+            std::env::set_var("HOME", &root);
+        }
+        let direct = PodmanDirect::new(root.display().to_string());
+        let root_str = root.display().to_string();
+
+        let forge = direct
+            .prepare_build("forge", "tillandsias-forge:v1")
+            .unwrap();
+        let proxy = direct
+            .prepare_build("proxy", "tillandsias-proxy:v1")
+            .unwrap();
+        let git = direct.prepare_build("git", "tillandsias-git:v1").unwrap();
+        let inference = direct
+            .prepare_build("inference", "tillandsias-inference:v1")
+            .unwrap();
+        let web = direct.prepare_build("web", "tillandsias-web:v1").unwrap();
+
+        let cases = [
+            (forge, "images/default/Containerfile"),
+            (proxy, "images/proxy/Containerfile"),
+            (git, "images/git/Containerfile"),
+            (inference, "images/inference/Containerfile"),
+            (web, "images/web/Containerfile"),
+        ];
+
+        for (call, expected) in cases {
+            let idx = call.args.iter().position(|arg| arg == "-f").unwrap();
+            assert!(
+                call.args[idx + 1].ends_with(expected),
+                "expected {expected}, got {}",
+                call.args[idx + 1]
+            );
+            assert!(call.cwd.ends_with(&root_str));
+        }
     }
 }

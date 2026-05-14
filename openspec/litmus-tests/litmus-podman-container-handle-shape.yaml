@@ -1,0 +1,31 @@
+# @trace spec:podman-container-handle
+name: litmus:podman-container-handle-shape
+spec: podman-container-handle
+phase: pre-build
+description: Verify the lightweight podman container handle retains identity and spec snapshot
+severity: medium
+
+preconditions:
+  - workspace contains crates/tillandsias-podman
+  - cargo is available in PATH
+
+critical_path:
+  - step: "run handle accessor test"
+    command: "cargo test -p tillandsias-podman handle_exposes_name_and_image -- --exact"
+    timeout_ms: 120000
+
+  - step: "run launch spec construction test"
+    command: "cargo test -p tillandsias-podman build_args_has_security_flags -- --exact"
+    timeout_ms: 120000
+
+observability:
+  traces:
+    - "@trace spec:podman-container-handle"
+  expected_log: "Container handle carries runtime identity and launch snapshot"
+  log_fields:
+    spec: "podman-container-handle"
+    test: "podman-container-handle-shape"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-podman/src/container_spec.rs and crates/tillandsias-podman/src/launch.rs"
+  command: "sed -n '1,260p' crates/tillandsias-podman/src/container_spec.rs && printf '\\n---\\n' && sed -n '1,240p' crates/tillandsias-podman/src/launch.rs"

@@ -16,10 +16,12 @@
 #   - Determinism: no timing assumptions, no flaky conditions
 #
 # Usage:
+#   ./scripts/run-litmus-test.sh --spec SPEC   # Scope by spec ladder shorthand
 #   ./scripts/run-litmus-test.sh [spec-name]       # Run single spec's litmus tests
 #   ./scripts/run-litmus-test.sh                     # Run all specs' tests
 #   ./scripts/run-litmus-test.sh --list              # List all test suites
 #   ./scripts/run-litmus-test.sh --timeout 60        # Custom timeout in seconds
+#   ./scripts/run-litmus-test.sh --ignore SPEC1,SPEC2 # Skip in-progress specs
 #
 # Exit Codes:
 #   0 = all tests pass
@@ -38,12 +40,77 @@ readonly PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly LITMUS_BINDINGS="${PROJECT_ROOT}/openspec/litmus-bindings.yaml"
 readonly LITMUS_TESTS_DIR="${PROJECT_ROOT}/openspec/litmus-tests"
 readonly METHODOLOGY_LITMUS="${PROJECT_ROOT}/methodology/litmus.yaml"
+readonly LITMUS_RUNTIME_DIR="${PROJECT_ROOT}/target/litmus-runtime"
+readonly LITMUS_PODMAN_ROOT="${PROJECT_ROOT}/target/litmus-podman/root"
+readonly LITMUS_PODMAN_RUNROOT="${PROJECT_ROOT}/target/litmus-podman/runroot"
+readonly LITMUS_PODMAN_TMPDIR="${PROJECT_ROOT}/target/litmus-podman/tmp"
+
+if [[ -z "${XDG_RUNTIME_DIR:-}" || ! -w "${XDG_RUNTIME_DIR:-/dev/null}" ]]; then
+    mkdir -p "$LITMUS_RUNTIME_DIR"
+    chmod 700 "$LITMUS_RUNTIME_DIR"
+    export XDG_RUNTIME_DIR="$LITMUS_RUNTIME_DIR"
+fi
+
+readonly REAL_PODMAN_BIN="$(command -v podman 2>/dev/null || true)"
+mkdir -p "$LITMUS_RUNTIME_DIR/bin" "$LITMUS_PODMAN_ROOT" "$LITMUS_PODMAN_RUNROOT" "$LITMUS_PODMAN_TMPDIR"
+chmod 700 "$LITMUS_PODMAN_ROOT" "$LITMUS_PODMAN_RUNROOT" "$LITMUS_PODMAN_TMPDIR"
+cat >"$LITMUS_RUNTIME_DIR/bin/podman" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+args=("\$@")
+mode="\${LITMUS_PODMAN_MODE:-real}"
+calls_file="\${LITMUS_PODMAN_CALLS_FILE:-$PROJECT_ROOT/target/litmus-podman/calls.log}"
+real_podman_bin="${REAL_PODMAN_BIN}"
+if [[ "\${args[0]:-}" == "run" || "\${args[0]:-}" == "create" ]]; then
+    has_userns=0
+    for arg in "\${args[@]}"; do
+        if [[ "\$arg" == --userns=* || "\$arg" == "--userns" ]]; then
+            has_userns=1
+            break
+        fi
+    done
+    if [[ "\$has_userns" -eq 0 ]]; then
+        args=("\${args[0]}" "--userns=host" "\${args[@]:1}")
+    fi
+fi
+
+mkdir -p "\$(dirname "\$calls_file")"
+{
+    printf '%s\t' "\$(date -u +%FT%TZ)"
+    printf 'podman'
+    for arg in "\${args[@]}"; do
+        printf ' %q' "\$arg"
+    done
+    printf '\n'
+} >>"\$calls_file"
+
+if [[ "\$mode" == "fake" ]]; then
+    exec "$PROJECT_ROOT/scripts/test-support/podman-mock.sh" "\${args[@]}"
+fi
+
+if [[ -z "\$real_podman_bin" ]]; then
+    echo "podman not found on PATH" >&2
+    exit 127
+fi
+
+exec "\$real_podman_bin" --root "$LITMUS_PODMAN_ROOT" --runroot "$LITMUS_PODMAN_RUNROOT" --tmpdir "$LITMUS_PODMAN_TMPDIR" "\${args[@]}"
+EOF
+chmod 755 "$LITMUS_RUNTIME_DIR/bin/podman"
+export PATH="$LITMUS_RUNTIME_DIR/bin:$PATH"
+export LITMUS_PODMAN_CALLS_FILE="${LITMUS_PODMAN_CALLS_FILE:-$PROJECT_ROOT/target/litmus-podman/calls.log}"
 
 # Default timeout in seconds (can be overridden via --timeout)
 TIMEOUT_SECONDS=30
 VERBOSE=0
 LIST_ONLY=0
 FILTER_SPEC=""
+FILTER_PHASE="all"
+COMPACT=0
+STRICT_MODE=0
+STRICT_SPEC_LIST=""
+IGNORE_SPEC_LIST=""
+SPEC_SHORTHAND=""
 
 # Test result tracking
 TESTS_PASSED=0
@@ -97,21 +164,28 @@ log_test_result() {
     local test_name="$2"
     local status="$3"
     local message="${4:-}"
+    local suppress_output=0
 
     case "$status" in
         PASS)
-            printf '  %b[PASS]%b %s\n' "${GREEN}" "${NC}" "$test_name" >&2
             TESTS_PASSED=$((TESTS_PASSED+1))
+            [[ "$COMPACT" == "1" ]] && suppress_output=1
+            if [[ "$suppress_output" -eq 0 ]]; then
+                printf '  %b[PASS]%b %s\n' "${GREEN}" "${NC}" "$test_name" >&2
+            fi
             ;;
         FAIL)
-            printf '  %b[FAIL]%b %s\n' "${RED}" "${NC}" "$test_name" >&2
+            printf '  %b[FAIL]%b spec=%s test=%s\n' "${RED}" "${NC}" "$spec_name" "$test_name" >&2
             [[ -n "$message" ]] && printf '         %b%s%b\n' "${RED}" "$message" "${NC}" >&2
             TESTS_FAILED=$((TESTS_FAILED+1))
             ;;
         SKIP)
-            printf '  %b[SKIP]%b %s\n' "${YELLOW}" "${NC}" "$test_name" >&2
-            [[ -n "$message" ]] && printf '         %b%s%b\n' "${YELLOW}" "$message" "${NC}" >&2
             TESTS_SKIPPED=$((TESTS_SKIPPED+1))
+            [[ "$COMPACT" == "1" ]] && suppress_output=1
+            if [[ "$suppress_output" -eq 0 ]]; then
+                printf '  %b[SKIP]%b %s\n' "${YELLOW}" "${NC}" "$test_name" >&2
+                [[ -n "$message" ]] && printf '         %b%s%b\n' "${YELLOW}" "$message" "${NC}" >&2
+            fi
             ;;
     esac
     TESTS_RUN=$((TESTS_RUN+1))
@@ -189,6 +263,26 @@ get_all_active_specs() {
     fi
 }
 
+get_test_phase() {
+    local file="$1"
+
+    if command -v yq &>/dev/null; then
+        yq eval '.phase // "runtime"' "$file" 2>/dev/null || echo "runtime"
+    else
+        awk '
+            /^phase: / {
+                gsub(/^phase: /, "");
+                print
+                found=1
+                exit
+            }
+            END {
+                if (!found) print "runtime"
+            }
+        ' "$file"
+    fi
+}
+
 # ============================================================================
 # TEST EXECUTION
 # ============================================================================
@@ -230,6 +324,132 @@ check_signal() {
     [[ -z "$failure_pattern" ]] || return 0
 }
 
+behavior_matches_output() {
+    local output="$1"
+    local expected="$2"
+    local expected_lc="${expected,,}"
+    local output_lc="${output,,}"
+
+    [[ -z "$expected_lc" ]] && return 0
+
+    if [[ "$expected_lc" =~ ([0-9]+)\+\ env\ vars ]]; then
+        local threshold="${BASH_REMATCH[1]}"
+        local count
+        count="$(grep -Eo '[0-9]+' <<<"$output" | head -1 || true)"
+        [[ -n "$count" ]] || return 1
+        [[ "$count" -ge "$threshold" ]]
+        return $?
+    fi
+
+    case "$expected_lc" in
+        *"0 directories"*|*"0 mounts"*|*"0 sockets"*|*"0 files"*|*"0 matches"*|*"0 log files"*|*"0 token files"*|*"0 socket files"*)
+            local count
+            count="$(grep -Eo '[0-9]+' <<<"$output" | head -1 || true)"
+            [[ "${count:-}" == "0" ]]
+            return $?
+            ;;
+        *"1 or more"*|*"at least one"*|*"multiple"*|*"several"*)
+            local count
+            count="$(grep -Eo '[0-9]+' <<<"$output" | head -1 || true)"
+            [[ -n "$count" ]] || return 1
+            if [[ "$expected_lc" == *"multiple"* || "$expected_lc" == *"several"* ]]; then
+                [[ "$count" -ge 2 ]]
+            else
+                [[ "$count" -ge 1 ]]
+            fi
+            return $?
+            ;;
+        *"3-10 env vars"*|*"3 to 10 env vars"*|*"3-10 env vars only"*)
+            local count
+            count="$(grep -Eo '[0-9]+' <<<"$output" | head -1 || true)"
+            [[ -n "$count" ]] || return 1
+            [[ "$count" -ge 3 && "$count" -le 10 ]]
+            return $?
+            ;;
+        *"readable file with size > 0"*|*"size > 0 bytes"*|*"size > 0"*)
+            local size
+            size="$(grep -Eo '[0-9]+' <<<"$output" | tail -1 || true)"
+            [[ -n "$size" ]] || return 1
+            [[ "$size" -gt 0 ]]
+            return $?
+            ;;
+        *"no such file"*|*"file not found"*|*"directory not found"*|*"not found error"*)
+            grep -Eqi 'no such file|not found|directory_not_found|directory not found' <<<"$output"
+            return $?
+            ;;
+        *"timeout or connection refused"*|*"connection refused"*|*"network unreachable"*)
+            grep -Eqi 'failed to connect|connection refused|network unreachable|timeout' <<<"$output"
+            return $?
+            ;;
+        *"container id returned"*|*"launches without error"*|*"shutdown command succeeds"*|*"succeeds"*)
+            [[ -n "$output" ]]
+            return $?
+            ;;
+        *"path is correctly set"*|*"cargo"*)
+            grep -Eqi 'cargo' <<<"$output"
+            return $?
+            ;;
+        *"token file exists in git-service"*)
+            grep -q 'TOKEN_MOUNTED' <<<"$output"
+            return $?
+            ;;
+        *"token files are present"*|*"token files are readable"*)
+            local count
+            count="$(grep -Eo '[0-9]+' <<<"$output" | head -1 || true)"
+            [[ -n "$count" ]] || return 1
+            [[ "$count" -ge 1 ]]
+            return $?
+            ;;
+        *"minimal env vars"*|*"minimal necessary vars present"*)
+            grep -Eqi '^(PATH|HOME|USER)=' <<<"$output"
+            return $?
+            ;;
+    esac
+
+    if grep -Fqi "$expected" <<<"$output" || grep -Fqi "$expected_lc" <<<"$output_lc"; then
+        return 0
+    fi
+
+    return 1
+}
+
+normalize_spec_list() {
+    local raw="${1:-}"
+    raw="${raw//:/ }"
+    raw="${raw//,/ }"
+    for item in $raw; do
+        [[ -n "$item" ]] && printf '%s\n' "$item"
+    done | awk '!seen[$0]++'
+}
+
+spec_in_list() {
+    local needle="$1"
+    local raw_list="${2:-}"
+
+    [[ -z "$raw_list" ]] && return 1
+    while IFS= read -r item; do
+        [[ "$item" == "$needle" ]] && return 0
+    done < <(normalize_spec_list "$raw_list")
+    return 1
+}
+
+spec_is_ignored() {
+    local spec_id="$1"
+    [[ -z "$IGNORE_SPEC_LIST" ]] && return 1
+    spec_in_list "$spec_id" "$IGNORE_SPEC_LIST"
+}
+
+should_fail_fast_for_spec() {
+    local spec_id="$1"
+
+    if spec_is_ignored "$spec_id"; then
+        return 1
+    fi
+    [[ "$STRICT_MODE" != "1" ]] && return 1
+    [[ -z "$STRICT_SPEC_LIST" ]] && return 0
+    spec_in_list "$spec_id" "$STRICT_SPEC_LIST"
+}
+
 # Parse and execute litmus test file
 # Returns 0 (success) if test should be considered passing, 1 (failure) otherwise
 # Note: Does NOT log results - caller is responsible for that
@@ -241,33 +461,76 @@ run_litmus_test_file() {
         return 1
     fi
 
-    # Parse YAML: extract critical_path steps and gating_points
-    # Format is simple YAML with predictable structure
+    # Parse YAML: extract critical_path steps and gating_points.
+    # The runner executes each critical-path step sequentially; later
+    # assertions depend on earlier setup work.
     local in_critical_path=0
     local in_gating_points=0
-    local step_command=""
-    local step_timeout=30000  # Default 30 seconds
+    local current_step_name=""
+    local current_step_command=""
+    local current_step_timeout=30000
+    local current_step_expected=""
+    local -a step_names=()
+    local -a step_commands=()
+    local -a step_timeouts=()
+    local -a step_expecteds=()
     local success_criteria=()
     local failure_criteria=()
-    local test_passed=1
 
-    # Read and execute test steps
+    append_step() {
+        [[ -z "$current_step_command" ]] && return 0
+        step_names+=("$current_step_name")
+        step_commands+=("$current_step_command")
+        step_timeouts+=("$current_step_timeout")
+        step_expecteds+=("$current_step_expected")
+    }
+
     while IFS= read -r line; do
-        # Detect section headers
-        [[ "$line" =~ ^critical_path: ]] && { in_critical_path=1; in_gating_points=0; continue; }
-        [[ "$line" =~ ^gating_points: ]] && { in_critical_path=0; in_gating_points=1; continue; }
-        [[ "$line" =~ ^[a-z_]+: ]] && in_critical_path=0 && in_gating_points=0
+        if [[ "$line" =~ ^critical_path: ]]; then
+            in_critical_path=1
+            in_gating_points=0
+            continue
+        fi
 
-        # Parse critical_path steps
+        if [[ "$line" =~ ^gating_points: ]]; then
+            append_step
+            current_step_name=""
+            current_step_command=""
+            current_step_timeout=30000
+            current_step_expected=""
+            in_critical_path=0
+            in_gating_points=1
+            continue
+        fi
+
+        if [[ "$line" =~ ^[a-z_]+: ]]; then
+            append_step
+            current_step_name=""
+            current_step_command=""
+            current_step_timeout=30000
+            current_step_expected=""
+            in_critical_path=0
+            in_gating_points=0
+        fi
+
         if [[ $in_critical_path -eq 1 ]]; then
-            if [[ "$line" =~ command:\ \"(.+)\" ]]; then
-                step_command="${BASH_REMATCH[1]}"
+            if [[ "$line" =~ ^[[:space:]]*-[[:space:]]step:\ \"(.+)\" ]]; then
+                append_step
+                current_step_name="${BASH_REMATCH[1]}"
+                current_step_command=""
+                current_step_timeout=30000
+                current_step_expected=""
+            elif [[ "$line" =~ command:\ \"(.+)\" ]]; then
+                current_step_command="${BASH_REMATCH[1]}"
             elif [[ "$line" =~ timeout_ms:\ ([0-9]+) ]]; then
-                step_timeout=$(( ${BASH_REMATCH[1]} / 1000 ))  # Convert ms to seconds
+                current_step_timeout="${BASH_REMATCH[1]}"
+            elif [[ "$line" =~ expected_behavior:\ \"(.+)\" ]]; then
+                current_step_expected="${BASH_REMATCH[1]}"
+            elif [[ "$line" =~ expected_behavior:\ (.+)$ ]]; then
+                current_step_expected="${BASH_REMATCH[1]}"
             fi
         fi
 
-        # Parse gating_points success/failure signals
         if [[ $in_gating_points -eq 1 ]]; then
             if [[ "$line" =~ success:\ \"(.+)\" ]]; then
                 success_criteria+=("${BASH_REMATCH[1]}")
@@ -277,66 +540,91 @@ run_litmus_test_file() {
         fi
     done < "$test_file"
 
-    # If no command was extracted, the litmus file is not executable evidence.
-    # Treat it as failure rather than pass/skip so incomplete bindings cannot
-    # inflate convergence.
-    if [[ -z "$step_command" ]]; then
+    append_step
+
+    if [[ "${#step_commands[@]}" -eq 0 ]]; then
         return 1
     fi
 
-    # Execute test command with timeout
-    local test_output
-    local exit_code=0
-    test_output=$(timeout "$step_timeout" bash -c "$step_command" 2>&1) || exit_code=$?
+    local combined_output=""
+    local step_index=0
 
-    # Check if timeout occurred
-    if [[ $exit_code -eq 124 ]]; then
-        log_warn "Test timeout after ${step_timeout}s"
-        return 1
-    fi
+    for idx in "${!step_commands[@]}"; do
+        local step_name="${step_names[$idx]}"
+        local step_command="${step_commands[$idx]}"
+        local step_timeout_ms="${step_timeouts[$idx]}"
+        local step_expected="${step_expecteds[$idx]}"
+        local step_output=""
+        local exit_code=0
 
-    # Match output against success/failure criteria
-    test_passed=0
-    for failure in "${failure_criteria[@]}"; do
-        if [[ "$test_output" =~ $failure ]]; then
-            test_passed=1
-            break
+        step_index=$((step_index + 1))
+        step_output=$(timeout "$(( step_timeout_ms / 1000 ))s" bash -c "$step_command" 2>&1) || exit_code=$?
+        combined_output+=$'\n'"[${step_index}:${step_name}]${step_output}"
+
+        if [[ $exit_code -eq 124 ]]; then
+            log_warn "Test timeout after $(( step_timeout_ms / 1000 ))s in step: ${step_name:-step-${step_index}}"
+            return 1
+        fi
+
+        if ! behavior_matches_output "$step_output" "$step_expected"; then
+            if [[ "$VERBOSE" == "1" ]]; then
+                printf '%s\n' "  [DEBUG] step=${step_name:-step-$step_index}" >&2
+                printf '%s\n' "          expected=${step_expected}" >&2
+                printf '%s\n' "          output=${step_output}" >&2
+            fi
+            return 1
         fi
     done
 
-    # If no failure matches, require at least one explicit success criterion
-    # to match. A non-failing command is not enough evidence that the bound
-    # requirement was exercised.
-    if [[ $test_passed -eq 0 ]]; then
-        test_passed=1
+    for failure in "${failure_criteria[@]}"; do
+        if grep -qE "$failure" <<<"$combined_output"; then
+            return 1
+        fi
+    done
+
+    if [[ "${#success_criteria[@]}" -gt 0 ]]; then
         for success in "${success_criteria[@]}"; do
-            if [[ "$test_output" =~ $success ]]; then
-                test_passed=0
-                break
+            if grep -qE "$success" <<<"$combined_output"; then
+                return 0
             fi
         done
+        return 1
     fi
 
-    return "$test_passed"
+    return 0
 }
 
 # Main test execution loop
 run_tests_for_spec() {
     local spec_id="$1"
 
-    log_spec_start "$spec_id"
+    if spec_is_ignored "$spec_id"; then
+        [[ "$COMPACT" == "1" ]] || log_warn "Ignoring spec: $spec_id"
+        SPEC_RESULTS["$spec_id"]="SKIP"
+        return 0
+    fi
+
+    [[ "$COMPACT" == "1" ]] || log_spec_start "$spec_id"
 
     # Get all litmus tests bound to this spec
     local litmus_tests
     litmus_tests="$(get_litmus_tests_for_spec "$spec_id")"
 
     if [[ -z "$litmus_tests" ]]; then
-        log_warn "No litmus tests bound to spec: $spec_id"
+        if should_fail_fast_for_spec "$spec_id"; then
+            log_fail "spec=$spec_id no litmus tests bound; strict filter requires an executable boundary"
+            printf '@trace spec:%s\n' "$spec_id" >&2
+            return 21
+        fi
+        [[ "$COMPACT" == "1" ]] || log_warn "No litmus tests bound to spec: $spec_id"
+        SPEC_RESULTS["$spec_id"]="SKIP"
         return 0
     fi
 
     # Execute each litmus test
     local test_count=0
+    local spec_failed=0
+    local spec_skipped=0
     while IFS= read -r test_name; do
         [[ -z "$test_name" ]] && continue
 
@@ -344,7 +632,22 @@ run_tests_for_spec() {
         local test_file="${LITMUS_TESTS_DIR}/${test_name//:/-}.yaml"
 
         if [[ ! -f "$test_file" ]]; then
+            if should_fail_fast_for_spec "$spec_id"; then
+                log_test_result "$spec_id" "$test_name" "FAIL" "Test file not found"
+                printf '@trace spec:%s\n' "$spec_id" >&2
+                return 21
+            fi
             log_test_result "$spec_id" "$test_name" "SKIP" "Test file not found"
+            spec_skipped=1
+            test_count=$((test_count+1))
+            continue
+        fi
+
+        local test_phase
+        test_phase="$(get_test_phase "$test_file")"
+        if [[ "$FILTER_PHASE" != "all" && "$test_phase" != "$FILTER_PHASE" ]]; then
+            log_test_result "$spec_id" "$test_name" "SKIP" "Phase mismatch: $test_phase"
+            spec_skipped=1
             test_count=$((test_count+1))
             continue
         fi
@@ -354,13 +657,24 @@ run_tests_for_spec() {
             log_test_result "$spec_id" "$test_name" "PASS" ""
         else
             log_test_result "$spec_id" "$test_name" "FAIL" "Check implementation"
+            spec_failed=1
+            if should_fail_fast_for_spec "$spec_id"; then
+                printf '@trace spec:%s\n' "$spec_id" >&2
+                return 20
+            fi
         fi
 
         test_count=$((test_count+1))
     done <<<"$litmus_tests"
 
     SPEC_TEST_COUNT["$spec_id"]=$test_count
-    SPEC_RESULTS["$spec_id"]="PASS"
+    if [[ "$spec_failed" == "1" ]]; then
+        SPEC_RESULTS["$spec_id"]="FAIL"
+    elif [[ "$spec_skipped" == "1" && "$test_count" -gt 0 ]]; then
+        SPEC_RESULTS["$spec_id"]="SKIP"
+    else
+        SPEC_RESULTS["$spec_id"]="PASS"
+    fi
 
     return 0
 }
@@ -487,6 +801,71 @@ parse_args() {
                 TIMEOUT_SECONDS="${2}"
                 shift 2
                 ;;
+            --filter|--filter=*)
+                if [[ "$1" == *=* ]]; then
+                    FILTER_SPEC="${1#*=}"
+                    shift
+                else
+                    if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+                        FILTER_SPEC="${2}"
+                        shift 2
+                    else
+                        FILTER_SPEC=""
+                        shift
+                    fi
+                fi
+                ;;
+            --strict|--strict=*)
+                STRICT_MODE=1
+                if [[ "$1" == *=* ]]; then
+                    STRICT_SPEC_LIST="${1#*=}"
+                    shift
+                else
+                    if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+                        STRICT_SPEC_LIST="${2}"
+                        shift 2
+                    else
+                        STRICT_SPEC_LIST=""
+                        shift
+                    fi
+                fi
+                ;;
+            --ignore|--ignore=*)
+                if [[ "$1" == *=* ]]; then
+                    IGNORE_SPEC_LIST="${1#*=}"
+                    shift
+                else
+                    if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+                        IGNORE_SPEC_LIST="${2}"
+                        shift 2
+                    else
+                        IGNORE_SPEC_LIST=""
+                        shift
+                    fi
+                fi
+                ;;
+            --spec|--spec=*)
+                if [[ "$1" == *=* ]]; then
+                    SPEC_SHORTHAND="${1#*=}"
+                    shift
+                else
+                    if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+                        SPEC_SHORTHAND="${2}"
+                        shift 2
+                    else
+                        SPEC_SHORTHAND=""
+                        shift
+                    fi
+                fi
+                ;;
+            --compact)
+                COMPACT=1
+                shift
+                ;;
+            --phase)
+                FILTER_PHASE="${2:-all}"
+                shift 2
+                ;;
             --json)
                 # JSON output (handled at end)
                 shift
@@ -497,7 +876,7 @@ parse_args() {
                 ;;
             -*)
                 log_fail "Unknown option: $1"
-                echo "Use: $0 [spec-name] --timeout N --list --json" >&2
+                echo "Use: $0 [spec-name] --timeout N --phase <name> --list --json" >&2
                 exit 3
                 ;;
             *)
@@ -549,6 +928,16 @@ validate_environment() {
 main() {
     parse_args "$@"
 
+    if [[ -n "$SPEC_SHORTHAND" ]]; then
+        if [[ -z "$FILTER_SPEC" ]]; then
+            FILTER_SPEC="$SPEC_SHORTHAND"
+        fi
+        if [[ "$STRICT_MODE" != "1" || -z "$STRICT_SPEC_LIST" ]]; then
+            STRICT_MODE=1
+            [[ -z "$STRICT_SPEC_LIST" ]] && STRICT_SPEC_LIST="$SPEC_SHORTHAND"
+        fi
+    fi
+
     log_info "Tillandsias Litmus Test Runner"
     log_info "Environment: ${PROJECT_ROOT}"
 
@@ -562,16 +951,33 @@ main() {
     fi
 
     log_info "Timeout per test: ${TIMEOUT_SECONDS}s"
+    log_info "Phase filter: ${FILTER_PHASE}"
+    [[ "$COMPACT" == "1" ]] && log_info "Output mode: compact"
+    [[ "$STRICT_MODE" == "1" ]] && log_info "Strict mode: enabled"
     echo "" >&2
 
     # Determine which specs to test
     local specs_to_test
     if [[ -n "$FILTER_SPEC" ]]; then
         log_info "Running tests for spec: $FILTER_SPEC"
-        specs_to_test="$FILTER_SPEC"
+        specs_to_test="$(normalize_spec_list "$FILTER_SPEC")"
+        if [[ "$STRICT_MODE" == "1" && -z "$STRICT_SPEC_LIST" ]]; then
+            STRICT_SPEC_LIST="$FILTER_SPEC"
+        fi
     else
         log_info "Running tests for all active specs"
-        specs_to_test="$(get_all_active_specs)"
+        specs_to_test="$(normalize_spec_list "$(get_all_active_specs)")"
+    fi
+
+    if [[ -n "$IGNORE_SPEC_LIST" ]]; then
+        local filtered_specs=""
+        while IFS= read -r spec_id; do
+            [[ -z "$spec_id" ]] && continue
+            if ! spec_is_ignored "$spec_id"; then
+                filtered_specs+="${spec_id}"$'\n'
+            fi
+        done <<<"$specs_to_test"
+        specs_to_test="$(printf '%s' "$filtered_specs" | awk 'NF')"
     fi
 
     # Check if spec list is empty
@@ -584,6 +990,11 @@ main() {
     while IFS= read -r spec_id; do
         [[ -z "$spec_id" ]] && continue
         run_tests_for_spec "$spec_id"
+        local status=$?
+        if [[ $status -ne 0 ]]; then
+            print_summary
+            exit "$status"
+        fi
     done <<<"$specs_to_test"
 
     # Print summary

@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Observatorium</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --bg2: #10161d;
+      --panel: #121a23;
+      --panel2: #16202a;
+      --line: #243243;
+      --line-soft: #1b2633;
+      --text: #d8e2ee;
+      --muted: #8da2b8;
+      --accent: #8bb7ff;
+      --accent2: #75d0c4;
+      --chip: rgba(139, 183, 255, 0.12);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: radial-gradient(circle at top, #16202d 0%, var(--bg) 45%); color: var(--text); font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .shell { display: grid; grid-template-rows: auto auto 1fr; min-height: 100vh; }
+    header { padding: 18px 20px 10px; border-bottom: 1px solid var(--line-soft); background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent); }
+    h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: 0.01em; }
+    .subtitle { margin-top: 6px; color: var(--muted); font-size: 13px; }
+    .toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+    .search, .badge, button {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.03);
+      color: var(--text);
+      padding: 8px 12px;
+    }
+    .search { min-width: 260px; outline: none; }
+    .badge { color: var(--muted); background: var(--chip); }
+    button { cursor: pointer; }
+    main { padding: 16px; display: grid; grid-template-columns: 1.1fr 1.2fr 1fr; gap: 14px; min-height: 0; }
+    .panel {
+      min-height: 0;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent), var(--panel);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.22);
+    }
+    .panel header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line-soft);
+      background: transparent;
+    }
+    .panel h2 { margin: 0; font-size: 15px; }
+    .panel .meta { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .list { overflow: auto; padding: 10px; min-height: 0; }
+    .card {
+      border: 1px solid var(--line-soft);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.025);
+      margin-bottom: 10px;
+      overflow: hidden;
+    }
+    .card.selected { border-color: rgba(139,183,255,0.6); box-shadow: 0 0 0 1px rgba(139,183,255,0.2) inset; }
+    .card button.row {
+      width: 100%;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      padding: 12px 13px;
+      border-radius: 0;
+    }
+    .title-line { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+    .title-line strong { font-weight: 650; }
+    .title-line small { color: var(--muted); }
+    .summary { margin-top: 6px; color: var(--muted); font-size: 12px; }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .chip {
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--chip);
+      color: var(--accent2);
+      font-size: 11px;
+    }
+    .details {
+      border-top: 1px solid var(--line-soft);
+      padding: 11px 13px 13px;
+      background: rgba(255,255,255,0.02);
+      color: var(--text);
+    }
+    .details.hidden { display: none; }
+    .details .block { margin-top: 8px; color: var(--muted); font-size: 12px; }
+    .kv { display: grid; grid-template-columns: 92px 1fr; gap: 4px 10px; font-size: 12px; }
+    .kv div:nth-child(odd) { color: var(--muted); }
+    .code-list { list-style: none; padding: 0; margin: 0; }
+    .code-list li {
+      border-bottom: 1px solid var(--line-soft);
+      padding: 10px 0;
+    }
+    .code-list li:last-child { border-bottom: 0; }
+    .empty { padding: 16px; color: var(--muted); }
+    .footer-note {
+      padding: 10px 16px 14px;
+      border-top: 1px solid var(--line-soft);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    code, pre { font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+    @media (max-width: 1200px) {
+      main { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <h1>Observatorium</h1>
+    <div class="subtitle">Live local trace graph for specs, code, and cheatsheets. Minimal UI, no cache, current checkout only.</div>
+    <div class="toolbar">
+      <input id="search" class="search" placeholder="Filter specs, code hits, or cheatsheets">
+      <button id="refresh">Refresh</button>
+      <span id="status" class="badge">Loading source snapshot…</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <header>
+        <h2>Specs</h2>
+        <div class="meta">Selected spec and nearby trace provenance</div>
+      </header>
+      <div id="specs" class="list"></div>
+    </section>
+
+    <section class="panel">
+      <header>
+        <h2>Code</h2>
+        <div class="meta">Source hits from TRACES.md for the active selection</div>
+      </header>
+      <div id="code" class="list"></div>
+    </section>
+
+    <section class="panel">
+      <header>
+        <h2>Cheatsheets</h2>
+        <div class="meta">Relevant cheatsheet hits and traced specs</div>
+      </header>
+      <div id="sheets" class="list"></div>
+    </section>
+  </main>
+
+  <div class="footer-note" id="footer">Ready.</div>
+</div>
+
+<script>
+const state = {
+  traces: [],
+  sheets: [],
+  selectedSpec: null,
+  selectedSheet: null,
+  search: '',
+  sheetCache: new Map(),
+};
+
+const els = {
+  status: document.getElementById('status'),
+  footer: document.getElementById('footer'),
+  search: document.getElementById('search'),
+  refresh: document.getElementById('refresh'),
+  specs: document.getElementById('specs'),
+  code: document.getElementById('code'),
+  sheets: document.getElementById('sheets'),
+};
+
+function setStatus(text) { els.status.textContent = text; }
+function setFooter(text) { els.footer.textContent = text; }
+
+async function fetchText(path) {
+  const res = await fetch(path, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`${path}: ${res.status}`);
+  return res.text();
+}
+
+function parseTraces(markdown) {
+  const rows = [];
+  for (const line of markdown.split(/\r?\n/)) {
+    if (!line.startsWith('| `spec:')) continue;
+    const cells = line.split('|').map(s => s.trim()).filter(Boolean);
+    if (cells.length < 3) continue;
+    const trace = cells[0].replace(/`/g, '');
+    const specLink = cells[1].match(/\[(.*?)\]\((.*?)\)/);
+    const specPath = specLink ? specLink[2] : '';
+    const sources = [...cells[2].matchAll(/\[(.*?)\]\((.*?)\)/g)].map(match => ({
+      label: match[1],
+      href: match[2],
+    }));
+    rows.push({ trace, specPath, sources });
+  }
+  return rows;
+}
+
+function parseCheatsheetIndex(markdown) {
+  const items = [];
+  let category = '';
+  for (const rawLine of markdown.split(/\r?\n/)) {
+    const line = rawLine.trimEnd();
+    const heading = line.match(/^##\s+(.+)$/);
+    if (heading) {
+      category = heading[1].trim();
+      continue;
+    }
+    const item = line.match(/^-\s+(.+?)\s+—\s+(.+)$/);
+    if (!item || !category) continue;
+    const file = item[1].replace(/\s+\[.*$/, '').trim();
+    items.push({
+      category,
+      file,
+      path: `${category}/${file}`,
+      description: item[2].trim(),
+    });
+  }
+  return items;
+}
+
+function specNameFromTrace(trace) {
+  return trace.replace(/^spec:/, '');
+}
+
+function tokenize(value) {
+  return value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+function scoreSheet(sheet, specId) {
+  const tokens = tokenize(specId);
+  const hay = `${sheet.path} ${sheet.description}`.toLowerCase();
+  return tokens.reduce((score, token) => score + (hay.includes(token) ? 1 : 0), 0);
+}
+
+async function loadSheetAnnotations(sheet) {
+  if (state.sheetCache.has(sheet.path)) return state.sheetCache.get(sheet.path);
+  try {
+    const text = await fetchText(`/cheatsheets/${sheet.path}`);
+    const traces = [...text.matchAll(/@trace\s+spec:([a-z0-9-]+)/gi)].map(m => m[1]);
+    const parsed = { text, traces };
+    state.sheetCache.set(sheet.path, parsed);
+    return parsed;
+  } catch (err) {
+    const parsed = { text: '', traces: [], error: String(err) };
+    state.sheetCache.set(sheet.path, parsed);
+    return parsed;
+  }
+}
+
+function selectedTraceRow() {
+  if (!state.selectedSpec) return null;
+  return state.traces.find(row => specNameFromTrace(row.trace) === state.selectedSpec) || null;
+}
+
+function filteredSpecs() {
+  const q = state.search.toLowerCase();
+  return state.traces.filter(row => {
+    const specId = specNameFromTrace(row.trace);
+    return !q || specId.includes(q) || row.specPath.toLowerCase().includes(q) || row.sources.some(s => s.href.toLowerCase().includes(q) || s.label.toLowerCase().includes(q));
+  });
+}
+
+function filteredSheets() {
+  const q = state.search.toLowerCase();
+  return state.sheets
+    .map(sheet => ({ ...sheet, score: state.selectedSpec ? scoreSheet(sheet, state.selectedSpec) : 0 }))
+    .filter(sheet => !q || `${sheet.path} ${sheet.description}`.toLowerCase().includes(q))
+    .sort((a, b) => (b.score - a.score) || a.path.localeCompare(b.path));
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value).replace(/`/g, '&#96;');
+}
+
+function renderSpecs() {
+  const rows = filteredSpecs();
+  if (!rows.length) {
+    els.specs.innerHTML = '<div class="empty">No specs match the current filter.</div>';
+    return;
+  }
+  els.specs.innerHTML = rows.map(row => {
+    const specId = specNameFromTrace(row.trace);
+    const selected = specId === state.selectedSpec;
+    const chips = row.sources.slice(0, 4).map(src => `<span class="chip">${escapeHtml(src.label)}</span>`).join('');
+    return `
+      <article class="card ${selected ? 'selected' : ''}">
+        <button class="row" data-spec="${escapeAttr(specId)}">
+          <div class="title-line">
+            <strong>${escapeHtml(specId)}</strong>
+            <small>${escapeHtml(row.specPath.replace(/^openspec\/specs\//, ''))}</small>
+          </div>
+          <div class="summary">${row.sources.length} code hit(s)</div>
+          <div class="chips">${chips}</div>
+        </button>
+        <div class="details ${selected ? '' : 'hidden'}">
+          <div class="kv">
+            <div>Trace</div><div>${escapeHtml(row.trace)}</div>
+            <div>Spec file</div><div>${escapeHtml(row.specPath)}</div>
+            <div>Hits</div><div>${row.sources.length}</div>
+          </div>
+        </div>
+      </article>`;
+  }).join('');
+  els.specs.querySelectorAll('[data-spec]').forEach(button => {
+    button.addEventListener('click', () => {
+      state.selectedSpec = button.dataset.spec;
+      state.selectedSheet = null;
+      location.hash = `spec=${encodeURIComponent(state.selectedSpec)}`;
+      renderAll();
+    });
+  });
+}
+
+function renderCode() {
+  const row = selectedTraceRow();
+  const q = state.search.toLowerCase();
+  const hits = row ? row.sources.filter(src => !q || src.label.toLowerCase().includes(q) || src.href.toLowerCase().includes(q)) : [];
+  if (!row) {
+    els.code.innerHTML = '<div class="empty">Select a spec or cheatsheet to reveal the corresponding source hits.</div>';
+    return;
+  }
+  els.code.innerHTML = `
+    <article class="card selected">
+      <button class="row" data-code-spec="${escapeAttr(state.selectedSpec)}">
+        <div class="title-line">
+          <strong>${escapeHtml(state.selectedSpec)}</strong>
+          <small>${hits.length} visible hit(s)</small>
+        </div>
+        <div class="summary">${escapeHtml(row.specPath)}</div>
+      </button>
+      <div class="details">
+        <ul class="code-list">
+          ${hits.map(src => {
+            const [path, line] = src.href.split('#L');
+            return `<li><a href="/${escapeAttr(src.href)}">${escapeHtml(src.label)}</a><div class="block">${escapeHtml(path)} ${line ? `line ${escapeHtml(line)}` : ''}</div></li>`;
+          }).join('')}
+        </ul>
+      </div>
+    </article>`;
+  els.code.querySelectorAll('[data-code-spec]').forEach(button => {
+    button.addEventListener('click', () => {
+      state.selectedSheet = null;
+      location.hash = `spec=${encodeURIComponent(button.dataset.codeSpec)}`;
+    });
+  });
+}
+
+async function renderSheets() {
+  const rows = filteredSheets();
+  if (!rows.length) {
+    els.sheets.innerHTML = '<div class="empty">No cheatsheets match the current filter.</div>';
+    return;
+  }
+
+  const html = [];
+  for (const sheet of rows.slice(0, 20)) {
+    const isSelected = sheet.path === state.selectedSheet;
+    const annotations = isSelected ? (await loadSheetAnnotations(sheet)).traces : [];
+    const tracedSpecs = annotations.length ? annotations : (state.selectedSpec ? [state.selectedSpec] : []);
+    html.push(`
+      <article class="card ${isSelected ? 'selected' : ''}">
+        <button class="row" data-sheet="${escapeAttr(sheet.path)}">
+          <div class="title-line">
+            <strong>${escapeHtml(sheet.path)}</strong>
+            <small>${escapeHtml(sheet.category)}</small>
+          </div>
+          <div class="summary">${escapeHtml(sheet.description)}</div>
+          <div class="chips">${tracedSpecs.slice(0, 3).map(spec => `<span class="chip">${escapeHtml(spec)}</span>`).join('')}</div>
+        </button>
+        <div class="details ${isSelected ? '' : 'hidden'}">
+          <div class="kv">
+            <div>Path</div><div>${escapeHtml(sheet.path)}</div>
+            <div>Category</div><div>${escapeHtml(sheet.category)}</div>
+            <div>Spec hits</div><div>${escapeHtml((annotations.length ? annotations : tracedSpecs).join(', ') || 'none')}</div>
+          </div>
+        </div>
+      </article>`);
+  }
+  els.sheets.innerHTML = html.join('');
+  els.sheets.querySelectorAll('[data-sheet]').forEach(button => {
+    button.addEventListener('click', async () => {
+      state.selectedSheet = button.dataset.sheet;
+      const sheet = state.sheets.find(s => s.path === state.selectedSheet);
+      if (sheet) {
+        const annotations = await loadSheetAnnotations(sheet);
+        if (annotations.traces.length) state.selectedSpec = annotations.traces[0];
+      }
+      location.hash = `sheet=${encodeURIComponent(state.selectedSheet)}`;
+      renderAll();
+    });
+  });
+}
+
+async function loadAll() {
+  setStatus('Loading TRACES.md');
+  const [tracesText, sheetsText] = await Promise.all([
+    fetchText('/TRACES.md'),
+    fetchText('/cheatsheets/INDEX.md'),
+  ]);
+  state.traces = parseTraces(tracesText);
+  state.sheets = parseCheatsheetIndex(sheetsText);
+  setStatus(`${state.traces.length} trace bucket(s), ${state.sheets.length} cheatsheet entries`);
+  setFooter('Source snapshot loaded from the current checkout.');
+}
+
+function selectFromHash() {
+  const params = new URLSearchParams(location.hash.replace(/^#/, ''));
+  if (params.has('sheet')) state.selectedSheet = params.get('sheet');
+  if (params.has('spec')) state.selectedSpec = params.get('spec');
+}
+
+async function renderAll() {
+  renderSpecs();
+  renderCode();
+  await renderSheets();
+}
+
+els.search.addEventListener('input', () => {
+  state.search = els.search.value.trim();
+  renderAll();
+});
+
+els.refresh.addEventListener('click', async () => {
+  state.sheetCache.clear();
+  await init();
+});
+
+async function init() {
+  selectFromHash();
+  await loadAll();
+  if (!state.selectedSpec && state.traces.length) {
+    state.selectedSpec = specNameFromTrace(state.traces[0].trace);
+  }
+  if (state.selectedSheet && !state.selectedSpec) {
+    const sheet = state.sheets.find(s => s.path === state.selectedSheet);
+    if (sheet) {
+      const annotations = await loadSheetAnnotations(sheet);
+      if (annotations.traces.length) state.selectedSpec = annotations.traces[0];
+    }
+  }
+  await renderAll();
+}
+
+window.addEventListener('hashchange', () => {
+  selectFromHash();
+  renderAll();
+});
+
+init().catch(err => {
+  console.error(err);
+  setStatus('Failed to load source snapshot');
+  setFooter(String(err));
+  els.specs.innerHTML = `<div class="empty">${escapeHtml(String(err))}</div>`;
+  els.code.innerHTML = '<div class="empty">Unable to load code hits.</div>';
+  els.sheets.innerHTML = '<div class="empty">Unable to load cheatsheet hits.</div>';
+});
+</script>
+</body>
+</html>

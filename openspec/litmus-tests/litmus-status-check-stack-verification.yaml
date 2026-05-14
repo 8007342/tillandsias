@@ -1,0 +1,54 @@
+# @trace spec:dev-build, spec:observability-convergence, spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container, spec:default-image
+name: litmus:status-check-stack-verification
+spec: dev-build
+phase: post-build
+description: Verify the post-build smoke starts the stack and reports service-online evidence from inside the forge container
+severity: high
+
+preconditions:
+  - podman is available on the host and the rootless socket is reachable directly or via auto-detected CONTAINER_HOST
+  - a Tillandsias binary has been installed to ~/.local/bin/tillandsias or provided via TILLANDSIAS_STATUS_CHECK_BIN
+  - the repo checkout contains the orchestration scripts
+
+critical_path:
+  - step: "clear previous status-check output"
+    command: "rm -f target/litmus-podman/status-check.log"
+    timeout_ms: 2000
+
+  - step: "verify installed binary is available"
+    command: 'STATUS_BIN="${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}"; test -x "$STATUS_BIN" && printf "%s\n" "$STATUS_BIN"'
+    timeout_ms: 2000
+
+  - step: "run init plus status-check smoke"
+    command: 'STATUS_BIN="${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}"; HOME="${TMPDIR:-/tmp}/tillandsias-status-check-home" TILLANDSIAS_ROOT="$(pwd)" timeout 180 "$STATUS_BIN" --init --debug --status-check > target/litmus-podman/status-check.log 2>&1'
+    timeout_ms: 180000
+
+  - step: "assert proxy evidence is visible"
+    command: "grep -F '[status-check] proxy online' target/litmus-podman/status-check.log"
+    timeout_ms: 2000
+
+  - step: "assert git evidence is visible"
+    command: "grep -F '[status-check] git online' target/litmus-podman/status-check.log"
+    timeout_ms: 2000
+
+  - step: "assert inference evidence is visible"
+    command: "grep -F '[status-check] inference online' target/litmus-podman/status-check.log"
+    timeout_ms: 2000
+
+  - step: "assert forge evidence is visible"
+    command: "grep -F '[status-check] forge online' target/litmus-podman/status-check.log"
+    timeout_ms: 2000
+
+observability:
+  traces:
+    - "@trace spec:dev-build"
+    - "@trace spec:observability-convergence"
+  expected_log: "[status-check] proxy online / git online / inference online / forge online"
+  log_fields:
+    spec: "dev-build"
+    test: "status-check-stack-verification"
+    phase: "post-build"
+
+rollback:
+  on_failure: "inspect target/litmus-podman/status-check.log and rerun with VERBOSE=1 or TILLANDSIAS_STATUS_CHECK_BIN pointing at the installed binary"
+  command: "sed -n '1,200p' target/litmus-podman/status-check.log"

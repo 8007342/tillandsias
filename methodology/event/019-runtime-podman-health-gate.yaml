@@ -1,0 +1,80 @@
+trace: spec:methodology-accountability, spec:ci-release, spec:litmus-convergence
+
+event_id: methodology.event.019-runtime-podman-health-gate@v1
+status: triaged
+observed_at: "2026-05-07T00:00:00Z"
+reporter: "codex"
+summary: >
+  The runtime residual litmus phase must remain honest about host Podman
+  capability. If rootless podman cannot create a probe container even after a
+  single repair attempt, the phase should be reported as skipped with a clear
+  host-health blocker rather than failing the release gate as if the code were
+  at fault.
+
+observed_signal:
+  description: >
+    The local runtime phase fails before the litmus bodies execute because the
+    host cannot set up a rootless Podman namespace. The health gate should
+    capture that state, attempt the documented maintenance path once, and then
+    surface a transparent skip if the host remains unhealthy.
+  signal_type: "ci-runtime-health"
+
+expected_model:
+  description: >
+    `--ci-full` should continue to validate pre-build and post-build contracts
+    while reporting a blocked runtime residual phase separately when the host
+    Podman environment cannot support rootless container creation.
+  source_refs:
+    - scripts/local-ci.sh
+    - build.sh
+    - cheatsheets/runtime/podman-logging.md
+    - methodology/litmus.yaml
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - runtime_litmus_should_not_mask_host_podman_health_failures
+    - host_maintenance_should_be_attempted_once_before_runtime_skip
+    - release_gate_should_report_skip_state_honestly
+  spec_requirement_ids:
+    - ci-release.runtime-phase.host-health-gated
+  cheatsheet_refs:
+    - cheatsheets/runtime/podman-logging.md
+  litmus_ids:
+    - litmus:environment-isolation
+    - litmus:enclave-isolation
+
+affected_artifacts:
+  specs:
+    - openspec/specs/ci-release/spec.md
+    - openspec/specs/podman-orchestration/spec.md
+  methodology_files:
+    - methodology/event/index.yaml
+  cheatsheets:
+    - cheatsheets/runtime/podman-logging.md
+
+evidence_refs:
+  commits: []
+  files:
+    - scripts/local-ci.sh
+    - build.sh
+  logs:
+    - /tmp/litmus-runtime-health.log
+    - /tmp/litmus-runtime-migrate.log
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: medium
+provisional_classification: host_health_gate
+
+next_distillation_step:
+  owner: "codex"
+  action: >
+    Keep the runtime phase gated by host Podman health, but continue splitting
+    any real container behavior into smaller litmus contracts so future healthy
+    hosts can exercise them directly.
+  target_artifact: "scripts/local-ci.sh"
+
+closure_criteria:
+  - runtime_phase_reports_skip_when_rootless_podman_is_unhealthy
+  - runtime_phase_attempts_single_documented_repair_before_skip
+  - build_output_distinguishes_pass_from_host_health_skip

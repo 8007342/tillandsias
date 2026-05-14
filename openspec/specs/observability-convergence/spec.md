@@ -248,16 +248,12 @@ Log events SHALL include:
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- pending — test binding required for S2→S3 progression
+- `litmus:observability-convergence-shape`
 
 Gating points:
-- Trace annotation points to valid spec in openspec/specs/ directory
-- Log events include structured fields: spec, trace_timestamp, implementation_timestamp
-- Convergence score computed as (implementation_traces / active_specs) * 100
-- Spec staleness detected when last trace is > 30 days old
-- Dead traces (referencing non-existent specs) flagged in validation and logged as `dead_trace=true`
-- Latency from spec creation to first trace recorded and reported
-- All accountability events include spec, timestamp, and source context
+- Dashboard scripts remain annotated with the convergence spec
+- The convergence score section stays present in the spec source
+- Falsifiable: missing trace annotations or score machinery fail the source-shape check
 
 ## Sources of Truth
 

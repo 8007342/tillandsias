@@ -5,5 +5,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [scripts/github-actions-convergence.sh#L2](../../../scripts/github-actions-convergence.sh#L2)
 - [scripts/local-ci.sh#L3](../../../scripts/local-ci.sh#L3)
-- [scripts/local-ci.sh#L146](../../../scripts/local-ci.sh#L146)
+- [scripts/local-ci.sh#L802](../../../scripts/local-ci.sh#L802)

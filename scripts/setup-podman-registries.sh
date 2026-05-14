@@ -11,6 +11,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/common.sh"
+require_podman
 
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/containers"
 SOURCE_FILE="$ROOT/.config/containers/registries.conf"
@@ -41,12 +43,8 @@ chmod 644 "$TARGET_FILE"
 echo "[podman-registries] ✓ Deployed registries.conf to $TARGET_FILE"
 
 # Verify podman recognizes it
-if command -v podman &>/dev/null; then
-    echo "[podman-registries] Verifying podman configuration..."
-    SHORT_NAME_MODE=$(podman info --format '{{.RegistriesConf.ShortNameMode}}' 2>/dev/null || echo "unknown")
-    echo "[podman-registries] short-name-mode: $SHORT_NAME_MODE"
-else
-    echo "[podman-registries] WARN: podman not found, skipping verification"
-fi
+echo "[podman-registries] Verifying podman configuration..."
+SHORT_NAME_MODE=$(podman info --format '{{.RegistriesConf.ShortNameMode}}' 2>/dev/null || echo "unknown")
+echo "[podman-registries] short-name-mode: $SHORT_NAME_MODE"
 
 echo "[podman-registries] ✓ Setup complete"

@@ -1,0 +1,94 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.013-podman-test-seam-split@v1
+status: triaged
+observed_at: "2026-05-06T00:00:00Z"
+reporter: "codex"
+summary: >
+  Podman's own docs show a clear split between command-line tests,
+  integration tests, system tests, and API/service-socket tests. Tillandsias
+  should use the same seam discipline: mock the subprocess boundary for
+  command-shape checks, use service-socket tests for control-plane routing,
+  and reserve real containers for the smaller set of runtime semantics that
+  truly need them.
+
+observed_signal:
+  description: >
+    Upstream Podman documents `make localunit`, `make localintegration`,
+    `make remoteintegration`, and `make localsystem`, plus `podman system service`
+    and `podman system connection` as a separate control-plane seam. The current
+    Tillandsias litmus suite was still overusing real container execution for
+    assertions that only needed command-shape or socket-routing evidence.
+  signal_type: "methodology"
+
+expected_model:
+  description: >
+    Podman-related tests should be split by seam: subprocess mock for exact CLI
+    calls, service/socket tests for API routing, and full container execution
+    only where payload semantics matter. This keeps litmus runs fast and makes
+    residual-obligation scoring less noisy.
+  source_refs:
+    - cheatsheets/test/podman-testing.md
+    - cheatsheets/runtime/podman-service-testing.md
+    - scripts/run-litmus-test.sh
+    - scripts/test-support/podman-mock.sh
+    - crates/tillandsias-litmus/README.md
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - mock_subprocess_boundary_for_command_shape_checks
+    - service_socket_tests_for_control_plane_routing
+    - real_container_runs_reserved_for_runtime_semantics
+  spec_requirement_ids:
+    - litmus_framework
+    - podman-orchestration
+    - environment-runtime
+  litmus_ids:
+    - litmus:podman-build-command-shape
+  cheatsheet_refs:
+    - cheatsheets/test/podman-testing.md
+    - cheatsheets/runtime/podman-service-testing.md
+
+affected_artifacts:
+  specs:
+    - openspec/litmus-tests/litmus-podman-build-command-shape.yaml
+  methodology_files:
+    - methodology/litmus-framework.yaml
+    - methodology/event/index.yaml
+  code_paths:
+    - scripts/run-litmus-test.sh
+    - scripts/test-support/podman-mock.sh
+  scripts:
+    - scripts/run-litmus-test.sh
+    - scripts/test-support/podman-mock.sh
+  dashboards: []
+
+evidence_refs:
+  commits: []
+  files:
+    - scripts/run-litmus-test.sh
+    - scripts/test-support/podman-mock.sh
+    - crates/tillandsias-litmus/README.md
+  logs: []
+  ci_runs: []
+  external_sources:
+    - https://github.com/containers/podman/blob/main/CONTRIBUTING.md
+    - https://github.com/containers/podman/blob/main/test/README.md
+    - https://github.com/containers/podman/blob/main/docs/source/markdown/podman-system-service.1.md
+    - https://github.com/containers/podman/blob/main/docs/source/markdown/podman-system-connection.1.md
+
+uncertainty_delta: medium
+provisional_classification: methodology_claim_unproven
+
+next_distillation_step:
+  owner: "codex"
+  action: >
+    Convert at least one build-image or podman-orchestration litmus into a fake
+    backend command-shape test so the seam split is exercised by CI, not just
+    documented.
+  target_artifact: "code"
+
+closure_criteria:
+  - podman_test_strata_are_documented_with_provenance
+  - fake_backend_command_shape_litmus_exists
+  - service_socket_testing_guidance_is_queryable

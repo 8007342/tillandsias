@@ -1,10 +1,13 @@
-// @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states, spec:tray-icon-lifecycle, spec:opencode-web-session, spec:runtime-logging, spec:logging-levels
+// @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states, spec:tray-icon-lifecycle, spec:security-privacy-isolation, spec:browser-isolation-tray-integration, spec:host-browser-mcp, spec:runtime-logging, spec:logging-levels
+// @trace spec:podman-container-spec, spec:podman-orchestration
 //! Native Linux tray service backed by StatusNotifierItem and DBusMenu.
 //!
 //! The tray owns the Linux menu/icon surface. Menu actions launch the repo's
 //! existing container entrypoints so the tray stays thin.
 
 use std::collections::HashMap;
+use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -16,13 +19,41 @@ use zbus::object_server::SignalContext;
 use zbus::{Connection, ConnectionBuilder, fdo, interface};
 use zvariant::{OwnedObjectPath, OwnedValue, Value};
 
+use crate::ENCLAVE_NO_PROXY;
 use tillandsias_core::config::{self, SelectedAgent};
 use tillandsias_core::genus::TrayIconState;
+use tillandsias_podman::{ContainerSpec, MountMode};
+
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 const ITEM_PATH: &str = "/StatusNotifierItem";
 const MENU_PATH: &str = "/Menu";
 const WATCHER_PATH: &str = "/StatusNotifierWatcher";
 const WATCHER_NAME: &str = "org.kde.StatusNotifierWatcher";
+
+// @trace spec:tray-minimal-ux
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EnclaveStatus {
+    Verifying,
+    ProxyReady,
+    GitReady,
+    AllHealthy,
+    Failed,
+}
+
+// @trace spec:tray-minimal-ux
+impl EnclaveStatus {
+    fn status_text(self) -> &'static str {
+        match self {
+            EnclaveStatus::Verifying => "☐ Verifying environment...",
+            EnclaveStatus::ProxyReady => "☐🌐 Building enclave...",
+            EnclaveStatus::GitReady => "☐🌐🪞 Building git mirror...",
+            EnclaveStatus::AllHealthy => "✓ Environment OK",
+            EnclaveStatus::Failed => "🥀 Unhealthy environment",
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 struct ProjectEntry {
@@ -38,6 +69,7 @@ enum LaunchKind {
     Maintenance,
 }
 
+// @trace spec:tray-minimal-ux
 #[derive(Debug, Clone)]
 struct TrayUiState {
     root: PathBuf,
@@ -48,6 +80,7 @@ struct TrayUiState {
     selected_agent: SelectedAgent,
     forge_available: bool,
     podman_available: bool,
+    enclave_status: EnclaveStatus,
     revision: u32,
 }
 
@@ -78,12 +111,20 @@ impl TrayUiState {
         let forge_image = format!("tillandsias-forge:v{version}");
         let forge_available = podman_available && image_exists(&forge_image);
 
+        let enclave_status = if !podman_available {
+            EnclaveStatus::Failed
+        } else if forge_available {
+            EnclaveStatus::AllHealthy
+        } else {
+            EnclaveStatus::Verifying
+        };
+
         let (status_text, tray_icon_state) = if !podman_available {
             ("🥀 Podman unavailable".to_string(), TrayIconState::Dried)
         } else if forge_available {
-            ("✅ Ready".to_string(), TrayIconState::Mature)
+            ("✓ Environment OK".to_string(), TrayIconState::Mature)
         } else {
-            ("🌱 Setting up...".to_string(), TrayIconState::Pup)
+            ("☐ Verifying environment...".to_string(), TrayIconState::Pup)
         };
 
         Self {
@@ -95,6 +136,7 @@ impl TrayUiState {
             selected_agent,
             forge_available,
             podman_available,
+            enclave_status,
             revision: 1,
         }
     }
@@ -159,6 +201,7 @@ impl TrayService {
         self.emit_refresh(true).await
     }
 
+    // @trace spec:tray-minimal-ux
     async fn set_status(
         &self,
         text: impl Into<String>,
@@ -169,7 +212,17 @@ impl TrayService {
             state.status_text = text.into();
             state.tray_icon_state = icon;
             if let Some(value) = forge_available {
+                let previous_available = state.forge_available;
                 state.forge_available = value;
+
+                // Wire forge_available=true transition to update status and trigger menu rebuild
+                if !previous_available && value {
+                    state.enclave_status = EnclaveStatus::AllHealthy;
+                    state.status_text = "✓ Environment OK".to_string();
+                } else if value && state.enclave_status == EnclaveStatus::Verifying {
+                    state.enclave_status = EnclaveStatus::AllHealthy;
+                    state.status_text = "✓ Environment OK".to_string();
+                }
             }
             state.bump_revision();
         });
@@ -250,14 +303,6 @@ fn discover_projects() -> Vec<ProjectEntry> {
     projects
 }
 
-fn shell_quote(value: impl Into<String>) -> String {
-    let value = value.into();
-    if value.is_empty() {
-        return "''".to_string();
-    }
-    format!("'{}'", value.replace('\'', "'\"'\"'"))
-}
-
 fn action_slug(kind: LaunchKind) -> &'static str {
     match kind {
         LaunchKind::OpenCode => "opencode",
@@ -316,12 +361,7 @@ fn tray_icon_tooltip(snapshot: &TrayUiState) -> (String, Vec<IconPixmap>, String
     )
 }
 
-fn build_launch_command(
-    project: &ProjectEntry,
-    image: &str,
-    kind: LaunchKind,
-    root: &Path,
-) -> String {
+fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> ContainerSpec {
     let project_name = &project.name;
     let project_path = project
         .path
@@ -329,55 +369,67 @@ fn build_launch_command(
         .unwrap_or_else(|_| project.path.clone());
     let ca_cert = PathBuf::from("/tmp/tillandsias-ca/intermediate.crt");
 
-    let mut cmd = format!(
-        "podman run --rm --name {} --hostname {} --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id --pids-limit=512 --env HOME=/home/forge --env USER=forge --env PROJECT={} --env http_proxy=http://proxy:3128 --env https_proxy=http://proxy:3128 --env HTTP_PROXY=http://proxy:3128 --env HTTPS_PROXY=http://proxy:3128 --env no_proxy=localhost,127.0.0.1,10.0.42.0/24 --env PATH=/usr/local/bin:/usr/bin --network tillandsias-enclave -v {}:/home/forge/src/{}:rw",
-        shell_quote(format!(
+    let mut spec = ContainerSpec::new(image.to_string())
+        .name(format!(
             "tillandsias-{}-{}",
             project_name,
             action_slug(kind)
-        )),
-        shell_quote(format!("forge-{}", project_name)),
-        shell_quote(project_name),
-        shell_quote(project_path.display().to_string()),
-        shell_quote(project_name),
-    );
+        ))
+        .hostname(format!("forge-{project_name}"))
+        .network("tillandsias-enclave")
+        .pids_limit(512)
+        .volume(
+            project_path.display().to_string(),
+            format!("/home/forge/src/{project_name}"),
+            MountMode::ReadWrite,
+        )
+        .env("HOME", "/home/forge")
+        .env("USER", "forge")
+        .env("PROJECT", project_name)
+        .env("http_proxy", "http://proxy:3128")
+        .env("https_proxy", "http://proxy:3128")
+        .env("HTTP_PROXY", "http://proxy:3128")
+        .env("HTTPS_PROXY", "http://proxy:3128")
+        .env("no_proxy", ENCLAVE_NO_PROXY)
+        .env("NO_PROXY", ENCLAVE_NO_PROXY)
+        .env("PATH", "/usr/local/bin:/usr/bin");
 
     if ca_cert.exists() {
-        cmd.push_str(&format!(
-            " --mount type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
-            shell_quote(ca_cert.display().to_string())
-        ));
+        spec = spec.bind_mount(
+            ca_cert.display().to_string(),
+            "/etc/tillandsias/ca.crt",
+            true,
+        );
     }
 
     match kind {
-        LaunchKind::OpenCode => cmd.push_str(
-            " --interactive --tty --entrypoint /usr/local/bin/entrypoint-forge-opencode.sh",
-        ),
-        LaunchKind::OpenCodeWeb => {
-            cmd.push_str(" --entrypoint /usr/local/bin/entrypoint-forge-opencode-web.sh -d")
-        }
-        LaunchKind::Claude => cmd.push_str(
-            " --interactive --tty --entrypoint /usr/local/bin/entrypoint-forge-claude.sh",
-        ),
-        LaunchKind::Maintenance => {
-            cmd.push_str(" --interactive --tty --entrypoint /usr/local/bin/entrypoint-terminal.sh")
-        }
+        LaunchKind::OpenCode => spec
+            .interactive()
+            .tty()
+            .entrypoint("/usr/local/bin/entrypoint-forge-opencode.sh"),
+        LaunchKind::OpenCodeWeb => spec
+            .detached()
+            .persistent()
+            .entrypoint("/usr/local/bin/entrypoint-forge-opencode-web.sh"),
+        LaunchKind::Claude => spec
+            .interactive()
+            .tty()
+            .entrypoint("/usr/local/bin/entrypoint-forge-claude.sh"),
+        LaunchKind::Maintenance => spec
+            .interactive()
+            .tty()
+            .entrypoint("/usr/local/bin/entrypoint-terminal.sh"),
     }
-
-    cmd.push(' ');
-    cmd.push_str(&shell_quote(image.to_string()));
-    let _ = root;
-    cmd
 }
 
-fn launch_in_terminal(title: &str, command: &str) -> Result<(), String> {
-    let shell_command = format!("{}; exec bash", command);
+fn launch_in_terminal(title: &str, executable: &str, args: &[String]) -> Result<(), String> {
     for candidate in ["gnome-terminal", "konsole", "xterm"] {
         if terminal_present(candidate) {
             let mut child = Command::new(candidate);
             match candidate {
                 "gnome-terminal" => {
-                    child.args(["--title", title, "--", "bash", "-lc", &shell_command]);
+                    child.args(["--title", title, "--", executable]);
+                    child.args(args);
                 }
                 "konsole" => {
                     child.args([
@@ -385,13 +437,13 @@ fn launch_in_terminal(title: &str, command: &str) -> Result<(), String> {
                         "-p",
                         &format!("tabtitle={title}"),
                         "-e",
-                        "bash",
-                        "-lc",
-                        &shell_command,
+                        executable,
                     ]);
+                    child.args(args);
                 }
                 "xterm" => {
-                    child.args(["-T", title, "-e", "bash", "-lc", &shell_command]);
+                    child.args(["-T", title, "-e", executable]);
+                    child.args(args);
                 }
                 _ => {}
             }
@@ -402,49 +454,61 @@ fn launch_in_terminal(title: &str, command: &str) -> Result<(), String> {
         }
     }
 
-    let status = Command::new("sh")
-        .args(["-lc", command])
+    let status = Command::new(executable)
+        .args(args)
         .status()
-        .map_err(|e| format!("failed to run shell command: {e}"))?;
+        .map_err(|e| format!("failed to run command: {e}"))?;
     if status.success() {
         Ok(())
     } else {
-        Err(format!("shell command exited with {status}"))
+        Err(format!("command exited with {status}"))
     }
 }
 
 fn terminal_present(candidate: &str) -> bool {
-    Command::new("sh")
-        .args(["-lc", &format!("command -v {candidate} >/dev/null 2>&1")])
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+    let Some(path) = env::var_os("PATH") else {
+        return false;
+    };
+
+    for dir in env::split_paths(&path) {
+        let candidate_path = dir.join(candidate);
+        if !candidate_path.exists() {
+            continue;
+        }
+        #[cfg(unix)]
+        {
+            if let Ok(metadata) = fs::metadata(&candidate_path)
+                && metadata.permissions().mode() & 0o111 == 0
+            {
+                continue;
+            }
+        }
+        return true;
+    }
+
+    false
 }
 
 fn launch_project_action(
     project: ProjectEntry,
     kind: LaunchKind,
-    root: PathBuf,
     version: String,
 ) -> Result<(), String> {
-    let image = format!("tillandsias-forge:v{}", version);
-    let command = build_launch_command(&project, &image, kind, &root);
     match kind {
-        LaunchKind::OpenCodeWeb => Command::new("sh")
-            .args(["-lc", &command])
-            .status()
-            .map_err(|e| e.to_string())
-            .and_then(|status| {
-                if status.success() {
-                    Ok(())
-                } else {
-                    Err(format!("shell command exited with {status}"))
-                }
-            }),
-        _ => launch_in_terminal(
-            &format!("Tillandsias - {} - {}", project.name, action_slug(kind)),
-            &command,
-        ),
+        LaunchKind::OpenCodeWeb => {
+            let project_path = project.path.display().to_string();
+            super::run_opencode_web_mode(&project_path, None, false)
+        }
+        _ => {
+            let image = format!("tillandsias-forge:v{}", version);
+            let spec = build_launch_spec(&project, kind, &image);
+            let args = spec.build_run_argv();
+            launch_in_terminal(
+                &format!("Tillandsias - {} - {}", project.name, action_slug(kind)),
+                "podman",
+                &args,
+            )
+        }
     }
 }
 
@@ -466,8 +530,8 @@ fn run_root_terminal(root: &Path, version: &str) -> Result<(), String> {
             .to_string(),
         path: root.to_path_buf(),
     };
-    let command = build_launch_command(&project, &image, LaunchKind::Maintenance, root);
-    launch_in_terminal("Tillandsias - Root", &command)
+    let spec = build_launch_spec(&project, LaunchKind::Maintenance, &image);
+    launch_in_terminal("Tillandsias - Root", "podman", &spec.build_run_argv())
 }
 
 fn handle_select_agent(service: Arc<TrayService>, agent: SelectedAgent) {
@@ -480,11 +544,10 @@ fn handle_select_agent(service: Arc<TrayService>, agent: SelectedAgent) {
 }
 
 fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind: LaunchKind) {
-    let root = service.snapshot().root.clone();
     let version = service.snapshot().version.clone();
     let service_for_emit = service.clone();
     thread::spawn(move || {
-        let result = launch_project_action(project, kind, root, version);
+        let result = launch_project_action(project, kind, version);
         if let Err(err) = result {
             warn!("project launch failed: {err}");
         }
@@ -524,6 +587,19 @@ fn handle_github_login(service: Arc<TrayService>) {
     });
 }
 
+// @trace spec:tray-minimal-ux
+fn build_separator_item(id: i32) -> MenuNode {
+    node(
+        id,
+        props(vec![
+            ("type".to_string(), ov_str("separator")),
+            ("visible".to_string(), ov(Value::from(true))),
+        ]),
+        Vec::new(),
+    )
+}
+
+// @trace spec:tray-minimal-ux
 fn build_seedlings_submenu(state: &TrayUiState) -> MenuNode {
     let mut children = Vec::new();
     for agent in [
@@ -651,9 +727,11 @@ fn stable_project_item_id(project: &str, suffix: &str) -> i32 {
     if value == 0 { 1 } else { value }
 }
 
+// @trace spec:tray-minimal-ux
 fn build_menu(state: &TrayUiState) -> MenuNode {
     let mut children = Vec::new();
 
+    // Always visible: Status element (id=1)
     children.push(child(node(
         1,
         props(vec![
@@ -664,48 +742,10 @@ fn build_menu(state: &TrayUiState) -> MenuNode {
         Vec::new(),
     )));
 
-    children.push(child(build_seedlings_submenu(state)));
+    // Always visible: Divider (id=2)
+    children.push(child(build_separator_item(2)));
 
-    for project in &state.projects {
-        children.push(child(build_project_submenu(state, project)));
-    }
-
-    children.push(child(node(
-        20,
-        props(vec![
-            ("label".to_string(), ov_str("Initialize images")),
-            ("enabled".to_string(), ov(Value::from(true))),
-            ("visible".to_string(), ov(Value::from(true))),
-        ]),
-        Vec::new(),
-    )));
-
-    children.push(child(node(
-        21,
-        props(vec![
-            ("label".to_string(), ov_str("Root Terminal")),
-            (
-                "enabled".to_string(),
-                ov(Value::from(state.forge_available && state.podman_available)),
-            ),
-            ("visible".to_string(), ov(Value::from(true))),
-        ]),
-        Vec::new(),
-    )));
-
-    children.push(child(node(
-        22,
-        props(vec![
-            ("label".to_string(), ov_str("GitHub Login")),
-            (
-                "enabled".to_string(),
-                ov(Value::from(state.podman_available)),
-            ),
-            ("visible".to_string(), ov(Value::from(true))),
-        ]),
-        Vec::new(),
-    )));
-
+    // Always visible: Version + Attribution (id=30)
     children.push(child(node(
         30,
         props(vec![
@@ -719,6 +759,7 @@ fn build_menu(state: &TrayUiState) -> MenuNode {
         Vec::new(),
     )));
 
+    // Always visible: Quit button (id=31)
     children.push(child(node(
         31,
         props(vec![
@@ -728,6 +769,30 @@ fn build_menu(state: &TrayUiState) -> MenuNode {
         ]),
         Vec::new(),
     )));
+
+    // Conditional on forge_available: Seedlings submenu and projects.
+    // Collapse the dynamic region entirely when the enclave has failed.
+    if state.forge_available && state.enclave_status != EnclaveStatus::Failed {
+        children.push(child(build_seedlings_submenu(state)));
+
+        for project in &state.projects {
+            children.push(child(build_project_submenu(state, project)));
+        }
+
+        // GitHub login button
+        children.push(child(node(
+            22,
+            props(vec![
+                ("label".to_string(), ov_str("GitHub Login")),
+                (
+                    "enabled".to_string(),
+                    ov(Value::from(state.podman_available)),
+                ),
+                ("visible".to_string(), ov(Value::from(true))),
+            ]),
+            Vec::new(),
+        )));
+    }
 
     node(
         0,
@@ -1156,27 +1221,24 @@ fn parse_seedling_label(label: &str) -> Option<SelectedAgent> {
     }
 }
 
-fn build_connection(service: Arc<TrayService>) -> Result<Connection, String> {
-    let connection = futures::executor::block_on(async {
-        let conn = ConnectionBuilder::session()
-            .map_err(|e| e.to_string())?
-            .name(service.service_name.as_str())
-            .map_err(|e| e.to_string())?
-            .serve_at(ITEM_PATH, StatusNotifierItemIface(service.clone()))
-            .map_err(|e| e.to_string())?
-            .serve_at(MENU_PATH, DbusMenuIface(service.clone()))
-            .map_err(|e| e.to_string())?
-            .build()
-            .await
-            .map_err(|e| e.to_string())?;
-        Ok::<Connection, String>(conn)
-    })?;
-    Ok(connection)
+async fn build_connection(service: Arc<TrayService>) -> Result<Connection, String> {
+    let conn = ConnectionBuilder::session()
+        .map_err(|e| e.to_string())?
+        .name(service.service_name.as_str())
+        .map_err(|e| e.to_string())?
+        .serve_at(ITEM_PATH, StatusNotifierItemIface(service.clone()))
+        .map_err(|e| e.to_string())?
+        .serve_at(MENU_PATH, DbusMenuIface(service.clone()))
+        .map_err(|e| e.to_string())?
+        .build()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(conn)
 }
 
-fn register_with_watcher(connection: &Connection, service_name: &str) {
+async fn register_with_watcher(connection: &Connection, service_name: &str) {
     let name = service_name.to_string();
-    let result = futures::executor::block_on(async {
+    let result = async {
         let proxy = zbus::Proxy::new(
             connection,
             WATCHER_NAME,
@@ -1190,7 +1252,8 @@ fn register_with_watcher(connection: &Connection, service_name: &str) {
             .await
             .map_err(|e| e.to_string())?;
         Ok::<(), String>(())
-    });
+    }
+    .await;
     if let Err(err) = result {
         warn!("StatusNotifierWatcher registration skipped: {err}");
     }
@@ -1201,14 +1264,15 @@ mod tests {
     use super::*;
 
     fn test_state(selected_agent: SelectedAgent, forge_available: bool) -> TrayUiState {
+        let enclave_status = if forge_available {
+            EnclaveStatus::AllHealthy
+        } else {
+            EnclaveStatus::Verifying
+        };
         TrayUiState {
             root: PathBuf::from("/tmp/tillandsias-test-root"),
             version: "0.1.260506.6".to_string(),
-            status_text: if forge_available {
-                "✅ Ready".to_string()
-            } else {
-                "🌱 Setting up...".to_string()
-            },
+            status_text: enclave_status.status_text().to_string(),
             tray_icon_state: if forge_available {
                 TrayIconState::Mature
             } else {
@@ -1221,6 +1285,7 @@ mod tests {
             selected_agent,
             forge_available,
             podman_available: true,
+            enclave_status,
             revision: 1,
         }
     }
@@ -1236,6 +1301,281 @@ mod tests {
                     .and_then(|value| String::try_from(value).ok())
             })
             .collect()
+    }
+
+    // @trace spec:tray-minimal-ux
+    /// Test harness builder for simulating state transitions
+    struct TrayStateBuilder {
+        agent: SelectedAgent,
+        forge_available: bool,
+        enclave_status: EnclaveStatus,
+        projects: Vec<ProjectEntry>,
+    }
+
+    impl TrayStateBuilder {
+        fn new() -> Self {
+            Self {
+                agent: SelectedAgent::OpenCodeWeb,
+                forge_available: false,
+                enclave_status: EnclaveStatus::Verifying,
+                projects: vec![ProjectEntry {
+                    name: "test-project".to_string(),
+                    path: std::path::PathBuf::from("/tmp/test-project"),
+                }],
+            }
+        }
+
+        fn forge_available(mut self, available: bool) -> Self {
+            self.forge_available = available;
+            if available {
+                self.enclave_status = EnclaveStatus::AllHealthy;
+            } else {
+                self.enclave_status = EnclaveStatus::Verifying;
+            }
+            self
+        }
+
+        fn enclave_status(mut self, status: EnclaveStatus) -> Self {
+            self.enclave_status = status;
+            self
+        }
+
+        fn projects(mut self, projects: Vec<ProjectEntry>) -> Self {
+            self.projects = projects;
+            self
+        }
+
+        fn build(self) -> TrayUiState {
+            let status_text = self.enclave_status.status_text().to_string();
+            TrayUiState {
+                root: std::path::PathBuf::from("/tmp/tillandsias-test-root"),
+                version: "0.1.260506.6".to_string(),
+                status_text,
+                tray_icon_state: if self.forge_available {
+                    TrayIconState::Mature
+                } else {
+                    TrayIconState::Pup
+                },
+                projects: self.projects,
+                selected_agent: self.agent,
+                forge_available: self.forge_available,
+                podman_available: true,
+                enclave_status: self.enclave_status,
+                revision: 1,
+            }
+        }
+    }
+
+    // @trace spec:tray-minimal-ux
+    #[test]
+    fn minimal_menu_has_exactly_4_items_at_launch() {
+        // When forge_available = false (cold start), menu should have exactly 4 items:
+        // 1. Status element
+        // 2. Divider
+        // 3. Version
+        // 4. Quit button
+        let state = test_state(SelectedAgent::OpenCodeWeb, false);
+        let menu = build_menu(&state);
+
+        let mut flat = Vec::new();
+        flatten_layout(&menu, &mut flat);
+
+        // Filter out root node (id=0), count remaining items
+        let items: Vec<_> = flat.iter().filter(|(id, _)| *id != 0).collect();
+        assert_eq!(
+            items.len(),
+            4,
+            "Expected exactly 4 items at launch (when forge_available=false), got {}. Items: {:?}",
+            items.len(),
+            items
+                .iter()
+                .map(|(_, p)| p.get("label"))
+                .collect::<Vec<_>>()
+        );
+
+        // Verify the items are status, divider, version, quit
+        let labels = labels(&menu);
+        assert!(
+            labels.contains(&"☐ Verifying environment...".to_string()),
+            "Missing status element"
+        );
+        assert!(
+            labels.contains(&"Tillandsias v0.1.260506.6".to_string()),
+            "Missing version"
+        );
+        assert!(
+            labels.contains(&"Quit Tillandsias".to_string()),
+            "Missing quit button"
+        );
+
+        // Verify separator is present (no label, has "type": "separator")
+        let has_separator = flat.iter().any(|(_, props)| {
+            props
+                .get("type")
+                .and_then(|v| v.try_clone().ok())
+                .and_then(|v| String::try_from(v).ok())
+                == Some("separator".to_string())
+        });
+        assert!(has_separator, "Missing separator divider");
+    }
+
+    // @trace spec:tray-minimal-ux
+    #[test]
+    fn menu_expands_when_forge_available() {
+        // When forge_available = true, menu should expand beyond 4 items to include:
+        // - Seedlings submenu
+        // - Project submenus
+        // - GitHub login button
+        let state = test_state(SelectedAgent::OpenCodeWeb, true);
+        let menu = build_menu(&state);
+
+        let mut flat = Vec::new();
+        flatten_layout(&menu, &mut flat);
+
+        // Should have more than 4 items now
+        let items: Vec<_> = flat.iter().filter(|(id, _)| *id != 0).collect();
+        assert!(
+            items.len() >= 6,
+            "Expected >=6 items when forge_available=true, got {}",
+            items.len()
+        );
+
+        // Verify seedlings submenu appears
+        let labels = labels(&menu);
+        assert!(
+            labels.contains(&"Seedlings".to_string()),
+            "Seedlings submenu missing when forge_available=true"
+        );
+        assert!(
+            labels.contains(&"alpha".to_string()),
+            "Project submenu missing when forge_available=true"
+        );
+    }
+
+    // @trace spec:tray-minimal-ux
+    #[test]
+    fn status_text_reflects_enclave_status() {
+        // Verify status text matches EnclaveStatus values
+        let verifying = test_state(SelectedAgent::OpenCodeWeb, false);
+        assert_eq!(
+            verifying.status_text, "☐ Verifying environment...",
+            "Status text should match Verifying state"
+        );
+        assert_eq!(
+            verifying.enclave_status,
+            EnclaveStatus::Verifying,
+            "Enclave status should be Verifying when forge_available=false"
+        );
+
+        let ready = test_state(SelectedAgent::OpenCodeWeb, true);
+        assert_eq!(
+            ready.status_text, "✓ Environment OK",
+            "Status text should match AllHealthy state"
+        );
+        assert_eq!(
+            ready.enclave_status,
+            EnclaveStatus::AllHealthy,
+            "Enclave status should be AllHealthy when forge_available=true"
+        );
+    }
+
+    // @trace spec:tray-minimal-ux
+    #[test]
+    fn state_transition_forge_false_to_true() {
+        // Simulate the forge becoming available (transition from Verifying → AllHealthy)
+        let initial = TrayStateBuilder::new()
+            .forge_available(false)
+            .enclave_status(EnclaveStatus::Verifying)
+            .build();
+
+        let menu_before = build_menu(&initial);
+        let mut flat_before = Vec::new();
+        flatten_layout(&menu_before, &mut flat_before);
+        let items_before: Vec<_> = flat_before.iter().filter(|(id, _)| *id != 0).collect();
+
+        // Should have exactly 4 items before
+        assert_eq!(
+            items_before.len(),
+            4,
+            "Should have 4 items when forge_available=false"
+        );
+
+        // Transition to forge_available=true
+        let transitioned = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .build();
+
+        let menu_after = build_menu(&transitioned);
+        let mut flat_after = Vec::new();
+        flatten_layout(&menu_after, &mut flat_after);
+        let items_after: Vec<_> = flat_after.iter().filter(|(id, _)| *id != 0).collect();
+
+        // Should expand to 6+ items after
+        assert!(
+            items_after.len() >= 6,
+            "Should have >=6 items when forge_available=true, got {}",
+            items_after.len()
+        );
+
+        // Status text should change
+        assert_ne!(
+            initial.status_text, transitioned.status_text,
+            "Status text should change on transition"
+        );
+        assert!(
+            transitioned.status_text.contains("✓"),
+            "Status should have checkmark in AllHealthy state"
+        );
+    }
+
+    // @trace spec:tray-minimal-ux
+    #[test]
+    fn enclave_status_all_states() {
+        // Verify all EnclaveStatus states have correct emoji prefixes
+        assert!(EnclaveStatus::Verifying.status_text().contains("☐"));
+        assert!(EnclaveStatus::ProxyReady.status_text().contains("☐"));
+        assert!(EnclaveStatus::ProxyReady.status_text().contains("🌐"));
+        assert!(EnclaveStatus::GitReady.status_text().contains("☐"));
+        assert!(EnclaveStatus::GitReady.status_text().contains("🌐"));
+        assert!(EnclaveStatus::GitReady.status_text().contains("🪞"));
+        assert!(EnclaveStatus::AllHealthy.status_text().contains("✓"));
+        assert!(EnclaveStatus::Failed.status_text().contains("🥀"));
+    }
+
+    #[test]
+    fn failed_state_collapses_dynamic_region() {
+        let state = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::Failed)
+            .build();
+        let menu = build_menu(&state);
+        let mut flat = Vec::new();
+        flatten_layout(&menu, &mut flat);
+        let items: Vec<_> = flat.iter().filter(|(id, _)| *id != 0).collect();
+        let item_labels: Vec<String> = items
+            .iter()
+            .filter_map(|(_, props)| {
+                props
+                    .get("label")
+                    .and_then(|value| value.try_clone().ok())
+                    .and_then(|value| String::try_from(value).ok())
+            })
+            .collect();
+
+        assert_eq!(item_labels[0], "🥀 Unhealthy environment");
+        assert!(item_labels.contains(&"Tillandsias v0.1.260506.6".to_string()));
+        assert!(item_labels.contains(&"Quit Tillandsias".to_string()));
+        assert!(!item_labels.contains(&"Seedlings".to_string()));
+        assert!(!item_labels.contains(&"OpenCode Web".to_string()));
+        assert!(!item_labels.contains(&"OpenCode".to_string()));
+        assert!(!item_labels.contains(&"Claude".to_string()));
+        assert!(!item_labels.contains(&"GitHub Login".to_string()));
+        assert!(!item_labels.contains(&"Attach Here".to_string()));
+        assert!(!item_labels.contains(&"Maintenance".to_string()));
+        assert!(!item_labels.contains(&"Stop".to_string()));
+
+        assert_eq!(items.len(), 4);
     }
 
     #[test]
@@ -1285,26 +1625,52 @@ mod tests {
 
     #[test]
     fn launch_command_targets_the_forge_image_and_project_mount() {
-        let root = PathBuf::from("/tmp/tillandsias-test-root");
         let project = ProjectEntry {
             name: "alpha".to_string(),
             path: PathBuf::from("/tmp/alpha"),
         };
-        let command = build_launch_command(
+        let spec = build_launch_spec(
             &project,
-            "tillandsias-forge:v0.1.260506.6",
             LaunchKind::Claude,
-            &root,
+            "tillandsias-forge:v0.1.260506.6",
         );
+        let args = spec.build_run_argv();
 
-        assert!(command.contains("podman run --rm"));
-        assert!(command.contains("tillandsias-alpha-claude"));
-        assert!(command.contains("forge-alpha"));
-        assert!(command.contains("entrypoint-forge-claude.sh"));
-        assert!(
-            command.contains("PROJECT=alpha") || command.contains("PROJECT='alpha'"),
-            "{command}"
+        assert_eq!(args[0], "run");
+        assert!(args.contains(&"--rm".to_string()));
+        assert!(args.contains(&"--init".to_string()));
+        assert!(args.contains(&"--name".to_string()));
+        assert!(args.contains(&"tillandsias-alpha-claude".to_string()));
+        assert!(args.contains(&"--hostname".to_string()));
+        assert!(args.contains(&"forge-alpha".to_string()));
+        assert!(args.contains(&"--entrypoint".to_string()));
+        assert!(args.contains(&"/usr/local/bin/entrypoint-forge-claude.sh".to_string()));
+        assert!(args.contains(&"tillandsias-forge:v0.1.260506.6".to_string()));
+    }
+
+    #[test]
+    fn launch_command_opencode_web_is_detached_and_persistent() {
+        let project = ProjectEntry {
+            name: "alpha".to_string(),
+            path: PathBuf::from("/tmp/alpha"),
+        };
+        let spec = build_launch_spec(
+            &project,
+            LaunchKind::OpenCodeWeb,
+            "tillandsias-forge:v0.1.260506.6",
         );
+        let args = spec.build_run_argv();
+
+        assert_eq!(args[0], "run");
+        assert!(args.contains(&"-d".to_string()));
+        assert!(!args.contains(&"--rm".to_string()));
+        assert!(!args.contains(&"--interactive".to_string()));
+        assert!(!args.contains(&"--tty".to_string()));
+        assert!(args.contains(&"--init".to_string()));
+        assert!(args.contains(&"--entrypoint".to_string()));
+        assert!(args.contains(&"/usr/local/bin/entrypoint-forge-opencode-web.sh".to_string()));
+        assert!(args.contains(&"--security-opt=label=disable".to_string()));
+        assert!(args.contains(&"tillandsias-forge:v0.1.260506.6".to_string()));
     }
 }
 
@@ -1312,7 +1678,7 @@ mod tests {
 ///
 /// @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states, spec:tray-icon-lifecycle
 pub fn run_tray_mode(config_path: Option<String>) -> Result<(), String> {
-    let root = super::find_repo_root()?;
+    let root = super::find_checkout_root()?;
     let version = super::VERSION.trim().to_string();
     let state = TrayUiState::new(root.clone(), version.clone(), discover_projects());
     let service = Arc::new(TrayService::new(state));
@@ -1321,12 +1687,14 @@ pub fn run_tray_mode(config_path: Option<String>) -> Result<(), String> {
         info!("Tray started with config path: {path}");
     }
 
-    let connection = build_connection(service.clone())?;
-    service.attach_connection(connection.clone());
-    register_with_watcher(&connection, &service.service_name);
-
     let runtime =
         tokio::runtime::Runtime::new().map_err(|e| format!("failed to create runtime: {e}"))?;
+    let _connection = runtime.block_on(async {
+        let conn = build_connection(service.clone()).await?;
+        service.attach_connection(conn.clone());
+        register_with_watcher(&conn, &service.service_name).await;
+        Ok::<Connection, String>(conn)
+    })?;
     runtime.block_on(async move {
         let item_ctxt = SignalContext::new(service.connection(), service.item_path.as_str())
             .map_err(|e| e.to_string())?;

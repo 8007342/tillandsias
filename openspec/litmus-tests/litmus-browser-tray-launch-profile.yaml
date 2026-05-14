@@ -1,0 +1,31 @@
+# @trace spec:browser-isolation-tray-integration
+name: litmus:browser-tray-launch-profile
+spec: browser-isolation-tray-integration
+phase: pre-build
+description: Verify tray-driven OpenCode Web launch stays detached and persistent
+severity: medium
+
+preconditions:
+  - workspace contains crates/tillandsias-headless
+  - cargo is available in PATH
+
+critical_path:
+  - step: "run the detached OpenCode Web launch unit test"
+    command: "cargo test -p tillandsias-headless --features tray tray::tests::launch_command_opencode_web_is_detached_and_persistent -- --exact"
+    timeout_ms: 120000
+
+  - step: "run the tray menu state test for running web sessions"
+    command: "cargo test -p tillandsias-headless --features tray tray::tests::project_menu_only_shows_stop_when_web_is_running -- --exact"
+    timeout_ms: 120000
+
+observability:
+  traces:
+    - "@trace spec:browser-isolation-tray-integration"
+  expected_log: "Tray OpenCode Web launch remains detached, persistent, and menu-driven"
+  log_fields:
+    spec: "browser-isolation-tray-integration"
+    test: "browser-tray-launch-profile"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-headless/src/tray/mod.rs for tray launch/profile drift"
+  command: "sed -n '1600,1655p' crates/tillandsias-headless/src/tray/mod.rs"

@@ -23,7 +23,7 @@ committed_for_project: false
 
 ## Portable Executable Transparent Mode
 
-**Use when:** Building a Linux portable executable (musl binary) that works both as a headless daemon and a system tray application, automatically detecting the environment.
+**Use when:** Building a Linux portable executable (musl binary) that works both as a headless foreground service and a system tray application, automatically detecting the environment.
 
 ### Overview
 
@@ -131,6 +131,11 @@ cargo build -p tillandsias-headless
 - Escalates to SIGKILL if containers don't stop
 - Exits with code 0 on success, 143 if force-killed
 
+**Systemd supervision note**
+- The headless binary should stay in the foreground and let systemd supervise it when deployed as a service.
+- Use `Type=simple` or `Type=notify` in the unit file rather than manual double-fork daemonization.
+- For installed runtime isolation, pair the unit with a dedicated service account and a rootless Podman socket.
+
 ### Tray Mode (Phase 4)
 
 **Subprocess Management:**
@@ -194,7 +199,7 @@ wait
 ### Related Specs
 
 - @trace spec:linux-native-portable-executable — Overall portable executable goal
-- @trace spec:headless-mode — Headless daemon mode
+- @trace spec:headless-mode — Headless foreground app lifecycle mode
 - @trace spec:tray-ui-integration — GTK4 tray UI
 - @trace spec:signal-handling — Signal forwarding and graceful shutdown
 - @trace spec:transparent-mode-detection — Auto-detection logic

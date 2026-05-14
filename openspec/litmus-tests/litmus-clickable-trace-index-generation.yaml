@@ -1,0 +1,43 @@
+# @trace spec:clickable-trace-index
+name: litmus:clickable-trace-index-generation
+spec: clickable-trace-index
+phase: pre-build
+description: Verify the trace index generator, companion backlink files, and build integration remain intact
+severity: medium
+
+preconditions:
+  - workspace contains scripts/ and openspec/specs/
+  - bash, grep, and find are available in PATH
+
+critical_path:
+  - step: "verify generator script is present and executable"
+    command: "test -x scripts/generate-traces.sh && grep -F 'generate-traces.sh' openspec/specs/clickable-trace-index/spec.md"
+    timeout_ms: 3000
+
+  - step: "regenerate traces from the current checkout"
+    command: "./scripts/generate-traces.sh"
+    timeout_ms: 120000
+
+  - step: "verify root trace index includes clickable-trace-index"
+    command: "grep -F '| `spec:clickable-trace-index` | [clickable-trace-index/spec.md](openspec/specs/clickable-trace-index/spec.md) |' TRACES.md"
+    timeout_ms: 3000
+
+  - step: "verify per-spec backlink file exists"
+    command: "test -f openspec/specs/clickable-trace-index/TRACES.md && grep -F 'generate-traces.sh' openspec/specs/clickable-trace-index/TRACES.md"
+    timeout_ms: 3000
+
+  - step: "verify build integration still calls the generator"
+    command: "grep -F 'generate-traces.sh' build.sh"
+    timeout_ms: 3000
+
+observability:
+  traces:
+    - "@trace spec:clickable-trace-index"
+  expected_log: "Trace index generation remains deterministic and build-integrated"
+  log_fields:
+    spec: "clickable-trace-index"
+    test: "clickable-trace-index-generation"
+
+rollback:
+  on_failure: "inspect scripts/generate-traces.sh, TRACES.md, and openspec/specs/clickable-trace-index/TRACES.md for drift"
+  command: "sed -n '1,260p' scripts/generate-traces.sh && sed -n '1,120p' TRACES.md && sed -n '1,160p' openspec/specs/clickable-trace-index/TRACES.md"

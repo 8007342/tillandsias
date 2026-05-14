@@ -1,4 +1,4 @@
-// @trace spec:forge-forward-compat, spec:logging-levels, spec:runtime-logging
+// @trace spec:forge-staleness, spec:logging-levels, spec:runtime-logging
 
 use std::path::{Path, PathBuf};
 
@@ -24,14 +24,14 @@ pub enum SelectedAgent {
     OpenCode,
     Claude,
     /// OpenCode's browser-based UI served by `opencode serve` and rendered
-    /// in an embedded Tauri webview. Default for new installs.
-    /// @trace spec:opencode-web-session
+    /// in the secure browser launch path. Default for new installs.
+    /// @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     #[serde(rename = "opencode-web")]
     #[default]
     OpenCodeWeb,
 }
 
-// @trace spec:opencode-web-session
+// @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
 
 impl SelectedAgent {
     /// The string value passed as `TILLANDSIAS_AGENT` env var.
@@ -63,7 +63,7 @@ impl SelectedAgent {
     }
 
     /// Returns true if the agent is the browser-based OpenCode Web variant.
-    /// @trace spec:opencode-web-session
+    /// @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     pub fn is_web(&self) -> bool {
         matches!(self, Self::OpenCodeWeb)
     }
@@ -757,6 +757,7 @@ fn true_val() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn default_config_values() {
@@ -767,6 +768,21 @@ mod tests {
         assert!(config.security.no_new_privileges);
         assert!(config.security.userns_keep_id);
         assert_eq!(config.scanner.debounce_ms, 2000);
+    }
+
+    // @trace spec:external-logs-layer
+    #[test]
+    fn external_logs_dir_points_to_state_sibling() {
+        let dir = external_logs_dir();
+        assert!(dir.ends_with(Path::new("external-logs")));
+        assert!(dir.to_string_lossy().contains("tillandsias"));
+    }
+
+    // @trace spec:external-logs-layer
+    #[test]
+    fn external_logs_role_dir_appends_role() {
+        let dir = external_logs_role_dir("git-service");
+        assert!(dir.ends_with(Path::new("external-logs/git-service")));
     }
 
     // @trace spec:forge-hot-cold-split
@@ -915,13 +931,13 @@ debounce_ms = 5000
         assert!(verbose.contains("Your language"));
     }
 
-    // @trace spec:opencode-web-session
+    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     #[test]
     fn selected_agent_default_is_opencode_web() {
         assert_eq!(SelectedAgent::default(), SelectedAgent::OpenCodeWeb);
     }
 
-    // @trace spec:opencode-web-session
+    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     #[test]
     fn selected_agent_as_env_str() {
         assert_eq!(SelectedAgent::OpenCode.as_env_str(), "opencode");
@@ -929,7 +945,7 @@ debounce_ms = 5000
         assert_eq!(SelectedAgent::OpenCodeWeb.as_env_str(), "opencode-web");
     }
 
-    // @trace spec:opencode-web-session
+    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     #[test]
     fn selected_agent_from_str_opt() {
         assert_eq!(
@@ -952,7 +968,7 @@ debounce_ms = 5000
         assert_eq!(SelectedAgent::from_str_opt("unknown"), None);
     }
 
-    // @trace spec:opencode-web-session
+    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     #[test]
     fn selected_agent_display_name() {
         assert_eq!(SelectedAgent::OpenCode.display_name(), "OpenCode");
@@ -960,7 +976,7 @@ debounce_ms = 5000
         assert_eq!(SelectedAgent::OpenCodeWeb.display_name(), "OpenCode Web");
     }
 
-    // @trace spec:opencode-web-session
+    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     #[test]
     fn selected_agent_is_web() {
         assert!(!SelectedAgent::OpenCode.is_web());
@@ -968,7 +984,7 @@ debounce_ms = 5000
         assert!(SelectedAgent::OpenCodeWeb.is_web());
     }
 
-    // @trace spec:opencode-web-session
+    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     #[test]
     fn selected_agent_serde_roundtrip() {
         // Existing variants serialize as plain lowercase (rename_all = "lowercase").
@@ -1003,7 +1019,7 @@ debounce_ms = 5000
         assert_eq!(parsed.selected, SelectedAgent::Claude);
     }
 
-    // @trace spec:opencode-web-session
+    // @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
     #[test]
     fn agent_config_default_is_opencode_web() {
         let cfg = AgentConfig::default();

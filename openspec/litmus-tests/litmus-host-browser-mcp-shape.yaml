@@ -1,0 +1,38 @@
+# @trace spec:host-browser-mcp
+name: litmus:host-browser-mcp-shape
+spec: host-browser-mcp
+phase: pre-build
+description: Verify the browser MCP surface, control-wire framing, and forge bridge wiring remain intact
+severity: medium
+
+preconditions:
+  - workspace contains crates/tillandsias-browser-mcp
+  - workspace contains crates/tillandsias-control-wire
+  - workspace contains images/default/config-overlay/opencode/config.json
+  - workspace contains images/default/config-overlay/mcp/host-browser.sh
+  - workspace contains images/default/entrypoint-forge-opencode-web.sh
+  - cargo, grep, and bash are available in PATH
+
+critical_path:
+  - step: "run the browser MCP unit surface tests"
+    command: "cargo test -p tillandsias-browser-mcp initialize_request -- --exact && cargo test -p tillandsias-browser-mcp tools_list_returns_eight_tools -- --exact && cargo test -p tillandsias-browser-mcp unknown_method_returns_error -- --exact && cargo test -p tillandsias-browser-mcp prompts_list_returns_empty -- --exact"
+    timeout_ms: 120000
+
+  - step: "verify the forge-side bridge and launcher wiring stay present"
+    command: "grep -Fq '/home/forge/.config-overlay/mcp/host-browser.sh' images/default/config-overlay/opencode/config.json && grep -Fq 'McpFrame' crates/tillandsias-control-wire/src/lib.rs && grep -Fq 'browser.open' crates/tillandsias-browser-mcp/src/server.rs && echo 'host-browser-mcp bridge present'"
+    timeout_ms: 5000
+    expected_behavior: "host-browser-mcp bridge present"
+
+observability:
+  traces:
+    - "@trace spec:host-browser-mcp"
+    - "@trace spec:tray-host-control-socket"
+    - "@trace spec:browser-isolation-tray-integration"
+  expected_log: "Browser MCP surface and forge bridge remain wired to the host control socket"
+  log_fields:
+    spec: "host-browser-mcp"
+    test: "host-browser-mcp-shape"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-browser-mcp/src/server.rs, crates/tillandsias-control-wire/src/lib.rs, images/default/config-overlay/mcp/host-browser.sh, and images/default/entrypoint-forge-opencode-web.sh for MCP bridge drift"
+  command: "sed -n '1,220p' crates/tillandsias-browser-mcp/src/server.rs && sed -n '1,180p' crates/tillandsias-control-wire/src/lib.rs && sed -n '1,220p' images/default/config-overlay/mcp/host-browser.sh && sed -n '120,160p' images/default/entrypoint-forge-opencode-web.sh"

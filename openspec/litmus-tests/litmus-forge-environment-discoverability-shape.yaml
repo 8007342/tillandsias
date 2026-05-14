@@ -1,0 +1,44 @@
+name: litmus:forge-environment-discoverability-shape
+spec: forge-environment-discoverability
+description: Verify the forge discovery scripts and welcome banner expose the current flat command surface
+severity: medium
+phase: pre-build
+
+preconditions:
+  - workspace contains images/default/cli/tillandsias-inventory
+  - workspace contains images/default/cli/tillandsias-services
+  - workspace contains images/default/cli/tillandsias-models
+  - workspace contains images/default/forge-welcome.sh
+
+critical_path:
+  - step: "verify inventory help advertises the flat JSON-capable interface"
+    command: "grep -Fq 'Usage: tillandsias-inventory [--json]' images/default/cli/tillandsias-inventory && echo 'inventory help present'"
+    timeout_ms: 10000
+    expected_behavior: "inventory help present"
+
+  - step: "verify services help advertises the flat JSON-capable interface"
+    command: "grep -Fq 'Usage: tillandsias-services [--json]' images/default/cli/tillandsias-services && echo 'services help present'"
+    timeout_ms: 10000
+    expected_behavior: "services help present"
+
+  - step: "verify models help advertises the flat JSON-capable interface"
+    command: "grep -Fq 'Usage: tillandsias-models [--json]' images/default/cli/tillandsias-models && echo 'models help present'"
+    timeout_ms: 10000
+    expected_behavior: "models help present"
+
+  - step: "verify the welcome banner points to the discovery commands"
+    command: "grep -Fq 'tillandsias-inventory' images/default/forge-welcome.sh && grep -Fq 'tillandsias-services' images/default/forge-welcome.sh && grep -Fq 'tillandsias-models' images/default/forge-welcome.sh && echo 'welcome banner points to discovery commands'"
+    timeout_ms: 10000
+    expected_behavior: "welcome banner points to discovery commands"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+  expected_log: "forge discovery scripts remain visible to the welcome path"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "forge-environment-discoverability-shape"
+
+rollback:
+  on_failure: "inspect images/default/cli/tillandsias-inventory, images/default/cli/tillandsias-services, images/default/cli/tillandsias-models, and images/default/forge-welcome.sh for drift"
+  command: "grep -Fq 'Usage: tillandsias-inventory [--json]' images/default/cli/tillandsias-inventory && grep -Fq 'tillandsias-models' images/default/forge-welcome.sh"

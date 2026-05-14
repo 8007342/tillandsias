@@ -1,0 +1,36 @@
+# @trace spec:tray-app
+name: litmus:cross-platform-tray
+spec: tray-app
+phase: pre-build
+description: Verify the tray code path remains the native StatusNotifierItem implementation and keeps the minimal menu shape
+severity: medium
+
+preconditions:
+  - workspace contains crates/tillandsias-headless
+  - cargo is available in PATH
+
+critical_path:
+  - step: "verify the native tray wrapper is present"
+    command: "grep -F 'StatusNotifierItemIface' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'pure D-Bus StatusNotifierItem path' crates/tillandsias-headless/src/tray/mod.rs"
+    timeout_ms: 5000
+
+  - step: "run the tray cold-start menu test"
+    command: "cargo test -p tillandsias-headless --features tray tray::tests::minimal_menu_has_exactly_4_items_at_launch -- --exact"
+    timeout_ms: 120000
+
+  - step: "run the tray expansion test"
+    command: "cargo test -p tillandsias-headless --features tray tray::tests::menu_expands_when_forge_available -- --exact"
+    timeout_ms: 120000
+
+observability:
+  traces:
+    - "@trace spec:tray-app"
+    - "@trace spec:tray-ux"
+  expected_log: "Tray remains on the native D-Bus path and the menu shape is stable"
+  log_fields:
+    spec: "tray-app"
+    test: "cross-platform-tray"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-headless/src/tray/mod.rs for wrapper drift or missing menu expansion"
+  command: "sed -n '1600,1710p' crates/tillandsias-headless/src/tray/mod.rs"

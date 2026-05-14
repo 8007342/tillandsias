@@ -37,6 +37,10 @@ Codex is a specialized AI agent invoked from the Tillandsias tray menu. It runs 
 | `tillandsias codex launch` | Tray subprocess call (Unix socket dispatch) |
 | Menu: "Codex" (tray) | User-facing entry point |
 
+## Bootstrap Command
+
+| Command | Effect |
+|---------|--------|
 ## Environment Variables
 
 | Variable | Set By | Used For |

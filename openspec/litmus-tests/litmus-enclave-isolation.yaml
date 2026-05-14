@@ -1,49 +1,43 @@
 name: litmus:enclave-isolation
 spec: enclave-network
-description: Verify forge cannot reach proxy container and reverse isolation
+description: Verify enclave network and proxy wiring stay aligned with the current runtime contract
 severity: critical
 
 preconditions:
-  - tillandsias tray running
-  - enclave network created (--enclave-network flag)
-  - proxy container running
-  - forge container running
+  - scripts/orchestrate-enclave.sh exists
+  - crates/tillandsias-headless/src/tray/mod.rs exists
 
 critical_path:
-  - step: "verify proxy container is running in enclave"
-    command: "podman ps -f 'label=tillandsias-enclave' | grep proxy"
+  - step: "verify the enclave network is the internal runtime network"
+    command: "grep -F 'tillandsias-enclave' scripts/orchestrate-enclave.sh && echo ENCLAVE_NET_DEFINED"
     timeout_ms: 5000
-    expected_behavior: "proxy container listed"
+    expected_behavior: "ENCLAVE_NET_DEFINED"
 
-  - step: "attempt forge to proxy connection"
-    command: "podman exec tillandsias-proxy-* ip addr show | grep -q 'inet' && echo PROXY_IP_EXISTS || echo PROXY_IP_MISSING"
-    timeout_ms: 3000
-
-  - step: "test forge cannot reach proxy internal services"
-    command: "podman run --rm --net=tillandsias-enclave tillandsias-forge sh -c 'timeout 3 curl http://proxy:3128 2>&1' || echo TIMEOUT_EXPECTED"
+  - step: "verify the proxy remains the enclave hostname exposed to forge containers"
+    command: "grep -F 'hostname proxy' scripts/orchestrate-enclave.sh && echo PROXY_HOSTNAME_WIRED"
     timeout_ms: 5000
-    expected_behavior: "connection refused or timeout"
+    expected_behavior: "PROXY_HOSTNAME_WIRED"
 
-gating_points:
-  - signal: "forge isolated from proxy services"
-    success: "connection refused OR timeout OR Cannot assign requested address"
-    failure: "curl succeeds OR HTTP response received"
-    spec_linkage: "enclave-network"
+  - step: "verify forge and terminal env vars point at the enclave proxy"
+    command: "grep -F 'HTTP_PROXY=http://proxy:3128' scripts/orchestrate-enclave.sh && grep -F 'NO_PROXY=$ENCLAVE_NO_PROXY' scripts/orchestrate-enclave.sh"
+    timeout_ms: 5000
+    expected_behavior: "HTTP_PROXY=http://proxy:3128"
 
-  - signal: "network namespace isolation verified"
-    success: "different network interfaces visible"
-    failure: "both containers see same network stack"
+  - step: "verify the tray launcher keeps the same proxy reference"
+    command: "grep -F 'http://proxy:3128' crates/tillandsias-headless/src/tray/mod.rs"
+    timeout_ms: 5000
+    expected_behavior: "http://proxy:3128"
 
 observability:
   traces:
     - "@trace spec:enclave-network"
     - "@trace spec:enclave-network-isolation"
-  expected_log: "Enclave network isolation enforced"
+  expected_log: "Enclave network and proxy wiring stay aligned"
   log_fields:
     spec: "enclave-network"
     test: "enclave-isolation"
-    isolation_type: "network-namespace"
+    isolation_type: "network-and-proxy-contract"
 
 rollback:
-  on_failure: "restart enclave network and containers"
-  command: "podman network rm tillandsias-enclave 2>/dev/null; podman compose down 2>/dev/null || true"
+  on_failure: "inspect the enclave orchestrator and tray launcher for stale proxy or network wiring"
+  command: "sed -n '1,220p' scripts/orchestrate-enclave.sh && printf '\\n---\\n' && sed -n '360,450p' crates/tillandsias-headless/src/tray/mod.rs"

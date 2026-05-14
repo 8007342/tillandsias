@@ -9,47 +9,41 @@ annotation-count: 13
 
 ## Purpose
 
-Ensure forge image staleness detection respects version boundaries, always invokes the build script for freshness checks, auto-prunes old images to save disk space, and forward-compatible detects newer forge images from a different binary version.
+Ensure forge image staleness detection is driven by the source hash, always invokes the build script for freshness checks, refreshes human aliases on rebuild, auto-prunes old images to save disk space, and forward-compatible detects newer forge images from a different binary version.
 
 ## Requirements
 
-### Requirement: Version-scoped staleness hash file
+### Requirement: Source-hash staleness file
 
-The forge staleness hash file MUST be versioned to match the current release version. Instead of `.last-build-forge.sha256`, the file MUST be named `.last-build-forge-v<MAJOR>.<MINOR>.<CHANGE>.sha256` where the version is extracted from the `VERSION` file at tray startup.
+The forge staleness hash file MUST be keyed by image name and track the source hash only. The file MUST be named `.last-build-forge.sha256`.
 
-Each version maintains its own hash state. When the VERSION bumps, a new hash file is created — the old one is discarded and does not carry over, preventing false "up to date" results across version upgrades.
+Version bumps MUST NOT force a rebuild when the source hash is unchanged. Human-facing version and latest tags may be refreshed without changing the underlying canonical image.
 
-#### Scenario: Version bump creates new hash file
+#### Scenario: Version bump reuses the same source hash
 
-- **WHEN** the VERSION file changes from `v0.1.97` to `v0.1.98`
-- **THEN** the tray MUST check for `.last-build-forge-v0.1.98.sha256`
-- **AND** the old `.last-build-forge-v0.1.97.sha256` MUST be ignored
-- **AND** the image MUST be rebuilt because the new hash file does not exist
-
-#### Scenario: Same version reuses hash state
-
-- **WHEN** the tray is restarted without a VERSION change
-- **THEN** the staleness hash file MUST retain its version-scoped name
-- **AND** staleness MUST be checked against the same hash, enabling cache hits on rebuild
+- **WHEN** the VERSION file changes but the Containerfile inputs do not
+- **THEN** `.last-build-forge.sha256` MUST still be consulted
+- **AND** the build MUST be skipped if the source hash is unchanged
+- **AND** only the human aliases are refreshed
 
 ### Requirement: Tray always invokes build script for staleness check
 
 The tray handler (`handlers.rs::ensure_forge_ready` or similar) MUST NOT short-circuit the build script when `podman image exists(tillandsias-forge:v<VERSION>)` returns true. Instead, the tray MUST ALWAYS invoke `scripts/build-image.sh forge`, which handles staleness detection internally.
 
-The build script checks if the computed source hash matches the version-scoped `.last-build-forge-v<VERSION>.sha256`. On match, the script exits early (no rebuild). On mismatch, the script rebuilds.
+The build script checks if the computed source hash matches `.last-build-forge.sha256`. On match, the script exits early (no rebuild). On mismatch, the script rebuilds and refreshes aliases.
 
 #### Scenario: Stale source triggers rebuild despite image existing
 
-- **WHEN** `podman image exists(tillandsias-forge:v0.1.98)` returns true
+- **WHEN** `podman image exists(tillandsias-forge:<HASH>)` returns true
 - **BUT** source files under `flake.nix`, `images/default/`, etc. have changed
 - **AND** `scripts/build-image.sh forge` recomputes the source hash
-- **AND** the hash does not match `.last-build-forge-v0.1.98.sha256`
+- **AND** the hash does not match `.last-build-forge.sha256`
 - **THEN** the script MUST rebuild the image
 - **AND** update the hash file
 
 #### Scenario: Fresh image with matching hash skips rebuild
 
-- **WHEN** the image exists AND the source hash matches `.last-build-forge-v0.1.98.sha256`
+- **WHEN** the image exists AND the source hash matches `.last-build-forge.sha256`
 - **THEN** `scripts/build-image.sh forge` MUST exit early with "image up to date"
 - **AND** no rebuild occurs
 - **AND** the attach proceeds with the cached image
@@ -58,8 +52,8 @@ The build script checks if the computed source hash matches the version-scoped `
 
 After a successful forge image build, the tray MUST prune all forge images except:
 
-1. The current-version image (just built)
-2. The latest single other version (as a fallback in case of the current version failing)
+1. The current canonical hash image (just built)
+2. The current human aliases pointing at that canonical image
 
 All other older forge images MUST be deleted via `podman rmi`.
 
@@ -67,27 +61,26 @@ All other older forge images MUST be deleted via `podman rmi`.
 
 - **WHEN** `scripts/build-image.sh forge` completes successfully
 - **THEN** the tray MUST run `podman images tillandsias-forge --format='...'` to list all forge images
-- **AND** delete all but the current version (most recent by timestamp)
-- **AND** one additional prior version (as a safety fallback)
+- **AND** delete all stale tags except the current canonical hash and refreshed aliases
 - **AND** log how many images were pruned
 
 #### Scenario: Pruning saves disk space
 
-- **WHEN** the user has upgraded from v0.1.90 → v0.1.95 → v0.1.98
-- **THEN** the images for v0.1.90 and v0.1.93 MUST be deleted
-- **AND** only v0.1.95 (fallback) and v0.1.98 (current) MUST be retained
+- **WHEN** the user has rebuilt from one canonical hash to the next
+- **THEN** older stale tags MUST be deleted
+- **AND** only the current canonical hash and refreshed aliases MUST be retained
 - **AND** freed disk space MUST be available for other operations
 
 ### Requirement: Forward-compatible newer image detection
 
-If a forge image exists with a version higher than the current `VERSION` (e.g., the user downgraded or the binary is older), the tray MUST detect this and use the newer image with a logged warning.
+If a forge image exists with a newer human alias than the current `VERSION` (e.g., the user downgraded or the binary is older), the tray MUST detect this and use the newer image with a logged warning.
 
 #### Scenario: Newer image is preferred over rebuilding
 
-- **WHEN** the current binary's VERSION is v0.1.96
-- **AND** a forge image `tillandsias-forge:v0.1.98` already exists
-- **THEN** the tray MUST use the v0.1.98 image
-- **AND** emit a `warn!` log: "Using newer forge image v0.1.98 (binary is v0.1.96)"`
+- **WHEN** the current binary's VERSION is an older CalVer release
+- **AND** a forge image with a newer human alias already exists
+- **THEN** the tray MUST use the existing canonical image
+- **AND** emit a `warn!` log naming the newer alias and the older binary version
 - **AND** MUST NOT rebuild or attempt to downgrade
 
 #### Scenario: Forward compatibility preserves functionality
@@ -99,27 +92,30 @@ If a forge image exists with a version higher than the current `VERSION` (e.g., 
 
 ### Requirement: Staleness detection in init command
 
-The `tillandsias --init` command MUST apply the same version-scoped staleness and pruning logic when building the initial forge image.
+The `tillandsias --init` command MUST apply the same source-hash staleness and pruning logic when building the initial forge image.
 
 #### Scenario: Init command builds fresh forge with staleness check
 
 - **WHEN** `tillandsias --init` is run for the first time
-- **THEN** the forge image build MUST be invoked with version-scoped hash detection
+- **THEN** the forge image build MUST be invoked with source-hash detection
 - **AND** subsequent `--init` runs with no source change MUST skip the rebuild
 - **AND** old images from failed prior attempts MUST be pruned
 
 ## Sources of Truth
 
-- `cheatsheets/build/podman-image-management.md` — image listing, deletion, version tag patterns
-- `cheatsheets/runtime/version-file-conventions.md` — VERSION file structure and semantic versioning in scripts
+- `scripts/build-image.sh` — source-hash freshness checks, alias refresh, and prune behavior
+- `crates/tillandsias-core/src/config.rs` — the traced forge staleness config surface
+- `crates/tillandsias-core/src/image_builder.rs` — the image builder test seam and staleness harness
+- `cheatsheets/build/podman-image-management.md` — image listing, deletion, alias refresh patterns
+- `cheatsheets/runtime/version-file-conventions.md` — VERSION file structure and human-facing alias semantics in scripts
 - `cheatsheets/build/nix-flake-caching.md` — reproducible hash computation for Nix builds
 
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
+- `litmus:forge-staleness-shape`
 
 Gating points:
-- Stale entries are cleaned; no persistent outdated state
-- Deterministic and reproducible: test results do not depend on prior state
-- Falsifiable: failure modes (leaked state, persistence) are detectable
+- Staleness checks remain source-hash keyed and deterministic
+- Human aliases refresh without changing the canonical hash contract
+- Old forge images continue to be pruned after successful rebuilds

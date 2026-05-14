@@ -6,7 +6,7 @@
 active
 
 ## Purpose
-TBD - created by archiving change cli-mode. Update Purpose after archive.
+Define the interactive CLI contract for the shipped Tillandsias binary. The binary is a compiled runtime orchestrator: it may embed static assets and metadata, but it MUST NOT depend on repository shell scripts for user-facing runtime behavior.
 ## Requirements
 ### Requirement: CLI mode launches container from terminal
 Running `tillandsias <path>` SHALL launch an interactive container for the project at the given path, with user-friendly terminal output.
@@ -22,6 +22,21 @@ Running `tillandsias <path>` SHALL launch an interactive container for the proje
 #### Scenario: Help flag
 - **WHEN** the user runs `tillandsias --help`
 - **THEN** usage information SHALL be printed and the process SHALL exit
+
+### Requirement: Runtime paths are compiled Rust
+The user-facing runtime paths `--init`, `--status-check`, `--github-login`, and `--opencode` SHALL be implemented in compiled Rust and SHALL invoke Podman or other stable Unix tools directly. They SHALL NOT shell out to repository scripts during normal runtime operation.
+
+#### Scenario: Init uses direct Podman orchestration
+- **WHEN** the user runs `tillandsias --init`
+- **THEN** the binary SHALL construct and execute Podman commands directly
+- **AND** it SHALL use Containerfiles as the image recipe source
+- **AND** it SHALL not call `scripts/build-image.sh`
+
+#### Scenario: Status check uses direct runtime orchestration
+- **WHEN** the user runs `tillandsias --status-check`
+- **THEN** the binary SHALL orchestrate the enclave stack directly from Rust
+- **AND** it SHALL use Podman commands plus the embedded health probe
+- **AND** it SHALL not call `scripts/orchestrate-enclave.sh`
 
 ### Requirement: Image selection flag
 The `--image` flag SHALL allow selecting which container image to use.
@@ -81,9 +96,11 @@ CLI mode SHALL use the same security hardening flags as tray mode.
 - **AND** logs SHALL continue to print to the terminal
 
 #### Scenario: Path attach spawns tray and runs foreground
-- **WHEN** the user runs `tillandsias /some/path` in a graphical session
+- **WHEN** the user runs `tillandsias /some/path --opencode` in a graphical session
 - **THEN** the tray icon SHALL appear
+- **AND** the full enclave stack SHALL launch, including proxy, git mirror, and inference
 - **AND** the OpenCode TUI SHALL run in the terminal foreground
+- **AND** `--prompt <text>` MAY be provided as an optional initial session seed
 - **AND** when the user exits OpenCode, the parent process SHALL return control to the shell with status 0
 - **AND** the tray SHALL remain running
 
@@ -118,15 +135,30 @@ Every CLI path that may have started enclave infrastructure MUST install a SIGIN
 - `cheatsheets/runtime/cmd.md` — Cmd reference and patterns
 - `cheatsheets/languages/bash.md` — Bash reference and patterns
 
+## Litmus Chain
+
+Smallest actionable boundary:
+- `cargo test -p tillandsias-headless opencode_args_mount_workspace_and_prompt status_check_args_probe_proxy_git_and_inference_from_forge shutdown_poll_backoff_doubles_until_capped -- --exact`
+
+Sibling tests:
+- `cargo test -p tillandsias-headless podman_runtime_blocker_matches_known_health_failures -- --exact`
+- `cargo test -p tillandsias-headless --lib`
+
+Scoped follow-up:
+```bash
+./build.sh --ci-full --install --filter cli-mode --strict cli-mode
+./build.sh --ci-full --install --strict-all
+```
+
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
+- `litmus:cli-mode-shape`
 
 Gating points:
-- CLI interface is stateless; no persistent state between invocations
-- Deterministic and reproducible: test results do not depend on prior state
-- Falsifiable: failure modes (leaked state, persistence) are detectable
+- CLI argument construction remains direct and deterministic
+- The attach/status-check/shutdown seams stay testable in isolation
+- Failure modes are falsifiable through unit-level command-shape checks
 
 ## Observability
 

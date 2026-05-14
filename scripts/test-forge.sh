@@ -6,6 +6,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/common.sh"
+require_podman
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 CONTAINER_NAME="tillandsias-diagnostic-forge"
 DEFAULT_VERSION="$(tr -d '[:space:]' < "$PROJECT_ROOT/VERSION")"

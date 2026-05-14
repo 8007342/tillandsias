@@ -1,49 +1,30 @@
-# Cheatsheet Methodology Evolution Spec
-
-@trace spec:cheatsheet-methodology-evolution
+<!-- @tombstone superseded:methodology/cheatsheets.yaml+methodology/provenance.yaml+spec-traceability -->
+# cheatsheet-methodology-evolution Specification (Tombstone)
 
 ## Status
 
-suspended
+obsolete
 
-## Why This Spec
+## Deprecation Notice
 
-Multiple @trace annotations reference this spec name, but the spec was never formally created during OpenSpec artifact generation. This is a placeholder to eliminate ghost trace errors during validation.
+This placeholder spec has been retired. Its intended live behavior is now
+covered by methodology:
 
-## Requirements
+- `methodology/cheatsheets.yaml` for cheatsheet provenance, compaction, and CRDT-like cache rules
+- `methodology/provenance.yaml` for provenance claims and evidence bundles
+- `spec-traceability` for trace, cheatsheet, and litmus-chain references
 
-### Requirement: Spec is placeholder — RFC 2119 revision pending
+There is no backwards-compatibility commitment.
 
-This spec is created retroactively as part of the traces-audit refactor. The placeholder text below SHALL be replaced with formal RFC 2119 requirements once usage patterns are confirmed.
+## Historical Context
 
-**Pending clarification:** Actual requirements are to be determined based on usage patterns in `@trace spec:cheatsheet-methodology-evolution` annotations. Upon clarification, all requirement statements MUST use RFC 2119 keywords (MUST, SHOULD, MAY, MUST_NOT, SHOULD_NOT).
+This spec existed as a retrofit placeholder while the cheatsheet methodology was
+being distilled. The real rules were then moved into methodology and related
+specs. Keeping this tombstone preserves the history without pretending there is a
+separate live capability here.
 
-## Implementation Notes
+## Replacement References
 
-This spec is created retroactively as part of the traces-audit refactor. It may represent:
-- An abandoned initiative that was never fully spec'd
-- A feature whose spec was lost or mishandled
-- A trace annotation that should have been corrected instead
-
-## Sources of Truth
-
-- `cheatsheets/observability/cheatsheet-metrics.md` — Cheatsheet Metrics reference and patterns
-- `cheatsheets/runtime/logging-levels.md` — Logging Levels reference and patterns
-
-## Litmus Tests
-
-Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
-
-Gating points:
-- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
-- Deterministic and reproducible: test results do not depend on prior state
-- Falsifiable: failure modes (leaked resources, persistence) are detectable
-
-## Observability
-
-```bash
-git log --all --grep="cheatsheet-methodology-evolution" --oneline
-git grep -n "@trace spec:cheatsheet-methodology-evolution"
-```
-
+- `methodology/cheatsheets.yaml`
+- `methodology/provenance.yaml`
+- `openspec/specs/spec-traceability/spec.md`

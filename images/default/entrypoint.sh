@@ -12,7 +12,7 @@ if [ "$MAINTENANCE" = "1" ]; then
 fi
 
 case "${TILLANDSIAS_AGENT:-claude}" in
-    # @trace spec:environment-runtime, spec:opencode-web-session
+    # @trace spec:environment-runtime, spec:browser-isolation-tray-integration
     opencode-web) exec /usr/local/bin/entrypoint-forge-opencode-web.sh "$@" ;;
     opencode) exec /usr/local/bin/entrypoint-forge-opencode.sh "$@" ;;
     claude)   exec /usr/local/bin/entrypoint-forge-claude.sh "$@" ;;

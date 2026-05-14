@@ -224,3 +224,55 @@ workflow_integration:
     - persistent_litmus_failure: "Test was passing, now fails (potential regression)"
     - flakiness_detected: "Same test produces different results"
     - mutation_testing_failure: "Litmus test doesn't actually touch the code"
+
+execution_contract:
+  description: >
+    CI commands are chaining primitives. They should be scoped, fail-fast when
+    asked, and emit the smallest actionable boundary necessary for the next
+    automation step.
+
+  phase_chain:
+    ci: "pre-build gate only"
+    ci_full: "pre-build gate -> post-build smoke -> runtime residual litmus"
+    install_with_ci_full: "same chain as ci_full, then install"
+    scope_carryover: "A spec ladder or filter applies to every litmus phase in the chain."
+    canonical_litmus_chain: >
+      1) smallest focused litmus
+      2) sibling litmus set
+      3) `./build.sh --ci --strict --filter <spec-id(s)>`
+      4) `./build.sh --ci-full --install --strict --filter <spec-id(s)>`
+      5) `tillandsias --init --debug`
+
+  scoped_execution:
+    spec_shorthand: >
+      `--spec=spec-id` is the caller-facing shorthand for a scoped ladder. It
+      fills `--filter` and `--strict` with the same spec ID when those flags are
+      not already provided explicitly, so agents can say "fix SPEC-X" and let
+      the chain derive the minimal-to-full verification ladder automatically.
+    filter_flag: >
+      `--filter=spec-a:spec-b` limits litmus execution to the named spec IDs.
+    strict_flag: >
+      `--strict=spec-a:spec-b` fails fast on the named spec IDs; if no explicit
+      filter is provided, the strict list becomes the active filter set.
+    compact_output: >
+      Compact mode suppresses successful litmus chatter while preserving FAIL
+      lines, spec IDs, test IDs, trace markers, and summary counts.
+    stop_on_failure: >
+      Scoped runs SHOULD stop at the first relevant failure boundary instead of
+      continuing to unrelated specs or later phases.
+    chain_reference: >
+      Each updated or newly added spec SHOULD include a `## Litmus Chain`
+      subsection that names the shortest actionable boundary, the sibling tests,
+      and the canonical `--filter` / `--strict` command pair for that spec set.
+
+  exit_code_contract:
+    0: "all requested checks passed"
+    1: "semantic failure in a requested check"
+    2: "invalid arguments or missing precondition"
+    20: "strict-scoped litmus failure"
+    21: "strict-scoped litmus missing boundary or test file"
+
+  log_contract:
+    failure_line: "spec=<spec-id> test=<test-id> reason=<smallest actionable cause>"
+    trace_line: "@trace spec:<spec-id>"
+    summary_line: "state the failing phase, the failing spec set, and the exit code"

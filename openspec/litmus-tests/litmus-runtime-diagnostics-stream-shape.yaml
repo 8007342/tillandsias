@@ -1,0 +1,29 @@
+# @trace spec:runtime-diagnostics-stream
+name: litmus:runtime-diagnostics-stream-shape
+spec: runtime-diagnostics-stream
+phase: pre-build
+description: Verify runtime diagnostics stream hooks stay attached to stderr-facing scripts
+severity: medium
+
+preconditions:
+  - workspace contains images/default/lib-common.sh
+  - workspace contains images/git/post-receive-hook.sh
+  - shell utilities are available in PATH
+
+critical_path:
+  - step: "verify stream annotations and stderr capture hooks"
+    command: "grep -F 'runtime-diagnostics-stream' images/default/lib-common.sh && grep -F 'runtime-diagnostics-stream' images/git/post-receive-hook.sh && grep -F 'always echo to stderr' images/git/post-receive-hook.sh"
+    timeout_ms: 5000
+    expected_behavior: "runtime-diagnostics-stream"
+
+observability:
+  traces:
+    - "@trace spec:runtime-diagnostics-stream"
+  expected_log: "Stderr-facing runtime diagnostics stream hooks stay in place"
+  log_fields:
+    spec: "runtime-diagnostics-stream"
+    test: "runtime-diagnostics-stream-shape"
+
+rollback:
+  on_failure: "inspect images/default/lib-common.sh and images/git/post-receive-hook.sh for stream drift"
+  command: "sed -n '110,130p' images/default/lib-common.sh && sed -n '1,60p' images/git/post-receive-hook.sh"

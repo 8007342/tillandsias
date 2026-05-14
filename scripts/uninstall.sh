@@ -19,6 +19,17 @@ else
     CACHE_DIR="$HOME/.cache/tillandsias"
 fi
 
+SERVICE_USER="tillandsias"
+SERVICE_GROUP="tillandsias"
+SERVICE_HOME="/var/lib/tillandsias"
+SYSTEMD_USER_UNIT_DIR="/etc/systemd/user"
+SYSUSERS_DIR="/etc/sysusers.d"
+TMPFILES_DIR="/etc/tmpfiles.d"
+IS_ROOT=false
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    IS_ROOT=true
+fi
+
 WIPE=false
 [[ "${1:-}" == "--wipe" ]] && WIPE=true
 
@@ -36,6 +47,13 @@ echo ""
 [ -d "$DATA_DIR" ] && echo "    - $DATA_DIR/ (app data)"
 [ -d "$CONFIG_DIR" ] && echo "    - $CONFIG_DIR/ (settings)"
 [ -d "$LOG_DIR" ] && echo "    - $LOG_DIR/ (logs)"
+if [[ "$IS_ROOT" == true ]]; then
+    [ -f "$SYSTEMD_USER_UNIT_DIR/tillandsias.service" ] && echo "    - $SYSTEMD_USER_UNIT_DIR/tillandsias.service (systemd user service)"
+    [ -f "$SYSUSERS_DIR/tillandsias.conf" ] && echo "    - $SYSUSERS_DIR/tillandsias.conf (service account sysusers entry)"
+    [ -f "$TMPFILES_DIR/tillandsias.conf" ] && echo "    - $TMPFILES_DIR/tillandsias.conf (service account tmpfiles entry)"
+    [ -d "$SERVICE_HOME" ] && echo "    - $SERVICE_HOME/ (service account home/state)"
+    [ -f "/usr/local/bin/tillandsias" ] && echo "    - /usr/local/bin/tillandsias (system binary)"
+fi
 if [[ "$WIPE" == true ]]; then
     [ -d "$CACHE_DIR" ] && echo "    - $CACHE_DIR/ (cache)"
     echo "    - tillandsias-forge:* container images"
@@ -60,6 +78,25 @@ rm -rf "$CONFIG_DIR"
 # ── Remove logs ───────────────────────────────────────────────
 rm -rf "$LOG_DIR"
 
+# ── Remove service account runtime ────────────────────────────
+if [[ "$IS_ROOT" == true ]]; then
+    if command -v runuser >/dev/null 2>&1; then
+        SERVICE_UID="$(id -u "$SERVICE_USER" 2>/dev/null || echo "")"
+        if [[ -n "$SERVICE_UID" ]]; then
+            runuser -u "$SERVICE_USER" -- env HOME="$SERVICE_HOME" XDG_RUNTIME_DIR="/run/user/$SERVICE_UID" \
+                systemctl --user disable --now tillandsias.service podman.socket 2>/dev/null || true
+        fi
+    fi
+    loginctl disable-linger "$SERVICE_USER" 2>/dev/null || true
+fi
+
+# ── Remove service-account unit files and policy ──────────────
+if [[ "$IS_ROOT" == true ]]; then
+    rm -f "$SYSTEMD_USER_UNIT_DIR/tillandsias.service"
+    rm -f "$SYSUSERS_DIR/tillandsias.conf"
+    rm -f "$TMPFILES_DIR/tillandsias.conf"
+fi
+
 # ── Linux desktop cleanup ─────────────────────────────────────
 rm -f "$HOME/.local/share/applications/tillandsias.desktop"
 rm -f "$HOME/.local/share/icons/hicolor/32x32/apps/tillandsias.png"
@@ -71,6 +108,13 @@ update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 # ── macOS desktop cleanup ─────────────────────────────────────
 rm -rf "$HOME/Applications/Tillandsias.app"
 rm -f "$HOME/Library/LaunchAgents/com.tillandsias.tray.plist"
+
+if [[ "$IS_ROOT" == true ]]; then
+    rm -f "/usr/local/bin/tillandsias" "/usr/local/bin/tillandsias-uninstall"
+    userdel -r "$SERVICE_USER" 2>/dev/null || true
+    groupdel "$SERVICE_GROUP" 2>/dev/null || true
+    rm -rf "$SERVICE_HOME"
+fi
 
 if [[ "$WIPE" == true ]]; then
     # Remove cache (container images, opencode, openspec, secrets)

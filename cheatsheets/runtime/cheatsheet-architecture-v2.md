@@ -19,7 +19,7 @@ pull_recipe: see-section-pull-on-demand
 
 # Cheatsheet architecture (v2 — fine-grained, MCP-queryable)
 
-@trace spec:agent-cheatsheets, spec:cheatsheet-methodology-evolution
+@trace spec:cheatsheet-tooling, spec:cheatsheet-source-layer, spec:cheatsheets-license-tiered, spec:spec-traceability
 
 ## Provenance
 

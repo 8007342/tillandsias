@@ -42,6 +42,25 @@ ghost_warnings=0
 zero_trace_warnings=0
 warnings=0
 
+normalize_spec_list() {
+    local raw="${1:-}"
+    raw="${raw//:/ }"
+    raw="${raw//,/ }"
+    for item in $raw; do
+        [[ -n "$item" ]] && printf '%s\n' "$item"
+    done | awk '!seen[$0]++'
+}
+
+spec_is_ignored() {
+    local needle="$1"
+    local raw_list="${TILLANDSIAS_OPEN_SPEC_IGNORE:-${TILLANDSIAS_STRICT_IGNORE_SPECS:-}}"
+    [[ -z "$raw_list" ]] && return 1
+    while IFS= read -r item; do
+        [[ "$item" == "$needle" ]] && return 0
+    done < <(normalize_spec_list "$raw_list")
+    return 1
+}
+
 # --- 1. Ghost trace check ---------------------------------------------------
 # Scan staged files for @trace spec:<name> where the spec doesn't exist.
 # Per methodology/ci.yaml: Ghost traces are BLOCKING errors.
@@ -140,6 +159,10 @@ staleness_check() {
 
         local change_name
         change_name="$(basename "$change_dir")"
+
+        if spec_is_ignored "$change_name"; then
+            continue
+        fi
 
         # Extract created: date (YYYY-MM-DD format)
         local created_date

@@ -1,6 +1,6 @@
 # <Tool/Language Name>
 
-@trace spec:agent-source-of-truth
+@trace spec:cheatsheet-tooling
 
 **Version baseline**: <version pinned in the forge>  
 **Use when**: <one-line elevator pitch — the situation this cheatsheet covers>

@@ -1,0 +1,89 @@
+# @trace spec:dev-build, spec:podman-container-spec, spec:podman-container-handle, spec:podman-orchestration, spec:observability-convergence
+name: litmus:headless-init-status-check-command-shape
+spec: dev-build
+phase: post-build
+description: Verify the installed binary emits the expected direct podman argv for headless init plus status-check
+severity: high
+backend: fake
+
+preconditions:
+  - podman wrapper is available via scripts/run-litmus-test.sh
+  - a Tillandsias binary has been installed to ~/.local/bin/tillandsias or provided via TILLANDSIAS_STATUS_CHECK_BIN
+
+critical_path:
+  - step: "clear previous direct podman call log"
+    command: "rm -f target/litmus-podman/headless-init-status-check.calls.log"
+    timeout_ms: 2000
+
+  - step: "verify installed binary is available"
+    command: 'STATUS_BIN="${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}"; test -x "$STATUS_BIN" && printf "%s\n" "$STATUS_BIN"'
+    timeout_ms: 2000
+
+  - step: "run headless init plus status-check smoke against fake podman"
+    command: 'STATUS_BIN="${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}"; HOME="${TMPDIR:-/tmp}/tillandsias-headless-init-status-check-home" PATH="$(pwd)/target/litmus-runtime/bin:$PATH" LITMUS_PODMAN_MODE=fake LITMUS_PODMAN_CALLS_FILE=target/litmus-podman/headless-init-status-check.calls.log TILLANDSIAS_ROOT="$(pwd)" timeout 180 "$STATUS_BIN" --headless --init --debug --status-check > target/litmus-podman/headless-init-status-check.log 2>&1'
+    timeout_ms: 180000
+
+  - step: "assert proxy image lookup happened"
+    command: "grep -F 'image exists tillandsias-proxy:v' target/litmus-podman/headless-init-status-check.calls.log"
+    timeout_ms: 2000
+
+  - step: "assert git image lookup happened"
+    command: "grep -F 'image exists tillandsias-git:v' target/litmus-podman/headless-init-status-check.calls.log"
+    timeout_ms: 2000
+
+  - step: "assert inference image lookup happened"
+    command: "grep -F 'image exists tillandsias-inference:v' target/litmus-podman/headless-init-status-check.calls.log"
+    timeout_ms: 2000
+
+  - step: "assert chromium core image lookup happened"
+    command: "grep -F 'image exists tillandsias-chromium-core:v' target/litmus-podman/headless-init-status-check.calls.log"
+    timeout_ms: 2000
+
+  - step: "assert chromium framework image lookup happened"
+    command: "grep -F 'image exists tillandsias-chromium-framework:v' target/litmus-podman/headless-init-status-check.calls.log"
+    timeout_ms: 2000
+
+  - step: "assert forge image lookup happened"
+    command: "grep -F 'image exists tillandsias-forge:v' target/litmus-podman/headless-init-status-check.calls.log"
+    timeout_ms: 2000
+
+  - step: "assert enclave network lookup happened"
+    command: "grep -F 'network exists tillandsias-enclave' target/litmus-podman/headless-init-status-check.calls.log"
+    timeout_ms: 2000
+
+  - step: "assert stale containers were cleaned up first"
+    command: "grep -F 'rm -f tillandsias-proxy' target/litmus-podman/headless-init-status-check.calls.log && grep -F 'rm -f tillandsias-git-' target/litmus-podman/headless-init-status-check.calls.log && grep -F 'rm -f tillandsias-inference' target/litmus-podman/headless-init-status-check.calls.log && grep -F 'rm -f tillandsias-tillandsias-forge' target/litmus-podman/headless-init-status-check.calls.log"
+    timeout_ms: 2000
+
+  - step: "assert proxy container run shape"
+    command: "grep -F 'run --detach --name tillandsias-proxy --hostname proxy --network tillandsias-enclave --ip 10.0.42.2' target/litmus-podman/headless-init-status-check.calls.log"
+    timeout_ms: 2000
+
+  - step: "assert git container run shape"
+    command: "grep -F 'run --detach --rm --name tillandsias-git-' target/litmus-podman/headless-init-status-check.calls.log && grep -F 'tillandsias-git:v' target/litmus-podman/headless-init-status-check.calls.log && grep -F '/usr/bin/git daemon --verbose --listen=0.0.0.0 --base-path=/var/lib/git' target/litmus-podman/headless-init-status-check.calls.log"
+    timeout_ms: 2000
+
+  - step: "assert inference container run shape"
+    command: "grep -F 'run --detach --rm --name tillandsias-inference --hostname inference --network-alias inference --network tillandsias-enclave --ip 10.0.42.4' target/litmus-podman/headless-init-status-check.calls.log && grep -F 'tillandsias-inference:v' target/litmus-podman/headless-init-status-check.calls.log && grep -F '/usr/bin/ollama serve' target/litmus-podman/headless-init-status-check.calls.log"
+    timeout_ms: 2000
+
+  - step: "assert forge status-check container run shape"
+    command: "grep -F 'run --name tillandsias-tillandsias-forge --hostname forge-tillandsias --network tillandsias-enclave' target/litmus-podman/headless-init-status-check.calls.log && grep -F -- '--entrypoint /bin/bash tillandsias-forge:v' target/litmus-podman/headless-init-status-check.calls.log && grep -F 'check_inference()' target/litmus-podman/headless-init-status-check.calls.log && grep -F 'echo \"[status-check] forge online\"' target/litmus-podman/headless-init-status-check.calls.log"
+    timeout_ms: 2000
+
+observability:
+  traces:
+    - "@trace spec:dev-build"
+    - "@trace spec:podman-container-spec"
+    - "@trace spec:podman-container-handle"
+    - "@trace spec:podman-orchestration"
+    - "@trace spec:observability-convergence"
+  expected_log: "Direct podman argv recorded for headless init plus status-check"
+  log_fields:
+    spec: "dev-build"
+    test: "headless-init-status-check-command-shape"
+    backend: "fake"
+
+rollback:
+  on_failure: "inspect target/litmus-podman/headless-init-status-check.log and target/litmus-podman/headless-init-status-check.calls.log, then rerun with VERBOSE=1 or TILLANDSIAS_STATUS_CHECK_BIN pointing at the installed binary"
+  command: "sed -n '1,200p' target/litmus-podman/headless-init-status-check.log && printf '\\n---\\n' && sed -n '1,200p' target/litmus-podman/headless-init-status-check.calls.log"

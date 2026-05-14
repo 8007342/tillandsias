@@ -104,20 +104,6 @@ The orchestration layer SHALL provide a launch profile that runs web-mode contai
 - **AND** contains neither `-i` nor `-t` nor `--rm`
 - **AND** still contains `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`
 
-### Requirement: Loopback-bound single-port publish for web mode
-- **ID**: podman-orchestration.web.loopback-port-publish@v1
-- **Modality**: MUST
-- **Measurable**: true
-- **Invariants**: [podman-orchestration.invariant.port-binding-loopback-only]
-
-The orchestration layer SHALL publish exactly one container port to exactly one host port bound to `127.0.0.1` when the profile is web-mode.
-
-#### Scenario: Publish arg is loopback-scoped
-- **WHEN** web-mode launch arg assembly runs with allocated host port `P`
-- **THEN** the arg list contains `-p 127.0.0.1:<P>:4096`
-- **AND** no bare `<P>:4096` form appears
-- **AND** no `0.0.0.0` or `::` binding appears
-
 ### Requirement: Deterministic forge-container name
 - **ID**: podman-orchestration.container.deterministic-forge-name@v1
 - **Modality**: MUST
@@ -132,6 +118,25 @@ The orchestration layer SHALL name persistent OpenCode Web containers exactly `t
 - **AND** the genus still appears in the `ContainerInfo` record for UI/iconography purposes
 - **AND** the name never collides with a concurrently-running `tillandsias-my-app-web` static-httpd container
 
+### Requirement: Launchers build argv directly
+- **ID**: podman-orchestration.launch.direct-argv@v1
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [podman-orchestration.invariant.launch-argv-no-shell-join]
+Tillandsias launchers SHALL construct Podman argv directly and pass them to
+`Command::new("podman")` or an equivalent terminal-emulator wrapper. They
+MUST NOT build shell-escaped command strings for runtime container launch.
+
+#### Scenario: Detached web launch uses argv
+- **WHEN** the tray launches a persistent OpenCode Web container
+- **THEN** the launch path SHALL pass a direct argv vector to Podman
+- **AND** no `sh -lc` or equivalent shell string join SHALL be used for the runtime path
+
+#### Scenario: Interactive launch uses argv
+- **WHEN** the tray launches OpenCode, Claude, or Maintenance in a terminal
+- **THEN** the terminal emulator SHALL receive `podman` plus argv directly
+- **AND** the command SHALL not be re-parsed by a shell layer
+
 ## Invariants
 
 ### Invariant: Security flags are non-negotiable
@@ -142,11 +147,6 @@ The orchestration layer SHALL name persistent OpenCode Web containers exactly `t
 ### Invariant: FD table is minimal before exec()
 - **ID**: podman-orchestration.invariant.fd-table-minimal-before-exec
 - **Expression**: `pre_exec_hook() ENSURES FDs_0_to_2_open AND FDs >= 3_are_closed_before_podman_exec()`
-- **Measurable**: true
-
-### Invariant: Port binding is loopback-only
-- **ID**: podman-orchestration.invariant.port-binding-loopback-only
-- **Expression**: `web_profile.publish_arg MATCHES 127.0.0.1:<PORT>:4096 AND NOT [0.0.0.0, ::, bare_<PORT>]`
 - **Measurable**: true
 
 ### Invariant: Forge container name has no genus suffix
@@ -164,6 +164,11 @@ The orchestration layer SHALL name persistent OpenCode Web containers exactly `t
 - **Expression**: `web_profile.build_podman_args() CONTAINS [--cap-drop=ALL, --security-opt=no-new-privileges, --userns=keep-id] && INDEPENDENT_OF_TTY_FLAGS`
 - **Measurable**: true
 
+### Invariant: Launch argv is not shell-joined
+- **ID**: podman-orchestration.invariant.launch-argv-no-shell-join
+- **Expression**: `runtime_launch_path USES argv_directly AND NOT shell_escaped_join_for_podman_run`
+- **Measurable**: true
+
 ### Invariant: No slirp4netns on Podman 5.0+
 - **ID**: podman-orchestration.invariant.no-slirp-on-podman5
 - **Expression**: `podman_version >= 5.0 AND rootless_container => pasta_backend (NOT slirp4netns)`
@@ -176,11 +181,28 @@ The orchestration layer SHALL name persistent OpenCode Web containers exactly `t
 
 ## Litmus Tests
 
+## Litmus Chain
+
+When iterating on podman orchestration, start with the exact failure boundary
+and widen only as needed:
+
+1. `./scripts/run-litmus-test.sh podman-path-availability`
+1. `./scripts/run-litmus-test.sh podman-orchestration`
+1. `./scripts/run-litmus-test.sh podman-container-spec`
+1. `./scripts/run-litmus-test.sh podman-container-handle`
+1. `./scripts/run-litmus-test.sh security-privacy-isolation`
+1. `./build.sh --ci --strict --filter podman-container-spec:podman-container-handle:podman-orchestration:security-privacy-isolation`
+1. `./build.sh --ci-full --install --strict --filter podman-container-spec:podman-container-handle:podman-orchestration:security-privacy-isolation:default-image`
+1. `tillandsias --init --debug`
+
 The following litmus tests validate podman-orchestration requirements:
 
-- `litmus-enclave-isolation.yaml` — Validates security-hardened container defaults (Req: podman-orchestration.container.security-hardened-defaults@v1)
+- `litmus-podman-path-availability.yaml` — Verifies podman is installed on PATH before stack scripts run (Req: podman-orchestration.*)
+- `litmus-enclave-isolation.yaml` — Validates enclave network and proxy wiring contract (Req: enclave-network.*)
 - `litmus-fd-table-minimal.yaml` — Validates FD sanitization before container launch (Req: podman-orchestration.container.fuse-fd-sanitization@v1)
-- `litmus-port-binding-loopback.yaml` — Validates loopback-scoped port publish for web mode (Req: podman-orchestration.web.loopback-port-publish@v1)
+- `litmus-podman-container-spec-shape.yaml` — Validates the typed spec builder and immutable defaults (Reqs: podman-container-spec.*)
+- `litmus-podman-container-handle-shape.yaml` — Validates the runtime handle snapshot shape (Reqs: podman-container-handle.*)
+- `litmus-podman-web-launch-profile.yaml` — Validates detached web launch profile and secure mount strategy (Reqs: podman-orchestration.web.detached-launch-profile@v1, podman-orchestration.mounts.secure-volume-strategy@v1)
 - `litmus-container-naming.yaml` — Validates deterministic forge-container naming (Req: podman-orchestration.container.deterministic-forge-name@v1)
 
 See `openspec/litmus-bindings.yaml` for full binding definitions.
@@ -189,6 +211,8 @@ See `openspec/litmus-bindings.yaml` for full binding definitions.
 
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns
 - `cheatsheets/utils/podman-containers.md` — Podman Containers reference and patterns
+- `openspec/specs/podman-container-spec/spec.md` — Typed container spec builder
+- `openspec/specs/podman-container-handle/spec.md` — Container handle snapshot and identity
 
 ## Observability
 

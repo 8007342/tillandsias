@@ -1,0 +1,31 @@
+# @trace spec:tray-icon-lifecycle
+name: litmus:tray-icon-initialization
+spec: tray-icon-lifecycle
+phase: pre-build
+description: Verify the initial Pup state and the Mature/Dried enum names remain in use
+severity: medium
+
+preconditions:
+  - workspace contains crates/tillandsias-core
+  - cargo is available in PATH
+
+critical_path:
+  - step: "run the Pup initialization test"
+    command: "cargo test -p tillandsias-core tray_state_new_starts_with_pup_icon -- --exact"
+    timeout_ms: 120000
+
+  - step: "verify the renamed tray icon variants are present"
+    command: "grep -F 'TrayIconState::Mature' crates/tillandsias-core/src/state.rs && grep -F 'TrayIconState::Dried' crates/tillandsias-core/src/state.rs && ! rg -n 'TrayIconState::Base|TrayIconState::Decay' crates/tillandsias-core/src crates/tillandsias-headless/src/tray/mod.rs"
+    timeout_ms: 5000
+
+observability:
+  traces:
+    - "@trace spec:tray-icon-lifecycle"
+  expected_log: "Tray icon starts in Pup and the enum uses Mature/Dried naming"
+  log_fields:
+    spec: "tray-icon-lifecycle"
+    test: "tray-icon-initialization"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-core/src/state.rs for initial-state or variant-name drift"
+  command: "sed -n '220,330p' crates/tillandsias-core/src/state.rs"

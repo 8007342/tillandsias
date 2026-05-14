@@ -42,7 +42,7 @@ The router (Caddy) MUST:
 4. 302-redirect to `/` to load the app
 5. Immediately evict the OTP from memory (single-use — not replayable)
 
-All subsequent requests to `<project>.opencode.localhost:8080/` MUST require a valid session cookie (unless the OTP POST is in flight).
+All subsequent requests to `opencode.<project>.localhost/` MUST require a valid session cookie (unless the OTP POST is in flight).
 
 #### Scenario: Browser form submission
 - **WHEN** the embedded form auto-submits to the router's `_auth/login` endpoint

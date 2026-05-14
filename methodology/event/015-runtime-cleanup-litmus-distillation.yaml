@@ -1,0 +1,92 @@
+trace: spec:methodology-accountability, spec:observability-convergence
+
+event_id: methodology.event.015-runtime-cleanup-litmus-distillation@v1
+status: triaged
+observed_at: "2026-05-07T00:00:00Z"
+reporter: "codex"
+summary: >
+  The runtime cleanup litmus tests had become wrapper-shaped: init-log cleanup
+  depended on tray shutdown language, and socket cleanup depended on an always
+  running tray process plus pkill-based teardown. The cleanup contracts should
+  be exercised by the actual command boundary and then measured as leftover
+  state, so the tests can stay direct and the cleanup signal stays meaningful.
+
+observed_signal:
+  description: >
+    `litmus:init-log-cleanup` and `litmus:socket-cleanup` were both framed
+    around tray lifecycle assumptions instead of the command or stack boundary
+    that actually produces the observable cleanup state.
+  signal_type: "litmus"
+
+expected_model:
+  description: >
+    Cleanup litmus should run the real boundary command, then assert the
+    absence of residual files or sockets afterward. The test should not depend
+    on a live tray process as an ambient prerequisite.
+  source_refs:
+    - openspec/specs/init-command/spec.md
+    - openspec/specs/init-incremental-builds/spec.md
+    - openspec/specs/secrets-management/spec.md
+    - openspec/specs/native-secrets-store/spec.md
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - runtime_cleanup_should_bind_to_real_lifecycle_boundary
+    - tray_wrapper_should_not_be_the_cleanup_contract
+    - residual_state_should_be_measured_after_completion
+  spec_requirement_ids:
+    - init-command.debug_log_capture
+    - secrets-management.token_file_infrastructure
+    - native-secrets-store.host_only_keyring_api_surface
+  litmus_ids:
+    - litmus:init-log-cleanup
+    - litmus:socket-cleanup
+  cheatsheet_refs:
+    - cheatsheets/test/podman-testing.md
+    - cheatsheets/runtime/podman-service-testing.md
+
+affected_artifacts:
+  specs:
+    - openspec/specs/init-command/spec.md
+    - openspec/specs/init-incremental-builds/spec.md
+    - openspec/specs/native-secrets-store/spec.md
+    - openspec/specs/secrets-management/spec.md
+  methodology_files:
+    - methodology/event/index.yaml
+  code_paths:
+    - scripts/run-litmus-test.sh
+    - scripts/local-ci.sh
+  scripts:
+    - openspec/litmus-tests/litmus-init-log-cleanup.yaml
+    - openspec/litmus-tests/litmus-socket-cleanup.yaml
+  dashboards:
+    - docs/convergence/centicolon-dashboard.md
+    - docs/convergence/centicolon-dashboard.json
+
+evidence_refs:
+  commits: []
+  files:
+    - openspec/litmus-tests/litmus-init-log-cleanup.yaml
+    - openspec/litmus-tests/litmus-socket-cleanup.yaml
+    - openspec/specs/init-command/spec.md
+    - openspec/specs/native-secrets-store/spec.md
+    - openspec/specs/secrets-management/spec.md
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: medium
+provisional_classification: methodology_claim_unproven
+
+next_distillation_step:
+  owner: "codex"
+  action: >
+    Split any remaining socket-cleanup semantics that belong to keyring IPC
+    from the orchestration socket cleanup already covered by the runtime stack
+    boundary, so each residual signal stays unambiguous.
+  target_artifact: "openspec/litmus-tests"
+
+closure_criteria:
+  - cleanup_litmus_runs_the_real_boundary_command
+  - residual_files_or_sockets_are_asserted_after_completion
+  - tray_wrapper_is_removed_from_the_cleanup_contract

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @trace spec:binary-signing
 # Verify a Tillandsias release artifact using Cosign keyless signatures.
 #
 # Usage: ./scripts/verify.sh <artifact>

@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export CHROME_HEADLESS=1
-export CHROME_DISABLE_GPU=1
-
 ARGS=(
     "$@"
     "--disable-crash-reporter"

@@ -9,7 +9,7 @@
 # Unlike the CLI variant, there is no TTY and no user-facing banner —
 # this entrypoint drives a headless HTTP server rendered in a host webview.
 #
-# @trace spec:opencode-web-session, spec:default-image, spec:environment-runtime, spec:secrets-management, spec:simplified-tray-ux
+# @trace spec:browser-isolation-tray-integration, spec:default-image, spec:environment-runtime, spec:secrets-management, spec:simplified-tray-ux
 
 source /usr/local/lib/tillandsias/lib-common.sh
 
@@ -38,7 +38,7 @@ if [ -f "$CA_CHAIN" ]; then
     fi
 fi
 
-# @trace spec:opencode-web-session
+# @trace spec:host-browser-mcp
 trace_lifecycle "entrypoint" "opencode web starting"
 
 # @trace spec:git-mirror-service, spec:forge-offline
@@ -114,22 +114,9 @@ if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
 fi
 
 # ── Launch OpenCode Web Server ──────────────────────────────
-# @trace spec:opencode-web-session, spec:default-image
+# @trace spec:browser-isolation-tray-integration, spec:default-image
 # Headless HTTP server on 0.0.0.0:4096 inside the container. The host-side
-# port publish binds 127.0.0.1 only — enforced in build_podman_args().
+# reverse-proxy route binds 127.0.0.1 only — enforced in the tray/launcher.
 trace_lifecycle "entrypoint" "opencode web serving on 0.0.0.0:4096"
 trace_lifecycle "exec" "launching opencode serve ($OC_BIN)"
 exec "$OC_BIN" serve --hostname 0.0.0.0 --port 4096
-
-# ── Launch MCP Browser Server ──────────────────────────
-# @trace spec:browser-mcp-server
-# Runs in background, listening on stdin/stdout for MCP protocol.
-# Sets TILLANDSIAS_PROJECT so the server knows its project context.
-export TILLANDSIAS_PROJECT="${PROJECT_NAME:-unknown}"
-if [ -x /usr/local/bin/tillandsias-mcp-browser ]; then
-    trace_lifecycle "entrypoint" "starting MCP browser server"
-    /usr/local/bin/tillandsias-mcp-browser &
-    MCP_PID=$!
-else
-    trace_lifecycle "entrypoint" "WARNING: tillandsias-mcp-browser not found, skipping MCP server"
-fi

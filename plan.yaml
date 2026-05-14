@@ -24,6 +24,8 @@ plan:
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next
+    platform_focus: linux-only
+    cross_platform_deferred: "2026-05-14 — see plan/issues/deferral-windows-macos-2026-05-14.md"
 
   coordination:
     selection_model: dependency_graph

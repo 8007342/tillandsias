@@ -4,7 +4,6 @@ languages: []
 since: 2026-04-25
 last_verified: 2026-04-27
 sources:
-  - https://github.com/8007342/tillandsias/blob/main/openspec/changes/forge-cache-architecture/proposal.md
   - https://github.com/8007342/tillandsias/blob/main/crates/tillandsias-core/src/container_profile.rs
   - https://github.com/8007342/tillandsias/blob/main/images/default/lib-common.sh
 authority: high
@@ -20,13 +19,13 @@ pull_recipe: see-section-pull-on-demand
 
 # Forge paths — ephemeral vs persistent
 
-@trace spec:forge-cache-architecture, spec:forge-cache-dual
+@trace spec:forge-cache-dual
 @cheatsheet runtime/forge-shared-cache-via-nix.md, build/nix-flake-basics.md
 
 ## Provenance
 
 This is project-internal architecture; the authority is the Tillandsias spec + source.
-- OpenSpec change `forge-cache-architecture` proposal: <https://github.com/8007342/tillandsias/blob/main/openspec/changes/forge-cache-architecture/proposal.md>
+- Tillandsias cache contract: <https://github.com/8007342/tillandsias/blob/main/openspec/specs/forge-cache-dual/spec.md>
 - Mount source code: <https://github.com/8007342/tillandsias/blob/main/crates/tillandsias-core/src/container_profile.rs>
 - Env var exports: <https://github.com/8007342/tillandsias/blob/main/images/default/lib-common.sh>
 - **Last updated:** 2026-04-25
@@ -156,21 +155,21 @@ A `current` symlink (Unix) or directory junction (Windows) in the install root p
 ### Source
 
 - **Upstream URL(s):**
-  - `https://github.com/8007342/tillandsias/blob/main/openspec/changes/forge-cache-architecture/proposal.md`
+  - `https://github.com/8007342/tillandsias/blob/main/openspec/specs/forge-cache-dual/spec.md`
 - **Archive type:** `single-html`
 - **Expected size:** `~1 MB extracted`
-- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/github.com/8007342/tillandsias/blob/main/openspec/changes/forge-cache-architecture/proposal.md`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/github.com/8007342/tillandsias/blob/main/openspec/specs/forge-cache-dual/spec.md`
 - **License:** see-license-allowlist
-- **License URL:** https://github.com/8007342/tillandsias/blob/main/openspec/changes/forge-cache-architecture/proposal.md
+- **License URL:** https://github.com/8007342/tillandsias/blob/main/openspec/specs/forge-cache-dual/spec.md
 
 ### Materialize recipe (agent runs this)
 
 ```bash
 set -euo pipefail
-TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/github.com/8007342/tillandsias/blob/main/openspec/changes/forge-cache-architecture/proposal.md"
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/github.com/8007342/tillandsias/blob/main/openspec/specs/forge-cache-dual/spec.md"
 mkdir -p "$(dirname "$TARGET")"
 curl --fail --silent --show-error \
-  "https://github.com/8007342/tillandsias/blob/main/openspec/changes/forge-cache-architecture/proposal.md" \
+  "https://github.com/8007342/tillandsias/blob/main/openspec/specs/forge-cache-dual/spec.md" \
   -o "$TARGET"
 ```
 

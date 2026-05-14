@@ -5,4 +5,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [src-tauri/src/github_health.rs#L15](../../../src-tauri/src/github_health.rs#L15)
+- [crates/tillandsias-core/src/state.rs#L274](../../../crates/tillandsias-core/src/state.rs#L274)
+- [crates/tillandsias-core/src/state.rs#L278](../../../crates/tillandsias-core/src/state.rs#L278)
+- [crates/tillandsias-core/src/state.rs#L281](../../../crates/tillandsias-core/src/state.rs#L281)
+- [crates/tillandsias-core/src/state.rs#L284](../../../crates/tillandsias-core/src/state.rs#L284)

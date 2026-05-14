@@ -6,7 +6,7 @@
 status: active
 
 ## Purpose
-TBD - created by archiving change forge-welcome-fish-default. Update Purpose after archive.
+Define the interactive terminal welcome banner and its once-per-session startup gating so new forge sessions expose project context, OS context, and discovery tips without repeating themselves.
 ## Requirements
 ### Requirement: Welcome message on terminal launch
 The forge container MUST display a colorful welcome message when an interactive terminal session starts.
@@ -45,18 +45,23 @@ The Terminal menu item and `--bash` CLI flag MUST launch the fish shell instead 
 
 ## Sources of Truth
 
-- `cheatsheets/runtime/podman.md` — Podman reference and patterns
-- `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+- `images/default/forge-welcome.sh` — welcome banner layout, rotating tips, and localization
+- `images/default/entrypoint-terminal.sh` — terminal entrypoint that triggers the banner
+- `images/default/shell/bashrc` — bash startup guard for the banner
+- `images/default/shell/zshrc` — zsh startup guard for the banner
+- `images/default/shell/config.fish` — fish startup guard for the banner
+- `cheatsheets/runtime/forge-container.md` — forge runtime boundaries and shell expectations
+- `cheatsheets/runtime/agent-startup-skills.md` — launch-time onboarding and startup routing
 
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
+- `litmus:forge-welcome-shape`
 
 Gating points:
-- Welcome state is ephemeral; displayed once per container, not persisted
-- Deterministic and reproducible: test results do not depend on prior state
-- Falsifiable: failure modes (leaked state, persistence) are detectable
+- The welcome banner stays visible in the launch path
+- The banner remains gated to once per session
+- The tip pool and project/OS scaffolding remain present
 
 ## Observability
 

@@ -1,0 +1,86 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.012-litmus-podman-runtime-blocker@v1
+status: triaged
+observed_at: "2026-05-06T00:00:00Z"
+reporter: "codex"
+summary: >
+  The litmus runner depends on a working rootless Podman runtime, but the
+  current host environment rejects namespace setup and toolbox access, so
+  container-backed litmus tests cannot actually exercise their intended
+  contracts yet.
+
+observed_signal:
+  description: >
+    `podman ps` and `toolbox run -c tillandsias podman ...` fail in this host
+    session with rootless namespace/runtime errors, including `newuidmap`
+    permission failures and read-only runtime lock paths. This blocks the
+    litmus suite before it reaches the container behavior the tests are meant
+    to validate.
+  signal_type: "infra"
+
+expected_model:
+  description: >
+    Litmus tests should run against a properly provisioned container runtime
+    and remain simple, idempotent, and order-independent. If the host runtime
+    is unavailable, the failure should be an explicit infrastructure blocker
+    rather than an ambiguous spec-code regression.
+  source_refs:
+    - scripts/run-litmus-test.sh
+    - scripts/local-ci.sh
+    - methodology/litmus-framework.yaml
+    - methodology/proximity.yaml
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - litmus_infra_must_be_available_for_container_backed_signals
+    - runner_should_distinguish_contract_failures_from_runtime_blockers
+    - container_based_litmus_requires_provisioned_podman_context
+  spec_requirement_ids:
+    - litmus_framework
+  litmus_ids: []
+  cheatsheet_refs:
+    - cheatsheets/runtime/podman.md
+    - cheatsheets/runtime/container-lifecycle.md
+
+affected_artifacts:
+  specs:
+    - openspec/specs/litmus-convergence/spec.md
+  methodology_files:
+    - methodology/event/index.yaml
+    - methodology/litmus-framework.yaml
+    - methodology/proximity.yaml
+  code_paths:
+    - scripts/run-litmus-test.sh
+    - scripts/local-ci.sh
+  scripts:
+    - scripts/run-litmus-test.sh
+    - scripts/local-ci.sh
+  dashboards:
+    - docs/convergence/centicolon-dashboard.md
+    - docs/convergence/centicolon-dashboard.json
+
+evidence_refs:
+  commits: []
+  files:
+    - scripts/run-litmus-test.sh
+    - scripts/local-ci.sh
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: high
+provisional_classification: environment_assumption
+
+next_distillation_step:
+  owner: "codex"
+  action: >
+    Decide whether the litmus suite should be provisioned with a dedicated
+    writable Podman runtime on the host, or whether CI needs a mock/sandboxed
+    backend for the container-backed checks.
+  target_artifact: "methodology"
+
+closure_criteria:
+  - podman_runtime_provisioned_for_litmus
+  - runner_reports_infra_blockers_separately_from_contract_failures
+  - container_backed_litmus_commands_can_execute_to_completion

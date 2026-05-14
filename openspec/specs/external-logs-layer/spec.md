@@ -5,7 +5,7 @@
 active
 
 ## Purpose
-TBD - created by archiving change external-logs-layer. Update Purpose after archive.
+Define the host-side external log tier for producer/consumer container pairs, including the shared parent directory layout, producer manifests, and auditor invariants that keep cross-container log visibility explicit and bounded.
 ## Requirements
 ### Requirement: Two-tier observability model
 
@@ -117,16 +117,27 @@ The pre-existing `git-push.log` file under `~/.local/state/tillandsias/container
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
+- `litmus:external-logs-layer-shape`
 
 Gating points:
 - External logs are cleaned up; no persistent log state leaks
 - Deterministic and reproducible: test results do not depend on prior state
 - Falsifiable: failure modes (leaked state, persistence) are detectable
 
+## Litmus Chain
+
+Start with the smallest executable boundary:
+
+1. `cargo test -p tillandsias-core external_logs_dir_points_to_state_sibling -- --exact`
+2. `cargo test -p tillandsias-core external_logs_role_dir_appends_role -- --exact`
+3. `./build.sh --ci-full --install --strict-all --filter external-logs-layer --strict external-logs-layer`
+
+The first two steps validate the pure path-shaping contract without needing Podman.
+The final step keeps the spec in the global frontier scan once the unit seam is green.
+
 ## Observability
 
 Annotations referencing this spec can be found by:
 ```bash
-grep -rn "@trace spec:external-logs-layer" src-tauri/ scripts/ crates/ images/ --include="*.rs" --include="*.sh"
+grep -rn "@trace spec:external-logs-layer" scripts/ crates/ images/ methodology/ --include="*.rs" --include="*.sh"
 ```

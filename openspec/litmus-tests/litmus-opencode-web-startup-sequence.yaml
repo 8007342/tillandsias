@@ -1,0 +1,47 @@
+# @trace spec:browser-isolation-tray-integration
+name: litmus:opencode-web-startup-sequence
+spec: browser-isolation-tray-integration
+phase: pre-build
+description: Verify the OpenCode Web tray path emits the expected startup stages and launch profile helpers
+severity: high
+
+preconditions:
+  - workspace contains crates/tillandsias-headless
+  - cargo is available in PATH
+
+critical_path:
+  - step: "run the tray OpenCode Web launch profile test"
+    command: "cargo test -p tillandsias-headless --features tray tray::tests::launch_command_opencode_web_is_detached_and_persistent -- --exact"
+    timeout_ms: 120000
+
+  - step: "run the tray running-state test"
+    command: "cargo test -p tillandsias-headless --features tray tray::tests::project_menu_only_shows_stop_when_web_is_running -- --exact"
+    timeout_ms: 120000
+
+  - step: "run the OpenCode Web startup stage order test"
+    command: "cargo test -p tillandsias-headless tests::opencode_web_startup_stage_order_is_stable -- --exact"
+    timeout_ms: 120000
+
+  - step: "run the OpenCode Web event log path test"
+    command: "cargo test -p tillandsias-headless tests::opencode_web_event_log_path_is_project_scoped -- --exact"
+    timeout_ms: 120000
+
+  - step: "run the OpenCode Web OTP/session litmus"
+    command: "./scripts/run-litmus-test.sh opencode-web-session-otp"
+    timeout_ms: 120000
+
+  - step: "run the typed browser launch profile test"
+    command: "cargo test -p tillandsias-headless tests::opencode_web_browser_spec_is_built_with_typed_podman_flags -- --exact"
+    timeout_ms: 120000
+
+observability:
+  traces:
+    - "@trace spec:browser-isolation-tray-integration"
+  expected_log: "OpenCode Web startup emits stack, proxy, git, inference, forge, and browser stages before the typed Podman browser launch profile is built"
+  log_fields:
+    spec: "browser-isolation-tray-integration"
+    test: "opencode-web-startup-sequence"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-headless/src/main.rs and crates/tillandsias-headless/src/tray/mod.rs for OpenCode Web launch drift"
+  command: "sed -n '1440,1585p' crates/tillandsias-headless/src/main.rs && printf '\\n---\\n' && sed -n '1570,1645p' crates/tillandsias-headless/src/tray/mod.rs"

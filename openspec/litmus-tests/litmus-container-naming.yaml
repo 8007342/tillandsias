@@ -1,0 +1,26 @@
+name: litmus:container-naming
+spec: podman-orchestration
+phase: pre-build
+description: Verify forge container naming stays deterministic and genus-free
+severity: medium
+
+preconditions:
+  - workspace contains crates/tillandsias-podman
+  - cargo is available in PATH
+
+critical_path:
+  - step: "run the container naming unit test"
+    command: "cargo test -p tillandsias-podman launch::tests::container_naming_convention -- --exact"
+    timeout_ms: 120000
+
+observability:
+  traces:
+    - "@trace spec:podman-orchestration"
+  expected_log: "Forge container naming remains deterministic"
+  log_fields:
+    spec: "podman-orchestration"
+    test: "container-naming"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-podman/src/launch.rs for naming regressions"
+  command: "sed -n '430,480p' crates/tillandsias-podman/src/launch.rs"

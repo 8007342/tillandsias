@@ -250,47 +250,26 @@ EOF
 
 {
     printf '# %s\n\n' "$TITLE"
-    printf '@trace spec:observability-convergence, spec:versioning, spec:spec-traceability\n\n'
-    printf 'Generated from `%s` at `%s`.\n\n' "${SOURCE#$REPO_ROOT/}" "$generated_at"
-    printf 'Series: `%s` (%s)\n\n' "$SERIES_LABEL" "$SERIES_NAMESPACE"
 
-    if [[ "$record_count" -eq 0 ]]; then
-        printf 'No CentiColon signature records exist yet for %s.\n\n' "$SERIES_LABEL"
-        printf '%s\n' "$EMPTY_HINT"
-    else
-        printf '```text\n'
+    printf '```text\n'
+    if [[ "$record_count" -gt 0 ]]; then
         printf '%b' "$trend_windows_markdown"
-        printf '```\n\n'
-        printf '## Latest\n\n'
-        printf '| Release | Commit | Earned / Total | Residual | Closed %% | Trend | Worst spec | Worst reason |\n'
-        printf '|---|---:|---:|---:|---:|---|---|---|\n'
-        printf '| `%s` | `%s` | `%s/%s` | `%s` | `%s%%` | `%s` | `%s` | `%s` |\n\n' \
-            "$latest_release" "$latest_commit" \
-            "$(jq -r '.earned_cc // 0' <<<"$latest_json")" \
-            "$(jq -r '.total_cc // 0' <<<"$latest_json")" \
-            "$(jq -r '.residual_cc // 0' <<<"$latest_json")" \
-            "$(printf '%.1f' "$(jq -r '.percent_closed // 0' <<<"$latest_json")")" \
-            "$(spark_glyph "$(jq -r '.percent_closed // 0' <<<"$latest_json")")" \
-            "$(jq -r '.worst_spec // "n/a"' <<<"$latest_json")" \
-            "$(jq -r '.worst_reason // "n/a"' <<<"$latest_json")"
-
-        printf '## History\n\n'
-        printf '| Release | Commit | Earned / Total | Residual | Closed %% | Trend | Worst spec | Worst reason |\n'
-        printf '|---|---:|---:|---:|---:|---|---|---|\n'
-        printf '%b' "$history_markdown_rows"
-
-        printf '\n## Visual Notes\n\n'
-        printf '%s\n' "- The chart is closed-trend only; residual remains available in JSON for machine consumers."
-        printf '%s\n' "- Each line is a fixed-width window ordered oldest to newest."
-        printf '%s\n' "- The machine summary lives next to this page at \`$(printf '%s' "$JSON_OUT" | sed "s#^$REPO_ROOT/##")\`."
     fi
+    printf '```\n'
 } >"$MD_OUT"
 
 cp "$MD_OUT" "$SUMMARY_OUT"
 
 if [[ "$TERMINAL_PREVIEW" == "1" ]]; then
     printf '\n[dashboard] terminal preview for %s\n' "$SERIES_LABEL" >&2
-    sed -n '1,72p' "$MD_OUT" >&2
+    printf '# %s\n\n' "$TITLE" >&2
+    if [[ "$record_count" -eq 0 ]]; then
+        printf '%s\n' "$EMPTY_HINT" >&2
+    else
+        printf '```text\n' >&2
+        printf '%b' "$trend_windows_markdown" >&2
+        printf '```\n' >&2
+    fi
 fi
 
 printf 'CentiColon dashboard regenerated: %s\n' "$MD_OUT"

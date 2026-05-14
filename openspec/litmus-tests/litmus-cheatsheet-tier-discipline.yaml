@@ -1,0 +1,27 @@
+# @trace spec:cheatsheets-license-tiered
+name: litmus:cheatsheet-tier-discipline
+spec: cheatsheets-license-tiered
+phase: pre-build
+description: Verify cheatsheet tier discipline stays valid under the tier validator
+severity: medium
+
+preconditions:
+  - workspace contains scripts/ and cheatsheets/
+  - bash is available in PATH
+
+critical_path:
+  - step: "run the tier validator in strict mode"
+    command: "bash scripts/check-cheatsheet-tiers.sh --strict"
+    timeout_ms: 5000
+
+observability:
+  traces:
+    - "@trace spec:cheatsheets-license-tiered"
+  expected_log: "cheatsheet tier discipline validates without errors"
+  log_fields:
+    spec: "cheatsheets-license-tiered"
+    test: "cheatsheet-tier-discipline"
+
+rollback:
+  on_failure: "inspect cheatsheets frontmatter and scripts/check-cheatsheet-tiers.sh for drift"
+  command: "bash scripts/check-cheatsheet-tiers.sh --strict"

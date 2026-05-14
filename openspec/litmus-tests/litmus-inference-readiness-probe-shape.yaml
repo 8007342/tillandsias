@@ -1,0 +1,60 @@
+name: litmus:inference-readiness-probe-shape
+spec: inference-container, async-inference-launch
+description: Verify inference readiness uses container health plus a forge-side /api/version probe
+severity: high
+phase: pre-build
+backend: fake
+
+preconditions:
+  - repository checkout is available
+  - scripts/orchestrate-enclave.sh and scripts/test-inference.sh are present
+
+critical_path:
+  - step: "assert orchestrator waits for inference container health in status-check mode"
+    command: "grep -F 'podman wait --condition=healthy' scripts/orchestrate-enclave.sh"
+    timeout_ms: 2000
+    expected_behavior: "podman wait --condition=healthy"
+
+  - step: "assert inference container has a friendly network alias"
+    command: "grep -F 'network-alias inference' scripts/orchestrate-enclave.sh"
+    timeout_ms: 2000
+    expected_behavior: "network-alias inference"
+
+  - step: "assert forge-side status-check probes the inference API endpoint"
+    command: "grep -F 'http://inference:11434/api/version' scripts/orchestrate-enclave.sh"
+    timeout_ms: 2000
+    expected_behavior: "http://inference:11434/api/version"
+
+  - step: "assert forge-side proxy exemptions include inference peers"
+    command: "grep -F 'ENCLAVE_NO_PROXY' scripts/orchestrate-enclave.sh"
+    timeout_ms: 2000
+    expected_behavior: "ENCLAVE_NO_PROXY"
+
+  - step: "assert tray launcher shares the same inference proxy bypass"
+    command: "grep -F 'ENCLAVE_NO_PROXY' crates/tillandsias-headless/src/tray/mod.rs && grep -F '.env(\"NO_PROXY\", ENCLAVE_NO_PROXY)' crates/tillandsias-headless/src/tray/mod.rs"
+    timeout_ms: 2000
+    expected_behavior: "ENCLAVE_NO_PROXY"
+
+  - step: "assert inference cache mounts at the ollama home path"
+    command: "grep -F '/home/ollama/.ollama/models:rw' scripts/orchestrate-enclave.sh && grep -F '/home/ollama/.ollama/models:rw' scripts/test-inference.sh"
+    timeout_ms: 2000
+    expected_behavior: "/home/ollama/.ollama/models"
+
+  - step: "assert standalone inference diagnostic probes the local API"
+    command: "grep -F '/api/version' scripts/test-inference.sh"
+    timeout_ms: 2000
+    expected_behavior: "/api/version"
+
+observability:
+  traces:
+    - "@trace spec:inference-container"
+    - "@trace spec:async-inference-launch"
+  expected_log: "Inference readiness uses layered health and API probes"
+  log_fields:
+    spec: "inference-container"
+    test: "inference-readiness-probe-shape"
+    backend: "fake"
+
+rollback:
+  on_failure: "inspect the orchestrator and inference diagnostic scripts for stale proxy or probe wiring"
+  command: "sed -n '1,240p' scripts/orchestrate-enclave.sh && sed -n '1,220p' scripts/test-inference.sh"

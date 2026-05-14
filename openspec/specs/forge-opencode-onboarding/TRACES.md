@@ -5,4 +5,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [src-tauri/src/handlers.rs#L5106](../../../src-tauri/src/handlers.rs#L5106)
+- [images/default/entrypoint-forge-opencode.sh#L11](../../../images/default/entrypoint-forge-opencode.sh#L11)
+- [images/default/forge-welcome.sh#L8](../../../images/default/forge-welcome.sh#L8)
+- [images/default/forge-welcome.sh#L167](../../../images/default/forge-welcome.sh#L167)
+- [images/default/forge-welcome.sh#L178](../../../images/default/forge-welcome.sh#L178)

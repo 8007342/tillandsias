@@ -1,0 +1,26 @@
+name: litmus:podman-path-availability
+spec: podman-orchestration
+description: Verify podman is installed on PATH before any stack scripts run
+severity: critical
+phase: pre-build
+
+preconditions:
+  - podman should be available in the user's PATH or reachable through the socket-aware Tillandsias wrapper
+
+critical_path:
+  - step: "verify podman is callable through the Tillandsias wrapper"
+    command: "bash -lc 'source scripts/common.sh && require_podman && echo podman version'"
+    timeout_ms: 3000
+    expected_behavior: "podman version"
+
+observability:
+  traces:
+    - "@trace spec:podman-orchestration"
+  expected_log: "podman version"
+  log_fields:
+    spec: "podman-orchestration"
+    test: "podman-path-availability"
+
+rollback:
+  on_failure: "install podman or fix the socket-aware wrapper before rerunning stack scripts"
+  command: "bash -lc 'source scripts/common.sh && require_podman'"

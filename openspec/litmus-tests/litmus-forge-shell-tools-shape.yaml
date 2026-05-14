@@ -1,0 +1,40 @@
+name: litmus:forge-shell-tools-shape
+spec: forge-shell-tools
+description: Verify the forge image still ships the shell/tool package set and interactive shell integrations
+severity: medium
+phase: pre-build
+
+preconditions:
+  - workspace contains flake.nix
+  - workspace contains images/default/shell/bashrc
+  - workspace contains images/default/shell/zshrc
+  - workspace contains images/default/shell/config.fish
+  - workspace contains images/default/forge-welcome.sh
+
+critical_path:
+  - step: "verify the forge image package set includes the shell tools"
+    command: "grep -Fq fish flake.nix && grep -Fq zsh flake.nix && grep -Fq mc flake.nix && grep -Fq vim flake.nix && grep -Fq nano flake.nix && grep -Fq eza flake.nix && grep -Fq bat flake.nix && grep -Fq fd flake.nix && grep -Fq fzf flake.nix && grep -Fq zoxide flake.nix && grep -Fq htop flake.nix && grep -Fq tree flake.nix && echo 'forge shell package set present'"
+    timeout_ms: 10000
+    expected_behavior: "forge shell package set present"
+
+  - step: "verify the shell configs wire the expected interactive helpers"
+    command: "grep -Fq '@trace spec:forge-shell-tools' images/default/shell/bashrc && grep -Fq 'alias ll=' images/default/shell/bashrc && grep -Fq 'zoxide init bash' images/default/shell/bashrc && grep -Fq '@trace spec:forge-shell-tools' images/default/shell/zshrc && grep -Fq 'alias ll=' images/default/shell/zshrc && grep -Fq 'zoxide init zsh' images/default/shell/zshrc && grep -Fq '@trace spec:forge-shell-tools' images/default/shell/config.fish && grep -Fq 'fish_greeting' images/default/shell/config.fish && grep -Fq 'direnv hook fish' images/default/shell/config.fish && echo 'forge shell configs present'"
+    timeout_ms: 10000
+    expected_behavior: "forge shell configs present"
+
+  - step: "verify the welcome banner advertises the shell tools"
+    command: "grep -Fq 'Try Midnight Commander with mc' images/default/forge-welcome.sh && grep -Fq 'Browse files with eza --tree' images/default/forge-welcome.sh && grep -Fq 'Preview files with bat <filename>' images/default/forge-welcome.sh && grep -Fq 'Find files fast with fd <pattern>' images/default/forge-welcome.sh && grep -Fq 'Fuzzy-find anything with fzf' images/default/forge-welcome.sh && grep -Fq 'View processes with htop' images/default/forge-welcome.sh && grep -Fq 'Show directory tree with tree' images/default/forge-welcome.sh && grep -Fq 'Edit files with vim or nano' images/default/forge-welcome.sh && grep -Fq 'Switch to zsh anytime: type zsh' images/default/forge-welcome.sh && echo 'forge welcome shell tips present'"
+    timeout_ms: 10000
+    expected_behavior: "forge welcome shell tips present"
+
+observability:
+  traces:
+    - "@trace spec:forge-shell-tools"
+  expected_log: "Shell tools and shell integration remain visible in the forge image and welcome path"
+  log_fields:
+    spec: "forge-shell-tools"
+    test: "forge-shell-tools-shape"
+
+rollback:
+  on_failure: "inspect flake.nix, images/default/shell/bashrc, images/default/shell/zshrc, images/default/shell/config.fish, and images/default/forge-welcome.sh for shell-tool drift"
+  command: "grep -Fq fish flake.nix && grep -Fq 'alias ll=' images/default/shell/bashrc && grep -Fq 'Try Midnight Commander with mc' images/default/forge-welcome.sh"

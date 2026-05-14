@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias-headless"
-version = "0.1.260506"
+version = "0.1.260513"
 edition = "2024"
 license = "GPL-3.0-or-later"
 authors = ["Tlatoani"]
@@ -13,6 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 tillandsias-core = { path = "../tillandsias-core" }
+tillandsias-otp = { path = "../tillandsias-otp" }
 tillandsias-podman = { path = "../tillandsias-podman" }
 tokio = { workspace = true }
 futures = "0.3"
@@ -24,7 +25,7 @@ serde_json = "1"
 tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
-reqwest = { version = "0.11", features = ["json", "stream"] }
+tempfile = "3"
 
 # Phase 4: Native tray UI (optional)
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }

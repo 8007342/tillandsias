@@ -110,36 +110,40 @@ ollama list 2>/dev/null | grep -q "llama3.2:3b" \
     && echo "[inference] T1 (llama3.2:3b) ready" \
     || echo "[inference] T1 (llama3.2:3b) MISSING — image build did not bake it" >&2
 
-# T2+ pull in background if tier permits.
-case "$TIER" in
-    T5|T4|T3|T2)
-        (
-            [ "$TIER" != "T0" ] && [ "$TIER" != "T1" ] && \
-                ollama pull qwen2.5:7b \
-                && echo "[inference] T2 (qwen2.5:7b) ready" \
-                || echo "[inference] T2 (qwen2.5:7b) pull failed (squid SSL-bump EOF likely; non-fatal)" >&2
-            case "$TIER" in T5|T4|T3)
-                ollama pull qwen2.5-coder:7b \
-                    && echo "[inference] T3 (qwen2.5-coder:7b) ready" \
-                    || echo "[inference] T3 (qwen2.5-coder:7b) pull failed (non-fatal)" >&2
-            esac
-            case "$TIER" in T5|T4)
-                ollama pull qwen2.5:14b \
-                    && echo "[inference] T4 (qwen2.5:14b) ready" \
-                    || echo "[inference] T4 (qwen2.5:14b) pull failed (non-fatal)" >&2
-            esac
-            case "$TIER" in T5)
-                ollama pull qwen2.5-coder:32b \
-                    && echo "[inference] T5 (qwen2.5-coder:32b) ready" \
-                    || echo "[inference] T5 (qwen2.5-coder:32b) pull failed (non-fatal)" >&2
-            esac
-            echo "[inference] runtime tier pulls complete"
-        ) &
-        ;;
-    *)
-        echo "[inference] tier=T0/T1 only — no runtime pulls"
-        ;;
-esac
+if [ -n "${TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS:-}" ]; then
+    echo "[inference] status-check mode — skipping runtime pulls"
+else
+    # T2+ pull in background if tier permits.
+    case "$TIER" in
+        T5|T4|T3|T2)
+            (
+                [ "$TIER" != "T0" ] && [ "$TIER" != "T1" ] && \
+                    ollama pull qwen2.5:7b \
+                    && echo "[inference] T2 (qwen2.5:7b) ready" \
+                    || echo "[inference] T2 (qwen2.5:7b) pull failed (squid SSL-bump EOF likely; non-fatal)" >&2
+                case "$TIER" in T5|T4|T3)
+                    ollama pull qwen2.5-coder:7b \
+                        && echo "[inference] T3 (qwen2.5-coder:7b) ready" \
+                        || echo "[inference] T3 (qwen2.5-coder:7b) pull failed (non-fatal)" >&2
+                esac
+                case "$TIER" in T5|T4)
+                    ollama pull qwen2.5:14b \
+                        && echo "[inference] T4 (qwen2.5:14b) ready" \
+                        || echo "[inference] T4 (qwen2.5:14b) pull failed (non-fatal)" >&2
+                esac
+                case "$TIER" in T5)
+                    ollama pull qwen2.5-coder:32b \
+                        && echo "[inference] T5 (qwen2.5-coder:32b) ready" \
+                        || echo "[inference] T5 (qwen2.5-coder:32b) pull failed (non-fatal)" >&2
+                esac
+                echo "[inference] runtime tier pulls complete"
+            ) &
+            ;;
+        *)
+            echo "[inference] tier=T0/T1 only — no runtime pulls"
+            ;;
+    esac
+fi
 
 # Hand off to ollama as the foreground process for signal handling.
 wait $OLLAMA_PID

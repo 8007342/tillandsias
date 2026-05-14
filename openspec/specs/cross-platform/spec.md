@@ -3,45 +3,37 @@
 
 ## Status
 
-suspended
+deprecated
+
+## Tombstone
+
+`cross-platform` was an umbrella for Windows-specific deltas. Its live obligations now
+live in narrower specs:
+
+- `windows-wsl-runtime`
+- `windows-native-dev-build`
+- `windows-process-creation`
+- `no-terminal-flicker`
+- `windows-sandbox`
+- `fix-windows-extended-path`
+- `fix-windows-image-routing`
+- `fix-podman-machine-host-aliases`
 
 ## Requirements
 
-### REQ-WIN-INSTALL: One-line Windows installer
-The install script MUST force TLS 1.2, download the correct NSIS setup asset, run it silently, detect missing Podman CLI and install via winget, and initialize + start the podman machine.
+### OBSOLETED REQUIREMENTS
 
-### REQ-WIN-CRLF: CRLF-safe embedded scripts
-All embedded scripts written to disk MUST have `\r` stripped before writing, so they execute correctly inside Linux containers when compiled on Windows with `core.autocrlf=true`.
-
-### REQ-WIN-BASH: Shell script dispatch
-All `.sh` script invocations via `Command::new()` MUST be dispatched through `bash` on Windows. Terminal launches for `.sh` files MUST use `bash` instead of `cmd /k`.
-
-### REQ-WIN-MACHINE: Podman machine lifecycle
-Both the tray app and CLI runner MUST check for an existing podman machine before starting one. If no machine exists, they MUST run `podman machine init` first, then `podman machine start`, with exponential backoff for readiness.
-
-### REQ-WIN-MENU: Focus-safe menu rebuilds
-Menu rebuilds MUST be skipped when menu-relevant state has not changed, to prevent window focus stealing on Windows and AppImage.
-
-### REQ-WIN-I18N: Live language switching
-Changing the language in the tray menu MUST reload the i18n string table immediately without requiring an app restart.
-
-### REQ-WIN-OS: Host OS detection
-`detect_host_os()` MUST return a meaningful string on Windows (e.g., "Microsoft Windows [Version 10.0.26200]") instead of "Unknown OS".
+The old Windows delta requirements were distilled into the narrower specs listed
+above and are intentionally no longer owned here.
 
 ## Sources of Truth
 
-- `cheatsheets/runtime/wsl2-isolation-boundary.md` — Wsl2 Isolation Boundary reference and patterns
+- `cheatsheets/runtime/wsl2-isolation-boundary.md` — WSL2 isolation boundary reference and patterns
 - `cheatsheets/runtime/windows-event-viewer.md` — Windows Event Viewer reference and patterns
 
 ## Litmus Tests
 
-Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
-
-Gating points:
-- Containers are destroyed after use; no cross-platform lingering state
-- Deterministic and reproducible: test results do not depend on prior state
-- Falsifiable: failure modes (leaked state, persistence) are detectable
+None. This spec is deprecated and kept only for traceability of the old umbrella.
 
 ## Observability
 

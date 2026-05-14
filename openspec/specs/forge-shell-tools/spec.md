@@ -6,7 +6,7 @@
 status: active
 
 ## Purpose
-TBD - created by archiving change forge-shell-tools. Update Purpose after archive.
+Define the live shell-tooling surface in the forge image: alternative shells, modern terminal utilities, and shell startup config that make interactive sessions useful by default.
 ## Requirements
 ### Requirement: Alternative shells available
 The forge image MUST include fish and zsh, startable by typing `fish` or `zsh` from any shell.
@@ -52,18 +52,22 @@ The forge image MUST include sensible default configs for bash, fish, and zsh wi
 
 ## Sources of Truth
 
-- `cheatsheets/languages/bash.md` — Bash reference and patterns
-- `cheatsheets/runtime/cmd.md` — Cmd reference and patterns
+- `flake.nix` — forge image package set for shells, terminal tools, and runtime utilities
+- `images/default/shell/bashrc` — bash shell startup and PATH/tool integration
+- `images/default/shell/zshrc` — zsh shell startup and PATH/tool integration
+- `images/default/shell/config.fish` — fish shell startup and PATH/tool integration
+- `images/default/forge-welcome.sh` — the tool tips surfaced to interactive shells
+- `cheatsheets/languages/bash.md` — bash shell reference and patterns
 
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
+- `litmus:forge-shell-tools-shape`
 
 Gating points:
-- Shell tools are isolated; no host tools leak into container
-- Deterministic and reproducible: test results do not depend on prior state
-- Falsifiable: failure modes (leaked state, persistence) are detectable
+- The forge image keeps the shell/tool package set stable
+- Interactive shell configs keep the expected aliases and integrations wired
+- The welcome banner keeps the shell tool tips visible to new sessions
 
 ## Observability
 

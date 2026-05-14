@@ -138,6 +138,16 @@ The host tray and WSL daemon MUST communicate asynchronously via:
 3. **Secrets never leak to containers**: Credentials are injected via secure mechanisms; no plaintext secrets in environment.
 4. **Port mappings are always explicit**: No implicit port forwarding; all exposed ports are documented and intentional.
 
+## Litmus Tests
+
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:wsl-runtime-shape`
+
+Gating points:
+- The WSL runtime stub remains explicit in source
+- The `wsl-runtime` trace annotation still exists on the runtime implementation
+- Falsifiable: missing trace or stub marker fails the source-shape check
+
 ---
 
 ## Litmus Tests

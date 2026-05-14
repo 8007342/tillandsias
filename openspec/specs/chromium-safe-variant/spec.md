@@ -15,7 +15,8 @@ This spec ensures:
 - No credentials persist across sessions
 - Cache is ephemeral (tmpfs)
 - No sync, autofill, password manager
-- Full network isolation (enclave-only or proxy-controlled)
+- Full network isolation inside the enclave, with allowlist enforcement via
+  the proxy only; no host-gateway internet fallback
 
 ## Requirements
 
@@ -127,9 +128,10 @@ Safe-variant container MUST run with minimum Linux capabilities required for dis
 - **AND** SHOULD log `privilege_escalation_attempt = true` for audit
 
 #### Scenario: Network isolation
-- **WHEN** the container is not in the enclave network
-- **THEN** it SHALL have only host (gateway) network access
-- **OR** if in the enclave, it SHALL connect via the proxy (allowlist enforced upstream)
+- **WHEN** the container starts
+- **THEN** it SHALL connect through the enclave network
+- **AND** all web egress SHALL traverse the proxy/allowlist path
+- **AND** no host-gateway internet fallback SHALL be used
 
 ### Requirement: No extensions or plugins
 
@@ -295,4 +297,5 @@ Log events SHALL include:
 - `cheatsheets/runtime/chromium-seccomp.md` — syscall filtering and container constraints
 - `cheatsheets/security/owasp-top-10-2021.md` — credential protection (A02:2021)
 - `cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md` — tmpfs-backed profile layout
-
+- `openspec/specs/browser-isolation-tray-integration/spec.md` — tray-driven safe browser launch contract
+- `openspec/specs/opencode-web-session-otp/spec.md` — secure OpenCode Web session gate for tray-launched browser windows

@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 # @trace spec:build-script-architecture, spec:windows-cross-build
-# Deferred specs: out-of-scope for linux-native-portable-executable change
+# Legacy portable-executable specs have been retired.
 #
-# build-script-architecture — AppImage build path removed. Kept for reference.
-# windows-cross-build — Windows/macOS wrappers deferred to separate changes.
-#
-# These specs remain in openspec/specs but are not actively implemented.
-# See: linux-native-portable-executable change for rationale.
+# The live build/runtime contracts now live in the current Linux-first build
+# flow and in the active OpenSpec bundles.
 
-echo "Deferred specs: build-script-architecture, windows-cross-build"
+echo "Legacy portable-executable specs have been retired."

@@ -218,6 +218,37 @@ methodology_provenance:
       inference: >
         OpenTelemetry semantic conventions show why common field names make
         heterogeneous telemetry easier to correlate.
+
+    - claim_id: methodology.runtime.compiled-cli-orchestration@v1
+      statement: >
+        The shipped Tillandsias runtime should own orchestration in compiled Rust
+        and invoke stable CLI tools directly; repository shell scripts may remain
+        as developer tools and documentation, but they are not part of the runtime
+        contract.
+      applies_to:
+        - openspec/specs/direct-podman-calls/spec.md
+        - openspec/specs/init-command/spec.md
+        - openspec/specs/cli-mode/spec.md
+        - openspec/specs/embedded-scripts/spec.md
+      provenance_refs:
+        - rfc2119
+      internal_refs:
+        - openspec/specs/direct-podman-calls/spec.md:Purpose
+        - openspec/specs/init-command/spec.md:Requirement: Init path does not invoke shell wrappers
+        - openspec/specs/cli-mode/spec.md:Requirement: Runtime paths are compiled Rust
+      claim_strength: project_invariant
+      inference: >
+        The current and desired runtime design separate build-time tooling from
+        shipped runtime behavior. Direct Rust CLI calls preserve the binary's
+        ability to run on native host Podman without requiring script extraction
+        or a shell middleware layer.
+      limits: >
+        This claim does not prohibit shell scripts from existing in the repo or
+        being used manually by developers during build-time workflows.
+      falsification_signal: >
+        A shipped runtime path shells out to a repository script for ordinary
+        user-facing orchestration.
+      review_cadence: on_runtime_contract_change
       limits: >
         Tillandsias field names are project-local unless mapped to OpenTelemetry
         attributes by an exporter.

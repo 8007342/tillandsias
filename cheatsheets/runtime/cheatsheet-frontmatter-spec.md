@@ -20,7 +20,7 @@ pull_recipe: see-section-pull-on-demand
 
 # Cheatsheet frontmatter spec (v2)
 
-@trace spec:agent-cheatsheets, spec:cheatsheets-license-tiered, spec:cheatsheet-methodology-evolution
+@trace spec:cheatsheet-tooling, spec:cheatsheet-source-layer, spec:cheatsheets-license-tiered, spec:spec-traceability
 @cheatsheet runtime/cheatsheet-architecture-v2.md
 
 ## Provenance

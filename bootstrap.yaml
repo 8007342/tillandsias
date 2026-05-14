@@ -1,0 +1,27 @@
+bootstrap:
+  command: "/skills bootstrap"
+  purpose: >
+    Minimal starting contract for a Codex bootstrap loop in this repository.
+    This file does not redefine methodology; it points the session at the
+    authoritative methodology files.
+
+  first_read:
+    - methodology.yaml
+    - methodology/bootstrap/router.yaml
+    - methodology/bootstrap/roles.yaml
+
+  loop:
+    - Select exactly one intent from the bootstrap router.
+    - Read only the files named by that intent.
+    - Audit the governing spec against cheatsheets, docs, and tombstones.
+    - Find the largest residual or drift signal.
+    - Make the smallest change that reduces that residual.
+    - Re-run the same litmus plus the nearest adjacent litmus.
+    - Refine spec or methodology if the gap is ambiguous.
+
+  output:
+    - selected_intent
+    - governing_files_read
+    - current_worst_residual
+    - next_minimal_change
+    - verification_plan

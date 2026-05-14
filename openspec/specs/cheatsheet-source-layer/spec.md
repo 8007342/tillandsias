@@ -5,7 +5,8 @@
 active
 
 ## Purpose
-TBD - created by archiving change cheatsheet-source-layer. Update Purpose after archive.
+Define the repository-side source binding, validation, and refresh tooling for
+cheatsheet provenance.
 ## Requirements
 ### Requirement: Verbatim source storage
 
@@ -186,15 +187,30 @@ human-triaged, not auto-resolved.
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns
 - `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
 
+## Litmus Chain
+
+Smallest actionable boundary:
+- `bash scripts/check-cheatsheet-sources.sh --no-sha`
+
+Sibling tests:
+- `bash scripts/regenerate-source-index.sh --check`
+- `bash scripts/refresh-cheatsheet-sources.sh --max-age-days 90`
+
+Scoped follow-up:
+```bash
+./build.sh --ci-full --install --filter cheatsheet-source-layer --strict cheatsheet-source-layer
+./build.sh --ci-full --install --strict-all
+```
+
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
+- `litmus:cheatsheet-source-layer-validation`
 
 Gating points:
-- Observable ephemeral guarantee: resources created during initialization are destroyed on shutdown
-- Deterministic and reproducible: test results do not depend on prior state
-- Falsifiable: failure modes (leaked resources, persistence) are detectable
+- Validation should be callable on a fresh workspace with no fetched sources
+- Missing `cheatsheet-sources/INDEX.json` is a non-fatal warning path
+- Local source binding checks must remain deterministic and side-effect free
 
 ## Observability
 

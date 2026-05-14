@@ -1,6 +1,8 @@
 # @trace spec:browser-isolation-framework, spec:chromium-debug-variant
-# Extended Chromium container with SDK tools, automation libraries, and fonts.
+# Extended Chromium container with SDK tools, automation libraries, and a
+# visible GUI browser path.
 # Extends tillandsias-chromium-core with:
+#   - Chromium GUI binary for windowed launches
 #   - Playwright for browser automation
 #   - Node.js for agent scripting
 #   - Fonts and locales for rendering
@@ -9,14 +11,15 @@
 # non-interactive and tracks the exact same version as the running binary.
 # @trace spec:versioning
 
-ARG CHROMIUM_CORE_TAG
-FROM tillandsias-chromium-core:${CHROMIUM_CORE_TAG}
+ARG CHROMIUM_CORE_IMAGE
+FROM ${CHROMIUM_CORE_IMAGE}
 
 # Switch to root for package installation
 USER root
 
 # Node.js for MCP client integration and agent scripting
 RUN microdnf install -y \
+    chromium \
     nodejs npm \
     && microdnf clean all
 
@@ -40,9 +43,14 @@ RUN microdnf install -y \
     mesa-vulkan-drivers \
     && microdnf clean all
 
-# Return to non-root user
+# Set GUI browser entry point via a small wrapper so launches can inherit the
+# correct app-mode flags and still fall back cleanly if the distro binary path
+# varies.
+USER root
+COPY chromium-framework-launch.sh /usr/local/bin/chromium-framework-launch.sh
+RUN chmod 0755 /usr/local/bin/chromium-framework-launch.sh
+
 USER chromium
 
-# Set headless entry point (inherits from core)
-ENTRYPOINT ["/usr/lib64/chromium-browser/headless_shell", "--headless=new"]
+ENTRYPOINT ["/usr/local/bin/chromium-framework-launch.sh"]
 CMD []

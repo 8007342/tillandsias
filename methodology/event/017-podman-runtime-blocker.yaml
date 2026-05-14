@@ -1,0 +1,32 @@
+status: triaged
+kind: blocker
+title: Podman runtime availability blocks residual litmus convergence
+date: 2026-05-07
+
+summary: >
+  The runtime residual litmus phase now passes the init-log and socket-cleanup
+  contracts, but the remaining environment-isolation, enclave-isolation, and
+  browser-ephemeral tests depend on a working rootless Podman runtime. On this
+  host, rootless Podman fails with `newuidmap` namespace setup errors during
+  those tests, so the residual phase cannot converge without either a host
+  runtime repair or a test-scope distillation.
+
+evidence:
+  - build: ./build.sh --ci-full --install
+  - litmus: scripts/run-litmus-test.sh --phase runtime
+  - error: newuidmap write to uid_map failed: Operation not permitted
+
+affected_contracts:
+  - litmus:environment-isolation
+  - litmus:enclave-isolation
+  - litmus:browser-ephemeral
+
+decision_needed:
+  - Repair local rootless Podman runtime and keep these litmus tests live, or
+  - Distill/tombstone the failing runtime litmus and rehome the coverage into
+    fake-backed command-shape tests plus the single status-check E2E smoke.
+
+notes:
+  - init-log-cleanup and socket-cleanup were validated and now pass.
+  - The browser-ephemeral test also needs semantic correction: the current
+    container command does not make the asserted temp directory observable.

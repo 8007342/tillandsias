@@ -1,6 +1,6 @@
 # Cache Discipline
 
-@trace spec:forge-cache-architecture, spec:forge-cache-dual
+@trace spec:forge-cache-dual
 @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md, build/nix-flake-basics.md
 
 Build artifacts must leave the project workspace. This forge uses four distinct storage categories. Understand them before your first `cargo build`, `npm install`, or `cargo run`.

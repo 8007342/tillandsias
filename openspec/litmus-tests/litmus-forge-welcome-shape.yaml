@@ -1,0 +1,40 @@
+name: litmus:forge-welcome-shape
+spec: forge-welcome
+description: Verify the welcome banner layout, rotating tips, and once-per-session gating stay wired to the terminal launch path
+severity: medium
+phase: pre-build
+
+preconditions:
+  - workspace contains images/default/forge-welcome.sh
+  - workspace contains images/default/entrypoint-terminal.sh
+  - workspace contains images/default/shell/bashrc
+  - workspace contains images/default/shell/zshrc
+  - workspace contains images/default/shell/config.fish
+
+critical_path:
+  - step: "verify the welcome banner still carries the project/OS/tip scaffolding"
+    command: "grep -Fq 'L_WELCOME_PROJECT' images/default/forge-welcome.sh && grep -Fq 'L_WELCOME_FORGE' images/default/forge-welcome.sh && grep -Fq 'L_WELCOME_MOUNTS' images/default/forge-welcome.sh && grep -Fq '_tip20=' images/default/forge-welcome.sh && echo 'forge welcome scaffold present'"
+    timeout_ms: 10000
+    expected_behavior: "forge welcome scaffold present"
+
+  - step: "verify the terminal launch path still triggers the banner once per session"
+    command: "grep -Fq 'forge-welcome.sh' images/default/entrypoint-terminal.sh && grep -Fq 'TILLANDSIAS_WELCOME_SHOWN' images/default/entrypoint-terminal.sh && grep -Fq 'TILLANDSIAS_WELCOME_SHOWN' images/default/shell/bashrc && grep -Fq 'TILLANDSIAS_WELCOME_SHOWN' images/default/shell/zshrc && grep -Fq 'TILLANDSIAS_WELCOME_SHOWN' images/default/shell/config.fish && echo 'forge welcome gating present'"
+    timeout_ms: 10000
+    expected_behavior: "forge welcome gating present"
+
+  - step: "verify the shell startup files still call the banner script"
+    command: "grep -Fq '/usr/local/share/tillandsias/forge-welcome.sh' images/default/shell/bashrc && grep -Fq '/usr/local/share/tillandsias/forge-welcome.sh' images/default/shell/zshrc && grep -Fq '/usr/local/share/tillandsias/forge-welcome.sh' images/default/shell/config.fish && echo 'forge welcome shell hooks present'"
+    timeout_ms: 10000
+    expected_behavior: "forge welcome shell hooks present"
+
+observability:
+  traces:
+    - "@trace spec:forge-welcome"
+  expected_log: "Welcome banner remains visible on terminal launch and stays gated to once per session"
+  log_fields:
+    spec: "forge-welcome"
+    test: "forge-welcome-shape"
+
+rollback:
+  on_failure: "inspect images/default/forge-welcome.sh, images/default/entrypoint-terminal.sh, and the shell rc files for banner drift"
+  command: "grep -Fq 'L_WELCOME_PROJECT' images/default/forge-welcome.sh && grep -Fq 'TILLANDSIAS_WELCOME_SHOWN' images/default/entrypoint-terminal.sh"

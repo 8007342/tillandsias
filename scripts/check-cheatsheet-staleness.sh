@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace spec:cheatsheet-methodology-evolution
+# @trace spec:cheatsheet-tooling, spec:cheatsheet-source-layer
 # Check for stale cheatsheets older than 90 days.
 # Usage: ./check-cheatsheet-staleness.sh [--days 90] [--check-urls]
 #

@@ -202,12 +202,12 @@ ls /run/user/$(id -u)/tillandsias-*-lifecycle-stderr.log 2>&1
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:ephemeral-guarantee`
+- `litmus:runtime-diagnostics-shape`
 
 Gating points:
-- Diagnostics are ephemeral; diagnostic data doesn't persist
-- Deterministic and reproducible: test results do not depend on prior state
-- Falsifiable: failure modes (leaked state, persistence) are detectable
+- Git entrypoint wiring remains traceable
+- Service log setup remains in place
+- Falsifiable: missing trace or log setup fails the source-shape check
 
 ## Observability
 
@@ -232,4 +232,3 @@ Log events SHALL include:
 - `cheatsheets/runtime/event-driven-monitoring.md` — container event streaming and failure detection
 - `cheatsheets/observability/cheatsheet-metrics.md` — structured logging for failure analysis
 - `cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md` — tmpfs-backed ephemeral file layout
-

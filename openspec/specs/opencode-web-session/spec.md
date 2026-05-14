@@ -4,17 +4,17 @@
 
 ## Status
 
-active
+obsolete
 
 ## Deprecation Notice
 
 This specification describes the webview-based approach to OpenCode Web. As of 2026-05-02,
-this flow is being **superseded by browser isolation** (`browser-isolation-tray-integration`).
+this flow has been **superseded by browser isolation** (`browser-isolation-tray-integration`).
 
 The webview path is deprecated and should not be used for new implementations. All browser-based
 interfaces now launch via `tillandsias-chromium-core` containers for improved security and isolation.
 
-Kept for reference and backwards compatibility through version 0.1.163 (three releases).
+Kept only as a tombstone for history. There is no backwards-compatibility commitment.
 
 ## Purpose (Legacy)
 

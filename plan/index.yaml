@@ -439,9 +439,10 @@ plan_index:
     - id: cross-platform-leftovers
       order: 6
       title: Windows and other cross-platform leftovers
-      status: pending
+      status: obsoleted
       deliverable: plan/steps/06-cross-platform.md
       depends_on: [observability-and-diagnostics]
+      deferral_reason: "Project focus shifted to Linux-only development per CLAUDE.md. Deferred until cross-platform phase. See plan/issues/deferral-windows-macos-2026-05-14.md."
       specs:
         - fix-windows-image-routing
         - windows-event-logging
@@ -455,54 +456,60 @@ plan_index:
         - "Windows-specific drift is either retired or narrowed to a live implementation gap."
       tasks:
         - id: cross-platform/windows-routing
-          status: pending
+          status: deferred
           depends_on:
             - observability-and-diagnostics
           owned_files:
             - openspec/specs/fix-windows-image-routing/spec.md
             - openspec/specs/windows-event-logging/spec.md
-          checkpoint_required: true
+          checkpoint_required: false
+          deferral_reason: "Windows build support deferred; reactivate in cross-platform phase."
           handoff_note: "Cold-start note: do not assume the same agent will carry the Windows tail."
         - id: cross-platform/windows-logging
-          status: pending
+          status: deferred
           depends_on:
             - cross-platform/windows-routing
           owned_files:
             - openspec/specs/windows-event-logging/spec.md
-          checkpoint_required: true
+          checkpoint_required: false
+          deferral_reason: "Windows logging deferred with Windows phase."
           handoff_note: "Cold-start note: Windows logging is separable from image routing."
         - id: cross-platform/wsl-runtime
-          status: pending
+          status: deferred
           depends_on:
             - cross-platform/windows-logging
           owned_files:
             - openspec/specs/wsl-runtime/spec.md
             - openspec/specs/wsl-daemon-orchestration/spec.md
-          checkpoint_required: true
+          checkpoint_required: false
+          deferral_reason: "WSL support deferred; reactivate in Windows/WSL phase."
           handoff_note: "Cold-start note: WSL work is a separate dependency tail from Windows routing."
         - id: cross-platform/versioning
-          status: pending
+          status: deferred
           depends_on:
             - cross-platform/wsl-runtime
           owned_files:
             - openspec/specs/versioning/spec.md
-          checkpoint_required: true
+          checkpoint_required: false
+          deferral_reason: "Cross-platform versioning deferred; Linux-only subset kept live in update-system."
           handoff_note: "Cold-start note: versioning is a stable leaf and should be checkpointed explicitly."
         - id: cross-platform/image
-          status: pending
+          status: deferred
           depends_on:
             - cross-platform/versioning
           owned_files:
             - openspec/specs/web-image/spec.md
-          checkpoint_required: true
+          checkpoint_required: false
+          deferral_reason: "web-image deferred to cross-platform phase."
           handoff_note: "Cold-start note: image contracts are separate from versioning."
         - id: cross-platform/zen-pool
-          status: pending
+          status: deferred
           depends_on:
             - cross-platform/image
           owned_files:
             - openspec/specs/zen-default-with-ollama-analysis-pool/spec.md
-          checkpoint_required: true
+          checkpoint_required: false
+          deferral_reason: "Cross-platform model routing deferred; revisit in optimization phase."
           handoff_note: "Cold-start note: model routing is the last cross-platform tail."
 
     - id: semantic-distillation-sweep
@@ -516,7 +523,6 @@ plan_index:
         - tray-runtime-and-cache
         - onboarding-and-discovery
         - observability-and-diagnostics
-        - cross-platform-leftovers
       specs:
         - active-specs-with-empty-bindings
         - active-specs-with-historical-purpose-only
@@ -532,7 +538,6 @@ plan_index:
             - tray-runtime-and-cache
             - onboarding-and-discovery
             - observability-and-diagnostics
-            - cross-platform-leftovers
           owned_files:
             - openspec/litmus-bindings.yaml
           checkpoint_required: true
@@ -608,13 +613,14 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Cold-start note: observability gaps should remain graph-shaped, not linear guesswork."
         - id: implementation-gaps/cross-platform
-          status: pending
+          status: obsoleted
           depends_on:
             - implementation-gaps/observability
           owned_files:
             - plan/steps/06-cross-platform.md
-          checkpoint_required: true
-          handoff_note: "Cold-start note: cross-platform gaps come after the Linux-first tails."
+          checkpoint_required: false
+          deferral_reason: "Cross-platform implementation deferred; kept as historical step marker for future reactivation."
+          handoff_note: "Cold-start note: cross-platform implementation moved to deferred phase. See plan/issues/deferral-windows-macos-2026-05-14.md."
         - id: implementation-gaps/residual-backlog
           status: pending
           depends_on:

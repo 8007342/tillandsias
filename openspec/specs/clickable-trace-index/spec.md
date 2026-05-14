@@ -88,6 +88,43 @@ For each active spec that has at least one `@trace` annotation in the codebase, 
 - **THEN** `generate-traces.sh` SHALL NOT run
 - **AND** the existing `TRACES.md` SHALL remain unchanged
 
+### Requirement: Local observatorium v0
+
+The repository SHALL provide `scripts/run-observatorium.sh`, a local launcher
+for a minimal observability viewer. The launcher SHALL serve the current
+checkout directly, SHOULD prefer a private Chromium sandbox when available, and
+MUST fall back to a host browser command when the sandbox path is unstable.
+The launcher MUST support `--recreate` to force container recreation and MUST
+short-circuit idempotently when the container already exists.
+
+The viewer SHALL expose three primary panes:
+- left: specs
+- middle: code
+- right: cheatsheets
+
+Selecting any item in one pane SHALL collapse or expand relevant hits in the
+other two panes, with compact metadata for path, kind, and trace provenance.
+
+#### Scenario: Observatorium launcher is idempotent
+- **WHEN** `scripts/run-observatorium.sh` is invoked twice without `--recreate`
+- **THEN** the container create step SHALL short-circuit on the second run
+- **AND** the script SHALL reuse the existing container
+
+#### Scenario: Observatorium launcher can force recreation
+- **WHEN** `scripts/run-observatorium.sh --recreate` is invoked
+- **THEN** any existing observatorium container SHALL be removed and recreated
+
+#### Scenario: Observatorium serves the current checkout
+- **WHEN** the observatorium starts
+- **THEN** it SHALL serve the current repository checkout directly
+- **AND** browser clicks SHALL resolve against the local source tree without a
+  separate release artifact
+
+#### Scenario: Browser fallback is available
+- **WHEN** the private Chromium launch path fails
+- **THEN** the launcher SHALL attempt a host browser command
+- **AND** the local observatorium SHALL still open
+
 ### No external dependencies
 
 `generate-traces.sh` MUST use only POSIX shell utilities (`grep`, `find`, `sort`, `awk`, `sed`) and SHALL NOT require any external tools, language runtimes, or network access.
@@ -98,49 +135,55 @@ For each active spec that has at least one `@trace` annotation in the codebase, 
 
 ## Litmus Tests
 
-### test_traces_script_exists (binding: litmus:enclave-isolation)
+### test_observatorium_launch_skeleton (binding: litmus:clickable-trace-index-observatorium-skeleton)
+**Setup**: Run `scripts/run-observatorium.sh --recreate` with browser launch disabled
+**Signal**: The launcher recreates or reuses the podman container, serves the repo root, and the page contains the three-pane observatorium shell
+**Pass**: The launcher exits cleanly, the observatorium page is reachable, and the shell shows specs, code, and cheatsheets panes
+**Fail**: The container cannot be created, the page does not load, or the three-pane shell is missing
+
+### test_traces_script_exists (binding: litmus:clickable-trace-index-generation)
 **Setup**: Check working directory and `scripts/` subdirectory
 **Signal**: File `scripts/generate-traces.sh` exists and is executable
 **Pass**: Script present with `#!/bin/bash` header and execute bit set
 **Fail**: File missing or not executable
 
-### test_scan_scope_coverage (binding: litmus:enclave-isolation)
+### test_scan_scope_coverage (binding: litmus:clickable-trace-index-generation)
 **Setup**: Run `scripts/generate-traces.sh` on fresh repository
 **Signal**: Output includes `.rs`, `.sh`, `.toml`, and `.nix` file extensions in scanned files list
 **Pass**: All four file types appear in scan results
 **Fail**: Any file type missing from coverage
 
-### test_root_traces_md_generated (binding: litmus:enclave-isolation)
+### test_root_traces_md_generated (binding: litmus:clickable-trace-index-generation)
 **Setup**: Run `scripts/generate-traces.sh` from repository root
 **Signal**: File `TRACES.md` created with Markdown table structure
 **Pass**: `TRACES.md` exists, contains table header with columns `Trace | Spec | Source Files`, and spec rows are sorted
 **Fail**: File missing, not a valid Markdown table, or unsorted entries
 
-### test_spec_links_clickable (binding: litmus:enclave-isolation)
+### test_spec_links_clickable (binding: litmus:clickable-trace-index-generation)
 **Setup**: Create a temporary GitHub repo with test specs and run script; validate with `md-link-check TRACES.md`
 **Signal**: Markdown links in TRACES.md resolve to actual files in `openspec/specs/` or `openspec/changes/archive/`
 **Pass**: All links resolve when rendered on GitHub (test on a fork or local GitHub Pages)
 **Fail**: Any broken links or references to non-existent spec files
 
-### test_per_spec_backlinkfile_exists (binding: litmus:enclave-isolation)
+### test_per_spec_backlinkfile_exists (binding: litmus:clickable-trace-index-generation)
 **Setup**: Run `scripts/generate-traces.sh` and inspect `openspec/specs/*/` directories
 **Signal**: Each active spec with ≥1 `@trace` annotation has a `TRACES.md` file alongside `spec.md`
 **Pass**: Backlinkfiles exist for all traced specs
 **Fail**: Any traced spec missing its backlinkfile
 
-### test_build_integration_auto_regenerates (binding: litmus:enclave-isolation)
+### test_build_integration_auto_regenerates (binding: litmus:clickable-trace-index-generation)
 **Setup**: Modify a source file to add a new `@trace spec:test-spec` annotation; run `./build.sh`
 **Signal**: `TRACES.md` is regenerated and includes the new annotation
 **Pass**: TRACES.md updated before build completes
 **Fail**: TRACES.md not regenerated or still shows old state
 
-### test_posix_only_execution (binding: litmus:enclave-isolation)
+### test_posix_only_execution (binding: litmus:clickable-trace-index-generation)
 **Setup**: Run `scripts/generate-traces.sh` on a host with only POSIX tools (no Perl, Ruby, Python, Node)
 **Signal**: Script completes successfully using only `grep`, `find`, `sort`, `awk`, `sed`
 **Pass**: Execution time <10 seconds, no external runtime errors
 **Fail**: Script fails or calls non-POSIX tools
 
-### test_empty_codebase_handling (binding: litmus:enclave-isolation)
+### test_empty_codebase_handling (binding: litmus:clickable-trace-index-generation)
 **Setup**: Create empty directory tree with no source files; copy `scripts/generate-traces.sh` only
 **Signal**: Script runs without crashing
 **Pass**: Exits 0 with message "no traces found" in TRACES.md
