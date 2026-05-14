@@ -1,0 +1,43 @@
+# @trace spec:podman-idiomatic-patterns
+name: litmus:podman-idiomatic-events-no-polling
+spec: podman-idiomatic-patterns
+phase: pre-build
+description: Verify container state observation uses podman events stream rather than polling sleep loops
+severity: high
+
+preconditions:
+  - workspace contains crates/tillandsias-podman with events.rs
+  - cargo is available in PATH
+
+critical_path:
+  - step: "assert events module exists with stream function"
+    command: "grep -F 'pub async fn stream' crates/tillandsias-podman/src/events.rs"
+    timeout_ms: 5000
+
+  - step: "assert podman events format json is used as event source"
+    command: "grep -F 'events' crates/tillandsias-podman/src/events.rs | grep -F 'json'"
+    timeout_ms: 5000
+
+  - step: "assert exponential backoff is present in events fallback"
+    command: "grep -F 'backoff' crates/tillandsias-podman/src/events.rs"
+    timeout_ms: 5000
+
+  - step: "assert PodmanEventStream is exported from crate root"
+    command: "grep -F 'PodmanEventStream' crates/tillandsias-podman/src/lib.rs"
+    timeout_ms: 5000
+
+  - step: "assert no polling sleep loop in events module (no thread::sleep or time::sleep outside backoff)"
+    command: "! grep -E 'thread::sleep|std::thread::sleep' crates/tillandsias-podman/src/events.rs"
+    timeout_ms: 5000
+
+observability:
+  traces:
+    - "@trace spec:podman-idiomatic-patterns"
+  expected_log: "Event-driven observation pattern verified; no polling loop present"
+  log_fields:
+    spec: "podman-idiomatic-patterns"
+    test: "podman-idiomatic-events-no-polling"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-podman/src/events.rs for PodmanEventStream::stream implementation"
+  command: "grep -n 'stream\\|events\\|backoff\\|sleep' crates/tillandsias-podman/src/events.rs | head -20"

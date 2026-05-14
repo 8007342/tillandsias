@@ -1,0 +1,43 @@
+# @trace spec:podman-idiomatic-patterns
+name: litmus:podman-idiomatic-error-discrimination
+spec: podman-idiomatic-patterns
+phase: pre-build
+description: Verify PodmanError categorizes errors into transient (CommandFailed), not-found (NotFound), and parse (ParseError) variants — enabling retry discrimination
+severity: medium
+
+preconditions:
+  - workspace contains crates/tillandsias-podman with client.rs PodmanError enum
+  - cargo is available in PATH
+
+critical_path:
+  - step: "assert PodmanError enum exists with CommandFailed variant"
+    command: "grep -F 'CommandFailed' crates/tillandsias-podman/src/client.rs"
+    timeout_ms: 5000
+
+  - step: "assert PodmanError has NotFound variant for not-found discrimination"
+    command: "grep -F 'NotFound' crates/tillandsias-podman/src/client.rs"
+    timeout_ms: 5000
+
+  - step: "assert PodmanError has ParseError variant"
+    command: "grep -F 'ParseError' crates/tillandsias-podman/src/client.rs"
+    timeout_ms: 5000
+
+  - step: "assert NotFound is used when container or image is absent (not retried)"
+    command: "grep -n 'PodmanError::NotFound' crates/tillandsias-podman/src/client.rs"
+    timeout_ms: 5000
+
+  - step: "compile check: cargo check confirms PodmanError is sound"
+    command: "cargo check -p tillandsias-podman 2>&1 | grep -v '^warning' | head -20"
+    timeout_ms: 120000
+
+observability:
+  traces:
+    - "@trace spec:podman-idiomatic-patterns"
+  expected_log: "PodmanError variants verified for transient/not-found/config discrimination"
+  log_fields:
+    spec: "podman-idiomatic-patterns"
+    test: "podman-idiomatic-error-discrimination"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-podman/src/client.rs PodmanError enum definition and usages"
+  command: "sed -n '1205,1215p' crates/tillandsias-podman/src/client.rs"

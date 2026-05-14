@@ -1,0 +1,43 @@
+# @trace spec:podman-idiomatic-patterns
+name: litmus:podman-idiomatic-storage-isolation
+spec: podman-idiomatic-patterns
+phase: pre-build
+description: Verify three env-var storage isolation paths (GRAPHROOT, RUNROOT, RUNTIME_DIR) are respected and that their absence reverts to host defaults
+severity: high
+
+preconditions:
+  - workspace contains crates/tillandsias-podman with lib.rs storage isolation tests
+  - cargo is available in PATH
+
+critical_path:
+  - step: "run storage isolation env-enabled test"
+    command: "cargo test -p tillandsias-podman lib::tests::local_transport_isolation_env_enables_storage_overrides -- --exact"
+    timeout_ms: 120000
+
+  - step: "run host-defaults test (no isolation env)"
+    command: "cargo test -p tillandsias-podman lib::tests::local_transport_uses_host_defaults_without_isolation_env -- --exact"
+    timeout_ms: 120000
+
+  - step: "assert TILLANDSIAS_PODMAN_GRAPHROOT is read in source"
+    command: "grep -F 'TILLANDSIAS_PODMAN_GRAPHROOT' crates/tillandsias-podman/src/lib.rs"
+    timeout_ms: 5000
+
+  - step: "assert TILLANDSIAS_PODMAN_RUNROOT is read in source"
+    command: "grep -F 'TILLANDSIAS_PODMAN_RUNROOT' crates/tillandsias-podman/src/lib.rs"
+    timeout_ms: 5000
+
+  - step: "assert TILLANDSIAS_PODMAN_RUNTIME_DIR is read in source"
+    command: "grep -F 'TILLANDSIAS_PODMAN_RUNTIME_DIR' crates/tillandsias-podman/src/lib.rs"
+    timeout_ms: 5000
+
+observability:
+  traces:
+    - "@trace spec:podman-idiomatic-patterns"
+  expected_log: "Per-project storage isolation env-var paths verified"
+  log_fields:
+    spec: "podman-idiomatic-patterns"
+    test: "podman-idiomatic-storage-isolation"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-podman/src/lib.rs for podman_graphroot/podman_runroot/podman_runtime_dir functions"
+  command: "grep -n 'TILLANDSIAS_PODMAN_GRAPHROOT\\|TILLANDSIAS_PODMAN_RUNROOT\\|TILLANDSIAS_PODMAN_RUNTIME_DIR' crates/tillandsias-podman/src/lib.rs | head -20"

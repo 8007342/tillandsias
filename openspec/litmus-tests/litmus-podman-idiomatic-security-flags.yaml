@@ -1,0 +1,43 @@
+# @trace spec:podman-idiomatic-patterns
+name: litmus:podman-idiomatic-security-flags
+spec: podman-idiomatic-patterns
+phase: pre-build
+description: Verify every container launch argv carries the four mandatory security flags (--cap-drop=ALL, --security-opt=no-new-privileges, --userns=keep-id, --rm)
+severity: high
+
+preconditions:
+  - workspace contains crates/tillandsias-podman with launch.rs
+  - cargo is available in PATH
+
+critical_path:
+  - step: "run the security flags unit test"
+    command: "cargo test -p tillandsias-podman launch::tests::build_args_has_security_flags -- --exact"
+    timeout_ms: 120000
+
+  - step: "assert --cap-drop=ALL appears in launch source"
+    command: "grep -F 'cap-drop=ALL' crates/tillandsias-podman/src/launch.rs"
+    timeout_ms: 5000
+
+  - step: "assert --security-opt=no-new-privileges appears in launch source"
+    command: "grep -F 'no-new-privileges' crates/tillandsias-podman/src/launch.rs"
+    timeout_ms: 5000
+
+  - step: "assert --userns=keep-id appears in launch source"
+    command: "grep -F 'userns=keep-id' crates/tillandsias-podman/src/launch.rs"
+    timeout_ms: 5000
+
+  - step: "assert --rm appears in launch source"
+    command: "grep -F '\"--rm\"' crates/tillandsias-podman/src/launch.rs"
+    timeout_ms: 5000
+
+observability:
+  traces:
+    - "@trace spec:podman-idiomatic-patterns"
+  expected_log: "Mandatory security flags verified in container launch argv"
+  log_fields:
+    spec: "podman-idiomatic-patterns"
+    test: "podman-idiomatic-security-flags"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-podman/src/launch.rs for missing security flags in build_run_args"
+  command: "grep -n 'cap-drop\\|no-new-privileges\\|userns\\|\"--rm\"' crates/tillandsias-podman/src/launch.rs | head -20"

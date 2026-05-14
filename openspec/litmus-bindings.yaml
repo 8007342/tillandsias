@@ -460,6 +460,15 @@ specs:
   - litmus:podman-container-handle-shape
   coverage_ratio: 33
   last_verified: '2026-05-12'
+- spec_id: podman-idiomatic-patterns
+  status: active
+  litmus_tests:
+  - litmus:podman-idiomatic-security-flags
+  - litmus:podman-idiomatic-storage-isolation
+  - litmus:podman-idiomatic-events-no-polling
+  - litmus:podman-idiomatic-error-discrimination
+  coverage_ratio: 57
+  last_verified: '2026-05-14'
 - spec_id: project-bootstrap-readme
   status: active
   litmus_tests: null
