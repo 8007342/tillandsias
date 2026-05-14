@@ -102,6 +102,11 @@ fi
 
 # ── Find project directory ──────────────────────────────────
 find_project_dir
+\n# ── Export project environment ───────────────────────────────
+# @trace spec:forge-environment-discoverability
+# Export discovery env vars: TILLANDSIAS_PROJECT_PATH, TILLANDSIAS_PROJECT_GENUS
+export_project_env
+
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 

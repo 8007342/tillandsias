@@ -1,11 +1,85 @@
 #!/usr/bin/env bash
 # MCP Server: Project Info for Tillandsias forge containers
-# @trace spec:layered-tools-overlay
+# @trace spec:layered-tools-overlay, spec:forge-environment-discoverability
 # Communicates via JSON-RPC over stdin/stdout (MCP stdio transport)
 #
-# Tools: project_structure, file_summary, search_code
+# Tools: project_structure, file_summary, search_code, project_list, project_info,
+#        project_type, project_metadata
 
 set -euo pipefail
+
+# ── Project type detection ──────────────────────────────────────
+# @trace spec:forge-environment-discoverability
+# Detects project type by examining canonical marker files.
+# Returns a list of detected types (may be multiple for polyglot projects).
+detect_project_types() {
+    local project_dir="${1:-.}"
+    local types=""
+
+    # Detect by marker files (order matters for common polyglots)
+    [ -f "$project_dir/Cargo.toml" ] && types="$types rust"
+    [ -f "$project_dir/Cargo.lock" ] && types="$types rust-workspace"
+    [ -f "$project_dir/go.mod" ] && types="$types go"
+    [ -f "$project_dir/go.sum" ] && types="$types go"
+    [ -f "$project_dir/package.json" ] && types="$types node"
+    [ -f "$project_dir/package-lock.json" ] && types="$types node-npm"
+    [ -f "$project_dir/yarn.lock" ] && types="$types node-yarn"
+    [ -f "$project_dir/pnpm-lock.yaml" ] && types="$types node-pnpm"
+    [ -f "$project_dir/bun.lockb" ] && types="$types node-bun"
+    [ -f "$project_dir/requirements.txt" ] && types="$types python"
+    [ -f "$project_dir/setup.py" ] && types="$types python"
+    [ -f "$project_dir/setup.cfg" ] && types="$types python"
+    [ -f "$project_dir/pyproject.toml" ] && types="$types python-pyproject"
+    [ -f "$project_dir/poetry.lock" ] && types="$types python-poetry"
+    [ -f "$project_dir/Pipfile" ] && types="$types python-pipenv"
+    [ -f "$project_dir/pom.xml" ] && types="$types java-maven"
+    [ -f "$project_dir/build.gradle" ] || [ -f "$project_dir/build.gradle.kts" ] && types="$types java-gradle"
+    [ -f "$project_dir/CMakeLists.txt" ] && types="$types cmake"
+    [ -f "$project_dir/Makefile" ] && types="$types make"
+    [ -f "$project_dir/Dockerfile" ] && types="$types docker"
+    [ -f "$project_dir/flake.nix" ] && types="$types nix"
+    [ -f "$project_dir/pubspec.yaml" ] && types="$types dart-flutter"
+    [ -d "$project_dir/.git" ] && types="$types git"
+
+    # Trim leading/trailing whitespace and deduplicate
+    echo "$types" | xargs | tr ' ' '\n' | sort -u | tr '\n' ',' | sed 's/,$//'
+}
+
+# ── Project metadata extraction ──────────────────────────────────
+# @trace spec:forge-environment-discoverability
+# Extracts structured metadata about a project.
+get_project_metadata() {
+    local project_dir="${1:-.}"
+    local project_name="${2:-$(basename "$project_dir")}"
+
+    # Description from README
+    local description=""
+    if [ -f "$project_dir/README.md" ]; then
+        description=$(head -1 "$project_dir/README.md" | sed 's/^# //' | sed 's/^## //' | head -c 100)
+    fi
+
+    # Project type
+    local project_type
+    project_type=$(detect_project_types "$project_dir")
+
+    # Is Tillandsias-managed
+    local is_managed="false"
+    [ -f "$project_dir/.tillandsias/config.toml" ] && is_managed="true"
+
+    # Output as structured JSON
+    cat <<EOF
+{
+  "name": "$project_name",
+  "path": "$project_dir",
+  "description": "$description",
+  "types": "$project_type",
+  "managed": $is_managed,
+  "has_readme": $([ -f "$project_dir/README.md" ] && echo "true" || echo "false"),
+  "has_git": $([ -d "$project_dir/.git" ] && echo "true" || echo "false"),
+  "has_config": $([ -f "$project_dir/.tillandsias/config.toml" ] && echo "true" || echo "false")
+}
+EOF
+}
 
 # Read JSON-RPC requests from stdin, respond on stdout
 while IFS= read -r line; do
@@ -17,7 +91,7 @@ while IFS= read -r line; do
             echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"project-info","version":"1.0.0"}}}'
             ;;
         "tools/list")
-            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"tools":[{"name":"project_structure","description":"List project files (max depth 3, max 100 files)","inputSchema":{"type":"object","properties":{"depth":{"type":"number","default":3}}}},{"name":"file_summary","description":"Show line count and first lines of a file","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"lines":{"type":"number","default":5}},"required":["path"]}},{"name":"search_code","description":"Search for a pattern across source files","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"glob":{"type":"string","default":"*"}},"required":["pattern"]}},{"name":"project_list","description":"Discover available projects in ~/src/ (git repos)","inputSchema":{"type":"object","properties":{}}}]}}'
+            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"tools":[{"name":"project_structure","description":"List project files (max depth 3, max 100 files)","inputSchema":{"type":"object","properties":{"depth":{"type":"number","default":3}}}},{"name":"file_summary","description":"Show line count and first lines of a file","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"lines":{"type":"number","default":5}},"required":["path"]}},{"name":"search_code","description":"Search for a pattern across source files","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"glob":{"type":"string","default":"*"}},"required":["pattern"]}},{"name":"project_list","description":"Discover available projects in ~/src/ (git repos)","inputSchema":{"type":"object","properties":{}}},{"name":"project_info","description":"Get detailed info about a project at a path","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_type","description":"Detect project type from marker files","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_metadata","description":"Get structured metadata about a project","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."},"name":{"type":"string"}},"required":[]}}]}}'
             ;;
         "tools/call")
             tool=$(echo "$line" | jq -r '.params.name')
@@ -58,7 +132,7 @@ ${preview}"
                                 description=""
                                 # Try to extract first line of README as description
                                 if [ -f "$project_dir/README.md" ]; then
-                                    description=$(head -1 "$project_dir/README.md" | sed 's/^# //' | sed 's/^## //')
+                                    description=$(head -1 "$project_dir/README.md" | sed 's/^# //' | sed 's/^## //' | head -c 100)
                                 fi
                                 # Check if Tillandsias-managed
                                 is_managed="false"
@@ -74,6 +148,25 @@ ${preview}"
                         [ -n "$projects_json" ] && project_data="[$projects_json]"
                     fi
                     result="$project_data"
+                    ;;
+                "project_type")
+                    # @trace spec:forge-environment-discoverability
+                    # Detect project type from marker files
+                    path=$(echo "$args" | jq -r '.path // "."')
+                    result=$(detect_project_types "$path")
+                    ;;
+                "project_info")
+                    # @trace spec:forge-environment-discoverability
+                    # Get detailed project info (deprecated in favor of project_metadata)
+                    path=$(echo "$args" | jq -r '.path // "."')
+                    result=$(get_project_metadata "$path")
+                    ;;
+                "project_metadata")
+                    # @trace spec:forge-environment-discoverability
+                    # Get structured metadata about a project
+                    path=$(echo "$args" | jq -r '.path // "."')
+                    name=$(echo "$args" | jq -r '.name // "unknown"')
+                    result=$(get_project_metadata "$path" "$name")
                     ;;
                 *)
                     result="Unknown tool: $tool"

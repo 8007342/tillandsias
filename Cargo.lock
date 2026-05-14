@@ -2349,6 +2349,7 @@ dependencies = [
  "resvg",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror",
  "tillandsias-logging",
  "tiny-skia",

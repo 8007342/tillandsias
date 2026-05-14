@@ -916,6 +916,49 @@ _pull_cache_evict_lru_if_over_cap() {
     return 0
 }
 
+# ── Project environment discovery ──────────────────────────────────
+# @trace spec:forge-environment-discoverability
+# Export environment variables that allow agents and scripts to discover
+# project context and configuration without external dependencies.
+# Called once at startup; sets TILLANDSIAS_PROJECT_PATH,
+# TILLANDSIAS_PROJECT_GENUS, and other project metadata.
+export_project_env() {
+    # PROJECT_DIR must be set by find_project_dir() before calling this.
+    # If not set, use the first directory under ~/src/ or empty.
+    local project_path="${PROJECT_DIR:-}"
+    if [ -z "$project_path" ]; then
+        for _d in "$HOME/src"/*/; do
+            [ -d "$_d" ] && project_path="${_d%/}" && break
+        done
+    fi
+
+    # Export absolute project path
+    if [ -n "$project_path" ] && [ -d "$project_path" ]; then
+        export TILLANDSIAS_PROJECT_PATH="$project_path"
+        trace_lifecycle "project-env" "TILLANDSIAS_PROJECT_PATH=$TILLANDSIAS_PROJECT_PATH"
+    else
+        export TILLANDSIAS_PROJECT_PATH=""
+        trace_lifecycle "project-env" "TILLANDSIAS_PROJECT_PATH=<empty>"
+        return 0  # No project; non-fatal for headless runs
+    fi
+
+    # Extract project genus (tillandsia name) from config or generate from name
+    local project_genus="${TILLANDSIAS_PROJECT_GENUS:-}"
+    if [ -z "$project_genus" ] && [ -f "$project_path/.tillandsias/config.toml" ]; then
+        # Try to read genus from project config
+        project_genus=$(grep -E '^\s*genus\s*=' "$project_path/.tillandsias/config.toml" 2>/dev/null | \
+            sed 's/.*=\s*"\([^"]*\)".*/\1/' || echo "")
+    fi
+    if [ -z "$project_genus" ]; then
+        # Fallback to TILLANDSIAS_PROJECT env var if available
+        project_genus="${TILLANDSIAS_PROJECT:-}"
+    fi
+    if [ -n "$project_genus" ]; then
+        export TILLANDSIAS_PROJECT_GENUS="$project_genus"
+        trace_lifecycle "project-env" "TILLANDSIAS_PROJECT_GENUS=$TILLANDSIAS_PROJECT_GENUS"
+    fi
+}
+
 # ── Banner ──────────────────────────────────────────────────
 show_banner() {
     local agent_name="${1:-terminal}"

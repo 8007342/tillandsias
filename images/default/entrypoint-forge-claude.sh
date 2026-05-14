@@ -70,6 +70,11 @@ find_project_dir
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
+# ── Export project environment ───────────────────────────────
+# @trace spec:forge-environment-discoverability
+# Export discovery env vars: TILLANDSIAS_PROJECT_PATH, TILLANDSIAS_PROJECT_GENUS
+export_project_env
+
 # ── OpenSpec init (every launch, silent) ────────────────────
 # Always run to ensure /opsx commands are available, even if the project
 # was cloned without openspec config. Idempotent — no-ops if already set up.

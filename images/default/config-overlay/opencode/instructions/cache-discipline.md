@@ -1,9 +1,28 @@
 # Cache Discipline
 
-@trace spec:forge-cache-dual
+@trace spec:forge-cache-dual, spec:forge-shell-tools
 @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md, build/nix-flake-basics.md
 
 Build artifacts must leave the project workspace. This forge uses four distinct storage categories. Understand them before your first `cargo build`, `npm install`, or `cargo run`.
+
+## Quick visibility
+
+Run `cache-report` (or invoke the MCP tool `cache_report`) to see live per-tier sizes:
+
+```text
+$ cache-report
+Tier         Path                                         Size       Persists?
+------------------------------------------------------------------------------
+shared       /nix/store                                   2.4G       yes (RO)
+project      /home/forge/.cache/tillandsias-project       820M       yes
+workspace    /home/forge/src                              31M        yes (git)
+ephemeral    /tmp                                         12M        no
+```
+
+The `tillandsias-help` shell command lists `cache-report` alongside the other
+discoverable helpers. Both the shell shortcut and the MCP tool read the same
+`TILLANDSIAS_*` cache constants exported by `lib-common.sh`, so an agent that
+prefers JSON-RPC and a human at a prompt see identical numbers.
 
 ## The Four Categories
 
@@ -141,6 +160,23 @@ $ npm install  # uses ~/.cache/tillandsias-project/npm/
 → The npm cache (`~/.cache/tillandsias-project/npm/`) persists  
 → Re-run `npm install` on next attach to restore node_modules from cache
 
+## When to rebuild, when to clear
+
+Agents are tempted to "just `cargo clean`" when something looks off. Don't.
+The four tiers each have a different invalidation story:
+
+| Tier | When to rebuild | When to clear |
+|------|-----------------|---------------|
+| **shared** (`/nix/store`) | When `flake.nix` changes (run `nix develop` on the HOST) | Almost never. Run `nix-collect-garbage` on the host. Never `rm -rf` from inside the forge — it is read-only. |
+| **per-project cache** | When build inputs change (the build tool decides) | Only if a tool reports cache corruption. Removing `~/.cache/tillandsias-project/cargo/target` is safe; the next `cargo build` rebuilds from sources. |
+| **workspace** | Never "rebuild" — it is your source code. Use git. | Never clear blindly. `git status` first; lose nothing. |
+| **ephemeral** (`/tmp`) | Re-create on next attach. | Container stop clears it for you. |
+
+**Heuristic**:
+1. If `cache-report` shows a tier exploding past expectations, look at the project cache first. Use `du -h --max-depth=2 ~/.cache/tillandsias-project/` to find the offender.
+2. If a build mysteriously fails, do NOT delete caches preemptively. Try `cargo build --verbose` (or equivalent) and read the error. Cache-clearing hides bugs.
+3. If the forge image was updated (`cache_is_stale` reports the cache version is older than the image version), the per-project cache will be rebuilt automatically on the next build — you do not need to do anything.
+
 ## Cleanup
 
 Cache grows over time. Occasional housekeeping:
@@ -153,6 +189,11 @@ rm -rf ~/.cache/tillandsias/forge-projects/<project>/
 # Nix store cleanup:
 nix-collect-garbage  # removes unreferenced entries from /nix/store/
 ```
+
+Inside the forge, the shell shortcut `cache-report` plus the MCP tool
+`cache_report` are the discoverable inspection surface. There is no
+shell shortcut for "clear all caches" by design — destructive clears
+remain a host-side operation so the forge cannot silently lose work.
 
 ## Sources of Truth
 
