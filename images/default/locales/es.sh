@@ -89,3 +89,9 @@ L_TIP_17="Cambia a bash en cualquier momento: escribe bash"
 L_TIP_18="Cambia a zsh en cualquier momento: escribe zsh"
 L_TIP_19="Revisa el estado de git con git status"
 L_TIP_20="GitHub CLI: gh repo view, gh pr list"
+
+# ── Cheatsheets ────────────────────────────────────────────
+# Note: The cheatsheet pointer is currently hardcoded in forge-welcome.sh
+# and does not use locale variables. This is kept for future localization
+# if we make the banner fully locale-aware.
+L_WELCOME_CHEATSHEETS="📚 Libro de consultas"
