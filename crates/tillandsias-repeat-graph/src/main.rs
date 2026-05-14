@@ -250,19 +250,13 @@ fn load_report(path: &PathBuf) -> RepeatReport {
 }
 
 fn build_index(steps: &[Node]) -> BTreeMap<String, NodeInfo> {
-    fn walk(
-        node: &Node,
-        parent_id: Option<String>,
-        index: &mut BTreeMap<String, NodeInfo>,
-    ) {
-        let id = node
-            .id
-            .clone()
-            .unwrap_or_else(|| node.title.clone().unwrap_or_else(|| format!("node-{}", index.len())));
-        let title = node
-            .title
-            .clone()
-            .unwrap_or_else(|| id.clone());
+    fn walk(node: &Node, parent_id: Option<String>, index: &mut BTreeMap<String, NodeInfo>) {
+        let id = node.id.clone().unwrap_or_else(|| {
+            node.title
+                .clone()
+                .unwrap_or_else(|| format!("node-{}", index.len()))
+        });
+        let title = node.title.clone().unwrap_or_else(|| id.clone());
         let status = node.status.clone().unwrap_or_else(|| "pending".to_string());
         let summary = node
             .handoff_note
@@ -283,10 +277,12 @@ fn build_index(steps: &[Node]) -> BTreeMap<String, NodeInfo> {
             },
         );
         for child in &node.tasks {
-            let child_id = child
-                .id
-                .clone()
-                .unwrap_or_else(|| child.title.clone().unwrap_or_else(|| format!("node-{}", index.len())));
+            let child_id = child.id.clone().unwrap_or_else(|| {
+                child
+                    .title
+                    .clone()
+                    .unwrap_or_else(|| format!("node-{}", index.len()))
+            });
             if let Some(parent) = index.get_mut(&id) {
                 parent.children.push(child_id.clone());
             }
@@ -341,39 +337,47 @@ fn node_visible(
     false
 }
 
-fn node_progress(node_id: &str, index: &BTreeMap<String, NodeInfo>, overlay: &BTreeMap<String, Overlay>) -> i64 {
-    if let Some(overlay) = overlay.get(node_id) {
-        if let Some(progress) = overlay.progress {
-            return clamp(progress);
-        }
+fn node_progress(
+    node_id: &str,
+    index: &BTreeMap<String, NodeInfo>,
+    overlay: &BTreeMap<String, Overlay>,
+) -> i64 {
+    if let Some(overlay) = overlay.get(node_id)
+        && let Some(progress) = overlay.progress
+    {
+        return clamp(progress);
     }
-    if let Some(node) = index.get(node_id) {
-        if active_status(&node.status) {
-            return match node.status.as_str() {
-                "completed" | "done" | "obsoleted" => 100,
-                "failed" => 10,
-                "blocked" => 15,
-                "stale" => 20,
-                "bootstrapping" => 18,
-                "reading" => 30,
-                "planning" => 40,
-                "claimed" => 48,
-                "editing" => 64,
-                "verifying" => 78,
-                "ready" => 26,
-                "running" => 52,
-                _ => 8,
-            };
-        }
+    if let Some(node) = index.get(node_id)
+        && active_status(&node.status)
+    {
+        return match node.status.as_str() {
+            "completed" | "done" | "obsoleted" => 100,
+            "failed" => 10,
+            "blocked" => 15,
+            "stale" => 20,
+            "bootstrapping" => 18,
+            "reading" => 30,
+            "planning" => 40,
+            "claimed" => 48,
+            "editing" => 64,
+            "verifying" => 78,
+            "ready" => 26,
+            "running" => 52,
+            _ => 8,
+        };
     }
     0
 }
 
-fn node_summary(node_id: &str, index: &BTreeMap<String, NodeInfo>, overlay: &BTreeMap<String, Overlay>) -> String {
-    if let Some(overlay) = overlay.get(node_id) {
-        if let Some(summary) = &overlay.summary {
-            return summarize(summary, 56);
-        }
+fn node_summary(
+    node_id: &str,
+    index: &BTreeMap<String, NodeInfo>,
+    overlay: &BTreeMap<String, Overlay>,
+) -> String {
+    if let Some(overlay) = overlay.get(node_id)
+        && let Some(summary) = &overlay.summary
+    {
+        return summarize(summary, 56);
     }
     index
         .get(node_id)
@@ -423,7 +427,10 @@ fn render_node(
         return;
     }
     let connector = if last { "└─" } else { "├─" };
-    let label = if focus_path.contains(node_id) && focus_path.len() > 1 && node_id != focus_path.iter().last().cloned().unwrap_or_default() {
+    let label = if focus_path.contains(node_id)
+        && focus_path.len() > 1
+        && node_id != focus_path.iter().last().cloned().unwrap_or_default()
+    {
         format!("• {}", node.title)
     } else if focus_path.contains(node_id) {
         format!("▶ {}", node.title)
@@ -482,7 +489,13 @@ fn build_overlay(
             .clone()
             .or_else(|| event.graph_node_id.clone())
             .or_else(|| event.spec_id.clone())
-            .or_else(|| if focus_hint.is_empty() { None } else { Some(focus_hint.to_string()) })
+            .or_else(|| {
+                if focus_hint.is_empty() {
+                    None
+                } else {
+                    Some(focus_hint.to_string())
+                }
+            })
             .unwrap_or_default();
         if task_key.is_empty() || !index.contains_key(&task_key) {
             continue;
@@ -519,40 +532,39 @@ fn build_overlay(
     }
 
     if let Some(focus) = report.focus_task_id.clone().or_else(|| {
-        if focus_hint.is_empty() {
-            None
-        } else {
+        if !focus_hint.is_empty() {
             Some(focus_hint.to_string())
+        } else {
+            None
         }
-    }) {
-        if index.contains_key(&focus) {
-            let entry = overlay.entry(focus).or_default();
-            if let Some(status) = &report.status {
-                entry.status = Some(status.clone());
-            }
-            if let Some(progress) = report.after_progress {
-                entry.progress = Some(progress);
-            }
-            if let Some(tokens_spent) = report.tokens_spent {
-                entry.tokens_spent = Some(tokens_spent);
-            }
-            if let Some(prompt_tokens) = report.prompt_tokens {
-                entry.prompt_tokens = Some(prompt_tokens);
-            }
-            if let Some(completion_tokens) = report.completion_tokens {
-                entry.completion_tokens = Some(completion_tokens);
-            }
-            if let Some(tokens_remaining_percent) = report.tokens_remaining_percent {
-                entry.tokens_remaining_percent = Some(tokens_remaining_percent);
-            }
-            if let Some(rate_limit_remaining_percent) = report.rate_limit_remaining_percent {
-                entry.rate_limit_remaining_percent = Some(rate_limit_remaining_percent);
-            }
-            if let Some(summary) = &report.next_action {
-                entry.summary = Some(summary.clone());
-            } else if let Some(label) = &report.milestone_label {
-                entry.summary = Some(label.clone());
-            }
+    }) && index.contains_key(&focus)
+    {
+        let entry = overlay.entry(focus).or_default();
+        if let Some(status) = &report.status {
+            entry.status = Some(status.clone());
+        }
+        if let Some(progress) = report.after_progress {
+            entry.progress = Some(progress);
+        }
+        if let Some(tokens_spent) = report.tokens_spent {
+            entry.tokens_spent = Some(tokens_spent);
+        }
+        if let Some(prompt_tokens) = report.prompt_tokens {
+            entry.prompt_tokens = Some(prompt_tokens);
+        }
+        if let Some(completion_tokens) = report.completion_tokens {
+            entry.completion_tokens = Some(completion_tokens);
+        }
+        if let Some(tokens_remaining_percent) = report.tokens_remaining_percent {
+            entry.tokens_remaining_percent = Some(tokens_remaining_percent);
+        }
+        if let Some(rate_limit_remaining_percent) = report.rate_limit_remaining_percent {
+            entry.rate_limit_remaining_percent = Some(rate_limit_remaining_percent);
+        }
+        if let Some(summary) = &report.next_action {
+            entry.summary = Some(summary.clone());
+        } else if let Some(label) = &report.milestone_label {
+            entry.summary = Some(label.clone());
         }
     }
 
@@ -617,9 +629,20 @@ fn main() {
     let trend_values = if history.is_empty() {
         vec![after]
     } else {
-        history.iter().rev().take(12).cloned().collect::<Vec<_>>().into_iter().rev().collect()
+        history
+            .iter()
+            .rev()
+            .take(12)
+            .cloned()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect()
     };
-    let trend_bar = trend_values.iter().map(|value| spark(*value)).collect::<String>();
+    let trend_bar = trend_values
+        .iter()
+        .map(|value| spark(*value))
+        .collect::<String>();
     let trend_avg = if trend_values.is_empty() {
         0.0
     } else {
@@ -655,7 +678,13 @@ fn main() {
         .blockers
         .clone()
         .filter(|blockers| !blockers.is_empty())
-        .map(|blockers| blockers.into_iter().map(|item| summarize(&item, 28)).collect::<Vec<_>>().join(", "))
+        .map(|blockers| {
+            blockers
+                .into_iter()
+                .map(|item| summarize(&item, 28))
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
         .unwrap_or_else(|| "none".to_string());
     let checkpoint = report.checkpoint_commit.clone().unwrap_or_default();
     let ready_count = report.ready_count.unwrap_or(0);
@@ -665,8 +694,14 @@ fn main() {
     let completion_tokens = report.completion_tokens;
     let tokens_remaining_percent = report.tokens_remaining_percent;
     let rate_limit_remaining_percent = report.rate_limit_remaining_percent;
-    let branch = report.branch.clone().unwrap_or_else(|| "linux-next".to_string());
-    let status = report.status.clone().unwrap_or_else(|| "running".to_string());
+    let branch = report
+        .branch
+        .clone()
+        .unwrap_or_else(|| "linux-next".to_string());
+    let status = report
+        .status
+        .clone()
+        .unwrap_or_else(|| "running".to_string());
     let loop_state_label = match loop_state.as_str() {
         "waiting_on_agent" => "waiting on agent".to_string(),
         "agent_working" => "agent working".to_string(),
@@ -725,17 +760,18 @@ fn main() {
     );
     println!(
         "[codex-repeat] trend    {}  latest={} prev={} avg={:.1}",
-        trend_bar,
-        latest,
-        previous,
-        trend_avg
+        trend_bar, latest, previous, trend_avg
     );
     println!(
         "[codex-repeat] tree     active={} ready={} blocked={} focus={} events={}",
         active_count,
         ready_count,
         blocked_count,
-        if focus_hint.is_empty() { "n/a" } else { &focus_hint },
+        if focus_hint.is_empty() {
+            "n/a"
+        } else {
+            &focus_hint
+        },
         events.len()
     );
     if tokens_spent.is_some()
@@ -765,9 +801,7 @@ fn main() {
     }
     println!(
         "[codex-repeat] milestone {}  next={}  blockers={}",
-        milestone_stamp,
-        next_action,
-        blockers_text
+        milestone_stamp, next_action, blockers_text
     );
     if events.is_empty() && overlay_active_count == 0 {
         println!(
@@ -778,7 +812,10 @@ fn main() {
         println!("[codex-repeat] checkpoint {}", checkpoint);
     }
     if !sleep_interval.is_empty() && loop_state == "sleeping_until_next_iteration" {
-        println!("[codex-repeat] next wake in {} | exit={}", sleep_interval, exit_code);
+        println!(
+            "[codex-repeat] next wake in {} | exit={}",
+            sleep_interval, exit_code
+        );
     }
     println!("[codex-repeat] tree");
     for line in tree_lines {

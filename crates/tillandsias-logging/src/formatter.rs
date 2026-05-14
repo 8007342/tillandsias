@@ -7,6 +7,7 @@ use std::fmt::Write;
 /// Format: `TIMESTAMP LEVEL component: message {key=val, ...}`
 ///
 /// For accountability events, adds multi-line block with metadata.
+#[allow(clippy::too_many_arguments)]
 pub fn format_compact(
     timestamp: &str,
     level: &str,
@@ -35,7 +36,11 @@ pub fn format_compact(
     };
 
     // Main log line
-    let _ = write!(output, "{} {} {}: {}", timestamp, level_str, component, message);
+    let _ = write!(
+        output,
+        "{} {} {}: {}",
+        timestamp, level_str, component, message
+    );
 
     // Add context fields (filtered to exclude accountability metadata)
     if let Some(ctx) = context {
@@ -63,7 +68,7 @@ pub fn format_compact(
 
     // Add accountability metadata if present
     if accountability.unwrap_or(false) {
-        let _ = write!(output, "\n");
+        let _ = writeln!(output);
         if let Some(cat) = category {
             let _ = write!(output, "  [{}]", cat);
         }

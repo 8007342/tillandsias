@@ -3,12 +3,12 @@
 //! @trace spec:host-browser-mcp, spec:browser-isolation-tray-integration
 //! @cheatsheet web/mcp.md, web/cdp.md
 
-use base64::Engine;
 use crate::allowlist;
 use crate::cdp_client::{CdpError, CdpSession};
 use crate::framing::{RpcRequest, RpcResponse};
 use crate::launcher::{self, LaunchError};
-use crate::window_registry::{close_window, DebounceTable, WindowRegistry};
+use crate::window_registry::{DebounceTable, WindowRegistry, close_window};
+use base64::Engine;
 use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -52,7 +52,8 @@ impl BrowserMcpServer {
     /// Create a new MCP server with the given config.
     /// @trace spec:host-browser-mcp
     pub fn new(config: McpServerConfig) -> Self {
-        let project_label = std::env::var("TILLANDSIAS_PROJECT").unwrap_or_else(|_| "unknown".to_string());
+        let project_label =
+            std::env::var("TILLANDSIAS_PROJECT").unwrap_or_else(|_| "unknown".to_string());
         Self::with_project_label(config, project_label, None)
     }
 
@@ -132,9 +133,7 @@ impl BrowserMcpServer {
     }
 
     fn requested_arguments(request: &RpcRequest) -> &serde_json::Value {
-        request.params
-            .get("arguments")
-            .unwrap_or(&request.params)
+        request.params.get("arguments").unwrap_or(&request.params)
     }
 
     fn browser_binary(&self) -> Option<PathBuf> {
@@ -339,7 +338,10 @@ impl BrowserMcpServer {
             "browser.screenshot" => self.handle_browser_screenshot(id, args).await,
             "browser.click" => self.handle_browser_click(id, args).await,
             "browser.type" => self.handle_browser_type(id, args).await,
-            "browser.eval" => Self::tool_error(id, "EVAL_DISABLED: browser.eval is disabled in v1; see follow-up change"),
+            "browser.eval" => Self::tool_error(
+                id,
+                "EVAL_DISABLED: browser.eval is disabled in v1; see follow-up change",
+            ),
             "browser.close" => self.handle_browser_close(id, args),
             other => Self::tool_error(id, format!("TOOL_NOT_FOUND: {other}")),
         };
@@ -360,20 +362,18 @@ impl BrowserMcpServer {
             }
         };
 
-        if let Some((elapsed, existing_window_id)) = self
-            .debounce
-            .get(&self.project_label, &allowed.host)
+        if let Some((elapsed, existing_window_id)) =
+            self.debounce.get(&self.project_label, &allowed.host)
+            && elapsed.elapsed() < Duration::from_millis(1000)
+            && self.windows.contains(&existing_window_id)
         {
-            if elapsed.elapsed() < Duration::from_millis(1000) && self.windows.contains(&existing_window_id)
-            {
-                return RpcResponse::Success {
-                    id,
-                    result: json!({
-                        "window_id": existing_window_id,
-                        "debounced": true
-                    }),
-                };
-            }
+            return RpcResponse::Success {
+                id,
+                result: json!({
+                "window_id": existing_window_id,
+                    "debounced": true
+                }),
+            };
         }
 
         let entry = match launcher::launch(
@@ -431,7 +431,11 @@ impl BrowserMcpServer {
 
     fn handle_browser_read_url(&self, id: u64, args: &serde_json::Value) -> RpcResponse {
         let Some(window_id) = args.get("window_id").and_then(|value| value.as_str()) else {
-            return Self::json_rpc_error(id, -32602, "browser.read_url requires arguments.window_id");
+            return Self::json_rpc_error(
+                id,
+                -32602,
+                "browser.read_url requires arguments.window_id",
+            );
         };
 
         match self.windows.get(window_id) {
@@ -467,7 +471,11 @@ impl BrowserMcpServer {
     async fn handle_browser_screenshot(&self, id: u64, args: &serde_json::Value) -> RpcResponse {
         // @trace spec:host-browser-mcp, spec:browser-isolation-core
         let Some(window_id) = args.get("window_id").and_then(|value| value.as_str()) else {
-            return Self::json_rpc_error(id, -32602, "browser.screenshot requires arguments.window_id");
+            return Self::json_rpc_error(
+                id,
+                -32602,
+                "browser.screenshot requires arguments.window_id",
+            );
         };
 
         let full_page = args
@@ -660,11 +668,7 @@ impl BrowserMcpServer {
 mod tests {
     use super::*;
     fn test_server(browser_bin: Option<PathBuf>) -> BrowserMcpServer {
-        BrowserMcpServer::with_project_label(
-            McpServerConfig::default(),
-            "acme",
-            browser_bin,
-        )
+        BrowserMcpServer::with_project_label(McpServerConfig::default(), "acme", browser_bin)
     }
 
     fn test_server_fake_launch(browser_bin: Option<PathBuf>) -> BrowserMcpServer {
@@ -874,7 +878,9 @@ mod tests {
             })
             .await;
         let first_window_id = match first {
-            RpcResponse::Success { result, .. } => result["window_id"].as_str().unwrap().to_string(),
+            RpcResponse::Success { result, .. } => {
+                result["window_id"].as_str().unwrap().to_string()
+            }
             other => panic!("expected success, got {other:?}"),
         };
 
@@ -943,7 +949,9 @@ mod tests {
             })
             .await;
         let window_id = match open {
-            RpcResponse::Success { result, .. } => result["window_id"].as_str().unwrap().to_string(),
+            RpcResponse::Success { result, .. } => {
+                result["window_id"].as_str().unwrap().to_string()
+            }
             other => panic!("expected success, got {other:?}"),
         };
 
@@ -1099,7 +1107,9 @@ mod tests {
             .await;
 
         let window_id = match response {
-            RpcResponse::Success { result, .. } => result["window_id"].as_str().unwrap().to_string(),
+            RpcResponse::Success { result, .. } => {
+                result["window_id"].as_str().unwrap().to_string()
+            }
             other => panic!("expected success, got {other:?}"),
         };
 

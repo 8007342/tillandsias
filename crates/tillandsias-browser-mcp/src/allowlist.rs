@@ -44,7 +44,10 @@ impl fmt::Display for AllowlistDeny {
                 write!(f, "port must be {expected} (got {actual:?})")
             }
             AllowlistDeny::ProjectMismatch { expected, actual } => {
-                write!(f, "project suffix mismatch: expected {expected}, got {actual}")
+                write!(
+                    f,
+                    "project suffix mismatch: expected {expected}, got {actual}"
+                )
             }
             AllowlistDeny::OpencodeSelf => write!(f, "opencode-self host is not allowed"),
             AllowlistDeny::HostShape => write!(f, "host must be <service>.<project>.localhost"),

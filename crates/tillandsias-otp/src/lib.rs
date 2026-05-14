@@ -18,9 +18,9 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use base64::Engine;
 use rand::TryRngCore;
 use rand::rngs::OsRng;
-use base64::Engine;
 use subtle::ConstantTimeEq;
 use tracing::{debug, info};
 use zeroize::Zeroize;
@@ -538,10 +538,7 @@ mod tests {
 
     #[test]
     fn login_form_html_targets_auth_endpoint_and_posts_otp() {
-        let html = build_login_form_html(
-            "http://opencode.demo.localhost:8080",
-            "abc123_OTP",
-        );
+        let html = build_login_form_html("http://opencode.demo.localhost:8080", "abc123_OTP");
 
         assert!(html.contains("method=\"post\""));
         assert!(html.contains("action=\"http://opencode.demo.localhost:8080/_auth/login\""));

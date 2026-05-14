@@ -71,7 +71,11 @@ mod subdomain {
         let project = parts[parts.len() - 1];
 
         // Project label must be non-empty and valid (alphanumeric + hyphens + underscores).
-        if project.is_empty() || !project.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        if project.is_empty()
+            || !project
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        {
             return None;
         }
 
@@ -229,7 +233,11 @@ async fn read_and_dispatch(sock: &mut TcpStream, store: &'static OtpStore) -> Op
     // Validate: cookie + subdomain binding.
     // The OtpStore enforces that a cookie is only valid for its registered project.
     // @trace spec:subdomain-naming-flip, spec:subdomain-routing-via-reverse-proxy
-    Some(validate_subdomain_binding(store, &subdomain_project, &cookie_bytes))
+    Some(validate_subdomain_binding(
+        store,
+        &subdomain_project,
+        &cookie_bytes,
+    ))
 }
 
 /// Read until "\r\n\r\n" or 8 KiB, whichever comes first. Returns the
@@ -528,10 +536,7 @@ mod tests {
     fn subdomain_extract_project_label_rejects_plain_localhost() {
         // @trace spec:subdomain-naming-flip
         // Plain `localhost` has no project component.
-        assert_eq!(
-            super::subdomain::extract_project_label("localhost"),
-            None
-        );
+        assert_eq!(super::subdomain::extract_project_label("localhost"), None);
         assert_eq!(
             super::subdomain::extract_project_label("localhost:8080"),
             None
@@ -711,15 +716,8 @@ mod tests {
     }
 
     /// Fire an HTTP request with custom Host header for subdomain testing.
-    async fn request_with_host(
-        port: u16,
-        path: &str,
-        host: &str,
-        cookie: Option<&str>,
-    ) -> String {
-        let mut sock = TcpStream::connect(("127.0.0.1", port))
-            .await
-            .unwrap();
+    async fn request_with_host(port: u16, path: &str, host: &str, cookie: Option<&str>) -> String {
+        let mut sock = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
         let cookie_line = cookie
             .map(|c| format!("Cookie: {c}\r\n"))
             .unwrap_or_default();

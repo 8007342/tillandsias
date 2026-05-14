@@ -232,7 +232,9 @@ fn print_usage(version: &str) {
     println!("       tillandsias --status-check [--debug]");
     println!("       tillandsias --github-login [--debug]");
     println!("       tillandsias --opencode <project> [--prompt <text>] [--debug|--diagnostics]");
-    println!("       tillandsias --opencode-web <project> [--prompt <text>] [--debug|--diagnostics]");
+    println!(
+        "       tillandsias --opencode-web <project> [--prompt <text>] [--debug|--diagnostics]"
+    );
     println!("  --headless     Run in headless mode (no UI)");
     println!("  --tray         Run in tray mode (requires native tray support)");
     println!("  --opencode     Enable LLM code analysis mode");
@@ -243,7 +245,9 @@ fn print_usage(version: &str) {
     println!("  --status-check Verify services are online through a representative stack smoke");
     println!("  --github-login Authenticate GitHub and create ephemeral Podman secret");
     println!("  --debug        Show command-level diagnostics and capture build logs");
-    println!("  --diagnostics  Stream real-time logs from all enclave containers (implies --debug)");
+    println!(
+        "  --diagnostics  Stream real-time logs from all enclave containers (implies --debug)"
+    );
     println!("  --debug        Show command-level diagnostics and capture build logs");
     println!("  --version      Show version information");
     println!("  --help         Show this help");
@@ -352,8 +356,8 @@ impl InitBuildState {
     fn save(&self) -> Result<(), String> {
         let cache_dir = init_cache_dir()?;
         let state_file = cache_dir.join("init-build-state.json");
-        let contents =
-            serde_json::to_string_pretty(self).map_err(|e| format!("Failed to serialize state: {e}"))?;
+        let contents = serde_json::to_string_pretty(self)
+            .map_err(|e| format!("Failed to serialize state: {e}"))?;
         fs::write(&state_file, contents)
             .map_err(|e| format!("Failed to write init build state: {e}"))?;
         Ok(())
@@ -368,7 +372,10 @@ impl InitBuildState {
     }
 
     fn was_successful(&self, image: &str) -> bool {
-        self.images.get(image).map(|s| s == "success").unwrap_or(false)
+        self.images
+            .get(image)
+            .map(|s| s == "success")
+            .unwrap_or(false)
     }
 }
 
@@ -381,8 +388,7 @@ fn init_cache_dir() -> Result<PathBuf, String> {
         return Err("Cannot determine cache directory: HOME not set".to_string());
     };
 
-    fs::create_dir_all(&cache_dir)
-        .map_err(|e| format!("Failed to create cache directory: {e}"))?;
+    fs::create_dir_all(&cache_dir).map_err(|e| format!("Failed to create cache directory: {e}"))?;
     Ok(cache_dir)
 }
 
@@ -946,8 +952,7 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     ];
 
     // Load existing build state or create new one
-    let mut state = InitBuildState::load()?
-        .unwrap_or_else(InitBuildState::new);
+    let mut state = InitBuildState::load()?.unwrap_or_else(InitBuildState::new);
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
     let mut failed_images = Vec::new();
@@ -1009,16 +1014,19 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         eprintln!("\n=== Failed Build Logs ===");
         for (image, _error) in &failed_images {
             let log_file = init_log_file(image, debug);
-            if let Some(log_path) = log_file {
-                if log_path.exists() {
-                    if let Ok(contents) = fs::read_to_string(&log_path) {
-                        let lines: Vec<&str> = contents.lines().collect();
-                        let start = if lines.len() > 10 { lines.len() - 10 } else { 0 };
-                        eprintln!("\n--- {} (last 10 lines) ---", image);
-                        for line in &lines[start..] {
-                            eprintln!("{}", line);
-                        }
-                    }
+            if let Some(log_path) = log_file
+                && log_path.exists()
+                && let Ok(contents) = fs::read_to_string(&log_path)
+            {
+                let lines: Vec<&str> = contents.lines().collect();
+                let start = if lines.len() > 10 {
+                    lines.len() - 10
+                } else {
+                    0
+                };
+                eprintln!("\n--- {} (last 10 lines) ---", image);
+                for line in &lines[start..] {
+                    eprintln!("{}", line);
                 }
             }
         }
@@ -1058,18 +1066,29 @@ fn build_image_with_logging(
 
     let mut command = podman_command();
     command.args(["build", "-t", image_tag, "-f"]);
-    command.arg(containerfile.to_str().ok_or_else(|| "Containerfile path contains invalid UTF-8".to_string())?);
+    command.arg(
+        containerfile
+            .to_str()
+            .ok_or_else(|| "Containerfile path contains invalid UTF-8".to_string())?,
+    );
 
     for arg in &build_args {
         command.arg(arg);
     }
 
-    command.arg(context_dir.to_str().ok_or_else(|| "Context path contains invalid UTF-8".to_string())?);
+    command.arg(
+        context_dir
+            .to_str()
+            .ok_or_else(|| "Context path contains invalid UTF-8".to_string())?,
+    );
 
     if let Some(log_path) = log_file {
         // Redirect stdout and stderr to log file
         if debug {
-            eprintln!("[tillandsias] logging build output to {}", log_path.display());
+            eprintln!(
+                "[tillandsias] logging build output to {}",
+                log_path.display()
+            );
         }
 
         let log_file_handle = fs::OpenOptions::new()
@@ -1079,7 +1098,11 @@ fn build_image_with_logging(
             .open(log_path)
             .map_err(|e| format!("Failed to open log file: {e}"))?;
 
-        command.stdout(log_file_handle.try_clone().map_err(|e| format!("Failed to clone log file handle: {e}"))?);
+        command.stdout(
+            log_file_handle
+                .try_clone()
+                .map_err(|e| format!("Failed to clone log file handle: {e}"))?,
+        );
         command.stderr(log_file_handle);
     }
 
@@ -1095,7 +1118,14 @@ fn build_image_with_logging(
 }
 
 fn cleanup_init_logs() {
-    for image in &["proxy", "git", "inference", "chromium-core", "chromium-framework", "forge"] {
+    for image in &[
+        "proxy",
+        "git",
+        "inference",
+        "chromium-core",
+        "chromium-framework",
+        "forge",
+    ] {
         let log_path = PathBuf::from(format!("/tmp/tillandsias-init-{}.log", image));
         let _ = fs::remove_file(&log_path);
     }
@@ -1740,7 +1770,16 @@ fn opencode_web_startup_stages() -> &'static [&'static str; 6] {
 fn wait_for_opencode_web(url: &str, debug: bool) -> Result<(), String> {
     for attempt in 1..=20 {
         let output = Command::new("curl")
-            .args(["-sS", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "1", url])
+            .args([
+                "-sS",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                "--max-time",
+                "1",
+                url,
+            ])
             .output();
         if let Ok(output) = output
             && output.status.success()
@@ -1890,10 +1929,7 @@ fn build_opencode_web_browser_spec(
 /// Send IssueWebSession message to tray's control socket.
 ///
 /// @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
-fn send_issue_web_session(
-    project_label: &str,
-    cookie_value: &[u8; 32],
-) -> Result<(), String> {
+fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Result<(), String> {
     // Get control socket path from XDG_RUNTIME_DIR or default.
     let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
         .unwrap_or_else(|_| format!("/run/user/{}", unsafe { libc::getuid() }));
@@ -1914,8 +1950,8 @@ fn send_issue_web_session(
     };
 
     // Encode and write with length prefix (4-byte big-endian).
-    let encoded = encode(&envelope)
-        .map_err(|e| format!("Failed to encode control message: {}", e))?;
+    let encoded =
+        encode(&envelope).map_err(|e| format!("Failed to encode control message: {}", e))?;
     let len = encoded.len() as u32;
     let mut frame = len.to_be_bytes().to_vec();
     frame.extend_from_slice(&encoded);
@@ -1964,13 +2000,8 @@ fn launch_opencode_web_browser(
     let project_label = format!("opencode.{project_name}.localhost");
     let otp = tillandsias_otp::issue_session(&project_label);
     let login_url = tillandsias_otp::build_login_data_url(&url, &otp);
-    let spec = build_opencode_web_browser_spec(
-        &login_url,
-        version,
-        &profile_path,
-        certs_dir,
-        &display,
-    )?;
+    let spec =
+        build_opencode_web_browser_spec(&login_url, version, &profile_path, certs_dir, &display)?;
     let args = spec.build_run_args();
 
     emit_opencode_web_event(project_name, "browser", "launch", Some("podman-run"))?;
@@ -1980,10 +2011,10 @@ fn launch_opencode_web_browser(
         // @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
         // Notify router (via control socket) that a web session has been issued.
         // This is non-critical; if the tray is down, we skip the notification gracefully.
-        if let Err(e) = send_issue_web_session(&project_label, &otp) {
-            if debug {
-                eprintln!("[tillandsias] Warning: failed to notify router of web session: {e}");
-            }
+        if let Err(e) = send_issue_web_session(&project_label, &otp)
+            && debug
+        {
+            eprintln!("[tillandsias] Warning: failed to notify router of web session: {e}");
         }
     } else if let Err(ref err) = result {
         let _ = emit_opencode_web_event(project_name, "browser", "launch_failed", Some(err));

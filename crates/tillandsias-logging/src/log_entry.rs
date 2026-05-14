@@ -23,7 +23,7 @@ pub struct LogEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context: Option<HashMap<String, Value>>,
 
-    /// @trace spec:<name> link for spec traceability
+    /// `@trace spec:<name>` link for spec traceability
     #[serde(skip_serializing_if = "Option::is_none")]
     pub spec_trace: Option<String>,
 

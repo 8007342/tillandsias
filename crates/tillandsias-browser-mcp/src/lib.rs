@@ -6,15 +6,15 @@
 //! @trace spec:host-browser-mcp
 //! @cheatsheet web/mcp.md, web/cdp.md
 
-pub mod framing;
 pub mod allowlist;
+pub mod cdp_client;
+pub mod framing;
 pub mod launcher;
 pub mod server;
 pub mod window_registry;
-pub mod cdp_client;
 
-pub use server::{BrowserMcpServer, McpServerConfig};
 pub use cdp_client::CdpSession;
+pub use server::{BrowserMcpServer, McpServerConfig};
 
 /// Default per-session concurrent call limit (16 tools can run in parallel).
 pub const DEFAULT_CONCURRENT_CALLS: usize = 16;

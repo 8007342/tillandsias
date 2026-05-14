@@ -50,15 +50,21 @@ impl WindowRegistry {
     }
 
     pub fn get(&self, window_id: &str) -> Option<WindowSummary> {
-        self.windows.lock().get(window_id).map(|entry| WindowSummary {
-            window_id: entry.window_id.clone(),
-            url: entry.opened_url.clone(),
-            title: entry.title.clone(),
-        })
+        self.windows
+            .lock()
+            .get(window_id)
+            .map(|entry| WindowSummary {
+                window_id: entry.window_id.clone(),
+                url: entry.opened_url.clone(),
+                title: entry.title.clone(),
+            })
     }
 
     pub fn get_entry(&self, window_id: &str) -> Option<(u16, String)> {
-        self.windows.lock().get(window_id).map(|entry| (entry.cdp_port, entry.target_id.clone()))
+        self.windows
+            .lock()
+            .get(window_id)
+            .map(|entry| (entry.cdp_port, entry.target_id.clone()))
     }
 
     pub fn get_entry_mut(&self, window_id: &str) -> Option<WindowEntry> {
@@ -79,7 +85,11 @@ impl WindowRegistry {
     }
 
     pub fn drain_all(&self) -> Vec<WindowEntry> {
-        self.windows.lock().drain().map(|(_, entry)| entry).collect()
+        self.windows
+            .lock()
+            .drain()
+            .map(|(_, entry)| entry)
+            .collect()
     }
 
     pub fn contains(&self, window_id: &str) -> bool {
@@ -137,4 +147,3 @@ pub fn close_all(registry: &WindowRegistry, debounce: &DebounceTable) -> Vec<Win
     }
     entries
 }
-

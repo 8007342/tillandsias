@@ -7,7 +7,7 @@
 //! @cheatsheet web/cdp.md
 
 use base64::Engine;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
@@ -94,11 +94,10 @@ impl CdpSession {
         // For now, use simple HTTP-based JSON over raw socket (not WebSocket).
         // In production, this would be a WebSocket connection with proper framing.
         // The `/devtools/protocol` endpoint accepts JSON over raw socket.
-        let body = serde_json::to_string(&request)
-            .map_err(|e| CdpError::ProtocolError {
-                code: -32700,
-                message: format!("JSON encode error: {e}"),
-            })?;
+        let body = serde_json::to_string(&request).map_err(|e| CdpError::ProtocolError {
+            code: -32700,
+            message: format!("JSON encode error: {e}"),
+        })?;
 
         // Write raw JSON command (Chrome's inspector protocol accepts this)
         self.stream
@@ -123,19 +122,15 @@ impl CdpSession {
 
         // Parse the response, stripping the null terminator
         let response_bytes = &buffer[..n.saturating_sub(1)];
-        let response: Value = serde_json::from_slice(response_bytes).map_err(|e| {
-            CdpError::ProtocolError {
+        let response: Value =
+            serde_json::from_slice(response_bytes).map_err(|e| CdpError::ProtocolError {
                 code: -32700,
                 message: format!("JSON decode error: {e}"),
-            }
-        })?;
+            })?;
 
         // Check for protocol-level error
         if let Some(error) = response.get("error") {
-            let code = error
-                .get("code")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(-1) as i32;
+            let code = error.get("code").and_then(|v| v.as_i64()).unwrap_or(-1) as i32;
             let message = error
                 .get("message")
                 .and_then(|v| v.as_str())

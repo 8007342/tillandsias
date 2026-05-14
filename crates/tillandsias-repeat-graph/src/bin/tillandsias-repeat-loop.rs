@@ -80,7 +80,9 @@ fn parse_args() -> Result<RepeatArgs, AnyError> {
             "--times" => {
                 times = args.next().and_then(|value| value.parse::<usize>().ok());
             }
-            "--plan-root" => plan_root = PathBuf::from(args.next().unwrap_or_else(|| "plan".to_string())),
+            "--plan-root" => {
+                plan_root = PathBuf::from(args.next().unwrap_or_else(|| "plan".to_string()))
+            }
             "--trend-window" => {
                 trend_window = args
                     .next()
@@ -101,9 +103,18 @@ fn parse_args() -> Result<RepeatArgs, AnyError> {
 
     let prompt = prompt.ok_or("missing prompt")?;
     let interval = interval.ok_or("missing interval")?;
-    let codex_bin = codex_bin.unwrap_or_else(|| find_in_path("codex").unwrap_or_else(|| PathBuf::from("codex")));
-    let renderer_bin = renderer_bin.unwrap_or_else(|| env::current_dir().unwrap().join("target/debug/tillandsias-repeat-graph"));
-    let state_root = state_root.unwrap_or_else(|| env::current_dir().unwrap().join("plan/localwork/codex-repeat"));
+    let codex_bin = codex_bin
+        .unwrap_or_else(|| find_in_path("codex").unwrap_or_else(|| PathBuf::from("codex")));
+    let renderer_bin = renderer_bin.unwrap_or_else(|| {
+        env::current_dir()
+            .unwrap()
+            .join("target/debug/tillandsias-repeat-graph")
+    });
+    let state_root = state_root.unwrap_or_else(|| {
+        env::current_dir()
+            .unwrap()
+            .join("plan/localwork/codex-repeat")
+    });
 
     Ok(RepeatArgs {
         prompt,
@@ -268,6 +279,7 @@ fn repeat_prompt_prefix() -> &'static str {
     PROMPT_PREFIX
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn render_snapshot(
     renderer_bin: PathBuf,
     plan_index: PathBuf,
@@ -296,7 +308,11 @@ async fn render_snapshot(
                 OsStr::new(&sleep_interval),
             ])
             .status()?;
-        if status.success() { Ok(()) } else { Err(format!("renderer exited with {status}").into()) }
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("renderer exited with {status}").into())
+        }
     })
     .await?
 }
@@ -330,7 +346,9 @@ async fn run() -> Result<(), AnyError> {
 
     ensure_dir(&args.state_root)?;
     let session_id = format!("repeat-{}-{}", chrono_like_timestamp(), std::process::id());
-    let session_dir = args.state_root.join(format!("session.{}", chrono_like_timestamp()));
+    let session_dir = args
+        .state_root
+        .join(format!("session.{}", chrono_like_timestamp()));
     ensure_dir(&session_dir)?;
 
     let schema_file = session_dir.join("report-schema.json");
@@ -372,7 +390,12 @@ async fn run() -> Result<(), AnyError> {
     loop {
         cycle += 1;
         fs::write(&event_log_file, "")?;
-        print_cycle_start(&session_id, cycle, &args.interval, current_epoch() - start_epoch);
+        print_cycle_start(
+            &session_id,
+            cycle,
+            &args.interval,
+            current_epoch() - start_epoch,
+        );
         render_snapshot(
             args.renderer_bin.clone(),
             args.plan_root.join("index.yaml"),
@@ -585,7 +608,9 @@ fn chrono_like_timestamp() -> String {
 
 fn extract_after_progress(report_json: &str) -> Option<i64> {
     let parsed: serde_json::Value = serde_json::from_str(report_json).ok()?;
-    parsed.get("after_progress").and_then(|value| value.as_i64())
+    parsed
+        .get("after_progress")
+        .and_then(|value| value.as_i64())
 }
 
 #[tokio::main]

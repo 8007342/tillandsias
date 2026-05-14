@@ -36,23 +36,32 @@ impl ContainerLogStream {
                 reason: e.to_string(),
             })?;
 
-        Ok(Self { container_name, child })
+        Ok(Self {
+            container_name,
+            child,
+        })
     }
 
     /// Read and forward log lines from this container's stream.
     ///
     /// Each line is prefixed with `[<container_name>]` and sent to the provided channel.
     /// Stops when the stream ends or the channel closes.
-    pub async fn forward_lines(&mut self, tx: mpsc::UnboundedSender<String>) -> Result<(), DiagnosticsError> {
+    pub async fn forward_lines(
+        &mut self,
+        tx: mpsc::UnboundedSender<String>,
+    ) -> Result<(), DiagnosticsError> {
         if let Some(stdout) = self.child.stdout.take() {
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
 
-            while let Some(line) = lines.next_line().await
-                .map_err(|e| DiagnosticsError::ReadFailed {
-                    container: self.container_name.clone(),
-                    reason: e.to_string(),
-                })?
+            while let Some(line) =
+                lines
+                    .next_line()
+                    .await
+                    .map_err(|e| DiagnosticsError::ReadFailed {
+                        container: self.container_name.clone(),
+                        reason: e.to_string(),
+                    })?
             {
                 let prefixed = format!("[{}] {}", self.container_name, line);
                 if tx.send(prefixed).is_err() {
@@ -72,7 +81,9 @@ impl ContainerLogStream {
 
     /// Wait for the stream to finish (blocking).
     pub async fn wait(&mut self) -> Result<(), DiagnosticsError> {
-        self.child.wait().await
+        self.child
+            .wait()
+            .await
             .map_err(|e| DiagnosticsError::WaitFailed {
                 container: self.container_name.clone(),
                 reason: e.to_string(),
@@ -85,11 +96,9 @@ impl Drop for ContainerLogStream {
     fn drop(&mut self) {
         // Kill the podman logs process on drop to ensure clean shutdown.
         // @trace spec:runtime-diagnostics-stream
-        if let Ok(child) = self.child.try_wait() {
-            if child.is_none() {
-                // Process is still running, kill it
-                let _ = self.child.kill();
-            }
+        if let Ok(None) = self.child.try_wait() {
+            // Process is still running, kill it
+            drop(self.child.kill());
         }
     }
 }

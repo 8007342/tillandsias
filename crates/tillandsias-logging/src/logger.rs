@@ -1,15 +1,14 @@
 // @trace spec:runtime-logging, spec:logging-levels, spec:external-logs-layer
+use crate::Result;
 use crate::config::LoggingConfig;
 use crate::rotation::RotationPolicy;
-use crate::Result;
 use parking_lot::RwLock;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
 use tracing_appender::non_blocking::WorkerGuard;
-use tracing_subscriber::fmt::time::SystemTime;
-use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::prelude::*;
 
 /// Main logging system
 ///
@@ -27,10 +26,7 @@ pub struct Logger {
 
 impl Logger {
     /// Create a new logger with default or custom configuration
-    pub async fn new(
-        log_dir: Option<PathBuf>,
-        project_log_dir: Option<PathBuf>,
-    ) -> Result<Self> {
+    pub async fn new(log_dir: Option<PathBuf>, project_log_dir: Option<PathBuf>) -> Result<Self> {
         let mut config = LoggingConfig::default();
 
         if let Some(dir) = log_dir {
@@ -72,7 +68,6 @@ impl Logger {
 
         let fmt_layer = tracing_subscriber::fmt::layer()
             .with_writer(non_blocking)
-            .with_timer(SystemTime::default())
             .with_target(true)
             .with_thread_ids(true)
             .with_level(true)

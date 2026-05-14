@@ -33,14 +33,12 @@ const CACHE_TTL_SECS: u64 = 300;
 
 /// Get the cache file path: ~/.tillandsias/cache/projects.json
 fn cache_path() -> Option<PathBuf> {
-    std::env::var("HOME")
-        .ok()
-        .map(|home| {
-            PathBuf::from(home)
-                .join(".tillandsias")
-                .join("cache")
-                .join("projects.json")
-        })
+    std::env::var("HOME").ok().map(|home| {
+        PathBuf::from(home)
+            .join(".tillandsias")
+            .join("cache")
+            .join("projects.json")
+    })
 }
 
 /// Check if cache is still valid (within TTL).
@@ -62,18 +60,16 @@ fn is_cache_valid(cached_at: u64) -> bool {
 /// A vector of discovered projects, or empty vec if gh is unavailable.
 pub fn discover_github_projects() -> Vec<GitHubProject> {
     // Try to load from cache first
-    if let Some(cache_path) = cache_path() {
-        if let Ok(content) = fs::read_to_string(&cache_path) {
-            if let Ok(entry) = serde_json::from_str::<CacheEntry>(&content) {
-                if is_cache_valid(entry.cached_at) {
-                    debug!(
-                        "github_projects: loaded from cache ({} projects)",
-                        entry.projects.len()
-                    );
-                    return entry.projects;
-                }
-            }
-        }
+    if let Some(cache_path) = cache_path()
+        && let Ok(content) = fs::read_to_string(&cache_path)
+        && let Ok(entry) = serde_json::from_str::<CacheEntry>(&content)
+        && is_cache_valid(entry.cached_at)
+    {
+        debug!(
+            "github_projects: loaded from cache ({} projects)",
+            entry.projects.len()
+        );
+        return entry.projects;
     }
 
     // Query GitHub API via `gh`

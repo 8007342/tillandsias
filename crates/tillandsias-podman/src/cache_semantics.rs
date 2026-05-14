@@ -60,9 +60,7 @@ impl CacheLayout {
     /// The shared nix store is always:
     /// `~/.cache/tillandsias/nix/`
     pub fn new(project_name: &str, cache_base: &Path) -> Self {
-        let project_cache_root = cache_base
-            .join("forge-projects")
-            .join(project_name);
+        let project_cache_root = cache_base.join("forge-projects").join(project_name);
 
         let shared_nix_store = cache_base.join("nix");
 
@@ -149,10 +147,7 @@ impl CacheLayout {
     ///
     /// Returns Ok(()) if isolation is verified, Err with details if not.
     /// This is primarily a test/validation function.
-    pub fn verify_isolation(
-        projects: &[(&str, &Path)],
-        cache_base: &Path,
-    ) -> Result<(), String> {
+    pub fn verify_isolation(projects: &[(&str, &Path)], cache_base: &Path) -> Result<(), String> {
         // Verify each project's cache root is unique and non-overlapping
         let mut cache_paths = Vec::new();
         for (project_name, _) in projects {
@@ -169,7 +164,8 @@ impl CacheLayout {
                 if path_i.starts_with(path_j) || path_j.starts_with(path_i) {
                     return Err(format!(
                         "Cache isolation violation: {} and {} paths overlap: {} vs {}",
-                        name_i, name_j,
+                        name_i,
+                        name_j,
                         path_i.display(),
                         path_j.display()
                     ));
@@ -306,10 +302,7 @@ mod tests {
     #[test]
     fn cache_isolation_distinct_projects() {
         let cache_base = Path::new("/home/user/.cache/tillandsias");
-        let projects = vec![
-            ("project-a", cache_base),
-            ("project-b", cache_base),
-        ];
+        let projects = vec![("project-a", cache_base), ("project-b", cache_base)];
 
         // Should verify without error
         assert!(CacheLayout::verify_isolation(&projects, cache_base).is_ok());

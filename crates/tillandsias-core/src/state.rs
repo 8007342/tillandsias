@@ -53,10 +53,7 @@ impl TrayAppLifecycleState {
             // Any -> Error is allowed (unrecoverable error from any state)
             (_, Self::Error) => Ok(()),
             // All other transitions are invalid
-            (from, to) => Err(format!(
-                "Invalid state transition: {:?} → {:?}",
-                from, to
-            )),
+            (from, to) => Err(format!("Invalid state transition: {:?} → {:?}", from, to)),
         }
     }
 
@@ -441,7 +438,10 @@ impl TrayState {
     /// Attempt a state transition with guard validation.
     /// @trace spec:tray-app, spec:app-lifecycle
     /// Returns `Ok(())` on successful transition, `Err(reason)` if blocked by a guard.
-    pub fn transition_lifecycle(&mut self, next_state: TrayAppLifecycleState) -> Result<(), String> {
+    pub fn transition_lifecycle(
+        &mut self,
+        next_state: TrayAppLifecycleState,
+    ) -> Result<(), String> {
         self.lifecycle_state.validate_transition(next_state)?;
         self.lifecycle_state = next_state;
         Ok(())
@@ -450,7 +450,10 @@ impl TrayState {
     /// Returns true if the tray is in a running/healthy state where user actions are allowed.
     /// @trace spec:tray-app, spec:app-lifecycle
     pub fn is_ready_for_user_action(&self) -> bool {
-        matches!(self.lifecycle_state, TrayAppLifecycleState::Idle | TrayAppLifecycleState::Running)
+        matches!(
+            self.lifecycle_state,
+            TrayAppLifecycleState::Idle | TrayAppLifecycleState::Running
+        )
     }
 
     /// Returns true if a project can be started (lifecycle state allows it).
@@ -709,43 +712,69 @@ mod tests {
     #[test]
     fn lifecycle_state_valid_transition_idle_to_initializing() {
         let state = TrayAppLifecycleState::Idle;
-        assert!(state.validate_transition(TrayAppLifecycleState::Initializing).is_ok());
+        assert!(
+            state
+                .validate_transition(TrayAppLifecycleState::Initializing)
+                .is_ok()
+        );
     }
 
     // @trace spec:tray-app, spec:app-lifecycle
     #[test]
     fn lifecycle_state_valid_transition_initializing_to_running() {
         let state = TrayAppLifecycleState::Initializing;
-        assert!(state.validate_transition(TrayAppLifecycleState::Running).is_ok());
+        assert!(
+            state
+                .validate_transition(TrayAppLifecycleState::Running)
+                .is_ok()
+        );
     }
 
     // @trace spec:tray-app, spec:app-lifecycle
     #[test]
     fn lifecycle_state_valid_transition_running_to_stopping() {
         let state = TrayAppLifecycleState::Running;
-        assert!(state.validate_transition(TrayAppLifecycleState::Stopping).is_ok());
+        assert!(
+            state
+                .validate_transition(TrayAppLifecycleState::Stopping)
+                .is_ok()
+        );
     }
 
     // @trace spec:tray-app, spec:app-lifecycle
     #[test]
     fn lifecycle_state_valid_transition_stopping_to_idle() {
         let state = TrayAppLifecycleState::Stopping;
-        assert!(state.validate_transition(TrayAppLifecycleState::Idle).is_ok());
+        assert!(
+            state
+                .validate_transition(TrayAppLifecycleState::Idle)
+                .is_ok()
+        );
     }
 
     // @trace spec:tray-app, spec:app-lifecycle
     #[test]
     fn lifecycle_state_valid_transition_any_to_error() {
         // Error is always reachable from any state
-        assert!(TrayAppLifecycleState::Idle.validate_transition(TrayAppLifecycleState::Error).is_ok());
-        assert!(TrayAppLifecycleState::Initializing
-            .validate_transition(TrayAppLifecycleState::Error)
-            .is_ok());
         assert!(
-            TrayAppLifecycleState::Running.validate_transition(TrayAppLifecycleState::Error).is_ok()
+            TrayAppLifecycleState::Idle
+                .validate_transition(TrayAppLifecycleState::Error)
+                .is_ok()
         );
         assert!(
-            TrayAppLifecycleState::Stopping.validate_transition(TrayAppLifecycleState::Error).is_ok()
+            TrayAppLifecycleState::Initializing
+                .validate_transition(TrayAppLifecycleState::Error)
+                .is_ok()
+        );
+        assert!(
+            TrayAppLifecycleState::Running
+                .validate_transition(TrayAppLifecycleState::Error)
+                .is_ok()
+        );
+        assert!(
+            TrayAppLifecycleState::Stopping
+                .validate_transition(TrayAppLifecycleState::Error)
+                .is_ok()
         );
     }
 
@@ -753,14 +782,22 @@ mod tests {
     #[test]
     fn lifecycle_state_invalid_transition_running_to_initializing() {
         let state = TrayAppLifecycleState::Running;
-        assert!(state.validate_transition(TrayAppLifecycleState::Initializing).is_err());
+        assert!(
+            state
+                .validate_transition(TrayAppLifecycleState::Initializing)
+                .is_err()
+        );
     }
 
     // @trace spec:tray-app, spec:app-lifecycle
     #[test]
     fn lifecycle_state_invalid_transition_initializing_directly_to_idle() {
         let state = TrayAppLifecycleState::Initializing;
-        assert!(state.validate_transition(TrayAppLifecycleState::Idle).is_err());
+        assert!(
+            state
+                .validate_transition(TrayAppLifecycleState::Idle)
+                .is_err()
+        );
     }
 
     // @trace spec:tray-app, spec:app-lifecycle
@@ -787,21 +824,41 @@ mod tests {
         assert_eq!(state.lifecycle_state, TrayAppLifecycleState::Idle);
 
         // Transition to Initializing (valid)
-        assert!(state.transition_lifecycle(TrayAppLifecycleState::Initializing).is_ok());
+        assert!(
+            state
+                .transition_lifecycle(TrayAppLifecycleState::Initializing)
+                .is_ok()
+        );
         assert_eq!(state.lifecycle_state, TrayAppLifecycleState::Initializing);
 
         // Transition to Running (valid)
-        assert!(state.transition_lifecycle(TrayAppLifecycleState::Running).is_ok());
+        assert!(
+            state
+                .transition_lifecycle(TrayAppLifecycleState::Running)
+                .is_ok()
+        );
         assert_eq!(state.lifecycle_state, TrayAppLifecycleState::Running);
 
         // Try invalid transition Running -> Initializing (blocked)
-        assert!(state.transition_lifecycle(TrayAppLifecycleState::Initializing).is_err());
+        assert!(
+            state
+                .transition_lifecycle(TrayAppLifecycleState::Initializing)
+                .is_err()
+        );
 
         // Transition to Stopping (valid)
-        assert!(state.transition_lifecycle(TrayAppLifecycleState::Stopping).is_ok());
+        assert!(
+            state
+                .transition_lifecycle(TrayAppLifecycleState::Stopping)
+                .is_ok()
+        );
 
         // Transition back to Idle (valid)
-        assert!(state.transition_lifecycle(TrayAppLifecycleState::Idle).is_ok());
+        assert!(
+            state
+                .transition_lifecycle(TrayAppLifecycleState::Idle)
+                .is_ok()
+        );
     }
 
     // @trace spec:app-lifecycle

@@ -5,7 +5,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [crates/tillandsias-core/src/state.rs#L66](../../../crates/tillandsias-core/src/state.rs#L66)
+- [crates/tillandsias-core/src/state.rs#L132](../../../crates/tillandsias-core/src/state.rs#L132)
 - [scripts/install-chromium.sh#L2](../../../scripts/install-chromium.sh#L2)
 - [scripts/install.sh#L157](../../../scripts/install.sh#L157)
 - [scripts/install.sh#L333](../../../scripts/install.sh#L333)

@@ -609,7 +609,10 @@ fn handle_clone_project(service: Arc<TrayService>, repo_url: String, repo_name: 
         // Clone the project
         match remote_projects::clone_project_from_github(&repo_url, &target_path) {
             Ok(()) => {
-                info!("clone_project: successfully cloned {} to {:?}", repo_name, target_path);
+                info!(
+                    "clone_project: successfully cloned {} to {:?}",
+                    repo_name, target_path
+                );
                 let _ = futures::executor::block_on(service_for_emit.set_status(
                     format!("✓ Cloned {}", repo_name),
                     TrayIconState::Mature,
@@ -700,11 +703,7 @@ fn build_clone_project_submenu(state: &TrayUiState) -> MenuNode {
     // Show top 5 projects
     for (idx, project) in projects.iter().take(5).enumerate() {
         let item_id = 2000 + idx as i32;
-        let label = format!(
-            "{} {}",
-            &project.owner,
-            &project.name
-        );
+        let label = format!("{} {}", &project.owner, &project.name);
         children.push(child(node(
             item_id,
             props(vec![
@@ -1231,8 +1230,13 @@ impl DbusMenuIface {
                             if parts.len() >= 2 {
                                 let owner = parts[0];
                                 let repo_name = parts[1];
-                                let repo_url = format!("https://github.com/{}/{}", owner, repo_name);
-                                handle_clone_project(self.0.clone(), repo_url, repo_name.to_string());
+                                let repo_url =
+                                    format!("https://github.com/{}/{}", owner, repo_name);
+                                handle_clone_project(
+                                    self.0.clone(),
+                                    repo_url,
+                                    repo_name.to_string(),
+                                );
                             }
                         }
                     }

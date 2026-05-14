@@ -5,6 +5,19 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [crates/tillandsias-router-sidecar/src/http.rs#L19](../../../crates/tillandsias-router-sidecar/src/http.rs#L19)
+- [crates/tillandsias-router-sidecar/src/http.rs#L34](../../../crates/tillandsias-router-sidecar/src/http.rs#L34)
+- [crates/tillandsias-router-sidecar/src/http.rs#L92](../../../crates/tillandsias-router-sidecar/src/http.rs#L92)
+- [crates/tillandsias-router-sidecar/src/http.rs#L173](../../../crates/tillandsias-router-sidecar/src/http.rs#L173)
+- [crates/tillandsias-router-sidecar/src/http.rs#L200](../../../crates/tillandsias-router-sidecar/src/http.rs#L200)
+- [crates/tillandsias-router-sidecar/src/http.rs#L206](../../../crates/tillandsias-router-sidecar/src/http.rs#L206)
+- [crates/tillandsias-router-sidecar/src/http.rs#L235](../../../crates/tillandsias-router-sidecar/src/http.rs#L235)
+- [crates/tillandsias-router-sidecar/src/http.rs#L581](../../../crates/tillandsias-router-sidecar/src/http.rs#L581)
+- [crates/tillandsias-router-sidecar/src/http.rs#L593](../../../crates/tillandsias-router-sidecar/src/http.rs#L593)
+- [crates/tillandsias-router-sidecar/src/http.rs#L605](../../../crates/tillandsias-router-sidecar/src/http.rs#L605)
+- [crates/tillandsias-router-sidecar/src/http.rs#L618](../../../crates/tillandsias-router-sidecar/src/http.rs#L618)
+- [crates/tillandsias-router-sidecar/src/http.rs#L644](../../../crates/tillandsias-router-sidecar/src/http.rs#L644)
+- [crates/tillandsias-router-sidecar/src/main.rs#L30](../../../crates/tillandsias-router-sidecar/src/main.rs#L30)
 - [images/router/Containerfile#L1](../../../images/router/Containerfile#L1)
 - [images/router/entrypoint.sh#L2](../../../images/router/entrypoint.sh#L2)
 - [images/router/router-reload.sh#L2](../../../images/router/router-reload.sh#L2)

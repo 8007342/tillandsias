@@ -15,7 +15,7 @@ pub struct RotationPolicy {
 impl Default for RotationPolicy {
     fn default() -> Self {
         Self {
-            max_size: 10 * 1024 * 1024,    // 10MB
+            max_size: 10 * 1024 * 1024,     // 10MB
             max_age_secs: 7 * 24 * 60 * 60, // 7 days
         }
     }
@@ -42,10 +42,10 @@ impl RotationPolicy {
 
         match fs::metadata(path).await {
             Ok(metadata) => {
-                if let Ok(modified) = metadata.modified() {
-                    if let Ok(elapsed) = modified.elapsed() {
-                        return elapsed.as_secs() >= self.max_age_secs;
-                    }
+                if let Ok(modified) = metadata.modified()
+                    && let Ok(elapsed) = modified.elapsed()
+                {
+                    return elapsed.as_secs() >= self.max_age_secs;
                 }
                 false
             }

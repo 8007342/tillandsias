@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-05-14T05:45:14Z",
+  "generated_at": "2026-05-14T11:39:32Z",
   "title": "Progression Trends",
   "series_namespace": "local_development",
   "series_label": "Local Development",
   "source_file": "target/convergence/centicolon-signature.jsonl",
-  "record_count": 79,
-  "sparkline_closed": "█████████████████████████████████████████▆▆███▇████████████████████████████████",
-  "sparkline_residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▃▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁",
+  "record_count": 81,
+  "sparkline_closed": "█████████████████████████████████████████▆▆███▇█████████████████████████████████▆",
+  "sparkline_residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▃▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃",
   "trend_windows": [
   {
     "index": 1,
@@ -36,26 +36,26 @@
     "start_release": "0.1.260513.3",
     "start_commit": "43a8615f2378",
     "end_release": "0.1.260513.6",
-    "end_commit": "2af8c15f3dea",
-    "count": 15,
-    "closed": "███████████████",
-    "residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
+    "end_commit": "70cfc6176ded",
+    "count": 17,
+    "closed": "████████████████▆",
+    "residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃"
   }
 ],
   "latest": {
   "release": "0.1.260513.6",
-  "date": "2026-05-14T05:44:11Z",
-  "commit": "2af8c15f3dea",
-  "total_cc": 560,
-  "earned_cc": 520,
-  "residual_cc": 40,
-  "percent_closed": 92.85714285714286,
-  "worst_spec": "spec:dev-build",
-  "worst_reason": "Rust code not formatted: run 'cargo fmt --all' (see /tmp/fmt-check.log)",
+  "date": "2026-05-14T11:17:48Z",
+  "commit": "70cfc6176ded",
+  "total_cc": 660,
+  "earned_cc": 460,
+  "residual_cc": 200,
+  "percent_closed": 69.6969696969697,
+  "worst_spec": "spec:podman-orchestration",
+  "worst_reason": "Pre-build litmus failures detected (see /tmp/litmus-pre-build.log)",
   "evidence": "target/convergence/evidence-bundle.json",
   "projection": "docs/convergence/centicolon-dashboard.md",
   "ci_result": "FAIL",
-  "ci_run_id": "local-ci-20260514T054411Z",
+  "ci_run_id": "local-ci-20260514T111748Z",
   "trend_glyph": ""
 },
   "history": [
@@ -1321,6 +1321,38 @@
     "projection": "docs/convergence/centicolon-dashboard.md",
     "ci_result": "FAIL",
     "ci_run_id": "local-ci-20260514T054411Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.1.260513.6",
+    "date": "2026-05-14T05:45:01Z",
+    "commit": "2af8c15f3dea",
+    "total_cc": 560,
+    "earned_cc": 560,
+    "residual_cc": 0,
+    "percent_closed": 100,
+    "worst_spec": "n/a",
+    "worst_reason": "n/a",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "PASS",
+    "ci_run_id": "local-ci-20260514T054501Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.1.260513.6",
+    "date": "2026-05-14T11:17:48Z",
+    "commit": "70cfc6176ded",
+    "total_cc": 660,
+    "earned_cc": 460,
+    "residual_cc": 200,
+    "percent_closed": 69.6969696969697,
+    "worst_spec": "spec:podman-orchestration",
+    "worst_reason": "Pre-build litmus failures detected (see /tmp/litmus-pre-build.log)",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "FAIL",
+    "ci_run_id": "local-ci-20260514T111748Z",
     "trend_glyph": ""
   }
 ]

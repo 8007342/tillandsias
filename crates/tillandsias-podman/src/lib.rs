@@ -1,7 +1,7 @@
 //! @trace spec:podman-orchestration, spec:cross-platform, spec:windows-wsl-runtime
 
-mod client;
 pub mod cache_semantics;
+mod client;
 pub mod container_spec;
 pub mod diagnostics_stream;
 pub mod events;
@@ -59,15 +59,15 @@ pub fn no_window_sync(cmd: &mut std::process::Command) -> &mut std::process::Com
     cmd
 }
 
+pub use client::EnclaveContainerInfo;
 pub use client::PodmanClient;
 pub use client::RunOutput;
-pub use client::EnclaveContainerInfo;
 pub use client::network_exists_sync;
 pub use container_spec::ContainerHandle;
 pub use container_spec::ContainerSpec;
 pub use container_spec::MountMode;
 pub use container_spec::MountSpec;
-pub use diagnostics_stream::{DiagnosticsHandle, DiagnosticsError};
+pub use diagnostics_stream::{DiagnosticsError, DiagnosticsHandle};
 pub use events::PodmanEventStream;
 pub use gpu::detect_gpu_devices;
 pub use launch::ContainerLauncher;

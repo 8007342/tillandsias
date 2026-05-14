@@ -35,7 +35,9 @@ fn home_dir() -> Option<PathBuf> {
 }
 
 fn writable_root(candidates: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
-    candidates.into_iter().find(|candidate| fs::create_dir_all(candidate).is_ok())
+    candidates
+        .into_iter()
+        .find(|candidate| fs::create_dir_all(candidate).is_ok())
 }
 
 fn cache_root() -> Option<PathBuf> {
@@ -111,7 +113,8 @@ fn cdp_http_list(port: u16) -> Result<Option<(String, String)>, LaunchError> {
             Ok(mut stream) => {
                 let _ = stream.set_read_timeout(Some(Duration::from_millis(150)));
                 let _ = stream.set_write_timeout(Some(Duration::from_millis(150)));
-                let request = b"GET /json/list HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+                let request =
+                    b"GET /json/list HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
                 stream.write_all(request)?;
                 let mut response = String::new();
                 stream.read_to_string(&mut response)?;
@@ -149,7 +152,12 @@ fn default_title(url: &Url) -> String {
     url.host_str().unwrap_or("browser").to_string()
 }
 
-fn spawn_browser(binary: &Path, url: &Url, user_data_dir: &Path, cdp_port: u16) -> Result<Child, LaunchError> {
+fn spawn_browser(
+    binary: &Path,
+    url: &Url,
+    user_data_dir: &Path,
+    cdp_port: u16,
+) -> Result<Child, LaunchError> {
     let mut command = Command::new(binary);
     command
         .arg(format!("--app={}", url.as_str()))
@@ -180,21 +188,13 @@ pub fn launch(
     ensure_dir(&user_data_dir)?;
     let cdp_port = if fake_launch { 0 } else { reserve_port()? };
     let (child, target_id, title) = if fake_launch {
-        (
-            None,
-            format!("{window_id}-target"),
-            default_title(url),
-        )
+        (None, format!("{window_id}-target"), default_title(url))
     } else {
         let binary = resolve_browser_binary(browser_binary)?;
         let child = spawn_browser(&binary, url, &user_data_dir, cdp_port)?;
         let probe = cdp_http_list(cdp_port).unwrap_or(None);
-        let (target_id, title) = probe.unwrap_or_else(|| {
-            (
-                format!("{window_id}-target"),
-                default_title(url),
-            )
-        });
+        let (target_id, title) =
+            probe.unwrap_or_else(|| (format!("{window_id}-target"), default_title(url)));
         (Some(child), target_id, title)
     };
 

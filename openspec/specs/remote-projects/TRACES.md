@@ -5,10 +5,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [src-tauri/src/github.rs#L28](../../../src-tauri/src/github.rs#L28)
-- [src-tauri/src/github.rs#L61](../../../src-tauri/src/github.rs#L61)
-- [src-tauri/src/github.rs#L66](../../../src-tauri/src/github.rs#L66)
-- [src-tauri/src/github.rs#L82](../../../src-tauri/src/github.rs#L82)
-- [src-tauri/src/github.rs#L229](../../../src-tauri/src/github.rs#L229)
-- [src-tauri/src/github.rs#L234](../../../src-tauri/src/github.rs#L234)
-- [src-tauri/src/github.rs#L247](../../../src-tauri/src/github.rs#L247)
+- [crates/tillandsias-core/src/remote_projects.rs#L1](../../../crates/tillandsias-core/src/remote_projects.rs#L1)
+- [crates/tillandsias-headless/src/tray/mod.rs#L1](../../../crates/tillandsias-headless/src/tray/mod.rs#L1)
+- [crates/tillandsias-headless/src/tray/mod.rs#L589](../../../crates/tillandsias-headless/src/tray/mod.rs#L589)
+- [crates/tillandsias-headless/src/tray/mod.rs#L695](../../../crates/tillandsias-headless/src/tray/mod.rs#L695)
