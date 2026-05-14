@@ -115,6 +115,10 @@ Gating points:
 - Multiple windows can attach with independent OTPs and cookies
 - Stolen OTP after consumption does not yield session cookie (separate random values)
 
+## Supersedes
+
+This spec replaces `opencode-web-session` as of v0.1.260513. The legacy spec (Tauri webview-based approach) is kept as a tombstone for historical traceability. The OTP-based session with control socket validation is now the authoritative session mechanism for OpenCode Web.
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/forge-container.md` — the forge runtime contract this OTP layer protects
