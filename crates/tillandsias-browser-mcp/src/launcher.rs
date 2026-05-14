@@ -198,6 +198,8 @@ pub fn launch(
         (Some(child), target_id, title)
     };
 
+    // @trace spec:browser-window-timeout
+    let now = std::time::Instant::now();
     Ok(WindowEntry {
         window_id,
         pid: child.as_ref().map(|child| child.id()).unwrap_or(0),
@@ -208,6 +210,8 @@ pub fn launch(
         opened_url: url.as_str().to_string(),
         title,
         child,
+        created_at: now,
+        last_activity: now,
     })
 }
 
