@@ -1,0 +1,81 @@
+# @trace spec:runtime-logging
+name: litmus:runtime-logging-schema-stability
+spec: runtime-logging
+phase: post-build
+description: Verify log field names and types remain stable (backwards compatibility)
+severity: high
+
+preconditions:
+  - workspace contains crates/tillandsias-logging
+  - golden schema file exists at docs/cheatsheets/log-schema-golden.json
+  - JSON parser available (jq)
+
+critical_path:
+  - step: "verify golden schema file exists"
+    command: "test -f docs/cheatsheets/log-schema-golden.json && echo SCHEMA_FOUND"
+    timeout_ms: 3000
+    expected_behavior: "SCHEMA_FOUND"
+
+  - step: "verify golden schema is valid JSON"
+    command: "jq -e . docs/cheatsheets/log-schema-golden.json > /dev/null && echo VALID_JSON"
+    timeout_ms: 3000
+    expected_behavior: "VALID_JSON"
+
+  - step: "verify schema_version exists"
+    command: "jq -e .schema_version docs/cheatsheets/log-schema-golden.json && echo Schema version is 1.0"
+    timeout_ms: 3000
+    expected_behavior: "Schema version is 1.0"
+
+  - step: "verify all_fields array has 9 elements"
+    command: "jq '.all_fields | length' docs/cheatsheets/log-schema-golden.json | grep 9"
+    timeout_ms: 3000
+    expected_behavior: "9"
+
+  - step: "verify LogEntry struct has core fields"
+    command: "test -f crates/tillandsias-logging/src/log_entry.rs && grep -q 'pub timestamp:' crates/tillandsias-logging/src/log_entry.rs && echo LogEntry core fields found"
+    timeout_ms: 5000
+    expected_behavior: "LogEntry core fields found"
+
+gating_points:
+  - signal: "golden schema file exists and is valid"
+    success: "SCHEMA_FOUND|VALID_JSON"
+    failure: "jq: error|No such file"
+    spec_linkage: "runtime-logging"
+
+  - signal: "schema version verified"
+    success: "Schema version is 1.0"
+    failure: "error|failed"
+
+  - signal: "all_fields array is correct size"
+    success: "9"
+    failure: "error|jq"
+
+  - signal: "LogEntry struct matches golden schema"
+    success: "LogEntry core fields found"
+    failure: "No such file|not found"
+
+observability:
+  traces:
+    - "@trace spec:runtime-logging"
+    - "@trace spec:methodology-accountability"
+  expected_log: "Log schema stability test passed"
+  log_fields:
+    spec: "runtime-logging"
+    test: "runtime-logging-schema-stability"
+    category: "observability"
+
+rollback:
+  on_failure: "Verify docs/cheatsheets/log-schema-golden.json exists and crates/tillandsias-logging/src/log_entry.rs has all core fields"
+  command: "ls -la docs/cheatsheets/log-schema-golden.json crates/tillandsias-logging/src/log_entry.rs && jq '.all_fields' docs/cheatsheets/log-schema-golden.json"
+
+notes: |
+  This test is a regression safeguard for log event consumer code (exporters, observability tools, SIEM systems).
+  Breaking changes to log field names cause silent data loss in consumers that depend on stable field presence.
+
+  If you intentionally rename or remove a field:
+  1. Update the golden schema (docs/cheatsheets/log-schema-golden.json)
+  2. Increment schema_version (1.0 -> 1.1)
+  3. Add a migration note to CHANGELOG.md
+  4. Broadcast the breaking change to all users who parse logs
+
+  New optional fields are backward-compatible and do not require schema version bump.

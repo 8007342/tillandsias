@@ -1,0 +1,158 @@
+{
+  "schema_version": "1.0",
+  "title": "Tillandsias Runtime Log Schema - Golden Reference",
+  "description": "Stable log field schema for backwards compatibility. Core fields are required and immutable. Optional fields may be added without version bump. Breaking changes require version increment and migration path.",
+  "last_updated": "2026-05-14",
+  "maintainer": "Tillandsias observability team",
+  "core_fields": {
+    "timestamp": {
+      "type": "string",
+      "format": "ISO8601",
+      "required": true,
+      "description": "RFC3339 timestamp of log event emission",
+      "example": "2026-05-14T12:34:56.789012345Z",
+      "immutable": true
+    },
+    "level": {
+      "type": "string",
+      "enum": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"],
+      "required": true,
+      "description": "Log severity level",
+      "immutable": true
+    },
+    "component": {
+      "type": "string",
+      "required": true,
+      "description": "Component/module name emitting the log (e.g., 'proxy', 'git-service', 'inference', 'forge')",
+      "example": "git-service",
+      "immutable": true
+    },
+    "message": {
+      "type": "string",
+      "required": true,
+      "description": "Human-readable log message",
+      "immutable": true
+    }
+  },
+  "optional_fields": {
+    "accountability": {
+      "type": "boolean",
+      "required": false,
+      "description": "Flag indicating this is a sensitive/auditable operation requiring traceability",
+      "default": false
+    },
+    "category": {
+      "type": "string",
+      "required": false,
+      "description": "Accountability event category (e.g., 'secrets', 'network', 'git', 'container')",
+      "example": "secrets",
+      "depends_on": "accountability = true"
+    },
+    "safety": {
+      "type": "string",
+      "required": false,
+      "description": "Safety note for sensitive operations",
+      "example": "Container network sandboxed from external IPs",
+      "depends_on": "accountability = true"
+    },
+    "spec_trace": {
+      "type": "string",
+      "required": false,
+      "description": "@trace spec:<name> link for spec traceability",
+      "example": "native-secrets-store",
+      "pattern": "^[a-z0-9_-]+$"
+    },
+    "context": {
+      "type": "object",
+      "required": false,
+      "description": "Arbitrary context fields (key-value pairs) for additional event metadata",
+      "additionalProperties": true,
+      "example": {
+        "container_name": "tillandsias-my-app-aeranthos",
+        "project": "my-app",
+        "genus": "aeranthos"
+      }
+    }
+  },
+  "all_fields": [
+    "accountability",
+    "category",
+    "component",
+    "context",
+    "level",
+    "message",
+    "safety",
+    "spec_trace",
+    "timestamp"
+  ],
+  "stability_notes": {
+    "backwards_compatibility": "All core_fields are immutable. Removing or renaming any core_field is a breaking change that requires a major version bump.",
+    "forward_compatibility": "New optional_fields may be added to LogEntry without version bump. Consumers must gracefully ignore unknown fields.",
+    "breaking_changes": {
+      "definition": "Any of: field rename, field type change, enum value change, core_field removal, required->optional flip",
+      "migration_protocol": "1. Increment schema_version (1.0 -> 1.1). 2. Add migration notes to CHANGELOG.md. 3. Broadcast to all known log consumers."
+    }
+  },
+  "field_type_constraints": {
+    "timestamp": "Must be RFC3339 string (ISO8601). Always UTC. Represents moment event was emitted.",
+    "level": "Strictly enumerated. TRACE=most verbose, ERROR=least verbose. Never add new variants without deprecation period.",
+    "component": "String. Examples: 'forge', 'proxy', 'git-service', 'inference'. Case-sensitive. Slugified (lowercase, hyphens OK).",
+    "message": "String. Plain text, no embedded JSON. Redacted for sensitive fields per OWASP guidance.",
+    "accountability": "Boolean. True indicates traceability-critical operation. False (default) for routine logs.",
+    "category": "String. Categories: 'secrets', 'network', 'git', 'container', 'cache', 'build', 'ui', 'auth'. Extensible.",
+    "safety": "String. Human-readable safety note. Example: 'Forge container isolated from external network.'",
+    "spec_trace": "String. Format: spec-name (slug). Example: 'native-secrets-store'. Maps to @trace spec:<name> in source.",
+    "context": "Object. Arbitrary key-value pairs. No schema constraints. Values may be string, number, boolean, null, or nested objects/arrays."
+  },
+  "examples": {
+    "regular_event": {
+      "timestamp": "2026-05-14T12:34:56.789012345Z",
+      "level": "INFO",
+      "component": "git-service",
+      "message": "Pull request fetched successfully",
+      "context": {
+        "repo": "8007342/tillandsias",
+        "pr_number": 42
+      }
+    },
+    "accountability_event": {
+      "timestamp": "2026-05-14T12:34:57.123456789Z",
+      "level": "INFO",
+      "component": "proxy",
+      "message": "GitHub token mounted into container",
+      "accountability": true,
+      "category": "secrets",
+      "safety": "Token isolated in ephemeral podman secret, readable only by git-service container",
+      "spec_trace": "podman-secrets-integration",
+      "context": {
+        "container": "tillandsias-my-app-aeranthos",
+        "secret_name": "tillandsias-github-token"
+      }
+    },
+    "error_event": {
+      "timestamp": "2026-05-14T12:34:58.456789012Z",
+      "level": "ERROR",
+      "component": "inference",
+      "message": "Ollama model pull failed",
+      "context": {
+        "model": "qwen2.5-coder:7b",
+        "reason": "network timeout",
+        "retry_count": 2
+      },
+      "spec_trace": "inference-container"
+    }
+  },
+  "test_binding": "litmus:runtime-logging-schema-stability",
+  "related_specs": [
+    "runtime-logging",
+    "logging-accountability",
+    "external-logs-layer",
+    "methodology-accountability"
+  ],
+  "references": {
+    "opentelemetry_semconv": "https://opentelemetry.io/docs/specs/semconv/logs/",
+    "owasp_logging_cheatsheet": "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html",
+    "rfc3339": "https://tools.ietf.org/html/rfc3339",
+    "tillandsias_logging_spec": "openspec/specs/runtime-logging/spec.md"
+  }
+}
