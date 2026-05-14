@@ -394,22 +394,67 @@ git log --oneline | grep -E "logging|diagnostic|observ"
 
 ---
 
+## Gap Triage & Prioritization (Wave 10.2 — 2026-05-14)
+
+All 49 documented gaps across browser, tray, onboarding, and observability have been reviewed and prioritized. See `plan/issues/gap-triage-matrix-2026-05-14.md` for complete analysis.
+
+### Critical Summary
+
+**No gaps block the Linux MVP release** (except P0 diagnostics stream, which is already planned).
+
+- **P0 (Ship-blocking):** 1 gap — Linux diagnostics stream (1.5 hours)
+- **P1 (Critical UX):** 6 gaps — Trace CI gate, cheatsheet pointer, cache corruption, .localhost proxy, cold-start litmus, resource metrics
+- **P2 (Polish):** 15 gaps — Wave 4 prerequisites, observability extensions, tray reliability
+- **P3 (Backlog):** 27 gaps — Performance, edge cases, documentation
+
+### Key Findings
+
+**By Severity:**
+- CRITICAL: 0 gaps
+- HIGH: 2 gaps (both blocking Wave 4 routing)
+- MEDIUM: 15 gaps (mostly observability & test coverage)
+- LOW: 32 gaps (optimizations & features)
+
+**By Effort:**
+- Small: 27 gaps (~13.5 hours)
+- Medium: 20 gaps (~60 hours)
+- Large: 2 gaps (~12 hours)
+- **Total estimated effort:** ~3.5 weeks (manageable for Wave 11+)
+
+**Quick Wins** (MEDIUM severity + SMALL effort):
+1. BR-003: Squid .localhost cache_peer (blocks agent egress)
+2. ON-011: Forge welcome cheatsheet pointer (improves discovery)
+3. OBS-004: Trace coverage CI gate (prevents regressions)
+4. OBS-021: Secret rotation event coverage (audit trail)
+
+### Handoff to Wave 11
+
+- All gaps documented with fix paths and dependencies
+- Dependency graph created for parallel work assignment
+- Triage matrix ready for backlog planning
+- No surprises; all identified gaps are known & managed
+
+---
+
 ## Next Steps (If Continuing)
 
-1. **Merge this assessment** into `plan/index.yaml`; mark Step 8 status as `complete`
-2. **Implement P0 Linux diagnostics stream** (use next agent slot or `/opsx:ff`)
-3. **Run final test suite** before shipping
-4. **Tag release:** `git tag -a v0.1.X -m "Linux MVP: browser, tray, onboarding complete"`
+1. **Commit triage matrix** (this change: `plan/issues/gap-triage-matrix-2026-05-14.md`)
+2. **Implement P0 Linux diagnostics stream** (already planned; use next agent slot or `/opsx:ff`)
+3. **Implement P1 quick wins** (4 items, ~5 hours) before ship
+4. **Run final test suite** before shipping
+5. **Tag release:** `git tag -a v0.1.X -m "Linux MVP: browser, tray, onboarding complete; 49 gaps triaged"`
 
 ---
 
 ## Handoff Notes for Next Agent
 
-- **Current state:** Step 8 assessment complete; project at 97% implementation (75/76 specs complete)
+- **Current state:** Step 8 assessment + gap triage complete; project at 97% implementation (75/76 specs complete)
+- **Gap analysis:** 49 gaps documented, zero blockers except P0 diagnostics stream
 - **Next phase:** P0 Linux diagnostics stream (1.5 hours), then ship-ready
+- **Wave 11 backlog:** All 49 gaps prioritized and ready for parallel assignment
 - **Branch:** `linux-next` (main branch contains old src-tauri code; linux-next is canonical)
 - **Build:** `./build.sh --release` produces musl-static binary
 - **Test:** `cargo test --workspace` passes; 22 browser tests, 13 tray state tests, 38 total
 - **Risk:** None identified; all dependencies resolved
-- **Recommendation:** Prioritize Linux diagnostics stream (P0), then cut release tag
+- **Recommendation:** Implement P0 (diagnostics) + P1 quick wins (5 hrs), then cut release tag
 
