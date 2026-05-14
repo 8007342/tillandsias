@@ -12,7 +12,7 @@ tier: bundled
 
 # Cache Architecture
 
-@trace spec:overlay-mount-cache, spec:tools-overlay-fast-reuse
+@trace spec:forge-cache-dual
 
 **Use when**: Understanding how Tillandsias caches container overlays, tool layers, and build artifacts.
 
@@ -60,8 +60,8 @@ Shared cache is refreshed at image build time. Per-project cache is user-managed
 
 ## Related Specs
 
-- `spec:layered-tools-overlay` — tools layer management
-- `spec:tools-overlay-fast-reuse` — overlay optimization
+- `spec:forge-cache-dual` — live dual-cache architecture (shared + per-project)
+- `spec:forge-hot-cold-split` — RAM-backed vs disk-backed path separation
 - `spec:init-incremental-builds` — incremental build caching
 
 ## See Also

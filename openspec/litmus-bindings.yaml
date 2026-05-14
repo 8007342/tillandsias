@@ -421,7 +421,8 @@ specs:
   status: obsolete
   litmus_tests: []
   coverage_ratio: 0
-  last_verified: '2026-05-13'
+  last_verified: '2026-05-14'
+  tombstone: superseded:forge-cache-dual
 - spec_id: persistent-git-service
   status: obsolete
   litmus_tests: []
@@ -527,7 +528,8 @@ specs:
   status: obsolete
   litmus_tests: []
   coverage_ratio: 0
-  last_verified: '2026-05-13'
+  last_verified: '2026-05-14'
+  tombstone: superseded:forge-cache-dual
 - spec_id: tray-app
   status: active
   litmus_tests:
