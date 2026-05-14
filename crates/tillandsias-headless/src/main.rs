@@ -20,6 +20,7 @@
 //!   - {"event":"app.stopped","exit_code":0,"timestamp":"<RFC3339>"} — on graceful shutdown
 
 use signal_hook::flag;
+use std::fs;
 use std::io::{self, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -32,6 +33,8 @@ use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION, en
 use tillandsias_podman::{
     ContainerSpec, MountMode, PodmanClient, detect_gpu_devices, podman_cmd_sync,
 };
+
+use serde::{Deserialize, Serialize};
 
 const VERSION: &str = include_str!("../../../VERSION");
 
@@ -54,6 +57,7 @@ fn main() {
 
     let debug = user_args.iter().any(|a| a == "--debug");
     let init = user_args.iter().any(|a| a == "--init");
+    let force = user_args.iter().any(|a| a == "--force");
     let status_check = user_args.iter().any(|a| a == "--status-check");
     let github_login = user_args.iter().any(|a| a == "--github-login");
     let opencode = user_args.iter().any(|a| a == "--opencode");
@@ -69,6 +73,7 @@ fn main() {
         "--headless",
         "--tray",
         "--debug",
+        "--force",
         "--init",
         "--status-check",
         "--github-login",
@@ -109,7 +114,7 @@ fn main() {
     }
 
     if init {
-        if let Err(e) = run_init(debug) {
+        if let Err(e) = run_init(debug, force) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -213,7 +218,7 @@ fn main() {
 fn print_usage(version: &str) {
     println!("Tillandsias v{}", version);
     println!("Usage: tillandsias [--headless|--tray] [config_path]");
-    println!("       tillandsias --init [--debug]");
+    println!("       tillandsias --init [--force] [--debug]");
     println!("       tillandsias --status-check [--debug]");
     println!("       tillandsias --github-login [--debug]");
     println!("       tillandsias --opencode <project> [--prompt <text>] [--debug]");
@@ -223,10 +228,11 @@ fn print_usage(version: &str) {
     println!("  --opencode     Enable LLM code analysis mode");
     println!("  --opencode-web Launch OpenCode Web plus isolated browser");
     println!("  --prompt TEXT  Send prompt to LLM inference (requires --opencode)");
-    println!("  --init         Build required Tillandsias container images");
+    println!("  --init         Pre-build container images");
+    println!("  --force        Rebuild all images even if cached (use with --init)");
     println!("  --status-check Verify services are online through a representative stack smoke");
     println!("  --github-login Authenticate GitHub and create ephemeral Podman secret");
-    println!("  --debug        Show command-level diagnostics");
+    println!("  --debug        Show command-level diagnostics and capture build logs");
     println!("  --version      Show version information");
     println!("  --help         Show this help");
     println!();
@@ -299,6 +305,85 @@ const ENCLAVE_SUBNET: &str = "10.0.42.0/24";
 const ENCLAVE_NO_PROXY: &str =
     "localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service,10.0.42.0/24";
 const CA_DIR: &str = "/tmp/tillandsias-ca";
+
+// @trace spec:init-incremental-builds
+/// Build state tracking for incremental initialization.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct InitBuildState {
+    /// Map of image name -> build status ("success", "failed", "pending")
+    images: std::collections::HashMap<String, String>,
+    /// Timestamp of last init run
+    timestamp: String,
+}
+
+impl InitBuildState {
+    fn new() -> Self {
+        Self {
+            images: std::collections::HashMap::new(),
+            timestamp: chrono::Local::now().to_rfc3339(),
+        }
+    }
+
+    fn load() -> Result<Option<Self>, String> {
+        let cache_dir = init_cache_dir()?;
+        let state_file = cache_dir.join("init-build-state.json");
+        if !state_file.exists() {
+            return Ok(None);
+        }
+        let contents = fs::read_to_string(&state_file)
+            .map_err(|e| format!("Failed to read init build state: {e}"))?;
+        let state = serde_json::from_str(&contents)
+            .map_err(|e| format!("Failed to parse init build state: {e}"))?;
+        Ok(Some(state))
+    }
+
+    fn save(&self) -> Result<(), String> {
+        let cache_dir = init_cache_dir()?;
+        let state_file = cache_dir.join("init-build-state.json");
+        let contents =
+            serde_json::to_string_pretty(self).map_err(|e| format!("Failed to serialize state: {e}"))?;
+        fs::write(&state_file, contents)
+            .map_err(|e| format!("Failed to write init build state: {e}"))?;
+        Ok(())
+    }
+
+    fn mark_success(&mut self, image: &str) {
+        self.images.insert(image.to_string(), "success".to_string());
+    }
+
+    fn mark_failed(&mut self, image: &str) {
+        self.images.insert(image.to_string(), "failed".to_string());
+    }
+
+    fn was_successful(&self, image: &str) -> bool {
+        self.images.get(image).map(|s| s == "success").unwrap_or(false)
+    }
+}
+
+fn init_cache_dir() -> Result<PathBuf, String> {
+    let cache_dir = if let Ok(cache_home) = std::env::var("XDG_CACHE_HOME") {
+        PathBuf::from(cache_home).join("tillandsias")
+    } else if let Ok(home) = std::env::var("HOME") {
+        PathBuf::from(home).join(".cache").join("tillandsias")
+    } else {
+        return Err("Cannot determine cache directory: HOME not set".to_string());
+    };
+
+    fs::create_dir_all(&cache_dir)
+        .map_err(|e| format!("Failed to create cache directory: {e}"))?;
+    Ok(cache_dir)
+}
+
+fn init_log_file(image_name: &str, debug: bool) -> Option<PathBuf> {
+    if !debug {
+        return None;
+    }
+
+    Some(PathBuf::from(format!(
+        "/tmp/tillandsias-init-{}.log",
+        image_name
+    )))
+}
 
 fn podman_runtime() -> Result<tokio::runtime::Runtime, String> {
     tokio::runtime::Runtime::new().map_err(|e| format!("Failed to create async runtime: {e}"))
@@ -833,10 +918,10 @@ fn build_opencode_forge_args(
     args
 }
 
-/// Build required container images on demand.
+/// Build required container images on demand with incremental build support.
 ///
-/// @trace spec:init-command, spec:default-image, spec:git-mirror-service, spec:proxy-container, spec:inference-container
-fn run_init(debug: bool) -> Result<(), String> {
+/// @trace spec:init-command, spec:init-incremental-builds, spec:default-image, spec:git-mirror-service, spec:proxy-container, spec:inference-container
+fn run_init(debug: bool, force: bool) -> Result<(), String> {
     let root = find_checkout_root()?;
     let version = VERSION.trim();
     let images = [
@@ -847,7 +932,161 @@ fn run_init(debug: bool) -> Result<(), String> {
         "chromium-framework",
         "forge",
     ];
-    ensure_versioned_images(&root, &images, version, debug)
+
+    // Load existing build state or create new one
+    let mut state = InitBuildState::load()?
+        .unwrap_or_else(InitBuildState::new);
+    let rt = podman_runtime()?;
+    let client = PodmanClient::new();
+    let mut failed_images = Vec::new();
+
+    // If force is set, clear previous build state to rebuild all images
+    if force {
+        if debug {
+            println!("FORCE: rebuilding all images");
+        }
+        state = InitBuildState::new();
+    }
+
+    for image in &images {
+        let tag = versioned_image_tag(image, version);
+
+        // Check if image exists and was previously successful
+        let should_skip = rt.block_on(async { client.image_exists(&tag).await });
+
+        if should_skip && state.was_successful(image) && !force {
+            if debug {
+                println!("SKIP {} (cached)", image);
+            }
+            continue;
+        }
+
+        if !should_skip && state.was_successful(image) {
+            // Image deleted after successful build - rebuild
+            if debug {
+                println!("REBUILD {} (image deleted)", image);
+            }
+        }
+
+        let log_file = init_log_file(image, debug);
+        if debug {
+            println!("BUILD {}", image);
+        }
+
+        let result = build_image_with_logging(&root, image, &tag, &log_file, debug);
+
+        if let Err(e) = result {
+            if debug {
+                eprintln!("FAILED {}: {}", image, e);
+            }
+            state.mark_failed(image);
+            failed_images.push((image.to_string(), e));
+        } else {
+            state.mark_success(image);
+            if debug {
+                println!("SUCCESS {}", image);
+            }
+        }
+    }
+
+    // Save updated state
+    state.save()?;
+
+    // Display failed build logs if debug mode and there are failures
+    if debug && !failed_images.is_empty() {
+        eprintln!("\n=== Failed Build Logs ===");
+        for (image, _error) in &failed_images {
+            let log_file = init_log_file(image, debug);
+            if let Some(log_path) = log_file {
+                if log_path.exists() {
+                    if let Ok(contents) = fs::read_to_string(&log_path) {
+                        let lines: Vec<&str> = contents.lines().collect();
+                        let start = if lines.len() > 10 { lines.len() - 10 } else { 0 };
+                        eprintln!("\n--- {} (last 10 lines) ---", image);
+                        for line in &lines[start..] {
+                            eprintln!("{}", line);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Clean up debug logs if all builds succeeded
+    if failed_images.is_empty() && debug {
+        cleanup_init_logs();
+    }
+
+    // Return error if any images failed
+    if !failed_images.is_empty() {
+        return Err(format!(
+            "Failed to build {} image(s): {}",
+            failed_images.len(),
+            failed_images
+                .iter()
+                .map(|(name, _)| name)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+
+    Ok(())
+}
+
+fn build_image_with_logging(
+    root: &Path,
+    image_name: &str,
+    image_tag: &str,
+    log_file: &Option<PathBuf>,
+    debug: bool,
+) -> Result<(), String> {
+    let (containerfile, context_dir) = image_specs(root, image_name)?;
+    let build_args = image_build_args(image_name, image_tag);
+
+    let mut command = podman_command();
+    command.args(["build", "-t", image_tag, "-f"]);
+    command.arg(containerfile.to_str().ok_or_else(|| "Containerfile path contains invalid UTF-8".to_string())?);
+
+    for arg in &build_args {
+        command.arg(arg);
+    }
+
+    command.arg(context_dir.to_str().ok_or_else(|| "Context path contains invalid UTF-8".to_string())?);
+
+    if let Some(log_path) = log_file {
+        // Redirect stdout and stderr to log file
+        if debug {
+            eprintln!("[tillandsias] logging build output to {}", log_path.display());
+        }
+
+        let log_file_handle = fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(log_path)
+            .map_err(|e| format!("Failed to open log file: {e}"))?;
+
+        command.stdout(log_file_handle.try_clone().map_err(|e| format!("Failed to clone log file handle: {e}"))?);
+        command.stderr(log_file_handle);
+    }
+
+    let status = command
+        .status()
+        .map_err(|e| format!("Failed to execute build: {e}"))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("Build exited with status {}", status))
+    }
+}
+
+fn cleanup_init_logs() {
+    for image in &["proxy", "git", "inference", "chromium-core", "chromium-framework", "forge"] {
+        let log_path = PathBuf::from(format!("/tmp/tillandsias-init-{}.log", image));
+        let _ = fs::remove_file(&log_path);
+    }
 }
 
 /// Run the representative end-to-end stack smoke after images exist.
