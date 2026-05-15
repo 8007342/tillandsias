@@ -201,11 +201,11 @@ impl AsyncTaskExecutor {
 
     /// Spawn a non-blocking task. Returns error if queue is full.
     /// @trace gap:TR-005
-    fn spawn_task<F>(&self, task: F) -> Result<(), mpsc::SendError<Box<dyn FnOnce() + Send>>>
+    fn spawn_task<F>(&self, task: F) -> Result<(), mpsc::TrySendError<Box<dyn FnOnce() + Send>>>
     where
         F: FnOnce() + Send + 'static,
     {
-        self.sender.send(Box::new(task))
+        self.sender.try_send(Box::new(task))
     }
 }
 
