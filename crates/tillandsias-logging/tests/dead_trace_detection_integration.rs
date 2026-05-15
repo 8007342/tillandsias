@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use tillandsias_logging::{extract_dead_specs, find_dead_traces, DeadTraceAudit};
+use tillandsias_logging::{DeadTraceAudit, extract_dead_specs, find_dead_traces};
 
 #[test]
 fn test_dead_trace_detection_integration_real_traces_md() {
@@ -61,8 +61,7 @@ Some content"#,
     .expect("Failed to write test file");
 
     let dead_specs = vec!["dead-spec".to_string(), "another-dead".to_string()];
-    let audit = find_dead_traces(project_root, &dead_specs)
-        .expect("Failed to audit dead traces");
+    let audit = find_dead_traces(project_root, &dead_specs).expect("Failed to audit dead traces");
 
     assert!(audit.has_dead_traces());
     assert!(audit.total_dead_traces >= 3); // At least 3 traces found
@@ -94,12 +93,14 @@ fn test_dead_trace_detection_skips_ignored_directories() {
 
     // Create file in project root (should be scanned)
     let root_file = project_root.join("file.rs");
-    fs::write(&root_file, "// @trace spec:dead-spec\nfn other_function() {}")
-        .expect("Failed to write file");
+    fs::write(
+        &root_file,
+        "// @trace spec:dead-spec\nfn other_function() {}",
+    )
+    .expect("Failed to write file");
 
     let dead_specs = vec!["dead-spec".to_string()];
-    let audit = find_dead_traces(project_root, &dead_specs)
-        .expect("Failed to audit dead traces");
+    let audit = find_dead_traces(project_root, &dead_specs).expect("Failed to audit dead traces");
 
     // Should find only one (in root), not the one in target/
     let traces = &audit.dead_traces_by_spec["dead-spec"];
@@ -117,8 +118,7 @@ fn test_dead_trace_detection_empty_project() {
     fs::create_dir(project_root.join("src")).expect("Failed to create src");
 
     let dead_specs = vec!["nonexistent-spec".to_string()];
-    let audit = find_dead_traces(project_root, &dead_specs)
-        .expect("Failed to audit dead traces");
+    let audit = find_dead_traces(project_root, &dead_specs).expect("Failed to audit dead traces");
 
     assert!(!audit.has_dead_traces());
     assert_eq!(audit.total_dead_traces, 0);

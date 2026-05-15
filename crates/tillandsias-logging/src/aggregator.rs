@@ -7,8 +7,8 @@
 //! - Filter by container name, component, spec, or log level
 //! - Support efficient querying across multiple sources
 
-use crate::log_entry::LogEntry;
 use crate::error::Result;
+use crate::log_entry::LogEntry;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -120,7 +120,11 @@ pub struct AggregatedLogEntry {
 
 impl AggregatedLogEntry {
     /// Create a new aggregated log entry
-    pub fn new(container: impl Into<String>, container_id: impl Into<String>, entry: LogEntry) -> Self {
+    pub fn new(
+        container: impl Into<String>,
+        container_id: impl Into<String>,
+        entry: LogEntry,
+    ) -> Self {
         Self {
             container: container.into(),
             container_id: container_id.into(),
@@ -152,19 +156,27 @@ impl LogAggregator {
         sources.insert(source.id.clone(), source.clone());
 
         let mut logs = self.logs.write().await;
-        logs.entry(source.id.clone())
-            .or_insert_with(Vec::new);
+        logs.entry(source.id.clone()).or_insert_with(Vec::new);
     }
 
     /// Add a log entry from a container
-    pub async fn add_log(&self, container: impl Into<String>, container_id: impl Into<String>, entry: LogEntry) -> Result<()> {
+    pub async fn add_log(
+        &self,
+        container: impl Into<String>,
+        container_id: impl Into<String>,
+        entry: LogEntry,
+    ) -> Result<()> {
         let container_str = container.into();
         let container_id_str = container_id.into();
 
         let mut logs = self.logs.write().await;
         logs.entry(container_id_str.clone())
             .or_insert_with(Vec::new)
-            .push(AggregatedLogEntry::new(container_str, container_id_str, entry));
+            .push(AggregatedLogEntry::new(
+                container_str,
+                container_id_str,
+                entry,
+            ));
 
         Ok(())
     }
@@ -172,10 +184,8 @@ impl LogAggregator {
     /// Get all aggregated logs sorted by timestamp (oldest first)
     pub async fn get_all_logs(&self) -> Result<Vec<AggregatedLogEntry>> {
         let logs = self.logs.read().await;
-        let mut all_entries: Vec<AggregatedLogEntry> = logs
-            .values()
-            .flat_map(|v| v.clone())
-            .collect();
+        let mut all_entries: Vec<AggregatedLogEntry> =
+            logs.values().flat_map(|v| v.clone()).collect();
 
         // Sort by timestamp ascending (oldest first)
         all_entries.sort_by(|a, b| a.entry.timestamp.cmp(&b.entry.timestamp));
@@ -183,7 +193,10 @@ impl LogAggregator {
     }
 
     /// Get aggregated logs with filtering
-    pub async fn get_logs_filtered(&self, filter: &AggregationFilter) -> Result<Vec<AggregatedLogEntry>> {
+    pub async fn get_logs_filtered(
+        &self,
+        filter: &AggregationFilter,
+    ) -> Result<Vec<AggregatedLogEntry>> {
         let all_logs = self.get_all_logs().await?;
         let filtered: Vec<AggregatedLogEntry> = all_logs
             .into_iter()
@@ -193,7 +206,10 @@ impl LogAggregator {
     }
 
     /// Get logs from a specific container
-    pub async fn get_logs_by_container(&self, container_id: &str) -> Result<Vec<AggregatedLogEntry>> {
+    pub async fn get_logs_by_container(
+        &self,
+        container_id: &str,
+    ) -> Result<Vec<AggregatedLogEntry>> {
         let logs = self.logs.read().await;
         match logs.get(container_id) {
             Some(entries) => {
@@ -206,7 +222,10 @@ impl LogAggregator {
     }
 
     /// Get logs from multiple containers
-    pub async fn get_logs_by_containers(&self, container_ids: &[String]) -> Result<Vec<AggregatedLogEntry>> {
+    pub async fn get_logs_by_containers(
+        &self,
+        container_ids: &[String],
+    ) -> Result<Vec<AggregatedLogEntry>> {
         let logs = self.logs.read().await;
         let mut all_entries: Vec<AggregatedLogEntry> = container_ids
             .iter()
@@ -233,7 +252,9 @@ impl LogAggregator {
     }
 
     /// Get logs grouped by container name (not ID)
-    pub async fn get_logs_grouped_by_name(&self) -> Result<HashMap<String, Vec<AggregatedLogEntry>>> {
+    pub async fn get_logs_grouped_by_name(
+        &self,
+    ) -> Result<HashMap<String, Vec<AggregatedLogEntry>>> {
         let all_logs = self.get_all_logs().await?;
         let mut result: HashMap<String, Vec<AggregatedLogEntry>> = HashMap::new();
 
@@ -248,7 +269,9 @@ impl LogAggregator {
     }
 
     /// Get logs grouped by component
-    pub async fn get_logs_grouped_by_component(&self) -> Result<HashMap<String, Vec<AggregatedLogEntry>>> {
+    pub async fn get_logs_grouped_by_component(
+        &self,
+    ) -> Result<HashMap<String, Vec<AggregatedLogEntry>>> {
         let all_logs = self.get_all_logs().await?;
         let mut result: HashMap<String, Vec<AggregatedLogEntry>> = HashMap::new();
 
@@ -263,16 +286,20 @@ impl LogAggregator {
     }
 
     /// Get logs grouped by spec trace
-    pub async fn get_logs_grouped_by_spec(&self) -> Result<HashMap<String, Vec<AggregatedLogEntry>>> {
+    pub async fn get_logs_grouped_by_spec(
+        &self,
+    ) -> Result<HashMap<String, Vec<AggregatedLogEntry>>> {
         let all_logs = self.get_all_logs().await?;
         let mut result: HashMap<String, Vec<AggregatedLogEntry>> = HashMap::new();
 
         for entry in all_logs {
-            let spec = entry.entry.spec_trace.as_deref().unwrap_or("unspecified").to_string();
-            result
-                .entry(spec)
-                .or_insert_with(Vec::new)
-                .push(entry);
+            let spec = entry
+                .entry
+                .spec_trace
+                .as_deref()
+                .unwrap_or("unspecified")
+                .to_string();
+            result.entry(spec).or_insert_with(Vec::new).push(entry);
         }
 
         Ok(result)
@@ -380,7 +407,12 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "proxy msg 1".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "proxy msg 1".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -390,7 +422,12 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "WARN".to_string(), "proxy".to_string(), "proxy msg 2".to_string()),
+                LogEntry::new(
+                    now,
+                    "WARN".to_string(),
+                    "proxy".to_string(),
+                    "proxy msg 2".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -401,7 +438,12 @@ mod tests {
             .add_log(
                 "tillandsias-git",
                 "git-id",
-                LogEntry::new(now, "INFO".to_string(), "git-service".to_string(), "git msg 1".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "git-service".to_string(),
+                    "git msg 1".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -412,7 +454,12 @@ mod tests {
             .add_log(
                 "tillandsias-forge",
                 "forge-id",
-                LogEntry::new(now, "ERROR".to_string(), "forge".to_string(), "forge msg 1".to_string()),
+                LogEntry::new(
+                    now,
+                    "ERROR".to_string(),
+                    "forge".to_string(),
+                    "forge msg 1".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -487,7 +534,12 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "msg".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "msg".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -496,7 +548,12 @@ mod tests {
             .add_log(
                 "tillandsias-git",
                 "git-id",
-                LogEntry::new(now, "INFO".to_string(), "git-service".to_string(), "msg".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "git-service".to_string(),
+                    "msg".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -517,7 +574,12 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "msg".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "msg".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -526,7 +588,12 @@ mod tests {
             .add_log(
                 "tillandsias-forge",
                 "forge-id",
-                LogEntry::new(now, "INFO".to_string(), "inference".to_string(), "msg".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "inference".to_string(),
+                    "msg".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -547,7 +614,12 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "msg1".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "msg1".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -556,7 +628,12 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "ERROR".to_string(), "proxy".to_string(), "msg2".to_string()),
+                LogEntry::new(
+                    now,
+                    "ERROR".to_string(),
+                    "proxy".to_string(),
+                    "msg2".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -577,8 +654,13 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "msg1".to_string())
-                    .with_spec_trace("spec:enclave-network"),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "msg1".to_string(),
+                )
+                .with_spec_trace("spec:enclave-network"),
             )
             .await
             .unwrap();
@@ -587,8 +669,13 @@ mod tests {
             .add_log(
                 "tillandsias-git",
                 "git-id",
-                LogEntry::new(now, "INFO".to_string(), "git-service".to_string(), "msg2".to_string())
-                    .with_spec_trace("spec:git-mirror-service"),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "git-service".to_string(),
+                    "msg2".to_string(),
+                )
+                .with_spec_trace("spec:git-mirror-service"),
             )
             .await
             .unwrap();
@@ -597,7 +684,14 @@ mod tests {
         let filtered = aggregator.get_logs_filtered(&filter).await.unwrap();
 
         assert_eq!(filtered.len(), 1);
-        assert!(filtered[0].entry.spec_trace.as_ref().unwrap().contains("git-mirror"));
+        assert!(
+            filtered[0]
+                .entry
+                .spec_trace
+                .as_ref()
+                .unwrap()
+                .contains("git-mirror")
+        );
     }
 
     #[tokio::test]
@@ -609,7 +703,12 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "msg1".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "msg1".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -632,7 +731,12 @@ mod tests {
             .add_log(
                 "tillandsias-git",
                 "git-id",
-                LogEntry::new(now, "INFO".to_string(), "git-service".to_string(), "msg".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "git-service".to_string(),
+                    "msg".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -652,7 +756,12 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "msg1".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "msg1".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -661,7 +770,12 @@ mod tests {
             .add_log(
                 "tillandsias-git",
                 "git-id",
-                LogEntry::new(now, "INFO".to_string(), "git-service".to_string(), "msg2".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "git-service".to_string(),
+                    "msg2".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -681,7 +795,12 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id-1",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "msg1".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "msg1".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -690,7 +809,12 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id-2",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "msg2".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "msg2".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -699,7 +823,12 @@ mod tests {
             .add_log(
                 "tillandsias-git",
                 "git-id",
-                LogEntry::new(now, "INFO".to_string(), "git-service".to_string(), "msg3".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "git-service".to_string(),
+                    "msg3".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -719,7 +848,12 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "msg1".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "msg1".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -728,7 +862,12 @@ mod tests {
             .add_log(
                 "tillandsias-forge",
                 "forge-id",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "msg2".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "msg2".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -737,7 +876,12 @@ mod tests {
             .add_log(
                 "tillandsias-git",
                 "git-id",
-                LogEntry::new(now, "INFO".to_string(), "git-service".to_string(), "msg3".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "git-service".to_string(),
+                    "msg3".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -757,8 +901,13 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "msg1".to_string())
-                    .with_spec_trace("spec:network"),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "msg1".to_string(),
+                )
+                .with_spec_trace("spec:network"),
             )
             .await
             .unwrap();
@@ -767,8 +916,13 @@ mod tests {
             .add_log(
                 "tillandsias-git",
                 "git-id",
-                LogEntry::new(now, "INFO".to_string(), "git-service".to_string(), "msg2".to_string())
-                    .with_spec_trace("spec:git"),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "git-service".to_string(),
+                    "msg2".to_string(),
+                )
+                .with_spec_trace("spec:git"),
             )
             .await
             .unwrap();
@@ -777,7 +931,12 @@ mod tests {
             .add_log(
                 "tillandsias-forge",
                 "forge-id",
-                LogEntry::new(now, "INFO".to_string(), "forge".to_string(), "msg3".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "forge".to_string(),
+                    "msg3".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -797,7 +956,12 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "msg1".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "msg1".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -806,7 +970,12 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "msg2".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "msg2".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -815,7 +984,12 @@ mod tests {
             .add_log(
                 "tillandsias-git",
                 "git-id",
-                LogEntry::new(now, "INFO".to_string(), "git-service".to_string(), "msg3".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "git-service".to_string(),
+                    "msg3".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -834,7 +1008,12 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "msg1".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "msg1".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -843,7 +1022,12 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "ERROR".to_string(), "proxy".to_string(), "msg2".to_string()),
+                LogEntry::new(
+                    now,
+                    "ERROR".to_string(),
+                    "proxy".to_string(),
+                    "msg2".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -852,7 +1036,12 @@ mod tests {
             .add_log(
                 "tillandsias-git",
                 "git-id",
-                LogEntry::new(now, "ERROR".to_string(), "git-service".to_string(), "msg3".to_string()),
+                LogEntry::new(
+                    now,
+                    "ERROR".to_string(),
+                    "git-service".to_string(),
+                    "msg3".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -871,8 +1060,13 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "msg1".to_string())
-                    .with_spec_trace("spec:network"),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "msg1".to_string(),
+                )
+                .with_spec_trace("spec:network"),
             )
             .await
             .unwrap();
@@ -881,8 +1075,13 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "ERROR".to_string(), "proxy".to_string(), "msg2".to_string())
-                    .with_spec_trace("spec:network"),
+                LogEntry::new(
+                    now,
+                    "ERROR".to_string(),
+                    "proxy".to_string(),
+                    "msg2".to_string(),
+                )
+                .with_spec_trace("spec:network"),
             )
             .await
             .unwrap();
@@ -891,8 +1090,13 @@ mod tests {
             .add_log(
                 "tillandsias-git",
                 "git-id",
-                LogEntry::new(now, "ERROR".to_string(), "git-service".to_string(), "msg3".to_string())
-                    .with_spec_trace("spec:network"),
+                LogEntry::new(
+                    now,
+                    "ERROR".to_string(),
+                    "git-service".to_string(),
+                    "msg3".to_string(),
+                )
+                .with_spec_trace("spec:network"),
             )
             .await
             .unwrap();
@@ -917,7 +1121,12 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "msg".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "msg".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -938,7 +1147,12 @@ mod tests {
             .add_log(
                 "tillandsias-proxy",
                 "proxy-id",
-                LogEntry::new(now, "INFO".to_string(), "proxy".to_string(), "msg1".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "proxy".to_string(),
+                    "msg1".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -947,7 +1161,12 @@ mod tests {
             .add_log(
                 "tillandsias-git",
                 "git-id",
-                LogEntry::new(now, "INFO".to_string(), "git-service".to_string(), "msg2".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "git-service".to_string(),
+                    "msg2".to_string(),
+                ),
             )
             .await
             .unwrap();
@@ -956,7 +1175,12 @@ mod tests {
             .add_log(
                 "tillandsias-forge",
                 "forge-id",
-                LogEntry::new(now, "INFO".to_string(), "forge".to_string(), "msg3".to_string()),
+                LogEntry::new(
+                    now,
+                    "INFO".to_string(),
+                    "forge".to_string(),
+                    "msg3".to_string(),
+                ),
             )
             .await
             .unwrap();

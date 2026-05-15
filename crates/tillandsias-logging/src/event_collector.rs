@@ -9,8 +9,11 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::collections::HashMap;
+
+#[cfg(test)]
+use serde_json::json;
 
 /// Base event metadata common to all events.
 #[derive(Clone, Debug, Serialize, Deserialize)]

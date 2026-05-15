@@ -34,8 +34,11 @@
 //! let should_emit = api.should_sample(&entry)?;
 //! ```
 
-use crate::{CostAwareSampler, LogEntry, QueryExecutor, parse, BudgetEnforcer, LogAggregator, AggregatedLogEntry};
 use crate::error::{LoggingError, Result};
+use crate::{
+    AggregatedLogEntry, BudgetEnforcer, CostAwareSampler, LogAggregator, LogEntry, QueryExecutor,
+    parse,
+};
 use parking_lot::RwLock;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -170,10 +173,7 @@ impl ObservabilityAPI {
             .map_err(|e| LoggingError::WriteError(format!("Query execution error: {}", e)))?;
 
         let matches = extract_match_count(&data);
-        let elapsed_ms = start
-            .elapsed()
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
+        let elapsed_ms = start.elapsed().map(|d| d.as_millis() as u64).unwrap_or(0);
 
         // Record in history
         {
@@ -228,15 +228,21 @@ impl ObservabilityAPI {
     /// # Returns
     /// BudgetStatus with decision and metadata
     pub fn check_budget(&self, spec: &str, _cost_bytes: usize) -> Result<BudgetStatus> {
-        self.budget_enforcer.check_trace_cost(&LogEntry::new(
-            chrono::Utc::now(),
-            "INFO".to_string(),
-            "api".to_string(),
-            "budget_check".to_string(),
-        ).with_spec_trace(spec))
+        self.budget_enforcer
+            .check_trace_cost(
+                &LogEntry::new(
+                    chrono::Utc::now(),
+                    "INFO".to_string(),
+                    "api".to_string(),
+                    "budget_check".to_string(),
+                )
+                .with_spec_trace(spec),
+            )
             .map_err(|e| LoggingError::WriteError(format!("Budget check error: {}", e)))?;
 
-        let current = self.budget_enforcer.spec_costs()
+        let current = self
+            .budget_enforcer
+            .spec_costs()
             .get(spec)
             .copied()
             .unwrap_or(0) as usize;
@@ -316,7 +322,11 @@ impl ObservabilityAPI {
     ///
     /// # Returns
     /// Filtered log entries
-    pub fn filter_by_spec(&self, spec: &str, entries: Vec<AggregatedLogEntry>) -> Vec<AggregatedLogEntry> {
+    pub fn filter_by_spec(
+        &self,
+        spec: &str,
+        entries: Vec<AggregatedLogEntry>,
+    ) -> Vec<AggregatedLogEntry> {
         entries
             .into_iter()
             .filter(|e| {
@@ -398,11 +408,7 @@ fn estimate_entry_cost(entry: &LogEntry) -> usize {
     let context_size = entry
         .context
         .as_ref()
-        .map(|ctx| {
-            ctx.iter()
-                .map(|(k, v)| k.len() + v.to_string().len())
-                .sum()
-        })
+        .map(|ctx| ctx.iter().map(|(k, v)| k.len() + v.to_string().len()).sum())
         .unwrap_or(0);
 
     // Spec trace size
@@ -469,7 +475,12 @@ mod tests {
     fn test_sampling_status() {
         let api = create_api();
 
-        let entry = LogEntry::new(Utc::now(), "info".to_string(), "test".to_string(), "msg".to_string());
+        let entry = LogEntry::new(
+            Utc::now(),
+            "info".to_string(),
+            "test".to_string(),
+            "msg".to_string(),
+        );
         let status = api.should_sample(&entry).unwrap();
 
         assert!(status.sampling_rate >= 0.0 && status.sampling_rate <= 1.0);
@@ -492,12 +503,22 @@ mod tests {
             AggregatedLogEntry::new(
                 "proxy",
                 "proxy-id",
-                LogEntry::new(now, "info".to_string(), "proxy".to_string(), "msg1".to_string()),
+                LogEntry::new(
+                    now,
+                    "info".to_string(),
+                    "proxy".to_string(),
+                    "msg1".to_string(),
+                ),
             ),
             AggregatedLogEntry::new(
                 "git",
                 "git-id",
-                LogEntry::new(now, "info".to_string(), "git".to_string(), "msg2".to_string()),
+                LogEntry::new(
+                    now,
+                    "info".to_string(),
+                    "git".to_string(),
+                    "msg2".to_string(),
+                ),
             ),
         ];
 
@@ -510,7 +531,12 @@ mod tests {
     fn test_unified_emit_decision() {
         let api = create_api();
 
-        let entry = LogEntry::new(Utc::now(), "info".to_string(), "test".to_string(), "msg".to_string());
+        let entry = LogEntry::new(
+            Utc::now(),
+            "info".to_string(),
+            "test".to_string(),
+            "msg".to_string(),
+        );
         let should_emit = api.should_emit(&entry, "test-spec").unwrap();
 
         assert!(should_emit || !should_emit); // Valid boolean result
@@ -525,7 +551,8 @@ mod tests {
             serde_json::json!({"spec": "foo", "level": "warn"}),
         ];
 
-        api.query(r#"{spec="foo"} | count"#, entries.clone()).unwrap();
+        api.query(r#"{spec="foo"} | count"#, entries.clone())
+            .unwrap();
         api.query(r#"{level="error"} | count"#, entries).unwrap();
 
         let history = api.query_history(10);
@@ -541,12 +568,22 @@ mod tests {
             AggregatedLogEntry::new(
                 "proxy",
                 "proxy-id",
-                LogEntry::new(now, "info".to_string(), "proxy".to_string(), "msg1".to_string()),
+                LogEntry::new(
+                    now,
+                    "info".to_string(),
+                    "proxy".to_string(),
+                    "msg1".to_string(),
+                ),
             ),
             AggregatedLogEntry::new(
                 "git",
                 "git-id",
-                LogEntry::new(now, "info".to_string(), "git".to_string(), "msg2".to_string()),
+                LogEntry::new(
+                    now,
+                    "info".to_string(),
+                    "git".to_string(),
+                    "msg2".to_string(),
+                ),
             ),
         ];
 
@@ -564,20 +601,37 @@ mod tests {
             AggregatedLogEntry::new(
                 "proxy",
                 "proxy-id",
-                LogEntry::new(now, "info".to_string(), "proxy".to_string(), "msg1".to_string())
-                    .with_spec_trace("spec:network"),
+                LogEntry::new(
+                    now,
+                    "info".to_string(),
+                    "proxy".to_string(),
+                    "msg1".to_string(),
+                )
+                .with_spec_trace("spec:network"),
             ),
             AggregatedLogEntry::new(
                 "git",
                 "git-id",
-                LogEntry::new(now, "info".to_string(), "git".to_string(), "msg2".to_string())
-                    .with_spec_trace("spec:git"),
+                LogEntry::new(
+                    now,
+                    "info".to_string(),
+                    "git".to_string(),
+                    "msg2".to_string(),
+                )
+                .with_spec_trace("spec:git"),
             ),
         ];
 
         let filtered = api.filter_by_spec("network", entries);
         assert_eq!(filtered.len(), 1);
-        assert!(filtered[0].entry.spec_trace.as_ref().unwrap().contains("network"));
+        assert!(
+            filtered[0]
+                .entry
+                .spec_trace
+                .as_ref()
+                .unwrap()
+                .contains("network")
+        );
     }
 
     #[test]

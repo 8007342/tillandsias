@@ -22,10 +22,10 @@
 //! println!("Menu open avg latency: {:?}", metrics.operation_latencies["MenuOpen"].avg_ms);
 //! ```
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
 
 /// Kinds of tray operations to profile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -80,14 +80,23 @@ impl LatencyStats {
 
         let count = measurements.len() as u64;
         let min_ms = measurements.iter().cloned().fold(f64::INFINITY, f64::min);
-        let max_ms = measurements.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let max_ms = measurements
+            .iter()
+            .cloned()
+            .fold(f64::NEG_INFINITY, f64::max);
         let avg_ms = measurements.iter().sum::<f64>() / measurements.len() as f64;
 
         // Percentiles from sorted array
         let p95_idx = (count as f64 * 0.95).ceil() as usize - 1;
         let p99_idx = (count as f64 * 0.99).ceil() as usize - 1;
-        let p95_ms = measurements.get(p95_idx.min(measurements.len() - 1)).cloned().unwrap_or(max_ms);
-        let p99_ms = measurements.get(p99_idx.min(measurements.len() - 1)).cloned().unwrap_or(max_ms);
+        let p95_ms = measurements
+            .get(p95_idx.min(measurements.len() - 1))
+            .cloned()
+            .unwrap_or(max_ms);
+        let p99_ms = measurements
+            .get(p99_idx.min(measurements.len() - 1))
+            .cloned()
+            .unwrap_or(max_ms);
 
         Some(Self {
             count,
@@ -247,11 +256,7 @@ impl TrayProfiler {
     #[cfg(test)]
     pub fn operation_count(&self, kind: OperationKind) -> usize {
         if let Ok(inner) = self.inner.lock() {
-            inner
-                .measurements
-                .get(&kind)
-                .map(|m| m.len())
-                .unwrap_or(0)
+            inner.measurements.get(&kind).map(|m| m.len()).unwrap_or(0)
         } else {
             0
         }
@@ -289,7 +294,11 @@ mod tests {
         assert_eq!(metrics.total_ops, 1);
         assert!(metrics.operation_latencies.contains_key("MenuOpen"));
         let stats = &metrics.operation_latencies["MenuOpen"];
-        assert!(stats.avg_ms >= 10.0, "Expected at least 10ms, got {}", stats.avg_ms);
+        assert!(
+            stats.avg_ms >= 10.0,
+            "Expected at least 10ms, got {}",
+            stats.avg_ms
+        );
     }
 
     #[test]
@@ -330,7 +339,10 @@ mod tests {
         }
 
         let metrics = profiler.export_metrics();
-        assert!(!metrics.hotspots.is_empty(), "Should detect MenuRebuild as hotspot");
+        assert!(
+            !metrics.hotspots.is_empty(),
+            "Should detect MenuRebuild as hotspot"
+        );
         assert!(metrics.hotspots.contains(&"MenuRebuild".to_string()));
     }
 

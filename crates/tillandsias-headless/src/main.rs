@@ -2484,7 +2484,7 @@ fn create_github_podman_secret(token: &str, debug: bool) -> Result<(), String> {
 }
 
 /// Phase 3, Task 12: Auto-detect native tray availability.
-/// @trace spec:linux-native-portable-executable, spec:transparent-mode-detection
+/// @trace spec:linux-native-portable-executable, spec:transparent-mode-detection, spec:tray-cli-coexistence
 fn is_tray_available() -> bool {
     cfg!(all(feature = "tray", target_os = "linux"))
 }
@@ -2718,6 +2718,7 @@ struct BrowserDisplayContext {
 }
 
 impl BrowserDisplayContext {
+    /// @trace spec:tray-cli-coexistence
     fn from_env() -> Result<Self, String> {
         let display = std::env::var("DISPLAY").ok();
         let xauthority = std::env::var_os("XAUTHORITY").map(PathBuf::from);

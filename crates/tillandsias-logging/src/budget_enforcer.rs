@@ -147,7 +147,10 @@ impl BudgetEnforcer {
     /// * `Ok(true)` - Budget exceeded, warning should be issued
     /// * `Ok(false)` - Budget OK, no warning needed
     /// * `Err(_)` - Error estimating cost (treat as non-fatal, return false)
-    pub fn check_trace_cost(&self, entry: &LogEntry) -> std::result::Result<bool, Box<dyn std::error::Error>> {
+    pub fn check_trace_cost(
+        &self,
+        entry: &LogEntry,
+    ) -> std::result::Result<bool, Box<dyn std::error::Error>> {
         let cost = estimate_trace_cost(entry)?;
 
         let mut state = self.state.write();
@@ -188,7 +191,11 @@ impl BudgetEnforcer {
             let spec_budget = self.get_spec_budget(spec_name);
             if let Some(spec_cost) = state.spec_costs.get(spec_name) {
                 if *spec_cost > spec_budget
-                    && !state.spec_warnings_issued.get(spec_name).copied().unwrap_or(false)
+                    && !state
+                        .spec_warnings_issued
+                        .get(spec_name)
+                        .copied()
+                        .unwrap_or(false)
                 {
                     state.spec_warnings_issued.insert(spec_name.clone(), true);
                     state.violations += 1;
@@ -205,7 +212,11 @@ impl BudgetEnforcer {
     /// Returns (global_cost, violation_count, global_warning_issued)
     pub fn window_stats(&self) -> (u64, u64, bool) {
         let state = self.state.read();
-        (state.global_cost, state.violations, state.global_warning_issued)
+        (
+            state.global_cost,
+            state.violations,
+            state.global_warning_issued,
+        )
     }
 
     /// Get per-spec costs in current window
@@ -350,7 +361,10 @@ mod tests {
 
         // Violations count should not increase
         let (_, violations_2, _) = enforcer.window_stats();
-        assert_eq!(violations_2, 1, "Should still have exactly 1 violation (warning already issued)");
+        assert_eq!(
+            violations_2, 1,
+            "Should still have exactly 1 violation (warning already issued)"
+        );
     }
 
     #[test]
@@ -387,14 +401,8 @@ mod tests {
 
         // Add traces for both specs
         for i in 0..30 {
-            let entry1 = create_test_entry(
-                &format!("message {}", i),
-                Some("spec:runtime-logging"),
-            );
-            let entry2 = create_test_entry(
-                &format!("message {}", i),
-                Some("spec:logging-levels"),
-            );
+            let entry1 = create_test_entry(&format!("message {}", i), Some("spec:runtime-logging"));
+            let entry2 = create_test_entry(&format!("message {}", i), Some("spec:logging-levels"));
 
             let _ = enforcer.check_trace_cost(&entry1);
             let _ = enforcer.check_trace_cost(&entry2);

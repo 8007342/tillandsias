@@ -28,8 +28,8 @@
 //! # }
 //! ```
 
-use crate::models::{CpuMetric, DiskMetric, MemoryMetric};
 use crate::MetricsSampler;
+use crate::models::{CpuMetric, DiskMetric, MemoryMetric};
 use anyhow::Result;
 use std::fmt::Write as FmtWrite;
 
@@ -110,10 +110,7 @@ impl PrometheusExporter {
             output,
             "# HELP tillandsias_container_cpu_percent Per-core CPU usage percentage"
         )?;
-        writeln!(
-            output,
-            "# TYPE tillandsias_container_cpu_percent gauge"
-        )?;
+        writeln!(output, "# TYPE tillandsias_container_cpu_percent gauge")?;
 
         for (core_id, core_percent) in cpu.per_core_percent.iter().enumerate() {
             self.write_metric(
@@ -194,10 +191,7 @@ impl PrometheusExporter {
             output,
             "# HELP tillandsias_container_memory_percent Used memory percentage"
         )?;
-        writeln!(
-            output,
-            "# TYPE tillandsias_container_memory_percent gauge"
-        )?;
+        writeln!(output, "# TYPE tillandsias_container_memory_percent gauge")?;
         self.write_metric(
             output,
             "tillandsias_container_memory_percent",
@@ -225,10 +219,7 @@ impl PrometheusExporter {
             output,
             "# HELP tillandsias_container_swap_bytes_used Used swap in bytes"
         )?;
-        writeln!(
-            output,
-            "# TYPE tillandsias_container_swap_bytes_used gauge"
-        )?;
+        writeln!(output, "# TYPE tillandsias_container_swap_bytes_used gauge")?;
         self.write_metric(
             output,
             "tillandsias_container_swap_bytes_used",
@@ -268,10 +259,7 @@ impl PrometheusExporter {
             output,
             "# HELP tillandsias_container_disk_bytes_used Used disk space in bytes"
         )?;
-        writeln!(
-            output,
-            "# TYPE tillandsias_container_disk_bytes_used gauge"
-        )?;
+        writeln!(output, "# TYPE tillandsias_container_disk_bytes_used gauge")?;
 
         for disk in disks {
             let mount = &disk.mount_point;
@@ -385,7 +373,9 @@ mod tests {
         // Check that metric values are present
         assert!(output.contains("tillandsias_container_cpu_seconds_total"));
         assert!(output.contains("tillandsias_container_cpu_percent"));
-        assert!(output.contains("tillandsias_container_cpu_system_percent{job=\"tillandsias\"} 42.5"));
+        assert!(
+            output.contains("tillandsias_container_cpu_system_percent{job=\"tillandsias\"} 42.5")
+        );
 
         // Check per-core metrics
         assert!(output.contains(r#"cpu="0""#));
@@ -412,11 +402,27 @@ mod tests {
         assert!(output.contains("# HELP tillandsias_container_memory_bytes_used"));
 
         // Check values
-        assert!(output.contains("tillandsias_container_memory_bytes_total{job=\"tillandsias\"} 16000000000"));
-        assert!(output.contains("tillandsias_container_memory_bytes_used{job=\"tillandsias\"} 8000000000"));
-        assert!(output.contains("tillandsias_container_memory_bytes_available{job=\"tillandsias\"} 8000000000"));
-        assert!(output.contains("tillandsias_container_swap_bytes_total{job=\"tillandsias\"} 4000000000"));
-        assert!(output.contains("tillandsias_container_swap_bytes_used{job=\"tillandsias\"} 1000000000"));
+        assert!(
+            output.contains(
+                "tillandsias_container_memory_bytes_total{job=\"tillandsias\"} 16000000000"
+            )
+        );
+        assert!(
+            output.contains(
+                "tillandsias_container_memory_bytes_used{job=\"tillandsias\"} 8000000000"
+            )
+        );
+        assert!(output.contains(
+            "tillandsias_container_memory_bytes_available{job=\"tillandsias\"} 8000000000"
+        ));
+        assert!(
+            output
+                .contains("tillandsias_container_swap_bytes_total{job=\"tillandsias\"} 4000000000")
+        );
+        assert!(
+            output
+                .contains("tillandsias_container_swap_bytes_used{job=\"tillandsias\"} 1000000000")
+        );
     }
 
     #[test]

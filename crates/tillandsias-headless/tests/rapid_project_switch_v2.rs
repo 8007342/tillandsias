@@ -162,8 +162,8 @@ fn test_stress_20_rapid_switches_under_500ms() {
     }
 
     // Summary: print average and max timing
-    let avg_ms: f64 = benchmarks.iter().map(|b| b.duration_ms).sum::<f64>()
-        / benchmarks.len() as f64;
+    let avg_ms: f64 =
+        benchmarks.iter().map(|b| b.duration_ms).sum::<f64>() / benchmarks.len() as f64;
     let max_ms = benchmarks
         .iter()
         .map(|b| b.duration_ms)
@@ -254,7 +254,10 @@ fn test_menu_consistency_with_varied_projects() {
         "Menu consistency failed for one or more switches"
     );
 
-    eprintln!("Menu consistency test: {} switches, all valid", rapid_switches);
+    eprintln!(
+        "Menu consistency test: {} switches, all valid",
+        rapid_switches
+    );
 }
 
 /// Test: No stale cached data persists across rapid switches.
@@ -295,7 +298,8 @@ fn test_no_stale_cache_across_rapid_switches() {
         let expected_generation = state.generation;
         let actual_generation = state.generation;
         assert_eq!(
-            actual_generation, expected_generation,
+            actual_generation,
+            expected_generation,
             "Generation mismatch at switch {}: expected gen {}, got gen {}",
             i + 1,
             expected_generation,
@@ -312,7 +316,10 @@ fn test_no_stale_cache_across_rapid_switches() {
         "Not all stale checks completed"
     );
 
-    eprintln!("Stale cache test: {} switches, zero stale data detected", rapid_switches);
+    eprintln!(
+        "Stale cache test: {} switches, zero stale data detected",
+        rapid_switches
+    );
 }
 
 /// Test: Concurrent rapid switches with thread safety.
@@ -360,10 +367,7 @@ fn test_concurrent_rapid_switches_thread_safe() {
                 let state = current_clone.lock().unwrap().clone();
                 let consistency = MenuConsistency::validate(&state);
 
-                thread_results.push((
-                    switch_duration.as_millis() as u64,
-                    consistency.valid,
-                ));
+                thread_results.push((switch_duration.as_millis() as u64, consistency.valid));
 
                 // Yield to increase contention
                 thread::yield_now();
@@ -466,7 +470,10 @@ fn test_menu_item_integrity_across_switches() {
         integrity_violations
     );
 
-    eprintln!("Menu integrity test: {} switches, all items intact", switch_count);
+    eprintln!(
+        "Menu integrity test: {} switches, all items intact",
+        switch_count
+    );
 }
 
 /// Lifecycle state for TR-010: tracks project initialization.
@@ -532,11 +539,7 @@ fn test_concurrent_attach_same_project_rapid() {
         let mut proj = project.lock().unwrap();
         let result = proj.try_attach();
         results.push(("attach-1", result.is_ok()));
-        assert!(
-            result.is_ok(),
-            "First attach should succeed: {:?}",
-            result
-        );
+        assert!(result.is_ok(), "First attach should succeed: {:?}", result);
     }
 
     // Try to attach again while initializing (should fail)
@@ -554,7 +557,8 @@ fn test_concurrent_attach_same_project_rapid() {
     {
         let proj = project.lock().unwrap();
         assert_eq!(
-            proj.lifecycle, LifecycleState::Initializing,
+            proj.lifecycle,
+            LifecycleState::Initializing,
             "Project should remain in Initializing state"
         );
     }
@@ -594,7 +598,10 @@ fn test_concurrent_attach_different_projects_rapid() {
         let mut proj = proj_a.lock().unwrap();
         let result = proj.try_attach();
         results.push(("proj-a-retry", result.is_ok()));
-        assert!(result.is_err(), "Re-attach to proj-a during init should fail");
+        assert!(
+            result.is_err(),
+            "Re-attach to proj-a during init should fail"
+        );
     }
 
     eprintln!(
@@ -626,10 +633,14 @@ fn test_menu_consistency_after_rejected_switch() {
     {
         let proj = project.lock().unwrap();
         assert_eq!(
-            proj.lifecycle, LifecycleState::Initializing,
+            proj.lifecycle,
+            LifecycleState::Initializing,
             "State should be Initializing (unchanged by rejection)"
         );
-        assert!(!proj.can_start_project(), "can_start_project should be false");
+        assert!(
+            !proj.can_start_project(),
+            "can_start_project should be false"
+        );
     }
 
     // Complete initialization
@@ -642,10 +653,7 @@ fn test_menu_consistency_after_rejected_switch() {
     {
         let mut proj = project.lock().unwrap();
         let result = proj.try_attach();
-        assert!(
-            result.is_err(),
-            "Cannot re-attach once already initialized"
-        );
+        assert!(result.is_err(), "Cannot re-attach once already initialized");
     }
 
     eprintln!("Menu consistency after rejection: state remains valid");
@@ -661,7 +669,8 @@ fn test_lifecycle_state_guards_enforce_transitions() {
     {
         let proj = project.lock().unwrap();
         assert_eq!(
-            proj.lifecycle, LifecycleState::Idle,
+            proj.lifecycle,
+            LifecycleState::Idle,
             "Initial state should be Idle"
         );
         assert!(
@@ -698,10 +707,7 @@ fn test_lifecycle_state_guards_enforce_transitions() {
     {
         let mut proj = project.lock().unwrap();
         let result = proj.try_attach();
-        assert!(
-            result.is_err(),
-            "Cannot re-attach once already initialized"
-        );
+        assert!(result.is_err(), "Cannot re-attach once already initialized");
     }
 
     eprintln!("Lifecycle guard test: all transitions enforced correctly");

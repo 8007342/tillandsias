@@ -7,5 +7,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [scripts/claude-delegate.sh#L3](../../../scripts/claude-delegate.sh#L3)
 - [scripts/claude-mcp.sh#L3](../../../scripts/claude-mcp.sh#L3)
-- [scripts/validate-traces.sh#L14](../../../scripts/validate-traces.sh#L14)
-- [scripts/validate-traces.sh#L211](../../../scripts/validate-traces.sh#L211)
+- [scripts/validate-traces.sh#L16](../../../scripts/validate-traces.sh#L16)
+- [scripts/validate-traces.sh#L217](../../../scripts/validate-traces.sh#L217)

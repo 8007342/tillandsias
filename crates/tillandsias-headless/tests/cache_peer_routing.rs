@@ -14,7 +14,6 @@
 //! 5. CONNECT method support — verify HTTPS tunneling for .localhost domains
 
 use std::fs;
-use std::path::Path;
 
 // ============================================================================
 // Test 1: Squid Configuration Syntax Validation
@@ -36,7 +35,8 @@ fn test_cache_peer_directive_syntax() {
 
     // Verify cache_peer directive exists and references the router
     assert!(
-        squid_conf.contains("cache_peer router parent 8080 0 no-query default name=tillandsias-router"),
+        squid_conf
+            .contains("cache_peer router parent 8080 0 no-query default name=tillandsias-router"),
         "cache_peer directive should reference 'router' hostname, not localhost"
     );
 
@@ -47,8 +47,12 @@ fn test_cache_peer_directive_syntax() {
     );
 
     // Verify the directive appears after ACL definitions
-    let cache_peer_idx = squid_conf.find("cache_peer router").expect("cache_peer not found");
-    let acl_idx = squid_conf.find("acl localhost_subdomain").expect("ACL not found");
+    let cache_peer_idx = squid_conf
+        .find("cache_peer router")
+        .expect("cache_peer not found");
+    let acl_idx = squid_conf
+        .find("acl localhost_subdomain")
+        .expect("ACL not found");
     assert!(
         cache_peer_idx > acl_idx,
         "cache_peer should come after ACL definitions"
@@ -164,7 +168,9 @@ fn test_never_direct_localhost_rule() {
     );
 
     // Verify it appears near cache_peer rules (they work together)
-    let never_direct_idx = squid_conf.find("never_direct allow localhost_subdomain").unwrap();
+    let never_direct_idx = squid_conf
+        .find("never_direct allow localhost_subdomain")
+        .unwrap();
     let cache_peer_idx = squid_conf.find("cache_peer router").unwrap();
     let distance = (never_direct_idx as i32 - cache_peer_idx as i32).abs();
     assert!(
@@ -299,8 +305,12 @@ fn test_https_connect_method_for_localhost() {
 
     // The design allows .localhost BEFORE the CONNECT-on-SSL-ports rule,
     // which means HTTPS .localhost requests are permitted regardless of port restriction
-    let localhost_idx = squid_conf.find("http_access allow localhost_subdomain").unwrap();
-    let connect_rule_idx = squid_conf.find("http_access allow CONNECT SSL_ports").unwrap();
+    let localhost_idx = squid_conf
+        .find("http_access allow localhost_subdomain")
+        .unwrap();
+    let connect_rule_idx = squid_conf
+        .find("http_access allow CONNECT SSL_ports")
+        .unwrap();
     assert!(
         localhost_idx < connect_rule_idx,
         ".localhost rule should be evaluated before port-restricted CONNECT rule"

@@ -8,8 +8,8 @@
 //! - Queryable parent-child span relationships
 //! - Thread-local context storage for automatic propagation
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use uuid::Uuid;
 
 /// Unique identifier for a span
@@ -189,21 +189,19 @@ impl SpanContext {
 
         match parts.as_slice() {
             // Root span header: trace_id:span_id
-            [trace_id_str, span_id_str] => {
-                Some(SpanContext {
-                    span_id: SpanId::from_u64(u64::from_str_radix(span_id_str, 16).ok()?),
-                    trace_id: TraceId::from_string(trace_id_str.to_string()),
-                    parent_span_id: None,
-                })
-            }
+            [trace_id_str, span_id_str] => Some(SpanContext {
+                span_id: SpanId::from_u64(u64::from_str_radix(span_id_str, 16).ok()?),
+                trace_id: TraceId::from_string(trace_id_str.to_string()),
+                parent_span_id: None,
+            }),
             // Child span header: trace_id:span_id:parent_span_id
-            [trace_id_str, span_id_str, parent_span_id_str] => {
-                Some(SpanContext {
-                    span_id: SpanId::from_u64(u64::from_str_radix(span_id_str, 16).ok()?),
-                    trace_id: TraceId::from_string(trace_id_str.to_string()),
-                    parent_span_id: Some(SpanId::from_u64(u64::from_str_radix(parent_span_id_str, 16).ok()?)),
-                })
-            }
+            [trace_id_str, span_id_str, parent_span_id_str] => Some(SpanContext {
+                span_id: SpanId::from_u64(u64::from_str_radix(span_id_str, 16).ok()?),
+                trace_id: TraceId::from_string(trace_id_str.to_string()),
+                parent_span_id: Some(SpanId::from_u64(
+                    u64::from_str_radix(parent_span_id_str, 16).ok()?,
+                )),
+            }),
             _ => None,
         }
     }
@@ -281,9 +279,7 @@ pub fn set_current_span(ctx: SpanContext) {
 
 /// Get the current span context (returns None if not set)
 pub fn current_span() -> Option<SpanContext> {
-    CURRENT_SPAN.with(|s| {
-        s.borrow().as_ref().map(|arc| arc.as_ref().clone())
-    })
+    CURRENT_SPAN.with(|s| s.borrow().as_ref().map(|arc| arc.as_ref().clone()))
 }
 
 /// Clear the current span context

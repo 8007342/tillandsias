@@ -7,10 +7,10 @@
 //!
 //! Used by `scripts/audit-dead-traces.sh` for CI gate enforcement and developer remediation.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::fs;
 use regex::Regex;
+use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 /// A dead trace reference found in the codebase.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,27 +96,30 @@ pub fn find_dead_traces(
         // Match @trace directive with spec:name anywhere in the annotation
         // Handles: @trace spec:name or @trace other spec:name or @trace spec:name, other:value
         let pattern = format!(r"@trace.*spec:{}", regex::escape(spec_name));
-        let re = Regex::new(&pattern)
-            .map_err(|e| format!("Invalid regex pattern: {}", e))?;
+        let re = Regex::new(&pattern).map_err(|e| format!("Invalid regex pattern: {}", e))?;
 
         let mut traces_for_spec = Vec::new();
 
         // Walk the project directory
-        walk_directory(project_root, &searchable_extensions, &mut |file_path: &Path| {
-            if let Ok(content) = fs::read_to_string(file_path) {
-                for (line_num, line) in content.lines().enumerate() {
-                    if re.is_match(line) {
-                        traces_for_spec.push(DeadTrace {
-                            spec_name: spec_name.clone(),
-                            file_path: file_path.to_path_buf(),
-                            line_number: line_num + 1,
-                            source_line: line.to_string(),
-                        });
-                        total_dead_traces += 1;
+        walk_directory(
+            project_root,
+            &searchable_extensions,
+            &mut |file_path: &Path| {
+                if let Ok(content) = fs::read_to_string(file_path) {
+                    for (line_num, line) in content.lines().enumerate() {
+                        if re.is_match(line) {
+                            traces_for_spec.push(DeadTrace {
+                                spec_name: spec_name.clone(),
+                                file_path: file_path.to_path_buf(),
+                                line_number: line_num + 1,
+                                source_line: line.to_string(),
+                            });
+                            total_dead_traces += 1;
+                        }
                     }
                 }
-            }
-        })?;
+            },
+        )?;
 
         if !traces_for_spec.is_empty() {
             dead_traces_by_spec.insert(spec_name.clone(), traces_for_spec);
@@ -134,8 +137,7 @@ fn walk_directory(
     dir: &Path,
     extensions: &[&str],
     callback: &mut dyn FnMut(&Path),
-) -> Result<(), String>
-{
+) -> Result<(), String> {
     // Skip .git, target directories
     let skip_dirs = [".git", "target", ".claude"];
 
@@ -143,10 +145,7 @@ fn walk_directory(
         for entry in entries {
             if let Ok(entry) = entry {
                 let path = entry.path();
-                let file_name = path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("");
+                let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
                 // Skip certain directories
                 if skip_dirs.iter().any(|skip| file_name == *skip) {
@@ -157,11 +156,9 @@ fn walk_directory(
                     walk_directory(&path, extensions, callback)?;
                 } else {
                     // Check file extension
-                    let matches_ext = extensions.iter().any(|ext| {
-                        path.to_str()
-                            .map(|s| s.ends_with(ext))
-                            .unwrap_or(false)
-                    });
+                    let matches_ext = extensions
+                        .iter()
+                        .any(|ext| path.to_str().map(|s| s.ends_with(ext)).unwrap_or(false));
 
                     if matches_ext {
                         callback(&path);
@@ -226,8 +223,8 @@ mod tests {
         .expect("Failed to write test file");
 
         let dead_specs = vec!["dead-spec-1".to_string(), "another-dead".to_string()];
-        let audit = find_dead_traces(project_root, &dead_specs)
-            .expect("Failed to audit dead traces");
+        let audit =
+            find_dead_traces(project_root, &dead_specs).expect("Failed to audit dead traces");
 
         assert!(audit.has_dead_traces());
         assert_eq!(audit.total_dead_traces, 3); // Two in .rs, one in .sh
@@ -256,12 +253,15 @@ mod tests {
 
         // Create file in project root (should be scanned)
         let root_file = project_root.join("file.rs");
-        fs::write(&root_file, "// @trace spec:dead-spec\nfn other_function() {}")
-            .expect("Failed to write file");
+        fs::write(
+            &root_file,
+            "// @trace spec:dead-spec\nfn other_function() {}",
+        )
+        .expect("Failed to write file");
 
         let dead_specs = vec!["dead-spec".to_string()];
-        let audit = find_dead_traces(project_root, &dead_specs)
-            .expect("Failed to audit dead traces");
+        let audit =
+            find_dead_traces(project_root, &dead_specs).expect("Failed to audit dead traces");
 
         assert_eq!(audit.total_dead_traces, 1); // Only the one in root, not in target/
     }
@@ -340,8 +340,8 @@ mod tests {
         .expect("Failed to write test file");
 
         let dead_specs = vec!["dead-spec-1".to_string()];
-        let audit = find_dead_traces(project_root, &dead_specs)
-            .expect("Failed to audit dead traces");
+        let audit =
+            find_dead_traces(project_root, &dead_specs).expect("Failed to audit dead traces");
 
         assert!(audit.has_dead_traces());
         assert_eq!(audit.total_dead_traces, 1);
@@ -353,8 +353,8 @@ mod tests {
         let project_root = temp_dir.path();
 
         let dead_specs = vec!["nonexistent-spec".to_string()];
-        let audit = find_dead_traces(project_root, &dead_specs)
-            .expect("Failed to audit dead traces");
+        let audit =
+            find_dead_traces(project_root, &dead_specs).expect("Failed to audit dead traces");
 
         assert!(!audit.has_dead_traces());
         assert_eq!(audit.total_dead_traces, 0);

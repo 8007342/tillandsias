@@ -31,15 +31,16 @@ pub use budget_enforcer::BudgetEnforcer;
 pub use cardinality::{CardinalityAnalyzer, CardinalityReport};
 pub use dead_trace_detector::{DeadTrace, DeadTraceAudit, extract_dead_specs, find_dead_traces};
 pub use error::{LoggingError, Result};
-pub use event_collector::{
-    EventCollector, EventMetadata, ImageBuildEvent, SecretRotationEvent,
-};
+pub use event_collector::{EventCollector, EventMetadata, ImageBuildEvent, SecretRotationEvent};
 pub use log_entry::LogEntry;
 pub use logger::Logger;
 pub use query::{AggregationOp, Filter, JsonFilter, Query, QueryExecutor, parse};
 pub use sampler::CostAwareSampler;
-pub use span_context::{SpanContext, SpanId, TraceId, SpanContextBuilder, set_current_span, current_span, clear_current_span};
-pub use surface::{ObservabilityAPI, SamplingStatus, BudgetStatus, QueryResult, AggregationResult};
+pub use span_context::{
+    SpanContext, SpanContextBuilder, SpanId, TraceId, clear_current_span, current_span,
+    set_current_span,
+};
+pub use surface::{AggregationResult, BudgetStatus, ObservabilityAPI, QueryResult, SamplingStatus};
 
 /// Initialize the global logging subscriber with file rotation and filtering.
 ///

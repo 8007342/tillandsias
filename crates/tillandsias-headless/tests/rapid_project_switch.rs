@@ -12,8 +12,10 @@ use std::time::Instant;
 #[derive(Debug, Clone)]
 struct MockProjectState {
     id: String,
+    #[allow(dead_code)]
     name: String,
     menu_items: Vec<String>,
+    #[allow(dead_code)]
     last_updated: Instant,
 }
 
@@ -38,6 +40,7 @@ struct MenuConsistency {
     project_id: String,
     item_count: usize,
     valid: bool,
+    #[allow(dead_code)]
     timestamp: Instant,
 }
 
