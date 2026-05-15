@@ -15,12 +15,14 @@ pub mod error;
 pub mod formatter;
 pub mod log_entry;
 pub mod logger;
+pub mod query;
 pub mod rotation;
 
 pub use cardinality::{CardinalityAnalyzer, CardinalityReport};
 pub use error::{LoggingError, Result};
 pub use log_entry::LogEntry;
 pub use logger::Logger;
+pub use query::{parse, Query, QueryExecutor, Filter, AggregationOp, JsonFilter};
 
 /// Initialize the global logging subscriber with file rotation and filtering.
 ///

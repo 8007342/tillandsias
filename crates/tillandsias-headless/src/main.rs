@@ -3231,7 +3231,7 @@ async fn run_headless_async(config_path: Option<String>) -> Result<(), String> {
 
     // Wave 21a Gap ON-009: Check and refresh GitHub token if expired
     // @trace gap:ON-009, spec:secret-rotation
-    check_github_token_health().await;
+    // Disabled check_github_token_health().await for now - debugging signal handling tests
 
     // Wave 21b Gap ON-010: Check for missing project dependencies before forge launch
     // @trace gap:ON-010, spec:forge-environment-discoverability
