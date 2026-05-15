@@ -39,12 +39,12 @@ if [[ "$COVERAGE_THRESHOLD_MODE" != true ]]; then
 
   # Scan annotated source for all spec names (exclude worktrees, target)
   ANNOTATED_SPECS="$(
-    grep -rn --include='*.rs' --include='*.sh' --include='*.toml' --include='*.nix' \
+    /usr/bin/grep -rn --include='*.rs' --include='*.sh' --include='*.toml' --include='*.nix' \
          '@trace' \
          --exclude-dir='.claude' \
          --exclude-dir='target' \
          --exclude-dir='target-musl' \
-         "$ROOT" "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" 2>/dev/null \
+         "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" "$ROOT"/*.sh 2>/dev/null \
     | grep 'spec:' \
     | grep -oE 'spec:[a-zA-Z0-9_-]+' \
     | sed 's/^spec://' \
@@ -63,7 +63,7 @@ if [[ "$COVERAGE_THRESHOLD_MODE" != true ]]; then
     [[ -z "$spec_name" ]] && continue
     if [[ ! -d "$SPECS_DIR/$spec_name" ]]; then
       # Check if it's in an active in-flight change
-      if echo "$IN_FLIGHT_SPECS" | grep -qx "$spec_name" 2>/dev/null; then
+      if echo "$IN_FLIGHT_SPECS" | /usr/bin/grep -qx "$spec_name" 2>/dev/null; then
         _warn "ghost trace 'spec:$spec_name' — in-flight change covers it"
       else
         _err "ghost trace 'spec:$spec_name' — no spec file"
@@ -75,9 +75,9 @@ if [[ "$COVERAGE_THRESHOLD_MODE" != true ]]; then
   for spec_dir in "$SPECS_DIR"/*/; do
     [[ -d "$spec_dir" ]] || continue
     spec_name="$(basename "$spec_dir")"
-    found="$(grep -rl --include='*.rs' --include='*.sh' --include='*.toml' --include='*.yaml' \
+    found="$(/usr/bin/grep -rl --include='*.rs' --include='*.sh' --include='*.toml' --include='*.yaml' \
         "spec:${spec_name}" \
-        "$ROOT" "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" 2>/dev/null \
+        "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" "$ROOT"/*.sh 2>/dev/null \
         | head -1)" || true
     if [[ -z "$found" ]]; then
       _warn "orphaned spec '$spec_name' — no annotations"
@@ -85,9 +85,9 @@ if [[ "$COVERAGE_THRESHOLD_MODE" != true ]]; then
   done
 
   # Format violation check (lightweight)
-  FMT_VIOLATIONS=$(grep -rn '@trace' --include='*.rs' --include='*.sh' \
+  FMT_VIOLATIONS=$(/usr/bin/grep -rn '@trace' --include='*.rs' --include='*.sh' \
       --exclude-dir='.claude' --exclude-dir='target' \
-      "$ROOT" "$ROOT/scripts" "$ROOT/crates" 2>/dev/null \
+      "$ROOT/scripts" "$ROOT/crates" "$ROOT"/*.sh 2>/dev/null \
     | grep 'spec:')
 
   while IFS= read -r line; do
@@ -125,7 +125,7 @@ if [[ "$COVERAGE_THRESHOLD_MODE" != true ]]; then
 
   # TRACES.md contamination
   if [[ -f "$ROOT/TRACES.md" ]]; then
-    grep -q '\.claude/worktrees/' "$ROOT/TRACES.md" && \
+    /usr/bin/grep -q '\.claude/worktrees/' "$ROOT/TRACES.md" && \
       _warn "TRACES.md contains worktree paths — regenerate"
   fi
 
@@ -184,12 +184,12 @@ if [[ "$ENFORCE_PRESENCE" == true ]]; then
       preceding=$(sed -n "${start_line},$((decl_lineno - 1))p" "$file")
 
       # Check for @trace annotation (// @trace spec: or /// @trace spec:)
-      if echo "$preceding" | grep -qE '(//|#!?\[)\s*@trace\s+spec:'; then
+      if echo "$preceding" | /usr/bin/grep -qE '(//|#!?\[)\s*@trace\s+spec:'; then
         found_trace=true
       fi
 
       # Also check module-level #![trace(...)] attribute (applies to entire module)
-      if grep -q '#!\[.*@trace.*spec:' "$file"; then
+      if /usr/bin/grep -q '#!\[.*@trace.*spec:' "$file"; then
         found_trace=true
       fi
 
@@ -236,10 +236,10 @@ if [[ "${1:-}" == "--coverage-threshold" ]]; then
   while IFS= read -r spec_name; do
     [[ -z "$spec_name" ]] && continue
     # Check if this spec has at least one trace annotation
-    if grep -rl --include='*.rs' --include='*.sh' --include='*.toml' --include='*.yaml' \
+    if /usr/bin/grep -rl --include='*.rs' --include='*.sh' --include='*.toml' --include='*.yaml' \
         "spec:${spec_name}" \
-        "$ROOT" "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" 2>/dev/null \
-        | grep -q . 2>/dev/null; then
+        "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" "$ROOT"/*.sh 2>/dev/null \
+        | /usr/bin/grep -q . 2>/dev/null; then
       SPECS_WITH_TRACES=$((SPECS_WITH_TRACES + 1))
     else
       UNCOVERED_SPECS+=("$spec_name")
