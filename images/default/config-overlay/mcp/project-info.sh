@@ -39,7 +39,9 @@ detect_project_types() {
     [ -f "$project_dir/Dockerfile" ] && types="$types docker"
     [ -f "$project_dir/flake.nix" ] && types="$types nix"
     [ -f "$project_dir/pubspec.yaml" ] && types="$types dart-flutter"
-    [ -d "$project_dir/.git" ] && types="$types git"
+    # @trace spec:forge-environment-discoverability, gap:multi-workdir-git-worktree-handling
+    # Use [ -e ] instead of [ -d ] to support git worktrees, which have .git as a file (pointing to parent worktree) not a directory
+    [ -e "$project_dir/.git" ] && types="$types git"
 
     # Trim leading/trailing whitespace and deduplicate
     echo "$types" | xargs | tr ' ' '\n' | sort -u | tr '\n' ',' | sed 's/,$//'
@@ -96,7 +98,9 @@ discover_sibling_projects() {
     if [ -d "$parent_dir" ]; then
         for project_dir in "$parent_dir"/*; do
             # Skip if not a directory or doesn't have .git
-            if [ ! -d "$project_dir" ] || [ ! -d "$project_dir/.git" ]; then
+            # @trace spec:forge-environment-discoverability, gap:multi-workdir-git-worktree-handling
+            # Use [ -e ] instead of [ -d ] to support git worktrees, which have .git as a file
+            if [ ! -d "$project_dir" ] || [ ! -e "$project_dir/.git" ]; then
                 continue
             fi
 
@@ -174,14 +178,15 @@ ${preview}"
                     result=$(grep -rn "$pattern" --include="$file_glob" . 2>&1 | head -50 || echo "No matches found")
                     ;;
                 "project_list")
-                    # @trace spec:forge-environment-discoverability
-                    # Discover projects in ~/src/ by scanning for .git/ directories
+                    # @trace spec:forge-environment-discoverability, gap:multi-workdir-git-worktree-handling
+                    # Discover projects in ~/src/ by scanning for .git/ directories or .git files (for git worktrees)
                     # Return JSON array of projects with metadata
                     project_data="[]"
                     if [ -d "$HOME/src" ]; then
                         projects_json=""
                         for project_dir in "$HOME/src"/*; do
-                            if [ -d "$project_dir" ] && [ -d "$project_dir/.git" ]; then
+                            # Use [ -e ] instead of [ -d ] to support git worktrees, which have .git as a file
+                            if [ -d "$project_dir" ] && [ -e "$project_dir/.git" ]; then
                                 project_name=$(basename "$project_dir")
                                 description=""
                                 # Try to extract first line of README as description

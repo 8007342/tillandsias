@@ -84,6 +84,92 @@ tools = ["rust", "node", "python"]  # Which dev tools to include
 
 See `CLAUDE.md` for complete configuration reference.
 
+## Next Steps for New Users
+
+### Getting Started Quickly
+
+**Option A: Initialize a Project**
+```bash
+# Create a new managed project
+tillandsias --init ~/my-project
+
+# Tillandsias will:
+# - Create .tillandsias/config.toml with project defaults
+# - Generate README.md using FOR HUMANS/FOR ROBOTS structure
+# - Install pre-push hooks for automated README updates
+```
+
+**Option B: Read the Onboarding Guide**
+```bash
+# Inside the forge, read the structured onboarding guide
+cat $TILLANDSIAS_CHEATSHEETS/welcome/readme-discipline.md
+
+# Or browse all cheatsheets
+cat $TILLANDSIAS_CHEATSHEETS/INDEX.md | grep welcome
+```
+
+**Option C: Run Sample Commands**
+```bash
+# Inside the forge (after `tillandsias /your/project`)
+tillandsias-inventory    # See all available tools and languages
+tillandsias-services     # Check enclave endpoints (proxy, git, inference)
+tillandsias-models       # View available LLM models and tiers
+```
+
+### Multi-Workspace Setup
+
+Tillandsias supports managing multiple projects independently:
+
+```bash
+# Terminal 1: Work on project A
+tillandsias ~/src/project-a
+
+# Terminal 2: Work on project B (separate environment)
+tillandsias ~/src/project-b
+
+# Terminal 3: Work on project C (isolated container, no state leakage)
+tillandsias ~/src/project-c
+```
+
+**Key properties**:
+- Each project gets its own forge container
+- No credentials shared between projects
+- Code changes are ephemeral (lost on container stop)
+- Git history is shared (read from enclave mirror)
+- Git auth handled centrally (via host keyring)
+
+**Git Worktrees**: Tillandsias also detects git worktrees as separate projects:
+```bash
+cd ~/src/main-project
+git worktree add feature-branch
+tillandsias ~/src/main-project/feature-branch  # Works correctly!
+```
+
+### Troubleshooting
+
+**Problem: "Container failed to start"**
+- Check: `tillandsias --diagnostics /your/project`
+- Verify: `podman ps` shows no stale containers
+- Fix: `tillandsias --reset /your/project` (recreates enclave)
+
+**Problem: "GPU not detected"**
+- Inside forge, run: `nvidia-smi`
+- Check: `tillandsias-models` shows available model tiers
+- Host issue: Verify `nvidia-smi` works on host before launching forge
+
+**Problem: "Missing model for inference tier"**
+- Models are lazy-pulled after forge starts
+- Check: `ls ~/.cache/tillandsias/models/` for downloaded models
+- Manual pull: `ollama pull qwen2.5-coder:7b` on host (faster)
+
+**Problem: "Git push fails in forge"**
+- Forge has NO credentials (by design)
+- Git auth via git-service container (reads from host keyring)
+- Fix: Ensure GitHub token is in `secret-tool` or GNOME Keyring
+- Test: `tillandsias-services` shows git-service endpoint
+
+---
+
 ## Development
 
 ### Building from Source
