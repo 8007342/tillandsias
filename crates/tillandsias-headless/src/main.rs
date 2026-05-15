@@ -3225,6 +3225,18 @@ async fn run_headless_async(config_path: Option<String>) -> Result<(), String> {
     // @trace gap:OBS-010
     run_log_cardinality_analysis().await;
 
+    // Wave 21c Gap TR-006: Run disk usage check and auto-evict old cached images
+    // @trace gap:TR-006
+    run_disk_usage_check();
+
+    // Wave 21a Gap ON-009: Check and refresh GitHub token if expired
+    // @trace gap:ON-009, spec:secret-rotation
+    check_github_token_health().await;
+
+    // Wave 21b Gap ON-010: Check for missing project dependencies before forge launch
+    // @trace gap:ON-010, spec:forge-environment-discoverability
+    run_dependency_check();
+
     let metrics_handle = spawn_metrics_sampler();
 
     // Main event loop: wait for application shutdown signal.
@@ -3482,6 +3494,186 @@ async fn run_log_cardinality_analysis() {
                 gap = "OBS-010",
                 error = %e,
                 "log cardinality analysis failed (non-blocking)"
+            );
+        }
+    }
+}
+
+/// Run disk usage check and auto-evict old cached images when > 85%.
+///
+/// This implements gap:TR-006. Invokes scripts/manage-cache.sh from the
+/// Tillandsias checkout root. Runs synchronously on startup (lightweight operation).
+///
+/// Non-blocking on error; if cache management fails, a warning is logged
+/// and startup continues.
+///
+/// @trace gap:TR-006, spec:disk-usage-detection, spec:podman-image-eviction
+fn run_disk_usage_check() {
+    use std::process::Command;
+
+    // Find checkout root for script path
+    let checkout_root = match find_checkout_root() {
+        Ok(root) => root,
+        Err(e) => {
+            tracing::warn!(
+                gap = "TR-006",
+                error = %e,
+                "could not determine Tillandsias root; skipping disk usage check"
+            );
+            return;
+        }
+    };
+
+    let manage_cache_script = checkout_root.join("scripts/manage-cache.sh");
+    if !manage_cache_script.exists() {
+        debug!(
+            gap = "TR-006",
+            path = ?manage_cache_script,
+            "manage-cache.sh not found; skipping disk usage check"
+        );
+        return;
+    }
+
+    // Run the cache management script
+    match Command::new("bash")
+        .arg(&manage_cache_script)
+        .output() {
+        Ok(output) => {
+            if output.status.success() {
+                // Log successful completion
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if !stdout.is_empty() {
+                    for line in stdout.lines() {
+                        debug!(gap = "TR-006", "{}", line);
+                    }
+                }
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                tracing::warn!(
+                    gap = "TR-006",
+                    exit_code = output.status.code(),
+                    stderr = %stderr,
+                    "disk usage check failed (non-blocking)"
+                );
+            }
+        }
+        Err(e) => {
+            // Non-critical error; don't fail startup
+            tracing::warn!(
+                gap = "TR-006",
+                error = %e,
+                "failed to invoke disk usage check (non-blocking)"
+            );
+        }
+    }
+}
+
+/// Check GitHub token health and refresh if expired.
+///
+/// Wave 21a Gap ON-009: Auto-refresh GitHub token via Secret Service when it expires.
+/// This prevents authentication failures due to token expiry by checking token validity
+/// at application startup and attempting refresh if needed.
+///
+/// @trace gap:ON-009, spec:secret-rotation, spec:native-secrets-store
+async fn check_github_token_health() {
+    use tillandsias_core::secrets;
+
+    let config = secrets::TokenRefreshConfig::default();
+    match secrets::check_and_refresh_github_token(&config).await {
+        Ok(()) => {
+            debug!(gap = "ON-009", "GitHub token health check completed");
+        }
+        Err(e) => {
+            // Non-critical error; don't fail startup
+            tracing::warn!(
+                gap = "ON-009",
+                spec = "secret-rotation",
+                error = %e,
+                "GitHub token health check failed (non-blocking)"
+            );
+        }
+    }
+}
+
+/// Check for missing project dependencies before forge launch.
+///
+/// This implements gap:ON-010. Scans the current project for dependency files
+/// (Cargo.toml, package.json, requirements.txt, etc.) and checks if required
+/// tools (rustc, cargo, node, npm, python3, etc.) are available in PATH.
+///
+/// Output: Displays missing dependencies as a formatted list to stderr.
+/// Non-blocking: If dependency check fails, startup continues.
+///
+/// @trace gap:ON-010, spec:forge-environment-discoverability
+fn run_dependency_check() {
+    use std::process::Command;
+
+    let project_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+    // Call the dependency-resolver.sh script to scan for missing dependencies
+    let resolver_script = "/opt/cheatsheets/dependency-resolver.sh";
+
+    // Check if the script exists; if not, skip silently (may be running in environment without it)
+    if !Path::new(resolver_script).exists() {
+        debug!(
+            gap = "ON-010",
+            "dependency-resolver.sh not found; skipping dependency check"
+        );
+        return;
+    }
+
+    match Command::new("bash")
+        .arg(resolver_script)
+        .arg(&project_dir)
+        .output()
+    {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+
+            // Parse JSON output
+            if let Ok(missing_deps) = serde_json::from_str::<Vec<serde_json::Value>>(&stdout) {
+                if !missing_deps.is_empty() {
+                    // Display missing dependencies to user
+                    eprintln!("\n[dependency resolver] Missing project dependencies:");
+                    for dep in &missing_deps {
+                        if let (Some(tool), Some(install_hint)) =
+                            (dep.get("tool"), dep.get("install"))
+                        {
+                            eprintln!(
+                                "  - {} (install: {})",
+                                tool.as_str().unwrap_or("unknown"),
+                                install_hint.as_str().unwrap_or("see docs")
+                            );
+                        }
+                    }
+                    eprintln!("  → You can continue, but some tools may not work as expected.\n");
+
+                    // Log structured event for observability
+                    tracing::info!(
+                        gap = "ON-010",
+                        spec = "forge-environment-discoverability",
+                        missing_count = missing_deps.len(),
+                        "project dependencies check completed"
+                    );
+                } else {
+                    debug!(
+                        gap = "ON-010",
+                        "all project dependencies available"
+                    );
+                }
+            } else {
+                debug!(
+                    gap = "ON-010",
+                    "failed to parse dependency resolver output; skipping"
+                );
+            }
+        }
+        Err(e) => {
+            // Non-critical error; don't fail startup
+            tracing::warn!(
+                gap = "ON-010",
+                error = %e,
+                "dependency check failed (non-blocking)"
             );
         }
     }
