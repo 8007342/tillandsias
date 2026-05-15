@@ -61,8 +61,7 @@ fn test_event_coverage_obs021_window_lifecycle_state_changed() {
 
 #[test]
 fn test_event_coverage_obs021_window_lifecycle_detached() {
-    let event = TrayWindowLifecycleEvent::new("browser-window", "detached")
-        .with_project("web-app");
+    let event = TrayWindowLifecycleEvent::new("browser-window", "detached").with_project("web-app");
 
     let json = EventCollector::log_window_lifecycle(&event).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -129,8 +128,7 @@ fn test_event_coverage_obs022_container_metrics_with_memory() {
 
 #[test]
 fn test_event_coverage_obs022_container_metrics_with_cpu() {
-    let event =
-        ContainerMetricsEvent::new("container-2", "tillandsias-app2", 55).with_cpu(45.5, 4);
+    let event = ContainerMetricsEvent::new("container-2", "tillandsias-app2", 55).with_cpu(45.5, 4);
 
     let json = EventCollector::log_container_metrics(&event).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -338,7 +336,9 @@ fn test_event_coverage_json_schema_consistency() {
     // Verify JSON schema consistency across multiple events
     let events_data = vec![
         (
-            TrayWindowLifecycleEvent::new("w1", "created").to_json().unwrap(),
+            TrayWindowLifecycleEvent::new("w1", "created")
+                .to_json()
+                .unwrap(),
             "tray.window_lifecycle",
         ),
         (
@@ -425,10 +425,7 @@ fn test_event_coverage_concurrent_event_creation() {
         let counter_clone = Arc::clone(&counter);
         let handle = std::thread::spawn(move || {
             // Window events
-            let window = TrayWindowLifecycleEvent::new(
-                format!("window-{}", i),
-                "created",
-            );
+            let window = TrayWindowLifecycleEvent::new(format!("window-{}", i), "created");
             let _ = window.to_json();
 
             // Metrics events

@@ -304,7 +304,10 @@ fn test_stress_state_transitions_no_deadlock() {
 
     // Under high contention, some cycles will fail (lock/state conflicts)
     // We just verify the test completes without deadlock
-    eprintln!("  Failed cycles: {} / {} (expected under contention)", failed_cycles, total_cycles);
+    eprintln!(
+        "  Failed cycles: {} / {} (expected under contention)",
+        failed_cycles, total_cycles
+    );
 
     eprintln!(
         "✓ State transitions: {} cycles in {:?}, max {:?} per cycle",
@@ -413,7 +416,11 @@ fn test_stress_no_resource_leaks() {
         "✓ No resource leaks: {} cycles in {:?}, avg {:.3}ms per cycle",
         cycles,
         total_time,
-        cycle_times.iter().map(|d| d.as_secs_f64() * 1000.0).sum::<f64>() / cycles as f64
+        cycle_times
+            .iter()
+            .map(|d| d.as_secs_f64() * 1000.0)
+            .sum::<f64>()
+            / cycles as f64
     );
 }
 

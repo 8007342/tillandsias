@@ -1978,7 +1978,10 @@ fn validate_project_cache(project_path: &Path, debug: bool) -> Result<bool, Stri
     }
 
     if !corrupted_files.is_empty() {
-        warn!("Corrupted cache files detected: {}", corrupted_files.join("; "));
+        warn!(
+            "Corrupted cache files detected: {}",
+            corrupted_files.join("; ")
+        );
         eprintln!(
             "WARNING: Project cache appears corrupted ({} issues found)",
             corrupted_files.len()
@@ -1988,9 +1991,7 @@ fn validate_project_cache(project_path: &Path, debug: bool) -> Result<bool, Stri
                 eprintln!("  - {}", file);
             }
         }
-        eprintln!(
-            "RECOVERY: Run 'tillandsias --cache-clear' to rebuild the cache"
-        );
+        eprintln!("RECOVERY: Run 'tillandsias --cache-clear' to rebuild the cache");
         // Return true (cache validation completed), but the cache is suspect
         return Ok(false);
     }

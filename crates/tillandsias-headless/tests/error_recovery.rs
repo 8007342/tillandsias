@@ -13,7 +13,7 @@ use std::io::Write;
 use std::process::Command;
 use tempfile::TempDir;
 
-use tillandsias_core::cache_validation::{self, ValidationResult, CacheStateWithChecksums};
+use tillandsias_core::cache_validation::{self, CacheStateWithChecksums, ValidationResult};
 
 // ===== Cache Corruption Detection & Recovery =====
 
@@ -41,8 +41,8 @@ fn test_cache_corruption_detection() {
     drop(file);
 
     // Validate: should detect corruption
-    let result =
-        cache_validation::validate_cache_file(&cache_file, &original_checksum).expect("validation failed");
+    let result = cache_validation::validate_cache_file(&cache_file, &original_checksum)
+        .expect("validation failed");
 
     assert!(
         result.is_corrupted(),
@@ -74,7 +74,8 @@ fn test_cache_corruption_multiple_files() {
             .expect("failed to write file");
         drop(file);
 
-        let checksum = cache_validation::compute_file_checksum(&filepath).expect("failed to compute checksum");
+        let checksum =
+            cache_validation::compute_file_checksum(&filepath).expect("failed to compute checksum");
         state.file_checksums.insert(filename.to_string(), checksum);
     }
 
@@ -87,13 +88,20 @@ fn test_cache_corruption_multiple_files() {
 
     // Verify detection
     assert!(
-        state.has_corrupted_files(cache_dir).expect("validation failed"),
+        state
+            .has_corrupted_files(cache_dir)
+            .expect("validation failed"),
         "Should detect at least one corrupted file"
     );
 
-    let corrupted = state.get_corrupted_files(cache_dir).expect("failed to get corrupted files");
+    let corrupted = state
+        .get_corrupted_files(cache_dir)
+        .expect("failed to get corrupted files");
     assert_eq!(corrupted.len(), 1, "Should detect exactly 1 corrupted file");
-    assert_eq!(corrupted[0].0, "npm-lock", "Should identify npm-lock as corrupted");
+    assert_eq!(
+        corrupted[0].0, "npm-lock",
+        "Should identify npm-lock as corrupted"
+    );
 }
 
 /// Test: Cache validation handles missing files gracefully
@@ -110,7 +118,9 @@ fn test_cache_corruption_missing_file() {
     );
 
     // Validate should report Missing, not error
-    let results = state.validate_all_files(cache_dir).expect("validation should not fail");
+    let results = state
+        .validate_all_files(cache_dir)
+        .expect("validation should not fail");
     assert_eq!(results.len(), 1);
 
     if let Some(ValidationResult::Missing) = results.get("missing-cache.json") {
@@ -132,7 +142,8 @@ fn test_cache_recovery_deletion() {
     file.write_all(b"original").expect("failed to write");
     drop(file);
 
-    let checksum = cache_validation::compute_file_checksum(&cache_file).expect("failed to compute checksum");
+    let checksum =
+        cache_validation::compute_file_checksum(&cache_file).expect("failed to compute checksum");
 
     // Corrupt it
     let mut file = File::create(&cache_file).expect("failed to open");
@@ -140,7 +151,8 @@ fn test_cache_recovery_deletion() {
     drop(file);
 
     // Verify corruption
-    let result = cache_validation::validate_cache_file(&cache_file, &checksum).expect("validation failed");
+    let result =
+        cache_validation::validate_cache_file(&cache_file, &checksum).expect("validation failed");
     assert!(result.is_corrupted());
 
     // Recovery: delete the corrupted file
@@ -174,7 +186,10 @@ fn test_podman_availability_detection() {
         }
         Err(e) => {
             // Podman not in PATH — expected in some CI environments
-            eprintln!("podman not found in PATH ({}); graceful fallback to headless", e);
+            eprintln!(
+                "podman not found in PATH ({}); graceful fallback to headless",
+                e
+            );
         }
     }
 }
@@ -231,8 +246,11 @@ fn test_missing_image_error_handling() {
             // Should indicate image not found (not a generic error)
             // Podman error messages include "not known" or "not found"
             assert!(
-                stderr.contains("not known") || stderr.contains("no image with reference") || stderr.contains("not found"),
-                "Error should clearly indicate missing image: {}", stderr
+                stderr.contains("not known")
+                    || stderr.contains("no image with reference")
+                    || stderr.contains("not found"),
+                "Error should clearly indicate missing image: {}",
+                stderr
             );
         }
         Ok(_) => {
@@ -272,7 +290,10 @@ fn test_network_timeout_handling() {
         }
         Err(e) => {
             // Timeout or connection refused — both acceptable
-            eprintln!("Network operation failed as expected: {} (elapsed: {:?})", e, elapsed);
+            eprintln!(
+                "Network operation failed as expected: {} (elapsed: {:?})",
+                e, elapsed
+            );
             assert!(
                 elapsed >= test_timeout || e.kind() == std::io::ErrorKind::ConnectionRefused,
                 "Should either timeout or get connection refused"
@@ -297,7 +318,8 @@ fn test_proxy_unreachable_error_message() {
             // Should contain actionable information
             assert!(
                 msg.contains("refused") || msg.contains("Connection"),
-                "Error should indicate proxy is unreachable: {}", msg
+                "Error should indicate proxy is unreachable: {}",
+                msg
             );
         }
         Ok(_) => {
@@ -388,21 +410,37 @@ fn test_startup_error_message_informativeness() {
     // 3. How to recover (actionable steps)
 
     let test_error_messages = vec![
-        ("podman not found", "Podman is not installed or not in PATH. Install podman via: sudo apt install podman"),
-        ("cache corrupted", "Cache file corrupted. Recovery: tillandsias --cache-clear"),
-        ("low disk", "Low disk space (<100MB). Please free up space and try again"),
-        ("proxy timeout", "Proxy unreachable at proxy.local:3128. Check network and proxy status"),
+        (
+            "podman not found",
+            "Podman is not installed or not in PATH. Install podman via: sudo apt install podman",
+        ),
+        (
+            "cache corrupted",
+            "Cache file corrupted. Recovery: tillandsias --cache-clear",
+        ),
+        (
+            "low disk",
+            "Low disk space (<100MB). Please free up space and try again",
+        ),
+        (
+            "proxy timeout",
+            "Proxy unreachable at proxy.local:3128. Check network and proxy status",
+        ),
     ];
 
     for (error_type, recovery_msg) in test_error_messages {
         assert!(
             !recovery_msg.is_empty(),
-            "Error message for {} should suggest recovery", error_type
+            "Error message for {} should suggest recovery",
+            error_type
         );
         assert!(
-            recovery_msg.contains("podman") || recovery_msg.contains("Cache")
-                || recovery_msg.contains("disk") || recovery_msg.contains("Proxy"),
-            "Recovery message should be specific: {}", recovery_msg
+            recovery_msg.contains("podman")
+                || recovery_msg.contains("Cache")
+                || recovery_msg.contains("disk")
+                || recovery_msg.contains("Proxy"),
+            "Recovery message should be specific: {}",
+            recovery_msg
         );
     }
 }
@@ -421,11 +459,17 @@ fn test_timeout_values_reasonable() {
     ];
 
     for (operation, timeout_secs, unit) in &timeouts {
-        assert!(*timeout_secs > 0, "{} timeout should be positive", operation);
+        assert!(
+            *timeout_secs > 0,
+            "{} timeout should be positive",
+            operation
+        );
         assert!(
             *timeout_secs <= 300,
             "{} timeout ({}{}) should be reasonable (<5 minutes)",
-            operation, timeout_secs, unit
+            operation,
+            timeout_secs,
+            unit
         );
     }
 }
@@ -446,8 +490,7 @@ fn test_symlink_validation_single_syscall() {
     // Create 30 valid files to symlink to
     for i in 0..30 {
         let target = temp_dir.path().join(format!("target_{}", i));
-        fs::write(&target, format!("content {}", i))
-            .expect("failed to write target file");
+        fs::write(&target, format!("content {}", i)).expect("failed to write target file");
     }
 
     // Create 30 valid symlinks
@@ -456,8 +499,7 @@ fn test_symlink_validation_single_syscall() {
         for i in 0..30 {
             let target = temp_dir.path().join(format!("target_{}", i));
             let link = cache_dir.join(format!("valid_{}", i));
-            std::os::unix::fs::symlink(&target, &link)
-                .expect("failed to create valid symlink");
+            std::os::unix::fs::symlink(&target, &link).expect("failed to create valid symlink");
         }
     }
 
@@ -467,11 +509,8 @@ fn test_symlink_validation_single_syscall() {
         for i in 0..20 {
             let link = cache_dir.join(format!("broken_{}", i));
             // Point to a path that doesn't exist
-            std::os::unix::fs::symlink(
-                temp_dir.path().join(format!("nonexistent_{}", i)),
-                &link,
-            )
-            .expect("failed to create broken symlink");
+            std::os::unix::fs::symlink(temp_dir.path().join(format!("nonexistent_{}", i)), &link)
+                .expect("failed to create broken symlink");
         }
     }
 

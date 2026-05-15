@@ -1797,7 +1797,11 @@ mod tests {
 
                     // Unregister
                     let unregister_result = reg.unregister_window(&window_id);
-                    assert!(unregister_result.is_ok(), "unregister cycle {} failed", cycle);
+                    assert!(
+                        unregister_result.is_ok(),
+                        "unregister cycle {} failed",
+                        cycle
+                    );
                 }
             });
             handles.push(handle);
@@ -1810,6 +1814,10 @@ mod tests {
 
         // Verify registry is clean (all windows unregistered)
         let windows = registry.get_windows().unwrap();
-        assert_eq!(windows.len(), 0, "registry should be empty after all cycles");
+        assert_eq!(
+            windows.len(),
+            0,
+            "registry should be empty after all cycles"
+        );
     }
 }

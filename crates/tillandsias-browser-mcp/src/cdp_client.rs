@@ -264,18 +264,14 @@ impl CdpSession {
             .map_err(|e| CdpError::ConnectionFailed(format!("failed to set read timeout: {e}")))?;
 
         // Write raw JSON command (Chrome's inspector protocol accepts this)
-        self.stream
-            .write_all(body.as_bytes())
-            .map_err(|e| {
-                // Connection lost mid-write: mark for reconnection
-                CdpError::ConnectionFailed(format!("write failed (connection may be broken): {e}"))
-            })?;
-        self.stream
-            .write_all(b"\0")
-            .map_err(|e| {
-                // Connection lost mid-write: mark for reconnection
-                CdpError::ConnectionFailed(format!("write terminator failed: {e}"))
-            })?;
+        self.stream.write_all(body.as_bytes()).map_err(|e| {
+            // Connection lost mid-write: mark for reconnection
+            CdpError::ConnectionFailed(format!("write failed (connection may be broken): {e}"))
+        })?;
+        self.stream.write_all(b"\0").map_err(|e| {
+            // Connection lost mid-write: mark for reconnection
+            CdpError::ConnectionFailed(format!("write terminator failed: {e}"))
+        })?;
 
         // Read response (null-terminated JSON) with timeout protection
         let mut buffer = [0u8; 8192];

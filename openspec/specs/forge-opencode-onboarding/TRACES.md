@@ -9,3 +9,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/forge-welcome.sh#L8](../../../images/default/forge-welcome.sh#L8)
 - [images/default/forge-welcome.sh#L167](../../../images/default/forge-welcome.sh#L167)
 - [images/default/forge-welcome.sh#L178](../../../images/default/forge-welcome.sh#L178)
+- [images/default/forge-welcome.sh#L184](../../../images/default/forge-welcome.sh#L184)

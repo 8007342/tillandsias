@@ -16,7 +16,6 @@ use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, OnceLock};
-use std::thread;
 
 use image::GenericImageView;
 use tracing::{Level, info, span, warn};
@@ -787,20 +786,27 @@ fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind:
     }
 
     if !snapshot.podman_available {
-        eprintln!("error: podman is not available; cannot launch project '{}'", project.name);
+        eprintln!(
+            "error: podman is not available; cannot launch project '{}'",
+            project.name
+        );
         return;
     }
 
+    let project_name = project.name.clone();
     if let Err(_) = service.task_executor.spawn_task(move || {
         let result = launch_project_action(project.clone(), kind, version);
         if let Err(err) = result {
-            eprintln!("error: project launch failed for '{}': {}", project.name, err);
+            eprintln!(
+                "error: project launch failed for '{}': {}",
+                project.name, err
+            );
         }
         let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
     }) {
         eprintln!(
             "error: task queue full; cannot launch project '{}' (too many concurrent operations)",
-            project.name
+            project_name
         );
     }
 }
@@ -923,23 +929,35 @@ fn handle_stop_project(service: Arc<TrayService>, project: String) {
     // Verify podman is available before attempting stop
     let snapshot = service.snapshot();
     if !snapshot.podman_available {
-        eprintln!("error: podman is not available; cannot stop project '{}'", project);
+        eprintln!(
+            "error: podman is not available; cannot stop project '{}'",
+            project
+        );
         return;
     }
 
+    let project_name = project.clone();
     if let Err(_) = service.task_executor.spawn_task(move || {
         let container_name = format!("tillandsias-{}-forge", project);
 
         // Guard: verify container exists before stopping
         let check_output = Command::new("podman")
-            .args(["ps", "-a", "--filter", &format!("name=^{}$", container_name)])
+            .args([
+                "ps",
+                "-a",
+                "--filter",
+                &format!("name=^{}$", container_name),
+            ])
             .output();
 
         match check_output {
             Ok(output) => {
                 if output.stdout.is_empty() || String::from_utf8_lossy(&output.stdout).len() <= 50 {
                     // No container found (header-only output)
-                    eprintln!("error: container '{}' not found; cannot stop", container_name);
+                    eprintln!(
+                        "error: container '{}' not found; cannot stop",
+                        container_name
+                    );
                 } else {
                     // Container exists, attempt stop
                     let stop_result = Command::new("podman")
@@ -949,23 +967,35 @@ fn handle_stop_project(service: Arc<TrayService>, project: String) {
                     match stop_result {
                         Ok(status) => {
                             if !status.success() {
-                                eprintln!("error: failed to stop container '{}': exit status {}", container_name, status);
+                                eprintln!(
+                                    "error: failed to stop container '{}': exit status {}",
+                                    container_name, status
+                                );
                             }
                         }
                         Err(e) => {
-                            eprintln!("error: failed to stop container '{}': {}", container_name, e);
+                            eprintln!(
+                                "error: failed to stop container '{}': {}",
+                                container_name, e
+                            );
                         }
                     }
                 }
             }
             Err(e) => {
-                eprintln!("error: failed to check container '{}': {}", container_name, e);
+                eprintln!(
+                    "error: failed to check container '{}': {}",
+                    container_name, e
+                );
             }
         }
 
         let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
     }) {
-        eprintln!("error: task queue full; cannot stop project '{}'", project);
+        eprintln!(
+            "error: task queue full; cannot stop project '{}'",
+            project_name
+        );
     }
 }
 

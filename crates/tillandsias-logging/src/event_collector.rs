@@ -780,8 +780,7 @@ mod tests {
 
     #[test]
     fn test_tray_window_lifecycle_with_project() {
-        let event =
-            TrayWindowLifecycleEvent::new("logs-viewer", "attached").with_project("my-app");
+        let event = TrayWindowLifecycleEvent::new("logs-viewer", "attached").with_project("my-app");
 
         assert_eq!(event.project_id, Some("my-app".to_string()));
     }
@@ -849,11 +848,8 @@ mod tests {
     // OBS-022: Container metrics events
     #[test]
     fn test_container_metrics_event_creation() {
-        let event = ContainerMetricsEvent::new(
-            "abc123def456",
-            "tillandsias-my-project-aeranthos",
-            42,
-        );
+        let event =
+            ContainerMetricsEvent::new("abc123def456", "tillandsias-my-project-aeranthos", 42);
 
         assert_eq!(event.container_id, "abc123def456");
         assert_eq!(event.container_name, "tillandsias-my-project-aeranthos");
@@ -864,12 +860,9 @@ mod tests {
 
     #[test]
     fn test_container_metrics_with_memory() {
-        let event = ContainerMetricsEvent::new(
-            "container-id-1",
-            "tillandsias-project-aeranthos",
-            25,
-        )
-        .with_memory(512 * 1024 * 1024, 2048 * 1024 * 1024); // 512 MB / 2048 MB
+        let event =
+            ContainerMetricsEvent::new("container-id-1", "tillandsias-project-aeranthos", 25)
+                .with_memory(512 * 1024 * 1024, 2048 * 1024 * 1024); // 512 MB / 2048 MB
 
         assert_eq!(event.memory_bytes, Some(512 * 1024 * 1024));
         assert_eq!(event.memory_limit_bytes, Some(2048 * 1024 * 1024));
@@ -907,15 +900,12 @@ mod tests {
 
     #[test]
     fn test_container_metrics_full_event() {
-        let event = ContainerMetricsEvent::new(
-            "full-container-id",
-            "tillandsias-comprehensive-test",
-            55,
-        )
-        .with_memory(768 * 1024 * 1024, 4096 * 1024 * 1024)
-        .with_cpu(62.3, 8)
-        .with_io(2048.0 * 1024.0, 1024.0 * 1024.0)
-        .with_network(100 * 1024 * 1024, 50 * 1024 * 1024);
+        let event =
+            ContainerMetricsEvent::new("full-container-id", "tillandsias-comprehensive-test", 55)
+                .with_memory(768 * 1024 * 1024, 4096 * 1024 * 1024)
+                .with_cpu(62.3, 8)
+                .with_io(2048.0 * 1024.0, 1024.0 * 1024.0)
+                .with_network(100 * 1024 * 1024, 50 * 1024 * 1024);
 
         assert_eq!(event.memory_bytes, Some(768 * 1024 * 1024));
         assert_eq!(event.memory_limit_bytes, Some(4096 * 1024 * 1024));
@@ -930,10 +920,9 @@ mod tests {
 
     #[test]
     fn test_container_metrics_json_serialization() {
-        let event =
-            ContainerMetricsEvent::new("container-xyz", "tillandsias-test-project", 40)
-                .with_memory(256 * 1024 * 1024, 1024 * 1024 * 1024)
-                .with_cpu(25.0, 2);
+        let event = ContainerMetricsEvent::new("container-xyz", "tillandsias-test-project", 40)
+            .with_memory(256 * 1024 * 1024, 1024 * 1024 * 1024)
+            .with_cpu(25.0, 2);
 
         let json = event.to_json().unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -962,8 +951,8 @@ mod tests {
 
     #[test]
     fn test_event_collector_log_window_lifecycle() {
-        let event = TrayWindowLifecycleEvent::new("test-window", "created")
-            .with_project("test-project");
+        let event =
+            TrayWindowLifecycleEvent::new("test-window", "created").with_project("test-project");
 
         let json = EventCollector::log_window_lifecycle(&event).unwrap();
         assert!(!json.is_empty());
@@ -974,8 +963,8 @@ mod tests {
 
     #[test]
     fn test_event_collector_log_container_metrics() {
-        let event = ContainerMetricsEvent::new("container-1", "tillandsias-test", 50)
-            .with_cpu(30.0, 2);
+        let event =
+            ContainerMetricsEvent::new("container-1", "tillandsias-test", 50).with_cpu(30.0, 2);
 
         let json = EventCollector::log_container_metrics(&event).unwrap();
         assert!(!json.is_empty());

@@ -146,8 +146,14 @@ fn test_proxy_cache_hit_rate_growth() {
     }
 
     let stats_after_first = proxy.stats();
-    assert_eq!(stats_after_first.cache_hits, 0, "First pass should have no hits");
-    assert_eq!(stats_after_first.cache_misses, 5, "First pass should have 5 misses");
+    assert_eq!(
+        stats_after_first.cache_hits, 0,
+        "First pass should have no hits"
+    );
+    assert_eq!(
+        stats_after_first.cache_misses, 5,
+        "First pass should have 5 misses"
+    );
 
     // Second pass: all hits (same URLs)
     for i in 0..5 {
@@ -160,7 +166,10 @@ fn test_proxy_cache_hit_rate_growth() {
     }
 
     let stats_after_second = proxy.stats();
-    assert_eq!(stats_after_second.cache_hits, 5, "Second pass should hit all 5");
+    assert_eq!(
+        stats_after_second.cache_hits, 5,
+        "Second pass should hit all 5"
+    );
     assert_eq!(
         stats_after_second.cache_misses, 5,
         "Misses should stay at 5"
@@ -292,7 +301,11 @@ fn test_squid_allowlist_enforcement() {
             headers: vec![],
         };
         let response = proxy.handle_request(req);
-        assert!(response.is_ok(), "Whitelisted URL should be allowed: {}", url);
+        assert!(
+            response.is_ok(),
+            "Whitelisted URL should be allowed: {}",
+            url
+        );
     }
 
     // Non-whitelisted should conceptually fail (in real squid)
@@ -334,7 +347,11 @@ fn test_localhost_subdomain_handling() {
             headers: vec![],
         };
         let response = proxy.handle_request(req);
-        assert!(response.is_ok(), "Localhost subdomain should resolve: {}", url);
+        assert!(
+            response.is_ok(),
+            "Localhost subdomain should resolve: {}",
+            url
+        );
     }
 
     eprintln!(
@@ -405,7 +422,8 @@ fn test_proxy_latency_bounded() {
     assert!(
         exceeded == 0,
         "{} requests exceeded {} latency",
-        exceeded, max_latency.as_millis()
+        exceeded,
+        max_latency.as_millis()
     );
     assert!(
         avg_latency < max_latency,
