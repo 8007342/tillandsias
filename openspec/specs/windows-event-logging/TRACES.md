@@ -5,4 +5,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [src-tauri/src/windows_eventlog.rs#L7](../../../src-tauri/src/windows_eventlog.rs#L7)
+- [crates/tillandsias-logging/src/event_collector.rs#L1](../../../crates/tillandsias-logging/src/event_collector.rs#L1)

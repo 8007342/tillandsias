@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-05-15T02:33:37Z",
+  "generated_at": "2026-05-15T02:43:23Z",
   "title": "Progression Trends",
   "series_namespace": "local_development",
   "series_label": "Local Development",
   "source_file": "target/convergence/centicolon-signature.jsonl",
-  "record_count": 1,
-  "sparkline_closed": "█",
-  "sparkline_residual": "▁",
+  "record_count": 3,
+  "sparkline_closed": "█▇█",
+  "sparkline_residual": "▁▂▁",
   "alert_level": "yellow",
   "alert_thresholds": {
     "red_below_percent_closed": 90,
@@ -14,7 +14,7 @@
   },
   "trend_metrics": {
     "pass_rate_7d_percent": 0,
-    "coverage_avg_7d_percent": 90.76923076923077
+    "coverage_avg_7d_percent": 88.71794871794873
   },
   "metrics": {"cpu_percent":0.0,"memory_percent":0.0,"disk_percent":0.0,"disk_read_bytes_per_sec":0.0,"disk_write_bytes_per_sec":0.0,"disk_iops":0.0,"disk_io_percent":0.0,"cpu_psi_percent":0.0,"memory_psi_percent":0.0,"io_psi_percent":0.0,"psi_available":false,"sample_timestamp":"1970-01-01T00:00:00Z","source":"tillandsias-metrics::DashboardSnapshot"},
   "dashboard_contract": {
@@ -62,16 +62,16 @@
     "start_release": "0.1.260513.6",
     "start_commit": "81c84d32ed7c",
     "end_release": "0.1.260513.6",
-    "end_commit": "81c84d32ed7c",
-    "count": 1,
-    "closed": "█",
-    "residual": "▁"
+    "end_commit": "24dc06d993c4",
+    "count": 3,
+    "closed": "█▇█",
+    "residual": "▁▂▁"
   }
 ],
   "latest": {
   "release": "0.1.260513.6",
-  "date": "2026-05-15T02:31:56Z",
-  "commit": "81c84d32ed7c",
+  "date": "2026-05-15T02:34:38Z",
+  "commit": "24dc06d993c4",
   "total_cc": 650,
   "earned_cc": 590,
   "residual_cc": 60,
@@ -81,7 +81,7 @@
   "evidence": "target/convergence/evidence-bundle.json",
   "projection": "docs/convergence/centicolon-dashboard.md",
   "ci_result": "FAIL",
-  "ci_run_id": "local-ci-20260515T023156Z",
+  "ci_run_id": "local-ci-20260515T023438Z",
   "trend_glyph": ""
 },
   "history": [
@@ -99,6 +99,38 @@
     "projection": "docs/convergence/centicolon-dashboard.md",
     "ci_result": "FAIL",
     "ci_run_id": "local-ci-20260515T023156Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.1.260513.6",
+    "date": "2026-05-15T02:33:23Z",
+    "commit": "9b8ef13d3501",
+    "total_cc": 650,
+    "earned_cc": 550,
+    "residual_cc": 100,
+    "percent_closed": 84.61538461538461,
+    "worst_spec": "spec:dev-build",
+    "worst_reason": "Clippy warnings found: run 'cargo clippy --workspace' to see details (see /tmp/clippy-check.log)",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "FAIL",
+    "ci_run_id": "local-ci-20260515T023323Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.1.260513.6",
+    "date": "2026-05-15T02:34:38Z",
+    "commit": "24dc06d993c4",
+    "total_cc": 650,
+    "earned_cc": 590,
+    "residual_cc": 60,
+    "percent_closed": 90.76923076923077,
+    "worst_spec": "spec:dev-build",
+    "worst_reason": "Clippy warnings found: run 'cargo clippy --workspace' to see details (see /tmp/clippy-check.log)",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "FAIL",
+    "ci_run_id": "local-ci-20260515T023438Z",
     "trend_glyph": ""
   }
 ]

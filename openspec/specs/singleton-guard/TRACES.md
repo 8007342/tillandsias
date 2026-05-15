@@ -5,5 +5,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [src-tauri/src/singleton.rs#L11](../../../src-tauri/src/singleton.rs#L11)
-- [src-tauri/src/singleton.rs#L34](../../../src-tauri/src/singleton.rs#L34)
+- [crates/tillandsias-headless/src/main.rs#L209](../../../crates/tillandsias-headless/src/main.rs#L209)
+- [crates/tillandsias-headless/src/main.rs#L232](../../../crates/tillandsias-headless/src/main.rs#L232)

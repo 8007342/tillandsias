@@ -5,5 +5,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [src-tauri/src/build_lock.rs#L6](../../../src-tauri/src/build_lock.rs#L6)
-- [src-tauri/src/build_lock.rs#L40](../../../src-tauri/src/build_lock.rs#L40)
+- [crates/tillandsias-headless/src/main.rs#L1466](../../../crates/tillandsias-headless/src/main.rs#L1466)

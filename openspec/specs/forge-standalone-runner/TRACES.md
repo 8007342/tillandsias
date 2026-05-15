@@ -1,8 +1,9 @@
-# Traces for forge-standalone-runner (obsolete)
+# Traces for forge-standalone-runner
 
-This artifact is tombstoned and superseded by `openspec/specs/forge-standalone/spec.md`.
-The active trace index is `openspec/specs/forge-standalone/TRACES.md`.
+Code implementing this spec (auto-generated — do not edit).
+Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- See `openspec/specs/forge-standalone/TRACES.md` for the canonical trace set.
+- [run-forge-standalone.sh#L2](../../../run-forge-standalone.sh#L2)
+- [scripts/build-image.sh#L4](../../../scripts/build-image.sh#L4)

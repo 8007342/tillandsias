@@ -23,6 +23,7 @@ pub mod logger;
 pub mod query;
 pub mod rotation;
 pub mod sampler;
+pub mod schema_validation;
 pub mod span_context;
 pub mod surface;
 

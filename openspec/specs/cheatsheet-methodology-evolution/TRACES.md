@@ -5,4 +5,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [scripts/check-cheatsheet-staleness.sh#L2](../../../scripts/check-cheatsheet-staleness.sh#L2)
+- [scripts/hooks/pre-commit-openspec.sh#L3](../../../scripts/hooks/pre-commit-openspec.sh#L3)

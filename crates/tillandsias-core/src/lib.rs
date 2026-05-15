@@ -1,4 +1,5 @@
 // @trace spec:runtime-logging
+pub mod cache_validation;
 pub mod config;
 pub mod container_profile;
 pub mod event;

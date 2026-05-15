@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "title": "Tillandsias Runtime Log Schema - Golden Reference",
   "description": "Stable log field schema for backwards compatibility. Core fields are required and immutable. Optional fields may be added without version bump. Breaking changes require version increment and migration path.",
-  "last_updated": "2026-05-14",
+  "last_updated": "2026-05-14T19:40:00Z",
   "maintainer": "Tillandsias observability team",
   "core_fields": {
     "schema_version": {
@@ -80,6 +80,38 @@
         "project": "my-app",
         "genus": "aeranthos"
       }
+    },
+    "sample_rate": {
+      "type": "number",
+      "required": false,
+      "description": "Sampling rate applied to this trace (e.g., 0.5 for 50% sampled). Only set if trace was subject to cost-aware sampling.",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "example": 0.5,
+      "related_gap": "OBS-006"
+    },
+    "span_id": {
+      "type": "string",
+      "required": false,
+      "description": "Span ID for distributed tracing across containers. Enables cross-container log linkage.",
+      "example": "0123456789abcdef",
+      "related_gap": "OBS-007"
+    },
+    "parent_span_id": {
+      "type": "string",
+      "required": false,
+      "description": "Parent span ID for cross-container log linkage. Establishes parent-child relationship in distributed traces.",
+      "example": "fedcba9876543210",
+      "depends_on": "span_id is set",
+      "related_gap": "OBS-007"
+    },
+    "trace_id": {
+      "type": "string",
+      "required": false,
+      "description": "Trace ID shared across all spans in a distributed trace. Correlates all related spans.",
+      "example": "550e8400-e29b-41d4-a716-446655440000",
+      "format": "UUID",
+      "related_gap": "OBS-007"
     }
   },
   "all_fields": [
@@ -89,10 +121,14 @@
     "context",
     "level",
     "message",
+    "parent_span_id",
     "safety",
+    "sample_rate",
     "schema_version",
+    "span_id",
     "spec_trace",
-    "timestamp"
+    "timestamp",
+    "trace_id"
   ],
   "stability_notes": {
     "backwards_compatibility": "All core_fields are immutable. Removing or renaming any core_field is a breaking change that requires a major version bump.",
@@ -111,7 +147,11 @@
     "category": "String. Categories: 'secrets', 'network', 'git', 'container', 'cache', 'build', 'ui', 'auth'. Extensible.",
     "safety": "String. Human-readable safety note. Example: 'Forge container isolated from external network.'",
     "spec_trace": "String. Format: spec-name (slug). Example: 'native-secrets-store'. Maps to @trace spec:<name> in source.",
-    "context": "Object. Arbitrary key-value pairs. No schema constraints. Values may be string, number, boolean, null, or nested objects/arrays."
+    "context": "Object. Arbitrary key-value pairs. No schema constraints. Values may be string, number, boolean, null, or nested objects/arrays.",
+    "sample_rate": "Number (float). Range: 0.0 to 1.0. Represents percentage of traces sampled. Only present if trace was cost-sampled.",
+    "span_id": "String. Hexadecimal trace span identifier. Uniquely identifies a span within a trace. Example: '0123456789abcdef'.",
+    "parent_span_id": "String. Hexadecimal trace span identifier. References parent span in distributed trace. Omitted for root spans.",
+    "trace_id": "String. UUID-format identifier shared across all spans in a distributed trace. Enables cross-container log correlation."
   },
   "examples": {
     "regular_event": {
@@ -152,6 +192,34 @@
         "retry_count": 2
       },
       "spec_trace": "inference-container"
+    },
+    "distributed_trace_event": {
+      "schema_version": "1.0",
+      "timestamp": "2026-05-14T12:34:59.789012345Z",
+      "level": "INFO",
+      "component": "proxy",
+      "message": "Request forwarded to git-service",
+      "trace_id": "550e8400-e29b-41d4-a716-446655440000",
+      "span_id": "0123456789abcdef",
+      "parent_span_id": "fedcba9876543210",
+      "context": {
+        "request_url": "api.github.com/repos/8007342/tillandsias",
+        "forwarded_to": "git-service"
+      },
+      "spec_trace": "enclave-network"
+    },
+    "sampled_event": {
+      "schema_version": "1.0",
+      "timestamp": "2026-05-14T12:34:57.123456789Z",
+      "level": "INFO",
+      "component": "git-service",
+      "message": "Push completed successfully",
+      "sample_rate": 0.1,
+      "context": {
+        "repo": "8007342/tillandsias",
+        "push_duration_ms": 2345
+      },
+      "spec_trace": "git-mirror-service"
     }
   },
   "test_binding": "litmus:runtime-logging-schema-stability",

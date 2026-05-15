@@ -5,7 +5,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [crates/tillandsias-core/src/config.rs#L457](../../../crates/tillandsias-core/src/config.rs#L457)
+- [crates/tillandsias-core/src/config.rs#L458](../../../crates/tillandsias-core/src/config.rs#L458)
 - [crates/tillandsias-core/src/container_profile.rs#L11](../../../crates/tillandsias-core/src/container_profile.rs#L11)
 - [crates/tillandsias-core/src/container_profile.rs#L43](../../../crates/tillandsias-core/src/container_profile.rs#L43)
 - [crates/tillandsias-core/src/container_profile.rs#L48](../../../crates/tillandsias-core/src/container_profile.rs#L48)
@@ -53,5 +53,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-podman/src/peer_table.rs#L8](../../../crates/tillandsias-podman/src/peer_table.rs#L8)
 - [crates/tillandsias-podman/src/runtime.rs#L11](../../../crates/tillandsias-podman/src/runtime.rs#L11)
 - [images/git/Containerfile#L47](../../../images/git/Containerfile#L47)
-- [scripts/build-image.sh#L17](../../../scripts/build-image.sh#L17)
-- [scripts/build-image.sh#L313](../../../scripts/build-image.sh#L313)
+- [scripts/build-image.sh#L18](../../../scripts/build-image.sh#L18)
+- [scripts/build-image.sh#L314](../../../scripts/build-image.sh#L314)

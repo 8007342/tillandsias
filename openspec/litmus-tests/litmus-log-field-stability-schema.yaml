@@ -1,0 +1,245 @@
+# @trace spec:runtime-logging, spec:methodology-accountability
+name: litmus:log-field-stability-schema
+spec: runtime-logging
+phase: pre-release
+description: Validate log field names and schema backwards compatibility to prevent silent breaking changes
+severity: critical
+
+preconditions:
+  - workspace contains crates/tillandsias-logging
+  - golden schema file exists at docs/cheatsheets/log-schema-golden.json
+  - LogEntry struct defined at crates/tillandsias-logging/src/log_entry.rs
+  - JSON parser available (jq)
+  - Rust compiler available (rustc/cargo)
+
+critical_path:
+  - step: "extract field names from LogEntry struct"
+    command: |
+      sed -n '/^pub struct LogEntry/,/^}/p' crates/tillandsias-logging/src/log_entry.rs | \
+      grep "pub " | awk '{print $2}' | cut -d: -f1 | sort > /tmp/actual_fields.txt && \
+      cat /tmp/actual_fields.txt
+    timeout_ms: 5000
+    expected_behavior: "schema_version"
+
+  - step: "extract field names from golden schema"
+    command: |
+      jq -r '.all_fields | .[]' docs/cheatsheets/log-schema-golden.json | sort > /tmp/golden_fields.txt && \
+      cat /tmp/golden_fields.txt
+    timeout_ms: 3000
+    expected_behavior: "accountability"
+
+  - step: "verify schema version matches"
+    command: |
+      GOLDEN_VERSION=$(jq -r '.schema_version' docs/cheatsheets/log-schema-golden.json) && \
+      CODE_VERSION=$(grep "const SCHEMA_VERSION:" crates/tillandsias-logging/src/log_entry.rs | cut -d'"' -f2) && \
+      test "$GOLDEN_VERSION" = "$CODE_VERSION" && echo "Schema versions match: $CODE_VERSION"
+    timeout_ms: 3000
+    expected_behavior: "Schema versions match"
+
+  - step: "verify core field count"
+    command: |
+      CORE_COUNT=$(jq '.core_fields | keys | length' docs/cheatsheets/log-schema-golden.json) && \
+      test "$CORE_COUNT" -ge 5 && echo "Found $CORE_COUNT core fields (minimum 5)"
+    timeout_ms: 3000
+    expected_behavior: "Found"
+
+  - step: "verify all core fields are immutable"
+    command: |
+      jq -e '.core_fields | to_entries | map(select(.value.immutable != true)) | length == 0' \
+      docs/cheatsheets/log-schema-golden.json && echo "All core fields marked immutable"
+    timeout_ms: 3000
+    expected_behavior: "All core fields marked immutable"
+
+  - step: "verify required core fields in code"
+    command: |
+      for field in schema_version timestamp level component message; do
+        grep -q "pub $field:" crates/tillandsias-logging/src/log_entry.rs || exit 1
+      done && echo "All required core fields found in code"
+    timeout_ms: 5000
+    expected_behavior: "All required core fields found"
+
+  - step: "verify optional fields match golden schema"
+    command: |
+      OPTIONAL_IN_GOLDEN=$(jq -r '.optional_fields | keys | .[]' docs/cheatsheets/log-schema-golden.json | sort) && \
+      OPTIONAL_IN_CODE=$(sed -n '/^pub struct LogEntry/,/^}/p' crates/tillandsias-logging/src/log_entry.rs | \
+        grep "Option<" | awk '{print $2}' | cut -d: -f1 | sort) && \
+      diff <(echo "$OPTIONAL_IN_GOLDEN") <(echo "$OPTIONAL_IN_CODE") > /dev/null 2>&1 && \
+      echo "Optional fields match golden schema"
+    timeout_ms: 5000
+    expected_behavior: "Optional fields match golden schema"
+
+  - step: "run log entry unit tests"
+    command: |
+      cd /var/home/machiyotl/src/tillandsias && \
+      cargo test -p tillandsias-logging --lib log_entry -- --nocapture --test-threads=1
+    timeout_ms: 30000
+    expected_behavior: "test result: ok"
+
+  - step: "verify no breaking field renames"
+    command: |
+      # Extract field names that were in all_fields historically
+      HISTORICAL=$(jq -r '.all_fields | .[]' docs/cheatsheets/log-schema-golden.json | sort) && \
+      CURRENT=$(sed -n '/^pub struct LogEntry/,/^}/p' crates/tillandsias-logging/src/log_entry.rs | \
+        grep "pub " | awk '{print $2}' | cut -d: -f1 | sort) && \
+      # Check that all historical fields still exist (no renames/deletes)
+      for field in $HISTORICAL; do
+        echo "$CURRENT" | grep -q "^$field$" || {
+          echo "BREAKING CHANGE: field $field was removed or renamed"
+          exit 1
+        }
+      done && echo "No breaking field changes detected"
+    timeout_ms: 5000
+    expected_behavior: "No breaking field changes detected"
+
+  - step: "verify field types match golden schema"
+    command: |
+      # Check core field types
+      for field in timestamp level component message; do
+        if grep -q "pub $field: String" crates/tillandsias-logging/src/log_entry.rs; then
+          :
+        elif [ "$field" = "timestamp" ] && grep -q "pub timestamp: DateTime" crates/tillandsias-logging/src/log_entry.rs; then
+          :
+        else
+          echo "BREAKING CHANGE: field type for $field has changed"
+          exit 1
+        fi
+      done && echo "Field types verified"
+    timeout_ms: 5000
+    expected_behavior: "Field types verified"
+
+  - step: "verify accountability field is optional"
+    command: |
+      grep -q "pub accountability: Option<bool>" crates/tillandsias-logging/src/log_entry.rs && \
+      echo "accountability field correctly optional"
+    timeout_ms: 3000
+    expected_behavior: "accountability field correctly optional"
+
+  - step: "verify serialization skips false accountability"
+    command: |
+      grep -q "#\[serde(skip_serializing_if = \"is_false\")\]" crates/tillandsias-logging/src/log_entry.rs && \
+      grep -q "fn is_false" crates/tillandsias-logging/src/log_entry.rs && \
+      echo "Serialization correctly skips false accountability values"
+    timeout_ms: 3000
+    expected_behavior: "Serialization correctly"
+
+  - step: "verify all optional fields skip-on-none serialization"
+    command: |
+      # Count skip_serializing_if directives
+      SKIP_COUNT=$(grep -c "skip_serializing_if" crates/tillandsias-logging/src/log_entry.rs) && \
+      test "$SKIP_COUNT" -ge 5 && echo "Found $SKIP_COUNT optional field skip directives"
+    timeout_ms: 3000
+    expected_behavior: "Found"
+
+gating_points:
+  - signal: "core fields extracted successfully"
+    success: "schema_version"
+    failure: "error|not found|No such file"
+    spec_linkage: "runtime-logging"
+
+  - signal: "golden schema fields extracted successfully"
+    success: "accountability"
+    failure: "error|not found|No such file"
+
+  - signal: "schema version consistency"
+    success: "Schema versions match"
+    failure: "failed|error|mismatch"
+
+  - signal: "core field immutability"
+    success: "All core fields marked immutable"
+    failure: "error|failed"
+
+  - signal: "required core fields present"
+    success: "All required core fields found"
+    failure: "error|failed|not found"
+
+  - signal: "optional field alignment"
+    success: "Optional fields match golden schema"
+    failure: "error|differ|mismatch"
+
+  - signal: "unit tests pass"
+    success: "test result: ok"
+    failure: "test result: FAILED|error|panicked"
+
+  - signal: "no breaking field changes"
+    success: "No breaking field changes detected"
+    failure: "BREAKING CHANGE|error|removed|renamed"
+
+  - signal: "field types stable"
+    success: "Field types verified"
+    failure: "BREAKING CHANGE|error|type mismatch"
+
+  - signal: "accountability optional"
+    success: "correctly optional"
+    failure: "error|not found"
+
+  - signal: "serialization behavior correct"
+    success: "Serialization correctly|correctly optional"
+    failure: "error|not found"
+
+  - signal: "optional field serde directives"
+    success: "Found"
+    failure: "error|no matches"
+
+observability:
+  traces:
+    - "@trace spec:runtime-logging"
+    - "@trace spec:methodology-accountability"
+    - "@trace gap:OBS-001"
+  expected_log: "Log field stability validation passed - no breaking changes detected"
+  log_fields:
+    spec: "runtime-logging"
+    test: "log-field-stability-schema"
+    category: "schema-validation"
+    severity: "critical"
+    change_gate: "pre-release"
+
+rollback:
+  on_failure: "Review breaking changes in LogEntry struct and update golden schema accordingly"
+  command: |
+    echo "=== BREAKING CHANGE ANALYSIS ===" && \
+    echo "Golden schema all_fields:" && \
+    jq -r '.all_fields | .[]' docs/cheatsheets/log-schema-golden.json && \
+    echo "" && \
+    echo "Current LogEntry fields:" && \
+    sed -n '/^pub struct LogEntry/,/^}/p' crates/tillandsias-logging/src/log_entry.rs | \
+    grep "pub " | awk '{print $2}' | cut -d: -f1 && \
+    echo "" && \
+    echo "To fix:" && \
+    echo "1. Review the field differences above" && \
+    echo "2. Update docs/cheatsheets/log-schema-golden.json all_fields array" && \
+    echo "3. Increment schema_version if breaking" && \
+    echo "4. Document migration path in CHANGELOG.md"
+
+notes: |
+  @trace gap:OBS-001 — Log Field Name Stability Litmus Test
+
+  This test enforces backwards compatibility for log consumers (observability pipelines, SIEM systems, log aggregators).
+  Breaking changes to field names or types cause silent data loss in downstream consumers.
+
+  CRITICAL CONSTRAINT: All field names and types in core_fields are immutable. Renaming, removing, or changing
+  types of core fields is a breaking change that requires:
+
+  1. Schema version increment (1.0 -> 1.1)
+  2. Migration guide in CHANGELOG.md
+  3. Notification to all known log consumers
+
+  BACKWARDS-COMPATIBLE changes (no version bump):
+  - Adding new optional fields (consumers ignore unknown fields)
+  - Making a required field optional (rare, requires justification)
+
+  BREAKING changes (major version bump required):
+  - Renaming any field
+  - Removing any core_field
+  - Changing field type (e.g., String -> Integer)
+  - Changing enum values (e.g., level: "TRACE" -> "VERBOSE")
+  - Moving field from required to forbidden
+
+  The golden schema at docs/cheatsheets/log-schema-golden.json is the source of truth.
+  It MUST be manually updated when schema changes occur, along with comprehensive migration guidance.
+
+  Related specs:
+  - runtime-logging: defines log schema and field contracts
+  - external-logs-layer: defines log sink behavior
+  - methodology-accountability: defines traceability requirements
+
+  See: docs/cheatsheets/log-schema-golden.json for full schema documentation

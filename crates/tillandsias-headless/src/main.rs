@@ -44,10 +44,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tempfile::Builder as TempDirBuilder;
 use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION, encode};
+use tillandsias_core::cache_validation;
 use tillandsias_podman::{
     ContainerSpec, MountMode, PodmanClient, detect_gpu_devices, podman_cmd_sync,
 };
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use serde::{Deserialize, Serialize};
 
@@ -1513,6 +1514,104 @@ fn build_opencode_forge_args(
 ///
 /// - 0 — All images built successfully (or skipped as cached)
 /// - non-zero — One or more images failed to build (human intervention required)
+
+/// Detect and recover from cache corruption.
+///
+/// Validates cache files and automatically recovers by:
+/// 1. Warning about corruption
+/// 2. Deleting corrupted cache files (only ephemeral cache, no project state)
+/// 3. Continuing with rebuild on next init
+///
+/// @trace spec:cache-recovery-mechanism
+fn detect_and_recover_cache_corruption(debug: bool) -> Result<bool, String> {
+    let cache_dir = init_cache_dir()?;
+    let state_file = cache_dir.join("init-build-state.json");
+
+    // Only validate if state file exists
+    if !state_file.exists() {
+        return Ok(false); // No cache to validate
+    }
+
+    // Try to compute checksum of the state file
+    match cache_validation::compute_file_checksum(&state_file) {
+        Ok(_) => {
+            // File is readable and has a checksum. Try to parse it to detect
+            // corruption at the semantic level (JSON parse error).
+            match fs::read_to_string(&state_file) {
+                Ok(contents) => match serde_json::from_str::<InitBuildState>(&contents) {
+                    Ok(_) => {
+                        // Cache is valid
+                        return Ok(false);
+                    }
+                    Err(e) => {
+                        // Semantic corruption: JSON parse failed
+                        warn!("Cache corrupted: JSON parse failed: {}", e);
+                        eprintln!("WARNING: Cache file is corrupted (JSON parse error)");
+                        eprintln!("  File: {}", state_file.display());
+                        eprintln!("  Error: {}", e);
+                        eprintln!("  Recovery: Deleting corrupted cache and rebuilding");
+
+                        // Delete corrupted cache file
+                        if let Err(delete_err) = fs::remove_file(&state_file) {
+                            warn!(
+                                "Failed to delete corrupted cache file: {}",
+                                delete_err
+                            );
+                            eprintln!(
+                                "WARNING: Failed to delete corrupted cache file: {}",
+                                delete_err
+                            );
+                            return Err(format!(
+                                "Cannot recover: failed to delete corrupted cache: {}",
+                                delete_err
+                            ));
+                        }
+
+                        if debug {
+                            eprintln!("DEBUG: Deleted corrupted cache file: {}", state_file.display());
+                        }
+                        return Ok(true); // Recovery was triggered
+                    }
+                },
+                Err(e) => {
+                    // I/O error reading file
+                    warn!("Cache corruption detected (read error): {}", e);
+                    eprintln!("WARNING: Cannot read cache file: {}", e);
+                    eprintln!("  File: {}", state_file.display());
+                    eprintln!("  Recovery: Deleting corrupted cache and rebuilding");
+
+                    if let Err(delete_err) = fs::remove_file(&state_file) {
+                        warn!(
+                            "Failed to delete unreadable cache file: {}",
+                            delete_err
+                        );
+                        return Err(format!(
+                            "Cannot recover: failed to delete unreadable cache: {}",
+                            delete_err
+                        ));
+                    }
+
+                    if debug {
+                        eprintln!(
+                            "DEBUG: Deleted unreadable cache file: {}",
+                            state_file.display()
+                        );
+                    }
+                    return Ok(true); // Recovery was triggered
+                }
+            }
+        }
+        Err(e) => {
+            // Cannot compute checksum (very unusual)
+            warn!("Cannot compute cache checksum: {}", e);
+            eprintln!("WARNING: Cannot validate cache (checksum error): {}", e);
+            eprintln!("  Proceeding with initialization anyway");
+            // Don't fail here — let normal flow continue
+            Ok(false)
+        }
+    }
+}
+
 fn run_init(debug: bool, force: bool) -> Result<(), String> {
     let root = find_checkout_root()?;
     let version = VERSION.trim();
@@ -1538,6 +1637,13 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         eprintln!("  Current version: {}", version);
         eprintln!("  Suggestion: Use --force to rebuild, or --cache-clear to start fresh");
         return Err("Cache version mismatch. Run with --force or --cache-clear.".to_string());
+    }
+
+    // @trace spec:cache-recovery-mechanism
+    // Detect and recover from cache corruption before loading state
+    let recovery_triggered = detect_and_recover_cache_corruption(debug)?;
+    if recovery_triggered && debug {
+        eprintln!("DEBUG: Cache corruption recovery completed; state will be rebuilt");
     }
 
     // Load existing build state or create new one

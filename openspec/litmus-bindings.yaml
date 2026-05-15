@@ -517,7 +517,8 @@ specs:
   litmus_tests:
   - litmus:runtime-logging-env-filter
   - litmus:runtime-logging-schema-stability
-  coverage_ratio: 66
+  - litmus:log-field-stability-schema
+  coverage_ratio: 100
   last_verified: '2026-05-14'
 - spec_id: secret-rotation
   status: active
