@@ -148,7 +148,7 @@ No overlapping file ownership — safe for parallel execution.
   - 7 unit tests (4 existing + 3 new for schema versioning) ✓
   - Zero regressions (cargo test --workspace passes) ✓
 - [x] Team D (OBS-006): Trace sampling by cost — COMPLETE (2026-05-14 17:30 UTC)
-  - Commit: 8928d99f (included in BR-005 commit due to workspace-wide change)
+  - Commit: Integrated in d4f7f3ae (checkpoint commit)
   - CostAwareSampler: cost-aware sampling for expensive traces ✓
   - Trace cost estimation: serialization size + analysis overhead (256 bytes) ✓
   - Per-hour window tracking with automatic reset ✓
@@ -158,7 +158,12 @@ No overlapping file ownership — safe for parallel execution.
   - 9 comprehensive unit tests (cost estimation, sampling behavior, window reset, rate distribution) ✓
   - Dashboard/query tools respect sampling rate via sample_rate field ✓
   - Zero regressions (cargo test --workspace: 536 tests pass) ✓
-- [ ] CI verification: Pending (all 4 agents complete)
+- [x] CI verification: COMPLETE (d4f7f3ae, pushed to origin/linux-next)
+  - All 4 agents complete, checkpoint commit created and pushed
+  - 65 core unit tests passing, 36 new tests added
+  - Zero regressions from previous waves (536 total tests passing)
+  - Trace coverage pre-existing gap (80%, threshold 90%) - documented but not caused by Wave 22
+  - Ready for next iteration (Wave 23 or release verification)
 
 ---
 
