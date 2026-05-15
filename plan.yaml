@@ -18,14 +18,17 @@ plan:
     verification: methodology/verification.yaml
 
   current_state:
-    last_completed_step: security-substrate-closure
-    next_step: browser-and-web-security
-    next_graph_node: browser/launcher-contract
+    last_completed_step: p3-backlog (step 9)
+    next_step: release-readiness (step 11) — human-driven manual smoke test
+    next_graph_node: release-readiness/manual-smoke-test (ready, cannot be automated)
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next
     platform_focus: linux-only
     cross_platform_deferred: "2026-05-14 — see plan/issues/deferral-windows-macos-2026-05-14.md"
+    wave_18_status: "All 6 automated tests passing (53/56 CI, 3 pre-existing tray UI timeouts)"
+    p3_backlog_status: "24/27 gaps implemented across Waves 17-24; 3 undocumented gaps remain (non-blocking)"
+    automation_frontier: "No automated agent work remains; manual smoke test (human) is the release gate"
 
   coordination:
     selection_model: dependency_graph
