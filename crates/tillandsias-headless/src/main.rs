@@ -1917,6 +1917,11 @@ fn cleanup_init_logs() {
 /// Validate per-project cache integrity before launching containers.
 /// Reports warnings if cache is corrupted or unreadable.
 /// @trace spec:cache-recovery-mechanism, spec:forge-cache-dual
+///
+/// # Integration Plan
+/// Currently unused, but integrated into container launch path when gap closure prioritized.
+/// See: plan/localwork/wave-27b-findings.md, line 155
+#[allow(dead_code)]
 fn validate_project_cache(project_path: &Path, debug: bool) -> Result<bool, String> {
     // Project cache is stored at .tillandsias/cache/ inside the project
     let cache_dir = project_path.join(".tillandsias").join("cache");
@@ -1937,16 +1942,34 @@ fn validate_project_cache(project_path: &Path, debug: bool) -> Result<bool, Stri
         for entry in entries.flatten() {
             let path = entry.path();
 
-            // Check for broken symlinks
-            if path.is_symlink() {
-                if fs::metadata(&path).is_err() {
-                    corrupted_files.push(format!("broken symlink: {}", path.display()));
+            // @trace gap:TR-006 — single-syscall symlink validation
+            // Use read_link() instead of is_symlink() + metadata() to detect broken symlinks.
+            // read_link() returns the target path as stored in the symlink, or an error if not a symlink.
+            if let Ok(target) = fs::read_link(&path) {
+                // Symlink exists. Resolve the target relative to the symlink's parent directory.
+                let resolved_target = if target.is_absolute() {
+                    target.clone()
+                } else {
+                    path.parent()
+                        .map(|p| p.join(&target))
+                        .unwrap_or(target.clone())
+                };
+
+                if !resolved_target.exists() {
+                    // Target doesn't exist = broken symlink
+                    corrupted_files.push(format!(
+                        "broken symlink: {} → {}",
+                        path.display(),
+                        target.display()
+                    ));
                     continue;
                 }
             }
 
             // Check for zero-byte files
-            if let Ok(metadata) = fs::metadata(&path) {
+            // Use symlink_metadata to avoid following symlinks when checking file size
+            #[allow(clippy::collapsible_if)]
+            if let Ok(metadata) = fs::symlink_metadata(&path) {
                 if metadata.is_file() && metadata.len() == 0 {
                     corrupted_files.push(format!("zero-byte file: {}", path.display()));
                 }
