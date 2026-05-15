@@ -13,7 +13,7 @@ pub mod launcher;
 pub mod server;
 pub mod window_registry;
 
-pub use cdp_client::{CdpSession, CdpConnectionPool};
+pub use cdp_client::{CdpConnectionPool, CdpSession};
 pub use server::{BrowserMcpServer, McpServerConfig};
 
 /// Default per-session concurrent call limit (16 tools can run in parallel).

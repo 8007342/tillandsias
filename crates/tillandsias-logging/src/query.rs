@@ -29,7 +29,7 @@
 //! - `stats max(<field>) by <group>` — Maximum value
 //! - `stats min(<field>) by <group>` — Minimum value
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 
 /// Parsed query filter with label matchers
@@ -150,9 +150,10 @@ pub fn parse(query_str: &str) -> Result<Query, ParseError> {
                 aggregation = Some(agg);
                 remaining = new_remaining;
             } else {
-                return Err(ParseError::InvalidAggregation(
-                    format!("Unknown operation: {}", remaining.split_whitespace().next().unwrap_or("?"))
-                ));
+                return Err(ParseError::InvalidAggregation(format!(
+                    "Unknown operation: {}",
+                    remaining.split_whitespace().next().unwrap_or("?")
+                )));
             }
         } else {
             return Err(ParseError::InvalidSyntax(format!(
@@ -179,9 +180,12 @@ fn parse_filter(filter_str: &str) -> Result<Filter, ParseError> {
 
     for pair in filter_str.split(',') {
         let pair = pair.trim();
-        let (key, value) = pair.split_once('=').ok_or(ParseError::InvalidFilter(
-            format!("Expected key=value, got: {}", pair),
-        ))?;
+        let (key, value) = pair
+            .split_once('=')
+            .ok_or(ParseError::InvalidFilter(format!(
+                "Expected key=value, got: {}",
+                pair
+            )))?;
 
         let key = key.trim();
         let value = value.trim();
@@ -209,7 +213,9 @@ fn try_parse_json_filter(input: &str) -> Option<(JsonFilter, &str)> {
 
     // Find the field name
     let mut i = 1;
-    while i < input.len() && (input[i..].chars().next().unwrap().is_alphanumeric() || input[i..].starts_with('_')) {
+    while i < input.len()
+        && (input[i..].chars().next().unwrap().is_alphanumeric() || input[i..].starts_with('_'))
+    {
         i += 1;
     }
 
@@ -272,7 +278,7 @@ fn parse_number(input: &str) -> Option<(f64, &str)> {
 
     if i > start || (i > 0 && chars[i - 1] != '.') {
         let num_str = input[..i].parse::<f64>().ok()?;
-        return Some((num_str, &input[i..].trim_start()));
+        return Some((num_str, input[i..].trim_start()));
     }
 
     None
@@ -296,7 +302,7 @@ fn parse_string(input: &str) -> Option<(String, &str)> {
     }
 
     let s = input[1..i].to_string();
-    Some((s, &input[i + 1..].trim_start()))
+    Some((s, input[i + 1..].trim_start()))
 }
 
 /// Parse stats aggregation
@@ -343,9 +349,10 @@ fn parse_stats(input: &str) -> Result<(AggregationOp, &str), ParseError> {
     remaining = func_remaining;
 
     if !remaining.starts_with('(') {
-        return Err(ParseError::InvalidAggregation(
-            format!("Expected '(' after {}", func_name),
-        ));
+        return Err(ParseError::InvalidAggregation(format!(
+            "Expected '(' after {}",
+            func_name
+        )));
     }
 
     remaining = remaining[1..].trim_start();
@@ -390,7 +397,7 @@ fn parse_stats(input: &str) -> Result<(AggregationOp, &str), ParseError> {
             return Err(ParseError::InvalidAggregation(format!(
                 "Unknown function: {}",
                 func_name
-            )))
+            )));
         }
     };
 
@@ -512,9 +519,7 @@ impl QueryExecutor {
                 // No aggregation, return filtered entries
                 Ok(Value::Array(filtered.into_iter().cloned().collect()))
             }
-            Some(AggregationOp::Count) => {
-                Ok(json!({"count": filtered.len()}))
-            }
+            Some(AggregationOp::Count) => Ok(json!({"count": filtered.len()})),
             Some(AggregationOp::CountBy(field)) => {
                 let mut groups: HashMap<String, usize> = HashMap::new();
                 for entry in &filtered {
@@ -577,12 +582,9 @@ impl QueryExecutor {
                 .unwrap_or("unknown")
                 .to_string();
 
-            let value = entry
-                .get(field_arg)
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0);
+            let value = entry.get(field_arg).and_then(|v| v.as_f64()).unwrap_or(0.0);
 
-            groups.entry(group_key).or_insert_with(Vec::new).push(value);
+            groups.entry(group_key).or_default().push(value);
         }
 
         let mut result = Vec::new();
@@ -605,14 +607,20 @@ mod tests {
     #[test]
     fn test_parse_simple_filter() {
         let query = parse(r#"{spec="browser-isolation"}"#).unwrap();
-        assert_eq!(query.filter.matchers.get("spec").unwrap(), "browser-isolation");
+        assert_eq!(
+            query.filter.matchers.get("spec").unwrap(),
+            "browser-isolation"
+        );
         assert_eq!(query.aggregation, None);
     }
 
     #[test]
     fn test_parse_multiple_filters() {
         let query = parse(r#"{spec="browser-isolation", level="error"}"#).unwrap();
-        assert_eq!(query.filter.matchers.get("spec").unwrap(), "browser-isolation");
+        assert_eq!(
+            query.filter.matchers.get("spec").unwrap(),
+            "browser-isolation"
+        );
         assert_eq!(query.filter.matchers.get("level").unwrap(), "error");
     }
 
@@ -625,7 +633,10 @@ mod tests {
     #[test]
     fn test_parse_count_by() {
         let query = parse(r#"{level="error"} | stats count() by spec"#).unwrap();
-        assert_eq!(query.aggregation, Some(AggregationOp::CountBy("spec".to_string())));
+        assert_eq!(
+            query.aggregation,
+            Some(AggregationOp::CountBy("spec".to_string()))
+        );
     }
 
     #[test]

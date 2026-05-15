@@ -25,7 +25,6 @@ use crate::LogEntry;
 use parking_lot::RwLock;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use chrono::Utc;
 
 /// Cost estimation overhead in bytes (per-trace metadata, timing info, etc.)
 const ANALYSIS_OVERHEAD_BYTES: usize = 256;
@@ -112,7 +111,10 @@ impl CostAwareSampler {
     /// * `Ok(true)` - Emit this trace (below threshold or lucky random)
     /// * `Ok(false)` - Drop this trace (over threshold and failed random sample)
     /// * `Err(_)` - Serialization error (treat as non-fatal, emit trace)
-    pub fn should_sample(&self, entry: &LogEntry) -> std::result::Result<bool, Box<dyn std::error::Error>> {
+    pub fn should_sample(
+        &self,
+        entry: &LogEntry,
+    ) -> std::result::Result<bool, Box<dyn std::error::Error>> {
         // Estimate cost of this trace
         let cost = estimate_trace_cost(entry)?;
 
@@ -161,7 +163,9 @@ impl CostAwareSampler {
     ///
     /// Public for testing purposes. Measures JSON serialization size
     /// plus analysis overhead.
-    pub fn estimate_cost(entry: &LogEntry) -> std::result::Result<usize, Box<dyn std::error::Error>> {
+    pub fn estimate_cost(
+        entry: &LogEntry,
+    ) -> std::result::Result<usize, Box<dyn std::error::Error>> {
         estimate_trace_cost(entry)
     }
 
@@ -248,6 +252,7 @@ fn rand_f64() -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
     use serde_json::json;
 
     fn create_test_entry(message: &str) -> LogEntry {
@@ -328,7 +333,10 @@ mod tests {
 
             // Once we exceed threshold, sampling should activate
             if cumulative > 100 {
-                assert!(sampling_active, "Sampling should activate when cost exceeds threshold");
+                assert!(
+                    sampling_active,
+                    "Sampling should activate when cost exceeds threshold"
+                );
             }
         }
 
@@ -416,8 +424,11 @@ mod tests {
                 // Sampling rate should be roughly 0.5
                 let rate = sampled_count as f64 / total_count as f64;
                 // Allow 0.3-0.7 range for sampling rate (loose bounds for randomness)
-                assert!(rate > 0.25 && rate < 0.75,
-                    "Sampling rate {} should be near 0.5", rate);
+                assert!(
+                    rate > 0.25 && rate < 0.75,
+                    "Sampling rate {} should be near 0.5",
+                    rate
+                );
                 break;
             }
         }

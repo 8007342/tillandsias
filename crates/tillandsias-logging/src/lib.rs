@@ -24,7 +24,7 @@ pub use cardinality::{CardinalityAnalyzer, CardinalityReport};
 pub use error::{LoggingError, Result};
 pub use log_entry::LogEntry;
 pub use logger::Logger;
-pub use query::{parse, Query, QueryExecutor, Filter, AggregationOp, JsonFilter};
+pub use query::{AggregationOp, Filter, JsonFilter, Query, QueryExecutor, parse};
 pub use sampler::CostAwareSampler;
 
 /// Initialize the global logging subscriber with file rotation and filtering.

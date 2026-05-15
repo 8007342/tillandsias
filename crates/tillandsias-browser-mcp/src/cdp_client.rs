@@ -7,6 +7,7 @@
 //! @cheatsheet web/cdp.md
 
 use base64::Engine;
+use parking_lot::RwLock;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -14,7 +15,6 @@ use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
-use parking_lot::RwLock;
 
 #[derive(Debug, Error)]
 pub enum CdpError {
@@ -201,9 +201,7 @@ static GLOBAL_POOL: std::sync::OnceLock<Arc<CdpConnectionPool>> = std::sync::Onc
 /// Get or initialize the global connection pool.
 /// @trace gap:BR-005
 fn get_global_pool() -> Arc<CdpConnectionPool> {
-    Arc::clone(
-        GLOBAL_POOL.get_or_init(|| Arc::new(CdpConnectionPool::new()))
-    )
+    Arc::clone(GLOBAL_POOL.get_or_init(|| Arc::new(CdpConnectionPool::new())))
 }
 
 impl CdpSession {
@@ -226,7 +224,6 @@ impl CdpSession {
             request_id: 0,
         })
     }
-
 
     /// Send a CDP JSON-RPC command and parse the response.
     fn send_command(&mut self, method: &str, params: Value) -> Result<Value, CdpError> {
@@ -543,9 +540,18 @@ mod tests {
     #[test]
     fn pool_key_equality() {
         // PoolKey should compare by both port and target_id.
-        let key1 = PoolKey { port: 9222, target_id: "target-1".to_string() };
-        let key2 = PoolKey { port: 9222, target_id: "target-1".to_string() };
-        let key3 = PoolKey { port: 9223, target_id: "target-1".to_string() };
+        let key1 = PoolKey {
+            port: 9222,
+            target_id: "target-1".to_string(),
+        };
+        let key2 = PoolKey {
+            port: 9222,
+            target_id: "target-1".to_string(),
+        };
+        let key3 = PoolKey {
+            port: 9223,
+            target_id: "target-1".to_string(),
+        };
 
         assert_eq!(key1, key2);
         assert_ne!(key1, key3);

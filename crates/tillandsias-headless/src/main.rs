@@ -3389,24 +3389,25 @@ fn run_evidence_bundle_retention() {
             // Check modification time
             if let Ok(metadata) = fs::metadata(&path)
                 && let Ok(modified) = metadata.modified()
-                    && modified < cutoff {
-                        // Bundle is older than retention window; delete it
-                        if let Ok(()) = fs::remove_file(&path) {
-                            deleted_count += 1;
-                            deleted_names.push(file_name);
-                            debug!(
-                                gap = "OBS-012",
-                                bundle = ?path,
-                                "deleted old evidence bundle"
-                            );
-                        } else {
-                            tracing::warn!(
-                                gap = "OBS-012",
-                                bundle = ?path,
-                                "failed to delete evidence bundle (continuing)"
-                            );
-                        }
-                    }
+                && modified < cutoff
+            {
+                // Bundle is older than retention window; delete it
+                if let Ok(()) = fs::remove_file(&path) {
+                    deleted_count += 1;
+                    deleted_names.push(file_name);
+                    debug!(
+                        gap = "OBS-012",
+                        bundle = ?path,
+                        "deleted old evidence bundle"
+                    );
+                } else {
+                    tracing::warn!(
+                        gap = "OBS-012",
+                        bundle = ?path,
+                        "failed to delete evidence bundle (continuing)"
+                    );
+                }
+            }
         }
     }
 
@@ -3541,9 +3542,7 @@ fn run_disk_usage_check() {
     }
 
     // Run the cache management script
-    match Command::new("bash")
-        .arg(&manage_cache_script)
-        .output() {
+    match Command::new("bash").arg(&manage_cache_script).output() {
         Ok(output) => {
             if output.status.success() {
                 // Log successful completion
@@ -3590,7 +3589,12 @@ async fn check_github_token_health() {
     let config = secrets::TokenRefreshConfig::default();
 
     // Use a 1-second timeout to avoid blocking shutdown signal handling
-    match timeout(Duration::from_secs(1), secrets::check_and_refresh_github_token(&config)).await {
+    match timeout(
+        Duration::from_secs(1),
+        secrets::check_and_refresh_github_token(&config),
+    )
+    .await
+    {
         Ok(Ok(())) => {
             debug!(gap = "ON-009", "GitHub token health check completed");
         }
@@ -3604,7 +3608,10 @@ async fn check_github_token_health() {
             );
         }
         Err(_timeout) => {
-            debug!(gap = "ON-009", "GitHub token health check timed out; skipping");
+            debug!(
+                gap = "ON-009",
+                "GitHub token health check timed out; skipping"
+            );
         }
     }
 }
@@ -3670,10 +3677,7 @@ fn run_dependency_check() {
                         "project dependencies check completed"
                     );
                 } else {
-                    debug!(
-                        gap = "ON-010",
-                        "all project dependencies available"
-                    );
+                    debug!(gap = "ON-010", "all project dependencies available");
                 }
             } else {
                 debug!(

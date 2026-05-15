@@ -10,13 +10,13 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{Arc, Mutex, OnceLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
 use image::GenericImageView;
-use tracing::{info, warn, span, Level};
+use tracing::{Level, info, span, warn};
 use zbus::object_server::SignalContext;
 use zbus::{Connection, ConnectionBuilder, fdo, interface};
 use zvariant::{OwnedObjectPath, OwnedValue, Value};
@@ -1450,8 +1450,9 @@ impl DbusMenuIface {
                         let snapshot = self.0.snapshot();
                         if snapshot.forge_available && snapshot.podman_available {
                             let service = self.0.clone();
+                            let executor = &service.task_executor;
                             // @trace gap:TR-005: Offload terminal launch to async executor (non-blocking)
-                            let _ = service.task_executor.spawn_task(move || {
+                            let _ = executor.spawn_task(move || {
                                 if let Err(err) =
                                     run_root_terminal(&snapshot.root, &snapshot.version)
                                 {
@@ -2569,8 +2570,20 @@ mod tests {
         let executor = AsyncTaskExecutor::new(2);
 
         // First two tasks should succeed (fill the queue)
-        assert!(executor.spawn_task(|| { std::thread::sleep(std::time::Duration::from_secs(10)); }).is_ok());
-        assert!(executor.spawn_task(|| { std::thread::sleep(std::time::Duration::from_secs(10)); }).is_ok());
+        assert!(
+            executor
+                .spawn_task(|| {
+                    std::thread::sleep(std::time::Duration::from_secs(10));
+                })
+                .is_ok()
+        );
+        assert!(
+            executor
+                .spawn_task(|| {
+                    std::thread::sleep(std::time::Duration::from_secs(10));
+                })
+                .is_ok()
+        );
 
         // Third task should fail (queue full)
         assert!(executor.spawn_task(|| {}).is_err());
@@ -2584,9 +2597,11 @@ mod tests {
 
         for _ in 0..5 {
             let counter_clone = counter.clone();
-            executor.spawn_task(move || {
-                counter_clone.fetch_add(1, std::sync::atomic::Ordering::Release);
-            }).unwrap();
+            executor
+                .spawn_task(move || {
+                    counter_clone.fetch_add(1, std::sync::atomic::Ordering::Release);
+                })
+                .unwrap();
         }
 
         // Give executor thread time to process all tasks

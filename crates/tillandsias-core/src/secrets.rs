@@ -103,11 +103,13 @@ pub fn read_github_token() -> Result<String> {
     use std::process::Stdio;
 
     let mut child = Command::new("gh")
-        .args(&["auth", "token"])
+        .args(["auth", "token"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| TokenRefreshError::KeyringReadError(format!("Failed to spawn 'gh auth token': {}", e)))?;
+        .map_err(|e| {
+            TokenRefreshError::KeyringReadError(format!("Failed to spawn 'gh auth token': {}", e))
+        })?;
 
     // Check if process exits quickly (within 5 seconds)
     let start = std::time::Instant::now();
@@ -141,14 +143,17 @@ pub fn read_github_token() -> Result<String> {
                 // Still running
                 if start.elapsed() > timeout {
                     let _ = child.kill();
-                    return Err(TokenRefreshError::KeyringReadError("gh auth token timed out".to_string()));
+                    return Err(TokenRefreshError::KeyringReadError(
+                        "gh auth token timed out".to_string(),
+                    ));
                 }
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }
             Err(e) => {
-                return Err(TokenRefreshError::KeyringReadError(
-                    format!("Failed to check 'gh auth token' status: {}", e),
-                ));
+                return Err(TokenRefreshError::KeyringReadError(format!(
+                    "Failed to check 'gh auth token' status: {}",
+                    e
+                )));
             }
         }
     }
@@ -164,7 +169,7 @@ pub fn should_refresh_token(token: &str, _config: &TokenRefreshConfig) -> Result
 
     // Call GitHub API to check token validity and get username
     let client = std::process::Command::new("curl")
-        .args(&[
+        .args([
             "-s",
             "-H",
             &format!("Authorization: token {}", token),
@@ -216,7 +221,9 @@ pub fn attempt_token_refresh() -> Result<()> {
     // Since we don't have access to refresh_token or OAuth state here,
     // we log the situation and let the tray handle re-authentication if needed.
 
-    warn!("Direct token refresh not available; token will be preserved until revoked or session ends");
+    warn!(
+        "Direct token refresh not available; token will be preserved until revoked or session ends"
+    );
     warn!("If token expires, users should re-authenticate via: gh auth logout && gh auth login");
 
     Ok(())
@@ -228,7 +235,7 @@ pub fn attempt_token_refresh() -> Result<()> {
 pub fn validate_token_file(token_path: &Path) -> Result<bool> {
     // @trace spec:secret-rotation, spec:secrets-management, gap:ON-009
     let token = std::fs::read_to_string(token_path)
-        .map_err(|e| TokenRefreshError::IoError(e))?
+        .map_err(TokenRefreshError::IoError)?
         .trim()
         .to_string();
 
@@ -239,7 +246,7 @@ pub fn validate_token_file(token_path: &Path) -> Result<bool> {
 
     // Quick validation: call GitHub API
     let output = Command::new("curl")
-        .args(&[
+        .args([
             "-s",
             "-o",
             "/dev/null",
@@ -252,8 +259,7 @@ pub fn validate_token_file(token_path: &Path) -> Result<bool> {
         .output()
         .map_err(|e| TokenRefreshError::GitHubApiError(format!("Validation failed: {}", e)))?;
 
-    let http_code = String::from_utf8(output.stdout)
-        .unwrap_or_default();
+    let http_code = String::from_utf8(output.stdout).unwrap_or_default();
 
     Ok(http_code.starts_with("2"))
 }
@@ -274,7 +280,10 @@ pub async fn check_and_refresh_github_token(config: &TokenRefreshConfig) -> Resu
             return Ok(());
         }
         Err(e) => {
-            warn!("Failed to read token from keyring: {}; will retry at next startup", e);
+            warn!(
+                "Failed to read token from keyring: {}; will retry at next startup",
+                e
+            );
             return Ok(()); // Don't fail startup due to token check
         }
     };
@@ -292,7 +301,10 @@ pub async fn check_and_refresh_github_token(config: &TokenRefreshConfig) -> Resu
             }
         }
         Err(e) => {
-            warn!("Failed to check token age: {}; will retry at next startup", e);
+            warn!(
+                "Failed to check token age: {}; will retry at next startup",
+                e
+            );
         }
     }
 

@@ -127,7 +127,7 @@ impl CardinalityAnalyzer {
         }
 
         // Sort by cardinality (highest first)
-        high_cardinality.sort_by(|a, b| b.unique_count.cmp(&a.unique_count));
+        high_cardinality.sort_by_key(|a| std::cmp::Reverse(a.unique_count));
 
         Ok(CardinalityReport {
             total_entries: entry_count,
