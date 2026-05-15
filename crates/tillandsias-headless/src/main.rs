@@ -1,4 +1,4 @@
-// @trace spec:linux-native-portable-executable, spec:runtime-logging
+// @trace spec:linux-native-portable-executable, spec:runtime-logging, gap:OBS-003, gap:OBS-006
 //! Tillandsias native headless app lifecycle launcher.
 //!
 //! Runs containerized development environments without a graphical interface.
@@ -21,7 +21,12 @@
 //!
 //! Logging Integration:
 //! See `crates/tillandsias-logging/INTEGRATION.md` for structured logging setup,
-//! including container lifecycle events, accountability windows, and log rotation.
+//! including container lifecycle events, accountability windows, log rotation, and schema versioning (@trace gap:OBS-003).
+//!
+//! Cost-Aware Trace Sampling:
+//! @trace gap:OBS-006 — Expensive traces (large serialization) are sampled probabilistically
+//! when cumulative cost exceeds 10MB/hour threshold. Sampled traces are marked with `sample_rate: 0.5`.
+//! See `crates/tillandsias-logging/src/sampler.rs` for implementation.
 
 use signal_hook::flag;
 use std::fs;

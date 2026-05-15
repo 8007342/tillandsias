@@ -1,9 +1,10 @@
-// @trace spec:runtime-logging, spec:logging-levels, spec:external-logs-layer
+// @trace spec:runtime-logging, spec:logging-levels, spec:external-logs-layer, gap:OBS-003
 //! Structured JSON logging layer for Tillandsias runtime.
 //!
 //! Provides:
 //! - Async file writing with non-blocking design
 //! - Structured LogEntry with timestamp, level, component, message, context, and spec_trace
+//! - Schema versioning for log entry evolution tracking (@trace gap:OBS-003)
 //! - File rotation: 7-day TTL, 10MB per file
 //! - Dual sinks: host (~/.tillandsias/logs/) and per-project (.tillandsias/logs/)
 //! - TILLANDSIAS_LOG environment variable for runtime filtering
@@ -17,12 +18,14 @@ pub mod log_entry;
 pub mod logger;
 pub mod query;
 pub mod rotation;
+pub mod sampler;
 
 pub use cardinality::{CardinalityAnalyzer, CardinalityReport};
 pub use error::{LoggingError, Result};
 pub use log_entry::LogEntry;
 pub use logger::Logger;
 pub use query::{parse, Query, QueryExecutor, Filter, AggregationOp, JsonFilter};
+pub use sampler::CostAwareSampler;
 
 /// Initialize the global logging subscriber with file rotation and filtering.
 ///

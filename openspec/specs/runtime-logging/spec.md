@@ -207,6 +207,39 @@ Tillandsias MUST distinguish two log tiers per container: INTERNAL (existing per
 - **AND** binary formats MUST NOT be permitted
 - **AND** agents reading external logs SHOULD be able to `grep` or `jq` them without a deserialiser dep
 
+### Requirement: Schema versioning for log entry evolution
+
+All log entries MUST include an immutable `schema_version` field to enable backwards-compatible schema evolution. This field enables:
+- Migration of old logs to new schemas
+- Detection of incompatible log formats
+- Audit of schema changes across runtime versions
+- Queryable log schema for observability tools
+
+@trace gap:OBS-003 — Log schema version field for evolution tracking
+
+#### Scenario: Schema version present in all logs
+- **WHEN** a log event is created and serialized
+- **THEN** the JSON output MUST include a `schema_version` field with value `"1.0"`
+- **AND** the `schema_version` field MUST be the first field (for canonical ordering)
+- **AND** the field MUST NOT be omitted, null, or have any other value
+
+#### Scenario: Schema version is immutable
+- **WHEN** multiple log entries are created by different components
+- **THEN** all entries MUST have the same `schema_version` value
+- **AND** the value MUST NOT change across application versions or releases
+
+#### Scenario: Schema version is queryable
+- **WHEN** querying logs via the trace index CLI or log query language
+- **THEN** `schema_version` MUST be filterable as a field
+- **AND** users MUST be able to issue queries like `{schema_version="1.0"}`
+- **AND** this enables tools to detect schema mismatches or incompatibilities
+
+#### Scenario: Backwards compatibility on deserialization
+- **WHEN** reading legacy logs that predate schema versioning
+- **THEN** deserialization MUST fail with a clear error (no silent shadowing)
+- **AND** the migration tool MUST inject `schema_version: "0.9"` or similar legacy marker
+- **AND** all new logs MUST include the current schema version
+
 
 ## Sources of Truth
 

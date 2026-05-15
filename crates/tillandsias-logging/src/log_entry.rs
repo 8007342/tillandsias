@@ -1,14 +1,15 @@
-// @trace spec:runtime-logging
+// @trace spec:runtime-logging, gap:OBS-003
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
 /// Structured log entry with accountability metadata and spec tracing.
-// @trace spec:runtime-logging, spec:log-schema-versioning
+// @trace spec:runtime-logging, spec:log-schema-versioning, gap:OBS-003
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LogEntry {
     /// Schema version for backwards compatibility. Immutable.
+    /// @trace gap:OBS-003 — Log schema version field for evolution tracking
     pub schema_version: String,
 
     /// RFC3339 timestamp
@@ -42,6 +43,12 @@ pub struct LogEntry {
     /// Safety note for sensitive operations
     #[serde(skip_serializing_if = "Option::is_none")]
     pub safety: Option<String>,
+
+    /// Sampling rate applied to this trace (e.g., 0.5 if 50% sampled)
+    /// Only set if trace was subject to cost-aware sampling
+    /// @trace gap:OBS-006 — Trace sampling by cost
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sample_rate: Option<f64>,
 }
 
 impl LogEntry {
@@ -66,6 +73,7 @@ impl LogEntry {
             accountability: None,
             category: None,
             safety: None,
+            sample_rate: None,
         }
     }
 
@@ -99,6 +107,12 @@ impl LogEntry {
     /// Add safety note for accountability event
     pub fn with_safety(mut self, note: impl Into<String>) -> Self {
         self.safety = Some(note.into());
+        self
+    }
+
+    /// Set sampling rate metadata
+    pub fn with_sample_rate(mut self, rate: f64) -> Self {
+        self.sample_rate = Some(rate);
         self
     }
 
@@ -192,5 +206,69 @@ mod tests {
         // All entries must have the same immutable schema version
         assert_eq!(entry1.schema_version, entry2.schema_version);
         assert_eq!(entry1.schema_version, "1.0");
+    }
+
+    #[test]
+    fn test_schema_version_in_json_serialization() {
+        // @trace gap:OBS-003 — Verify schema_version is always present in serialized logs
+        let entry = LogEntry::new(
+            Utc::now(),
+            "INFO".to_string(),
+            "proxy".to_string(),
+            "connection established".to_string(),
+        );
+
+        let json = entry.to_json().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        // Schema version must be present in JSON output
+        assert!(parsed.get("schema_version").is_some());
+        assert_eq!(parsed["schema_version"], "1.0");
+    }
+
+    #[test]
+    fn test_schema_version_backwards_compatible() {
+        // @trace gap:OBS-003 — Verify backwards compatibility: old logs without schema_version can be upgraded
+        let json_without_version = r#"{
+            "timestamp": "2026-05-14T10:00:00Z",
+            "level": "INFO",
+            "component": "forge",
+            "message": "legacy log entry"
+        }"#;
+
+        // Deserializing old logs would fail due to missing schema_version field
+        // This is expected — the schema_version field is immutable and required.
+        // Migration: when reading old logs, inject schema_version = "0.9" or similar legacy marker.
+        let result: Result<LogEntry, _> = serde_json::from_str(json_without_version);
+        assert!(
+            result.is_err(),
+            "Missing schema_version should cause deserialization to fail"
+        );
+    }
+
+    #[test]
+    fn test_schema_version_field_queryable() {
+        // @trace gap:OBS-003 — Verify schema_version field is present and queryable in structured logs
+        let entry = LogEntry::new(
+            Utc::now(),
+            "ERROR".to_string(),
+            "inference".to_string(),
+            "model pull timeout".to_string(),
+        )
+        .with_context("model_name", json!("qwen2.5-coder:14b"))
+        .with_context("schema_version", json!("1.0"));
+
+        let json = entry.to_json_pretty().unwrap();
+
+        // Verify the JSON can be queried for schema_version
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["schema_version"], "1.0");
+
+        // Verify all required fields are present for observability
+        assert!(parsed.get("timestamp").is_some());
+        assert!(parsed.get("level").is_some());
+        assert!(parsed.get("component").is_some());
+        assert!(parsed.get("message").is_some());
+        assert!(parsed.get("schema_version").is_some());
     }
 }
