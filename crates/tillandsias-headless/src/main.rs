@@ -3178,6 +3178,8 @@ pub(crate) fn run_opencode_web_mode(
 }
 
 // Module declarations for Phase 4+
+mod metrics_server;
+
 #[cfg(feature = "tray")]
 mod tray;
 

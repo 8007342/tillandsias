@@ -4,14 +4,16 @@
 #
 # Phase 1: Detects ghost traces, orphaned specs, and format violations.
 # Phase 2: Enforces @trace presence on public functions in crates.
+# Phase 3: Validates spec trace coverage threshold (OBS-004).
 #
 # Usage:
 #   ./scripts/validate-traces.sh              # Run Phase 1 (ghost, orphan, format)
 #   ./scripts/validate-traces.sh --enforce-presence  # Run Phase 2 (public fn traces)
+#   ./scripts/validate-traces.sh --coverage-threshold [THRESHOLD]  # Phase 3 (coverage gate)
 #   ./scripts/validate-traces.sh --warn-only  # Phase 1 warnings only (exit 0)
 #   ./scripts/validate-traces.sh --enforce-presence --warn-only  # Phase 2 warnings only
 #
-# @trace spec:spec-traceability, spec:methodology-accountability
+# @trace spec:spec-traceability, spec:methodology-accountability, gap:OBS-004
 # =============================================================================
 
 set -euo pipefail
@@ -210,9 +212,6 @@ if [[ "$ENFORCE_PRESENCE" == true ]]; then
   fi
 fi
 
-echo ""
-echo "validate-traces: $errors error(s), $warnings warning(s)"
-
 # ============================================================================
 # Coverage threshold check (new functionality)
 # @trace gap:OBS-004, spec:spec-trace-coverage-threshold, spec:methodology-accountability
@@ -286,6 +285,10 @@ EOF
 
   exit 0
 fi
+
+# Print summary for normal mode
+echo ""
+echo "validate-traces: $errors error(s), $warnings warning(s)"
 
 if [[ "$WARN_ONLY" == true ]]; then
   exit 0
