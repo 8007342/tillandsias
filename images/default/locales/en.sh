@@ -96,6 +96,8 @@ L_TIP_20="GitHub CLI: gh repo view, gh pr list"
 # and does not use locale variables. This is kept for future localization
 # if we make the banner fully locale-aware.
 L_WELCOME_CHEATSHEETS="📚 Cheatsheets"
+L_AGENT_ONBOARDING="🤖 Agent onboarding"
+L_AGENT_ONBOARDING_HINT="cat \$TILLANDSIAS_CHEATSHEETS/welcome/readme-discipline.md for first-turn guide"
 
 # ── Error messages (lib-localized-errors.sh) ────────────────
 L_ERROR_CONTAINER_FAILED="ERROR: Container failed to start"

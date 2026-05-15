@@ -112,3 +112,7 @@ L_ERROR_GIT_HINT="認証情報、SSH キーを確認するか、git サービス
 
 L_ERROR_AUTH="エラー: 認証に失敗しました"
 L_ERROR_AUTH_HINT="'gh auth login' で認証情報を再設定するか、git config を確認してください。"
+
+# ── Agent onboarding ──────────────────────────
+L_AGENT_ONBOARDING="🤖 エージェントオンボーディング"
+L_AGENT_ONBOARDING_HINT="初回ガイドは cat $TILLANDSIAS_CHEATSHEETS/welcome/readme-discipline.md"

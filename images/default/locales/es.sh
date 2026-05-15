@@ -112,3 +112,7 @@ L_ERROR_GIT_HINT="Verifica credenciales, claves SSH, o reinicia el servicio git.
 
 L_ERROR_AUTH="ERROR: Error de autenticación"
 L_ERROR_AUTH_HINT="Reconfigura credenciales con 'gh auth login' o revisa la configuración de git."
+
+# ── Agent onboarding ──────────────────────────
+L_AGENT_ONBOARDING="🤖 Incorporación de agentes"
+L_AGENT_ONBOARDING_HINT="cat $TILLANDSIAS_CHEATSHEETS/welcome/readme-discipline.md para la guía de primer turno"

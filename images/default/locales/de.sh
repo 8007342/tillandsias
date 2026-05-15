@@ -112,3 +112,7 @@ L_ERROR_GIT_HINT="Überprüfen Sie Anmeldedaten, SSH-Schlüssel oder starten Sie
 
 L_ERROR_AUTH="FEHLER: Authentifizierung fehlgeschlagen"
 L_ERROR_AUTH_HINT="Richten Sie Anmeldedaten neu ein mit 'gh auth login' oder prüfen Sie git config."
+
+# ── Agent onboarding ──────────────────────────
+L_AGENT_ONBOARDING="🤖 Agent-Onboarding"
+L_AGENT_ONBOARDING_HINT="cat $TILLANDSIAS_CHEATSHEETS/welcome/readme-discipline.md für First-Turn-Anleitung"

@@ -112,3 +112,7 @@ L_ERROR_GIT_HINT="Vérifiez les identifiants, les clés SSH, ou redémarrez le s
 
 L_ERROR_AUTH="ERREUR: Échec d'authentification"
 L_ERROR_AUTH_HINT="Reconfigurer les identifiants avec 'gh auth login' ou vérifier la configuration git."
+
+# ── Agent onboarding ──────────────────────────
+L_AGENT_ONBOARDING="🤖 Intégration agent"
+L_AGENT_ONBOARDING_HINT="cat $TILLANDSIAS_CHEATSHEETS/welcome/readme-discipline.md pour le guide de premier tour"

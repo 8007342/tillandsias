@@ -181,6 +181,12 @@ if [ -d "${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets}" ]; then
     printf "  📚 ${B_WHITE}Cheatsheets${RST} ${DIM}cat${RST} ${B_CYAN}%s/INDEX.md${RST} ${DIM}| rg <topic>${RST}\n" \
         "${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets}"
     echo ""
+    # @trace spec:forge-opencode-onboarding, gap:forge-welcome-cheatsheet-pointer
+    # Agent discovery: explicitly point to the welcome/ cheatsheet entry point
+    _AGENT_ONBOARDING="${L_AGENT_ONBOARDING:-🤖 Agent onboarding}"
+    _AGENT_ONBOARDING_HINT="${L_AGENT_ONBOARDING_HINT:-cat \$TILLANDSIAS_CHEATSHEETS/welcome/readme-discipline.md for first-turn guide}"
+    printf "  ${B_YELLOW}%s${RST} ${DIM}%s${RST}\n" "$_AGENT_ONBOARDING" "$_AGENT_ONBOARDING_HINT"
+    echo ""
 fi
 printf "  💡 %b\n" "$tip"
 echo ""
