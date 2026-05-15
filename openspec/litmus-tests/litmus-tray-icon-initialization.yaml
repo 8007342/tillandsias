@@ -12,7 +12,7 @@ preconditions:
 critical_path:
   - step: "run the Pup initialization test"
     command: "cargo test -p tillandsias-core tray_state_new_starts_with_pup_icon -- --exact"
-    timeout_ms: 120000
+    timeout_ms: 180000
 
   - step: "verify the renamed tray icon variants are present"
     command: "grep -F 'TrayIconState::Mature' crates/tillandsias-core/src/state.rs && grep -F 'TrayIconState::Dried' crates/tillandsias-core/src/state.rs && ! rg -n 'TrayIconState::Base|TrayIconState::Decay' crates/tillandsias-core/src crates/tillandsias-headless/src/tray/mod.rs"

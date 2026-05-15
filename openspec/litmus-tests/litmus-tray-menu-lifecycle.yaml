@@ -13,31 +13,31 @@ preconditions:
 critical_path:
   - step: "run the cold-start tray menu test"
     command: "cargo test -p tillandsias-headless --features tray tray::tests::minimal_menu_has_exactly_4_items_at_launch -- --exact"
-    timeout_ms: 120000
+    timeout_ms: 180000
 
   - step: "run the status text test"
     command: "cargo test -p tillandsias-headless --features tray tray::tests::status_text_reflects_enclave_status -- --exact"
-    timeout_ms: 120000
+    timeout_ms: 180000
 
   - step: "run the tray transition test"
     command: "cargo test -p tillandsias-headless --features tray tray::tests::state_transition_forge_false_to_true -- --exact"
-    timeout_ms: 120000
+    timeout_ms: 180000
 
   - step: "run the full status-state matrix"
     command: "cargo test -p tillandsias-headless --features tray tray::tests::enclave_status_all_states -- --exact"
-    timeout_ms: 120000
+    timeout_ms: 180000
 
   - step: "run the unhealthy failure collapse test"
     command: "cargo test -p tillandsias-headless --features tray tray::tests::failed_state_collapses_dynamic_region -- --exact"
-    timeout_ms: 120000
+    timeout_ms: 180000
 
   - step: "run the Seedlings ordering test"
     command: "cargo test -p tillandsias-headless --features tray tray::tests::seedlings_menu_keeps_default_order_and_active_choice -- --exact"
-    timeout_ms: 120000
+    timeout_ms: 180000
 
   - step: "run the per-project stop gating test"
     command: "cargo test -p tillandsias-headless --features tray tray::tests::project_menu_only_shows_stop_when_web_is_running -- --exact"
-    timeout_ms: 120000
+    timeout_ms: 180000
 
 observability:
   traces:

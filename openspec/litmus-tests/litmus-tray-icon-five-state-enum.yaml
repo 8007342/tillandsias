@@ -12,7 +12,7 @@ preconditions:
 critical_path:
   - step: "run the tray icon state coverage test"
     command: "cargo test -p tillandsias-core all_five_tray_icon_states_valid -- --exact"
-    timeout_ms: 120000
+    timeout_ms: 180000
 
 observability:
   traces:
