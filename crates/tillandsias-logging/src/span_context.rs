@@ -251,8 +251,8 @@ impl SpanContextBuilder {
     /// Build the span context
     pub fn build(self) -> SpanContext {
         SpanContext {
-            span_id: self.span_id.unwrap_or_else(SpanId::new),
-            trace_id: self.trace_id.unwrap_or_else(TraceId::new),
+            span_id: self.span_id.unwrap_or_default(),
+            trace_id: self.trace_id.unwrap_or_default(),
             parent_span_id: self.parent_span_id,
         }
     }
@@ -267,7 +267,7 @@ impl Default for SpanContextBuilder {
 // Thread-local storage for the current span context
 // Enables automatic propagation without explicit passing
 thread_local! {
-    static CURRENT_SPAN: std::cell::RefCell<Option<Arc<SpanContext>>> = std::cell::RefCell::new(None);
+    static CURRENT_SPAN: std::cell::RefCell<Option<Arc<SpanContext>>> = const { std::cell::RefCell::new(None) };
 }
 
 /// Set the current span context for the thread

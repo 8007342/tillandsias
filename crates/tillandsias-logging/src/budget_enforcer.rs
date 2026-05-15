@@ -187,20 +187,20 @@ impl BudgetEnforcer {
         }
 
         // Check per-spec budget if applicable
-        if let Some(spec_name) = &spec_name {
+        if let Some(spec_name) = &spec_name
+            && let Some(spec_cost) = state.spec_costs.get(spec_name)
+        {
             let spec_budget = self.get_spec_budget(spec_name);
-            if let Some(spec_cost) = state.spec_costs.get(spec_name) {
-                if *spec_cost > spec_budget
-                    && !state
-                        .spec_warnings_issued
-                        .get(spec_name)
-                        .copied()
-                        .unwrap_or(false)
-                {
-                    state.spec_warnings_issued.insert(spec_name.clone(), true);
-                    state.violations += 1;
-                    should_warn = true;
-                }
+            if *spec_cost > spec_budget
+                && !state
+                    .spec_warnings_issued
+                    .get(spec_name)
+                    .copied()
+                    .unwrap_or(false)
+            {
+                state.spec_warnings_issued.insert(spec_name.clone(), true);
+                state.violations += 1;
+                should_warn = true;
             }
         }
 

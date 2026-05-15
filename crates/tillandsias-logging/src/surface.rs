@@ -271,7 +271,7 @@ impl ObservabilityAPI {
     pub async fn aggregate(&self, entries: Vec<AggregatedLogEntry>) -> Result<AggregationResult> {
         // Sort by timestamp for aggregation
         let mut sorted_entries = entries;
-        sorted_entries.sort_by(|a, b| a.entry.timestamp.cmp(&b.entry.timestamp));
+        sorted_entries.sort_by_key(|a| a.entry.timestamp);
 
         // Track source counts
         let mut source_counts = HashMap::new();

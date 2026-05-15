@@ -33,7 +33,7 @@ impl ContainerSource {
 }
 
 /// Filter criteria for aggregating logs
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct AggregationFilter {
     /// Optional container names to include (if empty, include all)
     pub containers: Vec<String>,
@@ -43,17 +43,6 @@ pub struct AggregationFilter {
     pub specs: Vec<String>,
     /// Optional log levels to include (if empty, include all)
     pub levels: Vec<String>,
-}
-
-impl Default for AggregationFilter {
-    fn default() -> Self {
-        Self {
-            containers: Vec::new(),
-            components: Vec::new(),
-            specs: Vec::new(),
-            levels: Vec::new(),
-        }
-    }
 }
 
 impl AggregationFilter {
@@ -214,7 +203,7 @@ impl LogAggregator {
         match logs.get(container_id) {
             Some(entries) => {
                 let mut sorted = entries.clone();
-                sorted.sort_by(|a, b| a.entry.timestamp.cmp(&b.entry.timestamp));
+                sorted.sort_by_key(|a| a.entry.timestamp);
                 Ok(sorted)
             }
             None => Ok(Vec::new()),
@@ -261,7 +250,7 @@ impl LogAggregator {
         for entry in all_logs {
             result
                 .entry(entry.container.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(entry);
         }
 
@@ -278,7 +267,7 @@ impl LogAggregator {
         for entry in all_logs {
             result
                 .entry(entry.entry.component.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(entry);
         }
 
@@ -299,7 +288,7 @@ impl LogAggregator {
                 .as_deref()
                 .unwrap_or("unspecified")
                 .to_string();
-            result.entry(spec).or_insert_with(Vec::new).push(entry);
+            result.entry(spec).or_default().push(entry);
         }
 
         Ok(result)

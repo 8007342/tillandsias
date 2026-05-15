@@ -327,7 +327,7 @@ impl PrometheusExporter {
         }
 
         // Write value
-        write!(output, " {}\n", value)?;
+        writeln!(output, " {}", value)?;
 
         Ok(())
     }

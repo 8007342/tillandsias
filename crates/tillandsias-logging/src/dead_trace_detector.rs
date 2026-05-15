@@ -142,27 +142,25 @@ fn walk_directory(
     let skip_dirs = [".git", "target", ".claude"];
 
     if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
-                // Skip certain directories
-                if skip_dirs.iter().any(|skip| file_name == *skip) {
-                    continue;
-                }
+            // Skip certain directories
+            if skip_dirs.contains(&file_name) {
+                continue;
+            }
 
-                if path.is_dir() {
-                    walk_directory(&path, extensions, callback)?;
-                } else {
-                    // Check file extension
-                    let matches_ext = extensions
-                        .iter()
-                        .any(|ext| path.to_str().map(|s| s.ends_with(ext)).unwrap_or(false));
+            if path.is_dir() {
+                walk_directory(&path, extensions, callback)?;
+            } else {
+                // Check file extension
+                let matches_ext = extensions
+                    .iter()
+                    .any(|ext| path.to_str().map(|s| s.ends_with(ext)).unwrap_or(false));
 
-                    if matches_ext {
-                        callback(&path);
-                    }
+                if matches_ext {
+                    callback(&path);
                 }
             }
         }
