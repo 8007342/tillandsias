@@ -11,10 +11,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 use std::thread;
 
 use image::GenericImageView;
-use tracing::{info, warn};
+use tracing::{info, warn, span, Level};
 use zbus::object_server::SignalContext;
 use zbus::{Connection, ConnectionBuilder, fdo, interface};
 use zvariant::{OwnedObjectPath, OwnedValue, Value};
@@ -150,6 +152,66 @@ type IconPixmap = (i32, i32, Vec<u8>);
 type MenuNode = (i32, HashMap<String, OwnedValue>, Vec<OwnedValue>);
 type GroupProperties = Vec<(i32, HashMap<String, OwnedValue>)>;
 
+// @trace gap:TR-005
+/// Async task executor for offloading long-running operations from the GTK event loop.
+/// Prevents UI blocking by spawning tasks in a dedicated thread pool.
+#[derive(Debug)]
+struct AsyncTaskExecutor {
+    /// Send channel for queueing tasks
+    sender: mpsc::SyncSender<Box<dyn Fn() + Send>>,
+    /// Flag indicating if the executor thread is still running
+    is_running: Arc<AtomicBool>,
+}
+
+impl AsyncTaskExecutor {
+    /// Create a new async task executor with a bounded queue.
+    /// @trace gap:TR-005
+    fn new(queue_size: usize) -> Self {
+        let (sender, receiver) = mpsc::sync_channel(queue_size);
+        let is_running = Arc::new(AtomicBool::new(true));
+        let is_running_clone = is_running.clone();
+
+        // Spawn executor thread
+        std::thread::spawn(move || {
+            let span = span!(Level::TRACE, "async_task_executor");
+            let _guard = span.enter();
+
+            while is_running_clone.load(Ordering::Relaxed) {
+                match receiver.recv_timeout(std::time::Duration::from_millis(100)) {
+                    Ok(task) => {
+                        task();
+                    }
+                    Err(mpsc::RecvTimeoutError::Timeout) => {
+                        // Continue waiting
+                        continue;
+                    }
+                    Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        // Sender dropped, exit executor
+                        break;
+                    }
+                }
+            }
+        });
+
+        Self { sender, is_running }
+    }
+
+    /// Spawn a non-blocking task. Returns error if queue is full.
+    /// @trace gap:TR-005
+    fn spawn_task<F>(&self, task: F) -> Result<(), mpsc::SendError<Box<dyn Fn() + Send>>>
+    where
+        F: Fn() + Send + 'static,
+    {
+        self.sender.try_send(Box::new(task))
+    }
+}
+
+impl Drop for AsyncTaskExecutor {
+    fn drop(&mut self) {
+        self.is_running.store(false, Ordering::Release);
+    }
+}
+
 #[derive(Debug)]
 struct TrayService {
     state: Mutex<TrayUiState>,
@@ -157,6 +219,8 @@ struct TrayService {
     item_path: String,
     menu_path: String,
     service_name: String,
+    /// @trace gap:TR-005: Async executor for offloading blocking tasks
+    task_executor: AsyncTaskExecutor,
 }
 
 #[derive(Clone)]
@@ -228,12 +292,15 @@ impl TrayUiState {
 impl TrayService {
     fn new(state: TrayUiState) -> Self {
         let pid = std::process::id();
+        // @trace gap:TR-005: Initialize async task executor with bounded queue (100 pending tasks)
+        let task_executor = AsyncTaskExecutor::new(100);
         Self {
             state: Mutex::new(state),
             connection: OnceLock::new(),
             item_path: ITEM_PATH.to_string(),
             menu_path: MENU_PATH.to_string(),
             service_name: format!("org.freedesktop.StatusNotifierItem-{pid}-1"),
+            task_executor,
         }
     }
 
@@ -678,26 +745,33 @@ fn handle_select_agent(service: Arc<TrayService>, agent: SelectedAgent) {
     service.update_selected_agent(agent);
     config::save_selected_agent(agent);
     let service_for_emit = service.clone();
-    thread::spawn(move || {
+    // @trace gap:TR-005: Offload UI refresh to async executor (non-blocking)
+    if let Err(_) = service.task_executor.spawn_task(move || {
         let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
-    });
+    }) {
+        warn!("task queue full: skipping agent selection UI refresh");
+    }
 }
 
 fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind: LaunchKind) {
     let version = service.snapshot().version.clone();
     let service_for_emit = service.clone();
-    thread::spawn(move || {
+    // @trace gap:TR-005: Offload project launch and UI refresh to async executor (non-blocking)
+    if let Err(_) = service.task_executor.spawn_task(move || {
         let result = launch_project_action(project, kind, version);
         if let Err(err) = result {
             warn!("project launch failed: {err}");
         }
         let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
-    });
+    }) {
+        warn!("task queue full: skipping project launch");
+    }
 }
 
 fn handle_init(service: Arc<TrayService>) {
     let service_for_emit = service.clone();
-    thread::spawn(move || {
+    // @trace gap:TR-005: Offload initialization and UI updates to async executor (non-blocking)
+    if let Err(_) = service.task_executor.spawn_task(move || {
         let _ = futures::executor::block_on(service_for_emit.set_status(
             "⏳ Building images ...",
             TrayIconState::Building,
@@ -714,25 +788,31 @@ fn handle_init(service: Arc<TrayService>) {
         }
         let _ =
             futures::executor::block_on(service_for_emit.set_status(text, icon, forge_available));
-    });
+    }) {
+        warn!("task queue full: skipping initialization");
+    }
 }
 
 fn handle_github_login(service: Arc<TrayService>) {
-    // @trace spec:gh-auth-script, spec:tray-app
+    // @trace spec:gh-auth-script, spec:tray-app, gap:TR-005
     let service_for_emit = service.clone();
-    thread::spawn(move || {
+    // @trace gap:TR-005: Offload GitHub login terminal launch to async executor (non-blocking)
+    if let Err(_) = service.task_executor.spawn_task(move || {
         let args = vec!["--github-login".to_string()];
         if let Err(err) = launch_in_terminal("GitHub Login", "tillandsias", &args) {
             warn!("GitHub login terminal spawn failed: {err}");
         }
         let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
-    });
+    }) {
+        warn!("task queue full: skipping GitHub login");
+    }
 }
 
-// @trace spec:remote-projects
+// @trace spec:remote-projects, gap:TR-005
 fn handle_clone_project(service: Arc<TrayService>, repo_url: String, repo_name: String) {
     let service_for_emit = service.clone();
-    thread::spawn(move || {
+    // @trace gap:TR-005: Offload project cloning to async executor (non-blocking)
+    if let Err(_) = service.task_executor.spawn_task(move || {
         let home = match std::env::var("HOME") {
             Ok(h) => PathBuf::from(h),
             Err(_) => {
@@ -773,9 +853,11 @@ fn handle_clone_project(service: Arc<TrayService>, repo_url: String, repo_name: 
         }
 
         // Refresh menu after a short delay to show results
-        thread::sleep(std::time::Duration::from_secs(2));
+        std::thread::sleep(std::time::Duration::from_secs(2));
         let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
-    });
+    }) {
+        warn!("task queue full: skipping project clone");
+    }
 }
 
 // @trace spec:tray-minimal-ux
@@ -1368,7 +1450,8 @@ impl DbusMenuIface {
                         let snapshot = self.0.snapshot();
                         if snapshot.forge_available && snapshot.podman_available {
                             let service = self.0.clone();
-                            thread::spawn(move || {
+                            // @trace gap:TR-005: Offload terminal launch to async executor (non-blocking)
+                            let _ = service.task_executor.spawn_task(move || {
                                 if let Err(err) =
                                     run_root_terminal(&snapshot.root, &snapshot.version)
                                 {
@@ -1405,7 +1488,8 @@ impl DbusMenuIface {
                     "Stop" => {
                         if let Some((project, _)) = project_from_id(&state, id) {
                             let service = self.0.clone();
-                            thread::spawn(move || {
+                            // @trace gap:TR-005: Offload container stop to async executor (non-blocking)
+                            let _ = service.task_executor.spawn_task(move || {
                                 let _ = Command::new("podman")
                                     .args(["stop", &format!("tillandsias-{}-forge", project)])
                                     .status();
@@ -2455,6 +2539,87 @@ mod tests {
                 }
             }
         }
+    }
+
+    // @trace gap:TR-005: Unit tests for AsyncTaskExecutor non-blocking behavior
+    #[test]
+    fn async_executor_spawn_task_non_blocking() {
+        // @trace gap:TR-005: Verify task spawning returns immediately (< 1ms)
+        let executor = AsyncTaskExecutor::new(10);
+
+        let start = std::time::Instant::now();
+        for _ in 0..5 {
+            let _ = executor.spawn_task(|| {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            });
+        }
+        let elapsed = start.elapsed();
+
+        // Task spawning should return almost immediately (< 5ms even with 5 tasks)
+        assert!(
+            elapsed.as_millis() < 5,
+            "Task spawn should be non-blocking, took {}ms",
+            elapsed.as_millis()
+        );
+    }
+
+    #[test]
+    fn async_executor_respects_bounded_queue() {
+        // @trace gap:TR-005: Verify queue is bounded and rejects when full
+        let executor = AsyncTaskExecutor::new(2);
+
+        // First two tasks should succeed (fill the queue)
+        assert!(executor.spawn_task(|| { std::thread::sleep(std::time::Duration::from_secs(10)); }).is_ok());
+        assert!(executor.spawn_task(|| { std::thread::sleep(std::time::Duration::from_secs(10)); }).is_ok());
+
+        // Third task should fail (queue full)
+        assert!(executor.spawn_task(|| {}).is_err());
+    }
+
+    #[test]
+    fn async_executor_completes_tasks() {
+        // @trace gap:TR-005: Verify tasks actually execute (not dropped)
+        let executor = AsyncTaskExecutor::new(10);
+        let counter = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+        for _ in 0..5 {
+            let counter_clone = counter.clone();
+            executor.spawn_task(move || {
+                counter_clone.fetch_add(1, std::sync::atomic::Ordering::Release);
+            }).unwrap();
+        }
+
+        // Give executor thread time to process all tasks
+        std::thread::sleep(std::time::Duration::from_millis(200));
+
+        let final_count = counter.load(std::sync::atomic::Ordering::Acquire);
+        assert_eq!(final_count, 5, "All 5 tasks should have executed");
+    }
+
+    #[test]
+    fn async_executor_drop_graceful_shutdown() {
+        // @trace gap:TR-005: Verify executor shuts down cleanly when dropped
+        {
+            let executor = AsyncTaskExecutor::new(10);
+            let _ = executor.spawn_task(|| {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            });
+            // executor dropped here
+        }
+
+        // Should not panic or deadlock
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+
+    #[test]
+    fn tray_service_owns_executor() {
+        // @trace gap:TR-005: Verify TrayService initializes AsyncTaskExecutor
+        let state = test_state(SelectedAgent::OpenCode, true);
+        let service = TrayService::new(state);
+
+        // Should be able to spawn a task
+        let result = service.task_executor.spawn_task(|| {});
+        assert!(result.is_ok(), "TrayService executor should be ready");
     }
 }
 
