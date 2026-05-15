@@ -5,6 +5,8 @@
 //! The tray owns the Linux menu/icon surface. Menu actions launch the repo's
 //! existing container entrypoints so the tray stays thin.
 
+pub mod profiler;
+
 use std::collections::HashMap;
 use std::env;
 use std::fs;
