@@ -736,10 +736,20 @@ plan_index:
     - id: release-readiness
       order: 10
       title: Release Readiness — Manual smoke test and final verification
-      status: ready
+      status: needs_clarification
       deliverable: plan/steps/11-release-readiness.md
       depends_on: [p3-backlog]
       specs: []
+      clarification_question: |
+        **Question**: Should agents proceed with the manual smoke test, or should we wait for human execution?
+
+        **Context**: All 661 unit tests pass (automated phase complete). The next step is a human-driven GUI verification test that cannot be fully automated (requires visual inspection of Chromium window, tray icon, network behavior).
+
+        **Decision Needed**:
+        1. Have a human execute `./scripts/smoke-test.sh` and make release go/no-go decision (non-automatable)
+        2. OR: Agents create additional testing/validation that can run pre-release
+
+        **Recommended Default**: Option 1 — proceed with human smoke test execution. Agents cannot validate GUI correctness or make release approval decisions.
       exit_criteria:
         - "Manual smoke test (Test 7) completed successfully"
         - "All acceptance criteria passed"
@@ -747,12 +757,13 @@ plan_index:
         - "Evidence captured (logs, screenshots)"
       tasks:
         - id: release-readiness/manual-smoke-test
-          status: ready
+          status: needs_clarification
           depends_on: [p3-backlog]
           owned_files:
             - plan/steps/11-release-readiness.md
           checkpoint_required: true
-          handoff_note: "Manual smoke test required: build, init, opencode-web, tray verification, graceful shutdown. Full checklist in plan/steps/11-release-readiness.md. ~30 min, human-driven. No automated agent work."
+          clarification_note: "Manual smoke test is non-automatable (requires human GUI verification). Decision: should human execute now, or should agents create pre-release validation tooling?"
+          handoff_note: "Manual smoke test required: build, init, opencode-web, tray verification, graceful shutdown. Automation script available at scripts/smoke-test.sh. ~1.5h, human-driven. No further agent work possible on this step."
 
     - id: post-release-polish
       order: 12
