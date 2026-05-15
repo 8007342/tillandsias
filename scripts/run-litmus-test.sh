@@ -101,7 +101,9 @@ export PATH="$LITMUS_RUNTIME_DIR/bin:$PATH"
 export LITMUS_PODMAN_CALLS_FILE="${LITMUS_PODMAN_CALLS_FILE:-$PROJECT_ROOT/target/litmus-podman/calls.log}"
 
 # Default timeout in seconds (can be overridden via --timeout)
-TIMEOUT_SECONDS=30
+# Increased from 30s to 300s (5 min) for slow tray compilation and runtime tests
+# @trace spec:ci-release, spec:testing
+TIMEOUT_SECONDS=300
 VERBOSE=0
 LIST_ONLY=0
 FILTER_SPEC=""
@@ -290,7 +292,7 @@ get_test_phase() {
 # TEST EXECUTION
 # ============================================================================
 
-# Execute a single command from litmus test with timeout
+# Execute a single command from litmus test with timeout and progress reporting
 execute_test_command() {
     local command="$1"
     local timeout_ms="${2:-${TIMEOUT_SECONDS}000}"
@@ -299,8 +301,9 @@ execute_test_command() {
     # Ensure minimum timeout
     [[ $timeout_sec -lt 1 ]] && timeout_sec=1
 
-    # Run command with timeout
-    timeout "${timeout_sec}s" bash -c "$command" 2>&1 || true
+    # Run command with timeout and progress reporting
+    # @trace spec:testing
+    (timeout "${timeout_sec}s" bash -c "$command" 2>&1) || true
 }
 
 # Check if output matches success/failure criteria
@@ -561,13 +564,23 @@ run_litmus_test_file() {
         local exit_code=0
 
         step_index=$((step_index + 1))
-        step_output=$(timeout "$(( step_timeout_ms / 1000 ))s" bash -c "$step_command" 2>&1) || exit_code=$?
+        local timeout_sec=$(( step_timeout_ms / 1000 ))
+
+        # Progress reporting: show step start and timeout value
+        # Always show progress to prevent user-perceived hangs during long-running tests
+        # @trace spec:testing
+        printf '  [STEP %d/%d] %s (timeout: %ds)...' "$step_index" "${#step_commands[@]}" "$step_name" "$timeout_sec" >&2
+
+        step_output=$(timeout "${timeout_sec}s" bash -c "$step_command" 2>&1) || exit_code=$?
         combined_output+=$'\n'"[${step_index}:${step_name}]${step_output}"
 
         if [[ $exit_code -eq 124 ]]; then
-            log_warn "Test timeout after $(( step_timeout_ms / 1000 ))s in step: ${step_name:-step-${step_index}}"
+            log_warn "Test timeout after ${timeout_sec}s in step: ${step_name:-step-${step_index}}"
             return 1
         fi
+
+        # Progress reporting: show step result
+        printf ' %b[OK]%b\n' "${GREEN}" "${NC}" >&2
 
         if ! behavior_matches_output "$step_output" "$step_expected"; then
             if [[ "$VERBOSE" == "1" ]]; then
@@ -665,6 +678,10 @@ run_tests_for_spec() {
         fi
 
         # Execute test and capture result
+        # Always show which test is executing to prevent user-perceived hangs
+        # @trace spec:testing
+        printf '%bℹ%b Executing %s...\n' "${BLUE}" "${NC}" "$test_name" >&2
+
         if run_litmus_test_file "$test_file" "$spec_id"; then
             log_test_result "$spec_id" "$test_name" "PASS" ""
         else
