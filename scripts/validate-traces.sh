@@ -77,7 +77,7 @@ if [[ "$COVERAGE_THRESHOLD_MODE" != true ]]; then
     spec_name="$(basename "$spec_dir")"
     found="$(grep -rl --include='*.rs' --include='*.sh' --include='*.toml' --include='*.yaml' \
         "spec:${spec_name}" \
-        "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" 2>/dev/null \
+        "$ROOT" "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" 2>/dev/null \
         | head -1)" || true
     if [[ -z "$found" ]]; then
       _warn "orphaned spec '$spec_name' — no annotations"
@@ -87,7 +87,7 @@ if [[ "$COVERAGE_THRESHOLD_MODE" != true ]]; then
   # Format violation check (lightweight)
   FMT_VIOLATIONS=$(grep -rn '@trace' --include='*.rs' --include='*.sh' \
       --exclude-dir='.claude' --exclude-dir='target' \
-      "$ROOT/scripts" "$ROOT/crates" 2>/dev/null \
+      "$ROOT" "$ROOT/scripts" "$ROOT/crates" 2>/dev/null \
     | grep 'spec:')
 
   while IFS= read -r line; do
@@ -238,7 +238,7 @@ if [[ "${1:-}" == "--coverage-threshold" ]]; then
     # Check if this spec has at least one trace annotation
     if grep -rl --include='*.rs' --include='*.sh' --include='*.toml' --include='*.yaml' \
         "spec:${spec_name}" \
-        "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" 2>/dev/null \
+        "$ROOT" "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" 2>/dev/null \
         | grep -q . 2>/dev/null; then
       SPECS_WITH_TRACES=$((SPECS_WITH_TRACES + 1))
     else
