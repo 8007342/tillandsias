@@ -124,7 +124,7 @@ No overlapping file ownership — safe for parallel execution.
 ## Progress (Updated by agents)
 
 - [ ] Team A (OBS-004): Trace coverage CI gate — in progress
-- [ ] Team B (OBS-007): Cross-container span linkage — in progress (fixed type error)
+- [x] Team B (OBS-007): Cross-container span linkage — COMPLETE
 - [x] Team C (TR-007): Rapid project switch test — COMPLETE
 - [ ] Team D (OBS-009): Prometheus metrics export — in progress
 - [ ] CI verification: Pending (all 4 agents complete)
