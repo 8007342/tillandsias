@@ -101,9 +101,9 @@ export PATH="$LITMUS_RUNTIME_DIR/bin:$PATH"
 export LITMUS_PODMAN_CALLS_FILE="${LITMUS_PODMAN_CALLS_FILE:-$PROJECT_ROOT/target/litmus-podman/calls.log}"
 
 # Default timeout in seconds (can be overridden via --timeout)
-# Increased from 30s to 300s (5 min) for slow tray compilation and runtime tests
-# @trace spec:ci-release, spec:testing
-TIMEOUT_SECONDS=300
+# Increased from 30s to 600s (10 min) to handle slow tray feature compilation
+# @trace spec:spec-traceability
+TIMEOUT_SECONDS=600
 VERBOSE=0
 LIST_ONLY=0
 FILTER_SPEC=""
@@ -302,7 +302,7 @@ execute_test_command() {
     [[ $timeout_sec -lt 1 ]] && timeout_sec=1
 
     # Run command with timeout and progress reporting
-    # @trace spec:testing
+    # @trace spec:spec-traceability
     (timeout "${timeout_sec}s" bash -c "$command" 2>&1) || true
 }
 
@@ -568,7 +568,7 @@ run_litmus_test_file() {
 
         # Progress reporting: show step start and timeout value
         # Always show progress to prevent user-perceived hangs during long-running tests
-        # @trace spec:testing
+        # @trace spec:spec-traceability
         printf '  [STEP %d/%d] %s (timeout: %ds)...' "$step_index" "${#step_commands[@]}" "$step_name" "$timeout_sec" >&2
 
         step_output=$(timeout "${timeout_sec}s" bash -c "$step_command" 2>&1) || exit_code=$?
@@ -679,7 +679,7 @@ run_tests_for_spec() {
 
         # Execute test and capture result
         # Always show which test is executing to prevent user-perceived hangs
-        # @trace spec:testing
+        # @trace spec:spec-traceability
         printf '%bℹ%b Executing %s...\n' "${BLUE}" "${NC}" "$test_name" >&2
 
         if run_litmus_test_file "$test_file" "$spec_id"; then

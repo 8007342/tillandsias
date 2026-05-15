@@ -8,3 +8,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [scripts/github-actions-convergence.sh#L2](../../../scripts/github-actions-convergence.sh#L2)
 - [scripts/local-ci.sh#L3](../../../scripts/local-ci.sh#L3)
 - [scripts/local-ci.sh#L831](../../../scripts/local-ci.sh#L831)
+- [scripts/run-litmus-test.sh#L105](../../../scripts/run-litmus-test.sh#L105)
