@@ -3,7 +3,7 @@
 //! Provides `browser.open`, `browser.click`, `browser.type`, etc. over MCP JSON-RPC
 //! stdio transport. Bridges the forge's agents to the host's CDP-driven browser windows.
 //!
-//! @trace spec:host-browser-mcp
+//! @trace spec:host-browser-mcp, spec:browser-debounce, spec:browser-isolation-launcher
 //! @cheatsheet web/mcp.md, web/cdp.md
 
 pub mod allowlist;

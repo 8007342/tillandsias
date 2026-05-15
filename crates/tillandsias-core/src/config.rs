@@ -212,6 +212,7 @@ pub struct SecurityConfig {
 }
 
 /// Auto-updater settings.
+/// @trace spec:update-system
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UpdatesConfig {
     /// How often to check for updates, in hours. Default: 6.

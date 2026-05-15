@@ -172,11 +172,11 @@ pub enum ContainerType {
     Proxy,
     /// Local git mirror service — bare repos + git daemon.
     /// Named `tillandsias-<project>-git-service` — no genus allocation.
-    /// @trace spec:git-mirror-service
+    /// @trace spec:git-mirror-service, spec:persistent-git-service
     GitService,
     /// Local LLM inference service — ollama server.
     /// Named `tillandsias-inference` — shared, not project-specific.
-    /// @trace spec:inference-container
+    /// @trace spec:inference-container, spec:inference-host-side-pull
     Inference,
     /// Chromium browser container for safe/debug browsing.
     /// Named `tillandsias-chromium-<project>-<type>` — no genus allocation.

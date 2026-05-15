@@ -44,7 +44,7 @@ if [[ "$COVERAGE_THRESHOLD_MODE" != true ]]; then
          --exclude-dir='.claude' \
          --exclude-dir='target' \
          --exclude-dir='target-musl' \
-         "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" 2>/dev/null \
+         "$ROOT" "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" 2>/dev/null \
     | grep 'spec:' \
     | grep -oE 'spec:[a-zA-Z0-9_-]+' \
     | sed 's/^spec://' \

@@ -1,4 +1,4 @@
-//! @trace spec:forge-cache-dual, spec:forge-staleness, spec:cache-isolation
+//! @trace spec:forge-cache-dual, spec:forge-staleness, spec:cache-isolation, spec:forge-forward-compat
 //! Cache architecture and semantics for forge containers.
 //!
 //! Tillandsias uses a dual-cache architecture:

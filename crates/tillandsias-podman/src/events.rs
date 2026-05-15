@@ -1,4 +1,4 @@
-// @trace spec:podman-orchestration, spec:cross-platform, spec:wsl-daemon-orchestration
+// @trace spec:podman-orchestration, spec:cross-platform, spec:wsl-daemon-orchestration, spec:fix-windows-extended-path
 
 use std::collections::HashSet;
 use std::time::Duration;

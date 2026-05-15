@@ -1,5 +1,6 @@
 // @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states, spec:tray-icon-lifecycle, spec:security-privacy-isolation, spec:browser-isolation-tray-integration, spec:host-browser-mcp, spec:runtime-logging, spec:logging-levels, spec:remote-projects
 // @trace spec:podman-container-spec, spec:podman-orchestration
+// @trace spec:browser-daemon-tracking, spec:browser-tray-notifications, spec:tray-projects-rename
 //! Native Linux tray service backed by StatusNotifierItem and DBusMenu.
 //!
 //! The tray owns the Linux menu/icon surface. Menu actions launch the repo's

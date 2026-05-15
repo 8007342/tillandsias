@@ -81,11 +81,11 @@ fn main() {
     let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
     let cache_verify = user_args.iter().any(|a| a == "--cache-verify");
 
-    // @trace spec:cli-mode, spec:runtime-diagnostics-stream
+    // @trace spec:cli-mode, spec:runtime-diagnostics-stream, spec:cli-bash-mode, spec:cli-diagnostics
     // --diagnostics implies --debug
     let debug = debug || diagnostics;
 
-    // @trace spec:cli-mode
+    // @trace spec:cli-mode, spec:cli-bash-mode, spec:cli-diagnostics
     let prompt = user_args
         .iter()
         .position(|a| a == "--prompt")
@@ -206,7 +206,7 @@ fn main() {
     // If neither --headless nor --tray specified, auto-detect based on environment
     if !headless && !tray {
         if is_tray_available() {
-            // @trace spec:linux-native-portable-executable, spec:transparent-mode-detection
+            // @trace spec:linux-native-portable-executable, spec:transparent-mode-detection, spec:singleton-guard
             // Native tray support is available — launch tray mode.
             if cfg!(feature = "tray") {
                 if let Err(e) = launch_tray_mode(config_path) {
@@ -229,6 +229,7 @@ fn main() {
     }
 
     // Phase 3, Task 13: Explicit --tray flag support
+    // @trace spec:singleton-guard
     if tray {
         if cfg!(feature = "tray") {
             if let Err(e) = launch_tray_mode(config_path) {
@@ -1462,7 +1463,7 @@ fn build_opencode_forge_args(
 ///
 /// Orchestrate incremental container image builds for Tillandsias.
 ///
-/// @trace spec:init-command, spec:init-incremental-builds, spec:default-image, spec:git-mirror-service, spec:proxy-container, spec:inference-container
+/// @trace spec:init-command, spec:init-incremental-builds, spec:default-image, spec:git-mirror-service, spec:proxy-container, spec:inference-container, spec:build-lock, spec:direct-podman-calls, spec:embedded-scripts
 ///
 /// ## Init Flow
 ///

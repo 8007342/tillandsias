@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tillandsias Installer
 # Usage: curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
-# @trace spec:forge-cache-dual, spec:forge-staleness
+# @trace spec:forge-cache-dual, spec:forge-staleness, spec:install-progress
 #
 # Cache paths created during installation:
 #   ~/.cache/tillandsias/<project>/          - per-project cache (RW, bind-mounted into container)

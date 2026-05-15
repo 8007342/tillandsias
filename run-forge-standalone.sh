@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace spec:forge-standalone, spec:default-image
+# @trace spec:forge-standalone, spec:forge-standalone-runner, spec:default-image
 # @cheatsheet runtime/forge-standalone.md
 
 set -euo pipefail

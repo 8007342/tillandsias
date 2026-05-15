@@ -1,4 +1,4 @@
-// @trace spec:runtime-logging, gap:OBS-021, gap:OBS-022
+// @trace spec:runtime-logging, gap:OBS-021, gap:OBS-022, spec:windows-event-logging
 //! Structured event collection for observability gaps OBS-021 and OBS-022.
 //!
 //! Collects and logs:

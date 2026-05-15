@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pre-commit-openspec.sh — Non-blocking OpenSpec trace warnings (default), CI-mode enforcement
-# @trace spec:spec-traceability, spec:cheatsheet-source-layer
+# @trace spec:spec-traceability, spec:cheatsheet-source-layer, spec:cheatsheet-methodology-evolution
 #
 # PHILOSOPHY: This hook ALWAYS exits 0 by default. It NEVER blocks commits.
 #

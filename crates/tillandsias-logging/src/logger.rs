@@ -1,4 +1,4 @@
-// @trace spec:runtime-logging, spec:logging-levels, spec:external-logs-layer
+// @trace spec:runtime-logging, spec:logging-levels, spec:external-logs-layer, spec:logging-accountability
 use crate::Result;
 use crate::config::LoggingConfig;
 use crate::rotation::RotationPolicy;

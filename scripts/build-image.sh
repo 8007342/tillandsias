@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build container images directly with podman and source-hash caching.
 # Usage: scripts/build-image.sh [forge|web|proxy|git|inference] [--force]
+# @trace spec:forge-standalone-runner
 #
 # This script:
 #   1. Checks if sources have changed since last build (staleness detection)
