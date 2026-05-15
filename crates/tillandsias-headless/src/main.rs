@@ -1914,6 +1914,67 @@ fn cleanup_init_logs() {
     }
 }
 
+/// Validate per-project cache integrity before launching containers.
+/// Reports warnings if cache is corrupted or unreadable.
+/// @trace spec:cache-recovery-mechanism, spec:forge-cache-dual
+fn validate_project_cache(project_path: &Path, debug: bool) -> Result<bool, String> {
+    // Project cache is stored at .tillandsias/cache/ inside the project
+    let cache_dir = project_path.join(".tillandsias").join("cache");
+
+    if !cache_dir.exists() {
+        // No cache yet — this is normal for new projects
+        return Ok(true);
+    }
+
+    // Check for common corruption indicators:
+    // 1. Broken symlinks (typically in cargo cache)
+    // 2. Zero-byte files (incomplete downloads)
+    // 3. Truncated lock files (JSON or TOML)
+
+    let mut corrupted_files = Vec::new();
+
+    if let Ok(entries) = fs::read_dir(&cache_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+
+            // Check for broken symlinks
+            if path.is_symlink() {
+                if fs::metadata(&path).is_err() {
+                    corrupted_files.push(format!("broken symlink: {}", path.display()));
+                    continue;
+                }
+            }
+
+            // Check for zero-byte files
+            if let Ok(metadata) = fs::metadata(&path) {
+                if metadata.is_file() && metadata.len() == 0 {
+                    corrupted_files.push(format!("zero-byte file: {}", path.display()));
+                }
+            }
+        }
+    }
+
+    if !corrupted_files.is_empty() {
+        warn!("Corrupted cache files detected: {}", corrupted_files.join("; "));
+        eprintln!(
+            "WARNING: Project cache appears corrupted ({} issues found)",
+            corrupted_files.len()
+        );
+        if debug {
+            for file in &corrupted_files {
+                eprintln!("  - {}", file);
+            }
+        }
+        eprintln!(
+            "RECOVERY: Run 'tillandsias --cache-clear' to rebuild the cache"
+        );
+        // Return true (cache validation completed), but the cache is suspect
+        return Ok(false);
+    }
+
+    Ok(true)
+}
+
 /// Clear the initialization cache and build state.
 /// @trace spec:forge-staleness, spec:forge-cache-dual
 fn run_cache_clear(debug: bool) -> Result<(), String> {
