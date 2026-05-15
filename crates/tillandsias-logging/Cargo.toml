@@ -18,6 +18,7 @@ thiserror = { workspace = true }
 dirs = { workspace = true }
 parking_lot = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
+regex = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
