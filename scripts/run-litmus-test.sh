@@ -1,6 +1,5 @@
 #!/bin/bash
 # @trace spec:spec-traceability
-# @trace spec:litmus-convergence
 #
 # Tillandsias Litmus Test Execution Runner
 #
