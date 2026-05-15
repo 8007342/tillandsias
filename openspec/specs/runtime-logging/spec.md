@@ -240,6 +240,70 @@ All log entries MUST include an immutable `schema_version` field to enable backw
 - **AND** the migration tool MUST inject `schema_version: "0.9"` or similar legacy marker
 - **AND** all new logs MUST include the current schema version
 
+### Requirement: Secret rotation event logging (OBS-021)
+
+All secret rotation and refresh operations MUST emit structured audit events with complete metadata.
+
+@trace gap:OBS-021 — Secret rotation event logging
+
+#### Scenario: Secret rotation event schema
+- **WHEN** a secret is rotated, refreshed, or provisioned
+- **THEN** a JSON event MUST be emitted with:
+  - `event_type: "secret.rotated"`
+  - `timestamp: <RFC3339>` — UTC time of rotation
+  - `secret_name: "<name>"` — identifier only (e.g., "github-token", "ca-cert"), NO value
+  - `actor: "<component>"` — component performing rotation (e.g., "tillandsias-headless")
+  - `rotation_status: "success|failure"` — outcome
+  - `reason: "<reason>"` — (optional) "expiry", "refresh_threshold", "manual", etc.
+  - `error: "<message>"` — (optional, failure only) error details
+  - `context: {...}` — (optional) additional metadata like retry_count, duration_ms
+
+#### Scenario: No secret values in rotation events
+- **WHEN** a secret rotation event is logged
+- **THEN** the JSON MUST NOT contain any actual secret value
+- **AND** the JSON MUST NOT contain GitHub token prefixes (ghp_, ghu_, ghs_, ghr_)
+- **AND** patterns like "secret_value", "token_value", "password", "private_key" MUST NOT appear
+- **AND** validation MUST use `EventCollector::validate_no_secrets()` before persisting
+
+#### Scenario: Secret rotation event accessibility
+- **WHEN** rotation events are emitted
+- **THEN** they MUST be queryable via log query CLI: `tillandsias logs --filter 'event_type="secret.rotated"'`
+- **AND** filtering by `secret_name` (e.g., `secret_name="github-token"`) MUST work
+- **AND** filtering by `rotation_status` (e.g., `rotation_status="failure"`) MUST work
+
+### Requirement: Image build event logging (OBS-022)
+
+All image build operations MUST emit structured audit events with performance metrics.
+
+@trace gap:OBS-022 — Image build event logging
+
+#### Scenario: Image build event schema
+- **WHEN** a container image is built (forge, proxy, git, inference, etc.)
+- **THEN** a JSON event MUST be emitted with:
+  - `event_type: "image.built"`
+  - `timestamp: <RFC3339>` — UTC time build completed
+  - `image_name: "<name>"` — short name (e.g., "tillandsias-forge", "tillandsias-proxy")
+  - `image_tag: "<full_tag>"` — full tag (e.g., "tillandsias-forge:v1.2.3")
+  - `build_duration_seconds: <float>` — wall-clock time in seconds
+  - `build_status: "success|skipped|failure"` — outcome
+  - `builder: "<type>"` — builder implementation (e.g., "nix-build", "podman-build")
+  - `image_size_bytes: <int>` — (omitted if 0 or skipped) final image size in bytes
+  - `error: "<message>"` — (optional, failure only) error details
+  - `context: {...}` — (optional) additional metadata like cache_hit, layer_count
+
+#### Scenario: Build status semantics
+- **WHEN** a build operation completes
+- **THEN** status MUST be one of:
+  - `"success"` — image was built and landed in podman storage
+  - `"skipped"` — image already existed, build was not needed
+  - `"failure"` — build failed, no image produced
+- **AND** only "success" builds MUST populate `image_size_bytes`
+
+#### Scenario: Build performance observability
+- **WHEN** image build events are logged
+- **THEN** they MUST be queryable by duration: `tillandsias logs --filter 'build_duration_seconds > 60'`
+- **AND** filtering by `image_name`, `builder`, `build_status` MUST work
+- **AND** aggregation MUST support calculating average build time: `tillandsias logs --aggregate 'avg(build_duration_seconds)' --filter 'image_name="tillandsias-forge"'`
 
 ## Sources of Truth
 

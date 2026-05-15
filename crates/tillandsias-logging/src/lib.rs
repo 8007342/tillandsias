@@ -14,7 +14,9 @@ pub mod aggregator;
 pub mod budget_enforcer;
 pub mod cardinality;
 pub mod config;
+pub mod dead_trace_detector;
 pub mod error;
+pub mod event_collector;
 pub mod formatter;
 pub mod log_entry;
 pub mod logger;
@@ -27,7 +29,11 @@ pub mod surface;
 pub use aggregator::{AggregatedLogEntry, AggregationFilter, ContainerSource, LogAggregator};
 pub use budget_enforcer::BudgetEnforcer;
 pub use cardinality::{CardinalityAnalyzer, CardinalityReport};
+pub use dead_trace_detector::{DeadTrace, DeadTraceAudit, extract_dead_specs, find_dead_traces};
 pub use error::{LoggingError, Result};
+pub use event_collector::{
+    EventCollector, EventMetadata, ImageBuildEvent, SecretRotationEvent,
+};
 pub use log_entry::LogEntry;
 pub use logger::Logger;
 pub use query::{AggregationOp, Filter, JsonFilter, Query, QueryExecutor, parse};
