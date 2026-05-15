@@ -130,9 +130,9 @@ No overlapping file ownership — safe for parallel execution.
 
 - [x] Team A (BR-003): Squid .localhost cache_peer — **COMPLETE** (implemented by Team B in OBS-021+OBS-022 commit)
 - [x] Team B (OBS-021, OBS-022): Event coverage — **COMPLETE** (also included BR-003 cache_peer fix)
-- [ ] Team C (OBS-024): Undocumented P3 gap #1 — in progress
+- [x] Team C (OBS-005): Dead trace detection — **COMPLETE** (a4f5f092, a2d22844, 15 tests passing, 226 dead traces detected)
 - [ ] Opus (OBS-025, TR-010): Undocumented P3 gaps #2+#3 — in progress
-- [ ] CI verification: Pending (Team C + Opus completion)
+- [ ] CI verification: Pending (Opus completion + all agents pass)
 
 ---
 
