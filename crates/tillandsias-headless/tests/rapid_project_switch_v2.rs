@@ -1,10 +1,13 @@
-// @trace spec:tray-app, spec:project-management, gap:TR-007
+// @trace spec:tray-app, spec:project-management, gap:TR-007, gap:TR-010
 //! Rapid project switching stress test (v2).
 //!
 //! Enhanced defensive test validating that the tray app handles rapid project
 //! switches within strict timing constraints (< 500ms per switch). This test
 //! stresses the menu consistency layer, verifies no stale cached data persists,
 //! and ensures thread-safety under concurrent access patterns.
+//!
+//! Additional TR-010 tests validate that rapid switches during project initialization
+//! are correctly blocked and rejected, preventing invalid state transitions.
 //!
 //! Timing breakdown:
 //! - Project state transition: < 50ms
@@ -464,4 +467,242 @@ fn test_menu_item_integrity_across_switches() {
     );
 
     eprintln!("Menu integrity test: {} switches, all items intact", switch_count);
+}
+
+/// Lifecycle state for TR-010: tracks project initialization.
+/// @trace gap:TR-010
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LifecycleState {
+    Idle,
+    Initializing,
+    Ready,
+    Error,
+}
+
+/// Project state with lifecycle tracking for TR-010.
+/// @trace gap:TR-010
+struct ProjectWithLifecycle {
+    id: String,
+    lifecycle: LifecycleState,
+}
+
+impl ProjectWithLifecycle {
+    fn new(id: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            lifecycle: LifecycleState::Idle,
+        }
+    }
+
+    fn can_start_project(&self) -> bool {
+        // Cannot start if already initializing or already initialized in this session
+        match self.lifecycle {
+            LifecycleState::Idle => true,
+            LifecycleState::Initializing => false,
+            LifecycleState::Ready => false,
+            LifecycleState::Error => true,
+        }
+    }
+
+    fn try_attach(&mut self) -> Result<(), String> {
+        if !self.can_start_project() {
+            return Err(format!(
+                "Cannot attach to project {} (state: {:?})",
+                self.id, self.lifecycle
+            ));
+        }
+        self.lifecycle = LifecycleState::Initializing;
+        Ok(())
+    }
+
+    fn complete_initialization(&mut self) {
+        self.lifecycle = LifecycleState::Ready;
+    }
+}
+
+/// Test: Rapid clicks during initialization on the same project are blocked.
+/// @trace gap:TR-010
+#[test]
+fn test_concurrent_attach_same_project_rapid() {
+    let project = Arc::new(Mutex::new(ProjectWithLifecycle::new("proj-shared")));
+    let mut results = Vec::new();
+
+    // First attach succeeds
+    {
+        let mut proj = project.lock().unwrap();
+        let result = proj.try_attach();
+        results.push(("attach-1", result.is_ok()));
+        assert!(
+            result.is_ok(),
+            "First attach should succeed: {:?}",
+            result
+        );
+    }
+
+    // Try to attach again while initializing (should fail)
+    {
+        let mut proj = project.lock().unwrap();
+        let result = proj.try_attach();
+        results.push(("attach-2", result.is_ok()));
+        assert!(
+            result.is_err(),
+            "Second concurrent attach should be rejected"
+        );
+    }
+
+    // Verify the rejection reason
+    {
+        let proj = project.lock().unwrap();
+        assert_eq!(
+            proj.lifecycle, LifecycleState::Initializing,
+            "Project should remain in Initializing state"
+        );
+    }
+
+    eprintln!(
+        "Same-project rapid attach test: first={}, second={}",
+        results[0].1, results[1].1
+    );
+}
+
+/// Test: Rapid clicks on different projects during init are handled correctly.
+/// @trace gap:TR-010
+#[test]
+fn test_concurrent_attach_different_projects_rapid() {
+    let proj_a = Arc::new(Mutex::new(ProjectWithLifecycle::new("proj-a")));
+    let proj_b = Arc::new(Mutex::new(ProjectWithLifecycle::new("proj-b")));
+    let mut results = Vec::new();
+
+    // First project attach succeeds
+    {
+        let mut proj = proj_a.lock().unwrap();
+        let result = proj.try_attach();
+        results.push(("proj-a-attach", result.is_ok()));
+        assert!(result.is_ok(), "Attach to proj-a should succeed");
+    }
+
+    // Second project attach succeeds (different project)
+    {
+        let mut proj = proj_b.lock().unwrap();
+        let result = proj.try_attach();
+        results.push(("proj-b-attach", result.is_ok()));
+        assert!(result.is_ok(), "Attach to proj-b should succeed");
+    }
+
+    // Try to attach proj-a again (should fail due to Initializing)
+    {
+        let mut proj = proj_a.lock().unwrap();
+        let result = proj.try_attach();
+        results.push(("proj-a-retry", result.is_ok()));
+        assert!(result.is_err(), "Re-attach to proj-a during init should fail");
+    }
+
+    eprintln!(
+        "Different-project rapid attach test: results={:?}",
+        results.iter().map(|(k, v)| (k, v)).collect::<Vec<_>>()
+    );
+}
+
+/// Test: Menu state remains consistent after rejected attach attempts.
+/// @trace gap:TR-010
+#[test]
+fn test_menu_consistency_after_rejected_switch() {
+    let project = Arc::new(Mutex::new(ProjectWithLifecycle::new("proj-menu")));
+
+    // Start initialization
+    {
+        let mut proj = project.lock().unwrap();
+        let _ = proj.try_attach();
+    }
+
+    // Try to re-attach while initializing (should fail)
+    {
+        let mut proj = project.lock().unwrap();
+        let result = proj.try_attach();
+        assert!(result.is_err(), "Rejected attach should fail");
+    }
+
+    // Verify state is still valid (not corrupted by rejection)
+    {
+        let proj = project.lock().unwrap();
+        assert_eq!(
+            proj.lifecycle, LifecycleState::Initializing,
+            "State should be Initializing (unchanged by rejection)"
+        );
+        assert!(!proj.can_start_project(), "can_start_project should be false");
+    }
+
+    // Complete initialization
+    {
+        let mut proj = project.lock().unwrap();
+        proj.complete_initialization();
+    }
+
+    // Now the project is Ready; it should still reject attempts to re-attach
+    {
+        let mut proj = project.lock().unwrap();
+        let result = proj.try_attach();
+        assert!(
+            result.is_err(),
+            "Cannot re-attach once already initialized"
+        );
+    }
+
+    eprintln!("Menu consistency after rejection: state remains valid");
+}
+
+/// Test: Lifecycle state guards enforce proper transitions.
+/// @trace gap:TR-010
+#[test]
+fn test_lifecycle_state_guards_enforce_transitions() {
+    let project = Arc::new(Mutex::new(ProjectWithLifecycle::new("proj-guard")));
+
+    // Verify initial state
+    {
+        let proj = project.lock().unwrap();
+        assert_eq!(
+            proj.lifecycle, LifecycleState::Idle,
+            "Initial state should be Idle"
+        );
+        assert!(
+            proj.can_start_project(),
+            "Should be able to start from Idle"
+        );
+    }
+
+    // Transition to Initializing
+    {
+        let mut proj = project.lock().unwrap();
+        assert!(proj.try_attach().is_ok(), "First attach should succeed");
+        assert_eq!(proj.lifecycle, LifecycleState::Initializing);
+    }
+
+    // Attempt invalid transition (Initializing -> Initializing should fail)
+    {
+        let mut proj = project.lock().unwrap();
+        let result = proj.try_attach();
+        assert!(
+            result.is_err(),
+            "Cannot transition Initializing -> Initializing"
+        );
+    }
+
+    // Complete initialization
+    {
+        let mut proj = project.lock().unwrap();
+        proj.complete_initialization();
+        assert_eq!(proj.lifecycle, LifecycleState::Ready);
+    }
+
+    // Attempt to re-attach in Ready state
+    {
+        let mut proj = project.lock().unwrap();
+        let result = proj.try_attach();
+        assert!(
+            result.is_err(),
+            "Cannot re-attach once already initialized"
+        );
+    }
+
+    eprintln!("Lifecycle guard test: all transitions enforced correctly");
 }

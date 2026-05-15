@@ -128,11 +128,11 @@ No overlapping file ownership — safe for parallel execution.
 
 ## Progress (Updated by agents)
 
-- [ ] Team A (BR-003): Squid .localhost cache_peer — in progress
-- [ ] Team B (OBS-021, OBS-022): Event coverage — in progress
+- [x] Team A (BR-003): Squid .localhost cache_peer — **COMPLETE** (implemented by Team B in OBS-021+OBS-022 commit)
+- [x] Team B (OBS-021, OBS-022): Event coverage — **COMPLETE** (also included BR-003 cache_peer fix)
 - [ ] Team C (OBS-024): Undocumented P3 gap #1 — in progress
 - [ ] Opus (OBS-025, TR-010): Undocumented P3 gaps #2+#3 — in progress
-- [ ] CI verification: Pending (all 4 agents complete)
+- [ ] CI verification: Pending (Team C + Opus completion)
 
 ---
 
