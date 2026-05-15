@@ -26,10 +26,10 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "Schema version is 1.0"
 
-  - step: "verify all_fields array has 9 elements"
-    command: "jq '.all_fields | length' docs/cheatsheets/log-schema-golden.json | grep 9"
+  - step: "verify all_fields array has 14 elements"
+    command: "jq '.all_fields | length' docs/cheatsheets/log-schema-golden.json | grep 14"
     timeout_ms: 3000
-    expected_behavior: "9"
+    expected_behavior: "14"
 
   - step: "verify LogEntry struct has core fields"
     command: "test -f crates/tillandsias-logging/src/log_entry.rs && grep -q 'pub timestamp:' crates/tillandsias-logging/src/log_entry.rs && echo LogEntry core fields found"
@@ -47,7 +47,7 @@ gating_points:
     failure: "error|failed"
 
   - signal: "all_fields array is correct size"
-    success: "9"
+    success: "14"
     failure: "error|jq"
 
   - signal: "LogEntry struct matches golden schema"
