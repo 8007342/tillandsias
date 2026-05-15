@@ -119,11 +119,17 @@ No overlapping file ownership — safe for parallel execution.
 
 ## Progress (Updated by agents)
 
-- [ ] Team A (ON-009): GitHub token refresh
+- [x] Team A (ON-009): GitHub token refresh — completed d80e2d2a
+  - Spawns as background task, 1s timeout, non-blocking on startup
+  - Uses gh CLI to read token from OS keyring (GNOME Keyring)
+  - Detects expiry via GitHub API /user endpoint
+  - 5 existing tests pass + 8 new secrets module unit tests
+  - All 27 headless tests pass + signal handling tests pass
+  
 - [x] Team B (ON-010): Dependency resolver UX — completed bf62d384
 - [x] Team C (TR-006): Cache eviction — completed
 - [x] Team D (OBS-002): Log query language — completed 9a8e25d0
-- [ ] CI verification: Pending Team A completion
+- [x] CI verification: ALL TESTS PASSING (cargo test --workspace + ./build.sh --test)
 
 ---
 
