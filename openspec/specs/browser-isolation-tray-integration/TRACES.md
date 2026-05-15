@@ -76,7 +76,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/config-overlay/mcp/project-info.sh#L255](../../../images/default/config-overlay/mcp/project-info.sh#L255)
 - [images/default/Containerfile#L70](../../../images/default/Containerfile#L70)
 - [images/default/entrypoint-forge-opencode-web.sh#L12](../../../images/default/entrypoint-forge-opencode-web.sh#L12)
-- [images/default/entrypoint-forge-opencode-web.sh#L122](../../../images/default/entrypoint-forge-opencode-web.sh#L122)
+- [images/default/entrypoint-forge-opencode-web.sh#L137](../../../images/default/entrypoint-forge-opencode-web.sh#L137)
 - [images/default/entrypoint.sh#L15](../../../images/default/entrypoint.sh#L15)
 - [images/default/lib-common.sh#L495](../../../images/default/lib-common.sh#L495)
 - [scripts/run-safe-browser.sh#L2](../../../scripts/run-safe-browser.sh#L2)

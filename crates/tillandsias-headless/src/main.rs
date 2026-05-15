@@ -3369,9 +3369,9 @@ fn run_evidence_bundle_retention() {
             }
 
             // Check modification time
-            if let Ok(metadata) = fs::metadata(&path) {
-                if let Ok(modified) = metadata.modified() {
-                    if modified < cutoff {
+            if let Ok(metadata) = fs::metadata(&path)
+                && let Ok(modified) = metadata.modified()
+                    && modified < cutoff {
                         // Bundle is older than retention window; delete it
                         if let Ok(()) = fs::remove_file(&path) {
                             deleted_count += 1;
@@ -3389,8 +3389,6 @@ fn run_evidence_bundle_retention() {
                             );
                         }
                     }
-                }
-            }
         }
     }
 

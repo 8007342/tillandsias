@@ -70,4 +70,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/tray/mod.rs#L1](../../../crates/tillandsias-headless/src/tray/mod.rs#L1)
 - [crates/tillandsias-podman/src/peer_table.rs#L8](../../../crates/tillandsias-podman/src/peer_table.rs#L8)
 - [images/default/config-overlay/mcp/host-browser.sh#L8](../../../images/default/config-overlay/mcp/host-browser.sh#L8)
-- [images/default/entrypoint-forge-opencode-web.sh#L41](../../../images/default/entrypoint-forge-opencode-web.sh#L41)
+- [images/default/entrypoint-forge-opencode-web.sh#L49](../../../images/default/entrypoint-forge-opencode-web.sh#L49)

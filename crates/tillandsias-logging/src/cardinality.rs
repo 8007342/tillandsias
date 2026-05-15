@@ -91,7 +91,7 @@ impl CardinalityAnalyzer {
 
                         field_values
                             .entry(key.clone())
-                            .or_insert_with(HashSet::new)
+                            .or_default()
                             .insert(value_str);
                     }
                 }
@@ -101,7 +101,7 @@ impl CardinalityAnalyzer {
                     if let Some(val) = json.get(key).and_then(|v| v.as_str()) {
                         field_values
                             .entry(key.to_string())
-                            .or_insert_with(HashSet::new)
+                            .or_default()
                             .insert(val.to_string());
                     }
                 }
@@ -114,7 +114,8 @@ impl CardinalityAnalyzer {
         let mut high_cardinality = Vec::new();
         for (field_name, values) in field_values {
             if values.len() > self.high_cardinality_threshold {
-                let mut sample_values: Vec<String> = values.iter().take(self.max_samples).cloned().collect();
+                let mut sample_values: Vec<String> =
+                    values.iter().take(self.max_samples).cloned().collect();
                 sample_values.sort();
 
                 high_cardinality.push(HighCardinalityField {
@@ -161,13 +162,16 @@ impl CardinalityAnalyzer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
     use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[tokio::test]
     async fn test_cardinality_analyzer_empty_file() {
         let analyzer = CardinalityAnalyzer::default();
-        let report = analyzer.analyze_log_file(Path::new("/nonexistent/path")).await.unwrap();
+        let report = analyzer
+            .analyze_log_file(Path::new("/nonexistent/path"))
+            .await
+            .unwrap();
 
         assert_eq!(report.total_entries, 0);
         assert!(report.high_cardinality_fields.is_empty());
@@ -200,7 +204,8 @@ mod tests {
         assert!(!report.high_cardinality_fields.is_empty());
 
         // Check that container_id was detected as high-cardinality
-        let container_field = report.high_cardinality_fields
+        let container_field = report
+            .high_cardinality_fields
             .iter()
             .find(|f| f.field_name == "container_id");
         assert!(container_field.is_some());
@@ -238,13 +243,11 @@ mod tests {
         let analyzer = CardinalityAnalyzer::default();
         let report = CardinalityReport {
             total_entries: 5000,
-            high_cardinality_fields: vec![
-                HighCardinalityField {
-                    field_name: "container_id".to_string(),
-                    unique_count: 2500,
-                    sample_values: vec!["c001".to_string(), "c002".to_string()],
-                },
-            ],
+            high_cardinality_fields: vec![HighCardinalityField {
+                field_name: "container_id".to_string(),
+                unique_count: 2500,
+                sample_values: vec!["c001".to_string(), "c002".to_string()],
+            }],
         };
 
         // Should not panic or error
