@@ -2,8 +2,14 @@
 // Log schema field stability validation tests
 // Prevents silent breaking changes in log field names and types
 
+#[cfg(test)]
 use crate::LogEntry;
+#[cfg(test)]
 use chrono::Utc;
+#[cfg(test)]
+use serde_json::json;
+#[cfg(test)]
+use std::collections::HashMap;
 
 /// Validates that all required core fields are present in LogEntry
 /// @trace gap:OBS-001 — Core field presence validation

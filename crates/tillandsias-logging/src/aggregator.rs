@@ -177,7 +177,7 @@ impl LogAggregator {
             logs.values().flat_map(|v| v.clone()).collect();
 
         // Sort by timestamp ascending (oldest first)
-        all_entries.sort_by(|a, b| a.entry.timestamp.cmp(&b.entry.timestamp));
+        all_entries.sort_by_key(|a| a.entry.timestamp);
         Ok(all_entries)
     }
 
@@ -222,7 +222,7 @@ impl LogAggregator {
             .flat_map(|v| v.clone())
             .collect();
 
-        all_entries.sort_by(|a, b| a.entry.timestamp.cmp(&b.entry.timestamp));
+        all_entries.sort_by_key(|a| a.entry.timestamp);
         Ok(all_entries)
     }
 
@@ -233,7 +233,7 @@ impl LogAggregator {
 
         for (container_id, entries) in logs.iter() {
             let mut sorted = entries.clone();
-            sorted.sort_by(|a, b| a.entry.timestamp.cmp(&b.entry.timestamp));
+            sorted.sort_by_key(|a| a.entry.timestamp);
             result.insert(container_id.clone(), sorted);
         }
 

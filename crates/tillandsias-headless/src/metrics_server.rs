@@ -11,12 +11,11 @@
 //! it into the main headless binary. Integration into run_headless() is deferred
 //! to a separate change (TR-009 or similar).
 
-use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::Mutex;
 use tillandsias_metrics::{MetricsSampler, prometheus_exporter::PrometheusExporter};
-use tracing::{debug, error, info};
+use tracing::info;
 
 /// Metrics server state.
 ///
@@ -24,6 +23,7 @@ use tracing::{debug, error, info};
 #[derive(Debug)]
 pub struct MetricsServerState {
     sampler: Arc<Mutex<MetricsSampler>>,
+    #[allow(dead_code)]
     exporter: PrometheusExporter,
 }
 
@@ -56,6 +56,7 @@ impl Default for MetricsServerState {
 ///
 /// This is the core function that generates Prometheus-formatted metrics text.
 /// It can be called from any HTTP server implementation.
+#[allow(dead_code)]
 pub fn format_prometheus_metrics(state: &MetricsServerState) -> Result<String, String> {
     state
         .sampler

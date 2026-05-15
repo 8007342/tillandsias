@@ -67,15 +67,21 @@ pub struct CdpConnectionPool {
     connection_ttl: Duration,
 }
 
-impl CdpConnectionPool {
-    /// Create a new connection pool with default settings.
-    /// @trace gap:BR-005
-    pub fn new() -> Self {
+impl Default for CdpConnectionPool {
+    fn default() -> Self {
         Self {
             connections: Arc::new(RwLock::new(HashMap::new())),
             max_connections: 32,
             connection_ttl: Duration::from_secs(300), // 5 minutes
         }
+    }
+}
+
+impl CdpConnectionPool {
+    /// Create a new connection pool with default settings.
+    /// @trace gap:BR-005
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Create a pool with custom size and TTL.

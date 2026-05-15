@@ -1514,13 +1514,13 @@ fn build_opencode_forge_args(
 ///
 /// - 0 — All images built successfully (or skipped as cached)
 /// - non-zero — One or more images failed to build (human intervention required)
-
-/// Detect and recover from cache corruption.
+///
+/// ## Cache Corruption Detection and Recovery
 ///
 /// Validates cache files and automatically recovers by:
-/// 1. Warning about corruption
-/// 2. Deleting corrupted cache files (only ephemeral cache, no project state)
-/// 3. Continuing with rebuild on next init
+///   1. Warning about corruption
+///   2. Deleting corrupted cache files (only ephemeral cache, no project state)
+///   3. Continuing with rebuild on next init
 ///
 /// @trace spec:cache-recovery-mechanism
 fn detect_and_recover_cache_corruption(debug: bool) -> Result<bool, String> {
@@ -1541,7 +1541,7 @@ fn detect_and_recover_cache_corruption(debug: bool) -> Result<bool, String> {
                 Ok(contents) => match serde_json::from_str::<InitBuildState>(&contents) {
                     Ok(_) => {
                         // Cache is valid
-                        return Ok(false);
+                        Ok(false)
                     }
                     Err(e) => {
                         // Semantic corruption: JSON parse failed
@@ -1570,7 +1570,7 @@ fn detect_and_recover_cache_corruption(debug: bool) -> Result<bool, String> {
                                 state_file.display()
                             );
                         }
-                        return Ok(true); // Recovery was triggered
+                        Ok(true) // Recovery was triggered
                     }
                 },
                 Err(e) => {
@@ -1594,7 +1594,7 @@ fn detect_and_recover_cache_corruption(debug: bool) -> Result<bool, String> {
                             state_file.display()
                         );
                     }
-                    return Ok(true); // Recovery was triggered
+                    Ok(true) // Recovery was triggered
                 }
             }
         }
@@ -1852,40 +1852,35 @@ fn build_image_with_logging(
 
     if let Some(stdout_reader) = stdout {
         let buf_reader = std::io::BufReader::new(stdout_reader);
-        for line in buf_reader.lines() {
-            #[allow(clippy::if_let_ok_or_else)]
-            if let Ok(line) = line {
-                // Write to log file if present
-                if let Some(ref mut log) = log_handle {
-                    let _ = writeln!(log, "{}", line);
+        for line in buf_reader.lines().map_while(Result::ok) {
+            // Write to log file if present
+            if let Some(ref mut log) = log_handle {
+                let _ = writeln!(log, "{}", line);
+            }
+
+            // @trace gap:ON-005 — parse podman progress indicators
+            // Look for "Pulling" and percentage indicators to compute progress
+            if line.contains("Pulling") || line.contains("Digest:") || line.contains("Loaded image")
+            {
+                // Estimate progress based on visible output
+                if line.contains("Pulling") && progress_percent < 50 {
+                    progress_percent = 50;
+                } else if line.contains("Digest:") && progress_percent < 75 {
+                    progress_percent = 75;
+                } else if line.contains("Loaded image") || line.contains("Commit") {
+                    progress_percent = 100;
                 }
 
-                // @trace gap:ON-005 — parse podman progress indicators
-                // Look for "Pulling" and percentage indicators to compute progress
-                if line.contains("Pulling")
-                    || line.contains("Digest:")
-                    || line.contains("Loaded image")
-                {
-                    // Estimate progress based on visible output
-                    if line.contains("Pulling") && progress_percent < 50 {
-                        progress_percent = 50;
-                    } else if line.contains("Digest:") && progress_percent < 75 {
-                        progress_percent = 75;
-                    } else if line.contains("Loaded image") || line.contains("Commit") {
-                        progress_percent = 100;
-                    }
-
-                    // Emit progress update if it changed significantly
-                    if progress_percent > last_reported + 10 || progress_percent == 100 {
-                        println!(
-                            "Pulling image {} [{}{}] {}%",
-                            image_name,
-                            "█".repeat(progress_percent / 10),
-                            "░".repeat(10 - (progress_percent / 10)),
-                            progress_percent
-                        );
-                        last_reported = progress_percent;
-                    }
+                // Emit progress update if it changed significantly
+                if progress_percent > last_reported + 10 || progress_percent == 100 {
+                    println!(
+                        "Pulling image {} [{}{}] {}%",
+                        image_name,
+                        "█".repeat(progress_percent / 10),
+                        "░".repeat(10 - (progress_percent / 10)),
+                        progress_percent
+                    );
+                    last_reported = progress_percent;
                 }
             }
         }
@@ -3655,7 +3650,6 @@ async fn run_trace_budget_enforcement() {
     match tokio::fs::read_to_string(&log_file).await {
         Ok(contents) => {
             let mut trace_count = 0;
-            let mut warnings_issued = 0;
 
             for line in contents.lines() {
                 // Try to parse each line as a JSON log entry
@@ -3681,15 +3675,14 @@ async fn run_trace_budget_enforcement() {
             // If we found traces, emit a summary
             let (global_cost, violations, warning_issued) = enforcer.window_stats();
             if warning_issued {
-                warnings_issued = violations;
                 eprintln!(
                     "[headless] trace budget enforcement: {} warning(s) issued for cost overages",
-                    warnings_issued
+                    violations
                 );
                 tracing::warn!(
                     gap = "OBS-011",
                     spec = "runtime-logging",
-                    violations = warnings_issued as u32,
+                    violations = violations as u32,
                     global_cost_bytes = global_cost,
                     "trace budget exceeded in current window"
                 );
@@ -3833,6 +3826,7 @@ async fn check_github_token_health() {
 /// Non-blocking: If dependency check fails, startup continues.
 ///
 /// @trace gap:ON-010, spec:forge-environment-discoverability
+#[allow(dead_code)]
 fn run_dependency_check() {
     use std::process::Command;
 
