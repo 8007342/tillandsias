@@ -161,7 +161,7 @@ type GroupProperties = Vec<(i32, HashMap<String, OwnedValue>)>;
 #[derive(Debug)]
 struct AsyncTaskExecutor {
     /// Send channel for queueing tasks
-    sender: mpsc::SyncSender<Box<dyn Fn() + Send>>,
+    sender: mpsc::SyncSender<Box<dyn FnOnce() + Send>>,
     /// Flag indicating if the executor thread is still running
     is_running: Arc<AtomicBool>,
 }
@@ -170,7 +170,7 @@ impl AsyncTaskExecutor {
     /// Create a new async task executor with a bounded queue.
     /// @trace gap:TR-005
     fn new(queue_size: usize) -> Self {
-        let (sender, receiver) = mpsc::sync_channel(queue_size);
+        let (sender, receiver) = mpsc::sync_channel::<Box<dyn FnOnce() + Send>>(queue_size);
         let is_running = Arc::new(AtomicBool::new(true));
         let is_running_clone = is_running.clone();
 
@@ -201,11 +201,11 @@ impl AsyncTaskExecutor {
 
     /// Spawn a non-blocking task. Returns error if queue is full.
     /// @trace gap:TR-005
-    fn spawn_task<F>(&self, task: F) -> Result<(), mpsc::SendError<Box<dyn Fn() + Send>>>
+    fn spawn_task<F>(&self, task: F) -> Result<(), mpsc::SendError<Box<dyn FnOnce() + Send>>>
     where
-        F: Fn() + Send + 'static,
+        F: FnOnce() + Send + 'static,
     {
-        self.sender.try_send(Box::new(task))
+        self.sender.send(Box::new(task))
     }
 }
 
@@ -1453,9 +1453,8 @@ impl DbusMenuIface {
                         let snapshot = self.0.snapshot();
                         if snapshot.forge_available && snapshot.podman_available {
                             let service = self.0.clone();
-                            let executor = &service.task_executor;
                             // @trace gap:TR-005: Offload terminal launch to async executor (non-blocking)
-                            let _ = executor.spawn_task(move || {
+                            let _ = service.task_executor.spawn_task(move || {
                                 if let Err(err) =
                                     run_root_terminal(&snapshot.root, &snapshot.version)
                                 {
