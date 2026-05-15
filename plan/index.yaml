@@ -753,6 +753,30 @@ plan_index:
             - plan/steps/11-release-readiness.md
           checkpoint_required: true
           handoff_note: "Manual smoke test required: build, init, opencode-web, tray verification, graceful shutdown. Full checklist in plan/steps/11-release-readiness.md. ~30 min, human-driven. No automated agent work."
+
+    - id: post-release-polish
+      order: 12
+      title: Wave 25 — Post-Release Polish & P1 Consolidation
+      status: pending
+      deliverable: plan/issues/wave-25-post-release-polish-2026-05-14.md
+      depends_on: [release-readiness]
+      specs: []
+      exit_criteria:
+        - "P1 gap BR-003 (Squid .localhost) implemented"
+        - "P1 gaps OBS-021, OBS-022 (event coverage) implemented"
+        - "2 undocumented P3 gaps identified and implemented"
+        - "All 4 agents report completion"
+        - "./build.sh --test passing with no regressions"
+      tasks:
+        - id: post-release/wave-25-parallel
+          status: pending
+          depends_on: [release-readiness]
+          owned_files:
+            - plan/issues/wave-25-post-release-polish-2026-05-14.md
+            - images/proxy/squid.conf
+            - crates/tillandsias-logging/src/event_collector.rs
+          checkpoint_required: true
+          handoff_note: "Wave 25 post-release polish: 4 parallel agents (A, B, C, Opus) on BR-003 (Squid), OBS-021/22 (events), OBS-024 (P3 #1), OBS-025+TR-010 (P3 #2,#3). All agents identify/implement independently. Merge to linux-next after all 4 complete and CI passes."
       deliverable: plan/steps/09-p3-backlog.md
       depends_on: [implementation-gaps-backlog]
       specs:
