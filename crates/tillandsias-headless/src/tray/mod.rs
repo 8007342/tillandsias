@@ -863,6 +863,32 @@ fn handle_clone_project(service: Arc<TrayService>, repo_url: String, repo_name: 
     }
 }
 
+fn handle_root_terminal(service: Arc<TrayService>, root: PathBuf, version: String) {
+    let service_for_emit = service.clone();
+    // @trace gap:TR-005: Offload terminal launch to async executor (non-blocking)
+    if let Err(_) = service.task_executor.spawn_task(move || {
+        if let Err(err) = run_root_terminal(&root, &version) {
+            warn!("root terminal launch failed: {err}");
+        }
+        let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
+    }) {
+        warn!("task queue full: skipping root terminal");
+    }
+}
+
+fn handle_stop_project(service: Arc<TrayService>, project: String) {
+    let service_for_emit = service.clone();
+    // @trace gap:TR-005: Offload container stop to async executor (non-blocking)
+    if let Err(_) = service.task_executor.spawn_task(move || {
+        let _ = Command::new("podman")
+            .args(["stop", &format!("tillandsias-{}-forge", project)])
+            .status();
+        let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
+    }) {
+        warn!("task queue full: skipping container stop");
+    }
+}
+
 // @trace spec:tray-minimal-ux
 fn build_separator_item(id: i32) -> MenuNode {
     node(
@@ -1452,18 +1478,11 @@ impl DbusMenuIface {
                     "Root Terminal" => {
                         let snapshot = self.0.snapshot();
                         if snapshot.forge_available && snapshot.podman_available {
-                            let service = self.0.clone();
-                            // @trace gap:TR-005: Offload terminal launch to async executor (non-blocking)
-                            let _ = service.task_executor.spawn_task(move || {
-                                if let Err(err) =
-                                    run_root_terminal(&snapshot.root, &snapshot.version)
-                                {
-                                    warn!("root terminal launch failed: {err}");
-                                }
-                                let _ = futures::executor::block_on(
-                                    service.rebuild_after_state_change(),
-                                );
-                            });
+                            handle_root_terminal(
+                                self.0.clone(),
+                                snapshot.root,
+                                snapshot.version,
+                            );
                         }
                     }
                     "Quit Tillandsias" => {
@@ -1490,16 +1509,7 @@ impl DbusMenuIface {
                     }
                     "Stop" => {
                         if let Some((project, _)) = project_from_id(&state, id) {
-                            let service = self.0.clone();
-                            // @trace gap:TR-005: Offload container stop to async executor (non-blocking)
-                            let _ = service.task_executor.spawn_task(move || {
-                                let _ = Command::new("podman")
-                                    .args(["stop", &format!("tillandsias-{}-forge", project)])
-                                    .status();
-                                let _ = futures::executor::block_on(
-                                    service.rebuild_after_state_change(),
-                                );
-                            });
+                            handle_stop_project(self.0.clone(), project);
                         }
                     }
                     "OpenCode Web" | "OpenCode" | "Claude" => {
