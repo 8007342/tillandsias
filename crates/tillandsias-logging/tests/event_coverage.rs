@@ -114,8 +114,8 @@ fn test_event_coverage_obs022_container_metrics_basic() {
 
 #[test]
 fn test_event_coverage_obs022_container_metrics_with_memory() {
-    let mem_used = 768 * 1024 * 1024; // 768 MB
-    let mem_limit = 2048 * 1024 * 1024; // 2 GB
+    let mem_used = 768u64 * 1024 * 1024; // 768 MB
+    let mem_limit = 2048u64 * 1024 * 1024; // 2 GB
 
     let event = ContainerMetricsEvent::new("container-1", "tillandsias-app1", 50)
         .with_memory(mem_used, mem_limit);
@@ -156,8 +156,8 @@ fn test_event_coverage_obs022_container_metrics_with_io() {
 
 #[test]
 fn test_event_coverage_obs022_container_metrics_with_network() {
-    let rx_bytes = 10 * 1024 * 1024; // 10 MB
-    let tx_bytes = 5 * 1024 * 1024; // 5 MB
+    let rx_bytes = 10u64 * 1024 * 1024; // 10 MB
+    let tx_bytes = 5u64 * 1024 * 1024; // 5 MB
 
     let event = ContainerMetricsEvent::new("container-4", "tillandsias-app4", 65)
         .with_network(rx_bytes, tx_bytes);
@@ -176,10 +176,10 @@ fn test_event_coverage_obs022_container_metrics_all_fields() {
         "tillandsias-comprehensive-app",
         75,
     )
-    .with_memory(1024 * 1024 * 1024, 4096 * 1024 * 1024)
+    .with_memory(1024u64 * 1024 * 1024, 4096u64 * 1024 * 1024)
     .with_cpu(62.3, 8)
     .with_io(2048.0 * 1024.0, 1024.0 * 1024.0)
-    .with_network(100 * 1024 * 1024, 50 * 1024 * 1024);
+    .with_network(100u64 * 1024 * 1024, 50u64 * 1024 * 1024);
 
     let json = EventCollector::log_container_metrics(&event).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -191,8 +191,8 @@ fn test_event_coverage_obs022_container_metrics_all_fields() {
     assert_eq!(parsed["cpu_count"], 8);
     assert_eq!(parsed["io_read_bytes_per_sec"], 2048.0 * 1024.0);
     assert_eq!(parsed["io_write_bytes_per_sec"], 1024.0 * 1024.0);
-    assert_eq!(parsed["net_rx_bytes"], 100 * 1024 * 1024);
-    assert_eq!(parsed["net_tx_bytes"], 50 * 1024 * 1024);
+    assert_eq!(parsed["net_rx_bytes"], 100u64 * 1024 * 1024);
+    assert_eq!(parsed["net_tx_bytes"], 50u64 * 1024 * 1024);
     assert_eq!(parsed["wall_clock_ms"], 75);
 }
 
@@ -290,7 +290,7 @@ fn test_event_coverage_mixed_event_types() {
         TrayWindowLifecycleEvent::new("logs-window", "created").with_project("test-app");
 
     let metrics_event = ContainerMetricsEvent::new("container-abc", "tillandsias-test-app", 30)
-        .with_memory(256 * 1024 * 1024, 1024 * 1024 * 1024)
+        .with_memory(256u64 * 1024 * 1024, 1024u64 * 1024 * 1024)
         .with_cpu(25.5, 2);
 
     let window_json = EventCollector::log_window_lifecycle(&window_event).unwrap();
