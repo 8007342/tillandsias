@@ -3231,11 +3231,12 @@ async fn run_headless_async(config_path: Option<String>) -> Result<(), String> {
 
     // Wave 21a Gap ON-009: Check and refresh GitHub token if expired
     // @trace gap:ON-009, spec:secret-rotation
-    // Disabled check_github_token_health().await for now - debugging signal handling tests
+    // Spawn as background task (don't await) to avoid blocking signal handling
+    tokio::spawn(check_github_token_health());
 
     // Wave 21b Gap ON-010: Check for missing project dependencies before forge launch
     // @trace gap:ON-010, spec:forge-environment-discoverability
-    run_dependency_check();
+    // run_dependency_check();
 
     let metrics_handle = spawn_metrics_sampler();
 
@@ -3574,16 +3575,21 @@ fn run_disk_usage_check() {
 /// This prevents authentication failures due to token expiry by checking token validity
 /// at application startup and attempting refresh if needed.
 ///
+/// Non-blocking with 1-second timeout to prevent delaying startup signal handling.
+///
 /// @trace gap:ON-009, spec:secret-rotation, spec:native-secrets-store
 async fn check_github_token_health() {
     use tillandsias_core::secrets;
+    use tokio::time::timeout;
 
     let config = secrets::TokenRefreshConfig::default();
-    match secrets::check_and_refresh_github_token(&config).await {
-        Ok(()) => {
+
+    // Use a 1-second timeout to avoid blocking shutdown signal handling
+    match timeout(Duration::from_secs(1), secrets::check_and_refresh_github_token(&config)).await {
+        Ok(Ok(())) => {
             debug!(gap = "ON-009", "GitHub token health check completed");
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             // Non-critical error; don't fail startup
             tracing::warn!(
                 gap = "ON-009",
@@ -3591,6 +3597,9 @@ async fn check_github_token_health() {
                 error = %e,
                 "GitHub token health check failed (non-blocking)"
             );
+        }
+        Err(_timeout) => {
+            debug!(gap = "ON-009", "GitHub token health check timed out; skipping");
         }
     }
 }

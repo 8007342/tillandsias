@@ -121,9 +121,9 @@ No overlapping file ownership — safe for parallel execution.
 
 - [ ] Team A (ON-009): GitHub token refresh
 - [x] Team B (ON-010): Dependency resolver UX — completed bf62d384
-- [ ] Team C (TR-006): Cache eviction
-- [ ] Team D (OBS-002): Log query language
-- [ ] CI verification: Pending all teams
+- [x] Team C (TR-006): Cache eviction — completed
+- [x] Team D (OBS-002): Log query language — completed 9a8e25d0
+- [ ] CI verification: Pending Team A completion
 
 ---
 
