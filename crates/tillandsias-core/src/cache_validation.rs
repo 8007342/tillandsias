@@ -5,10 +5,10 @@
 //! when corruption is detected. Only ephemeral cache is deleted; project
 //! state is never affected.
 
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use sha2::{Sha256, Digest};
 
 /// SHA256 checksum of a cache file (hex-encoded).
 pub type FileChecksum = String;
@@ -44,8 +44,8 @@ impl ValidationResult {
 /// Returns the checksum as a hex string, or an error if the file cannot be read.
 /// @trace spec:cache-recovery-mechanism
 pub fn compute_file_checksum(path: &Path) -> Result<FileChecksum, String> {
-    let contents = fs::read(path)
-        .map_err(|e| format!("Failed to read file for checksumming: {}", e))?;
+    let contents =
+        fs::read(path).map_err(|e| format!("Failed to read file for checksumming: {}", e))?;
 
     let mut hasher = Sha256::new();
     hasher.update(&contents);
@@ -241,8 +241,8 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("nonexistent.txt");
 
-        let fake_checksum = "0000000000000000000000000000000000000000000000000000000000000000"
-            .to_string();
+        let fake_checksum =
+            "0000000000000000000000000000000000000000000000000000000000000000".to_string();
         let result = validate_cache_file(&file_path, &fake_checksum).unwrap();
 
         assert_eq!(result, ValidationResult::Missing);
@@ -261,7 +261,9 @@ mod tests {
         let checksum = compute_file_checksum(&file_path).unwrap();
 
         let mut state = CacheStateWithChecksums::new();
-        state.file_checksums.insert("init-build-state.json".to_string(), checksum);
+        state
+            .file_checksums
+            .insert("init-build-state.json".to_string(), checksum);
 
         let results = state.validate_all_files(temp_dir.path()).unwrap();
         assert_eq!(results.len(), 1);
@@ -281,7 +283,9 @@ mod tests {
         let original_checksum = compute_file_checksum(&file_path).unwrap();
 
         let mut state = CacheStateWithChecksums::new();
-        state.file_checksums.insert("data.json".to_string(), original_checksum);
+        state
+            .file_checksums
+            .insert("data.json".to_string(), original_checksum);
 
         // Corrupt the file
         let mut file = File::create(&file_path).unwrap();
@@ -307,7 +311,9 @@ mod tests {
         let checksum = compute_file_checksum(&file_path).unwrap();
 
         let mut state = CacheStateWithChecksums::new();
-        state.file_checksums.insert("clean.json".to_string(), checksum);
+        state
+            .file_checksums
+            .insert("clean.json".to_string(), checksum);
 
         assert!(!state.has_corrupted_files(temp_dir.path()).unwrap());
     }

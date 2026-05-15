@@ -7,12 +7,12 @@
 //! - System can rebuild after recovery
 //! - No data loss (only ephemeral cache affected)
 
-use std::fs::{File, self};
+use std::fs::{self, File};
 use std::io::Write;
 use std::path::PathBuf;
 use tempfile::TempDir;
 use tillandsias_core::cache_validation::{
-    compute_file_checksum, validate_cache_file, ValidationResult, CacheStateWithChecksums,
+    CacheStateWithChecksums, ValidationResult, compute_file_checksum, validate_cache_file,
 };
 
 /// Simulate a cache directory with valid and corrupted files.
@@ -47,7 +47,6 @@ impl CacheScenario {
         file.write_all(b"corrupted garbage data!!!")
             .expect("Failed to write garbage");
     }
-
 }
 
 #[test]
@@ -70,8 +69,7 @@ fn test_detect_corrupted_cache_file() {
     let state_path = scenario.create_valid_cache("init-build-state.json", r#"{"images":{}}"#);
 
     // Compute original checksum
-    let original_checksum =
-        compute_file_checksum(&state_path).expect("Failed to compute checksum");
+    let original_checksum = compute_file_checksum(&state_path).expect("Failed to compute checksum");
 
     // Corrupt the file
     scenario.corrupt_file(&state_path);
@@ -94,8 +92,8 @@ fn test_detect_missing_cache_file() {
     let scenario = CacheScenario::new();
     let missing_path = scenario.path().join("nonexistent.json");
 
-    let fake_checksum = "0000000000000000000000000000000000000000000000000000000000000000"
-        .to_string();
+    let fake_checksum =
+        "0000000000000000000000000000000000000000000000000000000000000000".to_string();
     let result = validate_cache_file(&missing_path, &fake_checksum).expect("Failed to validate");
 
     assert_eq!(result, ValidationResult::Missing);
@@ -122,9 +120,11 @@ fn test_cache_recovery_scenario_single_corrupted_file() {
     scenario.corrupt_file(&state_path);
 
     // Now it should be corrupted
-    assert!(validate_cache_file(&state_path, &valid_checksum)
-        .unwrap()
-        .is_corrupted());
+    assert!(
+        validate_cache_file(&state_path, &valid_checksum)
+            .unwrap()
+            .is_corrupted()
+    );
 
     // Recovery: delete the corrupted file
     fs::remove_file(&state_path).expect("Failed to delete corrupted cache");
@@ -198,9 +198,11 @@ fn test_cache_recovery_end_to_end() {
     scenario.corrupt_file(&cache_file);
 
     // Detection phase: identify the corruption
-    assert!(validate_cache_file(&cache_file, &initial_checksum)
-        .unwrap()
-        .is_corrupted());
+    assert!(
+        validate_cache_file(&cache_file, &initial_checksum)
+            .unwrap()
+            .is_corrupted()
+    );
 
     // Recovery phase: delete corrupted cache
     fs::remove_file(&cache_file).expect("Failed to delete corrupted cache");

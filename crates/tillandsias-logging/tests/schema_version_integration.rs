@@ -161,7 +161,10 @@ fn test_schema_version_immutable_across_variations() {
     ];
 
     for entry in entries {
-        assert_eq!(entry.schema_version, "1.0", "Schema version must be 1.0 for all entries");
+        assert_eq!(
+            entry.schema_version, "1.0",
+            "Schema version must be 1.0 for all entries"
+        );
     }
 }
 

@@ -4,8 +4,6 @@
 
 use crate::LogEntry;
 use chrono::Utc;
-use serde_json::json;
-use std::collections::HashMap;
 
 /// Validates that all required core fields are present in LogEntry
 /// @trace gap:OBS-001 — Core field presence validation
@@ -70,8 +68,10 @@ fn test_accountability_serialization_stability() {
 
     let json1 = entry_no_accountability.to_json().unwrap();
     let parsed1: serde_json::Value = serde_json::from_str(&json1).unwrap();
-    assert!(parsed1.get("accountability").is_none(),
-            "Accountability should be omitted when false or None");
+    assert!(
+        parsed1.get("accountability").is_none(),
+        "Accountability should be omitted when false or None"
+    );
 
     // Entry with accountability=true should include field in JSON
     let entry_with_accountability = LogEntry::new(
@@ -84,10 +84,14 @@ fn test_accountability_serialization_stability() {
 
     let json2 = entry_with_accountability.to_json().unwrap();
     let parsed2: serde_json::Value = serde_json::from_str(&json2).unwrap();
-    assert_eq!(parsed2["accountability"], true,
-               "Accountability should be true when explicitly set");
-    assert_eq!(parsed2["category"], "secrets",
-               "Category should be present with accountability");
+    assert_eq!(
+        parsed2["accountability"], true,
+        "Accountability should be true when explicitly set"
+    );
+    assert_eq!(
+        parsed2["category"], "secrets",
+        "Category should be present with accountability"
+    );
 }
 
 /// Validates that all core field names match the golden schema
@@ -114,8 +118,11 @@ fn test_all_core_field_names_present() {
     ];
 
     for field in core_fields {
-        assert!(parsed.get(field).is_some(),
-                "Core field '{}' missing from serialized JSON", field);
+        assert!(
+            parsed.get(field).is_some(),
+            "Core field '{}' missing from serialized JSON",
+            field
+        );
     }
 }
 
@@ -183,9 +190,18 @@ fn test_distributed_tracing_fields_optional() {
     .with_trace_id("550e8400-e29b-41d4-a716-446655440000")
     .with_parent_span_id("fedcba9876543210");
 
-    assert_eq!(entry_full_trace.span_id, Some("0123456789abcdef".to_string()));
-    assert_eq!(entry_full_trace.trace_id, Some("550e8400-e29b-41d4-a716-446655440000".to_string()));
-    assert_eq!(entry_full_trace.parent_span_id, Some("fedcba9876543210".to_string()));
+    assert_eq!(
+        entry_full_trace.span_id,
+        Some("0123456789abcdef".to_string())
+    );
+    assert_eq!(
+        entry_full_trace.trace_id,
+        Some("550e8400-e29b-41d4-a716-446655440000".to_string())
+    );
+    assert_eq!(
+        entry_full_trace.parent_span_id,
+        Some("fedcba9876543210".to_string())
+    );
 
     // Serialized JSON should include tracing fields when set
     let json2 = entry_full_trace.to_json().unwrap();
@@ -303,7 +319,10 @@ fn test_forward_compatible_field_omission() {
 
     // Should deserialize successfully
     let result: Result<LogEntry, _> = serde_json::from_str(json_minimal);
-    assert!(result.is_ok(), "Should deserialize minimal log entry without optional fields");
+    assert!(
+        result.is_ok(),
+        "Should deserialize minimal log entry without optional fields"
+    );
 
     let entry = result.unwrap();
     assert_eq!(entry.schema_version, "1.0");
@@ -332,7 +351,10 @@ fn test_unknown_field_tolerance() {
 
     // serde's default behavior ignores unknown fields
     let result: Result<LogEntry, _> = serde_json::from_str(json_with_unknown);
-    assert!(result.is_ok(), "Should ignore unknown fields during deserialization");
+    assert!(
+        result.is_ok(),
+        "Should ignore unknown fields during deserialization"
+    );
 
     let entry = result.unwrap();
     assert_eq!(entry.message, "log with unknown field");

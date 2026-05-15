@@ -1553,10 +1553,7 @@ fn detect_and_recover_cache_corruption(debug: bool) -> Result<bool, String> {
 
                         // Delete corrupted cache file
                         if let Err(delete_err) = fs::remove_file(&state_file) {
-                            warn!(
-                                "Failed to delete corrupted cache file: {}",
-                                delete_err
-                            );
+                            warn!("Failed to delete corrupted cache file: {}", delete_err);
                             eprintln!(
                                 "WARNING: Failed to delete corrupted cache file: {}",
                                 delete_err
@@ -1568,7 +1565,10 @@ fn detect_and_recover_cache_corruption(debug: bool) -> Result<bool, String> {
                         }
 
                         if debug {
-                            eprintln!("DEBUG: Deleted corrupted cache file: {}", state_file.display());
+                            eprintln!(
+                                "DEBUG: Deleted corrupted cache file: {}",
+                                state_file.display()
+                            );
                         }
                         return Ok(true); // Recovery was triggered
                     }
@@ -1581,10 +1581,7 @@ fn detect_and_recover_cache_corruption(debug: bool) -> Result<bool, String> {
                     eprintln!("  Recovery: Deleting corrupted cache and rebuilding");
 
                     if let Err(delete_err) = fs::remove_file(&state_file) {
-                        warn!(
-                            "Failed to delete unreadable cache file: {}",
-                            delete_err
-                        );
+                        warn!("Failed to delete unreadable cache file: {}", delete_err);
                         return Err(format!(
                             "Cannot recover: failed to delete unreadable cache: {}",
                             delete_err
