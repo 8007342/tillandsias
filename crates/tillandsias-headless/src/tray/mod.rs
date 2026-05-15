@@ -1478,11 +1478,7 @@ impl DbusMenuIface {
                     "Root Terminal" => {
                         let snapshot = self.0.snapshot();
                         if snapshot.forge_available && snapshot.podman_available {
-                            handle_root_terminal(
-                                self.0.clone(),
-                                snapshot.root,
-                                snapshot.version,
-                            );
+                            handle_root_terminal(self.0.clone(), snapshot.root, snapshot.version);
                         }
                     }
                     "Quit Tillandsias" => {
