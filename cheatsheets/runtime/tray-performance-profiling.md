@@ -1,3 +1,17 @@
+---
+tags: [tray, profiling, performance, metrics, rust]
+languages: [rust]
+since: 2026-05-14
+last_verified: 2026-05-14
+sources:
+  - https://doc.rust-lang.org/std/time/
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
 # Tray Performance Profiling
 
 **Use when**: Analyzing tray responsiveness, identifying menu latency regressions, or debugging slow UI operations.
