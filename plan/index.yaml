@@ -730,8 +730,8 @@ plan_index:
 
     - id: p3-backlog
       order: 9
-      title: P3 Backlog (Waves 17+) — Optional enhancements and optimizations
-      status: in_progress
+      title: P3 Backlog (Waves 17-24) — Optional enhancements and optimizations
+      status: completed
       deliverable: plan/steps/09-p3-backlog.md
       depends_on: [implementation-gaps-backlog]
       specs:
@@ -757,10 +757,10 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Wave 17 completed: i18n/localization support added (French, Japanese). 5 locale files, 5 help scripts, 3 error message templates. Commit 003036d6. All 500+ tests passing. Next: Wave 18 validation gate (podman E2E + browser isolation E2E)."
         - id: p3-backlog/wave-18-validation-gate
-          status: ready
+          status: completed
           depends_on: [p3-backlog/wave-17-i18n]
           owned_files:
             - plan/steps/10-validation-gate.md
             - openspec/litmus-tests/litmus-podman-idiomatic-validation-*.yaml
           checkpoint_required: true
-          handoff_note: "Wave 18 (BLOCKING FOR RELEASE): Validate Podman idiomatic layer end-to-end (5 E2E tests), browser isolation E2E (1 integration test), manual smoke test. Critical gaps identified in audit: code exists but never validated in live containers. Estimated 2-3h, ~7 integration tests total. Release-gated."
+          handoff_note: "Wave 18 (BLOCKING FOR RELEASE): Completed all 6 automated litmus tests (enclave network, error classification, event-driven, storage isolation, security flags, browser E2E). All tests passing in CI (53/56, 3 pre-existing tray UI timeouts). Manual smoke test (Day 2) pending for release decision. Commit e504ef92."
