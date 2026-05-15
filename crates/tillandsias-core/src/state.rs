@@ -440,13 +440,24 @@ impl BrowserWindowRegistry {
     /// Register a new browser window in the registry.
     /// Calls the mutation hook if one is set.
     /// Returns the registered metadata.
-    /// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist, spec:subdomain-routing-via-reverse-proxy
+    /// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist, spec:subdomain-routing-via-reverse-proxy, spec:window-lifecycle-concurrency
     pub fn register_window(
         &self,
         window_id: String,
         container_id: String,
         project_label: String,
     ) -> Result<BrowserWindowMetadata, String> {
+        // Validate preconditions
+        if window_id.is_empty() {
+            return Err("window_id cannot be empty".to_string());
+        }
+        if container_id.is_empty() {
+            return Err("container_id cannot be empty".to_string());
+        }
+        if project_label.is_empty() {
+            return Err("project_label cannot be empty".to_string());
+        }
+
         let now = Instant::now();
         let metadata = BrowserWindowMetadata {
             window_id: window_id.clone(),
@@ -462,6 +473,14 @@ impl BrowserWindowRegistry {
             .lock()
             .map_err(|_| "browser window registry lock poisoned".to_string())?;
 
+        // Check if window already registered (prevent duplicate registrations during rapid attach/detach)
+        if windows.contains_key(&window_id) {
+            return Err(format!(
+                "window {} already registered (rapid attach/detach detected)",
+                window_id
+            ));
+        }
+
         windows.insert(window_id.clone(), metadata.clone());
 
         // Call mutation hook after successful registration
@@ -473,11 +492,16 @@ impl BrowserWindowRegistry {
     /// Unregister a browser window from the registry.
     /// Calls the mutation hook if one is set.
     /// Returns the unregistered metadata if it existed.
-    /// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist, spec:subdomain-routing-via-reverse-proxy
+    /// @trace spec:browser-isolation-tray-integration, spec:browser-routing-allowlist, spec:subdomain-routing-via-reverse-proxy, spec:window-lifecycle-concurrency
     pub fn unregister_window(
         &self,
         window_id: &str,
     ) -> Result<Option<BrowserWindowMetadata>, String> {
+        // Validate precondition
+        if window_id.is_empty() {
+            return Err("window_id cannot be empty".to_string());
+        }
+
         let mut windows = self
             .windows
             .lock()
@@ -1681,5 +1705,111 @@ mod tests {
             by_project.get("project1").unwrap()[0].window_id,
             "project1-window-2"
         );
+    }
+
+    // @trace spec:browser-isolation-tray-integration, spec:window-lifecycle-concurrency
+    #[test]
+    fn browser_window_registry_register_with_empty_id_fails() {
+        let registry = BrowserWindowRegistry::new();
+
+        let result = registry.register_window(
+            "".to_string(),
+            "container-1".to_string(),
+            "project1".to_string(),
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("empty"));
+    }
+
+    // @trace spec:browser-isolation-tray-integration, spec:window-lifecycle-concurrency
+    #[test]
+    fn browser_window_registry_register_with_empty_container_fails() {
+        let registry = BrowserWindowRegistry::new();
+
+        let result = registry.register_window(
+            "project1-window-1".to_string(),
+            "".to_string(),
+            "project1".to_string(),
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("empty"));
+    }
+
+    // @trace spec:browser-isolation-tray-integration, spec:window-lifecycle-concurrency
+    #[test]
+    fn browser_window_registry_register_duplicate_fails() {
+        let registry = BrowserWindowRegistry::new();
+
+        // Register first time succeeds
+        let result1 = registry.register_window(
+            "project1-window-1".to_string(),
+            "container-1".to_string(),
+            "project1".to_string(),
+        );
+        assert!(result1.is_ok());
+
+        // Register same window_id again fails (rapid attach/detach detected)
+        let result2 = registry.register_window(
+            "project1-window-1".to_string(),
+            "container-2".to_string(),
+            "project1".to_string(),
+        );
+        assert!(result2.is_err());
+        assert!(result2.unwrap_err().contains("already registered"));
+    }
+
+    // @trace spec:browser-isolation-tray-integration, spec:window-lifecycle-concurrency
+    #[test]
+    fn browser_window_registry_unregister_with_empty_id_fails() {
+        let registry = BrowserWindowRegistry::new();
+
+        let result = registry.unregister_window("");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("empty"));
+    }
+
+    // @trace spec:browser-isolation-tray-integration, spec:window-lifecycle-concurrency
+    #[test]
+    fn browser_window_registry_rapid_attach_detach_20_cycles() {
+        let registry = std::sync::Arc::new(BrowserWindowRegistry::new());
+        let mut handles = vec![];
+
+        // Spawn 5 concurrent windows, each doing 20 rapid attach/detach cycles
+        for window_idx in 0..5 {
+            let reg = std::sync::Arc::clone(&registry);
+            let handle = std::thread::spawn(move || {
+                for cycle in 0..20 {
+                    let window_id = format!("window-{}-cycle-{}", window_idx, cycle);
+                    let container_id = format!("container-{}", window_idx);
+                    let project = format!("project{}", window_idx % 2);
+
+                    // Register
+                    let register_result =
+                        reg.register_window(window_id.clone(), container_id, project.clone());
+                    if register_result.is_err() && cycle > 0 {
+                        // After first cycle, duplicate registrations should fail
+                        continue;
+                    }
+                    assert!(register_result.is_ok(), "register cycle {} failed", cycle);
+
+                    // Update status
+                    let _ = reg.update_status(&window_id, BrowserWindowStatus::Active);
+
+                    // Unregister
+                    let unregister_result = reg.unregister_window(&window_id);
+                    assert!(unregister_result.is_ok(), "unregister cycle {} failed", cycle);
+                }
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all threads
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        // Verify registry is clean (all windows unregistered)
+        let windows = registry.get_windows().unwrap();
+        assert_eq!(windows.len(), 0, "registry should be empty after all cycles");
     }
 }

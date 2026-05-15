@@ -759,15 +759,49 @@ fn handle_select_agent(service: Arc<TrayService>, agent: SelectedAgent) {
 fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind: LaunchKind) {
     let version = service.snapshot().version.clone();
     let service_for_emit = service.clone();
-    // @trace gap:TR-005: Offload project launch and UI refresh to async executor (non-blocking)
+    // @trace gap:TR-005, spec:menu-action-error-handling
+    // Offload project launch and UI refresh to async executor (non-blocking)
+
+    // Guard checks: validate preconditions before launching
+    if project.name.is_empty() {
+        eprintln!("error: cannot launch project with empty name");
+        return;
+    }
+
+    if !project.path.exists() {
+        eprintln!(
+            "error: project path does not exist: {}",
+            project.path.display()
+        );
+        return;
+    }
+
+    // Verify forge image is available
+    let snapshot = service.snapshot();
+    if !snapshot.forge_available {
+        eprintln!(
+            "error: forge image not available for project '{}'; initialization may be in progress",
+            project.name
+        );
+        return;
+    }
+
+    if !snapshot.podman_available {
+        eprintln!("error: podman is not available; cannot launch project '{}'", project.name);
+        return;
+    }
+
     if let Err(_) = service.task_executor.spawn_task(move || {
-        let result = launch_project_action(project, kind, version);
+        let result = launch_project_action(project.clone(), kind, version);
         if let Err(err) = result {
-            warn!("project launch failed: {err}");
+            eprintln!("error: project launch failed for '{}': {}", project.name, err);
         }
         let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
     }) {
-        warn!("task queue full: skipping project launch");
+        eprintln!(
+            "error: task queue full; cannot launch project '{}' (too many concurrent operations)",
+            project.name
+        );
     }
 }
 
@@ -878,14 +912,60 @@ fn handle_root_terminal(service: Arc<TrayService>, root: PathBuf, version: Strin
 
 fn handle_stop_project(service: Arc<TrayService>, project: String) {
     let service_for_emit = service.clone();
-    // @trace gap:TR-005: Offload container stop to async executor (non-blocking)
+    // @trace gap:TR-005, spec:menu-action-error-handling
+    // Offload container stop to async executor (non-blocking)
+    // Guard checks: validate project name and container existence
+    if project.is_empty() {
+        eprintln!("error: cannot stop project with empty name");
+        return;
+    }
+
+    // Verify podman is available before attempting stop
+    let snapshot = service.snapshot();
+    if !snapshot.podman_available {
+        eprintln!("error: podman is not available; cannot stop project '{}'", project);
+        return;
+    }
+
     if let Err(_) = service.task_executor.spawn_task(move || {
-        let _ = Command::new("podman")
-            .args(["stop", &format!("tillandsias-{}-forge", project)])
-            .status();
+        let container_name = format!("tillandsias-{}-forge", project);
+
+        // Guard: verify container exists before stopping
+        let check_output = Command::new("podman")
+            .args(["ps", "-a", "--filter", &format!("name=^{}$", container_name)])
+            .output();
+
+        match check_output {
+            Ok(output) => {
+                if output.stdout.is_empty() || String::from_utf8_lossy(&output.stdout).len() <= 50 {
+                    // No container found (header-only output)
+                    eprintln!("error: container '{}' not found; cannot stop", container_name);
+                } else {
+                    // Container exists, attempt stop
+                    let stop_result = Command::new("podman")
+                        .args(["stop", &container_name])
+                        .status();
+
+                    match stop_result {
+                        Ok(status) => {
+                            if !status.success() {
+                                eprintln!("error: failed to stop container '{}': exit status {}", container_name, status);
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("error: failed to stop container '{}': {}", container_name, e);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("error: failed to check container '{}': {}", container_name, e);
+            }
+        }
+
         let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
     }) {
-        warn!("task queue full: skipping container stop");
+        eprintln!("error: task queue full; cannot stop project '{}'", project);
     }
 }
 

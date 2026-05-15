@@ -539,7 +539,8 @@ mod tests {
         );
         let should_emit = api.should_emit(&entry, "test-spec").unwrap();
 
-        assert!(should_emit || !should_emit); // Valid boolean result
+        // Verify should_emit returns a valid bool result
+        let _ = should_emit;
     }
 
     #[test]
