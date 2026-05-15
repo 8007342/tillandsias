@@ -1,4 +1,4 @@
-// @trace spec:linux-native-portable-executable, spec:runtime-logging, gap:OBS-003, gap:OBS-006
+// @trace spec:linux-native-portable-executable, spec:runtime-logging, gap:OBS-003, gap:OBS-006, gap:OBS-009
 //! Tillandsias native headless app lifecycle launcher.
 //!
 //! Runs containerized development environments without a graphical interface.

@@ -49,6 +49,21 @@ pub struct LogEntry {
     /// @trace gap:OBS-006 — Trace sampling by cost
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sample_rate: Option<f64>,
+
+    /// Span ID for distributed tracing across containers
+    /// @trace gap:OBS-007 — Cross-container span linkage
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub span_id: Option<String>,
+
+    /// Parent span ID for cross-container log linkage
+    /// @trace gap:OBS-007 — Cross-container span linkage
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_span_id: Option<String>,
+
+    /// Trace ID shared across all spans in a distributed trace
+    /// @trace gap:OBS-007 — Cross-container span linkage
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trace_id: Option<String>,
 }
 
 impl LogEntry {
@@ -74,6 +89,9 @@ impl LogEntry {
             category: None,
             safety: None,
             sample_rate: None,
+            span_id: None,
+            parent_span_id: None,
+            trace_id: None,
         }
     }
 
@@ -113,6 +131,38 @@ impl LogEntry {
     /// Set sampling rate metadata
     pub fn with_sample_rate(mut self, rate: f64) -> Self {
         self.sample_rate = Some(rate);
+        self
+    }
+
+    /// Set span ID for distributed tracing
+    /// @trace gap:OBS-007 — Cross-container span linkage
+    pub fn with_span_id(mut self, span_id: impl Into<String>) -> Self {
+        self.span_id = Some(span_id.into());
+        self
+    }
+
+    /// Set parent span ID for cross-container linkage
+    /// @trace gap:OBS-007 — Cross-container span linkage
+    pub fn with_parent_span_id(mut self, parent_span_id: impl Into<String>) -> Self {
+        self.parent_span_id = Some(parent_span_id.into());
+        self
+    }
+
+    /// Set trace ID for distributed tracing
+    /// @trace gap:OBS-007 — Cross-container span linkage
+    pub fn with_trace_id(mut self, trace_id: impl Into<String>) -> Self {
+        self.trace_id = Some(trace_id.into());
+        self
+    }
+
+    /// Attach span context from SpanContext
+    /// @trace gap:OBS-007 — Cross-container span linkage
+    pub fn with_span_context(mut self, ctx: &crate::span_context::SpanContext) -> Self {
+        self.span_id = Some(ctx.span_id().to_string());
+        self.trace_id = Some(ctx.trace_id().to_string());
+        if let Some(parent_id) = ctx.parent_span_id() {
+            self.parent_span_id = Some(parent_id.to_string());
+        }
         self
     }
 
@@ -270,5 +320,130 @@ mod tests {
         assert!(parsed.get("component").is_some());
         assert!(parsed.get("message").is_some());
         assert!(parsed.get("schema_version").is_some());
+    }
+
+    #[test]
+    fn test_log_entry_with_span_ids() {
+        // @trace gap:OBS-007 — Verify span IDs are attached to log entries
+        let entry = LogEntry::new(
+            Utc::now(),
+            "INFO".to_string(),
+            "proxy".to_string(),
+            "cache hit for api.github.com".to_string(),
+        )
+        .with_span_id("0123456789abcdef")
+        .with_trace_id("550e8400-e29b-41d4-a716-446655440000");
+
+        assert_eq!(entry.span_id, Some("0123456789abcdef".to_string()));
+        assert_eq!(
+            entry.trace_id,
+            Some("550e8400-e29b-41d4-a716-446655440000".to_string())
+        );
+    }
+
+    #[test]
+    fn test_log_entry_with_parent_span_id() {
+        // @trace gap:OBS-007 — Verify parent_span_id enables cross-container linkage
+        let entry = LogEntry::new(
+            Utc::now(),
+            "INFO".to_string(),
+            "forge".to_string(),
+            "spawned child process".to_string(),
+        )
+        .with_span_id("abcdef0123456789")
+        .with_parent_span_id("0123456789abcdef")
+        .with_trace_id("550e8400-e29b-41d4-a716-446655440000");
+
+        assert_eq!(entry.span_id, Some("abcdef0123456789".to_string()));
+        assert_eq!(entry.parent_span_id, Some("0123456789abcdef".to_string()));
+        assert_eq!(
+            entry.trace_id,
+            Some("550e8400-e29b-41d4-a716-446655440000".to_string())
+        );
+    }
+
+    #[test]
+    fn test_log_entry_span_context_attachment() {
+        // @trace gap:OBS-007 — Verify span context can be attached to log entries
+        use crate::span_context::SpanContext;
+
+        let ctx = SpanContext::root();
+        let span_id = ctx.span_id();
+        let trace_id = ctx.trace_id();
+
+        let entry = LogEntry::new(
+            Utc::now(),
+            "INFO".to_string(),
+            "git-service".to_string(),
+            "push started".to_string(),
+        )
+        .with_span_context(&ctx);
+
+        assert_eq!(entry.span_id, Some(span_id.to_string()));
+        assert_eq!(entry.trace_id, Some(trace_id.to_string()));
+        assert_eq!(entry.parent_span_id, None);
+    }
+
+    #[test]
+    fn test_log_entry_child_span_context_attachment() {
+        // @trace gap:OBS-007 — Verify child span context includes parent reference
+        use crate::span_context::SpanContext;
+
+        let root = SpanContext::root();
+        let child = root.child_span();
+        let parent_id = root.span_id();
+        let trace_id = root.trace_id();
+
+        let entry = LogEntry::new(
+            Utc::now(),
+            "DEBUG".to_string(),
+            "inference".to_string(),
+            "model inference started".to_string(),
+        )
+        .with_span_context(&child);
+
+        assert_eq!(entry.trace_id, Some(trace_id.to_string()));
+        assert_eq!(entry.parent_span_id, Some(parent_id.to_string()));
+    }
+
+    #[test]
+    fn test_log_entry_span_fields_serialization() {
+        // @trace gap:OBS-007 — Verify span fields serialize correctly to JSON
+        let entry = LogEntry::new(
+            Utc::now(),
+            "INFO".to_string(),
+            "proxy".to_string(),
+            "request routed".to_string(),
+        )
+        .with_span_id("fedcba9876543210")
+        .with_parent_span_id("0123456789abcdef")
+        .with_trace_id("550e8400-e29b-41d4-a716-446655440000");
+
+        let json = entry.to_json().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        // Span fields should be present in JSON
+        assert_eq!(parsed["span_id"], "fedcba9876543210");
+        assert_eq!(parsed["parent_span_id"], "0123456789abcdef");
+        assert_eq!(parsed["trace_id"], "550e8400-e29b-41d4-a716-446655440000");
+    }
+
+    #[test]
+    fn test_log_entry_span_fields_omitted_when_none() {
+        // @trace gap:OBS-007 — Verify span fields are omitted from JSON when not set
+        let entry = LogEntry::new(
+            Utc::now(),
+            "INFO".to_string(),
+            "forge".to_string(),
+            "container started".to_string(),
+        );
+
+        let json = entry.to_json().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        // Span fields should not be present when not set
+        assert!(parsed.get("span_id").is_none());
+        assert!(parsed.get("parent_span_id").is_none());
+        assert!(parsed.get("trace_id").is_none());
     }
 }

@@ -37,6 +37,7 @@ mod dashboard;
 mod error;
 mod models;
 mod sampler;
+pub mod prometheus_exporter;
 
 pub use dashboard::{DashboardSnapshot, emit_dashboard_metric};
 pub use error::MetricsError;
