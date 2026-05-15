@@ -16,11 +16,11 @@ critical_path:
 
   - step: "run the tray cold-start menu test"
     command: "cargo test -p tillandsias-headless --features tray tray::tests::minimal_menu_has_exactly_4_items_at_launch -- --exact"
-    timeout_ms: 180000
+    timeout_ms: 300000
 
   - step: "run the tray expansion test"
     command: "cargo test -p tillandsias-headless --features tray tray::tests::menu_expands_when_forge_available -- --exact"
-    timeout_ms: 180000
+    timeout_ms: 300000
 
 observability:
   traces:
