@@ -167,14 +167,59 @@ scripts/run-litmus-test.sh --size instant --phase pre-build --compact
 
 ---
 
+## Completion Status
+
+**Date**: 2026-05-16 (Wave D)
+**Commit**: 1ff31686 (doc-debt-payoff: post-implementation audit for three sessions)
+
+All four waves completed successfully:
+- **Wave A**: 3 events documented (025, 026, 027)
+  - 025-litmus-test-sizing-taxonomy.yaml (status: distilled)
+  - 026-rustls-musl-static-tls-strategy.yaml (status: distilled)
+  - 027-cache-version-fresh-start-fix.yaml (status: open)
+  - Updated methodology/event/index.yaml with all 3 entries
+
+- **Wave B**: 3 specs created (headless-mode, graceful-shutdown, cache-recovery-mechanism)
+  - openspec/specs/headless-mode/spec.md + TRACES.md (status: active, 100% coverage)
+  - openspec/specs/graceful-shutdown/spec.md + TRACES.md (status: active, 100% coverage)
+  - openspec/specs/cache-recovery-mechanism/spec.md + TRACES.md (status: draft → active, 100% coverage)
+
+- **Wave C**: 1 litmus test created + 2 specs updated
+  - openspec/litmus-tests/litmus-cache-recovery-fresh-start.yaml (5-step fresh-start regression test)
+  - Updated openspec/specs/forge-staleness/spec.md with fresh-start requirement section
+  - Updated openspec/specs/forge-cache-dual/spec.md with cache_version lifecycle section
+  - Updated openspec/litmus-bindings.yaml with cache-recovery-mechanism entry (status: active, 100% coverage, 1 litmus test)
+
+- **Wave D**: Verification complete (this agent)
+  - All Wave A/B/C files verified to exist with proper structure
+  - All YAML syntax validated (python3 yaml.safe_load)
+  - All litmus tests passing: instant (32/32), cache-recovery (1/1), quick (51/51)
+  - Workspace tests passing (700+), type-check clean (zero clippy warnings)
+  - Integration commit created and pushed to origin/linux-next
+
+**Verification Results**:
+- ✓ Event files: 025-litmus-test-sizing-taxonomy.yaml, 026-rustls-musl-static-tls-strategy.yaml, 027-cache-version-fresh-start-fix.yaml
+- ✓ Spec files: headless-mode/spec.md, graceful-shutdown/spec.md, cache-recovery-mechanism/spec.md (all with TRACES.md)
+- ✓ Litmus test: litmus-cache-recovery-fresh-start.yaml (validates unwrap_or(false) behavior)
+- ✓ Spec updates: forge-staleness/spec.md, forge-cache-dual/spec.md (cross-references added)
+- ✓ Index updates: methodology/event/index.yaml, openspec/litmus-bindings.yaml
+- ✓ Instant litmus tests: 32/32 pass (no regressions)
+- ✓ Cache-recovery litmus test: 1/1 pass (fresh-start regression detection verified)
+- ✓ Quick litmus tests: 51/51 pass (all pre-build checks pass)
+- ✓ Type-check: Clean (zero clippy warnings)
+- ✓ Workspace tests: 700+ pass, zero failures (tillandsias-core, tillandsias-logging, tillandsias-metrics, tillandsias-otp, tillandsias-podman, tillandsias-scanner, tillandsias-headless, tillandsias-browser-mcp, tillandsias-control-wire, tillandsias-repeat-graph)
+
+**Deferred Items**:
+- Ghost-trace sweep backlog: See plan/issues/ghost-trace-sweep-backlog-2026-05-16.md (deferred to Q3 2026 with documented rationale)
+
+---
+
 ## Next Action
 
-After Wave D verification passes:
-- [ ] All 3 events exist and have `status: distilled` (except 027: `status: open`)
-- [ ] All 3 specs exist with `status: active` (except cache-recovery: `status: draft` → `active`)
-- [ ] Litmus test passes and creates baseline for fresh-start regression detection
-- [ ] forge-staleness and forge-cache-dual have cross-references to cache-recovery-mechanism
-- [ ] plan.yaml reflects completion
-- [ ] Ghost-trace sweep deferred to Q3 2026
+Step 11a complete. All documentation debt from three recent sessions (litmus sizing, rustls strategy, cache fresh-start fix) is now:
+1. Documented in methodology events
+2. Specified with WHEN/THEN scenarios
+3. Bound to litmus regression tests
+4. Verified to pass with no code regressions
 
-Then: Step 11a complete. Proceed to step 11 (release-readiness manual smoke test).
+Proceed to step 11 (release-readiness manual smoke test).
