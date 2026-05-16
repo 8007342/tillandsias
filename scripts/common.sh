@@ -85,7 +85,14 @@ elif [[ -z "${TILLANDSIAS_PODMAN_REMOTE_URL:-${CONTAINER_HOST:-}}" ]] \
     # tillandsias-* image inventory between two backends and silently breaking
     # the runtime litmus probe.
     PODMAN="$_podman_bin"
-    export TILLANDSIAS_PODMAN_BIN="$_podman_bin"
+    # Deliberately UNSET TILLANDSIAS_PODMAN_BIN here instead of pinning it
+    # to $_podman_bin. The litmus runner (scripts/run-litmus-test.sh) only
+    # prepends its mock wrapper to PATH *after* this script is first sourced
+    # by build.sh; if we pin the binary to /usr/bin/podman now, the Rust
+    # launcher ignores that PATH prepend, runs real podman against a
+    # missing inference container, and the cache-recovery-fresh-start
+    # litmus times out at 20s with "inference offline".
+    unset TILLANDSIAS_PODMAN_BIN
     _stale_wrapper_dir="${TMPDIR:-/tmp}/tillandsias-podman-wrapper"
     case ":$PATH:" in
         *":$_stale_wrapper_dir:"*)

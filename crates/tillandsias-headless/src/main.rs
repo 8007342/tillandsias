@@ -1258,10 +1258,7 @@ async fn caddy_reload_routes(debug: bool) -> Result<(), String> {
             if output.status.success() {
                 if debug {
                     let stdout = String::from_utf8_lossy(&output.stdout);
-                    eprintln!(
-                        "[tillandsias] Caddy reload successful: {}",
-                        stdout.trim()
-                    );
+                    eprintln!("[tillandsias] Caddy reload successful: {}", stdout.trim());
                 }
                 Ok(())
             } else {
@@ -1610,10 +1607,7 @@ fn build_opencode_forge_args(
         // The forge image's opencode-web entrypoint clones the project from the
         // git mirror and execs `opencode serve` (no banner, no TTY); see
         // images/default/entrypoint-forge-opencode-web.sh.
-        ForgeMode::Web => (
-            "/usr/local/bin/entrypoint-forge-opencode-web.sh",
-            "",
-        ),
+        ForgeMode::Web => ("/usr/local/bin/entrypoint-forge-opencode-web.sh", ""),
     };
     args.push("--entrypoint".into());
     args.push(entrypoint.into());
