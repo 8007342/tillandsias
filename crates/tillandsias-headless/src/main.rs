@@ -546,7 +546,7 @@ fn check_cache_integrity(version: &str) -> Result<CacheIntegrityStatus, String> 
     let version_mismatch = cached_version
         .as_ref()
         .map(|v| v != version)
-        .unwrap_or(true);
+        .unwrap_or(false); // No cached version on fresh start is OK, not a mismatch
 
     let missing_state_file = !state_file.exists();
 
