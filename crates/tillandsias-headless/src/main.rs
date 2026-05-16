@@ -1239,42 +1239,43 @@ fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<S
 ///
 /// @trace spec:subdomain-routing-via-reverse-proxy
 async fn caddy_reload_routes(debug: bool) -> Result<(), String> {
-    // Caddy admin API endpoint for config reload.
-    // The router listens on localhost:2019 inside the container, which is
-    // exposed via podman's localhost mapping (same network namespace path).
-    let admin_url = "http://127.0.0.1:2019/reload";
+    // Caddy's admin API binds to 127.0.0.1:2019 *inside* the router container
+    // (per base.Caddyfile). The router only publishes its public listener
+    // (:8080) to the host; the admin port is intentionally not exposed, so
+    // hitting http://127.0.0.1:2019 from the host always gets connection
+    // refused. The canonical reload path is the router-reload.sh script that
+    // ships in the router image — it re-merges base + dynamic Caddyfiles
+    // and runs `caddy reload` inside the container.
+    let mut cmd = std::process::Command::new("podman");
+    cmd.args([
+        "exec",
+        "tillandsias-router",
+        "/usr/local/bin/router-reload.sh",
+    ]);
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-
-    // POST to /reload tells Caddy to reload the merged Caddyfile
-    // (which includes both base.Caddyfile and dynamic.Caddyfile).
-    // The request body is empty; Caddy just re-reads the file on disk.
-    match client.post(admin_url).send().await {
-        Ok(response) => {
-            let status = response.status();
-            if status.is_success() {
+    match cmd.output() {
+        Ok(output) => {
+            if output.status.success() {
                 if debug {
-                    eprintln!("[tillandsias] Caddy reload successful (status: {})", status);
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    eprintln!(
+                        "[tillandsias] Caddy reload successful: {}",
+                        stdout.trim()
+                    );
                 }
                 Ok(())
             } else {
-                // Non-2xx response from admin API. Log as warning but don't fail.
                 if debug {
                     eprintln!(
-                        "[tillandsias] Warning: Caddy reload returned status {}: {}",
-                        status,
-                        response.text().await.unwrap_or_default()
+                        "[tillandsias] Warning: router-reload.sh exited {}: {}",
+                        output.status,
+                        String::from_utf8_lossy(&output.stderr).trim()
                     );
                 }
                 Ok(())
             }
         }
         Err(e) => {
-            // Connection error (router not ready, port not open, etc).
-            // Warn but don't fail — the router may still be initializing.
             if debug {
                 eprintln!(
                     "[tillandsias] Warning: Caddy reload failed (router may not be ready): {}",
@@ -1328,8 +1329,24 @@ async fn ensure_router_running(
         .await
         .map_err(|e| format!("Failed to start router: {e}"))?;
 
+    // Wait for the container to actually transition to "running" before
+    // returning. `podman run -d` returns once the container is created and
+    // the process is forked, but the immediate caller turns around and
+    // calls `caddy_reload_routes` which `podman exec`s into it — racing
+    // ahead of "Up" status yields "container state improper".
+    for _ in 0..20 {
+        match client.inspect_container(ROUTER_NAME).await {
+            Ok(inspect) if inspect.state == "running" => {
+                if debug {
+                    eprintln!("[tillandsias] router container started");
+                }
+                return Ok(());
+            }
+            _ => tokio::time::sleep(std::time::Duration::from_millis(250)).await,
+        }
+    }
     if debug {
-        eprintln!("[tillandsias] router container started");
+        eprintln!("[tillandsias] router container started (state not confirmed running after 5s)");
     }
     Ok(())
 }
@@ -1499,13 +1516,32 @@ fn build_status_check_forge_args(
     args
 }
 
+/// Forge launch mode.
+///
+/// - `Cli`: interactive shell, attaches stdin/tty via --interactive --tty,
+///   default entrypoint /bin/bash. Used by `tillandsias --opencode`.
+/// - `Web`: headless HTTP service, --detach, entrypoint
+///   entrypoint-forge-opencode-web.sh. Used by `tillandsias --opencode-web`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum ForgeMode {
+    Cli,
+    Web,
+}
+
 fn build_opencode_forge_args(
     project_path: &Path,
     project_name: &str,
     prompt: Option<&str>,
     certs_dir: &Path,
     version: &str,
+    mode: ForgeMode,
 ) -> Vec<String> {
+    // CLI mode attaches stdio (--interactive --tty) for a real shell; Web
+    // mode detaches the container so the run() call returns and the host
+    // owns the lifecycle. Forcing --interactive --tty under a non-TTY shell
+    // (the way a tray launch or background script ends up) makes podman
+    // refuse with "input device is not a TTY" before any container start
+    // event fires.
     let mut args = vec![
         "--rm".into(),
         "--name".into(),
@@ -1519,8 +1555,17 @@ fn build_opencode_forge_args(
         "--security-opt=label=disable".into(),
         "--userns=keep-id".into(),
         "--pids-limit=512".into(),
-        "--interactive".into(),
-        "--tty".into(),
+    ];
+    match mode {
+        ForgeMode::Cli => {
+            args.push("--interactive".into());
+            args.push("--tty".into());
+        }
+        ForgeMode::Web => {
+            args.push("--detach".into());
+        }
+    }
+    args.extend([
         "--env".into(),
         "http_proxy=http://proxy:3128".into(),
         "--env".into(),
@@ -1548,19 +1593,29 @@ fn build_opencode_forge_args(
             "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
             certs_dir.join("intermediate.crt").display()
         ),
-    ];
+    ]);
     if let Some(prompt) = prompt {
         args.extend([
             "--env".into(),
             format!("TILLANDSIAS_OPENCODE_PROMPT={prompt}"),
         ]);
     }
-    args.extend([
-        "--entrypoint".into(),
-        "/bin/bash".into(),
-        forge_image_tag(version),
-        "/bin/bash".into(),
-    ]);
+    let (entrypoint, cmd): (&str, &str) = match mode {
+        ForgeMode::Cli => ("/bin/bash", "/bin/bash"),
+        // The forge image's opencode-web entrypoint clones the project from the
+        // git mirror and execs `opencode serve` (no banner, no TTY); see
+        // images/default/entrypoint-forge-opencode-web.sh.
+        ForgeMode::Web => (
+            "/usr/local/bin/entrypoint-forge-opencode-web.sh",
+            "",
+        ),
+    };
+    args.push("--entrypoint".into());
+    args.push(entrypoint.into());
+    args.push(forge_image_tag(version));
+    if !cmd.is_empty() {
+        args.push(cmd.into());
+    }
     args
 }
 
@@ -2842,7 +2897,11 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
 
     let root = find_checkout_root().unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
     let version = VERSION.trim();
-    let project_name = std::path::Path::new(project_path)
+    // `Path::new(".").file_name()` returns None — canonicalize first.
+    let project_path_resolved = std::path::Path::new(project_path)
+        .canonicalize()
+        .unwrap_or_else(|_| std::path::PathBuf::from(project_path));
+    let project_name = project_path_resolved
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("opencode-project");
@@ -2892,6 +2951,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             prompt,
             &certs_dir,
             version,
+            ForgeMode::Cli,
         );
         client
             .run_container(&opencode_args)
@@ -3370,7 +3430,12 @@ pub(crate) fn run_opencode_web_mode(
 
     let root = find_checkout_root().unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
     let version = VERSION.trim();
-    let project_name = std::path::Path::new(project_path)
+    // `Path::new(".").file_name()` returns None — canonicalize first so the
+    // project_name reflects the actual directory the user pointed at.
+    let project_path_resolved = std::path::Path::new(project_path)
+        .canonicalize()
+        .unwrap_or_else(|_| std::path::PathBuf::from(project_path));
+    let project_name = project_path_resolved
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("opencode-project");
@@ -3452,6 +3517,7 @@ pub(crate) fn run_opencode_web_mode(
             prompt,
             &certs_dir,
             version,
+            ForgeMode::Web,
         );
         client
             .run_container(&opencode_args)
@@ -3474,10 +3540,13 @@ pub(crate) fn run_opencode_web_mode(
 
         // Write dynamic Caddyfile with OpenCode Web routes.
         // For now, a single route mapping opencode.<project>.localhost to the web service.
+        // The forge image's opencode-web entrypoint runs `opencode serve --hostname 0.0.0.0
+        // --port 4096` (see images/default/entrypoint-forge-opencode-web.sh:142), so the
+        // router upstream must target 4096 — not 8080, which is the router's own listener.
         let windows = vec![(
             format!("opencode.{}", project_name),
             format!("tillandsias-{}-forge", project_name),
-            8080u16,
+            4096u16,
         )];
         let dynamic_config = generate_dynamic_caddyfile(&windows);
         let dyn_file = router_dynamic_caddyfile_host_path().join("dynamic.Caddyfile");
@@ -4272,6 +4341,7 @@ mod tests {
             Some("hello"),
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
+            ForgeMode::Cli,
         );
 
         assert!(has_arg(&args, "--interactive"));
