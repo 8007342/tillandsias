@@ -661,37 +661,9 @@ log_skip() {
     printf '%b%s%b %s\n' "${BLUE}" "ℹ" "${NC}" "$*"
 }
 
-run_rust_in_nix_develop() {
-    local toolbox_name="${TOOLBOX_NAME:-tillandsias}"
+run_rust_on_host() {
     local repo_root="${REPO_ROOT}"
-    local use_toolbox=0
-    local nix_cmd
-    nix_cmd="mkdir -p \"$HOME/.cache/tillandsias/nix-store\" && cd $(printf '%q' "$repo_root") && nix --store \"local?root=$HOME/.cache/tillandsias/nix-store\" develop --extra-experimental-features nix-command --extra-experimental-features flakes --command"
-    for arg in "$@"; do
-        nix_cmd+=" $(printf '%q' "$arg")"
-    done
-
-    if command -v toolbox >/dev/null 2>&1 && toolbox run -c "$toolbox_name" true >/dev/null 2>&1; then
-        use_toolbox=1
-    fi
-
-    if [[ "$use_toolbox" -eq 1 ]]; then
-        toolbox run -c "$toolbox_name" bash -lc "$nix_cmd"
-        return $?
-    fi
-
-    printf 'WARN: toolbox unavailable; running rust checks directly in the current shell\n' >&2
-    (
-        local cache_home runtime_dir
-        cache_home="$(mktemp -d "${TMPDIR:-/tmp}/tillandsias-ci-cache.XXXXXX")"
-        runtime_dir="$(mktemp -d "${TMPDIR:-/tmp}/tillandsias-ci-runtime.XXXXXX")"
-        trap 'rm -rf "$cache_home" "$runtime_dir"' EXIT
-        export XDG_CACHE_HOME="$cache_home"
-        export XDG_RUNTIME_DIR="$runtime_dir"
-        export DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime_dir/bus"
-        cd "$repo_root"
-        "$@"
-    )
+    (cd "$repo_root" && "$@")
 }
 
 sha256_file() {
@@ -751,14 +723,14 @@ podman_runtime_health_probe() {
         return 1
     fi
 
-    if timeout 5 podman run --rm --userns=host "$probe_image" env \
+    if timeout 5 podman run --rm --userns=host --entrypoint=env "$probe_image" \
         >/dev/null 2>"$probe_log"; then
         return 0
     fi
 
     if grep -Eqi 'newuidmap|read-only file system|acquiring runtime init lock|cannot set up namespace' "$probe_log"; then
         podman system migrate >"$migrate_log" 2>&1 || true
-        if timeout 5 podman run --rm --userns=host "$probe_image" env \
+        if timeout 5 podman run --rm --userns=host --entrypoint=env "$probe_image" \
             >/dev/null 2>>"$probe_log"; then
             return 0
         fi
@@ -856,11 +828,10 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     log_section "Rust Code Quality (fmt, clippy, tests)"
 
     # @trace spec:dev-build, spec:ci-release
-    # Run cargo commands through nix develop inside the toolbox boundary.
-    TOOLBOX_NAME="tillandsias"
+    # Run cargo commands directly on the host workstation.
 
     # Formatting check
-    if run_rust_in_nix_develop cargo fmt --check --all 2>&1 | tee /tmp/fmt-check.log; then
+    if run_rust_on_host cargo fmt --check --all 2>&1 | tee /tmp/fmt-check.log; then
         log_pass "Rust formatting valid"
         archive_check_log "rust-formatting" "pass" /tmp/fmt-check.log
     else
@@ -870,7 +841,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # Clippy check
-    if run_rust_in_nix_develop cargo clippy --workspace -- -D warnings 2>&1 | tee /tmp/clippy-check.log; then
+    if run_rust_on_host cargo clippy --workspace -- -D warnings 2>&1 | tee /tmp/clippy-check.log; then
         log_pass "Clippy checks pass (no warnings)"
         archive_check_log "rust-clippy" "pass" /tmp/clippy-check.log
     else
@@ -879,10 +850,11 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "rust-clippy" "fail" /tmp/clippy-check.log
     fi
 
-    # Tests - run lib tests only (integration tests require GTK headers in the Nix shell)
+    # Tests - run lib tests only; host-sensitive integration suites are covered by
+    # their dedicated litmus/runtime gates rather than the fast deterministic pass.
     # @trace spec:testing
-    if run_rust_in_nix_develop cargo test --workspace --lib 2>&1 | tee /tmp/test-check.log; then
-        log_pass "All unit tests pass (integration tests require the Nix shell)"
+    if run_rust_on_host cargo test --workspace --lib 2>&1 | tee /tmp/test-check.log; then
+        log_pass "All unit tests pass"
         archive_check_log "rust-tests" "pass" /tmp/test-check.log
     else
         log_fail_tracked "rust-tests" "Test failures detected: run 'cargo test --workspace --lib' to see details (see /tmp/test-check.log)"
@@ -892,7 +864,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
 
     # Tray feature contract
     # @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states
-    if run_rust_in_nix_develop cargo test -p tillandsias-headless --bin tillandsias --features tray 2>&1 | tee /tmp/tray-check.log; then
+    if run_rust_on_host cargo test -p tillandsias-headless --bin tillandsias --features tray 2>&1 | tee /tmp/tray-check.log; then
         log_pass "Tray feature tests pass"
         archive_check_log "tray-contract" "pass" /tmp/tray-check.log
     else
@@ -903,7 +875,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
 
     # Headless signal shutdown contract
     # @trace spec:headless-mode, spec:graceful-shutdown
-    if run_rust_in_nix_develop cargo test -p tillandsias-headless --test signal_handling 2>&1 | tee /tmp/signal-handling-check.log; then
+    if run_rust_on_host cargo test -p tillandsias-headless --test signal_handling 2>&1 | tee /tmp/signal-handling-check.log; then
         log_pass "Headless shutdown signal tests pass"
         archive_check_log "signal-handling" "pass" /tmp/signal-handling-check.log
     else

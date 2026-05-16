@@ -7,7 +7,8 @@ _resolve_podman_bin() {
         candidate="$path_entry/podman"
         if [[ -x "$candidate" ]]; then
             case "$candidate" in
-                */target/litmus-runtime/bin/podman)
+                */target/litmus-runtime/bin/podman| \
+                */tillandsias-podman-wrapper/podman)
                     continue
                     ;;
             esac
@@ -48,6 +49,26 @@ _podman_remote_url() {
 _podman_bin="$(_resolve_podman_bin)"
 if [[ -z "$_podman_bin" ]]; then
     PODMAN=podman
+elif [[ -z "${TILLANDSIAS_PODMAN_REMOTE_URL:-${CONTAINER_HOST:-}}" ]] \
+     && timeout 5 "$_podman_bin" info --format '{{.Store.GraphRoot}}' >/dev/null 2>&1; then
+    # Direct podman works under the current environment. Skip the wrapper so
+    # shell-script callers and the Rust binary share one storage view; without
+    # this fast-path the wrapper points scripts at a private /tmp graphroot
+    # while the binary keeps using the user's default store, splitting the
+    # tillandsias-* image inventory between two backends and silently breaking
+    # the runtime litmus probe.
+    PODMAN="$_podman_bin"
+    export TILLANDSIAS_PODMAN_BIN="$_podman_bin"
+    _stale_wrapper_dir="${TMPDIR:-/tmp}/tillandsias-podman-wrapper"
+    case ":$PATH:" in
+        *":$_stale_wrapper_dir:"*)
+            PATH="${PATH//":$_stale_wrapper_dir:"/":"}"
+            PATH="${PATH#"$_stale_wrapper_dir:"}"
+            PATH="${PATH%":$_stale_wrapper_dir"}"
+            export PATH
+            ;;
+    esac
+    unset _stale_wrapper_dir
 else
     _podman_remote_url="$(_podman_remote_url)"
     _podman_wrapper_dir="${TILLANDSIAS_PODMAN_WRAPPER_DIR:-}"

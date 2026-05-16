@@ -60,9 +60,13 @@ _info "Generating evidence bundle ($TIMESTAMP)..."
 _info "Running cargo tests..."
 TEST_RESULTS_FILE="$BUNDLE_STAGING/test-results.json"
 
-if cargo test --workspace --manifest-path "$PROJECT_ROOT/Cargo.toml" \
-    --no-fail-fast 2>&1 | tee "$BUNDLE_STAGING/cargo-test-raw.log" | \
-    grep -q "test result:"; then
+set +e
+cargo test --workspace --manifest-path "$PROJECT_ROOT/Cargo.toml" \
+    --no-fail-fast 2>&1 | tee "$BUNDLE_STAGING/cargo-test-raw.log"
+_cargo_test_status=${PIPESTATUS[0]}
+set -e
+if [[ "$_cargo_test_status" -eq 0 ]] \
+    && grep -q "test result:" "$BUNDLE_STAGING/cargo-test-raw.log"; then
 
     # Parse test results from cargo output
     cat > "$TEST_RESULTS_FILE" <<'EOF'
