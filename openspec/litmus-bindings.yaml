@@ -567,7 +567,7 @@ specs:
   coverage_ratio: 33
   last_verified: '2026-05-15'
 - spec_id: subdomain-routing-via-reverse-proxy
-  status: active
+  status: deprecated
   litmus_tests:
   - litmus:browser-isolation-e2e
   coverage_ratio: 60

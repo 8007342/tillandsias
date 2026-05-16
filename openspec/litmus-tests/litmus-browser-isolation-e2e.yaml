@@ -12,13 +12,13 @@ preconditions:
   - test project directory can be created at /tmp/tillandsias-e2e-test-*
 
 critical_path:
-  - step: "setup: create test project and enclave network"
-    command: "TEST_PROJECT=/tmp/tillandsias-e2e-test-$$; mkdir -p \"$TEST_PROJECT\" && cd \"$TEST_PROJECT\" && git init --quiet && podman network rm -f tillandsias-test-enclave-e2e >/dev/null 2>&1 || true; podman network create --subnet 10.0.43.0/24 tillandsias-test-enclave-e2e >/dev/null && echo TEST_PROJECT=$TEST_PROJECT"
-    timeout_ms: 5000
-    expected_behavior: "TEST_PROJECT=/tmp/tillandsias-e2e-test-"
+  - step: "setup: create test project, enclave network, and ephemeral CA"
+    command: "TEST_PROJECT=/tmp/tillandsias-e2e-test; mkdir -p \"$TEST_PROJECT\" && cd \"$TEST_PROJECT\" && git init --quiet && podman network rm -f tillandsias-test-enclave-e2e >/dev/null 2>&1 || true; podman network create --subnet 10.0.43.0/24 tillandsias-test-enclave-e2e >/dev/null && mkdir -p /tmp/tillandsias-e2e-ca && openssl req -x509 -newkey rsa:2048 -keyout /tmp/tillandsias-e2e-ca/intermediate.key -out /tmp/tillandsias-e2e-ca/intermediate.crt -days 1 -nodes -subj '/CN=tillandsias-e2e-test-ca' >/dev/null 2>&1 && chmod 644 /tmp/tillandsias-e2e-ca/intermediate.crt && chmod 644 /tmp/tillandsias-e2e-ca/intermediate.key && echo TEST_PROJECT=$TEST_PROJECT"
+    timeout_ms: 8000
+    expected_behavior: "TEST_PROJECT=/tmp/tillandsias-e2e-test"
 
   - step: "launch proxy container (Squid forward proxy)"
-    command: "export PROXY_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep tillandsias-proxy | head -1) && [ -n \"$PROXY_IMG\" ] || { echo 'Proxy image not found'; exit 1; } && podman rm -f tillandsias-test-proxy-e2e 2>/dev/null; podman run -d --name tillandsias-test-proxy-e2e --hostname proxy --network tillandsias-test-enclave-e2e --ip 10.0.43.2 --cap-drop=ALL --security-opt=no-new-privileges --userns=keep-id -v /tmp/tillandsias-ca:/etc/squid/certs:ro \"$PROXY_IMG\" 2>&1 | tee /tmp/litmus-proxy-e2e.log | head -1"
+    command: "export PROXY_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep tillandsias-proxy | head -1) && [ -n \"$PROXY_IMG\" ] || { echo 'Proxy image not found'; exit 1; } && podman rm -f tillandsias-test-proxy-e2e 2>/dev/null; podman run -d --name tillandsias-test-proxy-e2e --hostname proxy --network tillandsias-test-enclave-e2e --ip 10.0.43.2 --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id -v /tmp/tillandsias-e2e-ca/intermediate.crt:/etc/squid/certs/intermediate.crt:ro -v /tmp/tillandsias-e2e-ca/intermediate.key:/etc/squid/certs/intermediate.key:ro \"$PROXY_IMG\" 2>&1 | tee /tmp/litmus-proxy-e2e.log | head -1"
     timeout_ms: 10000
     expected_behavior: "container id returned"
 
@@ -28,18 +28,18 @@ critical_path:
     expected_behavior: "OK"
 
   - step: "launch router container (Caddy reverse proxy)"
-    command: "export ROUTER_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep tillandsias-router | head -1) && [ -n \"$ROUTER_IMG\" ] || { echo 'Router image not found'; exit 1; } && podman rm -f tillandsias-test-router-e2e 2>/dev/null; mkdir -p /tmp/tillandsias-router-e2e && podman run -d --name tillandsias-test-router-e2e --hostname router --network tillandsias-test-enclave-e2e --ip 10.0.43.3 --cap-drop=ALL --security-opt=no-new-privileges --userns=keep-id -p 127.0.0.1:8080:80 -v /tmp/tillandsias-router-e2e:/etc/caddy:rw \"$ROUTER_IMG\" caddy run --config /etc/caddy/Caddyfile 2>&1 | tee /tmp/litmus-router-e2e.log | head -1"
+    command: "export ROUTER_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep tillandsias-router | head -1) && [ -n \"$ROUTER_IMG\" ] || { echo 'Router image not found'; exit 1; } && podman rm -f tillandsias-test-router-e2e 2>/dev/null; mkdir -p /tmp/tillandsias-router-e2e && : > /tmp/tillandsias-router-e2e/dynamic.Caddyfile && podman run -d --name tillandsias-test-router-e2e --hostname router --network tillandsias-test-enclave-e2e --ip 10.0.43.3 --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id -p 127.0.0.1:8080:80 -v /tmp/tillandsias-router-e2e:/run/router:rw \"$ROUTER_IMG\" 2>&1 | tee /tmp/litmus-router-e2e.log | head -1"
     timeout_ms: 10000
     expected_behavior: "container id returned"
 
   - step: "launch forge container (dev environment)"
-    command: "export FORGE_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep 'tillandsias-forge' | grep -v router | head -1) && [ -n \"$FORGE_IMG\" ] || { echo 'Forge image not found'; exit 1; } && podman rm -f tillandsias-test-forge-e2e 2>/dev/null; podman run -d --name tillandsias-test-forge-e2e --hostname forge --network tillandsias-test-enclave-e2e --ip 10.0.43.5 --cap-drop=ALL --security-opt=no-new-privileges --userns=keep-id -w /workspace --env HTTP_PROXY=http://proxy:3128 --env HTTPS_PROXY=http://proxy:3128 --env NO_PROXY=localhost,127.0.0.1,proxy,router -v /tmp/tillandsias-e2e-test-$$:/workspace:rw \"$FORGE_IMG\" sleep 3600 2>&1 | tee /tmp/litmus-forge-e2e.log | head -1"
+    command: "export FORGE_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^localhost/tillandsias-forge:v' | head -1) && [ -n \"$FORGE_IMG\" ] || { echo 'Forge image not found'; exit 1; } && podman rm -f tillandsias-test-forge-e2e 2>/dev/null; podman run -d --name tillandsias-test-forge-e2e --hostname forge --network tillandsias-test-enclave-e2e --ip 10.0.43.5 --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id --entrypoint=/bin/sleep -w /workspace --env HTTP_PROXY=http://proxy:3128 --env HTTPS_PROXY=http://proxy:3128 --env NO_PROXY=localhost,127.0.0.1,proxy,router -v /tmp/tillandsias-e2e-test:/workspace:rw \"$FORGE_IMG\" 3600 2>&1 | tee /tmp/litmus-forge-e2e.log | head -1"
     timeout_ms: 15000
     expected_behavior: "container id returned"
 
   - step: "verify all 3 containers are running"
-    command: "podman ps -a --filter 'name=tillandsias-test-.*-e2e' --format '{{.Names}}:{{.Status}}' | grep -E '(proxy|router|forge)' | wc -l"
-    timeout_ms: 5000
+    command: "for i in 1 2 3 4 5; do count=$(podman ps -a --filter 'name=tillandsias-test-.*-e2e' --format '{{.Names}}:{{.Status}}' | grep -Ec '(proxy|router|forge):Up'); if [ \"$count\" = \"3\" ]; then echo 3; exit 0; fi; sleep 1; done; podman ps -a --filter 'name=tillandsias-test-' --format '{{.Names}}:{{.Status}}'; echo \"count=$count\""
+    timeout_ms: 10000
     expected_behavior: "3"
 
   - step: "generate OTP token (base64url-encoded random 32 bytes)"
