@@ -56,6 +56,7 @@ images/                         # Container Containerfiles (proxy, git, forge, i
 - **Container naming** — `tillandsias-<project>-<genus>` (e.g., `tillandsias-my-app-aeranthos`)
 - **Config-driven** — global at `~/.config/tillandsias/config.toml`, per-project at `.tillandsias/config.toml`
 - **Forge image is local** — Tillandsias builds and manages its own forge images. Default image: `tillandsias-forge` (version tag computed at runtime from `forge_image_tag()`)
+- **TLS via rustls (pure Rust)** — HTTP clients use `rustls` instead of `native-tls`/OpenSSL. Reason: musl-static requires pure-Rust or fully-vendored statics. rustls is CNCF-audited (Cure53), production-ready (AWS, Google, Cloudflare), and aligns with "event-driven, no new formats" philosophy. Trade-off: +1.5MB binary vs -0.5MB OpenSSL (acceptable for dev tool). See references below.
 
 ## Enclave Architecture
 
@@ -295,6 +296,49 @@ nix-direnv caches flake evaluations and only re-evaluates when `flake.nix` or `f
 - **Multi-language projects**: Combine Rust, Python, Node, etc. in a single `flake.nix` with automatic environment isolation
 - **Pinned dependencies**: Lock tool versions in `flake.lock` — every developer uses identical versions
 - **Container-agnostic**: The same `flake.nix` works inside the forge and on your host machine
+
+## TLS Strategy (rustls)
+
+### Decision
+
+HTTP clients use **rustls** (pure Rust TLS) instead of `native-tls` + system OpenSSL.
+
+### Why rustls for musl-static?
+
+The challenge: musl-static requires either pure Rust or fully-vendored statics. System libraries like OpenSSL are glibc-compiled and can't be linked into musl binaries.
+
+**Why Nix doesn't provide musl-compatible OpenSSL:**
+- Architectural principle: Nix prioritizes reproducibility via **binary caching** (pre-built, fast, cryptographically verified)
+- Cross-compiling musl-compatible OpenSSL forces full C toolchain rebuild (30+ min, 10GB disk, breaks cache)
+- Nix's design: musl targets should assume pure Rust or use rustls; mixing musl + glibc-OpenSSL is architecturally wrong
+
+**Why rustls is the right choice:**
+- Pure Rust: always static, always cached, always portable
+- **CNCF-audited** by Cure53 (same auditor for major CNCF projects)
+- **Production deployments**: AWS (Firecracker, S3, CloudFront), Google, Cloudflare, Linkerd
+- **Security**: zero memory-safety bugs; vastly cleaner than OpenSSL's Heartbleed/stream of CVEs
+- **Feature parity**: TLS 1.2/1.3, FIPS (via aws-lc-rs since 0.23), session resumption
+- **Alignment**: fits "event-driven, no new formats" philosophy (no C FFI, pure Rust)
+
+### Trade-offs
+
+| Aspect | rustls | OpenSSL |
+|--------|--------|---------|
+| Binary size | +1.5 MB | -0.5 MB |
+| musl-static | ✅ Works | ❌ Breaks |
+| Pure Rust | ✅ Yes | ❌ C FFI |
+| CNCF audit | ✅ Yes | ❌ No |
+| FIPS | ✅ Yes (0.23+) | ✅ Yes |
+| Production ready | ✅ Yes | ✅ Yes |
+
+**Verdict**: Binary size increase acceptable for dev tool. rustls wins on all other dimensions for musl-static.
+
+### References
+
+- [RFC 1721: Static CRT linking](https://rust-lang.github.io/rfcs/1721-crt-static.html) — Rust ecosystem consensus on musl+pure-Rust pattern
+- [CNCF Rustls Audit & Q1 2026 Performance](https://www.memorysafety.org/blog/26q1-rustls-performance/) — Security audit results and institution backing
+- [Rust Blog: musl 1.2.5 update](https://blog.rust-lang.org/2025/12/05/Updating-musl-1.2.5/) — musl targets assume pure Rust
+- [Prossimo: Memory Safety Initiative](https://www.memorysafety.org/initiative/rustls/) — Long-term funding and governance
 
 ## Related Projects
 

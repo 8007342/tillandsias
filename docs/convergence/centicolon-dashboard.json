@@ -1,20 +1,20 @@
 {
-  "generated_at": "2026-05-16T00:46:10Z",
+  "generated_at": "2026-05-16T01:19:38Z",
   "title": "Progression Trends",
   "series_namespace": "local_development",
   "series_label": "Local Development",
   "source_file": "target/convergence/centicolon-signature.jsonl",
-  "record_count": 0,
-  "sparkline_closed": "",
-  "sparkline_residual": "",
-  "alert_level": "unknown",
+  "record_count": 3,
+  "sparkline_closed": "███",
+  "sparkline_residual": "▁▁▁",
+  "alert_level": "green",
   "alert_thresholds": {
     "red_below_percent_closed": 90,
     "yellow_below_percent_closed": 95
   },
   "trend_metrics": {
-    "pass_rate_7d_percent": null,
-    "coverage_avg_7d_percent": null
+    "pass_rate_7d_percent": 100,
+    "coverage_avg_7d_percent": 100
   },
   "metrics": {"cpu_percent":0.0,"memory_percent":0.0,"disk_percent":0.0,"disk_read_bytes_per_sec":0.0,"disk_write_bytes_per_sec":0.0,"disk_iops":0.0,"disk_io_percent":0.0,"cpu_psi_percent":0.0,"memory_psi_percent":0.0,"io_psi_percent":0.0,"psi_available":false,"sample_timestamp":"1970-01-01T00:00:00Z","source":"tillandsias-metrics::DashboardSnapshot"},
   "dashboard_contract": {
@@ -55,7 +55,83 @@
     "coverage_avg_7d_description": "Average percent_closed across the most recent 7 signature records."
   }
 },
-  "trend_windows": [],
-  "latest": {},
-  "history": []
+  "trend_windows": [
+  {
+    "index": 1,
+    "kind": "closed",
+    "start_release": "0.1.260515.3",
+    "start_commit": "cb494ec17c23",
+    "end_release": "0.1.260515.4",
+    "end_commit": "cb494ec17c23",
+    "count": 3,
+    "closed": "███",
+    "residual": "▁▁▁"
+  }
+],
+  "latest": {
+  "release": "0.1.260515.4",
+  "date": "2026-05-16T01:19:37Z",
+  "commit": "cb494ec17c23",
+  "total_cc": 120,
+  "earned_cc": 120,
+  "residual_cc": 0,
+  "percent_closed": 100,
+  "worst_spec": "n/a",
+  "worst_reason": "n/a",
+  "evidence": "target/convergence/evidence-bundle.json",
+  "projection": "docs/convergence/centicolon-dashboard.md",
+  "ci_result": "PASS",
+  "ci_run_id": "local-ci-20260516T011937Z",
+  "trend_glyph": ""
+},
+  "history": [
+  {
+    "release": "0.1.260515.3",
+    "date": "2026-05-16T01:15:02Z",
+    "commit": "cb494ec17c23",
+    "total_cc": 1010,
+    "earned_cc": 1010,
+    "residual_cc": 0,
+    "percent_closed": 100,
+    "worst_spec": "n/a",
+    "worst_reason": "n/a",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "PASS",
+    "ci_run_id": "local-ci-20260516T011502Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.1.260515.3",
+    "date": "2026-05-16T01:16:31Z",
+    "commit": "cb494ec17c23",
+    "total_cc": 750,
+    "earned_cc": 750,
+    "residual_cc": 0,
+    "percent_closed": 100,
+    "worst_spec": "n/a",
+    "worst_reason": "n/a",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "PASS",
+    "ci_run_id": "local-ci-20260516T011631Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.1.260515.4",
+    "date": "2026-05-16T01:19:37Z",
+    "commit": "cb494ec17c23",
+    "total_cc": 120,
+    "earned_cc": 120,
+    "residual_cc": 0,
+    "percent_closed": 100,
+    "worst_spec": "n/a",
+    "worst_reason": "n/a",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "PASS",
+    "ci_run_id": "local-ci-20260516T011937Z",
+    "trend_glyph": ""
+  }
+]
 }
