@@ -19,8 +19,8 @@ plan:
 
   current_state:
     last_completed_step: p3-backlog (step 9)
-    next_step: release-readiness (step 11) — human-driven manual smoke test
-    next_graph_node: release-readiness/manual-smoke-test (ready, cannot be automated)
+    next_step: doc-debt-payoff (step 11) — waves A-D, documentation debt closure
+    next_graph_node: doc-debt/wave-a-events-specs (ready, 3 Haiku agents parallel)
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next
@@ -28,7 +28,8 @@ plan:
     cross_platform_deferred: "2026-05-14 — see plan/issues/deferral-windows-macos-2026-05-14.md"
     wave_18_status: "All 6 automated tests passing (53/56 CI, 3 pre-existing tray UI timeouts)"
     p3_backlog_status: "24/27 gaps implemented across Waves 17-24; 3 undocumented gaps remain (non-blocking)"
-    automation_frontier: "No automated agent work remains; manual smoke test (human) is the release gate"
+    doc_debt_payoff_status: "Waves A-D in progress: 3 events + 3 specs + 1 litmus test + 2 spec updates"
+    ghost_trace_sweep_status: "Deferred to Q3 2026; see plan/issues/ghost-trace-sweep-backlog-2026-05-16.md"
 
   coordination:
     selection_model: dependency_graph

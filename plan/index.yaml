@@ -765,6 +765,60 @@ plan_index:
           clarification_note: "Manual smoke test is non-automatable (requires human GUI verification). Decision: should human execute now, or should agents create pre-release validation tooling?"
           handoff_note: "Manual smoke test required: build, init, opencode-web, tray verification, graceful shutdown. Automation script available at scripts/smoke-test.sh. ~1.5h, human-driven. No further agent work possible on this step."
 
+    - id: doc-debt-payoff
+      order: 11
+      title: Documentation Debt Payoff (Waves A-D) — Events, Specs, Litmus Tests
+      status: in_progress
+      deliverable: plan/steps/11a-doc-debt-payoff.md
+      depends_on: [p3-backlog]
+      specs:
+        - forge-localization-pipeline
+        - inference-lazy-model-pull
+        - podman-enclave-network-core
+      exit_criteria:
+        - "3 events registered in methodology/events/"
+        - "3 new specs created with Sources of Truth"
+        - "2 existing specs updated (podman-idiomatic, inference-host-side-pull)"
+        - "1 litmus test passing (podman-enclave-network-isolation)"
+        - "./build.sh --ci-full passing with no regressions"
+        - "Single merge commit pushed to origin/linux-next"
+      tasks:
+        - id: doc-debt/wave-a-events-specs
+          status: ready
+          depends_on: [p3-backlog]
+          owned_files:
+            - methodology/events/ev-001-i18n-locale-load.yaml
+            - methodology/events/ev-002-model-pull-background-start.yaml
+            - methodology/events/ev-003-podman-enclave-network-created.yaml
+            - openspec/specs/forge-localization-pipeline/spec.md
+            - openspec/specs/inference-lazy-model-pull/spec.md
+            - openspec/specs/podman-enclave-network-core/spec.md
+          checkpoint_required: true
+          handoff_note: "Wave A: 3 Haiku agents in parallel (A, B, C). Each creates 1 event + 1 spec. Merge to linux-next after completion. ETA: 0-2h."
+        - id: doc-debt/wave-b-litmus-test
+          status: pending
+          depends_on: [doc-debt/wave-a-events-specs]
+          owned_files:
+            - openspec/litmus-tests/litmus-podman-enclave-network-isolation.yaml
+            - openspec/litmus-bindings.yaml
+          checkpoint_required: true
+          handoff_note: "Wave B: Haiku-D (1 agent). Depends on Wave A completion. Write podman enclave network litmus test (4 sub-tests). Merge to linux-next. ETA: 2-3h."
+        - id: doc-debt/wave-c-spec-updates
+          status: pending
+          depends_on: [doc-debt/wave-a-events-specs]
+          owned_files:
+            - openspec/specs/podman-idiomatic-patterns/spec.md
+            - openspec/specs/inference-host-side-pull/spec.md
+          checkpoint_required: true
+          handoff_note: "Wave C: 2 Haiku agents (E, F) in parallel. Update 2 specs (deferred work + formalization). Merge to linux-next independently. ETA: 2-3h (parallel with Wave B)."
+        - id: doc-debt/wave-d-integration
+          status: pending
+          depends_on: [doc-debt/wave-b-litmus-test, doc-debt/wave-c-spec-updates]
+          owned_files:
+            - plan/steps/11a-doc-debt-payoff.md
+          checkpoint_required: true
+          handoff_note: "Wave D: Opus (1 agent). Depends on Waves A, B, C. Verify all 6 specs, 1 litmus test, event schema, trace annotations. Build + test. Merge single integration commit. ETA: 2-3h."
+
     - id: post-release-polish
       order: 12
       title: Wave 25 — Post-Release Polish & P1 Consolidation
