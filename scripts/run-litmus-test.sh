@@ -622,25 +622,25 @@ run_litmus_test_file() {
         combined_output+=$'\n'"[${step_index}:${step_name}]${step_output}"
 
         if [[ $exit_code -eq 124 ]]; then
+            printf ' %b[TIMEOUT]%b\n' "${RED}" "${NC}" >&2
             log_warn "Test timeout after ${timeout_sec}s in step: ${step_name:-step-${step_index}}"
             return 1
         fi
 
-        # Progress reporting: show step result
-        printf ' %b[OK]%b\n' "${GREEN}" "${NC}" >&2
-
         if ! behavior_matches_output "$step_output" "$step_expected"; then
-            if [[ "$VERBOSE" == "1" ]]; then
-                printf '%s\n' "  [DEBUG] step=${step_name:-step-$step_index}" >&2
-                printf '%s\n' "          expected=${step_expected}" >&2
-                printf '%s\n' "          output=${step_output}" >&2
-            fi
+            printf ' %b[FAIL]%b\n' "${RED}" "${NC}" >&2
+            printf '%s\n' "         expected=${step_expected}" >&2
+            printf '%s\n' "         output=${step_output}" >&2
             return 1
         fi
+
+        # Step matched expected behavior — surface success only after validation.
+        printf ' %b[OK]%b\n' "${GREEN}" "${NC}" >&2
     done
 
     for failure in "${failure_criteria[@]}"; do
         if grep -qE "$failure" <<<"$combined_output"; then
+            printf '  %b[FAIL]%b gating_points.failure matched: %s\n' "${RED}" "${NC}" "$failure" >&2
             return 1
         fi
     done
@@ -651,6 +651,9 @@ run_litmus_test_file() {
                 return 0
             fi
         done
+        printf '  %b[FAIL]%b no gating_points.success criterion matched combined output\n' "${RED}" "${NC}" >&2
+        local first_success="${success_criteria[0]}"
+        printf '         tried: %s\n' "${success_criteria[*]}" >&2
         return 1
     fi
 
