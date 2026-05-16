@@ -4,6 +4,7 @@ spec: binary-signing
 phase: pre-build
 description: Verify release signing and verification use Cosign bundle artifacts
 severity: high
+size: instant
 
 preconditions:
   - workspace contains .github/workflows/release.yml, scripts/verify.sh, and docs/VERIFICATION.md

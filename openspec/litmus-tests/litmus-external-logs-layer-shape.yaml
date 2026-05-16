@@ -2,6 +2,7 @@ name: litmus:external-logs-layer-shape
 spec: external-logs-layer
 description: Verify the external log path helpers stay tied to the state root and append roles deterministically
 severity: medium
+size: instant
 phase: pre-build
 
 preconditions:

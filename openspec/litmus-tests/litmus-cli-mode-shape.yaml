@@ -4,6 +4,7 @@ spec: cli-mode
 phase: pre-build
 description: Verify cli-mode command-shape seams stay deterministic in unit tests
 severity: medium
+size: quick
 
 preconditions:
   - workspace contains crates/tillandsias-headless/

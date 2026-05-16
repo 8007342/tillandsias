@@ -2,6 +2,7 @@ name: litmus:browser-isolation-e2e
 spec: subdomain-routing-via-reverse-proxy
 description: Validate forge→proxy→router→sidecar chain for OpenCode Web session authentication with OTP validation
 severity: critical
+size: e2e
 
 preconditions:
   - Tillandsias binary built (./build.sh --release)

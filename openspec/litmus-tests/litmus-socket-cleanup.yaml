@@ -1,7 +1,12 @@
+# @tombstone superseded:binary-e2e-smoke
+# Composable binary invocation moved to litmus:binary-e2e-smoke; retired after v0.1.169.229
+
 name: litmus:socket-cleanup
 spec: enclave-network, control-socket
 description: Verify no leftover Unix domain sockets after a stack run completes
 severity: high
+phase: retired
+size: e2e
 
 preconditions:
   - ~/.cache/tillandsias directory exists

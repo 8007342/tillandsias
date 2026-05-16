@@ -2,6 +2,7 @@ name: litmus:forge-shell-tools-shape
 spec: forge-shell-tools
 description: Verify the forge image still ships the shell/tool package set and interactive shell integrations
 severity: medium
+size: instant
 phase: pre-build
 
 preconditions:

@@ -4,6 +4,7 @@ spec: runtime-logging
 phase: post-build
 description: Verify log field names and types remain stable (backwards compatibility)
 severity: high
+size: quick
 
 preconditions:
   - workspace contains crates/tillandsias-logging

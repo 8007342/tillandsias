@@ -1,7 +1,12 @@
+# @tombstone superseded:binary-e2e-smoke
+# Composable binary invocation moved to litmus:binary-e2e-smoke; retired after v0.1.169.229
+
 name: litmus:init-log-cleanup
 spec: ephemeral-guarantee
 description: Verify init logs do not persist after a successful init run
 severity: high
+phase: retired
+size: e2e
 
 preconditions:
   - clean temporary log state

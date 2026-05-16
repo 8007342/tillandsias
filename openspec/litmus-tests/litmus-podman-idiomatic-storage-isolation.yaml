@@ -4,6 +4,7 @@ spec: podman-idiomatic-patterns
 phase: pre-build
 description: Verify three env-var storage isolation paths (GRAPHROOT, RUNROOT, RUNTIME_DIR) are respected and that their absence reverts to host defaults
 severity: high
+size: quick
 
 preconditions:
   - workspace contains crates/tillandsias-podman with lib.rs storage isolation tests

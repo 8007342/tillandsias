@@ -29,4 +29,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/tray/mod.rs#L2486](../../../crates/tillandsias-headless/src/tray/mod.rs#L2486)
 - [crates/tillandsias-headless/src/tray/mod.rs#L2761](../../../crates/tillandsias-headless/src/tray/mod.rs#L2761)
 - [locales/en.toml#L48](../../../locales/en.toml#L48)
-- [scripts/local-ci.sh#L867](../../../scripts/local-ci.sh#L867)
+- [scripts/local-ci.sh#L872](../../../scripts/local-ci.sh#L872)

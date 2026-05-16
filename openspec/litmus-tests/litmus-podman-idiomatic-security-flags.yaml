@@ -4,6 +4,7 @@ spec: podman-idiomatic-patterns
 phase: integration
 description: Verify containers enforce security context with mandatory flags (--userns=keep-id, --cap-drop=ALL, --security-opt=no-new-privileges)
 severity: critical
+size: e2e
 
 preconditions:
   - podman is available and rootless mode is active

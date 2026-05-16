@@ -162,10 +162,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:environment-isolation
-  - litmus:headless-init-status-check-command-shape
-  - litmus:status-check-stack-verification
+  - litmus:binary-e2e-smoke
   coverage_ratio: 50
-  last_verified: '2026-05-07'
+  last_verified: '2026-05-15'
 - spec_id: direct-podman-calls
   status: obsolete
   litmus_tests: []
@@ -186,7 +185,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:enclave-isolation
-  - litmus:socket-cleanup
+  - litmus:binary-e2e-smoke
   coverage_ratio: 67
   last_verified: '2026-05-12'
 - spec_id: enforce-trace-presence
@@ -571,8 +570,9 @@ specs:
   - litmus:cross-platform-tray
   - litmus:agent-selection-menu
   - litmus:web-container-stop
+  - litmus:binary-e2e-smoke
   coverage_ratio: 100
-  last_verified: '2026-05-13'
+  last_verified: '2026-05-15'
 - spec_id: tray-cli-coexistence
   status: obsolete
   litmus_tests: null
@@ -581,9 +581,10 @@ specs:
   tombstone: obsolete:src-tauri-deferred
 - spec_id: tray-host-control-socket
   status: active
-  litmus_tests: null
+  litmus_tests:
+  - litmus:binary-e2e-smoke
   coverage_ratio: 30
-  last_verified: '2026-05-03'
+  last_verified: '2026-05-15'
 - spec_id: tray-icon-lifecycle
   status: active
   litmus_tests:
@@ -690,6 +691,24 @@ specs:
   - litmus:credential-isolation
   coverage_ratio: 33
   last_verified: '2026-05-03'
+- spec_id: headless-mode
+  status: active
+  litmus_tests:
+  - litmus:binary-e2e-smoke
+  coverage_ratio: 100
+  last_verified: '2026-05-15'
+- spec_id: graceful-shutdown
+  status: active
+  litmus_tests:
+  - litmus:binary-e2e-smoke
+  coverage_ratio: 100
+  last_verified: '2026-05-15'
+- spec_id: ephemeral-guarantee
+  status: active
+  litmus_tests:
+  - litmus:binary-e2e-smoke
+  coverage_ratio: 100
+  last_verified: '2026-05-15'
 - spec_id: reverse-proxy-internal
   status: active
   litmus_tests:

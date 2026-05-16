@@ -1,9 +1,13 @@
 # @trace spec:dev-build, spec:observability-convergence, spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container, spec:default-image
+# @tombstone superseded:binary-e2e-smoke
+# Composable binary invocation moved to litmus:binary-e2e-smoke; retired after v0.1.169.229
+
 name: litmus:status-check-stack-verification
 spec: dev-build
-phase: post-build
+phase: retired
 description: Verify the post-build smoke starts the stack and reports service-online evidence from inside the forge container
 severity: high
+size: e2e
 
 preconditions:
   - podman is available on the host and the rootless socket is reachable directly or via auto-detected CONTAINER_HOST

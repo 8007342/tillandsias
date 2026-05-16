@@ -4,6 +4,7 @@ spec: podman-orchestration
 phase: pre-build
 description: Verify web-mode podman launch stays detached and keeps the mount/security contract
 severity: medium
+size: long
 
 preconditions:
   - workspace contains crates/tillandsias-headless and the tray feature compiles

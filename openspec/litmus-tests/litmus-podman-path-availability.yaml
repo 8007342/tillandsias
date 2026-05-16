@@ -2,6 +2,7 @@ name: litmus:podman-path-availability
 spec: podman-orchestration
 description: Verify podman is installed on PATH before any stack scripts run
 severity: critical
+size: instant
 phase: pre-build
 
 preconditions:

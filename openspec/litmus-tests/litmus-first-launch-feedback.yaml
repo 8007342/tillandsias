@@ -4,6 +4,7 @@ spec: tray-app
 phase: pre-build
 description: Verify first-launch readiness feedback and unhealthy failure collapse in the tray menu
 severity: high
+size: long
 
 preconditions:
   - workspace contains crates/tillandsias-headless

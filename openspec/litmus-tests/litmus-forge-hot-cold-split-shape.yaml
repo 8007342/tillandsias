@@ -2,6 +2,7 @@ name: litmus:forge-hot-cold-split-shape
 spec: forge-hot-cold-split
 description: Verify the forge hot/cold split remains wired to the config budget seam and the visible hot-path banner
 severity: medium
+size: instant
 phase: pre-build
 
 preconditions:

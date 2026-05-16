@@ -4,6 +4,7 @@ spec: tray-app
 phase: pre-build
 description: Verify the tray code path remains the native StatusNotifierItem implementation and keeps the minimal menu shape
 severity: medium
+size: long
 
 preconditions:
   - workspace contains crates/tillandsias-headless

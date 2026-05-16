@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias-core"
-version = "0.1.260513"
+version = "0.1.260515"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true

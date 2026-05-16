@@ -7,6 +7,7 @@ name: litmus:toolbox-isolation
 spec: build-script-architecture
 description: Verify both cached and clean build paths use isolated toolbox, not host system
 severity: high
+size: quick
 
 preconditions:
   - build.sh script available

@@ -4,6 +4,7 @@ spec: browser-isolation-tray-integration
 phase: pre-build
 description: Verify tray-driven OpenCode Web launch stays detached and persistent
 severity: medium
+size: long
 
 preconditions:
   - workspace contains crates/tillandsias-headless

@@ -4,6 +4,7 @@ spec: podman-idiomatic-patterns
 phase: pre-build
 description: Verify enclave_network_name() generates tillandsias-<project>-enclave pattern and network creation/removal functions exist
 severity: critical
+size: quick
 
 preconditions:
   - crates/tillandsias-podman/src contains enclave_network_name() function

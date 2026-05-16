@@ -2,6 +2,7 @@ name: litmus:enclave-isolation
 spec: enclave-network
 description: Verify enclave network and proxy wiring stay aligned with the current runtime contract
 severity: critical
+size: e2e
 
 preconditions:
   - scripts/orchestrate-enclave.sh exists

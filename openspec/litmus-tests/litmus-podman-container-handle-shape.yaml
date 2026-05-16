@@ -4,6 +4,7 @@ spec: podman-container-handle
 phase: pre-build
 description: Verify the lightweight podman container handle retains identity and spec snapshot
 severity: medium
+size: quick
 
 preconditions:
   - workspace contains crates/tillandsias-podman

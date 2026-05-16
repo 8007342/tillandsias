@@ -4,6 +4,7 @@ spec: tray-minimal-ux
 phase: pre-build
 description: Verify the tray minimal UX code shape exposes Seedlings and tombstoned launch/cleanup boundaries
 severity: medium
+size: instant
 
 preconditions:
   - repo checkout contains the tray module, tray spec, and trace file

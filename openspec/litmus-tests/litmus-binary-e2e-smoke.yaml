@@ -1,0 +1,62 @@
+# @trace spec:headless-mode, spec:graceful-shutdown, spec:tray-app
+name: litmus:binary-e2e-smoke
+spec: headless-mode, graceful-shutdown, tray-app
+description: >
+  Full end-to-end smoke of the installed binary: init, status-check, log cleanup,
+  socket cleanup, and graceful shutdown. Steps share a single binary startup.
+severity: critical
+size: e2e
+phase: post-build
+
+preconditions:
+  - tillandsias binary is installed to ~/.local/bin/tillandsias
+  - podman is available (fake mode for unit testing)
+
+caveats:
+  - requires_installed_binary: "Uses TILLANDSIAS_STATUS_CHECK_BIN environment variable; reads ~/.local/bin/tillandsias as fallback"
+  - requires_podman_runtime: "LITMUS_PODMAN_MODE=fake provides mock runtime for testing"
+
+critical_path:
+  - step: "verify binary exists and is executable"
+    command: "test -x \"${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}\" && echo OK"
+    timeout_ms: 3000
+    success_pattern: "OK"
+    failure_pattern: "cannot access"
+
+  - step: "run --status-check (init path, fake podman)"
+    command: "LITMUS_PODMAN_MODE=fake \"${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}\" --headless --status-check /tmp/litmus-e2e-project 2>&1"
+    timeout_ms: 120000
+    success_pattern: "app.stopped|shutdown|completed"
+    failure_pattern: "error|panic|failed"
+
+  - step: "verify no stale sockets after status-check"
+    command: "SOCKET_COUNT=$(find /tmp -maxdepth 2 -name 'tillandsias*.sock' 2>/dev/null | wc -l); [[ $SOCKET_COUNT -eq 0 ]] && echo 'CLEAN: 0 sockets' || (echo \"LEAK: $SOCKET_COUNT sockets found\"; exit 1)"
+    timeout_ms: 5000
+    success_pattern: "CLEAN"
+    failure_pattern: "LEAK"
+
+  - step: "verify no stale mounts after status-check"
+    command: "MOUNT_COUNT=$(mount 2>/dev/null | grep -c 'tillandsias' || true); [[ $MOUNT_COUNT -eq 0 ]] && echo 'CLEAN: 0 mounts' || (echo \"LEAK: $MOUNT_COUNT mounts found\"; exit 1)"
+    timeout_ms: 5000
+    success_pattern: "CLEAN"
+    failure_pattern: "LEAK"
+
+  - step: "verify init log cleaned up"
+    command: "LOG_COUNT=$(ls /tmp/tillandsias-init-*.log 2>/dev/null | wc -l); [[ $LOG_COUNT -eq 0 ]] && echo 'CLEAN: 0 logs' || (echo \"LEAK: $LOG_COUNT logs found\"; exit 1)"
+    timeout_ms: 5000
+    success_pattern: "CLEAN"
+    failure_pattern: "LEAK"
+
+observability:
+  traces:
+    - "@trace spec:headless-mode"
+    - "@trace spec:graceful-shutdown"
+    - "@trace spec:tray-app"
+  expected_log: "Binary invocation, status check, and cleanup succeed with no leaks"
+  log_fields:
+    spec: "headless-mode,graceful-shutdown,tray-app"
+    test: "binary-e2e-smoke"
+
+rollback:
+  on_failure: "inspect tillandsias binary invocation and cleanup logic"
+  command: "grep -r 'fn main\|fn run\|fn cleanup' crates/tillandsias-headless/src/main.rs"

@@ -109,6 +109,54 @@ litmus_test:
       - cache_preconditions
       - batch_gating_point_checks
 
+  test_sizing:
+    description: >
+      Every litmus test carries a required `size` field that classifies its
+      expected wall-clock cost. Agents and CI scripts MUST use this field to
+      select the appropriate test scope for the task at hand.
+    tiers:
+      instant:
+        wall_time_max_ms: 5000
+        description: Grep/file assertions against source only. No compilation, no containers.
+        run_freely: true
+        agent_guidance: Safe for any feedback loop including watch-mode and pre-commit.
+      quick:
+        wall_time_warm_ms: 60000
+        wall_time_cold_ms: 120000
+        description: Single cargo unit test per step. Warm cache fast; cold compile 30-60s extra.
+        caveats: [compile_cold]
+        agent_guidance: >
+          Use for standard dev-loop validation. Warn the user if the cache is cold
+          (no prior build in this toolbox).
+      long:
+        wall_time_typical_ms: 600000
+        wall_time_max_ms: 900000
+        description: Tray feature tests. GTK header processing makes these slow regardless of cache.
+        caveats: [tray_feature_compile]
+        agent_guidance: >
+          Run only before push or when tray code changes. Do not run in tight feedback loops.
+      e2e:
+        wall_time_typical_ms: 900000
+        wall_time_max_ms: 1200000
+        description: >
+          Full binary invocation + podman runtime. Composed as a SINGLE sequential litmus file,
+          not N independent files. Steps share binary startup cost.
+        caveats: [requires_installed_binary, requires_podman_runtime]
+        agent_guidance: >
+          Run only with --ci-full --install. Never split binary-invocation steps into
+          separate litmus files — compose them in one critical_path instead.
+    caveat_glossary:
+      compile_cold: "First cargo compile in an empty toolbox adds 30-120s."
+      tray_feature_compile: "GTK4 headers force near-full recompile even with warm cache."
+      requires_installed_binary: "Needs tillandsias installed to ~/.local/bin/ first."
+      requires_podman_runtime: "Needs live podman + forge/proxy images present."
+    phase_size_defaults:
+      fast_check: instant
+      pre_build: quick
+      post_build: e2e
+      runtime: e2e
+      release_gate: [quick, long, e2e]
+
   failure_types:
     precondition_failure:
       signal: >

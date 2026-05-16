@@ -2,6 +2,7 @@ name: litmus:ephemeral-guarantee
 spec: forge-offline
 description: Verify forge container cannot reach external IP addresses
 severity: critical
+size: e2e
 
 preconditions:
   - tillandsias tray running

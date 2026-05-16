@@ -7,6 +7,7 @@ name: litmus:build-cache-transparent
 spec: build-script-architecture
 description: Verify that local caches do not change AppImage semantics or version strings
 severity: high
+size: quick
 
 preconditions:
   - build.sh script available and executable

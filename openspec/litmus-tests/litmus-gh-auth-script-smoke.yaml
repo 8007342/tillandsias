@@ -2,6 +2,7 @@ name: litmus:gh-auth-script-smoke
 spec: gh-auth-script
 description: Verify the GitHub login flow still exercises the fake ephemeral Podman harness
 severity: medium
+size: quick
 phase: pre-build
 
 preconditions:

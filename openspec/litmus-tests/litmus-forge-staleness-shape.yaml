@@ -2,6 +2,7 @@ name: litmus:forge-staleness-shape
 spec: forge-staleness
 description: Verify forge image freshness checks, alias refresh, and pruning still match the live build script contract
 severity: medium
+size: instant
 phase: pre-build
 
 preconditions:

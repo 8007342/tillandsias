@@ -2,6 +2,7 @@ name: litmus:browser-ephemeral
 spec: host-chromium-on-demand
 description: Verify Chromium launcher uses an ephemeral profile, GUI app-mode, and cleans it on exit
 severity: critical
+size: e2e
 
 preconditions:
   - browser launch script is available

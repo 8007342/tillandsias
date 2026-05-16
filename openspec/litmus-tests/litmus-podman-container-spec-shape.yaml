@@ -4,6 +4,7 @@ spec: podman-container-spec
 phase: pre-build
 description: Verify the typed Podman container-spec builder remains pure and deterministic
 severity: medium
+size: quick
 
 preconditions:
   - workspace contains crates/tillandsias-podman

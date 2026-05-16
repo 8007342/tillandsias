@@ -2,6 +2,7 @@ name: litmus:onboarding-cold-start-discovery
 spec: forge-welcome, forge-environment-discoverability, forge-shell-tools, project-bootstrap-readme
 description: Verify cold-start agents find essential discoverability signals on first forge entry without prior state
 severity: medium
+size: quick
 phase: post-build
 
 preconditions:

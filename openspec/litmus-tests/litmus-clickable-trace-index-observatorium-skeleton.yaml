@@ -4,6 +4,7 @@ spec: clickable-trace-index
 phase: pre-build
 description: Verify the local observatorium launcher serves the current checkout and exposes the minimal three-pane shell
 severity: medium
+size: quick
 
 preconditions:
   - workspace contains scripts/run-observatorium.sh and observatorium/index.html

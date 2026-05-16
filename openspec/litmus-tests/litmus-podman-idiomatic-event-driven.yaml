@@ -4,6 +4,7 @@ spec: podman-idiomatic-patterns
 phase: integration
 description: Verify container lifecycle events arrive via podman events within 100ms of state change, not polling
 severity: critical
+size: e2e
 
 preconditions:
   - podman is installed and running in rootless mode

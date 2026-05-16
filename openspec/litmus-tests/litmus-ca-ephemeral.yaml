@@ -2,6 +2,7 @@ name: litmus:ca-ephemeral
 spec: certificate-authority
 description: Verify CA certs deleted on tray shutdown, no persistence
 severity: high
+size: e2e
 
 preconditions:
   - tillandsias tray running

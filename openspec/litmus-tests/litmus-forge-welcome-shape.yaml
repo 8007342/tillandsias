@@ -2,6 +2,7 @@ name: litmus:forge-welcome-shape
 spec: forge-welcome
 description: Verify the welcome banner layout, rotating tips, and once-per-session gating stay wired to the terminal launch path
 severity: medium
+size: instant
 phase: pre-build
 
 preconditions:

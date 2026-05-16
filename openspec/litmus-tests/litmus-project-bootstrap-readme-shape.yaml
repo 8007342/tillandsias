@@ -3,6 +3,7 @@ spec: project-bootstrap-readme
 description: Verify the README discipline cheatsheet and bootstrap dispatcher remain
   bound to the FOR HUMANS / FOR ROBOTS contract and the readme.traces JSONL ledger.
 severity: medium
+size: quick
 phase: pre-build
 
 preconditions:

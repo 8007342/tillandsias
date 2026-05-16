@@ -2,6 +2,7 @@ name: litmus:filesystem-scanner-shape
 spec: filesystem-scanner
 description: Verify the scanner still resolves projects from the existing unit-test seams and keeps its event-driven contract
 severity: medium
+size: quick
 phase: pre-build
 
 preconditions:

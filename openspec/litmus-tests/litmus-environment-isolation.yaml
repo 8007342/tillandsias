@@ -2,6 +2,7 @@ name: litmus:environment-isolation
 spec: environment-runtime
 description: Verify forge sees ONLY minimal environment variables, no host env leakage
 severity: high
+size: e2e
 
 preconditions:
   - tillandsias tray running

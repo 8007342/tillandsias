@@ -4,6 +4,7 @@ spec: tray-icon-lifecycle
 phase: pre-build
 description: Verify the five tray icon lifecycle states exist and render valid PNGs
 severity: high
+size: quick
 
 preconditions:
   - workspace contains crates/tillandsias-core

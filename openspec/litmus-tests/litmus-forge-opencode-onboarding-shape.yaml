@@ -2,6 +2,7 @@ name: litmus:forge-opencode-onboarding-shape
 spec: forge-opencode-onboarding
 description: Verify the OpenCode onboarding bundle, OpenSpec init, and startup bootstrap stay wired together
 severity: medium
+size: instant
 phase: pre-build
 
 preconditions:

@@ -2,6 +2,7 @@ name: litmus:forge-cache-dual-shape
 spec: forge-cache-dual
 description: Verify cache discipline stays wired to the active dual-cache contract and the runtime env routing helpers
 severity: medium
+size: instant
 phase: pre-build
 
 preconditions:

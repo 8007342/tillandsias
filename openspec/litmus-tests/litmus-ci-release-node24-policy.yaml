@@ -4,6 +4,7 @@ spec: ci-release
 phase: pre-build
 description: Verify CI and release workflows enforce the Node 24 policy
 severity: medium
+size: instant
 
 preconditions:
   - repository contains .github/workflows/ci.yml and .github/workflows/release.yml

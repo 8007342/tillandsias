@@ -5,6 +5,7 @@ spec: tray-ux
 phase: pre-build
 description: Verify tray menu lifecycle, status transitions, and failure collapse
 severity: high
+size: long
 
 preconditions:
   - workspace contains crates/tillandsias-headless

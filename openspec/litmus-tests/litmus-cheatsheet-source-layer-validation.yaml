@@ -4,6 +4,7 @@ spec: cheatsheet-source-layer
 phase: pre-build
 description: Verify the cheatsheet source validator stays callable on a fresh workspace
 severity: medium
+size: instant
 
 preconditions:
   - workspace contains scripts/ and cheatsheets/

@@ -3,6 +3,7 @@ name: litmus:nix-builder-shape
 spec: nix-builder
 description: Verify the live Nix build contract uses git-tracked files and copyToRoot
 severity: medium
+size: instant
 phase: pre-build
 
 preconditions:

@@ -4,6 +4,7 @@ spec: forge-standalone
 phase: pre-build
 description: Verify forge standalone runner and image definitions stay aligned line-by-line
 severity: medium
+size: instant
 
 preconditions:
   - repo checkout contains the forge runner, Containerfile, and build wrapper

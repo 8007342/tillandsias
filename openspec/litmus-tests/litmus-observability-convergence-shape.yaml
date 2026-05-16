@@ -4,6 +4,7 @@ spec: observability-convergence
 phase: pre-build
 description: Verify observability convergence scripts keep their spec trace hooks, dashboard contract is present in spec body and rendered artefacts, and source-of-truth integration is preserved.
 severity: medium
+size: instant
 
 preconditions:
   - workspace contains scripts/github-actions-convergence.sh

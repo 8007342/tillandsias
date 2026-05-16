@@ -4,6 +4,7 @@ spec: host-browser-mcp
 phase: pre-build
 description: Verify the browser MCP surface, control-wire framing, and forge bridge wiring remain intact
 severity: medium
+size: quick
 
 preconditions:
   - workspace contains crates/tillandsias-browser-mcp

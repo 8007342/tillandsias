@@ -4,6 +4,7 @@ spec: tray-app
 phase: pre-build
 description: Verify attach-here launch arguments and detached OpenCode Web persistence
 severity: medium
+size: quick
 
 preconditions:
   - workspace contains crates/tillandsias-headless

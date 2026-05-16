@@ -3,6 +3,7 @@ spec: podman-orchestration
 phase: pre-build
 description: Verify forge container naming stays deterministic and genus-free
 severity: medium
+size: instant
 
 preconditions:
   - workspace contains crates/tillandsias-podman

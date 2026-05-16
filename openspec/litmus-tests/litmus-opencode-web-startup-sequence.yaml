@@ -4,6 +4,7 @@ spec: browser-isolation-tray-integration
 phase: pre-build
 description: Verify the OpenCode Web tray path emits the expected startup stages and launch profile helpers
 severity: high
+size: long
 
 preconditions:
   - workspace contains crates/tillandsias-headless

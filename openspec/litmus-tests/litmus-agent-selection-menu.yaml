@@ -4,6 +4,7 @@ spec: tray-app
 phase: pre-build
 description: Verify Seedlings ordering, agent selection persistence, and stop-item gating
 severity: medium
+size: quick
 
 preconditions:
   - workspace contains crates/tillandsias-headless

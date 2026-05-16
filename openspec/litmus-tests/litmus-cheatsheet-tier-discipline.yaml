@@ -4,6 +4,7 @@ spec: cheatsheets-license-tiered
 phase: pre-build
 description: Verify cheatsheet tier discipline stays valid under the tier validator
 severity: medium
+size: instant
 
 preconditions:
   - workspace contains scripts/ and cheatsheets/

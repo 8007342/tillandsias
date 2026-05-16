@@ -4,6 +4,7 @@ spec: podman-idiomatic-patterns
 phase: pre-build
 description: Verify PodmanError categorizes errors into transient (CommandFailed), not-found (NotFound), and parse (ParseError) variants — enabling retry discrimination
 severity: medium
+size: instant
 
 preconditions:
   - workspace contains crates/tillandsias-podman with client.rs PodmanError enum

@@ -4,6 +4,7 @@ spec: mcp-on-demand
 phase: pre-build
 description: Verify the MCP on-demand tray socket mount remains wired into the forge profile
 severity: medium
+size: instant
 
 preconditions:
   - workspace contains crates/tillandsias-core

@@ -4,6 +4,7 @@ spec: runtime-logging
 phase: pre-build
 description: Verify runtime logging respects TILLANDSIAS_LOG and defaults to info filtering
 severity: medium
+size: instant
 
 preconditions:
   - workspace contains crates/tillandsias-router-sidecar

@@ -4,6 +4,7 @@ spec: podman-orchestration
 phase: pre-build
 description: Verify build-image emits the expected podman command shape without requiring real containers
 severity: medium
+size: instant
 
 preconditions:
   - build-image.sh script available and executable

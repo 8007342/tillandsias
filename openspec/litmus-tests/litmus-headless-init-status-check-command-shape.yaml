@@ -1,9 +1,13 @@
 # @trace spec:dev-build, spec:podman-container-spec, spec:podman-container-handle, spec:podman-orchestration, spec:observability-convergence
+# @tombstone superseded:binary-e2e-smoke
+# Composable binary invocation moved to litmus:binary-e2e-smoke; retired after v0.1.169.229
+
 name: litmus:headless-init-status-check-command-shape
 spec: dev-build
-phase: post-build
+phase: retired
 description: Verify the installed binary emits the expected direct podman argv for headless init plus status-check
 severity: high
+size: e2e
 backend: fake
 
 preconditions:

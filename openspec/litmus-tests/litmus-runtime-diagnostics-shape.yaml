@@ -4,6 +4,7 @@ spec: runtime-diagnostics
 phase: pre-build
 description: Verify the git entrypoint keeps the runtime-diagnostics trace and service log wiring
 severity: medium
+size: instant
 
 preconditions:
   - workspace contains images/git/entrypoint.sh

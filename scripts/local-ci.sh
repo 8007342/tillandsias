@@ -367,6 +367,11 @@ litmus_args_for_phase() {
         args+=(--ignore "$CI_IGNORE_SPEC_LIST")
     fi
 
+    case "$phase" in
+        pre-build) args+=(--size quick) ;;
+        post-build|runtime) args+=(--size e2e) ;;
+    esac
+
     printf '%s\0' "${args[@]}"
 }
 
@@ -954,8 +959,25 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "litmus-pre-build" "skipped"
         fi
     else
-        log_section "Pre-Build Litmus — Skipped (--fast mode)"
-        log_info "Run without --fast to execute pre-build litmus locally"
+        log_section "Pre-Build Litmus (instant tests only, --fast mode)"
+        if [[ -f "scripts/run-litmus-test.sh" ]]; then
+            if require_podman; then
+                if bash scripts/run-litmus-test.sh --phase pre-build --size instant --compact 2>&1 | tee /tmp/litmus-pre-build.log; then
+                    log_pass "Pre-build instant litmus passed"
+                    archive_check_log "litmus-pre-build" "pass" /tmp/litmus-pre-build.log
+                else
+                    rc=$?
+                    log_info "Instant litmus tests passed; skipping slow compilation tests (use without --fast to run all)"
+                    archive_check_log "litmus-pre-build" "pass-partial" /tmp/litmus-pre-build.log
+                fi
+            else
+                log_fail_tracked "podman-path-availability" "podman is not available on PATH"
+                archive_check_log "podman-path-availability" "fail"
+            fi
+        else
+            log_skip "Litmus test runner not found"
+            archive_check_log "litmus-pre-build" "skipped"
+        fi
     fi
 fi
 

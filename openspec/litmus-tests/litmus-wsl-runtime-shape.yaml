@@ -4,6 +4,7 @@ spec: wsl-runtime
 phase: pre-build
 description: Verify the WSL runtime stub remains explicit and traceable
 severity: medium
+size: instant
 
 preconditions:
   - workspace contains crates/tillandsias-podman/src/runtime.rs

@@ -107,6 +107,7 @@ VERBOSE=0
 LIST_ONLY=0
 FILTER_SPEC=""
 FILTER_PHASE="all"
+SIZE_FILTER="all"
 COMPACT=0
 STRICT_MODE=0
 STRICT_SPEC_LIST=""
@@ -285,6 +286,53 @@ get_test_phase() {
             }
         ' "$file"
     fi
+}
+
+get_test_size() {
+    local file="$1"
+
+    if command -v yq &>/dev/null; then
+        yq eval '.size // "quick"' "$file" 2>/dev/null || echo "quick"
+    else
+        awk '
+            /^size: / {
+                gsub(/^size: /, "");
+                print
+                found=1
+                exit
+            }
+            END {
+                if (!found) print "quick"
+            }
+        ' "$file"
+    fi
+}
+
+size_matches_filter() {
+    local test_size="$1"
+    local filter="$2"
+
+    if [[ "$filter" == "all" ]]; then
+        return 0
+    fi
+
+    case "$test_size" in
+        instant)
+            [[ "$filter" =~ ^(instant|quick|long|e2e)$ ]] && return 0 || return 1
+            ;;
+        quick)
+            [[ "$filter" =~ ^(quick|long|e2e)$ ]] && return 0 || return 1
+            ;;
+        long)
+            [[ "$filter" =~ ^(long|e2e)$ ]] && return 0 || return 1
+            ;;
+        e2e)
+            [[ "$filter" == "e2e" ]] && return 0 || return 1
+            ;;
+        *)
+            return 0
+            ;;
+    esac
 }
 
 # ============================================================================
@@ -676,6 +724,15 @@ run_tests_for_spec() {
             continue
         fi
 
+        local test_size
+        test_size="$(get_test_size "$test_file")"
+        if ! size_matches_filter "$test_size" "$SIZE_FILTER"; then
+            log_test_result "$spec_id" "$test_name" "SKIP" "Size mismatch: $test_size"
+            spec_skipped=1
+            test_count=$((test_count+1))
+            continue
+        fi
+
         # Execute test and capture result
         # Always show which test is executing to prevent user-perceived hangs
         # @trace spec:spec-traceability
@@ -894,6 +951,15 @@ parse_args() {
                 FILTER_PHASE="${2:-all}"
                 shift 2
                 ;;
+            --size|--size=*)
+                if [[ "$1" == *=* ]]; then
+                    SIZE_FILTER="${1#*=}"
+                    shift
+                else
+                    SIZE_FILTER="${2:-all}"
+                    shift 2
+                fi
+                ;;
             --json)
                 # JSON output (handled at end)
                 shift
@@ -980,6 +1046,7 @@ main() {
 
     log_info "Timeout per test: ${TIMEOUT_SECONDS}s"
     log_info "Phase filter: ${FILTER_PHASE}"
+    log_info "Size filter: ${SIZE_FILTER}  (use --size instant|quick|long|e2e|all for more)"
     [[ "$COMPACT" == "1" ]] && log_info "Output mode: compact"
     [[ "$STRICT_MODE" == "1" ]] && log_info "Strict mode: enabled"
     echo "" >&2

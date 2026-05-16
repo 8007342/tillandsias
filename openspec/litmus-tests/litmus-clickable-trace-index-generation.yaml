@@ -4,6 +4,7 @@ spec: clickable-trace-index
 phase: pre-build
 description: Verify the trace index generator, companion backlink files, and build integration remain intact
 severity: medium
+size: quick
 
 preconditions:
   - workspace contains scripts/ and openspec/specs/

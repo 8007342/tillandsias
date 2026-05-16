@@ -7,6 +7,7 @@ name: litmus:ci-unchanged-behavior
 spec: build-script-architecture
 description: Verify CI builds work identically to before refactoring; release artifacts unchanged
 severity: critical
+size: quick
 
 preconditions:
   - CI environment variable set (CI=true or GITHUB_ACTIONS=true)

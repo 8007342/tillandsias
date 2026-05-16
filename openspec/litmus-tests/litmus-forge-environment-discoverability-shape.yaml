@@ -2,6 +2,7 @@ name: litmus:forge-environment-discoverability-shape
 spec: forge-environment-discoverability
 description: Verify the forge discovery scripts and welcome banner expose the current flat command surface
 severity: medium
+size: instant
 phase: pre-build
 
 preconditions:

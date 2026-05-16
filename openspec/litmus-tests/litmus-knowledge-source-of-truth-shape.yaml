@@ -4,6 +4,7 @@ spec: knowledge-source-of-truth
 phase: pre-build
 description: Verify debug-source fetching, vendor/debug isolation, gitignore coverage, and the source-of-truth epistemology contract (authority hierarchy, CRDT semantics, divergence resolution, evidence bundles, staleness signals).
 severity: medium
+size: instant
 
 preconditions:
   - workspace contains scripts/ and .gitignore

@@ -4,6 +4,7 @@ spec: podman-idiomatic-patterns
 phase: integration
 description: Verify per-project storage isolation with read-only /src, read-write /workspace, and ephemeral /tmp in actual forge containers
 severity: critical
+size: e2e
 
 preconditions:
   - podman is installed and running in rootless mode

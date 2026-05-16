@@ -4,6 +4,7 @@ spec: runtime-diagnostics-stream
 phase: pre-build
 description: Verify runtime diagnostics stream hooks stay attached to stderr-facing scripts
 severity: medium
+size: instant
 
 preconditions:
   - workspace contains images/default/lib-common.sh

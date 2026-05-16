@@ -7,6 +7,7 @@ name: litmus:build-clean-from-scratch-works
 spec: build-script-architecture
 description: Verify ./build.sh --clean produces a working AppImage from scratch, no caches
 severity: critical
+size: quick
 
 preconditions:
   - build.sh script available and executable

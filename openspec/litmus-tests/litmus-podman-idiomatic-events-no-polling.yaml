@@ -4,6 +4,7 @@ spec: podman-idiomatic-patterns
 phase: pre-build
 description: Verify container state observation uses podman events stream rather than polling sleep loops
 severity: high
+size: instant
 
 preconditions:
   - workspace contains crates/tillandsias-podman with events.rs

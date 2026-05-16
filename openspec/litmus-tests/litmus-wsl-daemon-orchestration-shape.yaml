@@ -4,6 +4,7 @@ spec: wsl-daemon-orchestration
 phase: pre-build
 description: Verify the WSL daemon orchestration path keeps its socket and watchdog wiring
 severity: medium
+size: instant
 
 preconditions:
   - workspace contains crates/tillandsias-podman/src/events.rs

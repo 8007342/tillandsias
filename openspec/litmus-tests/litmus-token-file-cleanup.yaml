@@ -2,6 +2,7 @@ name: litmus:token-file-cleanup
 spec: secrets-management
 description: Verify token files cleaned on container exit, no secrets left on disk
 severity: critical
+size: e2e
 phase: retired
 status: retired
 

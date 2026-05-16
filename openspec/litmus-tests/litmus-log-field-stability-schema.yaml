@@ -4,6 +4,7 @@ spec: runtime-logging
 phase: pre-release
 description: Validate log field names and schema backwards compatibility to prevent silent breaking changes
 severity: critical
+size: quick
 
 preconditions:
   - workspace contains crates/tillandsias-logging

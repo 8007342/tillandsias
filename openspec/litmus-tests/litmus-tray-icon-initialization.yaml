@@ -4,6 +4,7 @@ spec: tray-icon-lifecycle
 phase: pre-build
 description: Verify the initial Pup state and the Mature/Dried enum names remain in use
 severity: medium
+size: quick
 
 preconditions:
   - workspace contains crates/tillandsias-core

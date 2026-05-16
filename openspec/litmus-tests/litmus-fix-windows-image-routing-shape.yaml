@@ -2,6 +2,7 @@ name: litmus:fix-windows-image-routing-shape
 spec: fix-windows-image-routing
 description: Verify the image builder routes forge/proxy/git/inference/web to their own Containerfiles
 severity: medium
+size: instant
 phase: pre-build
 
 preconditions:

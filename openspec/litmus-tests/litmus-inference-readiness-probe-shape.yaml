@@ -2,6 +2,7 @@ name: litmus:inference-readiness-probe-shape
 spec: inference-container, async-inference-launch
 description: Verify inference readiness uses container health plus a forge-side /api/version probe
 severity: high
+size: instant
 phase: pre-build
 backend: fake
 

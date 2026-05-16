@@ -4,6 +4,7 @@ spec: cheatsheet-tooling
 phase: pre-build
 description: Verify cheatsheet tree layout, template, and generated index invariants
 severity: medium
+size: instant
 
 preconditions:
   - workspace contains cheatsheets/ and scripts/

@@ -2,6 +2,7 @@ name: litmus:mount-cleanup
 spec: podman-orchestration
 description: Verify no leftover bind mounts after shutdown
 severity: high
+size: e2e
 
 preconditions:
   - tillandsias tray running

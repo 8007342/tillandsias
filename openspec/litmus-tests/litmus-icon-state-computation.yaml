@@ -4,6 +4,7 @@ spec: tray-icon-lifecycle
 phase: pre-build
 description: Verify tray icon state computation across podman, building, blooming, and mature states
 severity: high
+size: quick
 
 preconditions:
   - workspace contains crates/tillandsias-core
