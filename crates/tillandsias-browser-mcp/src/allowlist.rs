@@ -7,6 +7,8 @@ use std::collections::HashSet;
 use std::fmt;
 use url::{Host, Url};
 
+const OBSERVATORIUM_HOST: &str = "observatorium.tillandsias.localhost";
+
 /// Parsed and validated browser URL.
 #[derive(Debug, Clone)]
 pub struct AllowedUrl {
@@ -114,6 +116,13 @@ impl BrowserAllowlist {
             None => return false,
         };
 
+        if host_str == OBSERVATORIUM_HOST {
+            return matches!(parsed.scheme(), "https")
+                && parsed.username().is_empty()
+                && parsed.password().is_none()
+                && parsed.port().is_none_or(|port| port == 443);
+        }
+
         let port = parsed.port().unwrap_or(match parsed.scheme() {
             "https" => 443,
             _ => 80,
@@ -177,17 +186,38 @@ pub fn validate(url: &str, project_label: &str) -> Result<AllowedUrl, AllowlistD
         return Err(AllowlistDeny::UserInfo);
     }
 
+    let host = parsed
+        .host_str()
+        .ok_or(AllowlistDeny::MissingHost)?
+        .to_string();
+
+    if host == OBSERVATORIUM_HOST {
+        if parsed.scheme() != "https" {
+            return Err(AllowlistDeny::UnsupportedScheme(
+                parsed.scheme().to_string(),
+            ));
+        }
+        if parsed.port().is_some_and(|port| port != 443) {
+            return Err(AllowlistDeny::WrongPort {
+                expected: 443,
+                actual: parsed.port(),
+            });
+        }
+
+        return Ok(AllowedUrl {
+            url: parsed,
+            host,
+            project_label: project_label.to_string(),
+            service_label: "observatorium".to_string(),
+        });
+    }
+
     if parsed.port() != Some(8080) {
         return Err(AllowlistDeny::WrongPort {
             expected: 8080,
             actual: parsed.port(),
         });
     }
-
-    let host = parsed
-        .host_str()
-        .ok_or(AllowlistDeny::MissingHost)?
-        .to_string();
 
     match parsed.host() {
         Some(Host::Ipv4(_)) | Some(Host::Ipv6(_)) => return Err(AllowlistDeny::IpLiteral),
@@ -333,6 +363,14 @@ mod tests {
     }
 
     #[test]
+    fn allowlist_allows_canonical_observatorium_host() {
+        let allowlist = BrowserAllowlist::empty();
+
+        assert!(allowlist.is_allowed("https://observatorium.tillandsias.localhost"));
+        assert!(allowlist.is_allowed("https://observatorium.tillandsias.localhost/"));
+    }
+
+    #[test]
     fn allowlist_blocks_ipv4_non_loopback() {
         let allowlist = BrowserAllowlist::empty();
 
@@ -403,5 +441,12 @@ mod tests {
 
         // But still block recursive opencode launches
         assert!(!allowlist.is_allowed("http://opencode.localhost:8080/"));
+    }
+
+    #[test]
+    fn validate_allows_canonical_observatorium_host() {
+        let allowed = validate("https://observatorium.tillandsias.localhost", "acme").unwrap();
+        assert_eq!(allowed.host, OBSERVATORIUM_HOST);
+        assert_eq!(allowed.service_label, "observatorium");
     }
 }

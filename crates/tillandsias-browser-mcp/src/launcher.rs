@@ -185,7 +185,9 @@ pub fn launch(
 ) -> Result<WindowEntry, LaunchError> {
     let window_id = format!("win-{}", Uuid::new_v4());
     let user_data_dir = profile_root().join(&window_id);
-    ensure_dir(&user_data_dir)?;
+    if !fake_launch {
+        ensure_dir(&user_data_dir)?;
+    }
     let cdp_port = if fake_launch { 0 } else { reserve_port()? };
     let (child, target_id, title) = if fake_launch {
         (None, format!("{window_id}-target"), default_title(url))

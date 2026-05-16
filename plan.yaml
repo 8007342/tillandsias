@@ -19,8 +19,8 @@ plan:
 
   current_state:
     last_completed_step: p3-backlog (step 9)
-    next_step: doc-debt-payoff (step 11) — waves A-D, documentation debt closure
-    next_graph_node: doc-debt/wave-a-events-specs (ready, 3 Haiku agents parallel)
+    next_step: plan-ledger-refresh (step 12) — tray/router routing wave
+    next_graph_node: plan-ledger-refresh/bootstrap (in_progress, ledger refresh and route split)
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next

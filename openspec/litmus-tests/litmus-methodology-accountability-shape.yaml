@@ -1,0 +1,48 @@
+# @trace spec:methodology-accountability
+name: litmus:methodology-accountability-shape
+spec: methodology-accountability
+phase: pre-build
+description: Verify the methodology authority spec stays anchored to its provenance, trace, and supporting artifacts
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains openspec/specs/methodology-accountability/spec.md
+  - workspace contains methodology.yaml
+  - workspace contains methodology/provenance.yaml
+  - workspace contains methodology/event/index.yaml
+  - workspace contains methodology/event/000-template-unpredicted.yaml
+  - workspace contains methodology/proximity.yaml
+  - workspace contains methodology/math-foundations.yaml
+  - workspace contains docs/cheatsheets/openspec-methodology.md
+  - shell utilities are available in PATH (grep, rg)
+
+critical_path:
+  - step: "verify the methodology accountability spec carries all required requirement sections"
+    command: "grep -F 'Requirement: Methodology claims cite provenance' openspec/specs/methodology-accountability/spec.md && grep -F 'Requirement: Unknown events are first-class artifacts' openspec/specs/methodology-accountability/spec.md && grep -F 'Requirement: Correctness proximity uses CentiColons' openspec/specs/methodology-accountability/spec.md && grep -F 'Requirement: Existing convergence score remains coarse' openspec/specs/methodology-accountability/spec.md && grep -F 'Requirement: Mathematical convergence claims are bounded' openspec/specs/methodology-accountability/spec.md"
+    timeout_ms: 5000
+
+  - step: "verify the supporting methodology sources of truth are present"
+    command: "test -f methodology/provenance.yaml && test -f methodology/event/index.yaml && test -f methodology/proximity.yaml && test -f methodology/math-foundations.yaml && test -f docs/cheatsheets/openspec-methodology.md && echo METHODOLOGY_SUPPORT_OK"
+    timeout_ms: 3000
+
+  - step: "verify the unknown-event template carries the required fields"
+    command: "grep -F 'event_id: methodology.event.000-template-unpredicted@v1' methodology/event/000-template-unpredicted.yaml && grep -F 'observed_signal:' methodology/event/000-template-unpredicted.yaml && grep -F 'expected_model:' methodology/event/000-template-unpredicted.yaml && grep -F 'violated_or_missing_claims:' methodology/event/000-template-unpredicted.yaml && grep -F 'affected_artifacts:' methodology/event/000-template-unpredicted.yaml && grep -F 'evidence_refs:' methodology/event/000-template-unpredicted.yaml && grep -F 'uncertainty_delta:' methodology/event/000-template-unpredicted.yaml && grep -F 'next_distillation_step:' methodology/event/000-template-unpredicted.yaml && grep -F 'closure_criteria:' methodology/event/000-template-unpredicted.yaml"
+    timeout_ms: 3000
+
+  - step: "verify the methodology accountability trace surface remains discoverable"
+    command: "rg -n '@trace spec:methodology-accountability' methodology openspec docs cheatsheets scripts src-tauri crates images"
+    timeout_ms: 10000
+    expected_behavior: "methodology-accountability"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "Methodology accountability spec remains traceable and anchored to its support files"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "methodology-accountability-shape"
+
+rollback:
+  on_failure: "inspect openspec/specs/methodology-accountability/spec.md, methodology/provenance.yaml, methodology/event/index.yaml, methodology/proximity.yaml, methodology/math-foundations.yaml, and docs/cheatsheets/openspec-methodology.md for drift"
+  command: "grep -n 'Requirement: Methodology claims cite provenance\\|Requirement: Unknown events are first-class artifacts\\|Requirement: Correctness proximity uses CentiColons\\|Requirement: Existing convergence score remains coarse\\|Requirement: Mathematical convergence claims are bounded' openspec/specs/methodology-accountability/spec.md && printf '\\n---\\n' && rg -n '@trace spec:methodology-accountability' methodology openspec docs cheatsheets scripts src-tauri crates images"

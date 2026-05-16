@@ -183,6 +183,69 @@
 **Effort**: 2 hours (container orchestration + network debugging)
 **File**: openspec/litmus-tests/litmus-browser-isolation-e2e.yaml
 
+#### Test 7: Canonical Observatorium HTTPS Reachability
+
+**Requirement**: The browser can open `https://observatorium.tillandsias.localhost`
+through the canonical browser-facing route.
+
+**Test Steps**:
+```bash
+1. Start the router and observatorium launcher paths with the fallback chain
+2. Confirm the browser allowlist accepts the canonical HTTPS observatorium URL
+3. Confirm the observatorium page is reachable at the canonical hostname
+4. Confirm launcher diagnostics report the real browser-visible URL
+```
+
+**Success Criteria**:
+- Canonical observatorium URL resolves through the browser-facing path
+- HTTPS browser launch does not require a service-port suffix
+- The readiness chain is visible in launcher output
+
+**Effort**: 30 min
+**File**: openspec/litmus-tests/litmus-observatorium-https-reachability.yaml
+
+#### Test 8: Router Host-Port Fallback Selection
+
+**Requirement**: The host-side router listener tries 80, then 8080, then an explicit `--port` escape hatch.
+
+**Test Steps**:
+```bash
+1. Bind 80 and 8080 with harmless listeners
+2. Launch the router path without --port and confirm it reports the explicit fallback requirement
+3. Relaunch with --port <free-port> and confirm the router starts on that port
+4. Confirm host app ports stay internal to the enclave
+```
+
+**Success Criteria**:
+- 80 is preferred when free
+- 8080 is used when 80 is occupied
+- Explicit `--port` is surfaced only when both are occupied
+- No application port is published directly on the host
+
+**Effort**: 30 min
+**File**: openspec/litmus-tests/litmus-router-port-fallback.yaml
+
+#### Test 9: Tray Bootstrap and No Host App-Port Publication
+
+**Requirement**: Tray startup creates or reuses the enclave network and does not publish app ports directly.
+
+**Test Steps**:
+```bash
+1. Start `tillandsias --tray` on a clean host
+2. Confirm the enclave network is created or reused before project containers launch
+3. Confirm tray startup does not cascade on network-not-found failures
+4. Inspect the running containers and verify only the router host binding is published
+```
+
+**Success Criteria**:
+- Enclave network bootstrap is idempotent
+- Tray startup waits for router readiness before launching project containers
+- No app container receives a host-side `-p` publication
+- Router remains the sole host-facing runtime listener
+
+**Effort**: 45 min
+**File**: openspec/litmus-tests/litmus-tray-network-bootstrap.yaml
+
 ---
 
 ### Area 3: Manual Smoke Test
@@ -306,4 +369,3 @@ All 6 automated tests map to litmus definitions:
 **Date**: 2026-05-14
 
 **Next Action**: Start Day 1 test implementation with 4-5 parallel agents (recommended Haiku teams).
-

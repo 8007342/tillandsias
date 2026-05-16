@@ -6,8 +6,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [crates/tillandsias-browser-mcp/src/launcher.rs#L3](../../../crates/tillandsias-browser-mcp/src/launcher.rs#L3)
-- [crates/tillandsias-headless/src/main.rs#L3121](../../../crates/tillandsias-headless/src/main.rs#L3121)
-- [crates/tillandsias-headless/src/main.rs#L3160](../../../crates/tillandsias-headless/src/main.rs#L3160)
+- [crates/tillandsias-headless/src/main.rs#L3246](../../../crates/tillandsias-headless/src/main.rs#L3246)
+- [crates/tillandsias-headless/src/main.rs#L3285](../../../crates/tillandsias-headless/src/main.rs#L3285)
 - [crates/tillandsias-podman/src/launch.rs#L284](../../../crates/tillandsias-podman/src/launch.rs#L284)
 - [scripts/install-chromium.sh#L2](../../../scripts/install-chromium.sh#L2)
 - [scripts/install.sh#L33](../../../scripts/install.sh#L33)

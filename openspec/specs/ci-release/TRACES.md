@@ -7,4 +7,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [scripts/github-actions-convergence.sh#L2](../../../scripts/github-actions-convergence.sh#L2)
 - [scripts/local-ci.sh#L3](../../../scripts/local-ci.sh#L3)
-- [scripts/local-ci.sh#L836](../../../scripts/local-ci.sh#L836)
+- [scripts/local-ci.sh#L858](../../../scripts/local-ci.sh#L858)

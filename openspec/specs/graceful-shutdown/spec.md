@@ -159,12 +159,12 @@ Gating points:
 
 ### Cheatsheets
 
-- `cheatsheets/runtime/signal-handling-unix.md` — Signal delivery, handler registration, POSIX semantics
-- `cheatsheets/runtime/podman-container-cleanup.md` — Container stop semantics, timeout handling, force-kill
-- `cheatsheets/utils/tillandsias-resources-ephemeral.md` — Socket/mount/log cleanup patterns and gotchas
+- `cheatsheets/runtime/container-lifecycle.md` — Container stop semantics, timeout handling, force-kill
+- `cheatsheets/runtime/ephemeral-lifecycle.md` — Socket/mount/log cleanup patterns and gotchas
+- `cheatsheets/runtime/runtime-logging.md` — Observable shutdown event emission and traceability
 
 ## Sources of Truth
 
-- `cheatsheets/runtime/signal-handling-unix.md` — POSIX signal handling semantics and best practices
-- `cheatsheets/runtime/podman-container-cleanup.md` — Podman stop/kill timeout and cleanup mechanics
-- `cheatsheets/utils/tillandsias-resources-ephemeral.md` — Ephemeral resource cleanup discipline and verification
+- `cheatsheets/runtime/container-lifecycle.md` — Podman stop/kill timeout and cleanup mechanics
+- `cheatsheets/runtime/ephemeral-lifecycle.md` — Ephemeral resource cleanup discipline and verification
+- `cheatsheets/runtime/runtime-logging.md` — Shutdown event logging and observability

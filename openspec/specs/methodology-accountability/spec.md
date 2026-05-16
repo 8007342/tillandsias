@@ -148,7 +148,7 @@ unless the required mathematical objects and validation evidence are defined.
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- pending - methodology accountability validator not implemented yet
+- `litmus:methodology-accountability-shape` - Verify the methodology authority surface stays anchored to its trace, provenance, and support files
 
 Gating points:
 - `methodology/provenance.yaml` contains claim IDs, source refs, limits, and

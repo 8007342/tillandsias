@@ -6,9 +6,9 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [crates/tillandsias-browser-mcp/src/allowlist.rs#L3](../../../crates/tillandsias-browser-mcp/src/allowlist.rs#L3)
-- [crates/tillandsias-browser-mcp/src/allowlist.rs#L21](../../../crates/tillandsias-browser-mcp/src/allowlist.rs#L21)
-- [crates/tillandsias-browser-mcp/src/allowlist.rs#L72](../../../crates/tillandsias-browser-mcp/src/allowlist.rs#L72)
-- [crates/tillandsias-browser-mcp/src/allowlist.rs#L100](../../../crates/tillandsias-browser-mcp/src/allowlist.rs#L100)
+- [crates/tillandsias-browser-mcp/src/allowlist.rs#L23](../../../crates/tillandsias-browser-mcp/src/allowlist.rs#L23)
+- [crates/tillandsias-browser-mcp/src/allowlist.rs#L74](../../../crates/tillandsias-browser-mcp/src/allowlist.rs#L74)
+- [crates/tillandsias-browser-mcp/src/allowlist.rs#L102](../../../crates/tillandsias-browser-mcp/src/allowlist.rs#L102)
 - [crates/tillandsias-browser-mcp/src/cdp_client.rs#L6](../../../crates/tillandsias-browser-mcp/src/cdp_client.rs#L6)
 - [crates/tillandsias-browser-mcp/src/framing.rs#L6](../../../crates/tillandsias-browser-mcp/src/framing.rs#L6)
 - [crates/tillandsias-browser-mcp/src/launcher.rs#L3](../../../crates/tillandsias-browser-mcp/src/launcher.rs#L3)

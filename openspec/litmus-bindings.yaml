@@ -20,10 +20,11 @@ specs:
   coverage_ratio: 0
   last_verified: '2026-05-06'
 - spec_id: artifact-detection
-  status: active
+  status: obsolete
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-12'
+  tombstone: superseded:project-summarizers+project-bootstrap-readme+filesystem-scanner+init-command+forge-staleness
 - spec_id: async-inference-launch
   status: active
   litmus_tests:
@@ -388,9 +389,9 @@ specs:
 - spec_id: methodology-accountability
   status: active
   litmus_tests:
-  - litmus:spec-trace-coverage-threshold
+  - litmus:methodology-accountability-shape
   coverage_ratio: 100
-  last_verified: '2026-05-14'
+  last_verified: '2026-05-15'
 - spec_id: logging-levels
   status: obsolete
   litmus_tests: []
@@ -423,9 +424,10 @@ specs:
   last_verified: '2026-05-13'
 - spec_id: no-terminal-flicker
   status: active
-  litmus_tests: null
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  litmus_tests:
+  - litmus:cross-platform-tray
+  coverage_ratio: 33
+  last_verified: '2026-05-15'
 - spec_id: opencode-web-session
   status: obsolete
   litmus_tests: []
@@ -492,9 +494,10 @@ specs:
   last_verified: '2026-05-14'
 - spec_id: project-summarizers
   status: active
-  litmus_tests: null
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  litmus_tests:
+  - litmus:project-bootstrap-readme-shape
+  coverage_ratio: 33
+  last_verified: '2026-05-15'
 - spec_id: proxy-container
   status: active
   litmus_tests:
@@ -503,9 +506,10 @@ specs:
   last_verified: '2026-05-03'
 - spec_id: remote-projects
   status: active
-  litmus_tests: null
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  litmus_tests:
+  - litmus:ephemeral-guarantee
+  coverage_ratio: 33
+  last_verified: '2026-05-15'
 - spec_id: runtime-diagnostics
   status: active
   litmus_tests:
@@ -528,9 +532,10 @@ specs:
   last_verified: '2026-05-14'
 - spec_id: secret-rotation
   status: active
-  litmus_tests: null
+  litmus_tests:
+  - litmus:credential-isolation
   coverage_ratio: 33
-  last_verified: '2026-05-03'
+  last_verified: '2026-05-15'
 - spec_id: secrets-management
   status: active
   litmus_tests:
@@ -539,9 +544,10 @@ specs:
   last_verified: '2026-05-03'
 - spec_id: simplified-tray-ux
   status: active
-  litmus_tests: null
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  litmus_tests:
+  - litmus:tray-minimal-ux-contract-shape
+  coverage_ratio: 33
+  last_verified: '2026-05-15'
 - spec_id: singleton-guard
   status: obsolete
   litmus_tests: null
@@ -550,14 +556,16 @@ specs:
   tombstone: obsolete:src-tauri-deferred
 - spec_id: spec-traceability
   status: active
-  litmus_tests: null
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  litmus_tests:
+  - litmus:spec-traceability-shape
+  coverage_ratio: 33
+  last_verified: '2026-05-15'
 - spec_id: subdomain-naming-flip
   status: active
-  litmus_tests: null
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  litmus_tests:
+  - litmus:ephemeral-guarantee
+  coverage_ratio: 33
+  last_verified: '2026-05-15'
 - spec_id: subdomain-routing-via-reverse-proxy
   status: active
   litmus_tests:
@@ -633,14 +641,16 @@ specs:
   tombstone: obsolete:src-tauri-deferred
 - spec_id: versioning
   status: active
-  litmus_tests: null
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  litmus_tests:
+  - litmus:ephemeral-guarantee
+  coverage_ratio: 33
+  last_verified: '2026-05-15'
 - spec_id: web-image
   status: active
-  litmus_tests: null
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  litmus_tests:
+  - litmus:ephemeral-guarantee
+  coverage_ratio: 33
+  last_verified: '2026-05-15'
 - spec_id: windows-cross-build
   status: obsolete
   litmus_tests: []
@@ -665,9 +675,10 @@ specs:
   last_verified: '2026-05-03'
 - spec_id: zen-default-with-ollama-analysis-pool
   status: active
-  litmus_tests: null
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  litmus_tests:
+  - litmus:inference-readiness-probe-shape
+  coverage_ratio: 33
+  last_verified: '2026-05-15'
 - spec_id: chromium-debug-variant
   status: active
   litmus_tests:

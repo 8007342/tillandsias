@@ -107,6 +107,8 @@ The repository SHALL provide `scripts/run-observatorium.sh`, a local launcher
 for a minimal observability viewer. The launcher SHALL serve the current
 checkout directly, SHOULD prefer a private Chromium sandbox when available, and
 MUST fall back to a host browser command when the sandbox path is unstable.
+The browser-facing canonical hostname SHALL be
+`https://observatorium.tillandsias.localhost`.
 The launcher MUST support `--recreate` to force container recreation and MUST
 short-circuit idempotently when the container already exists.
 

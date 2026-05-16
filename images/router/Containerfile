@@ -17,10 +17,10 @@
 # this image without the workspace source on disk.
 #
 # Two access paths to the Caddy listener, both defended in depth:
-#   1. Host loopback   — `-p 127.0.0.1:8080:8080` from the tray's podman
-#                        invocation. Host kernel restricts the listener to
-#                        127.0.0.1, so the LAN/internet can't reach it at
-#                        the socket level.
+#   1. Host loopback   — `-p 127.0.0.1:<selected>:8080` from the tray's
+#                        podman invocation. Host kernel restricts the
+#                        listener to 127.0.0.1, so the LAN/internet can't
+#                        reach it at the socket level.
 #   2. Enclave network — alias `router` on the tillandsias-enclave bridge.
 #                        Forge agents reach this through HTTP_PROXY=proxy:3128;
 #                        Squid recognises `*.localhost` and forwards to
@@ -92,9 +92,9 @@ RUN mkdir -p /etc/tillandsias
 COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
 
 # @trace spec:fix-router-loopback-port, spec:opencode-web-session-otp
-# Internal listener moved from :80 to :8080 — no privileged-port binding
-# needed, so we can run with the upstream image's default USER without
-# requiring capabilities or root inside the container. 9090 is the
-# sidecar validator (container-internal only; not published to the host).
+# Internal listener stays on :8080 — no privileged-port binding needed, so
+# we can run with the upstream image's default USER without requiring
+# capabilities or root inside the container. 9090 is the sidecar validator
+# (container-internal only; not published to the host).
 EXPOSE 8080 9090
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

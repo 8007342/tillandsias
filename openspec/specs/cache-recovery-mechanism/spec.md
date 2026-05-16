@@ -202,4 +202,8 @@ Test scenarios:
 
 ## Sources of Truth
 
+- `cheatsheets/runtime/cache-architecture.md` — Tiered cache behavior, shared vs per-project state, and cache invalidation
+- `cheatsheets/runtime/ephemeral-lifecycle.md` — Fresh-start semantics, disposable cache directories, and host-pristine lifecycle
+- `cheatsheets/runtime/version-file-conventions.md` — Version file format and cache-version checkpoint semantics
+
 - `cheatsheets/runtime/cache-architecture.md` — Cache model overview, tiered caching, ephemeral vs persistent layers

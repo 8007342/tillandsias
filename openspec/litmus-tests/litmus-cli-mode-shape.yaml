@@ -12,7 +12,7 @@ preconditions:
 
 critical_path:
   - step: "run exact cli-mode unit seams"
-    command: "cargo test -p tillandsias-headless --bin tillandsias tests::opencode_args_mount_workspace_and_prompt -- --exact && cargo test -p tillandsias-headless --bin tillandsias tests::status_check_args_probe_proxy_git_and_inference_from_forge -- --exact && cargo test -p tillandsias-headless --bin tillandsias tests::shutdown_poll_backoff_doubles_until_capped -- --exact"
+    command: "cargo test -p tillandsias-headless --bin tillandsias tests::opencode_args_mount_workspace_and_prompt -- --exact && cargo test -p tillandsias-headless --bin tillandsias tests::status_check_args_probe_proxy_git_and_inference_from_forge -- --exact && cargo test -p tillandsias-headless --bin tillandsias tests::shutdown_poll_backoff_doubles_until_capped -- --exact && cargo test -p tillandsias-headless --bin tillandsias tests::observatorium_launcher_script_is_repo_local -- --exact"
     timeout_ms: 60000
 
 observability:

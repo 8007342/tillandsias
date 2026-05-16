@@ -38,6 +38,15 @@ The user-facing runtime paths `--init`, `--status-check`, `--github-login`, and 
 - **AND** it SHALL use Podman commands plus the embedded health probe
 - **AND** it SHALL not call `scripts/orchestrate-enclave.sh`
 
+### Requirement: Observatorium launcher alias
+The binary MUST accept `--observatorium` as a user-facing launcher alias for the local observatorium viewer. The alias MAY invoke the repo-local observatorium launcher script, but the invocation MUST remain deterministic and must serve the current checkout without external dependencies.
+
+#### Scenario: Observatorium launch alias
+- **WHEN** the user runs `tillandsias --observatorium`
+- **THEN** the local observatorium SHALL be launched from the current checkout
+- **AND** a safe browser SHALL open against `https://observatorium.tillandsias.localhost`
+- **AND** the command SHALL remain compatible with tray-aware CLI invocation
+
 ### Requirement: Image selection flag
 The `--image` flag SHALL allow selecting which container image to use.
 

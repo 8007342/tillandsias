@@ -8,7 +8,7 @@
 # Trust policy:
 #   - The container only has two interfaces: enclave network (10.89.0.0/24
 #     on rootless podman by default) and the loopback port-mapping from
-#     the host (-p 127.0.0.1:8080:8080).
+#     the host (selected from 80 -> 8080 -> explicit --port fallback).
 #   - The Caddy listener at :8080 sees source IPs from those two paths only.
 #   - The `@trusted` matcher allowlists loopback + RFC 1918 private blocks
 #     as defence-in-depth in case the container ever ends up on a different

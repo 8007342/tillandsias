@@ -281,6 +281,13 @@ with the failing rule and the project label.
 - **AND** a chromium process spawns with `--app=http://web.acme.localhost/`
 - **AND** the `WindowRegistry` contains the new entry
 
+#### Scenario: Canonical observatorium URL is allowed
+
+- **WHEN** an agent calls `browser.open({ url: "https://observatorium.tillandsias.localhost" })`
+- **THEN** the tool result is allowed
+- **AND** the URL does not require a service-port suffix
+- **AND** the browser launcher can treat the hostname as the canonical observatorium entrypoint
+
 #### Scenario: URL with userinfo is rejected
 
 - **WHEN** an agent calls

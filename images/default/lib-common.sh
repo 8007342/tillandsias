@@ -11,13 +11,21 @@ set -euo pipefail
 # ── Certificate Authority injection ──────────────────────────
 # @trace spec:transparent-https-caching
 # If the enclave CA cert is mounted at /etc/tillandsias/ca.crt (from orchestrate-enclave.sh),
-# inject it into the system trust store. This allows cargo, npm, rustup, curl, and all other
-# tools to transparently trust the tillandsias-proxy's generated certificates for HTTPS caching.
-# This runs silently if no cert is present (e.g., in dev builds without enclave).
+# build a combined CA bundle in /tmp and point trust-aware tools at it. Forge
+# containers run rootless, so they cannot write system trust stores.
 if [ -f /etc/tillandsias/ca.crt ]; then
-    mkdir -p /usr/local/share/ca-certificates/
-    cp /etc/tillandsias/ca.crt /usr/local/share/ca-certificates/tillandsias.crt 2>/dev/null || true
-    update-ca-certificates 2>/dev/null || true
+    SYSTEM_CA=""
+    if [ -f /etc/pki/tls/certs/ca-bundle.crt ]; then
+        SYSTEM_CA=/etc/pki/tls/certs/ca-bundle.crt
+    elif [ -f /etc/ssl/certs/ca-certificates.crt ]; then
+        SYSTEM_CA=/etc/ssl/certs/ca-certificates.crt
+    fi
+    if [ -n "$SYSTEM_CA" ]; then
+        COMBINED_CA="/tmp/tillandsias-combined-ca.crt"
+        cat "$SYSTEM_CA" /etc/tillandsias/ca.crt > "$COMBINED_CA" 2>/dev/null || true
+        export SSL_CERT_FILE="$COMBINED_CA"
+        export REQUESTS_CA_BUNDLE="$COMBINED_CA"
+    fi
 fi
 
 # Ensure all files created by this script and any process it execs are

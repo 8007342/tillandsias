@@ -664,12 +664,34 @@ log_skip() {
 run_rust_in_nix_develop() {
     local toolbox_name="${TOOLBOX_NAME:-tillandsias}"
     local repo_root="${REPO_ROOT}"
+    local use_toolbox=0
     local nix_cmd
     nix_cmd="mkdir -p \"$HOME/.cache/tillandsias/nix-store\" && cd $(printf '%q' "$repo_root") && nix --store \"local?root=$HOME/.cache/tillandsias/nix-store\" develop --extra-experimental-features nix-command --extra-experimental-features flakes --command"
     for arg in "$@"; do
         nix_cmd+=" $(printf '%q' "$arg")"
     done
-    toolbox run -c "$toolbox_name" bash -lc "$nix_cmd"
+
+    if command -v toolbox >/dev/null 2>&1 && toolbox run -c "$toolbox_name" true >/dev/null 2>&1; then
+        use_toolbox=1
+    fi
+
+    if [[ "$use_toolbox" -eq 1 ]]; then
+        toolbox run -c "$toolbox_name" bash -lc "$nix_cmd"
+        return $?
+    fi
+
+    printf 'WARN: toolbox unavailable; running rust checks directly in the current shell\n' >&2
+    (
+        local cache_home runtime_dir
+        cache_home="$(mktemp -d "${TMPDIR:-/tmp}/tillandsias-ci-cache.XXXXXX")"
+        runtime_dir="$(mktemp -d "${TMPDIR:-/tmp}/tillandsias-ci-runtime.XXXXXX")"
+        trap 'rm -rf "$cache_home" "$runtime_dir"' EXIT
+        export XDG_CACHE_HOME="$cache_home"
+        export XDG_RUNTIME_DIR="$runtime_dir"
+        export DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime_dir/bus"
+        cd "$repo_root"
+        "$@"
+    )
 }
 
 sha256_file() {
@@ -870,7 +892,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
 
     # Tray feature contract
     # @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states
-    if run_rust_in_nix_develop cargo test -p tillandsias-headless --features tray 2>&1 | tee /tmp/tray-check.log; then
+    if run_rust_in_nix_develop cargo test -p tillandsias-headless --bin tillandsias --features tray 2>&1 | tee /tmp/tray-check.log; then
         log_pass "Tray feature tests pass"
         archive_check_log "tray-contract" "pass" /tmp/tray-check.log
     else

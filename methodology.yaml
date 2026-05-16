@@ -10,7 +10,7 @@ methodology:
 
   bootstrap:
     command: "/skills bootstrap"
-    first_step: "Read methodology/bootstrap/router.yaml."
+    first_step: "Read plan.yaml, plan/index.yaml, and methodology/bootstrap/router.yaml."
     selection_rule: "Choose exactly one intent from bootstrap_router.intent_options."
     role_rule: "Use methodology/bootstrap/roles.yaml for m:n role and file affordances."
     receipt_required_before_source_edits: true
@@ -24,6 +24,7 @@ methodology:
     plan_root: plan.yaml
     plan_index: plan/index.yaml
     plan_step_notes: plan/steps/README.md
+    plan_issues_root: plan/issues
     unknown_event_register: methodology/event/index.yaml
 
   invariant_summary:

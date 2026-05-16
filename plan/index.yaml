@@ -832,8 +832,134 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Wave D: 1 Haiku agent (D1). Verifies all waves, runs full litmus suite, confirms ./build.sh --test passes, creates ghost-trace backlog file, updates plan.yaml current_state. Single integration commit. ETA: 0.5-1h."
 
-    - id: post-release-polish
+    - id: plan-ledger-refresh
       order: 12
+      title: Plan Ledger Refresh — Tray and Observatorium Routing Wave
+      status: in_progress
+      deliverable: plan/steps/12-plan-ledger-refresh.md
+      depends_on: []
+      specs: []
+      exit_criteria:
+        - "methodology.yaml points bootstrap agents at plan.yaml, plan/index.yaml, plan/steps, and plan/issues first"
+        - "The tray/router wave is broken into discrete resumable step files"
+        - "The next agent can cold-start from the step file without chat history"
+      tasks:
+        - id: plan-ledger-refresh/bootstrap
+          status: in_progress
+          depends_on: []
+          owned_files:
+            - methodology.yaml
+            - plan.yaml
+            - plan/index.yaml
+            - plan/steps/README.md
+            - plan/steps/12-plan-ledger-refresh.md
+          checkpoint_required: true
+          handoff_note: "Current wave: refresh the durable plan ledger first, then split routing/bootstrap/port/readiness into resumable step files. Keep plan/issues as the blocker queue and preserve cold-start readability."
+        - id: plan-ledger-refresh/tray-routing-split
+          status: ready
+          depends_on:
+            - plan-ledger-refresh/bootstrap
+          owned_files:
+            - plan/steps/13-router-observatorium-routing.md
+            - plan/steps/14-user-runtime-port-selection.md
+            - plan/steps/15-tray-network-bootstrap.md
+            - plan/steps/16-observatorium-readiness-and-ux.md
+          checkpoint_required: true
+          handoff_note: "Follow-on work: route observatorium through the canonical hostname, make port selection explicit, bootstrap the enclave network before tray launch, and tighten readiness failure reporting."
+
+    - id: router-observatorium-routing
+      order: 13
+      title: Router and Observatorium Routing — Canonical Hostname Wave
+      status: in_progress
+      deliverable: plan/steps/13-router-observatorium-routing.md
+      depends_on: [plan-ledger-refresh]
+      specs: []
+      exit_criteria:
+        - "The canonical observatorium hostname is reflected in launcher, allowlist, and routing notes"
+        - "Router host-port ownership is documented and tested"
+        - "Safe browser launch paths accept the HTTPS observatorium URL"
+      tasks:
+        - id: router-observatorium-routing/allowlist-and-canonical-url
+          status: in_progress
+          depends_on: [plan-ledger-refresh/bootstrap]
+          owned_files:
+            - crates/tillandsias-browser-mcp/src/allowlist.rs
+            - crates/tillandsias-headless/src/main.rs
+            - scripts/run-observatorium.sh
+            - openspec/specs/host-browser-mcp/spec.md
+            - openspec/specs/cli-mode/spec.md
+          checkpoint_required: true
+          handoff_note: "Canonical route work: keep the browser-facing observatorium URL on the new HTTPS hostname, align the allowlist, and keep the router's host bind loopback-only."
+
+    - id: user-runtime-port-selection
+      order: 14
+      title: User Runtime Port Selection — 80 then 8080 then --port
+      status: ready
+      deliverable: plan/steps/14-user-runtime-port-selection.md
+      depends_on: [router-observatorium-routing]
+      specs: []
+      exit_criteria:
+        - "Router host-port selection tries 80 first, 8080 second, and an explicit --port escape hatch last"
+        - "Launcher help and diagnostics explain the fallback chain"
+        - "Host-facing app ports stay internal to the enclave"
+      tasks:
+        - id: user-runtime-port-selection/fallback-chain
+          status: ready
+          depends_on: [router-observatorium-routing/allowlist-and-canonical-url]
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - scripts/run-observatorium.sh
+            - plan/steps/14-user-runtime-port-selection.md
+          checkpoint_required: true
+          handoff_note: "Implement the host-port fallback chain explicitly, including the user-visible --port escape hatch and the host/loopback diagnostics."
+
+    - id: tray-network-bootstrap
+      order: 15
+      title: Tray Network Bootstrap — Ensure Enclave Readiness Before Launch
+      status: pending
+      deliverable: plan/steps/15-tray-network-bootstrap.md
+      depends_on: [router-observatorium-routing, user-runtime-port-selection]
+      specs: []
+      exit_criteria:
+        - "Tray startup creates or reuses the enclave network before project containers"
+        - "The tray no longer cascades on network-not-found or exit 125 errors"
+        - "Tray startup waits for the router before launching project containers"
+      tasks:
+        - id: tray-network-bootstrap/enclave-network
+          status: pending
+          depends_on: [user-runtime-port-selection/fallback-chain]
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-podman/src/client.rs
+            - plan/steps/15-tray-network-bootstrap.md
+          checkpoint_required: true
+          handoff_note: "Make tray startup idempotently create/reuse the enclave network via Podman and ensure router readiness precedes project container launch."
+
+    - id: observatorium-readiness-and-ux
+      order: 16
+      title: Observatorium Readiness and UX — Fail Loudly With Logs
+      status: pending
+      deliverable: plan/steps/16-observatorium-readiness-and-ux.md
+      depends_on: [router-observatorium-routing, user-runtime-port-selection, tray-network-bootstrap]
+      specs: []
+      exit_criteria:
+        - "Observatorium readiness checks the actual HTTPS page, not just container startup"
+        - "Failure paths attach container logs and inspect data"
+        - "Tray and observatorium errors resolve to one actionable path"
+      tasks:
+        - id: observatorium-readiness-and-ux/readiness-check
+          status: pending
+          depends_on: [tray-network-bootstrap/enclave-network]
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - scripts/run-observatorium.sh
+            - openspec/specs/clickable-trace-index/spec.md
+            - openspec/specs/cli-mode/spec.md
+          checkpoint_required: true
+          handoff_note: "Tighten the observatorium readiness check and surface container diagnostics on failure so the browser path can distinguish bootstrap from route breakage."
+
+    - id: post-release-polish
+      order: 17
       title: Wave 25 — Post-Release Polish & P1 Consolidation
       status: pending
       deliverable: plan/issues/wave-25-post-release-polish-2026-05-14.md

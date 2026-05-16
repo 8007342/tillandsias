@@ -710,7 +710,7 @@ fn launch_project_action(
     match kind {
         LaunchKind::OpenCodeWeb => {
             let project_path = project.path.display().to_string();
-            super::run_opencode_web_mode(&project_path, None, false)
+            super::run_opencode_web_mode(&project_path, None, None, false)
         }
         _ => {
             let image = format!("tillandsias-forge:v{}", version);

@@ -11,6 +11,9 @@ annotation-count: 11
 
 Enable stable, port-agnostic URLs for all web services spawned in the enclave via a reverse-proxy listener that maps `<service>.<project>.localhost` hostnames to internal container ports, while maintaining RFC 6761 loopback-only binding.
 
+The browser-facing observatorium success path uses
+`https://observatorium.tillandsias.localhost` as the canonical entrypoint.
+
 ## Requirements
 
 ### Requirement: Reverse-proxy container and binding

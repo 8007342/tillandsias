@@ -13,6 +13,8 @@
 //!   tillandsias                              # Auto-detect (transparent mode)
 //!   tillandsias --headless [config_path]    # Headless mode (no UI)
 //!   tillandsias --tray [config_path]        # Tray mode (requires native Linux tray feature)
+//!   tillandsias --observatorium              # Local observatorium launcher
+//!   tillandsias --port <port>                # Router / observatorium fallback host port
 //!
 //! JSON Events:
 //!   - {"event":"app.started","timestamp":"<RFC3339>"} — at startup
@@ -79,12 +81,32 @@ fn main() {
     let github_login = user_args.iter().any(|a| a == "--github-login");
     let opencode = user_args.iter().any(|a| a == "--opencode");
     let opencode_web = user_args.iter().any(|a| a == "--opencode-web");
+    let observatorium = user_args.iter().any(|a| a == "--observatorium");
     let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
     let cache_verify = user_args.iter().any(|a| a == "--cache-verify");
+    let port_override = match user_args.iter().position(|a| a == "--port") {
+        Some(i) => match user_args.get(i + 1).and_then(|p| p.parse::<u16>().ok()) {
+            Some(port) => Some(port),
+            None => {
+                eprintln!("Error: --port requires a numeric port value");
+                std::process::exit(2);
+            }
+        },
+        None => None,
+    };
 
     // @trace spec:cli-mode, spec:runtime-diagnostics-stream, spec:cli-bash-mode, spec:cli-diagnostics
     // --diagnostics implies --debug
     let debug = debug || diagnostics;
+
+    if let Some(port) = port_override {
+        // SAFETY: these writes happen during process startup before any worker
+        // threads are spawned, so there is no concurrent environment mutation.
+        unsafe {
+            std::env::set_var("TILLANDSIAS_ROUTER_HOST_PORT", port.to_string());
+            std::env::set_var("OBSERVATORIUM_PORT", port.to_string());
+        }
+    }
 
     // @trace spec:cli-mode, spec:cli-bash-mode, spec:cli-diagnostics
     let prompt = user_args
@@ -103,6 +125,8 @@ fn main() {
         "--github-login",
         "--opencode",
         "--opencode-web",
+        "--observatorium",
+        "--port",
         "--prompt",
         "--cache-clear",
         "--cache-verify",
@@ -126,10 +150,18 @@ fn main() {
 
     let headless = user_args.iter().any(|a| a == "--headless");
     let tray = user_args.iter().any(|a| a == "--tray");
-    let config_path = user_args
-        .iter()
-        .find(|a| !a.starts_with('-'))
-        .map(|p| p.to_string());
+    let config_path = user_args.iter().enumerate().find_map(|(i, a)| {
+        if a.starts_with('-') {
+            return None;
+        }
+        if user_args
+            .get(i.saturating_sub(1))
+            .is_some_and(|prev| prev == "--prompt" || prev == "--port")
+        {
+            return None;
+        }
+        Some(a.to_string())
+    });
 
     if github_login {
         if let Err(e) = run_github_login(debug) {
@@ -192,7 +224,9 @@ fn main() {
 
     if opencode_web {
         if let Some(project_path) = config_path {
-            if let Err(e) = run_opencode_web_mode(&project_path, prompt.as_deref(), debug) {
+            if let Err(e) =
+                run_opencode_web_mode(&project_path, prompt.as_deref(), port_override, debug)
+            {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -201,6 +235,14 @@ fn main() {
             eprintln!("Error: --opencode-web requires project path");
             std::process::exit(2);
         }
+    }
+
+    if observatorium {
+        if let Err(e) = run_observatorium_mode(debug) {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        return;
     }
 
     // Phase 3, Task 12: Auto-detection (transparent mode)
@@ -270,10 +312,15 @@ fn print_usage(version: &str) {
     println!(
         "       tillandsias --opencode-web <project> [--prompt <text>] [--debug|--diagnostics]"
     );
+    println!("       tillandsias --observatorium [--port <port>]");
     println!("  --headless     Run in headless mode (no UI)");
     println!("  --tray         Run in tray mode (requires native tray support)");
     println!("  --opencode     Enable LLM code analysis mode");
     println!("  --opencode-web Launch OpenCode Web plus isolated browser");
+    println!("  --observatorium Launch the local observatorium viewer");
+    println!(
+        "  --port PORT     Use PORT when 80 and 8080 are unavailable for the router or observatorium"
+    );
     println!("  --prompt TEXT  Send prompt to LLM inference (requires --opencode)");
     println!("  --init         Pre-build container images");
     println!("  --force        Rebuild all images even if cached (use with --init)");
@@ -563,16 +610,37 @@ fn check_cache_integrity(version: &str) -> Result<CacheIntegrityStatus, String> 
 }
 
 fn init_cache_dir() -> Result<PathBuf, String> {
-    let cache_dir = if let Ok(cache_home) = std::env::var("XDG_CACHE_HOME") {
-        PathBuf::from(cache_home).join("tillandsias")
-    } else if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".cache").join("tillandsias")
-    } else {
-        return Err("Cannot determine cache directory: HOME not set".to_string());
-    };
+    let mut candidates = Vec::new();
+    if let Ok(cache_home) = std::env::var("XDG_CACHE_HOME") {
+        candidates.push(PathBuf::from(cache_home).join("tillandsias"));
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        candidates.push(PathBuf::from(home).join(".cache").join("tillandsias"));
+    }
+    candidates.push(PathBuf::from("/tmp/tillandsias"));
 
-    fs::create_dir_all(&cache_dir).map_err(|e| format!("Failed to create cache directory: {e}"))?;
-    Ok(cache_dir)
+    for cache_dir in candidates {
+        if fs::create_dir_all(&cache_dir).is_ok() && cache_dir_is_writable(&cache_dir) {
+            return Ok(cache_dir);
+        }
+    }
+
+    Err("Failed to create a writable cache directory".to_string())
+}
+
+fn cache_dir_is_writable(cache_dir: &Path) -> bool {
+    let probe = cache_dir.join(".writable-probe");
+    match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+    {
+        Ok(_) => {
+            let _ = fs::remove_file(&probe);
+            true
+        }
+        Err(_) => false,
+    }
 }
 
 fn init_log_file(image_name: &str, debug: bool) -> Option<PathBuf> {
@@ -626,9 +694,9 @@ fn image_build_args(image_name: &str, image_tag: &str) -> Vec<String> {
         // @trace spec:init-command, spec:chromium-browser-isolation
         //
         // chromium-framework depends on chromium-core image built in the previous step.
-        // Pass --build-arg CHROMIUM_CORE_TAG so the Containerfile can reference it:
+        // Pass --build-arg CHROMIUM_CORE_IMAGE so the Containerfile can reference it:
         //
-        //   FROM tillandsias-chromium-core:${CHROMIUM_CORE_TAG}
+        //   FROM ${CHROMIUM_CORE_IMAGE}
         //
         // KNOWN BLOCKER: Nix-based image builds (via flake.nix + nix build) do NOT support
         // ARG passing. The nix build system does not expose a way to pass --build-arg values
@@ -639,14 +707,15 @@ fn image_build_args(image_name: &str, image_tag: &str) -> Vec<String> {
         //
         // Reference: project_nix_image_builds_require_git_add.md
         //
-        let core_tag = image_tag
+        let core_version = image_tag
             .split(':')
             .next_back()
+            .map(|value| value.trim_start_matches('v'))
             .filter(|value| !value.is_empty())
             .unwrap_or("latest");
         vec![
             "--build-arg".into(),
-            format!("CHROMIUM_CORE_TAG={core_tag}"),
+            format!("CHROMIUM_CORE_IMAGE=tillandsias-chromium-core:v{core_version}"),
         ]
     } else {
         Vec::new()
@@ -1098,11 +1167,12 @@ fn router_dynamic_caddyfile_host_path() -> PathBuf {
 ///
 /// The router runs on the enclave network with DNS alias `router` so Squid's
 /// `cache_peer` directive can resolve it for `.localhost` subdomain traffic.
-/// It also publishes `127.0.0.1:8080:8080` so the host browser can reach
-/// OpenCode Web at `http://<service>.<project>.localhost:8080/`.
+/// It also publishes the router on loopback using the first available host
+/// port from `80 -> 8080 -> --port`, while the in-container listener remains
+/// on `:8080`.
 ///
 /// @trace spec:subdomain-routing-via-reverse-proxy, spec:fix-router-loopback-port, spec:enclave-network
-fn build_router_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
+fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<String> {
     let dyn_dir = router_dynamic_caddyfile_host_path();
     let dyn_file = dyn_dir.join("dynamic.Caddyfile");
     // Ensure the directory and placeholder file exist before the container
@@ -1137,11 +1207,11 @@ fn build_router_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
         "--tmpfs".into(),
         "/run/router:size=8m".into(),
         // @trace spec:fix-router-loopback-port
-        // Host publish on loopback ONLY. Both host and container ports are 8080
-        // because rootless podman cannot bind ports below 1024 under
-        // --cap-drop=ALL. The base.Caddyfile listener is already on :8080.
+        // Host publish on loopback ONLY. The container listener stays on
+        // :8080; the host port is selected from the 80 -> 8080 -> --port
+        // fallback chain by `select_router_host_port()`.
         "-p".into(),
-        "127.0.0.1:8080:8080".into(),
+        format!("127.0.0.1:{host_port}:8080"),
         // @trace spec:subdomain-routing-via-reverse-proxy
         // Dynamic Caddyfile written by the runtime for per-project routes.
         // Bind-mounted read-write so router-reload.sh can atomically replace it.
@@ -1227,6 +1297,7 @@ async fn ensure_router_running(
     client: &PodmanClient,
     certs_dir: &Path,
     image: &str,
+    host_port: u16,
     debug: bool,
 ) -> Result<(), String> {
     const ROUTER_NAME: &str = "tillandsias-router";
@@ -1252,7 +1323,7 @@ async fn ensure_router_running(
         eprintln!("[tillandsias] starting router container");
     }
     client
-        .run_container(&build_router_run_args(certs_dir, image))
+        .run_container(&build_router_run_args(certs_dir, image, host_port))
         .await
         .map_err(|e| format!("Failed to start router: {e}"))?;
 
@@ -1286,6 +1357,38 @@ fn generate_dynamic_caddyfile(windows: &[(String, String, u16)]) -> String {
         ));
     }
     routes
+}
+
+fn router_host_port_candidates(port_override: Option<u16>) -> Vec<u16> {
+    let mut candidates = vec![80, 8080];
+    if let Some(port) = port_override
+        && !candidates.contains(&port)
+    {
+        candidates.push(port);
+    }
+    candidates
+}
+
+fn port_is_available(port: u16) -> bool {
+    std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()
+}
+
+fn select_router_host_port(port_override: Option<u16>, debug: bool) -> Result<u16, String> {
+    for candidate in router_host_port_candidates(port_override) {
+        if port_is_available(candidate) {
+            if debug {
+                eprintln!("[tillandsias] selected router host port {candidate}");
+            }
+            return Ok(candidate);
+        }
+    }
+
+    Err(match port_override {
+        Some(port) => format!(
+            "Host ports 80 and 8080 are occupied; re-run with --port {port} or choose another free port"
+        ),
+        None => "Host ports 80 and 8080 are occupied; re-run with --port <free-port>".to_string(),
+    })
 }
 
 fn forge_container_name(project_name: &str) -> String {
@@ -1499,7 +1602,7 @@ fn build_opencode_forge_args(
 ///
 /// ## Build Arguments
 ///
-/// - `chromium-framework` passes `--build-arg CHROMIUM_CORE_TAG=<version>` to reference the
+/// - `chromium-framework` passes `--build-arg CHROMIUM_CORE_IMAGE=<image>` to reference the
 ///   just-built chromium-core image. **Known blocker**: Nix-based build (via flake.nix) fails
 ///   when passed ARG values; workaround is to build directly via podman (current implementation).
 ///
@@ -1781,13 +1884,13 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
 ///
 /// ## Build Process
 /// 1. Locate Containerfile and build context directory (via image_specs)
-/// 2. Determine build arguments (e.g., CHROMIUM_CORE_TAG for chromium-framework)
+/// 2. Determine build arguments (e.g., CHROMIUM_CORE_IMAGE for chromium-framework)
 /// 3. Construct `podman build` command with tag and context
 /// 4. Optionally redirect stdout/stderr to log file (if debug mode)
 /// 5. Execute synchronously and return status
 ///
 /// ## Build Arguments
-/// - `--build-arg CHROMIUM_CORE_TAG=<tag>` for chromium-framework only
+/// - `--build-arg CHROMIUM_CORE_IMAGE=<image>` for chromium-framework only
 /// - chromium-framework MUST be built after chromium-core to resolve the ARG
 fn build_image_with_logging(
     root: &Path,
@@ -2687,6 +2790,28 @@ fn launch_tray_mode(_config_path: Option<String>) -> Result<(), String> {
     }
 }
 
+fn observatorium_launcher_script(root: &Path) -> PathBuf {
+    root.join("scripts/run-observatorium.sh")
+}
+
+fn run_observatorium_mode(debug: bool) -> Result<(), String> {
+    let root = find_checkout_root()?;
+    let script = observatorium_launcher_script(&root);
+
+    if !script.is_file() {
+        return Err(format!(
+            "Observatorium launcher not found at {}",
+            script.display()
+        ));
+    }
+
+    if debug {
+        eprintln!("[tillandsias] Observatorium launcher: {}", script.display());
+    }
+
+    run_command(Command::new(&script), debug)
+}
+
 /// Run in OpenCode mode — launch the full enclave stack and OpenCode TUI.
 ///
 /// @trace spec:cli-mode
@@ -3217,6 +3342,7 @@ async fn monitor_and_cleanup_browser(container_name: &str, debug: bool) -> Resul
 pub(crate) fn run_opencode_web_mode(
     project_path: &str,
     prompt: Option<&str>,
+    port_override: Option<u16>,
     debug: bool,
 ) -> Result<(), String> {
     if debug {
@@ -3333,7 +3459,9 @@ pub(crate) fn run_opencode_web_mode(
         // @trace spec:subdomain-routing-via-reverse-proxy
         // After forge starts, ensure router is running and write dynamic routes.
         let router_image = versioned_image_tag("router", version);
-        ensure_router_running(&client, &certs_dir, &router_image, debug)
+        let router_host_port = select_router_host_port(port_override, debug)?;
+
+        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug)
             .await
             .unwrap_or_else(|e| {
                 if debug {
@@ -4236,11 +4364,20 @@ mod tests {
         assert!(has_arg(&args, "--ozone-platform=x11"));
     }
 
+    #[test]
+    fn observatorium_launcher_script_is_repo_local() {
+        let root = PathBuf::from("/tmp/tillandsias");
+        assert_eq!(
+            observatorium_launcher_script(&root),
+            PathBuf::from("/tmp/tillandsias/scripts/run-observatorium.sh")
+        );
+    }
+
     // @trace spec:subdomain-routing-via-reverse-proxy, spec:fix-router-loopback-port
     #[test]
     fn router_run_args_encode_expected_container_shape() {
         let certs_dir = PathBuf::from("/tmp/ca");
-        let args = build_router_run_args(&certs_dir, "tillandsias-router:v1.2.3");
+        let args = build_router_run_args(&certs_dir, "tillandsias-router:v1.2.3", 8080);
 
         // Security flags
         assert!(has_arg(&args, "--detach"));
@@ -4511,8 +4648,8 @@ mod tests {
     }
 
     #[test]
-    fn image_build_args_passes_chromium_core_tag_for_framework() {
-        // Test that image_build_args correctly passes CHROMIUM_CORE_TAG
+    fn image_build_args_passes_chromium_core_image_for_framework() {
+        // Test that image_build_args correctly passes CHROMIUM_CORE_IMAGE
         // when building chromium-framework.
         // @trace spec:init-command
         let args = image_build_args(
@@ -4523,8 +4660,8 @@ mod tests {
         assert_eq!(args.len(), 2, "should have 2 args (--build-arg and value)");
         assert_eq!(args[0], "--build-arg");
         assert!(
-            args[1].contains("CHROMIUM_CORE_TAG=v1.0.0"),
-            "should pass CHROMIUM_CORE_TAG with version: {}",
+            args[1].contains("CHROMIUM_CORE_IMAGE=tillandsias-chromium-core:v1.0.0"),
+            "should pass CHROMIUM_CORE_IMAGE with version: {}",
             args[1]
         );
     }

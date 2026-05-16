@@ -89,11 +89,7 @@ RUN chmod +x /usr/local/share/tillandsias/forge-welcome.sh || true
 
 # ── Help system (locale-aware) ─────────────────────────────────
 # @trace spec:help-system-localization
-COPY ../../scripts/help.sh /usr/local/share/tillandsias/help.sh
-COPY ../../scripts/help-es.sh /usr/local/share/tillandsias/help-es.sh
-COPY ../../scripts/help-fr.sh /usr/local/share/tillandsias/help-fr.sh
-COPY ../../scripts/help-de.sh /usr/local/share/tillandsias/help-de.sh
-COPY ../../scripts/help-ja.sh /usr/local/share/tillandsias/help-ja.sh
+COPY help.sh /usr/local/share/tillandsias/help.sh
 RUN chmod +x /usr/local/share/tillandsias/help*.sh || true
 
 # ── Shell helper functions ─────────────────────────────────────

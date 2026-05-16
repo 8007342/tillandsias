@@ -292,11 +292,10 @@ git log --oneline | grep -E "logging|diagnostic|observ"
 | Onboarding | 3 | 3 | 0 | ✓ Complete |
 | Observability | 6 | 6 | 0 | ⚠ Partial |
 | Cross-Platform | 2 | 2 | 0 | ⏸ Deferred |
-| Other | 54 | 53 | 1 | ✓ Mostly Complete |
-| **TOTAL** | **76** | **75** | **1** | |
+| Other | 53 | 53 | 0 | ✓ Complete |
+| **TOTAL** | **75** | **75** | **0** | |
 
-**1 Low-Coverage Spec:**
-- `artifact-detection` (0%) — No litmus tests yet. [Priority: low, non-critical for MVP]
+**Low-Coverage Specs:** none. The retired `artifact-detection` umbrella spec is now tombstoned in the registry.
 
 ---
 
@@ -514,4 +513,3 @@ See `plan/issues/residual-backlog-wave-plan-2026-05-14.md` for per-wave parallel
 - **Cadence**: Per `plan/index.yaml`, checkpoint after each gap closure (3 commits + integration commit minimum for Wave 12).
 - **Verification per closure**: each closed gap MUST add a litmus binding OR a `@trace spec:<name>` annotation; pure code without either is not "closed" under the convergence policy.
 - **Recommendation**: Ship Linux MVP after Wave 12 (minimum-viable gate). Wave 13 strengthens release; Waves 14–16 polish.
-

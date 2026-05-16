@@ -1,0 +1,38 @@
+# @trace spec:spec-traceability
+name: litmus:spec-traceability-shape
+spec: spec-traceability
+phase: pre-build
+description: Verify the traceability authority spec retains its chain references, source-of-truth guidance, and observability anchors
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains openspec/specs/spec-traceability/spec.md
+  - workspace contains cheatsheets/observability/cheatsheet-metrics.md
+  - workspace contains docs/cheatsheets/openspec-methodology.md
+  - shell utilities are available in PATH (grep)
+
+critical_path:
+  - step: "verify the spec keeps the traceability requirements that govern annotations and logs"
+    command: "grep -F 'Requirement: Code annotations link to specs and knowledge' openspec/specs/spec-traceability/spec.md && grep -F 'Requirement: Structured spec field in tracing logs' openspec/specs/spec-traceability/spec.md && grep -F 'Requirement: CRDT-like reference semantics' openspec/specs/spec-traceability/spec.md && grep -F 'Requirement: Specs SHOULD prefer non-DRAFT cheatsheets in Sources of Truth' openspec/specs/spec-traceability/spec.md && grep -F 'Requirement: @cheatsheet path annotation in code is a peer of @trace spec:' openspec/specs/spec-traceability/spec.md && grep -F 'Requirement: Litmus chain references are explicit in updated specs' openspec/specs/spec-traceability/spec.md"
+    timeout_ms: 5000
+
+  - step: "verify the spec keeps its observability anchors and source-of-truth references"
+    command: "grep -F 'cheatsheets/observability/cheatsheet-metrics.md' openspec/specs/spec-traceability/spec.md && grep -F 'docs/cheatsheets/openspec-methodology.md' openspec/specs/spec-traceability/spec.md"
+    timeout_ms: 3000
+
+  - step: "verify the owning cheatsheet and methodology docs are present"
+    command: "test -f cheatsheets/observability/cheatsheet-metrics.md && test -f docs/cheatsheets/openspec-methodology.md && echo SPEC_TRACEABILITY_SUPPORT_OK"
+    timeout_ms: 3000
+
+observability:
+  traces:
+    - "@trace spec:spec-traceability"
+  expected_log: "Spec traceability remains anchored to its required annotation, logging, and litmus-chain contract"
+  log_fields:
+    spec: "spec-traceability"
+    test: "spec-traceability-shape"
+
+rollback:
+  on_failure: "inspect openspec/specs/spec-traceability/spec.md and the linked cheatsheets for missing traceability sections"
+  command: "grep -n 'Requirement: Code annotations link to specs and knowledge\\|Requirement: Structured spec field in tracing logs\\|Requirement: CRDT-like reference semantics\\|Requirement: Specs SHOULD prefer non-DRAFT cheatsheets in Sources of Truth\\|Requirement: @cheatsheet path annotation in code is a peer of @trace spec:\\|Requirement: Litmus chain references are explicit in updated specs' openspec/specs/spec-traceability/spec.md"

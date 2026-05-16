@@ -206,14 +206,13 @@ that resume the convergence loop without rediscovery.
 
 ## Litmus Tests
 
-The following litmus tests validate spec-traceability requirements:
+Bind to tests in `openspec/litmus-bindings.yaml`:
+- `litmus:spec-traceability-shape` - Verify the traceability spec keeps its required sections, source-of-truth anchors, and litmus-chain guidance
 
-- `litmus-annotation-coverage.yaml` — Validates trace annotation coverage (~20% of code) (Req: spec-traceability.annotation.trace-coverage@v1)
-- `litmus-spec-field-instrumentation.yaml` — Validates structured spec field in critical logs (Req: spec-traceability.logging.spec-field-instrumentation@v1)
-- `litmus-crdt-annotation-semantics.yaml` — Validates CRDT-like reference non-blocking properties (Req: spec-traceability.annotation.crdt-references@v1)
-- `litmus-cheatsheet-citation-graph.yaml` — Validates cheatsheet→code→spec queryable graph (Req: spec-traceability.annotation.cheatsheet-code-citation@v1)
-
-See `openspec/litmus-bindings.yaml` for full binding definitions.
+The spec is currently exercised by the shape litmus above. The more granular
+annotation and logging checks remain part of the spec text and may be split into
+separate executable boundaries later if the contract needs finer-grained
+regression coverage.
 
 ## Sources of Truth
 
