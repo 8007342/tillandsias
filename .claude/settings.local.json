@@ -55,7 +55,10 @@
       "Bash(mv memory/* \"/c/Users/bullo/.claude/projects/C--Users-bullo-src-tillandsias/memory/\")",
       "Read(//c/Users/bullo/.claude/projects/C--Users-bullo-src-tillandsias/memory//**)",
       "Bash(grep --line-buffered -E '\\(^STEP [0-9]+/15:|Successfully tagged|Error: building|exit status|^success$|writing manifest|verifying sha\\)')",
-      "Bash(kill -0 1446751)"
+      "Bash(kill -0 1446751)",
+      "Bash(xargs -r podman rm -f)",
+      "Bash(rm -rf /run/user/1000/tillandsias/browser/*)",
+      "Bash(rm -rf /run/user/1000/tillandsias/logs/opencode-web)"
     ],
     "defaultMode": "bypassPermissions"
   }

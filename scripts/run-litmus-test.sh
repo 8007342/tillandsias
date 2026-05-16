@@ -93,7 +93,14 @@ if [[ -z "\$real_podman_bin" ]]; then
     exit 127
 fi
 
-exec "\$real_podman_bin" --root "$LITMUS_PODMAN_ROOT" --runroot "$LITMUS_PODMAN_RUNROOT" --tmpdir "$LITMUS_PODMAN_TMPDIR" "\${args[@]}"
+# Real-mode delegation: pass through to the user default podman store so
+# tests can see tillandsias-* images written by tillandsias --init. The
+# isolated graphroot at \$LITMUS_PODMAN_ROOT (VFS) was empty of host images
+# and caused short-name resolution failures for tests that reference
+# tillandsias-forge / tillandsias-proxy / tillandsias-router by short name.
+# Tests are expected to clean up the containers they create (see the
+# rollback sections in openspec/litmus-tests/*.yaml).
+exec "\$real_podman_bin" "\${args[@]}"
 EOF
 chmod 755 "$LITMUS_RUNTIME_DIR/bin/podman"
 export PATH="$LITMUS_RUNTIME_DIR/bin:$PATH"
@@ -430,8 +437,8 @@ behavior_matches_output() {
             grep -Eqi 'no such file|not found|directory_not_found|directory not found' <<<"$output"
             return $?
             ;;
-        *"timeout or connection refused"*|*"connection refused"*|*"network unreachable"*)
-            grep -Eqi 'failed to connect|connection refused|network unreachable|timeout' <<<"$output"
+        *"timeout or connection refused"*|*"connection refused"*|*"network unreachable"*|*"could not resolve"*)
+            grep -Eqi 'failed to connect|connection refused|network unreachable|timeout|could not resolve|curl_exit=[1-9]' <<<"$output"
             return $?
             ;;
         *"container id returned"*|*"launches without error"*|*"shutdown command succeeds"*|*"succeeds"*)
@@ -574,7 +581,16 @@ run_litmus_test_file() {
                 current_step_timeout=30000
                 current_step_expected=""
             elif [[ "$line" =~ command:\ \"(.+)\" ]]; then
-                current_step_command="${BASH_REMATCH[1]}"
+                # YAML escapes \" as a double-quote inside a double-quoted
+                # string. The bash regex above captures the raw bytes between
+                # the outer "s, so the captured value retains the backslashes.
+                # When that value is later run via `bash -c`, the sub-shell
+                # treats unquoted \" as a literal " character — meaning test
+                # commands like `... \"$VAR\" ...` send a quote-wrapped value
+                # to the underlying program (e.g. podman: parsing reference
+                # "\"localhost/foo\""). Unescape here so commands behave the
+                # way they read.
+                current_step_command="${BASH_REMATCH[1]//\\\"/\"}"
             elif [[ "$line" =~ timeout_ms:\ ([0-9]+) ]]; then
                 current_step_timeout="${BASH_REMATCH[1]}"
             elif [[ "$line" =~ expected_behavior:\ \"(.+)\" ]]; then

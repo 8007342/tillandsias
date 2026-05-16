@@ -665,6 +665,7 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         "git" => "images/git",
         "inference" => "images/inference",
         "web" => "images/web",
+        "router" => "images/router",
         "chromium-core" => "images/chromium",
         "chromium-framework" => "images/chromium",
         other => {
@@ -1719,6 +1720,7 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         "proxy",
         "git",
         "inference",
+        "router",
         "chromium-core",
         "chromium-framework",
         "forge",
@@ -2008,6 +2010,7 @@ fn cleanup_init_logs() {
         "proxy",
         "git",
         "inference",
+        "router",
         "chromium-core",
         "chromium-framework",
         "forge",

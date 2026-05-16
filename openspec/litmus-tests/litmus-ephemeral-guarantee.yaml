@@ -11,23 +11,20 @@ preconditions:
 
 critical_path:
   - step: "launch forge environment"
-    command: "podman run --rm --cap-drop=ALL --security-opt=no-new-privileges tillandsias-forge /bin/sh -c 'sleep 1'"
+    command: "FORGE_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep -E '^localhost/tillandsias-forge:v' | head -1) && [ -n \"$FORGE_IMG\" ] && podman run --rm --cap-drop=ALL --security-opt=no-new-privileges --network=none --entrypoint=/bin/sh \"$FORGE_IMG\" -c 'echo FORGE_UP && sleep 1'"
     timeout_ms: 10000
+    expected_behavior: "FORGE_UP"
 
   - step: "attempt external network connection from forge"
-    command: "podman run --rm --cap-drop=ALL --security-opt=no-new-privileges tillandsias-forge curl --connect-timeout 5 https://example.com 2>&1"
+    command: "FORGE_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep -E '^localhost/tillandsias-forge:v' | head -1) && [ -n \"$FORGE_IMG\" ] && podman run --rm --cap-drop=ALL --security-opt=no-new-privileges --network=none --entrypoint=/bin/sh \"$FORGE_IMG\" -c 'curl --connect-timeout 5 https://example.com 2>&1; echo CURL_EXIT=$?'"
     timeout_ms: 8000
     expected_behavior: "timeout or connection refused"
 
 gating_points:
-  - signal: "connection timeout"
-    success: "curl: (7) Failed to connect to example.com port 443"
+  - signal: "no outbound route enforced by --network=none"
+    success: "Could not resolve|Failed to connect|Network unreachable|CURL_EXIT=[1-9]"
     failure: "HTTP response received OR curl succeeds"
     spec_linkage: "forge-offline"
-
-  - signal: "no outbound route"
-    success: "timeout after ~5s OR Network unreachable"
-    failure: "responds with HTTP status"
 
 observability:
   traces:

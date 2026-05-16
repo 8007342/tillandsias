@@ -46,9 +46,36 @@ _podman_remote_url() {
     fi
 }
 
+_find_litmus_podman_bin() {
+    # Returns the litmus podman wrapper if run-litmus-test.sh has put it on
+    # PATH. We can't just go through _resolve_podman_bin because that filter
+    # explicitly skips */target/litmus-runtime/bin/podman to avoid recursion
+    # when the wrapper itself sources common.sh.
+    local IFS=: parts
+    read -ra parts <<<"${PATH:-}"
+    for d in "${parts[@]}"; do
+        if [[ "$d" == */target/litmus-runtime/bin && -x "$d/podman" ]]; then
+            printf '%s\n' "$d/podman"
+            return 0
+        fi
+    done
+    return 1
+}
+
 _podman_bin="$(_resolve_podman_bin)"
+_litmus_podman_bin="$(_find_litmus_podman_bin || true)"
 if [[ -z "$_podman_bin" ]]; then
     PODMAN=podman
+elif [[ -n "${LITMUS_PODMAN_CALLS_FILE:-}" && -n "$_litmus_podman_bin" ]]; then
+    # A litmus test run is active and run-litmus-test.sh has installed its
+    # wrapper at target/litmus-runtime/bin/podman. That wrapper records every
+    # call AND implements LITMUS_PODMAN_MODE fake/real injection — both
+    # essential for litmus tests like browser-ephemeral that assert on the
+    # contract of the podman call shape. Route $PODMAN through it instead of
+    # the host wrapper or direct podman; otherwise launch-chromium.sh and
+    # friends silently skip the wrapper and tests see empty calls files.
+    PODMAN="$_litmus_podman_bin"
+    export TILLANDSIAS_PODMAN_BIN="$_litmus_podman_bin"
 elif [[ -z "${TILLANDSIAS_PODMAN_REMOTE_URL:-${CONTAINER_HOST:-}}" ]] \
      && timeout 5 "$_podman_bin" info --format '{{.Store.GraphRoot}}' >/dev/null 2>&1; then
     # Direct podman works under the current environment. Skip the wrapper so

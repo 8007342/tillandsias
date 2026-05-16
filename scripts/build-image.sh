@@ -71,7 +71,7 @@ FLAG_TAG=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        forge|web|proxy|git|inference|chromium-core|chromium-framework)
+        forge|web|proxy|git|inference|router|chromium-core|chromium-framework)
             IMAGE_NAME="$1"
             ;;
         --force)
@@ -135,6 +135,7 @@ case "$IMAGE_NAME" in
     proxy)     CONTAINERFILE="$ROOT/images/proxy/Containerfile" ;;
     git)       CONTAINERFILE="$ROOT/images/git/Containerfile" ;;
     inference) CONTAINERFILE="$ROOT/images/inference/Containerfile" ;;
+    router)    CONTAINERFILE="$ROOT/images/router/Containerfile" ;;
     chromium-core) CONTAINERFILE="$ROOT/images/chromium/Containerfile.core" ;;
     chromium-framework) CONTAINERFILE="$ROOT/images/chromium/Containerfile.framework" ;;
     *)         CONTAINERFILE="$ROOT/images/default/Containerfile" ;;

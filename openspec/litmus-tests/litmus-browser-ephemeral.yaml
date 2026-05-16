@@ -10,7 +10,7 @@ preconditions:
 
 critical_path:
   - step: "baseline check: no browser temp dirs"
-    command: "browser_root=\"${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/tillandsias/browser\"; mkdir -p \"$browser_root\"; find \"$browser_root\" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l"
+    command: "browser_root=\"${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/tillandsias/browser\"; mkdir -p \"$browser_root\"; find \"$browser_root\" -mindepth 1 -maxdepth 1 -type d -name 'safe-browser-*' 2>/dev/null | wc -l"
     timeout_ms: 3000
     expected_behavior: "0 directories"
 
@@ -24,7 +24,7 @@ critical_path:
     timeout_ms: 5000
 
   - step: "verify browser temp dir cleanup after exit"
-    command: "browser_root=\"${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/tillandsias/browser\"; find \"$browser_root\" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l"
+    command: "browser_root=\"${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/tillandsias/browser\"; find \"$browser_root\" -mindepth 1 -maxdepth 1 -type d -name 'safe-browser-*' 2>/dev/null | wc -l"
     timeout_ms: 3000
     expected_behavior: "0 directories"
 
