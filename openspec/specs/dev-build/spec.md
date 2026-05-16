@@ -10,38 +10,45 @@ Define the build pipeline for local development, install, and CI gating. The
 pipeline MUST keep cheap pre-build validation separate from the expensive
 post-build smoke so measurable debt is visible instead of folded into one blob.
 ## Requirements
-### Requirement: Toolbox auto-creation
-The build script SHALL auto-create the `tillandsias` toolbox with all build dependencies if it does not exist.
+### Requirement: Host-native build execution
+The build script SHALL run Rust build commands directly on the host workstation. The normal build path MUST NOT require a Toolbox container or a Nix shell.
 
-#### Scenario: First run on fresh checkout
-- **WHEN** `./build.sh` is run and no `tillandsias` toolbox exists
-- **THEN** the toolbox SHALL be created, system dependencies SHALL be installed, and the build SHALL proceed
-- **AND** the host Podman runtime wrapper SHALL be initialized before the first toolbox command so the wrapper owns writable runtime state on immutable hosts
+#### Scenario: First run on a Fedora workstation
+- **WHEN** `./build.sh` is run from a host with the required Rust toolchain and Podman available
+- **THEN** the host Podman runtime wrapper SHALL initialize writable runtime state
+- **AND** Rust build commands SHALL execute directly on the host
+- **AND** no Toolbox container SHALL be created as part of the build path
+
+#### Scenario: Portable install prerequisites
+- **WHEN** `./build.sh --install` is run
+- **THEN** the host SHALL provide a rustup-managed toolchain with the `x86_64-unknown-linux-musl` target installed
+- **AND** the build SHALL fail early with a corrective command if that target is absent
 
 #### Scenario: Subsequent runs
-- **WHEN** `./build.sh` is run and the `tillandsias` toolbox already exists
-- **THEN** the build SHALL proceed immediately with no setup overhead
+- **WHEN** `./build.sh` is run again
+- **THEN** the build SHALL reuse the host's installed toolchain and ordinary Cargo cache
+- **AND** no container bootstrap overhead SHALL be introduced
 
 ### Requirement: Debug build by default
-Running `./build.sh` with no flags SHALL perform a debug workspace build inside the toolbox.
+Running `./build.sh` with no flags SHALL perform a debug workspace build directly on the host.
 
 #### Scenario: Default invocation
 - **WHEN** `./build.sh` is run with no arguments
-- **THEN** `cargo build --workspace` SHALL run inside the `tillandsias` toolbox
+- **THEN** `cargo build --workspace` SHALL run directly on the host
 
 ### Requirement: Release build
 The `--release` flag SHALL produce a Tauri release bundle.
 
 #### Scenario: Release build
 - **WHEN** `./build.sh --release` is run
-- **THEN** `cargo tauri build` SHALL run inside the toolbox, producing platform-native bundles in `src-tauri/target/release/bundle/`
+- **THEN** the release command SHALL run directly on the host
 
 ### Requirement: Test execution
 The `--test` flag SHALL run the full test suite.
 
 #### Scenario: Run tests
 - **WHEN** `./build.sh --test` is run
-- **THEN** `cargo test --workspace` SHALL run inside the toolbox and SHALL report results
+- **THEN** `cargo test --workspace` SHALL run directly on the host and SHALL report results
 
 ### Requirement: Clean build
 The `--clean` flag SHALL remove all build artifacts before building.
@@ -109,12 +116,6 @@ The `--wipe` flag SHALL remove all caches and build artifacts.
 - **WHEN** `./build.sh --wipe` is run
 - **THEN** `target/`, `~/.cache/tillandsias/`, and any temporary build files SHALL be removed
 
-### Requirement: Toolbox reset
-The `--toolbox-reset` flag SHALL destroy and recreate the toolbox from scratch.
-
-#### Scenario: Reset toolbox
-- **WHEN** `./build.sh --toolbox-reset` is run
-- **THEN** the `tillandsias` toolbox SHALL be removed and recreated with fresh dependencies
 
 ### Requirement: Installer triggers init
 The installer script SHALL run `tillandsias --init` as a background task after installation.

@@ -6,7 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [build-proxy.sh#L2](../../../build-proxy.sh#L2)
-- [build.sh#L247](../../../build.sh#L247)
+- [build.sh#L248](../../../build.sh#L248)
 - [crates/tillandsias-core/src/container_profile.rs#L205](../../../crates/tillandsias-core/src/container_profile.rs#L205)
 - [crates/tillandsias-core/src/container_profile.rs#L365](../../../crates/tillandsias-core/src/container_profile.rs#L365)
 - [crates/tillandsias-core/src/container_profile.rs#L433](../../../crates/tillandsias-core/src/container_profile.rs#L433)
@@ -22,8 +22,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/main.rs#L2201](../../../crates/tillandsias-headless/src/main.rs#L2201)
 - [images/default/entrypoint-forge-claude.sh#L24](../../../images/default/entrypoint-forge-claude.sh#L24)
 - [images/default/entrypoint-forge-codex.sh#L23](../../../images/default/entrypoint-forge-codex.sh#L23)
-- [images/default/entrypoint-forge-opencode-web.sh#L24](../../../images/default/entrypoint-forge-opencode-web.sh#L24)
 - [images/default/entrypoint-forge-opencode.sh#L24](../../../images/default/entrypoint-forge-opencode.sh#L24)
+- [images/default/entrypoint-forge-opencode-web.sh#L24](../../../images/default/entrypoint-forge-opencode-web.sh#L24)
 - [images/default/entrypoint-terminal.sh#L32](../../../images/default/entrypoint-terminal.sh#L32)
 - [images/proxy/Containerfile#L1](../../../images/proxy/Containerfile#L1)
 - [images/proxy/Containerfile#L10](../../../images/proxy/Containerfile#L10)

@@ -2,8 +2,8 @@
 # =============================================================================
 # Tillandsias — Development Build Script
 #
-# Single entry point for the entire dev lifecycle. Runs everything inside
-# the `tillandsias` toolbox, creating it automatically if needed.
+# Single entry point for the entire dev lifecycle. Runs builds directly on the
+# host workstation.
 #
 # @tombstone superseded:linux-native-portable-executable
 # Tauri WebKit wrapper and AppImage bundling removed 2026-05-05.
@@ -19,7 +19,6 @@
 #   ./build.sh --install            # Build + install binary to ~/.local/bin/
 #   ./build.sh --remove             # Remove installed binary and symlink
 #   ./build.sh --wipe               # Remove target/, caches, temp files
-#   ./build.sh --toolbox-reset      # Destroy and recreate toolbox
 #   ./build.sh --clean --release    # Flags combine
 # =============================================================================
 
@@ -28,6 +27,12 @@ set -euo pipefail
 # @trace spec:linux-native-portable-executable, spec:dev-build, spec:build-script-architecture, spec:windows-cross-build
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Prefer a rustup-managed toolchain when present so optional targets such as
+# x86_64-unknown-linux-musl are visible to host-native builds.
+if [[ -d "$HOME/.cargo/bin" ]]; then
+    export PATH="$HOME/.cargo/bin:$PATH"
+fi
 
 if [[ -z "${TILLANDSIAS_PODMAN_REMOTE_URL:-}" ]]; then
     _build_runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
@@ -38,7 +43,6 @@ if [[ -z "${TILLANDSIAS_PODMAN_REMOTE_URL:-}" ]]; then
 fi
 
 source "$SCRIPT_DIR/scripts/common.sh"
-TOOLBOX_NAME="$(basename "$SCRIPT_DIR")"
 
 # Get the actual user's home directory (works with sudo)
 if [[ -n "${SUDO_USER:-}" ]]; then
@@ -51,7 +55,7 @@ INSTALL_DIR="$ACTUAL_HOME/.local/bin"
 INSTALL_BIN="$INSTALL_DIR/tillandsias"
 CACHE_DIR="$ACTUAL_HOME/.cache/tillandsias"
 
-# Prime the Podman wrapper before any toolbox or build orchestration touches it.
+# Prime the Podman wrapper before any build orchestration touches it.
 # On immutable hosts, raw /usr/bin/podman may fail version/config probes if the
 # default runtime dir is read-only; the wrapper redirects that state to writable
 # per-user locations first.
@@ -79,7 +83,6 @@ FLAG_CLEAN=false
 FLAG_INSTALL=false
 FLAG_REMOVE=false
 FLAG_WIPE=false
-FLAG_TOOLBOX_RESET=false
 FLAG_INIT=false
 FLAG_CI=false
 FLAG_CI_FULL=false
@@ -101,7 +104,6 @@ while [[ $# -gt 0 ]]; do
         --install)        FLAG_INSTALL=true ;;
         --remove)         FLAG_REMOVE=true ;;
         --wipe)           FLAG_WIPE=true ;;
-        --toolbox-reset)  FLAG_TOOLBOX_RESET=true ;;
         --init)           FLAG_INIT=true ;;
         --ci)             FLAG_CI=true ;;
         --ci-full)        FLAG_CI_FULL=true ;;
@@ -195,14 +197,13 @@ Install flags:
 
 Maintenance flags:
   --wipe            Remove target/, ~/.cache/tillandsias/, temp files
-  --toolbox-reset   Destroy and recreate the tillandsias toolbox
   --init            Build all container images with versioned tags (runs on host)
   --help            Show this message
 
 Flags combine: ./build.sh --clean --release --install
 
-The tillandsias toolbox is auto-created on first run with all
-build dependencies. No manual setup needed.
+Rust builds run directly on the host workstation. No Toolbox or Nix build layer
+is used by this script.
 EOF
             exit 0
             ;;
@@ -287,7 +288,7 @@ ensure_dev_cache() {
         done
     fi
 
-    # Export proxy env vars for toolbox
+    # Export proxy env vars for host-side build tooling
     export HTTP_PROXY="http://127.0.0.1:3129"
     export HTTPS_PROXY="http://127.0.0.1:3129"
     export http_proxy="http://127.0.0.1:3129"
@@ -317,26 +318,13 @@ else
     _info "Skipping dev cache for portable install"
 fi
 
-if [[ "$FLAG_TOOLBOX_RESET" == true ]]; then
-    _step "Resetting toolbox '${TOOLBOX_NAME}' before CI/build phases..."
-    if toolbox list --containers 2>/dev/null | awk 'NR > 1 { print $2 }' | grep -Fxq "$TOOLBOX_NAME"; then
-        toolbox rm -f "$TOOLBOX_NAME" 2>&1
-        _info "Removed existing toolbox"
-    fi
-    if ! toolbox create --assumeyes "$TOOLBOX_NAME" 2>&1 | tail -5; then
-        _error "Failed to create toolbox"
-        exit 1
-    fi
-    _info "Toolbox created"
-    TOOLBOX_RESET_EARLY_DONE=true
-fi
 # ---------------------------------------------------------------------------
-# Standalone operations (don't need toolbox)
+# Standalone operations
 # ---------------------------------------------------------------------------
 
 if [[ "$FLAG_INIT" == true ]]; then
     _step "Running tillandsias --init (builds all images with versioned tags)..."
-    # Runs on HOST where podman works (not nested in toolbox)
+    # Runs on the host where podman works.
     "$SCRIPT_DIR/target/debug/tillandsias" --init 2>&1
     # Also prune old images
     _step "Pruning old images..."
@@ -349,7 +337,7 @@ if [[ "$FLAG_REMOVE" == true ]]; then
     rm -f "$INSTALL_BIN"
     _info "Removed $INSTALL_BIN"
     # If --remove is the only flag, exit
-    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_WIPE$FLAG_TOOLBOX_RESET$FLAG_CI$FLAG_CI_FULL" == "falsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_WIPE$FLAG_CI$FLAG_CI_FULL" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
     fi
 fi
@@ -368,7 +356,7 @@ if [[ "$FLAG_WIPE" == true ]]; then
         2>/dev/null || true
     _info "Wipe complete"
     # If --wipe is the only flag, exit
-    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_TOOLBOX_RESET$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE" == "falsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
     fi
 fi
@@ -381,77 +369,43 @@ if [[ "$FLAG_CLEAN" == true ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Toolbox management
+# Host build execution
 # ---------------------------------------------------------------------------
 
-TOOLBOX_BOOTSTRAP_PACKAGES=(
-    bash coreutils findutils grep sed gawk tar gzip xz
-    procps-ng shadow-utils ca-certificates
-    fish zsh
-    git gh curl wget jq ripgrep
-    fd-find fzf tree htop less which file diffutils patch unzip zip
-    nodejs npm
-    python3 python3-pip python3-devel
-    perl
-    nix
-    rust cargo rustfmt clippy rust-src
-    gcc gcc-c++ make cmake ninja-build autoconf automake libtool
-    clang lld llvm llvm-devel binutils
-    glibc-devel libstdc++-devel
-    pkgconf pkgconf-pkg-config openssl-devel
-    gtk3-devel webkit2gtk4.1-devel libappindicator-gtk3-devel librsvg2-devel
-    go java-21-openjdk-devel
-)
+_require_host_build_tools() {
+    local missing=()
+    local tool
+    for tool in cargo rustc rustfmt clippy-driver gcc pkg-config file; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            missing+=("$tool")
+        fi
+    done
+    if [[ "${#missing[@]}" -gt 0 ]]; then
+        _error "Missing host build tools: ${missing[*]}"
+        _error "Install the Fedora build dependencies, then rerun this command."
+        exit 1
+    fi
 
-_toolbox_exists() {
-    toolbox list --containers 2>/dev/null | awk 'NR > 1 { print $2 }' | grep -Fxq "$TOOLBOX_NAME"
-}
-
-_toolbox_ensure() {
-    if ! _toolbox_exists; then
-        _step "Creating toolbox '${TOOLBOX_NAME}'..."
-        _warn "First-time setup creates the toolbox container (~30 seconds)"
-
-        if ! toolbox create --assumeyes "$TOOLBOX_NAME" 2>&1 | tail -5; then
-            _error "Failed to create toolbox"
+    if [[ "$FLAG_INSTALL" == true ]]; then
+        if ! command -v rustup >/dev/null 2>&1; then
+            _error "Portable installs require a rustup-managed toolchain with the musl target."
+            _error "Install rustup, initialize it, then add x86_64-unknown-linux-musl."
+            exit 1
+        fi
+        if ! rustup target list --installed | grep -qx 'x86_64-unknown-linux-musl'; then
+            _error "Missing Rust target: x86_64-unknown-linux-musl"
+            _error "Run: rustup target add x86_64-unknown-linux-musl"
             exit 1
         fi
     fi
-    if ! toolbox run -c "$TOOLBOX_NAME" bash -lc "sudo dnf install -y --skip-unavailable ${TOOLBOX_BOOTSTRAP_PACKAGES[*]}"; then
-        _error "Failed to install toolbox build dependencies"
-        exit 1
-    fi
-    _info "Toolbox created"
 }
 
 _run() {
-    local _toolbox_cmd
-    _toolbox_cmd="mkdir -p \"$HOME/.cache/tillandsias/nix-store\" && cd $(printf '%q' "$SCRIPT_DIR") && nix --store \"local?root=$HOME/.cache/tillandsias/nix-store\" develop --extra-experimental-features nix-command --extra-experimental-features flakes --command"
-    for _toolbox_arg in "$@"; do
-        _toolbox_cmd+=" $(printf '%q' "$_toolbox_arg")"
-    done
-    toolbox run -c "$TOOLBOX_NAME" bash -lc "$_toolbox_cmd"
+    _require_host_build_tools
+    (cd "$SCRIPT_DIR" && "$@")
 }
 
-TOOLBOX_RESET_EARLY_DONE=false
-
-if [[ "$FLAG_TOOLBOX_RESET" == true && "$TOOLBOX_RESET_EARLY_DONE" != true ]]; then
-    _step "Resetting toolbox '${TOOLBOX_NAME}'..."
-    if _toolbox_exists; then
-        toolbox rm -f "$TOOLBOX_NAME" 2>&1
-        _info "Removed existing toolbox"
-    fi
-    _toolbox_ensure
-    TOOLBOX_RESET_EARLY_DONE=true
-    # If --toolbox-reset is the only flag, exit
-if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then
-        exit 0
-    fi
-fi
-
-_toolbox_ensure
-
-# CI validation (standalone — runs locally, but Rust phases need the toolbox)
+# CI validation
 if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
     CI_ARG_LIST=()
     if [[ -n "$CI_IGNORE_SPEC_LIST" ]]; then
@@ -494,7 +448,7 @@ if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
         _info "Quick CI/CD validation passed — ready for development"
     fi
     # If --ci is the only flag, exit with success
-    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_WIPE$FLAG_TOOLBOX_RESET$FLAG_REMOVE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_WIPE$FLAG_REMOVE" == "falsefalsefalsefalsefalsefalsefalse" ]]; then
         if [[ "$FLAG_GRAPHS" == true ]]; then
             "$SCRIPT_DIR/scripts/update-convergence-dashboard.sh" >/dev/null 2>&1 || true
             if [[ -f "$SCRIPT_DIR/docs/convergence/centicolon-dashboard.md" ]]; then
@@ -579,13 +533,10 @@ if [[ "$FLAG_INSTALL" == true ]]; then
     fi
 
     # If --install is the only remaining flag, exit
-    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE$FLAG_TOOLBOX_RESET" == "falsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
     fi
 fi
-
-# Ensure toolbox exists before running Nix-backed cargo commands
-_toolbox_ensure
 
 # Test build
 if [[ "$FLAG_TEST" == true ]]; then
@@ -598,7 +549,7 @@ if [[ "$FLAG_TEST" == true ]]; then
     podman image prune -f 2>/dev/null && _info "Dangling images pruned" || true
 
     # If --test is the only remaining flag, exit
-    if [[ "$FLAG_RELEASE$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE$FLAG_TOOLBOX_RESET" == "falsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then
+    if [[ "$FLAG_RELEASE$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
     fi
 fi
@@ -610,7 +561,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Type-check passed"
 
     # If --check is the only remaining flag, exit
-    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE$FLAG_TOOLBOX_RESET" == "falsefalsefalsefalsefalsefalsefalsefalsefalse" ]]; then
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
     fi
 fi

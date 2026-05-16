@@ -15,7 +15,7 @@ Claude-compatible tools. If this file conflicts with `methodology.yaml`, follow
 ## Build Commands
 
 ```bash
-./build.sh                          # Debug build (auto-creates toolbox if needed)
+./build.sh                          # Debug build on the host workstation
 ./build.sh --release                # Release build (musl-static binary)
 ./build.sh --test                   # Run test suite
 ./build.sh --check                  # Type-check only
@@ -24,16 +24,15 @@ Claude-compatible tools. If this file conflicts with `methodology.yaml`, follow
 ./build.sh --install                # Build + install binary to ~/.local/bin/tillandsias
 ./build.sh --remove                 # Remove installed binary
 ./build.sh --wipe                   # Remove target/, caches
-./build.sh --toolbox-reset          # Destroy and recreate toolbox
 ```
 
-The build script auto-creates the `tillandsias` toolbox with all system deps on first run. Release builds target `x86_64-unknown-linux-musl` for maximum portability across Linux distros.
+The build script runs directly on the host workstation. Release builds target `x86_64-unknown-linux-musl` for maximum portability across Linux distros.
 
 ### Manual Commands (without build.sh)
 
 ```bash
-toolbox run -c tillandsias cargo build --workspace
-toolbox run -c tillandsias cargo test --workspace
+cargo build --workspace
+cargo test --workspace
 ```
 
 ## Workspace Structure
@@ -222,27 +221,22 @@ cargo test -p tillandsias-headless
 timeout 5 ./target/x86_64-unknown-linux-musl/release/tillandsias-headless --headless /tmp/test-project
 ```
 
-## Container Image Builds (Nix)
+## Container Image Builds
 
-Images are built reproducibly using Nix inside a dedicated builder toolbox (`tillandsias-builder`), separate from the dev toolbox.
-
-### Builder Toolbox
+Images are built directly on the host with Podman from the checked-in Containerfiles. There is no builder toolbox layer in the normal image build path.
 
 ```bash
-scripts/ensure-builder.sh          # Create builder toolbox with Nix (auto-called by build-image.sh)
 scripts/build-image.sh forge       # Build the forge (dev environment) image
 scripts/build-image.sh web         # Build the web server image
 scripts/build-image.sh forge --force  # Rebuild even if sources unchanged
 ```
 
 The build script:
-1. Ensures the `tillandsias-builder` toolbox exists with Nix + flakes
-2. Checks staleness (hashes `flake.nix`, `flake.lock`, `images/` sources)
-3. Runs `nix build` inside the builder toolbox to produce a tarball
-4. Loads the tarball into podman via `podman load`
-5. Tags as `tillandsias-forge:v<FULL_VERSION>` or `tillandsias-web:v<FULL_VERSION>`
+1. Checks staleness from the tracked image sources
+2. Runs `podman build` on the host using pinned Containerfile bases
+3. Tags the resulting image with a content hash plus human aliases such as `tillandsias-forge:v<FULL_VERSION>`
 
-Build cache is stored in `.nix-output/` (gitignored).
+Build hash state is stored in the user cache when available, with a repo-local fallback.
 
 ### Image Architecture
 
