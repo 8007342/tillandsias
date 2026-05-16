@@ -102,13 +102,36 @@ fi
 
 echo "[inference] tier=$TIER (RAM ${RAM_GB}GB, VRAM ${VRAM_GB}GB)"
 
-# T0 + T1 are image-baked; just confirm they're present.
-ollama list 2>/dev/null | grep -q "qwen2.5:0.5b" \
-    && echo "[inference] T0 (qwen2.5:0.5b) ready" \
-    || echo "[inference] T0 (qwen2.5:0.5b) MISSING — image build did not bake it" >&2
-ollama list 2>/dev/null | grep -q "llama3.2:3b" \
-    && echo "[inference] T1 (llama3.2:3b) ready" \
-    || echo "[inference] T1 (llama3.2:3b) MISSING — image build did not bake it" >&2
+# ── Ensure T0 + T1 are available ──────────────────────────────────
+# @trace spec:inference-container
+# T0 (qwen2.5:0.5b) and T1 (llama3.2:3b) are pulled at container startup
+# (not build time) to keep image build fast. They're cached on a host-mounted
+# volume (~/.cache/tillandsias/models), so only first run downloads them.
+# Subsequent container starts load them from the cached volume immediately.
+
+# Check if T0 is cached; if not, pull it (first run only).
+if ! ollama list 2>/dev/null | grep -q "qwen2.5:0.5b"; then
+    echo "[inference] Pulling T0 (qwen2.5:0.5b)..."
+    if ollama pull qwen2.5:0.5b 2>&1; then
+        echo "[inference] T0 (qwen2.5:0.5b) ready"
+    else
+        echo "[inference] T0 (qwen2.5:0.5b) pull FAILED — inference degraded" >&2
+    fi
+else
+    echo "[inference] T0 (qwen2.5:0.5b) ready (cached)"
+fi
+
+# Check if T1 is cached; if not, pull it (first run only).
+if ! ollama list 2>/dev/null | grep -q "llama3.2:3b"; then
+    echo "[inference] Pulling T1 (llama3.2:3b)..."
+    if ollama pull llama3.2:3b 2>&1; then
+        echo "[inference] T1 (llama3.2:3b) ready"
+    else
+        echo "[inference] T1 (llama3.2:3b) pull FAILED — inference degraded" >&2
+    fi
+else
+    echo "[inference] T1 (llama3.2:3b) ready (cached)"
+fi
 
 if [ -n "${TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS:-}" ]; then
     echo "[inference] status-check mode — skipping runtime pulls"

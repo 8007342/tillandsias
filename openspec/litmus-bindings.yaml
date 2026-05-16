@@ -344,8 +344,9 @@ specs:
   litmus_tests:
   - litmus:enclave-isolation
   - litmus:inference-readiness-probe-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:inference-deferred-model-pulls
+  coverage_ratio: 50
+  last_verified: '2026-05-16'
 - spec_id: inference-host-side-pull
   status: obsolete
   litmus_tests: null

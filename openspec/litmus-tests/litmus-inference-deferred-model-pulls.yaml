@@ -1,0 +1,104 @@
+# @trace spec:inference-container
+name: litmus:inference-deferred-model-pulls
+spec: inference-container
+description: Verify T0 + T1 models are pulled at container startup (not build time) and cached on subsequent starts
+severity: high
+size: long
+phase: post-build
+backend: real
+
+preconditions:
+  - tillandsias-inference image built and available in podman
+  - ~/.cache/tillandsias/models/ directory exists and is writable
+  - podman runtime available with networking support
+
+caveats:
+  - requires_docker_runtime: "Test launches actual inference container; needs podman + network"
+  - network_dependent: "First run pulls ~2.4GB from ollama.ai; requires internet or cached models"
+  - time_intensive: "First run ~90s (network pulls); cached run ~5s"
+
+critical_path:
+  - step: "remove cache to simulate fresh start"
+    command: "rm -rf ~/.cache/tillandsias/models/manifests/registry.ollama.ai/library/qwen2.5 ~/.cache/tillandsias/models/manifests/registry.ollama.ai/library/llama3.2"
+    timeout_ms: 3000
+    success_pattern: ""
+    failure_pattern: "Permission denied"
+
+  - step: "launch inference container (first run — models NOT in cache)"
+    command: >
+      CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models";
+      mkdir -p "$CACHE_DIR";
+      timeout 180 podman run --rm \
+        --name test-inference-first-run \
+        -v "$CACHE_DIR:/home/ollama/.ollama/models" \
+        -e TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=0 \
+        tillandsias-inference:latest &
+      CONTAINER_PID=$!;
+      sleep 3;
+      (podman logs test-inference-first-run 2>&1 | head -50) > /tmp/inference_first_run.log;
+      cat /tmp/inference_first_run.log
+    timeout_ms: 185000
+    success_pattern: "Pulling T0|T1 ready"
+    failure_pattern: "FAILED|panic|Error|error:"
+
+  - step: "verify entrypoint logged model pulls (not cached on first run)"
+    command: "grep -E 'Pulling T0|Pulling T1' /tmp/inference_first_run.log && echo FIRST_RUN_PULLED || echo FIRST_RUN_CACHED"
+    timeout_ms: 3000
+    success_pattern: "FIRST_RUN_PULLED"
+    failure_pattern: "FIRST_RUN_CACHED"
+
+  - step: "wait for first run to complete and verify models are cached"
+    command: >
+      sleep 5;
+      CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models";
+      if [ -f "$CACHE_DIR/manifests/registry.ollama.ai/library/qwen2.5/0.5b" ] || \
+         [ -f "$CACHE_DIR/manifests/registry.ollama.ai/library/llama3.2/3b" ]; then
+        echo MODELS_CACHED
+      else
+        echo MODELS_NOT_CACHED
+      fi
+    timeout_ms: 10000
+    success_pattern: "MODELS_CACHED"
+    failure_pattern: "MODELS_NOT_CACHED"
+
+  - step: "launch inference container (second run — models IN cache)"
+    command: >
+      CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models";
+      timeout 30 podman run --rm \
+        --name test-inference-cached-run \
+        -v "$CACHE_DIR:/home/ollama/.ollama/models" \
+        -e TILMANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1 \
+        tillandsias-inference:latest &
+      sleep 3;
+      (podman logs test-inference-cached-run 2>&1 | head -30) > /tmp/inference_cached_run.log;
+      cat /tmp/inference_cached_run.log;
+      pkill -f test-inference-cached-run || true
+    timeout_ms: 35000
+    success_pattern: "ready \\(cached\\)"
+    failure_pattern: "Pulling T|FAILED|panic"
+
+  - step: "verify entrypoint logged cached load (not pulling on second run)"
+    command: "grep -E 'ready \\(cached\\)' /tmp/inference_cached_run.log && echo SECOND_RUN_CACHED || echo SECOND_RUN_PULLED"
+    timeout_ms: 3000
+    success_pattern: "SECOND_RUN_CACHED"
+    failure_pattern: "SECOND_RUN_PULLED"
+
+  - step: "cleanup: remove test containers and logs"
+    command: "podman rm -f test-inference-first-run test-inference-cached-run 2>/dev/null; rm -f /tmp/inference_*.log; echo CLEANUP_OK"
+    timeout_ms: 5000
+    success_pattern: "CLEANUP_OK"
+    failure_pattern: ""
+
+observability:
+  traces:
+    - "@trace spec:inference-container"
+    - "@trace spec:zen-default-with-ollama-analysis-pool"
+  expected_log: "Deferred model pulling: build fast, startup pulls models once, subsequent starts load from cache"
+  log_fields:
+    spec: "inference-container"
+    test: "inference-deferred-model-pulls"
+    backend: "real"
+
+rollback:
+  on_failure: "Check images/inference/Containerfile (should NOT pull models) and images/inference/entrypoint.sh (should pull T0+T1 on startup)"
+  command: "grep -n 'ollama pull' images/inference/Containerfile; echo '---'; grep -n 'Pulling T0\\|Pulling T1' images/inference/entrypoint.sh"

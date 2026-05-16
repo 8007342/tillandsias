@@ -88,17 +88,28 @@ other non-tool-call-supporting models MUST NOT appear in any tier.
 | T4   | GPU ≥16GB              | `qwen2.5:14b`      | 9GB         |
 | T5   | GPU ≥32GB              | `qwen2.5-coder:32b`| 20GB        |
 
-T0 and T1 SHALL be baked into the inference image at build time so the
-first container start has them locally with zero network. T2+ MAY be
-pulled at runtime; failures SHALL log "[inference] T<N> pull failed"
-and continue (not fatal).
+T0 and T1 SHALL be pulled at container startup (entrypoint time, not image
+build time) so image build stays fast (<30s). The entrypoint pulls them on
+first container start; subsequent starts load them from a host-mounted cache
+volume (~/.cache/tillandsias/models/) with zero network latency. T2+ MAY be
+pulled at runtime if the host has sufficient capacity; failures SHALL log
+"[inference] T<N> pull failed" and continue (not fatal).
 
-#### Scenario: T0 + T1 ready immediately on first attach
+This deferred-pull design avoids blocking build on 2-3GB downloads and
+sidesteps Squid SSL-bump EOF issues (see: project_squid_ollama_eof.md).
+
+#### Scenario: T0 + T1 pulled on first container start
 - **WHEN** the inference container starts for the first time
-- **THEN** `ollama list` SHALL show `qwen2.5:0.5b` and `llama3.2:3b`
-- **AND** they SHALL come from the image (no network call required)
-- **AND** the entrypoint SHALL log "[inference] T0 (qwen2.5:0.5b) ready"
-  and "[inference] T1 (llama3.2:3b) ready"
+- **THEN** the entrypoint SHALL pull `qwen2.5:0.5b` (T0) and `llama3.2:3b` (T1)
+- **AND** the entrypoint SHALL log "[inference] Pulling T0 ..." and "[inference] T0 ready"
+- **AND** after completion, `ollama list` SHALL show both models
+- **AND** total startup time SHALL be ≤3 min (typical ~90s on 100 Mbps internet)
+
+#### Scenario: T0 + T1 cached on subsequent starts
+- **WHEN** the inference container starts with models already in the cache volume
+- **THEN** the entrypoint SHALL skip network pulls
+- **AND** the entrypoint SHALL log "[inference] T0 ready (cached)" and "[inference] T1 ready (cached)"
+- **AND** startup time SHALL be <5s (no network, pure cache load)
 
 #### Scenario: Higher tiers pulled in background
 - **WHEN** the host has GPU detected with ≥8GB VRAM
@@ -147,7 +158,8 @@ Gating points:
 ## Sources of Truth
 
 - `cheatsheets/runtime/local-inference.md` — Local Inference reference and patterns
-- `cheatsheets/runtime/container-gpu.md` — Container Gpu reference and patterns
+- `cheatsheets/runtime/container-gpu.md` — Container GPU reference and patterns
+- `docs/memory/project_squid_ollama_eof.md` — Squid 6.x SSL-bump EOF workaround justification (deferred model pulls avoid EOF)
 
 ## Observability
 
