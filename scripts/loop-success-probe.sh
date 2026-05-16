@@ -41,7 +41,9 @@ else
     EVENT_LOG="/tmp/tillandsias/logs/opencode-web/$PROJECT.jsonl"
 fi
 
-REQUIRED_START_STAGES=(stack proxy git inference forge)
+# `stack` only emits state=starting (it's the parent meta-stage); the per-
+# container stages are the ones that go to state=started.
+REQUIRED_START_STAGES=(proxy git inference forge)
 deadline=$(( $(date +%s) + TIMEOUT_SECS ))
 
 emit_result() {

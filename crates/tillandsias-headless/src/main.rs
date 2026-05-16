@@ -1353,9 +1353,12 @@ async fn ensure_router_running(
 
 /// Generate dynamic Caddy configuration for OpenCode Web routes.
 ///
-/// Takes a list of (subdomain, container_id, port) tuples and generates
+/// Takes a list of (subdomain, upstream_host, port) tuples and generates
 /// Caddy configuration blocks for reverse-proxy routes mapping
-/// `<subdomain>.localhost` to `http://127.0.0.1:<port>`.
+/// `<subdomain>.localhost` to `http://<upstream_host>:<port>`. The
+/// upstream is the container name on the enclave network (e.g.
+/// `tillandsias-<project>-forge`) — not `127.0.0.1`, which from inside
+/// the router container would point at the router's own loopback.
 ///
 /// @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-dynamic-routes
 fn generate_dynamic_caddyfile(windows: &[(String, String, u16)]) -> String {
@@ -1364,14 +1367,16 @@ fn generate_dynamic_caddyfile(windows: &[(String, String, u16)]) -> String {
     }
 
     let mut routes = String::new();
-    for (subdomain, _container_id, port) in windows {
-        // Generate Caddy block for each route: subdomain.localhost -> localhost:port
-        // Format: subdomain.localhost {
-        //   reverse_proxy 127.0.0.1:port
-        // }
+    for (subdomain, upstream_host, port) in windows {
+        // Force HTTP-only (`http://...`) on :8080. Caddy enables HTTP/2 and
+        // HTTP/3 by default, both of which require TLS — so a bare
+        // `host:8080 { }` site ends up speaking TLS and rejects plain
+        // requests with "Client sent an HTTP request to an HTTPS server."
+        // Rootless containers with --cap-drop=ALL can't bind privileged
+        // ports anyway, and the router publishes :8080 → host:8080 only.
         routes.push_str(&format!(
-            "{}.localhost {{\n    reverse_proxy 127.0.0.1:{}\n}}\n",
-            subdomain, port
+            "http://{}.localhost:8080 {{\n    reverse_proxy {}:{}\n}}\n",
+            subdomain, upstream_host, port
         ));
     }
     routes
@@ -2962,8 +2967,17 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
     })
 }
 
-fn opencode_web_url(project_name: &str) -> String {
-    format!("http://opencode.{project_name}.localhost/")
+fn opencode_web_url(project_name: &str, host_port: u16) -> String {
+    // The router publishes :8080 in-container to host_port via
+    // `127.0.0.1:host_port:8080`. host_port is normally 80 (privileged) or
+    // 8080 (fallback) per select_router_host_port(); rootless containers
+    // typically can't bind 80, so the URL must include the actual host
+    // port the user can reach.
+    if host_port == 80 {
+        format!("http://opencode.{project_name}.localhost/")
+    } else {
+        format!("http://opencode.{project_name}.localhost:{host_port}/")
+    }
 }
 
 #[cfg(test)]
@@ -3249,9 +3263,10 @@ fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Resul
 fn launch_opencode_web_browser(
     project_name: &str,
     certs_dir: &Path,
+    router_host_port: u16,
     debug: bool,
 ) -> Result<(), String> {
-    let url = opencode_web_url(project_name);
+    let url = opencode_web_url(project_name, router_host_port);
     emit_opencode_web_event(project_name, "browser", "wait_for_route", Some(&url))?;
     if let Err(err) = wait_for_opencode_web(&url, debug) {
         emit_opencode_web_event(project_name, "browser", "route_unhealthy", Some(&err))?;
@@ -3460,6 +3475,7 @@ pub(crate) fn run_opencode_web_mode(
 
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
+    let router_host_port = select_router_host_port(port_override, debug)?;
     emit_opencode_web_event(
         project_name,
         "stack",
@@ -3528,7 +3544,6 @@ pub(crate) fn run_opencode_web_mode(
         // @trace spec:subdomain-routing-via-reverse-proxy
         // After forge starts, ensure router is running and write dynamic routes.
         let router_image = versioned_image_tag("router", version);
-        let router_host_port = select_router_host_port(port_override, debug)?;
 
         ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug)
             .await
@@ -3564,7 +3579,7 @@ pub(crate) fn run_opencode_web_mode(
         Ok::<(), String>(())
     })?;
 
-    launch_opencode_web_browser(project_name, &certs_dir, debug)
+    launch_opencode_web_browser(project_name, &certs_dir, router_host_port, debug)
 }
 
 // Module declarations for Phase 4+
@@ -4495,10 +4510,14 @@ mod tests {
         )];
         let config = generate_dynamic_caddyfile(&windows);
 
-        // Verify Caddy block syntax is present
-        assert!(config.contains("opencode.visual-chess.localhost"));
+        // Verify Caddy block syntax is present, with the listener pinned to
+        // http://...:8080 so Caddy doesn't try to bind :443 and doesn't
+        // upgrade to HTTPS-only via implicit h2/h3.
+        assert!(config.contains("http://opencode.visual-chess.localhost:8080 {"));
         assert!(config.contains("reverse_proxy"));
-        assert!(config.contains("127.0.0.1:8080"));
+        // Upstream is the container DNS name on the enclave network, not
+        // 127.0.0.1 (which from inside the router would loop back).
+        assert!(config.contains("tillandsias-visual-chess-forge:8080"));
 
         // Verify structure has opening and closing braces
         assert!(config.contains("{"));
@@ -4524,8 +4543,8 @@ mod tests {
         // Verify both routes are present
         assert!(config.contains("opencode.alpha.localhost"));
         assert!(config.contains("opencode.beta.localhost"));
-        assert!(config.contains("127.0.0.1:8080"));
-        assert!(config.contains("127.0.0.1:8081"));
+        assert!(config.contains("tillandsias-alpha-forge:8080"));
+        assert!(config.contains("tillandsias-beta-forge:8081"));
     }
 
     #[test]
