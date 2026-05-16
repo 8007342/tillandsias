@@ -1,0 +1,63 @@
+# @trace spec:cache-recovery-mechanism
+name: litmus:cache-recovery-fresh-start
+spec: cache-recovery-mechanism
+description: >
+  Verifies the binary treats an absent cache_version file as a valid fresh start,
+  not an error. Tests the core fix at main.rs:549 (unwrap_or(false)) that allows
+  ephemeral deployments and first-run initialization without a pre-existing version file.
+severity: high
+size: quick
+phase: pre-build
+
+preconditions:
+  - tillandsias binary is installed to ~/.local/bin/tillandsias
+  - cache directory is writable
+
+caveats:
+  - requires_installed_binary: "Uses TILLANDSIAS_STATUS_CHECK_BIN environment variable; reads ~/.local/bin/tillandsias as fallback"
+  - cache_mutation: "Test modifies ~/.cache/tillandsias/cache_version and init-build-state.json; recommend running in isolated environment"
+
+critical_path:
+  - step: "verify binary exists and is executable"
+    command: "test -x \"${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}\" && echo 'BINARY_OK' || exit 1"
+    timeout_ms: 3000
+    success_pattern: "BINARY_OK"
+    failure_pattern: "cannot access|No such file"
+
+  - step: "clear cache_version and init-build-state.json to simulate fresh start"
+    command: "rm -f $HOME/.cache/tillandsias/cache_version $HOME/.cache/tillandsias/init-build-state.json && echo 'CLEARED' || exit 1"
+    timeout_ms: 2000
+    success_pattern: "CLEARED"
+    failure_pattern: "Permission denied|Read-only"
+
+  - step: "run --status-check with absent cache_version (should NOT error)"
+    command: "LITMUS_PODMAN_MODE=fake \"${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}\" --headless --status-check /tmp/litmus-cache-recovery-project 2>&1"
+    timeout_ms: 20000
+    success_pattern: "app.stopped|shutdown|completed|Cache is valid"
+    failure_pattern: "version mismatch|Version mismatch|panic|unwrap|thread.*panicked"
+
+  - step: "verify cache_version was written after successful init"
+    command: "test -f $HOME/.cache/tillandsias/cache_version && echo 'VERSION_WRITTEN' || (echo 'VERSION_NOT_FOUND'; exit 1)"
+    timeout_ms: 3000
+    success_pattern: "VERSION_WRITTEN"
+    failure_pattern: "VERSION_NOT_FOUND|No such file"
+
+  - step: "verify cache_version is non-empty and contains valid semantic version"
+    command: "CACHED_VER=$(cat $HOME/.cache/tillandsias/cache_version 2>/dev/null || echo ''); if [[ -n \"$CACHED_VER\" && \"$CACHED_VER\" =~ ^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$ ]]; then echo \"VERSION_VALID:$CACHED_VER\"; else echo \"VERSION_INVALID:$CACHED_VER\"; exit 1; fi"
+    timeout_ms: 2000
+    success_pattern: "VERSION_VALID"
+    failure_pattern: "VERSION_INVALID"
+
+observability:
+  traces:
+    - "@trace spec:cache-recovery-mechanism"
+  expected_log: "Fresh start with absent cache_version succeeds; version file is written post-init"
+  log_fields:
+    spec: "cache-recovery-mechanism"
+    test: "cache-recovery-fresh-start"
+    scenario: "fresh-start-no-cached-version"
+    expected_behavior: "init succeeds, unwrap_or(false) prevents mismatch error"
+
+rollback:
+  on_failure: "Check if main.rs:549 still contains unwrap_or(false); verify save_version() is called at line 1728"
+  command: "grep -n 'unwrap_or(false)' crates/tillandsias-headless/src/main.rs && grep -n 'save_version' crates/tillandsias-headless/src/main.rs"

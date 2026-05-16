@@ -1,0 +1,66 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.025-litmus-test-sizing-taxonomy@v1
+type: methodology_refinement
+category: litmus
+status: distilled
+
+date_observed: "2026-05-15T00:00:00Z"
+observed_by: "codex"
+
+title: "4-tier litmus test sizing taxonomy with --size filter and binary E2E composition"
+
+observed_signal:
+  - "Litmus tests ran flat without size distinction; agents and CI could not discriminate between instant assertions and 10-minute full-stack runs"
+  - "Dev-loop feedback latency suffered when --fast mode ran 600s tray compilation tests instead of 5s grep assertions"
+  - "Binary E2E tests were scattered as independent files, forcing redundant startup/shutdown overhead instead of sharing a single critical_path"
+
+expected_model:
+  - "Every litmus test carries a required `size` field: instant (≤5s, no compile), quick (≤2min, single cargo unit), long (≤15min, tray feature), e2e (≤20min, full binary+podman)"
+  - "size_matches_filter() enforces cumulative inclusion: quick includes instant; long includes quick+instant; e2e includes all"
+  - "Scripts (local-ci.sh, run-litmus-test.sh) respect --size flag for scoped execution: fast pre-build → instant only, post-build → e2e composition"
+  - "Binary E2E tests compose as a SINGLE litmus file with shared critical_path, not N independent files with redundant startups"
+  - "Phase→size defaults encode domain knowledge: fast_check=instant, pre_build=quick, post_build/runtime/release_gate=e2e"
+
+violated_or_missing_claims:
+  - "methodology/litmus.yaml defined test_sizing tiers but scripts did not enforce them"
+  - "scripts/run-litmus-test.sh lacked SIZE_FILTER, get_test_size(), and size_matches_filter() implementations"
+  - "scripts/local-ci.sh did not map phases to size tiers in litmus_args_for_phase()"
+  - "79 litmus test files lacked size: fields; tests ran unsized and unscoped"
+  - "Binary E2E tests split across 4 tombstoned files instead of composed into single E2E flow"
+
+affected_artifacts:
+  - methodology/litmus.yaml
+  - scripts/run-litmus-test.sh
+  - scripts/local-ci.sh
+  - openspec/litmus-tests/litmus-binary-e2e-smoke.yaml (new, replaces 4 tombstoned tests)
+  - "All 79 test files: size field added to every litmus test YAML"
+  - "4 tombstoned test files (kept 3 releases): litmus-init-log-cleanup.yaml, litmus-socket-cleanup.yaml, litmus-status-check-stack-verification.yaml, litmus-headless-init-status-check-command-shape.yaml"
+
+evidence_refs:
+  - "Commit cb494ec1: 'Fix litmus:binary-e2e-smoke test with proper success/failure patterns'"
+  - "Test count by size: instant=32, quick=25, long=6, e2e=16 (total 79 tests, 100% sized)"
+  - "SIZE_FILTER default='all', supports instant|quick|long|e2e; size_matches_filter() handles cumulative inclusion"
+  - "Phase-to-size mapping in scripts/local-ci.sh lines 371-372: pre_build→quick, post_build|runtime→e2e"
+  - "Fast mode in scripts/local-ci.sh line 965: --phase pre-build --size instant --compact"
+  - "Binary E2E spec reference: openspec/litmus-tests/litmus-binary-e2e-smoke.yaml with 5-step critical_path"
+  - "Proof of implementation: `./scripts/run-litmus-test.sh --size instant` filters to 32 tests; `--size quick` includes 57; `--size e2e` runs all 79"
+
+uncertainty_delta: low
+
+provisional_classification: methodology_refinement
+
+next_distillation_step:
+  - "Monitor litmus execution patterns in CI to verify phase→size defaults match actual runtime distributions"
+  - "Add telemetry counters to track (passed|failed|skipped) by size tier per phase"
+  - "Document cost model refinement if wall-clock times diverge from initial tier estimates (e.g., GTK tray compile slower than expected)"
+  - "Consider adding --size-histogram to CI output for visibility into test cost distribution"
+
+closure_criteria:
+  - "Every litmus test file under openspec/litmus-tests/ has a size: field (instant|quick|long|e2e)"
+  - "size_matches_filter() enforces cumulative inclusion: quick ⊇ instant, long ⊇ quick, e2e ⊇ all"
+  - "scripts/run-litmus-test.sh --size <tier> filters tests correctly"
+  - "scripts/local-ci.sh maps phases to size tiers per phase_size_defaults in methodology/litmus.yaml"
+  - "Binary E2E composed as single litmus file with shared critical_path, not scattered files"
+  - "4 superseded binary test files kept as @tombstone entries through 3 releases (0.1.260515 + 3 bumps)"
+  - "Fast mode (--fast pre-build --size instant) runs <30s on cold cache; dev-loop feedback latency restored"

@@ -109,6 +109,21 @@ This means: `target/`, `node_modules/`, `build/`, `dist/`, `.gradle/`, `.dart_to
 - **WHEN** the methodology cheatsheet `runtime/forge-paths-ephemeral-vs-persistent.md` is read by an agent
 - **THEN** it MUST clearly state that build artifacts under the project workspace (e.g., `node_modules/` for projects that don't redirect via tooling) are an anti-pattern, AND it MUST list which tools have native env-var redirection support
 
+### Requirement: cache_version file lifecycle
+
+The `cache_version` file in `init_cache_dir()` records the binary version that last successfully initialized state. It is the ONLY mechanism for detecting version mismatches.
+
+#### Lifecycle:
+- The file MUST be absent on fresh systems (first run, post-reset)
+- The file MUST be written by `save_version()` after every successful initialization
+- The file MUST be read by `check_cache_integrity()` before each subsequent run
+- **Absent file = fresh start (OK)**; **present file with wrong version = mismatch (error with --force out)**
+
+#### Implementation detail:
+The check at `main.rs:549` uses `unwrap_or(false)` to treat an absent file as valid.
+This is non-negotiable for supporting ephemeral deployments.
+
+**See also**: `spec:cache-recovery-mechanism` for the fresh-start invariant and corruption recovery.
 
 ## Sources of Truth
 

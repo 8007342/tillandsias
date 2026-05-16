@@ -1,218 +1,115 @@
-# Ghost Trace Sweep Backlog — 10 Traces with No Spec
+# Ghost Trace Sweep Backlog — 10 Traces with No Corresponding Spec
 
-**Date**: 2026-05-16
-**Status**: Tracked (not in critical path, future wave work)
-**Priority**: MEDIUM (technical debt, not blocking release)
-**Suggested Wave**: ghost-trace-sweep-2026-Q3
+## Overview
 
----
+The codebase contains 35+ `@trace spec:*` annotations in `crates/tillandsias-headless/src/main.rs` pointing to spec IDs that have no corresponding `openspec/specs/*/spec.md` file. These are "ghost traces" — implementation links to non-existent specs.
 
-## Summary
-
-Audit of codebase identified 10 `@trace` annotations in `crates/tillandsias-headless/src/main.rs` that reference specs or capabilities that either do not exist or are incomplete.
-
-These are "ghost traces" — code assertions with no formal spec backing.
-
-**Impact**: Non-blocking for current release. Future maintenance risk if specs are never defined.
-
-**Suggested Approach**: Batch as a separate wave (Q3 2026) with dedicated spec-authoring phase.
+This document tracks 10 high-priority ghost traces that should be resolved as a future wave (deferred to Q3 2026).
 
 ---
 
-## Ghost Traces Inventory
+## Ghost Traces Found in main.rs
 
-All 10 traces located in: `crates/tillandsias-headless/src/main.rs`
+### Tier 1: Known Missing (Direct Implementation References)
 
-| ID | Line | Trace Ref | Status | Spec Exists? | Type | Notes |
-|----|----- |-----------|--------|--------------|------|-------|
-| **GT-001** | ~187 | `@trace spec:podman-force-cleanup` | Active | ❌ | Behavior | Container cleanup on SIGTERM; no spec |
-| **GT-002** | ~203 | `@trace spec:tray-signal-propagation` | Active | ❌ | Behavior | Forward SIGTERM to headless child; no spec |
-| **GT-003** | ~215 | `@trace spec:tray-subprocess-teardown` | Active | ❌ | Behavior | Graceful shutdown waiting for child; no spec |
-| **GT-004** | ~267 | `@trace spec:headless-json-events` | Active | ❌ | Behavior | Emit JSON events on stdout; partially spec'd (runtime-logging) |
-| **GT-005** | ~283 | `@trace spec:headless-event-order-guarantee` | Active | ❌ | Behavior | Event delivery ordering semantics; no spec |
-| **GT-006** | ~301 | `@trace spec:tray-singleton-detection-network` | Active | ⚠️ Partial | Behavior | Network-based singleton check; incomplete in singleton-guard |
-| **GT-007** | ~318 | `@trace spec:headless-graceful-shutdown-timeout` | Active | ❌ | Behavior | 30s default shutdown timeout; undocumented |
-| **GT-008** | ~334 | `@trace spec:podman-events-fallback` | Active | ❌ | Behavior | Polling fallback when `podman events` fails; no spec |
-| **GT-009** | ~387 | `@trace spec:headless-config-reload` | Active | ❌ | Behavior | Config file change detection & reload; no spec |
-| **GT-010** | ~401 | `@trace spec:headless-observability-hooks` | Active | ❌ | Behavior | Log emission coordination; incomplete |
+| Spec ID | Sites | Module | Priority | Estimated Effort |
+|---|---|---|---|---|
+| `spec:linux-native-portable-executable` | 9 | main.rs: 1, 210, 2671, 2677, 3378, 3389, 4014, 4048 | HIGH | Large (new spec, requires extensive documentation) |
+| `spec:transparent-mode-detection` | 4 | main.rs: 210, 2671, 2677 | HIGH | Medium |
+| `spec:containerfile-staleness` | 6 | main.rs: 477, 499, 665, 702, 1666, 1707 | MEDIUM | Medium |
+| `spec:chromium-browser-isolation` | 1 | main.rs: 626 | MEDIUM | Medium (change dir exists: `openspec/changes/chromium-browser-isolation/`) |
+| `spec:fix-router-loopback-port` | 2 | main.rs: 1104, 1139 | LOW | Small |
 
----
+### Tier 2: Derived from Related Specs
 
-## Analysis by Spec Existence
-
-### Category A: No Spec (7 traces)
-
-These require brand new specs to be authored:
-
-| Trace | Spec Name (Proposed) | Effort | Cluster |
-|-------|----------------------|--------|---------|
-| GT-001 | podman-force-cleanup | Medium | Orchestration |
-| GT-002 | tray-signal-propagation | Small | Tray Lifecycle |
-| GT-003 | tray-subprocess-teardown | Medium | Tray Lifecycle |
-| GT-005 | headless-event-order-guarantee | Medium | Observability |
-| GT-007 | headless-graceful-shutdown-timeout | Small | Tray Lifecycle |
-| GT-008 | podman-events-fallback | Medium | Orchestration |
-| GT-009 | headless-config-reload | Medium | Runtime |
-
-**Total Effort**: ~1 week (spec authoring + litmus tests)
+| Spec ID | Sites | Reason Missing | Priority | Estimated Effort |
+|---|---|---|---|---|
+| `spec:opencode-web-dynamic-routes` | 2 | main.rs: 1271, 4278 | MEDIUM | Medium |
+| `spec:tray-subprocess-management` | 1 | main.rs: 2677 | MEDIUM | Medium |
+| `spec:signal-handling` | 3 | main.rs: 3389, 4014, 4048 | HIGH | Medium (graceful-shutdown spec should cross-reference this) |
+| `spec:resource-metric-collection` | 3 | main.rs: 3389, 3410, 3993 | LOW | Large |
+| `spec:observability-metrics` | 2 | main.rs: 3410, 3993 | LOW | Large |
 
 ---
 
-### Category B: Partial Spec (2 traces)
+## Critical Notes
 
-These require existing specs to be augmented:
+### Why Defer This Wave?
 
-| Trace | Existing Spec | Gap | Effort |
-|-------|---------------|-----|--------|
-| GT-004 | runtime-logging | JSON event structure + ordering undocumented | Small |
-| GT-010 | runtime-diagnostics (partial) | Logging coordination + hook timing not formalized | Medium |
+1. **Not blocking release**: These traces refer to implemented code that is working. No regression risk immediately.
+2. **Rust-only approach**: These specs would require refactoring to fit Tillandsias architecture (similar to the rustls/musl-static spec).
+3. **Time constraint**: Doc-debt-payoff (this wave) focuses on **recent work** (3 sessions, 3 events, 3 specs, 1 litmus). Ghost-trace sweep is a separate initiative.
+4. **Scope boundary**: The 10 traces represent ~20-30 hours of spec writing work. This wave is ~5-7 hours.
 
-**Total Effort**: ~2 days (spec enhancement)
+### Relationship to Current Work
 
----
+- **rustls TLS choice**: Naturally belongs in `spec:linux-native-portable-executable` when that spec is created (currently untraced in code)
+- **graceful-shutdown**: Should cross-reference `spec:signal-handling` when that spec exists
+- **cache-recovery-mechanism**: May cross-reference `spec:containerfile-staleness` for file lifecycle consistency
 
-### Category C: Incomplete Spec (1 trace)
+### Recommended Approach
 
-Spec exists but is incomplete:
-
-| Trace | Existing Spec | Gap | Effort |
-|-------|---------------|-----|--------|
-| GT-006 | singleton-guard | Network-based detection method undocumented; only ipc-socket covered | Medium |
-
-**Total Effort**: ~3 days (spec expansion + litmus test)
-
----
-
-## Proposed Wave Structure
-
-### Wave Ghost-A: Category A Specs (Foundational)
-
-**Effort**: ~3 days
-**Scope**: 7 new specs + litmus tests
-
-| Agent | Spec | Litmus Test |
-|-------|------|-------------|
-| Agent-1 | podman-force-cleanup | litmus:podman-force-cleanup-sigterm |
-| Agent-2 | tray-signal-propagation + tray-subprocess-teardown | litmus:tray-signal-propagation |
-| Agent-3 | headless-event-order-guarantee + headless-graceful-shutdown-timeout | litmus:headless-shutdown-semantics |
-| Agent-4 | podman-events-fallback + headless-config-reload | litmus:podman-events-fallback-polling |
-
-**Success Criteria**:
-- 7 specs created with ≥6 requirements each
-- 4 litmus tests passing (≥30% coverage each)
-- All code has @trace annotations updated
-- `./build.sh --test` passing
+Create a dedicated **Ghost Trace Sweep Wave** (tentatively Q3 2026 or after release v0.1.27x) that:
+1. Creates all 10 missing specs with WHEN/THEN scenarios
+2. Binds each to at least one litmus test
+3. Updates all @trace annotations in code to reference the new specs
+4. Verifies no downstream dependencies are broken
 
 ---
 
-### Wave Ghost-B: Category B & C Specs (Enhancement)
+## Ghost Trace Sweep Wave Structure (Future)
 
-**Effort**: ~2 days (depends on Ghost-A completion for reference links)
-**Scope**: 2 enhanced + 1 expanded spec
+### Wave: ghost-trace-sweep (estimated Q3 2026)
 
-| Agent | Task |
-|-------|------|
-| Agent-5 | Enhance runtime-logging spec: JSON event structure + ordering |
-| Agent-6 | Enhance runtime-diagnostics spec: logging hook coordination |
-| Agent-7 | Expand singleton-guard spec: network-based detection method |
+| Agent Group | Count | Work |
+|---|---|---|
+| **GTG-A** | 2 parallel | Create specs: linux-native-portable-executable, transparent-mode-detection |
+| **GTG-B** | 2 parallel | Create specs: containerfile-staleness, chromium-browser-isolation |
+| **GTG-C** | 2 parallel | Create specs: fix-router-loopback-port, opencode-web-dynamic-routes |
+| **GTG-D** | 2 parallel | Create specs: tray-subprocess-management, signal-handling |
+| **GTG-E** | 2 parallel | Create specs: resource-metric-collection, observability-metrics |
+| **GTG-F** | 1 serial | Create litmus tests for all 10 specs + update litmus-bindings |
+| **GTG-G** | 1 serial | Verification + checkpoint |
 
-**Success Criteria**:
-- 3 specs updated (spec diffs show clear additions)
-- New litmus tests for singleton-guard networking
-- All references to Ghost-A specs valid
-- `./build.sh --test` passing
-
----
-
-## Timeline
-
-**Phase 1**: Documentation debt payoff (immediate, May 2026)
-- plan/steps/11a-doc-debt-payoff (Waves A-D)
-- Closes 3 events + 3 specs + 1 litmus + 2 spec updates
-
-**Phase 2**: Ghost trace sweep (Q3 2026, ~3 months later)
-- Ghost-A wave (7 specs + litmus tests)
-- Ghost-B wave (3 spec enhancements)
-
-**Rationale**: Ghost traces are tech debt, not blocking release. Defer to post-release phase to avoid scope creep. Addresses long-term maintainability but not critical functionality.
+**Estimated duration**: 10-14 hours wall-clock time, 10-20 hours agent time
 
 ---
 
-## Integration Plan (After Ghost Waves)
+## Tracking Status
 
-When Ghost-A and Ghost-B complete:
-
-1. **Spec Completeness Audit**: Run `openspec validate --strict` on all 10 new/enhanced specs
-2. **Litmus Coverage**: All 10 traces should have binding in `openspec/litmus-bindings.yaml`
-3. **Trace Index Update**: TRACES.md should have entries for all 10 references
-4. **Archive PR**: Single PR with all ghost specs + litmus tests + trace updates
-
----
-
-## Files to Create/Update (Ghost-A Wave)
-
-**New Specs**:
-- `openspec/specs/podman-force-cleanup/spec.md`
-- `openspec/specs/tray-signal-propagation/spec.md`
-- `openspec/specs/tray-subprocess-teardown/spec.md`
-- `openspec/specs/headless-event-order-guarantee/spec.md`
-- `openspec/specs/headless-graceful-shutdown-timeout/spec.md`
-- `openspec/specs/podman-events-fallback/spec.md`
-- `openspec/specs/headless-config-reload/spec.md`
-
-**Litmus Tests**:
-- `openspec/litmus-tests/litmus-podman-force-cleanup-sigterm.yaml`
-- `openspec/litmus-tests/litmus-tray-signal-propagation.yaml`
-- `openspec/litmus-tests/litmus-headless-shutdown-semantics.yaml`
-- `openspec/litmus-tests/litmus-podman-events-fallback-polling.yaml`
-
-**Updated**:
-- `openspec/litmus-bindings.yaml` (4 new bindings)
-- `crates/tillandsias-headless/src/main.rs` (annotations already present)
+- **Status**: `deferred`
+- **Reason**: Not blocking release; orthogonal to current doc-debt-payoff wave
+- **Date deferred**: 2026-05-16
+- **Suggested resolution date**: Q3 2026 (after v0.1.27x release)
+- **Escalation trigger**: If any ghost trace code is modified before specs exist, promote sweep to P1
 
 ---
 
-## Files to Create/Update (Ghost-B Wave)
+## Reference: Ghost Trace Locations (for future sweep)
 
-**Enhanced Specs**:
-- `openspec/specs/runtime-logging/spec.md` (update)
-- `openspec/specs/runtime-diagnostics/spec.md` (update)
-- `openspec/specs/singleton-guard/spec.md` (update)
+```bash
+# Find all ghost traces
+grep -n "@trace spec:" crates/tillandsias-headless/src/main.rs | wc -l
+# Returns 38 traces
 
-**New Litmus Tests**:
-- `openspec/litmus-tests/litmus-singleton-guard-network-detection.yaml`
-
-**Updated**:
-- `openspec/litmus-bindings.yaml` (3 additional bindings)
+# Find traces with non-existent specs
+for spec in $(grep -o 'spec:[a-z-]*' crates/tillandsias-headless/src/main.rs | sort | uniq); do
+  id="${spec#spec:}"
+  [[ ! -d "openspec/specs/$id" ]] && echo "$spec — MISSING"
+done
+```
 
 ---
 
-## Success Criteria (Full Sweep)
+## Not in Scope (This Wave or Future Ghost Trace Sweep)
 
-- [ ] 10 traces → 10 specs (7 new + 3 enhanced)
-- [ ] 8 litmus tests created and passing
-- [ ] All specs have `## Sources of Truth` section
-- [ ] All new code has `@trace` annotations
-- [ ] `./build.sh --ci-full --test` passing
-- [ ] TRACES.md updated with all 10 references
-- [ ] Single archive PR merged to main
+- **Retired/obsolete traces**: Tombstoned code (e.g., browser-session) is already marked @tombstone; don't create specs for obsolete features
+- **Changes-directory references**: If a spec is in `openspec/changes/*/`, don't create `openspec/specs/*/` until the change is promoted to active
+- **Internal function traces**: Very narrow internal implementation details (e.g., single function) should live in comments, not specs
 
 ---
 
 ## Related Issues
 
-- plan/steps/11a-doc-debt-payoff.md (immediate doc debt, Waves A-D)
-- crates/tillandsias-headless/src/main.rs (source of ghost traces)
-- TRACES.md (trace index — needs update after ghost waves complete)
-
----
-
-## Handoff Notes for Q3 Wave Lead
-
-1. **Ghost traces are real code paths** — they execute at runtime; specs are just missing
-2. **Ghost-A is critical path** — 7 specs unlock litmus test coverage
-3. **Ghost-B can run in parallel** with Ghost-A Wave 2-3 (after Ghost-A Wave 1 completes)
-4. **Integration is straightforward** — all specs are independent (no circular deps)
-5. **No code changes needed** — only spec + litmus work; `@trace` annotations already present
-6. **Estimated 2-week calendar time** (3-4 days spec work + 2-3 days litmus work + 1 day integration)
-
+- [documentation-debt-2026-05-16.md](./documentation-debt-2026-05-16.md) — Current wave: 3 events, 3 specs, 1 litmus
+- [plan/steps/11a-doc-debt-payoff.md](../steps/11a-doc-debt-payoff.md) — Current wave execution plan

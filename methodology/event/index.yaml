@@ -183,3 +183,26 @@ unknown_event_register:
         - methodology/convergence.yaml
         - openspec/specs/spec-traceability/spec.md
         - openspec/specs/security-privacy-isolation/spec.md
+    - file: methodology/event/025-litmus-test-sizing-taxonomy.yaml
+      status: distilled
+      distilled_into:
+        - methodology/litmus.yaml
+        - scripts/run-litmus-test.sh
+        - scripts/local-ci.sh
+        - openspec/litmus-tests/litmus-binary-e2e-smoke.yaml
+    - file: methodology/event/026-rustls-musl-static-tls-strategy.yaml
+      status: distilled
+      architectural_decision: "HTTP clients use pure-Rust rustls instead of native-tls/OpenSSL for musl-static portability"
+      distilled_into:
+        - Cargo.toml (reqwest rustls-tls feature)
+        - CLAUDE.md (TLS Strategy section)
+        - crates/tillandsias-core/src/http.rs (@trace spec:linux-native-portable-executable)
+      spec_under_review: spec:linux-native-portable-executable (ghost trace - future spec creation)
+    - file: methodology/event/027-cache-version-fresh-start-fix.yaml
+      status: open
+      spec_under_review: spec:cache-recovery-mechanism
+      blocking_issues:
+        - cache_recovery_mechanism_spec_not_yet_created
+        - fresh_start_semantics_litmus_test_not_yet_created
+        - forge_staleness_spec_lacks_fresh_start_section
+        - forge_cache_dual_spec_lacks_version_lifecycle_section

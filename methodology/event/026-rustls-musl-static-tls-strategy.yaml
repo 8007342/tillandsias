@@ -1,0 +1,63 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.026-rustls-musl-static-tls-strategy@v1
+type: architectural_decision
+category: build
+status: distilled
+
+date_observed: "2026-05-12T00:00:00Z"
+observed_by: "a2-doc-debt-payoff"
+
+title: "Switch reqwest from native-tls to rustls-tls for musl-static binary portability"
+
+observed_signal:
+  - "Link failures with 'ld: cannot find -lssl -lcrypto' after podman system reset or clean Nix builds"
+  - "native-tls feature pulls glibc-compiled OpenSSL, incompatible with musl-static target"
+  - "Nix reproducibility philosophy: musl-static targets should assume pure Rust or rustls, never cross-compiled C libraries"
+  - "CLAUDE.md documented rustls rationale and implementation guidance but no OpenSpec entry governed the choice"
+
+expected_model:
+  - "HTTP clients in Tillandsias use pure-Rust rustls instead of native-tls/OpenSSL for musl-static portability"
+  - "TLS strategy decision rooted in Nix binary-caching design (pure Rust is cached, cross-compiled musl-OpenSSL is not)"
+  - "RFC 1721 consensus: musl ecosystem expects pure Rust or vendored statics, not glibc bindings"
+  - "rustls is CNCF-audited (Cure53), production-deployed (AWS, Google, Cloudflare), and aligns with event-driven philosophy"
+  - "Binary size trade-off (+1.5 MB for rustls vs -0.5 MB for OpenSSL) is acceptable for portable dev tool"
+
+violated_or_missing_claims:
+  - "No OpenSpec spec governed TLS backend selection or musl-static portability constraints"
+  - "CLAUDE.md documented rationale separately from methodology; decision exists as local knowledge, not as first-class artifact"
+  - "Cargo.toml feature flags drove the choice operationally, but no spec linked the choice to architectural intent"
+  - "Provenance and reasoning (Nix philosophy, RFC 1721, CNCF audit) were documented in CLAUDE.md but not in a distillable event record"
+
+affected_artifacts:
+  - Cargo.toml (reqwest features changed from default/native-tls to rustls-tls)
+  - Cargo.lock (regenerated with rustls dependencies, zero native-tls or openssl-sys)
+  - CLAUDE.md (TLS Strategy section added with rationale, trade-offs, references)
+  - crates/tillandsias-core/src/http.rs (or equivalent HTTP client initialization code with @trace annotations)
+  - methodology/event/index.yaml (updated with event 026 entry)
+
+evidence_refs:
+  - "Cargo.toml line 42: reqwest = { version = \"0.11\", features = [\"json\", \"rustls-tls\"], default-features = false }"
+  - "Cargo.lock: grep -c 'name = \"rustls' > 0 (present); grep -c 'name = \"openssl' = 0 (absent)"
+  - "CLAUDE.md lines 300-341: TLS Strategy section with decision, rationale, trade-offs, references"
+  - "build.sh --release produces x86_64-unknown-linux-musl binary with zero OpenSSL linkage"
+  - "Nix flake.nix: musl-gcc toolchain with pure Rust dependencies only (no glibc-compiled OpenSSL)"
+
+uncertainty_delta: low
+
+provisional_classification: architectural_decision
+
+next_distillation_step:
+  - "Create spec:linux-native-portable-executable to own musl-static constraints, binary size budgets, and TLS policy"
+  - "Add @trace spec:linux-native-portable-executable to Cargo.toml rustls-tls feature line"
+  - "Add @trace spec:linux-native-portable-executable to HTTP client initialization code"
+  - "Create cheatsheet docs/cheatsheets/build/musl-static-linking.md covering pure-Rust dependency discipline"
+  - "Refresh CLAUDE.md to mark TLS Strategy section as @trace spec:linux-native-portable-executable"
+  - "Update methodology/build.yaml to codify pure-Rust policy for musl-static targets"
+
+closure_criteria:
+  - "Cargo.toml has rustls-tls feature enabled, default-features = false on reqwest"
+  - "Cargo.lock contains no openssl-sys or native-tls entries; rustls, rustls-pemfile, rustls-webpki present"
+  - "Release build (x86_64-unknown-linux-musl) links statically with zero external OpenSSL dependency"
+  - "CLAUDE.md TLS Strategy section documents decision rationale, Nix philosophy, trade-offs, and references"
+  - "Event 026 recorded in methodology/event/index.yaml under known_events with distilled_into pointers"

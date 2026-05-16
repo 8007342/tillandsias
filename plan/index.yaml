@@ -766,58 +766,71 @@ plan_index:
           handoff_note: "Manual smoke test required: build, init, opencode-web, tray verification, graceful shutdown. Automation script available at scripts/smoke-test.sh. ~1.5h, human-driven. No further agent work possible on this step."
 
     - id: doc-debt-payoff
-      order: 11
-      title: Documentation Debt Payoff (Waves A-D) — Events, Specs, Litmus Tests
+      order: 11.5
+      title: Documentation Debt Payoff (Waves A-D) — Post-Implementation Audit & Spec System
       status: in_progress
       deliverable: plan/steps/11a-doc-debt-payoff.md
       depends_on: [p3-backlog]
       specs:
-        - forge-localization-pipeline
-        - inference-lazy-model-pull
-        - podman-enclave-network-core
+        - headless-mode
+        - graceful-shutdown
+        - cache-recovery-mechanism
       exit_criteria:
-        - "3 events registered in methodology/events/"
-        - "3 new specs created with Sources of Truth"
-        - "2 existing specs updated (podman-idiomatic, inference-host-side-pull)"
-        - "1 litmus test passing (podman-enclave-network-isolation)"
-        - "./build.sh --ci-full passing with no regressions"
-        - "Single merge commit pushed to origin/linux-next"
+        - "Event 025 (litmus-test-sizing-taxonomy) status: distilled"
+        - "Event 026 (rustls-musl-static-tls-strategy) status: distilled"
+        - "Event 027 (cache-version-fresh-start-fix) status: open (spec pending)"
+        - "Spec headless-mode created with WHEN/THEN scenarios and litmus binding"
+        - "Spec graceful-shutdown created with WHEN/THEN scenarios and litmus binding"
+        - "Spec cache-recovery-mechanism created (status: draft, pending litmus)"
+        - "Litmus test litmus-cache-recovery-fresh-start created and passing"
+        - "Specs forge-staleness and forge-cache-dual updated with fresh-start cross-references"
+        - "openspec/litmus-bindings.yaml updated with all 3 new spec bindings"
+        - "./build.sh --test passing with no regressions"
+        - "plan/issues/documentation-debt-2026-05-16.md and ghost-trace-sweep-backlog-2026-05-16.md created"
       tasks:
-        - id: doc-debt/wave-a-events-specs
+        - id: doc-debt/wave-a-events
           status: ready
           depends_on: [p3-backlog]
           owned_files:
-            - methodology/events/ev-001-i18n-locale-load.yaml
-            - methodology/events/ev-002-model-pull-background-start.yaml
-            - methodology/events/ev-003-podman-enclave-network-created.yaml
-            - openspec/specs/forge-localization-pipeline/spec.md
-            - openspec/specs/inference-lazy-model-pull/spec.md
-            - openspec/specs/podman-enclave-network-core/spec.md
+            - methodology/event/025-litmus-test-sizing-taxonomy.yaml
+            - methodology/event/026-rustls-musl-static-tls-strategy.yaml
+            - methodology/event/027-cache-version-fresh-start-fix.yaml
+            - methodology/event/index.yaml
           checkpoint_required: true
-          handoff_note: "Wave A: 3 Haiku agents in parallel (A, B, C). Each creates 1 event + 1 spec. Merge to linux-next after completion. ETA: 0-2h."
-        - id: doc-debt/wave-b-litmus-test
+          handoff_note: "Wave A: 3 Haiku agents in parallel (A1, A2, A3). Each creates 1 event YAML with proper structure. All update methodology/event/index.yaml entries. Merge to linux-next after completion. ETA: 0.5-1h."
+        - id: doc-debt/wave-b-specs
           status: pending
-          depends_on: [doc-debt/wave-a-events-specs]
+          depends_on: [doc-debt/wave-a-events]
           owned_files:
-            - openspec/litmus-tests/litmus-podman-enclave-network-isolation.yaml
+            - openspec/specs/headless-mode/spec.md
+            - openspec/specs/headless-mode/TRACES.md
+            - openspec/specs/graceful-shutdown/spec.md
+            - openspec/specs/graceful-shutdown/TRACES.md
+            - openspec/specs/cache-recovery-mechanism/spec.md
+            - openspec/specs/cache-recovery-mechanism/TRACES.md
+          checkpoint_required: true
+          handoff_note: "Wave B: 3 Sonnet agents in parallel (B1, B2, B3). Each creates 1 spec.md + TRACES.md with WHEN/THEN scenarios and Sources of Truth sections. Merge to linux-next after completion. ETA: 2-3h."
+        - id: doc-debt/wave-c-litmus-and-updates
+          status: pending
+          depends_on: [doc-debt/wave-b-specs]
+          owned_files:
+            - openspec/litmus-tests/litmus-cache-recovery-fresh-start.yaml
             - openspec/litmus-bindings.yaml
+            - openspec/specs/forge-staleness/spec.md
+            - openspec/specs/forge-cache-dual/spec.md
           checkpoint_required: true
-          handoff_note: "Wave B: Haiku-D (1 agent). Depends on Wave A completion. Write podman enclave network litmus test (4 sub-tests). Merge to linux-next. ETA: 2-3h."
-        - id: doc-debt/wave-c-spec-updates
+          handoff_note: "Wave C: 2 Sonnet agents in parallel (C1, C2). C1 creates litmus-cache-recovery-fresh-start.yaml + updates litmus-bindings.yaml. C2 adds fresh-start sections to forge-staleness and forge-cache-dual specs. Merge to linux-next independently. ETA: 1-2h."
+        - id: doc-debt/wave-d-finalization
           status: pending
-          depends_on: [doc-debt/wave-a-events-specs]
-          owned_files:
-            - openspec/specs/podman-idiomatic-patterns/spec.md
-            - openspec/specs/inference-host-side-pull/spec.md
-          checkpoint_required: true
-          handoff_note: "Wave C: 2 Haiku agents (E, F) in parallel. Update 2 specs (deferred work + formalization). Merge to linux-next independently. ETA: 2-3h (parallel with Wave B)."
-        - id: doc-debt/wave-d-integration
-          status: pending
-          depends_on: [doc-debt/wave-b-litmus-test, doc-debt/wave-c-spec-updates]
+          depends_on: [doc-debt/wave-c-litmus-and-updates]
           owned_files:
             - plan/steps/11a-doc-debt-payoff.md
+            - plan/issues/documentation-debt-2026-05-16.md
+            - plan/issues/ghost-trace-sweep-backlog-2026-05-16.md
+            - plan/index.yaml
+            - plan.yaml
           checkpoint_required: true
-          handoff_note: "Wave D: Opus (1 agent). Depends on Waves A, B, C. Verify all 6 specs, 1 litmus test, event schema, trace annotations. Build + test. Merge single integration commit. ETA: 2-3h."
+          handoff_note: "Wave D: 1 Haiku agent (D1). Verifies all waves, runs full litmus suite, confirms ./build.sh --test passes, creates ghost-trace backlog file, updates plan.yaml current_state. Single integration commit. ETA: 0.5-1h."
 
     - id: post-release-polish
       order: 12

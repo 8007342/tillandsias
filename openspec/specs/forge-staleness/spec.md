@@ -101,6 +101,19 @@ The `tillandsias --init` command MUST apply the same source-hash staleness and p
 - **AND** subsequent `--init` runs with no source change MUST skip the rebuild
 - **AND** old images from failed prior attempts MUST be pruned
 
+### Requirement: Absent cache version file means fresh start, not a staleness signal
+
+The staleness subsystem MUST NOT treat the absence of `~/.cache/tillandsias/cache_version` as a version mismatch or staleness violation. An absent file indicates a fresh environment — a valid state after `podman system reset`, first run, or ephemeral deployment.
+
+#### Scenario: First run after system reset
+
+- **WHEN** `~/.cache/tillandsias/cache_version` does not exist
+- **THEN** `check_cache_integrity()` MUST return `version_mismatch: false`
+- **THEN** initialization MUST proceed without error
+- **THEN** after successful init, `save_version()` MUST write the current version to `cache_version`
+
+**See also**: `spec:cache-recovery-mechanism` for the full invariant set governing cache version semantics.
+
 ## Sources of Truth
 
 - `scripts/build-image.sh` — source-hash freshness checks, alias refresh, and prune behavior

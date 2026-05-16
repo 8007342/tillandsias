@@ -83,6 +83,12 @@ specs:
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-06'
+- spec_id: cache-recovery-mechanism
+  status: active
+  litmus_tests:
+  - litmus:cache-recovery-fresh-start
+  coverage_ratio: 100
+  last_verified: '2026-05-16'
 - spec_id: certificate-authority
   status: deprecated
   litmus_tests: []

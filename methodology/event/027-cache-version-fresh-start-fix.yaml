@@ -1,0 +1,92 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.027-cache-version-fresh-start-fix@v1
+type: bug_fix_with_behavioral_contract
+category: cache
+status: open
+
+date_observed: "2026-05-15T00:00:00Z"
+observed_by: "machine-learning-agent"
+
+title: "Cache version check: absent cache_version treated as fresh start, not mismatch"
+
+observed_signal:
+  - "Binary errors 'Cache version mismatch: No cached version found' after podman system reset"
+  - "Fresh starts (no prior cache_version file) were incorrectly treated as version mismatches"
+  - "Users encountered spurious cache validation failures on clean machines or after system maintenance"
+
+expected_model:
+  - "Absent cache_version file indicates a fresh start and is valid (no prior version to mismatch against)"
+  - "Present cache_version file with wrong version is a mismatch and should trigger rebuild"
+  - "The .unwrap_or() semantic must default to 'no mismatch' when the file does not exist"
+
+violated_or_missing_claims:
+  - "spec:cache-recovery-mechanism does not exist; the invariant was embedded in code only"
+  - "No litmus test verifies that fresh starts (absent cache_version) succeed without error"
+  - "The behavioral contract (fresh-start semantics) was not formally documented in any spec"
+
+affected_artifacts:
+  - crates/tillandsias-headless/src/main.rs (line 549; check_cache_integrity function)
+  - crates/tillandsias-headless/src/main.rs (line 529; @trace annotation)
+  - crates/tillandsias-headless/src/main.rs (line 1639; @trace spec:cache-recovery-mechanism call site)
+
+code_change:
+  file: crates/tillandsias-headless/src/main.rs
+  function: check_cache_integrity
+  location: "line 546-549"
+  old_behavior: ".unwrap_or(true) // No cached version was treated as a mismatch"
+  new_behavior: ".unwrap_or(false) // No cached version on fresh start is OK, not a mismatch"
+  commit: "5e1c583c"
+  commit_message: "Fix cache version check to allow fresh starts after system resets"
+
+open_work:
+  - task: Create openspec/specs/cache-recovery-mechanism/spec.md
+    description: >
+      Formal spec documenting the behavioral contract: absent cache_version file indicates
+      fresh start (valid); present cache_version with wrong value indicates mismatch (error).
+      Must include WHEN/THEN scenarios for both paths.
+    assigned_wave: Wave B
+
+  - task: Create litmus test litmus-cache-recovery-fresh-start.yaml
+    description: >
+      Automated litmus test verifying that the fresh-start path executes without error.
+      Must cover both scenarios: (1) no cache_version file → success, (2) mismatched
+      cache_version file → error. Prevents regression where unwrap_or(false) is reverted.
+    assigned_wave: Wave C
+
+  - task: Update openspec/specs/forge-staleness/spec.md
+    description: >
+      Add "Fresh-Start Requirements" section explaining that forge-staleness checks
+      only apply when a cached version exists. Absent version file is not a staleness
+      signal.
+    assigned_wave: Wave C
+
+  - task: Update openspec/specs/forge-cache-dual/spec.md
+    description: >
+      Add "Cache Version File Lifecycle" section documenting when cache_version is
+      written (after successful init, via save_version()) and when it is expected
+      to be absent (fresh starts, system resets).
+    assigned_wave: Wave C
+
+evidence_refs:
+  - "crates/tillandsias-headless/src/main.rs:546-549 (check_cache_integrity function)"
+  - "crates/tillandsias-headless/src/main.rs:1728 (save_version call site)"
+  - "crates/tillandsias-headless/src/main.rs:1639 (@trace spec:cache-recovery-mechanism)"
+  - "plan/issues/documentation-debt-2026-05-16.md (Gap 3 and Gap 6)"
+
+uncertainty_delta: low
+
+provisional_classification: missing_spec_requirement
+
+next_distillation_step:
+  - "Create spec:cache-recovery-mechanism with WHEN/THEN scenarios for fresh-start vs mismatch paths"
+  - "Create litmus test to falsify the unwrap_or(false) invariant"
+  - "Cross-reference fresh-start semantics in forge-staleness and forge-cache-dual specs"
+
+closure_criteria:
+  - "openspec/specs/cache-recovery-mechanism/spec.md exists with WHEN/THEN scenarios"
+  - "litmus-cache-recovery-fresh-start.yaml test passes for both fresh-start and mismatch scenarios"
+  - "Existing litmus tests pass (no regression)"
+  - "openspec/litmus-bindings.yaml includes cache-recovery-mechanism binding"
+  - "forge-staleness and forge-cache-dual specs updated with fresh-start cross-references"
+  - "Event status promoted to 'distilled'"
