@@ -1111,7 +1111,7 @@ plan_index:
     - id: release-recovery
       order: 16.7
       title: Release Recovery — Static Cloud, Musl Release, Silverblue Installer
-      status: in_progress
+      status: completed
       deliverable: plan/steps/17-release-recovery.md
       depends_on: [git-identity-propagation]
       specs:
@@ -1128,16 +1128,16 @@ plan_index:
         - "README documents the Fedora Silverblue curl installer with Podman as the only runtime dependency"
       tasks:
         - id: release-recovery/local-validation
-          status: in_progress
+          status: completed
           depends_on: []
           owned_files:
             - build.sh
             - crates/tillandsias-headless/src/main.rs
             - plan/localwork/release-recovery/processes.md
           checkpoint_required: true
-          handoff_note: "Run the full local release recovery command chain and keep only compact process/run summaries."
+          handoff_note: "Local full install, init, and tray smoke passed on 2026-05-19."
         - id: release-recovery/static-cloud
-          status: ready
+          status: completed
           depends_on: [release-recovery/local-validation]
           owned_files:
             - .github/workflows/ci.yml
@@ -1145,9 +1145,9 @@ plan_index:
             - .github/workflows/litmus-tests.yml
             - scripts/github-actions-convergence.sh
           checkpoint_required: true
-          handoff_note: "Hosted checks stay static-only; no real Podman runtime or e2e browser work on GitHub-hosted runners."
+          handoff_note: "Hosted checks stay static-only; convergence runs 26128121882 and 26128506885 passed."
         - id: release-recovery/musl-release
-          status: ready
+          status: completed
           depends_on: [release-recovery/static-cloud]
           owned_files:
             - .github/workflows/release.yml
@@ -1155,9 +1155,9 @@ plan_index:
             - scripts/verify.sh
             - docs/VERIFICATION.md
           checkpoint_required: true
-          handoff_note: "Release workflow publishes the Linux musl binary and helper scripts with SHA256SUMS and Cosign bundles."
+          handoff_note: "Release run 26128601951 published v0.2.260519.3 with Linux musl binary, helper scripts, SHA256SUMS, and Cosign bundles."
         - id: release-recovery/paperwork
-          status: ready
+          status: completed
           depends_on: [release-recovery/musl-release]
           owned_files:
             - README.md
