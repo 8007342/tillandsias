@@ -49,6 +49,7 @@ source "$SCRIPT_DIR/common.sh"
 require_podman
 
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PODMAN_CLI="$ROOT/scripts/tillandsias-podman"
 VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
 NAME="${OBSERVATORIUM_CONTAINER_NAME:-tillandsias-observatorium}"
 SERVICE_PORT="${OBSERVATORIUM_SERVICE_PORT:-8080}"
@@ -57,10 +58,15 @@ BROWSER_MODE="${OBSERVATORIUM_BROWSER:-auto}"
 IMAGE="${OBSERVATORIUM_IMAGE:-tillandsias-web:v${VERSION}}"
 HOST_PORT=""
 CREATE_NEEDS_HOST_FALLBACK=0
+CONTAINER_STARTED_BY_CREATE=0
+
+podman_cli() {
+    "$PODMAN_CLI" "$@"
+}
 
 container_host_port() {
     local mapping
-    mapping="$("$PODMAN" port "$NAME" "${SERVICE_PORT}/tcp" 2>/dev/null | head -n1 || true)"
+    mapping="$(podman_cli container host-port "$NAME" "$SERVICE_PORT" 2>/dev/null | head -n1 || true)"
     if [[ -z "$mapping" ]]; then
         return 1
     fi
@@ -80,7 +86,9 @@ create_container_with_userns() {
     fi
 
     for candidate in "${candidates[@]}"; do
-        if "$PODMAN" create \
+        if podman_cli container run \
+            --detach \
+            --rm \
             --name "$NAME" \
             --label "app=tillandsias" \
             --label "role=observatorium" \
@@ -95,6 +103,7 @@ create_container_with_userns() {
             --volume "${ROOT}:/var/www:ro" \
             "$IMAGE" >/dev/null 2>"$create_error_file"; then
             HOST_PORT="$candidate"
+            CONTAINER_STARTED_BY_CREATE=1
             echo "[run-observatorium] Bound host port: $HOST_PORT"
             rm -f "$create_error_file"
             return 0
@@ -114,21 +123,21 @@ create_container_with_userns() {
 }
 
 ensure_container() {
-    if "$PODMAN" container exists "$NAME" >/dev/null 2>&1; then
+    if podman_cli container inspect "$NAME" >/dev/null 2>&1; then
         if [[ "$RECREATE" -eq 1 ]]; then
             echo "[run-observatorium] Recreating existing container: $NAME"
-            "$PODMAN" rm -f "$NAME" >/dev/null 2>&1 || true
+            podman_cli container rm -f "$NAME" >/dev/null 2>&1 || true
         else
             echo "[run-observatorium] Reusing existing container: $NAME"
         fi
     fi
 
-    if ! "$PODMAN" container exists "$NAME" >/dev/null 2>&1; then
+    if ! podman_cli container inspect "$NAME" >/dev/null 2>&1; then
         echo "[run-observatorium] Creating container: $NAME"
         if ! create_container_with_userns keep-id; then
             if [[ "$CREATE_NEEDS_HOST_FALLBACK" -eq 1 ]]; then
                 echo "[run-observatorium] Retrying container create with --userns=host after namespace failure"
-                "$PODMAN" system migrate >/dev/null 2>&1 || true
+                podman_cli system migrate >/dev/null 2>&1 || true
                 if ! create_container_with_userns host; then
                     :
                 fi
@@ -141,6 +150,10 @@ ensure_container() {
             echo "[run-observatorium] HINT: if podman reports newuidmap/namespace errors, repair the rootless runtime with 'podman system migrate' or reboot." >&2
             return 1
         fi
+
+        if [[ "$CONTAINER_STARTED_BY_CREATE" -eq 1 ]]; then
+            echo "[run-observatorium] Starting container: $NAME"
+        fi
     fi
 
     if [[ -z "$HOST_PORT" ]]; then
@@ -149,13 +162,17 @@ ensure_container() {
 }
 
 start_container() {
+    if [[ "$CONTAINER_STARTED_BY_CREATE" -eq 1 ]]; then
+        return 0
+    fi
+
     local running
-    running="$("$PODMAN" inspect -f '{{.State.Running}}' "$NAME" 2>/dev/null || echo false)"
-    if [[ "$running" != "true" ]]; then
-        echo "[run-observatorium] Starting container: $NAME"
-        "$PODMAN" start "$NAME" >/dev/null
-    else
+    running="$(podman_cli container inspect "$NAME" 2>/dev/null || true)"
+    if [[ "$running" == *'"state":"running"'* ]]; then
         echo "[run-observatorium] Container already running: $NAME"
+    else
+        echo "[run-observatorium] Starting container: $NAME"
+        podman_cli container start "$NAME" >/dev/null
     fi
 }
 
@@ -163,7 +180,7 @@ resolve_host_port() {
     local mapping
     local i
     for i in $(seq 1 20); do
-        mapping="$("$PODMAN" port "$NAME" "${SERVICE_PORT}/tcp" 2>/dev/null | head -n1 || true)"
+        mapping="$(podman_cli container host-port "$NAME" "$SERVICE_PORT" 2>/dev/null | head -n1 || true)"
         if [[ -n "$mapping" ]]; then
             echo "${mapping##*:}"
             return 0
@@ -233,9 +250,9 @@ fi
 if ! wait_for_http; then
     echo "[run-observatorium] ERROR: observatorium did not become ready at http://127.0.0.1:${HOST_PORT}/observatorium/" >&2
     echo "[run-observatorium] --- podman logs: $NAME ---" >&2
-    "$PODMAN" logs --tail 100 "$NAME" >&2 || true
+    podman_cli container logs --tail 100 "$NAME" >&2 || true
     echo "[run-observatorium] --- podman inspect: $NAME ---" >&2
-    "$PODMAN" inspect "$NAME" >&2 || true
+    podman_cli container inspect "$NAME" >&2 || true
     exit 1
 fi
 

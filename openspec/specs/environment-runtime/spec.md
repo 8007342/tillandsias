@@ -42,7 +42,22 @@ The uninstall script MUST:
 - Confirm that project files were NOT touched
 - Support `--wipe` for cache and container image removal
 
-### Requirement: Dedicated service account runtime
+### Requirement: Desktop user-session runtime
+
+Interactive Linux launches on Fedora Workstation and similar desktop systems MUST run in the logged-in user's real session. The runtime MUST rely on logind/systemd to provide a writable `XDG_RUNTIME_DIR`, MUST use the rootless Podman state owned by that user, and MUST NOT synthesize a fake `/run/user/<uid>` or substitute a helper runtime layer in production.
+
+#### Scenario: Desktop session has writable runtime state
+- **WHEN** the user runs `tillandsias --init`, `tillandsias --opencode`, `tillandsias --opencode-web`, or `tillandsias --observatorium` from a normal desktop login session
+- **THEN** the runtime MUST use the current user's rootless Podman state
+- **AND** `XDG_RUNTIME_DIR` MUST exist and be writable
+- **AND** no custom runtime directory bootstrap SHALL be required
+
+#### Scenario: Missing desktop session fails clearly
+- **WHEN** the user launches the interactive binary without a valid logind/session-owned runtime directory
+- **THEN** the command MUST fail with an actionable error
+- **AND** the error MUST say that the interactive runtime requires a real desktop user session
+
+### Requirement: Dedicated service account runtime for headless installs
 
 Linux installs that provision the headless orchestrator MUST create and track a dedicated `tillandsias` service account, its group, its systemd user unit, and its writable state directories. The runtime MUST be supervised by systemd in the foreground and MUST use the rootless Podman socket owned by that user.
 
@@ -123,6 +138,12 @@ The runtime environment contract MUST recognise `TILLANDSIAS_AGENT=opencode-web`
 **Pass**: `tillandsias` sysusers/tmpfiles/unit files exist, the account and group are present, and linger is enabled
 **Fail**: Installer does not create the dedicated service account stack or leaves unit/policy files missing
 
+### test_linux_desktop_session_runtime (binding: litmus:podman-idiomatic-launch-routing)
+**Setup**: Launch the interactive binary from a normal Linux desktop login session
+**Signal**: Writable session runtime and rootless Podman ownership
+**Pass**: `XDG_RUNTIME_DIR` is present and writable, and the launcher uses the current user's rootless Podman state
+**Fail**: The interactive runtime requires a fake runtime directory, a helper wrapper, or a missing logind/session-owned runtime
+
 ### test_service_account_artifacts_removed_in_order (binding: litmus:enclave-isolation)
 **Setup**: Run uninstall with elevated privileges on Linux
 **Signal**: Teardown order and residual traces
@@ -150,6 +171,8 @@ The runtime environment contract MUST recognise `TILLANDSIAS_AGENT=opencode-web`
 ## Sources of Truth
 
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns
+- `cheatsheets/runtime/linux-user-session-podman.md` — Linux desktop and service-account runtime lanes
+- `cheatsheets/runtime/systemd-socket-activation.md` — systemd user supervision and linger patterns
 - `cheatsheets/runtime/container-health-checks.md` — Container Health Checks reference and patterns
 
 ## Observability

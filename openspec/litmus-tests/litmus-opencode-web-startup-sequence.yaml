@@ -23,6 +23,10 @@ critical_path:
     command: "cargo test -p tillandsias-headless tests::opencode_web_startup_stage_order_is_stable -- --exact"
     timeout_ms: 120000
 
+  - step: "run the router reuse ordering test"
+    command: "cargo test -p tillandsias-headless --bin tillandsias tests::opencode_web_reuses_existing_router_before_host_port_selection -- --exact"
+    timeout_ms: 120000
+
   - step: "run the OpenCode Web event log path test"
     command: "cargo test -p tillandsias-headless tests::opencode_web_event_log_path_is_project_scoped -- --exact"
     timeout_ms: 120000

@@ -5,11 +5,36 @@
 //! platforms, providing multiplexed, prefixed log output from all enclave containers
 //! (proxy, git, inference, forge) for real-time observability.
 
+use std::io;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
+
+use crate::backend::{OperationKind, redact_argv};
+use crate::diagnostics::ContainerLogRecord;
+
+/// Spawn a long-lived Podman subprocess through one live-stream seam.
+///
+/// `PodmanBackend::execute` owns bounded command/output captures; followed
+/// streams need live stdout, so they share this helper instead. Keeping argv
+/// and operation tagging here gives logs and events the same launch posture.
+pub(crate) fn spawn_podman_stream(
+    operation: OperationKind,
+    argv: Vec<String>,
+) -> io::Result<Child> {
+    debug!(
+        ?operation,
+        argv = ?redact_argv(&argv),
+        "Spawning live podman stream"
+    );
+    crate::podman_cmd()
+        .args(&argv)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+}
 
 /// A single log stream from `podman logs -f <container>`.
 pub struct ContainerLogStream {
@@ -26,15 +51,14 @@ impl ContainerLogStream {
         let container_name = container_name.into();
         debug!(%container_name, "Starting log stream");
 
-        let child = crate::podman_cmd()
-            .args(["logs", "-f", &container_name])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|e| DiagnosticsError::SpawnFailed {
-                container: container_name.clone(),
-                reason: e.to_string(),
-            })?;
+        let child = spawn_podman_stream(
+            OperationKind::Logs,
+            vec!["logs".into(), "-f".into(), container_name.clone()],
+        )
+        .map_err(|e| DiagnosticsError::SpawnFailed {
+            container: container_name.clone(),
+            reason: e.to_string(),
+        })?;
 
         Ok(Self {
             container_name,
@@ -50,6 +74,26 @@ impl ContainerLogStream {
         &mut self,
         tx: mpsc::UnboundedSender<String>,
     ) -> Result<(), DiagnosticsError> {
+        self.forward_records_to(|record| tx.send(record.render_human()).is_ok())
+            .await
+    }
+
+    /// Read and forward typed log records from this container's stream.
+    ///
+    /// This is the richer sibling of [`Self::forward_lines`]; human callers can
+    /// keep their old terminal strings while control-plane callers retain facts.
+    pub async fn forward_records(
+        &mut self,
+        tx: mpsc::UnboundedSender<ContainerLogRecord>,
+    ) -> Result<(), DiagnosticsError> {
+        self.forward_records_to(|record| tx.send(record).is_ok())
+            .await
+    }
+
+    async fn forward_records_to(
+        &mut self,
+        mut send: impl FnMut(ContainerLogRecord) -> bool,
+    ) -> Result<(), DiagnosticsError> {
         if let Some(stdout) = self.child.stdout.take() {
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
@@ -63,8 +107,8 @@ impl ContainerLogStream {
                         reason: e.to_string(),
                     })?
             {
-                let prefixed = format!("[{}] {}", self.container_name, line);
-                if tx.send(prefixed).is_err() {
+                let record = ContainerLogRecord::combined(self.container_name.clone(), line);
+                if !send(record) {
                     // Channel closed, clean shutdown
                     return Ok(());
                 }
@@ -123,7 +167,7 @@ impl DiagnosticsHandle {
     /// # Returns
     /// A handle that keeps the log streams alive. Dropping it stops all streams.
     pub async fn start(container_names: Vec<String>) -> Self {
-        let (tx, mut rx) = mpsc::unbounded_channel();
+        let (tx, mut rx) = mpsc::unbounded_channel::<ContainerLogRecord>();
 
         let mut join_handles = Vec::new();
 
@@ -135,7 +179,7 @@ impl DiagnosticsHandle {
                 match ContainerLogStream::spawn(&container_name).await {
                     Ok(mut stream) => {
                         debug!(container = %container_name, "Log stream started");
-                        if let Err(e) = stream.forward_lines(tx).await {
+                        if let Err(e) = stream.forward_records(tx).await {
                             warn!(
                                 container = %container_name,
                                 %e,
@@ -161,8 +205,8 @@ impl DiagnosticsHandle {
 
         // Spawn a task to read from the channel and print prefixed lines.
         let print_task = tokio::spawn(async move {
-            while let Some(line) = rx.recv().await {
-                println!("{}", line);
+            while let Some(record) = rx.recv().await {
+                println!("{}", record.render_human());
             }
         });
 
@@ -233,5 +277,11 @@ mod tests {
         };
         assert_eq!(info.name, "tillandsias-myapp-aeranthos");
         assert_eq!(info.state, "Running");
+    }
+
+    #[test]
+    fn typed_log_records_render_like_legacy_lines() {
+        let record = ContainerLogRecord::combined("tillandsias-test-forge", "ready");
+        assert_eq!(record.render_human(), "[tillandsias-test-forge] ready");
     }
 }

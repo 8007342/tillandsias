@@ -265,7 +265,7 @@ impl PodmanDirect {
     fn image_exists(&self, _image_tag: &str) -> bool {
         // In real code, this would call `podman image exists <tag>`.
         // For this type definition, we sketch the pattern:
-        // let output = std::process::Command::new("podman")
+        // let output = std::process::Command::new(<podman-binary>)
         //     .args(["image", "exists", image_tag])
         //     .output();
         // output.map(|o| o.status.success()).unwrap_or(false)
@@ -307,7 +307,7 @@ impl ImageBuilder for PodmanDirect {
 
         // Step 3: Execute podman (synchronous, for prod)
         // In real code:
-        // let output = std::process::Command::new("podman")
+        // let output = std::process::Command::new(<podman-binary>)
         //     .args(&call.args)
         //     .current_dir(&call.cwd)
         //     .output()

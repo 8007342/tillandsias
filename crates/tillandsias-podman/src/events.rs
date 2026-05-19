@@ -8,11 +8,26 @@ use tracing::{debug, info, warn};
 
 use tillandsias_core::event::ContainerState;
 
+#[cfg(not(target_os = "windows"))]
+use crate::OperationKind;
+use crate::diagnostics::{ContainerLifecycleAction, ContainerLifecycleRecord, LifecycleSource};
+#[cfg(not(target_os = "windows"))]
+use crate::diagnostics_stream::spawn_podman_stream;
+
 /// Event from podman events stream.
 #[derive(Debug, Clone)]
 pub struct PodmanEvent {
     pub container_name: String,
     pub new_state: ContainerState,
+}
+
+impl From<ContainerLifecycleRecord> for PodmanEvent {
+    fn from(record: ContainerLifecycleRecord) -> Self {
+        Self {
+            container_name: record.container_name,
+            new_state: record.new_state,
+        }
+    }
 }
 
 /// Streams container state changes via `podman events`.
@@ -90,12 +105,17 @@ impl PodmanEventStream {
     async fn stream_events(&self, tx: &mpsc::Sender<PodmanEvent>) -> Result<(), PodmanEventError> {
         debug!(prefix = %self.prefix, "Starting podman events stream (no name filter, prefix matched in-process)");
 
-        let mut child = crate::podman_cmd()
-            .args(["events", "--format", "json", "--filter", "type=container"])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .map_err(|e| PodmanEventError::SpawnFailed(e.to_string()))?;
+        let mut child = spawn_podman_stream(
+            OperationKind::Events,
+            vec![
+                "events".into(),
+                "--format".into(),
+                "json".into(),
+                "--filter".into(),
+                "type=container".into(),
+            ],
+        )
+        .map_err(|e| PodmanEventError::SpawnFailed(e.to_string()))?;
 
         let stdout = child.stdout.take().ok_or(PodmanEventError::NoStdout)?;
         let mut reader = tokio::io::BufReader::new(stdout);
@@ -112,13 +132,15 @@ impl PodmanEventStream {
                 }
                 Ok(_) => {
                     debug!(raw_json = %line.trim(), "Received podman event line");
-                    if let Some(event) = parse_podman_event(&line, &self.prefix) {
+                    if let Some(record) = parse_podman_lifecycle_record(&line, &self.prefix) {
                         debug!(
-                            container = %event.container_name,
-                            state = ?event.new_state,
+                            container = %record.container_name,
+                            action = %record.action,
+                            state = ?record.new_state,
+                            source = %record.source,
                             "Dispatching parsed container event"
                         );
-                        if tx.send(event).await.is_err() {
+                        if tx.send(record.into()).await.is_err() {
                             return Ok(()); // Channel closed, clean shutdown
                         }
                     }
@@ -191,13 +213,15 @@ impl PodmanEventStream {
                     debug!(raw_json = %line.trim(), "Received WSL event line");
 
                     // Parse WSL event format: {"container":"name","state":"Running|Stopped|Creating"}
-                    if let Some(event) = parse_wsl_event(&line, &self.prefix) {
+                    if let Some(record) = parse_wsl_lifecycle_record(&line, &self.prefix) {
                         debug!(
-                            container = %event.container_name,
-                            state = ?event.new_state,
+                            container = %record.container_name,
+                            action = %record.action,
+                            state = ?record.new_state,
+                            source = %record.source,
                             "Dispatching parsed container event from WSL"
                         );
-                        if tx.send(event).await.is_err() {
+                        if tx.send(record.into()).await.is_err() {
                             return Ok(()); // Channel closed, clean shutdown
                         }
                     }
@@ -278,12 +302,16 @@ impl PodmanEventStream {
                                 current_names.insert(name.to_string());
                             }
 
-                            let event = PodmanEvent {
+                            let record = ContainerLifecycleRecord {
                                 container_name: name.to_string(),
+                                action: ContainerLifecycleAction::Observed,
                                 new_state,
+                                source: LifecycleSource::BackoffInspection,
+                                raw_status: Some(state.to_string()),
+                                observed_at_unix: None,
                             };
 
-                            if tx.send(event).await.is_err() {
+                            if tx.send(record.into()).await.is_err() {
                                 return Err(()); // Channel closed
                             }
                         }
@@ -298,11 +326,15 @@ impl PodmanEventStream {
                         container = %vanished,
                         "Container disappeared from podman ps (--rm death detected)"
                     );
-                    let event = PodmanEvent {
+                    let record = ContainerLifecycleRecord {
                         container_name: vanished.clone(),
+                        action: ContainerLifecycleAction::Disappeared,
                         new_state: ContainerState::Stopped,
+                        source: LifecycleSource::BackoffInspection,
+                        raw_status: None,
+                        observed_at_unix: None,
                     };
-                    if tx.send(event).await.is_err() {
+                    if tx.send(record.into()).await.is_err() {
                         return Err(()); // Channel closed
                     }
                 }
@@ -324,7 +356,15 @@ impl PodmanEventStream {
 /// ```
 /// Note: This is NOT Docker's format (`Actor.Attributes.name` / `Action`).
 // @trace spec:podman-orchestration
+#[cfg(test)]
 fn parse_podman_event(json_line: &str, prefix: &str) -> Option<PodmanEvent> {
+    parse_podman_lifecycle_record(json_line, prefix).map(PodmanEvent::from)
+}
+
+fn parse_podman_lifecycle_record(
+    json_line: &str,
+    prefix: &str,
+) -> Option<ContainerLifecycleRecord> {
     let value: serde_json::Value = serde_json::from_str(json_line.trim()).ok()?;
 
     let name = value["Name"].as_str()?;
@@ -333,17 +373,27 @@ fn parse_podman_event(json_line: &str, prefix: &str) -> Option<PodmanEvent> {
     }
 
     let action = value["Status"].as_str()?;
-    let new_state = match action {
-        "start" => ContainerState::Running,
-        "create" => ContainerState::Creating,
-        "stop" | "kill" => ContainerState::Stopping,
-        "died" | "remove" | "cleanup" => ContainerState::Stopped,
+    let (action, new_state) = match action {
+        "start" => (ContainerLifecycleAction::Started, ContainerState::Running),
+        "create" => (ContainerLifecycleAction::Created, ContainerState::Creating),
+        "stop" => (
+            ContainerLifecycleAction::StopRequested,
+            ContainerState::Stopping,
+        ),
+        "kill" => (ContainerLifecycleAction::Killed, ContainerState::Stopping),
+        "died" => (ContainerLifecycleAction::Died, ContainerState::Stopped),
+        "remove" => (ContainerLifecycleAction::Removed, ContainerState::Stopped),
+        "cleanup" => (ContainerLifecycleAction::CleanedUp, ContainerState::Stopped),
         _ => return None,
     };
 
-    Some(PodmanEvent {
+    Some(ContainerLifecycleRecord {
         container_name: name.to_string(),
+        action,
         new_state,
+        source: LifecycleSource::PodmanEvents,
+        raw_status: value["Status"].as_str().map(str::to_string),
+        observed_at_unix: value["Time"].as_i64(),
     })
 }
 
@@ -359,8 +409,13 @@ fn parse_podman_event(json_line: &str, prefix: &str) -> Option<PodmanEvent> {
 /// State values are uppercase: Running, Stopped, Creating, Stopping.
 // @trace spec:cross-platform, spec:wsl-daemon-orchestration
 // @cheatsheet runtime/wsl-daemon-patterns.md
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", test))]
 fn parse_wsl_event(json_line: &str, prefix: &str) -> Option<PodmanEvent> {
+    parse_wsl_lifecycle_record(json_line, prefix).map(PodmanEvent::from)
+}
+
+#[cfg(target_os = "windows")]
+fn parse_wsl_lifecycle_record(json_line: &str, prefix: &str) -> Option<ContainerLifecycleRecord> {
     let value: serde_json::Value = serde_json::from_str(json_line.trim()).ok()?;
 
     let name = value["container"].as_str()?;
@@ -369,17 +424,24 @@ fn parse_wsl_event(json_line: &str, prefix: &str) -> Option<PodmanEvent> {
     }
 
     let state_str = value["state"].as_str()?;
-    let new_state = match state_str {
-        "Running" => ContainerState::Running,
-        "Creating" => ContainerState::Creating,
-        "Stopping" => ContainerState::Stopping,
-        "Stopped" => ContainerState::Stopped,
+    let (action, new_state) = match state_str {
+        "Running" => (ContainerLifecycleAction::Started, ContainerState::Running),
+        "Creating" => (ContainerLifecycleAction::Created, ContainerState::Creating),
+        "Stopping" => (
+            ContainerLifecycleAction::StopRequested,
+            ContainerState::Stopping,
+        ),
+        "Stopped" => (ContainerLifecycleAction::Died, ContainerState::Stopped),
         _ => return None,
     };
 
-    Some(PodmanEvent {
+    Some(ContainerLifecycleRecord {
         container_name: name.to_string(),
+        action,
         new_state,
+        source: LifecycleSource::WslRouter,
+        raw_status: Some(state_str.to_string()),
+        observed_at_unix: None,
     })
 }
 
@@ -410,6 +472,37 @@ mod tests {
         let event = parse_podman_event(&json, "tillandsias-").unwrap();
         assert_eq!(event.container_name, "tillandsias-tetris-aeranthos");
         assert_eq!(event.new_state, ContainerState::Running);
+    }
+
+    #[test]
+    fn typed_lifecycle_record_preserves_podman_action_source_and_time() {
+        let json = podman_event_json("tillandsias-tetris-aeranthos", "start");
+        let record = parse_podman_lifecycle_record(&json, "tillandsias-").unwrap();
+
+        assert_eq!(record.container_name, "tillandsias-tetris-aeranthos");
+        assert_eq!(record.action, ContainerLifecycleAction::Started);
+        assert_eq!(record.new_state, ContainerState::Running);
+        assert_eq!(record.source, LifecycleSource::PodmanEvents);
+        assert_eq!(record.raw_status.as_deref(), Some("start"));
+        assert_eq!(record.observed_at_unix, Some(1_711_400_000));
+    }
+
+    #[test]
+    fn typed_lifecycle_record_distinguishes_stop_and_kill() {
+        let stop = parse_podman_lifecycle_record(
+            &podman_event_json("tillandsias-tetris-aeranthos", "stop"),
+            "tillandsias-",
+        )
+        .unwrap();
+        let kill = parse_podman_lifecycle_record(
+            &podman_event_json("tillandsias-tetris-aeranthos", "kill"),
+            "tillandsias-",
+        )
+        .unwrap();
+
+        assert_eq!(stop.action, ContainerLifecycleAction::StopRequested);
+        assert_eq!(kill.action, ContainerLifecycleAction::Killed);
+        assert_eq!(stop.new_state, kill.new_state);
     }
 
     #[test]

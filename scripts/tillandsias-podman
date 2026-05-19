@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Thin compatibility facade; orchestration belongs to the Rust CLI.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ -x "$ROOT/target/debug/tillandsias-podman-cli" ]]; then
+    exec "$ROOT/target/debug/tillandsias-podman-cli" "$@"
+fi
+exec cargo run --quiet -p tillandsias-podman-cli -- "$@"

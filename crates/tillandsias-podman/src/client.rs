@@ -1,5 +1,10 @@
 // @trace spec:security-privacy-isolation, spec:podman-idiomatic-patterns
+use std::sync::Arc;
+
 use tracing::{debug, info, instrument, warn};
+
+use crate::backend::{BackendRef, CommandFailure, OperationKind, RealBackend};
+use crate::diagnostics::{ContainerDiagnostics, LogTail};
 
 /// Output from executing a command in a container (podman or WSL).
 /// Contains stdout, stderr, and exit status.
@@ -9,6 +14,18 @@ pub struct RunOutput {
     pub stdout: String,
     pub stderr: String,
     pub status: std::process::ExitStatus,
+}
+
+#[cfg(unix)]
+fn exit_status_from_code(code: Option<i32>) -> std::process::ExitStatus {
+    use std::os::unix::process::ExitStatusExt;
+    std::process::ExitStatus::from_raw(code.unwrap_or(1) << 8)
+}
+
+#[cfg(windows)]
+fn exit_status_from_code(code: Option<i32>) -> std::process::ExitStatus {
+    use std::os::windows::process::ExitStatusExt;
+    std::process::ExitStatus::from_raw(code.unwrap_or(1) as u32)
 }
 
 /// Async equivalent of `wsl_distro_exists` — used by `image_exists` on Windows
@@ -62,33 +79,59 @@ fn build_kill_args(name: &str, signal: Option<&str>) -> Vec<String> {
 }
 
 /// Async podman CLI client. All operations are non-blocking.
-#[derive(Debug, Clone)]
-pub struct PodmanClient;
+#[derive(Clone)]
+pub struct PodmanClient {
+    backend: BackendRef,
+}
+
+impl std::fmt::Debug for PodmanClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PodmanClient").finish_non_exhaustive()
+    }
+}
 
 impl PodmanClient {
     pub fn new() -> Self {
-        Self
+        Self {
+            backend: Arc::new(RealBackend),
+        }
+    }
+
+    pub fn with_backend(backend: BackendRef) -> Self {
+        Self { backend }
+    }
+
+    pub async fn execute(
+        &self,
+        operation: OperationKind,
+        argv: &[String],
+    ) -> Result<crate::CommandOutput, CommandFailure> {
+        self.backend.execute(operation, argv).await
     }
 
     /// Check if podman is available in PATH.
     pub async fn is_available(&self) -> bool {
-        crate::podman_cmd()
-            .arg("--version")
-            .output()
+        self.execute(OperationKind::Availability, &["--version".into()])
             .await
-            .is_ok_and(|o| o.status.success())
+            .is_ok()
     }
 
     /// Check if any Podman Machine exists (macOS/Windows).
     pub async fn has_machine(&self) -> bool {
-        let output = crate::podman_cmd()
-            .args(["machine", "list", "--format", "json"])
-            .output()
-            .await;
-
-        match output {
-            Ok(o) if o.status.success() => {
-                let stdout = String::from_utf8_lossy(&o.stdout).trim().to_string();
+        match self
+            .execute(
+                OperationKind::Availability,
+                &[
+                    "machine".into(),
+                    "list".into(),
+                    "--format".into(),
+                    "json".into(),
+                ],
+            )
+            .await
+        {
+            Ok(output) => {
+                let stdout = output.stdout.trim().to_string();
                 // Empty array or empty output means no machines
                 !stdout.is_empty() && stdout != "[]"
             }
@@ -105,23 +148,24 @@ impl PodmanClient {
     /// @trace spec:cross-platform
     pub async fn init_machine(&self) -> bool {
         info!("Initializing podman machine (disk-size=10GB)...");
-        let output = crate::podman_cmd()
-            .args(["machine", "init", "--disk-size", "10"])
-            .output()
-            .await;
-
-        match output {
-            Ok(o) if o.status.success() => {
+        match self
+            .execute(
+                OperationKind::Availability,
+                &[
+                    "machine".into(),
+                    "init".into(),
+                    "--disk-size".into(),
+                    "10".into(),
+                ],
+            )
+            .await
+        {
+            Ok(_) => {
                 info!("Podman machine initialized successfully");
                 true
             }
-            Ok(o) => {
-                let stderr = String::from_utf8_lossy(&o.stderr);
-                warn!(%stderr, "Podman machine init failed");
-                false
-            }
-            Err(e) => {
-                warn!(%e, "Podman machine init command error");
+            Err(failure) => {
+                warn!(error = %failure, "Podman machine init failed");
                 false
             }
         }
@@ -129,14 +173,20 @@ impl PodmanClient {
 
     /// Check if Podman Machine is running (macOS/Windows).
     pub async fn is_machine_running(&self) -> bool {
-        let output = crate::podman_cmd()
-            .args(["machine", "list", "--format", "json"])
-            .output()
-            .await;
-
-        match output {
-            Ok(o) if o.status.success() => {
-                let stdout = String::from_utf8_lossy(&o.stdout);
+        match self
+            .execute(
+                OperationKind::Availability,
+                &[
+                    "machine".into(),
+                    "list".into(),
+                    "--format".into(),
+                    "json".into(),
+                ],
+            )
+            .await
+        {
+            Ok(output) => {
+                let stdout = output.stdout;
                 // Check if any machine has "Running": true (not just the key name)
                 stdout.contains("\"Running\": true") || stdout.contains("\"Running\":true")
             }
@@ -147,23 +197,19 @@ impl PodmanClient {
     /// Start the podman machine (macOS/Windows). Returns true on success.
     pub async fn start_machine(&self) -> bool {
         info!("Starting podman machine...");
-        let output = crate::podman_cmd()
-            .args(["machine", "start"])
-            .output()
-            .await;
-
-        match output {
-            Ok(o) if o.status.success() => {
+        match self
+            .execute(
+                OperationKind::Availability,
+                &["machine".into(), "start".into()],
+            )
+            .await
+        {
+            Ok(_) => {
                 info!("Podman machine started successfully");
                 true
             }
-            Ok(o) => {
-                let stderr = String::from_utf8_lossy(&o.stderr);
-                warn!(%stderr, "Podman machine start failed");
-                false
-            }
-            Err(e) => {
-                warn!(%e, "Podman machine start command error");
+            Err(failure) => {
+                warn!(error = %failure, "Podman machine start failed");
                 false
             }
         }
@@ -207,11 +253,14 @@ impl PodmanClient {
             return wsl_distro_exists_async(distro).await;
         }
         #[cfg(not(target_os = "windows"))]
-        crate::podman_cmd()
-            .args(["image", "exists", image])
-            .output()
+        {
+            self.execute(
+                OperationKind::Image,
+                &["image".into(), "exists".into(), image.into()],
+            )
             .await
-            .is_ok_and(|o| o.status.success())
+            .is_ok()
+        }
     }
 
     /// Pull a container image.
@@ -241,18 +290,10 @@ impl PodmanClient {
 
         #[cfg(not(target_os = "windows"))]
         {
-            let output = crate::podman_cmd()
-                .args(["pull", image])
-                .output()
+            self.execute(OperationKind::Image, &["pull".into(), image.into()])
                 .await
-                .map_err(|e| PodmanError::CommandFailed(format!("pull: {e}")))?;
-
-            if output.status.success() {
-                Ok(())
-            } else {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                Err(PodmanError::CommandFailed(format!("pull failed: {stderr}")))
-            }
+                .map(|_| ())
+                .map_err(PodmanError::CommandFailure)
         }
     }
 
@@ -292,35 +333,74 @@ impl PodmanClient {
 
         #[cfg(not(target_os = "windows"))]
         {
-            let output = crate::podman_cmd()
-                .args(["inspect", name, "--format", "json"])
-                .output()
+            match self
+                .execute(
+                    OperationKind::Inspect,
+                    &[
+                        "inspect".into(),
+                        name.into(),
+                        "--format".into(),
+                        "json".into(),
+                    ],
+                )
                 .await
-                .map_err(|e| PodmanError::CommandFailed(format!("inspect: {e}")))?;
+            {
+                Ok(output) => {
+                    let inspects: Vec<serde_json::Value> = serde_json::from_str(&output.stdout)
+                        .map_err(|e| PodmanError::ParseError(format!("inspect parse: {e}")))?;
 
-            if output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let inspects: Vec<serde_json::Value> = serde_json::from_str(&stdout)
-                    .map_err(|e| PodmanError::ParseError(format!("inspect parse: {e}")))?;
-
-                if let Some(inspect) = inspects.first() {
-                    let state = inspect["State"]["Status"]
-                        .as_str()
-                        .unwrap_or("unknown")
-                        .to_string();
-                    let image = inspect["ImageName"].as_str().unwrap_or("").to_string();
-                    Ok(ContainerInspect {
-                        name: name.to_string(),
-                        state,
-                        image,
-                    })
-                } else {
-                    Err(PodmanError::NotFound(name.to_string()))
+                    if let Some(inspect) = inspects.first() {
+                        let state = inspect["State"]["Status"]
+                            .as_str()
+                            .unwrap_or("unknown")
+                            .to_string();
+                        let image = inspect["ImageName"].as_str().unwrap_or("").to_string();
+                        Ok(ContainerInspect {
+                            name: name.to_string(),
+                            state,
+                            image,
+                        })
+                    } else {
+                        Err(PodmanError::NotFound(name.to_string()))
+                    }
                 }
-            } else {
-                Err(PodmanError::NotFound(name.to_string()))
+                Err(_) => Err(PodmanError::NotFound(name.to_string())),
             }
         }
+    }
+
+    /// Return the published host port for a container port, if Podman has one.
+    ///
+    /// On Linux/macOS this runs `podman port <name> <container_port>/tcp` and
+    /// parses the first published mapping. A missing or failed mapping returns
+    /// `Ok(None)` so callers can distinguish "running but unmapped" from a hard
+    /// Podman failure elsewhere.
+    pub async fn container_host_port(
+        &self,
+        name: &str,
+        container_port: u16,
+    ) -> Result<Option<u16>, PodmanError> {
+        let Ok(output) = self
+            .execute(
+                OperationKind::Inspect,
+                &["port".into(), name.into(), format!("{container_port}/tcp")],
+            )
+            .await
+        else {
+            return Ok(None);
+        };
+
+        for line in output.stdout.lines() {
+            let port = line
+                .rsplit(':')
+                .next()
+                .and_then(|candidate| candidate.trim().parse::<u16>().ok());
+            if port.is_some() {
+                return Ok(port);
+            }
+        }
+
+        Ok(None)
     }
 
     /// List all containers (or registered WSL distros on Windows).
@@ -369,21 +449,10 @@ impl PodmanClient {
 
         #[cfg(not(target_os = "windows"))]
         {
-            let output = crate::podman_cmd()
-                .args(["ps", "--all"])
-                .output()
+            self.execute(OperationKind::Container, &["ps".into(), "--all".into()])
                 .await
-                .map_err(|e| PodmanError::CommandFailed(format!("ps --all: {e}")))?;
-
-            if output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-                Ok(stdout)
-            } else {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                Err(PodmanError::CommandFailed(format!(
-                    "podman ps --all failed: {stderr}"
-                )))
-            }
+                .map(|output| output.stdout)
+                .map_err(PodmanError::CommandFailure)
         }
     }
 
@@ -392,36 +461,36 @@ impl PodmanClient {
         &self,
         prefix: &str,
     ) -> Result<Vec<ContainerListEntry>, PodmanError> {
-        let output = crate::podman_cmd()
-            .args([
-                "ps",
-                "-a",
-                "--filter",
-                &format!("name=^{prefix}"),
-                "--format",
-                "json",
-            ])
-            .output()
+        match self
+            .execute(
+                OperationKind::Container,
+                &[
+                    "ps".into(),
+                    "-a".into(),
+                    "--filter".into(),
+                    format!("name=^{prefix}"),
+                    "--format".into(),
+                    "json".into(),
+                ],
+            )
             .await
-            .map_err(|e| PodmanError::CommandFailed(format!("ps: {e}")))?;
+        {
+            Ok(output) => {
+                if output.stdout.trim().is_empty() || output.stdout.trim() == "[]" {
+                    return Ok(Vec::new());
+                }
+                let entries: Vec<PodmanPsEntry> = serde_json::from_str(&output.stdout)
+                    .map_err(|e| PodmanError::ParseError(format!("ps parse: {e}")))?;
 
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            if stdout.trim().is_empty() || stdout.trim() == "[]" {
-                return Ok(Vec::new());
+                Ok(entries
+                    .into_iter()
+                    .map(|e| ContainerListEntry {
+                        name: e.names.first().cloned().unwrap_or_default(),
+                        state: e.state,
+                    })
+                    .collect())
             }
-            let entries: Vec<PodmanPsEntry> = serde_json::from_str(&stdout)
-                .map_err(|e| PodmanError::ParseError(format!("ps parse: {e}")))?;
-
-            Ok(entries
-                .into_iter()
-                .map(|e| ContainerListEntry {
-                    name: e.names.first().cloned().unwrap_or_default(),
-                    state: e.state,
-                })
-                .collect())
-        } else {
-            Ok(Vec::new())
+            Err(_) => Ok(Vec::new()),
         }
     }
 
@@ -443,20 +512,41 @@ impl PodmanClient {
         #[cfg(not(target_os = "windows"))]
         {
             debug!(name, timeout_secs, "Stopping container");
-            let output = crate::podman_cmd()
-                .args(["stop", "-t", &timeout_secs.to_string(), name])
-                .output()
-                .await
-                .map_err(|e| PodmanError::CommandFailed(format!("stop: {e}")))?;
-
-            if output.status.success() {
-                Ok(())
-            } else {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                warn!(name, %stderr, "Container stop returned error");
-                // Not necessarily fatal — container may already be stopped
-                Ok(())
+            let args = vec![
+                "stop".into(),
+                "-t".into(),
+                timeout_secs.to_string(),
+                name.to_string(),
+            ];
+            match self.execute(OperationKind::Container, &args).await {
+                Ok(_) => Ok(()),
+                Err(failure) => {
+                    warn!(name, error = %failure, "Container stop returned error");
+                    Ok(())
+                }
             }
+        }
+    }
+
+    /// Start a container.
+    ///
+    /// This is the lifecycle counterpart to `stop_container` and is used by
+    /// shell wrappers that need to reuse a pre-created container without
+    /// re-encoding Podman's runtime policy.
+    pub async fn start_container(&self, name: &str) -> Result<(), PodmanError> {
+        #[cfg(target_os = "windows")]
+        {
+            debug!(name, "WSL distro start is a no-op");
+            return Ok(());
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            debug!(name, "Starting container");
+            self.execute(OperationKind::Container, &["start".into(), name.into()])
+                .await
+                .map(|_| ())
+                .map_err(PodmanError::CommandFailure)
         }
     }
 
@@ -492,16 +582,8 @@ impl PodmanClient {
         {
             debug!(name, ?signal, "Killing container");
             let args = build_kill_args(name, signal);
-            let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-            match crate::podman_cmd().args(arg_refs).output().await {
-                Ok(output) if !output.status.success() => {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    warn!(name, %stderr, "Container kill failed — may already be stopped");
-                }
-                Err(e) => {
-                    warn!(name, error = %e, "Container kill command failed");
-                }
-                _ => {}
+            if let Err(failure) = self.execute(OperationKind::Container, &args).await {
+                warn!(name, error = %failure, "Container kill failed — may already be stopped");
             }
             Ok(())
         }
@@ -510,15 +592,9 @@ impl PodmanClient {
     /// Remove a container.
     pub async fn remove_container(&self, name: &str) -> Result<(), PodmanError> {
         debug!(name, "Removing container");
-        match crate::podman_cmd().args(["rm", "-f", name]).output().await {
-            Ok(output) if !output.status.success() => {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                warn!(name, %stderr, "Container removal failed — may not exist");
-            }
-            Err(e) => {
-                warn!(name, error = %e, "Container removal command failed");
-            }
-            _ => {}
+        let args = vec!["rm".into(), "-f".into(), name.to_string()];
+        if let Err(failure) = self.execute(OperationKind::Container, &args).await {
+            warn!(name, error = %failure, "Container removal failed — may not exist");
         }
         Ok(())
     }
@@ -533,25 +609,17 @@ impl PodmanClient {
         build_args: &[String],
     ) -> Result<(), PodmanError> {
         debug!(tag, containerfile, context_dir, "Building image");
-        let start = std::time::Instant::now();
-        let mut command = crate::podman_cmd();
-        command.args(["build", "-t", tag]);
-        command.args(build_args);
-        command.args(["-f", containerfile, context_dir]);
-        let output = command
-            .output()
-            .await
-            .map_err(|e| PodmanError::CommandFailed(format!("build: {e}")))?;
+        let mut args = vec!["build".into(), "-t".into(), tag.into()];
+        args.extend_from_slice(build_args);
+        args.extend(["-f".into(), containerfile.into(), context_dir.into()]);
+        let output = self.execute(OperationKind::Image, &args).await;
 
-        if output.status.success() {
-            let elapsed = start.elapsed().as_secs_f64();
+        if let Ok(output) = output {
+            let elapsed = output.duration.as_secs_f64();
             info!(duration_secs = elapsed, "Image build complete");
             Ok(())
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            Err(PodmanError::CommandFailed(format!(
-                "build failed: {stderr}"
-            )))
+            Err(PodmanError::CommandFailure(output.err().unwrap()))
         }
     }
 
@@ -574,20 +642,19 @@ impl PodmanClient {
     #[instrument(skip(self), fields(tarball = %tarball_path))]
     pub async fn load_image(&self, tarball_path: &str) -> Result<(), PodmanError> {
         debug!(tarball_path, "Loading image from tarball");
-        let start = std::time::Instant::now();
-        let output = crate::podman_cmd()
-            .args(["load", "-i", tarball_path])
-            .output()
+        match self
+            .execute(
+                OperationKind::Image,
+                &["load".into(), "-i".into(), tarball_path.into()],
+            )
             .await
-            .map_err(|e| PodmanError::CommandFailed(format!("load: {e}")))?;
-
-        if output.status.success() {
-            let elapsed = start.elapsed().as_secs_f64();
-            info!(duration_secs = elapsed, "Image loaded from tarball");
-            Ok(())
-        } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            Err(PodmanError::CommandFailed(format!("load failed: {stderr}")))
+        {
+            Ok(output) => {
+                let elapsed = output.duration.as_secs_f64();
+                info!(duration_secs = elapsed, "Image loaded from tarball");
+                Ok(())
+            }
+            Err(failure) => Err(PodmanError::CommandFailure(failure)),
         }
     }
 
@@ -640,32 +707,27 @@ impl PodmanClient {
         #[cfg(not(target_os = "windows"))]
         {
             debug!(image, "Removing podman image");
-            let output = crate::podman_cmd()
-                .args(["image", "rm", image])
-                .output()
-                .await
-                .map_err(|e| PodmanError::CommandFailed(format!("image rm: {e}")))?;
-
-            if output.status.success() {
+            self.execute(
+                OperationKind::Image,
+                &["image".into(), "rm".into(), image.into()],
+            )
+            .await
+            .map(|_| {
                 info!(image, "Image removed successfully");
-                Ok(())
-            } else {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                Err(PodmanError::CommandFailed(format!(
-                    "image rm failed: {stderr}"
-                )))
-            }
+            })
+            .map_err(PodmanError::CommandFailure)
         }
     }
 
     /// Check if a podman network exists.
     /// @trace spec:enclave-network
     pub async fn network_exists(&self, name: &str) -> bool {
-        crate::podman_cmd()
-            .args(["network", "exists", name])
-            .output()
-            .await
-            .is_ok_and(|o| o.status.success())
+        self.execute(
+            OperationKind::Network,
+            &["network".into(), "exists".into(), name.into()],
+        )
+        .await
+        .is_ok()
     }
 
     /// Create an internal podman network.
@@ -673,21 +735,18 @@ impl PodmanClient {
     /// @trace spec:enclave-network
     pub async fn create_internal_network(&self, name: &str) -> Result<(), PodmanError> {
         debug!(name, "Creating internal network");
-        let output = crate::podman_cmd()
-            .args(["network", "create", name, "--internal"])
-            .output()
+        let args = vec![
+            "network".into(),
+            "create".into(),
+            name.into(),
+            "--internal".into(),
+        ];
+        self.execute(OperationKind::Network, &args)
             .await
-            .map_err(|e| PodmanError::CommandFailed(format!("network create: {e}")))?;
-
-        if output.status.success() {
-            info!(name, "Internal network created");
-            Ok(())
-        } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            Err(PodmanError::CommandFailed(format!(
-                "network create failed: {stderr}"
-            )))
-        }
+            .map(|_| {
+                info!(name, "Internal network created");
+            })
+            .map_err(PodmanError::CommandFailure)
     }
 
     /// Remove a podman network. Returns Ok(()) even on failure (callers handle gracefully).
@@ -700,17 +759,11 @@ impl PodmanClient {
     /// — we've already stopped those containers, we just want the network gone.
     pub async fn remove_network(&self, name: &str) -> Result<(), PodmanError> {
         debug!(name, "Removing network (force)");
-        let output = crate::podman_cmd()
-            .args(["network", "rm", "-f", name])
-            .output()
-            .await
-            .map_err(|e| PodmanError::CommandFailed(format!("network rm: {e}")))?;
-
-        if output.status.success() {
-            info!(name, "Network removed");
+        let args = vec!["network".into(), "rm".into(), "-f".into(), name.into()];
+        if let Err(failure) = self.execute(OperationKind::Network, &args).await {
+            tracing::error!(name, error = %failure, "Network removal failed");
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            tracing::error!(name, %stderr, "Network removal failed");
+            info!(name, "Network removed");
         }
         Ok(())
     }
@@ -738,20 +791,55 @@ impl PodmanClient {
 
         #[cfg(not(target_os = "windows"))]
         {
-            let output = crate::podman_cmd()
-                .arg("run")
-                .args(args)
-                .output()
-                .await
-                .map_err(|e| PodmanError::CommandFailed(format!("run: {e}")))?;
-
-            if output.status.success() {
-                let container_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                Ok(container_id)
-            } else {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                Err(PodmanError::CommandFailed(format!("run failed: {stderr}")))
+            let mut full_args = vec!["run".to_string()];
+            full_args.extend_from_slice(args);
+            match self.execute(OperationKind::Container, &full_args).await {
+                Ok(output) => Ok(output.stdout.trim().to_string()),
+                Err(failure) => Err(PodmanError::CommandFailure(failure)),
             }
+        }
+    }
+
+    pub async fn wait_healthy(&self, name: &str) -> Result<(), PodmanError> {
+        let args = vec![
+            "wait".into(),
+            "--condition=healthy".into(),
+            name.to_string(),
+        ];
+        self.execute(OperationKind::Health, &args)
+            .await
+            .map(|_| ())
+            .map_err(PodmanError::CommandFailure)
+    }
+
+    pub async fn log_tail(&self, name: &str, lines: usize) -> Result<LogTail, PodmanError> {
+        let args = vec![
+            "logs".into(),
+            "--tail".into(),
+            lines.to_string(),
+            name.to_string(),
+        ];
+        let output = self
+            .execute(OperationKind::Logs, &args)
+            .await
+            .map_err(PodmanError::CommandFailure)?;
+        Ok(LogTail {
+            lines: output.stdout.lines().map(ToOwned::to_owned).collect(),
+        })
+    }
+
+    pub async fn diagnostics_snapshot(&self, name: &str) -> ContainerDiagnostics {
+        let inspect = self.inspect_container(name).await.ok();
+        let logs = self.log_tail(name, 40).await.unwrap_or_default();
+        ContainerDiagnostics {
+            name: name.to_string(),
+            state: inspect.as_ref().map(|i| i.state.clone()),
+            image: inspect.as_ref().map(|i| i.image.clone()),
+            health: None,
+            inspect_json: None,
+            log_tail: logs,
+            command: None,
+            failure: None,
         }
     }
 
@@ -778,19 +866,15 @@ impl PodmanClient {
         #[cfg(not(target_os = "windows"))]
         {
             debug!(source, target, "Tagging image");
-            let output = crate::podman_cmd()
-                .args(["tag", source, target])
-                .output()
-                .await
-                .map_err(|e| PodmanError::CommandFailed(format!("tag: {e}")))?;
-
-            if output.status.success() {
+            self.execute(
+                OperationKind::Image,
+                &["tag".into(), source.into(), target.into()],
+            )
+            .await
+            .map(|_| {
                 info!(source, target, "Image tagged successfully");
-                Ok(())
-            } else {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                Err(PodmanError::CommandFailed(format!("tag failed: {stderr}")))
-            }
+            })
+            .map_err(PodmanError::CommandFailure)
         }
     }
 
@@ -829,18 +913,19 @@ impl PodmanClient {
         #[cfg(not(target_os = "windows"))]
         {
             debug!(image, "Inspecting podman image");
-            let output = crate::podman_cmd()
-                .args(["image", "inspect", image, "--format", "json"])
-                .output()
-                .await
-                .map_err(|e| PodmanError::CommandFailed(format!("image inspect: {e}")))?;
-
-            if output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-                Ok(stdout)
-            } else {
-                Err(PodmanError::NotFound(image.to_string()))
-            }
+            self.execute(
+                OperationKind::Inspect,
+                &[
+                    "image".into(),
+                    "inspect".into(),
+                    image.into(),
+                    "--format".into(),
+                    "json".into(),
+                ],
+            )
+            .await
+            .map(|output| output.stdout)
+            .map_err(|_| PodmanError::NotFound(image.to_string()))
         }
     }
 
@@ -934,27 +1019,24 @@ impl PodmanClient {
                 cmd.to_string(),
             ];
 
-            let output = crate::podman_cmd()
-                .arg("run")
-                .args(&args)
-                .output()
+            let mut full_args = vec!["run".to_string()];
+            full_args.extend(args);
+            let output = self
+                .execute(OperationKind::Container, &full_args)
                 .await
-                .map_err(|e| PodmanError::CommandFailed(format!("podman run: {e}")))?;
-
-            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                .map_err(PodmanError::CommandFailure)?;
 
             debug!(
-                status = output.status.code(),
-                stdout_len = stdout.len(),
-                stderr_len = stderr.len(),
+                status = output.status,
+                stdout_len = output.stdout.len(),
+                stderr_len = output.stderr.len(),
                 "podman command executed"
             );
 
             Ok(RunOutput {
-                stdout,
-                stderr,
-                status: output.status,
+                stdout: output.stdout,
+                stderr: output.stderr,
+                status: exit_status_from_code(output.status),
             })
         }
     }
@@ -973,6 +1055,49 @@ pub fn network_exists_sync(name: &str) -> bool {
         .args(["network", "exists", name])
         .output()
         .is_ok_and(|o| o.status.success())
+}
+
+/// Check whether podman is available in the current environment (sync).
+pub fn podman_available_sync() -> bool {
+    crate::podman_cmd_sync()
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+/// Check whether an image exists locally (sync).
+pub fn image_exists_sync(image: &str) -> bool {
+    crate::podman_cmd_sync()
+        .args(["image", "exists", image])
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+/// Check whether a container exists locally (sync).
+pub fn container_exists_sync(name: &str) -> bool {
+    crate::podman_cmd_sync()
+        .args(["inspect", name])
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+/// Stop a container gracefully (sync).
+pub fn stop_container_sync(name: &str, timeout_secs: u32) -> Result<(), PodmanError> {
+    let output = crate::podman_cmd_sync()
+        .args(["stop", "-t", &timeout_secs.to_string(), name])
+        .output()
+        .map_err(|e| PodmanError::CommandFailed(format!("stop: {e}")))?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(PodmanError::CommandFailed(if stderr.is_empty() {
+            format!("stop failed for {name} with status {}", output.status)
+        } else {
+            format!("stop failed for {name}: {stderr}")
+        }))
+    }
 }
 
 /// Extract the host port from a podman `-p` publish spec.
@@ -1213,6 +1338,8 @@ pub enum PodmanError {
     ParseError(String),
     #[error("Stream error: {0}")]
     StreamError(String),
+    #[error("{0}")]
+    CommandFailure(CommandFailure),
 }
 
 impl PodmanError {
@@ -1231,6 +1358,9 @@ impl PodmanError {
     pub fn is_transient(&self) -> bool {
         match self {
             PodmanError::StreamError(_) => true,
+            PodmanError::CommandFailure(failure) => {
+                failure.retry == crate::backend::RetryClass::Retryable
+            }
             PodmanError::CommandFailed(msg) => {
                 msg.contains("timeout") || msg.contains("connection refused")
             }

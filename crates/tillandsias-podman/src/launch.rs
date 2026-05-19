@@ -146,7 +146,18 @@ impl ContainerLauncher {
         );
         let args = spec.build_run_args();
 
-        self.client.run_container(&args).await?;
+        if let Err(err) = self.client.run_container(&args).await {
+            let mut snapshot = self.client.diagnostics_snapshot(&container_name).await;
+            if let PodmanError::CommandFailure(failure) = &err {
+                snapshot.failure = Some(failure.clone());
+            }
+            tracing::error!(
+                container = %container_name,
+                diagnostics = %snapshot.render_human(),
+                "Container launch failed"
+            );
+            return Err(err);
+        }
 
         let info = ContainerInfo {
             name: container_name,

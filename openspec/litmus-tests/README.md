@@ -42,7 +42,8 @@ Phase notes:
 | `litmus-cli-mode-shape.yaml` | `cli-mode` | **MEDIUM** | Verify cli-mode command-shape seams stay deterministic in unit tests |
 | `litmus-mcp-on-demand-shape.yaml` | `mcp-on-demand` | **MEDIUM** | Verify the MCP on-demand tray socket mount remains wired into the forge profile |
 | `litmus-podman-path-availability.yaml` | `podman-orchestration` | **CRITICAL** | Verify podman is installed on PATH before stack scripts run |
-| `litmus-headless-init-status-check-command-shape.yaml` | `dev-build` | **HIGH** | Verify the installed binary emits the expected direct podman argv for init plus status-check |
+| `litmus-podman-idiomatic-launch-routing.yaml` | `podman-idiomatic-patterns`, `cli-mode`, `dev-build`, `browser-isolation-tray-integration`, `podman-orchestration` | **CRITICAL** | Verify headless launch paths cannot bypass the shared idiomatic Podman layer |
+| `litmus-headless-init-status-check-source-built.yaml` | `dev-build`, `cli-mode`, `podman-idiomatic-patterns` | **HIGH** | Verify the source-built headless binary emits the expected podman argv for init plus status-check through the real Rust entrypoint |
 | `litmus-inference-readiness-probe-shape.yaml` | `inference-container`, `async-inference-launch` | **HIGH** | Verify inference readiness is split between health and API probes |
 | `litmus-status-check-stack-verification.yaml` | `dev-build` | **HIGH** | Verify post-build smoke launches the stack and reports online evidence |
 | `litmus-release-artifact-integrity.yaml` | `binary-signing` | **HIGH** | Verify release signing and verification stay on the Cosign bundle contract |
@@ -65,7 +66,7 @@ Phase notes:
 - **environment-runtime**: 1 test
 - **certificate-authority**: 1 test
 - **secrets-management**: 1 test
-- **podman-orchestration**: 4 tests (podman-build-command-shape, podman-web-launch-profile, container-naming, podman-path-availability)
+- **podman-orchestration**: 5 tests (podman-build-command-shape, podman-web-launch-profile, container-naming, podman-path-availability, podman-idiomatic-launch-routing)
 - **forge-cache-dual**: 1 test (forge-cache-dual-shape)
 - **forge-environment-discoverability**: 1 test (forge-environment-discoverability-shape)
 - **forge-hot-cold-split**: 1 test (forge-hot-cold-split-shape)
@@ -81,16 +82,16 @@ Phase notes:
 - **cheatsheet-source-layer**: 1 test (cheatsheet-source-layer-validation)
 - **cheatsheets-license-tiered**: 1 test (cheatsheet-tier-discipline)
 - **ci-release**: 1 test (ci-release-node24-policy)
-- **cli-mode**: 1 test (cli-mode-shape)
+- **cli-mode**: 2 tests (cli-mode-shape, podman-idiomatic-launch-routing)
 - **podman-container-spec**: 1 test
 - **podman-container-handle**: 1 test
 - **binary-signing**: 1 test
-- **browser-isolation-tray-integration**: 2 tests
+- **browser-isolation-tray-integration**: 3 tests
 - **host-browser-mcp**: 1 test (host-browser-mcp-shape)
 - **control-socket**: 1 test
-- **dev-build**: 3 tests (environment-isolation, headless-init-status-check-command-shape, status-check-stack-verification)
+- **dev-build**: 4 tests (environment-isolation, headless-init-status-check-source-built, status-check-stack-verification, binary-e2e-smoke)
 
-**Coverage**: 40 tests covering 35 distinct specs (some with multiple tests for depth)
+**Coverage**: 42 tests covering 35 distinct specs (some with multiple tests for depth)
 
 ## Running Tests
 

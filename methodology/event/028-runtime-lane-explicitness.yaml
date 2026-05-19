@@ -1,0 +1,75 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.028-runtime-lane-explicitness@v1
+type: architectural_decision
+category: runtime
+status: distilled
+
+date_observed: "2026-05-17T00:00:00Z"
+observed_by: "machine-learning-agent"
+
+title: "Make desktop user-session, headless service-account, and dev/test lanes explicit"
+
+observed_signal:
+  - "Interactive launchers were sharing one implicit Podman boundary, so the runtime ownership model was only implied by inherited environment state."
+  - "Desktop launches needed a writable logind-owned XDG_RUNTIME_DIR, but failures were not clearly separated from service-account or dev/test wrappers."
+  - "The headless service-account lane already existed in packaging, but the launcher did not name or validate that lane explicitly."
+  - "Dev/test wrapper state was easy to confuse with production runtime ownership."
+
+expected_model:
+  - "Desktop launches must run in the logged-in user-session lane and fail clearly when that lane is missing."
+  - "The headless service-account lane must remain explicit in packaging and supervision."
+  - "Dev/test wrappers must remain confined to scripts and litmus harnesses."
+  - "No production runtime should synthesize /run/user/<uid> or depend on a helper wrapper."
+
+violated_or_missing_claims:
+  - "spec:environment-runtime and spec:podman-orchestration described the ownership model, but the launcher did not enforce the lane distinction at the shared entrypoints."
+  - "methodology/specs/user-runtime-lifecycle/architecture.md still described the runtime split in older, broader terms."
+  - "plan/ did not yet have a dedicated handoff note for the lane split and its reasoning."
+
+affected_artifacts:
+  - crates/tillandsias-podman/src/lib.rs
+  - crates/tillandsias-headless/src/main.rs
+  - methodology/specs/user-runtime-lifecycle/architecture.md
+  - methodology/specs/user-runtime-lifecycle/TRACES.md
+  - plan/index.yaml
+  - plan/steps/14.5-runtime-lane-explicitness.md
+  - plan/issues/runtime-lane-explicitness.md
+
+code_change:
+  files:
+    - crates/tillandsias-podman/src/lib.rs
+    - crates/tillandsias-headless/src/main.rs
+  summary: >
+    Added explicit runtime-lane helpers in the Podman layer and wired the
+    interactive launchers to preflight the desktop user-session lane before
+    making Podman calls. The headless service-account lane is validated only
+    when service markers are present.
+
+evidence_refs:
+  - "crates/tillandsias-podman/src/lib.rs: RuntimeLane, current_runtime_lane(), require_desktop_user_session(), require_headless_service_account()"
+  - "crates/tillandsias-headless/src/main.rs: run_init(), run_status_check(), run_github_login(), run_opencode_mode(), run_opencode_web_mode(), run_observatorium_mode()"
+  - "packaging/systemd/user/tillandsias.service"
+  - "scripts/install.sh"
+  - "scripts/uninstall.sh"
+
+uncertainty_delta: low
+
+provisional_classification: missing_spec_requirement
+
+next_distillation_step:
+  - "Keep the lane preflight wording in sync with the interactive launcher diagnostics."
+  - "If a future runtime edge case appears, distill it into a spec scenario before widening the launcher."
+
+closure_criteria:
+  - "Launcher preflights are compiled and exercised successfully."
+  - "Interactive paths fail clearly when the desktop user-session lane is missing."
+  - "Headless service-account packaging remains explicit and documented."
+  - "Plan and methodology records preserve the reasoning for the lane split."
+  - "The runtime-lane distinction is captured in the architecture and trace docs."
+
+distilled_into:
+  - methodology/specs/user-runtime-lifecycle/architecture.md
+  - methodology/specs/user-runtime-lifecycle/TRACES.md
+  - plan/steps/14.5-runtime-lane-explicitness.md
+  - plan/issues/runtime-lane-explicitness.md

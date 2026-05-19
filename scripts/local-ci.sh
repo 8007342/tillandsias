@@ -716,21 +716,27 @@ podman_runtime_health_probe() {
     local probe_log="/tmp/litmus-runtime-health.log"
     local migrate_log="/tmp/litmus-runtime-migrate.log"
     local probe_image=""
+    local podman_ctl="$REPO_ROOT/scripts/tillandsias-podman"
 
-    probe_image="$(podman images --format '{{.Repository}}:{{.Tag}}' | grep 'tillandsias-forge' | head -1 || true)"
+    probe_image="${FORGE_IMAGE:-tillandsias-forge:v$(tr -d '[:space:]' < VERSION)}"
     if [[ -z "$probe_image" ]]; then
         printf 'forge image not available\n' >"$probe_log"
         return 1
     fi
 
-    if timeout 5 podman run --rm --userns=host --entrypoint=env "$probe_image" \
+    if ! "$podman_ctl" image exists "$probe_image" >/dev/null 2>&1; then
+        printf 'forge image not available: %s\n' "$probe_image" >"$probe_log"
+        return 1
+    fi
+
+    if timeout 5 "$podman_ctl" container run --rm --userns=host --entrypoint=env "$probe_image" \
         >/dev/null 2>"$probe_log"; then
         return 0
     fi
 
     if grep -Eqi 'newuidmap|read-only file system|acquiring runtime init lock|cannot set up namespace' "$probe_log"; then
-        podman system migrate >"$migrate_log" 2>&1 || true
-        if timeout 5 podman run --rm --userns=host --entrypoint=env "$probe_image" \
+        "$podman_ctl" system migrate >"$migrate_log" 2>&1 || true
+        if timeout 5 "$podman_ctl" container run --rm --userns=host --entrypoint=env "$probe_image" \
             >/dev/null 2>>"$probe_log"; then
             return 0
         fi

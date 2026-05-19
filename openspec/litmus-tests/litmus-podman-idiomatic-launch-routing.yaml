@@ -1,0 +1,32 @@
+# @trace spec:podman-idiomatic-patterns, spec:cli-mode, spec:dev-build, spec:browser-isolation-tray-integration, spec:podman-orchestration
+name: litmus:podman-idiomatic-launch-routing
+spec: podman-idiomatic-patterns, cli-mode, dev-build, browser-isolation-tray-integration, podman-orchestration
+phase: pre-build
+description: Verify headless and observatorium launch paths cannot bypass the shared idiomatic Podman layer
+severity: critical
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless
+  - cargo is available in PATH
+
+critical_path:
+  - step: "run the headless anti-bypass source audit"
+    command: "cargo test -p tillandsias-headless --bin tillandsias tests::idiomatic_podman_launch_paths_do_not_bypass_shared_layer -- --exact"
+    timeout_ms: 120000
+
+observability:
+  traces:
+    - "@trace spec:podman-idiomatic-patterns"
+    - "@trace spec:cli-mode"
+    - "@trace spec:dev-build"
+    - "@trace spec:browser-isolation-tray-integration"
+    - "@trace spec:podman-orchestration"
+  expected_log: "Headless launch paths stay routed through the shared idiomatic Podman boundary"
+  log_fields:
+    spec: "podman-idiomatic-patterns,cli-mode,dev-build,browser-isolation-tray-integration,podman-orchestration"
+    test: "podman-idiomatic-launch-routing"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-headless/src/main.rs for direct podman construction or a missing shared-layer call"
+  command: "cargo test -p tillandsias-headless --bin tillandsias tests::idiomatic_podman_launch_paths_do_not_bypass_shared_layer -- --exact --nocapture"

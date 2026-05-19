@@ -5,6 +5,21 @@ active
 
 ## Requirements
 
+### Requirement: Rootless user-session ownership
+- **ID**: podman-orchestration.runtime.user-session-owned@v1
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [podman-orchestration.invariant.user-runtime-requires-logind]
+Interactive Linux launches SHALL run inside a real logind-managed user session with a writable `XDG_RUNTIME_DIR`. The launcher MUST use the current user's rootless Podman state and MUST NOT invent a synthetic `/run/user/<uid>` or a helper runtime layer in production.
+
+#### Scenario: Desktop launch uses the current session
+- **WHEN** a user runs `tillandsias --init`, `--opencode`, `--opencode-web`, or `--observatorium` from a desktop login session
+- **THEN** the runtime SHALL use the current user's rootless Podman socket and runtime dir
+
+#### Scenario: Missing session is rejected
+- **WHEN** the runtime has no writable `XDG_RUNTIME_DIR` or no logind-managed session
+- **THEN** the launcher SHALL fail fast with an actionable error
+
 ### Requirement: Security-hardened container defaults
 - **ID**: podman-orchestration.container.security-hardened-defaults@v1
 - **Modality**: MUST
@@ -169,6 +184,11 @@ MUST NOT build shell-escaped command strings for runtime container launch.
 - **Expression**: `runtime_launch_path USES argv_directly AND NOT shell_escaped_join_for_podman_run`
 - **Measurable**: true
 
+### Invariant: User runtime requires a logind-managed session
+- **ID**: podman-orchestration.invariant.user-runtime-requires-logind
+- **Expression**: `interactive_linux_launch => writable_XDG_RUNTIME_DIR AND rootless_podman_owned_by_current_user`
+- **Measurable**: true
+
 ### Invariant: No slirp4netns on Podman 5.0+
 - **ID**: podman-orchestration.invariant.no-slirp-on-podman5
 - **Expression**: `podman_version >= 5.0 AND rootless_container => pasta_backend (NOT slirp4netns)`
@@ -210,6 +230,8 @@ See `openspec/litmus-bindings.yaml` for full binding definitions.
 ## Sources of Truth
 
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns
+- `cheatsheets/runtime/linux-user-session-podman.md` — Linux user-session runtime lanes and Podman ownership
+- `cheatsheets/runtime/systemd-socket-activation.md` — user service supervision and linger patterns
 - `cheatsheets/utils/podman-containers.md` — Podman Containers reference and patterns
 - `openspec/specs/podman-container-spec/spec.md` — Typed container spec builder
 - `openspec/specs/podman-container-handle/spec.md` — Container handle snapshot and identity

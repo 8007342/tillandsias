@@ -215,7 +215,10 @@ impl ContainerSpec {
     }
 
     pub fn option(mut self, value: impl Into<String>) -> Self {
-        self.options.push(value.into());
+        let value = value.into();
+        if crate::policy::is_allowlisted_passthrough_option(&value) {
+            self.options.push(value);
+        }
         self
     }
 
@@ -349,6 +352,10 @@ impl ContainerSpec {
     pub fn build_run_argv(&self) -> Vec<String> {
         let mut argv = vec!["run".to_string()];
         argv.extend(self.build_run_args());
+        debug_assert!(
+            crate::policy::validate_launch_argv(&argv).is_ok(),
+            "ContainerSpec must serialize to policy-valid podman run argv"
+        );
         argv
     }
 }
@@ -440,7 +447,7 @@ mod tests {
             .tmpfs("/tmp:size=256m")
             .tmpfs("/dev/shm:size=256m")
             .device("/dev/dri/renderD128")
-            .option("--network=host");
+            .network("host");
         let args = spec.build_run_args();
 
         assert!(args.contains(&"--pull=never".to_string()));
@@ -451,6 +458,8 @@ mod tests {
         assert!(args.contains(&"/tmp:size=256m".to_string()));
         assert!(args.contains(&"--device".to_string()));
         assert!(args.contains(&"/dev/dri/renderD128".to_string()));
+        assert!(args.contains(&"--network".to_string()));
+        assert!(args.contains(&"host".to_string()));
     }
 
     #[test]
@@ -474,6 +483,20 @@ mod tests {
         let spec = ContainerSpec::new("example:v1");
         let argv = spec.build_run_argv();
         assert_eq!(argv.first().map(|s| s.as_str()), Some("run"));
+        assert!(crate::policy::validate_launch_argv(&argv).is_ok());
+    }
+
+    #[test]
+    fn raw_option_passthrough_is_narrowly_allowlisted() {
+        let spec = ContainerSpec::new("example:v1")
+            .option("--privileged")
+            .option("--network=host")
+            .option("--device=/dev/dri/renderD128");
+        let args = spec.build_run_args();
+
+        assert!(!args.contains(&"--privileged".to_string()));
+        assert!(!args.contains(&"--network=host".to_string()));
+        assert!(args.contains(&"--device=/dev/dri/renderD128".to_string()));
     }
 
     #[test]

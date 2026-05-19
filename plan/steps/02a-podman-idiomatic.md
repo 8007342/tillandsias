@@ -2,7 +2,8 @@
 
 ## Status
 
-pending
+completed — refreshed 2026-05-18; superseded as an active work item by
+`15-podman-control-plane-overhaul`
 
 ## Objective
 
@@ -94,10 +95,8 @@ Podman for enclave orchestration. This step closes the gap between the two by:
 
 ## Remaining Work
 
-- Author `openspec/specs/podman-idiomatic-patterns/spec.md`
-- Audit `tillandsias-podman` crate against the cheatsheet patterns
-- Add `@trace spec:podman-idiomatic-patterns` annotations to podman crate entry points
-- Confirm all storage-isolation unit tests exercise the three env-var paths
+No remaining work in the foundation step. The newly-discovered split-brain
+control surface is tracked separately in `plan/steps/15-podman-control-plane-overhaul.md`.
 
 ## Verification
 

@@ -11,6 +11,9 @@ pub mod profiler;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
+use std::io::{Read, Write};
+use std::os::unix::fs::PermissionsExt;
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -24,13 +27,16 @@ use zbus::{Connection, ConnectionBuilder, fdo, interface};
 use zvariant::{OwnedObjectPath, OwnedValue, Value};
 
 use crate::ENCLAVE_NO_PROXY;
+use tillandsias_control_wire::{
+    ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
+};
 use tillandsias_core::config::{self, SelectedAgent};
 use tillandsias_core::genus::TrayIconState;
 use tillandsias_core::remote_projects;
-use tillandsias_podman::{ContainerSpec, MountMode};
-
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+use tillandsias_podman::{
+    ContainerSpec, MountMode, container_exists_sync, image_exists_sync, podman_available_sync,
+    stop_container_sync,
+};
 
 const ITEM_PATH: &str = "/StatusNotifierItem";
 const MENU_PATH: &str = "/Menu";
@@ -212,6 +218,144 @@ impl Drop for AsyncTaskExecutor {
     fn drop(&mut self) {
         self.is_running.store(false, Ordering::Release);
     }
+}
+
+type ControlSubscribers = Arc<Mutex<Vec<Arc<Mutex<UnixStream>>>>>;
+
+fn control_socket_path() -> PathBuf {
+    let runtime_dir = env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(format!("/run/user/{}", unsafe { libc::getuid() })));
+    runtime_dir.join("tillandsias/control.sock")
+}
+
+fn read_control_envelope(stream: &mut UnixStream) -> std::io::Result<ControlEnvelope> {
+    let mut len = [0_u8; 4];
+    stream.read_exact(&mut len)?;
+    let len = u32::from_be_bytes(len) as usize;
+    if len > MAX_MESSAGE_BYTES {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "control frame too large",
+        ));
+    }
+    let mut payload = vec![0_u8; len];
+    stream.read_exact(&mut payload)?;
+    decode(&payload).map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))
+}
+
+fn write_control_envelope(
+    stream: &mut UnixStream,
+    envelope: &ControlEnvelope,
+) -> std::io::Result<()> {
+    let payload = encode(envelope)
+        .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+    stream.write_all(&(payload.len() as u32).to_be_bytes())?;
+    stream.write_all(&payload)?;
+    stream.flush()
+}
+
+fn broadcast_control_envelope(subscribers: &ControlSubscribers, envelope: &ControlEnvelope) {
+    let mut subscribers = subscribers.lock().expect("control subscribers lock");
+    subscribers.retain(|subscriber| {
+        let Ok(mut stream) = subscriber.lock() else {
+            return false;
+        };
+        write_control_envelope(&mut stream, envelope).is_ok()
+    });
+}
+
+fn handle_control_connection(mut stream: UnixStream, subscribers: ControlSubscribers) {
+    let Ok(first) = read_control_envelope(&mut stream) else {
+        return;
+    };
+
+    match first.body {
+        ControlMessage::Hello { .. } => {
+            let ack = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: first.seq,
+                body: ControlMessage::HelloAck {
+                    wire_version: WIRE_VERSION,
+                    server_caps: vec!["IssueWebSession".to_string(), "EvictProject".to_string()],
+                },
+            };
+            if write_control_envelope(&mut stream, &ack).is_err() {
+                return;
+            }
+            subscribers
+                .lock()
+                .expect("control subscribers lock")
+                .push(Arc::new(Mutex::new(stream)));
+        }
+        ControlMessage::IssueWebSession { .. } | ControlMessage::EvictProject { .. } => {
+            // Broadcast to every registered subscriber first. This is a
+            // synchronous call: when it returns, the framed bytes have been
+            // written to each subscriber socket's send buffer, so any
+            // sidecar reading its end is guaranteed to pick the envelope up
+            // on its next poll.
+            broadcast_control_envelope(&subscribers, &first);
+
+            // Then ack the originator on the connection we still hold. The
+            // CLI uses this ack as the proof that the broadcast happened
+            // before it launches the browser, eliminating the OTP race that
+            // let the browser POST `/_auth/login` before the sidecar's
+            // `OtpStore` saw the cookie. The originating socket was never
+            // added to `subscribers`, so `broadcast_control_envelope` does
+            // not write to it — we have to ack it here.
+            //
+            // Ack failures are intentionally swallowed: if the originator
+            // closed early we simply have nothing to confirm to, and the
+            // broadcast has already succeeded for the real subscribers.
+            //
+            // @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
+            let ack = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: first.seq,
+                body: ControlMessage::IssueAck {
+                    seq_acked: first.seq,
+                },
+            };
+            let _ = write_control_envelope(&mut stream, &ack);
+        }
+        _ => {}
+    }
+}
+
+/// Start the tray-owned control socket used by the router sidecar and one-shot
+/// CLI publishers.
+///
+/// @trace spec:tray-host-control-socket, spec:opencode-web-session-otp
+fn start_control_socket_server() -> Result<(), String> {
+    let socket_path = control_socket_path();
+    if let Some(parent) = socket_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("failed to create control socket directory: {err}"))?;
+    }
+    if socket_path.exists() {
+        fs::remove_file(&socket_path)
+            .map_err(|err| format!("failed to remove stale control socket: {err}"))?;
+    }
+
+    let listener = UnixListener::bind(&socket_path)
+        .map_err(|err| format!("failed to bind control socket: {err}"))?;
+    fs::set_permissions(&socket_path, fs::Permissions::from_mode(0o600))
+        .map_err(|err| format!("failed to chmod control socket: {err}"))?;
+
+    let subscribers: ControlSubscribers = Arc::new(Mutex::new(Vec::new()));
+    std::thread::spawn(move || {
+        for incoming in listener.incoming() {
+            match incoming {
+                Ok(stream) => {
+                    let subscribers = subscribers.clone();
+                    std::thread::spawn(move || handle_control_connection(stream, subscribers));
+                }
+                Err(err) => warn!(error = %err, "control socket accept failed"),
+            }
+        }
+    });
+
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -470,19 +614,11 @@ fn enclave_status_to_icon(status: EnclaveStatus) -> TrayIconState {
 }
 
 fn podman_available() -> bool {
-    Command::new("podman")
-        .arg("--version")
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+    podman_available_sync()
 }
 
 fn image_exists(image_tag: &str) -> bool {
-    Command::new("podman")
-        .args(["image", "exists", image_tag])
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+    image_exists_sync(image_tag)
 }
 
 fn discover_projects() -> Vec<ProjectEntry> {
@@ -939,55 +1075,16 @@ fn handle_stop_project(service: Arc<TrayService>, project: String) {
     let project_name = project.clone();
     if let Err(_) = service.task_executor.spawn_task(move || {
         let container_name = format!("tillandsias-{}-forge", project);
-
-        // Guard: verify container exists before stopping
-        let check_output = Command::new("podman")
-            .args([
-                "ps",
-                "-a",
-                "--filter",
-                &format!("name=^{}$", container_name),
-            ])
-            .output();
-
-        match check_output {
-            Ok(output) => {
-                if output.stdout.is_empty() || String::from_utf8_lossy(&output.stdout).len() <= 50 {
-                    // No container found (header-only output)
-                    eprintln!(
-                        "error: container '{}' not found; cannot stop",
-                        container_name
-                    );
-                } else {
-                    // Container exists, attempt stop
-                    let stop_result = Command::new("podman")
-                        .args(["stop", &container_name])
-                        .status();
-
-                    match stop_result {
-                        Ok(status) => {
-                            if !status.success() {
-                                eprintln!(
-                                    "error: failed to stop container '{}': exit status {}",
-                                    container_name, status
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!(
-                                "error: failed to stop container '{}': {}",
-                                container_name, e
-                            );
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                eprintln!(
-                    "error: failed to check container '{}': {}",
-                    container_name, e
-                );
-            }
+        if !container_exists_sync(&container_name) {
+            eprintln!(
+                "error: container '{}' not found; cannot stop",
+                container_name
+            );
+        } else if let Err(e) = stop_container_sync(&container_name, 10) {
+            eprintln!(
+                "error: failed to stop container '{}': {}",
+                container_name, e
+            );
         }
 
         let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
@@ -1172,19 +1269,8 @@ fn build_project_submenu_with_running(
 }
 
 fn podman_running_web_container(project_name: &str) -> bool {
-    let output = Command::new("podman")
-        .args(["ps", "--format", "{{.Names}}"])
-        .output();
-    let Ok(output) = output else {
-        return false;
-    };
-    if !output.status.success() {
-        return false;
-    }
-    let prefix = format!("tillandsias-{project_name}-forge");
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .any(|line| line.trim() == prefix)
+    let container_name = format!("tillandsias-{project_name}-forge");
+    container_exists_sync(&container_name)
 }
 
 fn stable_project_item_id(project: &str, suffix: &str) -> i32 {
@@ -1823,6 +1909,32 @@ mod tests {
                     .and_then(|value| String::try_from(value).ok())
             })
             .collect()
+    }
+
+    #[test]
+    fn tray_module_routes_all_podman_calls_through_shared_layer() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/tray/mod.rs"));
+
+        assert!(
+            !source.contains("Command::new(\"podman\")"),
+            "tray module must not construct podman commands directly"
+        );
+        assert!(
+            source.contains("podman_available_sync()"),
+            "tray module must use the shared podman availability helper"
+        );
+        assert!(
+            source.contains("image_exists_sync("),
+            "tray module must use the shared podman image helper"
+        );
+        assert!(
+            source.contains("container_exists_sync("),
+            "tray module must use the shared podman container existence helper"
+        );
+        assert!(
+            source.contains("stop_container_sync("),
+            "tray module must use the shared podman stop helper"
+        );
     }
 
     // @trace spec:tray-minimal-ux
@@ -2764,6 +2876,7 @@ pub fn run_tray_mode(config_path: Option<String>) -> Result<(), String> {
     let version = super::VERSION.trim().to_string();
     let state = TrayUiState::new(root.clone(), version.clone(), discover_projects());
     let service = Arc::new(TrayService::new(state));
+    start_control_socket_server()?;
 
     if let Some(path) = config_path {
         info!("Tray started with config path: {path}");

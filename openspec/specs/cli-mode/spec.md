@@ -26,6 +26,8 @@ Running `tillandsias <path>` SHALL launch an interactive container for the proje
 ### Requirement: Runtime paths are compiled Rust
 The user-facing runtime paths `--init`, `--status-check`, `--github-login`, and `--opencode` SHALL be implemented in compiled Rust and SHALL invoke Podman or other stable Unix tools directly. They SHALL NOT shell out to repository scripts during normal runtime operation.
 
+On Linux desktop sessions, these runtime paths MUST run under the current user's logind-managed session and rootless Podman state. They MUST NOT create a synthetic `/run/user/<uid>` or rely on a helper runtime wrapper in production.
+
 #### Scenario: Init uses direct Podman orchestration
 - **WHEN** the user runs `tillandsias --init`
 - **THEN** the binary SHALL construct and execute Podman commands directly
@@ -44,8 +46,18 @@ The binary MUST accept `--observatorium` as a user-facing launcher alias for the
 #### Scenario: Observatorium launch alias
 - **WHEN** the user runs `tillandsias --observatorium`
 - **THEN** the local observatorium SHALL be launched from the current checkout
+- **AND** the `tillandsias-web:v<VERSION>` image SHALL be preflighted before launch
+- **AND** the launcher SHALL not fall into interactive short-name resolution for missing images
 - **AND** a safe browser SHALL open against `https://observatorium.tillandsias.localhost`
 - **AND** the command SHALL remain compatible with tray-aware CLI invocation
+
+### Requirement: OpenCode Web launch reuses the router when already present
+The `--opencode-web` launch path SHALL reuse an already-running router container when one exists, and SHALL only probe host ports after confirming the router is not already published.
+
+#### Scenario: Existing router is reused
+- **WHEN** the user runs `tillandsias --opencode-web . --debug` and `tillandsias-router` is already running
+- **THEN** the runtime SHALL reuse the existing router host port
+- **AND** it SHALL not fail early on the host-port availability check
 
 ### Requirement: Image selection flag
 The `--image` flag SHALL allow selecting which container image to use.
@@ -143,6 +155,8 @@ Every CLI path that may have started enclave infrastructure MUST install a SIGIN
 
 - `cheatsheets/runtime/cmd.md` — Cmd reference and patterns
 - `cheatsheets/languages/bash.md` — Bash reference and patterns
+- `cheatsheets/runtime/linux-user-session-podman.md` — Linux desktop user-session runtime contract
+- `cheatsheets/runtime/systemd-socket-activation.md` — supervised headless service contract
 
 ## Litmus Chain
 

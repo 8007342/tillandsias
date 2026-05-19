@@ -913,6 +913,37 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Implement the host-port fallback chain explicitly, including the user-visible --port escape hatch and the host/loopback diagnostics."
 
+    - id: runtime-lane-explicitness
+      order: 14.5
+      title: Runtime Lane Explicitness — Desktop, Service, and Dev/Test Ownership
+      status: completed
+      deliverable: plan/steps/14.5-runtime-lane-explicitness.md
+      depends_on: [user-runtime-port-selection]
+      specs:
+        - environment-runtime
+        - podman-orchestration
+        - cli-mode
+        - browser-isolation-tray-integration
+      exit_criteria:
+        - "Interactive launchers fail fast when the desktop user-session lane is missing"
+        - "The headless service-account lane remains explicit in packaging and supervision"
+        - "Dev/test wrapper state stays confined to scripts and litmus harnesses"
+      tasks:
+        - id: runtime-lane/preflight
+          status: completed
+          depends_on: [user-runtime-port-selection/fallback-chain]
+          owned_files:
+            - crates/tillandsias-podman/src/lib.rs
+            - crates/tillandsias-headless/src/main.rs
+            - methodology/specs/user-runtime-lifecycle/architecture.md
+            - methodology/specs/user-runtime-lifecycle/TRACES.md
+            - scripts/install.sh
+            - scripts/uninstall.sh
+            - plan/steps/14.5-runtime-lane-explicitness.md
+            - plan/issues/runtime-lane-explicitness.md
+          checkpoint_required: true
+          handoff_note: "Desktop launches now own their runtime lane explicitly; keep the headless service-account lane separate and do not let dev/test wrappers leak into production runtime."
+
     - id: tray-network-bootstrap
       order: 15
       title: Tray Network Bootstrap — Ensure Enclave Readiness Before Launch
@@ -957,6 +988,47 @@ plan_index:
             - openspec/specs/cli-mode/spec.md
           checkpoint_required: true
           handoff_note: "Tighten the observatorium readiness check and surface container diagnostics on failure so the browser path can distinguish bootstrap from route breakage."
+
+    - id: podman-control-plane-overhaul
+      order: 15
+      title: Podman Control-Plane Overhaul
+      status: in_progress
+      deliverable: plan/steps/15-podman-control-plane-overhaul.md
+      depends_on: [podman-idiomatic-foundation]
+      specs:
+        - podman-idiomatic-patterns
+        - podman-orchestration
+        - runtime-diagnostics
+      exit_criteria:
+        - "All new Podman orchestration enters through the Rust control plane."
+        - "Runtime failure output preserves raw command facts and diagnostics."
+        - "The local/small/large/full ladder is explicit and executable."
+      tasks:
+        - id: podman-control-plane-overhaul/spine
+          status: completed
+          depends_on: [podman-idiomatic-foundation]
+          owned_files:
+            - crates/tillandsias-podman/src/backend.rs
+            - crates/tillandsias-podman/src/diagnostics.rs
+          checkpoint_required: true
+          handoff_note: "Backend seam, lossless command facts, and failed-launch snapshots landed on 2026-05-18."
+        - id: podman-control-plane-overhaul/facade
+          status: completed
+          depends_on: [podman-control-plane-overhaul/spine]
+          owned_files:
+            - crates/tillandsias-podman-cli
+            - scripts/tillandsias-podman
+          checkpoint_required: true
+          handoff_note: "Dedicated CLI facade and thin shell delegate landed on 2026-05-18."
+        - id: podman-control-plane-overhaul/migrate-legacy-shell
+          status: ready
+          depends_on: [podman-control-plane-overhaul/facade]
+          owned_files:
+            - build.sh
+            - scripts/run-forge-project.sh
+            - scripts/run-litmus-test.sh
+          checkpoint_required: true
+          handoff_note: "Next wave: retire residual shell orchestration, then enable strict no-direct-Podman audit."
 
     - id: post-release-polish
       order: 17

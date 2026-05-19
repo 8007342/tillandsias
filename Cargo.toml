@@ -8,6 +8,7 @@ members = [
     "crates/tillandsias-metrics",
     "crates/tillandsias-otp",
     "crates/tillandsias-podman",
+    "crates/tillandsias-podman-cli",
     "crates/tillandsias-repeat-graph",
     "crates/tillandsias-router-sidecar",
     "crates/tillandsias-scanner",

@@ -2383,7 +2383,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-core"
-version = "0.1.260516"
+version = "0.1.260518"
 dependencies = [
  "async-trait",
  "dirs",
@@ -2403,7 +2403,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-headless"
-version = "0.1.260516"
+version = "0.1.260518"
 dependencies = [
  "bytes",
  "chrono",
@@ -2479,7 +2479,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-podman"
-version = "0.1.260516"
+version = "0.1.260518"
 dependencies = [
  "async-trait",
  "libc",
@@ -2490,6 +2490,15 @@ dependencies = [
  "tillandsias-core",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "tillandsias-podman-cli"
+version = "0.1.260518"
+dependencies = [
+ "serde_json",
+ "tillandsias-podman",
+ "tokio",
 ]
 
 [[package]]
@@ -2521,7 +2530,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-scanner"
-version = "0.1.260516"
+version = "0.1.260518"
 dependencies = [
  "dirs",
  "notify",

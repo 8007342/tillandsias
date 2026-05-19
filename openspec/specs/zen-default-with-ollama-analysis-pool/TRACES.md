@@ -5,6 +5,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [images/inference/Containerfile#L49](../../../images/inference/Containerfile#L49)
-- [images/inference/entrypoint.sh#L52](../../../images/inference/entrypoint.sh#L52)
-- [images/inference/entrypoint.sh#L83](../../../images/inference/entrypoint.sh#L83)
+- [images/inference/Containerfile#L57](../../../images/inference/Containerfile#L57)
+- [images/inference/entrypoint.sh#L55](../../../images/inference/entrypoint.sh#L55)
+- [images/inference/entrypoint.sh#L86](../../../images/inference/entrypoint.sh#L86)

@@ -120,3 +120,8 @@ installed runtime if the goal is isolation and repeatable Unix permissions.
 Developer builds can still use the existing user-owned toolbox path, but the
 installed runtime should be able to target a dedicated socket with no shared
 login-user Podman state.
+
+See also:
+
+- `cheatsheets/runtime/linux-user-session-podman.md` — the desktop-session lane that keeps the interactive binary on the logged-in user's runtime
+- `cheatsheets/runtime/systemd-socket-activation.md` — supervision and socket-activation patterns for the service account lane

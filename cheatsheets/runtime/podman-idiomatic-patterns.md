@@ -31,6 +31,37 @@ committed_for_project: false
 
 ---
 
+## Runtime lanes
+
+Tillandsias uses three distinct runtime lanes on Linux:
+
+| Lane | Who owns it | What it may do | What it must not do |
+|---|---|---|---|
+| Desktop user session | The logged-in desktop user, via logind/systemd | Interactive CLI, tray, OpenCode, OpenCode Web, observatorium | Synthesize `/run/user/<uid>` or invent a helper runtime layer |
+| Headless service account | Dedicated `tillandsias` user, managed by systemd | Supervised background installs and persistent service-mode launches | Impersonate the desktop user or share their runtime state |
+| Dev/test runtime | Shell wrappers and litmus harnesses | Provide isolated, reproducible test plumbing | Leak into production runtime behavior |
+
+### Desktop user session rules
+
+- Rootless Podman must use the current user's session-owned runtime state.
+- `XDG_RUNTIME_DIR` must exist and be writable.
+- The launcher should fail clearly if no real desktop login session is present.
+- `env -u` / env scrubbing is only process hygiene; it is not a runtime layer.
+
+### Headless service-account rules
+
+- Use `systemd --user` or Quadlet-style supervision for the dedicated `tillandsias` user.
+- Enable linger when the runtime must survive logout.
+- Keep Podman rootless and user-owned; do not escalate to host root.
+
+### Dev/test rules
+
+- Keep wrapper-based storage isolation in scripts and litmuses.
+- Do not carry wrapper env into shipped user-runtime code.
+- If a launch path needs a fake runtime dir to pass tests, that is a test-only contract and must be documented as such.
+
+---
+
 ## Event Streaming (Non-Polling)
 
 ### ❌ DON'T: Poll containers in a loop
@@ -734,5 +765,7 @@ CMD ["/app/myapp"]
 - `@trace spec:container-state-machine` — Lifecycle management
 
 **See also**:
+- `cheatsheets/runtime/linux-user-session-podman.md` — Linux desktop and headless runtime lanes
+- `cheatsheets/runtime/systemd-socket-activation.md` — supervised user-service and linger patterns
 - `research/IDIOMATIC_PODMAN.md` — Full architecture research report
 - `docs/cheatsheets/README.md` — Index of all cheatsheets

@@ -19,8 +19,8 @@ plan:
 
   current_state:
     last_completed_step: p3-backlog (step 9)
-    next_step: plan-ledger-refresh (step 12) — tray/router routing wave
-    next_graph_node: plan-ledger-refresh/bootstrap (in_progress, ledger refresh and route split)
+    next_step: podman-control-plane-overhaul (step 15)
+    next_graph_node: podman-control-plane-overhaul/spine (in_progress)
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next

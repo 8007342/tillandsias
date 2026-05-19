@@ -16,10 +16,14 @@ grep -rn "@trace spec:user-runtime-lifecycle" \
 
 | Location | Purpose |
 |----------|---------|
+| `crates/tillandsias-podman/src/lib.rs` | Runtime lane detection, desktop/service-account preflight, and Podman transport setup |
 | `scripts/build-image.sh` | Layer 2 entry point (distro detection, cache mounting, podman build invocation) |
 | `crates/tillandsias-core/src/image_builder.rs` | Layer 2 Rust API (ImageBuilder trait + implementations) |
 | `crates/tillandsias-podman/src/client.rs::build_image()` | Podman CLI wrapper (executes prepared calls) |
 | `src-tauri/src/embedded.rs` | Layer 1 (Containerfile embedding) |
+| `packaging/systemd/user/tillandsias.service` | Headless service-account lane for the supervised `tillandsias` user |
+| `scripts/install.sh`, `scripts/uninstall.sh` | Service-account provisioning and teardown for the headless lane |
+| `scripts/run-litmus-test.sh` | Dev/test wrapper lane for litmus isolation and repeatable probes |
 | `scripts/build-git.sh`, etc. | Layer 3 test harnesses (exercise Layer 2, capture calls, assert output) |
 
 ## Related Specs

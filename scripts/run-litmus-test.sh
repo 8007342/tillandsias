@@ -88,19 +88,20 @@ if [[ "\$mode" == "fake" ]]; then
     exec "$PROJECT_ROOT/scripts/test-support/podman-mock.sh" "\${args[@]}"
 fi
 
-if [[ -z "\$real_podman_bin" ]]; then
-    echo "podman not found on PATH" >&2
-    exit 127
-fi
-
-# Real-mode delegation: pass through to the user default podman store so
-# tests can see tillandsias-* images written by tillandsias --init. The
-# isolated graphroot at \$LITMUS_PODMAN_ROOT (VFS) was empty of host images
-# and caused short-name resolution failures for tests that reference
-# tillandsias-forge / tillandsias-proxy / tillandsias-router by short name.
-# Tests are expected to clean up the containers they create (see the
-# rollback sections in openspec/litmus-tests/*.yaml).
-exec "\$real_podman_bin" "\${args[@]}"
+# Real-mode delegation now passes through the Rust-owned Podman façade so
+# litmus tests exercise the same backend seam as the rest of the repository.
+# Strip our own dir from PATH and drop TILLANDSIAS_PODMAN_BIN so the Rust
+# delegate resolves the real podman instead of re-execing this wrapper
+# (which causes unbounded recursion when --version is dispatched via
+# raw → podman_cmd() → TILLANDSIAS_PODMAN_BIN → this wrapper).
+new_path=""
+IFS=: read -ra parts <<<"\$PATH"
+for d in "\${parts[@]}"; do
+    [[ "\$d" == */target/litmus-runtime/bin ]] && continue
+    new_path="\${new_path:+\$new_path:}\$d"
+done
+unset TILLANDSIAS_PODMAN_BIN
+PATH="\$new_path" exec "$PROJECT_ROOT/scripts/tillandsias-podman" raw "\${args[@]}"
 EOF
 chmod 755 "$LITMUS_RUNTIME_DIR/bin/podman"
 export PATH="$LITMUS_RUNTIME_DIR/bin:$PATH"

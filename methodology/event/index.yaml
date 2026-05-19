@@ -206,3 +206,15 @@ unknown_event_register:
         - fresh_start_semantics_litmus_test_not_yet_created
         - forge_staleness_spec_lacks_fresh_start_section
         - forge_cache_dual_spec_lacks_version_lifecycle_section
+    - file: methodology/event/028-runtime-lane-explicitness.yaml
+      status: distilled
+      distilled_into:
+        - methodology/specs/user-runtime-lifecycle/architecture.md
+        - methodology/specs/user-runtime-lifecycle/TRACES.md
+        - plan/steps/14.5-runtime-lane-explicitness.md
+        - plan/issues/runtime-lane-explicitness.md
+    - file: methodology/event/029-podman-control-plane-split-brain.yaml
+      status: distilled
+      distilled_into:
+        - cheatsheets/runtime/podman-control-plane.md
+        - plan/steps/15-podman-control-plane-overhaul.md

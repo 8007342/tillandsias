@@ -60,8 +60,9 @@ specs:
   litmus_tests:
   - litmus:browser-tray-launch-profile
   - litmus:opencode-web-startup-sequence
-  coverage_ratio: 67
-  last_verified: '2026-05-12'
+  - litmus:podman-idiomatic-launch-routing
+  coverage_ratio: 100
+  last_verified: '2026-05-16'
 - spec_id: browser-mcp-server
   status: obsolete
   litmus_tests: []
@@ -145,8 +146,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:cli-mode-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:podman-idiomatic-launch-routing
+  coverage_ratio: 67
+  last_verified: '2026-05-16'
 - spec_id: clickable-trace-index
   status: active
   litmus_tests:
@@ -170,8 +172,10 @@ specs:
   litmus_tests:
   - litmus:environment-isolation
   - litmus:binary-e2e-smoke
-  coverage_ratio: 50
-  last_verified: '2026-05-15'
+  - litmus:headless-init-status-check-source-built
+  - litmus:podman-idiomatic-launch-routing
+  coverage_ratio: 100
+  last_verified: '2026-05-16'
 - spec_id: direct-podman-calls
   status: obsolete
   litmus_tests: []
@@ -458,8 +462,9 @@ specs:
   - litmus:podman-web-launch-profile
   - litmus:container-naming
   - litmus:podman-path-availability
+  - litmus:podman-idiomatic-launch-routing
   coverage_ratio: 100
-  last_verified: '2026-05-12'
+  last_verified: '2026-05-16'
 - spec_id: podman-container-spec
   status: active
   litmus_tests:
@@ -483,8 +488,10 @@ specs:
   - litmus:podman-idiomatic-event-driven
   - litmus:podman-idiomatic-storage-isolation-runtime
   - litmus:podman-idiomatic-error-discrimination
-  coverage_ratio: 86
-  last_verified: '2026-05-14'
+  - litmus:podman-idiomatic-launch-routing
+  - litmus:headless-init-status-check-source-built
+  coverage_ratio: 100
+  last_verified: '2026-05-16'
 - spec_id: project-bootstrap-readme
   status: active
   litmus_tests:

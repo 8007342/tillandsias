@@ -5,11 +5,11 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [crates/tillandsias-headless/src/main.rs#L2434](../../../crates/tillandsias-headless/src/main.rs#L2434)
-- [crates/tillandsias-headless/src/main.rs#L2688](../../../crates/tillandsias-headless/src/main.rs#L2688)
+- [crates/tillandsias-headless/src/main.rs#L2558](../../../crates/tillandsias-headless/src/main.rs#L2558)
+- [crates/tillandsias-headless/src/main.rs#L2815](../../../crates/tillandsias-headless/src/main.rs#L2815)
 - [images/git/entrypoint.sh#L21](../../../images/git/entrypoint.sh#L21)
 - [images/git/entrypoint.sh#L33](../../../images/git/entrypoint.sh#L33)
-- [images/inference/entrypoint.sh#L27](../../../images/inference/entrypoint.sh#L27)
+- [images/inference/entrypoint.sh#L30](../../../images/inference/entrypoint.sh#L30)
 - [images/proxy/entrypoint.sh#L17](../../../images/proxy/entrypoint.sh#L17)
 - [images/proxy/entrypoint.sh#L25](../../../images/proxy/entrypoint.sh#L25)
 - [scripts/cleanup-secrets.sh#L13](../../../scripts/cleanup-secrets.sh#L13)

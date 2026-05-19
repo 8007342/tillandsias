@@ -7,11 +7,11 @@ created: 2026-05-05
 
 ## Purpose
 
-Define the build-time and runtime split used by Tillandsias: Nix provides reproducible build inputs for Rust/package materialization, Podman constructs and runs containers, and shell scripts remain test harnesses. This architecture keeps build determinism high without leaking Nix into user runtime orchestration.
+Define the build-time and runtime split used by Tillandsias: Nix provides reproducible build inputs for Rust/package materialization, Podman constructs and runs containers, and shell scripts remain test harnesses. The runtime itself is lane-aware: desktop user session, headless service account, and dev/test wrapper are distinct ownership models and must not collapse into one another.
 
 ## Overview
 
-Tillandsias uses a build-time Nix / runtime Podman / test-harness shell split:
+Tillandsias uses a build-time Nix / runtime Podman / test-harness shell split, with explicit runtime lanes:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -59,6 +59,16 @@ Tillandsias uses a build-time Nix / runtime Podman / test-harness shell split:
 │         (litmus centicolon bindings)                             │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+### Runtime lanes
+
+The runtime lane determines which user/session owns Podman state:
+
+- **Desktop user session**: interactive CLI, tray, OpenCode, OpenCode Web, observatorium. Requires the logged-in desktop user, a writable `XDG_RUNTIME_DIR`, and rootless Podman state owned by that user.
+- **Headless service account**: the dedicated `tillandsias` account supervised by `systemd --user` with linger enabled. This lane owns the packaged headless service.
+- **Dev/test wrapper**: scripts, litmus harnesses, and local checkout wrappers that isolate Podman for repeatable tests. This lane is not a production runtime.
+
+Production launch paths must choose the correct lane explicitly and fail fast if the current session does not match the expected ownership model.
 
 ## Three-Layer Separation
 

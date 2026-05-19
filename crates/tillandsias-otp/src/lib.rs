@@ -34,7 +34,7 @@ pub const PENDING_TTL: Duration = Duration::from_secs(60);
 
 /// Cookie attribute envelope — the canonical attribute set the spec mandates.
 ///
-/// `Set-Cookie: tillandsias_session=<base64url>; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400`
+/// `Set-Cookie: tillandsias_session=<base64url>; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`
 ///
 /// No `Secure` (we serve plain HTTP on loopback). No `Domain` (defaults to
 /// the exact request hostname; the cookie does not leak to sibling subdomains).
@@ -329,7 +329,15 @@ pub fn parse_cookie_value(s: &str) -> Option<[u8; COOKIE_LEN]> {
 pub fn format_set_cookie_header(token: &[u8; COOKIE_LEN], host: &str) -> String {
     let _ = host; // intentionally unused — kept in signature for API symmetry
     format!(
-        "{}={}; Path={}; HttpOnly; SameSite=Strict; Max-Age={}",
+        // SameSite=Lax (not Strict) is required because the OTP login flow
+        // navigates from a `data:` URL (opaque origin) to the project's
+        // subdomain via a 302 redirect. SameSite=Strict drops the cookie on
+        // that top-level redirect-follow (initiator origin != cookie origin),
+        // which then 401s every subsequent request and leaves the user on
+        // the "unauthorised" page. Lax keeps the cookie on top-level GET
+        // navigations while still blocking it from cross-site sub-resources
+        // and POSTs.
+        "{}={}; Path={}; HttpOnly; SameSite=Lax; Max-Age={}",
         COOKIE_NAME,
         format_cookie_value(token),
         COOKIE_PATH,
@@ -346,12 +354,16 @@ pub fn format_set_cookie_header(token: &[u8; COOKIE_LEN], host: &str) -> String 
 /// @trace spec:opencode-web-session-otp
 pub fn build_login_form_html(project_url: &str, otp_value: &str) -> String {
     let action = format!("{}/_auth/login", project_url.trim_end_matches('/'));
+    // No <meta http-equiv="refresh"> — meta refresh issues a GET, which races
+    // and almost always beats the JS POST below. The sidecar's /_auth/login
+    // only accepts POST (GET → 401), so meta refresh would short-circuit the
+    // OTP submission and leave the user on the "unauthorised" page. <noscript>
+    // covers the JS-disabled fallback.
     format!(
         r#"<!doctype html>
 <html>
   <head>
     <meta charset="utf-8">
-    <meta http-equiv="refresh" content="0;url={action}">
   </head>
   <body>
     <form id="login" method="post" action="{action}">
@@ -526,10 +538,7 @@ mod tests {
             "missing cookie name: {h}"
         );
         assert!(h.contains("HttpOnly"), "missing HttpOnly: {h}");
-        assert!(
-            h.contains("SameSite=Strict"),
-            "missing SameSite=Strict: {h}"
-        );
+        assert!(h.contains("SameSite=Lax"), "missing SameSite=Lax: {h}");
         assert!(h.contains("Path=/"), "missing Path=/: {h}");
         assert!(h.contains("Max-Age=86400"), "missing Max-Age=86400: {h}");
         assert!(!h.contains("Secure"), "must NOT contain Secure: {h}");

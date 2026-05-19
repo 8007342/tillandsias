@@ -1,13 +1,16 @@
 //! @trace spec:podman-orchestration, spec:cross-platform, spec:windows-wsl-runtime, spec:podman-idiomatic-patterns
 
+pub mod backend;
 pub mod cache_semantics;
 mod client;
 pub mod container_spec;
+pub mod diagnostics;
 pub mod diagnostics_stream;
 pub mod events;
 mod gpu;
 pub mod launch;
 pub mod peer_table;
+pub mod policy;
 pub mod runtime;
 
 use std::env;
@@ -59,14 +62,23 @@ pub fn no_window_sync(cmd: &mut std::process::Command) -> &mut std::process::Com
     cmd
 }
 
+pub use backend::{
+    BackendRef, CommandFailure, CommandOutput, FakeBackend, OperationKind, PodmanBackend,
+    RealBackend, ReplayBackend, RetryClass,
+};
 pub use client::EnclaveContainerInfo;
 pub use client::PodmanClient;
 pub use client::RunOutput;
+pub use client::container_exists_sync;
+pub use client::image_exists_sync;
 pub use client::network_exists_sync;
+pub use client::podman_available_sync;
+pub use client::stop_container_sync;
 pub use container_spec::ContainerHandle;
 pub use container_spec::ContainerSpec;
 pub use container_spec::MountMode;
 pub use container_spec::MountSpec;
+pub use diagnostics::{ContainerDiagnostics, LogTail};
 pub use diagnostics_stream::{DiagnosticsError, DiagnosticsHandle};
 pub use events::PodmanEventStream;
 pub use gpu::detect_gpu_devices;
@@ -77,6 +89,159 @@ pub use peer_table::{PeerTable, ProjectLabel};
 /// The internal podman network name for the Tillandsias enclave.
 /// @trace spec:enclave-network
 pub const ENCLAVE_NETWORK: &str = "tillandsias-enclave";
+
+/// Runtime lanes that Tillandsias recognizes on Linux.
+///
+/// The lanes are intentionally explicit so production launch paths can report
+/// which ownership model is active instead of guessing from incidental state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeLane {
+    DesktopUserSession,
+    HeadlessServiceAccount,
+    DevTest,
+}
+
+impl RuntimeLane {
+    pub const fn label(self) -> &'static str {
+        match self {
+            RuntimeLane::DesktopUserSession => "desktop-user-session",
+            RuntimeLane::HeadlessServiceAccount => "headless-service-account",
+            RuntimeLane::DevTest => "dev-test",
+        }
+    }
+}
+
+/// Return the current lane implied by the process environment.
+///
+/// This is intentionally conservative: service-account markers win first,
+/// then dev/test wrapper markers, and everything else is treated as a normal
+/// desktop user session.
+pub fn current_runtime_lane() -> RuntimeLane {
+    if env::var_os("TILLANDSIAS_PODMAN_REMOTE_URL").is_some()
+        || env::var_os("TILLANDSIAS_ROOT").is_some()
+    {
+        return RuntimeLane::HeadlessServiceAccount;
+    }
+
+    if env::var_os("TILLANDSIAS_PODMAN_GRAPHROOT").is_some()
+        || env::var_os("TILLANDSIAS_PODMAN_RUNROOT").is_some()
+        || env::var_os("TILLANDSIAS_PODMAN_RUNTIME_DIR").is_some()
+        || env::var_os("TILLANDSIAS_PODMAN_STORAGE_CONF").is_some()
+        || env::var_os("TILLANDSIAS_PODMAN_WRAPPER_DIR").is_some()
+    {
+        return RuntimeLane::DevTest;
+    }
+
+    RuntimeLane::DesktopUserSession
+}
+
+#[cfg(unix)]
+fn path_is_writable(path: &Path) -> bool {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    let Ok(c_path) = CString::new(path.as_os_str().as_bytes()) else {
+        return false;
+    };
+    unsafe { libc::access(c_path.as_ptr(), libc::W_OK) == 0 }
+}
+
+#[cfg(not(unix))]
+fn path_is_writable(_path: &Path) -> bool {
+    true
+}
+
+/// Require the interactive desktop lane.
+///
+/// Interactive launchers use this to ensure they are running inside a real
+/// logind-managed user session rather than the service-account or dev/test
+/// lanes.
+pub fn require_desktop_user_session(operation: &str) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        match current_runtime_lane() {
+            RuntimeLane::DesktopUserSession => {}
+            RuntimeLane::HeadlessServiceAccount => {
+                return Err(format!(
+                    "{operation} requires the desktop user-session lane, but this process is running under the headless service-account lane"
+                ));
+            }
+            RuntimeLane::DevTest => {
+                return Err(format!(
+                    "{operation} requires the desktop user-session lane, but this process is running under the dev/test wrapper lane"
+                ));
+            }
+        }
+
+        let runtime_dir = env::var_os("XDG_RUNTIME_DIR").ok_or_else(|| {
+            format!(
+                "{operation} requires a real desktop user session with a writable XDG_RUNTIME_DIR"
+            )
+        })?;
+        let runtime_dir = PathBuf::from(runtime_dir);
+        if !runtime_dir.is_dir() {
+            return Err(format!(
+                "{operation} requires XDG_RUNTIME_DIR to point at a directory: {}",
+                runtime_dir.display()
+            ));
+        }
+        if !path_is_writable(&runtime_dir) {
+            return Err(format!(
+                "{operation} requires writable XDG_RUNTIME_DIR, but {} is not writable",
+                runtime_dir.display()
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+/// Require the headless service-account lane when service-account markers are present.
+///
+/// The dev/test lane remains permissive so local litmus and scripted runs can
+/// continue to exercise the headless code path without provisioning the system
+/// service account. When the service-account markers are present, the runtime
+/// must be backed by the supervised user-service model.
+pub fn require_headless_service_account(operation: &str) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        if current_runtime_lane() != RuntimeLane::HeadlessServiceAccount {
+            return Ok(());
+        }
+
+        let runtime_dir = env::var_os("XDG_RUNTIME_DIR").ok_or_else(|| {
+            format!(
+                "{operation} requires the supervised headless service-account lane with XDG_RUNTIME_DIR"
+            )
+        })?;
+        let runtime_dir = PathBuf::from(runtime_dir);
+        if !runtime_dir.is_dir() {
+            return Err(format!(
+                "{operation} requires XDG_RUNTIME_DIR to point at a directory: {}",
+                runtime_dir.display()
+            ));
+        }
+        if !path_is_writable(&runtime_dir) {
+            return Err(format!(
+                "{operation} requires writable XDG_RUNTIME_DIR, but {} is not writable",
+                runtime_dir.display()
+            ));
+        }
+
+        let remote_url = env::var("TILLANDSIAS_PODMAN_REMOTE_URL").map_err(|_| {
+            format!(
+                "{operation} requires TILLANDSIAS_PODMAN_REMOTE_URL when running in the headless service-account lane"
+            )
+        })?;
+        if !remote_url.starts_with("unix://") {
+            return Err(format!(
+                "{operation} requires a unix:// Podman socket for the headless service-account lane, got {remote_url}"
+            ));
+        }
+    }
+
+    Ok(())
+}
 
 /// Generate the enclave network name for a given project label.
 /// Returns a network name in the format `tillandsias-<project_label>-enclave`.
@@ -429,7 +594,7 @@ mod tests {
                 "/tmp/tillandsias-podman-runtime-test",
             );
         }
-        let mut cmd = std::process::Command::new("podman");
+        let mut cmd = std::process::Command::new(find_podman_path());
         configure_podman_environment_with_transport(
             &mut cmd,
             Some("unix:///run/user/1000/podman/podman.sock"),
@@ -459,7 +624,7 @@ mod tests {
 
     #[test]
     fn local_transport_uses_host_defaults_without_isolation_env() {
-        let mut cmd = std::process::Command::new("podman");
+        let mut cmd = std::process::Command::new(find_podman_path());
         let _guard = env_lock();
         unsafe {
             std::env::remove_var("TILLANDSIAS_PODMAN_GRAPHROOT");
@@ -478,7 +643,7 @@ mod tests {
     #[test]
     fn local_transport_isolation_env_enables_storage_overrides() {
         let _guard = env_lock();
-        let mut cmd = std::process::Command::new("podman");
+        let mut cmd = std::process::Command::new(find_podman_path());
         unsafe {
             std::env::set_var("TILLANDSIAS_PODMAN_GRAPHROOT", "/tmp/tillandsias-graphroot");
             std::env::set_var("TILLANDSIAS_PODMAN_RUNROOT", "/tmp/tillandsias-runroot");
@@ -502,6 +667,72 @@ mod tests {
             std::env::remove_var("TILLANDSIAS_PODMAN_RUNTIME_DIR");
             std::env::remove_var("TILLANDSIAS_PODMAN_STORAGE_CONF");
         }
+    }
+
+    #[test]
+    fn runtime_lane_classification_prefers_service_account_then_devtest_then_desktop() {
+        let _guard = env_lock();
+        unsafe {
+            std::env::remove_var("TILLANDSIAS_PODMAN_REMOTE_URL");
+            std::env::remove_var("TILLANDSIAS_ROOT");
+            std::env::remove_var("TILLANDSIAS_PODMAN_GRAPHROOT");
+            std::env::remove_var("TILLANDSIAS_PODMAN_RUNROOT");
+            std::env::remove_var("TILLANDSIAS_PODMAN_RUNTIME_DIR");
+            std::env::remove_var("TILLANDSIAS_PODMAN_STORAGE_CONF");
+            std::env::remove_var("TILLANDSIAS_PODMAN_WRAPPER_DIR");
+        }
+
+        assert_eq!(current_runtime_lane(), RuntimeLane::DesktopUserSession);
+
+        unsafe {
+            std::env::set_var("TILLANDSIAS_PODMAN_GRAPHROOT", "/tmp/tillandsias-graphroot");
+        }
+        assert_eq!(current_runtime_lane(), RuntimeLane::DevTest);
+
+        unsafe {
+            std::env::set_var(
+                "TILLANDSIAS_PODMAN_REMOTE_URL",
+                "unix:///run/user/1000/podman/podman.sock",
+            );
+        }
+        assert_eq!(current_runtime_lane(), RuntimeLane::HeadlessServiceAccount);
+
+        unsafe {
+            std::env::remove_var("TILLANDSIAS_PODMAN_REMOTE_URL");
+            std::env::remove_var("TILLANDSIAS_PODMAN_GRAPHROOT");
+        }
+    }
+
+    #[test]
+    fn desktop_user_session_preflight_requires_writable_runtime_dir() {
+        let _guard = env_lock();
+        unsafe {
+            std::env::remove_var("TILLANDSIAS_PODMAN_REMOTE_URL");
+            std::env::remove_var("TILLANDSIAS_ROOT");
+            std::env::remove_var("TILLANDSIAS_PODMAN_GRAPHROOT");
+            std::env::remove_var("TILLANDSIAS_PODMAN_RUNROOT");
+            std::env::remove_var("TILLANDSIAS_PODMAN_RUNTIME_DIR");
+            std::env::remove_var("TILLANDSIAS_PODMAN_STORAGE_CONF");
+            std::env::remove_var("TILLANDSIAS_PODMAN_WRAPPER_DIR");
+        }
+
+        let temp_dir = std::env::temp_dir().join(format!(
+            "tillandsias-runtime-lane-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        unsafe {
+            std::env::set_var("XDG_RUNTIME_DIR", &temp_dir);
+        }
+        assert!(require_desktop_user_session("desktop runtime test").is_ok());
+
+        unsafe {
+            std::env::remove_var("XDG_RUNTIME_DIR");
+        }
+        assert!(require_desktop_user_session("desktop runtime test").is_err());
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 
     /// Verify enclave_network_name follows the spec pattern: tillandsias-<project>-enclave

@@ -37,18 +37,23 @@
 
 use signal_hook::flag;
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::os::unix::net::UnixStream;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tempfile::Builder as TempDirBuilder;
-use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION, encode};
+use tillandsias_control_wire::{
+    ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
+};
 use tillandsias_core::cache_validation;
 use tillandsias_podman::{
-    ContainerSpec, MountMode, PodmanClient, detect_gpu_devices, podman_cmd_sync,
+    ContainerSpec, MountMode, PodmanClient, current_runtime_lane, detect_gpu_devices,
+    podman_cmd_sync, require_desktop_user_session, require_headless_service_account,
 };
 use tracing::{debug, error, info, warn};
 
@@ -210,6 +215,7 @@ fn main() {
     }
 
     if opencode {
+        maybe_spawn_detached_tray_for_cli(tray, debug);
         if let Some(project_path) = config_path {
             if let Err(e) = run_opencode_mode(&project_path, prompt.as_deref(), debug) {
                 eprintln!("Error: {}", e);
@@ -223,6 +229,7 @@ fn main() {
     }
 
     if opencode_web {
+        maybe_spawn_detached_tray_for_cli(tray, debug);
         if let Some(project_path) = config_path {
             if let Err(e) =
                 run_opencode_web_mode(&project_path, prompt.as_deref(), port_override, debug)
@@ -656,6 +663,15 @@ fn init_log_file(image_name: &str, debug: bool) -> Option<PathBuf> {
 
 fn podman_runtime() -> Result<tokio::runtime::Runtime, String> {
     tokio::runtime::Runtime::new().map_err(|e| format!("Failed to create async runtime: {e}"))
+}
+
+fn report_runtime_lane(context: &str, debug: bool) {
+    if debug {
+        eprintln!(
+            "[tillandsias] {context} runtime lane: {}",
+            current_runtime_lane().label()
+        );
+    }
 }
 
 fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), String> {
@@ -1164,6 +1180,15 @@ fn router_dynamic_caddyfile_host_path() -> PathBuf {
     base.join("router")
 }
 
+fn control_socket_host_dir() -> PathBuf {
+    let base = if let Ok(runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
+        PathBuf::from(runtime_dir)
+    } else {
+        PathBuf::from(format!("/run/user/{}", unsafe { libc::getuid() }))
+    };
+    base.join("tillandsias")
+}
+
 /// Build `podman run` args for the Caddy reverse-proxy router container.
 ///
 /// The router runs on the enclave network with DNS alias `router` so Squid's
@@ -1218,6 +1243,11 @@ fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<S
         // Bind-mounted read-write so router-reload.sh can atomically replace it.
         "-v".into(),
         format!("{}:/run/router/dynamic.Caddyfile:rw", dyn_file.display()),
+        "-v".into(),
+        format!(
+            "{}:/run/host/tillandsias:rw",
+            control_socket_host_dir().display()
+        ),
         "--mount".into(),
         format!(
             "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
@@ -1246,42 +1276,62 @@ async fn caddy_reload_routes(debug: bool) -> Result<(), String> {
     // refused. The canonical reload path is the router-reload.sh script that
     // ships in the router image — it re-merges base + dynamic Caddyfiles
     // and runs `caddy reload` inside the container.
-    let mut cmd = std::process::Command::new("podman");
+    let mut cmd = podman_command();
     cmd.args([
         "exec",
         "tillandsias-router",
         "/usr/local/bin/router-reload.sh",
     ]);
 
-    match cmd.output() {
-        Ok(output) => {
-            if output.status.success() {
+    for attempt in 1..=10 {
+        match cmd.output() {
+            Ok(output) if output.status.success() => {
                 if debug {
                     let stdout = String::from_utf8_lossy(&output.stdout);
                     eprintln!("[tillandsias] Caddy reload successful: {}", stdout.trim());
                 }
-                Ok(())
-            } else {
+                return Ok(());
+            }
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let router_not_ready = stderr.contains("connection refused");
+                if router_not_ready && attempt < 10 {
+                    tokio::time::sleep(Duration::from_millis(150)).await;
+                    continue;
+                }
                 if debug {
                     eprintln!(
-                        "[tillandsias] Warning: router-reload.sh exited {}: {}",
+                        "[tillandsias] Warning: router-reload.sh exited {} after {attempt} attempt(s): {}",
                         output.status,
-                        String::from_utf8_lossy(&output.stderr).trim()
+                        stderr.trim()
                     );
                 }
-                Ok(())
+                return Ok(());
             }
-        }
-        Err(e) => {
-            if debug {
-                eprintln!(
-                    "[tillandsias] Warning: Caddy reload failed (router may not be ready): {}",
-                    e
-                );
+            Err(e) => {
+                if debug {
+                    eprintln!(
+                        "[tillandsias] Warning: Caddy reload failed (router may not be ready): {}",
+                        e
+                    );
+                }
+                return Ok(());
             }
-            Ok(())
         }
     }
+
+    Ok(())
+}
+
+/// Strip a leading `localhost/` from a podman image reference.
+///
+/// Podman's `inspect` output canonicalizes references with an explicit
+/// `localhost/` registry prefix for locally-built images, but our launch
+/// commands typically pass the short form (`tillandsias-router:vX`).
+/// Normalizing both sides through this helper avoids treating equivalent
+/// refs as different.
+fn strip_localhost_prefix(s: &str) -> &str {
+    s.strip_prefix("localhost/").unwrap_or(s)
 }
 
 /// Ensure the router container (`tillandsias-router`) is running.
@@ -1303,19 +1353,34 @@ async fn ensure_router_running(
 
     if let Ok(inspect) = client.inspect_container(ROUTER_NAME).await {
         if inspect.state == "running" {
-            if debug {
-                eprintln!("[tillandsias] router already running");
+            // Podman frequently reports image references with a `localhost/`
+            // prefix (e.g. `localhost/tillandsias-router:v1.2.3`) while our
+            // launch args pass the short form. Treat the two as equivalent
+            // so we don't spuriously recreate the router on every check.
+            if strip_localhost_prefix(&inspect.image) != strip_localhost_prefix(image) {
+                if debug {
+                    eprintln!(
+                        "[tillandsias] router image changed ({} -> {}); recreating",
+                        inspect.image, image
+                    );
+                }
+                let _ = client.stop_container(ROUTER_NAME, 5).await;
+                let _ = client.remove_container(ROUTER_NAME).await;
+            } else {
+                if debug {
+                    eprintln!("[tillandsias] router already running");
+                }
+                return Ok(());
             }
-            return Ok(());
+        } else {
+            if debug {
+                eprintln!(
+                    "[tillandsias] router container found but not running (state={}); removing",
+                    inspect.state
+                );
+            }
+            let _ = client.remove_container(ROUTER_NAME).await;
         }
-        // Container exists but is stopped — remove it so a fresh one can start.
-        if debug {
-            eprintln!(
-                "[tillandsias] router container found but not running (state={}); removing",
-                inspect.state
-            );
-        }
-        let _ = client.remove_container(ROUTER_NAME).await;
     }
 
     if debug {
@@ -1351,13 +1416,30 @@ async fn ensure_router_running(
 /// Generate dynamic Caddy configuration for OpenCode Web routes.
 ///
 /// Takes a list of (subdomain, upstream_host, port) tuples and generates
-/// Caddy configuration blocks for reverse-proxy routes mapping
-/// `<subdomain>.localhost` to `http://<upstream_host>:<port>`. The
-/// upstream is the container name on the enclave network (e.g.
-/// `tillandsias-<project>-forge`) — not `127.0.0.1`, which from inside
-/// the router container would point at the router's own loopback.
+/// Caddy configuration blocks for each project. Each block contains the
+/// full OTP-auth chain:
 ///
-/// @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-dynamic-routes
+/// 1. `handle /_auth/login` reverse-proxies the browser-submitted OTP form
+///    to the sidecar (localhost:9090 in the same container as Caddy),
+///    which validates the OTP, promotes the pending session to active,
+///    and replies with a 302 + `Set-Cookie`.
+/// 2. All other paths go through `forward_auth localhost:9090` against
+///    `/validate?project=<label>`. On 204 the request reaches the upstream;
+///    on 401 the request is denied.
+///
+/// The upstream is the container name on the enclave network (e.g.
+/// `tillandsias-<project>-forge`) — not `127.0.0.1`, which from inside
+/// the router container would point at the router's own loopback. The
+/// sidecar lives in the same container as Caddy, so its address from
+/// inside Caddy is `localhost:9090` (matching `DEFAULT_VALIDATE_PORT` in
+/// the sidecar).
+///
+/// The project label passed to `forward_auth` is derived from the
+/// subdomain in `<service>.<project>` form — we take the last component,
+/// which is what the sidecar's `extract_project_label` also extracts from
+/// the Host header.
+///
+/// @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-dynamic-routes, spec:opencode-web-session-otp
 fn generate_dynamic_caddyfile(windows: &[(String, String, u16)]) -> String {
     if windows.is_empty() {
         return String::new();
@@ -1365,15 +1447,39 @@ fn generate_dynamic_caddyfile(windows: &[(String, String, u16)]) -> String {
 
     let mut routes = String::new();
     for (subdomain, upstream_host, port) in windows {
+        // Derive the project label from `<service>.<project>`. The sidecar
+        // does the same extraction from the Host header — feeding the
+        // matching value into the query string lets the sidecar verify
+        // the binding via direct comparison.
+        let project_label = subdomain.rsplit('.').next().unwrap_or(subdomain.as_str());
+
         // Force HTTP-only (`http://...`) on :8080. Caddy enables HTTP/2 and
         // HTTP/3 by default, both of which require TLS — so a bare
         // `host:8080 { }` site ends up speaking TLS and rejects plain
         // requests with "Client sent an HTTP request to an HTTPS server."
         // Rootless containers with --cap-drop=ALL can't bind privileged
         // ports anyway, and the router publishes :8080 → host:8080 only.
+        //
+        // Inside the block:
+        //   * `handle /_auth/login` proxies the browser-submitted OTP form
+        //     to the sidecar (in-container, localhost:9090). Caddy forwards
+        //     the request body to the sidecar by default for reverse_proxy.
+        //   * `handle` (the default fallthrough) applies forward_auth and,
+        //     on success (204), reverse-proxies to the upstream forge
+        //     container on the enclave network.
         routes.push_str(&format!(
-            "http://{}.localhost:8080 {{\n    reverse_proxy {}:{}\n}}\n",
-            subdomain, upstream_host, port
+            "http://{subdomain}.localhost:8080 {{\n    \
+handle /_auth/login {{\n        \
+reverse_proxy localhost:9090\n    \
+}}\n    \
+handle {{\n        \
+forward_auth localhost:9090 {{\n            \
+uri /validate?project={project_label}\n            \
+copy_headers Cookie\n        \
+}}\n        \
+reverse_proxy {upstream_host}:{port}\n    \
+}}\n\
+}}\n"
         ));
     }
     routes
@@ -1588,8 +1694,19 @@ fn build_opencode_forge_args(
         "USER=forge".into(),
         "--env".into(),
         format!("PROJECT={project_name}"),
+        // Mount under `/home/forge/src/<project>/` (not directly at
+        // `/home/forge/src`) so the in-container tree matches what the forge
+        // entrypoint's clone path would produce
+        // (images/default/entrypoint-forge-opencode-web.sh:58) and what tools
+        // / agents expect from `$TILLANDSIAS_PROJECT_PATH`. Mounting flat at
+        // `/home/forge/src` puts the project files where the forge expects a
+        // sibling directory and confuses every consumer that resolves
+        // `~/src/<project>/...`.
         "-v".into(),
-        format!("{}:/home/forge/src:rw", project_path.display()),
+        format!(
+            "{}:/home/forge/src/{project_name}:rw",
+            project_path.display()
+        ),
         "--mount".into(),
         format!(
             "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
@@ -1768,6 +1885,9 @@ fn detect_and_recover_cache_corruption(debug: bool) -> Result<bool, String> {
 }
 
 fn run_init(debug: bool, force: bool) -> Result<(), String> {
+    require_desktop_user_session("tillandsias --init")?;
+    report_runtime_lane("--init", debug);
+
     let root = find_checkout_root()?;
     let version = VERSION.trim();
     let images = [
@@ -1778,6 +1898,7 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         "chromium-core",
         "chromium-framework",
         "forge",
+        "web",
     ];
 
     // @trace spec:forge-staleness, spec:forge-cache-dual
@@ -2257,6 +2378,9 @@ fn run_cache_verify(debug: bool) -> Result<(), String> {
 ///
 /// @trace spec:dev-build, spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container, spec:default-image, spec:observability-convergence
 fn run_status_check(debug: bool) -> Result<(), String> {
+    require_desktop_user_session("tillandsias --status-check")?;
+    report_runtime_lane("--status-check", debug);
+
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
     let root = find_checkout_root()?;
@@ -2433,6 +2557,9 @@ fn podman_command() -> Command {
 ///
 /// @trace spec:gh-auth-script, spec:secrets-management, spec:podman-secrets-integration, spec:secret-rotation
 fn run_github_login(debug: bool) -> Result<(), String> {
+    require_desktop_user_session("tillandsias --github-login")?;
+    report_runtime_lane("--github-login", debug);
+
     // @trace spec:secret-rotation, spec:secrets-management
     info!(
         accountability = true,
@@ -2833,6 +2960,78 @@ fn is_tray_available() -> bool {
     cfg!(all(feature = "tray", target_os = "linux"))
 }
 
+/// Return whether this process has a graphical desktop session available for a
+/// companion tray process.
+///
+/// @trace spec:tray-cli-coexistence
+fn has_graphical_session() -> bool {
+    if std::env::var_os("TILLANDSIAS_NO_TRAY").is_some_and(|v| v == "1") {
+        return false;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        std::env::var_os("DISPLAY").is_some_and(|v| !v.is_empty())
+            || std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty())
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        true
+    }
+}
+
+/// CLI modes do foreground work, but on a desktop they still need the tray's
+/// long-lived control socket. Spawn the tray as a detached sibling and let its
+/// singleton guard collapse duplicate launches.
+///
+/// @trace spec:tray-cli-coexistence, spec:tray-host-control-socket
+fn maybe_spawn_detached_tray_for_cli(explicit_tray: bool, debug: bool) {
+    if !cfg!(feature = "tray") || (!explicit_tray && !has_graphical_session()) {
+        return;
+    }
+
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+
+    let mut command = Command::new(exe);
+    command
+        .arg("--tray")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
+    #[cfg(unix)]
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+
+    match command.spawn() {
+        Ok(_) => {
+            if debug {
+                eprintln!("[tillandsias] spawned detached tray companion");
+            }
+            let socket_path = control_socket_host_dir().join("control.sock");
+            for _ in 0..20 {
+                if socket_path.exists() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+        Err(err) if debug => {
+            eprintln!("[tillandsias] Warning: failed to spawn tray companion: {err}");
+        }
+        Err(_) => {}
+    }
+}
+
 /// Phase 3, Task 12 & Phase 4: Launch in tray mode with headless subprocess.
 /// @trace spec:linux-native-portable-executable, spec:transparent-mode-detection, spec:tray-subprocess-management
 fn launch_tray_mode(_config_path: Option<String>) -> Result<(), String> {
@@ -2852,7 +3051,13 @@ fn observatorium_launcher_script(root: &Path) -> PathBuf {
 }
 
 fn run_observatorium_mode(debug: bool) -> Result<(), String> {
+    require_desktop_user_session("tillandsias --observatorium")?;
+    report_runtime_lane("--observatorium", debug);
+
     let root = find_checkout_root()?;
+    let version = VERSION.trim();
+    let images = ["web"];
+    ensure_versioned_images(&root, &images, version, debug)?;
     let script = observatorium_launcher_script(&root);
 
     if !script.is_file() {
@@ -2873,6 +3078,9 @@ fn run_observatorium_mode(debug: bool) -> Result<(), String> {
 ///
 /// @trace spec:cli-mode
 fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> Result<(), String> {
+    require_desktop_user_session("tillandsias --opencode")?;
+    report_runtime_lane("--opencode", debug);
+
     if debug {
         eprintln!("[tillandsias] OpenCode mode enabled");
         eprintln!("[tillandsias] Project: {}", project_path);
@@ -2926,7 +3134,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
                 &versioned_image_tag("proxy", version),
             ))
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("[OpenCode] failed to start proxy: {e}"))?;
         client
             .run_container(&build_git_run_args(
                 project_name,
@@ -2934,7 +3142,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
                 &versioned_image_tag("git", version),
             ))
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("[OpenCode] failed to start git: {e}"))?;
         client
             .run_container(&build_inference_run_args(
                 &certs_dir,
@@ -2942,7 +3150,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
                 false,
             ))
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("[OpenCode] failed to start inference: {e}"))?;
 
         let opencode_args = build_opencode_forge_args(
             std::path::Path::new(project_path),
@@ -2955,7 +3163,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
         client
             .run_container(&opencode_args)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("[OpenCode] failed to start forge: {e}"))?;
 
         Ok::<(), String>(())
     })
@@ -3130,9 +3338,14 @@ fn build_opencode_web_browser_spec(
     project_name: &str,
 ) -> Result<ContainerSpec, String> {
     let container_name = format!("tillandsias-browser-{project_name}");
+    // NOTE: rootfs is intentionally writable (no `.read_only()`). Chromium's
+    // crashpad handler aborts on a read-only rootfs because it cannot create
+    // its database directory, exiting 133 immediately on launch. The remaining
+    // hardening (--cap-drop=ALL, no-new-privileges, --userns=keep-id, tmpfs
+    // mounts for /tmp + chromium dirs + /dev/shm) keeps the blast radius
+    // tight.
     let mut spec = ContainerSpec::new(format!("tillandsias-chromium-framework:v{version}"))
         .pull_never()
-        .read_only()
         .cap_add("SYS_CHROOT")
         .network("host")
         .name(&container_name)
@@ -3208,7 +3421,20 @@ fn build_opencode_web_browser_spec(
     Ok(spec)
 }
 
-/// Send IssueWebSession message to tray's control socket.
+/// Send `IssueWebSession` to the tray's control socket and block until the
+/// tray confirms the broadcast with an `IssueAck { seq_acked: 1 }`.
+///
+/// This call is synchronous and event-driven (one write, one read, no
+/// polling). The ack proves that `broadcast_control_envelope` has returned
+/// in the tray, which means the bytes are already buffered on every
+/// subscriber socket — including the router-sidecar that owns the
+/// `OtpStore`. Returning Ok therefore guarantees the cookie is visible to
+/// the sidecar before the caller proceeds to launch the browser.
+///
+/// Any deviation (timeout, wrong variant, decode error, IO failure) is
+/// returned as `Err` so the caller can refuse to open the browser. There is
+/// no retry loop on purpose — the OTP race is a contract issue, not a
+/// transient one.
 ///
 /// @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
 fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Result<(), String> {
@@ -3217,12 +3443,17 @@ fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Resul
         .unwrap_or_else(|_| format!("/run/user/{}", unsafe { libc::getuid() }));
     let socket_path = format!("{}/tillandsias/control.sock", runtime_dir);
 
-    // Connect to the socket with 5-second timeout for graceful fallback.
+    // Connect to the socket. The connect itself has no built-in timeout, but
+    // it's a local UDS so it either binds immediately or returns ENOENT/
+    // ECONNREFUSED.
     let mut stream = UnixStream::connect(&socket_path)
         .map_err(|e| format!("Failed to connect to control socket {}: {}", socket_path, e))?;
 
-    // Set read/write timeouts to 5 seconds to prevent hanging if tray is unresponsive.
-    let timeout = Duration::from_secs(5);
+    // The whole round-trip must complete within a couple of seconds; the
+    // tray broadcast is synchronous so the ack should land in single-digit
+    // milliseconds. A 2s ceiling is generous and prevents the CLI from
+    // hanging if the tray is wedged.
+    let timeout = Duration::from_secs(2);
     stream
         .set_read_timeout(Some(timeout))
         .map_err(|e| format!("Failed to set read timeout: {}", e))?;
@@ -3230,10 +3461,11 @@ fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Resul
         .set_write_timeout(Some(timeout))
         .map_err(|e| format!("Failed to set write timeout: {}", e))?;
 
-    // Prepare and send the IssueWebSession message.
+    // Prepare and send the IssueWebSession message. `seq = 1` is the value
+    // the tray echoes back in `IssueAck { seq_acked }`.
     let envelope = ControlEnvelope {
         wire_version: WIRE_VERSION,
-        seq: 1, // seq number is not critical for this fire-and-forget usage
+        seq: 1,
         body: ControlMessage::IssueWebSession {
             project_label: project_label.to_string(),
             cookie_value: *cookie_value,
@@ -3251,7 +3483,41 @@ fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Resul
         .write_all(&frame)
         .map_err(|e| format!("Failed to write control message: {}", e))?;
 
-    Ok(())
+    // Read one envelope back on the same connection. The tray writes
+    // `IssueAck { seq_acked: 1 }` after broadcasting; anything else (or a
+    // timeout) is treated as a failed handshake.
+    let mut len_buf = [0_u8; 4];
+    stream.read_exact(&mut len_buf).map_err(|e| {
+        format!(
+            "Failed to read ack length prefix from control socket: {}",
+            e
+        )
+    })?;
+    let reply_len = u32::from_be_bytes(len_buf) as usize;
+    if reply_len == 0 || reply_len > MAX_MESSAGE_BYTES {
+        return Err(format!(
+            "Control socket ack has invalid length {} (max {})",
+            reply_len, MAX_MESSAGE_BYTES
+        ));
+    }
+    let mut reply = vec![0_u8; reply_len];
+    stream
+        .read_exact(&mut reply)
+        .map_err(|e| format!("Failed to read ack body from control socket: {}", e))?;
+    let reply_envelope =
+        decode(&reply).map_err(|e| format!("Failed to decode control socket ack: {}", e))?;
+
+    match reply_envelope.body {
+        ControlMessage::IssueAck { seq_acked: 1 } => Ok(()),
+        ControlMessage::IssueAck { seq_acked } => Err(format!(
+            "Control socket ack referenced unexpected seq {} (expected 1)",
+            seq_acked
+        )),
+        other => Err(format!(
+            "Control socket replied with unexpected variant: {:?}",
+            other
+        )),
+    }
 }
 
 fn launch_opencode_web_browser(
@@ -3277,6 +3543,11 @@ fn launch_opencode_web_browser(
         )
     })?;
     let display = BrowserDisplayContext::from_env()?;
+    // The profile dir must outlive this function: the container runs detached
+    // with `--user-data-dir=<profile>` bind-mounted, and chromium needs the
+    // host path to stay valid until it exits. `TempDir` would remove the dir
+    // on drop and chromium would die at startup; keep the path and let the
+    // background cleanup thread remove it after the container exits.
     let profile_dir = TempDirBuilder::new()
         .prefix(&format!("{project_name}-"))
         .tempdir_in(&profile_root)
@@ -3286,10 +3557,13 @@ fn launch_opencode_web_browser(
                 profile_root
             )
         })?;
-    let profile_path = profile_dir.path().to_path_buf();
+    let profile_path = profile_dir.keep();
     // @trace spec:opencode-web-session-otp
     // Issue a session token for the project and register it with the router.
-    let project_label = format!("opencode.{project_name}.localhost");
+    // The label must match what the router-sidecar extracts from the Host
+    // header (`extract_project_label("opencode.<project>.localhost")` →
+    // `"<project>"`), otherwise `/validate` and `/_auth/login` both 401.
+    let project_label = project_name.to_string();
     let otp = tillandsias_otp::issue_session(&project_label);
     let login_url = tillandsias_otp::build_login_data_url(&url, &otp);
     let spec = build_opencode_web_browser_spec(
@@ -3302,23 +3576,32 @@ fn launch_opencode_web_browser(
     )?;
     let args = spec.build_run_args();
 
+    // @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
+    // Notify the router (via the tray's control socket) of the new session
+    // BEFORE launching the browser. `send_issue_web_session` blocks until the
+    // tray returns `IssueAck`, which proves the broadcast bytes are already
+    // queued on the sidecar's socket — so by the time chromium POSTs to
+    // `/_auth/login`, the sidecar's `OtpStore` definitely contains the
+    // cookie. If the handshake fails (no tray, wrong reply, timeout) we
+    // refuse to launch the browser to prevent the "unauthorised" landing
+    // page that used to result from the race.
+    send_issue_web_session(&project_label, &otp).map_err(|e| {
+        let _ =
+            emit_opencode_web_event(project_name, "browser", "session_register_failed", Some(&e));
+        format!("Failed to register web session with router: {e}")
+    })?;
+
     emit_opencode_web_event(project_name, "browser", "launch", Some("podman-run"))?;
     let result = rt_block_on_podman_run(args, debug);
     if result.is_ok() {
         emit_opencode_web_event(project_name, "browser", "launched", Some("gui"))?;
-        // @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
-        // Notify router (via control socket) that a web session has been issued.
-        // This is non-critical; if the tray is down, we skip the notification gracefully.
-        if let Err(e) = send_issue_web_session(&project_label, &otp)
-            && debug
-        {
-            eprintln!("[tillandsias] Warning: failed to notify router of web session: {e}");
-        }
 
         // @trace spec:browser-isolation-core, spec:host-chromium-on-demand
         // Spawn background task to monitor container exit and cleanup.
-        // The browser is now running detached; this task waits for it to exit.
+        // The browser is now running detached; this task waits for it to exit,
+        // then removes the container and the host-side profile dir.
         let container_name = format!("tillandsias-browser-{project_name}");
+        let profile_cleanup_path = profile_path.clone();
         std::thread::spawn(move || {
             let rt = match tokio::runtime::Runtime::new() {
                 Ok(r) => r,
@@ -3330,6 +3613,7 @@ fn launch_opencode_web_browser(
             if let Err(e) = rt.block_on(monitor_and_cleanup_browser(&container_name, debug)) {
                 eprintln!("[tillandsias] Browser cleanup error: {e}");
             }
+            let _ = std::fs::remove_dir_all(&profile_cleanup_path);
         });
     } else if let Err(ref err) = result {
         let _ = emit_opencode_web_event(project_name, "browser", "launch_failed", Some(err));
@@ -3417,6 +3701,9 @@ pub(crate) fn run_opencode_web_mode(
     port_override: Option<u16>,
     debug: bool,
 ) -> Result<(), String> {
+    require_desktop_user_session("tillandsias --opencode-web")?;
+    report_runtime_lane("--opencode-web", debug);
+
     if debug {
         eprintln!("[tillandsias] OpenCode Web mode enabled");
         eprintln!("[tillandsias] Project: {}", project_path);
@@ -3469,7 +3756,12 @@ pub(crate) fn run_opencode_web_mode(
 
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
-    let router_host_port = select_router_host_port(port_override, debug)?;
+    let router_host_port = rt.block_on(async {
+        match existing_router_host_port(&client, debug).await? {
+            Some(port) => Ok::<u16, String>(port),
+            None => Ok(select_router_host_port(port_override, debug)?),
+        }
+    })?;
     emit_opencode_web_event(
         project_name,
         "stack",
@@ -3485,7 +3777,7 @@ pub(crate) fn run_opencode_web_mode(
                 &versioned_image_tag("proxy", version),
             ))
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("[OpenCode Web] failed to start proxy: {e}"))?;
         emit_opencode_web_event(
             project_name,
             "proxy",
@@ -3499,7 +3791,7 @@ pub(crate) fn run_opencode_web_mode(
                 &versioned_image_tag("git", version),
             ))
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("[OpenCode Web] failed to start git: {e}"))?;
         emit_opencode_web_event(
             project_name,
             "git",
@@ -3513,7 +3805,7 @@ pub(crate) fn run_opencode_web_mode(
                 false,
             ))
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("[OpenCode Web] failed to start inference: {e}"))?;
         emit_opencode_web_event(
             project_name,
             "inference",
@@ -3521,8 +3813,12 @@ pub(crate) fn run_opencode_web_mode(
             Some(&versioned_image_tag("inference", version)),
         )?;
 
+        // Use the canonical absolute path so the bind-mount source is
+        // unambiguous even when the user passed "." or another relative
+        // path on the CLI. Podman resolves bind sources against its own cwd,
+        // which is not the user's shell cwd.
         let opencode_args = build_opencode_forge_args(
-            std::path::Path::new(project_path),
+            &project_path_resolved,
             project_name,
             prompt,
             &certs_dir,
@@ -3532,7 +3828,7 @@ pub(crate) fn run_opencode_web_mode(
         client
             .run_container(&opencode_args)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("[OpenCode Web] failed to start forge: {e}"))?;
         emit_opencode_web_event(project_name, "forge", "started", Some("opencode-web"))?;
 
         // @trace spec:subdomain-routing-via-reverse-proxy
@@ -3597,6 +3893,8 @@ fn run_headless(config_path: Option<String>) -> Result<(), String> {
 /// Phase 5: Async implementation of headless mode.
 /// @trace spec:linux-native-portable-executable, spec:headless-mode, spec:signal-handling, spec:resource-metric-collection
 async fn run_headless_async(config_path: Option<String>) -> Result<(), String> {
+    require_headless_service_account("tillandsias --headless")?;
+
     // Emit startup event with timestamp
     let now = chrono::Local::now();
     println!(
@@ -3672,6 +3970,39 @@ async fn run_headless_async(config_path: Option<String>) -> Result<(), String> {
         now.to_rfc3339()
     );
     Ok(())
+}
+
+async fn existing_router_host_port(
+    client: &PodmanClient,
+    debug: bool,
+) -> Result<Option<u16>, String> {
+    const ROUTER_NAME: &str = "tillandsias-router";
+
+    let inspect = match client.inspect_container(ROUTER_NAME).await {
+        Ok(inspect) => inspect,
+        Err(_) => return Ok(None),
+    };
+
+    if inspect.state != "running" {
+        return Ok(None);
+    }
+
+    let host_port = client
+        .container_host_port(ROUTER_NAME, 8080)
+        .await
+        .map_err(|e| format!("Failed to inspect existing router port: {e}"))?;
+
+    let Some(host_port) = host_port else {
+        return Err(
+            "Existing router container is running but has no published host port".to_string(),
+        );
+    };
+
+    if debug {
+        eprintln!("[tillandsias] reusing existing router host port {host_port}");
+    }
+
+    Ok(Some(host_port))
 }
 
 /// Run metrics retention check to archive files older than 30 days.
@@ -4278,9 +4609,15 @@ async fn graceful_shutdown_async() -> Result<(), String> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use std::sync::{Mutex, OnceLock};
 
     fn has_arg(args: &[String], needle: &str) -> bool {
         args.iter().any(|arg| arg == needle)
+    }
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
     }
 
     #[test]
@@ -4360,7 +4697,7 @@ mod tests {
         assert!(has_arg(&args, "TILLANDSIAS_OPENCODE_PROMPT=hello"));
         assert!(
             args.iter()
-                .any(|arg| arg == "/tmp/project:/home/forge/src:rw")
+                .any(|arg| arg == "/tmp/project:/home/forge/src/alpha:rw")
         );
     }
 
@@ -4413,7 +4750,10 @@ mod tests {
         let args = spec.build_run_args();
 
         assert!(has_arg(&args, "--pull=never"));
-        assert!(has_arg(&args, "--read-only"));
+        // Intentionally NOT --read-only: Chromium crashpad aborts on
+        // a read-only rootfs because it cannot create its database dir,
+        // exiting 133 immediately. See build_opencode_web_browser_spec.
+        assert!(!has_arg(&args, "--read-only"));
         assert!(has_arg(&args, "--cap-add"));
         assert!(has_arg(&args, "SYS_CHROOT"));
         assert!(has_arg(&args, "--network"));
@@ -4452,6 +4792,174 @@ mod tests {
         assert_eq!(
             observatorium_launcher_script(&root),
             PathBuf::from("/tmp/tillandsias/scripts/run-observatorium.sh")
+        );
+    }
+
+    fn source_window<'a>(source: &'a str, signature: &str) -> &'a str {
+        let start = source
+            .find(signature)
+            .unwrap_or_else(|| panic!("missing signature: {signature}"));
+        let tail = &source[start..];
+        let end = tail
+            .find("\n    fn ")
+            .or_else(|| tail.find("\nfn "))
+            .unwrap_or(tail.len());
+        &tail[..end]
+    }
+
+    #[test]
+    fn idiomatic_podman_launch_paths_do_not_bypass_shared_layer() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+
+        assert!(
+            !source.contains("Command::new(\"podman\")"),
+            "headless runtime must not construct podman commands directly"
+        );
+
+        let init_window = source_window(source, "fn run_init(debug: bool, force: bool)");
+        assert!(
+            init_window.contains("PodmanClient::new()"),
+            "run_init must use PodmanClient"
+        );
+        assert!(
+            init_window.contains("\"web\""),
+            "run_init must include the web image"
+        );
+        assert!(
+            init_window.contains("podman_command()") || init_window.contains("podman_runtime()"),
+            "run_init must route through the shared podman layer"
+        );
+
+        let status_window = source_window(source, "fn run_status_check(debug: bool)");
+        assert!(
+            status_window.contains("PodmanClient::new()"),
+            "run_status_check must use PodmanClient"
+        );
+        assert!(
+            status_window.contains("podman_command()")
+                || status_window.contains("podman_runtime()"),
+            "run_status_check must route through the shared podman layer"
+        );
+
+        let login_window = source_window(source, "fn run_github_login(debug: bool)");
+        assert!(
+            login_window.contains("podman_command()"),
+            "run_github_login must use the shared podman command constructor"
+        );
+
+        let opencode_window = source_window(
+            source,
+            "fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool)",
+        );
+        assert!(
+            opencode_window.contains("PodmanClient::new()"),
+            "run_opencode_mode must use PodmanClient"
+        );
+        assert!(
+            opencode_window.contains("[OpenCode] failed to start proxy:")
+                && opencode_window.contains("[OpenCode] failed to start git:")
+                && opencode_window.contains("[OpenCode] failed to start inference:")
+                && opencode_window.contains("[OpenCode] failed to start forge:"),
+            "run_opencode_mode must report stage-specific container failures"
+        );
+
+        let web_window = source_window(source, "pub(crate) fn run_opencode_web_mode(");
+        assert!(
+            web_window.contains("PodmanClient::new()"),
+            "run_opencode_web_mode must use PodmanClient"
+        );
+
+        assert!(
+            web_window.contains("existing_router_host_port(&client, debug).await?"),
+            "run_opencode_web_mode must reuse an existing router before probing ports"
+        );
+
+        let observatorium_window = source_window(source, "fn run_observatorium_mode(debug: bool)");
+        assert!(
+            observatorium_window.contains("observatorium_launcher_script(&root)"),
+            "observatorium mode must remain repo-local"
+        );
+        assert!(
+            observatorium_window
+                .contains("ensure_versioned_images(&root, &images, version, debug)?;"),
+            "observatorium mode must preflight the web image"
+        );
+
+        let reload_window = source_window(source, "async fn caddy_reload_routes(debug: bool)");
+        assert!(
+            reload_window.contains("podman_command()"),
+            "router reload must use the shared podman command constructor"
+        );
+    }
+
+    #[test]
+    fn source_built_init_and_status_check_smoke_uses_fake_podman() {
+        let _guard = env_lock();
+
+        let root = find_checkout_root().expect("repo root");
+        let version = VERSION.trim();
+        let project_name = root
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("tillandsias");
+        let certs_dir = ensure_ca_bundle(false).expect("ensure_ca_bundle");
+        let status_args =
+            build_status_check_forge_args(root.as_path(), project_name, &certs_dir, version);
+        assert!(
+            status_args.join(" ").contains("check_inference()"),
+            "status-check plan should keep the inference probe"
+        );
+        assert!(
+            status_args
+                .join(" ")
+                .contains("echo \"[status-check] forge online\""),
+            "status-check plan should keep the completion marker"
+        );
+        if std::env::var_os("LITMUS_PODMAN_CALLS_FILE").is_some() {
+            let images = [
+                "proxy",
+                "git",
+                "inference",
+                "chromium-core",
+                "chromium-framework",
+                "forge",
+                "web",
+            ];
+
+            ensure_enclave_network(false).expect("ensure_enclave_network");
+            ensure_versioned_images(&root, &images, version, false)
+                .expect("ensure_versioned_images");
+        }
+        eprintln!("[status-check] planned args: {}", status_args.join(" "));
+    }
+
+    #[test]
+    fn observatorium_mode_preflights_web_image() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn run_observatorium_mode(debug: bool)");
+        assert!(
+            window.contains("let images = [\"web\"];"),
+            "observatorium mode must preflight the web image"
+        );
+        assert!(
+            window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
+            "observatorium mode must ensure the web image exists before launch"
+        );
+    }
+
+    #[test]
+    fn opencode_web_reuses_existing_router_before_host_port_selection() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "pub(crate) fn run_opencode_web_mode(");
+        let reuse_idx = window
+            .find("existing_router_host_port(&client, debug).await?")
+            .expect("missing router reuse call");
+        let probe_idx = window
+            .find("select_router_host_port(port_override, debug)?")
+            .expect("missing router port probe");
+        assert!(
+            reuse_idx < probe_idx,
+            "run_opencode_web_mode must reuse an existing router before probing ports"
         );
     }
 
@@ -4494,7 +5002,7 @@ mod tests {
         );
     }
 
-    // @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-dynamic-routes
+    // @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-dynamic-routes, spec:opencode-web-session-otp
     #[test]
     fn dynamic_caddyfile_routes_opencode_service() {
         let windows = vec![(
@@ -4507,15 +5015,41 @@ mod tests {
         // Verify Caddy block syntax is present, with the listener pinned to
         // http://...:8080 so Caddy doesn't try to bind :443 and doesn't
         // upgrade to HTTPS-only via implicit h2/h3.
-        assert!(config.contains("http://opencode.visual-chess.localhost:8080 {"));
-        assert!(config.contains("reverse_proxy"));
+        assert!(
+            config.contains("http://opencode.visual-chess.localhost:8080 {"),
+            "missing site block header: {config}"
+        );
+
+        // The OTP auth chain: forward_auth gates everything except
+        // POST /_auth/login, which is proxied to the in-container sidecar.
+        // @trace spec:opencode-web-session-otp
+        assert!(
+            config.contains("handle /_auth/login"),
+            "missing login handler: {config}"
+        );
+        assert!(
+            config.contains("reverse_proxy localhost:9090"),
+            "missing sidecar proxy for login: {config}"
+        );
+        assert!(
+            config.contains("forward_auth localhost:9090"),
+            "missing forward_auth directive: {config}"
+        );
+        assert!(
+            config.contains("uri /validate?project=visual-chess"),
+            "missing validate uri with project label: {config}"
+        );
+        assert!(
+            config.contains("copy_headers Cookie"),
+            "missing copy_headers Cookie: {config}"
+        );
+
         // Upstream is the container DNS name on the enclave network, not
         // 127.0.0.1 (which from inside the router would loop back).
-        assert!(config.contains("tillandsias-visual-chess-forge:8080"));
-
-        // Verify structure has opening and closing braces
-        assert!(config.contains("{"));
-        assert!(config.contains("}"));
+        assert!(
+            config.contains("reverse_proxy tillandsias-visual-chess-forge:8080"),
+            "missing upstream reverse_proxy: {config}"
+        );
     }
 
     #[test]
@@ -4534,11 +5068,20 @@ mod tests {
         ];
         let config = generate_dynamic_caddyfile(&windows);
 
-        // Verify both routes are present
+        // Both site blocks present
         assert!(config.contains("opencode.alpha.localhost"));
         assert!(config.contains("opencode.beta.localhost"));
-        assert!(config.contains("tillandsias-alpha-forge:8080"));
-        assert!(config.contains("tillandsias-beta-forge:8081"));
+
+        // Both upstream proxies present
+        assert!(config.contains("reverse_proxy tillandsias-alpha-forge:8080"));
+        assert!(config.contains("reverse_proxy tillandsias-beta-forge:8081"));
+
+        // Both project labels feed into forward_auth — note we extract the
+        // rightmost component of `opencode.alpha` (= "alpha"), matching what
+        // the sidecar does from the Host header.
+        // @trace spec:opencode-web-session-otp
+        assert!(config.contains("uri /validate?project=alpha"));
+        assert!(config.contains("uri /validate?project=beta"));
     }
 
     #[test]
@@ -4546,6 +5089,30 @@ mod tests {
         let windows: Vec<(String, String, u16)> = vec![];
         let config = generate_dynamic_caddyfile(&windows);
         assert!(config.is_empty());
+    }
+
+    /// Render the canonical demo case end-to-end to lock in the exact wire
+    /// format. Any change here must be deliberate (and reviewed against
+    /// `images/router/base.Caddyfile` for compatibility).
+    ///
+    /// @trace spec:opencode-web-session-otp, spec:subdomain-routing-via-reverse-proxy
+    #[test]
+    fn dynamic_caddyfile_demo_case_renders_full_auth_chain() {
+        let windows = vec![(
+            "opencode.demo".to_string(),
+            "tillandsias-demo-forge".to_string(),
+            4096u16,
+        )];
+        let config = generate_dynamic_caddyfile(&windows);
+
+        // Spot-check the full chain in a single rendered block.
+        assert!(config.contains("http://opencode.demo.localhost:8080 {"));
+        assert!(config.contains("handle /_auth/login"));
+        assert!(config.contains("reverse_proxy localhost:9090"));
+        assert!(config.contains("forward_auth localhost:9090"));
+        assert!(config.contains("uri /validate?project=demo"));
+        assert!(config.contains("copy_headers Cookie"));
+        assert!(config.contains("reverse_proxy tillandsias-demo-forge:4096"));
     }
 
     #[tokio::test]

@@ -141,6 +141,8 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - networking.md                             — Understanding how the forge accesses external services, what's blocked, what's … [bundled, partial-verify]
 - ollama-model-management.md [DRAFT]        — Pre-pulling LLM models into containers, checking model cache, implementing resu… [bundled, partial-verify]
 - podman-idiomatic-patterns.md              — Building container orchestration logic, integrating container events, optimizin… [bundled, partial-verify]
+- podman-control-plane.md                   — One Rust-owned Podman spine, facade, diagnostics, and verification ladder. [bundled, partial-verify]
+- linux-user-session-podman.md              — documenting the Linux runtime boundary for Tillandsias on a real desktop sess… [pull-on-demand: stub]
 - podman-logging.md                         — you need to inspect Podman output, recover stale rootless state, or clean up ep… [bundled, partial-verify]
 - podman.md                                 — - **URL**: https://podman.io/docs [bundled, partial-verify]
 - podman-service-testing.md                 — You need to test a client or wrapper that talks to Podman through the service s… [bundled, partial-verify]
@@ -236,4 +238,3 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - readme-discipline.md             — Understanding how Tillandsias-managed projects structure and auto-regenerate th… [bundled, partial-verify]
 - sample-prompts.md                — Helping users understand what an in-forge agent + Flutter/Nix/Flame defaults ca… [bundled, partial-verify]
 - tray-minimal-ux.md [DRAFT]       — Understanding the tray menu structure and user interactions in the Tillandsias … [bundled, partial-verify]
-

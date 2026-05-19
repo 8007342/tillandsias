@@ -1,0 +1,35 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.029-podman-control-plane-split-brain@v1
+type: architectural_decision
+category: runtime
+status: distilled
+date_observed: "2026-05-18T00:00:00Z"
+observed_by: "machine-learning-agent"
+title: "Collapse split-brain Podman orchestration behind one Rust control plane"
+observed_signal:
+  - "Typed Podman helpers existed, but runtime and build scripts still executed raw Podman commands directly."
+  - "Failure rendering discarded useful facts, producing empty messages such as `run failed:`."
+  - "Test realism changed by reimplementing orchestration in shell instead of swapping transports beneath one entrypoint."
+expected_model:
+  - "One Rust-owned transport seam owns command execution and diagnostics."
+  - "Shell delegates orchestration to a single approved facade."
+  - "Verification rungs differ by backend realism, not by orchestration logic."
+affected_artifacts:
+  - crates/tillandsias-podman/src/backend.rs
+  - crates/tillandsias-podman/src/diagnostics.rs
+  - crates/tillandsias-podman-cli/
+  - cheatsheets/runtime/podman-control-plane.md
+code_change:
+  files:
+    - crates/tillandsias-podman/src/backend.rs
+    - crates/tillandsias-podman/src/diagnostics.rs
+    - crates/tillandsias-podman-cli/src/main.rs
+  summary: >
+    Added the first-class Podman backend seam, lossless command/failure facts,
+    diagnostics snapshots, and the dedicated CLI facade that future shell
+    migration waves must delegate through.
+uncertainty_delta: low
+distilled_into:
+  - cheatsheets/runtime/podman-control-plane.md
+  - plan/steps/15-podman-control-plane-overhaul.md

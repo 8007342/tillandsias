@@ -466,8 +466,8 @@ fn otp_set_cookie_header_attributes() {
     );
     assert!(header.contains("HttpOnly"), "must have HttpOnly");
     assert!(
-        header.contains("SameSite=Strict"),
-        "must have SameSite=Strict"
+        header.contains("SameSite=Lax"),
+        "must have SameSite=Lax (data: URL initiator forces Strict cookie to drop on the 302 follow)"
     );
     assert!(header.contains("Path=/"), "must have Path=/");
     assert!(

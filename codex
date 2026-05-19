@@ -6,6 +6,10 @@ if [[ ! -x "$CODEX_BIN" ]]; then
   CODEX_BIN="$(command -v codex)"
 fi
 
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+repo_codex_profile="$repo_root/.codex/tillandsias.profile.sh"
+export CODEX_PROJECT_ROOT="$repo_root"
+
 QUIET=0
 QUIT=0
 REPEAT_INTERVAL=""
@@ -51,8 +55,26 @@ done
 
 common_args=(
   -p tillandsias
-  -c 'profiles.tillandsias.writable_roots=["/run/user/1000","/var/home/machiyotl"]'
 )
+
+profile_additional_args=()
+profile_additional_dir_args=()
+codex_profile_args=()
+codex_profile_add_dirs=()
+if [[ -f "$repo_codex_profile" ]]; then
+  # shellcheck disable=SC1090
+  source "$repo_codex_profile"
+fi
+
+if (( ${#codex_profile_args[@]} > 0 )); then
+  profile_additional_args+=("${codex_profile_args[@]}")
+fi
+
+if (( ${#codex_profile_add_dirs[@]} > 0 )); then
+  for dir in "${codex_profile_add_dirs[@]}"; do
+    profile_additional_dir_args+=(--add-dir "$dir")
+  done
+fi
 
 progress_bar() {
   local value="${1:-0}"
@@ -111,6 +133,8 @@ format_timestamp() {
 run_tui_once() {
   "$CODEX_BIN" \
     "${common_args[@]}" \
+    "${profile_additional_args[@]}" \
+    "${profile_additional_dir_args[@]}" \
     "${codex_args[@]}"
 }
 
@@ -119,6 +143,8 @@ run_quiet_once() {
     exec \
     --color never \
     "${common_args[@]}" \
+    "${profile_additional_args[@]}" \
+    "${profile_additional_dir_args[@]}" \
     "${codex_args[@]}"
 }
 

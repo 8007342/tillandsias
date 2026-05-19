@@ -44,6 +44,20 @@ pull_recipe: see-section-pull-on-demand
 | `StandardError=journal` | Send stderr → journal (separate stream) | error observability |
 | `ExecStartPost=` | Run command after main daemon starts; fail the service if it exits non-zero | health check gates |
 
+## Podman rootless user services
+
+Use this pattern when Tillandsias runs as a supervised background service on Linux:
+
+- Let `systemd --user` own the runtime lifecycle.
+- Use the real logind-created `XDG_RUNTIME_DIR` for the service account.
+- Enable linger if the service must remain available after logout.
+- Keep Podman rootless; the service account should own its own `podman` socket and storage.
+- Prefer Quadlet or user units over ad-hoc shell wrappers when you need repeatable background startup.
+
+### Why this matters
+
+Rootless Podman expects user-owned runtime state. If a service creates its own fake `/run/user/<uid>` or runs outside logind/systemd, Podman can fail in ways that look like storage or namespace bugs. The fix is normally to correct the user-session model, not to weaken Podman.
+
 ## Common patterns
 
 ### Pattern 1 — Rust daemon with sd_notify
@@ -162,6 +176,7 @@ The daemon receives BOTH sockets. Call `sd_listen_fds()` to iterate; return valu
 
 ## See also
 
+- `runtime/linux-user-session-podman.md` — Linux desktop-session ownership and the user-service lane
 - `runtime/unix-socket-ipc.md` — socket creation, credential passing, abstract vs. path-based sockets
 - `runtime/container-health-checks.md` — liveness/readiness patterns in podman containers
 - `runtime/event-driven-monitoring.md` — systemd journal querying, event subscriptions

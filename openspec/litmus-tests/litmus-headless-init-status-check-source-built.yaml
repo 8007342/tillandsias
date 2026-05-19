@@ -1,30 +1,24 @@
-# @trace spec:dev-build, spec:podman-container-spec, spec:podman-container-handle, spec:podman-orchestration, spec:observability-convergence
-# @tombstone superseded:binary-e2e-smoke
-# Composable binary invocation moved to litmus:binary-e2e-smoke; retired after v0.1.169.229
+# @trace spec:dev-build, spec:cli-mode, spec:podman-idiomatic-patterns, spec:podman-container-spec, spec:podman-container-handle, spec:podman-orchestration, spec:observability-convergence
 
-name: litmus:headless-init-status-check-command-shape
-spec: dev-build
-phase: retired
-description: Verify the installed binary emits the expected direct podman argv for headless init plus status-check
+name: litmus:headless-init-status-check-source-built
+spec: dev-build, cli-mode, podman-idiomatic-patterns
+phase: pre-build
+description: Verify the source-built headless binary emits the expected podman argv for init plus status-check through the real Rust entrypoint
 severity: high
-size: e2e
+size: quick
 backend: fake
 
 preconditions:
-  - podman wrapper is available via scripts/run-litmus-test.sh
-  - a Tillandsias binary has been installed to ~/.local/bin/tillandsias or provided via TILLANDSIAS_STATUS_CHECK_BIN
+  - workspace contains crates/tillandsias-headless
+  - cargo is available in PATH
 
 critical_path:
   - step: "clear previous direct podman call log"
     command: "rm -f target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000
 
-  - step: "verify installed binary is available"
-    command: 'STATUS_BIN="${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}"; test -x "$STATUS_BIN" && printf "%s\n" "$STATUS_BIN"'
-    timeout_ms: 2000
-
-  - step: "run headless init plus status-check smoke against fake podman"
-    command: 'STATUS_BIN="${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}"; HOME="${TMPDIR:-/tmp}/tillandsias-headless-init-status-check-home" PATH="$(pwd)/target/litmus-runtime/bin:$PATH" LITMUS_PODMAN_MODE=fake LITMUS_PODMAN_CALLS_FILE=target/litmus-podman/headless-init-status-check.calls.log TILLANDSIAS_ROOT="$(pwd)" timeout 180 "$STATUS_BIN" --headless --init --debug --status-check > target/litmus-podman/headless-init-status-check.log 2>&1'
+  - step: "run headless init plus status-check smoke through the source-built test harness"
+    command: 'HOME="${TMPDIR:-/tmp}/tillandsias-headless-init-status-check-home" PATH="$(pwd)/target/litmus-runtime/bin:$PATH" LITMUS_PODMAN_MODE=fake LITMUS_PODMAN_CALLS_FILE=target/litmus-podman/headless-init-status-check.calls.log TILLANDSIAS_ROOT="$(pwd)" cargo test -p tillandsias-headless --bin tillandsias tests::source_built_init_and_status_check_smoke_uses_fake_podman -- --exact --nocapture > target/litmus-podman/headless-init-status-check.log 2>&1'
     timeout_ms: 180000
 
   - step: "assert proxy image lookup happened"
@@ -51,6 +45,10 @@ critical_path:
     command: "grep -F 'image exists tillandsias-forge:v' target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000
 
+  - step: "assert web image lookup happened"
+    command: "grep -F 'image exists tillandsias-web:v' target/litmus-podman/headless-init-status-check.calls.log"
+    timeout_ms: 2000
+
   - step: "assert enclave network lookup happened"
     command: "grep -F 'network exists tillandsias-enclave' target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000
@@ -71,23 +69,25 @@ critical_path:
     command: "grep -F 'run --detach --rm --name tillandsias-inference --hostname inference --network-alias inference --network tillandsias-enclave --ip 10.0.42.4' target/litmus-podman/headless-init-status-check.calls.log && grep -F 'tillandsias-inference:v' target/litmus-podman/headless-init-status-check.calls.log && grep -F '/usr/bin/ollama serve' target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000
 
-  - step: "assert forge status-check container run shape"
-    command: "grep -F 'run --name tillandsias-tillandsias-forge --hostname forge-tillandsias --network tillandsias-enclave' target/litmus-podman/headless-init-status-check.calls.log && grep -F -- '--entrypoint /bin/bash tillandsias-forge:v' target/litmus-podman/headless-init-status-check.calls.log && grep -F 'check_inference()' target/litmus-podman/headless-init-status-check.calls.log && grep -F 'echo \"[status-check] forge online\"' target/litmus-podman/headless-init-status-check.calls.log"
+  - step: "assert status-check plan was emitted"
+    command: "grep -F '[status-check] planned args:' target/litmus-podman/headless-init-status-check.log && grep -F 'check_inference()' target/litmus-podman/headless-init-status-check.log && grep -F 'echo \"[status-check] forge online\"' target/litmus-podman/headless-init-status-check.log"
     timeout_ms: 2000
 
 observability:
   traces:
     - "@trace spec:dev-build"
+    - "@trace spec:cli-mode"
+    - "@trace spec:podman-idiomatic-patterns"
     - "@trace spec:podman-container-spec"
     - "@trace spec:podman-container-handle"
     - "@trace spec:podman-orchestration"
     - "@trace spec:observability-convergence"
-  expected_log: "Direct podman argv recorded for headless init plus status-check"
+  expected_log: "Source-built headless init plus status-check recorded through the real Rust entrypoint"
   log_fields:
-    spec: "dev-build"
-    test: "headless-init-status-check-command-shape"
+    spec: "dev-build,cli-mode,podman-idiomatic-patterns"
+    test: "headless-init-status-check-source-built"
     backend: "fake"
 
 rollback:
-  on_failure: "inspect target/litmus-podman/headless-init-status-check.log and target/litmus-podman/headless-init-status-check.calls.log, then rerun with VERBOSE=1 or TILLANDSIAS_STATUS_CHECK_BIN pointing at the installed binary"
+  on_failure: "inspect target/litmus-podman/headless-init-status-check.log and target/litmus-podman/headless-init-status-check.calls.log, then rerun with VERBOSE=1"
   command: "sed -n '1,200p' target/litmus-podman/headless-init-status-check.log && printf '\\n---\\n' && sed -n '1,200p' target/litmus-podman/headless-init-status-check.calls.log"

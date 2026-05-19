@@ -12,7 +12,10 @@ set -e
 # inject it into the system trust store so ollama and curl can use the tillandsias-proxy
 # for transparent HTTPS caching.
 if [ -f /etc/tillandsias/ca.crt ]; then
-    mkdir -p /usr/local/share/ca-certificates/
+    # The directory is pre-created and chowned to uid 1000 in the Containerfile,
+    # but guard the mkdir in case we're running on an older image — `set -e` is
+    # active and a Permission denied here exits the container immediately.
+    mkdir -p /usr/local/share/ca-certificates/ 2>/dev/null || true
     cp /etc/tillandsias/ca.crt /usr/local/share/ca-certificates/tillandsias.crt 2>/dev/null || true
     update-ca-certificates 2>/dev/null || true
 fi

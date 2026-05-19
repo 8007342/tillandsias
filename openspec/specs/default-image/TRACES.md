@@ -6,10 +6,10 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [build-forge.sh#L2](../../../build-forge.sh#L2)
-- [build.sh#L248](../../../build.sh#L248)
+- [build.sh#L249](../../../build.sh#L249)
 - [crates/tillandsias-core/src/container_profile.rs#L290](../../../crates/tillandsias-core/src/container_profile.rs#L290)
-- [crates/tillandsias-headless/src/main.rs#L1625](../../../crates/tillandsias-headless/src/main.rs#L1625)
-- [crates/tillandsias-headless/src/main.rs#L2258](../../../crates/tillandsias-headless/src/main.rs#L2258)
+- [crates/tillandsias-headless/src/main.rs#L1742](../../../crates/tillandsias-headless/src/main.rs#L1742)
+- [crates/tillandsias-headless/src/main.rs#L2379](../../../crates/tillandsias-headless/src/main.rs#L2379)
 - [images/default/config-overlay/mcp/host-browser.sh#L8](../../../images/default/config-overlay/mcp/host-browser.sh#L8)
 - [images/default/Containerfile#L4](../../../images/default/Containerfile#L4)
 - [images/default/Containerfile#L11](../../../images/default/Containerfile#L11)

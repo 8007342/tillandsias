@@ -11,6 +11,18 @@ safe GUI browser windows for OpenCode Web and other web-based tools.
 
 ## Requirements
 
+### Requirement: Tray launches run in the desktop user session
+Interactive tray-driven launches SHALL run in the logged-in desktop user's session with writable `XDG_RUNTIME_DIR` and rootless Podman state owned by that user. The tray MUST NOT invent a synthetic `/run/user/<uid>` or rely on a helper runtime wrapper in production.
+
+#### Scenario: Tray session is ready for Podman
+- **WHEN** the tray launches OpenCode Web on Fedora Workstation
+- **THEN** the runtime SHALL use the active desktop user's rootless Podman state
+- **AND** no service-account runtime lane SHALL be required for the interactive tray
+
+#### Scenario: Tray runtime is missing
+- **WHEN** the tray is launched without a valid desktop user session
+- **THEN** the launch SHALL fail with an actionable error explaining that the runtime requires a real login session
+
 ### Requirement: OpenCode Web launches in browser isolation
 When a user clicks the "🌐 OpenCode Web" action button in a project submenu:
 1. An OpenCode Web container is launched (persistent, per-project)
@@ -151,6 +163,7 @@ All web-based interfaces are launched through browser isolation containers only.
   health checks
 - `cheatsheets/runtime/podman-logging.md` — Podman diagnostics, lifecycle
   recovery, and host maintenance
+- `cheatsheets/runtime/linux-user-session-podman.md` — desktop user-session runtime and rootless Podman ownership
 - `cheatsheets/runtime/runtime-logging.md` — Runtime logging and tracing best
   practices
 - `cheatsheets/runtime/testing-best-practices.md` — lightweight unit-test and

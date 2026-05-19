@@ -225,6 +225,7 @@ fi
 # Transparent HTTPS caching setup (dev proxy)
 # ---------------------------------------------------------------------------
 # @trace spec:dev-build, spec:transparent-https-caching
+PODMAN_CTL="$SCRIPT_DIR/scripts/tillandsias-podman"
 ensure_dev_cache() {
     # Skip if explicitly disabled
     [[ "${TILLANDSIAS_NO_PROXY:-}" == "1" ]] && return 0
@@ -251,11 +252,11 @@ ensure_dev_cache() {
     _step "Using standard squid image for dev caching: $proxy_image"
 
     # Start dev proxy if not already running
-    if ! podman inspect tillandsias-dev-proxy &>/dev/null 2>&1; then
+    if ! "$PODMAN_CTL" container inspect tillandsias-dev-proxy &>/dev/null 2>&1; then
         _step "Starting dev proxy container..."
 
         # Start proxy with all interface binding so containers can reach it
-        if ! podman run \
+        if ! "$PODMAN_CTL" container run \
             --detach \
             --rm \
             --name tillandsias-dev-proxy \
@@ -280,8 +281,8 @@ ensure_dev_cache() {
             retry=$((retry + 1))
             if [[ $retry -eq $max_retries ]]; then
                 _error "Proxy health check failed after $max_retries seconds"
-                podman logs tillandsias-dev-proxy 2>&1 | tail -20
-                podman rm -f tillandsias-dev-proxy 2>/dev/null || true
+                "$PODMAN_CTL" container logs tillandsias-dev-proxy 20 2>&1 | tail -20
+                "$PODMAN_CTL" container rm tillandsias-dev-proxy 2>/dev/null || true
                 return 0
             fi
             sleep 1
@@ -328,7 +329,7 @@ if [[ "$FLAG_INIT" == true ]]; then
     "$SCRIPT_DIR/target/debug/tillandsias" --init 2>&1
     # Also prune old images
     _step "Pruning old images..."
-    podman image prune -f 2>/dev/null || true
+    "$PODMAN_CTL" image prune -f 2>/dev/null || true
     exit 0
 fi
 
@@ -546,7 +547,7 @@ if [[ "$FLAG_TEST" == true ]]; then
 
     # Prune dangling images accumulated during the test
     _step "Pruning dangling podman images..."
-    podman image prune -f 2>/dev/null && _info "Dangling images pruned" || true
+    "$PODMAN_CTL" image prune -f 2>/dev/null && _info "Dangling images pruned" || true
 
     # If --test is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
@@ -585,7 +586,7 @@ if [[ "$FLAG_RELEASE" == true ]]; then
 
     # Prune dangling images accumulated during the build
     _step "Pruning dangling podman images..."
-    podman image prune -f 2>/dev/null && _info "Dangling images pruned" || true
+    "$PODMAN_CTL" image prune -f 2>/dev/null && _info "Dangling images pruned" || true
 
     # Show built artifacts
     RELEASE_BIN="$SCRIPT_DIR/target/release/tillandsias"
@@ -601,5 +602,5 @@ elif [[ "$FLAG_TEST$FLAG_CHECK" == "falsefalse" ]]; then
 
     # Prune dangling images accumulated during the build
     _step "Pruning dangling podman images..."
-    podman image prune -f 2>/dev/null && _info "Dangling images pruned" || true
+    "$PODMAN_CTL" image prune -f 2>/dev/null && _info "Dangling images pruned" || true
 fi
