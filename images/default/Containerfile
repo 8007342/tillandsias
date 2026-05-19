@@ -26,7 +26,7 @@ RUN microdnf install -y \
 # @trace spec:default-image, spec:layered-tools-overlay
 # Install the coding agents at image build time so the forge launches
 # with no runtime installer and no dependency on host cache state.
-RUN npm install -g --prefix /usr/local opencode-ai@latest @fission-ai/openspec @anthropic-ai/claude-code
+RUN npm install -g --prefix /usr/local opencode-ai@latest @fission-ai/openspec @anthropic-ai/claude-code @openai/codex
 
 # ── Create forge user ──────────────────────────────────────────
 # DISTRO: useradd (Fedora shadow-utils), NOT adduser -D (Alpine)
@@ -51,12 +51,14 @@ COPY entrypoint-forge-opencode-web.sh /usr/local/bin/entrypoint-forge-opencode-w
 COPY entrypoint-forge-claude.sh /usr/local/bin/entrypoint-forge-claude.sh
 COPY entrypoint-forge-codex.sh /usr/local/bin/entrypoint-forge-codex.sh
 COPY entrypoint-terminal.sh /usr/local/bin/entrypoint-terminal.sh
+COPY sse-keepalive-proxy.js /usr/local/bin/sse-keepalive-proxy.js
 RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/entrypoint-forge-opencode.sh \
              /usr/local/bin/entrypoint-forge-opencode-web.sh \
              /usr/local/bin/entrypoint-forge-claude.sh \
              /usr/local/bin/entrypoint-forge-codex.sh \
-             /usr/local/bin/entrypoint-terminal.sh
+             /usr/local/bin/entrypoint-terminal.sh \
+             /usr/local/bin/sse-keepalive-proxy.js
 
 # No GIT_ASKPASS helper in the forge image — forge containers have ZERO
 # credentials. The old askpass was a dead-code vector superseded by the

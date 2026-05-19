@@ -36,6 +36,12 @@ runtime / build / tests
   diagnostics snapshot with command facts, inspect facts, and recent logs.
 - Shell is allowed to bootstrap the OS and delegate to
   `scripts/tillandsias-podman`; it is not the orchestration layer.
+- Launch-path shell that still creates certs or containers must either call
+  `scripts/tillandsias-podman` or be recorded as an explicit bootstrap
+  grandfather. Do not add fresh raw `podman` orchestration in `build.sh` or
+  `scripts/run-forge-project.sh`.
+- CA/cert creation that feeds Podman mounts must be serialized and published
+  atomically. A container should only ever see complete cert/key files.
 
 Verification ladder:
 

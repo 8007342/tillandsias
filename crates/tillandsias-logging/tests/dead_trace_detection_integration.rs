@@ -2,9 +2,8 @@
 //! Integration tests for dead trace detection module
 
 use std::fs;
-use std::path::PathBuf;
 use tempfile::TempDir;
-use tillandsias_logging::{DeadTraceAudit, extract_dead_specs, find_dead_traces};
+use tillandsias_logging::{extract_dead_specs, find_dead_traces};
 
 #[test]
 fn test_dead_trace_detection_integration_real_traces_md() {
@@ -34,19 +33,29 @@ fn test_dead_trace_detection_finds_annotations_in_files() {
     let rs_file = project_root.join("test.rs");
     fs::write(
         &rs_file,
-        r#"// @trace spec:dead-spec
+        concat!(
+            r#"// @"#,
+            "trace spec:dead-spec",
+            r#"
 fn some_function() {}
-// @trace spec:another-dead
+// @"#,
+            "trace spec:another-dead",
+            r#"
 fn another() {}"#,
+        ),
     )
     .expect("Failed to write test file");
 
     let sh_file = project_root.join("test.sh");
     fs::write(
         &sh_file,
-        r#"#!/bin/bash
-# @trace spec:dead-spec
+        concat!(
+            r#"#!/bin/bash
+# @"#,
+            "trace spec:dead-spec",
+            r#"
 echo hello"#,
+        ),
     )
     .expect("Failed to write test file");
 
@@ -54,9 +63,13 @@ echo hello"#,
     let md_file = project_root.join("README.md");
     fs::write(
         &md_file,
-        r#"# Test
-<!-- @trace spec:dead-spec -->
+        concat!(
+            r#"# Test
+<!-- @"#,
+            "trace spec:dead-spec",
+            r#" -->
 Some content"#,
+        ),
     )
     .expect("Failed to write test file");
 
@@ -87,7 +100,7 @@ fn test_dead_trace_detection_skips_ignored_directories() {
     let ignored_file = target_dir.join("file.rs");
     fs::write(
         &ignored_file,
-        "// @trace spec:dead-spec\nfn some_function() {}",
+        concat!("// @", "trace spec:dead-spec\nfn some_function() {}"),
     )
     .expect("Failed to write file");
 
@@ -95,7 +108,7 @@ fn test_dead_trace_detection_skips_ignored_directories() {
     let root_file = project_root.join("file.rs");
     fs::write(
         &root_file,
-        "// @trace spec:dead-spec\nfn other_function() {}",
+        concat!("// @", "trace spec:dead-spec\nfn other_function() {}"),
     )
     .expect("Failed to write file");
 

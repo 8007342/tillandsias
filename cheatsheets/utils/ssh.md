@@ -159,4 +159,4 @@ curl --fail --silent --show-error \
 ## See also
 
 - `runtime/networking.md` — why no ssh to github from forge
-- `utils/git.md` — git over the enclave mirror, not ssh
+- `utils/git-workflows.md` — git over the enclave mirror, not ssh

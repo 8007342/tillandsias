@@ -109,4 +109,4 @@ Prints the entire file with substitutions highlighted. Non-destructive — combi
 ## See also
 
 - `utils/fd.md` — `find` replacement, complementary file discovery
-- `utils/fzf.md` — interactive narrowing of `rg -l` / `rg --files` output
+- `utils/fzf-picker.md` — interactive narrowing of `rg -l` / `rg --files` output

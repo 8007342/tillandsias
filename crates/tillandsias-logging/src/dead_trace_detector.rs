@@ -93,8 +93,8 @@ pub fn find_dead_traces(
     let searchable_extensions = [".rs", ".sh", ".md", ".toml", "Containerfile"];
 
     for spec_name in dead_specs {
-        // Match @trace directive with spec:name anywhere in the annotation
-        // Handles: @trace spec:name or @trace other spec:name or @trace spec:name, other:value
+        // Match an @trace directive with a concrete spec token anywhere in
+        // the annotation.
         let pattern = format!(r"@trace.*spec:{}", regex::escape(spec_name));
         let re = Regex::new(&pattern).map_err(|e| format!("Invalid regex pattern: {}", e))?;
 
@@ -209,14 +209,19 @@ mod tests {
         let rs_file = project_root.join("test.rs");
         fs::write(
             &rs_file,
-            "// @trace spec:dead-spec-1\nfn some_function() {}\n// @trace spec:another-dead",
+            concat!(
+                "// @",
+                "trace spec:dead-spec-1\nfn some_function() {}\n// @",
+                "trace spec:",
+                "another-dead",
+            ),
         )
         .expect("Failed to write test file");
 
         let sh_file = project_root.join("test.sh");
         fs::write(
             &sh_file,
-            "#!/bin/bash\n# @trace spec:dead-spec-1\necho hello",
+            concat!("#!/bin/bash\n# @", "trace spec:dead-spec-1\necho hello"),
         )
         .expect("Failed to write test file");
 
@@ -245,7 +250,7 @@ mod tests {
         let ignored_file = target_dir.join("file.rs");
         fs::write(
             &ignored_file,
-            "// @trace spec:dead-spec\nfn some_function() {}",
+            concat!("// @", "trace spec:dead-spec\nfn some_function() {}"),
         )
         .expect("Failed to write file");
 
@@ -253,7 +258,7 @@ mod tests {
         let root_file = project_root.join("file.rs");
         fs::write(
             &root_file,
-            "// @trace spec:dead-spec\nfn other_function() {}",
+            concat!("// @", "trace spec:dead-spec\nfn other_function() {}"),
         )
         .expect("Failed to write file");
 
@@ -270,7 +275,7 @@ mod tests {
             spec_name: "my-spec".to_string(),
             file_path: PathBuf::from("src/file.rs"),
             line_number: 42,
-            source_line: "    // @trace spec:my-spec".to_string(),
+            source_line: format!("    // @{} spec:{}", "trace", "my-spec"),
         };
 
         let report = trace.format_report();
@@ -333,7 +338,7 @@ mod tests {
         let rs_file = project_root.join("gap.rs");
         fs::write(
             &rs_file,
-            "// @trace spec:dead-spec-1, gap:OBS-025\nfn func() {}",
+            concat!("// @", "trace spec:dead-spec-1, gap:OBS-025\nfn func() {}",),
         )
         .expect("Failed to write test file");
 

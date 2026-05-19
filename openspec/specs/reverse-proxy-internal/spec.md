@@ -64,6 +64,14 @@ The proxy MUST terminate HTTPS connections using certificates issued by the ephe
 - **AND** the old certificate MUST be destroyed
 - **AND** clients MUST accept the new cert (or pinning MUST be updated)
 
+#### Scenario: Concurrent launch does not publish partial CA files
+- **WHEN** multiple launch paths race to create the development or runtime CA
+- **THEN** generation MUST be serialized with a lock
+- **AND** cert/key material MUST be written to temporary files first
+- **AND** the final `intermediate.crt` and `intermediate.key` paths MUST be
+  published by atomic rename only after OpenSSL succeeds
+- **AND** containers MUST never mount a half-written cert or key
+
 ### Requirement: Request/response logging
 
 All traffic through the proxy MUST be logged in a structured format.
@@ -322,7 +330,8 @@ Log events SHALL include:
 - `cheatsheets/runtime/networking.md` — enclave-internal routing and DNS patterns
 - `cheatsheets/observability/cheatsheet-metrics.md` — structured logging for request/response events
 - `cheatsheets/runtime/forge-hot-cold-split.md` — caching strategies and performance optimization
+- `cheatsheets/runtime/podman-control-plane.md` — launch-path diagnostics and serialized Podman runtime ownership
+- `build.sh` and `crates/tillandsias-headless/src/main.rs` — current CA creation and atomic publish behavior
 
 **Related Specs:**
 - `spec:certificate-authority` — ephemeral CA for HTTPS termination used by this proxy
-

@@ -4,7 +4,7 @@ versioning_system:
     This component defines Calendar Versioning (CalVer) with build counter and commit hash.
     This format is monotonic under the declared branch discipline and human-readable.
     It supports convergence claims by linking every released artifact back to a spec
-    version and evidence bundle through bidirectional tracing (@trace spec:name).
+    version and evidence bundle through bidirectional tracing (`@trace spec:<name>`).
 
   format: "v<Major>.<Minor>.<YYMMDD>.<Build>+<CommitHash>"
 

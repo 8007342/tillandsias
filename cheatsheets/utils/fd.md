@@ -149,4 +149,4 @@ curl --fail --silent --show-error \
 ## See also
 
 - `utils/ripgrep.md` — content search (fd finds files, rg searches inside them)
-- `utils/git.md` — `.gitignore` rules that fd honors by default
+- `utils/git-workflows.md` — `.gitignore` rules that fd honors by default

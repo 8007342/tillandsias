@@ -1,10 +1,33 @@
-# Ghost Trace Sweep Backlog — 10 Traces with No Corresponding Spec
+# Ghost Trace Sweep Backlog — Closed 2026-05-19
 
 ## Overview
 
-The codebase contains 35+ `@trace spec:*` annotations in `crates/tillandsias-headless/src/main.rs` pointing to spec IDs that have no corresponding `openspec/specs/*/spec.md` file. These are "ghost traces" — implementation links to non-existent specs.
+Status: closed by Step 16a methodology reconciliation.
 
-This document tracks 10 high-priority ghost traces that should be resolved as a future wave (deferred to Q3 2026).
+`scripts/validate-traces.sh` now reports 0 ghost-trace errors. The original
+10 high-priority traces were resolved by creating active specs, retargeting
+stale implementation aliases to current owner specs, and regenerating
+`TRACES.md` plus per-spec trace indexes.
+
+Remaining trace warnings are active in-flight OpenSpec changes, not missing
+spec files.
+
+---
+
+## Resolution Summary
+
+- Created active specs for `linux-native-portable-executable`,
+  `transparent-mode-detection`, `containerfile-staleness`,
+  `tray-subprocess-management`, `signal-handling`,
+  `resource-metric-collection`, and `observability-metrics`.
+- Retargeted `chromium-browser-isolation` to `browser-isolation-framework`.
+- Retargeted `fix-router-loopback-port` and `opencode-web-dynamic-routes` to
+  `subdomain-routing-via-reverse-proxy` / `opencode-web-session-otp`.
+- Added broader active specs required by the validator, including browser
+  window lifecycle/timeout, CDP robustness, cache isolation, proxy/certificate
+  validation, metrics, logging, project, tray, and testing specs.
+- Split dead-trace detector fixture strings so example traces no longer pollute
+  repository scans.
 
 ---
 
@@ -77,11 +100,10 @@ Create a dedicated **Ghost Trace Sweep Wave** (tentatively Q3 2026 or after rele
 
 ## Tracking Status
 
-- **Status**: `deferred`
-- **Reason**: Not blocking release; orthogonal to current doc-debt-payoff wave
+- **Status**: `closed`
 - **Date deferred**: 2026-05-16
-- **Suggested resolution date**: Q3 2026 (after v0.1.27x release)
-- **Escalation trigger**: If any ghost trace code is modified before specs exist, promote sweep to P1
+- **Date closed**: 2026-05-19
+- **Verification**: `scripts/validate-traces.sh` reports 0 ghost-trace errors
 
 ---
 

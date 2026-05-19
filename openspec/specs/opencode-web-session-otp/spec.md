@@ -38,7 +38,7 @@ The router (Caddy) MUST:
 
 1. Expose an `_auth/login` POST endpoint that accepts the OTP form submission
 2. Validate the OTP against the stored value for the project
-3. Issue an HttpOnly + SameSite=Strict + Path=/ session cookie with a separate random value (independent of the OTP)
+3. Issue an HttpOnly + SameSite=Lax + Path=/ session cookie with a separate random value (independent of the OTP)
 4. 302-redirect to `/` to load the app
 5. Immediately evict the OTP from memory (single-use — not replayable)
 
@@ -60,7 +60,8 @@ The session cookie MUST have the following attributes:
 - **Value**: 32 random bytes (independent random value, not derived from OTP)
 - **Path**: `/`
 - **HttpOnly**: true (prevents JavaScript access)
-- **SameSite**: Strict (prevents cross-site cookie transmission)
+- **SameSite**: Lax (keeps the cookie on the top-level redirect from the
+  `data:` login document while blocking cross-site subresource and POST use)
 - **Lifetime**: same as the container stack (evicted on stack shutdown)
 
 A compromised OTP after consumption MUST NOT leak the session token because they are separate random values.
@@ -99,6 +100,24 @@ OTP generation and validation MUST be governed by the `secrets-management` spec:
 - Accountability log MUST track OTP generation and validation without recording the value itself
 - MUST be evicted from memory immediately after use (single-use TTL)
 
+### Requirement: Authenticated Readiness Probe
+
+Before launching Chromium, the tray-side launcher MUST prove both sides of the
+auth boundary:
+
+1. A request without `tillandsias_session` MUST return `401`
+2. After `IssueWebSession` is acknowledged, a request with the registered
+   cookie MUST return `2xx` or `3xx`
+3. The cookie used by the probe MUST be sent through an in-process HTTP client,
+   never through command-line arguments or logs
+
+#### Scenario: Registered session reaches OpenCode Web
+- **WHEN** the launcher has received an `IssueAck` for a project session
+- **THEN** it probes `http://opencode.<project>.localhost[:port]/` with the
+  registered cookie
+- **AND** it opens Chromium only after the app responds with `2xx` or `3xx`
+- **AND** failures record route diagnostics without recording the cookie value
+
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
@@ -109,8 +128,9 @@ Gating points:
 - OTP embedded in data: URI form (not logged, not on disk)
 - OTP passed to router via control socket (loopback only)
 - Router accepts OTP at `_auth/login` POST endpoint
-- Router issues HttpOnly + SameSite=Strict session cookie (independent random value)
-- OTP evicted from memory after first use; second use returns 403 Forbidden
+- Router issues HttpOnly + SameSite=Lax session cookie
+- Pending session is promoted to active after first validation; pending entries
+  expire if Chromium never presents them
 - Session cookie valid for remainder of container stack lifetime
 - Multiple windows can attach with independent OTPs and cookies
 - Stolen OTP after consumption does not yield session cookie (separate random values)
@@ -123,4 +143,6 @@ This spec replaces `opencode-web-session` as of v0.1.260513. The legacy spec (Ta
 
 - `cheatsheets/runtime/forge-container.md` — the forge runtime contract this OTP layer protects
 - `cheatsheets/runtime/networking.md` — confirms the loopback-only bind that makes OTP-over-HTTP acceptable
-- `cheatsheets/web/http.md` — cookie attributes and Set-Cookie semantics for `HttpOnly` + `SameSite=Strict`
+- `cheatsheets/web/http.md` — cookie attributes and Set-Cookie semantics for `HttpOnly` + `SameSite=Lax`
+- `images/default/sse-keepalive-proxy.js` — OpenCode Web dark-theme and SSE proxy used on the browser-facing port
+- `crates/tillandsias-headless/src/main.rs` — launcher readiness probes and in-process session-cookie probe

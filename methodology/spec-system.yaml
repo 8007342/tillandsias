@@ -70,7 +70,7 @@ spec_system:
       bindings:
         trace:
           required: true
-          format: "@trace spec:name"
+          format: "@trace spec:<name>"
         litmus:
           required: true
           tests: list

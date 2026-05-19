@@ -26,11 +26,11 @@ Interactive tray-driven launches SHALL run in the logged-in desktop user's sessi
 ### Requirement: OpenCode Web launches in browser isolation
 When a user clicks the "🌐 OpenCode Web" action button in a project submenu:
 1. An OpenCode Web container is launched (persistent, per-project)
-2. Once the container is healthy, a GUI browser window is launched in
+2. Once the auth-gated route is healthy, a GUI browser window is launched in
    `tillandsias-chromium-framework` through the compiled Podman launch path
    in `tillandsias-headless`
 3. The browser reaches OpenCode Web through the published project-local host
-   route `http://opencode.<project>.localhost/`
+   route `http://opencode.<project>.localhost[:port]/`
 4. No host system browser is used for tray-driven OpenCode Web; the browser
    container consumes the runtime CA bundle for the secure session and is
    launched only through the compiled typed Podman path
@@ -40,16 +40,22 @@ When a user clicks the "🌐 OpenCode Web" action button in a project submenu:
    typed Podman layer and the baked Chromium framework containerfile; shell
    wrappers MAY exist for developer litmuses but MUST NOT be required at
    runtime
+7. The forge web entrypoint SHALL apply the OpenCode config overlay before
+   starting `opencode serve`, then front the upstream server with the bundled
+   SSE/theme proxy on port 4096 so dark theme bootstrap and long-lived event
+   streams are stable.
 
 @trace spec:browser-isolation-core
 
 #### Scenario: First-time OpenCode Web launch
 - **WHEN** user clicks 🌐 OpenCode Web for a project
 - **THEN** an OpenCode Web container is created (if not already running)
-- **AND** once the container is healthy (OpenCode HTTP server responds), a
-  browser window is spawned
+- **AND** once the route returns `401` without a session cookie and `2xx/3xx`
+  with the freshly registered session cookie, a browser window is spawned
 - **AND** the browser launches inside `tillandsias-chromium-framework` via
   the compiled Podman browser launch path in safe GUI app mode
+- **AND** OpenCode receives the mounted project as
+  `/home/forge/src/<project>` with `TILLANDSIAS_PROJECT=<project>` set
 
 #### Scenario: Reattach to existing OpenCode Web
 - **WHEN** user clicks 🌐 OpenCode Web for a project that already has a running
@@ -59,19 +65,16 @@ When a user clicks the "🌐 OpenCode Web" action button in a project submenu:
 - **AND** multiple browser windows can attach to the same container
   concurrently
 
-### Requirement: Content-hash identity with human aliases for reproducibility
-The browser isolation containers MUST use a content-hash canonical tag for
-reproducible launches across sessions. Human-facing CalVer-style tags MAY
-remain as aliases, but `:latest` MUST NOT be the authoritative identity.
+### Requirement: Versioned identity without `latest`
+The browser isolation containers MUST use the running Tillandsias version tag
+for reproducible launches across sessions. Content-hash tags MAY be added as a
+future alias, but `:latest` MUST NOT be the authoritative identity.
 
 #### Scenario: Browser container uses correct canonical tag
 - **WHEN** a browser window is launched
-- **THEN** the container image used is the canonical content-hash tag for
-  `tillandsias-chromium-core`
-- **AND** the tray MAY refresh the human-facing version alias from
-  `TILLANDSIAS_FULL_VERSION`
-- **AND** the canonical tag is used consistently across all browser container
-  launches
+- **THEN** the container image used is
+  `tillandsias-chromium-framework:v<VERSION>`
+- **AND** `:latest` is never used for browser container launches
 
 ### Requirement: Safe window type by default
 The browser window launched for OpenCode Web SHALL use safe window type:
@@ -79,6 +82,9 @@ The browser window launched for OpenCode Web SHALL use safe window type:
 - No dev tools or debugging interfaces exposed to the user
 - Remote debugging port NOT exposed (port 9222 is internal only)
 - Security flags applied: CAP_DROP=ALL, no new privileges, read-only root
+- Chromium's own `--no-sandbox` flag MAY appear only inside the Chromium
+  framework image entrypoint. It is not a Tillandsias CLI flag and MUST NOT be
+  accepted by the top-level `tillandsias` parser.
 
 #### Scenario: Safe browser launch
 - **WHEN** 🌐 OpenCode Web is clicked
@@ -88,18 +94,26 @@ The browser window launched for OpenCode Web SHALL use safe window type:
 
 ### Requirement: Browser launcher uses the secure OpenCode Web session
 The browser launcher SHALL reach OpenCode Web through the published
-project-local host route `http://opencode.<project>.localhost/`. The browser
+project-local host route `http://opencode.<project>.localhost[:port]/`. The browser
 container SHALL inherit the runtime CA bundle for the session and shall only
 launch after the OpenCode Web OTP/session gate is healthy.
 
-@trace spec:host-chromium-on-demand, spec:podman-orchestration, spec:opencode-web-session-otp, spec:reverse-proxy-internal, spec:podman-secrets-integration, spec:secrets-management
+@trace spec:podman-orchestration, spec:opencode-web-session-otp, spec:reverse-proxy-internal, spec:podman-secrets-integration, spec:secrets-management
 
 #### Scenario: Browser communicates with OpenCode Web
 - **WHEN** browser window is launched
-- **THEN** OpenCode Web is accessible at `opencode.<project>.localhost/`
+- **THEN** OpenCode Web is accessible at `opencode.<project>.localhost[:port]/`
   through the published route after the OTP/session gate passes
 - **AND** the browser launcher inherits the runtime CA bundle for the session
 - **AND** no credentials from the project are visible to the browser container
+
+#### Scenario: Unauthenticated route is not treated as app readiness
+- **WHEN** the OpenCode Web route is being probed before browser launch
+- **THEN** a no-cookie probe MUST succeed only when it returns `401`
+- **AND** a registered-cookie probe MUST return `2xx` or `3xx` before Chromium
+  is opened
+- **AND** `502`, `404`, and arbitrary non-auth statuses MUST remain failures
+  with route diagnostics attached
 
 ### Requirement: Browser window lifecycle
 A browser window launched from the tray:
@@ -164,6 +178,7 @@ All web-based interfaces are launched through browser isolation containers only.
 - `cheatsheets/runtime/podman-logging.md` — Podman diagnostics, lifecycle
   recovery, and host maintenance
 - `cheatsheets/runtime/linux-user-session-podman.md` — desktop user-session runtime and rootless Podman ownership
+- `cheatsheets/runtime/opencode-web-launch.md` — OpenCode Web route, theme proxy, project selection, and auth-gated readiness
 - `cheatsheets/runtime/runtime-logging.md` — Runtime logging and tracing best
   practices
 - `cheatsheets/runtime/testing-best-practices.md` — lightweight unit-test and
@@ -176,8 +191,6 @@ All web-based interfaces are launched through browser isolation containers only.
   contract for the GUI browser
 - `openspec/specs/browser-isolation-core/spec.md` — Core browser isolation
   container requirements
-- `openspec/specs/host-chromium-on-demand/spec.md` — bundled Chromium runtime
-  and app-mode launch contract
 - `openspec/specs/opencode-web-session-otp/spec.md` — OTP and session-cookie
   protection for OpenCode Web attaches
 - `openspec/specs/reverse-proxy-internal/spec.md` — CA chain and HTTPS

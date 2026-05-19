@@ -224,7 +224,7 @@ parse_cheatsheet() {
                 if (match($0, /^status:[[:space:]]*([A-Za-z]+)/, m)) {
                     status = tolower(m[1])
                 }
-                # @trace spec:cheatsheets-license-tiered (v2 fields)
+                # @trace spec:cheatsheets-license-tiered
                 if (match($0, /^tier:[[:space:]]*([A-Za-z-]+)/, m)) {
                     tier = m[1]
                 }

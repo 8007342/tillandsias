@@ -5,5 +5,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [build.sh#L305](../../../build.sh#L305)
+- [build.sh#L332](../../../build.sh#L332)
 - [scripts/setup-podman-registries.sh#L3](../../../scripts/setup-podman-registries.sh#L3)

@@ -22,6 +22,8 @@ container failures.
 
 - Tray startup still needs a single place to prove the enclave network exists.
 - The router should be ready before the first project container is spawned.
+- This step is now the next ready graph node after the methodology
+  reconciliation pass.
 
 ## Next action
 

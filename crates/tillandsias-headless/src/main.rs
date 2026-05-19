@@ -708,7 +708,7 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
 
 fn image_build_args(image_name: &str, image_tag: &str) -> Vec<String> {
     if image_name == "chromium-framework" {
-        // @trace spec:init-command, spec:chromium-browser-isolation
+        // @trace spec:init-command, spec:browser-isolation-framework
         //
         // chromium-framework depends on chromium-core image built in the previous step.
         // Pass --build-arg CHROMIUM_CORE_IMAGE so the Containerfile can reference it:
@@ -873,23 +873,61 @@ fn ensure_enclave_network(debug: bool) -> Result<(), String> {
     run_command(command, debug)
 }
 
+fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
+    let max_age = std::time::Duration::from_secs(25 * 24 * 60 * 60);
+    for path in [crt, key] {
+        match std::fs::metadata(path).and_then(|meta| meta.modified()) {
+            Ok(modified) => {
+                if modified.elapsed().map(|age| age > max_age).unwrap_or(true) {
+                    return true;
+                }
+            }
+            Err(_) => return true,
+        }
+    }
+    false
+}
+
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
-    // @trace spec:secrets-management, spec:secret-rotation
+    // @trace spec:secrets-management, spec:secret-rotation, spec:reverse-proxy-internal
     let certs_dir = PathBuf::from(CA_DIR);
     let crt = certs_dir.join("intermediate.crt");
     let key = certs_dir.join("intermediate.key");
     std::fs::create_dir_all(&certs_dir)
         .map_err(|e| format!("Failed to create CA directory: {e}"))?;
 
-    let should_refresh = match std::fs::metadata(&crt).and_then(|meta| meta.modified()) {
-        Ok(modified) => modified
-            .elapsed()
-            .map(|age| age > std::time::Duration::from_secs(25 * 24 * 60 * 60))
-            .unwrap_or(true),
-        Err(_) => true,
-    };
+    let should_refresh = ca_bundle_needs_refresh(&crt, &key);
 
     if should_refresh {
+        let lock_dir = certs_dir.join(".ca-generation.lock");
+        let mut acquired_lock = false;
+        for _ in 0..50 {
+            match std::fs::create_dir(&lock_dir) {
+                Ok(()) => {
+                    acquired_lock = true;
+                    break;
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+                Err(e) => return Err(format!("Failed to acquire CA generation lock: {e}")),
+            }
+        }
+        if !acquired_lock {
+            return Err("Timed out waiting for CA generation lock".to_string());
+        }
+        struct LockDir(PathBuf);
+        impl Drop for LockDir {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir(&self.0);
+            }
+        }
+        let _lock = LockDir(lock_dir);
+
+        if !ca_bundle_needs_refresh(&crt, &key) {
+            return Ok(certs_dir);
+        }
+
         // @trace spec:secret-rotation
         info!(
             accountability = true,
@@ -901,6 +939,13 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
             "CA certificate rotation starting"
         );
 
+        let unique = format!(
+            "{}.{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        );
+        let tmp_crt = certs_dir.join(format!("intermediate.crt.{unique}.tmp"));
+        let tmp_key = certs_dir.join(format!("intermediate.key.{unique}.tmp"));
         let mut command = Command::new("openssl");
         command.args([
             "req",
@@ -908,10 +953,12 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
             "-newkey",
             "rsa:2048",
             "-keyout",
-            key.to_str()
+            tmp_key
+                .to_str()
                 .ok_or_else(|| "CA key path contains invalid UTF-8".to_string())?,
             "-out",
-            crt.to_str()
+            tmp_crt
+                .to_str()
                 .ok_or_else(|| "CA cert path contains invalid UTF-8".to_string())?,
             "-days",
             "30",
@@ -938,7 +985,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&crt, std::fs::Permissions::from_mode(0o644)).map_err(
+            std::fs::set_permissions(&tmp_crt, std::fs::Permissions::from_mode(0o644)).map_err(
                 |e| {
                     error!(
                         accountability = true,
@@ -953,7 +1000,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                     format!("Failed to set cert permissions: {e}")
                 },
             )?;
-            std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o600)).map_err(
+            std::fs::set_permissions(&tmp_key, std::fs::Permissions::from_mode(0o600)).map_err(
                 |e| {
                     error!(
                         accountability = true,
@@ -969,6 +1016,11 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                 },
             )?;
         }
+
+        std::fs::rename(&tmp_key, &key)
+            .map_err(|e| format!("Failed to atomically publish CA key: {e}"))?;
+        std::fs::rename(&tmp_crt, &crt)
+            .map_err(|e| format!("Failed to atomically publish CA cert: {e}"))?;
 
         info!(
             accountability = true,
@@ -1027,6 +1079,8 @@ fn build_stack_common_args(
         "USER=forge".into(),
         "--env".into(),
         format!("PROJECT={project_name}"),
+        "--env".into(),
+        format!("TILLANDSIAS_PROJECT={project_name}"),
         "-v".into(),
         format!(
             "{}:/home/forge/src/{project_name}:rw",
@@ -1197,7 +1251,7 @@ fn control_socket_host_dir() -> PathBuf {
 /// port from `80 -> 8080 -> --port`, while the in-container listener remains
 /// on `:8080`.
 ///
-/// @trace spec:subdomain-routing-via-reverse-proxy, spec:fix-router-loopback-port, spec:enclave-network
+/// @trace spec:subdomain-routing-via-reverse-proxy, spec:enclave-network
 fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<String> {
     let dyn_dir = router_dynamic_caddyfile_host_path();
     let dyn_file = dyn_dir.join("dynamic.Caddyfile");
@@ -1232,7 +1286,7 @@ fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<S
         "/tmp:size=64m".into(),
         "--tmpfs".into(),
         "/run/router:size=8m".into(),
-        // @trace spec:fix-router-loopback-port
+        // @trace spec:subdomain-routing-via-reverse-proxy
         // Host publish on loopback ONLY. The container listener stays on
         // :8080; the host port is selected from the 80 -> 8080 -> --port
         // fallback chain by `select_router_host_port()`.
@@ -1439,7 +1493,7 @@ async fn ensure_router_running(
 /// which is what the sidecar's `extract_project_label` also extracts from
 /// the Host header.
 ///
-/// @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-dynamic-routes, spec:opencode-web-session-otp
+/// @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-session-otp
 fn generate_dynamic_caddyfile(windows: &[(String, String, u16)]) -> String {
     if windows.is_empty() {
         return String::new();
@@ -1694,6 +1748,8 @@ fn build_opencode_forge_args(
         "USER=forge".into(),
         "--env".into(),
         format!("PROJECT={project_name}"),
+        "--env".into(),
+        format!("TILLANDSIAS_PROJECT={project_name}"),
         // Mount under `/home/forge/src/<project>/` (not directly at
         // `/home/forge/src`) so the in-container tree matches what the forge
         // entrypoint's clone path would produce
@@ -3252,37 +3308,106 @@ fn opencode_web_startup_stages() -> &'static [&'static str; 6] {
     &OPENCODE_WEB_STARTUP_STAGES
 }
 
-fn wait_for_opencode_web(url: &str, debug: bool) -> Result<(), String> {
-    for attempt in 1..=20 {
-        let output = Command::new("curl")
-            .args([
-                "-sS",
-                "-o",
-                "/dev/null",
-                "-w",
-                "%{http_code}",
-                "--max-time",
-                "1",
-                url,
-            ])
-            .output();
-        if let Ok(output) = output
-            && output.status.success()
-        {
-            let status = String::from_utf8_lossy(&output.stdout);
-            if let Ok(code) = status.trim().parse::<u16>()
-                && (100..600).contains(&code)
-            {
-                return Ok(());
-            }
+fn opencode_web_http_status(url: &str, cookie_header: Option<String>) -> Result<u16, String> {
+    let url = url.to_string();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| format!("Failed to create HTTP probe runtime: {e}"))?;
+
+    rt.block_on(async move {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(1))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|e| format!("Failed to build HTTP probe client: {e}"))?;
+        let mut request = client.get(url);
+        if let Some(cookie_header) = cookie_header {
+            request = request.header(reqwest::header::COOKIE, cookie_header);
         }
-        if debug {
-            eprintln!("[tillandsias] waiting for OpenCode Web route: attempt {attempt}/20");
+        request
+            .send()
+            .await
+            .map(|response| response.status().as_u16())
+            .map_err(|e| format!("HTTP probe failed: {e}"))
+    })
+}
+
+fn wait_for_opencode_web_route(url: &str, debug: bool) -> Result<(), String> {
+    for attempt in 1..=20 {
+        match opencode_web_http_status(url, None) {
+            Ok(401) => return Ok(()),
+            Ok(code) if debug => {
+                eprintln!(
+                    "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt}/20 (status {code})"
+                );
+            }
+            Err(err) if debug => {
+                eprintln!(
+                    "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt}/20 ({err})"
+                );
+            }
+            _ => {}
         }
         std::thread::sleep(Duration::from_millis(500));
     }
 
-    Err(format!("OpenCode Web route did not become ready: {url}"))
+    Err(format!(
+        "OpenCode Web auth gate did not become ready: {url}"
+    ))
+}
+
+fn wait_for_authenticated_opencode_web(
+    url: &str,
+    cookie_value: &[u8; tillandsias_otp::COOKIE_LEN],
+    debug: bool,
+) -> Result<(), String> {
+    let cookie_header = format!(
+        "{}={}",
+        tillandsias_otp::COOKIE_NAME,
+        tillandsias_otp::format_cookie_value(cookie_value)
+    );
+
+    for attempt in 1..=20 {
+        match opencode_web_http_status(url, Some(cookie_header.clone())) {
+            Ok(code) if (200..400).contains(&code) => return Ok(()),
+            Ok(code) if debug => {
+                eprintln!(
+                    "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt}/20 (status {code})"
+                );
+            }
+            Err(err) if debug => {
+                eprintln!(
+                    "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt}/20 ({err})"
+                );
+            }
+            _ => {}
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+
+    Err(format!(
+        "OpenCode Web app did not become reachable with a registered session: {url}"
+    ))
+}
+
+#[cfg(test)]
+fn opencode_web_auth_cookie_header(cookie_value: &[u8; tillandsias_otp::COOKIE_LEN]) -> String {
+    format!(
+        "{}={}",
+        tillandsias_otp::COOKIE_NAME,
+        tillandsias_otp::format_cookie_value(cookie_value)
+    )
+}
+
+#[cfg(test)]
+fn opencode_web_route_ready_status(code: u16) -> bool {
+    code == 401
+}
+
+#[cfg(test)]
+fn opencode_web_authenticated_ready_status(code: u16) -> bool {
+    (200..400).contains(&code)
 }
 
 fn browser_profile_root() -> PathBuf {
@@ -3528,7 +3653,7 @@ fn launch_opencode_web_browser(
 ) -> Result<(), String> {
     let url = opencode_web_url(project_name, router_host_port);
     emit_opencode_web_event(project_name, "browser", "wait_for_route", Some(&url))?;
-    if let Err(err) = wait_for_opencode_web(&url, debug) {
+    if let Err(err) = wait_for_opencode_web_route(&url, debug) {
         emit_opencode_web_event(project_name, "browser", "route_unhealthy", Some(&err))?;
         return Err(err);
     }
@@ -3590,6 +3715,11 @@ fn launch_opencode_web_browser(
             emit_opencode_web_event(project_name, "browser", "session_register_failed", Some(&e));
         format!("Failed to register web session with router: {e}")
     })?;
+    if let Err(err) = wait_for_authenticated_opencode_web(&url, &otp, debug) {
+        emit_opencode_web_event(project_name, "browser", "session_probe_failed", Some(&err))?;
+        return Err(err);
+    }
+    emit_opencode_web_event(project_name, "browser", "session_ready", Some(&url))?;
 
     emit_opencode_web_event(project_name, "browser", "launch", Some("podman-run"))?;
     let result = rt_block_on_podman_run(args, debug);
@@ -3870,6 +4000,324 @@ pub(crate) fn run_opencode_web_mode(
     })?;
 
     launch_opencode_web_browser(project_name, &certs_dir, router_host_port, debug)
+}
+
+// ─────────────────────────────────────────────────────────────
+// Per-project tray launch actions (Claude / Codex / OpenCode / Maintenance)
+// ─────────────────────────────────────────────────────────────
+//
+// @trace spec:browser-isolation-tray-integration, spec:tray-app, spec:tray-ux
+//
+// Contract:
+// 1. All four interactive modes run *inside the forge container* — never on the host.
+// 2. The host's default terminal (gnome-terminal/kitty/foot/...) is the TTY surface;
+//    closing the terminal window kills the container.
+// 3. Every `podman run` flows through `tillandsias-podman`'s `ContainerSpec` /
+//    `PodmanClient::run_container` — the tray never shells out to `podman` directly
+//    except through the spec-built argv it hands the host terminal.
+// 4. Ephemeral first: the project workspace + CA bundle are the only persistent
+//    bind mounts. No `$HOME`, no `~/.config`, no `~/.cache`.
+
+/// Forge-side agent the tray launches into the host terminal.
+///
+/// Each variant maps to an entrypoint script baked into the forge image:
+/// - Claude       → `/usr/local/bin/entrypoint-forge-claude.sh`
+/// - Codex        → `/usr/local/bin/entrypoint-forge-codex.sh`
+/// - OpenCode     → `/usr/local/bin/entrypoint-forge-opencode.sh`
+/// - Maintenance  → `/usr/local/bin/entrypoint-terminal.sh`
+///
+/// Note: the forge image does not currently ship `entrypoint-forge-bash.sh`.
+/// `Maintenance` uses the existing `entrypoint-terminal.sh`, which sources
+/// `lib-common.sh`, runs `openspec init`, and execs `fish` (or `bash` if fish
+/// is absent). A future bare-bones bash entrypoint can be added if needed —
+/// the test below pins the entrypoint contract, not the script body.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ForgeAgentMode {
+    Claude,
+    Codex,
+    OpenCode,
+    Maintenance,
+}
+
+impl ForgeAgentMode {
+    fn entrypoint(self) -> &'static str {
+        match self {
+            ForgeAgentMode::Claude => "/usr/local/bin/entrypoint-forge-claude.sh",
+            ForgeAgentMode::Codex => "/usr/local/bin/entrypoint-forge-codex.sh",
+            ForgeAgentMode::OpenCode => "/usr/local/bin/entrypoint-forge-opencode.sh",
+            ForgeAgentMode::Maintenance => "/usr/local/bin/entrypoint-terminal.sh",
+        }
+    }
+
+    fn slug(self) -> &'static str {
+        match self {
+            ForgeAgentMode::Claude => "claude",
+            ForgeAgentMode::Codex => "codex",
+            ForgeAgentMode::OpenCode => "opencode",
+            ForgeAgentMode::Maintenance => "maintenance",
+        }
+    }
+
+    fn window_title(self, project_name: &str) -> String {
+        format!("Tillandsias — {} — {}", project_name, self.slug())
+    }
+}
+
+/// Resolve the host's default terminal emulator into an argv prefix that
+/// expects the command and its args appended verbatim.
+///
+/// Resolution order (first match wins):
+/// 1. `$TERMINAL` env var — split on whitespace, used as-is.
+/// 2. `xdg-terminal-exec` — modern xdg-utils 1.2+ shim; takes the command
+///    directly as positional args, no `-e` separator needed.
+/// 3. Hard-coded probe in PATH: `gnome-terminal`, `konsole`, `kitty`,
+///    `alacritty`, `foot`, `xterm`. Each gets the right `-e` / `--` flag.
+///
+/// Returns a hard error if nothing is found so the tray can surface the
+/// problem to the user instead of silently failing.
+/// @trace spec:forge-as-only-runtime
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn detect_host_terminal() -> Result<Vec<String>, String> {
+    if let Ok(value) = std::env::var("TERMINAL")
+        && !value.trim().is_empty()
+    {
+        let parts: Vec<String> = value.split_whitespace().map(|s| s.to_string()).collect();
+        if !parts.is_empty() {
+            return Ok(parts);
+        }
+    }
+
+    if executable_on_path("xdg-terminal-exec") {
+        return Ok(vec!["xdg-terminal-exec".to_string()]);
+    }
+
+    // (name, argv-prefix-once-resolved) — the prefix accepts a command + args.
+    let candidates: &[(&str, &[&str])] = &[
+        ("gnome-terminal", &["gnome-terminal", "--"]),
+        ("konsole", &["konsole", "-e"]),
+        ("kitty", &["kitty", "-e"]),
+        ("alacritty", &["alacritty", "-e"]),
+        ("foot", &["foot"]),
+        ("xterm", &["xterm", "-e"]),
+    ];
+
+    for (name, prefix) in candidates {
+        if executable_on_path(name) {
+            return Ok(prefix.iter().map(|s| s.to_string()).collect());
+        }
+    }
+
+    Err(
+        "Could not find a terminal emulator on PATH. Set $TERMINAL or \
+         install one of: gnome-terminal/konsole/kitty/alacritty/foot/xterm"
+            .to_string(),
+    )
+}
+
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+fn executable_on_path(name: &str) -> bool {
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    for dir in std::env::split_paths(&path) {
+        let candidate = dir.join(name);
+        if !candidate.exists() {
+            continue;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(metadata) = std::fs::metadata(&candidate)
+                && metadata.permissions().mode() & 0o111 == 0
+            {
+                continue;
+            }
+        }
+        return true;
+    }
+    false
+}
+
+/// Bring the per-project enclave (proxy + git + inference) online and return
+/// the certs directory. Shared by `run_opencode_web_mode` (web) and
+/// `launch_forge_agent` (Claude/Codex/OpenCode/Maintenance terminal launches).
+///
+/// Idempotent: if containers already exist they are removed first, matching
+/// the existing `run_opencode_web_mode` discipline.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn ensure_enclave_for_project(
+    project_name: &str,
+    debug: bool,
+) -> Result<PathBuf, String> {
+    let root = find_checkout_root().unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+    let version = VERSION.trim();
+    let certs_dir = ensure_ca_bundle(debug)?;
+    ensure_enclave_network(debug)?;
+
+    let images = ["proxy", "git", "inference", "forge"];
+    ensure_versioned_images(&root, &images, version, debug)?;
+
+    let rt = podman_runtime()?;
+    let client = PodmanClient::new();
+    rt.block_on(async {
+        cleanup_stack_containers(&client, project_name).await;
+
+        client
+            .run_container(&build_proxy_run_args(
+                &certs_dir,
+                &versioned_image_tag("proxy", version),
+            ))
+            .await
+            .map_err(|e| format!("[forge-launch] failed to start proxy: {e}"))?;
+        client
+            .run_container(&build_git_run_args(
+                project_name,
+                &certs_dir,
+                &versioned_image_tag("git", version),
+            ))
+            .await
+            .map_err(|e| format!("[forge-launch] failed to start git: {e}"))?;
+        client
+            .run_container(&build_inference_run_args(
+                &certs_dir,
+                &versioned_image_tag("inference", version),
+                false,
+            ))
+            .await
+            .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
+        Ok::<(), String>(())
+    })?;
+
+    Ok(certs_dir)
+}
+
+/// Build the forge `podman run` argv for an interactive tray launch.
+///
+/// Mirrors `build_opencode_forge_args(ForgeMode::Cli)` but parameterized on the
+/// `ForgeAgentMode` entrypoint and prefixed with `run` so the result is
+/// directly executable by `<terminal> <prefix> podman <argv>`.
+///
+/// Every option flows through the policy-validated `build_run_argv()` path —
+/// no raw `--unsafe` flags, no host home mounts. Project workspace lands at
+/// `/home/forge/src/<project>/`, CA cert at `/etc/tillandsias/ca.crt`.
+/// @trace spec:forge-as-only-runtime
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn build_forge_agent_run_argv(
+    project_path: &Path,
+    project_name: &str,
+    certs_dir: &Path,
+    version: &str,
+    mode: ForgeAgentMode,
+) -> Vec<String> {
+    let image = forge_image_tag(version);
+    let mut spec = ContainerSpec::new(image)
+        .name(forge_container_name(project_name))
+        .hostname(forge_hostname(project_name))
+        .network(ENCLAVE_NET)
+        .pids_limit(512)
+        .interactive()
+        .tty()
+        // Project workspace at /home/forge/src/<project>/ — matches the
+        // forge entrypoint clone path and the `$TILLANDSIAS_PROJECT_PATH`
+        // contract every agent expects.
+        .volume(
+            project_path.display().to_string(),
+            format!("/home/forge/src/{project_name}"),
+            MountMode::ReadWrite,
+        )
+        .env("http_proxy", "http://proxy:3128")
+        .env("https_proxy", "http://proxy:3128")
+        .env("HTTP_PROXY", "http://proxy:3128")
+        .env("HTTPS_PROXY", "http://proxy:3128")
+        .env("no_proxy", ENCLAVE_NO_PROXY)
+        .env("NO_PROXY", ENCLAVE_NO_PROXY)
+        .env("PATH", "/usr/local/bin:/usr/bin")
+        .env("HOME", "/home/forge")
+        .env("USER", "forge")
+        .env("PROJECT", project_name)
+        .entrypoint(mode.entrypoint());
+
+    let ca_cert = certs_dir.join("intermediate.crt");
+    if ca_cert.exists() {
+        spec = spec.bind_mount(
+            ca_cert.display().to_string(),
+            "/etc/tillandsias/ca.crt",
+            true,
+        );
+    }
+
+    let mut argv = vec!["podman".to_string()];
+    argv.extend(spec.build_run_argv());
+    argv
+}
+
+/// Launch a per-project forge agent (Claude/Codex/OpenCode/Maintenance) in
+/// the host's default terminal emulator.
+///
+/// Flow:
+/// 1. Resolve project name + canonical path.
+/// 2. Bring up enclave (proxy + git + inference) via the shared idiomatic
+///    podman layer.
+/// 3. Build the forge `podman run` argv via `ContainerSpec`.
+/// 4. Detect host terminal, spawn it detached with the argv appended.
+///
+/// The terminal window is the user-facing surface. When the user closes it,
+/// `podman run --rm` tears the container down.
+/// @trace spec:forge-as-only-runtime
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn launch_forge_agent(
+    project_name: &str,
+    project_path: &Path,
+    mode: ForgeAgentMode,
+    debug: bool,
+) -> Result<(), String> {
+    if !project_path.exists() {
+        return Err(format!("Project not found: {}", project_path.display()));
+    }
+
+    let canonical = project_path
+        .canonicalize()
+        .unwrap_or_else(|_| project_path.to_path_buf());
+    let version = VERSION.trim();
+
+    if debug {
+        eprintln!(
+            "[tillandsias] launch_forge_agent: project={project_name} mode={} path={}",
+            mode.slug(),
+            canonical.display()
+        );
+    }
+
+    let certs_dir = ensure_enclave_for_project(project_name, debug)?;
+
+    let argv = build_forge_agent_run_argv(&canonical, project_name, &certs_dir, version, mode);
+
+    let mut term = detect_host_terminal()?;
+    if debug {
+        eprintln!(
+            "[tillandsias] launch_forge_agent: terminal={:?} argv={:?}",
+            term, argv
+        );
+    }
+
+    let executable = term.remove(0);
+    let mut child = Command::new(&executable);
+    child.args(&term);
+    child.args(&argv);
+    // Decouple stdio — the terminal owns the TTY, we don't want podman's
+    // chatter mixed into the tray service log.
+    child.stdin(Stdio::null());
+    child.stdout(Stdio::null());
+    child.stderr(Stdio::null());
+
+    // Window title hint for terminals that honor it via env (e.g. foot).
+    child.env("TILLANDSIAS_WINDOW_TITLE", mode.window_title(project_name));
+
+    child
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("failed to spawn host terminal '{executable}': {e}"))
 }
 
 // Module declarations for Phase 4+
@@ -4620,6 +5068,174 @@ mod tests {
         ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
     }
 
+    // ─────────────────────────────────────────────────────────
+    // Forge agent launch tests (Claude/Codex/OpenCode/Maintenance)
+    // @trace spec:browser-isolation-tray-integration, spec:tray-ux
+    // ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn detect_host_terminal_prefers_env_var() {
+        let _guard = env_lock();
+        let prev = std::env::var_os("TERMINAL");
+        // SAFETY: env_lock() guarantees this test holds the only
+        // environment-mutating handle during the assertion window.
+        unsafe { std::env::set_var("TERMINAL", "foo bar") };
+
+        let result = detect_host_terminal();
+
+        // Restore env before asserting so a failure doesn't poison siblings.
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("TERMINAL", v),
+                None => std::env::remove_var("TERMINAL"),
+            }
+        }
+        let argv = result.expect("detect_host_terminal should honor $TERMINAL");
+        assert_eq!(argv, vec!["foo".to_string(), "bar".to_string()]);
+    }
+
+    #[test]
+    fn detect_host_terminal_falls_back_to_xdg_then_probe() {
+        let _guard = env_lock();
+        // Build a tmp PATH that exposes ONLY `xterm` so the probe loop is the
+        // path actually exercised. xdg-terminal-exec must NOT be present.
+        let scratch = tempfile::tempdir().expect("tempdir");
+        let bin = scratch.path().join("bin");
+        std::fs::create_dir_all(&bin).expect("mkdir bin");
+        let xterm = bin.join("xterm");
+        std::fs::write(&xterm, "#!/bin/sh\nexit 0\n").expect("write xterm");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&xterm).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&xterm, perms).unwrap();
+        }
+
+        let prev_path = std::env::var_os("PATH");
+        let prev_term = std::env::var_os("TERMINAL");
+        // SAFETY: env_lock held; serialized.
+        unsafe {
+            std::env::remove_var("TERMINAL");
+            std::env::set_var("PATH", bin.as_os_str());
+        }
+
+        let result = detect_host_terminal();
+
+        // Restore before asserting.
+        unsafe {
+            match prev_path {
+                Some(v) => std::env::set_var("PATH", v),
+                None => std::env::remove_var("PATH"),
+            }
+            if let Some(v) = prev_term {
+                std::env::set_var("TERMINAL", v);
+            }
+        }
+        let argv = result.expect("detect_host_terminal should fall back to xterm");
+        assert_eq!(argv, vec!["xterm".to_string(), "-e".to_string()]);
+    }
+
+    #[test]
+    fn launch_forge_agent_maintenance_uses_terminal_entrypoint() {
+        // The forge image does not (yet) ship `entrypoint-forge-bash.sh`;
+        // Maintenance maps to the existing `entrypoint-terminal.sh` which is
+        // the closest bash/fish surface. See ForgeAgentMode docs.
+        let argv = build_forge_agent_run_argv(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Maintenance,
+        );
+
+        assert_eq!(argv.first().map(|s| s.as_str()), Some("podman"));
+        assert!(has_arg(&argv, "--entrypoint"));
+        assert!(
+            has_arg(&argv, "/usr/local/bin/entrypoint-terminal.sh"),
+            "Maintenance must use entrypoint-terminal.sh; got: {argv:?}"
+        );
+        assert!(has_arg(&argv, "--interactive"));
+        assert!(has_arg(&argv, "--tty"));
+    }
+
+    #[test]
+    fn launch_forge_agent_does_not_mount_user_home() {
+        // Walk every arg and reject anything that smells like a host-side
+        // home mount. The only `/home/forge` references must be in the
+        // *target* side of the workspace bind mount or in env values.
+        let argv = build_forge_agent_run_argv(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Claude,
+        );
+
+        let joined = argv.join(" ");
+        assert!(
+            !joined.contains(".config"),
+            "must not mount user .config dirs into the forge; got: {joined}"
+        );
+        assert!(
+            !joined.contains(".cache"),
+            "must not mount user .cache dirs into the forge; got: {joined}"
+        );
+
+        if let Some(home) = std::env::var_os("HOME") {
+            let home_str = home.to_string_lossy().into_owned();
+            if !home_str.is_empty() && home_str != "/" {
+                // The *target* HOME inside the container is /home/forge — that's fine.
+                // We're guarding against the *host* $HOME leaking in as a bind source.
+                for arg in &argv {
+                    if arg.contains(&home_str) && !arg.starts_with("HOME=") {
+                        panic!("argv contains host $HOME ({home_str}) outside of HOME env: {arg}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "diagnostic dump for hand-off; run with --ignored when needed"]
+    fn _diagnostic_dump_sample_claude_argv() {
+        // @trace spec:tray-ux
+        // Reproduces the exact argv a Claude tray launch would hand to the
+        // host terminal for the canonical Tillandsias self-build project.
+        let argv = build_forge_agent_run_argv(
+            &PathBuf::from("/home/tlatoani/src/tillandsias"),
+            "tillandsias",
+            &PathBuf::from("/tmp/tillandsias-ca"),
+            "0.2.260518",
+            ForgeAgentMode::Claude,
+        );
+        eprintln!("=== SAMPLE ARGV (Claude, tillandsias project) ===");
+        for (i, a) in argv.iter().enumerate() {
+            eprintln!("  [{i:02}] {a}");
+        }
+        eprintln!("=== {} args total ===", argv.len());
+    }
+
+    #[test]
+    fn forge_agent_mode_entrypoint_mapping_is_pinned() {
+        assert_eq!(
+            ForgeAgentMode::Claude.entrypoint(),
+            "/usr/local/bin/entrypoint-forge-claude.sh"
+        );
+        assert_eq!(
+            ForgeAgentMode::Codex.entrypoint(),
+            "/usr/local/bin/entrypoint-forge-codex.sh"
+        );
+        assert_eq!(
+            ForgeAgentMode::OpenCode.entrypoint(),
+            "/usr/local/bin/entrypoint-forge-opencode.sh"
+        );
+        assert_eq!(
+            ForgeAgentMode::Maintenance.entrypoint(),
+            "/usr/local/bin/entrypoint-terminal.sh"
+        );
+    }
+
     #[test]
     fn shutdown_poll_backoff_doubles_until_capped() {
         assert_eq!(next_shutdown_poll_delay_ms(25), 50);
@@ -4695,6 +5311,7 @@ mod tests {
         assert!(has_arg(&args, "--entrypoint"));
         assert!(has_arg(&args, "/bin/bash"));
         assert!(has_arg(&args, "TILLANDSIAS_OPENCODE_PROMPT=hello"));
+        assert!(has_arg(&args, "TILLANDSIAS_PROJECT=alpha"));
         assert!(
             args.iter()
                 .any(|arg| arg == "/tmp/project:/home/forge/src/alpha:rw")
@@ -4720,6 +5337,26 @@ mod tests {
             opencode_web_startup_stages(),
             &["stack", "proxy", "git", "inference", "forge", "browser"]
         );
+    }
+
+    #[test]
+    fn opencode_web_readiness_status_contract_is_auth_gated() {
+        assert!(opencode_web_route_ready_status(401));
+        assert!(!opencode_web_route_ready_status(200));
+        assert!(!opencode_web_route_ready_status(502));
+        assert!(opencode_web_authenticated_ready_status(200));
+        assert!(opencode_web_authenticated_ready_status(302));
+        assert!(!opencode_web_authenticated_ready_status(401));
+        assert!(!opencode_web_authenticated_ready_status(502));
+    }
+
+    #[test]
+    fn opencode_web_auth_cookie_header_is_canonical() {
+        let token = [7u8; 32];
+        let header = opencode_web_auth_cookie_header(&token);
+        assert!(header.starts_with("tillandsias_session="));
+        assert!(!header.contains('\n'));
+        assert!(!header.contains(' '));
     }
 
     #[test]
@@ -4963,7 +5600,7 @@ mod tests {
         );
     }
 
-    // @trace spec:subdomain-routing-via-reverse-proxy, spec:fix-router-loopback-port
+    // @trace spec:subdomain-routing-via-reverse-proxy
     #[test]
     fn router_run_args_encode_expected_container_shape() {
         let certs_dir = PathBuf::from("/tmp/ca");
@@ -5002,7 +5639,7 @@ mod tests {
         );
     }
 
-    // @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-dynamic-routes, spec:opencode-web-session-otp
+    // @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-session-otp
     #[test]
     fn dynamic_caddyfile_routes_opencode_service() {
         let windows = vec![(

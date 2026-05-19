@@ -134,4 +134,4 @@ curl --fail --silent --show-error \
 ## See also
 
 - `utils/ssh.md` — for the `-e ssh` transport, key auth, and port/jumphost config
-- `utils/git.md` — for source-controlled file movement (preferred over rsync for code)
+- `utils/git-workflows.md` — for source-controlled file movement (preferred over rsync for code)

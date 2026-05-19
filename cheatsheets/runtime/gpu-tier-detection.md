@@ -318,4 +318,4 @@ echo "Tier: None (CPU-only)"
 
 - `runtime/container-gpu.md` — GPU passthrough methods for containers
 - `runtime/ollama-model-management.md` — Model pulling and caching semantics
-- `runtime/inference-container.md` (DRAFT) — Inference container setup with multi-model support
+- `runtime/local-inference.md` — Inference container setup with multi-model support

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # test-subdomain-routing.sh — Smoke test for Squid .localhost cache_peer routing
-# @trace spec:subdomain-routing-via-reverse-proxy, spec:fix-router-loopback-port
+# @trace spec:subdomain-routing-via-reverse-proxy
 #
 # Purpose: Verify that Squid correctly forwards .localhost requests to the router
 # via cache_peer, enforcing enclave-internal routing for browser isolation.
@@ -114,12 +114,12 @@ assert_present \
     "name=tillandsias-router"
 echo ""
 
-# Test: cache_peer address uses 127.0.0.1 (avoid DNS issues)
-echo "Testing cache_peer loopback isolation..."
+# Test: cache_peer address uses the router network alias on the enclave network.
+echo "Testing cache_peer enclave routing..."
 assert_regex \
-    "cache_peer uses 127.0.0.1 to avoid DNS resolution issues" \
+    "cache_peer uses router network alias on port 8080" \
     "$SQUID_CONF" \
-    "^cache_peer 127\.0\.0\.1 parent 8080"
+    "^cache_peer router parent 8080"
 echo ""
 
 # Test: cache_peer_access restricts to localhost_subdomain
@@ -148,10 +148,6 @@ assert_present \
     "@trace spec:subdomain-routing-via-reverse-proxy appears in config" \
     "$SQUID_CONF" \
     "spec:subdomain-routing-via-reverse-proxy"
-assert_present \
-    "spec:fix-router-loopback-port appears in config" \
-    "$SQUID_CONF" \
-    "spec:fix-router-loopback-port"
 echo ""
 
 # Summary

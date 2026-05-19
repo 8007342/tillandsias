@@ -141,7 +141,7 @@ Three items have no Microsoft Learn-documented disable knob. Each is a known-acc
 
 | Residual | Why it can't be disabled | Tillandsias mitigation |
 |---|---|---|
-| **9P bridge `\\wsl$\<distro>\…`** | No `wsl.conf` key turns it off; it's how the host reaches the distro filesystem | Treat distro filesystem as host-readable: never write secrets to disk; secrets go through D-Bus to the host keyring or via process env (per `runtime/secrets-management.md`) |
+| **9P bridge `\\wsl$\<distro>\…`** | No `wsl.conf` key turns it off; it's how the host reaches the distro filesystem | Treat distro filesystem as host-readable: never write secrets to disk; secrets go through D-Bus to the host keyring or via process env (per `utils/tillandsias-secrets-architecture.md`) |
 | **Single Linux kernel per Windows user** (all distros + all containers share one VM) | Per `learn.microsoft.com/wsl/about`: "WSL provides a Linux-compatible kernel interface … run WSL 1 or WSL 2 distributions on the same machine, side by side." Same kernel, ergo a kernel exploit in any container reaches all containers in that VM. | Accept: this is the same trust model rootless podman has on a Linux host. Layer container hardening on top (cap-drop, seccomp, no-new-privileges, SELinux). |
 | **Windows file ACLs are NOT projected through 9P** | When the host writes a file to `\\wsl$\…\path`, the Linux-side ACL is fixed (no ACL inheritance). | Don't share state via 9P — share via in-VM podman volumes. |
 
@@ -173,7 +173,7 @@ When a new spec demands a host↔distro bridge be closed:
 - `runtime/wsl2-disk-elasticity.md` — vhdx growth, sparseVhd, `--manage --resize` (planned)
 - `runtime/podman-in-wsl2.md` — podman quirks under WSL2 — cgroup v2, fuse-overlayfs, subuid/subgid (planned)
 - `runtime/wsl-daemon-patterns.md` — long-running services in WSL: systemd, `[boot] command`, `[boot] systemd`
-- `runtime/secrets-management.md` — credential isolation rationale; why we don't put secrets on the distro filesystem
+- `utils/tillandsias-secrets-architecture.md` — credential isolation rationale; why we don't put secrets on the distro filesystem
 - `runtime/windows-installer-prereqs.md` — installer's WSL2 hard-requirement check
 - `runtime/wsl-browser-isolation.md` — applies this hardening profile to the chromium-browser-isolation spec
 

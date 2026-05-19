@@ -452,6 +452,6 @@ tokio::spawn(async {
 ## See also
 
 - `runtime/socket-container-health.md` — Deep dive on HEALTHCHECK mechanics
-- `runtime/enclave-diagnostics.md` — Debugging orchestration failures
+- `runtime/socket-enclave-diagnostics.md` — Debugging orchestration failures
 - `runtime/async-patterns-rust.md` — Tokio spawn, await, timeout patterns
 - `runtime/event-driven-monitoring.md` — Subscribing to container events

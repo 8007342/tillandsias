@@ -17,7 +17,7 @@ committed_for_project: false
 
 @trace spec:agent-source-of-truth
 
-**Version baseline**: OpenCode v0.2+ (baked at /opt/agents/opencode, web mode via Bun 1.0+)  
+**Version baseline**: OpenCode v0.2+ (baked at /usr/local/bin/opencode, web mode via Bun 1.0+)
 **Use when**: Launching web-based visual IDE, running OpenCode CLI, debugging web sessions, parallel coding
 
 ## Provenance
@@ -43,7 +43,7 @@ committed_for_project: false
 ```bash
 cd $HOME/src/my-project
 opencode serve --port 5173
-# Browser opens at http://localhost:5173 (app mode; OS native browser, not Tauri webview)
+# Tillandsias tray opens the routed app in the chromium-framework container.
 ```
 
 **Run multiple OpenCode sessions in parallel:**
@@ -56,9 +56,8 @@ opencode serve --port 5173
 cd $HOME/src/project-b
 opencode serve --port 5174
 
-# Access both in separate browser windows
-# http://localhost:5173  (Project A)
-# http://localhost:5174  (Project B)
+# In Tillandsias, project web sessions are routed through
+# http://opencode.<project>.localhost[:port]/ and gated by the session cookie.
 ```
 
 **Check session state:**
@@ -85,9 +84,11 @@ opencode config list
 
 ❌ **Port conflicts on the same forge**: Two agents try to start on port 5173. → Increment the port: 5173, 5174, 5175. Session DB keys off port + working dir; no collisions.
 
-❌ **Assuming a Tauri webview**: OpenCode web runs in the OS native browser (Chrome, Firefox, Safari), not a Tauri container. → Debugging tools are your browser's DevTools (F12), not Tauri's.
+❌ **Assuming a Tauri webview or daily host browser**: Tray-launched OpenCode Web runs in the isolated `tillandsias-chromium-framework` container. → Debug the route, browser container, and `/run/.../opencode-web/<project>.jsonl` events.
 
-❌ **Expecting the browser to be pre-installed**: The forge does NOT ship a browser. → The host OS's browser is launched by the tray; the forge agents cannot spawn browsers directly (network isolation). OpenCode prints the URL; a human (or the tray) opens it.
+❌ **Skipping the overlay in web mode**: Without `apply_opencode_config_overlay`, OpenCode Web falls back to the baked stub config and light/default UI. → The web entrypoint must apply `config.json` and `tui.json`, then front `opencode serve` with `sse-keepalive-proxy.js`.
+
+❌ **Treating any HTTP response as readiness**: A `401` without a session proves the auth gate is alive, but the app is ready only after a registered-cookie probe returns `2xx` or `3xx`. → Do both probes before opening Chromium.
 
 ❌ **Leaving sessions orphaned**: If you kill `opencode serve` without `opencode session delete`, the session DB leaks. → Always `opencode session delete <id>` before exiting.
 

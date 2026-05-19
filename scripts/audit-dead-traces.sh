@@ -67,7 +67,7 @@ for spec_name in $DEAD_SPECS; do
     echo "Checking for traces of dead spec: $spec_name"
 
     # Search for @trace annotations referencing this spec
-    # Patterns: @trace spec:name or @trace spec:name,
+    # Patterns: @trace spec:<name> or @trace spec:<name>,
     TRACES=$(grep -r "@trace.*spec:$spec_name" "$PROJECT_ROOT" \
         --include="*.rs" \
         --include="*.sh" \

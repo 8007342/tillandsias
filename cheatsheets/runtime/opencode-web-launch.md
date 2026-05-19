@@ -1,0 +1,53 @@
+---
+tags: [opencode, chromium, router, tray, readiness]
+languages: [bash, rust]
+since: 2026-05-19
+last_verified: 2026-05-19
+sources:
+  - https://opencode.dev/
+  - https://caddyserver.com/docs/caddyfile/directives/forward_auth
+  - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie
+authority: high
+status: current
+tier: bundled
+summary_generated_by: hand-curated
+bundled_into_image: true
+committed_for_project: false
+---
+
+# OpenCode Web Launch
+
+Use this when changing `tillandsias --opencode-web`, the tray OpenCode Web
+action, router auth, or the isolated Chromium app window.
+
+## Current Contract
+
+- Forge web container serves OpenCode through `sse-keepalive-proxy.js` on
+  `0.0.0.0:4096`; raw `opencode serve` is the loopback upstream on `4097`.
+- Browser URL is `http://opencode.<project>.localhost[:port]/`, where the
+  port is the router host port selected by the launcher.
+- No-cookie route probe must return `401`; this proves Caddy and the sidecar
+  auth gate are wired.
+- Registered-cookie route probe must return `2xx` or `3xx`; this proves the
+  route reaches OpenCode Web before Chromium opens.
+- The browser runs in `tillandsias-chromium-framework:v<VERSION>` through the
+  typed Podman launch profile, not Tauri and not the daily host browser.
+
+## Common Fixes
+
+- White/light UI usually means the web entrypoint skipped
+  `apply_opencode_config_overlay` or bypassed `sse-keepalive-proxy.js`.
+- Wrong or unselected project usually means `TILLANDSIAS_PROJECT` was not set,
+  the project was not mounted at `/home/forge/src/<project>`, or the entrypoint
+  did not `cd` into `PROJECT_DIR`.
+- Unauthorized landing page means `IssueWebSession` was not acknowledged or
+  the sidecar never received the session before Chromium loaded the data URL.
+- `--no-sandbox` belongs to the Chromium framework entrypoint only. It is not a
+  top-level `tillandsias` option.
+
+## Verification
+
+```bash
+cargo test -p tillandsias-headless opencode_web_readiness_status_contract_is_auth_gated -- --exact
+./scripts/run-litmus-test.sh opencode-web-startup-sequence
+```

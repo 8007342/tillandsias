@@ -212,7 +212,7 @@ for path in sorted(cheatsheets_dir.rglob("*.md")):
         if not pkg:
             errors.append(f"{rel}: tier=distro-packaged requires 'package:' field")
         elif IMAGE_PACKAGES and pkg not in IMAGE_PACKAGES:
-            # @trace spec:cheatsheets-license-tiered (task 4.2)
+            # @trace spec:cheatsheets-license-tiered
             # WARN not ERROR: Nix expression names and dnf package names
             # don't always match 1:1 (e.g., openjdk21 vs java-21-openjdk),
             # so a literal mismatch is a hint, not a guarantee of breakage.

@@ -228,7 +228,7 @@ curl --fail --silent --show-error \
 
 ## See also
 
-- `utils/git.md` — local VCS, the layer below `gh`
+- `utils/git-workflows.md` — local VCS, the layer below `gh`
 - `runtime/networking.md` — proxy egress rules, why direct GitHub access is blocked
 - `utils/jq.md` — for transforms beyond what embedded `--jq` handles
 - `agents/openspec.md` — `gh pr create` is part of the archive workflow

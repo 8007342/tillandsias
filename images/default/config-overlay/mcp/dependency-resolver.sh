@@ -15,7 +15,7 @@
 #
 # Output: JSON with missing dependencies, tool versions, and install recommendations
 #
-# @cheatsheet runtime/forge-environment-discoverability.md
+# @cheatsheet runtime/forge-container.md
 
 set -euo pipefail
 

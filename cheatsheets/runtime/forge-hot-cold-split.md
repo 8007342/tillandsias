@@ -137,4 +137,4 @@ df -ht tmpfs
 - `runtime/forge-paths-ephemeral-vs-persistent.md` — full path taxonomy (shared cache, per-project cache, workspace, ephemeral), Hot vs Cold section
 - `runtime/forge-container.md` — broader runtime contract, security flags, enclave network
 - `runtime/forge-shared-cache-via-nix.md` — why the shared (COLD) nix store is the right place for shared deps
-- `openspec/changes/cheatsheets-license-tiered/design.md` Decision 3 — origin of the tmpfs-overlay lane and the tiered RAMDISK budget
+- `runtime/cheatsheet-tier-system.md` — origin of the tiered hot/cold RAM budget

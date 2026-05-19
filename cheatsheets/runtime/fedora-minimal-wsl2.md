@@ -281,7 +281,7 @@ Each `podman build` produces an image stored in the distro's `containers-storage
 - `runtime/wsl-on-windows.md` — `wsl --import` semantics, drvfs gotchas, console flicker mitigation
 - `runtime/podman-in-wsl2.md` — podman quirks under WSL2 (cgroup v2, fuse-overlayfs, subuid/subgid in detail) — planned
 - `runtime/wsl2-disk-elasticity.md` — vhdx growth, sparse, `--manage --resize` — planned
-- `runtime/secrets-management.md` — credential isolation rationale; why we don't put secrets on this distro's filesystem
+- `utils/tillandsias-secrets-architecture.md` — credential isolation rationale; why we don't put secrets on this distro's filesystem
 - `runtime/windows-installer-prereqs.md` — installer's WSL2 hard-requirement check that runs BEFORE `wsl --import`
 - `runtime/wsl-browser-isolation.md` — applies the hardening to the chromium-browser-isolation spec
 

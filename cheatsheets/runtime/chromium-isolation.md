@@ -106,10 +106,13 @@ When running Chromium in a container:
    - Renderer runs with same sandboxing as GUI mode
    - Rendering goes to in-memory framebuffer
 
-4. **Avoid `--no-sandbox`** in production:
-   - Only use for development/testing
-   - Disables ALL sandboxing; makes renderers fully trusted
-   - In containers with restrictive capabilities/seccomp, may be necessary but reduces security
+4. **Treat `--no-sandbox` as an image-internal compatibility exception**:
+   - Do not expose it as a Tillandsias CLI flag.
+   - The `tillandsias-chromium-framework` entrypoint may pass it to Chromium
+     because the surrounding container drops capabilities, uses `userns=keep-id`,
+     isolates profile/cache state on tmpfs, and is only used for project-local
+     routes.
+   - Any broader use requires a spec update and a launch-profile test.
 
 ## References
 

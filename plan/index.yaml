@@ -894,7 +894,7 @@ plan_index:
     - id: user-runtime-port-selection
       order: 14
       title: User Runtime Port Selection — 80 then 8080 then --port
-      status: ready
+      status: completed
       deliverable: plan/steps/14-user-runtime-port-selection.md
       depends_on: [router-observatorium-routing]
       specs: []
@@ -904,14 +904,14 @@ plan_index:
         - "Host-facing app ports stay internal to the enclave"
       tasks:
         - id: user-runtime-port-selection/fallback-chain
-          status: ready
+          status: completed
           depends_on: [router-observatorium-routing/allowlist-and-canonical-url]
           owned_files:
             - crates/tillandsias-headless/src/main.rs
             - scripts/run-observatorium.sh
             - plan/steps/14-user-runtime-port-selection.md
           checkpoint_required: true
-          handoff_note: "Implement the host-port fallback chain explicitly, including the user-visible --port escape hatch and the host/loopback diagnostics."
+          handoff_note: "Completed on linux-next: router host-port selection tries 80, 8080, then explicit --port; existing router publish is reused before probing."
 
     - id: runtime-lane-explicitness
       order: 14.5
@@ -947,7 +947,7 @@ plan_index:
     - id: tray-network-bootstrap
       order: 15
       title: Tray Network Bootstrap — Ensure Enclave Readiness Before Launch
-      status: pending
+      status: ready
       deliverable: plan/steps/15-tray-network-bootstrap.md
       depends_on: [router-observatorium-routing, user-runtime-port-selection]
       specs: []
@@ -957,7 +957,7 @@ plan_index:
         - "Tray startup waits for the router before launching project containers"
       tasks:
         - id: tray-network-bootstrap/enclave-network
-          status: pending
+          status: ready
           depends_on: [user-runtime-port-selection/fallback-chain]
           owned_files:
             - crates/tillandsias-headless/src/main.rs
@@ -990,7 +990,7 @@ plan_index:
           handoff_note: "Tighten the observatorium readiness check and surface container diagnostics on failure so the browser path can distinguish bootstrap from route breakage."
 
     - id: podman-control-plane-overhaul
-      order: 15
+      order: 15.5
       title: Podman Control-Plane Overhaul
       status: in_progress
       deliverable: plan/steps/15-podman-control-plane-overhaul.md
@@ -1029,6 +1029,43 @@ plan_index:
             - scripts/run-litmus-test.sh
           checkpoint_required: true
           handoff_note: "Next wave: retire residual shell orchestration, then enable strict no-direct-Podman audit."
+
+    - id: methodology-reconciliation
+      order: 16.5
+      title: Methodology Reconciliation — Specs, Cheatsheets, and Launch Contract
+      status: completed
+      deliverable: plan/steps/16a-methodology-reconciliation.md
+      depends_on: [runtime-lane-explicitness]
+      specs:
+        - browser-isolation-tray-integration
+        - opencode-web-session-otp
+        - forge-opencode-onboarding
+        - reverse-proxy-internal
+      exit_criteria:
+        - "OpenCode Web launch behavior is reflected in active specs."
+        - "Cheatsheet references resolve cleanly."
+        - "The launch path has focused tests for auth-gated readiness and project selection."
+      tasks:
+        - id: methodology-reconciliation/launch-contract
+          status: completed
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - images/default/entrypoint-forge-opencode-web.sh
+            - images/default/Containerfile
+            - openspec/specs/browser-isolation-tray-integration/spec.md
+            - openspec/specs/opencode-web-session-otp/spec.md
+            - openspec/specs/forge-opencode-onboarding/spec.md
+          checkpoint_required: true
+          handoff_note: "OpenCode Web now applies the overlay, fronts opencode serve with the SSE/theme proxy, sets TILLANDSIAS_PROJECT, and probes unauth/auth readiness before Chromium launch."
+        - id: methodology-reconciliation/cheatsheet-links
+          status: completed
+          depends_on: [methodology-reconciliation/launch-contract]
+          owned_files:
+            - cheatsheets
+            - images/default/config-overlay/mcp/dependency-resolver.sh
+          checkpoint_required: true
+          handoff_note: "Broken cheatsheet links resolved; new runtime/opencode-web-launch.md added as the launch-path reference."
 
     - id: post-release-polish
       order: 17

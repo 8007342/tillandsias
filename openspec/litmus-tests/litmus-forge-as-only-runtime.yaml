@@ -1,0 +1,36 @@
+# @trace spec:forge-as-only-runtime
+name: litmus:forge-as-only-runtime
+spec: forge-as-only-runtime
+description: Verify (a) the forge image bakes claude/codex/opencode/bash on $PATH and (b) no raw podman shell-outs exist outside the idiomatic layer
+severity: critical
+size: instant
+
+preconditions:
+  - podman is available in PATH (or via the socket-aware wrapper)
+  - the tillandsias-forge image has been built (post-build check)
+  - the workspace contains crates/tillandsias-headless and scripts/
+
+critical_path:
+  - step: "forge image contains claude, codex, opencode, bash on $PATH"
+    phase: post-build
+    command: "bash -lc 'FORGE_IMG=$(podman images --format \"{{.Repository}}:{{.Tag}}\" | grep -E \"^localhost/tillandsias-forge:v\" | head -1) && [ -n \"$FORGE_IMG\" ] && podman run --rm --entrypoint /bin/sh \"$FORGE_IMG\" -c \"command -v claude codex opencode bash\"'"
+    timeout_ms: 15000
+    expected_behavior: "stdout lists four absolute paths (one per binary) and the command exits 0"
+
+  - step: "no raw 'podman run' shell-outs outside the idiomatic layer"
+    phase: pre-build
+    command: "bash -lc '! grep -RIn \"Command::new(\\\"podman\\\")\" crates/tillandsias-headless/src/ scripts/tillandsias-podman scripts/build-image.sh build.sh 2>/dev/null | grep -v \"tillandsias-podman\" | grep -v \"allowed-bootstrap\"'"
+    timeout_ms: 5000
+    expected_behavior: "zero matches — every podman invocation routes through tillandsias-podman or carries an 'allowed-bootstrap' annotation"
+
+observability:
+  traces:
+    - "@trace spec:forge-as-only-runtime"
+  expected_log: "forge image bakes all four agent CLIs and no raw podman shell-outs slip past the idiomatic layer"
+  log_fields:
+    spec: "forge-as-only-runtime"
+    test: "forge-as-only-runtime"
+
+rollback:
+  on_failure: "if (a) failed: rebuild the forge image (scripts/build-image.sh forge) and re-run; if a CLI is missing, add it to images/default/Containerfile. if (b) failed: route the flagged shell-out through tillandsias-podman::PodmanClient, or annotate the line '// allowed-bootstrap' / '# allowed-bootstrap' if it is a documented bootstrap exception"
+  command: "bash -lc 'grep -RIn \"Command::new(\\\"podman\\\")\" crates/tillandsias-headless/src/ scripts/tillandsias-podman scripts/build-image.sh build.sh 2>/dev/null | grep -v \"tillandsias-podman\" | grep -v \"allowed-bootstrap\"'"

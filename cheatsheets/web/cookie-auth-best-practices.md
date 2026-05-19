@@ -117,4 +117,4 @@ them would let an attacker confirm a guess by reading logs).
 
 - `web/http.md` — surrounding HTTP semantics: status codes, header parsing, caching.
 - `web/sse.md`, `web/websocket.md` — cookies travel automatically on SSE / WebSocket upgrades; same auth applies.
-- `cheatsheets/security/csrf.md` (planned) — CSRF model that `SameSite=Strict` defeats.
+- `security/owasp-top-10-2021.md` — CSRF and session-management threat model.

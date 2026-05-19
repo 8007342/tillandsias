@@ -18,25 +18,29 @@ explicit `--port` escape hatch if both are unavailable.
 
 ## Current evidence
 
-- The headless launcher still has fixed-port assumptions in the router path.
-- The observatorium launcher still needs a user-visible escape hatch.
+- The headless launcher implements the 80 -> 8080 -> `--port` candidate chain.
+- Existing router publishes are reused before probing new ports, so a running
+  router does not trip the availability check.
+- Observatorium still needs a user-visible escape hatch as part of the
+  observatorium readiness wave.
 
-## Next action
+## Completion evidence
 
-- Keep the policy explicit in help text and diagnostics.
-- Make the host-port probes deterministic.
-- Avoid publishing application ports directly on the host.
+- `cargo test -p tillandsias-headless --bin tillandsias opencode_web -- --nocapture`
+  passed after the reconciliation edits.
+- The remaining observatorium-specific port UX is tracked by Step 16, not this
+  completed router host-port selection step.
 
 ## Checkpoint and push expectation
 
 - Branch: `linux-next`
 - Checkpoint: pending
-- Push: after the port selection flow is implemented and verified.
+- Push: after the reconciliation batch is coherent.
 
 ## Handoff note
 
-The next agent should keep the fallback chain user-visible. If both preferred
-ports are occupied, the user should see a direct instruction to supply `--port`.
+The fallback chain is implemented in the runtime. Future work should keep the
+diagnostic text user-visible when both preferred ports are occupied.
 
 ## Repeat-mode progress report shape
 

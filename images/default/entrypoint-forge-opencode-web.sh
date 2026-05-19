@@ -92,6 +92,7 @@ fi
 # ── OpenCode + OpenSpec (hard-installed) ───────────────────
 # @trace spec:default-image, spec:forge-shell-tools, spec:simplified-tray-ux
 require_opencode
+apply_opencode_config_overlay
 require_openspec
 
 trace_lifecycle "entrypoint" "opencode web ready"
@@ -135,8 +136,18 @@ fi
 
 # ── Launch OpenCode Web Server ──────────────────────────────
 # @trace spec:browser-isolation-tray-integration, spec:default-image
-# Headless HTTP server on 0.0.0.0:4096 inside the container. The host-side
-# reverse-proxy route binds 127.0.0.1 only — enforced in the tray/launcher.
-trace_lifecycle "entrypoint" "opencode web serving on 0.0.0.0:4096"
-trace_lifecycle "exec" "launching opencode serve ($OC_BIN)"
-exec "$OC_BIN" serve --hostname 0.0.0.0 --port 4096
+# OpenCode serves on loopback :4097. The local SSE/theme proxy owns :4096,
+# injects the dark-theme bootstrap, strips service-worker headers, and keeps
+# event streams alive for the browser-facing route.
+trace_lifecycle "entrypoint" "opencode web serving behind local proxy on 0.0.0.0:4096"
+trace_lifecycle "exec" "launching opencode serve upstream ($OC_BIN)"
+"$OC_BIN" serve --hostname 127.0.0.1 --port 4097 &
+OC_PID=$!
+cleanup() {
+    kill "$OC_PID" 2>/dev/null || true
+}
+trap cleanup INT TERM EXIT
+
+export LISTEN_PORT=4096
+export UPSTREAM=127.0.0.1:4097
+exec /usr/local/bin/sse-keepalive-proxy.js

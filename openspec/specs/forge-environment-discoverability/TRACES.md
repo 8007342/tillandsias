@@ -6,8 +6,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [crates/tillandsias-core/tests/project_discovery.rs#L2](../../../crates/tillandsias-core/tests/project_discovery.rs#L2)
-- [crates/tillandsias-headless/src/main.rs#L3946](../../../crates/tillandsias-headless/src/main.rs#L3946)
-- [crates/tillandsias-headless/src/main.rs#L4453](../../../crates/tillandsias-headless/src/main.rs#L4453)
+- [crates/tillandsias-headless/src/main.rs#L4394](../../../crates/tillandsias-headless/src/main.rs#L4394)
+- [crates/tillandsias-headless/src/main.rs#L4901](../../../crates/tillandsias-headless/src/main.rs#L4901)
 - [flake.nix#L174](../../../flake.nix#L174)
 - [flake.nix#L185](../../../flake.nix#L185)
 - [images/default/config-overlay/mcp/dependency-resolver.sh#L3](../../../images/default/config-overlay/mcp/dependency-resolver.sh#L3)
@@ -27,10 +27,10 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/config-overlay/shell-helpers.sh#L45](../../../images/default/config-overlay/shell-helpers.sh#L45)
 - [images/default/config-overlay/shell-helpers.sh#L65](../../../images/default/config-overlay/shell-helpers.sh#L65)
 - [images/default/config-overlay/shell-helpers.sh#L139](../../../images/default/config-overlay/shell-helpers.sh#L139)
-- [images/default/Containerfile#L96](../../../images/default/Containerfile#L96)
+- [images/default/Containerfile#L98](../../../images/default/Containerfile#L98)
 - [images/default/entrypoint-forge-claude.sh#L88](../../../images/default/entrypoint-forge-claude.sh#L88)
 - [images/default/entrypoint-forge-opencode.sh#L96](../../../images/default/entrypoint-forge-opencode.sh#L96)
-- [images/default/entrypoint-forge-opencode-web.sh#L121](../../../images/default/entrypoint-forge-opencode-web.sh#L121)
+- [images/default/entrypoint-forge-opencode-web.sh#L122](../../../images/default/entrypoint-forge-opencode-web.sh#L122)
 - [images/default/entrypoint-terminal.sh#L83](../../../images/default/entrypoint-terminal.sh#L83)
 - [images/default/forge-welcome.sh#L167](../../../images/default/forge-welcome.sh#L167)
 - [images/default/lib-common.sh#L928](../../../images/default/lib-common.sh#L928)

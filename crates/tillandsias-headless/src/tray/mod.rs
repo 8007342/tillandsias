@@ -6,6 +6,7 @@
 //! The tray owns the Linux menu/icon surface. Menu actions launch the repo's
 //! existing container entrypoints so the tray stays thin.
 
+pub mod cloud;
 pub mod profiler;
 
 use std::collections::HashMap;
@@ -15,10 +16,11 @@ use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use image::GenericImageView;
 use tracing::{Level, info, span, warn};
@@ -77,6 +79,7 @@ const WATCHER_NAME: &str = "org.kde.StatusNotifierWatcher";
 /// - **AllHealthy**: Complete enclave operational (proxy, git, inference all healthy).
 /// - **Failed**: Unrecoverable enclave state. Requires manual rebuild or podman restart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)] // ProxyReady/GitReady stay reachable through the legacy probe path
 enum EnclaveStatus {
     Verifying,
     ProxyReady,
@@ -113,6 +116,10 @@ impl EnclaveStatus {
         }
     }
 
+    /// LEGACY: pre-minimal-ux status text. Kept only because the existing
+    /// tests still cross-check the old emoji set; the live tray uses
+    /// [`status_label`] keyed off [`TrayStatusStage`] instead.
+    #[allow(dead_code)]
     fn status_text(self) -> &'static str {
         match self {
             EnclaveStatus::Verifying => "☐ Verifying environment...",
@@ -124,10 +131,190 @@ impl EnclaveStatus {
     }
 }
 
+// @trace spec:tray-minimal-ux, spec:tray-progress-and-icon-states
+/// Cumulative left-to-right emoji stack describing the enclave launch pipeline.
+///
+/// Each variant *adds* one emoji to the prefix produced by the previous one,
+/// so the user sees the chain literally fill in as containers come online:
+///
+/// ```text
+/// PreLaunch       ☑️ Verifying environment…
+/// NetworkUp       ☑️🕸️  Network ready
+/// ProxyStarting   ☑️🕸️🔌  Proxy starting…
+/// GitStarting     ☑️🕸️🔌🌿  Git starting…
+/// InferenceStart  ☑️🕸️🔌🌿🧠  Inference starting…
+/// ForgeStarting   ☑️🕸️🔌🌿🧠🦾  Forge starting…
+/// RouterStarting  ☑️🕸️🔌🌿🧠🦾🌐  Router starting…
+/// AllReady        ☑️🕸️🔌🌿🧠🦾🌐 ✅ OK
+/// ShuttingDown    🌵 Shutting down…
+/// Failed(stage)   <prefix up to stage-1> ❌ <descriptor>
+/// PodmanMissing   ❌ Podman not available
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
+enum TrayStatusStage {
+    PreLaunch,
+    NetworkUp,
+    ProxyStarting,
+    GitStarting,
+    InferenceStarting,
+    ForgeStarting,
+    RouterStarting,
+    AllReady,
+    /// Emitted when the user clicks Quit but the runtime is still draining.
+    /// Reserved for the launch-pipeline integration (other agent).
+    ShuttingDown,
+    /// Failure at the given stage. `descriptor` is appended after the
+    /// preserved prefix as ` ❌ <descriptor>`.
+    Failed {
+        stage: Box<TrayStatusStage>,
+        descriptor: String,
+    },
+    /// Special hard-error sentinel rendered as a flat "❌ Podman not available".
+    PodmanMissing,
+}
+
+/// Map a [`TrayStatusStage`] to its rendered tray status label.
+///
+/// The stack is cumulative: each non-failure variant returns the prefix from
+/// the previous stage plus its own emoji and the human-readable suffix.
+///
+/// @trace spec:tray-minimal-ux, spec:tray-progress-and-icon-states
+fn status_label(stage: &TrayStatusStage) -> String {
+    // Emoji-only prefix produced when this stage *completes* successfully.
+    // For the "Failed" / "ShuttingDown" / "PodmanMissing" variants this is
+    // bypassed below.
+    fn prefix(stage: &TrayStatusStage) -> String {
+        match stage {
+            TrayStatusStage::PreLaunch => String::from("\u{2611}\u{FE0F}"),
+            TrayStatusStage::NetworkUp => {
+                format!("{} \u{1F578}\u{FE0F}", prefix(&TrayStatusStage::PreLaunch))
+            }
+            TrayStatusStage::ProxyStarting => {
+                format!("{}\u{1F50C}", prefix(&TrayStatusStage::NetworkUp))
+            }
+            TrayStatusStage::GitStarting => {
+                format!("{}\u{1F33F}", prefix(&TrayStatusStage::ProxyStarting))
+            }
+            TrayStatusStage::InferenceStarting => {
+                format!("{}\u{1F9E0}", prefix(&TrayStatusStage::GitStarting))
+            }
+            TrayStatusStage::ForgeStarting => {
+                format!("{}\u{1F9BE}", prefix(&TrayStatusStage::InferenceStarting))
+            }
+            TrayStatusStage::RouterStarting => {
+                format!("{}\u{1F310}", prefix(&TrayStatusStage::ForgeStarting))
+            }
+            TrayStatusStage::AllReady => prefix(&TrayStatusStage::RouterStarting),
+            // The remaining variants are not reachable through the cumulative
+            // chain; callers handle them in `status_label` directly.
+            TrayStatusStage::ShuttingDown
+            | TrayStatusStage::Failed { .. }
+            | TrayStatusStage::PodmanMissing => String::new(),
+        }
+    }
+
+    match stage {
+        TrayStatusStage::PreLaunch => format!("{} Verifying environment\u{2026}", prefix(stage)),
+        TrayStatusStage::NetworkUp => format!("{}  Network ready", prefix(stage)),
+        TrayStatusStage::ProxyStarting => format!("{}  Proxy starting\u{2026}", prefix(stage)),
+        TrayStatusStage::GitStarting => format!("{}  Git starting\u{2026}", prefix(stage)),
+        TrayStatusStage::InferenceStarting => {
+            format!("{}  Inference starting\u{2026}", prefix(stage))
+        }
+        TrayStatusStage::ForgeStarting => format!("{}  Forge starting\u{2026}", prefix(stage)),
+        TrayStatusStage::RouterStarting => format!("{}  Router starting\u{2026}", prefix(stage)),
+        TrayStatusStage::AllReady => format!("{} \u{2705} OK", prefix(stage)),
+        TrayStatusStage::ShuttingDown => String::from("\u{1F335} Shutting down\u{2026}"),
+        TrayStatusStage::Failed { stage, descriptor } => {
+            // Keep the cumulative prefix up to the predecessor of `stage`,
+            // i.e. exactly the emojis that *already* succeeded.
+            let preserved = match stage.as_ref() {
+                TrayStatusStage::PreLaunch => String::new(),
+                TrayStatusStage::NetworkUp => prefix(&TrayStatusStage::PreLaunch),
+                TrayStatusStage::ProxyStarting => prefix(&TrayStatusStage::NetworkUp),
+                TrayStatusStage::GitStarting => prefix(&TrayStatusStage::ProxyStarting),
+                TrayStatusStage::InferenceStarting => prefix(&TrayStatusStage::GitStarting),
+                TrayStatusStage::ForgeStarting => prefix(&TrayStatusStage::InferenceStarting),
+                TrayStatusStage::RouterStarting => prefix(&TrayStatusStage::ForgeStarting),
+                TrayStatusStage::AllReady => prefix(&TrayStatusStage::RouterStarting),
+                TrayStatusStage::ShuttingDown
+                | TrayStatusStage::Failed { .. }
+                | TrayStatusStage::PodmanMissing => String::new(),
+            };
+            if preserved.is_empty() {
+                format!("\u{274C} {descriptor}")
+            } else {
+                format!("{preserved} \u{274C} {descriptor}")
+            }
+        }
+        TrayStatusStage::PodmanMissing => String::from("\u{274C} Podman not available"),
+    }
+}
+
+/// Map the existing enclave health state machine onto the new cumulative
+/// emoji stack. Coarse-grained transitions only — the per-container starting
+/// states are emitted by the launch pipeline itself once it adopts the new
+/// enum.
+fn enclave_status_to_stage(status: EnclaveStatus) -> TrayStatusStage {
+    match status {
+        EnclaveStatus::Verifying => TrayStatusStage::PreLaunch,
+        EnclaveStatus::ProxyReady => TrayStatusStage::GitStarting,
+        EnclaveStatus::GitReady => TrayStatusStage::InferenceStarting,
+        EnclaveStatus::AllHealthy => TrayStatusStage::AllReady,
+        EnclaveStatus::Failed => TrayStatusStage::Failed {
+            stage: Box::new(TrayStatusStage::PreLaunch),
+            descriptor: "Unhealthy environment".to_string(),
+        },
+    }
+}
+
+/// Resolve the GitHub authentication state by running `gh auth status` with
+/// a hard 5s wall-clock timeout. Any non-zero exit (including the timeout
+/// itself) is treated as "not authenticated".
+///
+/// @trace spec:tray-minimal-ux, spec:gh-auth-script
+fn gh_auth_check() -> bool {
+    let mut child = match Command::new("gh")
+        .args(["auth", "status"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .stdin(Stdio::null())
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(_) => return false,
+    };
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return status.success(),
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return false;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(_) => return false,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct ProjectEntry {
+    /// Short name — for local projects, the directory basename; for cloud
+    /// projects, the bare repo name (e.g. `forge`). `cloud_project_by_name`
+    /// indexes by this field, so it must stay unique inside its scope.
     name: String,
     path: PathBuf,
+    /// Cloud-only: the GitHub `owner/repo` slug used as the menu label so the
+    /// user sees the same identifier `gh` returns. `None` for local projects
+    /// and for cloud entries built before the GitHub fetch landed.
+    /// @trace spec:tray-ux, spec:remote-projects
+    full_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -135,20 +322,38 @@ enum LaunchKind {
     OpenCode,
     OpenCodeWeb,
     Claude,
+    /// Codex CLI agent — launches `entrypoint-forge-codex.sh` in the host
+    /// terminal. @trace spec:tray-ux
+    Codex,
     Maintenance,
 }
 
 // @trace spec:tray-minimal-ux
 #[derive(Debug, Clone)]
 struct TrayUiState {
+    #[allow(dead_code)] // consumed by legacy `handle_root_terminal`; retained for tests
     root: PathBuf,
     version: String,
     status_text: String,
     tray_icon_state: TrayIconState,
     projects: Vec<ProjectEntry>,
+    /// Cloud-side projects (e.g. GitHub repos) the user can attach to.
+    /// Populated by [`cloud::refresh_cloud_projects_if_stale`] which shells
+    /// out to `gh` with a 5-minute TTL.
+    pub(super) cloud_projects: Vec<ProjectEntry>,
+    /// Timestamp of the last *successful* `gh` fetch that populated
+    /// [`Self::cloud_projects`]. `None` means we've never fetched (and the
+    /// menu should render `(loading…)`); `Some` means we've fetched at least
+    /// once (the list may still be empty — render `(no repos)`).
+    /// @trace spec:tray-ux, spec:remote-projects
+    pub(super) last_fetched: Option<Instant>,
     selected_agent: SelectedAgent,
     forge_available: bool,
     podman_available: bool,
+    /// Cached result of `gh auth status`. Refreshed at tray launch and on
+    /// any click of the GitHubLogin entry; never polled.
+    /// @trace spec:tray-minimal-ux, spec:gh-auth-script
+    is_authenticated: bool,
     enclave_status: EnclaveStatus,
     revision: u32,
     /// Hash of projects list to detect when menu needs rebuild
@@ -360,7 +565,10 @@ fn start_control_socket_server() -> Result<(), String> {
 
 #[derive(Debug)]
 struct TrayService {
-    state: Mutex<TrayUiState>,
+    /// Held behind an `Arc` so the cloud-refresh task running on the
+    /// `AsyncTaskExecutor` can mutate UI state without taking the whole
+    /// service by reference.
+    state: Arc<Mutex<TrayUiState>>,
     connection: OnceLock<Connection>,
     item_path: String,
     menu_path: String,
@@ -393,10 +601,19 @@ impl TrayUiState {
         // @trace spec:tray-icon-lifecycle
         // Map enclave status to icon state for consistent lifecycle representation
         let tray_icon_state = enclave_status_to_icon(enclave_status);
-        let status_text = enclave_status.status_text().to_string();
+        let status_text = if !podman_available {
+            status_label(&TrayStatusStage::PodmanMissing)
+        } else {
+            status_label(&enclave_status_to_stage(enclave_status))
+        };
 
         // Compute hash of projects list for change detection
         let projects_hash = Self::hash_projects(&projects);
+
+        // @trace spec:tray-minimal-ux, spec:gh-auth-script
+        // Cache `gh auth status` once at tray launch. Refreshed on demand
+        // when the user clicks the GitHubLogin entry — never polled.
+        let is_authenticated = gh_auth_check();
 
         Self {
             root,
@@ -404,9 +621,12 @@ impl TrayUiState {
             status_text,
             tray_icon_state,
             projects,
+            cloud_projects: Vec::new(),
+            last_fetched: None,
             selected_agent,
             forge_available,
             podman_available,
+            is_authenticated,
             enclave_status,
             revision: 1,
             projects_hash,
@@ -441,7 +661,7 @@ impl TrayService {
         // @trace gap:TR-005: Initialize async task executor with bounded queue (100 pending tasks)
         let task_executor = AsyncTaskExecutor::new(100);
         Self {
-            state: Mutex::new(state),
+            state: Arc::new(Mutex::new(state)),
             connection: OnceLock::new(),
             item_path: ITEM_PATH.to_string(),
             menu_path: MENU_PATH.to_string(),
@@ -462,6 +682,13 @@ impl TrayService {
 
     fn snapshot(&self) -> TrayUiState {
         self.state.lock().expect("tray state lock poisoned").clone()
+    }
+
+    /// Cloneable handle to the shared `TrayUiState` lock. Used by the cloud
+    /// fetcher so it can mutate state from the [`AsyncTaskExecutor`] without
+    /// owning a reference to the whole [`TrayService`].
+    fn state_handle(&self) -> Arc<Mutex<TrayUiState>> {
+        self.state.clone()
     }
 
     fn with_state<T>(&self, f: impl FnOnce(&mut TrayUiState) -> T) -> T {
@@ -541,7 +768,7 @@ impl TrayService {
                         .can_transition_to(EnclaveStatus::AllHealthy)
                     {
                         state.enclave_status = EnclaveStatus::AllHealthy;
-                        state.status_text = "✓ Environment OK".to_string();
+                        state.status_text = status_label(&TrayStatusStage::AllReady);
                         status_changed = true;
                     }
                 } else if value && state.enclave_status == EnclaveStatus::Verifying {
@@ -551,7 +778,7 @@ impl TrayService {
                         .can_transition_to(EnclaveStatus::AllHealthy)
                     {
                         state.enclave_status = EnclaveStatus::AllHealthy;
-                        state.status_text = "✓ Environment OK".to_string();
+                        state.status_text = status_label(&TrayStatusStage::AllReady);
                         status_changed = true;
                     }
                 }
@@ -568,10 +795,12 @@ impl TrayService {
         self.rebuild_after_state_change().await
     }
 
+    #[allow(dead_code)]
     fn selected_agent(&self) -> SelectedAgent {
         self.snapshot().selected_agent
     }
 
+    #[allow(dead_code)]
     fn update_selected_agent(&self, agent: SelectedAgent) {
         self.with_state(|state| {
             state.selected_agent = agent;
@@ -586,6 +815,18 @@ impl TrayService {
             .find(|project| project.name == name)
     }
 
+    /// Lookup a cloud (GitHub-sourced) project by name. Cloud projects are
+    /// surfaced under the `☁️ Cloud >` submenu and may or may not exist on
+    /// disk yet — `handle_launch_cloud_project` will clone if missing.
+    /// @trace spec:remote-projects, spec:tray-ux
+    fn cloud_project_by_name(&self, name: &str) -> Option<ProjectEntry> {
+        self.snapshot()
+            .cloud_projects
+            .into_iter()
+            .find(|project| project.name == name)
+    }
+
+    #[allow(dead_code)]
     fn launch_selected_agent_for_project(&self, _project: &ProjectEntry) -> LaunchKind {
         match self.selected_agent() {
             SelectedAgent::OpenCode => LaunchKind::OpenCode,
@@ -645,18 +886,26 @@ fn discover_projects() -> Vec<ProjectEntry> {
         else {
             continue;
         };
-        projects.push(ProjectEntry { name, path });
+        projects.push(ProjectEntry {
+            name,
+            path,
+            full_name: None,
+        });
     }
 
     projects.sort_by(|a, b| a.name.cmp(&b.name));
     projects
 }
 
+// Used by legacy `build_launch_spec` and tests; the new per-project launch
+// flow goes through `super::launch_forge_agent` instead.
+#[allow(dead_code)]
 fn action_slug(kind: LaunchKind) -> &'static str {
     match kind {
         LaunchKind::OpenCode => "opencode",
         LaunchKind::OpenCodeWeb => "opencode-web",
         LaunchKind::Claude => "claude",
+        LaunchKind::Codex => "codex",
         LaunchKind::Maintenance => "terminal",
     }
 }
@@ -710,6 +959,11 @@ fn tray_icon_tooltip(snapshot: &TrayUiState) -> (String, Vec<IconPixmap>, String
     )
 }
 
+// Legacy single-container spec builder for the pre-`launch_forge_agent` flow.
+// The new per-project launch path calls `super::build_forge_agent_run_argv`
+// after bringing up the proxy/git/inference enclave; this helper is retained
+// for the legacy `run_root_terminal` path and the build-spec unit tests.
+#[allow(dead_code)]
 fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> ContainerSpec {
     let project_name = &project.name;
     let project_path = project
@@ -764,6 +1018,10 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
             .interactive()
             .tty()
             .entrypoint("/usr/local/bin/entrypoint-forge-claude.sh"),
+        LaunchKind::Codex => spec
+            .interactive()
+            .tty()
+            .entrypoint("/usr/local/bin/entrypoint-forge-codex.sh"),
         LaunchKind::Maintenance => spec
             .interactive()
             .tty()
@@ -841,30 +1099,42 @@ fn terminal_present(candidate: &str) -> bool {
 fn launch_project_action(
     project: ProjectEntry,
     kind: LaunchKind,
-    version: String,
+    _version: String,
 ) -> Result<(), String> {
     match kind {
         LaunchKind::OpenCodeWeb => {
+            // OpenCode Web is already wired and brings its own enclave +
+            // browser surface. Untouched per the per-project-action contract.
             let project_path = project.path.display().to_string();
             super::run_opencode_web_mode(&project_path, None, None, false)
         }
-        _ => {
-            let image = format!("tillandsias-forge:v{}", version);
-            let spec = build_launch_spec(&project, kind, &image);
-            let args = spec.build_run_argv();
-            launch_in_terminal(
-                &format!("Tillandsias - {} - {}", project.name, action_slug(kind)),
-                "podman",
-                &args,
-            )
+        LaunchKind::Claude | LaunchKind::Codex | LaunchKind::OpenCode | LaunchKind::Maintenance => {
+            // @trace spec:tray-ux, spec:browser-isolation-tray-integration
+            // Interactive forge launches go through the host's default
+            // terminal emulator. The enclave (proxy + git + inference) is
+            // brought up via the idiomatic tillandsias-podman layer, then a
+            // single `podman run -it ... forge <entrypoint>` argv is handed
+            // to the terminal as the user-facing TTY surface.
+            let mode = match kind {
+                LaunchKind::Claude => super::ForgeAgentMode::Claude,
+                LaunchKind::Codex => super::ForgeAgentMode::Codex,
+                LaunchKind::OpenCode => super::ForgeAgentMode::OpenCode,
+                LaunchKind::Maintenance => super::ForgeAgentMode::Maintenance,
+                _ => unreachable!("non-interactive kinds branched above"),
+            };
+            super::launch_forge_agent(&project.name, &project.path, mode, false)
         }
     }
 }
 
+#[allow(dead_code)]
 fn run_init_action() -> Result<(), String> {
     super::run_init(false, false)
 }
 
+// Legacy root-checkout terminal launcher. The new flow launches per-project
+// shells through `super::launch_forge_agent(ForgeAgentMode::Maintenance, ...)`.
+#[allow(dead_code)]
 fn run_root_terminal(root: &Path, version: &str) -> Result<(), String> {
     let image = format!("tillandsias-forge:v{}", version);
     let project = ProjectEntry {
@@ -874,11 +1144,15 @@ fn run_root_terminal(root: &Path, version: &str) -> Result<(), String> {
             .unwrap_or("tillandsias")
             .to_string(),
         path: root.to_path_buf(),
+        full_name: None,
     };
     let spec = build_launch_spec(&project, LaunchKind::Maintenance, &image);
     launch_in_terminal("Tillandsias - Root", "podman", &spec.build_run_argv())
 }
 
+// Legacy seedling-selector handler. The new menu drives agent selection
+// directly via per-project leaves; this handler is retained for tests.
+#[allow(dead_code)]
 fn handle_select_agent(service: Arc<TrayService>, agent: SelectedAgent) {
     service.update_selected_agent(agent);
     config::save_selected_agent(agent);
@@ -947,6 +1221,125 @@ fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind:
     }
 }
 
+/// Launch a cloud-side (GitHub-sourced) project: idempotent clone into
+/// `~/src/<name>` then attach via `handle_launch_project`.
+///
+/// Flow:
+/// 1. If `~/src/<name>` does not exist, clone it from the project's repo URL
+///    (derived from the cloud `ProjectEntry`'s path or display name).
+/// 2. If it does exist, run `git fetch` to refresh remote state. This is
+///    best-effort — failure does not block the launch.
+/// 3. Hand the resulting on-disk path to the standard `launch_project_action`
+///    via `handle_launch_project` so all four interactive launch kinds
+///    (Claude / Codex / OpenCode / Maintenance) flow through the same
+///    enclave + terminal pipeline.
+///
+/// @trace spec:remote-projects, spec:tray-ux, spec:browser-isolation-tray-integration
+fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, kind: LaunchKind) {
+    if cloud.name.is_empty() {
+        eprintln!("error: cloud project has empty name; cannot launch");
+        return;
+    }
+
+    let snapshot = service.snapshot();
+    if !snapshot.podman_available {
+        eprintln!(
+            "error: podman unavailable; cannot launch cloud project '{}'",
+            cloud.name
+        );
+        return;
+    }
+    if !snapshot.forge_available {
+        eprintln!(
+            "error: forge image not ready; cannot launch cloud project '{}'",
+            cloud.name
+        );
+        return;
+    }
+
+    let service_for_emit = service.clone();
+    let cloud_name = cloud.name.clone();
+    if service
+        .task_executor
+        .spawn_task(move || {
+            // Resolve target on-disk path: ~/src/<name>. The cloud entry's
+            // `path` is the planned clone destination if the menu agent
+            // populated it; otherwise we synthesize the default.
+            let target_path = if cloud.path.as_os_str().is_empty() {
+                let Ok(home) = std::env::var("HOME") else {
+                    eprintln!("error: HOME not set; cannot resolve clone target");
+                    return;
+                };
+                PathBuf::from(home).join("src").join(&cloud.name)
+            } else {
+                cloud.path.clone()
+            };
+
+            // Step 1: clone if missing, fetch if present.
+            if !target_path.exists() {
+                // The cloud entry doesn't carry the owner directly — discover
+                // from the cached GitHub project list. The user contract
+                // example (`8007342/forge`) lives in that cache.
+                let projects = remote_projects::discover_github_projects();
+                let repo_url = projects
+                    .iter()
+                    .find(|p| p.name == cloud.name)
+                    .map(|p| p.url.clone())
+                    .unwrap_or_else(|| {
+                        // Fallback: best-effort guess so empty owner cases at
+                        // least surface a sane git error.
+                        format!("https://github.com/{}", cloud.name)
+                    });
+
+                let _ = futures::executor::block_on(service_for_emit.set_status(
+                    format!("⏳ Cloning {} ...", cloud.name),
+                    TrayIconState::Building,
+                    None,
+                ));
+                if let Err(err) =
+                    remote_projects::clone_project_from_github(&repo_url, &target_path)
+                {
+                    eprintln!("error: cloud clone failed for '{}': {}", cloud.name, err);
+                    let _ = futures::executor::block_on(service_for_emit.set_status(
+                        format!("🥀 Clone failed: {}", cloud.name),
+                        TrayIconState::Dried,
+                        None,
+                    ));
+                    return;
+                }
+            } else {
+                // Best-effort refresh — git fetch is non-fatal if it fails.
+                let _ = Command::new("git")
+                    .arg("-C")
+                    .arg(&target_path)
+                    .arg("fetch")
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status();
+            }
+
+            // Step 2: hand off to the standard local launch flow so all four
+            // interactive kinds flow through `launch_forge_agent`.
+            let entry = ProjectEntry {
+                name: cloud.name.clone(),
+                path: target_path,
+                full_name: cloud.full_name.clone(),
+            };
+            handle_launch_project(service_for_emit.clone(), entry, kind);
+        })
+        .is_err()
+    {
+        eprintln!(
+            "error: task queue full; cannot launch cloud project '{}'",
+            cloud_name
+        );
+    }
+}
+
+// Legacy init handler. The new minimal-UX menu drops the "Initialize images"
+// item; init is auto-triggered by the tray startup probe. Retained for tests.
+#[allow(dead_code)]
 fn handle_init(service: Arc<TrayService>) {
     let service_for_emit = service.clone();
     // @trace gap:TR-005: Offload initialization and UI updates to async executor (non-blocking)
@@ -988,6 +1381,9 @@ fn handle_github_login(service: Arc<TrayService>) {
 }
 
 // @trace spec:remote-projects, gap:TR-005
+// Legacy clone-project handler. The new cloud-side flow lives in
+// `handle_launch_cloud_project` (clone-then-launch). Retained for callers.
+#[allow(dead_code)]
 fn handle_clone_project(service: Arc<TrayService>, repo_url: String, repo_name: String) {
     let service_for_emit = service.clone();
     // @trace gap:TR-005: Offload project cloning to async executor (non-blocking)
@@ -1039,6 +1435,9 @@ fn handle_clone_project(service: Arc<TrayService>, repo_url: String, repo_name: 
     }
 }
 
+// Legacy root-checkout terminal handler. The new menu surfaces every project
+// (including the repo root) as a per-project leaf using Maintenance mode.
+#[allow(dead_code)]
 fn handle_root_terminal(service: Arc<TrayService>, root: PathBuf, version: String) {
     let service_for_emit = service.clone();
     // @trace gap:TR-005: Offload terminal launch to async executor (non-blocking)
@@ -1052,6 +1451,9 @@ fn handle_root_terminal(service: Arc<TrayService>, root: PathBuf, version: Strin
     }
 }
 
+// Legacy stop handler. The new menu does not currently surface a Stop leaf;
+// the action-wiring agent may resurrect it as a per-project Stop action.
+#[allow(dead_code)]
 fn handle_stop_project(service: Arc<TrayService>, project: String) {
     let service_for_emit = service.clone();
     // @trace gap:TR-005, spec:menu-action-error-handling
@@ -1109,6 +1511,292 @@ fn build_separator_item(id: i32) -> MenuNode {
 }
 
 // @trace spec:tray-minimal-ux
+//
+// # Per-project action-id namespace
+//
+// All per-project menu items share a unified i32 id-space organised as a
+// `base + offset` scheme so the action-wiring agent can recover both
+// **which project** and **which action** from any leaf id with a single
+// arithmetic operation. The handler scans the project tables for `id - base`
+// in `0..LeafAction::COUNT`.
+//
+// Reserved id ranges:
+//
+// | Range                     | Owner                                                     |
+// |---------------------------|-----------------------------------------------------------|
+// | `0..=31`                  | Static top-level items (status, login, separators, quit)  |
+// | `0x1000_0000..0x5000_0000`| Local project bases (`~/src/*`)                           |
+// | `0x5000_0000..0x8000_0000`| Cloud project bases (e.g. `Cloud/<repo>`)                 |
+// | `0x7FFF_FFFE`             | "(loading…)" placeholder leaf for empty Cloud submenu     |
+// | `0x7FFF_FFFD`             | "(loading…)" placeholder leaf for empty ~/src submenu     |
+//
+// Offset table (must match [`LeafAction`]):
+//
+// | Offset | Leaf            | Emoji   |
+// |--------|-----------------|---------|
+// | +0     | Claude          | 👾      |
+// | +1     | Codex           | 🏗️      |
+// | +2     | OpenCode        | 💻      |
+// | +3     | OpenCode Web    | 📐      |
+// | +4     | Maintenance     | 🔧      |
+// | +5     | (submenu node)  | —       |
+//
+// Helpers: [`local_project_base`], [`cloud_project_base`], and
+// [`project_action_from_id`] are the only place this layout is encoded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LeafAction {
+    Claude,
+    Codex,
+    OpenCode,
+    OpenCodeWeb,
+    Maintenance,
+}
+
+impl LeafAction {
+    const ALL: [LeafAction; 5] = [
+        LeafAction::Claude,
+        LeafAction::Codex,
+        LeafAction::OpenCode,
+        LeafAction::OpenCodeWeb,
+        LeafAction::Maintenance,
+    ];
+
+    fn offset(self) -> i32 {
+        match self {
+            LeafAction::Claude => 0,
+            LeafAction::Codex => 1,
+            LeafAction::OpenCode => 2,
+            LeafAction::OpenCodeWeb => 3,
+            LeafAction::Maintenance => 4,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            LeafAction::Claude => "\u{1F47E} Claude",
+            LeafAction::Codex => "\u{1F3D7}\u{FE0F} Codex",
+            LeafAction::OpenCode => "\u{1F4BB} OpenCode",
+            LeafAction::OpenCodeWeb => "\u{1F4D0} OpenCode Web",
+            LeafAction::Maintenance => "\u{1F527} Maintenance",
+        }
+    }
+
+    fn from_offset(offset: i32) -> Option<LeafAction> {
+        Self::ALL.iter().copied().find(|a| a.offset() == offset)
+    }
+}
+
+/// Project namespace: which top-level submenu owns a given project base.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProjectScope {
+    Local,
+    Cloud,
+}
+
+const LOCAL_BASE_LO: i32 = 0x1000_0000;
+const LOCAL_BASE_HI: i32 = 0x5000_0000;
+const CLOUD_BASE_LO: i32 = 0x5000_0000;
+const CLOUD_BASE_HI: i32 = 0x7FFF_FFF0;
+const LOADING_LOCAL_ID: i32 = 0x7FFF_FFFD;
+const LOADING_CLOUD_ID: i32 = 0x7FFF_FFFE;
+const PROJECT_LEAF_COUNT: i32 = 5;
+const PROJECT_SUBMENU_OFFSET: i32 = 5;
+
+fn project_base(name: &str, scope: ProjectScope) -> i32 {
+    use std::hash::Hash;
+    use std::hash::Hasher;
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    name.hash(&mut hash);
+    let (lo, hi) = match scope {
+        ProjectScope::Local => (LOCAL_BASE_LO, LOCAL_BASE_HI),
+        ProjectScope::Cloud => (CLOUD_BASE_LO, CLOUD_BASE_HI),
+    };
+    // Quantise to multiples of 16 so leaf offsets (0..=5) never overflow
+    // into the next project's base.
+    let span = ((hi - lo) / 16) as u32;
+    let raw = (hash.finish() as u32) % span.max(1);
+    lo + (raw as i32) * 16
+}
+
+fn local_project_base(name: &str) -> i32 {
+    project_base(name, ProjectScope::Local)
+}
+
+fn cloud_project_base(name: &str) -> i32 {
+    project_base(name, ProjectScope::Cloud)
+}
+
+/// Recover `(project_name, scope, action)` from a leaf id, scanning the
+/// known project tables. Returns `None` if the id is neither a per-project
+/// leaf nor a per-project submenu node.
+fn project_action_from_id(
+    state: &TrayUiState,
+    id: i32,
+) -> Option<(String, ProjectScope, Option<LeafAction>)> {
+    for project in &state.projects {
+        let base = local_project_base(&project.name);
+        if id >= base && id < base + PROJECT_LEAF_COUNT {
+            return Some((
+                project.name.clone(),
+                ProjectScope::Local,
+                LeafAction::from_offset(id - base),
+            ));
+        }
+        if id == base + PROJECT_SUBMENU_OFFSET {
+            return Some((project.name.clone(), ProjectScope::Local, None));
+        }
+    }
+    for project in &state.cloud_projects {
+        let base = cloud_project_base(&project.name);
+        if id >= base && id < base + PROJECT_LEAF_COUNT {
+            return Some((
+                project.name.clone(),
+                ProjectScope::Cloud,
+                LeafAction::from_offset(id - base),
+            ));
+        }
+        if id == base + PROJECT_SUBMENU_OFFSET {
+            return Some((project.name.clone(), ProjectScope::Cloud, None));
+        }
+    }
+    None
+}
+
+// @trace spec:tray-minimal-ux
+/// Build the per-project submenu (five leaves, no nesting).
+///
+/// The submenu node's id is `base + PROJECT_SUBMENU_OFFSET`; each leaf is
+/// `base + LeafAction::offset()`. All leaves are emitted with `enabled=true`
+/// **unless** podman is unavailable, in which case every leaf is disabled.
+fn build_project_submenu(
+    state: &TrayUiState,
+    project: &ProjectEntry,
+    scope: ProjectScope,
+) -> MenuNode {
+    let base = match scope {
+        ProjectScope::Local => local_project_base(&project.name),
+        ProjectScope::Cloud => cloud_project_base(&project.name),
+    };
+    let leaf_enabled = state.podman_available;
+
+    let children = LeafAction::ALL
+        .iter()
+        .map(|action| {
+            child(node(
+                base + action.offset(),
+                props(vec![
+                    ("label".to_string(), ov_str(action.label())),
+                    ("enabled".to_string(), ov(Value::from(leaf_enabled))),
+                    ("visible".to_string(), ov(Value::from(true))),
+                ]),
+                Vec::new(),
+            ))
+        })
+        .collect();
+
+    // Cloud entries carry a `full_name` (e.g. `8007342/forge`) so the user
+    // sees the same identifier `gh` returns. Local entries fall back to the
+    // bare directory name.
+    let label = project
+        .full_name
+        .clone()
+        .unwrap_or_else(|| project.name.clone());
+
+    node(
+        base + PROJECT_SUBMENU_OFFSET,
+        props(vec![
+            ("label".to_string(), ov_str(label)),
+            ("enabled".to_string(), ov(Value::from(true))),
+            ("visible".to_string(), ov(Value::from(true))),
+            ("children-display".to_string(), ov_str("submenu")),
+        ]),
+        children,
+    )
+}
+
+/// Build the `~/src >` submenu listing every discovered local project.
+///
+/// When the project list is empty (still loading, or genuinely empty
+/// `~/src`), a single disabled `(loading…)` child is emitted so the
+/// submenu chevron doesn't dead-end.
+fn build_local_projects_submenu(state: &TrayUiState) -> MenuNode {
+    let mut children: Vec<OwnedValue> = state
+        .projects
+        .iter()
+        .map(|p| child(build_project_submenu(state, p, ProjectScope::Local)))
+        .collect();
+    if children.is_empty() {
+        children.push(child(node(
+            LOADING_LOCAL_ID,
+            props(vec![
+                ("label".to_string(), ov_str("(loading\u{2026})")),
+                ("enabled".to_string(), ov(Value::from(false))),
+                ("visible".to_string(), ov(Value::from(true))),
+            ]),
+            Vec::new(),
+        )));
+    }
+    node(
+        21,
+        props(vec![
+            ("label".to_string(), ov_str("\u{1F3E0} ~/src")),
+            ("enabled".to_string(), ov(Value::from(true))),
+            ("visible".to_string(), ov(Value::from(true))),
+            ("children-display".to_string(), ov_str("submenu")),
+        ]),
+        children,
+    )
+}
+
+/// Build the `☁️ Cloud >` submenu listing every discovered cloud project.
+///
+/// Population of `state.cloud_projects` is owned by
+/// [`cloud::refresh_cloud_projects_if_stale`]. When the list is empty the
+/// placeholder text depends on whether we've ever fetched: `(loading…)`
+/// before the first fetch, `(no repos)` after a successful fetch with zero
+/// results.
+fn build_cloud_projects_submenu(state: &TrayUiState) -> MenuNode {
+    let mut children: Vec<OwnedValue> = state
+        .cloud_projects
+        .iter()
+        .map(|p| child(build_project_submenu(state, p, ProjectScope::Cloud)))
+        .collect();
+    if children.is_empty() {
+        let placeholder = if state.last_fetched.is_none() {
+            "(loading\u{2026})"
+        } else {
+            "(no repos)"
+        };
+        children.push(child(node(
+            LOADING_CLOUD_ID,
+            props(vec![
+                ("label".to_string(), ov_str(placeholder)),
+                ("enabled".to_string(), ov(Value::from(false))),
+                ("visible".to_string(), ov(Value::from(true))),
+            ]),
+            Vec::new(),
+        )));
+    }
+    node(
+        22,
+        props(vec![
+            ("label".to_string(), ov_str("\u{2601}\u{FE0F} Cloud")),
+            ("enabled".to_string(), ov(Value::from(true))),
+            ("visible".to_string(), ov(Value::from(true))),
+            ("children-display".to_string(), ov_str("submenu")),
+        ]),
+        children,
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Legacy helpers preserved for now: they still feed `handle_*` callbacks that
+// are part of the action-wiring agent's territory. They are not invoked from
+// the new `build_menu`. They will be cleaned up by the action-wiring change.
+// ---------------------------------------------------------------------------
+
+#[allow(dead_code)]
+// @trace spec:tray-minimal-ux
 fn build_seedlings_submenu(state: &TrayUiState) -> MenuNode {
     let mut children = Vec::new();
     for agent in [
@@ -1153,6 +1841,7 @@ fn build_seedlings_submenu(state: &TrayUiState) -> MenuNode {
     )
 }
 
+#[allow(dead_code)]
 // @trace spec:remote-projects
 fn build_clone_project_submenu(state: &TrayUiState) -> MenuNode {
     let mut children = Vec::new();
@@ -1201,20 +1890,16 @@ fn build_clone_project_submenu(state: &TrayUiState) -> MenuNode {
     )
 }
 
+#[allow(dead_code)]
 // @trace spec:tray-ux, spec:tray-minimal-ux
-/// Build a project submenu with runtime state detection.
-/// Menu items: "Attach Here", "Maintenance", and optionally "Stop" if web container is running.
-/// All items are enabled only when forge_available AND podman_available.
-fn build_project_submenu(state: &TrayUiState, project: &ProjectEntry) -> MenuNode {
+/// LEGACY (pre-minimal-ux): Build a project submenu with runtime state detection.
+fn build_project_submenu_legacy(state: &TrayUiState, project: &ProjectEntry) -> MenuNode {
     build_project_submenu_with_running(state, project, podman_running_web_container(&project.name))
 }
 
+#[allow(dead_code)]
 // @trace spec:tray-ux, spec:tray-minimal-ux
-/// Build a project submenu with explicit running state.
-/// Visibility rules:
-/// - "Attach Here": enabled if forge_available AND podman_available
-/// - "Maintenance": enabled if forge_available AND podman_available
-/// - "Stop": only shown if running_web=true (no disabled state)
+/// LEGACY (pre-minimal-ux): Build a project submenu with explicit running state.
 fn build_project_submenu_with_running(
     state: &TrayUiState,
     project: &ProjectEntry,
@@ -1268,11 +1953,13 @@ fn build_project_submenu_with_running(
     )
 }
 
+#[allow(dead_code)]
 fn podman_running_web_container(project_name: &str) -> bool {
     let container_name = format!("tillandsias-{project_name}-forge");
     container_exists_sync(&container_name)
 }
 
+#[allow(dead_code)]
 fn stable_project_item_id(project: &str, suffix: &str) -> i32 {
     let mut hash = std::collections::hash_map::DefaultHasher::new();
     use std::hash::Hash;
@@ -1284,62 +1971,80 @@ fn stable_project_item_id(project: &str, suffix: &str) -> i32 {
 }
 
 // @trace spec:tray-minimal-ux, spec:tray-ux, spec:tray-progress-and-icon-states
-/// Build the tray menu following minimal explicit UX pattern.
+/// Build the minimal tray menu.
 ///
-/// ## Menu Structure
+/// ## Final shape (top to bottom)
 ///
-/// ### Static Base Items (always visible)
-/// 1. Status element (id=1) — disabled, shows current enclave status with emoji
-/// 2. Separator (id=2) — visual divider
-/// 3. Version/Attribution (id=30) — disabled, shows "Tillandsias v{version}"
-/// 4. Quit button (id=31) — enabled, closes the application
+/// ```text
+/// 1. Status (disabled, live-updating)            id=1
+/// 2. 🔑 GitHubLogin                              id=20  (visible iff NOT authenticated)
+///    OR
+///    🏠 ~/src >                                  id=21  (visible iff authenticated)
+///    ☁️ Cloud >                                  id=22  (visible iff authenticated)
+/// 3. ─── separator ───                           id=29
+/// 4. v<full-version> — By Tlatoāni              id=30  (disabled)
+/// 5. ❌ Quit Tillandsias                         id=31
+/// ```
 ///
-/// ### Dynamic Region (shown only when forge_available=true AND enclave_status != Failed)
-/// When the dynamic region is hidden (forge unavailable or enclave failed), only the 4 base items appear.
-/// When visible, adds:
-/// 1. Seedlings submenu (id=10) — agent selector with checkmark
-/// 2. Project submenus (one per project) — each with Attach/Maintenance/Stop items
-/// 3. Clone Project submenu (id=20) — GitHub project discovery
-/// 4. GitHub Login button (id=22) — for authentication setup
+/// ## Item-count contract
 ///
-/// ## Visibility Rules
-/// - Static items are ALWAYS visible and never disabled
-/// - Dynamic items are completely hidden (not disabled) when forge unavailable
-/// - This ensures clean "cold start" experience with 4 items, expanding to full menu when ready
-/// - Failed state collapses dynamic region to show user the error without distraction
+/// | Authenticated? | Visible top-level items |
+/// |----------------|-------------------------|
+/// | No             | 5: status + login + separator + version + quit |
+/// | Yes            | 6: status + ~/src + Cloud + separator + version + quit |
 ///
-/// ## Minimal UX Principle
-/// No surprises. Menu items appear only when the system is ready to use them.
-/// Users never see disabled items that can't do anything.
+/// ## Podman-unavailable degradation
+///
+/// When `state.podman_available == false`, *every* per-project leaf is
+/// emitted with `enabled=false` and the status line is replaced with
+/// `❌ Podman not available`. The top-level shape is unchanged so the menu
+/// remains stable across the failure boundary.
 fn build_menu(state: &TrayUiState) -> MenuNode {
     let mut children = Vec::new();
 
-    // @trace spec:tray-minimal-ux
-    // Always visible: Status element (id=1)
-    // Shows current enclave state with emoji indicators
+    // (1) Status element — always visible, always disabled.
+    let status_text = if state.podman_available {
+        state.status_text.clone()
+    } else {
+        status_label(&TrayStatusStage::PodmanMissing)
+    };
     children.push(child(node(
         1,
         props(vec![
-            ("label".to_string(), ov_str(state.status_text.clone())),
+            ("label".to_string(), ov_str(status_text)),
             ("enabled".to_string(), ov(Value::from(false))),
             ("visible".to_string(), ov(Value::from(true))),
         ]),
         Vec::new(),
     )));
 
-    // @trace spec:tray-minimal-ux
-    // Always visible: Divider (id=2)
-    children.push(child(build_separator_item(2)));
+    // (2) Auth-gated row. Exactly one of {GitHubLogin} OR {~/src, Cloud}
+    //     is emitted, never both.
+    if state.is_authenticated {
+        children.push(child(build_local_projects_submenu(state)));
+        children.push(child(build_cloud_projects_submenu(state)));
+    } else {
+        children.push(child(node(
+            20,
+            props(vec![
+                ("label".to_string(), ov_str("\u{1F511} GitHubLogin")),
+                ("enabled".to_string(), ov(Value::from(true))),
+                ("visible".to_string(), ov(Value::from(true))),
+            ]),
+            Vec::new(),
+        )));
+    }
 
-    // @trace spec:tray-minimal-ux
-    // Always visible: Version + Attribution (id=30)
-    // Shows Tillandsias version number for user reference and attribution
+    // (3) Separator.
+    children.push(child(build_separator_item(29)));
+
+    // (4) Version + attribution. Always disabled.
     children.push(child(node(
         30,
         props(vec![
             (
                 "label".to_string(),
-                ov_str(format!("Tillandsias v{}", state.version)),
+                ov_str(format!("v{} \u{2014} By Tlatoa\u{0304}ni", state.version)),
             ),
             ("enabled".to_string(), ov(Value::from(false))),
             ("visible".to_string(), ov(Value::from(true))),
@@ -1347,57 +2052,16 @@ fn build_menu(state: &TrayUiState) -> MenuNode {
         Vec::new(),
     )));
 
-    // @trace spec:tray-minimal-ux
-    // Always visible: Quit button (id=31)
-    // Only actionable menu item in the base section
+    // (5) Quit.
     children.push(child(node(
         31,
         props(vec![
-            ("label".to_string(), ov_str("Quit Tillandsias")),
+            ("label".to_string(), ov_str("\u{274C} Quit Tillandsias")),
             ("enabled".to_string(), ov(Value::from(true))),
             ("visible".to_string(), ov(Value::from(true))),
         ]),
         Vec::new(),
     )));
-
-    // @trace spec:tray-minimal-ux, spec:tray-progress-and-icon-states
-    // Dynamic region: shown only when forge is available AND enclave is not failed
-    // When forge is unavailable (cold start) or enclave has failed, only show the 4 base items
-    // This implements "no surprises" by hiding entire feature set until system is ready
-    if state.forge_available && state.enclave_status != EnclaveStatus::Failed {
-        // @trace spec:tray-ux
-        // Seedlings submenu: agent selector
-        // Always visible when forge_available (main project launcher UI)
-        children.push(child(build_seedlings_submenu(state)));
-
-        // @trace spec:tray-ux
-        // Project submenus: one per discovered local project
-        // Each project shows: Attach Here, Maintenance, Stop (if running)
-        for project in &state.projects {
-            children.push(child(build_project_submenu(state, project)));
-        }
-
-        // @trace spec:tray-ux, spec:remote-projects
-        // Clone Project submenu: GitHub project discovery and cloning
-        // Shows top 5 recent GitHub projects for quick access
-        children.push(child(build_clone_project_submenu(state)));
-
-        // @trace spec:tray-ux, spec:gh-auth-script
-        // GitHub Login button: credentials setup
-        // Enabled only if podman is available (can't run without container support)
-        children.push(child(node(
-            22,
-            props(vec![
-                ("label".to_string(), ov_str("GitHub Login")),
-                (
-                    "enabled".to_string(),
-                    ov(Value::from(state.podman_available)),
-                ),
-                ("visible".to_string(), ov(Value::from(true))),
-            ]),
-            Vec::new(),
-        )));
-    }
 
     node(
         0,
@@ -1641,7 +2305,28 @@ impl DbusMenuIface {
         }
     }
 
-    async fn about_to_show(&self, _id: i32) -> fdo::Result<(bool, bool)> {
+    async fn about_to_show(&self, id: i32) -> fdo::Result<(bool, bool)> {
+        // The ☁️ Cloud submenu (id=22) opens — refresh if our TTL expired.
+        // The root menu (id=0) opens — refresh too, since many trays call
+        // AboutToShow on the root rather than per-submenu. Both paths are
+        // event-driven, not polled.
+        // @trace spec:tray-ux, spec:remote-projects
+        if id == 22 || id == 0 {
+            let service = self.0.clone();
+            let service_for_task = service.clone();
+            let state_handle = service.state_handle();
+            if service
+                .task_executor
+                .spawn_task(move || {
+                    let _ = cloud::refresh_cloud_projects_if_stale(state_handle, false, false);
+                    let _ =
+                        futures::executor::block_on(service_for_task.rebuild_after_state_change());
+                })
+                .is_err()
+            {
+                warn!("task queue full: skipping cloud refresh on submenu open");
+            }
+        }
         Ok((true, false))
     }
 
@@ -1656,75 +2341,79 @@ impl DbusMenuIface {
             return Ok((0, false));
         }
 
-        let state = self.0.snapshot();
-        let mut flat = Vec::new();
-        flatten_layout(&build_menu(&state), &mut flat);
-
-        if let Some((_, props)) = flat.iter().find(|(item_id, _)| *item_id == id) {
-            if let Some(label) = props.get("label") {
-                let label = String::try_from(
-                    label
-                        .try_clone()
-                        .map_err(|e| fdo::Error::Failed(e.to_string()))?,
-                )
-                .unwrap_or_default();
-                match label.as_str() {
-                    "Initialize images" => handle_init(self.0.clone()),
-                    "GitHub Login" => handle_github_login(self.0.clone()),
-                    "Root Terminal" => {
-                        let snapshot = self.0.snapshot();
-                        if snapshot.forge_available && snapshot.podman_available {
-                            handle_root_terminal(self.0.clone(), snapshot.root, snapshot.version);
+        // Static-id dispatch covers the minimal-UX skeleton. Per-project
+        // leaves are routed through `project_action_from_id` so the
+        // action-wiring agent can plug in handlers in a single place.
+        match id {
+            31 => {
+                std::process::exit(0);
+            }
+            20 => {
+                // GitHubLogin click: launch the gh login flow AND refresh
+                // the cached auth state. This is the only path that
+                // re-reads `gh auth status` outside tray launch.
+                handle_github_login(self.0.clone());
+                let service = self.0.clone();
+                let service_for_task = service.clone();
+                if service
+                    .task_executor
+                    .spawn_task(move || {
+                        let authed = gh_auth_check();
+                        service_for_task.with_state(|state| {
+                            state.is_authenticated = authed;
+                            state.bump_revision();
+                        });
+                        // @trace spec:tray-ux, spec:remote-projects
+                        // Newly-authenticated user: force-refresh the cloud
+                        // list so the submenu populates without waiting for
+                        // the next AboutToShow.
+                        if authed {
+                            let _ = cloud::refresh_cloud_projects_if_stale(
+                                service_for_task.state_handle(),
+                                true,
+                                false,
+                            );
                         }
-                    }
-                    "Quit Tillandsias" => {
-                        std::process::exit(0);
-                    }
-                    "Attach Here" => {
-                        if let Some((project, _)) = project_from_id(&state, id) {
-                            if let Some(project_entry) = self.0.project_by_name(&project) {
-                                let kind = self.0.launch_selected_agent_for_project(&project_entry);
-                                handle_launch_project(self.0.clone(), project_entry, kind);
+                        let _ = futures::executor::block_on(
+                            service_for_task.rebuild_after_state_change(),
+                        );
+                    })
+                    .is_err()
+                {
+                    warn!("task queue full: skipping gh auth refresh");
+                }
+            }
+            21 | 22 | 29 | 30 => {
+                // submenu container, separator, or version label — no-op.
+            }
+            _ => {
+                let state = self.0.snapshot();
+                if let Some((project_name, scope, Some(action))) =
+                    project_action_from_id(&state, id)
+                {
+                    // Per-project leaf: route local-project actions through
+                    // the existing launch helpers, and cloud-project actions
+                    // through an idempotent clone-then-launch path.
+                    {
+                        let kind = match action {
+                            LeafAction::Claude => LaunchKind::Claude,
+                            LeafAction::OpenCode => LaunchKind::OpenCode,
+                            LeafAction::OpenCodeWeb => LaunchKind::OpenCodeWeb,
+                            LeafAction::Maintenance => LaunchKind::Maintenance,
+                            LeafAction::Codex => LaunchKind::Codex,
+                        };
+                        match scope {
+                            ProjectScope::Local => {
+                                if let Some(project_entry) = self.0.project_by_name(&project_name) {
+                                    handle_launch_project(self.0.clone(), project_entry, kind);
+                                }
                             }
-                        }
-                    }
-                    "Maintenance" => {
-                        if let Some((project, _)) = project_from_id(&state, id) {
-                            if let Some(project_entry) = self.0.project_by_name(&project) {
-                                handle_launch_project(
-                                    self.0.clone(),
-                                    project_entry,
-                                    LaunchKind::Maintenance,
-                                );
-                            }
-                        }
-                    }
-                    "Stop" => {
-                        if let Some((project, _)) = project_from_id(&state, id) {
-                            handle_stop_project(self.0.clone(), project);
-                        }
-                    }
-                    "OpenCode Web" | "OpenCode" | "Claude" => {
-                        if let Some(agent) = parse_seedling_label(&label) {
-                            handle_select_agent(self.0.clone(), agent);
-                        }
-                    }
-                    _ => {
-                        // Check if this is a clone project item (format: "owner repo-name")
-                        // Clone project items have IDs in range 2000-2099
-                        if id >= 2000 && id < 2100 {
-                            // Parse the label to get owner and repo name
-                            let parts: Vec<&str> = label.split_whitespace().collect();
-                            if parts.len() >= 2 {
-                                let owner = parts[0];
-                                let repo_name = parts[1];
-                                let repo_url =
-                                    format!("https://github.com/{}/{}", owner, repo_name);
-                                handle_clone_project(
-                                    self.0.clone(),
-                                    repo_url,
-                                    repo_name.to_string(),
-                                );
+                            ProjectScope::Cloud => {
+                                if let Some(cloud_entry) =
+                                    self.0.cloud_project_by_name(&project_name)
+                                {
+                                    handle_launch_cloud_project(self.0.clone(), cloud_entry, kind);
+                                }
                             }
                         }
                     }
@@ -1799,6 +2488,7 @@ fn flatten_layout(node: &MenuNode, out: &mut Vec<(i32, HashMap<String, OwnedValu
     }
 }
 
+#[allow(dead_code)]
 fn project_from_id(state: &TrayUiState, id: i32) -> Option<(String, String)> {
     for project in &state.projects {
         let attach = stable_project_item_id(&project.name, "attach-here");
@@ -1817,6 +2507,7 @@ fn project_from_id(state: &TrayUiState, id: i32) -> Option<(String, String)> {
     None
 }
 
+#[allow(dead_code)]
 fn parse_seedling_label(label: &str) -> Option<SelectedAgent> {
     match label {
         "OpenCode Web" => Some(SelectedAgent::OpenCodeWeb),
@@ -1877,21 +2568,25 @@ mod tests {
         let projects = vec![ProjectEntry {
             name: "alpha".to_string(),
             path: PathBuf::from("/tmp/alpha"),
+            full_name: None,
         }];
         let projects_hash = TrayUiState::hash_projects(&projects);
         TrayUiState {
             root: PathBuf::from("/tmp/tillandsias-test-root"),
             version: "0.1.260506.6".to_string(),
-            status_text: enclave_status.status_text().to_string(),
+            status_text: status_label(&enclave_status_to_stage(enclave_status)),
             tray_icon_state: if forge_available {
                 TrayIconState::Mature
             } else {
                 TrayIconState::Pup
             },
             projects,
+            cloud_projects: Vec::new(),
+            last_fetched: None,
             selected_agent,
             forge_available,
             podman_available: true,
+            is_authenticated: false,
             enclave_status,
             revision: 1,
             projects_hash,
@@ -1942,8 +2637,12 @@ mod tests {
     struct TrayStateBuilder {
         agent: SelectedAgent,
         forge_available: bool,
+        podman_available: bool,
+        is_authenticated: bool,
         enclave_status: EnclaveStatus,
         projects: Vec<ProjectEntry>,
+        cloud_projects: Vec<ProjectEntry>,
+        last_fetched: Option<Instant>,
     }
 
     impl TrayStateBuilder {
@@ -1951,18 +2650,21 @@ mod tests {
             Self {
                 agent: SelectedAgent::OpenCodeWeb,
                 forge_available: false,
+                podman_available: true,
+                is_authenticated: false,
                 enclave_status: EnclaveStatus::Verifying,
                 projects: vec![ProjectEntry {
                     name: "test-project".to_string(),
                     path: std::path::PathBuf::from("/tmp/test-project"),
+                    full_name: None,
                 }],
+                cloud_projects: Vec::new(),
+                last_fetched: None,
             }
         }
 
         fn forge_available(mut self, available: bool) -> Self {
             self.forge_available = available;
-            // Don't auto-set enclave_status here; use enclave_status() method for explicit control
-            // This allows tests to independently set forge_available and enclave_status
             self
         }
 
@@ -1976,8 +2678,35 @@ mod tests {
             self
         }
 
+        fn authenticated(mut self, value: bool) -> Self {
+            self.is_authenticated = value;
+            self
+        }
+
+        #[allow(dead_code)]
+        fn podman_available(mut self, value: bool) -> Self {
+            self.podman_available = value;
+            self
+        }
+
+        #[allow(dead_code)]
+        fn cloud_projects(mut self, projects: Vec<ProjectEntry>) -> Self {
+            self.cloud_projects = projects;
+            self
+        }
+
+        #[allow(dead_code)]
+        fn last_fetched(mut self, value: Option<Instant>) -> Self {
+            self.last_fetched = value;
+            self
+        }
+
         fn build(self) -> TrayUiState {
-            let status_text = self.enclave_status.status_text().to_string();
+            let status_text = if self.podman_available {
+                status_label(&enclave_status_to_stage(self.enclave_status))
+            } else {
+                status_label(&TrayStatusStage::PodmanMissing)
+            };
             let projects_hash = TrayUiState::hash_projects(&self.projects);
             // @trace spec:tray-icon-lifecycle
             // Icon should reflect enclave status, not just forge_available
@@ -1988,9 +2717,12 @@ mod tests {
                 status_text,
                 tray_icon_state,
                 projects: self.projects,
+                cloud_projects: self.cloud_projects,
+                last_fetched: self.last_fetched,
                 selected_agent: self.agent,
                 forge_available: self.forge_available,
-                podman_available: true,
+                podman_available: self.podman_available,
+                is_authenticated: self.is_authenticated,
                 enclave_status: self.enclave_status,
                 revision: 1,
                 projects_hash,
@@ -2000,165 +2732,141 @@ mod tests {
 
     // @trace spec:tray-minimal-ux
     #[test]
-    fn minimal_menu_has_exactly_4_items_at_launch() {
-        // When forge_available = false (cold start), menu should have exactly 4 items:
-        // 1. Status element
-        // 2. Divider
-        // 3. Version
-        // 4. Quit button
-        let state = test_state(SelectedAgent::OpenCodeWeb, false);
+    fn minimal_menu_has_5_top_level_items_when_unauthenticated() {
+        // When `is_authenticated == false`, the top-level menu is exactly:
+        //   1. Status (id=1)
+        //   2. GitHubLogin (id=20)
+        //   3. Separator (id=29)
+        //   4. Version + attribution (id=30)
+        //   5. Quit (id=31)
+        let state = TrayStateBuilder::new()
+            .forge_available(false)
+            .enclave_status(EnclaveStatus::Verifying)
+            .authenticated(false)
+            .build();
         let menu = build_menu(&state);
 
-        let mut flat = Vec::new();
-        flatten_layout(&menu, &mut flat);
-
-        // Filter out root node (id=0), count remaining items
-        let items: Vec<_> = flat.iter().filter(|(id, _)| *id != 0).collect();
+        let top_level = &menu.2;
         assert_eq!(
-            items.len(),
-            4,
-            "Expected exactly 4 items at launch (when forge_available=false), got {}. Items: {:?}",
-            items.len(),
-            items
-                .iter()
-                .map(|(_, p)| p.get("label"))
-                .collect::<Vec<_>>()
+            top_level.len(),
+            5,
+            "Expected exactly 5 top-level items when unauthenticated, got {}",
+            top_level.len()
         );
 
-        // Verify the items are status, divider, version, quit
-        let labels = labels(&menu);
+        let label_list = labels(&menu);
         assert!(
-            labels.contains(&"☐ Verifying environment...".to_string()),
-            "Missing status element"
+            label_list
+                .iter()
+                .any(|l| l.contains("Verifying environment")),
+            "Missing status element. labels={:?}",
+            label_list
         );
         assert!(
-            labels.contains(&"Tillandsias v0.1.260506.6".to_string()),
-            "Missing version"
+            label_list.iter().any(|l| l.contains("GitHubLogin")),
+            "Missing GitHubLogin entry"
         );
         assert!(
-            labels.contains(&"Quit Tillandsias".to_string()),
+            label_list
+                .iter()
+                .any(|l| l.contains("By Tlato") && l.contains("0.1.260506.6")),
+            "Missing version + attribution. labels={:?}",
+            label_list
+        );
+        assert!(
+            label_list.iter().any(|l| l.contains("Quit Tillandsias")),
             "Missing quit button"
         );
 
-        // Verify separator is present (no label, has "type": "separator")
-        let has_separator = flat.iter().any(|(_, props)| {
-            props
-                .get("type")
-                .and_then(|v| v.try_clone().ok())
-                .and_then(|v| String::try_from(v).ok())
-                == Some("separator".to_string())
-        });
-        assert!(has_separator, "Missing separator divider");
+        // No ~/src / Cloud at this auth stage.
+        assert!(!label_list.iter().any(|l| l.contains("~/src")));
+        assert!(!label_list.iter().any(|l| l.contains("Cloud")));
     }
 
     // @trace spec:tray-minimal-ux
     #[test]
-    fn menu_expands_when_forge_available() {
-        // When forge_available = true, menu should expand beyond 4 items to include:
-        // - Seedlings submenu
-        // - Project submenus
-        // - GitHub login button
-        let state = test_state(SelectedAgent::OpenCodeWeb, true);
+    fn menu_expands_when_authenticated() {
+        // When `is_authenticated == true` the GitHubLogin row is replaced by
+        // the `~/src` + `Cloud` pair, giving 6 top-level items.
+        let state = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .authenticated(true)
+            .build();
         let menu = build_menu(&state);
 
-        let mut flat = Vec::new();
-        flatten_layout(&menu, &mut flat);
-
-        // Should have more than 4 items now
-        let items: Vec<_> = flat.iter().filter(|(id, _)| *id != 0).collect();
-        assert!(
-            items.len() >= 6,
-            "Expected >=6 items when forge_available=true, got {}",
-            items.len()
+        let top_level = &menu.2;
+        assert_eq!(
+            top_level.len(),
+            6,
+            "Expected 6 top-level items when authenticated, got {}",
+            top_level.len()
         );
 
-        // Verify seedlings submenu appears
-        let labels = labels(&menu);
+        let label_list = labels(&menu);
         assert!(
-            labels.contains(&"Seedlings".to_string()),
-            "Seedlings submenu missing when forge_available=true"
+            label_list.iter().any(|l| l.contains("~/src")),
+            "Missing ~/src submenu. labels={:?}",
+            label_list
         );
         assert!(
-            labels.contains(&"alpha".to_string()),
-            "Project submenu missing when forge_available=true"
+            label_list.iter().any(|l| l.contains("Cloud")),
+            "Missing Cloud submenu"
+        );
+        assert!(
+            !label_list.iter().any(|l| l.contains("GitHubLogin")),
+            "GitHubLogin must not appear when authenticated"
+        );
+        // The default local project from `TrayStateBuilder` is "test-project".
+        assert!(
+            label_list.contains(&"test-project".to_string()),
+            "Local project submenu missing when authenticated"
         );
     }
 
     // @trace spec:tray-minimal-ux
     #[test]
     fn status_text_reflects_enclave_status() {
-        // Verify status text matches EnclaveStatus values
         let verifying = test_state(SelectedAgent::OpenCodeWeb, false);
-        assert_eq!(
-            verifying.status_text, "☐ Verifying environment...",
-            "Status text should match Verifying state"
+        assert!(
+            verifying.status_text.contains("Verifying environment"),
+            "Expected Verifying label, got {:?}",
+            verifying.status_text
         );
-        assert_eq!(
-            verifying.enclave_status,
-            EnclaveStatus::Verifying,
-            "Enclave status should be Verifying when forge_available=false"
-        );
+        assert_eq!(verifying.enclave_status, EnclaveStatus::Verifying);
 
         let ready = test_state(SelectedAgent::OpenCodeWeb, true);
-        assert_eq!(
-            ready.status_text, "✓ Environment OK",
-            "Status text should match AllHealthy state"
+        assert!(
+            ready.status_text.contains("\u{2705} OK"),
+            "Expected AllReady label with the OK suffix, got {:?}",
+            ready.status_text
         );
-        assert_eq!(
-            ready.enclave_status,
-            EnclaveStatus::AllHealthy,
-            "Enclave status should be AllHealthy when forge_available=true"
-        );
+        assert_eq!(ready.enclave_status, EnclaveStatus::AllHealthy);
     }
 
     // @trace spec:tray-minimal-ux
     #[test]
-    fn state_transition_forge_false_to_true() {
-        // Simulate the forge becoming available (transition from Verifying → AllHealthy)
+    fn state_transition_unauthenticated_to_authenticated() {
         let initial = TrayStateBuilder::new()
             .forge_available(false)
             .enclave_status(EnclaveStatus::Verifying)
+            .authenticated(false)
             .build();
+        let before = build_menu(&initial);
+        assert_eq!(before.2.len(), 5);
 
-        let menu_before = build_menu(&initial);
-        let mut flat_before = Vec::new();
-        flatten_layout(&menu_before, &mut flat_before);
-        let items_before: Vec<_> = flat_before.iter().filter(|(id, _)| *id != 0).collect();
-
-        // Should have exactly 4 items before
-        assert_eq!(
-            items_before.len(),
-            4,
-            "Should have 4 items when forge_available=false"
-        );
-
-        // Transition to forge_available=true
-        let transitioned = TrayStateBuilder::new()
+        let after_state = TrayStateBuilder::new()
             .forge_available(true)
             .enclave_status(EnclaveStatus::AllHealthy)
+            .authenticated(true)
             .build();
+        let after = build_menu(&after_state);
+        assert_eq!(after.2.len(), 6);
 
-        let menu_after = build_menu(&transitioned);
-        let mut flat_after = Vec::new();
-        flatten_layout(&menu_after, &mut flat_after);
-        let items_after: Vec<_> = flat_after.iter().filter(|(id, _)| *id != 0).collect();
-
-        // Should expand to 6+ items after
-        assert!(
-            items_after.len() >= 6,
-            "Should have >=6 items when forge_available=true, got {}",
-            items_after.len()
-        );
-
-        // Status text should change
-        assert_ne!(
-            initial.status_text, transitioned.status_text,
-            "Status text should change on transition"
-        );
-        assert!(
-            transitioned.status_text.contains("✓"),
-            "Status should have checkmark in AllHealthy state"
-        );
+        // The status text moves from the verifying stack to the
+        // "all ready" stack (with the OK suffix).
+        assert!(initial.status_text.contains("Verifying"));
+        assert!(after_state.status_text.contains("\u{2705} OK"));
     }
 
     // @trace spec:tray-minimal-ux
@@ -2176,83 +2884,93 @@ mod tests {
     }
 
     #[test]
-    fn failed_state_collapses_dynamic_region() {
+    fn failed_enclave_status_only_changes_the_status_label() {
+        // Failure no longer collapses the menu — the ~/src and Cloud rows
+        // stay put. Only the Status label changes to the failure stack.
         let state = TrayStateBuilder::new()
             .forge_available(true)
             .enclave_status(EnclaveStatus::Failed)
+            .authenticated(true)
             .build();
         let menu = build_menu(&state);
-        let mut flat = Vec::new();
-        flatten_layout(&menu, &mut flat);
-        let items: Vec<_> = flat.iter().filter(|(id, _)| *id != 0).collect();
-        let item_labels: Vec<String> = items
-            .iter()
-            .filter_map(|(_, props)| {
-                props
-                    .get("label")
-                    .and_then(|value| value.try_clone().ok())
-                    .and_then(|value| String::try_from(value).ok())
-            })
-            .collect();
+        let top_level = &menu.2;
+        assert_eq!(top_level.len(), 6, "Failure must preserve menu shape");
 
-        assert_eq!(item_labels[0], "🥀 Unhealthy environment");
-        assert!(item_labels.contains(&"Tillandsias v0.1.260506.6".to_string()));
-        assert!(item_labels.contains(&"Quit Tillandsias".to_string()));
-        assert!(!item_labels.contains(&"Seedlings".to_string()));
-        assert!(!item_labels.contains(&"OpenCode Web".to_string()));
-        assert!(!item_labels.contains(&"OpenCode".to_string()));
-        assert!(!item_labels.contains(&"Claude".to_string()));
-        assert!(!item_labels.contains(&"GitHub Login".to_string()));
-        assert!(!item_labels.contains(&"Attach Here".to_string()));
-        assert!(!item_labels.contains(&"Maintenance".to_string()));
-        assert!(!item_labels.contains(&"Stop".to_string()));
-
-        assert_eq!(items.len(), 4);
+        let label_list = labels(&menu);
+        // labels()[0] is the root menu container ("Tillandsias");
+        // [1] is the Status row.
+        let status_line = &label_list[1];
+        assert!(
+            status_line.contains("\u{274C}"),
+            "Status must show the failure marker, got {:?}",
+            status_line
+        );
+        assert!(label_list.iter().any(|l| l.contains("~/src")));
+        assert!(label_list.iter().any(|l| l.contains("Cloud")));
+        assert!(label_list.iter().any(|l| l.contains("Quit Tillandsias")));
     }
 
     #[test]
-    fn seedlings_menu_keeps_default_order_and_active_choice() {
-        let state = test_state(SelectedAgent::OpenCodeWeb, true);
-        let menu = build_seedlings_submenu(&state);
-        let item_labels = labels(&menu);
+    fn project_submenu_has_five_leaves_in_order() {
+        // Per-project submenus are 5-leaf flat menus: Claude, Codex,
+        // OpenCode, OpenCode Web, Maintenance. Order is locked by
+        // `LeafAction::offset`.
+        let project = ProjectEntry {
+            name: "alpha".to_string(),
+            path: PathBuf::from("/tmp/alpha"),
+            full_name: None,
+        };
+        let state = TrayStateBuilder::new()
+            .forge_available(true)
+            .authenticated(true)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .projects(vec![project.clone()])
+            .build();
+        let submenu = build_project_submenu(&state, &project, ProjectScope::Local);
 
-        assert_eq!(item_labels[0], "Seedlings");
-        assert!(item_labels.contains(&"OpenCode Web".to_string()));
-        assert!(item_labels.contains(&"OpenCode".to_string()));
-        assert!(item_labels.contains(&"Claude".to_string()));
-
-        let mut flat = Vec::new();
-        flatten_layout(&menu, &mut flat);
-        let active = flat
-            .into_iter()
-            .find(|(_, props)| {
-                props
-                    .get("label")
-                    .and_then(|value| value.try_clone().ok())
-                    .and_then(|value| String::try_from(value).ok())
-                    .as_deref()
-                    == Some("OpenCode Web")
-            })
-            .and_then(|(_, props)| {
-                props
-                    .get("toggle-state")
-                    .and_then(|value| value.try_clone().ok())
-            })
-            .and_then(|value| i32::try_from(value).ok())
-            .unwrap_or_default();
-        assert_eq!(active, 1);
+        // Five leaves, no sub-submenus.
+        assert_eq!(submenu.2.len(), 5);
+        let leaf_labels = labels(&submenu);
+        // labels() walks the layout depth-first; index 0 is the submenu
+        // container, indices 1..=5 are the leaves in offset order.
+        assert_eq!(leaf_labels[0], "alpha");
+        assert!(leaf_labels[1].contains("Claude"));
+        assert!(leaf_labels[2].contains("Codex"));
+        assert!(leaf_labels[3].contains("OpenCode") && !leaf_labels[3].contains("Web"));
+        assert!(leaf_labels[4].contains("OpenCode Web"));
+        assert!(leaf_labels[5].contains("Maintenance"));
     }
 
     #[test]
-    fn project_menu_only_shows_stop_when_web_is_running() {
-        let state = test_state(SelectedAgent::OpenCodeWeb, true);
-        let project = state.projects[0].clone();
+    fn project_leaves_disabled_when_podman_missing() {
+        let project = ProjectEntry {
+            name: "alpha".to_string(),
+            path: PathBuf::from("/tmp/alpha"),
+            full_name: None,
+        };
+        let state = TrayStateBuilder::new()
+            .forge_available(false)
+            .podman_available(false)
+            .authenticated(true)
+            .enclave_status(EnclaveStatus::Failed)
+            .projects(vec![project.clone()])
+            .build();
+        let submenu = build_project_submenu(&state, &project, ProjectScope::Local);
 
-        let running = build_project_submenu_with_running(&state, &project, true);
-        let stopped = build_project_submenu_with_running(&state, &project, false);
-
-        assert!(labels(&running).contains(&"Stop".to_string()));
-        assert!(!labels(&stopped).contains(&"Stop".to_string()));
+        let mut flat = Vec::new();
+        flatten_layout(&submenu, &mut flat);
+        for (id, props) in flat.iter() {
+            // Skip the submenu container itself.
+            if *id == local_project_base(&project.name) + PROJECT_SUBMENU_OFFSET {
+                continue;
+            }
+            let enabled = props
+                .get("enabled")
+                .and_then(|v| v.try_clone().ok())
+                .and_then(|v| bool::try_from(v).ok())
+                .unwrap_or(true);
+            assert!(!enabled, "leaf id={} should be disabled", id);
+        }
     }
 
     #[test]
@@ -2260,6 +2978,7 @@ mod tests {
         let project = ProjectEntry {
             name: "alpha".to_string(),
             path: PathBuf::from("/tmp/alpha"),
+            full_name: None,
         };
         let spec = build_launch_spec(
             &project,
@@ -2285,6 +3004,7 @@ mod tests {
         let project = ProjectEntry {
             name: "alpha".to_string(),
             path: PathBuf::from("/tmp/alpha"),
+            full_name: None,
         };
         let spec = build_launch_spec(
             &project,
@@ -2555,96 +3275,74 @@ mod tests {
 
     // @trace spec:tray-minimal-ux
     #[test]
-    fn menu_hides_dynamic_region_when_forge_unavailable() {
-        // When forge_available=false, menu should have exactly 4 items
-        // (status, separator, version, quit) and NO dynamic items
+    fn unauthenticated_menu_excludes_local_and_cloud_submenus() {
         let state = TrayStateBuilder::new()
             .forge_available(false)
             .enclave_status(EnclaveStatus::Verifying)
+            .authenticated(false)
             .projects(vec![ProjectEntry {
                 name: "project-alpha".to_string(),
                 path: PathBuf::from("/tmp/project-alpha"),
+                full_name: None,
             }])
             .build();
 
         let menu = build_menu(&state);
-        let mut flat = Vec::new();
-        flatten_layout(&menu, &mut flat);
+        assert_eq!(menu.2.len(), 5, "Unauthenticated top-level must be 5 items");
 
-        // Filter to non-root items
-        let items: Vec<_> = flat.iter().filter(|(id, _)| *id != 0).collect();
-
-        // Should have exactly 4 items
-        assert_eq!(
-            items.len(),
-            4,
-            "Expected 4 items when forge unavailable, got {}. Items: {:?}",
-            items.len(),
-            items
-                .iter()
-                .filter_map(|(_, p)| p.get("label"))
-                .collect::<Vec<_>>()
-        );
-
-        let labels = labels(&menu);
-
-        // Should NOT contain any dynamic items
-        assert!(!labels.contains(&"Seedlings".to_string()));
-        assert!(!labels.contains(&"project-alpha".to_string()));
-        assert!(!labels.contains(&"Clone Project".to_string()));
-        assert!(!labels.contains(&"GitHub Login".to_string()));
+        let label_list = labels(&menu);
+        assert!(label_list.iter().any(|l| l.contains("GitHubLogin")));
+        assert!(!label_list.iter().any(|l| l.contains("~/src")));
+        assert!(!label_list.iter().any(|l| l.contains("Cloud")));
+        assert!(!label_list.contains(&"project-alpha".to_string()));
     }
 
     // @trace spec:tray-minimal-ux, spec:tray-progress-and-icon-states
     #[test]
     fn menu_collapses_on_failed_enclave_status() {
-        // When enclave_status=Failed, menu should hide dynamic region
-        // even if forge_available=true
+        // Failure no longer collapses the menu shape. The top-level row
+        // count and the ~/src / Cloud submenus must still be there; only
+        // the Status row changes label to a failure stack.
         let state = TrayStateBuilder::new()
             .forge_available(true)
             .enclave_status(EnclaveStatus::Failed)
+            .authenticated(true)
             .projects(vec![ProjectEntry {
                 name: "project-beta".to_string(),
                 path: PathBuf::from("/tmp/project-beta"),
+                full_name: None,
             }])
             .build();
 
         let menu = build_menu(&state);
-        let mut flat = Vec::new();
-        flatten_layout(&menu, &mut flat);
+        assert_eq!(menu.2.len(), 6, "Top-level must keep 6 rows on failure");
 
-        let items: Vec<_> = flat.iter().filter(|(id, _)| *id != 0).collect();
-
-        // Should have exactly 4 items (status, separator, version, quit)
-        assert_eq!(
-            items.len(),
-            4,
-            "Expected 4 items in Failed state, got {}",
-            items.len()
+        let label_list = labels(&menu);
+        // labels()[0] is the root menu container ("Tillandsias");
+        // [1] is the Status row.
+        assert!(
+            label_list[1].contains("\u{274C}"),
+            "Status row must show the failure marker, got {:?}",
+            label_list[1]
         );
-
-        let labels = labels(&menu);
-
-        // Status should show failed state
-        assert!(labels.contains(&"🥀 Unhealthy environment".to_string()));
-
-        // No dynamic items
-        assert!(!labels.contains(&"Seedlings".to_string()));
-        assert!(!labels.contains(&"project-beta".to_string()));
-        assert!(!labels.contains(&"GitHub Login".to_string()));
+        assert!(label_list.iter().any(|l| l.contains("~/src")));
+        assert!(label_list.iter().any(|l| l.contains("Cloud")));
+        assert!(label_list.contains(&"project-beta".to_string()));
     }
 
     // @trace spec:tray-minimal-ux
     #[test]
-    fn no_disabled_items_in_dynamic_region() {
-        // When dynamic region is visible, all items in it should be enabled
-        // (not disabled)
+    fn submenu_leaves_visible_when_authenticated() {
+        // When ~/src and Cloud submenus are present, every leaf and every
+        // submenu container must carry `visible=true`.
         let state = TrayStateBuilder::new()
             .forge_available(true)
             .enclave_status(EnclaveStatus::AllHealthy)
+            .authenticated(true)
             .projects(vec![ProjectEntry {
                 name: "test-proj".to_string(),
                 path: PathBuf::from("/tmp/test-proj"),
+                full_name: None,
             }])
             .build();
 
@@ -2652,21 +3350,19 @@ mod tests {
         let mut flat = Vec::new();
         flatten_layout(&menu, &mut flat);
 
-        // Check that no non-base items are disabled
         for (id, props) in flat.iter() {
-            // Skip root (id=0) and base items (1, 2, 30, 31)
-            if matches!(id, 0 | 1 | 2 | 30 | 31) {
+            // Root (id=0) and separator (id=29) carry no `visible` flag
+            // with the same semantics; skip them.
+            if matches!(id, 0 | 29) {
                 continue;
             }
-
-            // All dynamic items should be visible (in the menu)
             assert_eq!(
                 props
                     .get("visible")
                     .and_then(|v| v.try_clone().ok())
                     .and_then(|v| bool::try_from(v).ok()),
                 Some(true),
-                "Item {} should be visible in dynamic region",
+                "Item {} should be visible",
                 id
             );
         }
@@ -2675,30 +3371,35 @@ mod tests {
     // @trace spec:tray-minimal-ux
     #[test]
     fn menu_items_match_current_status() {
-        // Verify that status text in menu matches current enclave status
-        let test_cases = vec![
-            (EnclaveStatus::Verifying, "☐ Verifying environment..."),
-            (EnclaveStatus::ProxyReady, "☐🌐 Building enclave..."),
-            (EnclaveStatus::GitReady, "☐🌐🪞 Building git mirror..."),
-            (EnclaveStatus::AllHealthy, "✓ Environment OK"),
-            (EnclaveStatus::Failed, "🥀 Unhealthy environment"),
+        // The menu's Status row reflects the cumulative emoji stack
+        // computed by `status_label`. Each enclave status maps onto the
+        // new stage enum via `enclave_status_to_stage`.
+        type Predicate = fn(&str) -> bool;
+        let cases: Vec<(EnclaveStatus, Predicate)> = vec![
+            (EnclaveStatus::Verifying, |s| {
+                s.contains("Verifying environment")
+            }),
+            (EnclaveStatus::AllHealthy, |s| s.contains("\u{2705} OK")),
+            (EnclaveStatus::Failed, |s| s.contains("\u{274C}")),
         ];
 
-        for (status, expected_text) in test_cases {
+        for (status, predicate) in cases {
             let state = TrayStateBuilder::new()
                 .enclave_status(status)
                 .forge_available(status == EnclaveStatus::AllHealthy)
+                .authenticated(false)
                 .build();
 
             let menu = build_menu(&state);
-            let labels = labels(&menu);
-
+            let label_list = labels(&menu);
+            // labels()[0] is the root menu container ("Tillandsias");
+            // [1] is the Status row.
+            let status_line = &label_list[1];
             assert!(
-                labels.contains(&expected_text.to_string()),
-                "Expected status text '{}' for {:?}, got labels: {:?}",
-                expected_text,
+                predicate(status_line),
+                "Status label mismatch for {:?}: {:?}",
                 status,
-                labels
+                status_line
             );
         }
     }
@@ -2706,20 +3407,24 @@ mod tests {
     // @trace spec:tray-minimal-ux
     #[test]
     fn base_items_never_disabled() {
-        // Verify the 4 base items (status, separator, version, quit)
-        // are never disabled across any state
+        // Status (id=1) and version (id=30) are always informational;
+        // separator (id=29) carries no `enabled` flag; quit (id=31) is
+        // always enabled. Verify across multiple state combinations.
         let states = vec![
             TrayStateBuilder::new()
                 .forge_available(false)
                 .enclave_status(EnclaveStatus::Verifying)
+                .authenticated(false)
                 .build(),
             TrayStateBuilder::new()
                 .forge_available(true)
                 .enclave_status(EnclaveStatus::AllHealthy)
+                .authenticated(true)
                 .build(),
             TrayStateBuilder::new()
                 .forge_available(true)
                 .enclave_status(EnclaveStatus::Failed)
+                .authenticated(true)
                 .build(),
         ];
 
@@ -2731,7 +3436,6 @@ mod tests {
             for (id, props) in flat.iter() {
                 match id {
                     1 => {
-                        // Status: always disabled (informational)
                         assert_eq!(
                             props
                                 .get("enabled")
@@ -2741,11 +3445,10 @@ mod tests {
                             "Status (id=1) should be disabled"
                         );
                     }
-                    2 => {
-                        // Separator: check it exists
+                    29 => {
+                        // Separator: carries `type=separator`, no enabled flag.
                     }
                     30 => {
-                        // Version: always disabled (informational)
                         assert_eq!(
                             props
                                 .get("enabled")
@@ -2756,7 +3459,6 @@ mod tests {
                         );
                     }
                     31 => {
-                        // Quit: always enabled
                         assert_eq!(
                             props
                                 .get("enabled")
@@ -2877,6 +3579,25 @@ pub fn run_tray_mode(config_path: Option<String>) -> Result<(), String> {
     let state = TrayUiState::new(root.clone(), version.clone(), discover_projects());
     let service = Arc::new(TrayService::new(state));
     start_control_socket_server()?;
+
+    // @trace spec:tray-ux, spec:remote-projects
+    // Kick off the initial cloud-projects fetch on the async executor so the
+    // ☁️ Cloud submenu populates without blocking tray startup. If the user
+    // isn't authenticated this is effectively a no-op inside cloud.rs.
+    if service.snapshot().is_authenticated {
+        let service_for_init = service.clone();
+        let state_handle = service.state_handle();
+        if service
+            .task_executor
+            .spawn_task(move || {
+                let _ = cloud::refresh_cloud_projects_if_stale(state_handle, false, false);
+                let _ = futures::executor::block_on(service_for_init.rebuild_after_state_change());
+            })
+            .is_err()
+        {
+            warn!("task queue full: skipping initial cloud refresh");
+        }
+    }
 
     if let Some(path) = config_path {
         info!("Tray started with config path: {path}");

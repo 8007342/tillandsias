@@ -302,6 +302,19 @@ impl ContainerSpec {
         if self.read_only {
             args.push("--read-only".to_string());
         }
+        // @trace spec:browser-isolation-tray-integration, spec:tray-ux
+        // Interactive / tty flags drive the per-project tray launches that
+        // spawn a forge shell inside the host's default terminal emulator.
+        // Both flags are mutually compatible with `--detach` rejection in
+        // policy.rs: a spec marked `.detached().interactive()` would have
+        // semantic-conflict properties that are blocked at the call-site
+        // (see `launch_forge_agent`), not here.
+        if self.interactive {
+            args.push("--interactive".to_string());
+        }
+        if self.tty {
+            args.push("--tty".to_string());
+        }
         if let Some(limit) = self.pids_limit {
             args.push("--pids-limit".to_string());
             args.push(limit.to_string());
@@ -422,6 +435,20 @@ mod tests {
         assert!(args.contains(&"--cap-drop=ALL".to_string()));
         assert!(args.contains(&"--security-opt=no-new-privileges".to_string()));
         assert!(args.contains(&"--security-opt=label=disable".to_string()));
+    }
+
+    #[test]
+    fn interactive_and_tty_flags_are_serialized() {
+        // Regression: prior versions of `build_run_args` tracked `.interactive()`
+        // and `.tty()` in the spec but never emitted them, so tray-spawned
+        // forge shells silently dropped to non-interactive mode. The per-project
+        // tray launches (Claude / Codex / OpenCode / Maintenance) depend on
+        // these flags reaching `podman run`.
+        let spec = ContainerSpec::new("example:v1").interactive().tty();
+        let args = spec.build_run_args();
+
+        assert!(args.contains(&"--interactive".to_string()));
+        assert!(args.contains(&"--tty".to_string()));
     }
 
     #[test]

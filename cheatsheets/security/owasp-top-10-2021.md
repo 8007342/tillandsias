@@ -95,7 +95,7 @@ The 169.254/16 check is the classic AWS metadata exfiltration block (EC2 IMDSv1 
 
 ## See also
 
-- `privacy/data-minimization.md` — privacy-side counterpart
+- `privacy/data-minimization-gdpr.md` — privacy-side counterpart
 - `web/http.md` (DRAFT) — security headers (HSTS, CSP, X-Frame-Options)
 - `data/postgresql-indexing-basics.md` — column-level encryption for sensitive fields
 - OWASP ASVS for the comprehensive checklist (out of scope for this 1-page cheatsheet)

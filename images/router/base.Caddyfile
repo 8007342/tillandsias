@@ -1,4 +1,4 @@
-# @trace spec:subdomain-routing-via-reverse-proxy, spec:fix-router-loopback-port
+# @trace spec:subdomain-routing-via-reverse-proxy
 # Tillandsias router — base configuration.
 #
 # This is the static portion of the Caddy config baked into the image. The

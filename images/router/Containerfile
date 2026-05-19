@@ -1,4 +1,4 @@
-# @trace spec:subdomain-routing-via-reverse-proxy, spec:fix-router-loopback-port, spec:opencode-web-session-otp, spec:reverse-proxy-internal
+# @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-session-otp, spec:reverse-proxy-internal
 # Tillandsias router — Caddy 2 reverse proxy that maps
 # `<service>.<project>.localhost` to enclave containers by name + port,
 # plus the tillandsias-router-sidecar binary that:
@@ -36,7 +36,7 @@ FROM docker.io/library/caddy:2-alpine
 # wait, libcap for setcap).
 RUN apk add --no-cache curl libcap
 
-# @trace spec:fix-router-loopback-port
+# @trace spec:subdomain-routing-via-reverse-proxy
 # CRITICAL: strip the cap_net_bind_service file capability from the
 # Caddy binary. The upstream caddy:2-alpine image sets `cap_net_bind_service=ep`
 # on /usr/bin/caddy so Caddy can bind port 80 even when the container's
@@ -91,7 +91,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh \
 RUN mkdir -p /etc/tillandsias
 COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
 
-# @trace spec:fix-router-loopback-port, spec:opencode-web-session-otp
+# @trace spec:subdomain-routing-via-reverse-proxy, spec:opencode-web-session-otp
 # Internal listener stays on :8080 — no privileged-port binding needed, so
 # we can run with the upstream image's default USER without requiring
 # capabilities or root inside the container. 9090 is the sidecar validator

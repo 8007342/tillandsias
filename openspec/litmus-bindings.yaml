@@ -241,6 +241,12 @@ specs:
   - litmus:fix-windows-image-routing-shape
   coverage_ratio: 33
   last_verified: '2026-05-12'
+- spec_id: forge-as-only-runtime
+  status: active
+  litmus_tests:
+  - litmus:forge-as-only-runtime
+  coverage_ratio: 100
+  last_verified: '2026-05-19'
 - spec_id: forge-cache-architecture
   status: obsolete
   litmus_tests: []

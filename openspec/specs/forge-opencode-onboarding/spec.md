@@ -45,6 +45,14 @@ The launcher SHALL apply the OpenCode config overlay, run `openspec init --tools
 - **THEN** it MUST run `openspec init --tools opencode` when a project is present
 - **THEN** it MUST write `run /startup` to the OpenCode init prompt path
 
+#### Scenario: Web launcher applies the same project and theme overlay
+- **WHEN** `entrypoint-forge-opencode-web.sh` starts a web session
+- **THEN** it MUST apply the OpenCode config and TUI overlay before starting
+  the web server
+- **AND** the browser-facing port MUST be fronted by the bundled SSE/theme
+  proxy so the dark theme bootstrap is available before OpenCode paints
+- **AND** the active project MUST resolve to `/home/forge/src/<project>`
+
 #### Scenario: Launcher keeps the startup prompt deterministic
 - **WHEN** `TILLANDSIAS_OPENCODE_PROMPT` is unset
 - **THEN** the launcher MUST still write `run /startup`
@@ -57,6 +65,8 @@ The launcher SHALL apply the OpenCode config overlay, run `openspec init --tools
 - `images/default/config-overlay/opencode/instructions/methodology.md` — modular onboarding index for the first-turn instruction bundle
 - `images/default/config-overlay/opencode/instructions/forge-discovery.md` — first-turn discovery guidance
 - `images/default/entrypoint-forge-opencode.sh` — config overlay application, OpenSpec init, and `/startup` bootstrap
+- `images/default/entrypoint-forge-opencode-web.sh` — web overlay application and project selection
+- `images/default/sse-keepalive-proxy.js` — web theme bootstrap and SSE keepalive proxy
 - `cheatsheets/agents/opencode.md` — OpenCode workflow and CLI usage patterns
 - `cheatsheets/agents/openspec.md` — OpenSpec proposal/design/spec/task/archive lifecycle
 - `cheatsheets/runtime/forge-container.md` — forge container runtime expectations

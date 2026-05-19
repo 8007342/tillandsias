@@ -257,8 +257,8 @@ CDP attach from the host runs against `127.0.0.1:9222` directly — under WSL2 m
 - `runtime/wsl-on-windows.md` — sibling architectural pattern (forge/git/proxy/router/inference distros)
 - `runtime/wsl-mount-points.md` — drvfs ownership semantics that DON'T apply when `/mnt/c` is disabled
 - `runtime/wsl-daemon-patterns.md` — long-running services in WSL, systemd in WSL specifics
-- `runtime/secrets-management.md` — credential isolation rationale
-- `runtime/podman-security-flags.md` (planned) — sibling Linux backend for the same `chromium-browser-isolation` spec
+- `utils/tillandsias-secrets-architecture.md` — credential isolation rationale
+- `runtime/podman-idiomatic-patterns.md` — sibling Linux backend for the same browser isolation contract
 
 ## Pull on Demand
 

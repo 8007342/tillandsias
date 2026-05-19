@@ -233,13 +233,40 @@ ensure_dev_cache() {
     # Ensure CA cert exists
     local ca_cert="$CACHE_DIR/ca-cert.pem"
     local ca_key="$CACHE_DIR/ca-key.pem"
-    if [[ ! -f "$ca_cert" ]]; then
+    if [[ ! -f "$ca_cert" || ! -f "$ca_key" ]]; then
         mkdir -p "$CACHE_DIR"
-        openssl req -x509 -newkey rsa:2048 -keyout "$ca_key" -out "$ca_cert" \
-            -days 3650 -nodes -subj "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=Tillandsias CA" 2>/dev/null || {
-            _warn "Failed to generate CA cert for dev proxy"
+        local ca_lock="$CACHE_DIR/ca-generation.lock"
+        local lock_acquired=false
+        for _ in {1..50}; do
+            if mkdir "$ca_lock" 2>/dev/null; then
+                lock_acquired=true
+                break
+            fi
+            sleep 0.1
+        done
+        if [[ "$lock_acquired" != true ]]; then
+            _warn "Timed out waiting for dev proxy CA generation lock"
             return 0
-        }
+        fi
+        trap 'rmdir "$ca_lock" 2>/dev/null || true' RETURN
+        if [[ ! -f "$ca_cert" || ! -f "$ca_key" ]]; then
+            local tmp_cert tmp_key
+            tmp_cert="$(mktemp "$CACHE_DIR/ca-cert.XXXXXX")"
+            tmp_key="$(mktemp "$CACHE_DIR/ca-key.XXXXXX")"
+            if openssl req -x509 -newkey rsa:2048 -keyout "$tmp_key" -out "$tmp_cert" \
+                -days 3650 -nodes -subj "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=Tillandsias CA" 2>/dev/null; then
+                chmod 600 "$tmp_key" 2>/dev/null || true
+                chmod 644 "$tmp_cert" 2>/dev/null || true
+                mv -f "$tmp_key" "$ca_key"
+                mv -f "$tmp_cert" "$ca_cert"
+            else
+                rm -f "$tmp_cert" "$tmp_key"
+                _warn "Failed to generate CA cert for dev proxy"
+                return 0
+            fi
+        fi
+        rmdir "$ca_lock" 2>/dev/null || true
+        trap - RETURN
     fi
 
     # Ensure dev proxy cache dir exists
@@ -301,7 +328,7 @@ ensure_dev_cache() {
 }
 
 # Setup podman registries configuration ONLY for dev builds, not portable installs
-# Portable binaries must not depend on host configuration (@trace spec:portable-linux-executable)
+# Portable binaries must not depend on host configuration (@trace spec:linux-native-portable-executable)
 # @trace spec:podman-registries-config
 if [[ "$FLAG_INSTALL" != true ]]; then
     "$SCRIPT_DIR/scripts/setup-podman-registries.sh" || {

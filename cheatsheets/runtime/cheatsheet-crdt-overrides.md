@@ -116,4 +116,4 @@ The agent reads this BEFORE the cheatsheet body. Override semantics are surfaced
 - `runtime/cheatsheet-frontmatter-spec.md` — full v2 schema; the four fields are documented under "CRDT override discipline"
 - `runtime/cheatsheet-lifecycle.md` — REFINED state in the convergence loop
 - `runtime/forge-hot-cold-split.md` — `populate_hot_paths()` is the merge point
-- `runtime/forge-cache-dual.md` (if exists) — per-project isolation invariant
+- `runtime/forge-cache-semantics.md` — per-project isolation invariant

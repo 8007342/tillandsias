@@ -161,8 +161,8 @@ tray (Rust)
 
 - `runtime/wsl-on-windows.md` — sibling Windows isolation backend (WSL2 distros for forge/git/proxy/router/inference)
 - `runtime/wsl-mount-points.md` — drvfs ownership semantics that DON'T apply here (Sandbox doesn't see /mnt/c)
-- `runtime/podman-security-flags.md` — sibling Linux backend for `chromium-browser-isolation`
-- `runtime/secrets-management.md` — credential isolation rationale (sandbox provides this for free)
+- `runtime/podman-idiomatic-patterns.md` — sibling Linux backend for browser isolation
+- `utils/tillandsias-secrets-architecture.md` — credential isolation rationale (sandbox provides this for free)
 
 ## Pull on Demand
 
