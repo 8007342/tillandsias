@@ -4079,6 +4079,9 @@ impl ForgeAgentMode {
 /// @trace spec:forge-as-only-runtime
 #[cfg_attr(not(feature = "tray"), allow(dead_code))]
 pub(crate) fn detect_host_terminal() -> Result<Vec<String>, String> {
+    // Note: `$TERM` is the terminfo identifier (e.g. xterm-256color), NOT
+    // the path to the terminal binary — it cannot be used here. The closest
+    // env-var convention is `$TERMINAL` (i3/sway/dwm/etc.).
     if let Ok(value) = std::env::var("TERMINAL")
         && !value.trim().is_empty()
     {
@@ -4092,13 +4095,31 @@ pub(crate) fn detect_host_terminal() -> Result<Vec<String>, String> {
         return Ok(vec!["xdg-terminal-exec".to_string()]);
     }
 
+    // GNOME exposes the user's chosen terminal via gsettings — honor it
+    // before falling back to a hard-coded probe list. The output is a
+    // single-quoted string, e.g. "'ptyxis'" or "'gnome-terminal'".
+    if let Some(name) = gnome_default_terminal()
+        && executable_on_path(&name)
+    {
+        return Ok(argv_prefix_for(&name));
+    }
+
     // (name, argv-prefix-once-resolved) — the prefix accepts a command + args.
+    // ptyxis is GNOME's new default starting Fedora 41; gnome-terminal is the
+    // pre-41 default. Order roughly matches "most likely to be installed on
+    // a desktop Linux distro in 2026".
     let candidates: &[(&str, &[&str])] = &[
+        ("ptyxis", &["ptyxis", "--new-window", "--"]),
         ("gnome-terminal", &["gnome-terminal", "--"]),
         ("konsole", &["konsole", "-e"]),
         ("kitty", &["kitty", "-e"]),
         ("alacritty", &["alacritty", "-e"]),
+        ("wezterm", &["wezterm", "start", "--"]),
         ("foot", &["foot"]),
+        ("tilix", &["tilix", "-e"]),
+        ("xfce4-terminal", &["xfce4-terminal", "-e"]),
+        ("terminator", &["terminator", "-e"]),
+        ("blackbox-terminal", &["blackbox-terminal", "-c"]),
         ("xterm", &["xterm", "-e"]),
     ];
 
@@ -4110,9 +4131,52 @@ pub(crate) fn detect_host_terminal() -> Result<Vec<String>, String> {
 
     Err(
         "Could not find a terminal emulator on PATH. Set $TERMINAL or \
-         install one of: gnome-terminal/konsole/kitty/alacritty/foot/xterm"
+         install one of: ptyxis/gnome-terminal/konsole/kitty/alacritty/\
+         wezterm/foot/tilix/xfce4-terminal/terminator/blackbox-terminal/xterm"
             .to_string(),
     )
+}
+
+/// Query GNOME's `gsettings` for the user's chosen default terminal. Returns
+/// `None` if gsettings isn't available, the schema isn't installed, or the
+/// value is empty.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+fn gnome_default_terminal() -> Option<String> {
+    let out = std::process::Command::new("gsettings")
+        .args([
+            "get",
+            "org.gnome.desktop.default-applications.terminal",
+            "exec",
+        ])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let trimmed = raw.trim_matches(|c: char| c == '\'' || c == '"' || c.is_whitespace());
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+/// Build the argv prefix for a terminal binary. Most terminals follow the
+/// `<bin> -e <cmd>` convention; gnome-terminal/ptyxis/wezterm use `--`.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+fn argv_prefix_for(name: &str) -> Vec<String> {
+    let prefix: &[&str] = match name {
+        "ptyxis" => &["ptyxis", "--new-window", "--"],
+        "gnome-terminal" => &["gnome-terminal", "--"],
+        "wezterm" => &["wezterm", "start", "--"],
+        "foot" => &["foot"],
+        "blackbox-terminal" => &["blackbox-terminal", "-c"],
+        // konsole / kitty / alacritty / tilix / xfce4-terminal / terminator
+        // / xterm all accept `-e <cmd>`.
+        _ => &[name, "-e"],
+    };
+    prefix.iter().map(|s| s.to_string()).collect()
 }
 
 #[cfg_attr(not(feature = "tray"), allow(dead_code))]

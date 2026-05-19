@@ -83,6 +83,10 @@ pub(super) fn refresh_cloud_projects_if_stale(
     let raw = match runtime.block_on(fetch_gh_repos_raw()) {
         Ok(bytes) => bytes,
         Err(err) => {
+            // Surface to stderr unconditionally — the tray's global tracing
+            // subscriber routes everything to a log file, so without an
+            // eprintln the user sees "(loading…)" forever with no clue why.
+            eprintln!("[tillandsias] cloud refresh: gh invocation failed: {err}");
             warn!(error = %err, "cloud refresh: gh invocation failed; preserving cached list");
             return Err(err);
         }
@@ -91,11 +95,16 @@ pub(super) fn refresh_cloud_projects_if_stale(
     let entries = match parse_gh_repos(&raw) {
         Ok(entries) => entries,
         Err(err) => {
+            eprintln!("[tillandsias] cloud refresh: failed to parse gh output: {err}");
             warn!(error = %err, "cloud refresh: failed to parse gh output; preserving cached list");
             return Err(err);
         }
     };
 
+    eprintln!(
+        "[tillandsias] cloud refresh: loaded {} repos from gh",
+        entries.len()
+    );
     if debug {
         warn!("cloud refresh: parsed {} repos", entries.len());
     }
