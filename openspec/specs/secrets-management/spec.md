@@ -131,6 +131,9 @@ The host SHALL maintain a secrets directory at `~/.cache/tillandsias/secrets/` w
 - **WHEN** a user provides their name and email during GitHub Login
 - **THEN** the identity SHALL be written to `~/.cache/tillandsias/secrets/git/.gitconfig`
 - **AND** subsequent container launches SHALL read this identity and inject it as `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL` environment variables
+- **AND** forge entrypoints SHALL write repo-local `user.name` and `user.email`
+  from those env vars after entering the project directory
+- **AND** missing identity SHALL NOT inject placeholder values
 
 ### Requirement: Accountability logging for credential lifecycle
 
@@ -415,6 +418,7 @@ subject to the same handling rules as the GitHub OAuth token. Concretely:
 - `cheatsheets/runtime/unix-socket-ipc.md` — Unix Socket Ipc reference and patterns
 - `cheatsheets/utils/podman-secrets.md` — Podman secrets mechanism, storage drivers, and usage patterns
 - `cheatsheets/utils/tillandsias-secrets-architecture.md` — Tillandsias three-layer secret flow and threat mitigation
+- `cheatsheets/utils/git-workflows.md` — Git identity, commit, and push workflows in the forge
 
 ## Litmus Tests
 

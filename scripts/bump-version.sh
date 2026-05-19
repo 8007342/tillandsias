@@ -81,7 +81,7 @@ case "${1:-}" in
         ;;
 esac
 
-# Derive 3-part semver for Cargo/Tauri (using YYMMDD as patch version)
+# Derive 3-part semver for Cargo package versions (using YYMMDD as patch version)
 SEMVER="${MAJOR}.${MINOR}.${YYMMDD}"
 
 # Update all Cargo.toml files (workspace members)

@@ -90,6 +90,13 @@ opencode config list
 
 ❌ **Treating any HTTP response as readiness**: A `401` without a session proves the auth gate is alive, but the app is ready only after a registered-cookie probe returns `2xx` or `3xx`. → Do both probes before opening Chromium.
 
+❌ **Missing git identity in the forge**: Commits should not ask for
+`user.name`/`user.email` after GitHub Login. → Check that
+`GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, and
+`GIT_COMMITTER_EMAIL` are present, then run `git config user.name` and
+`git config user.email` inside the project to verify the entrypoint applied
+them locally.
+
 ❌ **Leaving sessions orphaned**: If you kill `opencode serve` without `opencode session delete`, the session DB leaks. → Always `opencode session delete <id>` before exiting.
 
 ## See also

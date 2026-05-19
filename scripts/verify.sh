@@ -9,13 +9,11 @@
 #   - The artifact's .cosign.bundle file in the same directory
 #
 # Example:
-#   ./scripts/verify.sh Tillandsias-linux-x86_64.AppImage
+#   ./scripts/verify.sh tillandsias-linux-x86_64
 #
 # The script expects this file alongside the artifact:
 #   <artifact>.cosign.bundle  - Sigstore bundle (signature, cert, timestamp)
 #
-# Note: Tauri also produces Ed25519 .sig files for auto-update bundles.
-# Those are separate from the Cosign .cosign.bundle files used here.
 
 set -euo pipefail
 
@@ -34,7 +32,7 @@ if [ $# -lt 1 ]; then
   echo "Usage: $0 <artifact>" >&2
   echo "" >&2
   echo "Example:" >&2
-  echo "  $0 Tillandsias-linux-x86_64.AppImage" >&2
+  echo "  $0 tillandsias-linux-x86_64" >&2
   exit 1
 fi
 

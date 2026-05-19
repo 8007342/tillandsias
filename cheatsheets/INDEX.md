@@ -20,7 +20,9 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## algorithms
 
-- binary-search.md                 — You have a **sorted** array (or any indexable, monotonic structure) and need O(… [pull-on-demand: stub]
+- binary-search.md                  — You have a **sorted** array (or any indexable, monotonic structure) and need O(… [pull-on-demand: stub]
+- sorting-comparison.md [DRAFT]     — choosing a sort strategy before applying algorithms that require ordered input,… [pull-on-demand: stub]
+- tree-traversal-bfs-dfs.md [DRAFT] — walking tree or graph-shaped data where binary search does not apply because ch… [pull-on-demand: stub]
 
 ## architecture
 
@@ -31,10 +33,10 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 ## build
 
 - build-lock-semantics.md [DRAFT]    — Understanding build lock mechanisms and mutual exclusion. [bundled, partial-verify]
-- build-strategy.md                  — Deciding between `./build.sh --install` (fast) and `./build.sh --clean --instal… [bundled, partial-verify]
+- build-strategy.md                  — Deciding how to validate Tillandsias locally, what may run in [bundled, partial-verify]
 - cargo.md                           — building / testing / running Rust code in the forge. [bundled, partial-verify]
 - cmake.md                           — cross-platform C/C++/CUDA builds; meta-build that generates Make/Ninja/MSVC pro… [pull-on-demand: stub]
-- container-image-building.md        — Understanding how Tillandsias images are built from Containerfiles, direct podm… [bundled, partial-verify]
+- container-image-building.md        — Understanding how Tillandsias builds local service images, router [bundled, partial-verify]
 - container-image-tagging.md [DRAFT] — Tagging and versioning container images. [bundled, partial-verify]
 - distro-packaged-cheatsheets.md     — A doc package ships in the forge image's package manifest (e.g. `java-21-openjd… [bundled, partial-verify]
 - flutter.md                         — building Flutter apps in the forge — web + Linux desktop only (no Android, iOS,… [pull-on-demand: stub]
@@ -59,6 +61,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## data
 
+- mysql-best-practices.md [DRAFT]  — comparing MySQL behavior with PostgreSQL or writing portable SQL where storage … [pull-on-demand: stub]
 - postgresql-indexing-basics.md    — You're choosing an index type for a Postgres table, debugging a slow query, or … [bundled, partial-verify]
 
 ## languages
@@ -87,6 +90,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 ## patterns
 
 - gof-observer.md                  — A **subject** has state changes that an unknown number of **observers** want to… [pull-on-demand: stub]
+- gof-strategy.md [DRAFT]          — selecting one interchangeable algorithm or policy at runtime without branching … [pull-on-demand: stub]
 
 ## privacy
 
@@ -125,27 +129,32 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - enclave-startup-sequencing.md [DRAFT]     — Starting the Tillandsias enclave (proxy → git → forge → inference), managing in… [bundled, partial-verify]
 - ephemeral-lifecycle.md                    — Understanding how Tillandsias manages container creation on first launch, cachi… [bundled, partial-verify]
 - event-driven-monitoring.md                — building observable systems that react to container lifecycle events, service s… [pull-on-demand: stub]
+- everything-in-forge.md                    — Adding a new agent type, auditing a launch path, reasoning [bundled, partial-verify]
 - external-logs.md                          — - `podman cp(1)`: <https://docs.podman.io/en/stable/markdown/podman-cp.1.html> [bundled, partial-verify]
 - fedora-minimal-wsl2.md                    — building the single `tillandsias` WSL2 distro that hosts podman and runs every … [pull-on-demand: project-committed]
+- forge-cache-semantics.md [DRAFT]          — Understanding how Tillandsias manages build artifacts, debugging cache stalenes… [bundled, partial-verify]
 - forge-container.md                        — Understanding what the forge container can do, where files live, how to avoid c… [bundled, partial-verify]
 - forge-hot-cold-split.md                   — You need to understand which forge paths are RAM-backed, what the size caps are… [bundled, partial-verify]
+- forge-localization.md [DRAFT]             — Understanding how Tillandsias Forge handles multiple language locales, configur… [bundled, partial-verify]
 - forge-paths-ephemeral-vs-persistent.md    — You're an agent (or human) writing files inside the forge container and need to… [pull-on-demand: stub]
 - forge-shared-cache-via-nix.md             — You're trying to share a library across projects without paying the download co… [pull-on-demand: stub]
-- forge-standalone.md                       — You want only the forge container, one mounted project tree, and [bundled, partial-verify]
 - forge-standalone-runner.md [DRAFT]        — is `cheatsheets/runtime/forge-standalone.md`. [bundled, partial-verify]
+- forge-standalone.md                       — You want only the forge container, one mounted project tree, and [bundled, partial-verify]
 - gpu-tier-detection.md [DRAFT]             — Determining which LLM models to pre-pull or lazy-load based on GPU VRAM, select… [bundled, partial-verify]
 - image-lifecycle.md                        — Understanding how images are built, stored, referenced, and cleaned up; debuggi… [bundled, partial-verify]
 - image-versioning.md [DRAFT]               — Managing container image version tags and tracking. [bundled, partial-verify]
+- linux-user-session-podman.md              — documenting the Linux runtime boundary for Tillandsias on a real desktop sessio… [pull-on-demand: stub]
 - local-inference.md                        — an agent inside the forge needs to call a local LLM — for triggers, summarisati… [pull-on-demand: stub]
 - logging-levels.md                         — Configuring log verbosity, enabling accountability windows, or troubleshooting … [bundled, partial-verify]
 - networking.md                             — Understanding how the forge accesses external services, what's blocked, what's … [bundled, partial-verify]
 - ollama-model-management.md [DRAFT]        — Pre-pulling LLM models into containers, checking model cache, implementing resu… [bundled, partial-verify]
+- opencode-web-launch.md                    — action, router auth, or the isolated Chromium app window. [bundled, partial-verify]
+- podman-control-plane.md                   — ```text [bundled, partial-verify]
 - podman-idiomatic-patterns.md              — Building container orchestration logic, integrating container events, optimizin… [bundled, partial-verify]
-- podman-control-plane.md                   — One Rust-owned Podman spine, facade, diagnostics, and verification ladder. [bundled, partial-verify]
-- linux-user-session-podman.md              — documenting the Linux runtime boundary for Tillandsias on a real desktop sess… [pull-on-demand: stub]
+- podman-in-wsl2.md [DRAFT]                 — running rootless Podman inside a WSL2 distro, especially for Tillandsias' Windo… [pull-on-demand: stub]
 - podman-logging.md                         — you need to inspect Podman output, recover stale rootless state, or clean up ep… [bundled, partial-verify]
-- podman.md                                 — - **URL**: https://podman.io/docs [bundled, partial-verify]
 - podman-service-testing.md                 — You need to test a client or wrapper that talks to Podman through the service s… [bundled, partial-verify]
+- podman.md                                 — - **URL**: https://podman.io/docs [bundled, partial-verify]
 - portable-executable-transparent-mode.md   — - https://github.com/tauri-apps/tauri — Reference for multi-mode app architectu… [bundled, partial-verify]
 - powershell.md                             — writing or invoking `*.ps1` scripts on a Windows host (e.g. `build-local.ps1`),… [pull-on-demand: stub]
 - request-rate-limiting.md [DRAFT]          — Understanding request debouncing and rate limiting in browser isolation. [bundled, partial-verify]
@@ -159,6 +168,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - syslog-configuration.md [DRAFT]           — Configuring syslog logging in containers. [bundled, partial-verify]
 - systemd-socket-activation.md              — building a daemon (like tillandsias-router) that systemd should supervise; coor… [pull-on-demand: stub]
 - testing-best-practices.md                 — designing Rust unit tests, layered verification chains, or [bundled, partial-verify]
+- tray-performance-profiling.md             — Analyzing tray responsiveness, identifying menu latency regressions, or debuggi… [bundled, partial-verify]
 - tray-state-machine.md [DRAFT]             — Understanding how the tray icon and menu state transitions in response to conta… [bundled, partial-verify]
 - unix-socket-ipc.md                        — building high-performance inter-process communication (IPC) between a daemon an… [pull-on-demand: stub]
 - version-file-conventions.md [DRAFT]       — Managing version file format and lifecycle. [bundled, partial-verify]
@@ -168,11 +178,12 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - windows-paths.md [DRAFT]                  — Handling Windows path conversion and normalization. [bundled, partial-verify]
 - windows-process-creation.md               — spawning native exes (`wsl.exe`, `podman.exe`, `cmd.exe`, anything that allocat… [pull-on-demand: stub]
 - windows-sandbox.md                        — hosting an isolated, ephemeral Windows process tree (e.g., the Chromium framewo… [pull-on-demand: project-committed]
-- wsl2-isolation-boundary.md                — deciding whether the WSL2 layer is providing a security boundary for a given co… [pull-on-demand: project-committed]
 - wsl-browser-isolation.md                  — hosting a hardened Chromium browser as a sibling WSL distro alongside `tillands… [pull-on-demand: project-committed]
 - wsl-daemon-patterns.md                    — running long-lived background services (daemons, proxies, routers) inside WSL2;… [pull-on-demand: stub]
 - wsl-mount-points.md                       — writing code that crosses the Windows↔Linux filesystem boundary in WSL2 — anyth… [pull-on-demand: stub]
 - wsl-on-windows.md                         — - **URL**: https://learn.microsoft.com/en-us/windows/wsl/ [bundled, partial-verify]
+- wsl2-disk-elasticity.md [DRAFT]           — reasoning about WSL2 distro VHDX growth, sparse disk behavior, cleanup, and res… [pull-on-demand: stub]
+- wsl2-isolation-boundary.md                — deciding whether the WSL2 layer is providing a security boundary for a given co… [pull-on-demand: project-committed]
 
 ## security
 
@@ -183,6 +194,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - cargo-test.md                    — testing Rust code — unit tests, integration tests, doctests. [bundled, partial-verify]
 - go-test.md                       — testing Go — unit tests, subtests, benchmarks, fuzz, race detection, coverage. [bundled, partial-verify]
 - junit.md                         — testing Java code — unit tests through Surefire, integration tests through Fail… [pull-on-demand: stub]
+- node-test.md [DRAFT]             — testing JavaScript or TypeScript projects with Node's built-in `node:test` runn… [pull-on-demand: stub]
 - playwright.md                    — modern E2E browser testing — TypeScript/JavaScript primary, Python and Java als… [pull-on-demand: stub]
 - podman-testing.md                — You are deciding how to test code that shells out to Podman, or you want to spl… [bundled, partial-verify]
 - pytest.md                        — testing Python — discovery, fixtures, parametrize. [pull-on-demand: stub]
@@ -198,19 +210,21 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - gh-cli.md                           — Creating/reviewing pull requests, managing issues, checking CI status, or authe… [bundled, partial-verify]
 - gh.md                               — GitHub-side operations from the forge — issues, PRs, workflows, API calls. (For… [pull-on-demand: stub]
 - git-workflows.md                    — Cloning, committing, branching, rebasing, pushing (clones via enclave mirror, n… [bundled, partial-verify]
-- jq.md                               — querying or transforming JSON in the forge — pipelines, log triage, config intr… [pull-on-demand: stub]
 - jq-yq-json.md                       — Querying, filtering, or transforming JSON (jq) or YAML (yq) from command line o… [bundled, partial-verify]
+- jq.md                               — querying or transforming JSON in the forge — pipelines, log triage, config intr… [pull-on-demand: stub]
 - podman-containers.md                — Managing containers, images, and enclaves; building images with Containerfile [bundled, partial-verify]
 - podman-logging.md [DRAFT]           — Configuring podman logging drivers and options. [bundled, partial-verify]
-- podman.md [DRAFT]                   — Working with podman CLI utilities. [bundled, partial-verify]
 - podman-registries.md                — Configuring which registries podman searches for image names, handling short-na… [bundled, partial-verify]
 - podman-secrets.md                   — Passing sensitive data (credentials, certificates, keys, tokens) to containers … [bundled, partial-verify]
+- podman.md [DRAFT]                   — Working with podman CLI utilities. [bundled, partial-verify]
+- psql.md [DRAFT]                     — inspecting PostgreSQL databases, running migrations manually, or debugging SQL … [pull-on-demand: stub]
 - rg-fd-search.md                     — Searching code/files (ripgrep) or finding files by name/pattern (fd) [bundled, partial-verify]
 - ripgrep.md                          — searching code in the forge. Faster than grep, respects `.gitignore` by default… [bundled, partial-verify]
 - rsync.md                            — copying files efficiently — local↔local or local↔remote (over ssh). Delta-trans… [pull-on-demand: stub]
 - shellcheck-shfmt.md                 — linting / formatting bash scripts before committing them. [pull-on-demand: stub]
-- ssh.md                              — ssh to other machines from the forge (rare — forge typically credential-free; u… [pull-on-demand: stub]
+- sqlite3.md [DRAFT]                  — inspecting or scripting SQLite databases with the `sqlite3` command-line shell. [pull-on-demand: stub]
 - ssh-remote.md                       — Connecting to remote systems, transferring files securely, or synchronizing dir… [bundled, partial-verify]
+- ssh.md                              — ssh to other machines from the forge (rare — forge typically credential-free; u… [pull-on-demand: stub]
 - tar.md                              — archiving / extracting / streaming files; in particular, [pull-on-demand: stub]
 - tillandsias-secrets-architecture.md — Understanding how secrets (CA certificates, GitHub tokens, SSH keys) flow throu… [bundled, partial-verify]
 - tree.md                             — visualising directory hierarchy — quick structural overview, sharing layout in … [pull-on-demand: stub]

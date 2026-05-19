@@ -15,10 +15,8 @@ Verification is optional for normal use, but recommended for anyone who wants to
 
 | File | Purpose |
 |------|---------|
-| `<artifact>` | The binary (e.g., `.AppImage`, `.dmg`, `.exe`) |
+| `<artifact>` | The release file, such as `tillandsias-linux-x86_64` |
 | `<artifact>.cosign.bundle` | Sigstore bundle (signature, Fulcio cert, transparency log proof, signed timestamp) |
-
-> **Note:** Tauri also produces `.sig` files for auto-update bundles (Ed25519 signatures). Those are separate from the `.cosign.bundle` files used for Cosign verification.
 
 ## Install Cosign
 
@@ -61,7 +59,7 @@ See the [Cosign installation docs](https://docs.sigstore.dev/cosign/system_confi
 The repository includes a helper script that wraps the verification command:
 
 ```bash
-./scripts/verify.sh Tillandsias-linux-x86_64.AppImage
+./scripts/verify.sh tillandsias-linux-x86_64
 ```
 
 The script checks that the `.cosign.bundle` file is present alongside the artifact and runs the appropriate `cosign verify-blob` command.
@@ -70,34 +68,14 @@ The script checks that the `.cosign.bundle` file is present alongside the artifa
 
 Run `cosign verify-blob` directly with the bundle file:
 
-**Linux (AppImage)**
+**Linux musl binary**
 
 ```bash
 cosign verify-blob \
-  --bundle Tillandsias-linux-x86_64.AppImage.cosign.bundle \
+  --bundle tillandsias-linux-x86_64.cosign.bundle \
   --certificate-identity-regexp "https://github.com/.*/tillandsias/" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-  Tillandsias-linux-x86_64.AppImage
-```
-
-**macOS (DMG)**
-
-```bash
-cosign verify-blob \
-  --bundle Tillandsias-macos-aarch64.dmg.cosign.bundle \
-  --certificate-identity-regexp "https://github.com/.*/tillandsias/" \
-  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-  Tillandsias-macos-aarch64.dmg
-```
-
-**Windows (EXE)**
-
-```bash
-cosign verify-blob \
-  --bundle Tillandsias-windows-x86_64.exe.cosign.bundle \
-  --certificate-identity-regexp "https://github.com/.*/tillandsias/" \
-  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-  Tillandsias-windows-x86_64.exe
+  tillandsias-linux-x86_64
 ```
 
 Replace the filenames with the actual artifact names from your release. The exact names vary by version.

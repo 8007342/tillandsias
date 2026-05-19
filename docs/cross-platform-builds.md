@@ -1,74 +1,40 @@
 # Cross-Platform Build Strategy
 
-Tillandsias targets Linux, macOS, and Windows. This document explains the build strategy for each platform and why certain local build options are not available.
+Tillandsias v0.2 ships the Linux client runtime first. The current release
+workflow publishes a single Linux x86_64 musl-static binary and helper scripts.
+macOS and Windows wrappers remain planned work, not release artifacts.
 
-## CI-First Approach
-
-GitHub Actions is the authoritative build pipeline for all platforms. The release workflow (`.github/workflows/release.yml`) builds native artifacts on each platform's own runner:
+## Current Release Lane
 
 | Platform | Runner | Target | Artifacts |
-|----------|--------|--------|-----------|
-| Linux | `ubuntu-22.04` | `x86_64-unknown-linux-gnu` | AppImage, deb, rpm |
-| macOS (ARM) | `macos-latest` | `aarch64-apple-darwin` | .dmg |
-| macOS (Intel) | `macos-latest` | `x86_64-apple-darwin` | .dmg |
-| Windows | `windows-latest` | `x86_64-pc-windows-msvc` | .exe, .msi, NSIS |
+|---|---|---|---|
+| Linux x86_64 | `ubuntu-22.04` | `x86_64-unknown-linux-musl` | `tillandsias-linux-x86_64`, installer helpers, `SHA256SUMS`, Cosign bundles |
 
-All release artifacts are signed (Tauri Ed25519 for updates, Cosign for supply chain verification). Only CI can produce signed artifacts.
+The release workflow builds the router sidecar, builds the musl binary with the
+tray feature, validates the binary is statically linked, signs artifacts with
+Cosign keyless signing, and publishes a GitHub Release.
 
 ## Local Linux Builds
 
 ```bash
-./build.sh              # Debug build
-./build.sh --release    # Release build (deb, rpm)
-./build.sh --test       # Run tests
+./build.sh --ci-full --install
+tillandsias --init --debug
+tillandsias --debug --tray
 ```
 
-See the main [CLAUDE.md](../CLAUDE.md) for full build.sh usage.
+This is the release-recovery path. It is intentionally broader than hosted CI
+because it can use the real local Podman runtime.
 
-## Local Windows Cross-Compilation
+## Hosted CI Policy
 
-```bash
-./build-windows.sh              # Debug cross-build
-./build-windows.sh --release    # Release cross-build (unsigned)
-./build-windows.sh --check      # Type-check only (fast)
-./build-windows.sh --test       # Compile tests (not executed)
-```
+GitHub-hosted CI must remain static-only:
 
-Uses [cargo-xwin](https://github.com/rust-cross/cargo-xwin) to cross-compile from Linux to `x86_64-pc-windows-msvc`. Runs inside a dedicated `tillandsias-windows` toolbox.
+- formatting, clippy, unit tests, spec binding, trace drift, and cheatsheet validation are allowed;
+- real Podman runtime tests, browser e2e tests, and container-backed litmus execution are not allowed;
+- release publishing is manual through `.github/workflows/release.yml`.
 
-### Limitations
+## Planned Platforms
 
-- **Unsigned**: Cross-compiled artifacts are NOT signed. Windows SmartScreen will block them.
-- **Experimental**: Tauri cross-compilation is labeled experimental. NSIS bundle generation may fail for some configurations.
-- **No test execution**: Windows binaries cannot run on Linux. Tests are compiled but not executed.
-- **Microsoft SDK**: cargo-xwin downloads Microsoft's CRT and Windows SDK headers on first use. See [license terms](https://go.microsoft.com/fwlink/?LinkId=2086102).
-
-### When to Use
-
-- Catching compilation errors before pushing to CI
-- Testing dependency changes that affect the Windows target
-- Debugging Windows-specific `#[cfg(target_os = "windows")]` code paths
-
-For production Windows builds, always use CI.
-
-## macOS Builds: CI Only
-
-Local macOS cross-compilation from Linux is **not available** for two reasons:
-
-### Legal Constraints
-
-Apple's macOS EULA (Section 2B) permits macOS installation only on "Apple-branded hardware." This applies to VMs and containers. Running macOS in any form on non-Apple hardware violates the license.
-
-The Xcode and Apple SDKs Agreement further prohibits installing Apple SDKs on non-Apple computers. Tools like `osxcross` that extract the macOS SDK operate in a legal gray area.
-
-### Technical Constraints
-
-Tauri depends on native macOS frameworks (WebKit, AppKit) that only exist on macOS. Unlike pure Rust projects, Tauri apps cannot be cross-compiled for macOS from Linux.
-
-### Alternatives for Faster macOS CI
-
-If GitHub Actions macOS runners are too slow or expensive:
-
-- **[Cirrus Runners](https://cirrus-runners.app/)**: Drop-in GitHub Actions replacement using Apple Silicon hardware. Claimed 2-3x faster than GitHub's macOS runners.
-- **[Tart](https://github.com/cirruslabs/tart)**: Open-source macOS VM tooling for Apple Silicon. Self-host on Mac Mini cluster.
-- **[MacStadium](https://www.macstadium.com/)**: Hosted Mac infrastructure with per-node pricing.
+macOS and Windows wrappers are deferred. Any future platform release must update
+this document, the release workflow, installer docs, and `openspec/specs/ci-release/spec.md`
+in the same change.

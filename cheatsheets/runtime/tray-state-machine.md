@@ -13,6 +13,7 @@ tier: bundled
 # Tray State Machine
 
 @trace spec:tray-app, spec:tray-progress-and-icon-states
+@trace spec:no-terminal-flicker, spec:remote-projects
 
 **Use when**: Understanding how the tray icon and menu state transitions in response to container lifecycle and build events.
 
@@ -42,12 +43,16 @@ State transitions are driven by multiplexed event sources:
 - **Monotonic**: never rollback state (only forward transitions)
 - **Idempotent**: same event applied twice = same result
 - **Convergent**: duplicate events don't cause inconsistency
+- **No open-time relayout**: `AboutToShow` for the root or Cloud submenu may
+  start a stale remote-project refresh, but it must not request an immediate
+  submenu re-read. Emit a menu layout update only after fetched content changes.
 
 ## Related Specs
 
 - `spec:tray-app` - main tray orchestration
 - `spec:podman-orchestration` - container lifecycle
 - `spec:tray-minimal-ux` - minimal menu UX
+- `spec:remote-projects` - Cloud submenu cache and clone behavior
 
 ## See Also
 

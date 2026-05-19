@@ -38,7 +38,7 @@ Phase notes:
 | `litmus-cheatsheet-tooling-structure.yaml` | `cheatsheet-tooling` | **MEDIUM** | Verify cheatsheet tree layout, template, and generated index invariants |
 | `litmus-cheatsheet-source-layer-validation.yaml` | `cheatsheet-source-layer` | **MEDIUM** | Verify the cheatsheet source validator stays callable on a fresh workspace |
 | `litmus-cheatsheet-tier-discipline.yaml` | `cheatsheets-license-tiered` | **MEDIUM** | Verify cheatsheet tier discipline stays valid under the tier validator |
-| `litmus-ci-release-node24-policy.yaml` | `ci-release` | **MEDIUM** | Verify CI and release workflows enforce the Node 24 policy |
+| `litmus-ci-release-musl-binary-policy.yaml` | `ci-release` | **HIGH** | Verify CI and release workflows publish the Linux musl binary and keep hosted checks static-only |
 | `litmus-cli-mode-shape.yaml` | `cli-mode` | **MEDIUM** | Verify cli-mode command-shape seams stay deterministic in unit tests |
 | `litmus-mcp-on-demand-shape.yaml` | `mcp-on-demand` | **MEDIUM** | Verify the MCP on-demand tray socket mount remains wired into the forge profile |
 | `litmus-podman-path-availability.yaml` | `podman-orchestration` | **CRITICAL** | Verify podman is installed on PATH before stack scripts run |
@@ -81,7 +81,7 @@ Phase notes:
 - **clickable-trace-index**: 2 tests (clickable-trace-index-generation, clickable-trace-index-observatorium-skeleton)
 - **cheatsheet-source-layer**: 1 test (cheatsheet-source-layer-validation)
 - **cheatsheets-license-tiered**: 1 test (cheatsheet-tier-discipline)
-- **ci-release**: 1 test (ci-release-node24-policy)
+- **ci-release**: 1 test (ci-release-musl-binary-policy)
 - **cli-mode**: 2 tests (cli-mode-shape, podman-idiomatic-launch-routing)
 - **podman-container-spec**: 1 test
 - **podman-container-handle**: 1 test
@@ -138,7 +138,9 @@ Each test is a self-contained YAML file with:
 
 ## Running via CI/CD
 
-See `.github/workflows/litmus-tests.yml` for automated execution on every push.
+See `.github/workflows/litmus-tests.yml` for hosted metadata validation. Runtime
+litmus execution is local or dedicated-runtime only because many tests require a
+real Podman session.
 
 ## Related Documentation
 

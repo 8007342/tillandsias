@@ -9,12 +9,12 @@ active
 Each signable release binary MUST have a corresponding `.cosign.bundle` file published alongside it in the GitHub Release. The bundle MUST contain the signature, Fulcio certificate, timestamp, and Rekor inclusion proof produced by Cosign keyless signing.
 
 #### Scenario: Artifact naming for bundles
-- **WHEN** a binary named `Tillandsias-linux-x86_64.AppImage` is signed
-- **THEN** the bundle MUST be published as `Tillandsias-linux-x86_64.AppImage.cosign.bundle`
+- **WHEN** a binary named `tillandsias-linux-x86_64` is signed
+- **THEN** the bundle MUST be published as `tillandsias-linux-x86_64.cosign.bundle`
 
 #### Scenario: All artifacts signed
-- **WHEN** a release contains artifacts for Linux, macOS, and Windows
-- **THEN** each platform's binary MUST have its own `.cosign.bundle` file
+- **WHEN** a release contains the Linux musl binary and installer helper scripts
+- **THEN** each signable artifact MUST have its own `.cosign.bundle` file
 - **AND** the release MUST still include `SHA256SUMS`
 
 #### Scenario: Bundle files uploaded to release

@@ -63,7 +63,7 @@ plan_index:
       order: 0
       title: Wrapper contract and repo-local launch defaults
       status: completed
-      deliverable: plan/steps/00-wrapper-contract.md
+      deliverable: plan/archive/2026-05-19/steps/00-wrapper-contract.md
       depends_on: []
       resume_prompt: './codex "Look at ./plan.yaml and continue implementation using ./methodology.yaml"'
       outcome: >
@@ -84,7 +84,7 @@ plan_index:
       order: 1
       title: Security substrate and Podman layer closure
       status: completed
-      deliverable: plan/steps/01-security-substrate.md
+      deliverable: plan/archive/2026-05-19/steps/01-security-substrate.md
       depends_on: [wrapper-contract]
       specs:
         - security-privacy-isolation
@@ -130,7 +130,7 @@ plan_index:
       order: 2
       title: Browser isolation and secure OpenCode Web
       status: completed
-      deliverable: plan/steps/02-browser-web.md
+      deliverable: plan/archive/2026-05-19/steps/02-browser-web.md
       depends_on: [security-substrate-closure]
       specs:
         - browser-isolation-core
@@ -208,7 +208,7 @@ plan_index:
       order: 2a
       title: Podman idiomatic patterns foundation
       status: completed
-      deliverable: plan/steps/02a-podman-idiomatic.md
+      deliverable: plan/archive/2026-05-19/steps/02a-podman-idiomatic.md
       depends_on: [security-substrate-closure]
       specs:
         - podman-idiomatic-patterns
@@ -280,7 +280,7 @@ plan_index:
       order: 3
       title: Tray lifecycle, init path, and cache semantics
       status: completed
-      deliverable: plan/steps/03-tray-runtime.md
+      deliverable: plan/archive/2026-05-19/steps/03-tray-runtime.md
       depends_on: [browser-and-web-security, podman-idiomatic-foundation]
       specs:
         - tray-app
@@ -367,7 +367,7 @@ plan_index:
       order: 4
       title: Onboarding, discoverability, and repo bootstrap docs
       status: completed
-      deliverable: plan/steps/04-onboarding-docs.md
+      deliverable: plan/archive/2026-05-19/steps/04-onboarding-docs.md
       depends_on: [tray-runtime-and-cache]
       specs:
         - forge-welcome
@@ -442,7 +442,7 @@ plan_index:
       order: 5
       title: Observability, logging, and evidence surfaces
       status: completed
-      deliverable: plan/steps/05-observability.md
+      deliverable: plan/archive/2026-05-19/steps/05-observability.md
       depends_on: [onboarding-and-discovery]
       specs:
         - runtime-logging
@@ -535,7 +535,7 @@ plan_index:
       order: 6
       title: Windows and other cross-platform leftovers
       status: obsoleted
-      deliverable: plan/steps/06-cross-platform.md
+      deliverable: plan/archive/2026-05-19/steps/06-cross-platform.md
       depends_on: [observability-and-diagnostics]
       deferral_reason: "Project focus shifted to Linux-only development per CLAUDE.md. Deferred until cross-platform phase. See plan/issues/deferral-windows-macos-2026-05-14.md."
       specs:
@@ -611,7 +611,7 @@ plan_index:
       order: 7
       title: Semantic distillation and tombstone sweep
       status: completed
-      deliverable: plan/steps/07-semantic-distillation.md
+      deliverable: plan/archive/2026-05-19/steps/07-semantic-distillation.md
       depends_on:
         - security-substrate-closure
         - browser-and-web-security
@@ -895,7 +895,7 @@ plan_index:
       order: 14
       title: User Runtime Port Selection — 80 then 8080 then --port
       status: completed
-      deliverable: plan/steps/14-user-runtime-port-selection.md
+      deliverable: plan/archive/2026-05-19/steps/14-user-runtime-port-selection.md
       depends_on: [router-observatorium-routing]
       specs: []
       exit_criteria:
@@ -917,7 +917,7 @@ plan_index:
       order: 14.5
       title: Runtime Lane Explicitness — Desktop, Service, and Dev/Test Ownership
       status: completed
-      deliverable: plan/steps/14.5-runtime-lane-explicitness.md
+      deliverable: plan/archive/2026-05-19/steps/14.5-runtime-lane-explicitness.md
       depends_on: [user-runtime-port-selection]
       specs:
         - environment-runtime
@@ -1034,7 +1034,7 @@ plan_index:
       order: 16.5
       title: Methodology Reconciliation — Specs, Cheatsheets, and Launch Contract
       status: completed
-      deliverable: plan/steps/16a-methodology-reconciliation.md
+      deliverable: plan/archive/2026-05-19/steps/16a-methodology-reconciliation.md
       depends_on: [runtime-lane-explicitness]
       specs:
         - browser-isolation-tray-integration
@@ -1066,6 +1066,106 @@ plan_index:
             - images/default/config-overlay/mcp/dependency-resolver.sh
           checkpoint_required: true
           handoff_note: "Broken cheatsheet links resolved; new runtime/opencode-web-launch.md added as the launch-path reference."
+
+    - id: git-identity-propagation
+      order: 16.6
+      title: Git Identity Propagation — Forge Commits and Pushes
+      status: completed
+      deliverable: plan/archive/2026-05-19/steps/16b-git-identity-propagation.md
+      depends_on: [methodology-reconciliation]
+      specs:
+        - secrets-management
+        - git-mirror-service
+        - forge-opencode-onboarding
+      exit_criteria:
+        - "GitHub Login identity is injected into direct forge launch argv."
+        - "Entry points configure repo-local git identity after selecting the project."
+        - "Specs and cheatsheets document the identity contract."
+      tasks:
+        - id: git-identity-propagation/launch-env
+          status: completed
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - images/default/lib-common.sh
+            - images/default/entrypoint-forge-opencode.sh
+            - images/default/entrypoint-forge-opencode-web.sh
+            - images/default/entrypoint-forge-claude.sh
+            - images/default/entrypoint-forge-codex.sh
+            - images/default/entrypoint-terminal.sh
+          checkpoint_required: true
+          handoff_note: "Launch argv now injects GIT_AUTHOR/GIT_COMMITTER identity from the managed GitHub Login gitconfig; entrypoints write repo-local user.name/user.email."
+        - id: git-identity-propagation/paperwork
+          status: completed
+          depends_on: [git-identity-propagation/launch-env]
+          owned_files:
+            - openspec/specs/secrets-management/spec.md
+            - openspec/specs/git-mirror-service/spec.md
+            - openspec/specs/forge-opencode-onboarding/spec.md
+            - cheatsheets/runtime/opencode-web-launch.md
+            - cheatsheets/agents/opencode.md
+            - cheatsheets/utils/git-workflows.md
+          checkpoint_required: true
+          handoff_note: "Specs and cheatsheets now describe GitHub Login identity propagation and git config verification."
+
+    - id: release-recovery
+      order: 16.7
+      title: Release Recovery — Static Cloud, Musl Release, Silverblue Installer
+      status: in_progress
+      deliverable: plan/steps/17-release-recovery.md
+      depends_on: [git-identity-propagation]
+      specs:
+        - ci-release
+        - binary-signing
+        - linux-native-portable-executable
+        - install-progress
+      exit_criteria:
+        - "./build.sh --ci-full --install passes locally"
+        - "tillandsias --init --debug passes locally"
+        - "tillandsias --debug --tray launches and is stopped cleanly after smoke"
+        - "main branch GitHub convergence is static-only and green"
+        - "GitHub Release publishes tillandsias-linux-x86_64 plus installer, checksums, and Cosign bundles"
+        - "README documents the Fedora Silverblue curl installer with Podman as the only runtime dependency"
+      tasks:
+        - id: release-recovery/local-validation
+          status: in_progress
+          depends_on: []
+          owned_files:
+            - build.sh
+            - crates/tillandsias-headless/src/main.rs
+            - plan/localwork/release-recovery/processes.md
+          checkpoint_required: true
+          handoff_note: "Run the full local release recovery command chain and keep only compact process/run summaries."
+        - id: release-recovery/static-cloud
+          status: ready
+          depends_on: [release-recovery/local-validation]
+          owned_files:
+            - .github/workflows/ci.yml
+            - .github/workflows/github-actions-convergence.yml
+            - .github/workflows/litmus-tests.yml
+            - scripts/github-actions-convergence.sh
+          checkpoint_required: true
+          handoff_note: "Hosted checks stay static-only; no real Podman runtime or e2e browser work on GitHub-hosted runners."
+        - id: release-recovery/musl-release
+          status: ready
+          depends_on: [release-recovery/static-cloud]
+          owned_files:
+            - .github/workflows/release.yml
+            - scripts/install.sh
+            - scripts/verify.sh
+            - docs/VERIFICATION.md
+          checkpoint_required: true
+          handoff_note: "Release workflow publishes the Linux musl binary and helper scripts with SHA256SUMS and Cosign bundles."
+        - id: release-recovery/paperwork
+          status: ready
+          depends_on: [release-recovery/musl-release]
+          owned_files:
+            - README.md
+            - openspec/specs/ci-release/spec.md
+            - openspec/specs/install-progress/spec.md
+            - cheatsheets/build/validation-ci.md
+          checkpoint_required: true
+          handoff_note: "Root README, OpenSpec, litmus metadata, and bundled build cheatsheets reflect the musl/Silverblue release path."
 
     - id: post-release-polish
       order: 17

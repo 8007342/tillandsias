@@ -32,6 +32,10 @@ action, router auth, or the isolated Chromium app window.
   route reaches OpenCode Web before Chromium opens.
 - The browser runs in `tillandsias-chromium-framework:v<VERSION>` through the
   typed Podman launch profile, not Tauri and not the daily host browser.
+- Git identity comes from GitHub Login's cached
+  `~/.cache/tillandsias/secrets/git/.gitconfig`; the launcher injects
+  `GIT_AUTHOR_*`/`GIT_COMMITTER_*`, and the entrypoint writes repo-local
+  `user.name`/`user.email`.
 
 ## Common Fixes
 
@@ -40,6 +44,9 @@ action, router auth, or the isolated Chromium app window.
 - Wrong or unselected project usually means `TILLANDSIAS_PROJECT` was not set,
   the project was not mounted at `/home/forge/src/<project>`, or the entrypoint
   did not `cd` into `PROJECT_DIR`.
+- `git commit` complaining about unknown author usually means the host launch
+  argv did not propagate GitHub Login identity or the entrypoint did not run
+  `configure_git_identity` after entering the project directory.
 - Unauthorized landing page means `IssueWebSession` was not acknowledged or
   the sidecar never received the session before Chromium loaded the data URL.
 - `--no-sandbox` belongs to the Chromium framework entrypoint only. It is not a

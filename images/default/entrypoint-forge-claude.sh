@@ -4,7 +4,7 @@
 # Lifecycle: source common -> install/update Claude Code -> install OpenSpec ->
 #            find project -> openspec init -> banner -> exec claude
 #
-# Secrets: gh credentials, git config, claude dir (~/.claude/ mounted from host), cache.
+# Secrets: git identity env plus Claude auth; GitHub token stays in git service.
 
 source /usr/local/lib/tillandsias/lib-common.sh
 
@@ -82,6 +82,7 @@ export_ssh_env || true
 # ── Find project directory ──────────────────────────────────
 find_project_dir
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
+configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
 # ── Export project environment ───────────────────────────────

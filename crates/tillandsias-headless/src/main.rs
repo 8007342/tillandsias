@@ -1047,7 +1047,7 @@ fn build_stack_common_args(
     project_name: &str,
     project_path: &Path,
 ) -> Vec<String> {
-    vec![
+    let mut args = vec![
         "--name".into(),
         container_name.into(),
         "--hostname".into(),
@@ -1091,7 +1091,9 @@ fn build_stack_common_args(
             "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
             certs_dir.join("intermediate.crt").display()
         ),
-    ]
+    ];
+    append_git_identity_env_args(&mut args);
+    args
 }
 
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
@@ -1769,6 +1771,7 @@ fn build_opencode_forge_args(
             certs_dir.join("intermediate.crt").display()
         ),
     ]);
+    append_git_identity_env_args(&mut args);
     if let Some(prompt) = prompt {
         args.extend([
             "--env".into(),
@@ -2793,6 +2796,39 @@ fn read_git_identity_defaults() -> GitIdentity {
         }
     }
     identity
+}
+
+fn git_identity_env_pairs(identity: &GitIdentity) -> Vec<(&'static str, String)> {
+    let Some(name) = identity
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    else {
+        return Vec::new();
+    };
+    let Some(email) = identity
+        .email
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    else {
+        return Vec::new();
+    };
+
+    vec![
+        ("GIT_AUTHOR_NAME", name.to_string()),
+        ("GIT_AUTHOR_EMAIL", email.to_string()),
+        ("GIT_COMMITTER_NAME", name.to_string()),
+        ("GIT_COMMITTER_EMAIL", email.to_string()),
+    ]
+}
+
+fn append_git_identity_env_args(args: &mut Vec<String>) {
+    for (name, value) in git_identity_env_pairs(&read_git_identity_defaults()) {
+        args.push("--env".into());
+        args.push(format!("{name}={value}"));
+    }
 }
 
 fn gitconfig_default_paths() -> Vec<PathBuf> {
@@ -4300,7 +4336,12 @@ pub(crate) fn build_forge_agent_run_argv(
         .env("HOME", "/home/forge")
         .env("USER", "forge")
         .env("PROJECT", project_name)
+        .env("TILLANDSIAS_PROJECT", project_name)
         .entrypoint(mode.entrypoint());
+
+    for (name, value) in git_identity_env_pairs(&read_git_identity_defaults()) {
+        spec = spec.env(name, value);
+    }
 
     let ca_cert = certs_dir.join("intermediate.crt");
     if ca_cert.exists() {
@@ -5377,9 +5418,43 @@ mod tests {
         assert!(has_arg(&args, "TILLANDSIAS_OPENCODE_PROMPT=hello"));
         assert!(has_arg(&args, "TILLANDSIAS_PROJECT=alpha"));
         assert!(
+            args.iter().any(|arg| arg.starts_with("GIT_AUTHOR_NAME="))
+                == args.iter().any(|arg| arg.starts_with("GIT_AUTHOR_EMAIL=")),
+            "git identity env should be injected as a complete name/email pair"
+        );
+        assert!(
             args.iter()
                 .any(|arg| arg == "/tmp/project:/home/forge/src/alpha:rw")
         );
+    }
+
+    #[test]
+    fn git_identity_env_pairs_cover_author_and_committer() {
+        let identity = GitIdentity {
+            name: Some("Big Pickle".to_string()),
+            email: Some("big.pickle@example.test".to_string()),
+        };
+        let pairs = git_identity_env_pairs(&identity);
+
+        assert_eq!(pairs.len(), 4);
+        assert!(pairs.contains(&("GIT_AUTHOR_NAME", "Big Pickle".to_string())));
+        assert!(pairs.contains(&("GIT_AUTHOR_EMAIL", "big.pickle@example.test".to_string())));
+        assert!(pairs.contains(&("GIT_COMMITTER_NAME", "Big Pickle".to_string())));
+        assert!(pairs.contains(&("GIT_COMMITTER_EMAIL", "big.pickle@example.test".to_string())));
+    }
+
+    #[test]
+    fn forge_agent_run_argv_exports_project_selection() {
+        let argv = build_forge_agent_run_argv(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Codex,
+        );
+
+        assert!(has_arg(&argv, "PROJECT=alpha"));
+        assert!(has_arg(&argv, "TILLANDSIAS_PROJECT=alpha"));
     }
 
     #[test]

@@ -5,7 +5,7 @@
 #            clone project from git mirror -> openspec init ->
 #            exec opencode serve (no banner, no TTY)
 #
-# Secrets: gh credentials, git config, cache. No Claude secrets.
+# Secrets: git identity env only; GitHub token stays in git service.
 # Unlike the CLI variant, there is no TTY and no user-facing banner —
 # this entrypoint drives a headless HTTP server rendered in a host webview.
 #
@@ -66,12 +66,7 @@ if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]] && [[ -n "${TILLANDSIAS_PROJECT:-}" ]
                 echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
             fi
             # @trace spec:forge-offline
-            if [[ -n "${GIT_AUTHOR_NAME:-}" ]]; then
-                git config user.name "$GIT_AUTHOR_NAME"
-            fi
-            if [[ -n "${GIT_AUTHOR_EMAIL:-}" ]]; then
-                git config user.email "$GIT_AUTHOR_EMAIL"
-            fi
+            configure_git_identity
             break
         fi
         if [[ $i -lt $MAX_RETRIES ]]; then
@@ -124,6 +119,7 @@ find_project_dir
 export_project_env
 
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
+configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
 # ── OpenSpec init (every launch, silent) ────────────────────

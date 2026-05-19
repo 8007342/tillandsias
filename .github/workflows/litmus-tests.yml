@@ -1,5 +1,5 @@
 # @trace spec:ci-release, spec:spec-traceability, spec:logging-accountability
-name: Litmus Tests
+name: Litmus Metadata
 
 on:
   workflow_dispatch:
@@ -13,9 +13,9 @@ concurrency:
 
 jobs:
   litmus-tests:
-    name: Run litmus test suite
+    name: Validate litmus metadata
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -25,8 +25,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             yq \
-            jq \
-            podman
+            jq
 
       - name: Verify litmus tests directory exists
         run: |
@@ -75,7 +74,7 @@ jobs:
           MISSING=0
 
           for test_name in $TEST_NAMES; do
-            TEST_FILE="openspec/litmus-tests/${test_name}.yaml"
+            TEST_FILE="openspec/litmus-tests/$(printf '%s' "$test_name" | sed 's/^litmus:/litmus-/').yaml"
             if [ ! -f "$TEST_FILE" ]; then
               echo "::error::Litmus test file not found: $TEST_FILE (referenced by spec)"
               MISSING=$((MISSING + 1))
@@ -88,14 +87,6 @@ jobs:
           fi
 
           echo "All $(echo "$TEST_NAMES" | wc -l) referenced litmus tests exist"
-
-      # @trace spec:litmus-convergence
-      # Execute all litmus tests. Results are collected and reported.
-      # Note: Some tests require podman/container runtime; they may SKIP on
-      # environments that cannot run containers. This is expected and handled gracefully.
-      - name: Execute litmus tests (requires podman)
-        continue-on-error: true  # Don't fail workflow if some tests skip
-        run: bash scripts/run-litmus-test.sh --all --report json
 
       - name: Generate litmus test report
         run: |
@@ -182,11 +173,11 @@ jobs:
             echo ""
             echo "@trace spec:ci-release"
             echo ""
-            echo "**Note**: This workflow validates litmus test configuration and spec coverage. Actual litmus test execution requires container runtime and is performed in dedicated test environments."
+            echo "**Note**: This workflow validates litmus test configuration and spec coverage only. Actual litmus execution requires container runtime and is performed locally or in dedicated test environments."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload litmus report artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: litmus-test-report

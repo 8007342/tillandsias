@@ -506,11 +506,10 @@ for category in "${CATEGORIES[@]}"; do
     } >>"${TMP_OUT}"
 done
 
-# Canonicalise: collapse runs of blank lines, ensure exactly one trailing \n.
+# Canonicalise: collapse runs of blank lines and drop trailing blank lines.
 awk 'BEGIN { blank=0 }
      /^$/ { blank++; next }
-     { while (blank-- > 0) print ""; blank=0; print }
-     END { print "" }' "${TMP_OUT}" >"${TMP_FINAL}"
+     { while (blank-- > 0) print ""; blank=0; print }' "${TMP_OUT}" >"${TMP_FINAL}"
 
 # ---------------------------------------------------------------------------
 # --check mode vs apply mode.

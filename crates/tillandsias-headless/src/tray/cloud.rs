@@ -31,6 +31,20 @@ pub(super) const CLOUD_TTL: Duration = Duration::from_secs(300);
 /// as a soft failure — the previous list survives.
 const GH_TIMEOUT: Duration = Duration::from_secs(5);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum CloudRefreshOutcome {
+    SkippedFresh,
+    SkippedInFlight,
+    UpdatedMenu,
+    RefreshedUnchanged,
+}
+
+impl CloudRefreshOutcome {
+    pub(super) fn menu_changed(self) -> bool {
+        matches!(self, Self::UpdatedMenu)
+    }
+}
+
 /// Shape of one repo entry in `gh api user/repos`. We deserialize only the
 /// fields we surface in the menu; everything else is dropped on the floor.
 #[derive(Debug, Deserialize)]
@@ -39,9 +53,20 @@ struct GhRepo {
     full_name: String,
 }
 
+pub(super) fn cloud_refresh_due(state: &TrayUiState, force: bool) -> bool {
+    if state.cloud_refresh_in_flight {
+        return false;
+    }
+    force
+        || state
+            .last_fetched
+            .map(|t| t.elapsed() >= CLOUD_TTL)
+            .unwrap_or(true)
+}
+
 /// Refresh `state.cloud_projects` if the TTL has expired (or `force` is set).
 ///
-/// Returns `Ok(())` on success or when the TTL is fresh and no work was done;
+/// Returns a [`CloudRefreshOutcome`] on success or when no work was done;
 /// returns `Err(reason)` only when the gh invocation failed *and* the caller
 /// should surface it. Either way `cloud_projects` is left untouched on
 /// failure so the menu doesn't flicker into `(no repos)`.
@@ -52,37 +77,43 @@ pub(super) fn refresh_cloud_projects_if_stale(
     state: Arc<Mutex<TrayUiState>>,
     force: bool,
     debug: bool,
-) -> Result<(), String> {
+) -> Result<CloudRefreshOutcome, String> {
     // TTL gate — read the timestamp without holding the lock across the gh
     // shell-out.
-    let needs_fetch = {
-        let guard = state
+    {
+        let mut guard = state
             .lock()
             .map_err(|err| format!("state lock poisoned: {err}"))?;
-        force
-            || guard
-                .last_fetched
-                .map(|t| t.elapsed() >= CLOUD_TTL)
-                .unwrap_or(true)
-    };
-    if !needs_fetch {
-        if debug {
-            warn!("cloud refresh skipped: TTL fresh");
+        if guard.cloud_refresh_in_flight {
+            if debug {
+                warn!("cloud refresh skipped: refresh already in flight");
+            }
+            return Ok(CloudRefreshOutcome::SkippedInFlight);
         }
-        return Ok(());
+        if !cloud_refresh_due(&guard, force) {
+            if debug {
+                warn!("cloud refresh skipped: TTL fresh");
+            }
+            return Ok(CloudRefreshOutcome::SkippedFresh);
+        }
+        guard.cloud_refresh_in_flight = true;
     }
 
     // Off-thread tokio runtime for the gh invocation. We deliberately spin up
     // a current-thread runtime here rather than reaching for the global tray
     // runtime to keep this helper standalone and easy to test.
-    let runtime = Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|err| format!("failed to build tokio runtime: {err}"))?;
+    let runtime = match Builder::new_current_thread().enable_all().build() {
+        Ok(runtime) => runtime,
+        Err(err) => {
+            clear_cloud_refresh_in_flight(&state);
+            return Err(format!("failed to build tokio runtime: {err}"));
+        }
+    };
 
     let raw = match runtime.block_on(fetch_gh_repos_raw()) {
         Ok(bytes) => bytes,
         Err(err) => {
+            clear_cloud_refresh_in_flight(&state);
             // Surface to stderr unconditionally — the tray's global tracing
             // subscriber routes everything to a log file, so without an
             // eprintln the user sees "(loading…)" forever with no clue why.
@@ -95,6 +126,7 @@ pub(super) fn refresh_cloud_projects_if_stale(
     let entries = match parse_gh_repos(&raw) {
         Ok(entries) => entries,
         Err(err) => {
+            clear_cloud_refresh_in_flight(&state);
             eprintln!("[tillandsias] cloud refresh: failed to parse gh output: {err}");
             warn!(error = %err, "cloud refresh: failed to parse gh output; preserving cached list");
             return Err(err);
@@ -112,10 +144,22 @@ pub(super) fn refresh_cloud_projects_if_stale(
     let mut guard = state
         .lock()
         .map_err(|err| format!("state lock poisoned: {err}"))?;
+    let menu_changed = guard.last_fetched.is_none() || guard.cloud_projects != entries;
     guard.cloud_projects = entries;
     guard.last_fetched = Some(Instant::now());
-    guard.bump_revision();
-    Ok(())
+    guard.cloud_refresh_in_flight = false;
+    if menu_changed {
+        guard.bump_revision();
+        Ok(CloudRefreshOutcome::UpdatedMenu)
+    } else {
+        Ok(CloudRefreshOutcome::RefreshedUnchanged)
+    }
+}
+
+fn clear_cloud_refresh_in_flight(state: &Arc<Mutex<TrayUiState>>) {
+    if let Ok(mut guard) = state.lock() {
+        guard.cloud_refresh_in_flight = false;
+    }
 }
 
 /// Shell out to `gh api user/repos` and return raw stdout bytes. Errors out
@@ -153,14 +197,21 @@ async fn fetch_gh_repos_raw() -> Result<Vec<u8>, String> {
 pub(super) fn parse_gh_repos(raw: &[u8]) -> Result<Vec<ProjectEntry>, String> {
     let repos: Vec<GhRepo> =
         serde_json::from_slice(raw).map_err(|err| format!("invalid gh JSON: {err}"))?;
-    Ok(repos
+    let mut entries: Vec<ProjectEntry> = repos
         .into_iter()
         .map(|r| ProjectEntry {
             name: r.name,
             path: PathBuf::new(),
             full_name: Some(r.full_name),
         })
-        .collect())
+        .collect();
+    entries.sort_by(|a, b| {
+        a.full_name
+            .as_deref()
+            .unwrap_or(&a.name)
+            .cmp(b.full_name.as_deref().unwrap_or(&b.name))
+    });
+    Ok(entries)
 }
 
 #[cfg(test)]
@@ -182,6 +233,7 @@ mod tests {
         );
         state.cloud_projects = cloud;
         state.last_fetched = last_fetched;
+        state.cloud_refresh_in_flight = false;
         Arc::new(Mutex::new(state))
     }
 
@@ -223,12 +275,28 @@ mod tests {
         // Should be Ok(()) and a no-op. Even if `gh` isn't installed on the
         // test host we must not invoke it.
         let result = refresh_cloud_projects_if_stale(state.clone(), false, false);
-        assert!(result.is_ok());
+        assert_eq!(result, Ok(CloudRefreshOutcome::SkippedFresh));
 
         let guard = state.lock().expect("test state lock");
         assert_eq!(guard.cloud_projects.len(), 1);
         assert_eq!(guard.cloud_projects[0].name, "cached");
         assert_eq!(guard.last_fetched, Some(fresh));
+        assert!(!guard.cloud_refresh_in_flight);
+    }
+
+    #[test]
+    fn cloud_refresh_skips_when_refresh_already_in_flight() {
+        let state = fixture_state(Vec::new(), None);
+        {
+            let mut guard = state.lock().expect("test state lock");
+            guard.cloud_refresh_in_flight = true;
+        }
+
+        let result = refresh_cloud_projects_if_stale(state.clone(), false, false);
+        assert_eq!(result, Ok(CloudRefreshOutcome::SkippedInFlight));
+
+        let guard = state.lock().expect("test state lock");
+        assert!(guard.cloud_refresh_in_flight);
     }
 
     #[test]
@@ -264,6 +332,10 @@ mod tests {
         assert!(
             guard.last_fetched.is_none(),
             "last_fetched must NOT advance on failure (cached state was None)"
+        );
+        assert!(
+            !guard.cloud_refresh_in_flight,
+            "failed refresh must clear the in-flight guard"
         );
     }
 }

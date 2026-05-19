@@ -129,9 +129,9 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
-  - litmus:ci-release-node24-policy
+  - litmus:ci-release-musl-binary-policy
   coverage_ratio: 33
-  last_verified: '2026-05-12'
+  last_verified: '2026-05-19'
 - spec_id: cli-bash-mode
   status: obsolete
   litmus_tests: []

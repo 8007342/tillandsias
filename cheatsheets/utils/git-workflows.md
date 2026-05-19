@@ -50,6 +50,19 @@ committed_for_project: false
 
 ## Common patterns
 
+**Verify forge git identity after GitHub Login:**
+```bash
+printf '%s\n' "$GIT_AUTHOR_NAME <$GIT_AUTHOR_EMAIL>"
+printf '%s\n' "$GIT_COMMITTER_NAME <$GIT_COMMITTER_EMAIL>"
+git config user.name
+git config user.email
+```
+
+In Tillandsias forges, GitHub Login stores identity on the host at
+`~/.cache/tillandsias/secrets/git/.gitconfig`. Launchers inject the author and
+committer env vars, and entrypoints copy them into repo-local git config after
+entering `/home/forge/src/<project>`.
+
 **Feature branch with rebase:**
 ```bash
 git switch -c feature/auth-tokens

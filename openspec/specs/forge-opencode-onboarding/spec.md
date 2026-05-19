@@ -52,6 +52,8 @@ The launcher SHALL apply the OpenCode config overlay, run `openspec init --tools
 - **AND** the browser-facing port MUST be fronted by the bundled SSE/theme
   proxy so the dark theme bootstrap is available before OpenCode paints
 - **AND** the active project MUST resolve to `/home/forge/src/<project>`
+- **AND** repo-local git identity MUST be configured from the injected
+  GitHub Login identity before OpenCode starts
 
 #### Scenario: Launcher keeps the startup prompt deterministic
 - **WHEN** `TILLANDSIAS_OPENCODE_PROMPT` is unset

@@ -176,6 +176,29 @@ export_pull_cache_path
 # Lifecycle tracing — function defined earlier in this file. See the forward
 # declaration block above.
 
+configure_git_identity() {
+    # @trace spec:secrets-management, spec:git-mirror-service
+    # GitHub Login stores identity on the host; launchers pass it in as env.
+    # Write repo-local config too so `git config user.*` and tools that inspect
+    # config see the same identity that Git uses for commits.
+    local name="${GIT_AUTHOR_NAME:-${GIT_COMMITTER_NAME:-}}"
+    local email="${GIT_AUTHOR_EMAIL:-${GIT_COMMITTER_EMAIL:-}}"
+
+    if [[ -z "$name" || -z "$email" ]]; then
+        trace_lifecycle "git-identity" "not configured (missing name or email)"
+        return 0
+    fi
+
+    export GIT_AUTHOR_NAME="$name"
+    export GIT_AUTHOR_EMAIL="$email"
+    export GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-$name}"
+    export GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-$email}"
+
+    git config user.name "$name" 2>/dev/null || true
+    git config user.email "$email" 2>/dev/null || true
+    trace_lifecycle "git-identity" "configured"
+}
+
 # @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service, spec:forge-offline
 # Shared clone-from-mirror routine for ALL forge entrypoints (opencode,
 # claude, opencode-web, terminal). Two transports:
@@ -242,8 +265,7 @@ clone_project_from_mirror() {
                 # No real GitHub remote on the mirror — keep the local path.
                 git remote set-url --push origin "${src}" 2>/dev/null || true
             fi
-            [[ -n "${GIT_AUTHOR_NAME:-}" ]] && git config user.name "$GIT_AUTHOR_NAME"
-            [[ -n "${GIT_AUTHOR_EMAIL:-}" ]] && git config user.email "$GIT_AUTHOR_EMAIL"
+            configure_git_identity
             echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
             return 0
         else
@@ -263,8 +285,7 @@ clone_project_from_mirror() {
                 cd "$clone_dir" || return 1
                 git remote set-url --push origin "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" 2>/dev/null || \
                     echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
-                [[ -n "${GIT_AUTHOR_NAME:-}" ]] && git config user.name "$GIT_AUTHOR_NAME"
-                [[ -n "${GIT_AUTHOR_EMAIL:-}" ]] && git config user.email "$GIT_AUTHOR_EMAIL"
+                configure_git_identity
                 echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
                 return 0
             fi

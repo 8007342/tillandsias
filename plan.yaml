@@ -18,9 +18,9 @@ plan:
     verification: methodology/verification.yaml
 
   current_state:
-    last_completed_step: methodology-reconciliation (step 16a)
-    next_step: tray-network-bootstrap (step 15)
-    next_graph_node: tray-network-bootstrap/enclave-network (ready)
+    last_completed_step: git-identity-propagation (step 16b)
+    next_step: release-recovery (step 17)
+    next_graph_node: release-recovery/local-validation (in_progress)
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next
@@ -30,6 +30,8 @@ plan:
     p3_backlog_status: "24/27 gaps implemented across Waves 17-24; 3 undocumented gaps remain (non-blocking)"
     doc_debt_payoff_status: "Waves A-D in progress: 3 events + 3 specs + 1 litmus test + 2 spec updates"
     methodology_reconciliation_status: "Completed 2026-05-19: OpenCode Web launch specs, cheatsheets, CA generation, overlay/theme proxy, project selection, and auth-gated readiness reconciled"
+    git_identity_propagation_status: "Completed 2026-05-19: GitHub Login identity now propagates to forge env and repo-local git config for Codex/OpenCode/OpenCode Web/Claude/maintenance"
+    release_recovery_status: "In progress 2026-05-19: restore local build/init/tray chain, static-only GitHub convergence, musl release publishing, and Fedora Silverblue curl installer docs"
     ghost_trace_sweep_status: "Completed 2026-05-19: validate-traces reports 0 ghost-trace errors; remaining warnings are active in-flight OpenSpec changes"
 
   coordination:

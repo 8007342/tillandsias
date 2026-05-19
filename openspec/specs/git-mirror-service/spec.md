@@ -47,6 +47,15 @@ The git service container SHALL run `git daemon` with `--export-all --enable=rec
 - **THEN** the push SHALL succeed against the git daemon's receive-pack
 - **AND** the commits SHALL be persisted in the bare mirror on the host filesystem
 
+#### Scenario: Forge commits use GitHub Login identity
+- **WHEN** a forge container starts after GitHub Login saved a git identity
+- **THEN** the launcher SHALL inject `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`,
+  `GIT_COMMITTER_NAME`, and `GIT_COMMITTER_EMAIL`
+- **AND** the entrypoint SHALL configure repo-local `user.name` and
+  `user.email` after entering the project
+- **AND** commits created by Codex, OpenCode, OpenCode Web, Claude, or the
+  maintenance terminal SHALL use that identity before pushing to the mirror
+
 #### Scenario: Multiple forge containers clone independently
 - **WHEN** two forge containers clone the same project mirror
 - **THEN** each SHALL have an independent working tree

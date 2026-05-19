@@ -4,7 +4,7 @@
 # Lifecycle: source common -> install OpenSpec -> find project ->
 #            openspec init -> welcome banner -> exec fish
 #
-# Secrets: gh credentials, git config only. No agent secrets.
+# Secrets: git identity env only; GitHub token stays in git service.
 
 source /usr/local/lib/tillandsias/lib-common.sh
 
@@ -90,6 +90,7 @@ export_project_env
 export_workspace_env
 
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
+configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
 # ── OpenSpec init (every launch, silent) ────────────────────

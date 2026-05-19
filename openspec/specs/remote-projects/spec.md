@@ -44,10 +44,14 @@ The fetched repository list SHALL be cached in memory with a 5-minute TTL to avo
 #### Scenario: Cache fresh
 - **WHEN** the Remote Projects submenu is opened and the cache is less than 5 minutes old
 - **THEN** the cached list is used without fetching from GitHub
+- **AND** the tray SHALL NOT emit a menu layout update or request an immediate
+  submenu re-read while the submenu is opening
 
 #### Scenario: Cache stale
 - **WHEN** the Remote Projects submenu is opened and the cache is more than 5 minutes old
 - **THEN** a fresh list is fetched from GitHub and the cache is updated
+- **AND** a tray menu layout update SHALL be emitted only if visible submenu
+  content changed
 
 #### Scenario: Cache refreshed after auth
 - **WHEN** the user completes a GitHub Login or Refresh
@@ -82,6 +86,7 @@ The Remote Projects submenu SHALL show a loading indicator while fetching the re
 
 - `cheatsheets/runtime/podman.md` — Podman reference and patterns
 - `cheatsheets/architecture/event-driven-basics.md` — Event Driven Basics reference and patterns
+- `cheatsheets/runtime/tray-state-machine.md` — tray menu state, Cloud refresh, and layout-update discipline
 
 ## Litmus Tests
 

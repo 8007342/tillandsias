@@ -8,12 +8,19 @@ A portable Linux binary that makes software appear — safely, locally, reproduc
 
 ## Install
 
-**Linux** (Fedora, Ubuntu, Debian, Arch, etc.)
+**Fedora Silverblue / Kinoite / uBlue and other x86_64 Linux desktops**
 ```bash
 curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
 ```
 
-The binary is fully portable (musl-static) and runs on any x86_64 Linux system without external dependencies.
+The installer downloads the musl-static `tillandsias-linux-x86_64` binary to `~/.local/bin/tillandsias`. It does not layer packages, install Chromium, install GTK/WebKit, or require a toolbox. Podman is the only runtime dependency.
+
+On Fedora Silverblue-family systems, Podman is usually already present. If it is missing:
+
+```bash
+sudo rpm-ostree install podman
+systemctl reboot
+```
 
 <details>
 <summary>Direct download</summary>
@@ -92,7 +99,7 @@ Removes the binary, caches, container images, and all Tillandsias data.
 
 **Required:**
 - **Linux** (x86_64) — Fedora, Ubuntu, Debian, Arch, or any distro with podman
-- [Podman](https://podman.io) (rootless) — `sudo dnf install podman` or `sudo apt install podman`
+- [Podman](https://podman.io) (rootless). The curl installer only checks for it and prints the distro-specific install command when it is missing.
 
 **For Tray Mode (optional):**
 - GTK4 runtime — usually pre-installed on desktop systems

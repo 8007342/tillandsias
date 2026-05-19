@@ -98,6 +98,10 @@ The Projects submenu SHOULD only rebuild when:
 
 **Scenario:** Start the tray, authenticate with GitHub, and verify the Projects submenu rebuilds once. Add a new project to ~/src and verify submenu rebuilds again. During normal operation, verify minimal rebuilds.
 
+**Scenario:** Open the Cloud submenu while the remote-project cache is fresh.
+Verify `AboutToShow` does not request an immediate submenu re-read, no
+`LayoutUpdated` signal is emitted, and the open submenu does not flicker.
+
 ---
 
 ### Requirement 7: No periodic menu polling
@@ -195,6 +199,7 @@ On macOS and Linux, terminal launches SHOULD:
 - `cheatsheets/runtime/podman.md` — Windows CREATE_NO_WINDOW flag, platform-specific CLI patterns
 - `cheatsheets/runtime/cross-platform-terminal-launch.md` — Terminal launch on macOS (Terminal.app), Linux (GNOME Terminal, Konsole), Windows (cmd.exe)
 - `cheatsheets/architecture/event-driven-ui-updates.md` — UI state machines, menu lifecycle, atomic updates
+- `cheatsheets/runtime/tray-state-machine.md` — tray state transitions and Cloud submenu refresh discipline
 
 ---
 
@@ -205,4 +210,3 @@ On macOS and Linux, terminal launches SHOULD:
 - **Menu state machine**: `src-tauri/src/tray_menu.rs` → `Stage` enum, visibility table, `set_stage()`
 - **Menu item handlers**: `src-tauri/src/menu.rs` → menu builder (legacy reference); superseded by `tray_menu.rs`
 - **Terminal platform selection**: `src-tauri/src/terminal.rs` → platform-specific terminal launcher
-

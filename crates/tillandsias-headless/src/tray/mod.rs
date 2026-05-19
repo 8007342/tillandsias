@@ -7,7 +7,6 @@
 //! existing container entrypoints so the tray stays thin.
 
 pub mod cloud;
-pub mod profiler;
 
 use std::collections::HashMap;
 use std::env;
@@ -303,7 +302,7 @@ fn gh_auth_check() -> bool {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct ProjectEntry {
     /// Short name — for local projects, the directory basename; for cloud
     /// projects, the bare repo name (e.g. `forge`). `cloud_project_by_name`
@@ -347,6 +346,11 @@ struct TrayUiState {
     /// once (the list may still be empty — render `(no repos)`).
     /// @trace spec:tray-ux, spec:remote-projects
     pub(super) last_fetched: Option<Instant>,
+    /// True while a `gh` refresh task is running. AboutToShow can fire for
+    /// both the root menu and the Cloud submenu during one user gesture; this
+    /// guard prevents duplicate refresh/layout-update races while expanding.
+    /// @trace spec:no-terminal-flicker, spec:remote-projects
+    pub(super) cloud_refresh_in_flight: bool,
     selected_agent: SelectedAgent,
     forge_available: bool,
     podman_available: bool,
@@ -356,7 +360,8 @@ struct TrayUiState {
     is_authenticated: bool,
     enclave_status: EnclaveStatus,
     revision: u32,
-    /// Hash of projects list to detect when menu needs rebuild
+    /// Hash of projects list to detect when menu needs rebuild.
+    #[allow(dead_code)] // retained for the project-list rebuild guard contract
     projects_hash: u64,
 }
 
@@ -623,6 +628,7 @@ impl TrayUiState {
             projects,
             cloud_projects: Vec::new(),
             last_fetched: None,
+            cloud_refresh_in_flight: false,
             selected_agent,
             forge_available,
             podman_available,
@@ -650,6 +656,7 @@ impl TrayUiState {
     }
 
     /// Check if projects list has changed since last menu build
+    #[allow(dead_code)] // retained for the project-list rebuild guard contract
     fn projects_changed(&self, new_projects: &[ProjectEntry]) -> bool {
         Self::hash_projects(new_projects) != self.projects_hash
     }
@@ -1158,9 +1165,13 @@ fn handle_select_agent(service: Arc<TrayService>, agent: SelectedAgent) {
     config::save_selected_agent(agent);
     let service_for_emit = service.clone();
     // @trace gap:TR-005: Offload UI refresh to async executor (non-blocking)
-    if let Err(_) = service.task_executor.spawn_task(move || {
-        let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
-    }) {
+    if service
+        .task_executor
+        .spawn_task(move || {
+            let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
+        })
+        .is_err()
+    {
         warn!("task queue full: skipping agent selection UI refresh");
     }
 }
@@ -1204,16 +1215,20 @@ fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind:
     }
 
     let project_name = project.name.clone();
-    if let Err(_) = service.task_executor.spawn_task(move || {
-        let result = launch_project_action(project.clone(), kind, version);
-        if let Err(err) = result {
-            eprintln!(
-                "error: project launch failed for '{}': {}",
-                project.name, err
-            );
-        }
-        let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
-    }) {
+    if service
+        .task_executor
+        .spawn_task(move || {
+            let result = launch_project_action(project.clone(), kind, version);
+            if let Err(err) = result {
+                eprintln!(
+                    "error: project launch failed for '{}': {}",
+                    project.name, err
+                );
+            }
+            let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
+        })
+        .is_err()
+    {
         eprintln!(
             "error: task queue full; cannot launch project '{}' (too many concurrent operations)",
             project_name
@@ -1343,24 +1358,31 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
 fn handle_init(service: Arc<TrayService>) {
     let service_for_emit = service.clone();
     // @trace gap:TR-005: Offload initialization and UI updates to async executor (non-blocking)
-    if let Err(_) = service.task_executor.spawn_task(move || {
-        let _ = futures::executor::block_on(service_for_emit.set_status(
-            "⏳ Building images ...",
-            TrayIconState::Building,
-            None,
-        ));
-        let result = run_init_action();
-        let (text, icon, forge_available) = if result.is_ok() {
-            ("✅ Ready", TrayIconState::Mature, Some(true))
-        } else {
-            ("🥀 Setup failed", TrayIconState::Dried, Some(false))
-        };
-        if let Err(err) = result {
-            warn!("initialization failed: {err}");
-        }
-        let _ =
-            futures::executor::block_on(service_for_emit.set_status(text, icon, forge_available));
-    }) {
+    if service
+        .task_executor
+        .spawn_task(move || {
+            let _ = futures::executor::block_on(service_for_emit.set_status(
+                "⏳ Building images ...",
+                TrayIconState::Building,
+                None,
+            ));
+            let result = run_init_action();
+            let (text, icon, forge_available) = if result.is_ok() {
+                ("✅ Ready", TrayIconState::Mature, Some(true))
+            } else {
+                ("🥀 Setup failed", TrayIconState::Dried, Some(false))
+            };
+            if let Err(err) = result {
+                warn!("initialization failed: {err}");
+            }
+            let _ = futures::executor::block_on(service_for_emit.set_status(
+                text,
+                icon,
+                forge_available,
+            ));
+        })
+        .is_err()
+    {
         warn!("task queue full: skipping initialization");
     }
 }
@@ -1369,13 +1391,17 @@ fn handle_github_login(service: Arc<TrayService>) {
     // @trace spec:gh-auth-script, spec:tray-app, gap:TR-005
     let service_for_emit = service.clone();
     // @trace gap:TR-005: Offload GitHub login terminal launch to async executor (non-blocking)
-    if let Err(_) = service.task_executor.spawn_task(move || {
-        let args = vec!["--github-login".to_string()];
-        if let Err(err) = launch_in_terminal("GitHub Login", "tillandsias", &args) {
-            warn!("GitHub login terminal spawn failed: {err}");
-        }
-        let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
-    }) {
+    if service
+        .task_executor
+        .spawn_task(move || {
+            let args = vec!["--github-login".to_string()];
+            if let Err(err) = launch_in_terminal("GitHub Login", "tillandsias", &args) {
+                warn!("GitHub login terminal spawn failed: {err}");
+            }
+            let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
+        })
+        .is_err()
+    {
         warn!("task queue full: skipping GitHub login");
     }
 }
@@ -1387,50 +1413,54 @@ fn handle_github_login(service: Arc<TrayService>) {
 fn handle_clone_project(service: Arc<TrayService>, repo_url: String, repo_name: String) {
     let service_for_emit = service.clone();
     // @trace gap:TR-005: Offload project cloning to async executor (non-blocking)
-    if let Err(_) = service.task_executor.spawn_task(move || {
-        let home = match std::env::var("HOME") {
-            Ok(h) => PathBuf::from(h),
-            Err(_) => {
-                warn!("clone_project: HOME not set");
-                return;
-            }
-        };
-        let target_path = home.join("src").join(&repo_name);
+    if service
+        .task_executor
+        .spawn_task(move || {
+            let home = match std::env::var("HOME") {
+                Ok(h) => PathBuf::from(h),
+                Err(_) => {
+                    warn!("clone_project: HOME not set");
+                    return;
+                }
+            };
+            let target_path = home.join("src").join(&repo_name);
 
-        // Update status to show cloning
-        let _ = futures::executor::block_on(service_for_emit.set_status(
-            format!("⏳ Cloning {} ...", repo_name),
-            TrayIconState::Building,
-            None,
-        ));
+            // Update status to show cloning
+            let _ = futures::executor::block_on(service_for_emit.set_status(
+                format!("⏳ Cloning {} ...", repo_name),
+                TrayIconState::Building,
+                None,
+            ));
 
-        // Clone the project
-        match remote_projects::clone_project_from_github(&repo_url, &target_path) {
-            Ok(()) => {
-                info!(
-                    "clone_project: successfully cloned {} to {:?}",
-                    repo_name, target_path
-                );
-                let _ = futures::executor::block_on(service_for_emit.set_status(
-                    format!("✓ Cloned {}", repo_name),
-                    TrayIconState::Mature,
-                    None,
-                ));
+            // Clone the project
+            match remote_projects::clone_project_from_github(&repo_url, &target_path) {
+                Ok(()) => {
+                    info!(
+                        "clone_project: successfully cloned {} to {:?}",
+                        repo_name, target_path
+                    );
+                    let _ = futures::executor::block_on(service_for_emit.set_status(
+                        format!("✓ Cloned {}", repo_name),
+                        TrayIconState::Mature,
+                        None,
+                    ));
+                }
+                Err(err) => {
+                    warn!("clone_project: failed to clone {}: {}", repo_name, err);
+                    let _ = futures::executor::block_on(service_for_emit.set_status(
+                        format!("🥀 Clone failed: {}", err),
+                        TrayIconState::Dried,
+                        None,
+                    ));
+                }
             }
-            Err(err) => {
-                warn!("clone_project: failed to clone {}: {}", repo_name, err);
-                let _ = futures::executor::block_on(service_for_emit.set_status(
-                    format!("🥀 Clone failed: {}", err),
-                    TrayIconState::Dried,
-                    None,
-                ));
-            }
-        }
 
-        // Refresh menu after a short delay to show results
-        std::thread::sleep(std::time::Duration::from_secs(2));
-        let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
-    }) {
+            // Refresh menu after a short delay to show results
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
+        })
+        .is_err()
+    {
         warn!("task queue full: skipping project clone");
     }
 }
@@ -1441,12 +1471,16 @@ fn handle_clone_project(service: Arc<TrayService>, repo_url: String, repo_name: 
 fn handle_root_terminal(service: Arc<TrayService>, root: PathBuf, version: String) {
     let service_for_emit = service.clone();
     // @trace gap:TR-005: Offload terminal launch to async executor (non-blocking)
-    if let Err(_) = service.task_executor.spawn_task(move || {
-        if let Err(err) = run_root_terminal(&root, &version) {
-            warn!("root terminal launch failed: {err}");
-        }
-        let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
-    }) {
+    if service
+        .task_executor
+        .spawn_task(move || {
+            if let Err(err) = run_root_terminal(&root, &version) {
+                warn!("root terminal launch failed: {err}");
+            }
+            let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
+        })
+        .is_err()
+    {
         warn!("task queue full: skipping root terminal");
     }
 }
@@ -1475,22 +1509,26 @@ fn handle_stop_project(service: Arc<TrayService>, project: String) {
     }
 
     let project_name = project.clone();
-    if let Err(_) = service.task_executor.spawn_task(move || {
-        let container_name = format!("tillandsias-{}-forge", project);
-        if !container_exists_sync(&container_name) {
-            eprintln!(
-                "error: container '{}' not found; cannot stop",
-                container_name
-            );
-        } else if let Err(e) = stop_container_sync(&container_name, 10) {
-            eprintln!(
-                "error: failed to stop container '{}': {}",
-                container_name, e
-            );
-        }
+    if service
+        .task_executor
+        .spawn_task(move || {
+            let container_name = format!("tillandsias-{}-forge", project);
+            if !container_exists_sync(&container_name) {
+                eprintln!(
+                    "error: container '{}' not found; cannot stop",
+                    container_name
+                );
+            } else if let Err(e) = stop_container_sync(&container_name, 10) {
+                eprintln!(
+                    "error: failed to stop container '{}': {}",
+                    container_name, e
+                );
+            }
 
-        let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
-    }) {
+            let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
+        })
+        .is_err()
+    {
         eprintln!(
             "error: task queue full; cannot stop project '{}'",
             project_name
@@ -2311,23 +2349,32 @@ impl DbusMenuIface {
         // AboutToShow on the root rather than per-submenu. Both paths are
         // event-driven, not polled.
         // @trace spec:tray-ux, spec:remote-projects
-        if id == 22 || id == 0 {
+        if (id == 22 || id == 0) && cloud::cloud_refresh_due(&self.0.snapshot(), false) {
             let service = self.0.clone();
             let service_for_task = service.clone();
             let state_handle = service.state_handle();
             if service
                 .task_executor
                 .spawn_task(move || {
-                    let _ = cloud::refresh_cloud_projects_if_stale(state_handle, false, false);
-                    let _ =
-                        futures::executor::block_on(service_for_task.rebuild_after_state_change());
+                    match cloud::refresh_cloud_projects_if_stale(state_handle, false, false) {
+                        Ok(outcome) if outcome.menu_changed() => {
+                            let _ = futures::executor::block_on(
+                                service_for_task.rebuild_after_state_change(),
+                            );
+                        }
+                        Ok(_) => {}
+                        Err(_) => {}
+                    }
                 })
                 .is_err()
             {
                 warn!("task queue full: skipping cloud refresh on submenu open");
             }
         }
-        Ok((true, false))
+        // The refresh above is asynchronous. Returning "needs update" here
+        // asks the shell to re-read the submenu while it is opening, which
+        // causes visible flicker when the cache is already fresh.
+        Ok((false, false))
     }
 
     async fn event(
@@ -2583,6 +2630,7 @@ mod tests {
             projects,
             cloud_projects: Vec::new(),
             last_fetched: None,
+            cloud_refresh_in_flight: false,
             selected_agent,
             forge_available,
             podman_available: true,
@@ -2719,6 +2767,7 @@ mod tests {
                 projects: self.projects,
                 cloud_projects: self.cloud_projects,
                 last_fetched: self.last_fetched,
+                cloud_refresh_in_flight: false,
                 selected_agent: self.agent,
                 forge_available: self.forge_available,
                 podman_available: self.podman_available,
@@ -2821,6 +2870,32 @@ mod tests {
         assert!(
             label_list.contains(&"test-project".to_string()),
             "Local project submenu missing when authenticated"
+        );
+    }
+
+    #[test]
+    fn cloud_about_to_show_with_fresh_cache_does_not_request_immediate_relayout() {
+        let state = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .authenticated(true)
+            .cloud_projects(vec![ProjectEntry {
+                name: "remote-alpha".to_string(),
+                path: PathBuf::new(),
+                full_name: Some("owner/remote-alpha".to_string()),
+            }])
+            .last_fetched(Some(Instant::now()))
+            .build();
+        let service = Arc::new(TrayService::new(state));
+        let iface = DbusMenuIface(service);
+
+        let result = futures::executor::block_on(iface.about_to_show(22))
+            .expect("AboutToShow should succeed");
+
+        assert_eq!(
+            result,
+            (false, false),
+            "fresh Cloud cache must not ask the shell to re-read the submenu while it opens"
         );
     }
 
@@ -3590,8 +3665,15 @@ pub fn run_tray_mode(config_path: Option<String>) -> Result<(), String> {
         if service
             .task_executor
             .spawn_task(move || {
-                let _ = cloud::refresh_cloud_projects_if_stale(state_handle, false, false);
-                let _ = futures::executor::block_on(service_for_init.rebuild_after_state_change());
+                match cloud::refresh_cloud_projects_if_stale(state_handle, false, false) {
+                    Ok(outcome) if outcome.menu_changed() => {
+                        let _ = futures::executor::block_on(
+                            service_for_init.rebuild_after_state_change(),
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(_) => {}
+                }
             })
             .is_err()
         {

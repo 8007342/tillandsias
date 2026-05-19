@@ -1,520 +1,25 @@
-# @trace spec:ci-release, spec:binary-signing, spec:windows-cross-build
+# @trace spec:ci-release, spec:binary-signing
 name: Release
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to release (e.g., 0.0.25.21). Required when not triggered from a tag."
+        description: "Version to release. Defaults to VERSION from the selected ref."
         required: false
         type: string
 
 permissions:
   contents: write
-  id-token: write  # Required for Sigstore Cosign keyless signing (OIDC)
+  id-token: write
 
 concurrency:
   group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Build the static-musl router sidecar ONCE on Linux, then share with every
-  # platform via artifact. This binary is embedded into the tray via
-  # src-tauri/build.rs include_bytes!() and runs inside a Linux container at
-  # tray runtime, so it must be Linux x86_64 musl regardless of the host OS
-  # building the tray. Cross-compiling musl from macOS/Windows runners is
-  # possible but fragile; building once on Linux is the reliable path.
-  # @trace spec:opencode-web-session-otp
-  # ---------------------------------------------------------------------------
-  build-sidecar:
-    name: Build router sidecar (static musl)
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - name: Install Rust stable with musl target
-        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
-        with:
-          toolchain: stable
-          targets: x86_64-unknown-linux-musl
-
-      - name: Rust cache (sidecar target dir)
-        uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
-        with:
-          workspaces: ". -> target-musl"
-          key: sidecar-musl
-
-      - name: Build sidecar
-        run: scripts/build-sidecar.sh
-
-      - name: Upload sidecar artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
-        with:
-          name: router-sidecar-musl
-          path: images/router/tillandsias-router-sidecar
-          if-no-files-found: error
-          retention-days: 1
-
-  # ---------------------------------------------------------------------------
-  # Build platform-specific Tauri bundles
-  # ---------------------------------------------------------------------------
-  build:
-    needs: build-sidecar
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            label: linux-x86_64
-          # @suspend macos-aarch64 — macOS support suspended, using container stack in future
-          # - platform: macos-latest
-          #   target: aarch64-apple-darwin
-          #   label: macos-aarch64
-          # @suspend macos-x86_64 — macOS support suspended, using container stack in future
-          # - platform: macos-latest
-          #   target: x86_64-apple-darwin
-          #   label: macos-x86_64
-          # @suspend windows-x86_64 — Windows support suspended, using container stack in future
-          # - platform: windows-latest
-          #   target: x86_64-pc-windows-msvc
-          #   label: windows-x86_64
-
-    runs-on: ${{ matrix.platform }}
-
-    env:
-      # Tauri Ed25519 signing key -- required for update bundles.
-      # If these secrets are missing, `tauri build` will fail, preventing
-      # unsigned releases from being published.
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - name: Fail if signing key is missing
-        shell: bash
-        run: |
-          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
-            echo "::error::TAURI_SIGNING_PRIVATE_KEY secret is not configured. Cannot produce signed update bundles."
-            exit 1
-          fi
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
-        with:
-          toolchain: stable
-          targets: ${{ matrix.target }}
-
-      - name: Install system dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libssl-dev
-
-      - name: Install Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
-        with:
-          node-version: 24
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
-        with:
-          workspaces: ". -> target"
-
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2"
-
-      - name: Download router sidecar
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: router-sidecar-musl
-          path: images/router/
-
-      - name: Mark sidecar executable (POSIX)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: chmod 0755 images/router/tillandsias-router-sidecar
-
-      - name: Build Tauri (signed)
-        run: cargo tauri build --target ${{ matrix.target }}
-
-      - name: Collect build artifacts
-        shell: bash
-        run: |
-          mkdir -p collected-artifacts
-          BUNDLE_DIR="target/${{ matrix.target }}/release/bundle"
-
-          # Copy all release-worthy files from Tauri bundle output
-          # Note: *.AppImage and *.AppImage.sig are the updater artifacts needed
-          # by Tauri's auto-updater on Linux. Tauri v2 does NOT produce a .tar.gz
-          # for Linux — only the raw AppImage and its detached Ed25519 signature.
-          find "${BUNDLE_DIR}" -type f \( \
-            -name "*.AppImage" -o -name "*.AppImage.sig" \
-            -o -name "*.AppImage.tar.gz" -o -name "*.AppImage.tar.gz.sig" \
-            -o -name "*.dmg" \
-            -o -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" \
-            -o -name "*.exe" \
-            -o -name "*.msi" -o -name "*.msi.sig" \
-            -o -name "*.nsis.zip" -o -name "*.nsis.zip.sig" \
-          \) -exec cp {} collected-artifacts/ \;
-
-          # Rename portable formats to versionless names.
-          # These self-update via Tauri — version in filename becomes stale.
-          cd collected-artifacts
-          for f in *.AppImage; do
-            [ -f "$f" ] && mv "$f" "Tillandsias-linux-x86_64.AppImage" 2>/dev/null || true
-          done
-          for f in *.AppImage.sig; do
-            [ -f "$f" ] && mv "$f" "Tillandsias-linux-x86_64.AppImage.sig" 2>/dev/null || true
-          done
-          for f in *.AppImage.tar.gz; do
-            [ -f "$f" ] && mv "$f" "Tillandsias-linux-x86_64.AppImage.tar.gz" 2>/dev/null || true
-          done
-          for f in *.AppImage.tar.gz.sig; do
-            [ -f "$f" ] && mv "$f" "Tillandsias-linux-x86_64.AppImage.tar.gz.sig" 2>/dev/null || true
-          done
-          for f in *_aarch64.dmg; do
-            [ -f "$f" ] && mv "$f" "Tillandsias-macos-aarch64.dmg" 2>/dev/null || true
-          done
-          for f in *_x64.dmg; do
-            [ -f "$f" ] && mv "$f" "Tillandsias-macos-x86_64.dmg" 2>/dev/null || true
-          done
-          for f in *.app.tar.gz; do
-            [ -f "$f" ] && mv "$f" "Tillandsias-macos-aarch64.app.tar.gz" 2>/dev/null || true
-          done
-          for f in *.app.tar.gz.sig; do
-            [ -f "$f" ] && mv "$f" "Tillandsias-macos-aarch64.app.tar.gz.sig" 2>/dev/null || true
-          done
-          for f in *-setup.exe; do
-            [ -f "$f" ] && mv "$f" "Tillandsias-windows-x86_64-setup.exe" 2>/dev/null || true
-          done
-          for f in *-setup.nsis.zip; do
-            [ -f "$f" ] && mv "$f" "Tillandsias-windows-x86_64-setup.nsis.zip" 2>/dev/null || true
-          done
-          for f in *-setup.nsis.zip.sig; do
-            [ -f "$f" ] && mv "$f" "Tillandsias-windows-x86_64-setup.nsis.zip.sig" 2>/dev/null || true
-          done
-          cd ..
-
-          echo "Collected artifacts:"
-          ls -la collected-artifacts/
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
-        with:
-          name: build-${{ matrix.label }}
-          path: collected-artifacts/*
-          if-no-files-found: error
-          retention-days: 3
-
-  # ---------------------------------------------------------------------------
-  # Collect all artifacts, sign with Cosign, generate checksums, create release
-  # ---------------------------------------------------------------------------
-  sign-and-release:
-    name: Sign and release
-    needs: build
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - name: Validate version matches VERSION file
-        run: |
-          FILE_VERSION="$(tr -d '[:space:]' < VERSION)"
-
-          # Resolve version: prefer workflow_dispatch input, fall back to tag
-          if [ -n "${{ inputs.version }}" ]; then
-            RESOLVED_VERSION="${{ inputs.version }}"
-            echo "Version source: workflow_dispatch input"
-          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            RESOLVED_VERSION="${GITHUB_REF_NAME#v}"
-            echo "Version source: git tag"
-          else
-            echo "::error::No version provided. Either push a v* tag or provide a version input via workflow_dispatch."
-            exit 1
-          fi
-
-          if [ "$RESOLVED_VERSION" != "$FILE_VERSION" ]; then
-            echo "::error::Resolved version ($RESOLVED_VERSION) does not match VERSION file ($FILE_VERSION)"
-            exit 1
-          fi
-          echo "VERSION=$FILE_VERSION" >> "$GITHUB_ENV"
-          echo "Version validated: v$FILE_VERSION"
-
-      # @trace spec:versioning
-      # Enforce monotonic version increases per CRDT merge semantics.
-      # Current version MUST be >= latest released tag.
-      - name: Verify version is monotonically greater than last release
-        run: bash scripts/verify-version-monotonic.sh
-
-      - name: Download all build artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          path: release-artifacts
-          pattern: build-*
-          merge-multiple: true
-
-      - name: List artifacts before signing
-        run: ls -la release-artifacts/
-
-      - name: Generate SHA256 checksums
-        run: |
-          cd release-artifacts
-          sha256sum -- * > SHA256SUMS
-          echo "--- SHA256SUMS ---"
-          cat SHA256SUMS
-
-      # -- Cosign signing (keyless via GitHub OIDC) ---------------------------
-      #
-      # Tauri already produces Ed25519 .sig files for auto-update bundles
-      # (e.g., *.AppImage.sig). Cosign signatures use the .cosign.sig and
-      # .cosign.cert extensions to avoid collision with Tauri signatures.
-
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003  # v4.1.1
-
-      - name: Verify Cosign installation
-        run: cosign version
-
-      - name: Sign artifacts with Cosign (keyless)
-        run: |
-          cd release-artifacts
-          for artifact in *; do
-            # Skip non-binary files: checksums, Tauri Ed25519 sigs, Cosign outputs
-            case "${artifact}" in
-              SHA256SUMS|*.sig|*.cosign.bundle) continue ;;
-            esac
-
-            echo "::group::Signing ${artifact}"
-            # Cosign v3.0+ requires --bundle (single file containing signature,
-            # cert, timestamp, and inclusion proof). The legacy
-            # --output-signature/--output-certificate flags are deprecated and
-            # silently ignored. The default SigningConfig auto-detects GitHub
-            # Actions OIDC ambient identity, so no --oidc-issuer needed.
-            cosign sign-blob \
-              --yes \
-              --bundle "${artifact}.cosign.bundle" \
-              "${artifact}"
-
-            # Verify the bundle file was created
-            if [ ! -f "${artifact}.cosign.bundle" ]; then
-              echo "::error::Signing failed for ${artifact} -- missing .cosign.bundle file"
-              exit 1
-            fi
-
-            echo "Signed: ${artifact}"
-            echo "  -> ${artifact}.cosign.bundle"
-            echo "::endgroup::"
-          done
-
-      - name: Verify all signable artifacts are signed
-        run: |
-          cd release-artifacts
-          EXPECTED=0
-          SIGNED=0
-          for artifact in *; do
-            case "${artifact}" in
-              SHA256SUMS|*.sig|*.cosign.bundle) continue ;;
-            esac
-            EXPECTED=$((EXPECTED + 1))
-            if [ -f "${artifact}.cosign.bundle" ]; then
-              SIGNED=$((SIGNED + 1))
-              echo "OK: ${artifact} (.cosign.bundle present)"
-            else
-              echo "::error::MISSING Cosign bundle file for ${artifact}"
-              exit 1
-            fi
-          done
-
-          echo ""
-          echo "Cosign-signed ${SIGNED}/${EXPECTED} artifacts"
-
-          if [ "${SIGNED}" -ne "${EXPECTED}" ]; then
-            echo "::error::Not all artifacts were signed (${SIGNED}/${EXPECTED})"
-            exit 1
-          fi
-
-          if [ "${EXPECTED}" -eq 0 ]; then
-            echo "::error::No artifacts found to sign"
-            exit 1
-          fi
-
-      - name: List all release files
-        run: ls -la release-artifacts/
-
-      # -- Generate Tauri update manifest (latest.json) ----------------------
-      #
-      # Tauri's updater plugin fetches this manifest to discover available
-      # updates. The version MUST be the 3-part semver from tauri.conf.json
-      # (not the 4-part VERSION file) because CARGO_PKG_VERSION is 3-part.
-      # URLs point to the release assets on this same GitHub release.
-
-      - name: Generate latest.json
-        run: |
-          # Extract 3-part semver (Major.Minor.ChangeCount) from 4-part VERSION
-          SEMVER="$(echo "$VERSION" | cut -d. -f1-3)"
-          REPO="${{ github.repository }}"
-          TAG="v${VERSION}"
-          BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
-
-          # Read Ed25519 signatures from the .sig files produced by Tauri
-          read_sig() {
-            local sigfile="release-artifacts/$1"
-            if [ -f "$sigfile" ]; then
-              cat "$sigfile"
-            else
-              echo ""
-            fi
-          }
-
-          LINUX_SIG="$(read_sig 'Tillandsias-linux-x86_64.AppImage.sig')"
-          MACOS_AARCH64_SIG="$(read_sig 'Tillandsias-macos-aarch64.app.tar.gz.sig')"
-          # Try .nsis.zip.sig first (Tauri v1), fall back to .exe (Tauri v2)
-          WINDOWS_SIG="$(read_sig 'Tillandsias-windows-x86_64-setup.nsis.zip.sig')"
-          WINDOWS_URL="${BASE_URL}/Tillandsias-windows-x86_64-setup.nsis.zip"
-          if [ -z "$WINDOWS_SIG" ] || [ ! -f "release-artifacts/Tillandsias-windows-x86_64-setup.nsis.zip" ]; then
-            # Tauri v2 produces .exe directly, no .nsis.zip wrapper
-            WINDOWS_SIG=""
-            WINDOWS_URL="${BASE_URL}/Tillandsias-windows-x86_64-setup.exe"
-          fi
-          WINDOWS_MSI_SIG="$(read_sig 'Tillandsias_${SEMVER}_x64_en-US.msi.sig')"
-
-          # Build the manifest. Platform keys follow Tauri v2 convention:
-          #   "{os}-{arch}" where os is linux/darwin/windows and arch is x86_64/aarch64
-          cat > release-artifacts/latest.json << MANIFEST
-          {
-            "version": "${SEMVER}",
-            "full_version": "${VERSION}",
-            "notes": "See release notes at ${BASE_URL}",
-            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "platforms": {
-              "linux-x86_64": {
-                "url": "${BASE_URL}/Tillandsias-linux-x86_64.AppImage",
-                "signature": "${LINUX_SIG}"
-              },
-              "darwin-aarch64": {
-                "url": "${BASE_URL}/Tillandsias-macos-aarch64.app.tar.gz",
-                "signature": "${MACOS_AARCH64_SIG}"
-              },
-              "windows-x86_64": {
-                "url": "${WINDOWS_URL}",
-                "signature": "${WINDOWS_SIG}"
-              }
-            }
-          }
-          MANIFEST
-
-          # Remove leading whitespace from heredoc indentation
-          python3 -c "
-          import json, sys
-          with open('release-artifacts/latest.json') as f:
-              data = json.load(f)
-          with open('release-artifacts/latest.json', 'w') as f:
-              json.dump(data, f, indent=2)
-              f.write('\n')
-          "
-
-          echo "--- latest.json ---"
-          cat release-artifacts/latest.json
-
-      # -- Create GitHub Release with verification instructions ---------------
-      #
-      # Uses gh CLI directly instead of softprops/action-gh-release. The
-      # softprops action still uses Node 20 (deprecated 2025-09-19, removed
-      # from runners 2026-09-16) and the maintainer has not merged any of the
-      # open Node 24 migration PRs. gh CLI is pre-installed on all runners
-      # and has no Node version dependency.
-
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-        run: |
-          # Build release notes file: our verification body + GitHub auto-generated changelog
-          NOTES_FILE="$(mktemp)"
-          cat > "${NOTES_FILE}" <<'BODY_EOF'
-          ## Verify artifact signatures (Cosign)
-
-          All release artifacts are signed with [Sigstore Cosign](https://docs.sigstore.dev/) using keyless mode via GitHub Actions OIDC identity. Every signature is recorded in the [Rekor transparency log](https://rekor.sigstore.dev/).
-
-          ### Install Cosign
-
-          ```bash
-          # macOS (Homebrew)
-          brew install cosign
-
-          # Debian / Ubuntu
-          sudo apt-get install cosign
-
-          # Or download from: https://github.com/sigstore/cosign/releases
-          ```
-
-          ### Verify a downloaded binary
-
-          Download the binary along with its `.cosign.bundle` file, then run:
-
-          ```bash
-          cosign verify-blob \
-            --bundle <ARTIFACT>.cosign.bundle \
-            --certificate-identity-regexp "https://github.com/.*/tillandsias/" \
-            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            <ARTIFACT>
-          ```
-
-          Replace `<ARTIFACT>` with the filename you downloaded.
-
-          > **Note:** Requires Cosign v3.0+ (the bundle format is the default in v3.0).
-          > Older Cosign versions used separate `.cosign.sig` and `.cosign.cert` files.
-
-          ### Verify SHA256 checksums
-
-          ```bash
-          sha256sum -c SHA256SUMS
-          ```
-          BODY_EOF
-
-          # Append the verification docs link (uses ${REPO} from env)
-          printf '\nFor detailed instructions, see [docs/VERIFICATION.md](https://github.com/%s/blob/main/docs/VERIFICATION.md).\n' "${REPO}" >> "${NOTES_FILE}"
-
-          # Append GitHub auto-generated release notes (changelog since previous tag)
-          GENERATED="$(gh api "repos/${REPO}/releases/generate-notes" \
-            -f tag_name="v${VERSION}" \
-            --jq '.body' 2>/dev/null || echo "")"
-          if [ -n "${GENERATED}" ]; then
-            printf '\n%s\n' "${GENERATED}" >> "${NOTES_FILE}"
-          fi
-
-          # Determine prerelease flag from version string
-          PRERELEASE_FLAG=""
-          case "${VERSION}" in
-            *-rc*|*-beta*|*-alpha*) PRERELEASE_FLAG="--prerelease" ;;
-          esac
-
-          # Create the release with all artifacts
-          # Only include scripts that exist (Windows .ps1 scripts are planned, not yet available)
-          SCRIPT_FILES="release-artifacts/* scripts/install.sh scripts/uninstall.sh"
-
-          gh release create "v${VERSION}" \
-            --title "v${VERSION}" \
-            --notes-file "${NOTES_FILE}" \
-            ${PRERELEASE_FLAG} \
-            ${SCRIPT_FILES}
-
-  # ---------------------------------------------------------------------------
-  # Update rolling tags (stable + latest)
-  # ---------------------------------------------------------------------------
-  rolling-tags:
-    name: Update rolling tags
-    needs: sign-and-release
+  release:
+    name: Build, sign, and publish Linux musl release
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -522,13 +27,179 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Force-push stable and latest tags
+      - name: Install Rust stable with musl target
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
+        with:
+          toolchain: stable
+          targets: x86_64-unknown-linux-musl
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
+        with:
+          workspaces: |
+            . -> target
+            . -> target-musl
+
+      - name: Install release tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y file jq
+
+      - name: Resolve and validate version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          FILE_VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [ -n "${INPUT_VERSION}" ]; then
+            RESOLVED_VERSION="${INPUT_VERSION}"
+          else
+            RESOLVED_VERSION="${FILE_VERSION}"
+          fi
+
+          if [ "${RESOLVED_VERSION}" != "${FILE_VERSION}" ]; then
+            echo "::error::Resolved version (${RESOLVED_VERSION}) does not match VERSION file (${FILE_VERSION})"
+            exit 1
+          fi
+
+          echo "VERSION=${FILE_VERSION}" >> "$GITHUB_ENV"
+          echo "Version validated: v${FILE_VERSION}"
+
+      - name: Verify version monotonicity
+        run: bash scripts/verify-version-monotonic.sh
+
+      - name: Build router sidecar
+        run: scripts/build-sidecar.sh
+
+      - name: Build portable Linux binary
+        run: |
+          cargo build \
+            --workspace \
+            --release \
+            --target x86_64-unknown-linux-musl \
+            --features tray \
+            --manifest-path Cargo.toml
+
+      - name: Validate portable binary
+        run: |
+          BIN="target/x86_64-unknown-linux-musl/release/tillandsias"
+          test -x "$BIN"
+          file "$BIN" | tee /tmp/tillandsias-file.txt
+          grep -F "statically linked" /tmp/tillandsias-file.txt
+          "$BIN" --version
+
+          HEADLESS_OUTPUT="$(timeout 5 "$BIN" --headless /tmp/tillandsias-release-validation 2>&1 || true)"
+          printf '%s\n' "$HEADLESS_OUTPUT"
+          grep -F '"event":"app.started"' <<<"$HEADLESS_OUTPUT"
+          grep -F '"event":"app.stopped"' <<<"$HEADLESS_OUTPUT"
+
+      - name: Collect release artifacts
+        run: |
+          mkdir -p release-artifacts
+          install -m 0755 target/x86_64-unknown-linux-musl/release/tillandsias release-artifacts/tillandsias-linux-x86_64
+          install -m 0755 scripts/install.sh release-artifacts/install.sh
+          install -m 0755 scripts/uninstall.sh release-artifacts/uninstall.sh
+          install -m 0755 scripts/verify.sh release-artifacts/verify.sh
+
+          cd release-artifacts
+          sha256sum -- * > SHA256SUMS
+          echo "--- SHA256SUMS ---"
+          cat SHA256SUMS
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+
+      - name: Verify Cosign installation
+        run: cosign version
+
+      - name: Sign artifacts with Cosign bundles
+        run: |
+          cd release-artifacts
+          for artifact in *; do
+            case "${artifact}" in
+              SHA256SUMS|*.cosign.bundle) continue ;;
+            esac
+
+            echo "::group::Signing ${artifact}"
+            cosign sign-blob \
+              --yes \
+              --bundle "${artifact}.cosign.bundle" \
+              "${artifact}"
+            test -f "${artifact}.cosign.bundle"
+            echo "::endgroup::"
+          done
+
+      - name: Verify release artifact set
+        run: |
+          cd release-artifacts
+          test -f tillandsias-linux-x86_64
+          test -f tillandsias-linux-x86_64.cosign.bundle
+          test -f install.sh
+          test -f install.sh.cosign.bundle
+          test -f uninstall.sh
+          test -f verify.sh
+          test -f SHA256SUMS
+          ls -la
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          NOTES_FILE="$(mktemp)"
+          cat > "${NOTES_FILE}" <<'BODY_EOF'
+          ## Install on Fedora Silverblue or other x86_64 Linux systems
+
+          ```bash
+          curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
+          ```
+
+          The installer places the musl-static binary at `~/.local/bin/tillandsias`.
+          It does not install host packages; Podman is the only runtime dependency.
+
+          ## Verify artifact signatures
+
+          Release artifacts are signed with Sigstore Cosign keyless signing through GitHub Actions OIDC and recorded in the Rekor transparency log.
+
+          ```bash
+          cosign verify-blob \
+            --bundle tillandsias-linux-x86_64.cosign.bundle \
+            --certificate-identity-regexp "https://github.com/.*/tillandsias/" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            tillandsias-linux-x86_64
+          ```
+
+          Verify checksums with:
+
+          ```bash
+          sha256sum -c SHA256SUMS
+          ```
+          BODY_EOF
+
+          GENERATED="$(gh api "repos/${REPO}/releases/generate-notes" \
+            -f tag_name="v${VERSION}" \
+            -f target_commitish="${GITHUB_SHA}" \
+            --jq '.body' 2>/dev/null || true)"
+          if [ -n "${GENERATED}" ]; then
+            printf '\n%s\n' "${GENERATED}" >> "${NOTES_FILE}"
+          fi
+
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            gh release upload "v${VERSION}" release-artifacts/* --clobber
+            gh release edit "v${VERSION}" --title "v${VERSION}" --notes-file "${NOTES_FILE}"
+          else
+            gh release create "v${VERSION}" \
+              release-artifacts/* \
+              --target "${GITHUB_SHA}" \
+              --title "v${VERSION}" \
+              --notes-file "${NOTES_FILE}"
+          fi
+
+      - name: Update rolling tags
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -f stable -m "Rolling tag: stable release (${{ github.ref_name }})"
-          git tag -f latest -m "Rolling tag: latest build (${{ github.ref_name }})"
+          git tag -f -a stable -m "Rolling tag: stable release v${VERSION}" "${GITHUB_SHA}"
+          git tag -f -a latest -m "Rolling tag: latest release v${VERSION}" "${GITHUB_SHA}"
           git push origin refs/tags/stable --force
           git push origin refs/tags/latest --force
-          echo "Updated rolling tags: stable, latest → ${{ github.sha }}"
-
+          echo "Updated rolling tags: stable, latest -> ${GITHUB_SHA}"

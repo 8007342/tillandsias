@@ -29,26 +29,20 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf
-
-      - name: Build router sidecar (required by src-tauri/build.rs)
+      - name: Build router sidecar
         run: scripts/build-sidecar.sh
 
       - name: Check formatting
         run: cargo fmt --check --all
 
       - name: Run clippy
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy --workspace --features tray -- -D warnings
 
       - name: Run tests
-        run: cargo test --workspace
+        run: |
+          cargo test --workspace --lib
+          cargo test -p tillandsias-headless --bin tillandsias
+          cargo test -p tillandsias-headless --features tray --bin tillandsias
 
       # @trace spec:cheatsheets-license-tiered
       # Gating tier-aware cheatsheet validator. Unlike the pre-commit hook
@@ -56,14 +50,14 @@ jobs:
       # ERRORs so a release cannot ship a cheatsheet whose pull-on-demand
       # stub is malformed or whose CRDT override discipline is broken.
       - name: Validate cheatsheet tier discipline
-        run: scripts/check-cheatsheet-tiers.sh
+        run: scripts/check-cheatsheet-tiers.sh --strict
 
       # @trace spec:spec-cheatsheet-binding
       # Verify that every spec references at least one cheatsheet via
       # ## Sources of Truth section. Binding creates traceability from
       # spec intent → implementation patterns → code.
       - name: Validate spec-cheatsheet binding completeness
-        run: scripts/validate-spec-cheatsheet-binding.sh --threshold 90
+        run: scripts/validate-spec-cheatsheet-binding-fast.sh
 
       # @trace spec:spec-traceability
       # In CI mode, spec-code drift checks fail the build. Ghost traces

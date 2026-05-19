@@ -4,7 +4,7 @@
 # Lifecycle: source common -> install/update OpenCode -> install OpenSpec ->
 #            find project -> openspec init -> banner -> exec opencode
 #
-# Secrets: gh credentials, git config, cache. No Claude secrets.
+# Secrets: git identity env only; GitHub token stays in git service.
 
 source /usr/local/lib/tillandsias/lib-common.sh
 
@@ -98,6 +98,7 @@ find_project_dir
 export_project_env
 
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
+configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
 # ── OpenSpec init (every launch, silent) ────────────────────
