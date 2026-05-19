@@ -60,7 +60,7 @@ a real local runtime boundary.
 The release workflow:
 
 1. Checks out the selected ref with tags.
-2. Installs Rust stable plus `x86_64-unknown-linux-musl`.
+2. Installs Rust stable, `x86_64-unknown-linux-musl`, and `musl-tools`.
 3. Runs `scripts/build-sidecar.sh`.
 4. Builds the workspace with `--features tray`.
 5. Validates the binary with `file`, `--version`, and a headless start/stop smoke.

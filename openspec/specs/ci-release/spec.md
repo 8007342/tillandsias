@@ -11,12 +11,15 @@ active
 The release workflow MUST publish the `tillandsias-linux-x86_64` musl-static
 binary as the canonical Linux release artifact. It MUST NOT depend on Tauri,
 AppImage packaging, Node.js, or host WebKit packaging.
+The hosted runner MUST install the native musl C toolchain required by crates
+with C build scripts before compiling the musl target.
 
 #### Scenario: Linux binary artifact
 - **WHEN** the release workflow completes
 - **THEN** the GitHub Release includes `tillandsias-linux-x86_64`
 - **AND** the workflow validates that the binary is statically linked
 - **AND** the workflow signs the artifact with a `.cosign.bundle`
+- **AND** the workflow installs `musl-tools` before the build step
 
 ### Hosted CI stays static-only
 
@@ -40,6 +43,7 @@ to local release recovery or dedicated runtime environments.
 Smallest actionable boundary:
 - `grep -F 'tillandsias-linux-x86_64' .github/workflows/release.yml`
 - `grep -F 'statically linked' .github/workflows/release.yml`
+- `grep -F 'musl-tools' .github/workflows/release.yml`
 - `! grep -F 'scripts/run-litmus-test.sh' .github/workflows/litmus-tests.yml`
 
 Sibling tests:

@@ -25,6 +25,10 @@ Fedora Silverblue curl installer.
 - The release workflow is being replaced with a Linux musl binary publisher.
 - The installer is being narrowed to a userspace Linux binary install with
   Podman as the only runtime dependency.
+- Local validation has passed through full install, `--init`, and tray startup.
+- Main convergence run `26128121882` passed on `f71b1f33`.
+- Release run `26128319662` failed before artifact upload because the hosted
+  runner lacked `x86_64-linux-musl-gcc`; retry after installing `musl-tools`.
 
 ## Process Log
 
