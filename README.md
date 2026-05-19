@@ -4,6 +4,8 @@
 
 A portable Linux binary that makes software appear — safely, locally, reproducibly. Runs headless (CLI/automation) or with optional native GTK tray.
 
+> **Linux only.** Tillandsias v0.2 is Linux-native (musl-static, rootless podman, GTK4 tray). macOS and Windows wrappers are planned — see [Platform support](#platform-support) below.
+
 ## Install
 
 **Linux** (Fedora, Ubuntu, Debian, Arch, etc.)
@@ -21,8 +23,6 @@ The binary is fully portable (musl-static) and runs on any x86_64 Linux system w
 | [tillandsias-linux-x86_64](https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-linux-x86_64) |
 
 </details>
-
-> **Note**: macOS and Windows support is planned via thin platform wrappers. Linux is the source of truth.
 
 ## Run
 
@@ -61,6 +61,16 @@ What happens:
 
 Emits JSON events for integration with CI/observability systems. See [OPENCODE-INTEGRATION-COMPLETED.md](docs/OPENCODE-INTEGRATION-COMPLETED.md) for full details.
 
+## OpenCode Web: Full Browser-Based Session
+
+Open a sandboxed Chromium window pointed at the OpenCode UI for the project, with per-window OTP session, isolated container, and forge integration:
+
+```bash
+tillandsias --opencode-web /path/to/project --debug --tray
+```
+
+A Chromium window opens with the OpenCode UI authenticated to your project. The browser runs in a locked-down container (no host filesystem access beyond the profile dir, no credentials, no network outside the enclave).
+
 ## Uninstall
 
 ```bash
@@ -89,6 +99,24 @@ Removes the binary, caches, container images, and all Tillandsias data.
 - For GNOME: [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/) for system tray
 
 **Note**: Headless mode requires no GTK or display server. Tray mode is optional and auto-disabled if GTK is unavailable.
+
+## Platform support
+
+### Linux
+
+First-class. Everything in this README applies as-is. The Linux binary is the source of truth for behavior, security model, and the test matrix.
+
+### macOS
+
+**Coming soon.**
+
+Planned as a thin platform wrapper around the same Rust core, delegating container runtime to Podman Desktop or Docker Desktop. The tray will use the native macOS status bar API.
+
+### Windows
+
+**Coming soon.**
+
+Planned via WSL2: the Linux musl-static binary runs inside WSL, with a thin Windows-side wrapper handling system tray (Win32 NotifyIcon) and lifecycle. Container runtime via Podman Desktop or Docker Desktop.
 
 ## All Downloads
 
