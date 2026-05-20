@@ -51,8 +51,14 @@ Observed notes:
 - `(cd /tmp && tillandsias --init --debug)` used
   `~/.local/share/tillandsias/runtime/0.2.260520.1` and successfully built all
   eight runtime images.
-- GitHub release publication and readback are the remaining operational steps
-  after this batch is pushed to `origin/main`.
+- Commit `6540eb4e1edf423a428c227134f0d347139d27c7` was pushed to
+  `origin/main`.
+- GitHub Actions Convergence run `26186617492` passed on `main`.
+- Release workflow run `26190392894` passed on `main` and published
+  `v0.2.260520.1`.
+- Release readback confirmed `v0.2.260520.1` is latest and includes
+  `install.sh`, `SHA256SUMS`, `tillandsias-linux-x86_64`, `uninstall.sh`,
+  `verify.sh`, and the expected Cosign bundle assets.
 
 ## Trigger
 

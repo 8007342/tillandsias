@@ -1170,7 +1170,7 @@ plan_index:
     - id: user-runtime-checkout-free
       order: 16.8
       title: User Runtime Without Checkout - Assetized Install, PATH-Safe Installer
-      status: in_progress
+      status: completed
       deliverable: plan/steps/18-user-runtime-checkout-free.md
       depends_on: [release-recovery]
       specs:
@@ -1253,7 +1253,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Installer PATH test, runtime asset tests, user-runtime litmus, full local CI, and /tmp installed init smoke passed."
         - id: user-runtime-checkout-free/docs-release
-          status: in_progress
+          status: completed
           depends_on: [user-runtime-checkout-free/tests]
           owned_files:
             - README.md
@@ -1264,7 +1264,7 @@ plan_index:
             - cheatsheets/runtime/linux-user-session-podman.md
             - plan/steps/18-user-runtime-checkout-free.md
           checkpoint_required: true
-          handoff_note: "README, specs, cheatsheets, and plan evidence updated for checkout-free user runtime; release publication/readback remains the next operational step after pushing to origin/main."
+          handoff_note: "README, specs, cheatsheets, and plan evidence updated; v0.2.260520.1 release workflow/readback passed on main."
 
     - id: post-release-polish
       order: 17
