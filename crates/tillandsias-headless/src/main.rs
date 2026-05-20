@@ -59,6 +59,8 @@ use tracing::{debug, error, info, warn};
 
 use serde::{Deserialize, Serialize};
 
+mod runtime_assets;
+
 const VERSION: &str = include_str!("../../../VERSION");
 
 fn main() {
@@ -345,21 +347,29 @@ fn print_usage(version: &str) {
     println!("Auto-detection: Tray mode if native tray support is available, headless otherwise");
 }
 
-/// Locate the Tillandsias checkout root.
+fn checkout_root_is_valid(path: &Path) -> bool {
+    path.join("VERSION").is_file() && path.join("images").is_dir()
+}
+
+/// Locate a developer Tillandsias checkout root.
 ///
-/// The binary uses this to resolve image source paths and workspace-relative
-/// mounts when it is launched from outside the repository.
-fn find_checkout_root() -> Result<PathBuf, String> {
+/// User runtime paths should call `resolve_runtime_asset_root` instead. This
+/// helper exists for explicit `TILLANDSIAS_ROOT` developer overrides and tests.
+fn find_developer_checkout_root() -> Result<PathBuf, String> {
     if let Ok(root) = std::env::var("TILLANDSIAS_ROOT") {
         let path = PathBuf::from(root);
-        if path.join("VERSION").is_file() && path.join("images").is_dir() {
+        if checkout_root_is_valid(&path) {
             return Ok(path);
         }
+        return Err(format!(
+            "TILLANDSIAS_ROOT does not point at a valid Tillandsias checkout: {}",
+            path.display()
+        ));
     }
 
     let mut dir = std::env::current_dir().map_err(|e| format!("Failed to get cwd: {e}"))?;
     loop {
-        if dir.join("VERSION").is_file() && dir.join("images").is_dir() {
+        if checkout_root_is_valid(&dir) {
             return Ok(dir);
         }
         if !dir.pop() {
@@ -368,9 +378,30 @@ fn find_checkout_root() -> Result<PathBuf, String> {
     }
 
     Err(
-        "Could not find Tillandsias checkout. Run from the repo or set TILLANDSIAS_ROOT."
+        "Could not find Tillandsias developer checkout. Set TILLANDSIAS_ROOT to override runtime assets."
             .to_string(),
     )
+}
+
+fn resolve_runtime_asset_root(version: &str, debug: bool) -> Result<PathBuf, String> {
+    // @trace spec:user-runtime-lifecycle, spec:linux-native-portable-executable
+    if std::env::var_os("TILLANDSIAS_ROOT").is_some() {
+        let root = find_developer_checkout_root()?;
+        if debug {
+            eprintln!(
+                "[tillandsias] using developer runtime assets from TILLANDSIAS_ROOT={}",
+                root.display()
+            );
+        }
+        return Ok(root);
+    }
+
+    runtime_assets::ensure_runtime_assets(version, debug)
+}
+
+#[allow(dead_code)]
+fn find_checkout_root() -> Result<PathBuf, String> {
+    find_developer_checkout_root()
 }
 
 fn run_command(mut command: Command, debug: bool) -> Result<(), String> {
@@ -441,6 +472,12 @@ const CA_DIR: &str = "/tmp/tillandsias-ca";
 struct InitBuildState {
     /// Map of image name -> build status ("success", "failed", "pending")
     images: std::collections::HashMap<String, String>,
+    /// Map of image name -> digest of the source context used for the build.
+    #[serde(default)]
+    image_source_digests: std::collections::HashMap<String, String>,
+    /// Digest of the materialized runtime asset manifest, when available.
+    #[serde(default)]
+    runtime_asset_manifest_digest: Option<String>,
     /// Timestamp of last init run (RFC 3339 format)
     timestamp: String,
 }
@@ -449,6 +486,8 @@ impl InitBuildState {
     fn new() -> Self {
         Self {
             images: std::collections::HashMap::new(),
+            image_source_digests: std::collections::HashMap::new(),
+            runtime_asset_manifest_digest: None,
             timestamp: chrono::Local::now().to_rfc3339(),
         }
     }
@@ -508,6 +547,21 @@ impl InitBuildState {
             .unwrap_or(false)
     }
 
+    fn set_image_source_digest(&mut self, image: &str, digest: String) {
+        self.image_source_digests.insert(image.to_string(), digest);
+    }
+
+    fn image_source_digest_matches(&self, image: &str, digest: &str) -> bool {
+        self.image_source_digests
+            .get(image)
+            .map(|cached| cached == digest)
+            .unwrap_or(false)
+    }
+
+    fn set_runtime_asset_manifest_digest(&mut self, digest: Option<String>) {
+        self.runtime_asset_manifest_digest = digest;
+    }
+
     /// Check if cache version matches current VERSION.
     /// @trace spec:forge-staleness, spec:forge-cache-dual
     #[allow(dead_code)]
@@ -529,6 +583,7 @@ impl InitBuildState {
 
     /// Get the last recorded Containerfile mtime for an image.
     /// @trace spec:containerfile-staleness
+    #[allow(dead_code)]
     fn get_last_containerfile_mtime(image: &str) -> Result<Option<u64>, String> {
         let cache_dir = init_cache_dir()?;
         let mtime_file = cache_dir.join(format!("{}-containerfile-mtime", image));
@@ -551,6 +606,7 @@ impl InitBuildState {
 
     /// Save the current Containerfile mtime for an image.
     /// @trace spec:containerfile-staleness
+    #[allow(dead_code)]
     fn save_containerfile_mtime(image: &str, mtime: u64) -> Result<(), String> {
         let cache_dir = init_cache_dir()?;
         let mtime_file = cache_dir.join(format!("{}-containerfile-mtime", image));
@@ -749,6 +805,7 @@ fn forge_image_tag(version: &str) -> String {
 
 /// Check if Containerfile has been modified since last successful build.
 /// @trace spec:containerfile-staleness
+#[allow(dead_code)]
 fn containerfile_is_stale(root: &Path, image_name: &str, debug: bool) -> Result<bool, String> {
     let (containerfile, _) = image_specs(root, image_name)?;
 
@@ -786,6 +843,7 @@ fn containerfile_is_stale(root: &Path, image_name: &str, debug: bool) -> Result<
 
 /// Capture and record the current Containerfile mtime after a successful build.
 /// @trace spec:containerfile-staleness
+#[allow(dead_code)]
 fn capture_containerfile_mtime(root: &Path, image_name: &str) -> Result<(), String> {
     let (containerfile, _) = image_specs(root, image_name)?;
 
@@ -1947,8 +2005,9 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --init")?;
     report_runtime_lane("--init", debug);
 
-    let root = find_checkout_root()?;
     let version = VERSION.trim();
+    let root = resolve_runtime_asset_root(version, debug)?;
+    let runtime_manifest_digest = runtime_assets::root_manifest_digest(&root).ok();
     let images = [
         "proxy",
         "git",
@@ -1998,27 +2057,22 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
 
     for image in &images {
         let tag = versioned_image_tag(image, version);
+        let source_digest = runtime_assets::image_source_digest(&root, image)?;
 
         // Check if image exists and was previously successful
         let should_skip = rt.block_on(async { client.image_exists(&tag).await });
 
-        // @trace spec:containerfile-staleness
-        // Check if Containerfile has been modified since last build
-        let containerfile_stale = if should_skip && state.was_successful(image) && !force {
-            containerfile_is_stale(&root, image, debug).unwrap_or(false)
-        } else {
-            false
-        };
+        let source_changed = !state.image_source_digest_matches(image, &source_digest);
 
-        if should_skip && state.was_successful(image) && !force && !containerfile_stale {
+        if should_skip && state.was_successful(image) && !force && !source_changed {
             if debug {
                 println!("SKIP {} (cached)", image);
             }
             continue;
         }
 
-        if containerfile_stale && debug {
-            eprintln!("REBUILD {} (Containerfile modified)", image);
+        if source_changed && state.was_successful(image) && debug {
+            eprintln!("REBUILD {} (runtime assets changed)", image);
         }
 
         if !should_skip && state.was_successful(image) {
@@ -2043,21 +2097,14 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
             failed_images.push((image.to_string(), e));
         } else {
             state.mark_success(image);
-            // @trace spec:containerfile-staleness
-            // Record Containerfile mtime after successful build
-            if let Err(e) = capture_containerfile_mtime(&root, image)
-                && debug
-            {
-                eprintln!(
-                    "WARNING: Failed to record Containerfile mtime for {}: {}",
-                    image, e
-                );
-            }
+            state.set_image_source_digest(image, source_digest);
             if debug {
                 println!("SUCCESS {}", image);
             }
         }
     }
+
+    state.set_runtime_asset_manifest_digest(runtime_manifest_digest);
 
     // Save updated state
     state.save()?;
@@ -2442,12 +2489,9 @@ fn run_status_check(debug: bool) -> Result<(), String> {
 
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
-    let root = find_checkout_root()?;
     let version = VERSION.trim();
-    let project_name = root
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("tillandsias");
+    let root = resolve_runtime_asset_root(version, debug)?;
+    let project_name = "tillandsias-status-check";
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
@@ -2628,8 +2672,8 @@ fn run_github_login(debug: bool) -> Result<(), String> {
         "GitHub authentication and secret rotation starting"
     );
 
-    let root = find_checkout_root()?;
     let version = VERSION.trim();
+    let root = resolve_runtime_asset_root(version, debug)?;
     let image = versioned_image_tag("git", version);
 
     prompt_and_store_git_identity()?;
@@ -3146,8 +3190,8 @@ fn run_observatorium_mode(debug: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --observatorium")?;
     report_runtime_lane("--observatorium", debug);
 
-    let root = find_checkout_root()?;
     let version = VERSION.trim();
+    let root = resolve_runtime_asset_root(version, debug)?;
     let images = ["web"];
     ensure_versioned_images(&root, &images, version, debug)?;
     let script = observatorium_launcher_script(&root);
@@ -3194,8 +3238,8 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
         );
     }
 
-    let root = find_checkout_root().unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
     let version = VERSION.trim();
+    let root = resolve_runtime_asset_root(version, debug)?;
     // `Path::new(".").file_name()` returns None — canonicalize first.
     let project_path_resolved = std::path::Path::new(project_path)
         .canonicalize()
@@ -3890,8 +3934,8 @@ pub(crate) fn run_opencode_web_mode(
         );
     }
 
-    let root = find_checkout_root().unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
     let version = VERSION.trim();
+    let root = resolve_runtime_asset_root(version, debug)?;
     // `Path::new(".").file_name()` returns None — canonicalize first so the
     // project_name reflects the actual directory the user pointed at.
     let project_path_resolved = std::path::Path::new(project_path)
@@ -4250,8 +4294,8 @@ pub(crate) fn ensure_enclave_for_project(
     project_name: &str,
     debug: bool,
 ) -> Result<PathBuf, String> {
-    let root = find_checkout_root().unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
     let version = VERSION.trim();
+    let root = resolve_runtime_asset_root(version, debug)?;
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
@@ -4447,6 +4491,7 @@ fn run_headless(config_path: Option<String>) -> Result<(), String> {
 /// @trace spec:linux-native-portable-executable, spec:headless-mode, spec:signal-handling, spec:resource-metric-collection
 async fn run_headless_async(config_path: Option<String>) -> Result<(), String> {
     require_headless_service_account("tillandsias --headless")?;
+    let shutdown_signal = install_shutdown_signal_handlers()?;
 
     // Emit startup event with timestamp
     let now = chrono::Local::now();
@@ -4502,7 +4547,7 @@ async fn run_headless_async(config_path: Option<String>) -> Result<(), String> {
     let metrics_handle = spawn_metrics_sampler();
 
     // Main event loop: wait for application shutdown signal.
-    wait_for_shutdown_signal().await?;
+    wait_for_shutdown_signal(shutdown_signal).await?;
     eprintln!("Received shutdown signal");
 
     // Cancel background metric sampler before invoking the rest of the
@@ -4896,20 +4941,20 @@ async fn run_trace_budget_enforcement() {
 fn run_disk_usage_check() {
     use std::process::Command;
 
-    // Find checkout root for script path
-    let checkout_root = match find_checkout_root() {
+    let version = VERSION.trim();
+    let runtime_root = match resolve_runtime_asset_root(version, false) {
         Ok(root) => root,
         Err(e) => {
             tracing::warn!(
                 gap = "TR-006",
                 error = %e,
-                "could not determine Tillandsias root; skipping disk usage check"
+                "could not determine Tillandsias runtime asset root; skipping disk usage check"
             );
             return;
         }
     };
 
-    let manage_cache_script = checkout_root.join("scripts/manage-cache.sh");
+    let manage_cache_script = runtime_root.join("scripts/manage-cache.sh");
     if !manage_cache_script.exists() {
         debug!(
             gap = "TR-006",
@@ -5105,13 +5150,16 @@ fn spawn_metrics_sampler() -> Option<tokio::task::JoinHandle<()>> {
 /// signal handler, and the async sleep yields the runtime while backing off so
 /// we do not spin aggressively while waiting for termination.
 /// @trace spec:linux-native-portable-executable, spec:signal-handling, spec:runtime-logging
-async fn wait_for_shutdown_signal() -> Result<(), String> {
+fn install_shutdown_signal_handlers() -> Result<Arc<AtomicBool>, String> {
     let terminated = Arc::new(AtomicBool::new(false));
     flag::register(libc::SIGTERM, Arc::clone(&terminated))
         .map_err(|e| format!("Failed to register SIGTERM: {e}"))?;
     flag::register(libc::SIGINT, Arc::clone(&terminated))
         .map_err(|e| format!("Failed to register SIGINT: {e}"))?;
+    Ok(terminated)
+}
 
+async fn wait_for_shutdown_signal(terminated: Arc<AtomicBool>) -> Result<(), String> {
     let mut poll_delay_ms = 25_u64;
     while !terminated.load(Ordering::SeqCst) {
         tokio::time::sleep(std::time::Duration::from_millis(poll_delay_ms)).await;
@@ -6042,6 +6090,18 @@ mod tests {
             .expect("chromium-framework image specs should be resolvable");
         assert!(containerfile.ends_with("images/chromium/Containerfile.framework"));
         assert!(context.ends_with("images/chromium"));
+
+        // Test router image
+        let (containerfile, context) =
+            image_specs(&root, "router").expect("router image specs should be resolvable");
+        assert!(containerfile.ends_with("images/router/Containerfile"));
+        assert!(context.ends_with("images/router"));
+
+        // Test web image
+        let (containerfile, context) =
+            image_specs(&root, "web").expect("web image specs should be resolvable");
+        assert!(containerfile.ends_with("images/web/Containerfile"));
+        assert!(context.ends_with("images/web"));
     }
 
     #[test]
@@ -6139,40 +6199,41 @@ mod tests {
 
     #[test]
     fn init_command_defines_required_images_in_order() {
-        // Test that run_init builds images in the correct order: proxy, git, inference,
-        // chromium-core, chromium-framework, forge.
+        // Test that run_init builds images in the correct order: proxy, git,
+        // inference, router, chromium-core, chromium-framework, forge, web.
         // @trace spec:init-command, spec:init-incremental-builds
         // NOTE: This test validates the IMAGE BUILD ORDER, which is critical for
         // chromium-framework (depends on chromium-core) and inter-image dependencies.
         // The actual build execution is skipped here; we test the order specification.
 
         // The images array from run_init defines the build order:
-        // proxy -> git -> inference -> chromium-core -> chromium-framework -> forge
+        // proxy -> git -> inference -> router -> chromium-core -> chromium-framework -> forge -> web
         let images = [
             "proxy",
             "git",
             "inference",
+            "router",
             "chromium-core",
             "chromium-framework",
             "forge",
+            "web",
         ];
 
         // Verify all required images are present
-        assert!(images.iter().any(|&i| i == "proxy"), "proxy must be first");
-        assert!(images.iter().any(|&i| i == "git"), "git must be included");
+        assert_eq!(images.first(), Some(&"proxy"), "proxy must be first");
+        assert!(images.contains(&"git"), "git must be included");
+        assert!(images.contains(&"inference"), "inference must be included");
+        assert!(images.contains(&"router"), "router must be included");
         assert!(
-            images.iter().any(|&i| i == "inference"),
-            "inference must be included"
-        );
-        assert!(
-            images.iter().any(|&i| i == "chromium-core"),
+            images.contains(&"chromium-core"),
             "chromium-core must be included"
         );
         assert!(
-            images.iter().any(|&i| i == "chromium-framework"),
+            images.contains(&"chromium-framework"),
             "chromium-framework must be included"
         );
-        assert!(images.iter().any(|&i| i == "forge"), "forge must be last");
+        assert!(images.contains(&"forge"), "forge must be included");
+        assert_eq!(images.last(), Some(&"web"), "web must be last");
 
         // Verify build order: chromium-framework comes AFTER chromium-core
         let core_idx = images.iter().position(|&i| i == "chromium-core").unwrap();

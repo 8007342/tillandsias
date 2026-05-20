@@ -2,7 +2,7 @@
 tags: [containers, images, podman, oci, lifecycle]
 languages: [bash]
 since: 2026-05-06
-last_verified: 2026-05-06
+last_verified: 2026-05-20
 sources:
   - https://docs.podman.io/en/latest/markdown/podman-image.1.html
   - https://github.com/opencontainers/image-spec
@@ -15,6 +15,9 @@ bundled_into_image: true
 committed_for_project: false
 ---
 # Tillandsias Container Image Lifecycle
+
+@trace spec:user-runtime-lifecycle, spec:init-command, spec:init-incremental-builds, spec:containerfile-staleness
+@cheatsheet runtime/user-runtime-install.md, build/container-image-tagging.md
 
 **Use when**: Understanding how images are built, stored, referenced, and cleaned up; debugging image-related issues; or designing image management workflows.
 
@@ -34,52 +37,65 @@ committed_for_project: false
 | **tillandsias-git** | Git mirror + daemon + credentials | Alpine 3.20 | ~77 MB | Build as-needed for --github-login |
 | **tillandsias-proxy** | HTTPS caching proxy (squid + SSL bump) | Alpine 3.20 | ~27 MB | Build as-needed, rarely changes |
 | **tillandsias-inference** | Ollama + local LLM | Alpine 3.20 | ~300 MB | Build once per release, cached |
+| **tillandsias-router** | Caddy reverse proxy and route reload helper | Alpine 3.20 | small | Build once per release, cached |
+| **tillandsias-web** | OpenCode web UI runtime | Runtime image context | variable | Build once per release, cached |
+| **tillandsias-chromium-core** | Browser isolation core | Runtime image context | variable | Build once per release, cached |
+| **tillandsias-chromium-framework** | Browser isolation framework | Runtime image context | variable | Build once per release, cached |
 
 ## Build Lifecycle
 
 ### 1. Source → Build Inputs
 
 ```
-flake.nix + flake.lock      (Nix reproducible build definition)
 images/default/Containerfile (Forge reference documentation)
 images/git/Containerfile      (Git service build instructions)
 images/proxy/Containerfile    (Proxy build instructions)
 images/inference/Containerfile (Inference build instructions)
+images/router/Containerfile   (Router build instructions)
+images/chromium/Containerfile.core
+images/chromium/Containerfile.framework
+images/web/Containerfile
 ```
 
-**Key**: Images are git-tracked. Untracked files in `images/*/` are **silently excluded** by Nix.
-→ Always `git add` image files before building.
+For installed users these inputs are embedded in the release binary and
+materialized to `$XDG_DATA_HOME/tillandsias/runtime/<VERSION>` or the
+`~/.local/share/tillandsias/runtime/<VERSION>` fallback. For developers,
+`TILLANDSIAS_ROOT` may explicitly point at a checkout to test local image
+changes.
 
-### 2. Build (Nix + Podman)
+### 2. Build (Rust + Podman)
 
 **Trigger**: 
-- `./build.sh --init` (explicit: rebuild all)
-- `./build.sh --release` (builds all)
+- `tillandsias --init --debug` (explicit: build missing/stale runtime images)
+- `./build.sh --ci-full --install` followed by installed-binary init validation
 - `tillandsias --github-login` checks if git image exists, builds if missing
-- Any `run_build_image_script("git", false)` call
+- OpenCode/OpenCode Web/tray paths preflight the images they need
 
 **Process**:
 ```bash
-scripts/build-image.sh forge       # Nix flake build → OCI image → podman load
+tillandsias --init --debug
 ```
 
 **Output**: Image tagged as `tillandsias-<name>:v<VERSION>`
 - Example: `tillandsias-forge:v0.1.260505.11`
 - Stored in podman's local image storage: `~/.local/share/containers/storage/`
 
-**Staleness Detection** (`scripts/build-image.sh`):
-- Hashes: `flake.nix`, `flake.lock`, image source files
-- Compares to cache file: `~/.cache/tillandsias/build-hashes/.last-build-<tag>.sha256`
-- **If unchanged**: skips rebuild, uses `--force` to force rebuild
+**Staleness Detection**:
+- Hashes materialized image context files for each image.
+- Compares to `~/.cache/tillandsias/init-build-state.json`.
+- Rebuilds when the local image is missing, the previous build failed,
+  `--force` is passed, or the image source digest changed.
 
 ### 3. Runtime (Container Start)
 
-**Image Reference** (from `handlers.rs`):
+**Image Reference**:
 ```rust
-tillandsias_forge:v0.1.260505.11
+tillandsias-forge:v0.1.260505.11
 tillandsias-git:v0.1.260505.11
 tillandsias-proxy:v0.1.260505.11
 tillandsias-inference:v0.1.260505.11
+tillandsias-router:v0.1.260505.11
+tillandsias-web:v0.1.260505.11
 ```
 
 **Image Resolution** (podman + registries.conf):
@@ -178,7 +194,8 @@ short-name-mode = "disabled"         # Fail fast on ambiguous names
 | Component | Path | Lifecycle |
 |-----------|------|-----------|
 | **Local images** | `~/.local/share/containers/storage/` | Persistent until pruned |
-| **Image cache** (build) | `~/.cache/tillandsias/build-hashes/` | Persistent, tracks staleness |
+| **Runtime assets** | `~/.local/share/tillandsias/runtime/<VERSION>/` | Rewritten only when missing/corrupt/stale |
+| **Image build state** | `~/.cache/tillandsias/init-build-state.json` | Persistent, tracks success and source digests |
 | **Proxy cache** (dev) | `~/.cache/tillandsias/dev-proxy-cache/` | Ephemeral, cleared between builds |
 | **CA certificates** (dev) | `~/.cache/tillandsias/ca-*.pem` | Ephemeral, regenerated per build |
 
@@ -198,9 +215,11 @@ cat ~/.config/containers/registries.conf
 # Verify image exists and is loadable
 podman image exists tillandsias-forge:v0.1.260505.11 && echo "OK" || echo "NOT FOUND"
 
-# Force rebuild (clears staleness cache)
-rm ~/.cache/tillandsias/build-hashes/.last-build-*
-./scripts/build-image.sh forge
+# Force rebuild (keeps runtime assets and projects intact)
+tillandsias --init --force --debug
+
+# Inspect materialized runtime assets
+find ~/.local/share/tillandsias/runtime -maxdepth 3 -type f | sort | head
 
 # View image history/layers
 podman history tillandsias-forge:v0.1.260505.11
@@ -212,3 +231,4 @@ podman image tree tillandsias-forge:v0.1.260505.11
 - `cheatsheets/utils/podman-registries.md` — Short-name resolution and registries.conf configuration
 - `cheatsheets/utils/podman-secrets.md` — Credential mounting for containers
 - `cheatsheets/runtime/container-lifecycle.md` — Full container lifecycle (create → run → cleanup)
+- `cheatsheets/runtime/user-runtime-install.md` — Checkout-free runtime assets and installer PATH contract

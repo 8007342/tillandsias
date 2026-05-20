@@ -2,7 +2,7 @@
 tags: [linux, podman, systemd, logind, rootless, runtime, desktop]
 languages: [bash]
 since: 2026-05-17
-last_verified: 2026-05-17
+last_verified: 2026-05-20
 sources:
   - https://www.freedesktop.org/software/systemd/man/pam_systemd.html
   - https://www.freedesktop.org/software/systemd/man/loginctl.html
@@ -20,8 +20,8 @@ pull_recipe: see-section-pull-on-demand
 
 # Linux user-session Podman runtime
 
-@trace spec:environment-runtime, spec:podman-orchestration, spec:browser-isolation-tray-integration, spec:cli-mode
-@cheatsheet runtime/podman-idiomatic-patterns.md, runtime/systemd-socket-activation.md
+@trace spec:environment-runtime, spec:podman-orchestration, spec:browser-isolation-tray-integration, spec:cli-mode, spec:user-runtime-lifecycle, spec:install-progress
+@cheatsheet runtime/podman-idiomatic-patterns.md, runtime/systemd-socket-activation.md, runtime/user-runtime-install.md
 
 **Use when**: documenting the Linux runtime boundary for Tillandsias on a real desktop session or in a supervised headless service account.
 
@@ -44,6 +44,11 @@ This is the normal Fedora Workstation case:
 - Tillandsias launches rootless Podman directly as the logged-in user.
 
 If that session is missing, the launcher should fail with an actionable error instead of inventing runtime state.
+
+The installed binary in this lane must be checkout-free: after the curl
+installer, `tillandsias --init --debug` and `tillandsias --debug --tray`
+resolve release-shipped runtime assets from user data and use Podman as the
+only container runtime dependency.
 
 ### 2. Headless service account
 
@@ -70,6 +75,7 @@ echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
 test -n "$XDG_RUNTIME_DIR" && test -w "$XDG_RUNTIME_DIR"
 podman info --format '{{.Host.Security.Rootless}}'
 loginctl show-user "$USER" -p Linger
+command -v tillandsias || printf 'reload shell PATH or use ~/.local/bin/tillandsias\n'
 ```
 
 ## Failure meanings
@@ -85,6 +91,7 @@ loginctl show-user "$USER" -p Linger
 - `cheatsheets/runtime/podman-idiomatic-patterns.md`
 - `cheatsheets/runtime/systemd-socket-activation.md`
 - `cheatsheets/runtime/container-health-checks.md`
+- `cheatsheets/runtime/user-runtime-install.md`
 
 ## Pull on Demand
 

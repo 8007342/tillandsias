@@ -153,8 +153,14 @@ jobs:
           curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
           ```
 
-          The installer places the musl-static binary at `~/.local/bin/tillandsias`.
-          It does not install host packages; Podman is the only runtime dependency.
+          The installer places the musl-static binary in a safe user-owned bin
+          directory, usually `~/.local/bin/tillandsias`. If that directory is not
+          on `PATH`, it writes idempotent shell startup snippets and prints the
+          absolute command you can run immediately.
+
+          It does not install host packages or require a Tillandsias checkout;
+          Podman is the only runtime dependency. The binary materializes its
+          bundled runtime image assets under user data on first use.
 
           ## Verify artifact signatures
 

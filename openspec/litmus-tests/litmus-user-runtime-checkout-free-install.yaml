@@ -1,0 +1,42 @@
+# @trace spec:user-runtime-lifecycle, spec:install-progress, spec:linux-native-portable-executable, spec:init-command
+name: litmus:user-runtime-checkout-free-install
+spec: user-runtime-lifecycle, install-progress, linux-native-portable-executable, init-command
+phase: pre-build
+description: Verify the curl installer PATH contract and checkout-free runtime asset materialization
+severity: high
+size: quick
+backend: fake
+
+preconditions:
+  - workspace contains scripts/install.sh
+  - cargo is available in PATH
+  - bash is available in PATH
+
+critical_path:
+  - step: "verify installer PATH persistence is idempotent"
+    command: "bash scripts/test-install-path.sh"
+    timeout_ms: 10000
+
+  - step: "verify runtime assets embed and repair without Podman"
+    command: "cargo test -p tillandsias-headless --bin tillandsias runtime_assets --features tray"
+    timeout_ms: 180000
+
+  - step: "verify user runtime paths resolve the runtime asset root"
+    command: "rg 'resolve_runtime_asset_root\\(version, debug\\)\\?' crates/tillandsias-headless/src/main.rs && rg 'ensure_runtime_assets' crates/tillandsias-headless/src/runtime_assets.rs"
+    timeout_ms: 5000
+
+observability:
+  traces:
+    - "@trace spec:user-runtime-lifecycle"
+    - "@trace spec:install-progress"
+    - "@trace spec:linux-native-portable-executable"
+    - "@trace spec:init-command"
+  expected_log: "Installer PATH setup is idempotent and runtime assets materialize without a Tillandsias checkout"
+  log_fields:
+    spec: "user-runtime-lifecycle,install-progress,linux-native-portable-executable,init-command"
+    test: "user-runtime-checkout-free-install"
+    backend: "fake"
+
+rollback:
+  on_failure: "inspect installer PATH helpers and runtime asset resolver before re-running from a non-checkout directory"
+  command: "sed -n '1,260p' scripts/install.sh && sed -n '1,260p' crates/tillandsias-headless/src/runtime_assets.rs"

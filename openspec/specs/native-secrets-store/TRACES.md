@@ -11,7 +11,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-core/src/container_profile.rs#L529](../../../crates/tillandsias-core/src/container_profile.rs#L529)
 - [crates/tillandsias-core/src/secrets.rs#L102](../../../crates/tillandsias-core/src/secrets.rs#L102)
 - [crates/tillandsias-core/tests/gh_auth_deploy_key.rs#L2](../../../crates/tillandsias-core/tests/gh_auth_deploy_key.rs#L2)
-- [crates/tillandsias-headless/src/main.rs#L4962](../../../crates/tillandsias-headless/src/main.rs#L4962)
+- [crates/tillandsias-headless/src/main.rs#L5007](../../../crates/tillandsias-headless/src/main.rs#L5007)
 - [images/default/Containerfile#L68](../../../images/default/Containerfile#L68)
 - [images/git/Containerfile#L18](../../../images/git/Containerfile#L18)
 - [images/git/Containerfile#L51](../../../images/git/Containerfile#L51)

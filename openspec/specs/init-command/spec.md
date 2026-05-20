@@ -6,21 +6,23 @@
 status: active
 
 ## Purpose
-Define behavior of `tillandsias --init` command including incremental builds, debug mode, and the runtime contract that the shipped binary performs image orchestration directly from Rust without shell-script wrappers.
+Define behavior of `tillandsias --init` command including incremental builds, debug mode, and the runtime contract that the shipped binary performs image orchestration directly from Rust without shell-script wrappers or a source checkout.
 
 ## Requirements
 
 ### Requirement: Init CLI command
-The application MUST provide a `tillandsias --init` command that pre-builds all container images. The command MUST support `--force` to rebuild all images and `--debug` to enable verbose output with failed build log capture. The command MUST track successful builds across runs and skip already-built images on re-run. The implementation MUST be compiled Rust that invokes Podman directly; it MUST NOT depend on executing repository shell scripts as part of the shipped runtime path.
+The application MUST provide a `tillandsias --init` command that pre-builds all container images. The command MUST support `--force` to rebuild all images and `--debug` to enable verbose output with failed build log capture. The command MUST track successful builds across runs and skip already-built images on re-run when the release-shipped image source digest is unchanged. The implementation MUST be compiled Rust that invokes Podman directly; it MUST NOT depend on executing repository shell scripts as part of the shipped runtime path.
 
 #### Scenario: First run
 - **WHEN** `tillandsias --init` is run and no images exist
-- **THEN** all images MUST be built in sequence (proxy, forge, git, inference, chromium-core, chromium-framework), progress MUST be shown on stdout, and the command MUST exit with code 0
+- **THEN** all images MUST be built in sequence (proxy, git, inference, router, chromium-core, chromium-framework, forge, web), progress MUST be shown on stdout, and the command MUST exit with code 0
 - **AND** the build plan MUST be derived from Containerfiles plus Rust-side Podman command construction, not via a shell-script launcher
+- **AND** the Containerfiles MUST come from the embedded/materialized runtime asset root unless `TILLANDSIAS_ROOT` is explicitly set for development
 
 #### Scenario: Images already exist (staleness)
 - **WHEN** `tillandsias --init` is run and all images already exist and sources unchanged
 - **THEN** the command MUST print "Images up to date" and exit immediately
+- **AND** unchanged sources MUST be determined by content/version digest, not by repository file mtime
 
 #### Scenario: Partial failure with state tracking
 - **WHEN** `tillandsias --init` is run, previous run built proxy successfully but forge failed
@@ -46,6 +48,15 @@ The application MUST provide a `tillandsias --init` command that pre-builds all 
 - **THEN** the binary SHALL build the podman command line itself
 - **AND** the image recipes SHALL come from Containerfiles and runtime assets only
 - **AND** the runtime SHALL not depend on repository shell scripts
+
+### Requirement: Init does not require a checkout
+`tillandsias --init` SHALL resolve image contexts from the release binary's embedded runtime assets by default. `TILLANDSIAS_ROOT` SHALL remain available as an explicit developer override and SHALL fail loudly when it points at an invalid checkout.
+
+#### Scenario: Init outside the repository
+- **WHEN** a user runs `tillandsias --init --debug` from a non-Tillandsias directory with `TILLANDSIAS_ROOT` unset
+- **THEN** the command SHALL materialize or reuse runtime assets under user data
+- **AND** image build paths SHALL point at that runtime asset root
+- **AND** the command SHALL NOT report "Could not find Tillandsias checkout"
 
 ### Requirement: Init build uses host user namespace
 The init build path SHALL select a Podman user namespace mode that does not depend on `newuidmap` on immutable hosts. The default build contract SHALL prefer host namespace reuse for the build container itself while preserving the normal image security contract for runtime containers.
@@ -94,28 +105,31 @@ When `--debug` flag is passed, init MUST capture each image build's output to `/
 - **AND** log lines MUST be prefixed with image name for clarity
 
 ### Requirement: All images built
-The init command MUST build exactly six container images in sequence.
+The init command MUST build exactly eight container images in sequence.
 
 #### Scenario: Image build sequence
 - **WHEN** `tillandsias --init` is run
 - **THEN** the following images MUST be built in this order:
   1. `proxy` — caching HTTP/S proxy with domain allowlist
-  2. `forge` — main dev environment
-  3. `git` — mirror service with push support
-  4. `inference` — ollama for local models
+  2. `git` — mirror service with push support
+  3. `inference` — ollama for local models
+  4. `router` — Caddy reverse proxy and route reload helper
   5. `chromium-core` — browser isolation core (Linux)
   6. `chromium-framework` — browser isolation framework (Linux)
+  7. `forge` — main dev environment
+  8. `web` — OpenCode web UI runtime
 
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:init-log-cleanup` — Verify init logs do not persist after a successful init run
+- `litmus:user-runtime-checkout-free-install` — Verify checkout-free runtime asset materialization and installer PATH discipline
 
 Gating points:
 - All six images build or validate (cached) before first forge launch
 - Build lock prevents concurrent builds; subsequent builds wait for lock release
 - Canonical image tags are content-hash based; version and latest are human-facing aliases
-- Staleness detection checks the source hash; if stale, rebuilds and refreshes aliases
+- Staleness detection checks the release runtime source digest; if stale, rebuilds and refreshes aliases
 - Init logs written to `~/.cache/tillandsias/init-<date>-<time>.log` and cleaned up after init completes
 - On init failure, error is logged but tray continues (degraded state, not fatal)
 - Incremental builds cache layers; unchanged sources skip rebuild
@@ -124,6 +138,8 @@ Gating points:
 
 - `cheatsheets/build/build-lock-semantics.md` — process coordination via PID files to prevent concurrent builds
 - `cheatsheets/build/container-image-tagging.md` — versioned image tag scheme and staleness detection
+- `cheatsheets/runtime/image-lifecycle.md` — release-shipped image source lifecycle
+- `cheatsheets/runtime/user-runtime-install.md` — checkout-free install/runtime boundary
 
 ## Observability
 

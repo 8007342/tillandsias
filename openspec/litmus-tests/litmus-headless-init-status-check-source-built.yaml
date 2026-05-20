@@ -33,6 +33,10 @@ critical_path:
     command: "grep -F 'image exists tillandsias-inference:v' target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000
 
+  - step: "assert router image lookup happened"
+    command: "grep -F 'image exists tillandsias-router:v' target/litmus-podman/headless-init-status-check.calls.log"
+    timeout_ms: 2000
+
   - step: "assert chromium core image lookup happened"
     command: "grep -F 'image exists tillandsias-chromium-core:v' target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000

@@ -171,6 +171,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - tray-performance-profiling.md             — Analyzing tray responsiveness, identifying menu latency regressions, or debuggi… [bundled, partial-verify]
 - tray-state-machine.md [DRAFT]             — Understanding how the tray icon and menu state transitions in response to conta… [bundled, partial-verify]
 - unix-socket-ipc.md                        — building high-performance inter-process communication (IPC) between a daemon an… [pull-on-demand: stub]
+- user-runtime-install.md                   — changing the curl installer, release binary shape, or any runtime path that wou… [bundled, partial-verify]
 - version-file-conventions.md [DRAFT]       — Managing version file format and lifecycle. [bundled, partial-verify]
 - windows-event-viewer.md                   — Diagnosing errors and warnings on Windows systems, or accessing Tillandsias app… [bundled, partial-verify]
 - windows-installer-prereqs.md              — implementing the one-line `install.ps1` / `install.sh` curl installer's prerequ… [pull-on-demand: project-committed]

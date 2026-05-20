@@ -18,6 +18,16 @@ The default headless Tillandsias launcher for Linux MUST be buildable as a self-
 - **THEN** it MUST NOT require host development registry configuration
 - **AND** runtime prerequisites MUST be reported as user-facing setup requirements rather than hidden build-time coupling
 
+### Requirement: Linux binary carries runtime image contexts
+
+The Linux release binary MUST carry the runtime image contexts and helper scripts needed to initialize the user runtime without a Tillandsias source checkout. The binary MAY materialize those assets under `$XDG_DATA_HOME/tillandsias/runtime/<VERSION>` or the equivalent user data fallback before invoking Podman.
+
+#### Scenario: Installed binary initializes outside checkout
+
+- **WHEN** the curl-installed binary runs `--init --debug` from a directory that is not a Tillandsias checkout
+- **THEN** it MUST find or materialize the release-shipped runtime assets
+- **AND** it MUST NOT require `TILLANDSIAS_ROOT`, Rust, Cargo, Nix, or toolbox
+
 ### Requirement: Linux release artifact is the musl binary
 
 The release artifact for the Linux client runtime MUST be named
@@ -28,7 +38,7 @@ The release artifact for the Linux client runtime MUST be named
 
 - **WHEN** a user runs the curl installer
 - **THEN** it downloads `tillandsias-linux-x86_64` from the latest GitHub Release
-- **AND** installs it as `~/.local/bin/tillandsias`
+- **AND** installs it as `tillandsias` in a safe current-user bin directory, usually `~/.local/bin/tillandsias`
 
 ### Requirement: Native tray builds may use host UI libraries
 
@@ -44,3 +54,4 @@ Native tray and platform integrations MAY use platform libraries when they inten
 - `cheatsheets/runtime/portable-executable-transparent-mode.md` - Portable executable model
 - `cheatsheets/runtime/linux-user-session-podman.md` - Linux user-session runtime constraints
 - `cheatsheets/runtime/windows-native-dev-build.md` - Cross-platform build contrast
+- `cheatsheets/runtime/user-runtime-install.md` - Checkout-free user runtime contract

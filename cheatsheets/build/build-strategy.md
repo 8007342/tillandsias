@@ -2,10 +2,11 @@
 tags: [build, ci, reproducible-builds, local-development, release]
 languages: [bash]
 since: 2026-05-06
-last_verified: 2026-05-19
+last_verified: 2026-05-20
 sources:
   - https://github.com/8007342/tillandsias/blob/main/README.md
   - https://github.com/8007342/tillandsias/blob/main/openspec/specs/ci-release/spec.md
+  - file://cheatsheets/runtime/user-runtime-install.md
 authority: high
 status: current
 tier: bundled
@@ -15,6 +16,9 @@ committed_for_project: false
 ---
 # Build Strategy: Local Validation and Release
 
+@trace spec:ci-release, spec:linux-native-portable-executable, spec:user-runtime-lifecycle
+@cheatsheet runtime/user-runtime-install.md, runtime/image-lifecycle.md
+
 **Use when**: Deciding how to validate Tillandsias locally, what may run in
 GitHub Actions, and which artifact the release workflow publishes.
 
@@ -22,7 +26,9 @@ GitHub Actions, and which artifact the release workflow publishes.
 
 Tillandsias v0.2 is released as a Linux musl-static binary named
 `tillandsias-linux-x86_64`. Tauri, AppImage, Node, WebKit packaging, and
-cross-platform release jobs are retired for this release lane.
+cross-platform release jobs are retired for this release lane. The binary
+embeds the runtime image contexts and materializes them on first use, so the
+installed user runtime does not need a Tillandsias checkout.
 
 ## Local Release Recovery
 
@@ -67,4 +73,7 @@ The release workflow:
 6. Publishes `tillandsias-linux-x86_64`, installer scripts, `SHA256SUMS`, and Cosign bundles.
 
 The curl installer downloads that exact asset and installs it as
-`~/.local/bin/tillandsias`.
+`tillandsias` in a safe user-owned bin directory, usually
+`~/.local/bin/tillandsias`. If that directory is not on `PATH`, the installer
+writes idempotent shell startup snippets and prints the absolute command path
+for immediate use.

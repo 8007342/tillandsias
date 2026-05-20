@@ -367,19 +367,22 @@ specs:
   status: active
   litmus_tests:
   - litmus:init-log-cleanup
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:user-runtime-checkout-free-install
+  coverage_ratio: 67
+  last_verified: '2026-05-20'
 - spec_id: init-incremental-builds
   status: active
   litmus_tests:
   - litmus:init-log-cleanup
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:user-runtime-checkout-free-install
+  coverage_ratio: 67
+  last_verified: '2026-05-20'
 - spec_id: install-progress
-  status: obsolete
-  litmus_tests: []
-  coverage_ratio: 0
-  last_verified: '2026-05-12'
+  status: active
+  litmus_tests:
+  - litmus:user-runtime-checkout-free-install
+  coverage_ratio: 100
+  last_verified: '2026-05-20'
 - spec_id: knowledge-source-of-truth
   status: active
   litmus_tests:
@@ -396,6 +399,12 @@ specs:
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-12'
+- spec_id: linux-native-portable-executable
+  status: active
+  litmus_tests:
+  - litmus:user-runtime-checkout-free-install
+  coverage_ratio: 100
+  last_verified: '2026-05-20'
 - spec_id: methodology-accountability
   status: active
   litmus_tests:
@@ -652,6 +661,12 @@ specs:
   coverage_ratio: 0
   last_verified: '2026-05-14'
   tombstone: obsolete:src-tauri-deferred
+- spec_id: user-runtime-lifecycle
+  status: active
+  litmus_tests:
+  - litmus:user-runtime-checkout-free-install
+  coverage_ratio: 100
+  last_verified: '2026-05-20'
 - spec_id: versioning
   status: active
   litmus_tests:

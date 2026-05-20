@@ -1167,6 +1167,105 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Root README, OpenSpec, litmus metadata, and bundled build cheatsheets reflect the musl/Silverblue release path."
 
+    - id: user-runtime-checkout-free
+      order: 16.8
+      title: User Runtime Without Checkout - Assetized Install, PATH-Safe Installer
+      status: in_progress
+      deliverable: plan/steps/18-user-runtime-checkout-free.md
+      depends_on: [release-recovery]
+      specs:
+        - user-runtime-lifecycle
+        - install-progress
+        - init-command
+        - linux-native-portable-executable
+        - ci-release
+      exit_criteria:
+        - "Installer makes tillandsias discoverable in subsequent shells and prints an immediate absolute fallback"
+        - "Installed runtime materializes versioned image contexts from embedded assets without requiring a Tillandsias checkout"
+        - "--init, --tray, --headless, GitHub login, OpenCode, OpenCode Web, and tray attach do not require TILLANDSIAS_ROOT or repo cwd"
+        - "Runtime image staleness uses binary version/content digests rather than checkout Containerfile mtimes"
+        - "Specs, cheatsheets, README, release docs, and litmus metadata describe checkout-free user runtime"
+        - "Local Silverblue smoke passes from a non-checkout directory"
+        - "Patch release is published and read back from GitHub"
+      tasks:
+        - id: user-runtime-checkout-free/installer-path
+          status: completed
+          depends_on: []
+          owned_files:
+            - scripts/install.sh
+            - README.md
+            - openspec/specs/install-progress/spec.md
+          checkpoint_required: true
+          handoff_note: "Implemented and covered by scripts/test-install-path.sh plus README/install-progress spec updates."
+        - id: user-runtime-checkout-free/spec-contract
+          status: completed
+          depends_on: []
+          owned_files:
+            - openspec/specs/user-runtime-lifecycle/spec.md
+            - openspec/specs/install-progress/spec.md
+            - openspec/specs/init-command/spec.md
+            - openspec/specs/linux-native-portable-executable/spec.md
+            - openspec/litmus-bindings.yaml
+            - openspec/litmus-tests
+          checkpoint_required: true
+          handoff_note: "OpenSpec, litmus binding, and litmus:user-runtime-checkout-free-install now define checkout-free user runtime."
+        - id: user-runtime-checkout-free/embedded-assets
+          status: completed
+          depends_on: [user-runtime-checkout-free/spec-contract]
+          owned_files:
+            - crates/tillandsias-headless/build.rs
+            - crates/tillandsias-headless/src/runtime_assets.rs
+            - crates/tillandsias-headless/Cargo.toml
+            - scripts/build-sidecar.sh
+            - images
+            - scripts/manage-cache.sh
+            - scripts/run-observatorium.sh
+          checkpoint_required: true
+          handoff_note: "crates/tillandsias-headless/build.rs embeds runtime assets with executable metadata and fails on missing required assets."
+        - id: user-runtime-checkout-free/runtime-root-refactor
+          status: completed
+          depends_on: [user-runtime-checkout-free/embedded-assets]
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-headless/src/tray/mod.rs
+            - crates/tillandsias-core/src/image_builder.rs
+          checkpoint_required: true
+          handoff_note: "User runtime entrypoints resolve materialized assets by default; TILLANDSIAS_ROOT is a loud developer override."
+        - id: user-runtime-checkout-free/cache-staleness
+          status: completed
+          depends_on: [user-runtime-checkout-free/runtime-root-refactor]
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-core/src/cache_validation.rs
+            - openspec/specs/init-incremental-builds/spec.md
+            - openspec/specs/containerfile-staleness/spec.md
+          checkpoint_required: true
+          handoff_note: "Init state stores runtime manifest and per-image source digests; checkout mtime path is dead-code compatibility only."
+        - id: user-runtime-checkout-free/tests
+          status: completed
+          depends_on: [user-runtime-checkout-free/runtime-root-refactor, user-runtime-checkout-free/cache-staleness, user-runtime-checkout-free/installer-path]
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-headless/tests
+            - scripts
+            - .github/workflows/ci.yml
+            - .github/workflows/release.yml
+          checkpoint_required: true
+          handoff_note: "Installer PATH test, runtime asset tests, user-runtime litmus, full local CI, and /tmp installed init smoke passed."
+        - id: user-runtime-checkout-free/docs-release
+          status: in_progress
+          depends_on: [user-runtime-checkout-free/tests]
+          owned_files:
+            - README.md
+            - docs/VERIFICATION.md
+            - docs/UPDATING.md
+            - cheatsheets/build/build-strategy.md
+            - cheatsheets/runtime/image-lifecycle.md
+            - cheatsheets/runtime/linux-user-session-podman.md
+            - plan/steps/18-user-runtime-checkout-free.md
+          checkpoint_required: true
+          handoff_note: "README, specs, cheatsheets, and plan evidence updated for checkout-free user runtime; release publication/readback remains the next operational step after pushing to origin/main."
+
     - id: post-release-polish
       order: 17
       title: Wave 25 — Post-Release Polish & P1 Consolidation

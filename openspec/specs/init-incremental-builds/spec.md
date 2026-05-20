@@ -6,16 +6,16 @@
 status: active
 
 ## Purpose
-Track and resume partial `tillandsias --init` builds, with debug logging for failed images.
+Track and resume partial `tillandsias --init` builds, with debug logging for failed images and content-based runtime asset staleness.
 
 ## Requirements
 
 ### Requirement: Incremental build state tracking
-The init command MUST maintain a state file at `$HOME/.cache/tillandsias/init-build-state.json` tracking which images were successfully built.
+The init command MUST maintain a state file at `$HOME/.cache/tillandsias/init-build-state.json` tracking which images were successfully built, the runtime asset manifest digest, and the per-image source digest used for the build.
 
 #### Scenario: First run with no state file
 - **WHEN** `tillandsias --init` is run and no state file exists
-- **THEN** all images MUST be built in sequence (proxy, forge, git, inference, chromium-core, chromium-framework)
+- **THEN** all images MUST be built in sequence (proxy, git, inference, router, chromium-core, chromium-framework, forge, web)
 
 #### Scenario: Re-run after partial failure
 - **WHEN** `tillandsias --init` is run and the state file shows proxy=success, forge=failed
@@ -24,6 +24,11 @@ The init command MUST maintain a state file at `$HOME/.cache/tillandsias/init-bu
 #### Scenario: Image deleted after successful build
 - **WHEN** `tillandsias --init` is run, state shows forge=success, but `podman image exists tillandsias-forge:vX.Y.Z` returns false
 - **THEN** forge MUST be rebuilt despite state showing success
+
+#### Scenario: Runtime image source digest changes
+- **WHEN** `tillandsias --init` is run and the state file shows an image success, but the current release runtime source digest for that image differs from the cached digest
+- **THEN** that image MUST be rebuilt even if the image tag exists
+- **AND** the state file MUST be refreshed with the new digest after a successful build
 
 ### Requirement: Debug flag for init command
 The init command MUST accept a `--debug` flag that enables verbose output and failed build log capture.
@@ -68,6 +73,8 @@ Gating points:
 
 - `cheatsheets/build/cargo.md` — Cargo reference and patterns
 - `cheatsheets/build/nix-flake-basics.md` — Nix Flake Basics reference and patterns
+- `cheatsheets/runtime/image-lifecycle.md` — Runtime source digest and rebuild lifecycle
+- `cheatsheets/runtime/user-runtime-install.md` — Release-shipped runtime asset root
 
 ## Observability
 

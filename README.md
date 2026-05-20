@@ -13,7 +13,9 @@ A portable Linux binary that makes software appear — safely, locally, reproduc
 curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
 ```
 
-The installer downloads the musl-static `tillandsias-linux-x86_64` binary to `~/.local/bin/tillandsias`. It does not layer packages, install Chromium, install GTK/WebKit, or require a toolbox. Podman is the only runtime dependency.
+The installer downloads the musl-static `tillandsias-linux-x86_64` binary to a user-owned bin directory, usually `~/.local/bin/tillandsias`. When that directory is not on your shell `PATH`, the installer adds an idempotent PATH block to your shell startup files and prints the absolute command you can run immediately.
+
+It does not layer packages, install Chromium, install GTK/WebKit, require a toolbox, or require a Tillandsias source checkout. Podman is the only runtime dependency. The released binary carries the runtime image sources it needs and materializes them under your user data directory on first use.
 
 On Fedora Silverblue-family systems, Podman is usually already present. If it is missing:
 
@@ -32,6 +34,14 @@ systemctl reboot
 </details>
 
 ## Run
+
+Initialize the local runtime images after installing:
+
+```bash
+tillandsias --init --debug
+```
+
+If your current shell has not reloaded the installer PATH update yet, use the absolute path printed by the installer, for example `~/.local/bin/tillandsias --init --debug`.
 
 **Desktop (with tray UI, requires GTK4 runtime):**
 ```bash
@@ -100,6 +110,8 @@ Removes the binary, caches, container images, and all Tillandsias data.
 **Required:**
 - **Linux** (x86_64) — Fedora, Ubuntu, Debian, Arch, or any distro with podman
 - [Podman](https://podman.io) (rootless). The curl installer only checks for it and prints the distro-specific install command when it is missing.
+
+No Tillandsias checkout, Rust toolchain, Nix, toolbox, or host Chromium install is required for the installed user runtime.
 
 **For Tray Mode (optional):**
 - GTK4 runtime — usually pre-installed on desktop systems

@@ -18,9 +18,9 @@ plan:
     verification: methodology/verification.yaml
 
   current_state:
-    last_completed_step: release-recovery (step 17)
-    next_step: post-release-polish (order 17)
-    next_graph_node: post-release/wave-25-parallel (pending)
+    last_completed_step: release-recovery (step 16)
+    next_step: user-runtime-checkout-free (step 18)
+    next_graph_node: user-runtime-checkout-free (release publication/readback pending)
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next
@@ -32,6 +32,7 @@ plan:
     methodology_reconciliation_status: "Completed 2026-05-19: OpenCode Web launch specs, cheatsheets, CA generation, overlay/theme proxy, project selection, and auth-gated readiness reconciled"
     git_identity_propagation_status: "Completed 2026-05-19: GitHub Login identity now propagates to forge env and repo-local git config for Codex/OpenCode/OpenCode Web/Claude/maintenance"
     release_recovery_status: "Completed 2026-05-19: local build/init/tray chain passed, static-only GitHub convergence passed, v0.2.260519.3 musl release published, and Fedora Silverblue curl installer docs updated"
+    user_runtime_checkout_free_status: "Implementation complete 2026-05-20 locally: installer PATH persistence, embedded/materialized runtime assets, checkout-free installed --init smoke from /tmp, and ./build.sh --ci-full --install all passed; release workflow dispatch/readback remains pending after push to origin/main"
     ghost_trace_sweep_status: "Completed 2026-05-19: validate-traces reports 0 ghost-trace errors; remaining warnings are active in-flight OpenSpec changes"
 
   coordination:

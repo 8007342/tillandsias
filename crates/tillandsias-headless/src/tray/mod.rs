@@ -3649,8 +3649,8 @@ mod tests {
 ///
 /// @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states, spec:tray-icon-lifecycle
 pub fn run_tray_mode(config_path: Option<String>) -> Result<(), String> {
-    let root = super::find_checkout_root()?;
     let version = super::VERSION.trim().to_string();
+    let root = super::resolve_runtime_asset_root(&version, false)?;
     let state = TrayUiState::new(root.clone(), version.clone(), discover_projects());
     let service = Arc::new(TrayService::new(state));
     start_control_socket_server()?;
