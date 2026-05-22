@@ -339,10 +339,22 @@ pub fn clone_project_from_github_with_debug(
     target_path: &Path,
     debug: bool,
 ) -> Result<(), String> {
-    if let Some(parent) = target_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|err| format!("failed to create parent dir: {}", err))?;
-    }
+    // The container needs to write `target_path` from inside its own
+    // filesystem. Without a bind-mount, `gh repo clone owner/name
+    // /home/<user>/src/<repo>` fails with "could not create leading
+    // directories ... Permission denied" because that host path doesn't
+    // exist inside the container. We identity-map the *parent* directory
+    // (e.g. `/home/<user>/src`) so the clone destination resolves to a
+    // writable, host-shared path. Combined with `--userns=keep-id`, the
+    // in-container UID 1000 == host UID 1000, so the cloned tree is owned
+    // by the host user directly with no chown needed.
+    let parent = target_path
+        .parent()
+        .ok_or_else(|| format!("target path {target_path:?} has no parent dir"))?;
+    std::fs::create_dir_all(parent)
+        .map_err(|err| format!("failed to create parent dir: {}", err))?;
+    let parent_str = parent.to_string_lossy().to_string();
+    let bind_mount = format!("{parent_str}:{parent_str}:rw");
 
     let nwo = normalize_repo_identifier(repo_url);
     let image = git_image_tag();
@@ -360,6 +372,9 @@ exec gh repo clone "$1" "$2"
                 "[tillandsias] gh: normalized repo identifier {repo_url:?} -> {nwo:?}"
             );
         }
+        eprintln!(
+            "[tillandsias] gh: clone bind-mount {parent_str:?} (identity-mapped, rw) target={repo_dir:?}"
+        );
         debug_log_podman_invocation(
             "clone_project_from_github",
             &image,
@@ -375,6 +390,10 @@ exec gh repo clone "$1" "$2"
             "--rm",
             "--secret",
             "tillandsias-github-token",
+            "--security-opt=label=disable",
+            "--userns=keep-id",
+            "-v",
+            &bind_mount,
             "--entrypoint",
             "/bin/sh",
             &image,
@@ -640,6 +659,85 @@ mod tests {
             "8007342/lakanoa",
             "gh repo clone must receive owner/name, not the API URL"
         );
+
+        if let Some(path) = original_path {
+            unsafe { std::env::set_var("PATH", path) };
+        }
+        if let Some(state) = original_state {
+            unsafe { std::env::set_var("LITMUS_PODMAN_STATE_DIR", state) };
+        } else {
+            unsafe { std::env::remove_var("LITMUS_PODMAN_STATE_DIR") };
+        }
+        unsafe { std::env::remove_var("TILLANDSIAS_GIT_IMAGE") };
+    }
+
+    /// Regression test for the "Permission denied" failure on Silverblue
+    /// v0.2.260522.5: `gh repo clone owner/name /home/<user>/src/<repo>`
+    /// failed inside the container with `could not create leading
+    /// directories ... Permission denied` because the host path wasn't
+    /// bind-mounted. Fix: identity-map the *parent* of the target into
+    /// the container with `-v <parent>:<parent>:rw` and align UIDs with
+    /// `--userns=keep-id`. SELinux relabeling is disabled via
+    /// `--security-opt=label=disable` to match the other enclave
+    /// containers (`build_git_run_args` and friends).
+    #[test]
+    fn clone_uses_host_parent_bindmount() {
+        let _guard = TEST_LOCK.lock().expect("test lock");
+        let podman_dir = install_podman_mock();
+        let state_dir = tempdir().expect("state tempdir");
+        let original_path = std::env::var_os("PATH");
+        let original_state = std::env::var_os("LITMUS_PODMAN_STATE_DIR");
+        let mock_path = format!(
+            "{}:{}",
+            podman_dir.path().display(),
+            original_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default()
+        );
+        unsafe { std::env::set_var("PATH", mock_path) };
+        unsafe { std::env::set_var("TILLANDSIAS_GIT_IMAGE", "mock-image") };
+        unsafe { std::env::set_var("LITMUS_PODMAN_STATE_DIR", state_dir.path()) };
+
+        let clone_root = tempdir().expect("clone tempdir");
+        let target = clone_root.path().join("lakanoa");
+        let parent = clone_root.path().to_string_lossy().to_string();
+        let expected_bind = format!("{parent}:{parent}:rw");
+
+        clone_project_from_github("8007342/lakanoa", &target)
+            .expect("containerized clone with bind-mount");
+
+        let captured_args =
+            std::fs::read_to_string(state_dir.path().join("last_clone_run_args"))
+                .expect("mock should record full arg vector");
+        let args: Vec<&str> = captured_args.lines().collect();
+
+        assert!(
+            args.contains(&"--userns=keep-id"),
+            "podman run must pass --userns=keep-id so in-container UID 1000 == host UID; got args: {args:?}"
+        );
+        assert!(
+            args.contains(&"--security-opt=label=disable"),
+            "podman run must disable SELinux label relabeling on the bind-mount; got args: {args:?}"
+        );
+        // `-v` is followed by the bind-mount spec as the next arg.
+        let v_index = args
+            .iter()
+            .position(|a| *a == "-v")
+            .unwrap_or_else(|| panic!("podman run must include `-v` bind-mount flag; got args: {args:?}"));
+        let bind_spec = args
+            .get(v_index + 1)
+            .unwrap_or_else(|| panic!("`-v` must be followed by a mount spec; got args: {args:?}"));
+        assert_eq!(
+            *bind_spec, expected_bind,
+            "bind-mount must identity-map the host parent dir as rw"
+        );
+        // Sanity: the positional clone target still comes through unchanged
+        // and is *inside* the bind-mounted parent.
+        let captured_target =
+            std::fs::read_to_string(state_dir.path().join("last_clone_target_arg"))
+                .expect("mock should record target arg");
+        assert_eq!(captured_target.trim(), target.to_string_lossy().as_ref());
 
         if let Some(path) = original_path {
             unsafe { std::env::set_var("PATH", path) };

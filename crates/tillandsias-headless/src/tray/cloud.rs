@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use tillandsias_core::remote_projects;
 use tracing::warn;
 
-use super::{ProjectEntry, TrayUiState};
+use super::{ProjectEntry, TrayUiState, resolved_max_cloud_projects_in_menu};
 
 /// How long a successful fetch stays fresh before the next AboutToShow is
 /// allowed to refetch.
@@ -51,21 +51,20 @@ pub(super) fn cloud_refresh_due(state: &TrayUiState, force: bool) -> bool {
 }
 
 fn github_projects_to_entries(projects: Vec<remote_projects::GitHubProject>) -> Vec<ProjectEntry> {
-    let mut entries: Vec<ProjectEntry> = projects
+    // IMPORTANT: do NOT sort alphabetically here. `gh api user/repos?sort=pushed`
+    // returns the user's repos newest-activity first, and the tray cap (see
+    // `MAX_CLOUD_PROJECTS_IN_MENU` in `tray::mod`) trims the *tail* of this
+    // list. Re-sorting alphabetically would surface stale archived repos at
+    // the top and bury the user's active work behind the overflow item.
+    // @trace spec:tray-ux, spec:remote-projects
+    projects
         .into_iter()
         .map(|project| ProjectEntry {
             name: project.name.clone(),
             path: PathBuf::new(),
             full_name: Some(format!("{}/{}", project.owner, project.name)),
         })
-        .collect();
-    entries.sort_by(|a, b| {
-        a.full_name
-            .as_deref()
-            .unwrap_or(&a.name)
-            .cmp(b.full_name.as_deref().unwrap_or(&b.name))
-    });
-    entries
+        .collect()
 }
 
 /// Refresh `state.cloud_projects` if the TTL has expired (or `force` is set).
@@ -160,6 +159,18 @@ pub(super) fn refresh_cloud_projects_if_stale(
         "[tillandsias] cloud refresh: loaded {} repos from gh",
         entries.len()
     );
+    // Surface the menu cap so the behaviour is observable from logs even when
+    // the user has no GUI session. The tray itself caps the visible list in
+    // `build_cloud_projects_submenu`; this line just makes the trim auditable.
+    // @trace spec:tray-ux
+    let cap = resolved_max_cloud_projects_in_menu();
+    if entries.len() > cap {
+        eprintln!(
+            "[tillandsias] tray: showing {} of {} cloud projects (rest behind overflow item)",
+            cap,
+            entries.len()
+        );
+    }
     if debug {
         warn!("cloud refresh: parsed {} repos", entries.len());
     }

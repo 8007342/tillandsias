@@ -1416,6 +1416,38 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
     }
 }
 
+// @trace spec:tray-ux
+/// Fallback handler for the cloud-submenu overflow leaf.
+///
+/// Native KSNI / GMenu indicator menus do not support a scroll widget, so we
+/// cap the visible cloud-project list and surface the remainder behind a
+/// single "All cloud projects (N)…" item. When that item is activated we
+/// dump the *full* list of repos (with their `owner/name` slugs) to stderr
+/// so the user can copy-paste a NWO into a future favourites file. This is
+/// explicitly the documented fallback — see TODO(@tray-overflow) in
+/// `build_cloud_projects_submenu` for the eventual GtkWindow picker design.
+fn handle_cloud_overflow_click(state: &TrayUiState) {
+    let total = state.cloud_projects.len();
+    eprintln!(
+        "[tillandsias] tray: full cloud project list ({} repos):",
+        total
+    );
+    for project in &state.cloud_projects {
+        let label = project
+            .full_name
+            .as_deref()
+            .unwrap_or(project.name.as_str());
+        eprintln!("[tillandsias] tray:   - {}", label);
+    }
+    eprintln!(
+        "[tillandsias] tray: tip — set TILLANDSIAS_MAX_CLOUD_MENU_ITEMS=<n> \
+         to raise the menu cap (default {}), or use \
+         ~/.config/tillandsias/cloud-projects.toml to bookmark favourites \
+         once that file lands (TODO @tray-overflow)",
+        MAX_CLOUD_PROJECTS_IN_MENU
+    );
+}
+
 // Legacy init handler. The new minimal-UX menu drops the "Initialize images"
 // item; init is auto-triggered by the tray startup probe. Retained for tests.
 #[allow(dead_code)]
@@ -1706,8 +1738,43 @@ const CLOUD_BASE_LO: i32 = 0x5000_0000;
 const CLOUD_BASE_HI: i32 = 0x7FFF_FFF0;
 const LOADING_LOCAL_ID: i32 = 0x7FFF_FFFD;
 const LOADING_CLOUD_ID: i32 = 0x7FFF_FFFE;
+/// Disabled leaf shown at the bottom of the `☁️ Cloud >` submenu when the
+/// cloud-project list overflows [`resolved_max_cloud_projects_in_menu`].
+/// Activating it currently dumps the full list to stderr (see
+/// `handle_cloud_overflow_click`); a future GtkWindow picker would replace
+/// that fallback in place. @trace spec:tray-ux
+const CLOUD_OVERFLOW_ID: i32 = 0x7FFF_FFFC;
 const PROJECT_LEAF_COUNT: i32 = 6;
 const PROJECT_SUBMENU_OFFSET: i32 = 6;
+
+/// Maximum number of cloud projects rendered as top-level entries inside the
+/// `☁️ Cloud >` submenu before an overflow item replaces the tail.
+///
+/// Native StatusNotifierItem / GMenu indicator menus do NOT support
+/// scrollbars on individual submenus — a user with 22+ cloud repos sees the
+/// per-project submenu chevrons clipped off the bottom of their screen, with
+/// no way to reach the OpenCode / Codex / Maintenance leaves inside. Capping
+/// the visible list and overflowing into a single "All cloud projects (N)…"
+/// item is the standard fix.
+///
+/// The cap can be overridden at runtime via the
+/// `TILLANDSIAS_MAX_CLOUD_MENU_ITEMS` env var (see
+/// [`resolved_max_cloud_projects_in_menu`]). Power users on tall monitors who
+/// genuinely want every repo inline can set it to e.g. `999`.
+///
+/// @trace spec:tray-ux, spec:remote-projects
+pub(super) const MAX_CLOUD_PROJECTS_IN_MENU: usize = 10;
+
+/// Resolve the effective cap, honouring `TILLANDSIAS_MAX_CLOUD_MENU_ITEMS`
+/// when set to a positive integer. Falls back to [`MAX_CLOUD_PROJECTS_IN_MENU`].
+/// @trace spec:tray-ux
+pub(super) fn resolved_max_cloud_projects_in_menu() -> usize {
+    std::env::var("TILLANDSIAS_MAX_CLOUD_MENU_ITEMS")
+        .ok()
+        .and_then(|raw| raw.parse::<usize>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(MAX_CLOUD_PROJECTS_IN_MENU)
+}
 
 fn project_base(name: &str, scope: ProjectScope) -> i32 {
     use std::hash::Hash;
@@ -1862,10 +1929,29 @@ fn build_local_projects_submenu(state: &TrayUiState) -> MenuNode {
 /// placeholder text depends on whether we've ever fetched: `(loading…)`
 /// before the first fetch, `(no repos)` after a successful fetch with zero
 /// results.
+///
+/// ## Overflow handling
+///
+/// Native KSNI / GMenu indicator menus cannot scroll, so we cap the visible
+/// list at [`resolved_max_cloud_projects_in_menu`] entries. When the
+/// underlying list is longer the tail is hidden behind a final disabled-ish
+/// overflow leaf (id [`CLOUD_OVERFLOW_ID`]) whose label includes the total
+/// count. Activation is handled in the StatusNotifierItem event handler.
+///
+/// Sort order matches whatever populated `cloud_projects` (currently
+/// `gh api user/repos?sort=pushed`, i.e. newest-pushed first) so the cap
+/// trims the *tail* — stale repos — rather than the user's active work.
+///
+/// @trace spec:tray-ux, spec:remote-projects
 fn build_cloud_projects_submenu(state: &TrayUiState) -> MenuNode {
+    let total = state.cloud_projects.len();
+    let cap = resolved_max_cloud_projects_in_menu();
+    let visible_count = total.min(cap);
+
     let mut children: Vec<OwnedValue> = state
         .cloud_projects
         .iter()
+        .take(visible_count)
         .map(|p| child(build_project_submenu(state, p, ProjectScope::Cloud)))
         .collect();
     if children.is_empty() {
@@ -1879,6 +1965,33 @@ fn build_cloud_projects_submenu(state: &TrayUiState) -> MenuNode {
             props(vec![
                 ("label".to_string(), ov_str(placeholder)),
                 ("enabled".to_string(), ov(Value::from(false))),
+                ("visible".to_string(), ov(Value::from(true))),
+            ]),
+            Vec::new(),
+        )));
+    }
+    // Overflow leaf — only emitted when the underlying list exceeds the cap.
+    // The label includes the *total* count so the user knows how many repos
+    // are hidden. Clicking dumps the full list to stderr (see
+    // `event` dispatch on `CLOUD_OVERFLOW_ID`).
+    //
+    // TODO(@tray-overflow): replace the stderr dump with a GtkWindow-based
+    // project picker once the headless binary grows GTK plumbing. The
+    // current tray module is pure StatusNotifierItem/DBusMenu over zbus —
+    // adding a window would require a new GTK application thread, GResource
+    // setup, and a theming hook, none of which exist here today. The cap +
+    // overflow item is the standard pattern for native indicator menus and
+    // resolves the user-visible clipping bug on its own.
+    if total > visible_count {
+        let label = format!(
+            "\u{2026} All cloud projects ({})\u{2026}",
+            total
+        );
+        children.push(child(node(
+            CLOUD_OVERFLOW_ID,
+            props(vec![
+                ("label".to_string(), ov_str(label)),
+                ("enabled".to_string(), ov(Value::from(true))),
                 ("visible".to_string(), ov(Value::from(true))),
             ]),
             Vec::new(),
@@ -2511,6 +2624,12 @@ impl DbusMenuIface {
             21 | 22 | 29 | 30 => {
                 // submenu container, separator, or version label — no-op.
             }
+            CLOUD_OVERFLOW_ID => {
+                // Cloud overflow leaf — dump the full project list to stderr
+                // as the documented fallback for "no GtkWindow picker yet".
+                // See TODO(@tray-overflow) in `build_cloud_projects_submenu`.
+                handle_cloud_overflow_click(&self.0.snapshot());
+            }
             _ => {
                 let state = self.0.snapshot();
                 if let Some((project_name, scope, Some(action))) =
@@ -2953,6 +3072,139 @@ mod tests {
         assert!(
             label_list.contains(&"test-project".to_string()),
             "Local project submenu missing when authenticated"
+        );
+    }
+
+    // @trace spec:tray-ux
+    #[test]
+    fn cloud_menu_caps_overflow_with_50_projects() {
+        // When the user has many cloud repos (the bug report mentioned 22,
+        // we exaggerate to 50 to leave headroom) the `☁️ Cloud >` submenu
+        // must:
+        //   1. render exactly `MAX_CLOUD_PROJECTS_IN_MENU` per-project
+        //      submenu entries, AND
+        //   2. emit a single overflow leaf whose label encodes the total.
+        //
+        // Native KSNI / GMenu menus cannot scroll; this cap is what keeps
+        // every project's submenu chevron on-screen so the per-project
+        // launch leaves never get clipped. @trace spec:tray-ux
+
+        let fake_projects: Vec<ProjectEntry> = (0..50)
+            .map(|i| ProjectEntry {
+                name: format!("repo-{i:02}"),
+                path: PathBuf::new(),
+                full_name: Some(format!("octocat/repo-{i:02}")),
+            })
+            .collect();
+        let state = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .authenticated(true)
+            .cloud_projects(fake_projects)
+            .last_fetched(Some(Instant::now()))
+            .build();
+
+        let cloud_node = build_cloud_projects_submenu(&state);
+
+        // Direct child count (per-project submenus + the single overflow
+        // leaf). We assert against the runtime-resolved cap so a user with
+        // `TILLANDSIAS_MAX_CLOUD_MENU_ITEMS=999` set in the test env still
+        // sees a coherent outcome — but the default ought to be 10.
+        let cap = resolved_max_cloud_projects_in_menu();
+        assert_eq!(
+            cloud_node.2.len(),
+            cap + 1,
+            "Cloud submenu must show exactly `cap` projects plus one overflow leaf when total > cap; \
+             children={} cap={}",
+            cloud_node.2.len(),
+            cap
+        );
+
+        // The overflow leaf must reference the *total* count (50), not the
+        // cap. Use `labels()` to flatten the subtree and search for the
+        // count.
+        let label_list = labels(&cloud_node);
+        let overflow_label = label_list
+            .iter()
+            .find(|l| l.contains("All cloud projects"))
+            .expect("Overflow item with label 'All cloud projects (N)…' must be present");
+        assert!(
+            overflow_label.contains("50"),
+            "Overflow label must include the total project count (50), got {:?}",
+            overflow_label
+        );
+    }
+
+    // @trace spec:tray-ux
+    #[test]
+    fn cloud_menu_omits_overflow_when_total_within_cap() {
+        // Below the cap, behaviour must be unchanged: no overflow leaf.
+        let cap = resolved_max_cloud_projects_in_menu();
+        let n = cap.saturating_sub(1).max(1);
+        let fake_projects: Vec<ProjectEntry> = (0..n)
+            .map(|i| ProjectEntry {
+                name: format!("repo-{i:02}"),
+                path: PathBuf::new(),
+                full_name: Some(format!("octocat/repo-{i:02}")),
+            })
+            .collect();
+        let state = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .authenticated(true)
+            .cloud_projects(fake_projects)
+            .last_fetched(Some(Instant::now()))
+            .build();
+
+        let cloud_node = build_cloud_projects_submenu(&state);
+        assert_eq!(
+            cloud_node.2.len(),
+            n,
+            "Below the cap the submenu must render exactly the project list with no overflow"
+        );
+        let label_list = labels(&cloud_node);
+        assert!(
+            !label_list.iter().any(|l| l.contains("All cloud projects")),
+            "Overflow label must NOT appear when total <= cap; labels={:?}",
+            label_list
+        );
+    }
+
+    // @trace spec:tray-ux
+    #[test]
+    fn cloud_menu_preserves_pushed_sort_order_under_cap() {
+        // gh returns repos sorted by `pushed` (newest first). The cap must
+        // trim the *tail* — i.e. the first N projects of the input list are
+        // exactly the first N children of the rendered submenu (modulo the
+        // overflow leaf that follows).
+        let fake_projects: Vec<ProjectEntry> = (0..30)
+            .map(|i| ProjectEntry {
+                name: format!("recent-{i:02}"),
+                path: PathBuf::new(),
+                full_name: Some(format!("octocat/recent-{i:02}")),
+            })
+            .collect();
+        let state = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .authenticated(true)
+            .cloud_projects(fake_projects.clone())
+            .last_fetched(Some(Instant::now()))
+            .build();
+
+        let cloud_node = build_cloud_projects_submenu(&state);
+        let label_list = labels(&cloud_node);
+        // The first project ("recent-00") must appear; the last ("recent-29")
+        // must NOT (it's below the cap and hidden behind overflow).
+        assert!(
+            label_list.iter().any(|l| l.contains("recent-00")),
+            "Newest-pushed project must be visible in the menu; labels={:?}",
+            label_list
+        );
+        assert!(
+            !label_list.iter().any(|l| l.contains("recent-29")),
+            "Tail project below the cap must be hidden behind the overflow leaf; labels={:?}",
+            label_list
         );
     }
 

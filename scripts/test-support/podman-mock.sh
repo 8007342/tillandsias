@@ -73,6 +73,13 @@ case "$subcommand" in
                 repo_arg="${@: -2:1}"
                 printf '%s\n' "$repo_arg" >"$state_dir/last_clone_repo_arg"
                 printf '%s\n' "$target_path" >"$state_dir/last_clone_target_arg"
+                # Record the full arg vector (one per line) so tests can
+                # assert on bind-mount and security flags. Each line is one
+                # argument verbatim — preserves spaces inside values.
+                : >"$state_dir/last_clone_run_args"
+                for a in "$@"; do
+                    printf '%s\n' "$a" >>"$state_dir/last_clone_run_args"
+                done
                 mkdir -p "$target_path/.git"
                 printf 'mock-clone-ok\n'
                 exit 0
