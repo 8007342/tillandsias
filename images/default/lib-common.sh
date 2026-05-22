@@ -199,6 +199,89 @@ configure_git_identity() {
     trace_lifecycle "git-identity" "configured"
 }
 
+# @trace spec:git-mirror-service, spec:forge-offline, spec:enclave-network
+# rewrite_origin_for_enclave_push — host-mount-only remote rewrite.
+#
+# When TILLANDSIAS_PROJECT_HOST_MOUNT=1, the project workspace at
+# /home/forge/src/<project> is a bind-mount of the host's working tree. The
+# bind-mounted `.git/config` carries the host's `origin = https://github.com/...`,
+# but the forge has zero credentials and no DNS for github.com — direct push fails
+# with "Could not resolve host: github.com".
+#
+# This routine installs a container-ephemeral `url.<mirror>.insteadOf <github>`
+# rule in `~/.gitconfig` (NOT the bind-mounted `.git/config`, which must stay
+# pristine so the host's normal workflow keeps working). The rule redirects
+# any push or fetch against the GitHub URL onto the enclave-local git mirror
+# reachable at `git://git-service/<project>`. The mirror owns the GitHub token
+# (via /run/secrets/tillandsias-github-token) and forwards through its
+# post-receive hook.
+#
+# Net effect inside the forge:
+#   - `git remote -v` still shows the GitHub URL (matches user expectation).
+#   - `git push origin <branch>` silently routes to `git://git-service/<project>`.
+#   - The host's `.git/config` is never modified.
+#
+# Diagnostic forensics: the original origin URL is preserved under
+# `tillandsias.original-origin` in the global config so debug runs can see
+# what was rewritten without touching the bind-mounted repo config.
+#
+# Idempotent — re-running on each forge attach overwrites the same global
+# config keys.
+rewrite_origin_for_enclave_push() {
+    # Only act when host-mount mode is active. Other transports (filesystem
+    # /Windows-WSL, git daemon /Linux-podman) handle their own remote setup
+    # in the clone branches below.
+    [[ "${TILLANDSIAS_PROJECT_HOST_MOUNT:-}" == "1" ]] || return 0
+    [[ -n "${TILLANDSIAS_PROJECT:-}" ]] || return 0
+
+    local original
+    original="$(git remote get-url origin 2>/dev/null || true)"
+    if [[ -z "$original" ]]; then
+        trace_lifecycle "git-mirror" "no origin on host-mounted repo; skipping rewrite"
+        return 0
+    fi
+
+    # Only rewrite when the host's origin is a remote URL the forge cannot
+    # reach (GitHub HTTPS/SSH). If it's already a local/enclave URL leave it.
+    local needs_rewrite=0
+    case "$original" in
+        https://github.com/*|http://github.com/*|git@github.com:*|ssh://git@github.com/*)
+            needs_rewrite=1
+            ;;
+    esac
+    if [[ "$needs_rewrite" -ne 1 ]]; then
+        trace_lifecycle "git-mirror" "origin ${original} is not GitHub; leaving as-is"
+        return 0
+    fi
+
+    local mirror_url="git://git-service/${TILLANDSIAS_PROJECT}"
+
+    # Stash the original under tillandsias.* in the GLOBAL config (ephemeral
+    # ~/.gitconfig inside the forge — NOT the bind-mounted .git/config).
+    # Forensic only; no functional dependency.
+    git config --global "tillandsias.original-origin" "$original" 2>/dev/null || true
+    git config --global "tillandsias.mirror-url" "$mirror_url" 2>/dev/null || true
+
+    # Install the insteadOf redirect so `git push origin <branch>` (and any
+    # explicit operation against the GitHub URL) routes through the mirror.
+    # Use --global so this lands in ~/.gitconfig, NEVER in the bind-mounted
+    # .git/config. Setting it under --local would persist to the host repo.
+    git config --global --replace-all "url.${mirror_url}.insteadOf" "$original" 2>/dev/null || true
+
+    # For SSH-style remotes also pre-compute the HTTPS equivalent and redirect
+    # that too, so a user who runs `git push https://github.com/<org>/<repo>`
+    # by hand also hits the mirror.
+    if [[ "$original" == git@github.com:* ]]; then
+        local nwo="${original#git@github.com:}"
+        nwo="${nwo%.git}"
+        local https_form="https://github.com/${nwo}.git"
+        git config --global --add "url.${mirror_url}.insteadOf" "$https_form" 2>/dev/null || true
+    fi
+
+    trace_lifecycle "git-mirror" "host-mount origin rewrite: ${original} -> ${mirror_url}"
+    echo "[forge] git push origin <branch> routes to the enclave mirror (git-service:9418); upstream is ${original}."
+}
+
 # @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service, spec:forge-offline
 # Shared clone-from-mirror routine for ALL forge entrypoints (opencode,
 # claude, opencode-web, terminal). Two transports:
@@ -226,6 +309,21 @@ clone_project_from_mirror() {
         trace_lifecycle "git-mirror" "using mounted project ${clone_dir}; mirror clone skipped"
         cd "$clone_dir" || return 1
         configure_git_identity
+        # @trace spec:git-mirror-service, spec:forge-offline, spec:enclave-network
+        # The bind-mounted `.git/config` carries the HOST's `origin = https://github.com/...`,
+        # which the offline, credential-free forge cannot reach. Without rewriting,
+        # `git push origin <branch>` fails with "Could not resolve host: github.com".
+        #
+        # Fix: install a `url.<mirror>.insteadOf <github>` rule in the container-ephemeral
+        # `~/.gitconfig` (NOT in `.git/config`, which is bind-mounted from the host and
+        # must stay pristine). This redirects any push/fetch against the GitHub URL to
+        # the enclave-local git mirror, which has the GitHub token and runs the
+        # post-receive hook to forward the push.
+        #
+        # `git remote -v` continues to show the GitHub URL (matches host expectation),
+        # but the actual transport is the enclave mirror. The host's `.git/config` is
+        # never modified — the host can keep using its own `origin` directly.
+        rewrite_origin_for_enclave_push
         return 0
     fi
 

@@ -106,6 +106,32 @@ Host-mounted project launches must also set
 directory at `/home/forge/src/<project>` is the user's real checkout. It must
 be used in place, never wiped, and never replaced with a mirror clone.
 
+### `git push` UX inside a host-mounted forge
+
+The bind-mounted `.git/config` carries the host's `origin = https://github.com/...`,
+but the forge has no DNS for github.com and no credentials. Without intervention,
+`git push origin <branch>` fails inside the forge with `Could not resolve host:
+github.com`.
+
+`clone_project_from_mirror()` in `images/default/lib-common.sh` resolves this
+by calling `rewrite_origin_for_enclave_push()` on the host-mount path. That
+helper installs `url.git://git-service/<project>.insteadOf <host-origin-url>`
+in the container-ephemeral `~/.gitconfig` (**NOT** in the bind-mounted
+`.git/config`, which must stay pristine so the host's normal workflow keeps
+working unchanged).
+
+User-visible behavior inside the forge:
+
+```bash
+git remote -v                         # shows git://git-service/<project>
+git config remote.origin.url          # shows the original https://github.com/...
+git config --global tillandsias.original-origin  # forensic copy of the original
+git push origin <branch>              # routes through git-service:9418
+```
+
+The host can still `git push origin <branch>` directly to GitHub from outside
+the forge; only the forge container sees the rewrite.
+
 ## The Host Terminal Seam
 
 The tray's interactive launch path looks like this:

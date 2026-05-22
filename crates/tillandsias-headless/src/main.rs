@@ -45,7 +45,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tempfile::Builder as TempDirBuilder;
 use tillandsias_control_wire::{
     ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
@@ -3348,6 +3348,22 @@ fn maybe_spawn_detached_tray_for_cli(explicit_tray: bool, debug: bool) {
         return;
     }
 
+    let socket_path = control_socket_host_dir().join("control.sock");
+
+    // Fast path: if the socket is already accepting connections, an existing
+    // tray (or an earlier sibling) is alive and there's no need to spawn a
+    // duplicate. Probe with an actual `connect()` so we don't mistake a stale
+    // socket file (left behind by a crashed tray) for a live listener — that
+    // false positive used to cause `--observatorium` / `--opencode-web` to
+    // race past this helper and then fail in `send_issue_web_session` with
+    // `Connection refused`.
+    if control_socket_is_listening(&socket_path) {
+        if debug {
+            eprintln!("[tillandsias] reusing existing tray control socket");
+        }
+        return;
+    }
+
     let Ok(exe) = std::env::current_exe() else {
         return;
     };
@@ -3374,12 +3390,26 @@ fn maybe_spawn_detached_tray_for_cli(explicit_tray: bool, debug: bool) {
             if debug {
                 eprintln!("[tillandsias] spawned detached tray companion");
             }
-            let socket_path = control_socket_host_dir().join("control.sock");
-            for _ in 0..20 {
-                if socket_path.exists() {
-                    break;
+            // Poll until something actually accepts a connection — not just
+            // until the socket file appears. The spawned tray removes the
+            // stale file (`start_control_socket_server`) before binding, so a
+            // bare `exists()` check is racy: it can fire on the leftover
+            // inode before the bind completes.
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while Instant::now() < deadline {
+                if control_socket_is_listening(&socket_path) {
+                    if debug {
+                        eprintln!("[tillandsias] tray control socket is ready");
+                    }
+                    return;
                 }
                 std::thread::sleep(Duration::from_millis(50));
+            }
+            if debug {
+                eprintln!(
+                    "[tillandsias] Warning: tray control socket did not become ready within 5s; \
+                     downstream OTP handshakes may fail"
+                );
             }
         }
         Err(err) if debug => {
@@ -3387,6 +3417,22 @@ fn maybe_spawn_detached_tray_for_cli(explicit_tray: bool, debug: bool) {
         }
         Err(_) => {}
     }
+}
+
+/// Test whether the tray's control socket is accepting connections. Used by
+/// `maybe_spawn_detached_tray_for_cli` to distinguish a live tray from a
+/// stale socket file left over from a crashed tray.
+///
+/// @trace spec:tray-host-control-socket
+fn control_socket_is_listening(socket_path: &Path) -> bool {
+    if !socket_path.exists() {
+        return false;
+    }
+    // Any connect failure — ECONNREFUSED on a stale socket file, ENOTSOCK on
+    // a regular file at the path, ENOENT if the file vanished between the
+    // exists() check and connect — collapses to "not listening" and lets the
+    // caller decide whether to spawn or give up.
+    UnixStream::connect(socket_path).is_ok()
 }
 
 /// Phase 3, Task 12 & Phase 4: Launch in tray mode with headless subprocess.
@@ -5055,6 +5101,13 @@ pub(crate) fn launch_forge_agent(
     let mut child = Command::new(&executable);
     child.args(&term);
     child.args(&argv);
+    // Some terminal emulators (ptyxis on Fedora Silverblue 44 in particular)
+    // refuse to launch when the parent process cwd is `/` — which is the
+    // default for tray processes started from a .desktop entry. Anchor cwd to
+    // the project workspace so the spawned terminal has a sane starting
+    // directory and inherits the same cwd semantics as the CLI lane.
+    // @trace spec:tray-ux, spec:browser-isolation-tray-integration
+    child.current_dir(&canonical);
     // Decouple stdio — the terminal owns the TTY, we don't want podman's
     // chatter mixed into the tray service log.
     child.stdin(Stdio::null());
@@ -5064,10 +5117,25 @@ pub(crate) fn launch_forge_agent(
     // Window title hint for terminals that honor it via env (e.g. foot).
     child.env("TILLANDSIAS_WINDOW_TITLE", mode.window_title(project_name));
 
-    child
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("failed to spawn host terminal '{executable}': {e}"))
+    match child.spawn() {
+        Ok(_) => {
+            // Always log spawn success so silent menu clicks are
+            // distinguishable from silent failures. Single line, not gated on
+            // debug — at this level the tray has emitted one click-receipt
+            // line and one spawn-receipt line, no more.
+            // @trace spec:tray-ux
+            eprintln!(
+                "[tillandsias] launch_forge_agent: spawned {} for project '{}' via {}",
+                mode.slug(),
+                project_name,
+                executable
+            );
+            Ok(())
+        }
+        Err(e) => Err(format!(
+            "failed to spawn host terminal '{executable}': {e}"
+        )),
+    }
 }
 
 // Module declarations for Phase 4+
@@ -5912,6 +5980,42 @@ mod tests {
         );
         assert!(has_arg(&argv, "--interactive"));
         assert!(has_arg(&argv, "--tty"));
+    }
+
+    // @trace spec:tray-ux, spec:browser-isolation-tray-integration
+    // Regression: on Fedora Silverblue tray clicks silently failed because
+    // (a) `launch_forge_agent` inherited cwd=`/` from the desktop-spawned
+    // tray (ptyxis refuses to start there), and (b) successful spawns
+    // produced no log trail, indistinguishable from silent failures. Pin
+    // both: the function MUST set `current_dir(canonical)` and MUST emit a
+    // single "spawned <mode> for project ..." stderr line ungated on debug.
+    #[test]
+    fn launch_forge_agent_sets_cwd_and_logs_spawn_outcome() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+
+        // Find the launch_forge_agent body and assert both invariants live
+        // inside the same function — not just somewhere in the file.
+        let start = source
+            .find("pub(crate) fn launch_forge_agent(")
+            .expect("launch_forge_agent function must exist");
+        // The next top-level `fn run_headless(` follows in this file, so
+        // bound the body to keep the assertions scoped.
+        let end = source[start..]
+            .find("\nfn run_headless(")
+            .map(|offset| start + offset)
+            .unwrap_or(source.len());
+        let body = &source[start..end];
+
+        assert!(
+            body.contains("child.current_dir(&canonical);"),
+            "launch_forge_agent must anchor cwd to the project workspace so \
+             terminals like ptyxis don't refuse to start from cwd=/"
+        );
+        assert!(
+            body.contains("[tillandsias] launch_forge_agent: spawned"),
+            "launch_forge_agent must log spawn success ungated on debug so \
+             silent failures are distinguishable from silent successes"
+        );
     }
 
     #[test]
@@ -6992,5 +7096,52 @@ mod tests {
                 "Progress bar should have 10 total characters"
             );
         }
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Control-socket liveness probe regression tests.
+    // @trace spec:tray-host-control-socket, spec:tray-cli-coexistence
+    //
+    // Pinned bug: `maybe_spawn_detached_tray_for_cli` used to declare the
+    // tray "ready" the moment `socket_path.exists()` returned true. That
+    // false positive fired on every stale socket file left behind by a
+    // crashed tray, so `--observatorium` and `--opencode-web` raced past
+    // the helper and then failed in `send_issue_web_session` with
+    // `Connection refused (os error 111)` against the dead inode.
+    // ─────────────────────────────────────────────────────────
+    #[test]
+    fn control_socket_is_listening_returns_false_for_missing_path() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let socket_path = tmp.path().join("control.sock");
+        assert!(
+            !control_socket_is_listening(&socket_path),
+            "missing socket must be reported as not-listening"
+        );
+    }
+
+    #[test]
+    fn control_socket_is_listening_returns_false_for_stale_socket_file() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let socket_path = tmp.path().join("control.sock");
+        // A regular file at the socket path mimics the leftover-inode case
+        // (no listener, just a name in the filesystem). `connect()` returns
+        // ENOTSOCK / ECONNREFUSED — both must collapse to false.
+        std::fs::write(&socket_path, b"").expect("write stale socket file");
+        assert!(
+            !control_socket_is_listening(&socket_path),
+            "stale (non-socket) file must be reported as not-listening"
+        );
+    }
+
+    #[test]
+    fn control_socket_is_listening_returns_true_for_live_listener() {
+        use std::os::unix::net::UnixListener;
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let socket_path = tmp.path().join("control.sock");
+        let _listener = UnixListener::bind(&socket_path).expect("bind listener");
+        assert!(
+            control_socket_is_listening(&socket_path),
+            "bound listener must be reported as listening"
+        );
     }
 }

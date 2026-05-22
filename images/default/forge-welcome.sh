@@ -49,7 +49,7 @@ L_WELCOME_CODE="${L_WELCOME_CODE:-Code}"
 L_WELCOME_CODE_DESC="${L_WELCOME_CODE_DESC:-cloned from git mirror (uncommitted work is ephemeral)}"
 L_WELCOME_SERVICES="${L_WELCOME_SERVICES:-Services}"
 L_WELCOME_PROXY_DESC="${L_WELCOME_PROXY_DESC:-caching HTTP/S proxy (allowlisted domains)}"
-L_WELCOME_GIT_DESC="${L_WELCOME_GIT_DESC:-git mirror + auto-push to remote}"
+L_WELCOME_GIT_DESC="${L_WELCOME_GIT_DESC:-git mirror (git push origin routes through git-service:9418)}"
 L_WELCOME_INFERENCE_DESC="${L_WELCOME_INFERENCE_DESC:-ollama (local LLM)}"
 
 # ── Environment ──────────────────────────────────────────────

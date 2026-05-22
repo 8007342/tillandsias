@@ -1138,17 +1138,18 @@ fn launch_project_action(
     project: ProjectEntry,
     kind: LaunchKind,
     _version: String,
+    debug: bool,
 ) -> Result<(), String> {
     match kind {
         LaunchKind::OpenCodeWeb => {
             // OpenCode Web is already wired and brings its own enclave +
             // browser surface. Untouched per the per-project-action contract.
             let project_path = project.path.display().to_string();
-            super::run_opencode_web_mode(&project_path, None, None, false)
+            super::run_opencode_web_mode(&project_path, None, None, debug)
         }
         LaunchKind::Observatorium => {
             let project_path = project.path.display().to_string();
-            super::run_observatorium_mode(&project_path, None, false)
+            super::run_observatorium_mode(&project_path, None, debug)
         }
         LaunchKind::Claude | LaunchKind::Codex | LaunchKind::OpenCode | LaunchKind::Maintenance => {
             // @trace spec:tray-ux, spec:browser-isolation-tray-integration
@@ -1164,7 +1165,7 @@ fn launch_project_action(
                 LaunchKind::Maintenance => super::ForgeAgentMode::Maintenance,
                 _ => unreachable!("non-interactive kinds branched above"),
             };
-            super::launch_forge_agent(&project.name, &project.path, mode, false)
+            super::launch_forge_agent(&project.name, &project.path, mode, debug)
         }
     }
 }
@@ -1212,10 +1213,23 @@ fn handle_select_agent(service: Arc<TrayService>, agent: SelectedAgent) {
 }
 
 fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind: LaunchKind) {
-    let version = service.snapshot().version.clone();
+    let snapshot = service.snapshot();
+    let version = snapshot.version.clone();
+    let debug = snapshot.debug;
     let service_for_emit = service.clone();
     // @trace gap:TR-005, spec:menu-action-error-handling
     // Offload project launch and UI refresh to async executor (non-blocking)
+
+    // Always emit a click-receipt to stderr so the user sees something the
+    // moment they invoke a menu item. Silent menus look broken on Fedora
+    // Silverblue when nothing surfaces in the user's terminal.
+    // @trace spec:tray-ux
+    eprintln!(
+        "[tillandsias] tray: launching {:?} for project '{}' (path={})",
+        kind,
+        project.name,
+        project.path.display()
+    );
 
     // Guard checks: validate preconditions before launching
     if project.name.is_empty() {
@@ -1232,7 +1246,6 @@ fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind:
     }
 
     // Verify forge image is available
-    let snapshot = service.snapshot();
     if !snapshot.forge_available {
         eprintln!(
             "error: forge image not available for project '{}'; initialization may be in progress",
@@ -1253,12 +1266,21 @@ fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind:
     if service
         .task_executor
         .spawn_task(move || {
-            let result = launch_project_action(project.clone(), kind, version);
+            let result = launch_project_action(project.clone(), kind, version, debug);
             if let Err(err) = result {
                 eprintln!(
                     "error: project launch failed for '{}': {}",
                     project.name, err
                 );
+                // Surface the failure on the tray icon/status so the user
+                // sees feedback in addition to the stderr line (which is
+                // invisible when the tray is launched from a .desktop entry).
+                // @trace spec:tray-ux, spec:menu-action-error-handling
+                let _ = futures::executor::block_on(service_for_emit.set_status(
+                    format!("🥀 Launch failed: {}", err),
+                    TrayIconState::Dried,
+                    None,
+                ));
             }
             let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
         })
@@ -3134,6 +3156,58 @@ mod tests {
         assert!(args.contains(&"--entrypoint".to_string()));
         assert!(args.contains(&"/usr/local/bin/entrypoint-forge-claude.sh".to_string()));
         assert!(args.contains(&"tillandsias-forge:v0.1.260506.6".to_string()));
+    }
+
+    // @trace spec:tray-ux, spec:browser-isolation-tray-integration
+    // Regression: tray launch clicks were silently failing on Fedora
+    // Silverblue because `--debug` was hardcoded `false` at every tray
+    // launch-site, which suppressed every `[tillandsias] launch_forge_agent:
+    // ...` log line. Once the user reported a silent failure there was no
+    // log trail to debug from. Pin that:
+    //   1. `launch_project_action` accepts a `debug` flag,
+    //   2. `handle_launch_project` reads `snapshot.debug` and forwards it.
+    #[test]
+    fn tray_launch_threads_debug_flag_into_launch_helpers() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/tray/mod.rs"));
+
+        // launch_project_action must take a debug parameter and forward it
+        // into super::launch_forge_agent / run_opencode_web_mode /
+        // run_observatorium_mode (not hardcoded `false`).
+        assert!(
+            source.contains("fn launch_project_action(")
+                && source.contains("    debug: bool,"),
+            "launch_project_action must take debug: bool"
+        );
+        assert!(
+            source.contains("super::launch_forge_agent(&project.name, &project.path, mode, debug)"),
+            "launch_project_action must forward debug to launch_forge_agent (not false)"
+        );
+        assert!(
+            source.contains("super::run_opencode_web_mode(&project_path, None, None, debug)"),
+            "launch_project_action must forward debug to run_opencode_web_mode (not false)"
+        );
+        assert!(
+            source.contains("super::run_observatorium_mode(&project_path, None, debug)"),
+            "launch_project_action must forward debug to run_observatorium_mode (not false)"
+        );
+
+        // handle_launch_project must read debug from the tray snapshot —
+        // otherwise --debug on the binary never reaches the launchers.
+        assert!(
+            source.contains("let debug = snapshot.debug;"),
+            "handle_launch_project must read debug from tray snapshot"
+        );
+
+        // Click-receipt and failure-status: the user must see SOMETHING on
+        // every click and a tray-visible status when the spawn fails.
+        assert!(
+            source.contains("[tillandsias] tray: launching"),
+            "handle_launch_project must emit a click-receipt to stderr"
+        );
+        assert!(
+            source.contains("🥀 Launch failed:"),
+            "handle_launch_project must surface launch failures via tray status"
+        );
     }
 
     #[test]

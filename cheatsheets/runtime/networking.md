@@ -54,13 +54,34 @@ npm install express # Uses proxy, subject to allowlist
 **Cloning from the git mirror:**
 
 ```bash
-# git daemon on git:9418 hosts mirrors of allowed repos
-git clone git://git/my-org/my-repo.git ./my-repo
+# git daemon on git-service:9418 hosts mirrors of allowed repos
+git clone git://git-service/my-org/my-repo.git ./my-repo
 cd my-repo
 
-# Push is authenticated via D-Bus → host keyring (push happens on host, not in forge)
-# Forge sees changes as git daemon pull-only
-git push origin main  # D-Bus → git-service → host keyring → GitHub
+# Push is authenticated by the git-service container, which reads the
+# GitHub token from /run/secrets/tillandsias-github-token (a podman secret
+# the host tray populates from the OS keyring). The forge itself stays
+# fully credential-free.
+git push origin main  # forge → git-service → token from podman secret → GitHub
+```
+
+**Host-mounted projects (`TILLANDSIAS_PROJECT_HOST_MOUNT=1`):**
+
+When the launcher bind-mounts your host checkout at `/home/forge/src/<project>`
+(direct CLI flags `--bash`, `--claude`, `--opencode`, `--codex`, and the
+tray's interactive attach), the bind-mounted `.git/config` carries the host's
+`origin = https://github.com/...`. The forge can't reach github.com directly.
+
+The entrypoint installs a container-ephemeral `url.<mirror>.insteadOf <github>`
+rule in `~/.gitconfig` so `git push origin <branch>` silently routes through
+the enclave mirror. The host's `.git/config` is **not** modified — you can
+still push from the host as usual.
+
+```bash
+git remote -v                                  # git://git-service/<project>
+git config remote.origin.url                   # https://github.com/<owner>/<repo>.git
+git config --global tillandsias.original-origin # forensic copy of original
+git push origin main                           # routes to git-service:9418
 ```
 
 **Inference via ollama:**
@@ -92,7 +113,7 @@ curl https://example.com  # Depends on allowlist
 
 ❌ **Assuming `localhost` reaches the host**: The forge cannot reach host services on `127.0.0.1`. → Use the enclave-internal service names: `proxy`, `git`, `inference`.
 
-❌ **Pushing commits via SSH from the forge**: SSH is not available inside the forge. → Git authentication happens via D-Bus to the host keyring. Just `git push origin main` and let the git-service handle it.
+❌ **Pushing commits via SSH from the forge**: SSH is not available inside the forge. → Git authentication happens inside the `git-service` container via the `tillandsias-github-token` podman secret. Just `git push origin main` — for host-mounted projects the entrypoint installs an `insteadOf` rule that routes the GitHub URL onto `git://git-service/<project>` transparently.
 
 ❌ **Pulling models at runtime**: ollama pull inside the forge will time out if the model is large and not pre-cached. → Either pre-pull on the host (host runs `ollama pull model-name` before attaching), or accept the first-run latency, or use a smaller model.
 
